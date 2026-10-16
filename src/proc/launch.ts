@@ -67,6 +67,9 @@ export const LAUNCH_CATEGORIES = [
   // The doctor's tmux query — click-driven like the verbs above, and its own
   // category so the cap never reaches the tmux SEGMENT's cache-driven spawns.
   "doctor.tmux",
+  // The doctor's font question (src/doctor/font-edge.ts): CoreText through
+  // osascript, or fc-list — one spawn per run, on the click like the tmux one.
+  "doctor.font",
   // `cc-candybar doctor`'s URL-handler probe (src/doctor/handler-probe.ts), in
   // the CLI's own process: the link it opens, and — only for a link that did
   // not come back — the Launch Services lookup and the applet's script.
@@ -120,6 +123,7 @@ const RATE_LIMITS: Partial<Record<LaunchCategory, number>> = {
   "click.open": 1000,
   // A synchronous spawn that holds the daemon's loop for up to its 2 s timeout.
   "doctor.tmux": 1000,
+  "doctor.font": 1000,
   // A double-click is refused rather than typing and submitting its command
   // twice. Daemon-wide, so two sessions typing in one second collide. Only
   // the typing is limited: a click the pane refused typed

@@ -129,9 +129,12 @@ export const VERB_APPLY_UPDATE = "apply-update";
 // `[sessionId, checkName]` — re-probes that one check and performs the fix its
 // verdict carries, then re-runs. The check name is gated by membership in
 // `CHECKS` (src/doctor/checks.ts); no command, path, or value ever rides the
-// URL — the fix is whatever the check's own verdict describes.
+// URL — the fix is whatever the check's own verdict describes. `doctor-mark`
+// args: `[sessionId, checkName, mark]` — records the user's mark on the glyphs
+// that check's fresh verdict shows, under the sighting they are, then re-runs.
 export const VERB_DOCTOR_RUN = "doctor-run";
 export const VERB_DOCTOR_FIX = "doctor-fix";
+export const VERB_DOCTOR_MARK = "doctor-mark";
 // A link `cc-candybar doctor` opens to learn whether the URL handler delivers
 // it. Arg: the nonce the CLI will look for among the daemon's arrivals.
 export const VERB_DOCTOR_PROBE = "doctor-probe";

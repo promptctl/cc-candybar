@@ -53,6 +53,9 @@ export function testVerbContext(
       probeTmux: () => {
         throw new Error("doctor: no tmux edge in this test");
       },
+      fontInUse: () => {
+        throw new Error("doctor: no font edge in this test");
+      },
       loadConfig: () => {
         throw new Error("doctor: no config edge in this test");
       },

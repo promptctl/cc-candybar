@@ -1083,13 +1083,43 @@
                   "config",
                   "urlHandler",
                   "tmuxTruecolor",
-                  "effectRefresh"
+                  "effectRefresh",
+                  "nerdFont"
                 ]
               }
             },
             "required": [
               "doctor",
               "check"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "doctor": {
+                "const": "mark"
+              },
+              "check": {
+                "enum": [
+                  "config",
+                  "urlHandler",
+                  "tmuxTruecolor",
+                  "effectRefresh",
+                  "nerdFont"
+                ]
+              },
+              "mark": {
+                "enum": [
+                  "drawn",
+                  "boxes"
+                ]
+              }
+            },
+            "required": [
+              "doctor",
+              "check",
+              "mark"
             ],
             "additionalProperties": false
           },

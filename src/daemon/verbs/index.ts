@@ -101,6 +101,7 @@ import {
   VERB_UNDO,
   VERB_DOCTOR_RUN,
   VERB_DOCTOR_FIX,
+  VERB_DOCTOR_MARK,
   VERB_DOCTOR_PROBE,
   VERB_CEILING,
   VERB_SLASH,
@@ -113,8 +114,19 @@ import {
 import { ceilingScope, type CeilingMove } from "../../memento/edge";
 import type { MementoProvider } from "../../segments/memento";
 import { parseClientHints } from "../protocol";
-import { checkByName, runDoctor, type DoctorFacts } from "../../doctor/checks";
-import { doctorReportPairs } from "../../doctor/report";
+import {
+  GLYPH_MARKS,
+  checkByName,
+  runDoctor,
+  type DoctorFacts,
+  type GlyphMark,
+} from "../../doctor/checks";
+import {
+  doctorMarkKey,
+  doctorReportPairs,
+  markValue,
+  nerdFontFields,
+} from "../../doctor/report";
 import {
   applyFix,
   clickArrived,
@@ -1128,7 +1140,7 @@ function writeReport(ctx: VerbContext, sid: string, facts: DoctorFacts): void {
   ctx.sessionState.setBatch(sid, doctorReportPairs(reports));
   ctx.dlog(
     "info",
-    `doctor: ${reports.map((r) => `${r.check.name}=${r.verdict.ok ? "ok" : `failed(${1 + (r.verdict.more?.length ?? 0)})`}`).join(" ")} (session=${sid})`,
+    `doctor: ${reports.map((r) => `${r.check.name}=${r.verdict.ok ? "ok" : `failed(${1 + (r.verdict.more?.length ?? 0)})`}`).join(" ")} ${nerdFontFields(facts.nerdFont)} (session=${sid})`,
   );
 }
 
@@ -1191,6 +1203,42 @@ const doctorFix: VerbHandler = (value, ctx) => {
     `doctor-fix: ${check.name} → ${verdict.fix.kind} ${verdict.fix.path.join(".")}=${JSON.stringify(verdict.fix.value)} (session=${sid})`,
   );
   writeReport(ctx, sid, after);
+};
+
+// Record what the user saw of the glyphs THIS check's fresh verdict shows,
+// under the sighting they are — never a sighting cached from the render that
+// drew the ✓ and ✗, since the session's terminal or joiner may have moved —
+// then re-run over the facts the mark is now part of.
+const doctorMark: VerbHandler = (value, ctx) => {
+  const [sessionId = "", checkName = "", mark = ""] = decodeWire(() =>
+    decodeSegments(value),
+  );
+  const sid = requireSessionId(sessionId);
+  const check = checkByName(checkName);
+  if (check === undefined) {
+    throw new BadVerbArgs(`doctor-mark: unknown check "${checkName}"`);
+  }
+  if (!(GLYPH_MARKS as readonly string[]).includes(mark)) {
+    throw new BadVerbArgs(
+      `doctor-mark: the mark is ${JSON.stringify(mark)}, not ${GLYPH_MARKS.join(" or ")}`,
+    );
+  }
+  const verdict = check.probe(clickFacts(ctx, sid));
+  if (verdict.ok || verdict.sighting === undefined) {
+    throw new BadVerbArgs(
+      `doctor-mark: ${check.label} — ${verdict.ok ? "nothing to mark" : "shows nothing to look at"}`,
+    );
+  }
+  ctx.sessionState.set(
+    sid,
+    doctorMarkKey(check.name),
+    markValue({ mark: mark as GlyphMark, sighting: verdict.sighting.id }),
+  );
+  ctx.dlog(
+    "info",
+    `doctor-mark: ${check.name} ${mark} on ${verdict.sighting.id} (session=${sid})`,
+  );
+  writeReport(ctx, sid, clickFacts(ctx, sid));
 };
 
 // ─── Memento ceiling (brandon-context-ceiling-xta.asv) ───────────────────────
@@ -1346,6 +1394,7 @@ const LEAF_VERBS = new Map<string, VerbHandler>([
   [VERB_APPLY_UPDATE, applyUpdate],
   [VERB_DOCTOR_RUN, doctorRun],
   [VERB_DOCTOR_FIX, doctorFix],
+  [VERB_DOCTOR_MARK, doctorMark],
   [VERB_DOCTOR_PROBE, doctorProbe],
   [VERB_CEILING, ceiling],
   [VERB_SLASH, slash],
@@ -1370,6 +1419,7 @@ export const SEGMENTED_VERBS: ReadonlySet<string> = new Set([
   VERB_UNDO,
   VERB_REDO,
   VERB_DOCTOR_FIX,
+  VERB_DOCTOR_MARK,
   VERB_CEILING,
   VERB_SLASH,
 ]);
@@ -1397,6 +1447,7 @@ const SESSION_FIRST_VERBS: ReadonlySet<string> = new Set([
   VERB_APPLY_UPDATE,
   VERB_DOCTOR_RUN,
   VERB_DOCTOR_FIX,
+  VERB_DOCTOR_MARK,
   VERB_CEILING,
   VERB_SLASH,
 ]);

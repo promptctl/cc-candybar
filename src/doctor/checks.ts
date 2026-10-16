@@ -18,12 +18,24 @@ import type { LoopName } from "@promptctl/rich-js";
 import { EFFECT_FLOOR, type EffectSelection } from "../themes/policy.js";
 import type { Outcome } from "../utils/outcome.js";
 import type { DeclKind, UnusedDecl } from "../config/unused.js";
+import {
+  BUNDLED_SINCE,
+  TERMINAL_LABEL,
+  releasedSince,
+  type BundlingTerminal,
+  type ConfiguredTerminal,
+  type TmuxClientTerm,
+} from "./terminal.js";
 
-// [LAW:types-are-the-program] tmux's own verdict on the attached terminal's
-// features (`#{client_termfeatures}`), or why it could not be asked. No
-// `absent` arm: the query either answers or fails — there is no "tmux has no
-// opinion", so a probe never has to decide what an absent list would mean.
-export type TermFeatures = Asked<readonly string[]>;
+// [LAW:types-are-the-program] What tmux says about the client attached to the
+// session's pane, or why it could not be asked: its verdict on the terminal's
+// features (`#{client_termfeatures}`), and what that terminal is
+// (TmuxClientTerm). No `absent` arm: the query either answers or fails —
+// there is no "tmux has no opinion", so a probe never has to decide what an
+// absent answer would mean.
+export interface TmuxClient extends TmuxClientTerm {
+  readonly features: readonly string[];
+}
 
 // A question put to the system: it answers or it fails, never "no opinion".
 export type Asked<T> = Extract<Outcome<T>, { kind: "ok" | "failed" }>;
@@ -40,7 +52,7 @@ export type TmuxFacts =
   | {
       readonly kind: "inside";
       readonly hint: TmuxHint;
-      readonly termfeatures: TermFeatures;
+      readonly client: Asked<TmuxClient>;
     };
 
 // [LAW:types-are-the-program] What loading the session's config found. The
@@ -103,6 +115,61 @@ export type StatusLineFacts =
   | { readonly kind: "not-an-object"; readonly value: unknown }
   | { readonly kind: "present"; readonly refreshInterval: unknown };
 
+// The font a configured terminal draws private-use glyphs with, where that
+// was read from (`iTerm2 profile "Default"`, an Alacritty config file), and
+// which of the bar's glyphs it lacks — null when no installed font goes by
+// that name, so the terminal draws with whatever it falls back to.
+export interface FontInUse {
+  readonly font: string;
+  readonly from: string;
+  readonly lacks: readonly string[] | null;
+}
+
+// [LAW:types-are-the-program] What the doctor knows about the terminal that
+// draws the session's bar. `unreported` is a client too old to say,
+// `unasked` a tmux server that could not be asked about its client, and
+// `unknown` a terminal the doctor has no reading for (`called` is the name it
+// went by, empty when nothing named it). A known terminal is one of two
+// kinds (src/doctor/terminal.ts): one that ships its own Nerd Font symbols,
+// whose release is the whole question, and one that draws them only from the
+// font it is set to, which is read.
+export type TerminalFacts =
+  | { readonly kind: "unreported" }
+  | { readonly kind: "unasked"; readonly reason: string }
+  | { readonly kind: "unknown"; readonly called: string }
+  | {
+      readonly kind: "bundling";
+      readonly name: BundlingTerminal;
+      readonly version: string | null;
+    }
+  | {
+      readonly kind: "configured";
+      readonly name: ConfiguredTerminal;
+      readonly version: string | null;
+      readonly font: Asked<FontInUse>;
+    };
+
+// What the user saw when the doctor showed them the bar's glyphs: shapes, or
+// the boxes a terminal draws for a glyph no font it has supplies.
+export const GLYPH_MARKS = ["drawn", "boxes"] as const;
+export type GlyphMark = (typeof GLYPH_MARKS)[number];
+
+// A mark, and the sighting it was made on (Sighting.id).
+export interface RecordedMark {
+  readonly mark: GlyphMark;
+  readonly sighting: string;
+}
+
+export interface NerdFontFacts {
+  // The private-use glyphs the session's bar draws (its joiner, in the
+  // charset in force — src/render/strip.ts measures them), "" for none.
+  readonly glyphs: string;
+  readonly terminal: TerminalFacts;
+  // The user's mark on these glyphs in this terminal, recorded under the
+  // sighting it answered; a mark on another sighting is no mark at all.
+  readonly mark: RecordedMark | null;
+}
+
 export interface PlacementEffectFact {
   readonly placement: string;
   readonly effect: LoopName;
@@ -112,6 +179,7 @@ export interface DoctorFacts {
   readonly tmux: TmuxFacts;
   readonly config: ConfigFacts;
   readonly urlHandler: UrlHandlerFacts;
+  readonly nerdFont: NerdFontFacts;
   // The effect the session's bar wears, resolved as its render resolves it
   // (session pick over config default over the floor). A rule stays a rule:
   // only the render can say what it names.
@@ -146,10 +214,21 @@ export interface Fix {
   readonly value: string | number;
 }
 
+// What a check asks the user to look at when it cannot see for itself — a
+// terminal cannot be asked what it drew. `glyphs` is what to show; `id` names
+// the sighting (the terminal and the glyphs), which a mark is recorded under,
+// so a mark answers for exactly what was shown.
+export interface Sighting {
+  readonly glyphs: string;
+  readonly id: string;
+}
+
 // A check never has a third state: the reason string and the optional fix
 // carry every difference between one failure and another. A check that found
 // several problems leads with one as its `reason` and lists the rest in `more`:
 // the bar's row has room for one and counts the others, the CLI prints them all.
+// A `sighting` is the user's way to settle what the check could not: the row
+// shows its glyphs with a ✓ and a ✗ to mark them.
 export type Verdict =
   | { readonly ok: true }
   | {
@@ -157,6 +236,7 @@ export type Verdict =
       readonly reason: string;
       readonly more?: readonly string[];
       readonly fix?: Fix;
+      readonly sighting?: Sighting;
     };
 
 function problemsVerdict(problems: readonly string[]): Verdict {
@@ -202,15 +282,15 @@ const tmuxTruecolor: Check = {
       case "outside":
         return { ok: true };
       case "inside": {
-        if (tmux.termfeatures.kind === "failed") {
+        if (tmux.client.kind === "failed") {
           return {
             ok: false,
-            reason: `tmux could not be asked: ${tmux.termfeatures.reason}`,
+            reason: `tmux could not be asked: ${tmux.client.reason}`,
           };
         }
         // Not applicable is not a failure: without RGB there is nothing for
         // Claude Code to be told about.
-        if (!tmux.termfeatures.value.includes("RGB")) return { ok: true };
+        if (!tmux.client.value.features.includes("RGB")) return { ok: true };
         if (tmux.hint.truecolor !== null) return { ok: true };
         // [LAW:one-source-of-truth] The same truthiness Claude Code applies to
         // its env: a non-empty string. Anything else in settings.json — absent,
@@ -399,11 +479,129 @@ const effectRefresh: Check = {
   },
 };
 
+const codePoints = (glyphs: Iterable<string>): string =>
+  [...glyphs]
+    .map((g) => `U+${g.codePointAt(0)!.toString(16).toUpperCase()}`)
+    .join(" ");
+
+// The terminal as a sentence names it.
+function terminalCalled(terminal: TerminalFacts): string {
+  switch (terminal.kind) {
+    case "unreported":
+    case "unasked":
+      return "this terminal";
+    case "unknown":
+      return terminal.called === "" ? "this terminal" : terminal.called;
+    case "bundling":
+    case "configured":
+      return [TERMINAL_LABEL[terminal.name], terminal.version]
+        .filter((part) => part !== null)
+        .join(" ");
+  }
+}
+
+// [LAW:one-source-of-truth] The sighting the Nerd Font check shows, and the
+// one spelling of its id: the doctor verb records a mark under it, and the
+// probe honours a mark only under it, so a mark made in one terminal, or on
+// another joiner's glyphs, answers nothing here.
+export function glyphSighting(
+  facts: Pick<NerdFontFacts, "glyphs" | "terminal">,
+): Sighting {
+  return {
+    glyphs: facts.glyphs,
+    id: `${terminalCalled(facts.terminal)}|${codePoints(facts.glyphs)}`,
+  };
+}
+
+const ASCII_WAY =
+  'or set globals.charset to "ascii" to draw the bar without them';
+
+// "A Nerd Font is set up and in use" (brandon-doctor-v62x.2ww): the terminal
+// that draws the bar has the private-use glyphs the bar draws — its joiner's
+// caps and seams — so they read as shapes, not boxes. A terminal cannot be
+// asked its font, so the font is read where the terminal reads it, and what
+// the doctor cannot settle that way the user settles by looking: every failed
+// verdict shows the glyphs to mark, and a mark on them is the answer.
+// The check's name, which its mark is keyed by (doctorMarkKey).
+export const NERD_FONT_CHECK = "nerdFont";
+
+const nerdFont: Check = {
+  name: NERD_FONT_CHECK,
+  label: "Nerd Font",
+  probe: ({ nerdFont: facts }) => {
+    if (facts.glyphs === "") return { ok: true };
+    const sighting = glyphSighting(facts);
+    const failed = (reason: string): Verdict => ({
+      ok: false,
+      reason,
+      sighting,
+    });
+    const terminal = facts.terminal;
+    const called = terminalCalled(terminal);
+    const mark = facts.mark?.sighting === sighting.id ? facts.mark.mark : null;
+    switch (mark) {
+      case "drawn":
+        return { ok: true };
+      case "boxes":
+        return failed(
+          `${called} draws ${codePoints(facts.glyphs)} as boxes — set a Nerd Font as its font, ${ASCII_WAY}`,
+        );
+      case null:
+        break;
+    }
+    switch (terminal.kind) {
+      case "unreported":
+        return failed(
+          "the client reported no terminal — re-run `cc-candybar install` to stage a current client",
+        );
+      case "unasked":
+        return failed(
+          `tmux could not be asked which terminal is attached: ${terminal.reason}`,
+        );
+      case "unknown":
+        return failed(`the doctor cannot read ${called}'s font`);
+      case "bundling": {
+        const since = BUNDLED_SINCE[terminal.name];
+        if (since === null) return { ok: true };
+        const shipped =
+          terminal.version === null
+            ? null
+            : releasedSince(terminal.version, since);
+        if (shipped === true) return { ok: true };
+        const label = TERMINAL_LABEL[terminal.name];
+        return failed(
+          shipped === null
+            ? `${label} ships Nerd Font symbols since ${since}, and did not say which release this is`
+            : `${called} ships no Nerd Font symbols (they came in ${since}) — update ${label}, or set a Nerd Font as its font, ${ASCII_WAY}`,
+        );
+      }
+      case "configured": {
+        if (terminal.font.kind === "failed") {
+          return failed(
+            `the doctor cannot read ${called}'s font: ${terminal.font.reason}`,
+          );
+        }
+        const { font, from, lacks } = terminal.font.value;
+        if (lacks === null) {
+          return failed(
+            `${called} is set to ${font} (${from}), which is not installed — install it or set a Nerd Font, ${ASCII_WAY}`,
+          );
+        }
+        if (lacks.length === 0) return { ok: true };
+        return failed(
+          `${called} draws with ${font} (${from}), which has no ${codePoints(lacks)} — set a Nerd Font as its font, ${ASCII_WAY}`,
+        );
+      }
+    }
+  },
+};
+
 export const CHECKS: readonly Check[] = [
   config,
   urlHandler,
   tmuxTruecolor,
   effectRefresh,
+  nerdFont,
 ];
 
 // [LAW:single-enforcer] THE fold. The bar's 🩺 click and `cc-candybar doctor`

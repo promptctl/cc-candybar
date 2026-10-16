@@ -12,7 +12,13 @@
 // `CHECKS` is static, so a fixed set of scalar keys needs no series encoding.
 
 import { BOOLEAN_FALSE, BOOLEAN_TRUE } from "../themes/policy.js";
-import type { CheckReport } from "./checks.js";
+import {
+  GLYPH_MARKS,
+  type CheckReport,
+  type GlyphMark,
+  type NerdFontFacts,
+  type RecordedMark,
+} from "./checks.js";
 import { SETTINGS_NS } from "../config/loader/reserved-namespace.js";
 
 export const DOCTOR_NS = `${SETTINGS_NS}doctor.`;
@@ -23,10 +29,13 @@ export const VERDICT_FAILED = "failed";
 // which is the report's "this check has not run" state, gating the row off.
 export const VERDICT_UNRUN = "";
 
+// `sighting` holds the glyphs a failed verdict shows the user to mark, empty
+// when it shows none.
 export interface ReportKeys {
   readonly verdict: string;
   readonly reason: string;
   readonly fixable: string;
+  readonly sighting: string;
 }
 
 export function doctorReportKeys(checkName: string): ReportKeys {
@@ -35,7 +44,66 @@ export function doctorReportKeys(checkName: string): ReportKeys {
     verdict: `${base}verdict`,
     reason: `${base}reason`,
     fixable: `${base}fixable`,
+    sighting: `${base}sighting`,
   };
+}
+
+// [LAW:one-source-of-truth] Where a check's mark lives — beside its report,
+// but never written by it: a report rewrites every key it names on every run,
+// and a mark is the user's, outliving the runs that read it.
+export function doctorMarkKey(checkName: string): string {
+  return `${DOCTOR_NS}${checkName}.mark`;
+}
+
+// The one spelling of a recorded mark, `<mark>:<sighting id>`, and its one
+// reading. Only the doctor verb writes the key, so a value that does not read
+// is a fault to name, never a missing mark.
+export function markValue({ mark, sighting }: RecordedMark): string {
+  return `${mark}:${sighting}`;
+}
+
+export function parseMark(raw: string): RecordedMark {
+  const split = raw.indexOf(":");
+  const mark = raw.slice(0, Math.max(split, 0));
+  if (!(GLYPH_MARKS as readonly string[]).includes(mark)) {
+    throw new Error(
+      `doctor: a recorded mark reads ${JSON.stringify(raw)}, not <${GLYPH_MARKS.join("|")}>:<sighting>`,
+    );
+  }
+  return { mark: mark as GlyphMark, sighting: raw.slice(split + 1) };
+}
+
+// [LAW:nothing-unseen] What the Nerd Font check reasoned over, as logfmt
+// fields for the doctor's event: the glyphs it needed (`-` for none), the
+// terminal it found (`<name>@<release>`, `-` for an unsaid release, else the
+// arm that kept it from finding one), the font it read (`-` where none is
+// read) and the mark it honoured. A value a terminal or font chose is a JSON
+// string, since it may hold a space.
+export function nerdFontFields({
+  glyphs,
+  terminal,
+  mark,
+}: NerdFontFacts): string {
+  const codes = [...glyphs].map((g) => g.codePointAt(0)!.toString(16));
+  const found = ((): string => {
+    switch (terminal.kind) {
+      case "unreported":
+      case "unasked":
+        return terminal.kind;
+      case "unknown":
+        return `unknown:${JSON.stringify(terminal.called)}`;
+      case "bundling":
+      case "configured":
+        return `${terminal.name}@${terminal.version ?? "-"}`;
+    }
+  })();
+  const font = ((): string => {
+    if (terminal.kind !== "configured") return "-";
+    if (terminal.font.kind === "failed") return "failed";
+    const { font: name, lacks } = terminal.font.value;
+    return `${JSON.stringify(name)}:${lacks === null ? "not-installed" : `lacks${lacks.length}`}`;
+  })();
+  return `glyphs=${codes.join(",") || "-"} terminal=${found} font=${font} mark=${mark?.mark ?? "-"}`;
 }
 
 // The bar's row has room for one problem: it names the first and counts the
@@ -60,6 +128,7 @@ export function doctorReportPairs(
           { key: keys.verdict, value: VERDICT_OK },
           { key: keys.reason, value: "" },
           { key: keys.fixable, value: BOOLEAN_FALSE },
+          { key: keys.sighting, value: "" },
         ]
       : [
           { key: keys.verdict, value: VERDICT_FAILED },
@@ -68,6 +137,7 @@ export function doctorReportPairs(
             key: keys.fixable,
             value: verdict.fix === undefined ? BOOLEAN_FALSE : BOOLEAN_TRUE,
           },
+          { key: keys.sighting, value: verdict.sighting?.glyphs ?? "" },
         ];
   });
 }

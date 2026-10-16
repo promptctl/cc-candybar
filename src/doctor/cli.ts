@@ -17,6 +17,7 @@ import process from "node:process";
 import type { CliPlan } from "../check.js";
 import { DOOR_GLYPH } from "../config/disclosure.js";
 import { detectTmuxHint } from "../tmux-hint.js";
+import { detectTerminalEnv } from "../terminal-hint.js";
 import { runDoctor, type CheckReport, type DoctorFacts } from "./checks.js";
 import {
   gatherFacts,
@@ -42,12 +43,19 @@ const EXIT_USAGE = 2;
 
 const FIX_HINT = ` (fix: click the settings menu (${DOOR_GLYPH} by default) › 🧰 tools › 🩺 doctor, then [fix] on the bar)`;
 
-// A failed check's line, then one indented line per further problem it found.
+// The CLI cannot take a mark: it shows what to look at, and where to mark it.
+const MARK_HINT = `if these draw as shapes, not boxes, mark them ✓ in the bar: the settings menu (${DOOR_GLYPH} by default) › 🧰 tools › 🩺 doctor`;
+
+// A failed check's line, then one indented line per further problem it found,
+// then what it asks the user to look at.
 function reportLine({ check, verdict }: CheckReport): string {
   return verdict.ok
     ? `✓ ${check.label}\n`
     : `✗ ${check.label} — ${verdict.reason}${verdict.fix === undefined ? "" : FIX_HINT}\n` +
-        (verdict.more ?? []).map((problem) => `    ${problem}\n`).join("");
+        (verdict.more ?? []).map((problem) => `    ${problem}\n`).join("") +
+        (verdict.sighting === undefined
+          ? ""
+          : `    look: ${verdict.sighting.glyphs} — ${MARK_HINT}\n`);
 }
 
 // [LAW:single-enforcer] The CLI's config load is the daemon's own
@@ -90,6 +98,7 @@ export async function doctorPlan(
       {
         tmux: detectTmuxHint(env),
         claudeConfigDir: detectClaudeConfigDir(env, cwd),
+        terminalEnv: detectTerminalEnv(env),
       },
       // The config the daemon would load for a session started here: this
       // directory, under the file named on the command line (a statusline

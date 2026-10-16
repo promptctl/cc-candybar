@@ -35,21 +35,42 @@ import {
 import { presetRoot } from "../config/presets.js";
 import { EFFECT_FLOOR, FOLLOW_BAR } from "../themes/policy.js";
 import { resolveEffectiveGlobals } from "../daemon/render-payload.js";
-import type {
-  ConfigFacts,
-  DoctorFacts,
-  Fix,
-  PlacementEffectFact,
-  TermFeatures,
-  TmuxFacts,
-  UrlHandlerFacts,
+import {
+  NERD_FONT_CHECK,
+  type Asked,
+  type ConfigFacts,
+  type DoctorFacts,
+  type Fix,
+  type FontInUse,
+  type PlacementEffectFact,
+  type TerminalFacts,
+  type TmuxClient,
+  type TmuxFacts,
+  type UrlHandlerFacts,
 } from "./checks.js";
 import { PACKAGE_VERSION } from "../version.js";
+import type { TerminalEnvHint } from "../terminal-hint.js";
+import {
+  identifyFromEnv,
+  identifyInTmux,
+  isBundling,
+  type ConfiguredTerminal,
+} from "./terminal.js";
+import { fontInUse } from "./font-edge.js";
+import { stripPrivateGlyphs } from "../render/strip.js";
+import { doctorMarkKey, parseMark } from "./report.js";
 
 export interface DoctorEdge {
-  // tmux's own verdict on the attached client's terminal, asked of THE server
+  // tmux's own word on the attached client's terminal, asked of THE server
   // the hint names — `-S socket` and `-t pane` are why the hint carries them.
-  readonly probeTmux: (hint: TmuxHint) => TermFeatures;
+  readonly probeTmux: (hint: TmuxHint) => Asked<TmuxClient>;
+  // The font a configured terminal draws the bar's glyphs with, read where
+  // the terminal reads it (src/doctor/font-edge.ts).
+  readonly fontInUse: (
+    terminal: ConfiguredTerminal,
+    env: TerminalEnvHint,
+    glyphs: string,
+  ) => Asked<FontInUse>;
   // What loading the config at an origin finds now — the daemon reloads the
   // render-cache entry the session's bar is drawn from and answers from it
   // (so the doctor and the bar's strip report one load), the CLI runs one
@@ -81,28 +102,50 @@ export interface ConfigLoad {
 // `#{client_termfeatures}` lists terminal-features + overrides + terminfo for
 // the client attached to the pane — `RGB` in it is tmux saying both it and the
 // outer terminal do truecolor (verified on tmux 3.6a: `…,osc7,RGB,sixel,…`).
-function probeTmux(hint: TmuxHint): TermFeatures {
+// `#{client_termtype}` is that terminal's XTVERSION reply (`iTerm2 3.7.2`,
+// empty from one that does not answer) and `#{client_termname}` the TERM it
+// was started under. One display call, the three tab-separated.
+const TMUX_CLIENT_FORMAT =
+  "#{client_termfeatures}\t#{client_termtype}\t#{client_termname}";
+
+// [LAW:parse-dont-validate] tmux's answer, read as the three fields it was
+// asked for — a line that is not three fields is a failure naming what came
+// back, never a client with blank fields.
+export function parseTmuxClient(stdout: string): Asked<TmuxClient> {
+  const fields = stdout.replace(/\n$/, "").split("\t");
+  if (fields.length !== 3) {
+    return {
+      kind: "failed",
+      reason: `tmux answered ${JSON.stringify(stdout)}, not the three fields asked for`,
+    };
+  }
+  const [features, termtype, termname] = fields as [string, string, string];
+  return {
+    kind: "ok",
+    value: {
+      features: features.split(",").filter((f) => f !== ""),
+      termtype,
+      termname,
+    },
+  };
+}
+
+function probeTmux(hint: TmuxHint): Asked<TmuxClient> {
   const run = runTmux(hint, "doctor.tmux", [
     "display",
     "-p",
     "-t",
     hint.pane,
-    "#{client_termfeatures}",
+    TMUX_CLIENT_FORMAT,
   ]);
   if (run.kind !== "ok") return { kind: "failed", reason: run.reason };
-  return {
-    kind: "ok",
-    value: run.stdout
-      .trim()
-      .split(",")
-      .filter((f) => f !== ""),
-  };
+  return parseTmuxClient(run.stdout);
 }
 
 export function productionEdge(
   loadConfig: DoctorEdge["loadConfig"],
 ): DoctorEdge {
-  return { probeTmux, loadConfig };
+  return { probeTmux, fontInUse, loadConfig };
 }
 
 // [LAW:dataflow-not-control-flow] The load's two arms become ConfigFacts'
@@ -151,7 +194,40 @@ function readClaudeSettingsFacts(
 function tmuxFacts(edge: DoctorEdge, hint: ClientHints["tmux"]): TmuxFacts {
   if (hint === undefined) return { kind: "unreported" };
   if (hint === null) return { kind: "outside" };
-  return { kind: "inside", hint, termfeatures: edge.probeTmux(hint) };
+  return { kind: "inside", hint, client: edge.probeTmux(hint) };
+}
+
+// [LAW:dataflow-not-control-flow] Which terminal draws the bar: inside tmux
+// the client tmux has attached (its answer, or why it gave none), outside it
+// what the session's client environment says — and for a terminal that draws
+// only from its font, that font, read once, exactly when there is one to read.
+function terminalFacts(
+  edge: DoctorEdge,
+  tmux: TmuxFacts,
+  env: TerminalEnvHint | undefined,
+  glyphs: string,
+): TerminalFacts {
+  if (tmux.kind === "unreported") return { kind: "unreported" };
+  if (tmux.kind === "inside" && tmux.client.kind === "failed") {
+    return { kind: "unasked", reason: tmux.client.reason };
+  }
+  if (tmux.kind === "outside" && env === undefined) {
+    return { kind: "unreported" };
+  }
+  const identified =
+    tmux.kind === "inside" && tmux.client.kind === "ok"
+      ? identifyInTmux(tmux.client.value)
+      : identifyFromEnv(env ?? {});
+  if (identified.kind === "unknown") return identified;
+  const { name, version } = identified.terminal;
+  return isBundling(name)
+    ? { kind: "bundling", name, version }
+    : {
+        kind: "configured",
+        name,
+        version,
+        font: edge.fontInUse(name, env ?? {}, glyphs),
+      };
 }
 
 // A click the daemon is handling IS a link that came back through the URL
@@ -199,21 +275,29 @@ function placementEffects(
 // the clicking session, `() => null` for the CLI, which has no session.
 export function gatherFacts(
   edge: DoctorEdge,
-  hints: Pick<ClientHints, "tmux" | "claudeConfigDir">,
+  hints: Pick<ClientHints, "tmux" | "claudeConfigDir" | "terminalEnv">,
   origin: ConfigOrigin,
   sessionPick: (key: string) => string | null,
 ): Omit<DoctorFacts, "urlHandler"> {
   const load = edge.loadConfig(origin);
   // [LAW:one-source-of-truth] The render's own resolution, so the doctor and
-  // the bar cannot disagree about which effect is on. The preset's
-  // customization is a fact no field read here depends on.
+  // the bar cannot disagree about which effect is on, or which joiner draws
+  // it. The preset's customization is a fact no field read here depends on.
   const globals = resolveEffectiveGlobals(
     load.config,
     sessionPick,
     () => false,
   );
+  const tmux = tmuxFacts(edge, hints.tmux);
+  const glyphs = stripPrivateGlyphs(globals);
+  const mark = sessionPick(doctorMarkKey(NERD_FONT_CHECK));
   return {
-    tmux: tmuxFacts(edge, hints.tmux),
+    tmux,
+    nerdFont: {
+      glyphs,
+      terminal: terminalFacts(edge, tmux, hints.terminalEnv, glyphs),
+      mark: mark === null ? null : parseMark(mark),
+    },
     config: configFacts(load),
     effect: globals.effect,
     placementEffects: placementEffects(

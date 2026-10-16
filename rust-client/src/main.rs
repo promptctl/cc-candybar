@@ -244,6 +244,7 @@ fn render(argv: &[String], hook_data: &serde_json::Value) -> RenderOutcome {
     let config_env = detect_config_env(std::path::Path::new(&cwd));
     let claude_config_dir = detect_claude_config_dir(std::path::Path::new(&cwd));
     let memento_env = detect_memento_env(std::path::Path::new(&cwd));
+    let terminal_env = detect_terminal_env();
 
     let mut request = serde_json::json!({
         "v": PROTOCOL_VERSION,
@@ -284,6 +285,8 @@ fn render(argv: &[String], hook_data: &serde_json::Value) -> RenderOutcome {
     // environment does not set left out of it — absence stays "client too old
     // to report".
     request["mementoEnv"] = memento_env;
+    // terminalEnv is UNCONDITIONAL like mementoEnv: always an object.
+    request["terminalEnv"] = terminal_env;
     // --- end client hints ---
     let body = match serde_json::to_vec(&request) {
         Ok(b) => b,
@@ -599,6 +602,36 @@ fn memento_env_hint(
             let value = raw(name).filter(|v| !v.is_empty())?;
             let absolute = resolve_against(cwd, &value);
             Some((name.to_string(), serde_json::Value::from(absolute)))
+        })
+        .collect::<serde_json::Map<String, serde_json::Value>>()
+        .into()
+}
+
+// The variables a terminal emulator sets to name itself — mirrors
+// TERMINAL_ENV_VARS in src/terminal-hint.ts, diffed by
+// scripts/check-protocol.mjs. They cross raw, by name: which terminal a value
+// means is the doctor's reading (src/doctor/terminal.ts).
+const TERMINAL_ENV_VARS: [&str; 4] = [
+    "TERM_PROGRAM",
+    "TERM_PROGRAM_VERSION",
+    "TERM",
+    "ITERM_PROFILE",
+];
+
+fn detect_terminal_env() -> serde_json::Value {
+    terminal_env_hint(|name| env::var(name).ok())
+}
+
+// [LAW:dataflow-not-control-flow] Total by construction, like memento_env_hint:
+// always an object, an unset-or-empty variable left out of it —
+// detectTerminalEnv's rule. Pure over the lookup so test/terminal-hint.test.ts's
+// table can be run against it.
+fn terminal_env_hint(raw: impl Fn(&str) -> Option<String>) -> serde_json::Value {
+    TERMINAL_ENV_VARS
+        .iter()
+        .filter_map(|name| {
+            let value = raw(name).filter(|v| !v.is_empty())?;
+            Some((name.to_string(), serde_json::Value::from(value)))
         })
         .collect::<serde_json::Map<String, serde_json::Value>>()
         .into()
@@ -1169,6 +1202,28 @@ mod tests {
         assert_eq!(hint(Some("~/bar.json5")), Some("/home/u/bar.json5".into()));
         assert_eq!(hint(Some("~")), Some("/home/u".into()));
         assert_eq!(hint(Some("~alice/c.json5")), Some("/work/proj/~alice/c.json5".into()));
+    }
+
+    // The same table as test/terminal-hint.test.ts.
+    #[test]
+    fn terminal_env_hint_reports_exactly_what_the_ts_client_reports() {
+        let hint = |program: Option<&str>, term: Option<&str>| {
+            terminal_env_hint(|name| match name {
+                "TERM_PROGRAM" => program.map(String::from),
+                "TERM" => term.map(String::from),
+                _ => None,
+            })
+        };
+        assert_eq!(hint(None, None), serde_json::json!({}));
+        assert_eq!(hint(Some(""), Some("")), serde_json::json!({}));
+        assert_eq!(
+            hint(Some("iTerm.app"), None),
+            serde_json::json!({ "TERM_PROGRAM": "iTerm.app" })
+        );
+        assert_eq!(
+            hint(Some("tmux"), Some("xterm-kitty")),
+            serde_json::json!({ "TERM_PROGRAM": "tmux", "TERM": "xterm-kitty" })
+        );
     }
 
     // The same table as test/memento-hint.test.ts.

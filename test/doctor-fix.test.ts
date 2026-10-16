@@ -38,6 +38,9 @@ const NO_TMUX: DoctorEdge = {
   probeTmux: () => {
     throw new Error("probeTmux must not run in this case");
   },
+  fontInUse: () => {
+    throw new Error("fontInUse must not run in this case");
+  },
   loadConfig: loadsConfig(DEFAULT_DSL_CONFIG),
 };
 const NO_SESSION = (): string | null => null;
@@ -337,14 +340,21 @@ describe("gatherFacts", () => {
     const edge: DoctorEdge = {
       probeTmux: (hint) => {
         asked.push(hint);
-        return { kind: "ok", value: ["osc7", "RGB"] };
+        return {
+          kind: "ok",
+          value: { features: ["osc7", "RGB"], termtype: "", termname: "" },
+        };
       },
+      fontInUse: NO_TMUX.fontInUse,
       loadConfig: NO_TMUX.loadConfig,
     };
     expect(factsIn(absent, HINT, edge).tmux).toEqual({
       kind: "inside",
       hint: HINT,
-      termfeatures: { kind: "ok", value: ["osc7", "RGB"] },
+      client: {
+        kind: "ok",
+        value: { features: ["osc7", "RGB"], termtype: "", termname: "" },
+      },
     });
     expect(asked).toEqual([HINT]);
   });

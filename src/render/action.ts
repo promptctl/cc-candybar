@@ -40,6 +40,7 @@ import { resolvedStyle } from "./rich-theme.js";
 import { CONFIG_KEY_TO_EFFECTIVE_VAR } from "../config/setting-projections.js";
 import { encodeLayoutOp, type LayoutOp } from "../config/layout-ops.js";
 import type { Decor } from "../themes/decor.js";
+import type { GlyphMark } from "../doctor/checks.js";
 import {
   effectsUrl,
   VERB_APPLY_LAYOUT_OP,
@@ -60,6 +61,7 @@ import {
   VERB_UNDO,
   VERB_DOCTOR_RUN,
   VERB_DOCTOR_FIX,
+  VERB_DOCTOR_MARK,
   VERB_CEILING,
   VERB_SLASH,
   type Effect,
@@ -224,6 +226,11 @@ export type CompiledActionDecl =
   // CHECKS at load), so the click carries only what the config declared.
   | { readonly kind: "doctor-run" }
   | { readonly kind: "doctor-fix"; readonly check: string }
+  | {
+      readonly kind: "doctor-mark";
+      readonly check: string;
+      readonly mark: GlyphMark;
+    }
   // The memento ceiling move, compiled in from the declaration.
   | { readonly kind: "ceiling"; readonly args: readonly string[] }
   // The declared slash command, compiled in from the declaration.
@@ -494,9 +501,14 @@ function compileAction(
     return { kind: "reset", key: action.reset };
   }
   if ("doctor" in action) {
-    return action.doctor === "run"
-      ? { kind: "doctor-run" }
-      : { kind: "doctor-fix", check: action.check };
+    switch (action.doctor) {
+      case "run":
+        return { kind: "doctor-run" };
+      case "fix":
+        return { kind: "doctor-fix", check: action.check };
+      case "mark":
+        return { kind: "doctor-mark", check: action.check, mark: action.mark };
+    }
   }
   if ("ceiling" in action) {
     return {
@@ -579,6 +591,7 @@ export function bindsTemplateValue(c: CompiledActionDecl): boolean {
     case "theme-default-save":
     case "doctor-run":
     case "doctor-fix":
+    case "doctor-mark":
     case "ceiling":
     case "slash":
     case "do":
@@ -890,6 +903,13 @@ export function realize(
     case "doctor-fix":
       return {
         effects: [{ verb: VERB_DOCTOR_FIX, args: [sessionId, c.check] }],
+        active: false,
+      };
+    case "doctor-mark":
+      return {
+        effects: [
+          { verb: VERB_DOCTOR_MARK, args: [sessionId, c.check, c.mark] },
+        ],
         active: false,
       };
     // Never "active": a move is a one-shot trigger; the ceiling it leaves is

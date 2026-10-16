@@ -29,6 +29,7 @@ import {
   parseEffects,
   VERB_DISPATCH,
   VERB_DOCTOR_FIX,
+  VERB_DOCTOR_MARK,
   VERB_DOCTOR_RUN,
 } from "../src/click/wire";
 import { VERBS, SESSION_CLIENT_HINTS_KEY, BadVerbArgs } from "../src/daemon/verbs";
@@ -36,6 +37,7 @@ import type { VerbContext } from "../src/daemon/verbs";
 import { TMUX_TRUECOLOR_VAR } from "../src/doctor/checks";
 import type { ConfigLoad, DoctorEdge } from "../src/doctor/edge";
 import type { TmuxHint } from "../src/tmux-hint";
+import type { TerminalEnvHint } from "../src/terminal-hint";
 import { linkUrls, stripAnsi } from "./helpers/ansi";
 import { instantOf } from "../src/utils/instant";
 
@@ -78,7 +80,25 @@ const CLEAN_LOAD: LoadOutcome = {
   unused: [],
 };
 
-function buildRuntime(tmux: TmuxHint | null, load: LoadOutcome = CLEAN_LOAD) {
+// The session's terminal, as its client reported it, and the font the edge
+// reads for a terminal that draws from one. By default Ghostty, which ships
+// its own Nerd Font symbols, so a test about another check never reads a font.
+interface TerminalFixture {
+  readonly env: TerminalEnvHint;
+  readonly fontInUse: DoctorEdge["fontInUse"];
+}
+const GHOSTTY: TerminalFixture = {
+  env: { TERM_PROGRAM: "ghostty" },
+  fontInUse: () => {
+    throw new Error("fontInUse must not run in this case");
+  },
+};
+
+function buildRuntime(
+  tmux: TmuxHint | null,
+  load: LoadOutcome = CLEAN_LOAD,
+  terminal: TerminalFixture = GHOSTTY,
+) {
   const config = parseAndValidate(
     "<user>",
     `{ globals: {}, root: { h: ['directory', 'model'] } }`,
@@ -90,7 +110,11 @@ function buildRuntime(tmux: TmuxHint | null, load: LoadOutcome = CLEAN_LOAD) {
   sessionState.set(
     "s1",
     SESSION_CLIENT_HINTS_KEY,
-    JSON.stringify({ tmux, claudeConfigDir: dir }),
+    JSON.stringify({
+      tmux,
+      claudeConfigDir: dir,
+      terminalEnv: terminal.env,
+    }),
   );
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, sessionState);
@@ -107,8 +131,16 @@ function buildRuntime(tmux: TmuxHint | null, load: LoadOutcome = CLEAN_LOAD) {
   const doctor: DoctorEdge = {
     probeTmux: () => {
       probes += 1;
-      return { kind: "ok", value: ["osc7", "RGB", "sixel"] };
+      return {
+        kind: "ok",
+        value: {
+          features: ["osc7", "RGB", "sixel"],
+          termtype: "ghostty 1.3.1",
+          termname: "xterm-ghostty",
+        },
+      };
     },
+    fontInUse: terminal.fontInUse,
     loadConfig: () => ({ ...load, config }),
   };
   const logs: string[] = [];
@@ -156,6 +188,8 @@ function buildRuntime(tmux: TmuxHint | null, load: LoadOutcome = CLEAN_LOAD) {
     urlOfVerb,
     openTools,
     logs,
+    ctx,
+    renderRaw,
     probes: () => probes,
   };
 }
@@ -216,7 +250,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     expect(out).toContain("✓ tmux truecolor");
     expect(rt.urlOfVerb(VERB_DOCTOR_FIX)).toBeUndefined();
     expect(rt.logs.filter((line) => line.startsWith("doctor:"))).toEqual([
-      "doctor: config=failed(2) urlHandler=ok tmuxTruecolor=ok effectRefresh=ok (session=s1)",
+      "doctor: config=failed(2) urlHandler=ok tmuxTruecolor=ok effectRefresh=ok nerdFont=ok glyphs=e0b0,e0b1 terminal=ghostty@- font=- mark=- (session=s1)",
     ]);
   });
 
@@ -305,6 +339,88 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     rt.clickVerb(VERB_DOCTOR_RUN);
     expect(rt.render()).toContain("✓ tmux truecolor");
     expect(rt.urlOfVerb(VERB_DOCTOR_FIX)).toBeUndefined();
+  });
+
+  // brandon-doctor-v62x.2ww: the Nerd Font row, its glyphs to look at, and
+  // the mark that settles what the doctor could not read.
+  describe("the Nerd Font row", () => {
+    const fontCalls: unknown[][] = [];
+    const ITERM_MENLO: TerminalFixture = {
+      env: { TERM_PROGRAM: "iTerm.app", TERM_PROGRAM_VERSION: "3.7.2" },
+      fontInUse: (...args) => {
+        fontCalls.push(args);
+        return {
+          kind: "ok",
+          value: { font: "Menlo-Regular", from: 'iTerm2 profile "Default"', lacks: [...args[2]] },
+        };
+      },
+    };
+    beforeEach(() => {
+      fontCalls.length = 0;
+    });
+
+    const markUrl = (rt: ReturnType<typeof buildRuntime>, mark: string) =>
+      rt.urlOfVerb(VERB_DOCTOR_MARK) === undefined
+        ? undefined
+        : linkUrls(rt.renderRaw()).find((u) =>
+            effectsOf(u).some(
+              (e) => e.verb === VERB_DOCTOR_MARK && e.args[2] === mark,
+            ),
+          );
+
+    test("a font without the glyphs: the row names it, shows the glyphs, and offers ✓ and ✗", () => {
+      const rt = buildRuntime(null, CLEAN_LOAD, ITERM_MENLO);
+      rt.openTools();
+      rt.clickVerb(VERB_DOCTOR_RUN);
+      const out = rt.render();
+      expect(out).toContain(
+        '✗ Nerd Font — iTerm2 3.7.2 draws with Menlo-Regular (iTerm2 profile "Default"), which has no U+E0B0 U+E0B1',
+      );
+      expect(out).toContain("\ue0b0\ue0b1 [✓ shapes] [✗ boxes]");
+      // The font edge was asked about exactly the glyphs the bar draws.
+      expect(fontCalls).toEqual([["iterm2", ITERM_MENLO.env, "\ue0b0\ue0b1"]]);
+      expect(rt.logs.filter((l) => l.startsWith("doctor:"))).toEqual([
+        'doctor: config=ok urlHandler=ok tmuxTruecolor=ok effectRefresh=ok nerdFont=failed(1) glyphs=e0b0,e0b1 terminal=iterm2@3.7.2 font="Menlo-Regular":lacks2 mark=- (session=s1)',
+      ]);
+    });
+
+    test("marking ✓ records the mark on this sighting and the row is ok", () => {
+      const rt = buildRuntime(null, CLEAN_LOAD, ITERM_MENLO);
+      rt.openTools();
+      rt.clickVerb(VERB_DOCTOR_RUN);
+      rt.click(markUrl(rt, "drawn")!);
+      const out = rt.render();
+      expect(out).toContain("✓ Nerd Font");
+      expect(out).not.toContain("[✓ shapes]");
+      expect(rt.logs).toContain(
+        "doctor-mark: nerdFont drawn on iTerm2 3.7.2|U+E0B0 U+E0B1 (session=s1)",
+      );
+      expect(rt.logs.at(-1)).toMatch(/nerdFont=ok .* mark=drawn \(session=s1\)$/);
+    });
+
+    test("marking ✗ keeps the row failed, says boxes, and leaves ✓ to mark later", () => {
+      const rt = buildRuntime(null, CLEAN_LOAD, ITERM_MENLO);
+      rt.openTools();
+      rt.clickVerb(VERB_DOCTOR_RUN);
+      rt.click(markUrl(rt, "boxes")!);
+      const out = rt.render();
+      expect(out).toContain("✗ Nerd Font — iTerm2 3.7.2 draws U+E0B0 U+E0B1 as boxes");
+      expect(markUrl(rt, "drawn")).toBeDefined();
+    });
+
+    test("a mark on a check with nothing to look at is refused", () => {
+      const rt = buildRuntime(null);
+      rt.openTools();
+      rt.clickVerb(VERB_DOCTOR_RUN);
+      expect(rt.render()).toContain("✓ Nerd Font");
+      expect(markUrl(rt, "drawn")).toBeUndefined();
+      expect(() =>
+        VERBS.get(VERB_DOCTOR_MARK)!("s1/nerdFont/drawn", rt.ctx),
+      ).toThrow(BadVerbArgs);
+      expect(() =>
+        VERBS.get(VERB_DOCTOR_MARK)!("s1/nerdFont/perhaps", rt.ctx),
+      ).toThrow(/the mark is "perhaps"/);
+    });
   });
 
   test("closing 🍫 hides the tools body even when it was left open", () => {

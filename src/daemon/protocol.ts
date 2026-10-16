@@ -5,6 +5,7 @@ import type { StatsSnapshot } from "./stats";
 import type { DebugSnapshot, DebugWhat } from "./debug-types";
 import type { TmuxHint } from "../tmux-hint";
 import { MEMENTO_ENV_VARS, type MementoEnvHint } from "../memento-hint";
+import { TERMINAL_ENV_VARS, type TerminalEnvHint } from "../terminal-hint";
 
 // [LAW:types-are-the-program] PROTOCOL_VERSION encodes one thing:
 // "old-client × new-daemon (or vice versa) cannot communicate." It moves on
@@ -117,6 +118,7 @@ export interface ClientHints {
   readonly configEnv?: string;
   readonly claudeConfigDir?: string;
   readonly mementoEnv?: MementoEnvHint;
+  readonly terminalEnv?: TerminalEnvHint;
 }
 
 // [LAW:one-source-of-truth] Every field of ClientHints, keyed by the type so
@@ -129,6 +131,7 @@ const CLIENT_HINT_FIELDS = Object.keys({
   configEnv: true,
   claudeConfigDir: true,
   mementoEnv: true,
+  terminalEnv: true,
 } satisfies Record<keyof ClientHints, true>) as ReadonlyArray<
   keyof ClientHints
 >;
@@ -150,6 +153,7 @@ export function parseClientHints(
   const configEnv = sanitizeAbsolutePath(req.configEnv);
   const claudeConfigDir = sanitizeAbsolutePath(req.claudeConfigDir);
   const mementoEnv = sanitizeMementoEnv(req.mementoEnv);
+  const terminalEnv = sanitizeTerminalEnv(req.terminalEnv);
   return {
     ...(termCols !== undefined && { termCols }),
     ...(termRows !== undefined && { termRows }),
@@ -158,6 +162,7 @@ export function parseClientHints(
     ...(configEnv !== undefined && { configEnv }),
     ...(claudeConfigDir !== undefined && { claudeConfigDir }),
     ...(mementoEnv !== undefined && { mementoEnv }),
+    ...(terminalEnv !== undefined && { terminalEnv }),
   };
 }
 
@@ -207,6 +212,19 @@ export function sanitizeMementoEnv(v: unknown): MementoEnvHint | undefined {
   const o = v as Record<string, unknown>;
   const set = MEMENTO_ENV_VARS.filter((name) => o[name] !== undefined);
   return set.every((name) => sanitizeAbsolutePath(o[name]) !== undefined)
+    ? Object.fromEntries(set.map((name) => [name, o[name] as string]))
+    : undefined;
+}
+
+// [LAW:no-defensive-null-guards] exception: trust boundary, same shape as
+// sanitizeMementoEnv. Only the variables of TERMINAL_ENV_VARS are read, each a
+// non-empty string as both clients send it; one that is anything else makes
+// the whole hint unreported (`undefined`).
+export function sanitizeTerminalEnv(v: unknown): TerminalEnvHint | undefined {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return undefined;
+  const o = v as Record<string, unknown>;
+  const set = TERMINAL_ENV_VARS.filter((name) => o[name] !== undefined);
+  return set.every((name) => typeof o[name] === "string" && o[name] !== "")
     ? Object.fromEntries(set.map((name) => [name, o[name] as string]))
     : undefined;
 }
