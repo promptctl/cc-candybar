@@ -31,6 +31,7 @@ import { SessionUsageStore } from "../src/daemon/cache/session-usage-store";
 import { clearParseCache } from "../src/utils/claude";
 import type { ClaudeHookData } from "../src/utils/claude";
 import { instantOf } from "../src/utils/instant";
+import { ABSENT } from "../src/utils/outcome";
 
 // Count cumulative FSREQPROMISE inits (libuv fs requests) over `body`.
 async function countFsOps(body: () => Promise<unknown>): Promise<number> {
@@ -183,7 +184,7 @@ describe("SessionUsageStore — session projection", () => {
       await new Promise((r) => setTimeout(r, 10));
       expect(store.sweepStale()).toBe(1);
       expect(store.getStats()).toMatchObject({ sweeps: 1, size: 0 });
-      expect(lines).toContain("usageStore sweep dropped=1 held=0");
+      expect(lines).toContain("usageStore sweep dropped=1 noRecord=0 held=0");
     } finally {
       store.close();
     }
@@ -208,7 +209,7 @@ describe("SessionUsageStore — session projection", () => {
       await new Promise((r) => setTimeout(r, 10));
       expect(store.sweepStale()).toBe(0);
       expect(store.getStats()).toMatchObject({ sweeps: 0, size: 1 });
-      expect(lines).toContain("usageStore sweep dropped=0 held=1");
+      expect(lines).toContain("usageStore sweep dropped=0 noRecord=0 held=1");
     } finally {
       store.close();
     }
@@ -224,6 +225,81 @@ describe("SessionUsageStore — session projection", () => {
       await store.getUsageInfo("A", hook("A", t));
       await new Promise((r) => setTimeout(r, 10));
       expect(store.sweepStale()).toBe(1);
+    } finally {
+      store.close();
+    }
+  });
+
+  // brandon-unfiled-3248.59m: a session that renders before its transcript
+  // has bytes holds a speed ring and no record; it is swept on the same clock.
+  test("sweepStale drops a session seen only by a speed observation", async () => {
+    const lines: string[] = [];
+    let now = Date.now();
+    const clock = jest.spyOn(Date, "now").mockImplementation(() => now);
+    const store = new SessionUsageStore({
+      sweepIntervalMs: 0,
+      staleAgeMs: 1,
+      logger: (_level, msg) => lines.push(msg),
+    });
+    try {
+      await store.observeSpeed("R", undefined, 1_000);
+      expect(store.getStats()).toMatchObject({ size: 1 });
+      now += 2;
+      expect(store.sweepStale()).toBe(1);
+      expect(store.getStats()).toMatchObject({ size: 0 });
+      expect(lines).toContain("usageStore sweep dropped=1 noRecord=1 held=0");
+      // The ring went with it: the next observation starts a new baseline.
+      const next = await store.observeSpeed("R", undefined, 2_000);
+      expect(next.kind).toBe("ok");
+      if (next.kind !== "ok") return;
+      expect(next.value.prev).toBeUndefined();
+    } finally {
+      store.close();
+      clock.mockRestore();
+    }
+  });
+
+  // A render reporting no transcript_path still sees its session, so the
+  // record and its tok/s baseline outlive `staleAgeMs` while it renders.
+  test("a render with no transcript path keeps its session seen", async () => {
+    const a = join(dir, "A.jsonl");
+    const b = join(dir, "B.jsonl");
+    writeFileSync(a, usageLine("a", new Date(), 0.01));
+    writeFileSync(b, usageLine("b", new Date(), 0.01));
+    let now = Date.now();
+    const clock = jest.spyOn(Date, "now").mockImplementation(() => now);
+    const store = new SessionUsageStore({
+      sweepIntervalMs: 0,
+      staleAgeMs: 300,
+    });
+    try {
+      await store.getUsageInfo("A", hook("A", a));
+      await store.getUsageInfo("B", hook("B", b));
+      now += 400;
+      await store.getUsageInfo("B", { session_id: "B" } as ClaudeHookData);
+      expect(store.sweepStale()).toBe(1);
+      const info = await store.getUsageInfo("B", {
+        session_id: "B",
+      } as ClaudeHookData);
+      expect(info.kind).toBe("ok");
+      if (info.kind !== "ok") return;
+      expect(info.value.session.calculatedCost).toBeCloseTo(0.01, 5);
+    } finally {
+      store.close();
+      clock.mockRestore();
+    }
+  });
+
+  // Asking about a session stores nothing: a slot exists only once a record or
+  // a speed sample is stored in it.
+  test("an ask that stores nothing leaves no slot", async () => {
+    const store = new SessionUsageStore({ sweepIntervalMs: 0 });
+    try {
+      const failed = await store.getUsageInfo("G", hook("G", dir));
+      expect(failed.kind).toBe("failed");
+      await store.getUsageInfo("H", { session_id: "H" } as ClaudeHookData);
+      expect(await store.observeSpeed("", undefined, 1_000)).toEqual(ABSENT);
+      expect(store.getStats()).toMatchObject({ size: 0 });
     } finally {
       store.close();
     }

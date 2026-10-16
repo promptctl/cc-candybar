@@ -125,7 +125,25 @@ interface SessionRecord {
   days: Map<string, DayUsage>;
   transcriptStamp: string;
   transcriptPath: string | undefined;
+}
+
+// Everything the store holds for one session, living exactly as long as the
+// session is seen: the slot exists once something is stored for it (a record,
+// a speed sample), every render or scan asking about it moves `lastSeenAt`,
+// and `sweepStale` drops the slot whole. [LAW:types-are-the-program] The
+// record and the speed ring hang off the one slot, so neither can outlive the
+// other — a session that renders before its transcript has bytes holds a ring
+// and no record, and is swept on the same clock.
+interface SessionSlot {
   lastSeenAt: number;
+  record: SessionRecord | undefined;
+  // [LAW:one-source-of-truth] The recent tok/s observations, a bounded ring
+  // (oldest→newest). tok/s is a derivative of the SAME token totals the record
+  // owns; the baseline (prior counts + time) is the ring's last element, not a
+  // parallel counter. The burn-rate sparkline folds over the whole ring; tok/s
+  // folds over its final pair. One call to observeSpeed appends; the pure delta
+  // math is render-payload's.
+  readonly ring: SpeedSample[];
 }
 
 // What one caller's ingests did. Renders share the store's running tally — the
@@ -329,7 +347,7 @@ export class SessionUsageStore {
   // the day's sessions would drop work from it unseen. A record is a few
   // scalars per file and retained day, and `sweepStale` bounds the map to the
   // sessions seen within `staleAgeMs` plus those holding work done today.
-  private readonly entries = new Map<string, SessionRecord>();
+  private readonly sessions = new Map<string, SessionSlot>();
   // [LAW:one-source-of-truth] Coalesces concurrent MISSES for the same
   // (session, observed stamp) onto one parse; cleared on settle (a coalescer,
   // not a cache — the records map IS the cache).
@@ -344,13 +362,6 @@ export class SessionUsageStore {
   private readonly seeded = new Map<string, DaySeed>();
   private seededDay = "";
   private readonly rescanIntervalMs: number;
-  // [LAW:one-source-of-truth] The recent tok/s observations per session, a
-  // bounded ring (oldest→newest). tok/s is a derivative of the SAME token totals
-  // the records map already owns; the baseline (prior counts + time) is the ring's
-  // last element, not a parallel counter. The burn-rate sparkline folds over the
-  // whole ring; tok/s folds over its final pair. One call to observeSpeed appends;
-  // the pure delta math is render-payload's.
-  private readonly speedRings = new Map<string, SpeedSample[]>();
   // [LAW:no-ambient-temporal-coupling] Explicit owner of observe/commit ordering
   // for the speed sample. Concurrent renders observing the SAME transcript state
   // (key = `${sessionId}:${mtime}`) share ONE observation and commit the baseline
@@ -396,7 +407,7 @@ export class SessionUsageStore {
     rescans: number;
   } {
     return {
-      size: this.entries.size,
+      size: this.sessions.size,
       hits: this.renderTally.hits,
       misses: this.renderTally.misses,
       sweeps: this.sweeps,
@@ -478,12 +489,13 @@ export class SessionUsageStore {
     const roots = claudePaths.map((dir) => join(dir, "projects") + sep);
     const total: DayUsage = { ...EMPTY_DAY };
     let any = false;
-    for (const [sessionId, record] of this.entries) {
-      const path = record.transcriptPath ?? "";
+    for (const [sessionId, { record }] of this.sessions) {
+      const path = record?.transcriptPath ?? "";
       const counted =
         sessionId === hookData?.session_id ||
         roots.some((root) => path.startsWith(root));
-      const days = counted ? record.days : NO_DAYS;
+      // A slot holding only a speed ring has no record, and no days.
+      const days = counted ? (record?.days ?? NO_DAYS) : NO_DAYS;
       any = any || days.has(today);
       const d = days.get(today) ?? EMPTY_DAY;
       total.cost += d.cost;
@@ -526,6 +538,9 @@ export class SessionUsageStore {
     // the write of `cur` happen exactly once for that state, with the flight as
     // the sole owner of ordering. A distinct stamp is a genuinely new sample and
     // gets its own key.
+    // No session id is no session: there is no baseline to keep, and a ring
+    // keyed "" would be every id-less caller's baseline at once.
+    if (!sessionId) return ABSENT;
     const stamp = statStamp(transcriptPath);
     return this.speedFlight.run(`${sessionId}:${stamp}`, async () => {
       const record = await this.ingest(
@@ -538,7 +553,7 @@ export class SessionUsageStore {
       const breakdown =
         record.kind === "ok" ? record.value.sessionInfo.tokenBreakdown : null;
       const cur = speedSampleOf(breakdown, nowMs);
-      const ring = this.speedRings.get(sessionId) ?? [];
+      const { ring } = this.hold(sessionId);
       // [LAW:no-ambient-temporal-coupling] Observation time (atMs, the render
       // clock) owns ring order — NOT ingest-completion order. Two concurrent
       // observes with different stamps don't coalesce in speedFlight and each
@@ -559,7 +574,6 @@ export class SessionUsageStore {
       // Drop oldest (smallest atMs ⇒ ring[0]) beyond the cap — a tail window,
       // not an archive.
       if (ring.length > SPEED_RING_CAPACITY) ring.shift();
-      this.speedRings.set(sessionId, ring);
       return ok({
         ...(prev !== undefined && { prev }),
         cur,
@@ -571,8 +585,8 @@ export class SessionUsageStore {
   // stamp-gated, coalesced re-parse of ONE session. `ok` is its record,
   // `absent` is an unknown empty session (or no sessionId), `failed` is a
   // transcript that exists but couldn't be parsed — NOT cached (only ok
-  // records enter the map; the next render retries, same rule as the git
-  // cache). This is the single write-path into the records map.
+  // records are stored; the next render retries, same rule as the git
+  // cache). This is the single write-path of a slot's record.
   private async ingest(
     sessionId: string,
     transcriptPath: string | undefined,
@@ -581,9 +595,8 @@ export class SessionUsageStore {
   ): Promise<Outcome<SessionRecord>> {
     if (!sessionId) return ABSENT;
     const stamp = knownStamp ?? statStamp(transcriptPath);
-    const existing = this.entries.get(sessionId);
+    const existing = this.see(sessionId)?.record;
     if (existing && stamp !== "" && existing.transcriptStamp === stamp) {
-      existing.lastSeenAt = Date.now();
       tally.hits++;
       return ok(existing);
     }
@@ -621,7 +634,7 @@ export class SessionUsageStore {
     };
     try {
       refolded = await this.flight.run(`${sessionId}:${stamp}`, async () => {
-        const prior = this.entries.get(sessionId);
+        const prior = this.sessions.get(sessionId)?.record;
         return {
           prior,
           outcome: await this.refold(sessionId, transcriptPath, prior),
@@ -640,12 +653,34 @@ export class SessionUsageStore {
       days: outcome.value.days,
       transcriptStamp: outcome.value.mainStamp,
       transcriptPath,
-      lastSeenAt: Date.now(),
     };
     // Something else landed first (another refold, a sweep): store nothing.
-    if (this.entries.get(sessionId) !== prior) return ok(record);
-    this.entries.set(sessionId, record);
+    // Store only over the record this fold started from; a sweep of that record
+    // mid-flight is a change too, so its slot is not brought back.
+    if (this.sessions.get(sessionId)?.record !== prior) return ok(record);
+    this.hold(sessionId).record = record;
     return ok(record);
+  }
+
+  // The one write of `lastSeenAt`: the session's slot, refreshed as seen, or
+  // undefined while the store holds nothing for it — asking stores nothing.
+  private see(sessionId: string): SessionSlot | undefined {
+    const slot = this.sessions.get(sessionId);
+    if (slot) slot.lastSeenAt = Date.now();
+    return slot;
+  }
+
+  // The slot something is about to be stored in, created on the first store.
+  private hold(sessionId: string): SessionSlot {
+    const seen = this.see(sessionId);
+    if (seen) return seen;
+    const slot: SessionSlot = {
+      lastSeenAt: Date.now(),
+      record: undefined,
+      ring: [],
+    };
+    this.sessions.set(sessionId, slot);
+    return slot;
   }
 
   // [LAW:dataflow-not-control-flow] Re-fold ONLY the bytes appended since the
@@ -829,20 +864,26 @@ export class SessionUsageStore {
     const now = Date.now();
     let dropped = 0;
     let held = 0;
-    for (const [sid, record] of this.entries) {
-      if (now - record.lastSeenAt <= this.staleAgeMs) continue;
-      if (record.days.has(this.seededDay)) {
+    // Slots dropped holding no record: a session seen only before its
+    // transcript had bytes, or with no transcript path at all.
+    let noRecord = 0;
+    for (const [sid, { lastSeenAt, record }] of this.sessions) {
+      if (now - lastSeenAt <= this.staleAgeMs) continue;
+      if (record?.days.has(this.seededDay)) {
         held++;
         continue;
       }
-      this.entries.delete(sid);
-      this.speedRings.delete(sid);
+      this.sessions.delete(sid);
       dropped++;
+      if (record === undefined) noRecord++;
     }
     if (dropped > 0) this.sweeps++;
     // [LAW:nothing-unseen] A sweep that held records for `today` says so.
     if (dropped > 0 || held > 0) {
-      this.log("info", `usageStore sweep dropped=${dropped} held=${held}`);
+      this.log(
+        "info",
+        `usageStore sweep dropped=${dropped} noRecord=${noRecord} held=${held}`,
+      );
     }
     return dropped;
   }
@@ -852,8 +893,7 @@ export class SessionUsageStore {
       clearInterval(this.sweepTimer);
       this.sweepTimer = null;
     }
-    this.entries.clear();
+    this.sessions.clear();
     this.seeded.clear();
-    this.speedRings.clear();
   }
 }
