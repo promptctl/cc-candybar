@@ -93,7 +93,7 @@ What a click does depends on the action's kind:
 | Copy | `{ copy: template }` | copies the evaluated text |
 | Open | `{ open: template }` | opens a path in VS Code |
 | Slash | `{ slash: "/compact" }` | types the command into this session's Claude Code pane (refused unless the pane shows a bare prompt) |
-| Doctor | `{ doctor: "run" }` / `{ doctor: "fix", check }` | runs the checks; fixes one |
+| Doctor | `{ doctor: "run" }` / `{ doctor: "fix", check }` / `{ doctor: "mark", check, mark }` | runs the checks; fixes one; marks the glyphs one shows |
 | Ceiling | `{ ceiling: "set", to }` / `{ ceiling: "clear" }` | moves memento's context ceiling for this session |
 | Do | `{ do: [a, b, …] }` | fires each listed action in one click, one undo step |
 
@@ -510,7 +510,7 @@ At 80 columns the row moves under an empty row and is still 113 cells wide:
  ✗ tmux truecolor — the client reported no tmux facts — re-run `cc-candybar install` to stage a current client
 ```
 
-A passing check reads `✓ <label>`. A failing check that can be fixed carries `[fix]`, which writes `~/.claude/settings.json` (`doctor-fix`). A check that found several problems names the first and counts the rest (`(+2 more — run `cc-candybar doctor`)`); the CLI lists them all. The checks are data in `src/doctor/checks.ts`: `config`, `URL handler`, `tmux truecolor` and `effect refresh`.
+A passing check reads `✓ <label>`. A failing check that can be fixed carries `[fix]`, which writes `~/.claude/settings.json` (`doctor-fix`). A check that found several problems names the first and counts the rest (`(+2 more — run `cc-candybar doctor`)`); the CLI lists them all. A failing check that shows glyphs to look at (`Nerd Font`) adds them after its reason, then `[✓ shapes]` and `[✗ boxes]` (`doctor-mark`). The checks are data in `src/doctor/checks.ts`: `config`, `URL handler`, `tmux truecolor`, `effect refresh` and `Nerd Font`.
 
 ## Edit mode
 
@@ -725,7 +725,7 @@ Every verb the daemon accepts, from `src/click/wire.ts`, and what emits it.
 | `copy`, `open-vscode` | `⎘ id`, `⎘ resume`, `↗ proj`, `↗ log`, `↗ config` |
 | `slash` | `/compact`, `/model`, `/clear`, autocompact's `−` `+` `↺` |
 | `ceiling` | the ceiling segment's `−` `+` `∞` `↺` |
-| `doctor-run`, `doctor-fix` | `🩺 doctor`, `[fix]` |
+| `doctor-run`, `doctor-fix`, `doctor-mark` | `🩺 doctor`, `[fix]`, `[✓ shapes]` `[✗ boxes]` |
 | `show-config-error`, `show-config-warning` | the diagnostic strip's words |
 | `apply-update` | `[rebuild]` / `[upgrade]` |
 | `toolbar-toggle` | nothing |

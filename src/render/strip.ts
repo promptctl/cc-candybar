@@ -212,6 +212,33 @@ export function stripSeamCols(options: StripShape): number {
   return stripGeometry(options).seam;
 }
 
+// Unicode's three Private Use Areas: the code points no standard font draws,
+// where Powerline and Nerd Fonts put their glyphs.
+const PRIVATE_USE =
+  /[\u{E000}-\u{F8FF}\u{F0000}-\u{FFFFD}\u{100000}-\u{10FFFD}]/gu;
+
+// The private-use glyphs in a text, each once, in the order written.
+export function privateGlyphsIn(text: string): string {
+  return [...new Set(text.match(PRIVATE_USE) ?? [])].join("");
+}
+
+// The private-use glyphs a row draws — its caps, the seam between two cells,
+// and the divider between two on one ground, each once, in the order drawn:
+// what a terminal needs a Nerd Font (or its own built-in glyphs) to show.
+// MEASURED through the joiner that draws the row, as its geometry is, so a
+// joiner rich-js adds needs no entry here.
+export function stripPrivateGlyphs(options: StripShape): string {
+  const joiner = pickJoiner(options.endcaps, options.separator);
+  const cell = (bgcolor: string): RichText =>
+    new RichText("x", { end: "", style: new Style({ bgcolor }) });
+  const cells = [cell("#101010"), cell("#202020"), cell("#202020")];
+  const drawn = draw(new Strip(cells, joiner), {
+    colorSystem: null,
+    ...drawOptions(options.charset),
+  });
+  return privateGlyphsIn(drawn);
+}
+
 function toCell(seg: RenderedSegmentLike, padding: number): RichText {
   // [LAW:one-source-of-truth] Intra-cell padding derives from the one resolved
   // globals.padding value on BuildLineOptions — the joiners sit between cells;

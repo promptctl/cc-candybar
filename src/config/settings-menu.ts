@@ -62,7 +62,7 @@ import {
   disclosureTriggerCall,
   templateLiteral,
 } from "./disclosure.js";
-import { CHECKS } from "../doctor/checks.js";
+import { CHECKS, GLYPH_MARKS, type GlyphMark } from "../doctor/checks.js";
 import {
   doctorReportKeys,
   VERDICT_OK,
@@ -243,7 +243,14 @@ const REDO_ACTION = `${SETTINGS_NS}redo`;
 const DOCTOR_SEG = `${SETTINGS_NS}doctor`;
 const DOCTOR_RUN_ACTION = `${DOCTOR_SEG}.run`;
 const doctorFixAction = (check: string): string => `${DOCTOR_SEG}.fix.${check}`;
+const doctorMarkAction = (check: string, mark: GlyphMark): string =>
+  `${DOCTOR_SEG}.mark.${check}.${mark}`;
 const doctorRowSeg = (check: string): string => `${DOCTOR_SEG}.${check}`;
+// What each mark says, in the words a user looks with.
+const MARK_GLYPH: Readonly<Record<GlyphMark, string>> = {
+  drawn: "[✓ shapes]",
+  boxes: "[✗ boxes]",
+};
 
 // [LAW:one-source-of-truth] One accordion key for every picker in the menu:
 // one key holds one open member, so opening a theme picker closes the style
@@ -908,7 +915,9 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
 // (`verdict` left its unrun default); it reads `✓ label`, or `✗ label — reason`
 // with a `[fix]` bound to that check's own fix action when the verdict carried
 // one. The `[fix]` is `{ doctor: "fix", check }` — the daemon re-probes the
-// check at click time and refuses loudly if there is nothing left to fix.
+// check at click time and refuses loudly if there is nothing left to fix. A
+// verdict that shows glyphs to look at adds them, then a ✓ and a ✗ — each
+// `{ doctor: "mark", check, mark }`, re-probed at click time the same way.
 function declareDoctorRows(artifacts: MenuArtifacts): void {
   for (const c of CHECKS) {
     const keys = doctorReportKeys(c.name);
@@ -917,12 +926,30 @@ function declareDoctorRows(artifacts: MenuArtifacts): void {
       artifacts.variables[key] = { kind: "state", key, default: VERDICT_UNRUN };
     }
     artifacts.actions[fix] = { doctor: "fix", check: c.name };
+    // Only a check that takes a mark gets the actions that make one.
+    const marks = c.takesMark ? GLYPH_MARKS : [];
+    for (const mark of marks) {
+      artifacts.actions[doctorMarkAction(c.name, mark)] = {
+        doctor: "mark",
+        check: c.name,
+        mark,
+      };
+    }
+    const markCells = marks
+      .map(
+        (mark) =>
+          ` {{ action "${doctorMarkAction(c.name, mark)}" "${MARK_GLYPH[mark]}" }}`,
+      )
+      .join("");
     artifacts.segments[doctorRowSeg(c.name)] = {
       when: `{{ ne .${keys.verdict} "${VERDICT_UNRUN}" }}`,
       template:
         `{{ if eq .${keys.verdict} "${VERDICT_OK}" }}✓ ${c.label}` +
         `{{ else }}✗ ${c.label} — {{ .${keys.reason} }}` +
         `{{ if eq .${keys.fixable} "${BOOLEAN_TRUE}" }} {{ action "${fix}" "[fix]" }}{{ end }}` +
+        (markCells === ""
+          ? ""
+          : `{{ if ne .${keys.sighting} "" }} {{ .${keys.sighting} }}${markCells}{{ end }}`) +
         `{{ end }}`,
     };
   }

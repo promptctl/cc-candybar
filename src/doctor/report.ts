@@ -12,7 +12,14 @@
 // `CHECKS` is static, so a fixed set of scalar keys needs no series encoding.
 
 import { BOOLEAN_FALSE, BOOLEAN_TRUE } from "../themes/policy.js";
-import type { CheckReport } from "./checks.js";
+import {
+  NERD_FONT_CHECK,
+  glyphSighting,
+  type Asked,
+  type CheckReport,
+  type MarkBook,
+  type NerdFontFacts,
+} from "./checks.js";
 import { SETTINGS_NS } from "../config/loader/reserved-namespace.js";
 
 export const DOCTOR_NS = `${SETTINGS_NS}doctor.`;
@@ -23,10 +30,13 @@ export const VERDICT_FAILED = "failed";
 // which is the report's "this check has not run" state, gating the row off.
 export const VERDICT_UNRUN = "";
 
+// `sighting` holds the glyphs a failed verdict shows the user to mark, empty
+// when it shows none.
 export interface ReportKeys {
   readonly verdict: string;
   readonly reason: string;
   readonly fixable: string;
+  readonly sighting: string;
 }
 
 export function doctorReportKeys(checkName: string): ReportKeys {
@@ -35,7 +45,50 @@ export function doctorReportKeys(checkName: string): ReportKeys {
     verdict: `${base}verdict`,
     reason: `${base}reason`,
     fixable: `${base}fixable`,
+    sighting: `${base}sighting`,
   };
+}
+
+// [LAW:nothing-unseen] What the Nerd Font check reasoned over, as logfmt
+// fields for the doctor's event: the glyphs it needed, the terminal it found
+// (`<name>@<release>`, `-` for an unsaid release, else the arm that kept it
+// from finding one), the font it read and the mark it honoured, the one made
+// on the sighting it shows (`unread` when the mark book could not be read) —
+// every field `-` where there was nothing to find.
+// A value a terminal or font chose is a JSON string, since it may hold a space.
+export function nerdFontFields(
+  facts: NerdFontFacts,
+  marks: Asked<MarkBook>,
+): string {
+  if (facts.kind === "none") return "glyphs=- terminal=- font=- mark=-";
+  const { glyphs, terminal } = facts;
+  const codes = [...glyphs].map((g) => g.codePointAt(0)!.toString(16));
+  const found = ((): string => {
+    switch (terminal.kind) {
+      case "unreported":
+      case "unasked":
+        return terminal.kind;
+      case "unknown":
+        return `unknown:${JSON.stringify(terminal.called)}`;
+      case "bundling":
+      case "configured":
+        return `${terminal.name}@${terminal.version ?? "-"}`;
+    }
+  })();
+  const font = ((): string => {
+    if (terminal.kind !== "configured") return "-";
+    if (terminal.font.kind === "failed") return "failed";
+    const { font: name, lacks } = terminal.font.value;
+    return `${JSON.stringify(name)}:${lacks === null ? "not-installed" : `lacks${lacks.length}`}`;
+  })();
+  const sighting = glyphSighting(facts);
+  const mark =
+    marks.kind === "failed"
+      ? "unread"
+      : sighting === undefined
+        ? "-"
+        : (marks.value[NERD_FONT_CHECK]?.[sighting.id] ?? "-");
+  return `glyphs=${codes.join(",")} terminal=${found} font=${font} mark=${mark}`;
 }
 
 // The bar's row has room for one problem: it names the first and counts the
@@ -60,6 +113,7 @@ export function doctorReportPairs(
           { key: keys.verdict, value: VERDICT_OK },
           { key: keys.reason, value: "" },
           { key: keys.fixable, value: BOOLEAN_FALSE },
+          { key: keys.sighting, value: "" },
         ]
       : [
           { key: keys.verdict, value: VERDICT_FAILED },
@@ -68,6 +122,7 @@ export function doctorReportPairs(
             key: keys.fixable,
             value: verdict.fix === undefined ? BOOLEAN_FALSE : BOOLEAN_TRUE,
           },
+          { key: keys.sighting, value: verdict.sighting?.glyphs ?? "" },
         ];
   });
 }

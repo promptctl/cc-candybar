@@ -5,6 +5,7 @@
 // verb, the handler version a click carries), and the reading of the handler
 // app's script against the installer that writes it.
 
+import { memoryMarkBook } from "./helpers/mark-book";
 import { checkByName, type UrlHandlerFacts } from "../src/doctor/checks";
 import {
   ProbeArrivals,
@@ -42,6 +43,8 @@ const verdict = (urlHandler: UrlHandlerFacts) =>
     effect: { kind: "decided", name: "none", value: "none" },
     placementEffects: [],
     transitions: false,
+    nerdFont: { kind: "none" },
+    marks: { kind: "ok", value: {} },
     claudeSettings: { path: "/s.json", env: {}, statusLine: { kind: "absent" } },
   });
 
@@ -411,7 +414,17 @@ describe("the daemon's side of the round trip", () => {
       probes,
       dlog: (_level, message) => logs.push(message),
       doctor: {
-        probeTmux: () => ({ kind: "ok", value: [] }),
+        probeTmux: () => ({
+          kind: "ok",
+          value: { features: [], termtype: "", termname: "", pid: 4242 },
+        }),
+        remoteLogin: () => {
+          throw new Error("remoteLogin must not run in this case");
+        },
+        marks: memoryMarkBook(),
+        fontInUse: () => {
+          throw new Error("fontInUse must not run in this case");
+        },
         loadConfig: () => ({
           layers: [],
           error: null,
@@ -464,7 +477,7 @@ describe("the daemon's side of the round trip", () => {
   function doctorRow(clientVersion: string | null) {
     const d = daemon(clientVersion);
     recordRender(d.sessionState, "s1");
-    d.sessionState.set("s1", SESSION_CLIENT_HINTS_KEY, JSON.stringify({ tmux: null }));
+    d.sessionState.set("s1", SESSION_CLIENT_HINTS_KEY, JSON.stringify({ tmux: null, terminalEnv: { TERM_PROGRAM: "ghostty" } }));
     d.click(VERB_DOCTOR_RUN, "s1");
     const keys = doctorReportKeys("urlHandler");
     return {
@@ -478,7 +491,7 @@ describe("the daemon's side of the round trip", () => {
     const row = doctorRow(PACKAGE_VERSION);
     expect(row.verdict).toBe("ok");
     expect(row.logs).toEqual([
-      "doctor: config=ok urlHandler=ok tmuxTruecolor=ok effectRefresh=ok (session=s1)",
+      "doctor: config=ok urlHandler=ok tmuxTruecolor=ok effectRefresh=ok nerdFont=ok glyphs=e0b0,e0b1 terminal=ghostty@- font=- mark=- (session=s1)",
     ]);
   });
 
@@ -489,7 +502,7 @@ describe("the daemon's side of the round trip", () => {
       `the URL handler runs cc-candybar 0.0.1; the bar runs ${PACKAGE_VERSION} — re-run \`cc-candybar install\``,
     );
     expect(row.logs).toEqual([
-      "doctor: config=ok urlHandler=failed(1) tmuxTruecolor=ok effectRefresh=ok (session=s1)",
+      "doctor: config=ok urlHandler=failed(1) tmuxTruecolor=ok effectRefresh=ok nerdFont=ok glyphs=e0b0,e0b1 terminal=ghostty@- font=- mark=- (session=s1)",
     ]);
   });
 

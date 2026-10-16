@@ -6,6 +6,7 @@
 // only ever asked when there is a server to ask. The settings file is the one
 // in the Claude Code directory the client's `claudeConfigDir` hint names.
 
+import { memoryMarkBook } from "./helpers/mark-book";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -37,6 +38,13 @@ const loadsConfig = (config: DslConfig): DoctorEdge["loadConfig"] => () => ({
 const NO_TMUX: DoctorEdge = {
   probeTmux: () => {
     throw new Error("probeTmux must not run in this case");
+  },
+  remoteLogin: () => {
+    throw new Error("remoteLogin must not run in this case");
+  },
+  marks: memoryMarkBook(),
+  fontInUse: () => {
+    throw new Error("fontInUse must not run in this case");
   },
   loadConfig: loadsConfig(DEFAULT_DSL_CONFIG),
 };
@@ -337,14 +345,23 @@ describe("gatherFacts", () => {
     const edge: DoctorEdge = {
       probeTmux: (hint) => {
         asked.push(hint);
-        return { kind: "ok", value: ["osc7", "RGB"] };
+        return {
+          kind: "ok",
+          value: { features: ["osc7", "RGB"], termtype: "", termname: "", pid: 4242 },
+        };
       },
+      remoteLogin: NO_TMUX.remoteLogin,
+      marks: NO_TMUX.marks,
+      fontInUse: NO_TMUX.fontInUse,
       loadConfig: NO_TMUX.loadConfig,
     };
     expect(factsIn(absent, HINT, edge).tmux).toEqual({
       kind: "inside",
       hint: HINT,
-      termfeatures: { kind: "ok", value: ["osc7", "RGB"] },
+      client: {
+        kind: "ok",
+        value: { features: ["osc7", "RGB"], termtype: "", termname: "", pid: 4242 },
+      },
     });
     expect(asked).toEqual([HINT]);
   });

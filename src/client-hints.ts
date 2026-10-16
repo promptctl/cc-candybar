@@ -10,6 +10,7 @@ import { detectClaudeConfigDir } from "./claude-settings";
 import { detectConfigEnv } from "./config-hint";
 import { detectMementoEnv } from "./memento-hint";
 import { detectTermExtent } from "./term-extent";
+import { detectTerminalEnv } from "./terminal-hint";
 import { detectTmuxHint } from "./tmux-hint";
 
 // The env vars an SSH login shell inherits from sshd. Any one of them present
@@ -57,5 +58,8 @@ export function detectClientHints(
     // Total like tmux: always an object, so an absent hint means only "client
     // too old". Memento's spawns run with THIS session's variables.
     mementoEnv: detectMementoEnv(env, cwd),
+    // Total like mementoEnv. The doctor reads which terminal draws the bar
+    // from these (src/doctor/terminal.ts).
+    terminalEnv: detectTerminalEnv(env),
   };
 }

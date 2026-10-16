@@ -768,17 +768,37 @@ describe("2de.12 — loader proves the ActionDecl invariants", () => {
     );
   });
 
-  test("a doctor action's verb is run or fix", () => {
+  test("a doctor action's verb is run, fix or mark", () => {
     expectIssue(
       base(`{ a: { doctor: 'reset' } }`),
-      /doctor must be "run" or "fix"/,
+      /doctor must be "run", "fix", "mark"/,
     );
   });
 
   test("a doctor fix names a declared check", () => {
     expectIssue(
       base(`{ a: { doctor: 'fix', check: 'ghost' } }`),
-      /doctor fix must name a check \(have: config, urlHandler, tmuxTruecolor, effectRefresh\)/,
+      /doctor fix must name a check \(have: config, urlHandler, tmuxTruecolor, effectRefresh, nerdFont\)/,
+    );
+  });
+
+  test("a doctor mark names a check that takes one, and a mark", () => {
+    expectIssue(
+      base(`{ a: { doctor: 'mark', check: 'nerdFont', mark: 'maybe' } }`),
+      /doctor mark must be "drawn" or "boxes", got "maybe"/,
+    );
+    expectIssue(
+      base(`{ a: { doctor: 'mark', check: 'ghost', mark: 'drawn' } }`),
+      /doctor mark must name a check/,
+    );
+    // A check that takes no mark is not one a mark may name.
+    expectIssue(
+      base(`{ a: { doctor: 'mark', check: 'config', mark: 'drawn' } }`),
+      /doctor mark must name a check \(have: nerdFont\), got "config"/,
+    );
+    expectIssue(
+      base(`{ a: { doctor: 'fix', check: 'nerdFont', mark: 'drawn' } }`),
+      /Unknown key "mark" on a doctor action. Expected only: doctor, check/,
     );
   });
 
@@ -792,7 +812,7 @@ describe("2de.12 — loader proves the ActionDecl invariants", () => {
   test("a bad doctor verb and an unknown key are both reported in one pass", () => {
     const source = base(`{ a: { doctor: 'reset', oops: 1 } }`);
     expectIssue(source, /Unknown key "oops" on a doctor action/);
-    expectIssue(source, /doctor must be "run" or "fix"/);
+    expectIssue(source, /doctor must be "run", "fix", "mark"/);
   });
 
   test("an unresolved `{{ action }}` reference is rejected", () => {

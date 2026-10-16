@@ -24,7 +24,7 @@ const inside = (
 ): TmuxFacts => ({
   kind: "inside",
   hint: { ...HINT, truecolor },
-  termfeatures: { kind: "ok", value: features },
+  client: { kind: "ok", value: { features, termtype: "", termname: "", pid: 4242 } },
 });
 
 const LOADED: ConfigFacts = {
@@ -52,6 +52,8 @@ const facts = (
   placementEffects,
   transitions,
   urlHandler: { kind: "unsupported" },
+  nerdFont: { kind: "none" },
+  marks: { kind: "ok", value: {} },
   claudeSettings: { path: SETTINGS_PATH, env, statusLine },
 });
 
@@ -109,7 +111,7 @@ describe("tmuxTruecolor probe", () => {
       facts({
         kind: "inside",
         hint: HINT,
-        termfeatures: { kind: "failed", reason: "no server running" },
+        client: { kind: "failed", reason: "no server running" },
       }),
     );
     expect(v).toEqual({
@@ -241,6 +243,7 @@ describe("config probe", () => {
       ["urlHandler", true],
       ["tmuxTruecolor", true],
       ["effectRefresh", true],
+      ["nerdFont", true],
     ]);
   });
 });

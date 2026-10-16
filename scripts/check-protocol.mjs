@@ -102,6 +102,7 @@ const TS_CLI_FLAGS = "src/cli-flags.ts";
 const TS_TMUX_HINT = "src/tmux-hint.ts";
 const TS_CONFIG_HINT = "src/config-hint.ts";
 const TS_MEMENTO_HINT = "src/memento-hint.ts";
+const TS_TERMINAL_HINT = "src/terminal-hint.ts";
 const TS_CLAUDE_SETTINGS = "src/claude-settings.ts";
 const TS_GLYPH = "src/render/error-glyph.ts";
 const TS_STYLE = "src/render/diagnostic-style.ts";
@@ -261,6 +262,23 @@ const CHECKS = [
     rust: memberSet(
       RS_MAIN,
       /const MEMENTO_ENV_VARS: \[&str; \d+\] = \[[\s\S]+?\];/,
+      /"([A-Z_]+)"/g,
+    ),
+  },
+  // Which env vars name the session's terminal. Same drift hazard: a variable
+  // one runtime stops reporting would not fail — the doctor would read the
+  // session's terminal as one it cannot name under whichever client rendered
+  // last.
+  {
+    label: "terminal env vocabulary",
+    ts: memberSet(
+      TS_TERMINAL_HINT,
+      /export const TERMINAL_ENV_VARS = \[[\s\S]+?\] as const;/,
+      /"([A-Z_]+)"/g,
+    ),
+    rust: memberSet(
+      RS_MAIN,
+      /const TERMINAL_ENV_VARS: \[&str; \d+\] = \[[\s\S]+?\];/,
       /"([A-Z_]+)"/g,
     ),
   },

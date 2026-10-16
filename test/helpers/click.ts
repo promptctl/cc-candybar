@@ -53,6 +53,20 @@ export function testVerbContext(
       probeTmux: () => {
         throw new Error("doctor: no tmux edge in this test");
       },
+      remoteLogin: () => {
+        throw new Error("doctor: no process edge in this test");
+      },
+      marks: {
+        read: () => {
+          throw new Error("doctor: no mark book in this test");
+        },
+        record: () => {
+          throw new Error("doctor: no mark book in this test");
+        },
+      },
+      fontInUse: () => {
+        throw new Error("doctor: no font edge in this test");
+      },
       loadConfig: () => {
         throw new Error("doctor: no config edge in this test");
       },

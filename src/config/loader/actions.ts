@@ -25,7 +25,13 @@ import {
   type OptionDomain,
 } from "../action.js";
 import { findKeyLine } from "./diagnostics.js";
-import { CHECKS, checkByName } from "../../doctor/checks.js";
+import {
+  CHECKS,
+  GLYPH_MARKS,
+  MARKED_CHECKS,
+  type Check,
+  type GlyphMark,
+} from "../../doctor/checks.js";
 import {
   parseSlashLine,
   SLASH_LINE_PATTERN,
@@ -385,22 +391,33 @@ const THEME_DEFAULT_ARM_JSON: JsonNode = {
   additionalProperties: false,
 };
 
-// [LAW:types-are-the-program] `doctor` (brandon-doctor-b6a) is a two-member
-// enum on its own key — `"run"` alone, or `"fix"` with the `check` it repairs.
-// The check name is gated HERE against `CHECKS` (src/doctor/checks.ts), the
-// same list the daemon's doctor-fix verb gates the wire against, so an authored
-// `[fix]` over a check that does not exist is a load error naming the ones
-// that do, never a click-time BAD_REQUEST. `function`, not a const arrow, so
-// ACTION_ARMS above can reference it directly via hoisting.
+// [LAW:types-are-the-program] `doctor` (brandon-doctor-b6a) is a three-member
+// enum on its own key — `"run"` alone, `"fix"` with the `check` it repairs,
+// or `"mark"` with the `check` whose glyphs were looked at and the `mark`
+// made on them. The check name is gated HERE against `CHECKS`
+// (src/doctor/checks.ts), the same list the daemon's doctor verbs gate the
+// wire against, so an authored `[fix]` over a check that does not exist is a
+// load error naming the ones that do, never a click-time BAD_REQUEST.
+// `function`, not a const arrow, so ACTION_ARMS above can reference it
+// directly via hoisting.
+const DOCTOR_KEYS: Readonly<Record<string, readonly string[]>> = {
+  run: ["doctor"],
+  fix: ["doctor", "check"],
+  mark: ["doctor", "check", "mark"],
+};
+
 function doctorArm(
   ctx: ValidateCtx,
   path: string,
   raw: Record<string, unknown>,
 ): ActionDecl | null {
   const verb = raw.doctor;
-  // Every failing key is reported before returning, like the sibling arms: a
-  // run takes no check; any other verb may carry one.
-  const allowed = verb === "run" ? ["doctor"] : ["doctor", "check"];
+  const known = typeof verb === "string" && Object.hasOwn(DOCTOR_KEYS, verb);
+  // Every failing key is reported before returning, like the sibling arms —
+  // against the verb's own keys, or every doctor key when the verb is bad.
+  const allowed = known
+    ? DOCTOR_KEYS[verb]!
+    : [...new Set(Object.values(DOCTOR_KEYS).flat())];
   for (const k of Object.keys(raw)) {
     if (!allowed.includes(k))
       issue(
@@ -409,25 +426,39 @@ function doctorArm(
         `Unknown key "${k}" on a doctor action. Expected only: ${allowed.join(", ")}`,
       );
   }
-  if (verb !== "run" && verb !== "fix") {
+  if (!known) {
     issue(
       ctx,
       `${path}.doctor`,
-      `doctor must be "run" or "fix", got ${describeValue(verb)}`,
+      `doctor must be ${Object.keys(DOCTOR_KEYS)
+        .map((v) => `"${v}"`)
+        .join(", ")}, got ${describeValue(verb)}`,
     );
     return null;
   }
   if (verb === "run") return { doctor: "run" };
   const check = raw.check;
-  if (typeof check !== "string" || checkByName(check) === undefined) {
+  // A mark names a check that takes one; a fix may name any.
+  const nameable = verb === "mark" ? MARKED_CHECKS : CHECKS;
+  if (typeof check !== "string" || !nameable.some((c) => c.name === check)) {
     issue(
       ctx,
       `${path}.check`,
-      `doctor fix must name a check (have: ${CHECKS.map((c) => c.name).join(", ")}), got ${describeValue(check)}`,
+      `doctor ${verb} must name a check (have: ${nameable.map((c) => c.name).join(", ")}), got ${describeValue(check)}`,
     );
     return null;
   }
-  return { doctor: "fix", check };
+  if (verb === "fix") return { doctor: "fix", check };
+  const mark = raw.mark;
+  if (!(GLYPH_MARKS as readonly unknown[]).includes(mark)) {
+    issue(
+      ctx,
+      `${path}.mark`,
+      `doctor mark must be ${GLYPH_MARKS.map((m) => `"${m}"`).join(" or ")}, got ${describeValue(mark)}`,
+    );
+    return null;
+  }
+  return { doctor: "mark", check, mark: mark as GlyphMark };
 }
 
 // [LAW:types-are-the-program] `ceiling` is `"set"` with the `to` memento will
@@ -518,9 +549,13 @@ const SLASH_ARM_JSON: JsonNode = {
   additionalProperties: false,
 };
 
-// [LAW:one-source-of-truth] Two schema members for the two arms `doctorArm`
-// parses, the check enum drawn from the same CHECKS list.
+// [LAW:one-source-of-truth] One schema member per arm `doctorArm` parses, the
+// check enums drawn from the same lists it names, the mark enum from
+// GLYPH_MARKS.
 function doctorArmJson(): readonly JsonNode[] {
+  const names = (checks: readonly Check[]) => ({
+    enum: checks.map((c) => c.name),
+  });
   return [
     {
       type: "object",
@@ -530,11 +565,18 @@ function doctorArmJson(): readonly JsonNode[] {
     },
     {
       type: "object",
-      properties: {
-        doctor: { const: "fix" },
-        check: { enum: CHECKS.map((c) => c.name) },
-      },
+      properties: { doctor: { const: "fix" }, check: names(CHECKS) },
       required: ["doctor", "check"],
+      additionalProperties: false,
+    },
+    {
+      type: "object",
+      properties: {
+        doctor: { const: "mark" },
+        check: names(MARKED_CHECKS),
+        mark: { enum: [...GLYPH_MARKS] },
+      },
+      required: ["doctor", "check", "mark"],
       additionalProperties: false,
     },
   ];

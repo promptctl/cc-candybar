@@ -32,6 +32,7 @@
 // at all. Re-exported here so ActionDecl stays self-contained to read.
 import type { OptionDomain } from "./option-domain.js";
 import type { SlashLine } from "../claude-input/slash-line.js";
+import type { GlyphMark } from "../doctor/checks.js";
 export type { OptionDomain } from "./option-domain.js";
 
 // [LAW:types-are-the-program] The top-level discriminator of an ActionDecl — the
@@ -245,8 +246,15 @@ export type ActionDecl =
   // fresh verdict carries. `check` is a name in `CHECKS` (src/doctor/checks.ts)
   // — a load error otherwise — so the URL carries nothing the daemon has not
   // already declared. No `set`, so no validator derives (like copy/open).
+  // `mark` records what the user saw of the glyphs the check's verdict showed
+  // them (its `sighting`) and re-runs.
   | { readonly doctor: "run" }
   | { readonly doctor: "fix"; readonly check: string }
+  | {
+      readonly doctor: "mark";
+      readonly check: string;
+      readonly mark: GlyphMark;
+    }
   // [LAW:one-source-of-truth] The memento plugin's context ceiling for the
   // clicked session: `set` hands `to` — memento's own value grammar, `+100_000`
   // / `400000` / `off` — to memento's `ceiling set session`, `clear` removes
