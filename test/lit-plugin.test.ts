@@ -113,7 +113,7 @@ test("a worktree's ticket is the worktree's own file", async () => {
 // The stage over the git facts a test names, each pinned by a literal over the
 // bundled input of that name; the rest are a clean, synced, PR-less checkout.
 async function stage(git: Record<string, string | number> = {}): Promise<string> {
-  const facts = { status: "clean", operation: "", ahead: 0, behind: 0, prState: "", ...git };
+  const facts = { status: "clean", operation: "", tracking: "tracked", ahead: 0, behind: 0, prState: "", prError: "", ...git };
   const variables = Object.entries(facts)
     .map(([k, v]) => `"git.${k}": { kind: "literal", value: ${JSON.stringify(v)} }`)
     .join(", ");
@@ -132,6 +132,9 @@ describe("the work-loop stage", () => {
     ["an operation in progress", { operation: "rebase" }],
     ["commits to push", { ahead: 1 }],
     ["commits to pull", { behind: 2 }],
+    // ahead/behind sit at their 0 default here: nothing says they are level.
+    ["a branch with no upstream", { tracking: "none" }],
+    ["a branch whose upstream is gone", { tracking: "gone" }],
   ])("no ticket worked and %s is cleanup", async (_, git) => {
     litWrote(idle);
     expect(await stage(git)).toContain("↻ 1/5 cleanup");
@@ -152,6 +155,15 @@ describe("the work-loop stage", () => {
   ])("a worked ticket with %s", async (_, prState, shown) => {
     litWrote(working);
     expect(await stage({ prState, status: "dirty" })).toContain(shown);
+  });
+
+  // [LAW:no-silent-failure] Every input then sits at its default — clean,
+  // level, no PR — which the stage must not read as facts.
+  test("a stage the facts cannot settle is ⚠, not a guess", async () => {
+    litWrote(working);
+    expect(await stage({ prError: "HTTP 401" })).toContain("↻ ⚠ PR");
+    litWrote(idle);
+    expect(await stage({ tracking: "" })).toContain("↻ ⚠ git");
   });
 
   test("no file yet draws no stage", async () => {

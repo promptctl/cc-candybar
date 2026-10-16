@@ -133,6 +133,7 @@ export function checkPayload(
       untracked: 1,
       conflicts: 0,
       upstream: "origin/main",
+      tracking: "tracked",
       stash: 1,
       status: "dirty",
       operation: "rebase",

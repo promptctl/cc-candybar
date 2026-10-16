@@ -292,6 +292,10 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       default: 0,
     },
     "git.upstream": { kind: "input", path: "git.upstream", default: "" },
+    // `none` | `gone` | `tracked` — only `tracked` makes ahead/behind real
+    // counts (their 0 default stands for "unknown" too); "" when git could
+    // not be read.
+    "git.tracking": { kind: "input", path: "git.tracking", default: "" },
     "git.stash": {
       kind: "input",
       path: "git.stash",

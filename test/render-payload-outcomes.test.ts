@@ -169,6 +169,8 @@ describe("buildRenderPayload — git outcome lane", () => {
       ahead: 1,
       behind: 2,
       sha: "abc1234",
+      // Read, and the branch has none.
+      tracking: "none",
     });
     expect("stash" in payload.git!).toBe(false);
     // The absent upstream is also missing but logs nothing; only the failed

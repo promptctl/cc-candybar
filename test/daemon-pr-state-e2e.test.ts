@@ -95,7 +95,7 @@ describe("a daemon render carries the branch's PR in every state", () => {
     config = path.join(dir, "bar.json5");
     fs.writeFileSync(
       config,
-      `{ segments: { pr: { template: 'pr:{{ .git.prState }}' } }, root: { h: ['pr', 'plugins.lit.stage'] } }`,
+      `{ segments: { pr: { template: 'pr:{{ .git.prState }} t:{{ .git.tracking }}' } }, root: { h: ['pr', 'plugins.lit.stage'] } }`,
     );
 
     env = {
@@ -132,6 +132,7 @@ describe("a daemon render carries the branch's PR in every state", () => {
         }),
       );
       if (out.includes("↻") || Date.now() > deadline) return out;
+      await new Promise((r) => setTimeout(r, 50));
     }
   }
 
@@ -140,11 +141,13 @@ describe("a daemon render carries the branch's PR in every state", () => {
     ["MERGED", "pr:merged ", "merged", "↻ 5/5 downstream"],
     ["CLOSED", "pr:closed ", "closed", "↻ 3/5 work"],
     ["none", "pr: ", "-", "↻ 3/5 work"],
-    ["denied", "pr: ", "failed", "↻ 3/5 work"],
+    ["denied", "pr: ", "failed", "↻ ⚠ PR"],
   ])("branch %s → %j, pr=%s, stage %s", async (branch, cell, fact, stage) => {
     const sessionId = `pr-e2e-${branch}`;
     const out = await settledBar(sessionId, checkout(branch));
     expect(out).toContain(cell);
+    // A remote, but no branch here was ever pushed to it.
+    expect(out).toContain("t:none");
     expect(out).toContain(stage);
     expect(prFacts(sessionId).at(-1)).toBe(fact);
   });

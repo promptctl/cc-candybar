@@ -17,14 +17,32 @@ export interface AheadBehind {
   behind: number;
 }
 
+// [LAW:types-are-the-program] How the branch stands to its upstream, in git's
+// own words: no upstream configured, an upstream whose ref is `gone` (deleted
+// on the remote and pruned — porcelain v2 still names it in `branch.upstream`
+// but prints no `branch.ab`), or one it tracks, where ahead/behind are known.
+export type Tracking = "none" | "gone" | "tracked";
+
+export function trackingOf(
+  upstream: Outcome<string>,
+  aheadBehind: Outcome<AheadBehind>,
+): Outcome<Tracking> {
+  if (upstream.kind === "absent") return ok("none");
+  if (upstream.kind === "failed") return upstream;
+  if (aheadBehind.kind === "failed") return aheadBehind;
+  return ok(aheadBehind.kind === "ok" ? "tracked" : "gone");
+}
+
 // [LAW:types-are-the-program] Where a PR/MR stands, in one vocabulary for
 // every forge. Each forge spells it its own way; its parser below is the one
 // place that spelling becomes this.
 export type PrState = "open" | "merged" | "closed";
 
-// The branch's PR/MR as the forge reports it — the newest one for the branch,
-// whatever its state, so a branch whose PR merged reads `merged` rather than
-// as a branch that never had one. `number` and `url` are the click target.
+// The branch's PR/MR in any state, as the forge CLI picks it for the branch —
+// gh takes an open one if there is one, else the newest; glab's rule is
+// unverified (see parseGitlabMr) — so a branch whose PR merged reads `merged`
+// rather than as a branch that never had one. `number` and `url` are the
+// click target.
 export interface PullRequest {
   number: number;
   state: PrState;
