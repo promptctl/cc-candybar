@@ -47,17 +47,20 @@ const CONFIGS = {
   held: `{ segments: { mark: { template: '{{ .tmux.session }}' } }, root: { h: ['mark'] } }`,
 };
 
-// [LAW:no-ambient-temporal-coupling] The `tmux` on the daemon's PATH: it says
-// it was asked, then answers only once the test opens the gate beside it — a
-// FIFO, whose read blocks until a writer opens it. The test opens it after the
-// client has been answered TIMEOUT, so the render provably outlives the request
-// timeout: an ordering the test owns, not a bet on how slow a render is. Only a
-// render whose client reports a tmux pane runs it, and src/proc/tmux.ts kills
-// it at 2 s, so a test that never opens the gate leaves no stub behind.
+// [LAW:no-ambient-temporal-coupling] The `tmux` on the daemon's PATH: it holds
+// the gate beside it open for reading — a FIFO, opened read-write so the open
+// itself does not wait for a writer — then says it was asked, and answers only
+// once the test writes a line into the gate. `asked` therefore means "reading":
+// the test opens the gate after the client has been answered TIMEOUT, so the
+// render provably outlives the request timeout, an ordering the test owns, not
+// a bet on how slow a render is. Only a render whose client reports a tmux pane
+// runs it, and src/proc/tmux.ts kills it at 2 s, so a test that never opens the
+// gate leaves no stub behind.
 const STUB_TMUX = `#!/bin/sh
 here=$(dirname "$0")
+exec 3<> "$here/gate"
 : > "$here/asked"
-read _ < "$here/gate"
+read _ <&3
 echo held
 `;
 
