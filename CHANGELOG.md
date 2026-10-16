@@ -1,3 +1,10 @@
+# [1.133.0](https://github.com/promptctl/cc-candybar/compare/v1.132.2...v1.133.0) (2026-10-16)
+
+
+### Features
+
+* **doctor:** Nerd Font check — does the terminal drawing the bar have its glyphs ([#360](https://github.com/promptctl/cc-candybar/issues/360)) ([c9bcf79](https://github.com/promptctl/cc-candybar/commit/c9bcf79a53ee3077244392d59804bdf3c92070ec))
+
 ## [1.132.2](https://github.com/promptctl/cc-candybar/compare/v1.132.1...v1.132.2) (2026-10-16)
 
 
