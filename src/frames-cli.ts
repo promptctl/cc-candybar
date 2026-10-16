@@ -49,13 +49,8 @@ const FORMATS = {
   band: bandLine,
 } as const;
 
-export function frameFormat(name: string): (resp: Response) => string {
-  if (!Object.hasOwn(FORMATS, name)) {
-    throw new Error(
-      `cc-candybar frames: --format must be one of ${Object.keys(FORMATS).join(", ")}, got ${JSON.stringify(name)}`,
-    );
-  }
-  return FORMATS[name as keyof typeof FORMATS];
+function isFormat(name: string): name is keyof typeof FORMATS {
+  return Object.hasOwn(FORMATS, name);
 }
 
 export async function runFrames(argv: readonly string[]): Promise<void> {
@@ -70,7 +65,6 @@ export async function runFrames(argv: readonly string[]): Promise<void> {
     strict: true,
     tokens: true,
   });
-  const encode = frameFormat(values.format);
   // The render args a statusline client sends: the binary, then the flags
   // the daemon reads (--config), as the statusline command spells them.
   const renderArgs = [
@@ -91,6 +85,13 @@ export async function runFrames(argv: readonly string[]): Promise<void> {
     say("--session needs a session id");
     process.exit(2);
   }
+  if (!isFormat(values.format)) {
+    say(
+      `--format must be one of ${Object.keys(FORMATS).join(", ")}, got ${JSON.stringify(values.format)}`,
+    );
+    process.exit(2);
+  }
+  const encode = FORMATS[values.format];
   if (values.session !== undefined && values.config !== undefined) {
     say(
       "--config has no effect with --session: the session's own statusline client sends its config",

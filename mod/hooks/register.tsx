@@ -15,10 +15,8 @@ import type {
 
 import type { BandFrame, BandRun } from '../types'
 
-const frameRef = { plugin: 'candybar-band', key: 'frame' } as const
-const failureRef = { plugin: 'candybar-band', key: 'failure' } as const
-const frameAtom = atom(frameRef, null)
-const failureAtom = atom(failureRef, null)
+const bandRef = { plugin: 'candybar-band', key: 'band' } as const
+const bandAtom = atom(bandRef, { frame: null, failure: null })
 
 type Child = { sessionId: string; stop: () => void }
 
@@ -30,11 +28,27 @@ let child: Child | null = null
 // [LAW:one-source-of-truth] The band names the session and nothing else: its
 // frames are drawn from the data the session's own statusline client sends,
 // so the band and the statusline are one render of one session.
-async function follow($: EngineInterface) {
-  const sessionId = await $.session.id()
-  if (child?.sessionId === sessionId) return
-  child?.stop()
-  child = start($, sessionId)
+async function followNow($: EngineInterface) {
+  try {
+    const sessionId = await $.session.id()
+    if (child?.sessionId === sessionId) return
+    child?.stop()
+    child = start($, sessionId)
+  } catch (error) {
+    // [LAW:no-silent-failure] A band that cannot follow its session says so.
+    $.ui.log(`candybar-band: following the session failed: ${String(error)}`, { to: 'debug' })
+    await $.state.set(bandRef, { frame: null, failure: `candybar: following the session failed: ${String(error)}` })
+  }
+}
+
+// [LAW:no-ambient-temporal-coupling] Follows run one at a time, in the order
+// the session's events asked for them, so the last one asked reads the
+// session id last and its child is the one left running.
+let following: Promise<void> = Promise.resolve()
+
+function follow($: EngineInterface): Promise<void> {
+  following = following.then(() => followNow($), () => followNow($))
+  return following
 }
 
 export const register: Register = on => {
@@ -56,8 +70,7 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    const frame = await read($, frameAtom)
-    const failure = await read($, failureAtom)
+    const { frame, failure } = await read($, bandAtom)
     if (e.props.hasSurvey || (frame === null && failure === null)) return next(e)
 
     const { Box, Text, Link } = $.ui.resolve(e)
@@ -90,8 +103,7 @@ function drawRun(
 function start($: EngineInterface, sessionId: string): Child {
   // A new session's band starts empty: the last frame is another session's,
   // its links that session's.
-  void $.state.set(failureRef, null)
-  void $.state.set(frameRef, null)
+  void $.state.set(bandRef, { frame: null, failure: null })
   const stream = $.process.spawn({
     argv: [
       'node',
@@ -108,31 +120,40 @@ function start($: EngineInterface, sessionId: string): Child {
   // in flight; once `stop` runs, none of them is the session's frame.
   let stopped = false
   void (async () => {
-    let pending = ''
-    let stderr = ''
+    let frame: BandFrame | null = null
+    // The child's last line on stderr, and each pipe's line not yet ended.
+    let said = ''
+    const partial = { stdout: '', stderr: '' }
+    const draw = (failure: string | null) => $.state.set(bandRef, { frame, failure })
     try {
       for await (const { stream: pipe, text } of stream) {
         if (stopped) break
+        const lines = (partial[pipe] + text).split('\n')
+        partial[pipe] = lines.pop() ?? ''
         if (pipe === 'stderr') {
-          stderr = (stderr + text).slice(-2000)
-          $.ui.log(text, { to: 'debug' })
+          for (const line of lines) $.ui.log(line, { to: 'debug' })
+          const newest = lines.findLast(line => line.trim() !== '')
+          if (newest === undefined) continue
+          // [LAW:no-silent-failure] The child says only what is wrong (a
+          // daemon it is reconnecting to, a render that failed), so its word
+          // stands above the bar until a frame answers it.
+          said = newest
+          await draw(said)
           continue
         }
-        const lines = (pending + text).split('\n')
-        pending = lines.pop() ?? ''
         // Only the newest frame in a piece is worth drawing.
         const newest = lines.at(-1)
-        if (newest !== undefined) await $.state.set(frameRef, JSON.parse(newest) as BandFrame)
+        if (newest === undefined) continue
+        frame = JSON.parse(newest) as BandFrame
+        await draw(null)
       }
       const { code, signal } = await stream.result
       const how = signal ?? `exit ${code}`
       $.ui.log(`candybar-band: frames for ${sessionId} ended (${how})`, { to: 'debug' })
-      if (!stopped) {
-        await $.state.set(failureRef, `candybar: frames stopped (${how}) ${lastLine(stderr)}`)
-      }
+      if (!stopped) await draw(`candybar: frames stopped (${how}) ${said}`)
     } catch (error) {
       $.ui.log(`candybar-band: frames for ${sessionId} failed: ${String(error)}`, { to: 'debug' })
-      if (!stopped) await $.state.set(failureRef, `candybar: frames failed: ${String(error)}`)
+      if (!stopped) await draw(`candybar: frames failed: ${String(error)}`)
     }
   })()
   return {
@@ -143,11 +164,4 @@ function start($: EngineInterface, sessionId: string): Child {
       void stream.return(undefined as never)
     },
   }
-}
-
-// The band's failure row is one line: the child's last word on stderr, which
-// is why it stopped. Its whole stderr is in the debug log.
-function lastLine(text: string): string {
-  const said = text.trimEnd()
-  return said.slice(said.lastIndexOf('\n') + 1)
 }

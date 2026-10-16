@@ -11,7 +11,7 @@
 // render's error glyph included.
 
 import { AnsiDecoder, ColorDepth, Style } from "@promptctl/rich-js";
-import type { ColorSpec } from "@promptctl/rich-js";
+import type { ColorSpec, StyleOptions } from "@promptctl/rich-js";
 import type { BandFrame, BandRun, RunColor } from "../../mod/types";
 import { renderOutcomeOf } from "../daemon/client";
 import type { Response } from "../daemon/protocol";
@@ -69,11 +69,19 @@ type BandAttribute =
   | "strikethrough"
   | "inverse";
 
+// rich-js's text attributes: every on/off field of a `Style`.
+type StyleAttribute = {
+  [K in keyof StyleOptions]-?: NonNullable<StyleOptions[K]> extends boolean
+    ? K
+    : never;
+}[keyof StyleOptions];
+
 // Every text attribute a rich-js `Style` carries, and the `Text` prop that
 // draws it; null where the mod's `Text` has none, which the band refuses
 // rather than drawing concealed text, say, in the clear.
-// [LAW:one-source-of-truth] exception: rich-js keeps this list as
-// ATTRIBUTE_NAMES but does not export it, so its thirteen names are copied.
+// [LAW:one-source-of-truth] rich-js does not export its ATTRIBUTE_NAMES, so
+// this table is keyed by its `StyleOptions` instead: an attribute rich-js
+// adds fails to compile here until the band says how to draw it.
 const ATTRIBUTES = {
   bold: "bold",
   dim: "dimColor",
@@ -88,7 +96,7 @@ const ATTRIBUTES = {
   frame: null,
   encircle: null,
   overline: null,
-} as const satisfies Record<string, BandAttribute | null>;
+} as const satisfies Record<StyleAttribute, BandAttribute | null>;
 
 const ATTRIBUTE_NAMES = Object.keys(ATTRIBUTES) as Array<
   keyof typeof ATTRIBUTES

@@ -9,7 +9,7 @@ import {
   segmentsToString,
 } from "@promptctl/rich-js";
 import { bandFrame, bandLine } from "../src/band/frames";
-import { frameFormat } from "../src/frames-cli";
+import { runFrames } from "../src/frames-cli";
 import { DIAGNOSTIC_ERROR_COLORS } from "../src/render/diagnostic-style";
 
 const ESC = "\x1b";
@@ -89,13 +89,24 @@ describe("bandFrame", () => {
   });
 });
 
-describe("frameFormat", () => {
-  test("band is bandLine; any other name is refused with the choices", () => {
-    expect(frameFormat("band")).toBe(bandLine);
-    expect(() => frameFormat("ansi")).toThrow(
-      '--format must be one of response, band, got "ansi"',
-    );
+test("an unknown --format is refused with exit 2 and the choices, as the other usage errors are", async () => {
+  const exit = jest.spyOn(process, "exit").mockImplementation((code) => {
+    throw new Error(`exit ${String(code)}`);
   });
+  const stderr = jest
+    .spyOn(process.stderr, "write")
+    .mockImplementation(() => true);
+  try {
+    await expect(
+      runFrames(["node", "cc-candybar", "frames", "--format", "ansi"]),
+    ).rejects.toThrow("exit 2");
+    expect(String(stderr.mock.calls[0]?.[0])).toBe(
+      'cc-candybar frames: --format must be one of response, band, got "ansi"\n',
+    );
+  } finally {
+    exit.mockRestore();
+    stderr.mockRestore();
+  }
 });
 
 describe("bandLine", () => {

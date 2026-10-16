@@ -32,10 +32,10 @@ export interface BandFrame {
 declare module 'claude-code' {
   interface PluginState {
     'candybar-band': {
-      // The newest frame; null until the first arrives.
-      frame: BandFrame | null;
-      // Why the frames child stopped when nothing asked it to; null while it runs.
-      failure: string | null;
+      // What the band draws: the newest frame, null until the first arrives;
+      // and what is wrong now, above it, null while frames arrive: the
+      // frames child's last word since its last frame, or why it stopped.
+      band: { frame: BandFrame | null; failure: string | null };
     };
   }
 }
