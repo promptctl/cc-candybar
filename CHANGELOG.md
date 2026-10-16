@@ -1,3 +1,10 @@
+## [1.130.4](https://github.com/promptctl/cc-candybar/compare/v1.130.3...v1.130.4) (2026-10-16)
+
+
+### Bug Fixes
+
+* **render:** a globals rule whose template throws renders its slot's floor and says so ([#349](https://github.com/promptctl/cc-candybar/issues/349)) ([978aa4a](https://github.com/promptctl/cc-candybar/commit/978aa4ac425efd2287019812f11f620d523ce376))
+
 ## [1.130.3](https://github.com/promptctl/cc-candybar/compare/v1.130.2...v1.130.3) (2026-10-16)
 
 
