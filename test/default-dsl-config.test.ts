@@ -1616,6 +1616,7 @@ describe("bundled preset library renders clean at every width — brandon-preset
       ...(base.git as object),
       prUrl: "https://example.com/pr/181",
       prNumber: 181,
+      prState: "open",
     },
     speed: { history: "10,25,15,30,20" },
   });

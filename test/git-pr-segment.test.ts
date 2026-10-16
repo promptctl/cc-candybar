@@ -83,7 +83,7 @@ describe("gitPr segment render", () => {
     const out = renderGitPr({
       branch: "brandon-git-76s",
       prNumber: 76,
-      prState: "OPEN",
+      prState: "open",
       prUrl: url,
     });
 
@@ -106,6 +106,20 @@ describe("gitPr segment render", () => {
     expect(out).toContain("⚠");
     expect(out).toContain("PR");
   });
+
+  test.each(["merged", "closed"])(
+    "a %s PR → segment absent: the link is for open PRs",
+    (prState) => {
+      const out = renderGitPr({
+        branch: "brandon-git-76s",
+        prNumber: 76,
+        prState,
+        prUrl: "https://github.com/promptctl/cc-candybar/pull/76",
+      });
+      expect(linkUrls(out)).toEqual([]);
+      expect(out).not.toContain("#76");
+    },
+  );
 
   test("no PR → segment absent (when-gated, empty line)", () => {
     const out = renderGitPr({ branch: "brandon-git-76s" });

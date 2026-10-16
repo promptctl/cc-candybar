@@ -9,8 +9,11 @@ import {
   detectForge,
   parseGithubPr,
   parseGitlabMr,
+  prOfHead,
+  type PrState,
 } from "../src/segments/git";
 import type { LaunchResult } from "../src/proc/launch";
+import { ABSENT, failed, ok } from "../src/utils/outcome";
 
 const okResult = (stdout: string): LaunchResult => ({
   ok: true,
@@ -64,25 +67,42 @@ describe("classifyForgePr (github)", () => {
       number: 76,
       state: "OPEN",
       url: "https://github.com/promptctl/cc-candybar/pull/76",
+      headRefOid: "c0ffee",
     });
     expect(classify(okResult(out))).toEqual({
       kind: "ok",
       value: {
         number: 76,
-        state: "OPEN",
+        state: "open",
         url: "https://github.com/promptctl/cc-candybar/pull/76",
+        head: "c0ffee",
       },
     });
   });
 
-  test("merged PR for the branch → absent (not a value)", () => {
-    const out = JSON.stringify({
-      number: 76,
-      state: "MERGED",
-      url: "https://github.com/x/y/pull/76",
+  test.each([
+    ["MERGED", "merged"],
+    ["CLOSED", "closed"],
+  ])("a %s PR for the branch → ok, state %s", (state, parsed) => {
+    const url = "https://github.com/x/y/pull/76";
+    const out = JSON.stringify({ number: 76, state, url, headRefOid: "c0ffee" });
+    expect(classify(okResult(out))).toEqual({
+      kind: "ok",
+      value: { number: 76, state: parsed, url, head: "c0ffee" },
     });
-    expect(classify(okResult(out))).toEqual({ kind: "absent" });
   });
+
+  test.each(["DRAFT", "open", ""])(
+    "a state word gh does not print (%j) → failed, naming it",
+    (state) => {
+      const out = JSON.stringify({ number: 76, state, url: "https://x/76", headRefOid: "c0ffee" });
+      const r = classify(okResult(out));
+      expect(r).toEqual({
+        kind: "failed",
+        reason: `gh pr view: unknown state ${JSON.stringify(state)}`,
+      });
+    },
+  );
 
   test('no PR for branch (exit 1 + "no pull requests found") → absent', () => {
     const r = failResult(
@@ -136,24 +156,38 @@ describe("classifyForgePr (gitlab)", () => {
       iid: 42,
       state: "opened",
       web_url: "https://gitlab.com/group/proj/-/merge_requests/42",
+      sha: "c0ffee",
     });
     expect(classify(okResult(out))).toEqual({
       kind: "ok",
       value: {
         number: 42,
-        state: "opened",
+        state: "open",
         url: "https://gitlab.com/group/proj/-/merge_requests/42",
+        head: "c0ffee",
       },
     });
   });
 
-  test("closed MR → absent", () => {
-    const out = JSON.stringify({
-      iid: 42,
-      state: "closed",
-      web_url: "https://gitlab.com/g/p/-/merge_requests/42",
+  test.each([
+    ["locked", "open"],
+    ["merged", "merged"],
+    ["closed", "closed"],
+  ])("a %s MR → ok, state %s", (state, parsed) => {
+    const url = "https://gitlab.com/g/p/-/merge_requests/42";
+    const out = JSON.stringify({ iid: 42, state, web_url: url, sha: "c0ffee" });
+    expect(classify(okResult(out))).toEqual({
+      kind: "ok",
+      value: { number: 42, state: parsed, url, head: "c0ffee" },
     });
-    expect(classify(okResult(out))).toEqual({ kind: "absent" });
+  });
+
+  test("a state word glab does not print → failed, naming it", () => {
+    const out = JSON.stringify({ iid: 42, state: "OPENED", web_url: "https://x/42", sha: "c0ffee" });
+    expect(classify(okResult(out))).toEqual({
+      kind: "failed",
+      reason: 'glab mr view: unknown state "OPENED"',
+    });
   });
 
   test("no MR available → absent", () => {
@@ -162,5 +196,30 @@ describe("classifyForgePr (gitlab)", () => {
       "no open merge request available for branch",
     );
     expect(classify(r)).toEqual({ kind: "absent" });
+  });
+});
+
+// A branch name reused after its PR concluded gets that PR back from the
+// forge: it is the branch's only while HEAD is still the PR's head.
+describe("prOfHead", () => {
+  const pr = (state: PrState) =>
+    ok({ number: 7, state, url: "https://x/7", head: "aaa" });
+
+  test.each<[PrState, string, boolean]>([
+    ["open", "aaa", true],
+    ["open", "bbb", true],
+    ["merged", "aaa", true],
+    ["merged", "bbb", false],
+    ["closed", "aaa", true],
+    ["closed", "bbb", false],
+  ])("a %s PR, HEAD %s → the branch's: %s", (state, head, kept) => {
+    expect(prOfHead(pr(state), ok(head))).toEqual(kept ? pr(state) : ABSENT);
+  });
+
+  test("an unborn HEAD has no concluded PR; no PR and a failure pass through", () => {
+    expect(prOfHead(pr("merged"), ABSENT)).toEqual(ABSENT);
+    expect(prOfHead(ABSENT, ok("aaa"))).toEqual(ABSENT);
+    const f = failed("gh pr view: HTTP 401");
+    expect(prOfHead(f, ok("aaa"))).toEqual(f);
   });
 });

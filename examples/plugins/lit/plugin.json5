@@ -3,8 +3,8 @@
 // writes `.lit/statusline.json` at the root of every checkout it runs in —
 // each worktree its own — saying what that checkout is working on and what
 // `lit next` last picked; the file's shape is lit's docs/statusline.md. Its
-// folder, `lit`, is its name: placed as `plugins.lit.ticket` and
-// `plugins.lit.next`.
+// folder, `lit`, is its name: placed as `plugins.lit.ticket`,
+// `plugins.lit.next` and `plugins.lit.stage`.
 {
   data: { checkout: ".lit/statusline.json" },
   segments: {
@@ -30,6 +30,31 @@
       settings: {
         title: { label: "title chars", domain: { min: 0, max: 80, step: 10 }, default: 0 },
       },
+    },
+    stage: {
+      group: "activity",
+      description: "Where this checkout is in the work loop: cleanup, pick, work, review, then downstream once its PR merges.",
+      // The loop is cleanup → pick → work → review → downstream (update the
+      // tickets the work touched), and each stage is a fact on disk, never a
+      // record of what the session did: no ticket worked and a workspace with
+      // anything to commit, pull or finish is cleanup, a clean one is pick;
+      // a worked ticket is work until its branch has a PR, review while the PR
+      // is open, downstream once it merged — until `lit done` clears the
+      // ticket and the loop starts over. Reading the PR turns on the forge
+      // lookup, so a merge shows within its cache's five minutes. Synced means
+      // `tracked` with nothing ahead or behind: a branch with no upstream, or
+      // one whose upstream is gone, has its ahead/behind at their 0 default.
+      // [LAW:no-silent-failure] A stage the facts cannot settle is ⚠, never
+      // a guess: the forge could not say where the PR stands (⚠ PR), or git
+      // could not be read (⚠ git — tracking is "" only then).
+      when: '{{ with .plugins.lit.data }}{{ template "plugins.lit.v1" . }}true{{ else }}false{{ end }}',
+      template: '{{ $stage := "cleanup" }}{{ $unknown := "" }}\
+{{ if .plugins.lit.data.working_on }}{{ $stage = "work" }}\
+{{ if ne .git.prError "" }}{{ $unknown = "PR" }}\
+{{ else if eq .git.prState "open" }}{{ $stage = "review" }}{{ else if eq .git.prState "merged" }}{{ $stage = "downstream" }}{{ end }}\
+{{ else if eq .git.tracking "" }}{{ $unknown = "git" }}\
+{{ else if and (eq .git.status "clean") (eq .git.operation "") (eq .git.tracking "tracked") (eq .git.ahead 0) (eq .git.behind 0) }}{{ $stage = "pick" }}{{ end }}\
+↻ {{ if $unknown }}⚠ {{ $unknown }}{{ else }}{{ index (dict "cleanup" 1 "pick" 2 "work" 3 "review" 4 "downstream" 5) $stage }}/5 {{ $stage }}{{ end }}',
     },
   },
   helpers: {

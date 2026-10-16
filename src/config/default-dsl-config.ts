@@ -292,6 +292,10 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       default: 0,
     },
     "git.upstream": { kind: "input", path: "git.upstream", default: "" },
+    // `none` | `gone` | `tracked` — only `tracked` makes ahead/behind real
+    // counts (their 0 default stands for "unknown" too); "" when git could
+    // not be read.
+    "git.tracking": { kind: "input", path: "git.tracking", default: "" },
     "git.stash": {
       kind: "input",
       path: "git.stash",
@@ -325,11 +329,12 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // `default: "expanded"` to start with the full line.
     "git.detail": { kind: "state", key: "git-detail", default: "collapsed" },
 
-    // Forge PR/MR — the daemon's git provider resolves the branch's open PR via
-    // gh/glab and projects it here. Declaring any of these turns on the network
-    // lookup. [LAW:no-silent-failure] prError is non-empty ONLY when the forge
-    // was asked but couldn't answer (auth/network) — distinct from "no PR"
-    // (every field empty). prNumber 0 (default) ⇒ no open PR.
+    // Forge PR/MR — the daemon's git provider resolves the branch's newest PR
+    // via gh/glab and projects it here; prState is `open`, `merged` or
+    // `closed`. Declaring any of these turns on the network lookup.
+    // [LAW:no-silent-failure] prError is non-empty ONLY when the forge was
+    // asked but couldn't answer (auth/network) — distinct from "no PR" (every
+    // field empty). prNumber 0 (default) ⇒ the branch has no PR.
     "git.prNumber": {
       kind: "input",
       path: "git.prNumber",
@@ -722,9 +727,9 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // url text }}` emits ONE OSC-8 region carrying the https PR url, so the
     // CLICK is handled by the terminal/OS (opens the browser) — no daemon verb.
     // [LAW:no-silent-failure] Three render states from the data: an open PR
-    // (prUrl set) renders the link; a lookup FAILURE (prError set, prUrl empty)
-    // renders a distinct ⚠ marker so an outage is not mistaken for "no PR";
-    // no PR (both empty) leaves the `when` gate false and the segment absent.
+    // renders the link; a lookup FAILURE (prError set) renders a distinct ⚠
+    // marker so an outage is not mistaken for "no PR"; no PR, or one already
+    // merged or closed, leaves the `when` gate false and the segment absent.
     gitPr: {
       group: "git",
       description:
@@ -732,10 +737,10 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       // The pad spaces are structural chrome now, OUTSIDE the OSC-8 link
       // region — the clickable area is the glyph text itself.
       template:
-        '{{ if ne .git.prUrl "" }}' +
+        '{{ if eq .git.prState "open" }}' +
         '{{ link .git.prUrl (printf "⇆ #%v" .git.prNumber) }}' +
         "{{ else }}⚠ PR{{ end }}",
-      when: '{{ or (ne .git.prUrl "") (ne .git.prError "") }}',
+      when: '{{ or (eq .git.prState "open") (ne .git.prError "") }}',
     },
     toolbar: {
       group: "session-tools",

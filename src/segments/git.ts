@@ -17,15 +17,75 @@ export interface AheadBehind {
   behind: number;
 }
 
-// [LAW:types-are-the-program] The branch's open PR/MR as the forge reports it.
-// `number` and `url` are the click target; `state` is the forge's status string
-// (GitHub "OPEN", GitLab "opened") — carried so a consumer can color/label it,
-// though resolvePullRequest only ever returns a PR whose state is open (a
-// merged/closed PR for the branch is the domain's `absent`, not a value).
+// [LAW:types-are-the-program] How the branch stands to its upstream, in git's
+// own words: no upstream configured, an upstream whose ref is `gone` (deleted
+// on the remote and pruned — porcelain v2 still names it in `branch.upstream`
+// but prints no `branch.ab`), or one it tracks, where ahead/behind are known.
+export type Tracking = "none" | "gone" | "tracked";
+
+export function trackingOf(
+  upstream: Outcome<string>,
+  aheadBehind: Outcome<AheadBehind>,
+): Outcome<Tracking> {
+  if (upstream.kind === "absent") return ok("none");
+  if (upstream.kind === "failed") return upstream;
+  if (aheadBehind.kind === "failed") return aheadBehind;
+  return ok(aheadBehind.kind === "ok" ? "tracked" : "gone");
+}
+
+// [LAW:types-are-the-program] Where a PR/MR stands, in one vocabulary for
+// every forge. Each forge spells it its own way; its parser below is the one
+// place that spelling becomes this.
+export type PrState = "open" | "merged" | "closed";
+
+// The branch's PR/MR in any state, as the forge CLI picks it for the branch —
+// gh takes an open one if there is one, else the newest; glab's rule is
+// unverified (see parseGitlabMr) — so a branch whose PR merged reads `merged`
+// rather than as a branch that never had one. `number` and `url` are the
+// click target; `head` is the commit the PR's branch pointed at.
 export interface PullRequest {
   number: number;
-  state: string;
+  state: PrState;
   url: string;
+  head: string;
+}
+
+// [LAW:types-are-the-program] The forge picks a PR by branch NAME, so a name
+// reused after its PR merged or closed (a reopened ticket's branch) gets the
+// old PR back. An open PR is the branch's whatever its head; a concluded one
+// only while it still describes HEAD — once the branch moves off it, the work
+// on it is new and has no PR yet.
+export function prOfHead(
+  pr: Outcome<PullRequest>,
+  head: Outcome<string>,
+): Outcome<PullRequest> {
+  if (pr.kind !== "ok" || pr.value.state === "open") return pr;
+  return head.kind === "ok" && head.value === pr.value.head ? pr : ABSENT;
+}
+
+// [LAW:parse-dont-validate] Each forge's exact state words, and only those: a
+// word not listed is a forge this reader does not understand, refused loudly
+// rather than guessed. GitLab's `locked` is an MR mid-merge — not merged yet.
+const GITHUB_PR_STATES: Readonly<Record<string, PrState>> = {
+  OPEN: "open",
+  MERGED: "merged",
+  CLOSED: "closed",
+};
+const GITLAB_MR_STATES: Readonly<Record<string, PrState>> = {
+  opened: "open",
+  locked: "open",
+  merged: "merged",
+  closed: "closed",
+};
+
+function prStateOf(
+  cli: string,
+  states: Readonly<Record<string, PrState>>,
+  word: string,
+): Outcome<PrState> {
+  return Object.hasOwn(states, word)
+    ? ok(states[word]!)
+    : failed(`${cli}: unknown state ${JSON.stringify(word)}`);
 }
 
 // [LAW:types-are-the-program] Every on-demand field is an Outcome, so "this
@@ -40,6 +100,9 @@ export interface GitInfo {
   branch: string;
   status: "clean" | "dirty" | "conflicts";
   aheadBehind: Outcome<AheadBehind>;
+  // HEAD's full object id, absent on an unborn HEAD — what a PR's `head` is
+  // compared against (`prOfHead`).
+  head: Outcome<string>;
   workingTree?: WorkingTree;
   sha?: Outcome<string>;
   operation?: Outcome<string>;
@@ -56,7 +119,7 @@ export interface GitInfo {
   repoUrl?: Outcome<string>;
   isWorktree?: boolean;
   // [LAW:no-silent-failure] The forge lookup's three outcomes are all kept
-  // distinct here: `ok` is an open PR, `absent` is "this branch has none / no
+  // distinct here: `ok` is the branch's PR, `absent` is "this branch has none / no
   // forge / no forge CLI", `failed` is "the forge was asked but couldn't
   // answer" (auth, network, API error). The render boundary surfaces `failed`
   // as a VISIBLE marker — collapsing it to `absent` would make a transient
@@ -591,8 +654,7 @@ export function parseStatusV2(stdout: string): CoreStatus {
   };
 }
 
-// `gh pr view --json number,state,url` → one JSON object. Only an OPEN PR is a
-// value; a MERGED/CLOSED PR for the branch is the domain's `absent`.
+// `gh pr view --json number,state,url,headRefOid` → one JSON object.
 export function parseGithubPr(stdout: string): Outcome<PullRequest> {
   let json: unknown;
   try {
@@ -603,22 +665,25 @@ export function parseGithubPr(stdout: string): Outcome<PullRequest> {
     );
   }
   if (!isRecord(json)) return failed("gh pr view: JSON is not an object");
-  const { number, state, url } = json;
+  const { number, state, url, headRefOid: head } = json;
   if (
     typeof number !== "number" ||
     typeof state !== "string" ||
-    typeof url !== "string"
+    typeof url !== "string" ||
+    typeof head !== "string"
   ) {
-    return failed("gh pr view: missing number/state/url");
+    return failed("gh pr view: missing number/state/url/headRefOid");
   }
-  if (state.toUpperCase() !== "OPEN") return ABSENT;
-  return ok({ number, state, url });
+  const prState = prStateOf("gh pr view", GITHUB_PR_STATES, state);
+  return prState.kind === "ok"
+    ? ok({ number, state: prState.value, url, head })
+    : prState;
 }
 
-// `glab mr view --output json` → one JSON object (iid / state / web_url). State
-// "opened" is the open MR; anything else is `absent`. NOTE: verified against
-// glab's documented JSON shape, not runtime-exercised here (glab not installed
-// on the dev machine) — the github path is the runtime-verified one.
+// `glab mr view --output json` → one JSON object (iid / state / web_url / sha).
+// NOTE: verified against glab's documented JSON shape, not runtime-exercised
+// here (glab not installed on the dev machine) — the github path is the
+// runtime-verified one.
 export function parseGitlabMr(stdout: string): Outcome<PullRequest> {
   let json: unknown;
   try {
@@ -632,15 +697,19 @@ export function parseGitlabMr(stdout: string): Outcome<PullRequest> {
   const iid = json.iid;
   const state = json.state;
   const url = json.web_url;
+  const head = json.sha;
   if (
     typeof iid !== "number" ||
     typeof state !== "string" ||
-    typeof url !== "string"
+    typeof url !== "string" ||
+    typeof head !== "string"
   ) {
-    return failed("glab mr view: missing iid/state/web_url");
+    return failed("glab mr view: missing iid/state/web_url/sha");
   }
-  if (state.toLowerCase() !== "opened") return ABSENT;
-  return ok({ number: iid, state, url });
+  const mrState = prStateOf("glab mr view", GITLAB_MR_STATES, state);
+  return mrState.kind === "ok"
+    ? ok({ number: iid, state: mrState.value, url, head })
+    : mrState;
 }
 
 // One commit timestamp is 40 bytes of key and a number, and a bar sees a handful
@@ -836,6 +905,7 @@ export class GitService {
       branch: core.value.branch,
       status: core.value.status,
       aheadBehind: core.value.aheadBehind,
+      head: core.value.oid,
     };
 
     // sha, upstream, and the worktree counts all rode in on the core call —
@@ -1279,7 +1349,7 @@ export class GitService {
     });
   }
 
-  // [LAW:effects-at-boundaries] Resolve the branch's open PR/MR via the forge
+  // [LAW:effects-at-boundaries] Resolve the branch's PR/MR via the forge
   // CLI. Pure dispatch over a remote the CALLER has already read: pick the
   // forge by host, run its CLI, fold the launch result into an Outcome. The
   // remote is a parameter (not read here) so the cache layer can fold it into
@@ -1297,7 +1367,7 @@ export class GitService {
         "gh pr view",
         await this.execForgeAsync(
           "gh",
-          ["pr", "view", "--json", "number,state,url"],
+          ["pr", "view", "--json", "number,state,url,headRefOid"],
           { cwd: workingDir, timeout: 5000 },
         ),
         /no (open )?pull requests? found/i,

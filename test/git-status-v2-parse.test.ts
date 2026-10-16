@@ -5,8 +5,8 @@
 // -bb9.1); every field it lifts — branch, sha, upstream, ahead/behind, worktree
 // status — must survive each state, so each state is one case here.
 
-import { parseStatusV2 } from "../src/segments/git";
-import { ABSENT, ok } from "../src/utils/outcome";
+import { parseStatusV2, trackingOf } from "../src/segments/git";
+import { ABSENT, failed, ok } from "../src/utils/outcome";
 
 describe("parseStatusV2", () => {
   test("empty input → benign default (detached/clean, all absent), never a crash", () => {
@@ -180,5 +180,25 @@ describe("parseStatusV2", () => {
     const r = parseStatusV2(out);
     expect(r.workingTree).toMatchObject({ staged: 1, unstaged: 0 });
     expect(r.status).toBe("dirty");
+  });
+});
+
+// Captured from real runs: a pushed branch, the same branch after its remote
+// branch was deleted and pruned, and a branch never pushed.
+describe("trackingOf", () => {
+  const head = "# branch.oid 96d85fdaa67b59fa217e5a594f1af4e39a44b65b\n# branch.head feat";
+  test.each([
+    ["tracked", `${head}\n# branch.upstream origin/feat\n# branch.ab +0 -0`],
+    ["gone", `${head}\n# branch.upstream origin/feat`],
+    ["none", head],
+  ])("%s", (tracking, out) => {
+    const { upstream, aheadBehind } = parseStatusV2(out);
+    expect(trackingOf(upstream, aheadBehind)).toEqual(ok(tracking));
+  });
+
+  test("an upstream that could not be read is not a tracking state", () => {
+    const f = failed("git: boom");
+    expect(trackingOf(f, ABSENT)).toEqual(f);
+    expect(trackingOf(ok("origin/feat"), f)).toEqual(f);
   });
 });

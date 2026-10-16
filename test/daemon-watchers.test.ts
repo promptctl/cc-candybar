@@ -91,6 +91,7 @@ class StubInner extends GitService {
       branch: "main",
       status: "clean",
       aheadBehind: ok({ ahead: 0, behind: 0 }),
+      head: ok("c0ffee"),
     });
   }
 }

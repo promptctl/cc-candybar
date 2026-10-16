@@ -123,7 +123,7 @@ These are the segment names `DEFAULT_DSL_CONFIG` declares, each available to a u
 | `metrics` | `Δ` last response time, `⧖` response time, `⧗` session duration, `◆` message count, lines changed | when any of those exist |
 | `activity` | `⌘` the slash command that opened the turn, `☐` the in-progress todo with its position, `⟳` tools in flight and `✓` tools finished this turn | while the session is doing something |
 
-The lit ticket a checkout is working on is not bundled: it is a plugin lit ships (`examples/plugins/lit`), placed as `plugins.lit.ticket` and `plugins.lit.next`. It reads the `.lit/statusline.json` lit keeps in each checkout, so no lit process runs for the bar.
+The lit ticket a checkout is working on is not bundled: it is a plugin lit ships (`examples/plugins/lit`), placed as `plugins.lit.ticket`, `plugins.lit.next` and `plugins.lit.stage`. It reads the `.lit/statusline.json` lit keeps in each checkout, so no lit process runs for the bar. `stage` shows where the checkout is in the work loop — `↻ 1/5 cleanup`, `pick`, `work`, `review`, `downstream` — from that file, the git status and the branch's PR.
 
 Each segment is a DSL declaration with a `template` (text + interpolation + style functions), a `bg`/`fg` palette spec, and optional `when` predicate. Templates compose freely — every formatter in the bundled function library (`formatCost`, `formatTokens`, `formatLongTimeRemaining`, `budgetStatus`, `link`, `urlEncode`, the sprig string/list/dict library, …) is available in every segment.
 

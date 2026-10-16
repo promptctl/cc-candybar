@@ -143,6 +143,7 @@ describe("buildRenderPayload — git outcome lane", () => {
         branch: "main",
         status: "clean",
         aheadBehind: ok({ ahead: 1, behind: 2 }),
+        head: ok("c0ffee"),
         sha: ok("abc1234"),
         stashCount: failed("git stash list: timeout, exit null"),
         upstream: ABSENT,
@@ -169,6 +170,8 @@ describe("buildRenderPayload — git outcome lane", () => {
       ahead: 1,
       behind: 2,
       sha: "abc1234",
+      // Read, and the branch has none.
+      tracking: "none",
     });
     expect("stash" in payload.git!).toBe(false);
     // The absent upstream is also missing but logs nothing; only the failed
@@ -190,6 +193,7 @@ describe("buildRenderPayload — git outcome lane", () => {
         branch: "main",
         status: "clean",
         aheadBehind: ABSENT,
+        head: ok("c0ffee"),
         committedAt: ok(committedAt),
       }),
       [],
@@ -550,10 +554,12 @@ describe("buildRenderPayload — git PR projection", () => {
         branch: "feature",
         status: "clean",
         aheadBehind: ABSENT,
+        head: ok("c0ffee"),
         pullRequest: ok({
           number: 76,
-          state: "OPEN",
+          state: "open",
           url: "https://github.com/x/y/pull/76",
+          head: "c0ffee",
         }),
       }),
       logs,
@@ -572,7 +578,7 @@ describe("buildRenderPayload — git PR projection", () => {
 
     expect(payload.git).toMatchObject({
       prNumber: 76,
-      prState: "OPEN",
+      prState: "open",
       prUrl: "https://github.com/x/y/pull/76",
     });
     expect("prError" in payload.git!).toBe(false);
@@ -586,6 +592,7 @@ describe("buildRenderPayload — git PR projection", () => {
         branch: "feature",
         status: "clean",
         aheadBehind: ABSENT,
+        head: ok("c0ffee"),
         pullRequest: failed("gh pr view: non-zero, exit 1, HTTP 401"),
       }),
       logs,
@@ -620,6 +627,7 @@ describe("buildRenderPayload — git PR projection", () => {
         branch: "feature",
         status: "clean",
         aheadBehind: ABSENT,
+        head: ok("c0ffee"),
         pullRequest: ABSENT,
       }),
       logs,

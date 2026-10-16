@@ -61,7 +61,14 @@ import {
   underThemeDefault,
 } from "../config/theme-defaults.js";
 import { templateReads } from "../config/dsl-loader.js";
-import type { GitInfo, GitInfoOptions } from "../segments/git.js";
+import {
+  prOfHead,
+  trackingOf,
+  type GitInfo,
+  type GitInfoOptions,
+  type PrState,
+  type Tracking,
+} from "../segments/git.js";
 import { ABSENT, failed, type Outcome } from "../utils/outcome.js";
 import { cacheExpiresAt } from "../segments/cache.js";
 import type { DaemonLogger } from "./log.js";
@@ -539,6 +546,10 @@ export interface GitPayload {
   readonly untracked?: number;
   readonly conflicts?: number;
   readonly upstream?: string;
+  // Present whenever `upstream` was read, so a template can tell a branch
+  // level with its upstream (`tracked`, ahead and behind 0) from one whose
+  // ahead/behind are missing because it has no upstream or it is `gone`.
+  readonly tracking?: Tracking;
   readonly stash?: number;
   readonly status?: string;
   readonly operation?: string;
@@ -550,7 +561,7 @@ export interface GitPayload {
   // open PR (prNumber/prState/prUrl present), lookup failed (prError present),
   // no PR (all absent → segment when-gated off).
   readonly prNumber?: number;
-  readonly prState?: string;
+  readonly prState?: PrState;
   readonly prUrl?: string;
   readonly prError?: string;
 }
@@ -1133,7 +1144,9 @@ function gitOptionsFromClosure(needed: ReadonlySet<string>): GitInfoOptions {
     ...(has("git.sha") && { showSha: true }),
     ...(wantsWorkingTree && { showWorkingTree: true }),
     ...(has("git.stash") && { showStashCount: true }),
-    ...(has("git.upstream") && { showUpstream: true }),
+    ...((has("git.upstream") || has("git.tracking")) && {
+      showUpstream: true,
+    }),
     ...(has("git.repoName") && { showRepoName: true }),
     ...(has("git.repoUrl") && { showRepoUrl: true }),
     ...(has("git.operation") && { showOperation: true }),
@@ -1709,6 +1722,10 @@ function projectGitInfo(
       : Math.floor((nowMs - committedAt) / 1000);
   const stash = field("stash", info.stashCount);
   const upstream = field("upstream", info.upstream);
+  const tracking =
+    info.upstream === undefined
+      ? undefined
+      : field("tracking", trackingOf(info.upstream, info.aheadBehind));
   const repoName = field("repoName", info.repoName);
   const repoUrl = field("repoUrl", info.repoUrl);
 
@@ -1718,10 +1735,13 @@ function projectGitInfo(
   // the segment renders a distinct marker. `absent` is still a missing key (no
   // PR / no forge → segment off). The reason is the gate value the template
   // tests; the same reason is logged for the operator.
-  const pr = info.pullRequest;
+  const pr =
+    info.pullRequest === undefined
+      ? undefined
+      : prOfHead(info.pullRequest, info.head);
   const prFields: {
     prNumber?: number;
-    prState?: string;
+    prState?: PrState;
     prUrl?: string;
     prError?: string;
   } = {};
@@ -1753,6 +1773,7 @@ function projectGitInfo(
       ...(timeSinceCommit !== undefined && { timeSinceCommit }),
       ...(stash !== undefined && { stash }),
       ...(upstream !== undefined && { upstream }),
+      ...(tracking !== undefined && { tracking }),
       ...(repoName !== undefined && { repoName }),
       ...(repoUrl !== undefined && { repoUrl }),
       ...prFields,
