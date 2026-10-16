@@ -1,3 +1,10 @@
+## [1.132.1](https://github.com/promptctl/cc-candybar/compare/v1.132.0...v1.132.1) (2026-10-16)
+
+
+### Bug Fixes
+
+* **loader:** a template variable's cache: is refused, not ignored ([#358](https://github.com/promptctl/cc-candybar/issues/358)) ([253106a](https://github.com/promptctl/cc-candybar/commit/253106a41f6f7eeaa2ecc3901e88bf7d5c2cf901))
+
 # [1.132.0](https://github.com/promptctl/cc-candybar/compare/v1.131.0...v1.132.0) (2026-10-16)
 
 
