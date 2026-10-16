@@ -8,7 +8,7 @@ export function memoryMarkBook(initial: MarkBook = {}): MarkBookStore & {
 } {
   let book = initial;
   return {
-    read: () => book,
+    read: () => ({ kind: "ok", value: book }),
     record: (check, sighting, mark) => {
       book = withMark(book, check, sighting, mark);
     },

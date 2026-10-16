@@ -57,13 +57,14 @@ import {
   type ConfiguredTerminal,
 } from "./terminal.js";
 import { fontInUse } from "./font-edge.js";
-import { stripPrivateGlyphs } from "../render/strip.js";
+import { privateGlyphsIn, stripPrivateGlyphs } from "../render/strip.js";
+import { DoctorBusy } from "./busy.js";
 import { fileMarkBook, type MarkBookStore } from "./mark-book.js";
 
 export interface DoctorEdge {
   // tmux's own word on the attached client's terminal, asked of THE server
   // the hint names — `-S socket` and `-t pane` are why the hint carries them.
-  readonly probeTmux: (hint: TmuxHint) => Asked<TmuxClient>;
+  readonly probeTmux: (hint: TmuxHint) => Asked<TmuxClient | null>;
   // The marks the user has made on what the doctor showed them, kept for
   // good (src/doctor/mark-book.ts).
   readonly marks: MarkBookStore;
@@ -119,14 +120,17 @@ const TMUX_CLIENT_FORMAT =
   "#{client_termfeatures}\t#{client_termtype}\t#{client_termname}\t#{client_pid}";
 
 // [LAW:parse-dont-validate] tmux's answer, read as the four fields it was
-// asked for — a line that is not four fields, or a pid that is neither one nor
-// empty, is a failure naming what came back. Every field is empty when no
-// client is attached to the pane's session: no features, no terminal, no
-// process, which is an answer, not a failure.
-export function parseTmuxClient(stdout: string): Asked<TmuxClient> {
-  const fields = stdout.replace(/\n$/, "").split("\t");
+// asked for. Every field is empty when no client is attached to the pane's
+// session — an answer, `null`, not a failure; any other line that is not four
+// fields with a pid is a failure naming what came back. The client is the one
+// attached to the PANE's session, whatever TMUX_PANE the asker carries
+// (measured on tmux 3.6a).
+export function parseTmuxClient(stdout: string): Asked<TmuxClient | null> {
+  const line = stdout.replace(/\n$/, "");
+  if (line === "\t\t\t") return { kind: "ok", value: null };
+  const fields = line.split("\t");
   const [features, termtype, termname, pid] = fields;
-  if (fields.length !== 4 || !/^(?:[1-9]\d*)?$/.test(pid!)) {
+  if (fields.length !== 4 || !/^[1-9]\d*$/.test(pid!)) {
     return {
       kind: "failed",
       reason: `tmux answered ${JSON.stringify(stdout)}, not the four fields asked for`,
@@ -138,7 +142,7 @@ export function parseTmuxClient(stdout: string): Asked<TmuxClient> {
       features: features!.split(",").filter((f) => f !== ""),
       termtype: termtype!,
       termname: termname!,
-      pid: pid === "" ? null : Number(pid),
+      pid: Number(pid),
     },
   };
 }
@@ -185,13 +189,14 @@ function remoteLogin(pid: number): Asked<boolean> {
     category: "doctor.process",
   });
   if (!run.ok) {
+    if (run.reason === "rate-limited") throw new DoctorBusy("the processes");
     const detail = run.error ?? `${run.reason}: ${run.stderr.trim()}`;
     return { kind: "failed", reason: `ps failed (${detail})` };
   }
   return descendsFromRemoteLogin(run.stdout, pid);
 }
 
-function probeTmux(hint: TmuxHint): Asked<TmuxClient> {
+function probeTmux(hint: TmuxHint): Asked<TmuxClient | null> {
   const run = runTmux(hint, "doctor.tmux", [
     "display",
     "-p",
@@ -199,7 +204,8 @@ function probeTmux(hint: TmuxHint): Asked<TmuxClient> {
     hint.pane,
     TMUX_CLIENT_FORMAT,
   ]);
-  if (run.kind !== "ok") return { kind: "failed", reason: run.reason };
+  if (run.kind === "rate-limited") throw new DoctorBusy("tmux");
+  if (run.kind === "failed") return { kind: "failed", reason: run.reason };
   return parseTmuxClient(run.stdout);
 }
 
@@ -279,13 +285,25 @@ function terminalFacts(
   if (tmux.kind === "inside" && tmux.client.kind === "failed") {
     return { kind: "unasked", reason: tmux.client.reason };
   }
+  if (
+    tmux.kind === "inside" &&
+    tmux.client.kind === "ok" &&
+    tmux.client.value === null
+  ) {
+    return {
+      kind: "unasked",
+      reason: "tmux has no client attached to the pane's session",
+    };
+  }
   if (tmux.kind === "outside" && env === undefined) {
     return { kind: "unreported" };
   }
-  const identified =
+  const client =
     tmux.kind === "inside" && tmux.client.kind === "ok"
-      ? identifyInTmux(tmux.client.value)
-      : identifyFromEnv(env ?? {});
+      ? tmux.client.value
+      : null;
+  const identified =
+    client === null ? identifyFromEnv(env ?? {}) : identifyInTmux(client);
   if (identified.kind === "unknown") return identified;
   const { name, version } = identified.terminal;
   if (isBundling(name)) return { kind: "bundling", name, version };
@@ -295,13 +313,10 @@ function terminalFacts(
   // reader is handed no profile (and reads every one), and whether the
   // terminal is remote is asked of the attached client's own process.
   const { ITERM_PROFILE: startedIn, ...unattached } = env ?? {};
-  const inside = tmux.kind === "inside" ? tmux.client : null;
   const remote: Asked<boolean> =
-    inside?.kind !== "ok"
+    client === null
       ? { kind: "ok", value: hints.ssh === true }
-      : inside.value.pid === null
-        ? { kind: "failed", reason: "tmux has no client attached to the pane" }
-        : edge.remoteLogin(inside.value.pid);
+      : edge.remoteLogin(client.pid);
   return {
     kind: "configured",
     name,
@@ -322,7 +337,7 @@ function terminalFacts(
             }
           : edge.fontInUse(
               { name, version },
-              inside === null ? (env ?? {}) : unattached,
+              client === null ? (env ?? {}) : unattached,
               glyphs,
             ),
   };
@@ -387,7 +402,14 @@ export function gatherFacts(
     () => false,
   );
   const tmux = tmuxFacts(edge, hints.tmux);
-  const glyphs = stripPrivateGlyphs(globals);
+  // The joiner's glyphs, then every one the config's own text writes — a
+  // Nerd icon in a template or a menu glyph is drawn as surely as a cap.
+  const glyphs = [
+    ...new Set([
+      ...stripPrivateGlyphs(globals),
+      ...privateGlyphsIn(JSON.stringify(load.config)),
+    ]),
+  ].join("");
   return {
     tmux,
     // [LAW:types-are-the-program] The measured glyphs parsed into the facts'

@@ -20,6 +20,7 @@ import { parse as parseToml } from "smol-toml";
 import { launchSync } from "../proc/launch.js";
 import type { Asked, FontInUse } from "./checks.js";
 import { itermDrawsItself, type ConfiguredTerminal } from "./terminal.js";
+import { DoctorBusy } from "./busy.js";
 import type { TerminalEnvHint } from "../terminal-hint.js";
 
 // [LAW:types-are-the-program] How a font is named where a terminal stores it:
@@ -36,9 +37,12 @@ const hex = (glyph: string): string =>
 // ─── macOS: CoreText through JXA ────────────────────────────────────────────
 
 // [LAW:single-enforcer] One script answers every macOS question, so a doctor
-// run spawns once. Modes: `font <kind> <name> <codepoints>` resolves a font
-// and lists the code points it lacks (`{ lacks }`, null when no installed
-// font has that name); `iterm <profile> <codepoints>` reads the named iTerm2
+// run spawns once. A glyph a font LACKS is one CoreText draws with LastResort
+// — the box — when asked which font draws it (`CTFontCreateForString`): the
+// font itself, or whatever it falls back to, is the platform's own word on
+// what reaches the screen. Modes: `font <kind> <name> <codepoints>` resolves
+// a font and lists the code points it lacks (`{ lacks }`, null when no
+// installed font has that name); `iterm <profile> <codepoints>` reads the named iTerm2
 // profile, or every profile for an empty name (`{ profiles }`), each as it
 // stands — its name, the font that draws non-ASCII (its non-ASCII font when
 // "Use a different font for non-ASCII text" is on, its own font otherwise; null
@@ -47,10 +51,14 @@ const hex = (glyph: string): string =>
 // MEANS is decided in TypeScript (`itermFontInUse`). Errors answer `{ error }`.
 const JXA = String.raw`
 ObjC.import("AppKit");
+ObjC.import("CoreText");
 function lacksOf(font, points) {
   if (font.isNil()) return null;
-  const set = font.coveredCharacterSet;
-  return points.filter((p) => !set.longCharacterIsMember(parseInt(p, 16)));
+  return points.filter((p) => {
+    const text = $.NSString.stringWithString(String.fromCodePoint(parseInt(p, 16)));
+    const drawn = $.CTFontCreateForString(font, text, $.CFRangeMake(0, text.length));
+    return ObjC.castRefToObject($.CTFontCopyPostScriptName(drawn)).js === "LastResort";
+  });
 }
 function resolve(kind, name) {
   return kind === "postscript"
@@ -98,6 +106,7 @@ function jxa<T>(args: readonly string[]): Asked<T> {
     category: "doctor.font",
   });
   if (!run.ok) {
+    if (run.reason === "rate-limited") throw new DoctorBusy("the font");
     const detail = run.error ?? `${run.reason}: ${run.stderr.trim()}`;
     return { kind: "failed", reason: `osascript failed (${detail})` };
   }
@@ -253,47 +262,60 @@ function itermFont(
 
 // ─── fontconfig ─────────────────────────────────────────────────────────────
 
-// [LAW:effects-at-boundaries] Pure over fc-match's answer: the family
-// fontconfig resolves a name to (an alias like `monospace`, or a family no
-// installed font has, resolves to whatever it substitutes), a tab, and that
-// font's code points as hex ranges (`20-7e a0-17f e0b0-e0b3`). A glyph is
-// lacking when no range covers it.
+// [LAW:effects-at-boundaries] Pure over `fc-match --sort`'s answer: the
+// fonts fontconfig draws a family with, best first — the font it resolves the
+// name to (an alias like `monospace`, or a family no installed font has,
+// resolves to whatever it substitutes), then the fonts a fontconfig terminal
+// falls back to for a glyph that one lacks — one per line, a family, a tab,
+// and its code points as hex ranges (`20-7e a0-17f e0b0-e0b3`). The font is
+// the first; a glyph is lacking when no font in the list covers it.
 export function fcMatchCoverage(
   output: string,
   glyphs: string,
 ): Asked<Coverage> {
-  const line = output.replace(/\n$/, "");
-  const tab = line.indexOf("\t");
-  if (tab <= 0 || line.includes("\n")) {
+  const lines = output.split("\n").filter((l) => l !== "");
+  const fonts = lines.map((line) => {
+    const tab = line.indexOf("\t");
+    return tab <= 0
+      ? null
+      : {
+          family: line.slice(0, tab),
+          ranges: line
+            .slice(tab + 1)
+            .split(/\s+/)
+            .filter((r) => r !== "")
+            .map((range) => {
+              const [lo, hi = lo] = range
+                .split("-")
+                .map((h) => parseInt(h, 16));
+              return [lo!, hi!] as const;
+            }),
+        };
+  });
+  if (fonts.length === 0 || fonts.some((f) => f === null)) {
     return {
       kind: "failed",
-      reason: `fc-match answered ${JSON.stringify(output)}, not a family and its charset`,
+      reason: `fc-match answered ${JSON.stringify(output.slice(0, 200))}, not families and their charsets`,
     };
   }
-  const ranges = line
-    .slice(tab + 1)
-    .split(/\s+/)
-    .filter((r) => r !== "")
-    .map((range) => {
-      const [lo, hi = lo] = range.split("-").map((h) => parseInt(h, 16));
-      return [lo!, hi!] as const;
-    });
+  const drawable = fonts.flatMap((f) => f!.ranges);
   const lacks = [...glyphs].filter((g) => {
     const p = g.codePointAt(0)!;
-    return !ranges.some(([lo, hi]) => lo <= p && p <= hi);
+    return !drawable.some(([lo, hi]) => lo <= p && p <= hi);
   });
-  return { kind: "ok", value: { font: line.slice(0, tab), lacks } };
+  return { kind: "ok", value: { font: fonts[0]!.family, lacks } };
 }
 
 // fontconfig's pattern syntax escapes these in a value.
 const fcEscape = (value: string): string => value.replace(/[\\:,=-]/g, "\\$&");
 
 // What fontconfig draws a family with — the font a fontconfig terminal ends
-// up using, alias or not.
+// up using, alias or not, and the fonts it falls back to.
 function fcCoverage(family: string, glyphs: string): Asked<Coverage> {
   const run = launchSync({
     bin: "fc-match",
     args: [
+      "--sort",
       "--format",
       "%{family[0]}\t%{charset}\n",
       `:family=${fcEscape(family)}`,
@@ -302,6 +324,7 @@ function fcCoverage(family: string, glyphs: string): Asked<Coverage> {
     category: "doctor.font",
   });
   if (!run.ok) {
+    if (run.reason === "rate-limited") throw new DoctorBusy("the font");
     const detail = run.error ?? `${run.reason}: ${run.stderr.trim()}`;
     return { kind: "failed", reason: `fc-match failed (${detail})` };
   }

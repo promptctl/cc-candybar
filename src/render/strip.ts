@@ -215,7 +215,12 @@ export function stripSeamCols(options: StripShape): number {
 // Unicode's three Private Use Areas: the code points no standard font draws,
 // where Powerline and Nerd Fonts put their glyphs.
 const PRIVATE_USE =
-  /[\u{E000}-\u{F8FF}\u{F0000}-\u{FFFFD}\u{100000}-\u{10FFFD}]/u;
+  /[\u{E000}-\u{F8FF}\u{F0000}-\u{FFFFD}\u{100000}-\u{10FFFD}]/gu;
+
+// The private-use glyphs in a text, each once, in the order written.
+export function privateGlyphsIn(text: string): string {
+  return [...new Set(text.match(PRIVATE_USE) ?? [])].join("");
+}
 
 // The private-use glyphs a row draws — its caps, the seam between two cells,
 // and the divider between two on one ground, each once, in the order drawn:
@@ -231,7 +236,7 @@ export function stripPrivateGlyphs(options: StripShape): string {
     colorSystem: null,
     ...drawOptions(options.charset),
   });
-  return [...new Set([...drawn].filter((c) => PRIVATE_USE.test(c)))].join("");
+  return privateGlyphsIn(drawn);
 }
 
 function toCell(seg: RenderedSegmentLike, padding: number): RichText {

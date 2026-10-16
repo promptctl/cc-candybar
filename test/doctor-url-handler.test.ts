@@ -44,7 +44,7 @@ const verdict = (urlHandler: UrlHandlerFacts) =>
     placementEffects: [],
     transitions: false,
     nerdFont: { kind: "none" },
-    marks: {},
+    marks: { kind: "ok", value: {} },
     claudeSettings: { path: "/s.json", env: {}, statusLine: { kind: "absent" } },
   });
 

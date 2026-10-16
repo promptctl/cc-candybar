@@ -53,7 +53,7 @@ const facts = (
   transitions,
   urlHandler: { kind: "unsupported" },
   nerdFont: { kind: "none" },
-  marks: {},
+  marks: { kind: "ok", value: {} },
   claudeSettings: { path: SETTINGS_PATH, env, statusLine },
 });
 

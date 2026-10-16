@@ -5,6 +5,7 @@
 // recorded `claudeConfigDir` hint names. The recorded client hints are seeded the way server.ts records them, so the click reads
 // the facts of the session's "last render" exactly as production does.
 
+import { DoctorBusy } from "../src/doctor/busy";
 import { memoryMarkBook } from "./helpers/mark-book";
 import fs from "node:fs";
 import { POWERLINE } from "./helpers/powerline";
@@ -404,7 +405,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
       expect(out).toContain("✓ Nerd Font");
       expect(out).not.toContain("[✓ shapes]");
       expect(rt.logs).toContain(
-        "doctor-mark: nerdFont drawn on iTerm2 3.7.2 with Menlo-Regular|U+E0B0 U+E0B1 (session=s1)",
+        'doctor-mark: nerdFont drawn on iTerm2 with Menlo-Regular (iTerm2 profile "Default")|U+E0B0 U+E0B1 (session=s1)',
       );
       expect(rt.logs.at(-1)).toMatch(/nerdFont=ok .* mark=drawn \(session=s1\)$/);
     });
@@ -431,6 +432,21 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
       expect(() =>
         VERBS.get(VERB_DOCTOR_MARK)!("s1/nerdFont/perhaps", rt.ctx),
       ).toThrow(/the mark is "perhaps"/);
+    });
+
+    test("a probe the rate limit refused refuses the click, and the report stands", () => {
+      const busy: TerminalFixture = {
+        ...ITERM_MENLO,
+        fontInUse: () => {
+          throw new DoctorBusy("the font");
+        },
+      };
+      const rt = buildRuntime(null, CLEAN_LOAD, busy);
+      rt.openTools();
+      expect(() => VERBS.get(VERB_DOCTOR_RUN)!("s1", rt.ctx)).toThrow(
+        new BadVerbArgs("the doctor looked at the font less than a second ago — click again"),
+      );
+      expect(rt.render()).not.toContain("Nerd Font");
     });
 
     test("only a check that takes a mark is given the actions that make one", () => {

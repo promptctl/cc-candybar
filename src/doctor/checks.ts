@@ -31,13 +31,12 @@ import {
 // session's pane, or why it could not be asked: its verdict on the terminal's
 // features (`#{client_termfeatures}`), what that terminal is
 // (TmuxClientTerm), and the client's process (`#{client_pid}`), whose
-// ancestry says whether it was attached over a remote login — null when no
-// client is attached to the pane's session. No `absent` arm:
+// ancestry says whether it was attached over a remote login. No `absent` arm:
 // the query either answers or fails — there is no "tmux has no opinion", so a
 // probe never has to decide what an absent answer would mean.
 export interface TmuxClient extends TmuxClientTerm {
   readonly features: readonly string[];
-  readonly pid: number | null;
+  readonly pid: number;
 }
 
 // A question put to the system: it answers or it fails, never "no opinion".
@@ -55,7 +54,9 @@ export type TmuxFacts =
   | {
       readonly kind: "inside";
       readonly hint: TmuxHint;
-      readonly client: Asked<TmuxClient>;
+      // null: no client is attached to the pane's session — tmux's answer,
+      // not a failure.
+      readonly client: Asked<TmuxClient | null>;
     };
 
 // [LAW:types-are-the-program] What loading the session's config found. The
@@ -187,8 +188,9 @@ export interface DoctorFacts {
   readonly config: ConfigFacts;
   readonly urlHandler: UrlHandlerFacts;
   readonly nerdFont: NerdFontFacts;
-  // The user's marks; a check honours only the one on the sighting it shows.
-  readonly marks: MarkBook;
+  // The user's marks, or why the book could not be read; a check honours
+  // only the mark on the sighting it shows.
+  readonly marks: Asked<MarkBook>;
   // The effect the session's bar wears, resolved as its render resolves it
   // (session pick over config default over the floor). A rule stays a rule:
   // only the render can say what it names.
@@ -315,7 +317,11 @@ const tmuxTruecolor: Check = {
         }
         // Not applicable is not a failure: without RGB there is nothing for
         // Claude Code to be told about.
-        if (!tmux.client.value.features.includes("RGB")) return { ok: true };
+        if (
+          tmux.client.value === null ||
+          !tmux.client.value.features.includes("RGB")
+        )
+          return { ok: true };
         if (tmux.hint.truecolor !== null) return { ok: true };
         // [LAW:one-source-of-truth] The same truthiness Claude Code applies to
         // its env: a non-empty string. Anything else in settings.json — absent,
@@ -528,27 +534,42 @@ function terminalCalled(terminal: TerminalFacts): string {
   }
 }
 
-// What a mark answers for: the terminal, and the font it was read to draw
-// with where one was read — so a mark made under one font answers nothing
-// once the terminal is set to another, and the fresh reading speaks again.
-function sightedIn(terminal: TerminalFacts): string {
-  const called = terminalCalled(terminal);
-  return terminal.kind === "configured" && terminal.font.kind === "ok"
-    ? `${called} with ${terminal.font.value.font}`
-    : called;
+// What a mark answers for, or null where nothing names the terminal — a
+// mark there would answer for whichever terminal next goes unnamed. A named
+// terminal is its name, never its release (an update draws what it drew), and
+// for one whose font was read, the font and where it was read — so a mark
+// made under one font, or before the built-in glyphs were turned on, answers
+// nothing once the reading changes, and the fresh reading speaks again.
+function sightedIn(terminal: TerminalFacts): string | null {
+  switch (terminal.kind) {
+    case "unreported":
+    case "unasked":
+      return null;
+    case "unknown":
+      return terminal.called === "" ? null : terminal.called;
+    case "bundling":
+      return TERMINAL_LABEL[terminal.name];
+    case "configured": {
+      const label = TERMINAL_LABEL[terminal.name];
+      return terminal.font.kind === "ok"
+        ? `${label} with ${terminal.font.value.font} (${terminal.font.value.from})`
+        : `${label}, its font unread: ${terminal.font.reason}`;
+    }
+  }
 }
 
 // [LAW:one-source-of-truth] The sighting the Nerd Font check shows, and the
-// one spelling of its id: the doctor verb records a mark under it, and the
+// one spelling of its id: the doctor verb files a mark under it, and the
 // probe honours a mark only under it, so a mark made in one terminal, under
 // another font, or on another joiner's glyphs, answers nothing here.
+// Undefined where nothing names the terminal: there is nothing to mark.
 export function glyphSighting(
   facts: Pick<DrawnGlyphs, "glyphs" | "terminal">,
-): Sighting {
-  return {
-    glyphs: facts.glyphs,
-    id: `${sightedIn(facts.terminal)}|${codePoints(facts.glyphs)}`,
-  };
+): Sighting | undefined {
+  const where = sightedIn(facts.terminal);
+  return where === null
+    ? undefined
+    : { glyphs: facts.glyphs, id: `${where}|${codePoints(facts.glyphs)}` };
 }
 
 const ASCII_WAY =
@@ -569,15 +590,24 @@ const nerdFont: Check = {
   takesMark: true,
   probe: ({ nerdFont: facts, marks }) => {
     if (facts.kind === "none") return { ok: true };
+    if (marks.kind === "failed") {
+      return {
+        ok: false,
+        reason: `the mark book could not be read: ${marks.reason}`,
+      };
+    }
     const sighting = glyphSighting(facts);
     const failed = (reason: string): Verdict => ({
       ok: false,
       reason,
-      sighting,
+      ...(sighting !== undefined && { sighting }),
     });
     const terminal = facts.terminal;
     const called = terminalCalled(terminal);
-    const mark = marks[NERD_FONT_CHECK]?.[sighting.id] ?? null;
+    const mark =
+      sighting === undefined
+        ? null
+        : (marks.value[NERD_FONT_CHECK]?.[sighting.id] ?? null);
     switch (mark) {
       case "drawn":
         return { ok: true };

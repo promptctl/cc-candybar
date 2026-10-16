@@ -15,6 +15,7 @@ import { BOOLEAN_FALSE, BOOLEAN_TRUE } from "../themes/policy.js";
 import {
   NERD_FONT_CHECK,
   glyphSighting,
+  type Asked,
   type CheckReport,
   type MarkBook,
   type NerdFontFacts,
@@ -52,9 +53,13 @@ export function doctorReportKeys(checkName: string): ReportKeys {
 // fields for the doctor's event: the glyphs it needed, the terminal it found
 // (`<name>@<release>`, `-` for an unsaid release, else the arm that kept it
 // from finding one), the font it read and the mark it honoured, the one made
-// on the sighting it shows — every field `-` where there was nothing to find.
+// on the sighting it shows (`unread` when the mark book could not be read) —
+// every field `-` where there was nothing to find.
 // A value a terminal or font chose is a JSON string, since it may hold a space.
-export function nerdFontFields(facts: NerdFontFacts, marks: MarkBook): string {
+export function nerdFontFields(
+  facts: NerdFontFacts,
+  marks: Asked<MarkBook>,
+): string {
   if (facts.kind === "none") return "glyphs=- terminal=- font=- mark=-";
   const { glyphs, terminal } = facts;
   const codes = [...glyphs].map((g) => g.codePointAt(0)!.toString(16));
@@ -76,7 +81,13 @@ export function nerdFontFields(facts: NerdFontFacts, marks: MarkBook): string {
     const { font: name, lacks } = terminal.font.value;
     return `${JSON.stringify(name)}:${lacks === null ? "not-installed" : `lacks${lacks.length}`}`;
   })();
-  const mark = marks[NERD_FONT_CHECK]?.[glyphSighting(facts).id] ?? "-";
+  const sighting = glyphSighting(facts);
+  const mark =
+    marks.kind === "failed"
+      ? "unread"
+      : sighting === undefined
+        ? "-"
+        : (marks.value[NERD_FONT_CHECK]?.[sighting.id] ?? "-");
   return `glyphs=${codes.join(",")} terminal=${found} font=${font} mark=${mark}`;
 }
 

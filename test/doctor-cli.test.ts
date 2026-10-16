@@ -151,7 +151,7 @@ describe("doctorPlan", () => {
   // mark made in the bar's doctor and passes on it.
   test("a ✓ the bar's doctor filed in the mark book settles the check here too", async () => {
     const glyphs = stripPrivateGlyphs({ endcaps: "powerline", charset: "unicode" });
-    const id = glyphSighting({ glyphs, terminal: { kind: "unknown", called: "vscode" } }).id;
+    const id = glyphSighting({ glyphs, terminal: { kind: "unknown", called: "vscode" } })!.id;
     const plan = await doctorPlan(
       { ...EDGE, marks: memoryMarkBook(withMark({}, "nerdFont", id, "drawn")) },
       NO_HANDLER,

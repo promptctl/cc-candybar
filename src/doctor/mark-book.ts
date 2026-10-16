@@ -15,41 +15,47 @@ import fs from "node:fs";
 import path from "node:path";
 import { stateDir } from "../daemon/paths.js";
 import { writeAtomic } from "../utils/atomic-write.js";
-import { GLYPH_MARKS, type GlyphMark, type MarkBook } from "./checks.js";
+import {
+  GLYPH_MARKS,
+  type Asked,
+  type GlyphMark,
+  type MarkBook,
+} from "./checks.js";
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);
 
 // [LAW:parse-dont-validate] The file's text as a MarkBook — check name, then
 // sighting id, then the mark. Only the doctor writes the file, so text that
-// does not read is a fault to name, never an empty book.
-export function parseMarkBook(text: string, file: string): MarkBook {
-  const fault = (why: string): Error =>
-    new Error(`doctor: the mark book ${file} ${why}`);
+// does not read is a failure naming the file, never an empty book; it fails
+// only the check that reads marks, never the doctor's other checks.
+export function parseMarkBook(text: string, file: string): Asked<MarkBook> {
+  const fault = (why: string): Asked<MarkBook> => ({
+    kind: "failed",
+    reason: `${file} ${why}`,
+  });
   let doc: unknown;
   try {
     doc = JSON.parse(text);
   } catch (e) {
-    throw fault(`is not JSON: ${(e as Error).message}`);
+    return fault(`is not JSON: ${(e as Error).message}`);
   }
-  if (!isRecord(doc)) throw fault("is not an object");
-  return Object.fromEntries(
-    Object.entries(doc).map(([check, sightings]) => {
-      if (!isRecord(sightings)) {
-        throw fault(
-          `holds ${JSON.stringify(check)} as something other than its sightings`,
+  if (!isRecord(doc)) return fault("is not an object");
+  for (const [check, sightings] of Object.entries(doc)) {
+    if (!isRecord(sightings)) {
+      return fault(
+        `holds ${JSON.stringify(check)} as something other than its sightings`,
+      );
+    }
+    for (const [id, mark] of Object.entries(sightings)) {
+      if (!(GLYPH_MARKS as readonly unknown[]).includes(mark)) {
+        return fault(
+          `marks ${JSON.stringify(id)} ${JSON.stringify(mark)}, not ${GLYPH_MARKS.join(" or ")}`,
         );
       }
-      for (const [id, mark] of Object.entries(sightings)) {
-        if (!(GLYPH_MARKS as readonly unknown[]).includes(mark)) {
-          throw fault(
-            `marks ${JSON.stringify(id)} ${JSON.stringify(mark)}, not ${GLYPH_MARKS.join(" or ")}`,
-          );
-        }
-      }
-      return [check, sightings as Readonly<Record<string, GlyphMark>>];
-    }),
-  );
+    }
+  }
+  return { kind: "ok", value: doc as MarkBook };
 }
 
 // The book with one mark made: the latest mark on a sighting is its answer.
@@ -63,7 +69,9 @@ export function withMark(
 }
 
 export interface MarkBookStore {
-  readonly read: () => MarkBook;
+  readonly read: () => Asked<MarkBook>;
+  // Throws when the book cannot be read: a mark is never filed over a book
+  // whose other marks would be lost.
   readonly record: (check: string, sighting: string, mark: GlyphMark) => void;
 }
 
@@ -71,23 +79,31 @@ export interface MarkBookStore {
 export function fileMarkBook(
   file: string = path.join(stateDir(), "doctor-marks.json"),
 ): MarkBookStore {
-  const read = (): MarkBook => {
+  const read = (): Asked<MarkBook> => {
     let text: string;
     try {
       text = fs.readFileSync(file, "utf8");
     } catch (e) {
-      if ((e as NodeJS.ErrnoException).code === "ENOENT") return {};
-      throw e;
+      if ((e as NodeJS.ErrnoException).code === "ENOENT") {
+        return { kind: "ok", value: {} };
+      }
+      return { kind: "failed", reason: `${file}: ${(e as Error).message}` };
     }
     return parseMarkBook(text, file);
   };
   return {
     read,
     record: (check, sighting, mark) => {
+      const book = read();
+      if (book.kind === "failed") {
+        throw new Error(
+          `doctor: the mark book could not be read: ${book.reason}`,
+        );
+      }
       fs.mkdirSync(path.dirname(file), { recursive: true });
       writeAtomic(
         file,
-        `${JSON.stringify(withMark(read(), check, sighting, mark), null, 2)}\n`,
+        `${JSON.stringify(withMark(book.value, check, sighting, mark), null, 2)}\n`,
       );
     },
   };

@@ -123,6 +123,7 @@ import {
 } from "../../doctor/checks";
 import { doctorReportPairs, nerdFontFields } from "../../doctor/report";
 import { withMark } from "../../doctor/mark-book";
+import { DoctorBusy } from "../../doctor/busy";
 import {
   applyFix,
   clickArrived,
@@ -1141,17 +1142,23 @@ function writeReport(ctx: VerbContext, sid: string, facts: DoctorFacts): void {
 }
 
 // The facts a doctor click reasons over: the session's, and the click itself
-// as the link that came back through the URL handler.
+// as the link that came back through the URL handler. A probe the rate limit
+// refused refuses the click (DoctorBusy), so no report is written over facts
+// the doctor did not see.
 function clickFacts(ctx: VerbContext, sid: string): DoctorFacts {
-  return {
-    ...gatherFacts(
+  let gathered: ReturnType<typeof gatherFacts>;
+  try {
+    gathered = gatherFacts(
       ctx.doctor,
       sessionHints(ctx, sid),
       sessionOrigin(ctx, sid),
       (key) => ctx.sessionState.get(sid, key),
-    ),
-    urlHandler: clickArrived(ctx.clientVersion),
-  };
+    );
+  } catch (e) {
+    if (e instanceof DoctorBusy) throw new BadVerbArgs(e.message);
+    throw e;
+  }
+  return { ...gathered, urlHandler: clickArrived(ctx.clientVersion) };
 }
 
 const doctorRun: VerbHandler = (value, ctx) => {
@@ -1229,13 +1236,20 @@ const doctorMark: VerbHandler = (value, ctx) => {
       `doctor-mark: ${check.label} — ${verdict.ok ? "nothing to mark" : "shows nothing to look at"}`,
     );
   }
+  // A verdict shows a sighting only over a book it could read.
+  if (facts.marks.kind === "failed") {
+    throw new BadVerbArgs(`doctor-mark: ${facts.marks.reason}`);
+  }
   const made = [check.name, verdict.sighting.id, mark as GlyphMark] as const;
   ctx.doctor.marks.record(...made);
   ctx.dlog(
     "info",
     `doctor-mark: ${check.name} ${mark} on ${verdict.sighting.id} (session=${sid})`,
   );
-  writeReport(ctx, sid, { ...facts, marks: withMark(facts.marks, ...made) });
+  writeReport(ctx, sid, {
+    ...facts,
+    marks: { kind: "ok", value: withMark(facts.marks.value, ...made) },
+  });
 };
 
 // ─── Memento ceiling (brandon-context-ceiling-xta.asv) ───────────────────────
