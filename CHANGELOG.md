@@ -1,3 +1,10 @@
+## [1.130.5](https://github.com/promptctl/cc-candybar/compare/v1.130.4...v1.130.5) (2026-10-16)
+
+
+### Bug Fixes
+
+* **render:** a layout when that throws costs its node, not the whole bar ([#351](https://github.com/promptctl/cc-candybar/issues/351)) ([ec9c777](https://github.com/promptctl/cc-candybar/commit/ec9c7771c904af25e76c8bd0f8049d7fed8e73a7))
+
 ## [1.130.4](https://github.com/promptctl/cc-candybar/compare/v1.130.3...v1.130.4) (2026-10-16)
 
 
