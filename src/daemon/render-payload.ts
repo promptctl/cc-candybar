@@ -564,6 +564,11 @@ export interface GitPayload {
   readonly prState?: PrState;
   readonly prUrl?: string;
   readonly prError?: string;
+  // [LAW:nothing-unseen] The state of the PR the forge answered with when it
+  // was not the branch's (`prOfHead`: concluded at a commit HEAD has moved
+  // off), so the render event can tell it from a branch the forge has no PR
+  // for. Every other pr* field is absent then.
+  readonly prEarlier?: PrState;
 }
 
 // Which machine this session is on, and whether the user got here over the
@@ -1735,15 +1740,14 @@ function projectGitInfo(
   // the segment renders a distinct marker. `absent` is still a missing key (no
   // PR / no forge → segment off). The reason is the gate value the template
   // tests; the same reason is logged for the operator.
-  const pr =
-    info.pullRequest === undefined
-      ? undefined
-      : prOfHead(info.pullRequest, info.head);
+  const forgePr = info.pullRequest;
+  const pr = forgePr === undefined ? undefined : prOfHead(forgePr, info.head);
   const prFields: {
     prNumber?: number;
     prState?: PrState;
     prUrl?: string;
     prError?: string;
+    prEarlier?: PrState;
   } = {};
   if (pr?.kind === "ok") {
     prFields.prNumber = pr.value.number;
@@ -1752,6 +1756,8 @@ function projectGitInfo(
   } else if (pr?.kind === "failed") {
     failures.push(`git.pr: ${pr.reason}`);
     prFields.prError = pr.reason;
+  } else if (forgePr?.kind === "ok") {
+    prFields.prEarlier = forgePr.value.state;
   }
 
   return {

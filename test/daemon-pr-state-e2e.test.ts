@@ -144,7 +144,7 @@ describe("a daemon render carries the branch's PR in every state", () => {
     ["OPEN", "pr:open ", "open", "↻ 4/5 review"],
     ["MERGED", "pr:merged ", "merged", "↻ 5/5 downstream"],
     ["CLOSED", "pr:closed ", "closed", "↻ 3/5 work"],
-    ["REUSED", "pr: ", "-", "↻ 3/5 work"],
+    ["REUSED", "pr: ", "earlier-merged", "↻ 3/5 work"],
     ["none", "pr: ", "-", "↻ 3/5 work"],
     ["denied", "pr: ", "failed", "↻ ⚠ PR"],
   ])("branch %s → %j, pr=%s, stage %s", async (branch, cell, fact, stage) => {

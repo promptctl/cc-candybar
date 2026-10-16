@@ -585,6 +585,41 @@ describe("buildRenderPayload — git PR projection", () => {
     expect(logs).toEqual([]);
   });
 
+  test("a merged PR for an earlier HEAD → no PR fields, its state as prEarlier", async () => {
+    const deps = depsWith(
+      ok({
+        branch: "feature",
+        status: "clean",
+        aheadBehind: ABSENT,
+        head: ok("c0ffee"),
+        pullRequest: ok({
+          number: 76,
+          state: "merged",
+          url: "https://github.com/x/y/pull/76",
+          head: "0ld0id",
+        }),
+      }),
+      [],
+    );
+
+    const payload = await buildRenderPayload(
+      hookData("/no/such/transcript.jsonl"),
+      instantOf(new Date()),
+      deps,
+      undefined,
+      PR_PATHS,
+      EFFECTIVE_GLOBALS,
+      NO_HINTS,
+      NO_CONFIG_FILE,
+    );
+
+    expect(payload.git).toEqual({
+      branch: "feature",
+      status: "clean",
+      prEarlier: "merged",
+    });
+  });
+
   test("lookup failed → prError surfaced AND logged (visible, distinct)", async () => {
     const logs: LogEntry[] = [];
     const deps = depsWith(

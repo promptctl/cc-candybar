@@ -104,6 +104,7 @@ import {
   renderSelectionOf,
   resolveEffectiveGlobals,
   type EffectiveGlobals,
+  type GitPayload,
   type RenderPayloadDeps,
 } from "./render-payload.js";
 import { EffectSessions, type PassageFrame } from "../render/effect.js";
@@ -1205,6 +1206,14 @@ function handleClick(
 
 // --- render ---
 
+// The render event's `pr=`: what the payload says about the branch's PR.
+function prFact(git: GitPayload | undefined): string {
+  if (git?.prState !== undefined) return git.prState;
+  if (git?.prError !== undefined) return "failed";
+  if (git?.prEarlier !== undefined) return `earlier-${git.prEarlier}`;
+  return "-";
+}
+
 // One render request: the bar, or the refusal of a request no client of ours
 // builds. A throw is the third outcome, recorded by the caller. `facts` is the
 // render event's record, filled as each stage learns its part.
@@ -1391,10 +1400,10 @@ async function renderRequest(
     prompts: String(payload.metrics?.messageCount ?? "-"),
     nonPrompts: String(payload.metrics?.nonPrompts ?? "-"),
     // Where the branch's PR stands, `failed` when the forge could not say,
-    // `-` when the payload carries none (no PR, or no segment reads one).
-    pr:
-      payload.git?.prState ??
-      (payload.git?.prError === undefined ? "-" : "failed"),
+    // `earlier-<state>` when the forge's PR concluded at a commit HEAD has
+    // moved off (so the branch has none), `-` when the payload carries none
+    // (no PR, or no segment reads one).
+    pr: prFact(payload.git),
   });
   // [LAW:no-silent-failure] What renderDsl had to settle for itself and could
   // not honour (`RenderWarning`). Collected per render into a local, so there
