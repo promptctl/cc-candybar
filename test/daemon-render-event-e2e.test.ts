@@ -6,10 +6,20 @@
 // same order as one that finished, so the failing renders are described by the
 // same fields as the rest.
 
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
+import { PROTOCOL_VERSION } from "../src/daemon/protocol";
 import { logPath } from "../src/daemon/paths";
 import {
   hookData,
@@ -17,6 +27,7 @@ import {
   render,
   renderRequest,
 } from "./helpers/daemon-e2e";
+import { sendDaemonRequest } from "./helpers/daemon-wire";
 import {
   prepareIsolatedDaemonEnv,
   spawnDaemonWithEnv,
@@ -27,11 +38,22 @@ jest.setTimeout(30_000);
 
 // `drawn` draws a bar. `broken` gates a row on a `when` that fails when it is
 // evaluated — inside renderDsl's walk, after the payload is built — so the
-// render throws partway through.
+// render throws partway through. `held` reads the tmux session name, which the
+// payload awaits from a `tmux` spawn (src/segments/tmux.ts) — the stub below.
 const CONFIGS = {
   drawn: `{ segments: { mark: { template: 'mark' } }, root: { h: ['mark'] } }`,
   broken: `{ segments: { mark: { template: 'mark' } }, root: { h: ['mark'], when: '{{ fail "the gate broke" }}' } }`,
+  held: `{ segments: { mark: { template: '{{ .tmux.session }}' } }, root: { h: ['mark'] } }`,
 };
+
+// [LAW:no-ambient-temporal-coupling] The `tmux` on the daemon's PATH: it says
+// it was asked, then answers only once the test opens the gate — a FIFO, whose
+// read blocks until a writer opens it. The test opens it after the client has
+// been answered TIMEOUT, so the render provably outlives the request timeout:
+// an ordering the test owns, not a bet on how slow a render is. Only a render
+// whose client reports a tmux pane runs it.
+const stubTmux = (asked: string, gate: string): string =>
+  `#!/bin/sh\n: > '${asked}'\nread _ < '${gate}'\necho held\n`;
 
 type Event = {
   level: string;
@@ -69,6 +91,8 @@ describe("every render request writes one render event, whatever its outcome", (
   let env: NodeJS.ProcessEnv;
   let removeTmpDirs: () => void;
   let projectDir: string;
+  let tmuxAsked: string;
+  let tmuxGate: string;
   let daemon: RunningDaemon | undefined;
 
   const configFlag = (name: keyof typeof CONFIGS): string[] => [
@@ -94,7 +118,18 @@ describe("every render request writes one render event, whatever its outcome", (
     );
     for (const [name, text] of Object.entries(CONFIGS))
       writeFileSync(path.join(projectDir, `${name}.json5`), text);
-    daemon = await spawnDaemonWithEnv(prepared.env);
+    const bin = path.join(projectDir, "bin");
+    mkdirSync(bin);
+    tmuxAsked = path.join(projectDir, "tmux-asked");
+    tmuxGate = path.join(projectDir, "tmux-gate");
+    execFileSync("mkfifo", [tmuxGate]);
+    writeFileSync(path.join(bin, "tmux"), stubTmux(tmuxAsked, tmuxGate), {
+      mode: 0o755,
+    });
+    daemon = await spawnDaemonWithEnv({
+      ...prepared.env,
+      PATH: `${bin}${path.delimiter}${prepared.env.PATH ?? ""}`,
+    });
   });
 
   afterAll(async () => {
@@ -165,4 +200,46 @@ describe("every render request writes one render event, whatever its outcome", (
     );
     expect(field(refused, "sid")).toBeUndefined();
   });
+
+  // A render still running when its client was answered TIMEOUT says so: its
+  // event is written when it ends, after that reply, and is the one record
+  // that the reply the client read was not this render's.
+  test("a render that outlives its request timeout writes timedOut=Y", async () => {
+    await expect(
+      sendDaemonRequest(sockPath, {
+        v: PROTOCOL_VERSION,
+        kind: "render",
+        hookData: hookData("ev-late", projectDir),
+        args: configFlag("held"),
+        cwd: projectDir,
+        tmux: { socket: "/tmp/stub-tmux", pane: "%1", truecolor: null },
+      }),
+    ).resolves.toMatchObject({ ok: false, code: "TIMEOUT" });
+
+    await until(() => existsSync(tmuxAsked), "the render never asked tmux");
+    await writeFile(tmuxGate, "open\n");
+    await until(
+      () => eventsOf("ev-late").length > 0,
+      "the held render never wrote its event",
+    );
+
+    const late = only(eventsOf("ev-late"));
+    expect(field(late, "timedOut")).toBe("Y");
+    expect(field(late, "outcome")).toBe("ok");
+  });
 });
+
+// Wait for a state the daemon reaches on its own clock, failing loudly at the
+// deadline rather than hanging on it.
+async function until(
+  reached: () => boolean,
+  failure: string,
+  timeoutMs = 5_000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!reached()) {
+    if (Date.now() >= deadline)
+      throw new Error(`${failure} within ${timeoutMs}ms`);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+}
