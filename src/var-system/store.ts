@@ -225,16 +225,21 @@ function assertType(
 // one while renders read the other.
 
 export class VariableStore {
-  private readonly nodes = new Map<string, StoreNode>();
+  // [LAW:no-ambient-temporal-coupling] Which names are declared is itself
+  // observable: a reaction that read a name before its declaration (a cache
+  // key over a variable declared after it) re-runs when it is declared, so
+  // what it sees does not depend on the order the config lists variables in.
+  // `deep: false` keeps each node the object it was declared as.
+  private readonly nodes = observable.map<string, StoreNode>(undefined, {
+    deep: false,
+  });
 
   defineBox(name: string, type: VarType, initial: VarValue): void {
-    this.assertNotDefined(name);
-    this.nodes.set(name, new BoxNode(name, type, initial));
+    this.declare(name, new BoxNode(name, type, initial));
   }
 
   defineDocument(name: string, initial: Outcome<JsonValue>): void {
-    this.assertNotDefined(name);
-    this.nodes.set(name, new DocumentCell(name, initial));
+    this.declare(name, new DocumentCell(name, initial));
   }
 
   // Computed deriver receives a `read` function that returns the value
@@ -246,9 +251,8 @@ export class VariableStore {
     type: VarType,
     deriver: (read: (other: string) => VarValue) => VarValue,
   ): void {
-    this.assertNotDefined(name);
     const reader = (other: string): VarValue => this.read(other);
-    this.nodes.set(name, new ComputedNode(name, type, () => deriver(reader)));
+    this.declare(name, new ComputedNode(name, type, () => deriver(reader)));
   }
 
   read(name: string): VarValue {
@@ -388,9 +392,10 @@ export class VariableStore {
     return node;
   }
 
-  private assertNotDefined(name: string): void {
+  private declare(name: string, node: StoreNode): void {
     if (this.nodes.has(name)) {
       throw new Error(`Variable "${name}" is already declared`);
     }
+    mobxRunInAction(() => this.nodes.set(name, node));
   }
 }

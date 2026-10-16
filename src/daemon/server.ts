@@ -1515,13 +1515,16 @@ async function renderRequest(
     frames.map((f) => `${f.placement}@${f.t.toFixed(3)}`).join(",") || "-";
   // [LAW:nothing-unseen] Each warning the strip carried, in its order,
   // including any its row cap left undrawn; `-` for none. A rule's tag names
-  // the slot that fell to its floor (`rule:style`), so the event says which.
+  // the slot that fell to its floor (`rule:style`), and a refresh's the
+  // variable that stopped (`refresh:stamp`), so the event says which.
   // [LAW:types-are-the-program] Exhaustive over the kinds: a new kind is a
   // compile error here until the event says how to name it.
   const tagOf = (w: (typeof warnings)[number]): string => {
     switch (w.kind) {
       case "rule":
         return `rule:${w.slot}`;
+      case "refresh":
+        return `refresh:${w.variable}`;
       case "load":
       case "band-floor":
       case "when":

@@ -1317,8 +1317,9 @@ export class SourceRegistry {
         };
   }
 
-  // Every variable whose cache policy cannot fire, with why: the bar draws
-  // such a variable's last value with nothing to say it has stopped refreshing.
+  // Every variable whose cache policy cannot fire, with why: each render
+  // reports them (`RenderWarning` kind `refresh`), since the bar draws such a
+  // variable's last value with nothing of its own to say it has stopped.
   cachePolicyFaults(): ReadonlyMap<string, LastError> {
     return this.policyFaults;
   }
@@ -1366,7 +1367,7 @@ export class SourceRegistry {
 
       case "watch_file": {
         const unsub = this.watchMgr.subscribe(policy.path, update, (message) =>
-          this.policyFaults.set(name, { timestamp: Date.now(), message }),
+          this.notePolicy(name, failed(message)),
         );
         this.cleanups.push(unsub);
         break;
@@ -1398,17 +1399,19 @@ export class SourceRegistry {
             );
           }
         };
-        this.notePolicy(name, keyOf());
-        const disposer: IReactionDisposer = reaction(
-          keyOf,
-          (key) => {
-            this.notePolicy(name, key);
-            if (key.kind === "ok") update();
-          },
-          // A key is plain data: two evaluations are one key when they spell
-          // alike, so the source runs only when the key's value moves.
-          { equals: (a, b) => JSON.stringify(a) === JSON.stringify(b) },
-        );
+        // The key the source last ran under: the declare-time run's, until a
+        // key that differs from it runs the source again. Measured against
+        // that rather than the previous evaluation, so a key that throws for a
+        // moment and comes back unchanged runs nothing.
+        const declared = keyOf();
+        this.notePolicy(name, declared);
+        let ranUnder = declared.kind === "ok" ? declared.value : undefined;
+        const disposer: IReactionDisposer = reaction(keyOf, (key) => {
+          this.notePolicy(name, key);
+          if (key.kind !== "ok" || key.value === ranUnder) return;
+          ranUnder = key.value;
+          update();
+        });
         this.cleanups.push(disposer);
         break;
       }

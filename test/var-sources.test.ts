@@ -1016,6 +1016,69 @@ describe("SourceRegistry — shell: key: cache policy", () => {
       cleanup();
     }
   });
+
+  it("a key that throws and comes back unchanged runs nothing", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const dataFile = path.join(dir, "data");
+      fs.writeFileSync(dataFile, "v1");
+
+      const store = new VariableStore();
+      const registry = registryOver(store);
+      store.defineBox("trigger", "string", "ok");
+      registry.declareShell("val", `cat ${dataFile}`, {
+        cwd: process.cwd(),
+        parse: TEXT,
+        cache: {
+          kind: "key",
+          template: '{{ if eq .trigger "bad" }}{{ fail "no key" }}{{ end }}a',
+        },
+      });
+      await ran(registry);
+      expect(store.read("val")).toBe("v1");
+
+      fs.writeFileSync(dataFile, "v2");
+      store.setBox("trigger", "bad");
+      expect(registry.cachePolicyFaults().has("val")).toBe(true);
+      // The key is "a" again, the key the source last ran under.
+      store.setBox("trigger", "fine");
+      await elapse(250);
+      await ran(registry);
+      expect(store.read("val")).toBe("v1");
+      expect(registry.cachePolicyFaults().size).toBe(0);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("a key over a variable declared after it follows that variable", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const dataFile = path.join(dir, "data");
+      fs.writeFileSync(dataFile, "v1");
+
+      const store = new VariableStore();
+      const registry = registryOver(store);
+      registry.declareShell("val", `cat ${dataFile}`, {
+        cwd: process.cwd(),
+        parse: TEXT,
+        cache: { kind: "key", template: "{{ .later }}" },
+      });
+      expect(registry.cachePolicyFaults().has("val")).toBe(true);
+
+      // Declaring it is what the key was missing: the fault goes.
+      store.defineBox("later", "string", "a");
+      expect(registry.cachePolicyFaults().size).toBe(0);
+      await ran(registry);
+
+      fs.writeFileSync(dataFile, "v2");
+      store.setBox("later", "b");
+      await ran(registry);
+      expect(store.read("val")).toBe("v2");
+    } finally {
+      cleanup();
+    }
+  });
 });
 
 // ─── file — basic ─────────────────────────────────────────────────────────────

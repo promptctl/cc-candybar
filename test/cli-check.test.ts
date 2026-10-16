@@ -406,7 +406,9 @@ describe("checkConfig — explicit target", () => {
       }`,
     );
     const message = expectFatal(await checkConfig(p, dir));
-    expect(message).toMatch(/1 variable cannot refresh:\n {2}stamp: cache key: .*no key/);
+    expect(message).toMatch(
+      /1 render error[^\n]*\n {2}variable "stamp": cannot refresh: cache key: .*no key/,
+    );
   });
 
   // brandon-menu-ia-q30.ge5 review: the toolbar's `⎘ resume` and `↗ config`

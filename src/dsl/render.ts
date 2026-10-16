@@ -971,8 +971,9 @@ export interface RenderObservers {
   // Optional for the same reason the two above are: a caller that passes none has
   // said it is not listening (a compile-only test, the demo). Both shipping
   // callers listen — the daemon folds every one into the diagnostic strip's
-  // warning channel, and `cc-candybar check` fails a globals rule or a gate, so
-  // either failure is visible whether or not anyone is looking at a bar. Check lists
+  // warning channel, and `cc-candybar check` fails a globals rule, a gate or a
+  // variable that cannot refresh, so each is visible whether or not anyone is
+  // looking at a bar. Check lists
   // a band-floor shortfall only where its own renders open a trigger — one open
   // by default; it opens none itself, so a shortfall behind a closed trigger
   // reaches the bar alone.
@@ -1006,7 +1007,16 @@ export type RenderWarning =
   // trigger off the cells of the row it stands in, or its plane off its
   // trigger. Drawn as near as it comes, and the message names the setting that
   // clears it — a fact about the chosen look, not a fault in the config.
-  | { readonly kind: "band-floor"; readonly message: string };
+  | { readonly kind: "band-floor"; readonly message: string }
+  // A variable whose cache policy cannot fire — its key template throws, or
+  // the OS refused its watch — so the bar draws its last value with no cell of
+  // its own to say it has stopped refreshing (brandon-var-system-7wl9).
+  | {
+      readonly kind: "refresh";
+      readonly variable: string;
+      readonly error: string;
+      readonly message: string;
+    };
 
 // [LAW:locality-or-seam] The per-render RESOLUTION the caller performs and hands
 // down — the values that are neither config (compiled once) nor payload (input
@@ -1514,5 +1524,13 @@ export function renderDsl(
     .join("\n");
   motion.drawn();
   for (const message of shortfalls) warn({ kind: "band-floor", message });
+  // Read after the walk: the payload this render pushed is what a key reads.
+  for (const [variable, fault] of registry.cachePolicyFaults())
+    warn({
+      kind: "refresh",
+      variable,
+      error: fault.message,
+      message: `variable "${variable}" cannot refresh: ${fault.message}`,
+    });
   return rendered;
 }
