@@ -552,7 +552,7 @@ describe("buildRenderPayload — git PR projection", () => {
         aheadBehind: ABSENT,
         pullRequest: ok({
           number: 76,
-          state: "OPEN",
+          state: "open",
           url: "https://github.com/x/y/pull/76",
         }),
       }),
@@ -572,7 +572,7 @@ describe("buildRenderPayload — git PR projection", () => {
 
     expect(payload.git).toMatchObject({
       prNumber: 76,
-      prState: "OPEN",
+      prState: "open",
       prUrl: "https://github.com/x/y/pull/76",
     });
     expect("prError" in payload.git!).toBe(false);

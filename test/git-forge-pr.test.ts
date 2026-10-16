@@ -69,20 +69,35 @@ describe("classifyForgePr (github)", () => {
       kind: "ok",
       value: {
         number: 76,
-        state: "OPEN",
+        state: "open",
         url: "https://github.com/promptctl/cc-candybar/pull/76",
       },
     });
   });
 
-  test("merged PR for the branch → absent (not a value)", () => {
-    const out = JSON.stringify({
-      number: 76,
-      state: "MERGED",
-      url: "https://github.com/x/y/pull/76",
+  test.each([
+    ["MERGED", "merged"],
+    ["CLOSED", "closed"],
+  ])("a %s PR for the branch → ok, state %s", (state, parsed) => {
+    const url = "https://github.com/x/y/pull/76";
+    const out = JSON.stringify({ number: 76, state, url });
+    expect(classify(okResult(out))).toEqual({
+      kind: "ok",
+      value: { number: 76, state: parsed, url },
     });
-    expect(classify(okResult(out))).toEqual({ kind: "absent" });
   });
+
+  test.each(["DRAFT", "open", ""])(
+    "a state word gh does not print (%j) → failed, naming it",
+    (state) => {
+      const out = JSON.stringify({ number: 76, state, url: "https://x/76" });
+      const r = classify(okResult(out));
+      expect(r).toEqual({
+        kind: "failed",
+        reason: `gh pr view: unknown state ${JSON.stringify(state)}`,
+      });
+    },
+  );
 
   test('no PR for branch (exit 1 + "no pull requests found") → absent', () => {
     const r = failResult(
@@ -141,19 +156,31 @@ describe("classifyForgePr (gitlab)", () => {
       kind: "ok",
       value: {
         number: 42,
-        state: "opened",
+        state: "open",
         url: "https://gitlab.com/group/proj/-/merge_requests/42",
       },
     });
   });
 
-  test("closed MR → absent", () => {
-    const out = JSON.stringify({
-      iid: 42,
-      state: "closed",
-      web_url: "https://gitlab.com/g/p/-/merge_requests/42",
+  test.each([
+    ["locked", "open"],
+    ["merged", "merged"],
+    ["closed", "closed"],
+  ])("a %s MR → ok, state %s", (state, parsed) => {
+    const url = "https://gitlab.com/g/p/-/merge_requests/42";
+    const out = JSON.stringify({ iid: 42, state, web_url: url });
+    expect(classify(okResult(out))).toEqual({
+      kind: "ok",
+      value: { number: 42, state: parsed, url },
     });
-    expect(classify(okResult(out))).toEqual({ kind: "absent" });
+  });
+
+  test("a state word glab does not print → failed, naming it", () => {
+    const out = JSON.stringify({ iid: 42, state: "OPENED", web_url: "https://x/42" });
+    expect(classify(okResult(out))).toEqual({
+      kind: "failed",
+      reason: 'glab mr view: unknown state "OPENED"',
+    });
   });
 
   test("no MR available → absent", () => {

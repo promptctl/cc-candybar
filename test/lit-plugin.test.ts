@@ -110,6 +110,63 @@ test("a worktree's ticket is the worktree's own file", async () => {
   expect(rendered(await checkConfig(config, wt))).toContain("🎫 wt-2");
 });
 
+// The stage over the git facts a test names, each pinned by a literal over the
+// bundled input of that name; the rest are a clean, synced, PR-less checkout.
+async function stage(git: Record<string, string | number> = {}): Promise<string> {
+  const facts = { status: "clean", operation: "", ahead: 0, behind: 0, prState: "", ...git };
+  const variables = Object.entries(facts)
+    .map(([k, v]) => `"git.${k}": { kind: "literal", value: ${JSON.stringify(v)} }`)
+    .join(", ");
+  const config = path.join(dir, "config.json5");
+  fs.writeFileSync(config, `{ variables: { ${variables} }, root: { h: ["directory", "plugins.lit.stage"] } }`);
+  return rendered(await checkConfig(config, path.join(dir, "repo")));
+}
+
+describe("the work-loop stage", () => {
+  const idle = { schema_version: 1, working_on: null, next: null };
+  const working = { schema_version: 1, working_on: ticket("w-9"), next: ticket("w-9") };
+
+  test.each([
+    ["anything to commit", { status: "dirty" }],
+    ["conflicts", { status: "conflicts" }],
+    ["an operation in progress", { operation: "rebase" }],
+    ["commits to push", { ahead: 1 }],
+    ["commits to pull", { behind: 2 }],
+  ])("no ticket worked and %s is cleanup", async (_, git) => {
+    litWrote(idle);
+    expect(await stage(git)).toContain("↻ 1/5 cleanup");
+  });
+
+  test("no ticket worked in a clean, synced checkout is pick — lit's pick or not", async () => {
+    litWrote(idle);
+    expect(await stage()).toContain("↻ 2/5 pick");
+    litWrote({ ...idle, next: ticket("a-1") });
+    expect(await stage()).toContain("↻ 2/5 pick");
+  });
+
+  test.each([
+    ["no PR yet", "", "↻ 3/5 work"],
+    ["a closed PR", "closed", "↻ 3/5 work"],
+    ["an open PR", "open", "↻ 4/5 review"],
+    ["a merged PR", "merged", "↻ 5/5 downstream"],
+  ])("a worked ticket with %s", async (_, prState, shown) => {
+    litWrote(working);
+    expect(await stage({ prState, status: "dirty" })).toContain(shown);
+  });
+
+  test("no file yet draws no stage", async () => {
+    expect(await stage()).not.toContain("↻");
+  });
+
+  test("the stage reads the git payload's own fields", async () => {
+    // check's payload: dirty, ahead and behind, no PR.
+    litWrote(idle);
+    expect(rendered(await bar(`"plugins.lit.stage"`))).toContain("↻ 1/5 cleanup");
+    litWrote(working);
+    expect(rendered(await bar(`"plugins.lit.stage"`))).toContain("↻ 3/5 work");
+  });
+});
+
 // [LAW:no-silent-failure] A file this definition was not written for is ⚠,
 // never a guess at what its fields mean.
 test("an unknown schema_version is a render error naming it", async () => {
