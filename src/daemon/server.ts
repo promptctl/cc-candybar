@@ -44,6 +44,7 @@ import { explicitConfigPath } from "../utils/user-path";
 import {
   PROTOCOL_VERSION,
   encodeFrame,
+  encodeJsonFrame,
   makeFrameReader,
   parseClientHints,
   refusedHints,
@@ -113,9 +114,13 @@ import {
   type PassageFrame,
 } from "../render/effect.js";
 import { FEED_PERIODS, FrameFeeds, type FeedFrame } from "./frame-feed.js";
-import { showClickError } from "./click-error.js";
+import { heldClickError, releaseClickError } from "./click-error.js";
 import { newestWins } from "../utils/newest-wins.js";
-import { LIST_PANES_FORMAT, PaneVisibility } from "./pane-visibility.js";
+import {
+  LIST_CLIENTS_FORMAT,
+  LIST_PANES_FORMAT,
+  PaneVisibility,
+} from "./pane-visibility.js";
 import { runTmuxAsync } from "../proc/tmux.js";
 import { reaction } from "mobx";
 import { setImmediate } from "node:timers";
@@ -204,6 +209,12 @@ const paneVisibility = new PaneVisibility({
       "-a",
       "-F",
       LIST_PANES_FORMAT,
+    ]),
+  listClients: (socket) =>
+    runTmuxAsync({ socket }, "frames.visibility", [
+      "list-clients",
+      "-F",
+      LIST_CLIENTS_FORMAT,
     ]),
   // Only the sessions on a server whose view changed are drawn again.
   onChange: (sockets) => {
@@ -905,7 +916,9 @@ function handleConnection(sock: net.Socket): void {
     const write = newestWins(sock);
     sock.on(
       "close",
-      frameFeeds.subscribe(sessionId, (resp) => write(encodeFrame(resp))),
+      frameFeeds.subscribe(sessionId, (_resp, json) =>
+        write(encodeJsonFrame(json)),
+      ),
     );
   };
 
@@ -1045,6 +1058,11 @@ export async function handleRequest(
       : await renderChecked(checked.req, at, facts).then(
           ({ output, moves }) => {
             const resp = { ok: true, output } as const;
+            releaseClickError(
+              sessionState,
+              checked.req.hookData.session_id,
+              at,
+            );
             // [LAW:one-source-of-truth] A request the render took is the
             // session's data from now on: its frames are drawn from it, and
             // this answer is its frame now.
@@ -1052,7 +1070,7 @@ export async function handleRequest(
               checked.req.hookData.session_id,
               checked.req,
               order,
-              feedFrameOf(checked.req, resp, moves),
+              feedFrameOf(checked.req, resp, t0, moves),
             );
             return { outcome: { kind: "ok" } as const, resp };
           },
@@ -1369,7 +1387,7 @@ async function renderFrame(req: CheckedRenderRequest): Promise<FeedFrame> {
       instantOf(started),
       facts,
     );
-    return feedFrameOf(req, { ok: true, output }, moves);
+    return feedFrameOf(req, { ok: true, output }, started.getTime(), moves);
   } catch (error) {
     const outcome = { kind: "threw", error } as const;
     const { level, line } = renderEvent(
@@ -1379,21 +1397,24 @@ async function renderFrame(req: CheckedRenderRequest): Promise<FeedFrame> {
     );
     return {
       resp: renderFailed(error),
+      drawnAt: started.getTime(),
       motion: "still",
       failure: { level, line: `frame ${line}` },
     };
   }
 }
 
-// The frame a render of `req` just drew: the bar is due again at the moving
-// rate while it `moves` AND someone can see it.
+// The frame a render of `req` just drew at `drawnAt` (ms): the bar is due
+// again at the moving rate while it `moves` AND someone can see it.
 function feedFrameOf(
   req: CheckedRenderRequest,
   resp: Response,
+  drawnAt: number,
   moves: boolean,
 ): FeedFrame {
   return {
     resp,
+    drawnAt,
     motion: !moves
       ? "still"
       : paneVisibility.shown(req.hints.tmux)
@@ -1658,8 +1679,8 @@ async function renderChecked(
     { ...renderSelectionOf(effective), effects },
   );
   // [LAW:one-source-of-truth] The click error dispatch held for this session,
-  // cleared by the render that has shown it for its hold.
-  const clickError = showClickError(sessionState, sessionId, at);
+  // shown by every render while it is held; a render request releases it.
+  const clickError = heldClickError(sessionState, sessionId)?.text ?? null;
   const combinedError = [
     unknownFlagsError,
     hintsError,
@@ -1706,8 +1727,12 @@ async function renderChecked(
     sessionId,
     diagnostics === null ? null : formatDiagnosticDump(diagnostics),
   );
-  if (dumpFailure !== null)
-    dlog("warn", `diagnostic dump failed: ${dumpFailure}`);
+  // [LAW:nothing-unseen] On the render event, not a line of its own: a frame
+  // writes no event, and a subscribed session renders thirty times a second.
+  // The strip's trailer row says it on the bar either way.
+  noteFacts(facts, {
+    dumpFailed: dumpFailure === null ? "-" : JSON.stringify(dumpFailure),
+  });
   const output = composeWithDiagnostics(
     body,
     diagnostics,

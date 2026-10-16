@@ -13,10 +13,14 @@ const refused = (
     resp: { ok: false, code, error: `${code} said`, daemonV },
   }) as const;
 
-test("a daemon that refuses the stream for good ends the client; a busy one, a restart and a failure reconnect", () => {
+test("only a daemon newer than this client ends it; an older, busy, restarted or absent one is reconnected", () => {
+  // This client's subscribe is well formed, so BAD_REQUEST is a daemon from
+  // before subscribe, which restarts itself on the new build.
   expect(afterStreamEnd(refused("BAD_REQUEST"))).toEqual({
-    kind: "exit",
-    reason: "the daemon refused the stream: BAD_REQUEST: BAD_REQUEST said",
+    kind: "reconnect",
+    reason:
+      "the daemon does not take subscribe (BAD_REQUEST said); it restarts on the new build",
+    kick: false,
   });
   // A daemon newer than this client: this client is the stale one.
   expect(afterStreamEnd(refused("VERSION_MISMATCH", PROTOCOL_VERSION + 1))).toMatchObject({
@@ -52,6 +56,22 @@ test("--config beside --session is refused with exit 2, since no data is forward
       runFrames(["node", "cc-candybar", "frames", "--session", "s", "--config", "/tmp/x.json5"]),
     ).rejects.toThrow("exit 2");
     expect(String(stderr.mock.calls[0]?.[0])).toMatch(/--config has no effect with --session/);
+  } finally {
+    exit.mockRestore();
+    stderr.mockRestore();
+  }
+});
+
+test("an empty --session is refused with exit 2: the subscribe this client sends is well formed", async () => {
+  const exit = jest.spyOn(process, "exit").mockImplementation((code) => {
+    throw new Error(`exit ${String(code)}`);
+  });
+  const stderr = jest.spyOn(process.stderr, "write").mockImplementation(() => true);
+  try {
+    await expect(runFrames(["node", "cc-candybar", "frames", "--session", ""])).rejects.toThrow(
+      "exit 2",
+    );
+    expect(String(stderr.mock.calls[0]?.[0])).toMatch(/--session needs a session id/);
   } finally {
     exit.mockRestore();
     stderr.mockRestore();

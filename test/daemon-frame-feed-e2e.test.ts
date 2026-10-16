@@ -24,12 +24,14 @@ import type { StatsSnapshot } from "../src/daemon/stats";
 import {
   click,
   killAndWait,
+  sendClick,
   render,
   renderBody,
   stripAnsi,
   urlWriting,
 } from "./helpers/daemon-e2e";
 import { sendDaemonRequest } from "./helpers/daemon-wire";
+import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import {
   prepareIsolatedDaemonEnv,
   spawnDaemonWithEnv,
@@ -114,7 +116,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     mkdirSync(bin);
     writeFileSync(
       path.join(bin, "tmux"),
-      `#!/bin/sh\ncase "$*" in *list-panes*) printf '%%7 0 1 0 1\\n' ;; *) printf 'stub\\n' ;; esac\n`,
+      `#!/bin/sh\ncase "$*" in *list-panes*) printf '%%7 $1 0 1 0 1\\n' ;; *) printf 'stub\\n' ;; esac\n`,
     );
     chmodSync(path.join(bin, "tmux"), 0o755);
     daemon = await spawnDaemonWithEnv({
@@ -257,5 +259,36 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       feeds: before.feeds,
       subscribers: before.subscribers,
     });
+  });
+
+  test("a failed click's error stays on the pushed frames until a statusline request after the hold releases it", async () => {
+    await render(sockPath, "feed-click-error", projectDir, {}, args("toggle"));
+    const bad = effectsUrl([
+      { verb: VERB_SET_STATE, args: ["feed-click-error", "face", "bogus"] },
+    ]);
+    const outputs: string[] = [];
+    let first = "";
+    let second = "";
+    const frames = await framesOf("feed-click-error", async () => {
+      await sleep(100);
+      expect((await sendClick(sockPath, bad)).ok).toBe(false);
+      await sleep(1200);
+      first = await render(sockPath, "feed-click-error", projectDir, {}, args("toggle"));
+      second = await render(sockPath, "feed-click-error", projectDir, {}, args("toggle"));
+      await sleep(100);
+    });
+    for (const { resp } of frames)
+      if (resp.ok && "output" in resp) outputs.push(stripAnsi(resp.output));
+    const shows = (text: string): boolean => /bogus/.test(text);
+    // Claude Code's own bar shows it once, and its next render is clear.
+    expect(shows(stripAnsi(first))).toBe(true);
+    expect(shows(stripAnsi(second))).toBe(false);
+    // The frames: the bar, the bar with the error for over a second, the bar.
+    const errorAt = frames.findIndex(({ resp }) => resp.ok && "output" in resp && shows(stripAnsi(resp.output)));
+    const clearAt = frames.findIndex((f, i) => i > errorAt && f.resp.ok && "output" in f.resp && !shows(stripAnsi(f.resp.output)));
+    expect(errorAt).toBeGreaterThan(0);
+    expect(clearAt).toBeGreaterThan(errorAt);
+    expect(frames[clearAt]!.at - frames[errorAt]!.at).toBeGreaterThanOrEqual(1000);
+    expect(shows(outputs[0]!)).toBe(false);
   });
 });

@@ -373,7 +373,13 @@ export const FRAME_HEADER_BYTES = 4;
 export const MAX_FRAME_BYTES = 16 * 1024 * 1024;
 
 export function encodeFrame(value: unknown): Buffer {
-  const body = Buffer.from(JSON.stringify(value), "utf8");
+  return encodeJsonFrame(JSON.stringify(value));
+}
+
+// A frame of JSON already serialized: a pushed frame is serialized once for
+// every subscriber.
+export function encodeJsonFrame(json: string): Buffer {
+  const body = Buffer.from(json, "utf8");
   const header = Buffer.alloc(FRAME_HEADER_BYTES);
   header.writeUInt32BE(body.length, 0);
   return Buffer.concat([header, body]);

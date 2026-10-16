@@ -22,11 +22,13 @@ function harness(opts: { motion: Motion; renderMs?: number; fails?: boolean }) {
     opts.fails === true
       ? {
           resp: { ok: false, error: `${req} threw`, code: "RENDER_FAILED" },
+          drawnAt: Date.now(),
           motion: "still",
           failure: { level: "error", line: `frame ${req} threw` },
         }
       : {
           resp: { ok: true, output: `${req}#${state.motion === "still" ? state.n : ++state.n}` },
+          drawnAt: Date.now(),
           motion: state.motion,
           failure: null,
         };
@@ -215,4 +217,42 @@ test("a frame that keeps failing the same way is logged once, and counted every 
   close();
   expect(log.filter((l) => l === "frame bar threw")).toHaveLength(1);
   expect(log.at(-1)).toMatch(/ drawn=2 .* failed=2 pushed=1 /);
+});
+
+test("an answer drawn at an earlier instant than the frame already out is drawn afresh, not pushed", async () => {
+  const { feeds, note, state } = harness({ motion: "still" });
+  note("s", "bar");
+  const got: string[] = [];
+  const close = feeds.subscribe("s", (r) => got.push(outputOf(r)));
+  await sleep(20);
+  expect(got).toEqual(["bar#0"]);
+  const renders = state.renders;
+  feeds.note("s", "newer", ++state.order, {
+    resp: { ok: true, output: "drawn before the frame out" },
+    drawnAt: Date.now() - 60_000,
+    motion: "still",
+    failure: null,
+  });
+  await sleep(20);
+  close();
+  expect(state.renders).toBe(renders + 1);
+  expect(got).toEqual(["bar#0", "newer#0"]);
+});
+
+test("a moving answer noted while a still frame is drawn sets the pace of the next", async () => {
+  const { feeds, note, state } = harness({ motion: "still", renderMs: 30 });
+  note("s", "bar");
+  const close = feeds.subscribe("s", () => {});
+  await sleep(5);
+  feeds.note("s", "moving", ++state.order, {
+    resp: { ok: true, output: "moving#1" },
+    drawnAt: Date.now(),
+    motion: "moving",
+    failure: null,
+  });
+  // The still frame finishes at 30 ms; the next is due a moving period (20 ms)
+  // after the noted one, not a still period (400 ms) after the still one.
+  await sleep(150);
+  close();
+  expect(state.renders).toBeGreaterThanOrEqual(2);
 });
