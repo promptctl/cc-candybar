@@ -87,8 +87,8 @@ async function main(): Promise<void> {
       return;
     }
     if (subcommand === "bar-pane") {
-      await runBarPane(process.argv.slice(3)); // runs until the pane closes
-      process.exit(0);
+      // Runs until the pane closes; owns its own exit code.
+      process.exit(await runBarPane(process.argv.slice(3)));
     }
     // [LAW:dataflow-not-control-flow] vars/segments/config are ONE handler
     // parameterized by `what` — the subcommand name IS the DebugWhat. The guard

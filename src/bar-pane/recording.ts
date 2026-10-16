@@ -51,7 +51,7 @@ function parseInvocation(file: string, text: string): Invocation {
   const notARecord = new Error(`bar-pane: ${file} is not a statusline record`);
   if (!text.endsWith("\0")) throw notARecord;
   const [payload, cwd, size, argc, ...rest] = text.slice(0, -1).split("\0");
-  const n = Number(argc);
+  const n = /^\d+$/.test(argc ?? "") ? Number(argc) : NaN;
   const env = rest.slice(n);
   const tty = /^(\d+) (\d+)$/.exec(size ?? "");
   if (
@@ -99,4 +99,9 @@ export function readRecording(server: string, pane: string): Recording {
     throw e;
   }
   return { kind: "recorded", invocation: parseInvocation(file, text) };
+}
+
+// A pane that never recorded has nothing to remove.
+export function removeRecording(server: string, pane: string): void {
+  fs.rmSync(recordingPath(server, pane), { force: true });
 }

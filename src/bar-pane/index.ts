@@ -18,8 +18,14 @@ import { planOutcome } from "../render/outcome-plan";
 import { detectClientHints } from "../client-hints";
 import { detectTmuxHint, type TmuxHint } from "../tmux-hint";
 import { runTmuxAsync } from "../proc/tmux";
+import { socketPath } from "../daemon/paths";
 import { DRAWING, RESTORED, paint, type Paint } from "./paint";
-import { readRecording, serverOf, type Recording } from "./recording";
+import {
+  readRecording,
+  removeRecording,
+  serverOf,
+  type Recording,
+} from "./recording";
 
 const DEFAULT_FPS = 20;
 // How stale the pane's visibility may be: a window switched to waits this long
@@ -63,15 +69,26 @@ async function placementOf(tmux: TmuxHint, pane: string): Promise<Placement> {
     : "hidden";
 }
 
+// What this pane shows before the daemon has answered once.
+const FIRST_FRAME = "cc-candybar bar-pane: waiting for the daemon";
+
 // The text this pane shows for the recording it found, given the text it
-// shows now.
+// shows now, and whether the daemon wants a kick.
 async function frameOf(
   recording: Recording,
   pane: string,
   shown: string,
-): Promise<string> {
+): Promise<{ readonly text: string; readonly kick: boolean }> {
   if (recording.kind === "absent") {
-    return `waiting for pane ${pane}'s statusline to record ${recording.path} (the cc-candybar package's scripts/bar-pane/record-statusline, in front of that statusline command)`;
+    return {
+      text: [
+        `waiting for pane ${pane}'s statusline to record`,
+        recording.path,
+        "(the cc-candybar package's scripts/bar-pane/record-statusline,",
+        "in front of that session's statusline command)",
+      ].join("\n"),
+      kick: false,
+    };
   }
   const { hookData, cwd, tty, argv, env } = recording.invocation;
   // [LAW:one-source-of-truth] The statusline client's own request, replayed:
@@ -79,7 +96,13 @@ async function frameOf(
   // from its environment and the terminal on its stderr. The daemon records a
   // session's hints and render origin from every render, so a request that
   // differed from the statusline's would rewrite them, and invalidate the
-  // session's state, on every frame of either.
+  // session's state, on every frame of either. The daemon it goes to is this
+  // process's, so it must be the statusline's.
+  if (socketPath(env) !== socketPath()) {
+    throw new Error(
+      `pane ${pane}'s statusline renders on ${socketPath(env)} and this bar pane on ${socketPath()}: run it with that session's CC_CANDYBAR_SOCKET`,
+    );
+  }
   const outcome = await tryRenderViaDaemon(
     hookData,
     [...argv],
@@ -87,10 +110,12 @@ async function frameOf(
     detectClientHints(env, cwd, tty),
   );
   const plan = planOutcome(outcome);
-  if (plan.kick) obtainDaemonKick();
   // A transient outcome is a daemon between processes, back within a frame
   // or two: the bar it drew stays rather than blanking and resizing the pane.
-  return outcome.kind === "transient" ? shown : plan.output;
+  return {
+    text: outcome.kind === "transient" ? shown : plan.output,
+    kick: plan.kick,
+  };
 }
 
 function parseArgs(argv: readonly string[]): { pane: string; fps: number } {
@@ -119,7 +144,19 @@ function parseArgs(argv: readonly string[]): { pane: string; fps: number } {
   return { pane, fps };
 }
 
-export async function runBarPane(argv: readonly string[]): Promise<void> {
+// The subcommand's own exit code: its failures are the bar pane's, named as
+// such, never the statusline's.
+export async function runBarPane(argv: readonly string[]): Promise<number> {
+  try {
+    await drawBarPane(argv);
+    return 0;
+  } catch (e) {
+    process.stderr.write(`cc-candybar bar-pane: ${(e as Error).message}\n`);
+    return 1;
+  }
+}
+
+async function drawBarPane(argv: readonly string[]): Promise<void> {
   const { pane, fps } = parseArgs(argv);
   const tmux = detectTmuxHint(process.env);
   if (tmux === null)
@@ -143,7 +180,7 @@ export async function runBarPane(argv: readonly string[]): Promise<void> {
   // [LAW:no-ambient-temporal-coupling] This loop is the one clock: each tick
   // renders, paints, then sleeps out the rest of its period, so a slow frame
   // delays the next rather than piling up behind it.
-  let frame = "";
+  let frame = FIRST_FRAME;
   let shown: Paint = { bytes: "", rows: 0 };
   // A resized pane no longer holds what was painted: the next tick paints
   // the frame whole, changed or not.
@@ -155,7 +192,18 @@ export async function runBarPane(argv: readonly string[]): Promise<void> {
   while (placement !== "gone") {
     const tickAt = performance.now();
     if (placement === "shown") {
-      frame = await frameOf(readRecording(server, pane), pane, frame);
+      const { text, kick } = await frameOf(
+        readRecording(server, pane),
+        pane,
+        frame,
+      );
+      frame = text;
+      if (kick) {
+        // The kick reports on stderr, this pane's terminal, over the frame
+        // shown: the frame is painted whole below.
+        obtainDaemonKick();
+        shown = { ...shown, bytes: "" };
+      }
       const next = paint(frame);
       if (next.rows !== shown.rows) {
         const resized = await runTmuxAsync(tmux, "bar-pane.tmux", [
@@ -176,5 +224,7 @@ export async function runBarPane(argv: readonly string[]): Promise<void> {
     }
     await sleep(Math.max(0, periodMs - (performance.now() - tickAt)));
   }
+  // The record holds the session's environment: it ends with the session.
+  removeRecording(server, pane);
   process.stderr.write(`cc-candybar bar-pane: pane ${pane} closed\n`);
 }

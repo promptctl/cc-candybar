@@ -6,6 +6,7 @@ import { paint } from "../src/bar-pane/paint";
 import {
   readRecording,
   recordingPath,
+  removeRecording,
   serverOf,
 } from "../src/bar-pane/recording";
 
@@ -128,12 +129,23 @@ describe("bar-pane recording", () => {
     });
   });
 
+  // The record holds the session's environment, so it goes when the bar pane
+  // sees the session's pane close; a pane that never recorded is no fault.
+  it("removes the record, and is absent after", () => {
+    write("{}\0/\0\x000\0");
+    removeRecording("anim,123", "%3");
+    expect(readRecording("anim,123", "%3").kind).toBe("absent");
+    expect(() => removeRecording("anim,123", "%3")).not.toThrow();
+  });
+
   it.each([
     ["a payload that is not JSON", "{ half\0/\0\x000\0"],
     ["no record at all", "{}"],
     ["a record cut short of its last NUL", "{}\0/\0\x000\0A=1"],
     ["an environment entry with no value", "{}\0/\0\x000\0A=1\0B\0"],
     ["a size that is not rows and columns", "{}\0/\x00wide\x000\0"],
+    ["an empty argc", "{}\0/\0\0\0A=1\0"],
+    ["a negative argc", "{}\0/\0\0-1\0A=1\0"],
   ])("throws, naming the file, on %s", (_, text) => {
     const file = write(text);
     expect(() => readRecording("anim,123", "%3")).toThrow(file);
