@@ -655,7 +655,8 @@ export class SessionUsageStore {
       transcriptPath,
     };
     // Something else landed first (another refold, a sweep): store nothing.
-    // A slot swept mid-flight is not brought back to hold a fold of it.
+    // Store only over the record this fold started from; a sweep of that record
+    // mid-flight is a change too, so its slot is not brought back.
     if (this.sessions.get(sessionId)?.record !== prior) return ok(record);
     this.hold(sessionId).record = record;
     return ok(record);
