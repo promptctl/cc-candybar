@@ -1,3 +1,10 @@
+## [1.130.1](https://github.com/promptctl/cc-candybar/compare/v1.130.0...v1.130.1) (2026-10-16)
+
+
+### Bug Fixes
+
+* **config:** a relative CC_CANDYBAR_CONFIG or --config resolves against the client's cwd ([#346](https://github.com/promptctl/cc-candybar/issues/346)) ([031c92c](https://github.com/promptctl/cc-candybar/commit/031c92ce4bafd57f6332cb97e5799d4a77b7b2e4))
+
 # [1.130.0](https://github.com/promptctl/cc-candybar/compare/v1.129.5...v1.130.0) (2026-10-16)
 
 
