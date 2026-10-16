@@ -677,10 +677,12 @@ function zeroValue(type: VarType): VarValue {
 export class SourceRegistry {
   private readonly inputMetas = new Map<string, InputMeta>();
   private readonly lastErrors = new Map<string, LastError>();
-  // A watch the OS refused is a STANDING fault, not a read's outcome: a read
-  // that succeeds afterwards says nothing about whether writes will be seen,
-  // so no outcome clears it. It lives until the registry does.
-  private readonly watchFaults = new Map<string, LastError>();
+  // A cache policy that cannot fire is a STANDING fault, not a read's
+  // outcome: a read that succeeds afterwards says nothing about whether the
+  // source will ever run again, so no read outcome clears it. A watch the OS
+  // refused lives until the registry does; a key template that throws lives
+  // until the key evaluates again. One map, since a variable has one policy.
+  private readonly policyFaults = new Map<string, LastError>();
 
   // Triggers for shell/file cache policies and the time source's tick:
   private readonly watchMgr = new WatchManager();
@@ -1305,7 +1307,7 @@ export class SourceRegistry {
   // resolution succeeded (or the variable has never been resolved).
   getLastError(name: string): LastError | undefined {
     const read = this.lastErrors.get(name);
-    const fault = this.watchFaults.get(name);
+    const fault = this.policyFaults.get(name);
     if (fault === undefined) return read;
     return read === undefined
       ? fault
@@ -1313,6 +1315,12 @@ export class SourceRegistry {
           timestamp: read.timestamp,
           message: `${fault.message}; ${read.message}`,
         };
+  }
+
+  // Every variable whose cache policy cannot fire, with why: the bar draws
+  // such a variable's last value with nothing to say it has stopped refreshing.
+  cachePolicyFaults(): ReadonlyMap<string, LastError> {
+    return this.policyFaults;
   }
 
   // ─── Lifecycle ────────────────────────────────────────────────────────────
@@ -1358,7 +1366,7 @@ export class SourceRegistry {
 
       case "watch_file": {
         const unsub = this.watchMgr.subscribe(policy.path, update, (message) =>
-          this.watchFaults.set(name, { timestamp: Date.now(), message }),
+          this.policyFaults.set(name, { timestamp: Date.now(), message }),
         );
         this.cleanups.push(unsub);
         break;
@@ -1371,17 +1379,36 @@ export class SourceRegistry {
         // [LAW:dataflow-not-control-flow] The key template is the sole
         // selector — no manual dep declarations, no conditional checks.
         const parsedKey = this.engine.parse(policy.template);
-        const disposer: IReactionDisposer = reaction(() => {
-          const scope = buildScope(this.store);
+        // [LAW:no-silent-failure] A key that throws is no key: it is the
+        // variable's standing fault until the key evaluates again, and the
+        // source keeps what its last run yielded. Folding the throw into a
+        // key value made a key that always throws a constant one — the
+        // source never ran again and nothing said why.
+        const keyOf = (): Outcome<string> => {
           try {
-            return parsedKey
-              .evaluate(scope)
-              .map((f) => f.plain)
-              .join("");
-          } catch {
-            return "";
+            return ok(
+              parsedKey
+                .evaluate(buildScope(this.store))
+                .map((f) => f.plain)
+                .join(""),
+            );
+          } catch (e) {
+            return failed(
+              `cache key: ${e instanceof Error ? e.message : String(e)}`,
+            );
           }
-        }, update);
+        };
+        this.notePolicy(name, keyOf());
+        const disposer: IReactionDisposer = reaction(
+          keyOf,
+          (key) => {
+            this.notePolicy(name, key);
+            if (key.kind === "ok") update();
+          },
+          // A key is plain data: two evaluations are one key when they spell
+          // alike, so the source runs only when the key's value moves.
+          { equals: (a, b) => JSON.stringify(a) === JSON.stringify(b) },
+        );
         this.cleanups.push(disposer);
         break;
       }
@@ -1442,6 +1469,17 @@ export class SourceRegistry {
 
   private recordError(name: string, message: string): void {
     this.lastErrors.set(name, { timestamp: Date.now(), message });
+  }
+
+  // The one fold from a policy's own outcome — whether it can fire — to the
+  // variable's standing fault.
+  private notePolicy(name: string, outcome: Outcome<unknown>): void {
+    if (outcome.kind === "failed")
+      this.policyFaults.set(name, {
+        timestamp: Date.now(),
+        message: outcome.reason,
+      });
+    else this.policyFaults.delete(name);
   }
 
   // [LAW:single-enforcer] The one fold from a source outcome to the

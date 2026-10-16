@@ -600,7 +600,18 @@ async function loadRegisterRender(
     // only the verdict can say the config asked for something it did not get.
     // Each drop is already a warning line; the verdict counts them.
     const drops = prepared.droppedPlugins.length;
+    // [LAW:no-silent-failure] A variable whose cache policy cannot fire — a
+    // watch the OS refused, a key template that throws — draws its last value
+    // with nothing on the bar to say it has stopped refreshing. Read after the
+    // passes, since a key may read what a render pushes.
+    const stuck = [...prepared.registry.cachePolicyFaults()];
     const failures = [
+      ...(stuck.length > 0
+        ? [
+            `${stuck.length} variable${stuck.length === 1 ? "" : "s"} cannot refresh:\n` +
+              stuck.map(([name, f]) => `  ${name}: ${f.message}`).join("\n"),
+          ]
+        : []),
       ...(drops > 0
         ? [
             `${drops} plugin${drops === 1 ? "" : "s"} did not load (named in the warnings)`,
