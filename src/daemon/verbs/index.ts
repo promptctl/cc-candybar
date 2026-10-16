@@ -20,6 +20,8 @@
 
 import { launchSync } from "../../proc/launch";
 import type { SessionStateRW } from "../session-state";
+import { holdClickError } from "../click-error";
+import { instantOf } from "../../utils/instant";
 import { stateGate, stateKeySeed } from "./state-validators";
 import { configGate, configKeySeed } from "./config-validators";
 import type { Gate, RangeParams } from "./validator-registry";
@@ -1420,8 +1422,8 @@ const SESSION_FIRST_VERBS: ReadonlySet<string> = new Set([
 // unknown verb is bad input — it does not flip the classification.
 //
 // [LAW:one-source-of-truth] Per-effect errors are written to session state
-// under 'click.error' so the next render shows WHICH effect(s) failed in the
-// bar transiently (one render, then cleared). Only possible when a session ID
+// so the bar shows WHICH effect(s) failed, for the hold src/daemon/click-error.ts
+// sets. Only possible when a session ID
 // is available from a set-state or toolbar-toggle effect in the same click.
 const dispatch: VerbHandler = (rawValue, ctx) => {
   const errors: string[] = [];
@@ -1449,7 +1451,12 @@ const dispatch: VerbHandler = (rawValue, ctx) => {
   }
   if (errors.length > 0) {
     if (sessionId) {
-      ctx.sessionState.set(sessionId, "click.error", errors.join("\n"));
+      holdClickError(
+        ctx.sessionState,
+        sessionId,
+        errors.join("\n"),
+        instantOf(new Date()),
+      );
     }
     const message = `dispatch: ${errors.join("; ")}`;
     throw operational ? new Error(message) : new BadVerbArgs(message);

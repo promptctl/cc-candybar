@@ -136,7 +136,10 @@ function hookData(): ClaudeHookData {
 
 async function daemon(request: RenderRequest | ClickRequest): Promise<string> {
   // In the page there is no socket, so no reply timer to have fired.
-  const { resp } = await handleRequest(request, () => false);
+  const handled = await handleRequest(request, () => false);
+  // A render or a click is answered with a reply; only a subscribe streams.
+  if (handled.kind !== "reply") throw new Error(`${request.kind} was not answered with a reply`);
+  const { resp } = handled;
   if (!resp.ok) throw new Error(`${resp.error} (${resp.code})`);
   return "output" in resp ? resp.output : "";
 }
