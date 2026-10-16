@@ -1,3 +1,10 @@
+# [1.134.0](https://github.com/promptctl/cc-candybar/compare/v1.133.0...v1.134.0) (2026-10-16)
+
+
+### Features
+
+* **doctor:** links check — the terminal draws OSC 8 links, and tmux passes them through ([#361](https://github.com/promptctl/cc-candybar/issues/361)) ([158cd5d](https://github.com/promptctl/cc-candybar/commit/158cd5d2c701665d269e7359bd193eb81593409e))
+
 # [1.133.0](https://github.com/promptctl/cc-candybar/compare/v1.132.2...v1.133.0) (2026-10-16)
 
 
