@@ -61,6 +61,7 @@ import {
 import {
   cellParts,
   heldCell,
+  type Gate,
   type LaidCell,
 } from "../template-engine/layout.js";
 import type { Returned } from "../render/effect.js";
@@ -200,9 +201,16 @@ export type PlacementSettings = Readonly<Record<string, SettingValue>> & {
   readonly effect: PlacementEffect;
 };
 
-// [LAW:single-enforcer] The render-time context. `visible` is THIS node's
-// computed visibility (the driver ANDs node.when with the parent's).
-// renderChild continues the walk.
+// [LAW:types-are-the-program] A node's own `when` as the driver evaluated it,
+// a failure carrying the one way to say so: only a gate that failed can be
+// reported, and only with its own error.
+export type NodeGate =
+  | Exclude<Gate, { kind: "failed" }>
+  | (Extract<Gate, { kind: "failed" }> & { report(): void });
+
+// [LAW:single-enforcer] The render-time context. `gate` is THIS node's own
+// `when` as the driver evaluated it — hidden, unevaluated, under a parent that
+// is not shown. renderChild continues the walk.
 export interface NodeRenderCtx {
   // The render's scope. A placement's own templates evaluate in it with
   // `.settings` bound (`placementScope`); everything else reads it as is.
@@ -211,7 +219,7 @@ export interface NodeRenderCtx {
   // choice over config default) under the render's style, transposed ONCE by
   // the driver — every unpinned segment colours from this one object.
   readonly palette: Palette;
-  readonly visible: boolean;
+  readonly gate: NodeGate;
   // [LAW:one-source-of-truth] The render-wide intra-cell padding (resolved
   // globals.padding), threaded by the driver from BuildLineOptions into every
   // segment's layout — one value per render, never re-defaulted per node.
@@ -517,6 +525,11 @@ const containerType: NodeType<"container"> = {
     };
   },
   render(node, ctx) {
+    // [LAW:no-silent-failure] A gate that failed decides nothing, so what it
+    // gates is hidden: a broken `when` costs its own container, never the bar
+    // (brandon-unfiled-3248.ryf). A container has no cell to show a ⚠ in, so
+    // it reports the failure instead.
+    if (ctx.gate.kind === "failed") ctx.gate.report();
     // [LAW:dataflow-not-control-flow] Every child is walked, hidden or not:
     // visibility is a value `parentVisible` threads, never a skipped call, and a
     // child's address step is its (index, count) here, placed by THIS
@@ -524,7 +537,11 @@ const containerType: NodeType<"container"> = {
     return composeBlocks(
       node.direction,
       node.children.map((child, index) =>
-        ctx.renderChild(child, ctx.visible, childStep(node, index)),
+        ctx.renderChild(
+          child,
+          ctx.gate.kind === "shown",
+          childStep(node, index),
+        ),
       ),
     );
   },
@@ -606,11 +623,16 @@ function drawSegment(
     throw new Error(`Layout segment "${node.name}" has no matching segment`);
   }
   const { seg, compiled: segCompiled } = found;
-  if (!ctx.visible) return [];
+  if (ctx.gate.kind === "hidden") return [];
   // [LAW:one-source-of-truth] Every template of THIS placement — its
   // segment's `when`, `bg:`, `fg:`, body, and edit mode's lead and trail — reads
   // this placement's settings; nothing outside the placement does.
   const scope = placementScope(ctx.scope, node.settings);
+  // The gate on the placement (`{ seg, when }`) failing is the placement's
+  // failure, drawn as its segment's own `when` failing is.
+  if (ctx.gate.kind === "failed") {
+    return brokenSegment(node, scope, ctx, ctx.gate.message);
+  }
 
   // [LAW:no-silent-failure] Wrap the whole render body in a try/catch so a
   // partial-load consequence (e.g. a variable that failed to declare, leaving a
@@ -804,41 +826,55 @@ function drawSegment(
     // then the disclosure body, in the order they hang under the trigger.
     return [...laidLines, ...ledBody];
   } catch (err) {
-    const message = (err as Error).message ?? String(err);
-    ctx.onSegmentError?.(node.id, message);
-    // The error cell is a row of the band the segment sits on, like any
-    // inline line — a broken segment inside an open body still gets its ✕.
-    // A cell is one line: the message's own line breaks (a parse error's
-    // excerpt, a source's stderr) fold to spaces here — the full text went
-    // to onSegmentError above — and the cell is placed whole, never wrapped
-    // inside itself, like every other cell.
-    const oneLine = message.replace(/\s*\n\s*/g, " ");
-    return [
-      {
-        cells: applySegmentLayout(
-          [new RichText(`⚠ ${node.id}: ${oneLine}`, { end: "" })],
-          {
-            width: "auto",
-            justify: "left",
-            truncate: "right",
-            padding: 0,
-            // It follows the bar, and fades in from the bar's ground: the
-            // failure it reports may be the read of this placement's own
-            // settings.
-            placement: {
-              id: node.id,
-              effect: FOLLOW_BAR,
-              ground: groundOf(ctx.palette),
-            },
-            lead: errorAffix(node.lead, node, scope, ctx),
-            trail: errorAffix(node.trail, node, scope, ctx),
-          },
-        ),
-        band: "own",
-        place: "flow",
-      },
-    ];
+    return brokenSegment(
+      node,
+      scope,
+      ctx,
+      (err as Error).message ?? String(err),
+    );
   }
+}
+
+// The ⚠ cell a broken placement draws in place of everything it would have.
+function brokenSegment(
+  node: CompiledSegmentNode,
+  scope: object,
+  ctx: NodeRenderCtx,
+  message: string,
+): RenderedLines {
+  ctx.onSegmentError?.(node.id, message);
+  // The error cell is a row of the band the segment sits on, like any
+  // inline line — a broken segment inside an open body still gets its ✕.
+  // A cell is one line: the message's own line breaks (a parse error's
+  // excerpt, a source's stderr) fold to spaces here — the full text went
+  // to onSegmentError above — and the cell is placed whole, never wrapped
+  // inside itself, like every other cell.
+  const oneLine = message.replace(/\s*\n\s*/g, " ");
+  return [
+    {
+      cells: applySegmentLayout(
+        [new RichText(`⚠ ${node.id}: ${oneLine}`, { end: "" })],
+        {
+          width: "auto",
+          justify: "left",
+          truncate: "right",
+          padding: 0,
+          // It follows the bar, and fades in from the bar's ground: the
+          // failure it reports may be the read of this placement's own
+          // settings.
+          placement: {
+            id: node.id,
+            effect: FOLLOW_BAR,
+            ground: groundOf(ctx.palette),
+          },
+          lead: errorAffix(node.lead, node, scope, ctx),
+          trail: errorAffix(node.trail, node, scope, ctx),
+        },
+      ),
+      band: "own",
+      place: "flow",
+    },
+  ];
 }
 
 // A broken segment stays configurable and removable: edit mode's buttons ride

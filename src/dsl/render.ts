@@ -39,6 +39,7 @@ import {
   presetRoot,
 } from "../config/presets.js";
 import { configOptionDomains, arrangedSegment } from "../config/edit-chrome.js";
+import { EDIT_NS } from "../config/loader/reserved-namespace.js";
 import type { VariableStore } from "../var-system/store.js";
 import type { SourceRegistry } from "../var-system/sources.js";
 import {
@@ -86,6 +87,8 @@ import { buildScope, placementScope } from "../template-engine/scope.js";
 import {
   createCcCandybarEngine,
   evaluateWhen,
+  gateOf,
+  HIDDEN,
   resolveSegmentColors,
 } from "../template-engine/index.js";
 import {
@@ -142,6 +145,7 @@ import {
   type RenderedLine,
   type RenderedLines,
   type NodeCompileCtx,
+  type NodeGate,
   type NodeRenderCtx,
   type SegmentStyles,
   type EvaluatedSegment,
@@ -894,6 +898,19 @@ function provisionalName<T>(
   return selected.kind === "decided" ? selected.name : SLOT_FLOORS[slot];
 }
 
+// The ids of the placements a layout node holds, its open bodies' included:
+// what names a container to its author. Its compiled `when` is edit chrome's
+// wrapping of the one they wrote and its path is a position in the synthesized
+// tree, while a placement keeps its id through every synthesis. Edit chrome's
+// own cells are not the author's.
+function placementsUnder(node: CompiledNode): string[] {
+  if (node.kind === "container") return node.children.flatMap(placementsUnder);
+  return [
+    ...(node.name.startsWith(EDIT_NS) ? [] : [node.id]),
+    ...(node.opens === undefined ? [] : placementsUnder(node.opens.body)),
+  ];
+}
+
 // ─── renderDsl ───────────────────────────────────────────────────────────────
 
 /**
@@ -954,8 +971,8 @@ export interface RenderObservers {
   // Optional for the same reason the two above are: a caller that passes none has
   // said it is not listening (a compile-only test, the demo). Both shipping
   // callers listen — the daemon folds every one into the diagnostic strip's
-  // warning channel, and `cc-candybar check` fails a globals rule, so a rule's
-  // failure is visible whether or not anyone is looking at a bar. Check lists
+  // warning channel, and `cc-candybar check` fails a globals rule or a gate, so
+  // either failure is visible whether or not anyone is looking at a bar. Check lists
   // a band-floor shortfall only where its own renders open a trigger — one open
   // by default; it opens none itself, so a shortfall behind a closed trigger
   // reaches the bar alone.
@@ -973,6 +990,16 @@ export type RenderWarning =
   | {
       readonly kind: "rule";
       readonly slot: ExpressionSlot;
+      readonly message: string;
+    }
+  // A container's own `when` whose template threw, so what it gates is
+  // hidden (brandon-unfiled-3248.ryf). A container has no cell to show a ⚠ in;
+  // a placement's gate failing draws its ⚠ instead, through onSegmentError.
+  // `where` names it as a placement's ⚠ is named, `error` says why.
+  | {
+      readonly kind: "when";
+      readonly where: string;
+      readonly error: string;
       readonly message: string;
     }
   // A floor an open band stands short of as drawn (decor.ts `bandFor`): its
@@ -1358,7 +1385,9 @@ export function renderDsl(
 
   // [LAW:dataflow-not-control-flow] ONE walk renders any node to LINES OF CELLS
   // (serialization deferred to the root). The driver owns the cross-cutting
-  // `when`: `visible` ANDs the node's own predicate with its ancestors'. It then
+  // `when`: a node under a parent not shown is hidden, and any other is gated
+  // by its own predicate — shown, hidden, or failed, never collapsed to a
+  // boolean, since what a failure costs is the node type's to say. It then
   // dispatches to the node type's render via nodeType() — no kind switch here.
   // The node count, nesting depth, and per-leaf segment count are all data; a
   // deeper tree is more recursion, not more code.
@@ -1367,11 +1396,27 @@ export function renderDsl(
     parentVisible: boolean,
     region: Region,
   ): RenderedLines => {
-    const visible = parentVisible && evaluateWhen(node.when, scope);
+    // A hidden parent's child is hidden without its `when` being asked.
+    const evaluated = parentVisible ? gateOf(node.when, scope) : HIDDEN;
+    const gate: NodeGate =
+      evaluated.kind === "failed"
+        ? {
+            ...evaluated,
+            report: () => {
+              const where = `when over ${placementsUnder(node).join(", ") || "no placement"}`;
+              warn({
+                kind: "when",
+                where,
+                error: evaluated.message,
+                message: `${where}: ${evaluated.message} — what it gates is hidden`,
+              });
+            },
+          }
+        : evaluated;
     const ctx: NodeRenderCtx = {
       scope,
       palette,
-      visible,
+      gate,
       padding: opts.padding,
       region,
       perSegmentSink,
@@ -1385,7 +1430,7 @@ export function renderDsl(
       // `decorationFor` each time a band item opens the next — so a nested
       // `{{ menu }}` inside door → ⚙ lands at depth 2 with no walk state.
       renderBody: (body, open, band) =>
-        renderNode(body, visible && open, bandRoot(band)),
+        renderNode(body, gate.kind === "shown" && open, bandRoot(band)),
       // [LAW:one-source-of-truth] The row ✕ reads the session id from the
       // same store every other affordance's URL does.
       closeDisclosure: (key) => disclosureCloseFragment(store, key),
@@ -1416,15 +1461,17 @@ export function renderDsl(
   }
   // [LAW:one-source-of-truth] The rows `{{ layoutPreview }}` draws, from the
   // tree about to be walked and the walk's own visibility: a node's `when`,
-  // then a segment's own — and a segment whose `when` throws is SHOWN, because
-  // the walk draws an error cell exactly there. Edit mode's `+`/`-` and reset
+  // then a segment's own — and a segment either `when` of which throws is
+  // SHOWN, because the walk draws an error cell exactly there, where a
+  // container whose `when` throws draws nothing. Edit mode's `+`/`-` and reset
   // banner are affordances over the arrangement, not part of it, while a name
   // label stands in for its segment (`arrangedSegment`). Each segment
   // keeps the palette the walk colours it in, pin included.
   const shown = (node: CompiledNode): boolean => {
-    if (!evaluateWhen(node.when, scope)) return false;
-    if (node.kind === "container") return true;
+    const gate = gateOf(node.when, scope);
+    if (node.kind === "container") return gate.kind === "shown";
     if (arrangedSegment(node.name) === undefined) return false;
+    if (gate.kind !== "shown") return gate.kind === "failed";
     try {
       return evaluateWhen(
         compiled.segments[node.name]!.when,

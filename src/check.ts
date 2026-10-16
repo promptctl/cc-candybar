@@ -407,8 +407,9 @@ export async function prepareConfig(
 // partially-declared variable) renders as a visible ⚠ error cell — partial
 // rendering, the daemon's channel for a human looking at the bar. The blind
 // authoring agent is not looking at the bar; check collects the same errors
-// through the render's observer seam — a segment's ⚠, and a globals rule the
-// render could not honour (brandon-themes-dzl) — and fails the verdict, so
+// through the render's observer seam — a segment's ⚠, a globals rule the
+// render could not honour (brandon-themes-dzl), and a layout `when` that threw
+// (brandon-unfiled-3248.ryf) — and fails the verdict, so
 // exit 0 never blesses a bar the daemon would render a complaint on.
 export function renderEffective(
   { layers, config, compiled, store, registry }: PreparedConfig,
@@ -443,6 +444,11 @@ export function renderEffective(
       // written at, which may be a preset's globals rather than the config's.
       case "rule":
         failures.set(`${warning.slot} rule`, warning.message);
+        return;
+      // A layout `when` that threw: the bar hides what it gates, which a
+      // headless pass would otherwise bless.
+      case "when":
+        failures.set(warning.where, warning.error);
         return;
       // An open band the chosen look leaves short of a floor: the bar draws it
       // as near as it comes, and the message names what clears it.
@@ -512,11 +518,12 @@ async function loadRegisterRender(
       config.globals.preset,
       config.presets,
     );
-    // [LAW:no-silent-failure] A render can THROW rather than report — a
-    // layout node's `when` that fails is not a ⚠ cell — and one pass's
-    // throw must neither lose the failures the other passes find nor drop
-    // the preset that reached it, so it is caught here and becomes that
-    // pass's one failure. `rendered` is absent exactly then.
+    // [LAW:no-silent-failure] Nothing a config authors makes a render throw
+    // — every fault it can hold is a ⚠ cell or a warning — so a throw is the
+    // renderer's own bug, and one pass's throw must neither lose the
+    // failures the other passes find nor drop the preset that reached it: it
+    // is caught here and becomes that pass's one failure. `rendered` is
+    // absent exactly then.
     const render = (preset: string, customized: boolean) => {
       const effective = resolveEffectiveGlobals(
         config,

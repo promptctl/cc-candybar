@@ -1,10 +1,9 @@
 // [LAW:nothing-unseen] brandon-unfiled-3248.87p, measured on a REAL daemon:
 // every render request writes one render event — the `render …` log line —
-// whatever its outcome. A render that draws the bar, one that throws, and one
-// the daemon refuses each leave an event naming its outcome, and a render that
-// stops early carries the fields it reached under the same names and in the
-// same order as one that finished, so the failing renders are described by the
-// same fields as the rest.
+// whatever its outcome. A render that draws the bar, one whose config fails
+// partway (a broken gate), and one the daemon refuses each leave an event
+// naming its outcome. The event's own fields, and the threw arm a renderer
+// bug reaches, are held by test/render-event.test.ts.
 
 import { execFileSync } from "node:child_process";
 import {
@@ -19,6 +18,7 @@ import { constants, open } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
+import { stripAnsi } from "./helpers/ansi";
 import { PROTOCOL_VERSION } from "../src/daemon/protocol";
 import { logPath } from "../src/daemon/paths";
 import {
@@ -38,8 +38,7 @@ import {
 jest.setTimeout(30_000);
 
 // `drawn` draws a bar. `broken` gates a row on a `when` that fails when it is
-// evaluated — inside renderDsl's walk, after the payload is built — so the
-// render throws partway through. `held` reads the tmux session name, which the
+// evaluated, which costs that row and warns. `held` reads the tmux session name, which the
 // payload awaits from a `tmux` spawn (src/segments/tmux.ts) — the stub below.
 const CONFIGS = {
   drawn: `{ segments: { mark: { template: 'mark' } }, root: { h: ['mark'] } }`,
@@ -142,12 +141,17 @@ describe("every render request writes one render event, whatever its outcome", (
     removeTmpDirs();
   });
 
-  test("a drawn bar, a thrown render and a refused request each leave an event naming their outcome", async () => {
+  test("a drawn bar, a broken gate and a refused request each leave an event naming their outcome", async () => {
     const hints = { termCols: 120, termRows: 40 };
     await render(sockPath, FORGING_SID, projectDir, hints, configFlag("drawn"));
-    await expect(
-      render(sockPath, "ev-threw", projectDir, hints, configFlag("broken")),
-    ).rejects.toThrow(/the gate broke.*RENDER_FAILED/);
+    // A gate that fails costs what it gates, not the bar
+    // (brandon-unfiled-3248.ryf): the reply is a bar, its strip saying why.
+    const gated = stripAnsi(
+      await render(sockPath, "ev-gate", projectDir, hints, configFlag("broken")),
+    );
+    expect(gated).toContain(
+      "when over mark: the gate broke — what it gates is hidden",
+    );
     await expect(
       renderRequest(sockPath, {
         hookData: hookData("ev-refused", projectDir),
@@ -171,26 +175,12 @@ describe("every render request writes one render event, whatever its outcome", (
     const drawn = attempts(FORGING_SID, "ok", "info");
     expect(renderEvents().filter((e) => field(e, "sid") === "x")).toEqual([]);
 
-    const thrown = attempts("ev-threw", "threw", "error");
-    expect(thrown.level).toBe("error");
-    expect(field(thrown, "outcome")).toBe("threw");
-    expect(field(thrown, "error")).toContain("the gate broke");
-    // What the render learned before it threw, as a finished render names it.
-    expect(field(thrown, "termCols")).toBe("120");
-    expect(field(thrown, "termRows")).toBe("40");
-    expect(field(thrown, "refused")).toBe("-");
-    // The fields it reached are the finished render's, in its order, up to the
-    // stage that threw — never a field it did not reach, spelled as "none".
-    const keys = (event: Event) =>
-      event.fields
-        .map(([k]) => k)
-        .filter((k) => !["timedOut", "took", "outcome", "error"].includes(k));
-    const reached = keys(thrown);
-    expect(reached).toEqual(keys(drawn).slice(0, reached.length));
-    expect(reached).toContain("prompts");
-    expect(reached).not.toContain("effect");
-    expect(reached).not.toContain("warn");
-    // The event is the one record of the throw: the connection never saw it.
+    // The broken gate is a render that finished, warning which gate it was;
+    // its fields are the drawn bar's, in the same order.
+    const gate = attempts("ev-gate", "ok", "info");
+    expect(field(gate, "warn")).toBe("when");
+    const keys = (event: Event) => event.fields.map(([k]) => k);
+    expect(keys(gate)).toEqual(keys(drawn));
     expect(readFileSync(logPath(env), "utf8")).not.toContain("handler threw");
 
     // A refused request names its problems. The request was not trusted, so

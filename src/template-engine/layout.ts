@@ -84,6 +84,34 @@ export function evaluateWhen(
   return fragments.map((f) => f.plain).join("") !== "false";
 }
 
+// [LAW:types-are-the-program] What a layout node's own `when` decided: shown,
+// hidden, or neither — its template threw, and `message` says why. What a
+// failed gate costs is the node type's to say (brandon-unfiled-3248.ryf).
+export type Gate =
+  | { readonly kind: "shown" }
+  | { readonly kind: "hidden" }
+  | { readonly kind: "failed"; readonly message: string };
+
+export const HIDDEN: Gate = { kind: "hidden" };
+const SHOWN: Gate = { kind: "shown" };
+
+// [LAW:no-silent-failure] evaluateWhen with its throw as a value: a gate that
+// fails is one node's fault, so it reaches that node rather than unwinding the
+// walk and taking every other node with it.
+export function gateOf(
+  template: Template<RichText> | undefined,
+  scope: object,
+): Gate {
+  try {
+    return evaluateWhen(template, scope) ? SHOWN : HIDDEN;
+  } catch (e) {
+    return {
+      kind: "failed",
+      message: e instanceof Error ? e.message : String(e),
+    };
+  }
+}
+
 /**
  * Collapse a visual line's cells into the ONE strip item the unit contributes
  * for that line. [LAW:single-enforcer] A unit (segment, or an inline leaf) is
