@@ -449,12 +449,8 @@ export function renderEffective(
       case "band-floor":
         advisories.add(warning.message);
         return;
-      default: {
-        const unhandled: never = warning;
-        throw new Error(
-          `unhandled render warning ${JSON.stringify(unhandled)}`,
-        );
-      }
+      default:
+        warning satisfies never;
     }
   };
   const rendered = renderDsl(
@@ -517,7 +513,7 @@ async function loadRegisterRender(
       config.presets,
     );
     // [LAW:no-silent-failure] A render can THROW rather than report — a
-    // globals rule whose evaluation fails is not a ⚠ cell — and one pass's
+    // layout node's `when` that fails is not a ⚠ cell — and one pass's
     // throw must neither lose the failures the other passes find nor drop
     // the preset that reached it, so it is caught here and becomes that
     // pass's one failure. `rendered` is absent exactly then.

@@ -8,6 +8,7 @@ export {
   STYLE_FLOOR,
   EXPRESSION_SLOTS,
   SLOT_FLOORS,
+  ruleFloorMessage,
   isExpression,
   resolveSelection,
   finishSelection,

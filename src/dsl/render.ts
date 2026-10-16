@@ -62,8 +62,8 @@ import {
   decideEffectName,
   decideStyleName,
   decideThemeName,
-  EFFECT_FLOOR,
   resolveEffectSelection,
+  ruleFloorMessage,
   type EffectSelection,
   type Selection,
   EXPRESSION_SLOTS,
@@ -78,7 +78,6 @@ import {
   STYLE_FLOOR,
   placementPalette,
   resolveThemeSelection,
-  THEME_FLOOR,
   transposedPalette,
   type StyleSelection,
   type ThemeSelection,
@@ -870,22 +869,29 @@ function evalRule(
       .map((f) => f.plain)
       .join("");
   } catch (e) {
-    const floor = SLOT_FLOORS[slot];
     warn({
       kind: "rule",
       slot,
-      message: `${rule.where} rendered "${floor}": the rule failed — ${(e as Error).message ?? String(e)}`,
+      message: ruleFloorMessage(
+        rule.where,
+        slot,
+        `the rule failed — ${e instanceof Error ? e.message : String(e)}`,
+      ),
     });
-    return floor;
+    return SLOT_FLOORS[slot];
   }
 }
 
 // The name a render publishes for a slot BEFORE its fold has finished: the
-// decided name, or that field's floor when only this render can settle it.
+// decided name, or that slot's floor when only this render can settle it — the
+// floor a failing rule collapses to, read from the one table.
 // [LAW:dataflow-not-control-flow] One total projection of the union to one value,
-// shared by both slots, rather than a per-slot branch at the push site.
-function provisionalName<T>(selected: Selection<T>, floorName: string): string {
-  return selected.kind === "decided" ? selected.name : floorName;
+// shared by every slot, rather than a per-slot branch at the push site.
+function provisionalName<T>(
+  selected: Selection<T>,
+  slot: ExpressionSlot,
+): string {
+  return selected.kind === "decided" ? selected.name : SLOT_FLOORS[slot];
 }
 
 // ─── renderDsl ───────────────────────────────────────────────────────────────
@@ -1131,9 +1137,9 @@ export function renderDsl(
   // slot's rule may be written to depend on the other's result.
   registry.applyInput(
     payloadWith(
-      provisionalName(selectedTheme, THEME_FLOOR),
-      provisionalName(selectedStyle, STYLE_FLOOR),
-      provisionalName(selectedEffect, EFFECT_FLOOR),
+      provisionalName(selectedTheme, "palette"),
+      provisionalName(selectedStyle, "style"),
+      provisionalName(selectedEffect, "effect"),
     ),
   );
   // [LAW:single-enforcer] Publish the columns the render's strip spends on a

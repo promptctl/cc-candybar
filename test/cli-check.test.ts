@@ -550,6 +550,23 @@ describe("checkConfig — explicit target", () => {
     expect(message).toContain('(under preset "b"');
   });
 
+  it("a rule that throws in a preset the session does not open in is FATAL, at the preset's path and tagged with it", async () => {
+    const p = write(
+      "style-rule-throws-other-preset.json5",
+      `{
+        globals: { preset: 'a' },
+        presets: { a: {}, b: { globals: { style: '{{ .nope }}' } } },
+        segments: { x: { template: 'x' } },
+        root: { h: ['x'] },
+      }`,
+    );
+    const message = expectFatal(await checkConfig(p, dir));
+    expect(message).toContain(
+      'style rule: presets.b.globals.style rendered "none": the rule failed',
+    );
+    expect(message).toContain('(under preset "b"');
+  });
+
   it("an open trigger no colour stands off is a WARNING in its own words: the config renders the look it chose", async () => {
     // textual-dark's navy secondary and orange accent under `alt`: the first
     // row (the door, three cells and the group's trigger) turns between them,

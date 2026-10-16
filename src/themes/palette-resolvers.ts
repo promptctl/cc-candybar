@@ -21,6 +21,7 @@ import {
   FOLLOW_BAR,
   resolveSelection,
   retiredThemeNote,
+  ruleFloorMessage,
   THEME_FLOOR,
   type Decided,
   type Selection,
@@ -161,7 +162,11 @@ export function decideThemeName(
   const named = namedTheme(name);
   if (named !== null) return named;
   onUnresolvable(
-    `${where} rendered "${THEME_FLOOR}": "${name}" names no installed theme${retiredThemeNote(name)}`,
+    ruleFloorMessage(
+      where,
+      "palette",
+      `"${name}" names no installed theme${retiredThemeNote(name)}`,
+    ),
   );
   return themeFloor();
 }

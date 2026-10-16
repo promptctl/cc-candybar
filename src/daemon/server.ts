@@ -1511,9 +1511,21 @@ async function renderRequest(
   // `-` for none.
   const passages = (frames: readonly PassageFrame[]): string =>
     frames.map((f) => `${f.placement}@${f.t.toFixed(3)}`).join(",") || "-";
-  // [LAW:nothing-unseen] Each warning the strip carried, by kind, in its
-  // order, including any its row cap left undrawn; `-` for none.
-  const warned = warnings.map((w) => w.kind).join(",") || "-";
+  // [LAW:nothing-unseen] Each warning the strip carried, in its order,
+  // including any its row cap left undrawn; `-` for none. A rule's tag names
+  // the slot that fell to its floor (`rule:style`), so the event says which.
+  // [LAW:types-are-the-program] Exhaustive over the kinds: a new kind is a
+  // compile error here until the event says how to name it.
+  const tagOf = (w: (typeof warnings)[number]): string => {
+    switch (w.kind) {
+      case "rule":
+        return `rule:${w.slot}`;
+      case "load":
+      case "band-floor":
+        return w.kind;
+    }
+  };
+  const warned = warnings.map(tagOf).join(",") || "-";
   noteFacts(facts, {
     git: `${g.size}/${g.hits}h/${g.misses}m`,
     usage: `${u.size}/${u.hits}h/${u.misses}m`,
