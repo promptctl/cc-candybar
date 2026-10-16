@@ -500,7 +500,8 @@ const TMUX_ENV: TmuxEnv = TmuxEnv {
 const CONFIG_ENV: &str = "CC_CANDYBAR_CONFIG";
 
 fn detect_config_env(cwd: &std::path::Path) -> Option<String> {
-    config_env_hint(env::var(CONFIG_ENV).ok(), cwd, env::var("HOME").ok())
+    let home = env::home_dir().and_then(|h| h.to_str().map(String::from));
+    config_env_hint(env::var(CONFIG_ENV).ok(), cwd, home)
 }
 
 // [LAW:dataflow-not-control-flow] Total by construction, like detect_ssh:
@@ -516,9 +517,10 @@ fn config_env_hint(
     Some(resolve_against(cwd, &expand_home(&raw, home)))
 }
 
-// expandHome in src/config/loader/discovery.ts: only bare `~` and `~/…` name
-// the home directory; `~alice/…` stays literal. Node's os.homedir() reads
-// HOME on POSIX, the one platform this client ships for.
+// expandHome in src/utils/user-path.ts: only bare `~` and `~/…` name the
+// home directory; `~alice/…` stays literal. `home` is env::home_dir, which
+// on POSIX — the one platform this client ships for — reads HOME and falls
+// back to the password database, as Node's os.homedir() does.
 fn expand_home(value: &str, home: Option<String>) -> String {
     match home {
         Some(home) if value == "~" || value.starts_with("~/") => format!("{home}{}", &value[1..]),

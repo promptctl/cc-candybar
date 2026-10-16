@@ -21,7 +21,7 @@ import JSON5 from "json5";
 import { type DslConfig, type RawDslConfig } from "../dsl-types.js";
 import { listResolvablePaletteNames } from "../../themes/policy.js";
 import { ConfigError, type ConfigIssue } from "./diagnostics.js";
-import { resolveUserPath } from "./discovery.js";
+import { resolveUserPath } from "../../utils/user-path.js";
 import { type Checkout } from "../../utils/git-root.js";
 import {
   isPlainObject,

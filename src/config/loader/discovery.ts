@@ -1,5 +1,5 @@
 // [LAW:single-enforcer] Config-file discovery: where the DSL config can live, in
-// what precedence, and how `~` expands. One candidate-path enumerator feeds the
+// what precedence. One candidate-path enumerator feeds the
 // resolver, the watchers, and the collision detector so none can disagree about
 // which files are candidates. This file changes when the resolution rules change.
 
@@ -35,33 +35,6 @@ function presence(path: string): Presence {
   }
 }
 
-// [LAW:single-enforcer] One implementation of `~`-prefix expansion; a path a
-// user writes reaches it through `resolveUserPath` below. Every path that
-// reaches the rest of this module is already literal.
-//
-// [LAW:types-are-the-program] Only the shell-standard home-expansion forms trigger
-// replacement: bare `~`, `~/...`, or `~\...` on Windows. A string like
-// `~alice/cfg` (POSIX named-home lookup) is NOT expanded — we have no way
-// to resolve another user's home and a literal substitution would corrupt
-// the path (`<homedir>alice/cfg`).
-function expandHome(p: string): string {
-  return p === "~" || p.startsWith("~/") || p.startsWith("~\\")
-    ? os.homedir() + p.slice(1)
-    : p;
-}
-
-// [LAW:single-enforcer] The one rule for a path a user writes — the
-// `CC_CANDYBAR_CONFIG` a client reports, a statusline command's `--config`,
-// the `check`/`doctor`/gallery argument, a plugin list entry or data file:
-// `~` expanded, then made absolute against `base`, the directory it was
-// written relative to. For a path named in a session that is the client's
-// cwd, never the detached daemon's (brandon-config-nuq6: a relative override
-// resolved against whichever shell spawned the daemon); for one named in a
-// file, that file's directory.
-export function resolveUserPath(base: string, p: string): string {
-  return path.resolve(base, expandHome(p));
-}
-
 /**
  * The full ordered list of candidate paths the DSL config could live at,
  * for a given (projectDir, cwd). Returned regardless of which exist — the
@@ -70,7 +43,7 @@ export function resolveUserPath(base: string, p: string): string {
  *
  * `configFile` is the highest-precedence entry — the explicit path
  * server.ts composed for the session (load-config pick > `--config` >
- * `configEnv` hint, already literal). When present, it is the
+ * `configEnv` hint, absolute). When present, it is the
  * sole candidate and the rest of the precedence chain is bypassed. This
  * module reads no environment of its own: the daemon is detached and
  * one-per-user, so its env answers for whichever shell spawned it, not for
@@ -168,7 +141,7 @@ export type ConfigResolution =
 /**
  * The search, over the locations of `dslConfigCandidatePaths`:
  *   1. `configFile` — the session's explicit path (load-config pick >
- *      `--config` > `configEnv` hint, composed literal in server.ts); the
+ *      `--config` > `configEnv` hint, composed absolute in server.ts); the
  *      sole candidate when present
  *   2. `<projectDir>/.cc-candybar.json5`, then `.json`
  *   3. `<cwd>/.cc-candybar.json5`, then `.json`

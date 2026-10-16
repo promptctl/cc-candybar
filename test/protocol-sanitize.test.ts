@@ -5,6 +5,7 @@
 
 import {
   parseClientHints,
+  refusedHintsError,
   sanitizeSsh,
   sanitizeTermExtent,
   sanitizeTmux,
@@ -157,6 +158,20 @@ describe("parseClientHints (the one wire checkpoint)", () => {
       expect("configEnv" in parseClientHints(req({ configEnv }))).toBe(false);
     }
     expect("configEnv" in parseClientHints(req({}))).toBe(false);
+  });
+
+  // A hint the client sent and the checkpoint refused is named on the bar;
+  // one never sent, and one taken, are not.
+  test("refusedHintsError names exactly the sent hints the checkpoint refused", () => {
+    const refused = (extra: Record<string, unknown>) =>
+      refusedHintsError(extra, parseClientHints(req(extra)));
+    expect(refused({})).toBeNull();
+    expect(
+      refused({ termCols: 80, tmux: null, configEnv: "/etc/c.json5" }),
+    ).toBeNull();
+    expect(refused({ termCols: 80, configEnv: "c.json5", ssh: "yes" })).toMatch(
+      /^Client hints refused: ssh="yes", configEnv="c.json5" — /,
+    );
   });
 
   // termRows is the third hint: same sanitizer as termCols, same absence

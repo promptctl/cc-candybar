@@ -18,6 +18,7 @@ import {
   hookData,
   killAndWait,
   render,
+  renderRequest,
   stripAnsi,
 } from "./helpers/daemon-e2e";
 import {
@@ -171,6 +172,31 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
     );
     expect(bar).toContain("OVERRIDE-WINS");
     expect(bar).not.toContain("Config file not found");
+  });
+
+  // brandon-config-nuq6: a client older than the daemon sends the variable
+  // raw. The checkpoint refuses it — the daemon would read it against its own
+  // cwd — and the bar says so rather than rendering another config unexplained.
+  test("a relative configEnv hint is refused on the bar, not resolved against the daemon's cwd", async () => {
+    const bar = stripAnsi(
+      await render(sockPath, "cfg-env-stale-client", projectDir, {
+        configEnv: path.basename(override),
+      }),
+    );
+    expect(bar).toContain('Client hints refused: configEnv="override.json5"');
+    expect(bar).not.toContain("OVERRIDE-WINS");
+  });
+
+  // The request's cwd anchors a relative --config, so a relative cwd is a
+  // frame no client of ours builds: refused, never anchored at the daemon's.
+  test("a render request whose cwd is not absolute is a bad request", async () => {
+    await expect(
+      renderRequest(sockPath, {
+        hookData: hookData("cfg-relative-cwd", projectDir),
+        args: configFlag("override.json5"),
+        cwd: "proj",
+      }),
+    ).rejects.toThrow(/request 'cwd' is not an absolute path: "proj".*BAD_REQUEST/);
   });
 
   // The production wiring end to end: the REAL client (`dist/index.mjs`,

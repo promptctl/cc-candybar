@@ -30,10 +30,10 @@ import {
   configResolutionNotice,
   detectConfigCollisions,
   ConfigError,
-  resolveUserPath,
   type DroppedPlugin,
 } from "./config/dsl-loader.js";
 import { detectConfigEnv } from "./config-hint.js";
+import { explicitConfigPath } from "./utils/user-path.js";
 import { autoCompactControls } from "./segments/autocompact.js";
 import type { ValidatedConfig } from "./config/dsl-types.js";
 import { DEFAULT_DSL_CONFIG } from "./config/default-dsl-config.js";
@@ -261,8 +261,7 @@ export async function checkConfig(
   // probe at the argv trust boundary, not a second read: a directory target
   // (`check .`) fails read() with a path-less EISDIR the catch could not
   // attribute, so the not-a-file usage error is decided here.
-  const configPath =
-    target === undefined ? null : resolveUserPath(process.cwd(), target);
+  const configPath = explicitConfigPath(cwd, target) ?? null;
   const layers =
     configPath === null ? searchedLayers(cwd, warnings) : [configPath];
   if (configPath !== null) {

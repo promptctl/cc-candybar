@@ -31,7 +31,7 @@ import {
   type HandlerProbeEdge,
 } from "./handler-probe.js";
 import { detectConfigEnv } from "../config-hint.js";
-import { resolveUserPath } from "../config/dsl-loader.js";
+import { explicitConfigPath } from "../utils/user-path.js";
 import { fallbackState, loadFromDisk } from "../daemon/cache/render.js";
 import { SessionState } from "../daemon/session-state.js";
 import { detectClaudeConfigDir } from "../claude-settings.js";
@@ -98,7 +98,10 @@ export async function doctorPlan(
       {
         projectDir: cwd,
         cwd,
-        configFile: configFile ?? detectConfigEnv(env, cwd) ?? null,
+        configFile:
+          explicitConfigPath(cwd, configFile) ??
+          detectConfigEnv(env, cwd) ??
+          null,
       },
       // No session: the bar a session started here opens on.
       () => null,
@@ -135,7 +138,7 @@ export async function runDoctorCli(args: readonly string[]): Promise<never> {
     productionHandlerProbeEdge(),
     process.env,
     cwd,
-    args[0] === undefined ? undefined : resolveUserPath(cwd, args[0]),
+    args[0],
   );
   process.stdout.write(plan.stdout);
   process.stderr.write(plan.stderr);

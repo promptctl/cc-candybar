@@ -119,6 +119,20 @@ export interface ClientHints {
   readonly mementoEnv?: MementoEnvHint;
 }
 
+// [LAW:one-source-of-truth] Every field of ClientHints, keyed by the type so
+// a new hint is a compile error here until it is listed.
+const CLIENT_HINT_FIELDS = Object.keys({
+  termCols: true,
+  termRows: true,
+  ssh: true,
+  tmux: true,
+  configEnv: true,
+  claudeConfigDir: true,
+  mementoEnv: true,
+} satisfies Record<keyof ClientHints, true>) as ReadonlyArray<
+  keyof ClientHints
+>;
+
 // [LAW:single-enforcer] The ONE checkpoint where wire-supplied client hints
 // become trusted values. Per-field sanitizers stay separate (each fact has its
 // own validity rule) but every hint crosses HERE, so a new hint cannot reach
@@ -145,6 +159,30 @@ export function parseClientHints(
     ...(claudeConfigDir !== undefined && { claudeConfigDir }),
     ...(mementoEnv !== undefined && { mementoEnv }),
   };
+}
+
+// [LAW:no-silent-failure] A hint the client SENT that the checkpoint refused
+// is not the same fact as one it never sent: the render goes on without it
+// (one malformed field must not cost the bar), but the bar says so — the red
+// strip's line, null when every sent hint was taken. The producer that reaches
+// this is a client older than the daemon whose hint contract has since
+// tightened (brandon-config-nuq6: `configEnv` was raw, now absolute), which
+// would otherwise render a different config with no word why. Derived from
+// the raw request and the stamped hints, so no sanitizer learns a third state.
+export function refusedHintsError(
+  req: Partial<Record<keyof ClientHints, unknown>>,
+  hints: ClientHints,
+): string | null {
+  const refused = CLIENT_HINT_FIELDS.filter(
+    (k) => req[k] !== undefined && hints[k] === undefined,
+  );
+  return refused.length === 0
+    ? null
+    : `Client hints refused: ${refused
+        .map((k) => `${k}=${JSON.stringify(req[k])}`)
+        .join(
+          ", ",
+        )} — is the statusline client older than the daemon? Reinstall it (\`cc-candybar install\`, or \`just install-rust\` in a checkout).`;
 }
 
 // [LAW:no-defensive-null-guards] exception: trust boundary, same shape as

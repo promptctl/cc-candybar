@@ -755,6 +755,18 @@ describe("checkConfig — default resolution (the daemon's own chain)", () => {
     expect(absent.kind).toBe("unreadable");
   });
 
+  // brandon-config-nuq6: a relative target names a file from the cwd the
+  // check runs in — its parameter — never the process's.
+  it("resolves a relative target against its cwd", async () => {
+    const p = write(
+      "rel/target.json5",
+      `{ segments: { a: { template: 'rel' } }, root: { h: ['a'] } }`,
+    );
+    const outcome = await checkConfig("target.json5", path.join(dir, "rel"));
+    expect(outcome.kind).toBe("clean");
+    if (outcome.kind === "clean") expect(outcome.layers).toEqual([p]);
+  });
+
   it("surfaces the .json5/.json collision as a warning on a CLEAN exit", async () => {
     const cwd = path.join(dir, "collide");
     write(

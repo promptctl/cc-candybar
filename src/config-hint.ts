@@ -1,4 +1,4 @@
-import { resolveUserPath } from "./config/loader/discovery";
+import { explicitConfigPath } from "./utils/user-path";
 
 // The client's explicit-config probe — the `CC_CANDYBAR_CONFIG` the shell
 // Claude Code spawned the statusline in carries, read from the client's own
@@ -31,6 +31,5 @@ export function detectConfigEnv(
   env: Readonly<Record<string, string | undefined>>,
   cwd: string,
 ): string | undefined {
-  const value = env[CONFIG_ENV] ?? "";
-  return value === "" ? undefined : resolveUserPath(cwd, value);
+  return explicitConfigPath(cwd, env[CONFIG_ENV]);
 }

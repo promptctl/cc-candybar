@@ -19,7 +19,7 @@
 
 import process from "node:process";
 
-import { resolveUserPath } from "../config/loader/discovery.js";
+import { resolveUserPath } from "../utils/user-path.js";
 import { resolveEffectiveGlobals } from "../daemon/render-payload.js";
 import { prepareConfig, renderEffective } from "../check.js";
 import { listResolvablePaletteNames } from "../themes/policy.js";

@@ -203,6 +203,7 @@ describe("doctorPlan over a real config", () => {
     expect(out.stdout).toMatch(/errorAt/);
   });
 
+  // Named relative to the doctor's cwd, never the process's (brandon-config-nuq6).
   test("a file named on the command line is the one checked, over $CC_CANDYBAR_CONFIG", async () => {
     const named = path.join(dir, "named.json5");
     const hinted = path.join(dir, "hinted.json5");
@@ -215,7 +216,7 @@ describe("doctorPlan over a real config", () => {
           NO_HANDLER,
           inDir({ CC_CANDYBAR_CONFIG: hinted }),
           project,
-          named,
+          path.relative(project, named),
         )
       )
         .stdout,
