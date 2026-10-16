@@ -1,7 +1,8 @@
 // [LAW:nothing-unseen] brandon-workflow-mgo2, measured on a REAL daemon: the
 // branch's PR reaches the bar in whatever state the forge reports it — open,
 // merged or closed — and the render event says which (`pr=`), `failed` when the
-// forge could not answer and `-` when the branch has none. The forge is a stub
+// forge could not answer, `earlier-<state>` when the forge's PR is an older use
+// of the branch's name (REUSED), and `-` when it has none. The forge is a stub
 // `gh` on the daemon's PATH answering by branch name, so the whole chain runs:
 // forge CLI → parser → payload → render event, and lit's work-loop stage
 // (examples/plugins/lit) reading that payload over the checkout's own

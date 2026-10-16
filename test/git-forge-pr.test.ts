@@ -202,8 +202,13 @@ describe("classifyForgePr (gitlab)", () => {
 // A branch name reused after its PR concluded gets that PR back from the
 // forge: it is the branch's only while HEAD is still the PR's head.
 describe("prOfHead", () => {
-  const pr = (state: PrState) =>
-    ok({ number: 7, state, url: "https://x/7", head: "aaa" });
+  const pull = (state: PrState) => ({
+    number: 7,
+    state,
+    url: "https://x/7",
+    head: "aaa",
+  });
+  const pr = (state: PrState) => ok(pull(state));
 
   test.each<[PrState, string, boolean]>([
     ["open", "aaa", true],
@@ -213,11 +218,23 @@ describe("prOfHead", () => {
     ["closed", "aaa", true],
     ["closed", "bbb", false],
   ])("a %s PR, HEAD %s → the branch's: %s", (state, head, kept) => {
-    expect(prOfHead(pr(state), ok(head))).toEqual(kept ? pr(state) : ABSENT);
+    expect(prOfHead(pr(state), ok(head))).toEqual(
+      kept ? pr(state) : { kind: "earlier", value: pull(state) },
+    );
   });
 
-  test("an unborn HEAD has no concluded PR; no PR and a failure pass through", () => {
-    expect(prOfHead(pr("merged"), ABSENT)).toEqual(ABSENT);
+  test("an unborn HEAD's concluded PR is an earlier one; an unreadable HEAD fails it", () => {
+    expect(prOfHead(pr("merged"), ABSENT)).toEqual({
+      kind: "earlier",
+      value: pull("merged"),
+    });
+    expect(prOfHead(pr("closed"), failed("no oid"))).toEqual(
+      failed("HEAD: no oid"),
+    );
+    expect(prOfHead(pr("open"), failed("no oid"))).toEqual(pr("open"));
+  });
+
+  test("no PR and a failed lookup pass through", () => {
     expect(prOfHead(ABSENT, ok("aaa"))).toEqual(ABSENT);
     const f = failed("gh pr view: HTTP 401");
     expect(prOfHead(f, ok("aaa"))).toEqual(f);
