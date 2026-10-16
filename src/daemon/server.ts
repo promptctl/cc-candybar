@@ -101,6 +101,7 @@ import type { RichText } from "@promptctl/rich-js";
 import {
   buildRenderPayload,
   renderOptionsOf,
+  prFactOf,
   renderSelectionOf,
   resolveEffectiveGlobals,
   type EffectiveGlobals,
@@ -1390,11 +1391,7 @@ async function renderRequest(
   noteFacts(facts, {
     prompts: String(payload.metrics?.messageCount ?? "-"),
     nonPrompts: String(payload.metrics?.nonPrompts ?? "-"),
-    // Where the branch's PR stands, `failed` when the forge could not say,
-    // `-` when the payload carries none (no PR, or no segment reads one).
-    pr:
-      payload.git?.prState ??
-      (payload.git?.prError === undefined ? "-" : "failed"),
+    pr: prFactOf(payload.git),
   });
   // [LAW:no-silent-failure] What renderDsl had to settle for itself and could
   // not honour (`RenderWarning`). Collected per render into a local, so there

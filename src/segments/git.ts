@@ -54,13 +54,24 @@ export interface PullRequest {
 // reused after its PR merged or closed (a reopened ticket's branch) gets the
 // old PR back. An open PR is the branch's whatever its head; a concluded one
 // only while it still describes HEAD — once the branch moves off it, the work
-// on it is new and has no PR yet.
+// on it is new and has no PR yet. That PR is kept as `earlier` rather than
+// dropped, so "the forge answered with an older use of this name" stays
+// distinct from "the forge has no PR"; an unborn HEAD has no commit any PR
+// could describe, and a HEAD that could not be read leaves the PR's owner
+// unknown, which is the lookup failing.
+export type BranchPr =
+  | Outcome<PullRequest>
+  | { readonly kind: "earlier"; readonly value: PullRequest };
+
 export function prOfHead(
   pr: Outcome<PullRequest>,
   head: Outcome<string>,
-): Outcome<PullRequest> {
+): BranchPr {
   if (pr.kind !== "ok" || pr.value.state === "open") return pr;
-  return head.kind === "ok" && head.value === pr.value.head ? pr : ABSENT;
+  if (head.kind === "failed") return failed(`HEAD: ${head.reason}`);
+  return head.kind === "ok" && head.value === pr.value.head
+    ? pr
+    : { kind: "earlier", value: pr.value };
 }
 
 // [LAW:parse-dont-validate] Each forge's exact state words, and only those: a

@@ -10,14 +10,14 @@ import { resolveThemeSelection } from "../src/themes/palette-resolvers.js";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { buildRenderPayload } from "../src/daemon/render-payload";
+import { buildRenderPayload, prFactOf } from "../src/daemon/render-payload";
 import { claudeConfigDir } from "../src/claude-settings";
 import type { ClientHints } from "../src/daemon/protocol";
 import type {
   EffectiveGlobals,
   RenderPayloadDeps,
 } from "../src/daemon/render-payload";
-import type { GitInfo } from "../src/segments/git";
+import type { GitInfo, GitInfoOptions, PrState } from "../src/segments/git";
 import { ABSENT, failed, ok, type Outcome } from "../src/utils/outcome";
 import { FLOOR_EFFECT, FLOOR_STYLE } from "./helpers/floor-style";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
@@ -543,8 +543,10 @@ describe("buildRenderPayload — git PR projection", () => {
   const PR_PATHS = new Set([
     "git.branch",
     "git.prNumber",
+    "git.prState",
     "git.prUrl",
     "git.prError",
+    "git.prEarlier",
   ]);
 
   test("open PR (ok) → prNumber/prState/prUrl projected, nothing logged", async () => {
@@ -583,6 +585,79 @@ describe("buildRenderPayload — git PR projection", () => {
     });
     expect("prError" in payload.git!).toBe(false);
     expect(logs).toEqual([]);
+  });
+
+  // A branch name reused after its PR concluded: HEAD moved off the PR's
+  // head, or is unborn on the reused name. The branch has no PR; the forge's
+  // older one is kept as its state alone.
+  test.each<[PrState, Outcome<string>]>([
+    ["merged", ok("c0ffee")],
+    ["closed", ok("c0ffee")],
+    ["merged", ABSENT],
+  ])(
+    "a %s PR whose head is not HEAD (%j) → only prEarlier",
+    async (state, head) => {
+      const logs: LogEntry[] = [];
+      const deps = depsWith(
+        ok({
+          branch: "feature",
+          status: "clean",
+          aheadBehind: ABSENT,
+          head,
+          pullRequest: ok({
+            number: 76,
+            state,
+            url: "https://github.com/x/y/pull/76",
+            head: "0ld0id",
+          }),
+        }),
+        logs,
+      );
+
+      const payload = await buildRenderPayload(
+        hookData("/no/such/transcript.jsonl"),
+        instantOf(new Date()),
+        deps,
+        undefined,
+        PR_PATHS,
+        EFFECTIVE_GLOBALS,
+        NO_HINTS,
+        NO_CONFIG_FILE,
+      );
+
+      expect(payload.git).toEqual({
+        branch: "feature",
+        status: "clean",
+        prEarlier: state,
+      });
+      expect(prFactOf(payload.git)).toBe(`earlier-${state}`);
+      expect(logs).toEqual([]);
+    },
+  );
+
+  test("a layout reading only git.prEarlier still asks the forge", async () => {
+    const asked: GitInfoOptions[] = [];
+    const deps = depsWith(ABSENT, [], {
+      gitProvider: {
+        getGitInfo: async (_dir: string, options: GitInfoOptions) => {
+          asked.push(options);
+          return ABSENT;
+        },
+      },
+    });
+
+    await buildRenderPayload(
+      hookData("/no/such/transcript.jsonl"),
+      instantOf(new Date()),
+      deps,
+      "/repo",
+      new Set(["git.prEarlier"]),
+      EFFECTIVE_GLOBALS,
+      NO_HINTS,
+      NO_CONFIG_FILE,
+    );
+
+    expect(asked).toEqual([expect.objectContaining({ showPullRequest: true })]);
   });
 
   test("lookup failed → prError surfaced AND logged (visible, distinct)", async () => {

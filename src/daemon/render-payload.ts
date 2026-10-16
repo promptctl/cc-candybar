@@ -531,7 +531,9 @@ export type MementoPayload =
 // input fallback chain emits the declared `default` and records a
 // `last_error` per field. The old coerce-to-''/0 shim erased the distinction
 // between "no stashes" and "stash count unknown because git failed".
-export interface GitPayload {
+export type GitPayload = GitFacts & PrPayload;
+
+interface GitFacts {
   readonly repoName?: string;
   // The repo's browsable web page (an https/http URL, credentials stripped),
   // derived from the same remotes read `repoName` is. Missing = the repo has no
@@ -554,16 +556,53 @@ export interface GitPayload {
   readonly status?: string;
   readonly operation?: string;
   readonly timeSinceCommit?: number;
-  // Forge PR/MR. [LAW:no-silent-failure] Unlike every other git field (where
-  // `failed` collapses to a missing key), the PR's failure is surfaced as
-  // `prError` so the segment can render a VISIBLY DISTINCT marker — a forge
-  // outage must not look like "no PR". The three render-distinguishable states:
-  // open PR (prNumber/prState/prUrl present), lookup failed (prError present),
-  // no PR (all absent → segment when-gated off).
-  readonly prNumber?: number;
-  readonly prState?: PrState;
-  readonly prUrl?: string;
-  readonly prError?: string;
+}
+
+// Forge PR/MR. [LAW:no-silent-failure] Unlike every other git field (where
+// `failed` collapses to a missing key), the PR's failure is surfaced as
+// `prError` so the segment can render a VISIBLY DISTINCT marker — a forge
+// outage must not look like "no PR". [LAW:types-are-the-program] The four
+// arms of `BranchPr`, flat because templates read `.git.prState` and the rest,
+// and exclusive because every field outside an arm is `never` there: the
+// branch's PR (prNumber/prState/prUrl), lookup failed (prError), an earlier
+// PR of the branch's name (prEarlier — its state, no click target, since it is
+// not this work's), and no PR (all absent → segment when-gated off).
+interface PrFieldTypes {
+  prNumber: number;
+  prState: PrState;
+  prUrl: string;
+  prError: string;
+  prEarlier: PrState;
+}
+type PrArm<K extends keyof PrFieldTypes> = {
+  readonly [F in K]: PrFieldTypes[F];
+} & { readonly [F in Exclude<keyof PrFieldTypes, K>]?: never };
+export type PrPayload =
+  | PrArm<"prNumber" | "prState" | "prUrl">
+  | PrArm<"prError">
+  | PrArm<"prEarlier">
+  | PrArm<never>;
+
+// [LAW:one-source-of-truth] Every PR field a template can lay out; reading any
+// of them turns on the forge lookup, so a new arm's field is a compile error
+// here until it does too.
+const PR_FIELDS: { readonly [F in keyof PrFieldTypes]: true } = {
+  prNumber: true,
+  prState: true,
+  prUrl: true,
+  prError: true,
+  prEarlier: true,
+};
+
+// The render event's `pr=`: the branch's PR state, `failed` when the forge
+// could not say, `earlier-<state>` when its PR was an older use of the
+// branch's name, `-` when the payload carries none (no PR, or no segment
+// reads one).
+export function prFactOf(pr: PrPayload | undefined): string {
+  if (pr?.prState !== undefined) return pr.prState;
+  if (pr?.prError !== undefined) return "failed";
+  if (pr?.prEarlier !== undefined) return `earlier-${pr.prEarlier}`;
+  return "-";
 }
 
 // Which machine this session is on, and whether the user got here over the
@@ -1151,12 +1190,10 @@ function gitOptionsFromClosure(needed: ReadonlySet<string>): GitInfoOptions {
     ...(has("git.repoUrl") && { showRepoUrl: true }),
     ...(has("git.operation") && { showOperation: true }),
     ...(has("git.timeSinceCommit") && { showTimeSinceCommit: true }),
-    // Any PR field laid out turns on the (network) forge lookup. Keep these in
-    // lockstep with the projected `git.pr*` fields below.
-    ...((has("git.prNumber") ||
-      has("git.prState") ||
-      has("git.prUrl") ||
-      has("git.prError")) && { showPullRequest: true }),
+    // Any PR field laid out turns on the (network) forge lookup.
+    ...(Object.keys(PR_FIELDS).some((f) => has(`git.${f}`)) && {
+      showPullRequest: true,
+    }),
   };
 }
 
@@ -1739,19 +1776,25 @@ function projectGitInfo(
     info.pullRequest === undefined
       ? undefined
       : prOfHead(info.pullRequest, info.head);
-  const prFields: {
-    prNumber?: number;
-    prState?: PrState;
-    prUrl?: string;
-    prError?: string;
-  } = {};
-  if (pr?.kind === "ok") {
-    prFields.prNumber = pr.value.number;
-    prFields.prState = pr.value.state;
-    prFields.prUrl = pr.value.url;
-  } else if (pr?.kind === "failed") {
-    failures.push(`git.pr: ${pr.reason}`);
-    prFields.prError = pr.reason;
+  let prFields: PrPayload = {};
+  switch (pr?.kind) {
+    case "ok":
+      prFields = {
+        prNumber: pr.value.number,
+        prState: pr.value.state,
+        prUrl: pr.value.url,
+      };
+      break;
+    case "failed":
+      failures.push(`git.pr: ${pr.reason}`);
+      prFields = { prError: pr.reason };
+      break;
+    case "earlier":
+      prFields = { prEarlier: pr.value.state };
+      break;
+    case "absent":
+    case undefined:
+      break;
   }
 
   return {
