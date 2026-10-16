@@ -1,3 +1,5 @@
+import { inspect } from "node:util";
+
 import type { LogLevel } from "./log";
 
 // How one render request ended. A render the daemon refused and a render that
@@ -26,21 +28,25 @@ const LEVEL: Record<RenderOutcome["kind"], LogLevel> = {
   threw: "error",
 };
 
-// The outcome's own detail, quoted so a message with spaces stays one value.
-function detailOf(outcome: RenderOutcome): string {
+// The outcome's own detail. A thrown value is described by `inspect`, which
+// is total over anything a render can throw and carries an Error's stack.
+function detailOf(outcome: RenderOutcome): RenderFacts {
   switch (outcome.kind) {
     case "ok":
-      return "";
+      return [];
     case "bad-request":
-      return ` problems=${JSON.stringify(outcome.problems.join("; "))}`;
+      return [["problems", outcome.problems.join("; ")]];
     case "threw":
-      return ` error=${JSON.stringify(
-        outcome.error instanceof Error
-          ? outcome.error.message
-          : String(outcome.error),
-      )}`;
+      return [["error", inspect(outcome.error)]];
   }
 }
+
+// logfmt: a value is written bare only when it cannot be misread as more than
+// one field; any other value is a JSON string. A value is often what a client
+// said (a session id), so no value can open a field or a line of its own.
+const BARE = /^[^\s"=\\]+$/;
+const valueOf = (value: string): string =>
+  BARE.test(value) ? value : JSON.stringify(value);
 
 // [LAW:nothing-unseen] The one render event: every render request writes this
 // line once, whatever its outcome, so the renders that fail are described by
@@ -50,9 +56,14 @@ export function renderEvent(
   outcome: RenderOutcome,
   tookMs: number,
 ): { readonly level: LogLevel; readonly line: string } {
-  const learned = facts.map(([key, value]) => ` ${key}=${value}`).join("");
+  const fields: RenderFacts = [
+    ...facts,
+    ["took", `${tookMs}ms`],
+    ["outcome", outcome.kind],
+    ...detailOf(outcome),
+  ];
   return {
     level: LEVEL[outcome.kind],
-    line: `render${learned} took=${tookMs}ms outcome=${outcome.kind}${detailOf(outcome)}`,
+    line: `render${fields.map(([key, value]) => ` ${key}=${valueOf(value)}`).join("")}`,
   };
 }

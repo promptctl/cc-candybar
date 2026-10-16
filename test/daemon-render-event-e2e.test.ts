@@ -38,8 +38,8 @@ type Event = {
   fields: ReadonlyArray<readonly [string, string]>;
 };
 
-// A log line's level and its `key=value` fields, in order. The outcome's own
-// detail (`error=` / `problems=`) is a JSON string, read whole and unquoted.
+// A log line's level and its `key=value` fields, in order. A value that could
+// be misread as more than one field is a JSON string, read whole and unquoted.
 function eventOf(line: string): Event {
   const [, level, rest] = line.match(/ \[(\w+)\] render (.*)$/)!;
   const fields = [...rest!.matchAll(/(\w+)=("(?:[^"\\]|\\.)*"|\S+)/g)].map(
@@ -59,6 +59,10 @@ function only(events: readonly Event[]): Event {
     throw new Error(`expected exactly one render event, got ${events.length}`);
   return event;
 }
+
+// A session id that would forge a field, and a second event, were it written
+// into the line as it was sent.
+const FORGING_SID = 'ev drawn outcome=threw\n2026-01-01 [error] render sid="x"';
 
 describe("every render request writes one render event, whatever its outcome", () => {
   let sockPath: string;
@@ -101,7 +105,7 @@ describe("every render request writes one render event, whatever its outcome", (
 
   test("a drawn bar, a thrown render and a refused request each leave an event naming their outcome", async () => {
     const hints = { termCols: 120, termRows: 40 };
-    await render(sockPath, "ev-drawn", projectDir, hints, configFlag("drawn"));
+    await render(sockPath, FORGING_SID, projectDir, hints, configFlag("drawn"));
     await expect(
       render(sockPath, "ev-threw", projectDir, hints, configFlag("broken")),
     ).rejects.toThrow(/the rule broke.*RENDER_FAILED/);
@@ -114,15 +118,21 @@ describe("every render request writes one render event, whatever its outcome", (
     ).rejects.toThrow(/BAD_REQUEST/);
 
     // A request the helper retried after a reply timeout is logged once per
-    // attempt; every attempt ended the same way.
-    const drawn = eventsOf("ev-drawn");
-    expect(drawn.length).toBeGreaterThanOrEqual(1);
-    for (const event of drawn) {
-      expect(event.level).toBe("info");
-      expect(field(event, "outcome")).toBe("ok");
-    }
+    // attempt: every attempt ended the same way, and exactly one of them is
+    // the reply the client read.
+    const attempts = (sid: string, outcome: string, level: string): Event => {
+      const events = eventsOf(sid);
+      for (const event of events) {
+        expect(event.level).toBe(level);
+        expect(field(event, "outcome")).toBe(outcome);
+      }
+      return only(events.filter((e) => field(e, "timedOut") === "N"));
+    };
+    // The forging sid is read back whole, as one field of one event.
+    const drawn = attempts(FORGING_SID, "ok", "info");
+    expect(renderEvents().filter((e) => field(e, "sid") === "x")).toEqual([]);
 
-    const thrown = only(eventsOf("ev-threw"));
+    const thrown = attempts("ev-threw", "threw", "error");
     expect(thrown.level).toBe("error");
     expect(field(thrown, "outcome")).toBe("threw");
     expect(field(thrown, "error")).toContain("the rule broke");
@@ -135,12 +145,14 @@ describe("every render request writes one render event, whatever its outcome", (
     const keys = (event: Event) =>
       event.fields
         .map(([k]) => k)
-        .filter((k) => !["took", "outcome", "error"].includes(k));
+        .filter((k) => !["timedOut", "took", "outcome", "error"].includes(k));
     const reached = keys(thrown);
-    expect(reached).toEqual(keys(drawn[0]!).slice(0, reached.length));
+    expect(reached).toEqual(keys(drawn).slice(0, reached.length));
     expect(reached).toContain("prompts");
     expect(reached).not.toContain("effect");
     expect(reached).not.toContain("warn");
+    // The event is the one record of the throw: the connection never saw it.
+    expect(readFileSync(logPath(env), "utf8")).not.toContain("handler threw");
 
     // A refused request names its problems. The request was not trusted, so
     // nothing it said is recorded as a fact of the render — not even its sid.

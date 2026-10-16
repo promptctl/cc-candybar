@@ -3,7 +3,7 @@ import net from "node:net";
 import v8 from "node:v8";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import { parseArgs } from "node:util";
+import { inspect, parseArgs } from "node:util";
 import {
   daemonDir,
   diagnosticsDir,
@@ -759,7 +759,9 @@ function handleConnection(sock: net.Socket): void {
   // duplicating. A timeout therefore adds zero new fs work — there is never
   // more than one scan per key to orphan. Cancellation would be both messier
   // and wasteful here (the in-flight scan is exactly what the next tick needs).
+  let timedOut = false;
   const timer = setTimeout(() => {
+    timedOut = true;
     stats.requestsTimedOut++;
     respond(
       {
@@ -774,19 +776,11 @@ function handleConnection(sock: net.Socket): void {
 
   const reader = makeFrameReader(
     (frame) => {
-      void handleRequest(frame as Request)
+      void handleRequest(frame as Request, () => timedOut)
         .then((r) => respond(r.resp, r.exitAfterFlush))
-        .catch((err) => {
-          dlog("error", `handler threw: ${err?.stack || err}`);
-          respond(
-            {
-              ok: false,
-              error: String(err?.message || err),
-              code: "RENDER_FAILED",
-              daemonV: PROTOCOL_VERSION,
-            },
-            null,
-          );
+        .catch((err: unknown) => {
+          dlog("error", `handler threw: ${inspect(err)}`);
+          respond(renderFailed(err), null);
         });
     },
     (err) => {
@@ -832,7 +826,19 @@ const stay = (resp: Response): HandledRequest => ({
   exitAfterFlush: null,
 });
 
-export async function handleRequest(req: Request): Promise<HandledRequest> {
+// [LAW:single-enforcer] The one reply to a request whose handler threw — a
+// render's own throw, or any other handler's that reached the connection.
+const renderFailed = (err: unknown): Response => ({
+  ok: false,
+  error: err instanceof Error ? err.message : inspect(err),
+  code: "RENDER_FAILED",
+  daemonV: PROTOCOL_VERSION,
+});
+
+export async function handleRequest(
+  req: Request,
+  timedOut: () => boolean,
+): Promise<HandledRequest> {
   if (
     !req ||
     typeof req !== "object" ||
@@ -912,20 +918,25 @@ export async function handleRequest(req: Request): Promise<HandledRequest> {
     // [LAW:nothing-unseen] One render event per render request, written here
     // on every exit — a refusal and a throw included — from the facts the
     // render reached, so a failing render is described like any other.
+    // A throw is this request's own RENDER_FAILED reply, so the event is the
+    // one record of it and the connection's catch never sees a render.
     const facts: RenderFacts = [];
-    const emit = (outcome: RenderOutcome): void => {
-      if (outcome.kind !== "ok") stats.requestsErrored++;
-      const { level, line } = renderEvent(facts, outcome, Date.now() - t0);
-      dlog(level, line);
-    };
-    try {
-      const rendered = await renderRequest(req, at, facts);
-      emit(rendered.outcome);
-      return stay(rendered.resp);
-    } catch (error) {
-      emit({ kind: "threw", error });
-      throw error;
-    }
+    const rendered = await renderRequest(req, at, facts).catch(
+      (error: unknown) => ({
+        outcome: { kind: "threw", error } as const,
+        resp: renderFailed(error),
+      }),
+    );
+    if (rendered.outcome.kind !== "ok") stats.requestsErrored++;
+    // Whether the client was already told TIMEOUT while this render ran on.
+    noteFacts(facts, { timedOut: timedOut() ? "Y" : "N" });
+    const { level, line } = renderEvent(
+      facts,
+      rendered.outcome,
+      Date.now() - t0,
+    );
+    dlog(level, line);
+    return stay(rendered.resp);
   }
 
   if (req.kind === "click") {
