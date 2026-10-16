@@ -189,9 +189,10 @@ export function settingControl(
     // closed, the setting's label and the swatch of the theme in force; open,
     // that theme's name and swatch, over the row of swatches and the two-row
     // demo of the theme selected. Brandon: "The name loses its styling and
-    // the swatch carries the colour."
+    // the swatch carries the colour." The name and the swatch are one button
+    // (`[Theme [=]]`): each is a link to the same open.
     return optionPicker(key, name, listKey, domain.themes, (n) => ({
-      template: `{{ action "${n.open}" "${label}" .${readVar} }} {{ swatch "${n.apply}" }}`,
+      template: `{{ action "${n.open}" "${label}" .${readVar} }} {{ action "${n.open}" (swatch "${n.apply}") }}`,
       rows: [
         `{{ swatches "${n.apply}" "${n.page}" }}`,
         `{{ themePreview "${n.apply}" }}`,

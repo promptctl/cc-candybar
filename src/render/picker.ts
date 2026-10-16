@@ -195,6 +195,17 @@ export type PickerClose =
     }
   | { readonly kind: "led" };
 
+// [LAW:types-are-the-program] A cell laid before the page — a `{{ swatches }}`
+// row's ◀ ? ▶ — that applies `option` and turns the picker to the page holding
+// it, so the row follows the value it moved. The page is the one this render
+// lays out, written as itself: no sentinel a page cursor's other readers (a
+// standalone picker's `when`, which reads below zero as closed) could take
+// for something else.
+export interface PickerStep {
+  readonly glyph: string;
+  readonly option: string;
+}
+
 // [LAW:no-defensive-null-guards] The loader proves both picker arg names resolve
 // to declared actions; this asserts the KIND each must be (apply ⇒ set-option,
 // page ⇒ set-int) — a wrong kind is an author error surfaced loudly at render
@@ -204,15 +215,31 @@ export function requireKind<K extends CompiledActionDecl["kind"]>(
   name: string,
   kind: K,
   shape: string,
+  helper: OptionHelper,
 ): Extract<CompiledActionDecl, { kind: K }> {
   const action = runtime.compiled.get(name);
   if (!action || action.kind !== kind) {
     throw new Error(
-      `picker references action "${name}" which must be ${shape}, got ${action ? `a ${action.kind} action` : "no such action"}`,
+      `${helper} references action "${name}" which must be ${shape}, got ${action ? `a ${action.kind} action` : "no such action"}`,
     );
   }
   return action as Extract<CompiledActionDecl, { kind: K }>;
 }
+
+// The template functions that bind an option action, each named in the errors
+// its own call raises.
+export type OptionHelper =
+  | "picker"
+  | "menu"
+  | "carousel"
+  | "swatch"
+  | "swatches"
+  | "themePreview";
+
+export type OptionAction = Extract<
+  CompiledActionDecl,
+  { kind: "set-option" | "persist-option" | "layout-op-option" }
+>;
 
 // [LAW:one-source-of-truth] The apply action a picker grid binds to is one of
 // THREE option-domain-driven kinds (src/render/action.ts): set-option/
@@ -234,17 +261,8 @@ export function requireKind<K extends CompiledActionDecl["kind"]>(
 export function requireOptionKind(
   runtime: ActionRuntime,
   name: string,
-  helper:
-    | "picker"
-    | "menu"
-    | "carousel"
-    | "swatch"
-    | "swatches"
-    | "themePreview",
-): Extract<
-  CompiledActionDecl,
-  { kind: "set-option" | "persist-option" | "layout-op-option" }
-> {
+  helper: OptionHelper,
+): OptionAction {
   // [LAW:dataflow-not-control-flow] A `do` resolves to its head BEFORE the
   // kind check, so a picker over a `do` headed by an option action is a picker
   // over that option kind — the grid, its current-mark, and its close folding
@@ -277,6 +295,11 @@ export function requireOptionKind(
 // wrapper, never a parallel picker.
 export function renderPicker(
   applyName: string,
+  // [LAW:parse-dont-validate] The caller's own `requireOptionKind` of
+  // `applyName`, under its own helper's name: each caller needs the action
+  // before the grid (its painter), so the grid takes the checked one rather
+  // than asking again under a name the template never called.
+  apply: OptionAction,
   page: PickerPage,
   close: PickerClose,
   paged: boolean,
@@ -285,11 +308,10 @@ export function renderPicker(
   // The ✕'s text on the ground the picker is laid on (`closeOn`): the caller
   // knows that ground — a menu body's plane, a bare picker's own segment.
   closeStyle: Style,
-  // Cells the caller lays before the page, after any ✕ — a `{{ swatches }}`
+  // Steps the caller lays before the page, after any ✕ — a `{{ swatches }}`
   // row's ◀ ? ▶. The page is fitted to what they leave of the row.
-  lead: readonly RichText[] = [],
+  steps: readonly PickerStep[] = [],
 ): readonly RichText[] {
-  const apply = requireOptionKind(runtime, applyName, "picker");
   // [LAW:one-source-of-truth] The GRID reads the presented action above (its
   // options, its current-mark); the CLICK is realized from the declaration
   // itself, through the same fold `{{ action }}` uses. That is what carries a
@@ -330,7 +352,7 @@ export function renderPicker(
       : rowBudget(runtime);
   const navReserve =
     (close.kind === "led" ? 0 : cellWidth(DISCLOSURE_GLYPH_CLOSE) + 1) +
-    lead.reduce((cols, cell) => cols + cell.cellLength + 1, 0);
+    steps.reduce((cols, step) => cols + cellWidth(step.glyph) + 1, 0);
 
   // [LAW:dataflow-not-control-flow] A page is the sections it shows; a plain
   // domain's one section is the run of cells `paginate` fits to the width, and
@@ -342,11 +364,16 @@ export function renderPicker(
     groups: apply.library.groups,
     entries: apply.options.map(apply.library.entry),
   };
+  // A grid's cells are drawn once: measured to page them, then laid.
+  const gridFaces =
+    catalogue === undefined
+      ? apply.options.map((option, i) => optionFace(i, option))
+      : [];
   const pages: readonly LibraryPageLayout[] =
     catalogue !== undefined
       ? libraryLayout(catalogue.entries, catalogue.groups, paged)
       : gridPages(
-          apply.options.map((option, i) => optionFace(i, option).cellLength),
+          gridFaces.map((face) => face.cellLength),
           available,
           navReserve,
         );
@@ -355,16 +382,19 @@ export function renderPicker(
   // (the key was never written) — parse it at this trust boundary; an unset
   // value is the first page and one past the end the last, so the picker never
   // indexes a non-existent page. A value below zero is the page holding the
-  // option in force (PAGE_HOLDING_CURRENT): a list opens where its value is,
-  // and a click that moves the value moves the view with it. (A standalone
-  // picker's `when` hides it at page < 0, so it never draws one.)
+  // option in force (PAGE_HOLDING_CURRENT): a list opens where its value is.
+  // (A standalone picker's `when` hides it at page < 0, so it never draws
+  // one — which is why a step writes the page it lands on, never that.)
   const rawPage = parseInt(readVar(store, page.stateVar), 10);
-  const inForce = current === undefined ? -1 : apply.options.indexOf(current);
-  const holding = Math.max(
-    0,
-    pages.findIndex((sections) =>
-      sections.some((section) => section.indices.includes(inForce)),
-    ),
+  const pageHolding = (index: number): number =>
+    Math.max(
+      0,
+      pages.findIndex((sections) =>
+        sections.some((section) => section.indices.includes(index)),
+      ),
+    );
+  const holding = pageHolding(
+    current === undefined ? -1 : apply.options.indexOf(current),
   );
   const pageIdx = !Number.isInteger(rawPage)
     ? 0
@@ -404,8 +434,8 @@ export function renderPicker(
       ...closeEffects,
     ]);
 
-  const optionCell = (i: number, label: string): RichText =>
-    linkOver(optionFace(i, label), optionUrl(apply.options[i]!));
+  const optionCell = (face: RichText, i: number): RichText =>
+    linkOver(face, optionUrl(apply.options[i]!));
   // [LAW:dataflow-not-control-flow] A led picker is closed by the body's ✕.
   const nav: RichText[] =
     close.kind === "led"
@@ -418,7 +448,27 @@ export function renderPicker(
             closeStyle,
           ),
         ];
-  nav.push(...lead);
+  // A step applies its option and turns to the page holding it — one click,
+  // one batch of session writes.
+  nav.push(
+    ...steps.map(({ glyph, option }) =>
+      linkFragment(
+        glyph,
+        effectsUrl([
+          ...realize(declared, option, option, store, sessionId).effects,
+          {
+            verb: VERB_SET_STATE,
+            args: [
+              sessionId,
+              page.key,
+              String(pageHolding(apply.options.indexOf(option))),
+            ],
+          },
+        ]),
+        false,
+      ),
+    ),
+  );
   if (pageIdx > 0) {
     nav.push(linkFragment(PICKER_PREV, pageUrl(pageIdx - 1), false));
   }
@@ -431,11 +481,7 @@ export function renderPicker(
     const indices = pageSections.flatMap((section) => section.indices);
     return [
       assemble(
-        [
-          ...nav,
-          ...indices.map((i) => optionCell(i, apply.options[i]!)),
-          ...next,
-        ],
+        [...nav, ...indices.map((i) => optionCell(gridFaces[i]!, i)), ...next],
         paged,
       ),
     ];
@@ -471,7 +517,12 @@ export function renderPicker(
       const gap = " ".repeat(nameWidth - cellWidth(option) + 2);
       const row =
         description === undefined ? option : `${option}${gap}${description}`;
-      lines.push(assemble([optionCell(i, fitCells(row, available))], paged));
+      lines.push(
+        assemble(
+          [optionCell(optionFace(i, fitCells(row, available)), i)],
+          paged,
+        ),
+      );
     }
   }
   return lines;
@@ -525,6 +576,7 @@ export function pickerFuncs(
           pageName,
           "set-int",
           "an int action ({ set, int: true })",
+          "picker",
         );
         // [LAW:no-silent-failure] A body's ✕ closes a led picker, and the
         // picker cannot know what that ✕ writes, so it has no close to fold
@@ -552,6 +604,7 @@ export function pickerFuncs(
         }
         const [line] = renderPicker(
           applyName,
+          apply,
           { key: page.key, stateVar: page.stateVar },
           inBody === true
             ? { kind: "led" }

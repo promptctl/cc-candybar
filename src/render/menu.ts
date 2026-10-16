@@ -169,8 +169,10 @@ function renderMenu(
       placement.disclosure,
       drawnAt,
     ).plane;
+    const apply = requireOptionKind(action, applyName, "menu");
     return renderPicker(
       applyName,
+      apply,
       { key: pageKey, stateVar: pageKey },
       {
         kind: "own",
@@ -191,7 +193,7 @@ function renderMenu(
         placement,
         options.distribution,
         renderLook(action, "{{ menu }}"),
-        requireOptionKind(action, applyName, "menu").paletteOf,
+        apply.paletteOf,
         drawnAt,
         plane,
       ),

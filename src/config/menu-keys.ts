@@ -44,8 +44,7 @@ import {
 // loader and the helper call this so neither restates the rule.
 // [LAW:one-source-of-truth] The page cursor's value for "the page holding the
 // option in force": a picker reads any page below zero that way
-// (render/picker.ts), so a list opened with it opens where its value is, and a
-// click that moves the value can move the view with it by writing it too.
+// (render/picker.ts), so a list opened with it opens where its value is.
 export const PAGE_HOLDING_CURRENT = "-1";
 
 export function menuMember(applyName: string): string {

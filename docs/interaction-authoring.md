@@ -1621,15 +1621,19 @@ alerts — each drawn by the same function the bar draws that cell with, so it
 cannot show a colour the bar under that theme would not. Under a carousel whose
 every click applies, that is the theme (or style) at the centre of the ring.
 Named an option action, `{{ themePreview "applyAction" }}` samples instead the
-palette the option that action's key holds puts in force — what the settings
-menu's theme picker demos — and an action over a domain that is not
-colour-valued is a render error, `themePreview references action "x", whose
-options are not colour-valued…`.
+palette the action's domain draws the option its key holds in — what the
+settings menu's theme picker demos. Over `themes` that is the theme as it
+ships, with no style applied: the theme picker shows the theme, and the style
+control beside it shows the style, so under a style the demo is not the bar's
+own colours (`{{ themePreview }}` with no name is). An action over a domain
+that is not colour-valued is a render error, `themePreview references action
+"x", whose options are not colour-valued…`.
 
 `{{ swatch "applyAction" }}` is the swatch of the option the action's key holds;
 `{{ swatch "applyAction" "nord" }}` the swatch of the option named. It is what
 stands beside a theme name, so a name you show in your own template can carry
-it too. `{{ swatches "applyAction" "pageAction" }}` is the theme picker's row:
+it too, and an `{{ action }}` display may be one, so the swatch is the button:
+`{{ action "openThemes" (swatch "applyTheme") }}`. `{{ swatches "applyAction" "pageAction" }}` is the theme picker's row:
 `◀ ? ▶` applying the previous option, a random one other than the one in force
 and the next, then a page of swatches, each applying its option, the one in
 force bracketed, with `←`/`→` turning the page through the `int` action
@@ -1657,8 +1661,10 @@ force bracketed, with `←`/`→` turning the page through the `int` action
 ```
 
 A page cursor below zero is the page holding the option in force, so the row
-opens where the theme is, and `◀ ? ▶` write it beside the theme they apply, so
-the row follows the theme they land on.
+opens where the theme is, and `◀ ? ▶` turn the row to the page holding the
+theme they apply, so the row follows the theme they land on. They write that
+page as its number, so a cursor your own `when` reads as closed below zero
+stays open.
 
 `{{ layoutPreview }}` is the same idea for the arrangement: one line per row of
 the layout the bar is in, each segment a block labelled with its name (less any

@@ -58,11 +58,7 @@ import {
   renderLayoutPreview,
 } from "../src/render/layout-preview";
 import { layoutRows, type CompiledNode } from "../src/dsl/node-registry";
-import {
-  menuPageKey,
-  PAGE_HOLDING_CURRENT,
-  sharedMenuStateKey,
-} from "../src/config/menu-keys";
+import { menuPageKey, sharedMenuStateKey } from "../src/config/menu-keys";
 import { randomOther, SWATCHES_RANDOM } from "../src/render/swatches";
 import { EDIT_MODE_KEY, EDIT_MODE_ARRANGE } from "../src/config/loader/edit-mode";
 import { EDIT_NS } from "../src/config/loader/reserved-namespace";
@@ -422,7 +418,8 @@ describe("the settings menu's look controls are pickers whose name opens a list"
       .map((l) => ({
         text: stripAnsi(l.text),
         writes: effectsOf(l.url).find((e) => e.args[1] === "theme")?.args[2],
-      }));
+      }))
+      .filter((c) => c.writes !== undefined);
 
   test("closed, the theme picker is its label and the swatch of the theme in force, beside the gear", () => {
     const rt = rig(`{ globals: { palette: 'nord' } }`);
@@ -431,8 +428,24 @@ describe("the settings menu's look controls are pickers whose name opens a list"
     rt.clickText("🎨 look");
     const rendered = rt.render();
     expect(stripAnsi(rendered)).toContain("🎨 theme ▀▀▀");
+    // The label and the swatch are one button (`[Theme [=]]`): both open it.
+    const opens = links(rendered).filter((l) =>
+      ["🎨 theme", "▀▀▀"].includes(stripAnsi(l.text)),
+    );
+    expect(opens.map((l) => stripAnsi(l.text))).toEqual(["🎨 theme", "▀▀▀"]);
+    expect(writesOf(opens[1]!.url)).toEqual(writesOf(opens[0]!.url));
+    // The swatch's own link, as the bar last drew it: open, it closes again.
+    const swatchButton = (drawn: string) =>
+      links(drawn).find(
+        (l) => stripAnsi(l.text) === "▀▀▀" && effectsOf(l.url).some((e) => e.args[1] === PICKERS),
+      )!;
+    rt.click(swatchButton(rendered).url);
+    expect(rt.sink.has("candybar.list.theme.0")).toBe(true);
+    rt.click(swatchButton(rt.render()).url);
+    expect(rt.sink.has("candybar.list.theme.0")).toBe(false);
+    const reopened = rt.render();
     // No ring: the theme is chosen by looking at it, not stepped by name.
-    expect(stripAnsi(rendered)).not.toMatch(new RegExp(`${CAROUSEL_PREV} nord ${CAROUSEL_NEXT}`));
+    expect(stripAnsi(reopened)).not.toMatch(new RegExp(`${CAROUSEL_PREV} nord ${CAROUSEL_NEXT}`));
     // The gear opens the theme's configuration on the same accordion.
     const gear = links(rendered).find((l) => stripAnsi(l.text) === "⚙")!;
     expect(writesOf(gear.url)).toEqual([[PICKERS, "gear"]]);
@@ -522,10 +535,11 @@ describe("the settings menu's look controls are pickers whose name opens a list"
     const next = THEMES[(THEMES.indexOf("nord") + 1) % THEMES.length]!;
     const before = rt.sink.get("directory")![0]!.style;
     const step = rt.linkOn("theme", CAROUSEL_NEXT);
-    expect(writesOf(step.url)).toEqual([
-      ["theme", next],
-      [menuPageKey(PICKERS), PAGE_HOLDING_CURRENT],
-    ]);
+    const [apply, turn] = writesOf(step.url);
+    expect(apply).toEqual(["theme", next]);
+    // The page it lands on, as itself: a page number, never a sentinel.
+    expect(turn![0]).toBe(menuPageKey(PICKERS));
+    expect(turn![1]).toMatch(/^\d+$/);
     rt.click(step.url);
     expect(rt.sessionState.get(SID, "theme")).toBe(next);
     expect(stripAnsi(rt.render())).toContain(`${next} ▀▀▀`);
@@ -533,6 +547,42 @@ describe("the settings menu's look controls are pickers whose name opens a list"
     expect(rt.sink.get("directory")![0]!.style).not.toEqual(before);
     rt.click(rt.linkOn("theme", CAROUSEL_PREV).url);
     expect(rt.sessionState.get(SID, "theme")).toBe("nord");
+    rt.dispose();
+  });
+
+  test("◀ from the first theme wraps to the last, and the row turns to the page holding it", () => {
+    const first = THEMES[0]!;
+    const last = THEMES[THEMES.length - 1]!;
+    // Narrow enough that the swatches page, so the last is on another page.
+    const rt = rig(`{ globals: { palette: '${first}' } }`, 80);
+    openPicker(rt, "theme");
+    expect(swatchLinks(rt.render()).some((c) => c.writes === last)).toBe(false);
+    rt.click(rt.linkOn("theme", CAROUSEL_PREV).url);
+    expect(rt.sessionState.get(SID, "theme")).toBe(last);
+    expect(swatchLinks(rt.render()).find((c) => c.writes === last)?.text).toBe("[▀▀▀]");
+    rt.dispose();
+  });
+
+  test("a step keeps open a row whose own when reads its cursor below zero as closed", () => {
+    // The standalone-picker idiom: the row shows at page ≥ 0. A step writes
+    // the page it lands on, so ◀ ? ▶ never close the row they sit in.
+    const rt = rig(`{
+      variables: { themesPage: { kind: 'state', key: 'themes-page', default: '0' } },
+      actions: {
+        applyTheme: { set: 'theme', from: 'themes' },
+        themesPage: { set: 'themes-page', int: true },
+      },
+      segments: { row: { template: '{{ swatches "applyTheme" "themesPage" }}' } },
+      root: { rows: {
+        identity: { h: [{ seg: 'row', when: '{{ ge (int .themesPage) 0 }}' }] },
+        status: { h: [] },
+      } },
+    }`);
+    rt.render();
+    for (const glyph of [CAROUSEL_NEXT, SWATCHES_RANDOM, CAROUSEL_PREV]) {
+      rt.click(rt.linkOn("theme", glyph).url);
+      expect([glyph, rt.sink.has("row")]).toEqual([glyph, true]);
+    }
     rt.dispose();
   });
 
@@ -554,7 +604,10 @@ describe("the settings menu's look controls are pickers whose name opens a list"
     openPicker(rt, "theme");
     const row = swatchLinks(rt.render());
     const other = links(rt.render()).find(
-      (l) => /▀▀▀/u.test(stripAnsi(l.text)) && stripAnsi(l.text) !== "[▀▀▀]",
+      (l) =>
+        /▀▀▀/u.test(stripAnsi(l.text)) &&
+        stripAnsi(l.text) !== "[▀▀▀]" &&
+        effectsOf(l.url).some((e) => e.args[1] === "theme"),
     )!;
     expect(writesOf(other.url)).toHaveLength(1);
     const picked = writesOf(other.url)[0]![1]!;

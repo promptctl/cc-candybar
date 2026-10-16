@@ -26,29 +26,25 @@
 
 import type { Palette, RichText } from "@promptctl/rich-js";
 import type { FuncMap } from "@promptctl/go-template-js";
-import { effectsUrl, VERB_SET_STATE } from "../click/wire.js";
-import { PAGE_HOLDING_CURRENT } from "../config/menu-keys.js";
-import {
-  linkFragment,
-  readVar,
-  realize,
-  renderLook,
-  type ActionRuntime,
-} from "./action.js";
+import { readVar, renderLook, type ActionRuntime } from "./action.js";
 import {
   requireActiveSegment,
   type ActiveSegmentRef,
 } from "./active-segment.js";
 import { closeOn } from "./band-style.js";
-import { CAROUSEL_NEXT, CAROUSEL_PREV } from "./carousel.js";
+import { CAROUSEL_NEXT, CAROUSEL_PREV, ringAround } from "./carousel.js";
 import { swatchPaint } from "./option-paint.js";
-import { renderPicker, requireKind, requireOptionKind } from "./picker.js";
+import {
+  renderPicker,
+  requireKind,
+  requireOptionKind,
+  type OptionAction,
+  type PickerStep,
+} from "./picker.js";
 import { swatch } from "./swatch.js";
 import { refuseSurplus } from "../template-engine/optional-tail.js";
 
 export const SWATCHES_RANDOM = "?";
-
-type OptionAction = ReturnType<typeof requireOptionKind>;
 
 // [LAW:no-silent-failure] Every reader of an option's palette — these two and
 // `{{ themePreview "applyAction" }}` — draws the palette an option would put
@@ -145,6 +141,7 @@ export function swatchFuncs(
           pageName,
           "set-int",
           "an int action ({ set, int: true })",
+          "swatches",
         );
         const active = requireActiveSegment(activeSegment, "{{ swatches }}");
         if (active.bg === undefined) {
@@ -153,49 +150,29 @@ export function swatchFuncs(
           );
         }
         const drawnAt = activeSegment.drawnAt();
-        const store = runtime.store;
-        const sessionId = readVar(store, "session.id");
-        const declared = runtime.compiled.get(applyName)!;
         const { options } = apply;
         const count = options.length;
-        // [LAW:one-source-of-truth] The "unknown current counts as the first
-        // member" rule the carousel and every cycle fold over, so ◀ ▶ step
-        // from the option a ring over the same key would be centred on.
-        const centre = Math.max(
-          options.indexOf(readVar(store, apply.stateVar)),
-          0,
-        );
-        const at = (index: number): string =>
-          options[((index % count) + count) % count]!;
-        // A step moves the option in force, maybe onto another page, so it
-        // turns the row to the page holding it — one click, one batch.
-        const applies = (glyph: string, option: string): RichText =>
-          linkFragment(
-            glyph,
-            effectsUrl([
-              ...realize(declared, option, option, store, sessionId).effects,
-              {
-                verb: VERB_SET_STATE,
-                args: [sessionId, page.key, PAGE_HOLDING_CURRENT],
-              },
-            ]),
-            false,
-          );
         // [LAW:dataflow-not-control-flow] An empty domain has nothing to step
-        // to, so it leads with nothing, as its grid has no cells.
-        const lead =
-          count === 0
-            ? []
-            : [
-                applies(CAROUSEL_PREV, at(centre - 1)),
-                applies(
-                  SWATCHES_RANDOM,
-                  at(randomOther(clock().getTime(), count, centre)),
-                ),
-                applies(CAROUSEL_NEXT, at(centre + 1)),
-              ];
+        // to, so it leads with nothing, as its grid has no cells. Otherwise ◀ ▶
+        // step through the ring a carousel over the same key turns, and ? to
+        // another option at random.
+        const steps = (): readonly PickerStep[] => {
+          const at = ringAround(
+            options,
+            readVar(runtime.store, apply.stateVar),
+          );
+          return [
+            { glyph: CAROUSEL_PREV, option: options[at(-1)]! },
+            {
+              glyph: SWATCHES_RANDOM,
+              option: options[randomOther(clock().getTime(), count, at(0))]!,
+            },
+            { glyph: CAROUSEL_NEXT, option: options[at(1)]! },
+          ];
+        };
         const [line] = renderPicker(
           applyName,
+          apply,
           { key: page.key, stateVar: page.stateVar },
           { kind: "led" },
           true,
@@ -208,7 +185,7 @@ export function swatchFuncs(
             active.bg,
           ),
           closeOn(active.palette, active.bg, drawnAt),
-          lead,
+          count === 0 ? [] : steps(),
         );
         return line!;
       },

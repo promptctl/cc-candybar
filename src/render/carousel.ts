@@ -44,12 +44,27 @@ import {
   cellWidth,
   ledRowBudget,
   requireOptionKind,
+  type OptionAction,
 } from "./picker.js";
 
 export const CAROUSEL_PREV = "◀";
 export const CAROUSEL_NEXT = "▶";
 
-type OptionAction = ReturnType<typeof requireOptionKind>;
+// [LAW:one-source-of-truth] A ring over a domain, centred on the value a key
+// holds: the index `offset` steps from the centre, wrapping. The centre is
+// THE "unknown current counts as the first member" rule every enumerated
+// control folds over (render/action.ts cycleIndex), so a value outside the
+// domain rotates exactly as a cycle over it would. The carousel and a
+// `{{ swatches }}` row's ◀ ▶ step through this one ring. Over a domain that
+// is not empty.
+export function ringAround(
+  options: readonly string[],
+  current: string,
+): (offset: number) => number {
+  const count = options.length;
+  const centre = Math.max(options.indexOf(current), 0);
+  return (offset) => (((centre + offset) % count) + count) % count;
+}
 
 // [LAW:dataflow-not-control-flow] How many neighbours each side gets is a pure
 // function of widths: whole symmetric levels are added while the row still
@@ -115,14 +130,9 @@ export function renderCarousel(
   // or show, so the ring is empty, as a grid over it has no cells.
   if (count === 0) return assemble([], true);
   const current = readVar(store, apply.stateVar);
-  // [LAW:one-source-of-truth] THE "unknown current counts as the first member"
-  // rule every enumerated control folds over (render/action.ts cycleIndex), so
-  // a value outside the domain rotates exactly as a cycle over it would. The
-  // centre is then an option, not the value — which is why "current" below is
+  // The centre is an option, not the value — which is why "current" below is
   // the picker's own comparison, never "is the centre".
-  const centre = Math.max(options.indexOf(current), 0);
-  const indexAt = (offset: number): number =>
-    (((centre + offset) % count) + count) % count;
+  const indexAt = ringAround(options, current);
   const ring = (offset: number): string => options[indexAt(offset)]!;
   // Each offset's click is realized once: the arrow and the neighbour name
   // beside it write the same option.
@@ -143,8 +153,15 @@ export function renderCarousel(
       ring(offset),
       ring(offset) === current,
     );
-  const option = (offset: number): RichText =>
-    linkOver(face(offset), url(offset));
+  // Each offset's cell is drawn once: measured to fit the ring, then laid.
+  const cells = new Map<number, RichText>();
+  const option = (offset: number): RichText => {
+    const known = cells.get(offset);
+    if (known !== undefined) return known;
+    const made = linkOver(face(offset), url(offset));
+    cells.set(offset, made);
+    return made;
+  };
 
   const middle =
     centreAction === undefined
@@ -177,7 +194,7 @@ export function renderCarousel(
     1 +
     cellWidth(CAROUSEL_NEXT);
   const levels = neighbourLevels(
-    (offset) => face(offset).cellLength,
+    (offset) => option(offset).cellLength,
     count,
     base,
     ledRowBudget(runtime),
