@@ -1,3 +1,10 @@
+# [1.132.0](https://github.com/promptctl/cc-candybar/compare/v1.131.0...v1.132.0) (2026-10-16)
+
+
+### Features
+
+* **daemon:** the render event says when the forge's PR was an earlier one ([#355](https://github.com/promptctl/cc-candybar/issues/355)) ([e8fe75d](https://github.com/promptctl/cc-candybar/commit/e8fe75d635cf9a988241c481941f9b7862a975b4))
+
 # [1.131.0](https://github.com/promptctl/cc-candybar/compare/v1.130.5...v1.131.0) (2026-10-16)
 
 
