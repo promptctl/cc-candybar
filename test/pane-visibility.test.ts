@@ -2,7 +2,11 @@
 // pure reading of `tmux list-panes`, and the poller's answers — a session is
 // shown unless its server said otherwise, and a change is announced once.
 
-import { PaneVisibility, shownPanes } from "../src/daemon/pane-visibility";
+import {
+  PaneVisibility,
+  controlledSessions,
+  shownPanes,
+} from "../src/daemon/pane-visibility";
 import type { TmuxRun } from "../src/proc/tmux";
 
 const hint = (socket: string, pane: string) => ({
@@ -14,15 +18,27 @@ const hint = (socket: string, pane: string) => ({
 describe("shownPanes", () => {
   test("a pane is shown in its session's current window, while a client is attached", () => {
     const out = [
-      "%1 1 1 0 1", // shown
-      "%2 1 1 0 0", // shown: a split pane beside the active one
-      "%3 1 0 0 1", // another window of that session
-      "%4 0 1 0 1", // a session nobody is attached to
-      "%5 2 1 1 1", // zoomed, and the active pane: shown
-      "%6 2 1 1 0", // zoomed under another pane
+      "%1 $1 1 1 0 1", // shown
+      "%2 $1 1 1 0 0", // shown: a split pane beside the active one
+      "%3 $1 1 0 0 1", // another window of that session
+      "%4 $2 0 1 0 1", // a session nobody is attached to
+      "%5 $3 2 1 1 1", // zoomed, and the active pane: shown
+      "%6 $3 2 1 1 0", // zoomed under another pane
       "",
     ].join("\n");
-    expect([...shownPanes(out)].sort()).toEqual(["%1", "%2", "%5"]);
+    expect([...shownPanes(out, new Set())].sort()).toEqual(["%1", "%2", "%5"]);
+  });
+
+  test("every window of a session a control-mode client draws can be on screen", () => {
+    const clients = ["$1 1", "$2 0", ""].join("\n");
+    expect([...controlledSessions(clients)]).toEqual(["$1"]);
+    const out = [
+      "%1 $1 1 0 0 1", // another window, drawn natively by tmux -CC
+      "%2 $1 1 0 1 0", // zoomed under another pane, still hidden
+      "%3 $2 1 0 0 1", // another window of a plainly attached session
+      "",
+    ].join("\n");
+    expect([...shownPanes(out, controlledSessions(clients))]).toEqual(["%1"]);
   });
 });
 
@@ -32,6 +48,7 @@ describe("PaneVisibility", () => {
     const log: string[] = [];
     const visibility = new PaneVisibility({
       listPanes: (socket) => Promise.resolve(answers[socket]!),
+      listClients: () => Promise.resolve({ kind: "ok", stdout: "" } as TmuxRun),
       onChange: (sockets) => changes.push([...sockets]),
       log: (_level, line) => log.push(line),
     });
@@ -47,7 +64,7 @@ describe("PaneVisibility", () => {
 
   test("an asked server's answer decides, and only a change is announced", async () => {
     const h = harness({
-      "/s": { kind: "ok", stdout: "%1 1 1 0 1\n%2 0 1 0 1\n" },
+      "/s": { kind: "ok", stdout: "%1 $1 1 1 0 1\n%2 $2 0 1 0 1\n" },
     });
     await h.visibility.refresh(new Set(["/s"]));
     expect(h.visibility.shown(hint("/s", "%1"))).toBe(true);
@@ -55,7 +72,7 @@ describe("PaneVisibility", () => {
     expect(h.changes).toHaveLength(1);
     await h.visibility.refresh(new Set(["/s"]));
     expect(h.changes).toHaveLength(1);
-    h.answers["/s"] = { kind: "ok", stdout: "%2 1 1 0 1\n" };
+    h.answers["/s"] = { kind: "ok", stdout: "%2 $2 1 1 0 1\n" };
     await h.visibility.refresh(new Set(["/s"]));
     expect(h.visibility.shown(hint("/s", "%2"))).toBe(true);
     expect(h.changes).toEqual([["/s"], ["/s"]]);
@@ -66,7 +83,7 @@ describe("PaneVisibility", () => {
   });
 
   test("a server that cannot be asked shows every pane, and says why once", async () => {
-    const h = harness({ "/s": { kind: "ok", stdout: "%1 0 1 0 1\n" } });
+    const h = harness({ "/s": { kind: "ok", stdout: "%1 $1 0 1 0 1\n" } });
     await h.visibility.refresh(new Set(["/s"]));
     expect(h.visibility.shown(hint("/s", "%1"))).toBe(false);
     h.answers["/s"] = {
@@ -80,7 +97,7 @@ describe("PaneVisibility", () => {
   });
 
   test("a server no watched session is on is forgotten", async () => {
-    const h = harness({ "/s": { kind: "ok", stdout: "%1 0 1 0 1\n" } });
+    const h = harness({ "/s": { kind: "ok", stdout: "%1 $1 0 1 0 1\n" } });
     await h.visibility.refresh(new Set(["/s"]));
     expect(h.visibility.shown(hint("/s", "%1"))).toBe(false);
     await h.visibility.refresh(new Set());

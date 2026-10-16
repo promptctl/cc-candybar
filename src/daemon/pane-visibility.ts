@@ -13,23 +13,45 @@
 import type { TmuxHint } from "../tmux-hint.js";
 import type { TmuxRun } from "../proc/tmux.js";
 
-// One line per pane: its id, how many clients its session has attached, and
-// whether its window is the session's current one, zoomed, and itself the
-// active pane.
+// One line per pane: its id, its session's id, how many clients that session
+// has attached, and whether its window is the session's current one, zoomed,
+// and itself the active pane.
 export const LIST_PANES_FORMAT =
-  "#{pane_id} #{session_attached} #{window_active} #{window_zoomed_flag} #{pane_active}";
+  "#{pane_id} #{session_id} #{session_attached} #{window_active} #{window_zoomed_flag} #{pane_active}";
 
-// The panes a client is showing: in a window that is its session's current
-// one, of a session at least one client is attached to — and, when that
-// window is zoomed, only its active pane.
-export function shownPanes(listPanes: string): ReadonlySet<string> {
+// One line per client: the id of the session it is attached to, and whether it
+// is a control-mode client (iTerm2's `tmux -CC`).
+export const LIST_CLIENTS_FORMAT = "#{session_id} #{client_control_mode}";
+
+// The sessions a control-mode client is attached to. Such a client draws each
+// of the session's windows as a native window of its own, any number of which
+// can be on screen at once.
+export function controlledSessions(listClients: string): ReadonlySet<string> {
+  const controlled = new Set<string>();
+  for (const line of listClients.split("\n")) {
+    const [session, control] = line.trim().split(" ");
+    if (session !== undefined && control === "1") controlled.add(session);
+  }
+  return controlled;
+}
+
+// The panes a client is showing: of a session at least one client is attached
+// to, in a window that is its session's current one — or any of its windows,
+// when a control-mode client draws them all — and, when that window is zoomed,
+// only its active pane.
+export function shownPanes(
+  listPanes: string,
+  controlled: ReadonlySet<string>,
+): ReadonlySet<string> {
   const shown = new Set<string>();
   for (const line of listPanes.split("\n")) {
-    const [pane, attached, current, zoomed, active] = line.trim().split(" ");
-    if (pane === undefined || pane === "") continue;
+    const [pane, session, attached, current, zoomed, active] = line
+      .trim()
+      .split(" ");
+    if (pane === undefined || pane === "" || session === undefined) continue;
     if (
       Number(attached) > 0 &&
-      current === "1" &&
+      (current === "1" || controlled.has(session)) &&
       (zoomed !== "1" || active === "1")
     )
       shown.add(pane);
@@ -45,7 +67,10 @@ type ServerView =
   | { readonly kind: "unasked"; readonly reason: string };
 
 export interface VisibilityDeps {
+  // `tmux list-panes -a` and `tmux list-clients` of the server at `socket`,
+  // in LIST_PANES_FORMAT and LIST_CLIENTS_FORMAT.
   listPanes(socket: string): Promise<TmuxRun>;
+  listClients(socket: string): Promise<TmuxRun>;
   // Called after a refresh in which any server's shown panes changed, or
   // whether it could be asked, with those servers' sockets.
   onChange(sockets: ReadonlySet<string>): void;
@@ -77,11 +102,22 @@ export class PaneVisibility {
       if (!sockets.has(socket)) this.servers.delete(socket);
     const answers = await Promise.all(
       [...sockets].map(async (socket) => {
-        const run = await this.deps.listPanes(socket);
+        const [panes, clients] = await Promise.all([
+          this.deps.listPanes(socket),
+          this.deps.listClients(socket),
+        ]);
         const view: ServerView =
-          run.kind === "ok"
-            ? { kind: "asked", shown: shownPanes(run.stdout) }
-            : { kind: "unasked", reason: run.reason };
+          panes.kind !== "ok"
+            ? { kind: "unasked", reason: panes.reason }
+            : clients.kind !== "ok"
+              ? { kind: "unasked", reason: clients.reason }
+              : {
+                  kind: "asked",
+                  shown: shownPanes(
+                    panes.stdout,
+                    controlledSessions(clients.stdout),
+                  ),
+                };
         return [socket, view] as const;
       }),
     );

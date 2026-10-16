@@ -18,11 +18,13 @@ import type { Response } from "./protocol";
 export type Motion = "moving" | "unseen" | "still";
 
 // What one render produced for a feed: the response its subscribers receive
-// (the one a render request is answered with), how the bar moves, which
-// decides when the next frame is due, and — for a render that threw — the
-// render event describing it, logged when that failure is first pushed.
+// (the one a render request is answered with), the instant it was drawn at (ms
+// since the epoch), how the bar moves, which decides when the next frame is
+// due, and — for a render that threw — the render event describing it, logged
+// when that failure is first pushed.
 export interface FeedFrame {
   readonly resp: Response;
+  readonly drawnAt: number;
   readonly motion: Motion;
   readonly failure: LogLine | null;
 }
@@ -44,7 +46,9 @@ export interface FeedPeriods {
 // one a second the rate Claude Code itself reaches.
 export const FEED_PERIODS: FeedPeriods = { moving: 1000 / 30, still: 1000 };
 
-export type Sink = (resp: Response) => void;
+// A subscriber: each frame's response, and its JSON as the feed serialized it
+// once for every subscriber.
+export type Sink = (resp: Response, json: string) => void;
 
 export interface FeedDeps<Req> {
   render(req: Req): Promise<FeedFrame>;
@@ -60,11 +64,16 @@ export interface FeedDeps<Req> {
 // [LAW:no-ambient-temporal-coupling] Where a feed's frame clock stands, as
 // state: no request to draw from yet; the next frame due at a timer; or a frame
 // being drawn, with whether a change arrived while it was (`again`: draw the
-// next one as soon as this one is out).
+// next one as soon as this one is out) and the noted frame that superseded it
+// (`superseded`: the frame the next one is due from, when it was noted).
 type Phase =
   | { readonly kind: "waiting" }
   | { readonly kind: "due"; readonly timer: ReturnType<typeof setTimeout> }
-  | { kind: "drawing"; again: boolean };
+  | {
+      kind: "drawing";
+      again: boolean;
+      superseded: { readonly frame: FeedFrame; readonly at: number } | null;
+    };
 
 interface Feed {
   readonly sessionId: string;
@@ -73,7 +82,11 @@ interface Feed {
   phase: Phase;
   // The last frame pushed, as sent, so an unchanged frame is never sent twice
   // and a new subscriber gets the bar at once.
-  last: { readonly resp: Response; readonly bytes: string } | null;
+  last: {
+    readonly resp: Response;
+    readonly bytes: string;
+    readonly drawnAt: number;
+  } | null;
   readonly since: number;
   drawn: number;
   noted: number;
@@ -138,13 +151,21 @@ export class FrameFeeds<Req> {
     }
     const feed = this.feeds.get(sessionId);
     if (feed === undefined) return;
+    // An answer drawn at an earlier instant than a frame already out would
+    // step the bar back in time: the newer data is drawn afresh instead.
+    if (feed.last !== null && frame.drawnAt < feed.last.drawnAt) {
+      this.wake(sessionId);
+      return;
+    }
     feed.noted++;
     this.count(feed, frame);
     this.push(feed, frame);
+    const now = this.deps.now();
     switch (feed.phase.kind) {
       case "drawing":
         // The frame being drawn is of the request this one replaced: it is
-        // not pushed, and its draw schedules the next.
+        // not pushed, and its draw schedules the next from this one.
+        feed.phase.superseded = { frame, at: now };
         return;
       case "due":
         clearTimeout(feed.phase.timer);
@@ -152,14 +173,13 @@ export class FrameFeeds<Req> {
       case "waiting":
         break;
     }
-    const now = this.deps.now();
     this.schedule(feed, frame, now, now);
   }
 
   subscribe(sessionId: string, sink: Sink): () => void {
     const feed = this.feeds.get(sessionId) ?? this.open(sessionId);
     feed.sinks.add(sink);
-    if (feed.last !== null) sink(feed.last.resp);
+    if (feed.last !== null) sink(feed.last.resp, feed.last.bytes);
     this.deps.log(
       "info",
       `feed sid=${JSON.stringify(sessionId)} subscribed subscribers=${feed.sinks.size} data=${this.requests.has(sessionId) ? "Y" : "N"}`,
@@ -245,7 +265,7 @@ export class FrameFeeds<Req> {
       return;
     }
     const { req } = noted;
-    const phase: Phase = { kind: "drawing", again: false };
+    const phase: Phase = { kind: "drawing", again: false, superseded: null };
     feed.phase = phase;
     const started = this.deps.now();
     const frame = await this.deps
@@ -277,7 +297,8 @@ export class FrameFeeds<Req> {
       void this.draw(feed);
       return;
     }
-    this.schedule(feed, frame, started, finished);
+    const basis = phase.superseded ?? { frame, at: started };
+    this.schedule(feed, basis.frame, basis.at, finished);
   }
 
   // [LAW:no-ambient-temporal-coupling] The next frame is due a period after
@@ -313,7 +334,7 @@ export class FrameFeeds<Req> {
     const { resp } = frame;
     const bytes = JSON.stringify(resp);
     if (feed.last?.bytes === bytes) return;
-    feed.last = { resp, bytes };
+    feed.last = { resp, bytes, drawnAt: frame.drawnAt };
     this.pushed++;
     feed.pushed++;
     // [LAW:nothing-unseen] A failing frame's render event is logged when that
@@ -321,7 +342,7 @@ export class FrameFeeds<Req> {
     // same bytes, which are not pushed again, and the summary counts it.
     if (frame.failure !== null)
       this.deps.log(frame.failure.level, frame.failure.line);
-    for (const sink of feed.sinks) sink(resp);
+    for (const sink of feed.sinks) sink(resp, bytes);
   }
 
   // [LAW:nothing-unseen] A feed's frames are not render requests, so they write

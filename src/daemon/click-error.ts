@@ -1,10 +1,12 @@
 // A failed click's errors, as the bar shows them: the dispatch verb holds them
 // in the clicking session's state, and every render of that session reads them.
 //
-// How long they show is time, not a count of renders. A session that someone
-// subscribes to renders thirty times a second (src/daemon/frame-feed.ts), so
-// an error cleared by the first render that showed it was on screen for one
-// thirtieth of a second.
+// How long they show is time, not a count of renders, and only the session's
+// own render requests release them. A session that someone subscribes to
+// renders thirty times a second (src/daemon/frame-feed.ts), so an error cleared
+// by the first render that showed it was on screen for one thirtieth of a
+// second; and its frames may be drawn beside the bar Claude Code draws from
+// each request's answer, which must show the error too.
 
 import type { SessionStateReader, SessionStateRW } from "./session-state.js";
 import type { Instant } from "../utils/instant.js";
@@ -45,18 +47,18 @@ export function heldClickError(
 }
 
 // [LAW:single-enforcer] The one rule for when a click's errors leave the bar:
-// the first render at least CLICK_ERROR_HOLD_S after the click failed shows
-// them and clears them, so they are shown at least once, and for at least the
-// hold however often the session renders.
-export function showClickError(
+// a render request at `at`, which has just shown them, releases them once
+// CLICK_ERROR_HOLD_S has passed since the click failed. Every render shows them
+// while they are held, so they reach Claude Code's own bar at least once and
+// every frame display for at least the hold.
+export function releaseClickError(
   state: SessionStateRW,
   sessionId: string,
   at: Instant,
-): string | null {
+): void {
   const held = heldClickError(state, sessionId);
-  if (held === null) return null;
-  if (at >= held.at + CLICK_ERROR_HOLD_S) state.clear(sessionId, KEY);
-  return held.text;
+  if (held !== null && at >= held.at + CLICK_ERROR_HOLD_S)
+    state.clear(sessionId, KEY);
 }
 
 function recordOf(raw: string): HeldClickError | null {

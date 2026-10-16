@@ -56,12 +56,17 @@ export async function runFrames(argv: readonly string[]): Promise<void> {
     ),
   ];
   const cwd = process.cwd();
-  const hints = detectClientHints(process.env, cwd, process.stderr);
   const say = (line: string): void => {
     process.stderr.write(`cc-candybar frames: ${line}\n`);
   };
   // [LAW:no-silent-failure] --config is a render arg, sent only with the data
   // this client forwards; under --session it forwards none.
+  // [LAW:parse-dont-validate] The subscribe this client sends is well formed,
+  // so a daemon that answers BAD_REQUEST is one that does not take subscribe.
+  if (values.session === "") {
+    say("--session needs a session id");
+    process.exit(2);
+  }
   if (values.session !== undefined && values.config !== undefined) {
     say(
       "--config has no effect with --session: the session's own statusline client sends its config",
@@ -83,6 +88,9 @@ export async function runFrames(argv: readonly string[]): Promise<void> {
   // The session's data, to the daemon. Its reply is the bar the stream
   // carries, so only a failure is said here.
   const forward = async (hook: ClaudeHookData): Promise<void> => {
+    // The terminal as it is now: a resize between two statusline ticks is in
+    // the next one.
+    const hints = detectClientHints(process.env, cwd, process.stderr);
     const outcome = await tryRenderViaDaemon(hook, renderArgs, cwd, hints);
     if (outcome.kind === "ok") return;
     say(describeFailure(outcome));
@@ -135,6 +143,10 @@ export async function runFrames(argv: readonly string[]): Promise<void> {
       say(`stdin line is not JSON: ${(e as Error).message}`);
       continue;
     }
+    if (typeof hook.session_id !== "string" || hook.session_id === "") {
+      say("stdin line carries no session_id");
+      continue;
+    }
     lastHook = hook;
     await forward(hook);
     if (hook.session_id !== sessionId) {
@@ -146,11 +158,12 @@ export async function runFrames(argv: readonly string[]): Promise<void> {
 }
 
 // [LAW:effects-at-boundaries] What a stream the daemon ended calls for: a
-// reconnect, kicking a daemon into existence when none answered or when the
-// one that answered is older than this client (it exits on that answer so a
-// respawn runs the newer build) — or, when the daemon refuses this request or
-// is newer than this client, which it will do the same way however often it is
-// asked, the end of this client.
+// reconnect — kicking a daemon into existence when none answered, or when the
+// one that answered speaks an older protocol (it exits on that answer so a
+// respawn runs the newer build) — or, when the daemon speaks a newer protocol
+// than this client, which it will do however often it is asked, the end of
+// this client. A BAD_REQUEST is from a daemon too old to take subscribe (this
+// client's own subscribe is well formed); it restarts itself on the new build.
 export type AfterEnd =
   | {
       readonly kind: "reconnect";
@@ -180,6 +193,12 @@ export function afterStreamEnd(
         return {
           kind: "reconnect",
           reason: `the daemon was too busy to open the stream (${end.resp.error})`,
+          kick: false,
+        };
+      if (end.resp.code === "BAD_REQUEST")
+        return {
+          kind: "reconnect",
+          reason: `the daemon does not take subscribe (${end.resp.error}); it restarts on the new build`,
           kick: false,
         };
       if (
