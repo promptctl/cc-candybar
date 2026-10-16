@@ -5,6 +5,7 @@
 
 import {
   parseClientHints,
+  refusedHints,
   refusedHintsError,
   sanitizeSsh,
   sanitizeTermExtent,
@@ -162,14 +163,20 @@ describe("parseClientHints (the one wire checkpoint)", () => {
 
   // A hint the client sent and the checkpoint refused is named on the bar;
   // one never sent, and one taken, are not.
-  test("refusedHintsError names exactly the sent hints the checkpoint refused", () => {
+  test("refusedHints names exactly the sent hints the checkpoint refused, with what was sent", () => {
     const refused = (extra: Record<string, unknown>) =>
-      refusedHintsError(extra, parseClientHints(req(extra)));
-    expect(refused({})).toBeNull();
+      refusedHints(extra, parseClientHints(req(extra)));
+    expect(refused({})).toEqual([]);
+    expect(refusedHintsError(refused({}))).toBeNull();
     expect(
       refused({ termCols: 80, tmux: null, configEnv: "/etc/c.json5" }),
-    ).toBeNull();
-    expect(refused({ termCols: 80, configEnv: "c.json5", ssh: "yes" })).toMatch(
+    ).toEqual([]);
+    const sent = refused({ termCols: 80, configEnv: "c.json5", ssh: "yes" });
+    expect(sent).toEqual([
+      { hint: "ssh", sent: "yes" },
+      { hint: "configEnv", sent: "c.json5" },
+    ]);
+    expect(refusedHintsError(sent)).toMatch(
       /^Client hints refused: ssh="yes", configEnv="c.json5" — /,
     );
   });

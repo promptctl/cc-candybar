@@ -46,6 +46,7 @@ import {
   encodeFrame,
   makeFrameReader,
   parseClientHints,
+  refusedHints,
   refusedHintsError,
   sanitizeClientVersion,
 } from "./protocol";
@@ -972,7 +973,8 @@ export async function handleRequest(req: Request): Promise<HandledRequest> {
       // post-reserve" with no semantic split between wire-supplied and
       // fallback values.
       const hints = parseClientHints(req);
-      const hintsError = refusedHintsError(req, hints);
+      const refused = refusedHints(req, hints);
+      const hintsError = refusedHintsError(refused);
       // [LAW:one-source-of-truth] Record the STAMPED hints per session — the
       // SESSION_RENDER_ORIGIN_KEY move for client facts: a click arrives with
       // no hints of its own, so the doctor (verbs/index.ts) reads the facts of
@@ -1204,7 +1206,7 @@ export async function handleRequest(req: Request): Promise<HandledRequest> {
       const warned = warnings.map((w) => w.kind).join(",") || "-";
       dlog(
         "info",
-        `render sid=${req.hookData.session_id ?? "?"} at=${at.toFixed(3)} took=${ms}ms termCols=${termCols ?? "?"} termRows=${hints.termRows ?? "?"} width=${width} git=${g.size}/${g.hits}h/${g.misses}m usage=${u.size}/${u.hits}h/${u.misses}m effect=${fx.effect} effectT=${fx.t.toFixed(3)} effectRows=${fx.made}made/${fx.reused}reused effectOwn=${own} fadeBasis=${fx.basis} stateRev=${fx.revision} fades=${passages(fx.fades)} leaves=${passages(fx.leaves)} prompts=${payload.metrics?.messageCount ?? "-"} nonPrompts=${payload.metrics?.nonPrompts ?? "-"} err=${combinedError ? "Y" : "N"} upd=${updates.length} warn=${warned}`,
+        `render sid=${req.hookData.session_id ?? "?"} at=${at.toFixed(3)} took=${ms}ms termCols=${termCols ?? "?"} termRows=${hints.termRows ?? "?"} width=${width} git=${g.size}/${g.hits}h/${g.misses}m usage=${u.size}/${u.hits}h/${u.misses}m effect=${fx.effect} effectT=${fx.t.toFixed(3)} effectRows=${fx.made}made/${fx.reused}reused effectOwn=${own} fadeBasis=${fx.basis} stateRev=${fx.revision} fades=${passages(fx.fades)} leaves=${passages(fx.leaves)} prompts=${payload.metrics?.messageCount ?? "-"} nonPrompts=${payload.metrics?.nonPrompts ?? "-"} err=${combinedError ? "Y" : "N"} refused=${refused.map((r) => r.hint).join(",") || "-"} upd=${updates.length} warn=${warned}`,
       );
       return stay({ ok: true, output: output + "\n" });
     } catch (e) {
