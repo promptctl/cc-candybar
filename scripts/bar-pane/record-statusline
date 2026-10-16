@@ -1,0 +1,39 @@
+#!/bin/sh
+# Put in front of a statusline command to let `cc-candybar bar-pane` draw that
+# session's bar beside it:
+#
+#   "statusLine": { "type": "command",
+#                   "command": "/path/to/record-statusline cc-candybar" }
+#
+# Records the statusline's whole invocation — the hook payload, its cwd, the
+# size its stderr's terminal answers, its argv and its environment — keyed by
+# the tmux server and pane the session runs
+# in, then runs the command on the same payload. The bar pane replays that
+# invocation, so its render requests are the statusline's own. Outside tmux
+# there is no pane to draw beside, and it records nothing.
+#
+# A stopgap: once the daemon pushes a session's frames
+# (candybar-animation-wbxz.jmm.usl) it holds the payload itself.
+# The record's path and layout are src/bar-pane/recording.ts's.
+
+[ -n "$TMUX_PANE" ] || exec "$@"
+# The environment holds the session's secrets: the record is its owner's alone.
+umask 077
+payload=$(cat)
+# `rows cols` from the terminal on stderr — the client asks the same one
+# (TIOCGWINSZ on stderr) — or nothing when stderr is not a terminal, which is
+# the answer, not a fault.
+size=$(stty size <&2 2>/dev/null)
+dir="${XDG_STATE_HOME:-$HOME/.local/state}/cc-candybar/bar-pane"
+# `$TMUX` is `socket,server-pid,session`: the socket's file name and the pid
+# name one server run, since pane ids start again at %0 on every server.
+server="${TMUX%,*}"
+file="$dir/${server##*/}$TMUX_PANE"
+# One NUL-separated record, renamed into place whole so the bar pane never
+# reads half of one. A failure to record leaves the bar pane waiting, never
+# the statusline without its payload.
+{ mkdir -p "$dir" &&
+  { printf '%s\0' "$payload" "$(pwd -P)" "$size" "$#" "$@" && env -0; } > "$file.$$" &&
+  mv "$file.$$" "$file"; } ||
+  { rm -f "$file.$$"; echo "record-statusline: could not record $file" >&2; }
+printf '%s\n' "$payload" | "$@"

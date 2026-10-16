@@ -55,8 +55,8 @@ export function daemonDir(): string {
 // is cleared on reboot, which is fine — the daemon doesn't survive reboots.
 // CC_CANDYBAR_SOCKET is the only explicit override for intentional isolation
 // (tests, dev, multiple intentional instances).
-export function socketPath(): string {
-  return process.env.CC_CANDYBAR_SOCKET || defaultSocketPath();
+export function socketPath(env: NodeJS.ProcessEnv = process.env): string {
+  return env.CC_CANDYBAR_SOCKET || defaultSocketPath();
 }
 
 // The socket a process with no override reaches — the URL handler app's, which
