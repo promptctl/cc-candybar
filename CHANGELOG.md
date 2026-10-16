@@ -1,3 +1,10 @@
+# [1.131.0](https://github.com/promptctl/cc-candybar/compare/v1.130.5...v1.131.0) (2026-10-16)
+
+
+### Features
+
+* **lit:** work-loop stage segment; a branch's PR in every state ([#353](https://github.com/promptctl/cc-candybar/issues/353)) ([c451544](https://github.com/promptctl/cc-candybar/commit/c4515441d81228f5e2bece47d071674622cab144))
+
 ## [1.130.5](https://github.com/promptctl/cc-candybar/compare/v1.130.4...v1.130.5) (2026-10-16)
 
 
