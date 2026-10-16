@@ -13,6 +13,11 @@ allowBuilds:
   esbuild: false
   unrs-resolver: false
 
+# An unmet peer fails resolution instead of warning: rich-js's mobx peer
+# (^7.0.3) sat unmet by mobx 6.x behind a warning nobody read.
+# [LAW:no-silent-failure]
+strictPeerDependencies: true
+
 # Our own packages are trusted at publish time — exempt them from the
 # supply-chain release-age delay so a fresh release installs immediately.
 minimumReleaseAgeExclude:
