@@ -42,11 +42,25 @@ export type PrState = "open" | "merged" | "closed";
 // gh takes an open one if there is one, else the newest; glab's rule is
 // unverified (see parseGitlabMr) — so a branch whose PR merged reads `merged`
 // rather than as a branch that never had one. `number` and `url` are the
-// click target.
+// click target; `head` is the commit the PR's branch pointed at.
 export interface PullRequest {
   number: number;
   state: PrState;
   url: string;
+  head: string;
+}
+
+// [LAW:types-are-the-program] The forge picks a PR by branch NAME, so a name
+// reused after its PR merged or closed (a reopened ticket's branch) gets the
+// old PR back. An open PR is the branch's whatever its head; a concluded one
+// only while it still describes HEAD — once the branch moves off it, the work
+// on it is new and has no PR yet.
+export function prOfHead(
+  pr: Outcome<PullRequest>,
+  head: Outcome<string>,
+): Outcome<PullRequest> {
+  if (pr.kind !== "ok" || pr.value.state === "open") return pr;
+  return head.kind === "ok" && head.value === pr.value.head ? pr : ABSENT;
 }
 
 // [LAW:parse-dont-validate] Each forge's exact state words, and only those: a
@@ -86,6 +100,9 @@ export interface GitInfo {
   branch: string;
   status: "clean" | "dirty" | "conflicts";
   aheadBehind: Outcome<AheadBehind>;
+  // HEAD's full object id, absent on an unborn HEAD — what a PR's `head` is
+  // compared against (`prOfHead`).
+  head: Outcome<string>;
   workingTree?: WorkingTree;
   sha?: Outcome<string>;
   operation?: Outcome<string>;
@@ -637,7 +654,7 @@ export function parseStatusV2(stdout: string): CoreStatus {
   };
 }
 
-// `gh pr view --json number,state,url` → one JSON object.
+// `gh pr view --json number,state,url,headRefOid` → one JSON object.
 export function parseGithubPr(stdout: string): Outcome<PullRequest> {
   let json: unknown;
   try {
@@ -648,21 +665,22 @@ export function parseGithubPr(stdout: string): Outcome<PullRequest> {
     );
   }
   if (!isRecord(json)) return failed("gh pr view: JSON is not an object");
-  const { number, state, url } = json;
+  const { number, state, url, headRefOid: head } = json;
   if (
     typeof number !== "number" ||
     typeof state !== "string" ||
-    typeof url !== "string"
+    typeof url !== "string" ||
+    typeof head !== "string"
   ) {
-    return failed("gh pr view: missing number/state/url");
+    return failed("gh pr view: missing number/state/url/headRefOid");
   }
   const prState = prStateOf("gh pr view", GITHUB_PR_STATES, state);
   return prState.kind === "ok"
-    ? ok({ number, state: prState.value, url })
+    ? ok({ number, state: prState.value, url, head })
     : prState;
 }
 
-// `glab mr view --output json` → one JSON object (iid / state / web_url).
+// `glab mr view --output json` → one JSON object (iid / state / web_url / sha).
 // NOTE: verified against glab's documented JSON shape, not runtime-exercised
 // here (glab not installed on the dev machine) — the github path is the
 // runtime-verified one.
@@ -679,16 +697,18 @@ export function parseGitlabMr(stdout: string): Outcome<PullRequest> {
   const iid = json.iid;
   const state = json.state;
   const url = json.web_url;
+  const head = json.sha;
   if (
     typeof iid !== "number" ||
     typeof state !== "string" ||
-    typeof url !== "string"
+    typeof url !== "string" ||
+    typeof head !== "string"
   ) {
-    return failed("glab mr view: missing iid/state/web_url");
+    return failed("glab mr view: missing iid/state/web_url/sha");
   }
   const mrState = prStateOf("glab mr view", GITLAB_MR_STATES, state);
   return mrState.kind === "ok"
-    ? ok({ number: iid, state: mrState.value, url })
+    ? ok({ number: iid, state: mrState.value, url, head })
     : mrState;
 }
 
@@ -885,6 +905,7 @@ export class GitService {
       branch: core.value.branch,
       status: core.value.status,
       aheadBehind: core.value.aheadBehind,
+      head: core.value.oid,
     };
 
     // sha, upstream, and the worktree counts all rode in on the core call —
@@ -1346,7 +1367,7 @@ export class GitService {
         "gh pr view",
         await this.execForgeAsync(
           "gh",
-          ["pr", "view", "--json", "number,state,url"],
+          ["pr", "view", "--json", "number,state,url,headRefOid"],
           { cwd: workingDir, timeout: 5000 },
         ),
         /no (open )?pull requests? found/i,

@@ -37,11 +37,15 @@ const DEFINITION = path.join(
 );
 
 // `gh pr view` for the checked-out branch: a branch named after a gh state
-// has a PR in it, `none` has no PR, and anything else is an auth failure.
+// has a PR in it whose head is HEAD, `REUSED` a merged PR whose head is some
+// earlier commit (the branch name was used before), `none` has no PR, and
+// anything else is an auth failure.
 const GH = `#!/bin/sh
 b=$(git branch --show-current)
+pr() { printf '{"number":7,"state":"%s","url":"https://github.com/x/y/pull/7","headRefOid":"%s"}\\n' "$1" "$2"; }
 case "$b" in
-  OPEN|MERGED|CLOSED) printf '{"number":7,"state":"%s","url":"https://github.com/x/y/pull/7"}\\n' "$b" ;;
+  OPEN|MERGED|CLOSED) pr "$b" "$(git rev-parse HEAD)" ;;
+  REUSED) pr MERGED 0000000000000000000000000000000000000000 ;;
   none) echo "no pull requests found for branch \\"$b\\"" >&2; exit 1 ;;
   *) echo "HTTP 401: Bad credentials" >&2; exit 1 ;;
 esac
@@ -140,6 +144,7 @@ describe("a daemon render carries the branch's PR in every state", () => {
     ["OPEN", "pr:open ", "open", "↻ 4/5 review"],
     ["MERGED", "pr:merged ", "merged", "↻ 5/5 downstream"],
     ["CLOSED", "pr:closed ", "closed", "↻ 3/5 work"],
+    ["REUSED", "pr: ", "-", "↻ 3/5 work"],
     ["none", "pr: ", "-", "↻ 3/5 work"],
     ["denied", "pr: ", "failed", "↻ ⚠ PR"],
   ])("branch %s → %j, pr=%s, stage %s", async (branch, cell, fact, stage) => {

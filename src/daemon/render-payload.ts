@@ -62,6 +62,7 @@ import {
 } from "../config/theme-defaults.js";
 import { templateReads } from "../config/dsl-loader.js";
 import {
+  prOfHead,
   trackingOf,
   type GitInfo,
   type GitInfoOptions,
@@ -1734,7 +1735,10 @@ function projectGitInfo(
   // the segment renders a distinct marker. `absent` is still a missing key (no
   // PR / no forge → segment off). The reason is the gate value the template
   // tests; the same reason is logged for the operator.
-  const pr = info.pullRequest;
+  const pr =
+    info.pullRequest === undefined
+      ? undefined
+      : prOfHead(info.pullRequest, info.head);
   const prFields: {
     prNumber?: number;
     prState?: PrState;

@@ -24,12 +24,14 @@ class StubGitService extends GitService {
     branch: "main",
     status: "clean",
     aheadBehind: ok({ ahead: 0, behind: 0 }),
+    head: ok("c0ffee"),
   };
   public prCalls: Array<{ workingDir: string; remoteUrl: string }> = [];
   public stubPr: Outcome<PullRequest> = ok({
     number: 7,
     state: "open",
     url: "https://example.test/pull/7",
+    head: "c0ffee",
   });
   public stubRemote: Outcome<string> = ok("git@github.com:acme/widget.git");
 
@@ -629,7 +631,7 @@ describe("GitDataProvider PR cache", () => {
     expect(out.kind).toBe("ok");
     if (out.kind !== "ok") return;
     expect(out.value.pullRequest).toEqual(
-      ok({ number: 7, state: "open", url: "https://example.test/pull/7" }),
+      ok({ number: 7, state: "open", url: "https://example.test/pull/7", head: "c0ffee" }),
     );
     expect(inner.prCalls).toHaveLength(1);
   });
