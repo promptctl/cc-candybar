@@ -150,7 +150,7 @@ describe("every render request writes one render event, whatever its outcome", (
       await render(sockPath, "ev-gate", projectDir, hints, configFlag("broken")),
     );
     expect(gated).toContain(
-      "when over mark: the gate broke — nothing it gates is drawn",
+      "when over mark: the gate broke — what it gates is hidden",
     );
     await expect(
       renderRequest(sockPath, {

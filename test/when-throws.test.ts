@@ -1,7 +1,7 @@
 // [LAW:verifiable-goals] brandon-unfiled-3248.ryf: a layout node's own `when`
 // whose template throws costs that node, visibly, never the whole bar. A
-// container — a row, the root — draws nothing it gates and reports a `when`
-// warning naming the gate by its source; a placement's gate (`{ seg, when }`)
+// container — a row, the root — hides what it gates and reports a `when`
+// warning naming the placements it holds; a placement's gate (`{ seg, when }`)
 // draws the ⚠ cell its segment's own failing `when` draws.
 //
 // [LAW:single-enforcer] Drives the real spine — parse/merge/validate, then
@@ -87,12 +87,12 @@ const gateWarning = (where: string, error: string): RenderWarning => ({
   where,
   error: expect.stringContaining(error) as unknown as string,
   message: expect.stringMatching(
-    new RegExp(`^${where}: .*${error}.* — nothing it gates is drawn$`),
+    new RegExp(`^${where}: .*${error}.* — what it gates is hidden$`),
   ) as unknown as string,
 });
 
 describe("a layout node's when that throws costs that node, not the bar", () => {
-  test("a row whose when fails draws nothing it gates; every other row draws", () => {
+  test("a row whose when fails hides what it gates; every other row draws", () => {
     const rt = runtime(
       src(`{ v: [ { h: ['ay', 'bee'], when: '${FAIL}' }, 'sea' ] }`),
     );

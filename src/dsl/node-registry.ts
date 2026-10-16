@@ -201,6 +201,13 @@ export type PlacementSettings = Readonly<Record<string, SettingValue>> & {
   readonly effect: PlacementEffect;
 };
 
+// [LAW:types-are-the-program] A node's own `when` as the driver evaluated it,
+// a failure carrying the one way to say so: only a gate that failed can be
+// reported, and only with its own error.
+export type NodeGate =
+  | Exclude<Gate, { kind: "failed" }>
+  | (Extract<Gate, { kind: "failed" }> & { report(): void });
+
 // [LAW:single-enforcer] The render-time context. `gate` is THIS node's own
 // `when` as the driver evaluated it — hidden, unevaluated, under a parent that
 // is not shown. renderChild continues the walk.
@@ -212,7 +219,7 @@ export interface NodeRenderCtx {
   // choice over config default) under the render's style, transposed ONCE by
   // the driver — every unpinned segment colours from this one object.
   readonly palette: Palette;
-  readonly gate: Gate;
+  readonly gate: NodeGate;
   // [LAW:one-source-of-truth] The render-wide intra-cell padding (resolved
   // globals.padding), threaded by the driver from BuildLineOptions into every
   // segment's layout — one value per render, never re-defaulted per node.
@@ -298,9 +305,6 @@ export interface NodeRenderCtx {
   // rows it last drew in place of its own (`SessionEffects.motion`,
   // brandon-effects-2gka.3vt).
   placed(id: string, lines: RenderedLines): RenderedLines;
-  // [LAW:no-silent-failure] A container whose own `when` failed has no cell
-  // to show a ⚠ in, so it hides what it gates and says so here, with why.
-  gateFailed(error: string): void;
 }
 
 // [LAW:one-source-of-truth] The lines the placement `id` returned, divided as
@@ -521,12 +525,11 @@ const containerType: NodeType<"container"> = {
     };
   },
   render(node, ctx) {
-    // A gate that failed decides nothing, so what it gates is not drawn: a
-    // broken `when` costs its own container, never the bar
-    // (brandon-unfiled-3248.ryf), and the warning says which.
-    if (ctx.gate.kind === "failed") {
-      ctx.gateFailed(ctx.gate.message);
-    }
+    // [LAW:no-silent-failure] A gate that failed decides nothing, so what it
+    // gates is hidden: a broken `when` costs its own container, never the bar
+    // (brandon-unfiled-3248.ryf). A container has no cell to show a ⚠ in, so
+    // it reports the failure instead.
+    if (ctx.gate.kind === "failed") ctx.gate.report();
     // [LAW:dataflow-not-control-flow] Every child is walked, hidden or not:
     // visibility is a value `parentVisible` threads, never a skipped call, and a
     // child's address step is its (index, count) here, placed by THIS

@@ -407,8 +407,9 @@ export async function prepareConfig(
 // partially-declared variable) renders as a visible ⚠ error cell — partial
 // rendering, the daemon's channel for a human looking at the bar. The blind
 // authoring agent is not looking at the bar; check collects the same errors
-// through the render's observer seam — a segment's ⚠, and a globals rule the
-// render could not honour (brandon-themes-dzl) — and fails the verdict, so
+// through the render's observer seam — a segment's ⚠, a globals rule the
+// render could not honour (brandon-themes-dzl), and a layout `when` that threw
+// (brandon-unfiled-3248.ryf) — and fails the verdict, so
 // exit 0 never blesses a bar the daemon would render a complaint on.
 export function renderEffective(
   { layers, config, compiled, store, registry }: PreparedConfig,
@@ -444,7 +445,7 @@ export function renderEffective(
       case "rule":
         failures.set(`${warning.slot} rule`, warning.message);
         return;
-      // A layout `when` that threw: the bar draws nothing it gates, which a
+      // A layout `when` that threw: the bar hides what it gates, which a
       // headless pass would otherwise bless.
       case "when":
         failures.set(warning.where, warning.error);

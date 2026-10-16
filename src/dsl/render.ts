@@ -145,6 +145,7 @@ import {
   type RenderedLine,
   type RenderedLines,
   type NodeCompileCtx,
+  type NodeGate,
   type NodeRenderCtx,
   type SegmentStyles,
   type EvaluatedSegment,
@@ -991,8 +992,8 @@ export type RenderWarning =
       readonly slot: ExpressionSlot;
       readonly message: string;
     }
-  // A container's own `when` whose template threw, so nothing it gates is
-  // drawn (brandon-unfiled-3248.ryf). A container has no cell to show a ⚠ in;
+  // A container's own `when` whose template threw, so what it gates is
+  // hidden (brandon-unfiled-3248.ryf). A container has no cell to show a ⚠ in;
   // a placement's gate failing draws its ⚠ instead, through onSegmentError.
   // `where` names it as a placement's ⚠ is named, `error` says why.
   | {
@@ -1384,7 +1385,9 @@ export function renderDsl(
 
   // [LAW:dataflow-not-control-flow] ONE walk renders any node to LINES OF CELLS
   // (serialization deferred to the root). The driver owns the cross-cutting
-  // `when`: `visible` ANDs the node's own predicate with its ancestors'. It then
+  // `when`: a node under a parent not shown is hidden, and any other is gated
+  // by its own predicate — shown, hidden, or failed, never collapsed to a
+  // boolean, since what a failure costs is the node type's to say. It then
   // dispatches to the node type's render via nodeType() — no kind switch here.
   // The node count, nesting depth, and per-leaf segment count are all data; a
   // deeper tree is more recursion, not more code.
@@ -1394,7 +1397,22 @@ export function renderDsl(
     region: Region,
   ): RenderedLines => {
     // A hidden parent's child is hidden without its `when` being asked.
-    const gate = parentVisible ? gateOf(node.when, scope) : HIDDEN;
+    const evaluated = parentVisible ? gateOf(node.when, scope) : HIDDEN;
+    const gate: NodeGate =
+      evaluated.kind === "failed"
+        ? {
+            ...evaluated,
+            report: () => {
+              const where = `when over ${placementsUnder(node).join(", ") || "no placement"}`;
+              warn({
+                kind: "when",
+                where,
+                error: evaluated.message,
+                message: `${where}: ${evaluated.message} — what it gates is hidden`,
+              });
+            },
+          }
+        : evaluated;
     const ctx: NodeRenderCtx = {
       scope,
       palette,
@@ -1417,15 +1435,6 @@ export function renderDsl(
       // same store every other affordance's URL does.
       closeDisclosure: (key) => disclosureCloseFragment(store, key),
       placed: motion.placed,
-      gateFailed: (error) => {
-        const where = `when over ${placementsUnder(node).join(", ") || "no placement"}`;
-        warn({
-          kind: "when",
-          where,
-          error,
-          message: `${where}: ${error} — nothing it gates is drawn`,
-        });
-      },
     };
     return nodeType(node.kind).render(node, ctx);
   };
