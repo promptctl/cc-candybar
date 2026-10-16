@@ -128,11 +128,12 @@ interface SessionRecord {
 }
 
 // Everything the store holds for one session, living exactly as long as the
-// session is seen: a render or a scan asking about it moves `lastSeenAt`, and
-// `sweepStale` drops the slot whole. [LAW:types-are-the-program] The record
-// and the speed ring hang off the one slot, so neither can outlive the other
-// — a session that renders before its transcript has bytes holds a ring and
-// no record, and is swept on the same clock.
+// session is seen: the slot exists once something is stored for it (a record,
+// a speed sample), every render or scan asking about it moves `lastSeenAt`,
+// and `sweepStale` drops the slot whole. [LAW:types-are-the-program] The
+// record and the speed ring hang off the one slot, so neither can outlive the
+// other — a session that renders before its transcript has bytes holds a ring
+// and no record, and is swept on the same clock.
 interface SessionSlot {
   lastSeenAt: number;
   record: SessionRecord | undefined;
@@ -537,6 +538,9 @@ export class SessionUsageStore {
     // the write of `cur` happen exactly once for that state, with the flight as
     // the sole owner of ordering. A distinct stamp is a genuinely new sample and
     // gets its own key.
+    // No session id is no session: there is no baseline to keep, and a ring
+    // keyed "" would be every id-less caller's baseline at once.
+    if (!sessionId) return ABSENT;
     const stamp = statStamp(transcriptPath);
     return this.speedFlight.run(`${sessionId}:${stamp}`, async () => {
       const record = await this.ingest(
@@ -549,7 +553,7 @@ export class SessionUsageStore {
       const breakdown =
         record.kind === "ok" ? record.value.sessionInfo.tokenBreakdown : null;
       const cur = speedSampleOf(breakdown, nowMs);
-      const { ring } = this.see(sessionId);
+      const { ring } = this.hold(sessionId);
       // [LAW:no-ambient-temporal-coupling] Observation time (atMs, the render
       // clock) owns ring order — NOT ingest-completion order. Two concurrent
       // observes with different stamps don't coalesce in speedFlight and each
@@ -581,8 +585,8 @@ export class SessionUsageStore {
   // stamp-gated, coalesced re-parse of ONE session. `ok` is its record,
   // `absent` is an unknown empty session (or no sessionId), `failed` is a
   // transcript that exists but couldn't be parsed — NOT cached (only ok
-  // records enter the map; the next render retries, same rule as the git
-  // cache). This is the single write-path into the records map.
+  // records are stored; the next render retries, same rule as the git
+  // cache). This is the single write-path of a slot's record.
   private async ingest(
     sessionId: string,
     transcriptPath: string | undefined,
@@ -591,7 +595,7 @@ export class SessionUsageStore {
   ): Promise<Outcome<SessionRecord>> {
     if (!sessionId) return ABSENT;
     const stamp = knownStamp ?? statStamp(transcriptPath);
-    const existing = this.see(sessionId).record;
+    const existing = this.see(sessionId)?.record;
     if (existing && stamp !== "" && existing.transcriptStamp === stamp) {
       tally.hits++;
       return ok(existing);
@@ -651,20 +655,29 @@ export class SessionUsageStore {
       transcriptPath,
     };
     // Something else landed first (another refold, a sweep): store nothing.
-    const slot = this.see(sessionId);
-    if (slot.record !== prior) return ok(record);
-    slot.record = record;
+    // A slot swept mid-flight is not brought back to hold a fold of it.
+    if (this.sessions.get(sessionId)?.record !== prior) return ok(record);
+    this.hold(sessionId).record = record;
     return ok(record);
   }
 
-  // The one write of `lastSeenAt`: the session's slot, created on first sight.
-  private see(sessionId: string): SessionSlot {
-    const slot = this.sessions.get(sessionId) ?? {
-      lastSeenAt: 0,
+  // The one write of `lastSeenAt`: the session's slot, refreshed as seen, or
+  // undefined while the store holds nothing for it — asking stores nothing.
+  private see(sessionId: string): SessionSlot | undefined {
+    const slot = this.sessions.get(sessionId);
+    if (slot) slot.lastSeenAt = Date.now();
+    return slot;
+  }
+
+  // The slot something is about to be stored in, created on the first store.
+  private hold(sessionId: string): SessionSlot {
+    const seen = this.see(sessionId);
+    if (seen) return seen;
+    const slot: SessionSlot = {
+      lastSeenAt: Date.now(),
       record: undefined,
       ring: [],
     };
-    slot.lastSeenAt = Date.now();
     this.sessions.set(sessionId, slot);
     return slot;
   }
