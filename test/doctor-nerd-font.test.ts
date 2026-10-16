@@ -167,7 +167,9 @@ describe("nerdFont probe", () => {
   // A mark there would answer for whichever terminal next goes unnamed.
   test("where nothing names the terminal, there is nothing to mark", () => {
     const cases: Array<[TerminalFacts, string]> = [
-      [{ kind: "unknown", called: "" }, "the doctor cannot read this terminal's font"],
+      [{ kind: "unnamed", term: "" }, "the doctor cannot read this terminal's font"],
+      // Its TERM is no name: many terminals share it.
+      [{ kind: "unnamed", term: "xterm-256color" }, "the doctor cannot read xterm-256color's font"],
       [
         { kind: "unasked", reason: "tmux display failed (no server)" },
         "tmux could not be asked which terminal is attached: tmux display failed (no server)",

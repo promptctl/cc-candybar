@@ -101,8 +101,20 @@ describe("links probe", () => {
       reason: `the doctor does not know whether Hyper draws links (OSC 8) — ${PROVE}`,
       more: [],
     });
-    const nameless = verdict(seen({ kind: "unknown", called: "" }));
-    expect(!nameless.ok && nameless.reason).toMatch(/^the doctor does not know whether this terminal draws/);
+  });
+
+  // A TERM is shared by many terminals: a click remembered under it would
+  // answer for every one of them, so none is, and none is promised.
+  test("a terminal nothing names but its TERM fails without promising to remember a click", () => {
+    const xterm = seen({ kind: "unnamed", term: "xterm-256color" });
+    expect(verdict(xterm)).toEqual({
+      ok: false,
+      reason:
+        "nothing names this terminal but its TERM (xterm-256color), so the doctor cannot tell whether it draws links (OSC 8) — click 🩺 doctor in the bar's settings menu: if it runs, links work",
+      more: [],
+    });
+    const nameless = verdict(seen({ kind: "unnamed", term: "" }));
+    expect(!nameless.ok && nameless.reason).toMatch(/^nothing names this terminal, so the doctor cannot tell/);
   });
 
   // A doctor click that came back from a terminal is a link it drew and the
@@ -174,7 +186,9 @@ describe("links probe", () => {
     expect(linkFields(seen(known("iterm2", "3.7.2")), { kind: "failed", reason: "x" })).toBe(
       "tmuxLinks=- linkMark=unread",
     );
-    expect(linkFields(seen({ kind: "unknown", called: "" }), clickedIn(""))).toBe("tmuxLinks=- linkMark=-");
+    expect(linkFields(seen({ kind: "unnamed", term: "xterm-256color" }), clickedIn("xterm-256color"))).toBe(
+      "tmuxLinks=- linkMark=-",
+    );
     expect(linkFields({ kind: "unasked", reason: "x" }, NO_MARKS)).toBe("tmuxLinks=- linkMark=-");
   });
 

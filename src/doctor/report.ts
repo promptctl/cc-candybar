@@ -95,6 +95,8 @@ export function nerdFontFields(
         return terminal.kind;
       case "unknown":
         return `unknown:${JSON.stringify(terminal.called)}`;
+      case "unnamed":
+        return `unnamed:${JSON.stringify(terminal.term)}`;
       case "bundling":
       case "unread":
       case "configured":

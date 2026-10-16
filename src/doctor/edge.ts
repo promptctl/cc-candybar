@@ -316,7 +316,7 @@ function terminalFacts(
   if (identity.kind !== "seen") return identity;
   const { identified, tmuxClient: client } = identity;
   const env = hints.terminalEnv;
-  if (identified.kind === "unknown") return identified;
+  if (identified.kind !== "known") return identified;
   const { name, version } = identified.terminal;
   if (isBundling(name)) return { kind: "bundling", name, version };
   if (!isConfigured(name)) return { kind: "unread", name, version };

@@ -33,13 +33,16 @@ describe("identifyInTmux", () => {
     });
   });
 
-  test("a terminal the doctor has no reading for keeps the name it went by", () => {
+  test("a terminal the doctor has no reading for keeps the name it gave itself", () => {
     expect(
       identifyInTmux({ termtype: "Apple_Terminal 455", termname: "xterm-256color" }),
     ).toEqual({ kind: "unknown", called: "Apple_Terminal 455" });
+  });
+
+  test("one that gives no name is unnamed, only its TERM said of it", () => {
     expect(identifyInTmux({ termtype: "", termname: "xterm-256color" })).toEqual({
-      kind: "unknown",
-      called: "xterm-256color",
+      kind: "unnamed",
+      term: "xterm-256color",
     });
   });
 });
@@ -76,12 +79,16 @@ describe("identifyFromEnv", () => {
     ).toEqual({ kind: "known", terminal: { name: "vscode", version: null } });
   });
 
-  test("anything else is unknown, under the name it went by", () => {
+  test("a TERM_PROGRAM the doctor does not know is unknown, under that name", () => {
     expect(identifyFromEnv({ TERM_PROGRAM: "Hyper", TERM: "xterm-256color" })).toEqual({
       kind: "unknown",
       called: "Hyper",
     });
-    expect(identifyFromEnv({})).toEqual({ kind: "unknown", called: "" });
+  });
+
+  test("no TERM_PROGRAM and a TERM no terminal owns is unnamed", () => {
+    expect(identifyFromEnv({ TERM: "xterm-256color" })).toEqual({ kind: "unnamed", term: "xterm-256color" });
+    expect(identifyFromEnv({})).toEqual({ kind: "unnamed", term: "" });
   });
 });
 

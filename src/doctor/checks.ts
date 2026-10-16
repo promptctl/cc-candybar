@@ -21,6 +21,7 @@ import type { DeclKind, UnusedDecl } from "../config/unused.js";
 import {
   LINK_TERMINALS,
   TERMINALS,
+  identifiedAs,
   linkSupport,
   releasedSince,
   terminalLabel,
@@ -150,9 +151,10 @@ export interface FontInUse {
 
 // [LAW:types-are-the-program] What the doctor knows about the terminal that
 // draws the session's bar. `unreported` is a client too old to say,
-// `unasked` a tmux server that could not be asked about its client, and
-// `unknown` a terminal the doctor does not know (`called` is the name it went
-// by, empty when nothing named it). A known terminal is one of three kinds
+// `unasked` a tmux server that could not be asked about its client, `unknown`
+// a terminal the doctor does not know by the name it gave itself, and
+// `unnamed` one that gave none, only its TERM said of it (Identified, in
+// src/doctor/terminal.ts). A known terminal is one of three kinds
 // (src/doctor/terminal.ts): one that ships its own Nerd Font symbols, whose
 // release is the whole question; one that draws them only from the font it is
 // set to, which is read; and one whose font the doctor has no reader for.
@@ -160,6 +162,7 @@ export type TerminalFacts =
   | { readonly kind: "unreported" }
   | { readonly kind: "unasked"; readonly reason: string }
   | { readonly kind: "unknown"; readonly called: string }
+  | { readonly kind: "unnamed"; readonly term: string }
   | {
       readonly kind: "bundling";
       readonly name: BundlingTerminal;
@@ -500,13 +503,19 @@ type SeenTerminal = Extract<TerminalIdentity, { kind: "seen" }>;
 // which tmux says for itself on every run — or null where nothing names it,
 // since a mark there would answer for whichever terminal next goes unnamed.
 export function linkSighting(identified: Identified): string | null {
-  return identified.kind === "known"
-    ? terminalLabel(identified.terminal.name)
-    : identified.called || null;
+  switch (identified.kind) {
+    case "known":
+      return terminalLabel(identified.terminal.name);
+    case "unknown":
+      return identified.called;
+    case "unnamed":
+      return null;
+  }
 }
 
-const PROVE_BY_CLICK =
-  "click 🩺 doctor in the bar's settings menu: if it runs, links work, and the doctor remembers it for this terminal";
+const CLICK_TO_SEE =
+  "click 🩺 doctor in the bar's settings menu: if it runs, links work";
+const PROVE_BY_CLICK = `${CLICK_TO_SEE}, and the doctor remembers it for this terminal`;
 
 // Whether the terminal draws the bar's links: a doctor click that came back
 // from it settles that for good; otherwise what the doctor knows of its
@@ -514,7 +523,10 @@ const PROVE_BY_CLICK =
 function drawsLinks(
   identified: Identified,
   marks: Asked<MarkBook>,
-): LinkSupport | { readonly kind: "unknown" } {
+):
+  | LinkSupport
+  | { readonly kind: "unknown" }
+  | { readonly kind: "unnamed"; readonly term: string } {
   const id = linkSighting(identified);
   if (
     marks.kind === "ok" &&
@@ -523,9 +535,14 @@ function drawsLinks(
   ) {
     return { kind: "draws" };
   }
-  return identified.kind === "known"
-    ? linkSupport(identified.terminal)
-    : { kind: "unknown" };
+  switch (identified.kind) {
+    case "known":
+      return linkSupport(identified.terminal);
+    case "unknown":
+      return { kind: "unknown" };
+    case "unnamed":
+      return identified;
+  }
 }
 
 // Why the bar's links do not reach the user, the terminal's own reason first:
@@ -534,10 +551,7 @@ function linkProblems(
   { identified, tmuxClient }: SeenTerminal,
   marks: Asked<MarkBook>,
 ): string[] {
-  const called =
-    identified.kind === "known"
-      ? terminalLabel(identified.terminal.name)
-      : identified.called || "this terminal";
+  const called = identifiedAs(identified);
   const support = drawsLinks(identified, marks);
   const terminal = ((): string[] => {
     switch (support.kind) {
@@ -558,6 +572,11 @@ function linkProblems(
       case "unknown":
         return [
           `the doctor does not know whether ${called} draws links (OSC 8) — ${PROVE_BY_CLICK}`,
+        ];
+      // Nothing to remember a click under: its TERM is shared by many.
+      case "unnamed":
+        return [
+          `nothing names this terminal${support.term === "" ? "" : ` but its TERM (${support.term})`}, so the doctor cannot tell whether it draws links (OSC 8) — ${CLICK_TO_SEE}`,
         ];
     }
   })();
@@ -697,7 +716,9 @@ function terminalCalled(terminal: TerminalFacts): string {
     case "unasked":
       return "this terminal";
     case "unknown":
-      return terminal.called === "" ? "this terminal" : terminal.called;
+      return terminal.called;
+    case "unnamed":
+      return terminal.term || "this terminal";
     case "bundling":
     case "unread":
     case "configured":
@@ -707,8 +728,9 @@ function terminalCalled(terminal: TerminalFacts): string {
   }
 }
 
-// What a mark answers for, or null where nothing names the terminal — a
-// mark there would answer for whichever terminal next goes unnamed. A named
+// What a mark answers for, or null where nothing names the terminal — its
+// TERM at most, which many terminals share, so a mark there would answer for
+// whichever terminal next goes unnamed under it. A named
 // terminal is its name, never its release (an update draws what it drew), and
 // for one whose font was read, the font and where it was read — so a mark
 // made under one font, or before the built-in glyphs were turned on, answers
@@ -717,9 +739,10 @@ function sightedIn(terminal: TerminalFacts): string | null {
   switch (terminal.kind) {
     case "unreported":
     case "unasked":
+    case "unnamed":
       return null;
     case "unknown":
-      return terminal.called === "" ? null : terminal.called;
+      return terminal.called;
     case "bundling":
     case "unread":
       return terminalLabel(terminal.name);
@@ -802,6 +825,7 @@ const nerdFont: Check = {
           `tmux could not be asked which terminal is attached: ${terminal.reason}`,
         );
       case "unknown":
+      case "unnamed":
       case "unread":
         return failed(`the doctor cannot read ${called}'s font`);
       case "bundling": {

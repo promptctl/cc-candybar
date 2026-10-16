@@ -100,6 +100,7 @@ function buildRuntime(
   tmux: TmuxHint | null,
   load: LoadOutcome = CLEAN_LOAD,
   terminal: TerminalFixture = GHOSTTY,
+  marks: ReturnType<typeof memoryMarkBook> = memoryMarkBook(),
 ) {
   const config = parseAndValidate(
     "<user>",
@@ -130,7 +131,6 @@ function buildRuntime(
   recordRender(sessionState, "s1");
   const settingsPath = path.join(dir, "settings.json");
   let probes = 0;
-  const marks = memoryMarkBook();
   const doctor: DoctorEdge = {
     probeTmux: () => {
       probes += 1;
@@ -155,7 +155,7 @@ function buildRuntime(
   const ctx: VerbContext = {
     ...testVerbContext(sessionState, undefined, config),
     doctor,
-    dlog: (_level, message) => logs.push(message),
+    dlog: (level, message) => logs.push(level === "warn" ? `warn: ${message}` : message),
   };
   const click = (url: string): void => {
     const { verb, value } = parseHandlerUrl(url);
@@ -282,6 +282,23 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     expect(rt.logs.filter((line) => line.startsWith("doctor:"))).toEqual([
       "doctor: config=ok urlHandler=ok links=ok tmuxTruecolor=ok effectRefresh=ok nerdFont=failed(1) glyphs=e0b0,e0b1 terminal=apple-terminal@455.1 font=- mark=- tmuxLinks=- linkMark=clicked (session=s1)",
     ]);
+  });
+
+  // Filing the click rides along with the run: a book that cannot be written
+  // is logged, and the doctor still reports.
+  test("a mark book that cannot be written does not stop the run, and says so in the log", () => {
+    const unwritable = {
+      ...memoryMarkBook(),
+      record: () => {
+        throw new Error("EROFS: read-only file system");
+      },
+    };
+    const rt = buildRuntime(null, CLEAN_LOAD, GHOSTTY, unwritable);
+    rt.openTools();
+    rt.clickVerb(VERB_DOCTOR_RUN);
+    expect(rt.render()).toContain("✓ links");
+    expect(rt.logs).toContain('warn: doctor: links mark not filed for "Ghostty": EROFS: read-only file system');
+    expect(rt.logs.find((line) => line.startsWith("doctor:"))).toMatch(/ linkMark=- \(session=s1\)$/);
   });
 
   test("in tmux with RGB and the var unset: failed row with [fix]; the fix lands and the row says restart", () => {

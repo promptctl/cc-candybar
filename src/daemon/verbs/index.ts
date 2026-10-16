@@ -1176,6 +1176,9 @@ function clickFacts(ctx: VerbContext, sid: string): DoctorFacts {
 // links: filed in the mark book, where `cc-candybar doctor` — which cannot
 // click — reads it. Nothing is filed where nothing names the terminal, or
 // over a book that cannot be read (the doctor's rows say why).
+// [LAW:no-silent-failure] The filing rides along with the run it came with,
+// so a write that fails is logged — and the event's `linkMark=-` shows
+// nothing was filed — while the run reports over the book as it was read.
 function clickedFrom(
   ctx: VerbContext,
   { terminal, marks }: ReturnType<typeof gatherFacts>,
@@ -1184,7 +1187,15 @@ function clickedFrom(
     terminal.kind === "seen" ? linkSighting(terminal.identified) : null;
   if (sighting === null || marks.kind === "failed") return marks;
   const clicked = { check: LINKS_CHECK, mark: "clicked" } as const;
-  ctx.doctor.marks.record(clicked, sighting);
+  try {
+    ctx.doctor.marks.record(clicked, sighting);
+  } catch (e) {
+    ctx.dlog(
+      "warn",
+      `doctor: links mark not filed for ${JSON.stringify(sighting)}: ${e instanceof Error ? e.message : String(e)}`,
+    );
+    return marks;
+  }
   return { kind: "ok", value: withMark(marks.value, clicked, sighting) };
 }
 

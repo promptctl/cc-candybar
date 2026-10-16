@@ -234,20 +234,25 @@ function fromTerm(term: string | undefined): Terminal | null {
   return name === undefined ? null : { name, version: null };
 }
 
-// What identifying the terminal found: one the doctor knows, or the name the
-// terminal goes by (an empty string when nothing named it).
+// [LAW:types-are-the-program] What identifying the terminal found: one the
+// doctor knows; one it does not, by the name it gave itself (its XTVERSION
+// reply, or TERM_PROGRAM); or one that gave none, so only the TERM it runs
+// under is said of it (empty when unset) — a value many terminals share, so
+// it names none of them, and nothing is remembered under it.
 export type Identified =
   | { readonly kind: "known"; readonly terminal: Terminal }
-  | { readonly kind: "unknown"; readonly called: string };
+  | { readonly kind: "unknown"; readonly called: string }
+  | { readonly kind: "unnamed"; readonly term: string };
 
 // Inside tmux the attached client is the terminal: tmux's word on it beats
 // the session's environment, which tmux passes on from whichever terminal
 // started the server.
 export function identifyInTmux(client: TmuxClientTerm): Identified {
   const terminal = fromXtversion(client.termtype) ?? fromTerm(client.termname);
-  return terminal === null
-    ? { kind: "unknown", called: client.termtype || client.termname }
-    : { kind: "known", terminal };
+  if (terminal !== null) return { kind: "known", terminal };
+  return client.termtype === ""
+    ? { kind: "unnamed", term: client.termname }
+    : { kind: "unknown", called: client.termtype };
 }
 
 export function identifyFromEnv(env: TerminalEnvHint): Identified {
@@ -262,9 +267,22 @@ export function identifyFromEnv(env: TerminalEnvHint): Identified {
             ? (env.TERM_PROGRAM_VERSION ?? null)
             : null,
         };
-  return terminal === null
-    ? { kind: "unknown", called: program ?? env.TERM ?? "" }
-    : { kind: "known", terminal };
+  if (terminal !== null) return { kind: "known", terminal };
+  return program === undefined
+    ? { kind: "unnamed", term: env.TERM ?? "" }
+    : { kind: "unknown", called: program };
+}
+
+// The identified terminal as a sentence names it.
+export function identifiedAs(identified: Identified): string {
+  switch (identified.kind) {
+    case "known":
+      return terminalLabel(identified.terminal.name);
+    case "unknown":
+      return identified.called;
+    case "unnamed":
+      return identified.term || "this terminal";
+  }
 }
 
 // Whether a known terminal draws OSC 8 links: it does, it draws none, or its
