@@ -4,7 +4,11 @@
 // requireCache gates presence by source kind. This file changes when
 // the cache vocabulary changes — add an arm to CACHE_SCHEMA and CacheDecl.
 
-import { CACHE_KEYS, type CacheDecl, type SourceKind } from "../dsl-types.js";
+import {
+  CACHE_KEYS,
+  type CacheDecl,
+  type VariableDeclWithCache,
+} from "../dsl-types.js";
 import { findKeyLine } from "./diagnostics.js";
 import {
   absolutePathProblem,
@@ -18,10 +22,10 @@ import {
   type ValidateCtx,
 } from "./validate-core.js";
 
-// [LAW:types-are-the-program] The kinds whose source the daemon re-reads on a
-// policy only the author can choose (no sensible default) — the field maps that
-// call requireCacheSpec are the whole list, so the parameter type is the set.
-type PolicySourceKind = Extract<SourceKind, "file" | "shell">;
+// [LAW:one-source-of-truth] The kinds whose source the daemon re-reads on a
+// policy only the author can choose (no sensible default): exactly the kinds
+// that carry a cache, read off that one union rather than listed again.
+type PolicySourceKind = VariableDeclWithCache["kind"];
 
 export function requireCache(
   ctx: ValidateCtx,

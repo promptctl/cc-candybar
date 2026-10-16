@@ -834,9 +834,9 @@ export type SourceKind = (typeof SOURCE_KINDS)[number];
 
 // [LAW:one-source-of-truth] The "which kinds have a cache field" predicate
 // lives here once. The loader's cross-ref and cycle validators narrow via
-// this guard instead of repeating the kind list (`!== "literal" && !==
-// "input" && ...`) at every site — adding a new no-cache kind only requires
-// updating the union and this guard.
+// this guard instead of repeating the kind list at every site. A kind that
+// takes a cache policy is listed in this union and this guard; a kind that
+// takes none needs nothing here.
 export type VariableDeclWithCache = FileVarDecl | ShellVarDecl;
 
 export function hasCacheField(v: VariableDecl): v is VariableDeclWithCache {

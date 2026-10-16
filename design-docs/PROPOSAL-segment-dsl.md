@@ -110,8 +110,8 @@ Each source kind has a default policy. User-overridable per variable:
 | `literal` | `never` | n/a |
 | `input` | per render request | n/a |
 | `env` | `never` (per process) | n/a |
-| `template` | auto-tracked dependencies | `never`, `ttl` |
-| `time` | `ttl: 1s` | any TTL |
+| `template` | auto-tracked dependencies | none — a `cache:` is a load error |
+| `time` | the instant its render is drawn at | none — a `cache:` is a load error |
 | `shell` / `file` | **must declare one of:** `ttl`, `watch_file`, `depends_on`, `key`, `never` | required |
 | `git` | the daemon's git cache, which watches the repository | none — a `cache:` is a load error |
 

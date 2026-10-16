@@ -350,6 +350,11 @@ const SHELL_FIELDS: FieldSpecMap<Omit<ShellVarDecl, "kind">> = {
   cache: requireCacheSpec("shell"),
   default: sourceDefaultSpec(),
 };
+// [LAW:one-source-of-truth] The refusal a kind that takes no cache policy gives
+// a `cache:`, spelled once; each kind supplies only why it needs none.
+function noCachePolicy(why: string): Readonly<Record<string, string>> {
+  return { cache: `${why}, so it takes no cache policy — delete the key` };
+}
 const TEMPLATE_FIELDS: FieldSpecMap<Omit<TemplateVarDecl, "kind">> = {
   template: requireStringSpec(),
   default: optionalStringSpec(),
@@ -357,10 +362,9 @@ const TEMPLATE_FIELDS: FieldSpecMap<Omit<TemplateVarDecl, "kind">> = {
 // [LAW:no-silent-failure] A template variable is a computed that tracks every
 // variable it reads; a `cache:` was accepted here and never reached the runtime,
 // so a ttl, a depends_on or a key changed nothing.
-const TEMPLATE_VAR_REMOVED = {
-  cache:
-    "a template variable recomputes whenever a variable it reads changes, so it takes no cache policy — delete the key",
-};
+const TEMPLATE_VAR_REMOVED = noCachePolicy(
+  "a template variable recomputes whenever a variable it reads changes",
+);
 const TIME_FIELDS: FieldSpecMap<Omit<TimeVarDecl, "kind">> = {
   layout: requireStringSpec(),
   default: optionalStringSpec(),
@@ -368,10 +372,9 @@ const TIME_FIELDS: FieldSpecMap<Omit<TimeVarDecl, "kind">> = {
 // [LAW:no-silent-failure] A time variable reads the instant its render is drawn
 // at, so it changes exactly when the time it shows does; a `cache:` ttl once set
 // how often it re-read the wall clock, and would now change nothing.
-const TIME_VAR_REMOVED = {
-  cache:
-    "a time variable reads the instant its render is drawn at, so it takes no cache policy — delete the key",
-};
+const TIME_VAR_REMOVED = noCachePolicy(
+  "a time variable reads the instant its render is drawn at",
+);
 const GIT_VAR_FIELDS: FieldSpecMap<Omit<GitVarDecl, "kind">> = {
   field: gitFieldSpec(),
   default: optionalStringSpec(),
@@ -379,10 +382,9 @@ const GIT_VAR_FIELDS: FieldSpecMap<Omit<GitVarDecl, "kind">> = {
 // [LAW:no-silent-failure] A git variable refreshes through the daemon's git
 // cache, which watches the repository itself; a `cache:` here was required and
 // then never read, so a ttl or a watched path changed nothing.
-const GIT_VAR_REMOVED = {
-  cache:
-    "a git variable is refreshed by the daemon's own watch on the repository, so it takes no cache policy — delete the key",
-};
+const GIT_VAR_REMOVED = noCachePolicy(
+  "a git variable is refreshed by the daemon's own watch on the repository",
+);
 const STATE_FIELDS: FieldSpecMap<Omit<StateVarDecl, "kind">> = {
   key: requireStringSpec(),
   default: optionalStringSpec(),
