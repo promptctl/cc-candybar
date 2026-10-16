@@ -30,6 +30,8 @@ export function recordingPath(server: string, pane: string): string {
 export interface Invocation {
   readonly hookData: ClaudeHookData;
   readonly cwd: string;
+  // What the terminal on its stderr answered; empty when it had none.
+  readonly tty: { readonly columns?: number; readonly rows?: number };
   readonly argv: readonly string[];
   readonly env: Readonly<Record<string, string>>;
 }
@@ -42,14 +44,24 @@ export type Recording =
 
 // [LAW:parse-dont-validate] The record's layout, NUL-separated (no field can
 // hold a NUL — JSON escapes it, argv and the environment cannot carry one):
-// the payload, the cwd, argc, argv, then one `NAME=value` per variable, each
-// field NUL-terminated. The payload's shape is the daemon's to check
-// (validateHookData), as for every render request.
+// the payload, the cwd, `rows cols` or nothing, argc, argv, then one
+// `NAME=value` per variable, each field NUL-terminated. The payload's shape is
+// the daemon's to check (validateHookData), as for every render request.
 function parseInvocation(file: string, text: string): Invocation {
-  const [payload, cwd, argc, ...rest] = text.split("\0");
+  const notARecord = new Error(`bar-pane: ${file} is not a statusline record`);
+  if (!text.endsWith("\0")) throw notARecord;
+  const [payload, cwd, size, argc, ...rest] = text.slice(0, -1).split("\0");
   const n = Number(argc);
-  if (cwd === undefined || !Number.isInteger(n) || rest.length < n + 1) {
-    throw new Error(`bar-pane: ${file} is not a statusline record`);
+  const env = rest.slice(n);
+  const tty = /^(\d+) (\d+)$/.exec(size ?? "");
+  if (
+    cwd === undefined ||
+    (size !== "" && tty === null) ||
+    !Number.isInteger(n) ||
+    rest.length < n ||
+    env.some((entry) => !entry.includes("="))
+  ) {
+    throw notARecord;
   }
   let hookData: ClaudeHookData;
   try {
@@ -62,9 +74,10 @@ function parseInvocation(file: string, text: string): Invocation {
   return {
     hookData,
     cwd,
+    tty: tty === null ? {} : { rows: Number(tty[1]), columns: Number(tty[2]) },
     argv: rest.slice(0, n),
     env: Object.fromEntries(
-      rest.slice(n, -1).map((entry) => {
+      env.map((entry) => {
         const eq = entry.indexOf("=");
         return [entry.slice(0, eq), entry.slice(eq + 1)];
       }),

@@ -88,6 +88,8 @@ describe("bar-pane recording", () => {
       invocation: {
         hookData: { session_id: "s2" },
         cwd: fs.realpathSync(state),
+        // The test's stderr is a pipe: the client's ioctl would answer nothing.
+        tty: {},
         argv,
         env: expect.objectContaining(env),
       },
@@ -107,12 +109,33 @@ describe("bar-pane recording", () => {
     expect(JSON.parse(out)).toEqual({ session_id: "s2" });
   });
 
-  it("throws, naming the file, on a record it cannot parse", () => {
+  const write = (text: string) => {
     const file = recordingPath("anim,123", "%3");
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, "{ half\0/\x000\0");
-    expect(() => readRecording("anim,123", "%3")).toThrow(file);
-    fs.writeFileSync(file, "{}");
+    fs.writeFileSync(file, text);
+    return file;
+  };
+
+  it("reads the size the statusline's terminal answered", () => {
+    write('{}\0/\x0040 120\x000\0A=1\0');
+    const recording = readRecording("anim,123", "%3");
+    expect(recording.kind === "recorded" && recording.invocation).toEqual({
+      hookData: {},
+      cwd: "/",
+      tty: { rows: 40, columns: 120 },
+      argv: [],
+      env: { A: "1" },
+    });
+  });
+
+  it.each([
+    ["a payload that is not JSON", "{ half\0/\0\x000\0"],
+    ["no record at all", "{}"],
+    ["a record cut short of its last NUL", "{}\0/\0\x000\0A=1"],
+    ["an environment entry with no value", "{}\0/\0\x000\0A=1\0B\0"],
+    ["a size that is not rows and columns", "{}\0/\x00wide\x000\0"],
+  ])("throws, naming the file, on %s", (_, text) => {
+    const file = write(text);
     expect(() => readRecording("anim,123", "%3")).toThrow(file);
   });
 });
