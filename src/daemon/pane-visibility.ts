@@ -46,8 +46,9 @@ type ServerView =
 
 export interface VisibilityDeps {
   listPanes(socket: string): Promise<TmuxRun>;
-  // Called after a refresh in which any server's shown panes changed.
-  onChange(): void;
+  // Called after a refresh in which any server's shown panes changed, or
+  // whether it could be asked, with those servers' sockets.
+  onChange(sockets: ReadonlySet<string>): void;
   log(level: "info" | "warn", line: string): void;
 }
 
@@ -84,12 +85,12 @@ export class PaneVisibility {
         return [socket, view] as const;
       }),
     );
-    let changed = false;
+    const changed = new Set<string>();
     for (const [socket, view] of answers) {
       const before = this.servers.get(socket);
       this.servers.set(socket, view);
       if (sameView(before, view)) continue;
-      changed = true;
+      changed.add(socket);
       // [LAW:no-silent-failure] Each change of what a server shows, or of
       // whether it can be asked, is logged once — not each second.
       this.deps.log(
@@ -99,7 +100,7 @@ export class PaneVisibility {
           : `visibility socket=${JSON.stringify(socket)} unasked: ${view.reason} — its panes count as shown`,
       );
     }
-    if (changed) this.deps.onChange();
+    if (changed.size > 0) this.deps.onChange(changed);
   }
 }
 

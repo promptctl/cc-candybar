@@ -10,11 +10,16 @@
 // the daemon cannot take is refused with a reply, never a thrown handler.
 
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 
 import { openFrameStream, type StreamEnd } from "../src/daemon/client-frames";
-import { PROTOCOL_VERSION, type Response } from "../src/daemon/protocol";
+import {
+  PROTOCOL_VERSION,
+  encodeFrame,
+  type Response,
+} from "../src/daemon/protocol";
 import type { StatsSnapshot } from "../src/daemon/stats";
 import {
   click,
@@ -235,5 +240,22 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       error: expect.stringContaining("request 'cwd' is not an absolute path: 42"),
     });
     expect((await stats()).requests.errored).toBe(before + 1);
+  });
+
+  test("a subscriber that hangs up before its subscribe is handled leaves no feed behind", async () => {
+    await render(sockPath, "feed-hangup", projectDir, {}, args("still"));
+    const before = await feedStats();
+    await new Promise<void>((resolve) => {
+      const sock = net.createConnection({ path: sockPath }, () => {
+        sock.end(encodeFrame({ v: PROTOCOL_VERSION, kind: "subscribe", sessionId: "feed-hangup" }));
+        sock.destroy();
+        resolve();
+      });
+    });
+    await sleep(300);
+    expect(await feedStats()).toMatchObject({
+      feeds: before.feeds,
+      subscribers: before.subscribers,
+    });
   });
 });

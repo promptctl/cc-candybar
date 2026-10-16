@@ -116,6 +116,7 @@ import { newestWins } from "../utils/newest-wins.js";
 import { LIST_PANES_FORMAT, PaneVisibility } from "./pane-visibility.js";
 import { runTmuxAsync } from "../proc/tmux.js";
 import { reaction } from "mobx";
+import { setImmediate } from "node:timers";
 import type { RenderedLine } from "../dsl/node-registry.js";
 import { productionClaudeInputEdge } from "../claude-input/edge.js";
 import {
@@ -180,8 +181,13 @@ const effectSessions = new EffectSessions<RenderedLine>();
 // click — draws its next frame at once.
 const frameFeeds = new FrameFeeds<CheckedRenderRequest>({
   render: (req) => renderFrame(req),
+  // [LAW:no-ambient-temporal-coupling] The wake runs on the next turn of the
+  // event loop, not inside the session write that changed the revision, so a
+  // click's whole run of writes lands before a frame of it is drawn.
   watch: (sessionId, onChange) =>
-    reaction(() => sessionState.revision(sessionId), onChange),
+    reaction(() => sessionState.revision(sessionId), onChange, {
+      scheduler: (run) => setImmediate(run),
+    }),
   periods: FEED_PERIODS,
   now: () => Date.now(),
   log: dlog,
@@ -197,19 +203,28 @@ const paneVisibility = new PaneVisibility({
       "-F",
       LIST_PANES_FORMAT,
     ]),
-  onChange: () => frameFeeds.wakeAll(),
+  // Only the sessions on a server whose view changed are drawn again.
+  onChange: (sockets) => {
+    for (const { sessionId, req } of frameFeeds.watched())
+      if (req.hints.tmux && sockets.has(req.hints.tmux.socket))
+        frameFeeds.wake(sessionId);
+  },
   log: dlog,
 });
 const VISIBILITY_INTERVAL_MS = 1000;
+// Render requests received so far: each one's place in the order they arrived.
+let renderArrivals = 0;
 // The servers of the sessions someone is watching; none, so no query, while
 // nobody is.
 const watchedTmuxServers = (): ReadonlySet<string> =>
   new Set(
-    frameFeeds
-      .watched()
-      .flatMap(({ hints: { tmux } }) =>
-        tmux === null || tmux === undefined ? [] : [tmux.socket],
-      ),
+    frameFeeds.watched().flatMap(
+      ({
+        req: {
+          hints: { tmux },
+        },
+      }) => (tmux === null || tmux === undefined ? [] : [tmux.socket]),
+    ),
   );
 // [LAW:no-ambient-temporal-coupling] The next refresh is scheduled when this
 // one has its answers, so a tmux server slower than the interval is never
@@ -766,7 +781,8 @@ function handleConnection(sock: net.Socket): void {
   stats.inFlight = inFlight;
   let responded = false;
   // A connection is in flight until it is answered and closes, or until it
-  // becomes a subscription, which is counted by its feed instead.
+  // becomes a subscription, which daemon-stats counts as one of
+  // `frameFeeds.subscribers` instead.
   let counted = true;
   const leaveInFlight = (): void => {
     if (!counted) return;
@@ -878,6 +894,9 @@ function handleConnection(sock: net.Socket): void {
     // daemon had not yet read the subscribe — is not a subscription: its socket is closing, and a
     // feed attached to it would never hear the close. The subscriber was told, and opens another.
     if (responded) return;
+    // A subscriber that hung up before its subscribe was handled: its close has
+    // already fired, so a feed attached now would never hear it.
+    if (sock.destroyed) return;
     clearTimeout(timer);
     responded = true;
     leaveInFlight();
@@ -1020,11 +1039,14 @@ export async function handleRequest(
     // A throw is this request's own RENDER_FAILED reply, so the event is the
     // one record of it and the connection's catch never sees a render.
     const facts: RenderFacts = [];
+    // Where this request came in the order they arrived: renders of one session
+    // can finish out of it.
+    const order = ++renderArrivals;
     const checked = checkRenderRequest(req);
     const rendered: { outcome: RenderOutcome; resp: Response } = !checked.ok
       ? refusedRender(checked.problems)
       : await renderChecked(checked.req, at, facts).then(
-          (output) => {
+          ({ output, moves }) => {
             const resp = { ok: true, output } as const;
             // [LAW:one-source-of-truth] A request the render took is the
             // session's data from now on: its frames are drawn from it, and
@@ -1032,7 +1054,8 @@ export async function handleRequest(
             frameFeeds.note(
               checked.req.hookData.session_id,
               checked.req,
-              feedFrameOf(checked.req, resp),
+              order,
+              feedFrameOf(checked.req, resp, moves),
             );
             return { outcome: { kind: "ok" } as const, resp };
           },
@@ -1333,14 +1356,19 @@ function handleClick(
 // would be answered with, and the bar moves when its effects say it does.
 // [LAW:parse-dont-validate] The request crossed the checkpoint when it was
 // noted, so a frame renders it without asking again.
-// [LAW:nothing-unseen] A frame that throws writes the render event a throwing
-// request would; the feed summarizes the frames that render.
+// [LAW:nothing-unseen] A frame that throws carries the render event a throwing
+// request writes, for the feed to log when that failure is first pushed; the
+// feed summarizes the frames that render.
 async function renderFrame(req: CheckedRenderRequest): Promise<FeedFrame> {
   const started = new Date();
   const facts: RenderFacts = [];
   try {
-    const output = await renderChecked(req, instantOf(started), facts);
-    return feedFrameOf(req, { ok: true, output });
+    const { output, moves } = await renderChecked(
+      req,
+      instantOf(started),
+      facts,
+    );
+    return feedFrameOf(req, { ok: true, output }, moves);
   } catch (error) {
     const outcome = { kind: "threw", error } as const;
     const { level, line } = renderEvent(
@@ -1348,17 +1376,21 @@ async function renderFrame(req: CheckedRenderRequest): Promise<FeedFrame> {
       outcome,
       Date.now() - started.getTime(),
     );
-    dlog(level, `frame ${line}`);
-    return { resp: renderFailed(error), motion: "still" };
+    return {
+      resp: renderFailed(error),
+      motion: "still",
+      failure: { level, line: `frame ${line}` },
+    };
   }
 }
 
 // The frame a render of `req` just drew: the bar is due again at the moving
-// rate while it moves AND someone can see it.
-function feedFrameOf(req: CheckedRenderRequest, resp: Response): FeedFrame {
-  const moves = frameMoves(
-    effectSessions.of(req.hookData.session_id).lastFrame(),
-  );
+// rate while it `moves` AND someone can see it.
+function feedFrameOf(
+  req: CheckedRenderRequest,
+  resp: Response,
+  moves: boolean,
+): FeedFrame {
   return {
     resp,
     motion: !moves
@@ -1366,6 +1398,7 @@ function feedFrameOf(req: CheckedRenderRequest, resp: Response): FeedFrame {
       : paneVisibility.shown(req.hints.tmux)
         ? "moving"
         : "unseen",
+    failure: null,
   };
 }
 
@@ -1441,13 +1474,15 @@ const refusedRender = (problems: string[]) => ({
   } satisfies Response,
 });
 
-// The bar for a checked request, at `at`. A throw is the caller's to record.
-// `facts` is the render event's record, filled as each stage learns its part.
+// The bar for a checked request, at `at`, and whether anything on it moves
+// (read off this render's own effect frame, in the same synchronous step that
+// drew it). A throw is the caller's to record. `facts` is the render event's
+// record, filled as each stage learns its part.
 async function renderChecked(
   req: CheckedRenderRequest,
   at: Instant,
   facts: RenderFacts,
-): Promise<string> {
+): Promise<{ output: string; moves: boolean }> {
   noteFacts(facts, {
     sid: req.hookData.session_id,
     at: at.toFixed(3),
@@ -1732,5 +1767,5 @@ async function renderChecked(
     upd: String(updates.length),
     warn: warned,
   });
-  return output + "\n";
+  return { output: output + "\n", moves: frameMoves(fx) };
 }

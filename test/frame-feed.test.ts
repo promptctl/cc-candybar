@@ -16,12 +16,20 @@ const PERIODS = { moving: 20, still: 400 };
 // one while it does. `renders` counts the renders, `changes` the watches'
 // change callbacks, by session. `note` notes a request with the answer a
 // request's own render would give, as the daemon does.
-function harness(opts: { motion: Motion; renderMs?: number }) {
-  const state = { motion: opts.motion, renders: 0, n: 0 };
-  const frameOf = (req: string): FeedFrame => ({
-    resp: { ok: true, output: `${req}#${state.motion === "still" ? state.n : ++state.n}` },
-    motion: state.motion,
-  });
+function harness(opts: { motion: Motion; renderMs?: number; fails?: boolean }) {
+  const state = { motion: opts.motion, renders: 0, n: 0, order: 0 };
+  const frameOf = (req: string): FeedFrame =>
+    opts.fails === true
+      ? {
+          resp: { ok: false, error: `${req} threw`, code: "RENDER_FAILED" },
+          motion: "still",
+          failure: { level: "error", line: `frame ${req} threw` },
+        }
+      : {
+          resp: { ok: true, output: `${req}#${state.motion === "still" ? state.n : ++state.n}` },
+          motion: state.motion,
+          failure: null,
+        };
   const changes = new Map<string, () => void>();
   const log: string[] = [];
   const feeds = new FrameFeeds<string>({
@@ -38,8 +46,8 @@ function harness(opts: { motion: Motion; renderMs?: number }) {
     now: () => Date.now(),
     log: (_level, line) => log.push(line),
   });
-  const note = (sessionId: string, req: string): void =>
-    feeds.note(sessionId, req, frameOf(req));
+  const note = (sessionId: string, req: string, order = ++state.order): void =>
+    feeds.note(sessionId, req, order, frameOf(req));
   return { feeds, note, state, changes, log };
 }
 
@@ -127,7 +135,7 @@ test("the last subscriber leaving stops the feed and logs what it drew", async (
   expect(changes.has("s")).toBe(false);
   expect(feeds.getStats()).toMatchObject({ feeds: 0, subscribers: 0 });
   expect(log.at(-1)).toMatch(
-    /^feed sid="s" closed subscribers=0 .* drawn=(\d+) noted=0 moving=\1 unseen=0 pushed=\d+/,
+    /^feed sid="s" closed subscribers=0 .* drawn=(\d+) noted=0 moving=\1 unseen=0 failed=0 pushed=\d+/,
   );
   // A request noted for a session nobody watches draws nothing.
   note("s", "again");
@@ -156,7 +164,7 @@ test("a bar that moves where nobody can see it is drawn at the still rate, and i
   close();
   // Drawn at 0 and 400 ms: the still period, not the 20 ms a moving bar gets.
   expect(state.renders).toBe(2);
-  expect(log.at(-1)).toMatch(/ drawn=2 noted=0 moving=0 unseen=2 /);
+  expect(log.at(-1)).toMatch(/ drawn=2 noted=0 moving=0 unseen=2 failed=0 /);
 });
 
 test("a noted answer counts as the feed's frame, and the next falls due a period after it", async () => {
@@ -170,5 +178,41 @@ test("a noted answer counts as the feed's frame, and the next falls due a period
   close();
   expect(state.renders).toBe(1);
   expect(got).toEqual(["bar#0"]);
-  expect(log.at(-1)).toMatch(/ drawn=1 noted=1 moving=0 unseen=0 pushed=1 /);
+  expect(log.at(-1)).toMatch(/ drawn=1 noted=1 moving=0 unseen=0 failed=0 pushed=1 /);
+});
+
+test("a request that arrived before the one held is not the session's data, however late its render finishes", async () => {
+  const { feeds, note } = harness({ motion: "still" });
+  const got: string[] = [];
+  const close = feeds.subscribe("s", (r) => got.push(outputOf(r)));
+  note("s", "newer", 2);
+  note("s", "older", 1);
+  await sleep(20);
+  close();
+  expect(got).toEqual(["newer#0"]);
+});
+
+test("a watched session's request outlives the eviction of the least recently noted", async () => {
+  const { feeds, note, state, changes } = harness({ motion: "still" });
+  note("s", "bar");
+  const close = feeds.subscribe("s", () => {});
+  await sleep(20);
+  for (let i = 0; i < 300; i++) note(`other-${i}`, "x");
+  const drawn = state.renders;
+  changes.get("s")!();
+  await sleep(20);
+  close();
+  expect(state.renders).toBe(drawn + 1);
+});
+
+test("a frame that keeps failing the same way is logged once, and counted every time", async () => {
+  const { feeds, note, changes, log } = harness({ motion: "still", fails: true });
+  note("s", "bar");
+  const close = feeds.subscribe("s", () => {});
+  await sleep(20);
+  changes.get("s")!();
+  await sleep(20);
+  close();
+  expect(log.filter((l) => l === "frame bar threw")).toHaveLength(1);
+  expect(log.at(-1)).toMatch(/ drawn=2 .* failed=2 pushed=1 /);
 });
