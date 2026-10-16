@@ -21,9 +21,9 @@ import {
 jest.setTimeout(30_000);
 
 // The rule branches on the session id, payload the daemon carries per render,
-// so one config draws a render that reports a theme-rule warning and one that
-// does not.
-const RULE = `{{ if hasSuffix "-bad" .session.id }}no-such-theme{{ else }}dracula{{ end }}`;
+// so one config draws a render whose rule names no theme, one whose rule throws
+// (brandon-unfiled-3248.2gq), and one that warns of nothing.
+const RULE = `{{ if hasSuffix "-bad" .session.id }}no-such-theme{{ else if hasSuffix "-threw" .session.id }}{{ fail "the rule broke" }}{{ else }}dracula{{ end }}`;
 
 // `dup` repeats a key, which loads (last wins) but earns the load's warning that
 // the settings menu cannot edit the file; `clean` is the same config without it.
@@ -61,8 +61,14 @@ describe("a daemon render's event names every warning its strip carried", () => 
     {
       config: "clean",
       sessionId: "clean-bad",
-      warn: "theme-rule",
+      warn: "rule",
       shown: ["no-such-theme"],
+    },
+    {
+      config: "clean",
+      sessionId: "clean-threw",
+      warn: "rule",
+      shown: ["broke"],
     },
     {
       config: "dup",
@@ -73,7 +79,7 @@ describe("a daemon render's event names every warning its strip carried", () => 
     {
       config: "dup",
       sessionId: "dup-bad",
-      warn: "load,theme-rule",
+      warn: "load,rule",
       shown: ["duplicate", "no-such-theme"],
     },
   ] as const)(

@@ -7,6 +7,7 @@ export {
   THEME_FLOOR,
   STYLE_FLOOR,
   EXPRESSION_SLOTS,
+  SLOT_FLOORS,
   isExpression,
   resolveSelection,
   finishSelection,

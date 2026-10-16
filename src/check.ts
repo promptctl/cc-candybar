@@ -431,19 +431,31 @@ export function renderEffective(
   // What the daemon shows on the bar as a warning and check lists beside its
   // verdict, without failing it: a fact about the look the config chose.
   const advisories = new Set<string>();
-  // [LAW:types-are-the-program] Keyed by every kind a render can warn of, so a
-  // new kind is a compile error here until check says what it means.
-  const warned: Record<RenderWarning["kind"], (message: string) => void> = {
-    // [LAW:no-silent-failure] A palette rule whose result names no installed
-    // theme is a real finding for a headless pass: the bar would render, in
-    // the wrong theme, with nobody watching the strip. Keyed "theme rule" so it
-    // dedupes and prints through the one channel every other finding does;
-    // the message itself names the path(s) the rule was written at, which may
-    // be a preset's globals rather than the config's own.
-    "theme-rule": (message) => failures.set("theme rule", message),
-    // An open band the chosen look leaves short of a floor: the bar draws it
-    // as near as it comes, and the message names what clears it.
-    "band-floor": (message) => advisories.add(message),
+  // [LAW:types-are-the-program] Exhaustive over every kind a render can warn
+  // of, so a new kind is a compile error here until check says what it means.
+  const warned = (warning: RenderWarning): void => {
+    switch (warning.kind) {
+      // [LAW:no-silent-failure] A globals rule the render could not honour —
+      // its template threw, or a palette rule named no installed theme — is a
+      // real finding for a headless pass: the bar would render that slot's
+      // floor with nobody watching the strip. Keyed by its slot so two failing
+      // slots are two findings; the message names the path(s) the rule was
+      // written at, which may be a preset's globals rather than the config's.
+      case "rule":
+        failures.set(`${warning.slot} rule`, warning.message);
+        return;
+      // An open band the chosen look leaves short of a floor: the bar draws it
+      // as near as it comes, and the message names what clears it.
+      case "band-floor":
+        advisories.add(warning.message);
+        return;
+      default: {
+        const unhandled: never = warning;
+        throw new Error(
+          `unhandled render warning ${JSON.stringify(unhandled)}`,
+        );
+      }
+    }
   };
   const rendered = renderDsl(
     config,
@@ -456,7 +468,7 @@ export function renderEffective(
     {
       onSegmentError: (placementId: string, message: string) =>
         failures.set(`segment "${placementId}"`, message),
-      onRenderWarning: ({ kind, message }) => warned[kind](message),
+      onRenderWarning: warned,
     },
     renderSelectionOf(effective),
   );
