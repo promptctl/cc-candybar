@@ -28,11 +28,11 @@ describe("shownPanes", () => {
 
 describe("PaneVisibility", () => {
   function harness(answers: Record<string, TmuxRun>) {
-    const changes: number[] = [];
+    const changes: string[][] = [];
     const log: string[] = [];
     const visibility = new PaneVisibility({
       listPanes: (socket) => Promise.resolve(answers[socket]!),
-      onChange: () => changes.push(1),
+      onChange: (sockets) => changes.push([...sockets]),
       log: (_level, line) => log.push(line),
     });
     return { visibility, changes, log, answers };
@@ -58,7 +58,7 @@ describe("PaneVisibility", () => {
     h.answers["/s"] = { kind: "ok", stdout: "%2 1 1 0 1\n" };
     await h.visibility.refresh(new Set(["/s"]));
     expect(h.visibility.shown(hint("/s", "%2"))).toBe(true);
-    expect(h.changes).toHaveLength(2);
+    expect(h.changes).toEqual([["/s"], ["/s"]]);
     expect(h.log).toEqual([
       'visibility socket="/s" shown=%1',
       'visibility socket="/s" shown=%2',

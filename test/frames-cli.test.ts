@@ -1,12 +1,16 @@
 // `cc-candybar frames` (src/frames-cli.ts): what a stream the daemon ended
 // calls for, and a flag that could do nothing refused rather than ignored.
 
+import { PROTOCOL_VERSION } from "../src/daemon/protocol";
 import { afterStreamEnd, runFrames } from "../src/frames-cli";
 
-const refused = (code: "BAD_REQUEST" | "VERSION_MISMATCH" | "TIMEOUT") =>
+const refused = (
+  code: "BAD_REQUEST" | "VERSION_MISMATCH" | "TIMEOUT",
+  daemonV = PROTOCOL_VERSION,
+) =>
   ({
     kind: "refused",
-    resp: { ok: false, code, error: `${code} said` },
+    resp: { ok: false, code, error: `${code} said`, daemonV },
   }) as const;
 
 test("a daemon that refuses the stream for good ends the client; a busy one, a restart and a failure reconnect", () => {
@@ -14,7 +18,16 @@ test("a daemon that refuses the stream for good ends the client; a busy one, a r
     kind: "exit",
     reason: "the daemon refused the stream: BAD_REQUEST: BAD_REQUEST said",
   });
-  expect(afterStreamEnd(refused("VERSION_MISMATCH"))).toMatchObject({ kind: "exit" });
+  // A daemon newer than this client: this client is the stale one.
+  expect(afterStreamEnd(refused("VERSION_MISMATCH", PROTOCOL_VERSION + 1))).toMatchObject({
+    kind: "exit",
+  });
+  // A daemon older than this client exits on that answer, so a respawn runs
+  // the newer build.
+  expect(afterStreamEnd(refused("VERSION_MISMATCH", PROTOCOL_VERSION - 1))).toMatchObject({
+    kind: "reconnect",
+    kick: true,
+  });
   expect(afterStreamEnd(refused("TIMEOUT"))).toMatchObject({
     kind: "reconnect",
     kick: false,

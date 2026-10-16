@@ -18,11 +18,19 @@ import type { Response } from "./protocol";
 export type Motion = "moving" | "unseen" | "still";
 
 // What one render produced for a feed: the response its subscribers receive
-// (the one a render request is answered with) and how the bar moves, which
-// decides when the next frame is due.
+// (the one a render request is answered with), how the bar moves, which
+// decides when the next frame is due, and — for a render that threw — the
+// render event describing it, logged when that failure is first pushed.
 export interface FeedFrame {
   readonly resp: Response;
   readonly motion: Motion;
+  readonly failure: LogLine | null;
+}
+
+type Level = "info" | "warn" | "error";
+export interface LogLine {
+  readonly level: Level;
+  readonly line: string;
 }
 
 // Milliseconds from the start of one frame to the next: while the bar moves,
@@ -46,7 +54,7 @@ export interface FeedDeps<Req> {
   watch(sessionId: string, onChange: () => void): () => void;
   periods: FeedPeriods;
   now(): number;
-  log(level: "info" | "warn" | "error", line: string): void;
+  log(level: Level, line: string): void;
 }
 
 // [LAW:no-ambient-temporal-coupling] Where a feed's frame clock stands, as
@@ -71,6 +79,7 @@ interface Feed {
   noted: number;
   moving: number;
   unseen: number;
+  failed: number;
   pushed: number;
   drawMs: number;
   summarizedAt: number;
@@ -78,8 +87,17 @@ interface Feed {
 
 // How often a long-lived feed writes its summary to the log.
 const SUMMARY_EVERY_MS = 60_000;
-// Sessions whose latest request is kept, least recently noted evicted first.
+// Sessions whose latest request is kept, least recently noted evicted first —
+// except a session someone is watching, whose feed draws from it.
 const MAX_REQUESTS = 256;
+
+// A session's latest request and `order`: where it came in the order the
+// daemon received requests, which is what makes one request later than another
+// when their renders finish out of order.
+interface Noted<Req> {
+  readonly req: Req;
+  readonly order: number;
+}
 
 export interface FeedStats {
   readonly feeds: number;
@@ -95,30 +113,34 @@ export interface FeedStats {
  * subscribers to one session share every render.
  */
 export class FrameFeeds<Req> {
-  private readonly requests = new Map<string, Req>();
+  private readonly requests = new Map<string, Noted<Req>>();
   private readonly feeds = new Map<string, Feed>();
   private drawn = 0;
   private pushed = 0;
 
   constructor(private readonly deps: FeedDeps<Req>) {}
 
-  // The session's latest valid render request, which its frames are drawn
-  // from from now on, and `frame`: the bar the daemon answered it with.
-  // [LAW:one-source-of-truth] That answer IS the request's frame at this
+  // A valid render request the daemon received `order`-th, and `frame`: the
+  // bar it was answered with. The latest request a session sent is the one its
+  // frames are drawn from; one that arrived before it — a slow render finishing
+  // late — is not the session's data, and its frame would step the bar back.
+  // [LAW:one-source-of-truth] The answer IS the request's frame at this
   // instant, so it is pushed as one, and the next frame falls due a period
   // after it rather than being drawn again at once.
-  note(sessionId: string, req: Req, frame: FeedFrame): void {
+  note(sessionId: string, req: Req, order: number, frame: FeedFrame): void {
+    const held = this.requests.get(sessionId);
+    if (held !== undefined && held.order > order) return;
     this.requests.delete(sessionId);
-    this.requests.set(sessionId, req);
+    this.requests.set(sessionId, { req, order });
     for (const oldest of this.requests.keys()) {
       if (this.requests.size <= MAX_REQUESTS) break;
-      this.requests.delete(oldest);
+      if (!this.feeds.has(oldest)) this.requests.delete(oldest);
     }
     const feed = this.feeds.get(sessionId);
     if (feed === undefined) return;
     feed.noted++;
     this.count(feed, frame);
-    this.push(feed, frame.resp);
+    this.push(feed, frame);
     switch (feed.phase.kind) {
       case "drawing":
         // The frame being drawn is of the request this one replaced: it is
@@ -163,17 +185,11 @@ export class FrameFeeds<Req> {
     }
   }
 
-  // Draw every watched session's next frame now: something all their rates
-  // depend on changed.
-  wakeAll(): void {
-    for (const sessionId of this.feeds.keys()) this.wake(sessionId);
-  }
-
-  // The latest request of every session someone is watching.
-  watched(): Req[] {
-    return [...this.feeds.keys()].flatMap((id) => {
-      const req = this.requests.get(id);
-      return req === undefined ? [] : [req];
+  // The latest request of every session someone is watching, by session.
+  watched(): Array<{ readonly sessionId: string; readonly req: Req }> {
+    return [...this.feeds.keys()].flatMap((sessionId) => {
+      const noted = this.requests.get(sessionId);
+      return noted === undefined ? [] : [{ sessionId, req: noted.req }];
     });
   }
 
@@ -201,6 +217,7 @@ export class FrameFeeds<Req> {
       noted: 0,
       moving: 0,
       unseen: 0,
+      failed: 0,
       pushed: 0,
       drawMs: 0,
       summarizedAt: now,
@@ -222,11 +239,12 @@ export class FrameFeeds<Req> {
   }
 
   private async draw(feed: Feed): Promise<void> {
-    const req = this.requests.get(feed.sessionId);
-    if (req === undefined) {
+    const noted = this.requests.get(feed.sessionId);
+    if (noted === undefined) {
       feed.phase = { kind: "waiting" };
       return;
     }
+    const { req } = noted;
     const phase: Phase = { kind: "drawing", again: false };
     feed.phase = phase;
     const started = this.deps.now();
@@ -251,8 +269,8 @@ export class FrameFeeds<Req> {
     if (frame !== null) this.count(feed, frame);
     // A request noted while this frame was drawn was pushed as its own frame;
     // this one, of the data before it, would step the bar back.
-    if (frame !== null && this.requests.get(feed.sessionId) === req)
-      this.push(feed, frame.resp);
+    if (frame !== null && this.requests.get(feed.sessionId) === noted)
+      this.push(feed, frame);
     if (finished - feed.summarizedAt >= SUMMARY_EVERY_MS)
       this.summarize(feed, "running");
     if (phase.again) {
@@ -288,14 +306,21 @@ export class FrameFeeds<Req> {
   private count(feed: Feed, frame: FeedFrame): void {
     if (frame.motion === "moving") feed.moving++;
     if (frame.motion === "unseen") feed.unseen++;
+    if (frame.failure !== null) feed.failed++;
   }
 
-  private push(feed: Feed, resp: Response): void {
+  private push(feed: Feed, frame: FeedFrame): void {
+    const { resp } = frame;
     const bytes = JSON.stringify(resp);
     if (feed.last?.bytes === bytes) return;
     feed.last = { resp, bytes };
     this.pushed++;
     feed.pushed++;
+    // [LAW:nothing-unseen] A failing frame's render event is logged when that
+    // failure is first pushed: one that keeps throwing the same way draws the
+    // same bytes, which are not pushed again, and the summary counts it.
+    if (frame.failure !== null)
+      this.deps.log(frame.failure.level, frame.failure.line);
     for (const sink of feed.sinks) sink(resp);
   }
 
@@ -306,7 +331,7 @@ export class FrameFeeds<Req> {
     const now = this.deps.now();
     this.deps.log(
       "info",
-      `feed sid=${JSON.stringify(feed.sessionId)} ${state} subscribers=${feed.sinks.size} for=${Math.round((now - feed.since) / 1000)}s drawn=${feed.drawn} noted=${feed.noted} moving=${feed.moving} unseen=${feed.unseen} pushed=${feed.pushed} meanDraw=${feed.drawn === 0 ? "-" : (feed.drawMs / feed.drawn).toFixed(2)}ms`,
+      `feed sid=${JSON.stringify(feed.sessionId)} ${state} subscribers=${feed.sinks.size} for=${Math.round((now - feed.since) / 1000)}s drawn=${feed.drawn} noted=${feed.noted} moving=${feed.moving} unseen=${feed.unseen} failed=${feed.failed} pushed=${feed.pushed} meanDraw=${feed.drawn === 0 ? "-" : (feed.drawMs / feed.drawn).toFixed(2)}ms`,
     );
     feed.summarizedAt = now;
   }

@@ -32,6 +32,7 @@ import {
 import { describeFailure } from "./daemon/client-transport";
 import { obtainDaemonKick } from "./daemon/acquire";
 import { socketPath } from "./daemon/paths";
+import { PROTOCOL_VERSION } from "./daemon/protocol";
 import { detectClientHints } from "./client-hints";
 import { newestWins } from "./utils/newest-wins";
 
@@ -145,9 +146,11 @@ export async function runFrames(argv: readonly string[]): Promise<void> {
 }
 
 // [LAW:effects-at-boundaries] What a stream the daemon ended calls for: a
-// reconnect, kicking a daemon into existence when none answered — or, when the
-// daemon refuses this request or speaks another protocol version, which it
-// will do the same way however often it is asked, the end of this client.
+// reconnect, kicking a daemon into existence when none answered or when the
+// one that answered is older than this client (it exits on that answer so a
+// respawn runs the newer build) — or, when the daemon refuses this request or
+// is newer than this client, which it will do the same way however often it is
+// asked, the end of this client.
 export type AfterEnd =
   | {
       readonly kind: "reconnect";
@@ -173,15 +176,25 @@ export function afterStreamEnd(
         kick: false,
       };
     case "refused":
-      return end.resp.code === "TIMEOUT"
-        ? {
-            kind: "reconnect",
-            reason: `the daemon was too busy to open the stream (${end.resp.error})`,
-            kick: false,
-          }
-        : {
-            kind: "exit",
-            reason: `the daemon refused the stream: ${end.resp.code}: ${end.resp.error}`,
-          };
+      if (end.resp.code === "TIMEOUT")
+        return {
+          kind: "reconnect",
+          reason: `the daemon was too busy to open the stream (${end.resp.error})`,
+          kick: false,
+        };
+      if (
+        end.resp.code === "VERSION_MISMATCH" &&
+        end.resp.daemonV !== undefined &&
+        end.resp.daemonV < PROTOCOL_VERSION
+      )
+        return {
+          kind: "reconnect",
+          reason: `the daemon is older than this client (${end.resp.error})`,
+          kick: true,
+        };
+      return {
+        kind: "exit",
+        reason: `the daemon refused the stream: ${end.resp.code}: ${end.resp.error}`,
+      };
   }
 }
