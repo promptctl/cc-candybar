@@ -5,19 +5,22 @@
 // bytes moved; while nothing moves, no frame is sent that would draw the same
 // bar again, and a click is pushed the moment it lands. Frames are drawn from
 // the session's latest render request, so a subscriber that arrives before the
-// session's first render receives the bar once that render lands.
+// session's first render receives the bar once that render lands. A bar
+// nobody can see is drawn at the still rate however it moves, and a request
+// the daemon cannot take is refused with a reply, never a thrown handler.
 
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { openFrameStream } from "../src/daemon/client-frames";
+import { openFrameStream, type StreamEnd } from "../src/daemon/client-frames";
 import { PROTOCOL_VERSION, type Response } from "../src/daemon/protocol";
 import type { StatsSnapshot } from "../src/daemon/stats";
 import {
   click,
   killAndWait,
   render,
+  renderBody,
   stripAnsi,
   urlWriting,
 } from "./helpers/daemon-e2e";
@@ -75,15 +78,17 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     return frames;
   }
 
-  const feedStats = async (): Promise<StatsSnapshot["frameFeeds"]> => {
+  const stats = async (): Promise<StatsSnapshot> => {
     const resp = await sendDaemonRequest(
       sockPath,
       { v: PROTOCOL_VERSION, kind: "stats" },
       5000,
     );
     if (!resp.ok || !("stats" in resp)) throw new Error(JSON.stringify(resp));
-    return resp.stats.frameFeeds;
+    return resp.stats;
   };
+  const feedStats = async (): Promise<StatsSnapshot["frameFeeds"]> =>
+    (await stats()).frameFeeds;
 
   const outputs = (frames: Array<{ resp: Response }>): string[] =>
     frames.map(({ resp }) => {
@@ -98,7 +103,19 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     projectDir = mkdtempSync(path.join(os.tmpdir(), "cc-candybar-feed-e2e-"));
     for (const [name, text] of Object.entries(CONFIGS))
       writeFileSync(path.join(projectDir, `${name}.json5`), text);
-    daemon = await spawnDaemonWithEnv(prepared.env);
+    // A tmux first on the daemon's PATH whose server shows no pane: pane %7's
+    // session has no client attached.
+    const bin = path.join(projectDir, "bin");
+    mkdirSync(bin);
+    writeFileSync(
+      path.join(bin, "tmux"),
+      `#!/bin/sh\ncase "$*" in *list-panes*) printf '%%7 0 1 0 1\\n' ;; *) printf 'stub\\n' ;; esac\n`,
+    );
+    chmodSync(path.join(bin, "tmux"), 0o755);
+    daemon = await spawnDaemonWithEnv({
+      ...prepared.env,
+      PATH: `${bin}:${prepared.env.PATH ?? ""}`,
+    });
   });
 
   afterAll(async () => {
@@ -165,5 +182,58 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       expect.stringContaining("a still mark"),
     ]);
     expect(frames[0]!.at).toBeGreaterThanOrEqual(200);
+  });
+
+  test("a moving bar in a pane nobody can see is drawn at the still rate", async () => {
+    const tmux = {
+      socket: path.join(projectDir, "tmux-socket"),
+      pane: "%7",
+      truecolor: null,
+    };
+    await render(sockPath, "feed-unseen", projectDir, { tmux }, args("moving"));
+    let drawn = 0;
+    await framesOf("feed-unseen", async () => {
+      // The pane's server is asked once a second; until it answers, the pane
+      // counts as shown.
+      await sleep(1500);
+      const before = (await feedStats()).drawn;
+      await sleep(2000);
+      drawn = (await feedStats()).drawn - before;
+    });
+    // One a second at the still rate; a bar someone could see draws thirty.
+    expect(drawn).toBeGreaterThanOrEqual(1);
+    expect(drawn).toBeLessThanOrEqual(4);
+  });
+
+  test("a subscribe that names no session is refused, and the stream ends on the refusal", async () => {
+    const frames: Response[] = [];
+    const end = await new Promise<StreamEnd>((resolve) =>
+      openFrameStream(sockPath, "", (resp) => frames.push(resp), resolve),
+    );
+    expect(end).toMatchObject({
+      kind: "refused",
+      resp: { ok: false, code: "BAD_REQUEST", error: expect.stringMatching(/sessionId/) },
+    });
+    expect(frames).toEqual([]);
+  });
+
+  test("a render request whose cwd is not a string is refused and counted, not thrown", async () => {
+    const before = (await stats()).requests.errored;
+    const resp = await sendDaemonRequest(
+      sockPath,
+      {
+        v: PROTOCOL_VERSION,
+        kind: "render",
+        ...renderBody("feed-bad-cwd", projectDir),
+        cwd: 42,
+      },
+      5000,
+    );
+    expect(resp).toMatchObject({
+      ok: false,
+      code: "BAD_REQUEST",
+      error: expect.stringContaining("request 'cwd' is not an absolute path: 42"),
+    });
+    expect((await stats()).requests.errored).toBe(before + 1);
   });
 });

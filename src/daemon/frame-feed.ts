@@ -12,12 +12,17 @@
 
 import type { Response } from "./protocol";
 
+// [LAW:types-are-the-program] Why the next frame falls due when it does: the
+// bar moves and someone can see it; it moves where nobody can, so it is drawn
+// at the still rate; or nothing on it moves.
+export type Motion = "moving" | "unseen" | "still";
+
 // What one render produced for a feed: the response its subscribers receive
-// (the one a render request is answered with) and whether anything on the bar
-// moves, which decides when the next frame is due.
+// (the one a render request is answered with) and how the bar moves, which
+// decides when the next frame is due.
 export interface FeedFrame {
   readonly resp: Response;
-  readonly moving: boolean;
+  readonly motion: Motion;
 }
 
 // Milliseconds from the start of one frame to the next: while the bar moves,
@@ -63,7 +68,9 @@ interface Feed {
   last: { readonly resp: Response; readonly bytes: string } | null;
   readonly since: number;
   drawn: number;
+  noted: number;
   moving: number;
+  unseen: number;
   pushed: number;
   drawMs: number;
   summarizedAt: number;
@@ -96,15 +103,35 @@ export class FrameFeeds<Req> {
   constructor(private readonly deps: FeedDeps<Req>) {}
 
   // The session's latest valid render request, which its frames are drawn
-  // from from now on.
-  note(sessionId: string, req: Req): void {
+  // from from now on, and `frame`: the bar the daemon answered it with.
+  // [LAW:one-source-of-truth] That answer IS the request's frame at this
+  // instant, so it is pushed as one, and the next frame falls due a period
+  // after it rather than being drawn again at once.
+  note(sessionId: string, req: Req, frame: FeedFrame): void {
     this.requests.delete(sessionId);
     this.requests.set(sessionId, req);
     for (const oldest of this.requests.keys()) {
       if (this.requests.size <= MAX_REQUESTS) break;
       this.requests.delete(oldest);
     }
-    this.wake(sessionId);
+    const feed = this.feeds.get(sessionId);
+    if (feed === undefined) return;
+    feed.noted++;
+    this.count(feed, frame);
+    this.push(feed, frame.resp);
+    switch (feed.phase.kind) {
+      case "drawing":
+        // The frame being drawn is of the request this one replaced: it is
+        // not pushed, and its draw schedules the next.
+        return;
+      case "due":
+        clearTimeout(feed.phase.timer);
+        break;
+      case "waiting":
+        break;
+    }
+    const now = this.deps.now();
+    this.schedule(feed, frame, now, now);
   }
 
   subscribe(sessionId: string, sink: Sink): () => void {
@@ -115,7 +142,6 @@ export class FrameFeeds<Req> {
       "info",
       `feed sid=${JSON.stringify(sessionId)} subscribed subscribers=${feed.sinks.size} data=${this.requests.has(sessionId) ? "Y" : "N"}`,
     );
-    this.wake(sessionId);
     return () => this.unsubscribe(feed, sink);
   }
 
@@ -172,12 +198,18 @@ export class FrameFeeds<Req> {
       last: null,
       since: now,
       drawn: 0,
+      noted: 0,
       moving: 0,
+      unseen: 0,
       pushed: 0,
       drawMs: 0,
       summarizedAt: now,
     };
     this.feeds.set(sessionId, feed);
+    // A feed's clock starts when it opens: its first frame is drawn at once,
+    // and pushed to the subscriber that opened it once the render is out. A
+    // later subscriber is handed the frame as it stands.
+    void this.draw(feed);
     return feed;
   }
 
@@ -216,21 +248,34 @@ export class FrameFeeds<Req> {
     // Unsubscribed while this frame was drawn: the feed is gone, and so is
     // its clock.
     if (this.feeds.get(feed.sessionId) !== feed) return;
-    if (frame?.moving === true) feed.moving++;
-    if (frame !== null) this.push(feed, frame.resp);
+    if (frame !== null) this.count(feed, frame);
+    // A request noted while this frame was drawn was pushed as its own frame;
+    // this one, of the data before it, would step the bar back.
+    if (frame !== null && this.requests.get(feed.sessionId) === req)
+      this.push(feed, frame.resp);
     if (finished - feed.summarizedAt >= SUMMARY_EVERY_MS)
       this.summarize(feed, "running");
     if (phase.again) {
       void this.draw(feed);
       return;
     }
+    this.schedule(feed, frame, started, finished);
+  }
+
+  // [LAW:no-ambient-temporal-coupling] The next frame is due a period after
+  // this one STARTED, so the rate holds whatever a render costs, up to a
+  // render as slow as the period, when frames are drawn back to back. A frame
+  // the render adapter could not produce is followed at the still rate.
+  private schedule(
+    feed: Feed,
+    frame: FeedFrame | null,
+    started: number,
+    finished: number,
+  ): void {
     const period =
-      frame?.moving === true
+      frame?.motion === "moving"
         ? this.deps.periods.moving
         : this.deps.periods.still;
-    // [LAW:no-ambient-temporal-coupling] The next frame is due a period after
-    // this one STARTED, so the rate holds whatever a render costs, up to a
-    // render as slow as the period, when frames are drawn back to back.
     feed.phase = {
       kind: "due",
       timer: setTimeout(
@@ -238,6 +283,11 @@ export class FrameFeeds<Req> {
         Math.max(0, started + period - finished),
       ),
     };
+  }
+
+  private count(feed: Feed, frame: FeedFrame): void {
+    if (frame.motion === "moving") feed.moving++;
+    if (frame.motion === "unseen") feed.unseen++;
   }
 
   private push(feed: Feed, resp: Response): void {
@@ -256,7 +306,7 @@ export class FrameFeeds<Req> {
     const now = this.deps.now();
     this.deps.log(
       "info",
-      `feed sid=${JSON.stringify(feed.sessionId)} ${state} subscribers=${feed.sinks.size} for=${Math.round((now - feed.since) / 1000)}s drawn=${feed.drawn} moving=${feed.moving} pushed=${feed.pushed} meanDraw=${feed.drawn === 0 ? "-" : (feed.drawMs / feed.drawn).toFixed(2)}ms`,
+      `feed sid=${JSON.stringify(feed.sessionId)} ${state} subscribers=${feed.sinks.size} for=${Math.round((now - feed.since) / 1000)}s drawn=${feed.drawn} noted=${feed.noted} moving=${feed.moving} unseen=${feed.unseen} pushed=${feed.pushed} meanDraw=${feed.drawn === 0 ? "-" : (feed.drawMs / feed.drawn).toFixed(2)}ms`,
     );
     feed.summarizedAt = now;
   }
