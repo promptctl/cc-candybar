@@ -9,6 +9,7 @@
 // it does the statusline's, so a click works the same.
 
 import process from "node:process";
+import { fileURLToPath } from "node:url";
 import { setTimeout as sleep } from "node:timers/promises";
 import { performance } from "node:perf_hooks";
 import { tryRenderViaDaemon } from "../daemon/client";
@@ -17,13 +18,22 @@ import { planOutcome } from "../render/outcome-plan";
 import { detectClientHints } from "../client-hints";
 import { detectTmuxHint, type TmuxHint } from "../tmux-hint";
 import { runTmuxAsync } from "../proc/tmux";
-import { paint, type Paint } from "./paint";
-import { readRecording, type Recording } from "./recording";
+import { DRAWING, RESTORED, paint, type Paint } from "./paint";
+import { readRecording, serverOf, type Recording } from "./recording";
 
 const DEFAULT_FPS = 20;
 // How stale the pane's visibility may be: a window switched to waits this long
 // for its first frame, one switched away renders this long for nobody.
 const PLACEMENT_EVERY_MS = 500;
+// The recorder, where the bundle (dist/index.mjs) ships beside it.
+const RECORDER = fileURLToPath(
+  new URL("../scripts/bar-pane/record-statusline", import.meta.url),
+);
+
+interface Extent {
+  readonly columns: number;
+  readonly rows: number;
+}
 
 // Where the session's pane sits, as tmux says. `visible`: its window is the
 // one shown in an attached session — a frame drawn anywhere else is seen by
@@ -35,23 +45,25 @@ type Placement =
   | {
       readonly kind: "placed";
       readonly visible: boolean;
-      readonly extent: { readonly columns: number; readonly rows: number };
+      readonly extent: Extent;
     }
-  | { readonly kind: "gone"; readonly reason: string };
+  | { readonly kind: "gone" };
 
 async function placementOf(tmux: TmuxHint, pane: string): Promise<Placement> {
   const run = await runTmuxAsync(tmux, "bar-pane.tmux", [
-    "display-message",
-    "-p",
-    "-t",
-    pane,
+    "list-panes",
+    "-a",
+    "-f",
+    `#{==:#{pane_id},${pane}}`,
+    "-F",
     "#{session_attached} #{window_active} #{pane_width} #{pane_height}",
   ]);
-  if (run.kind !== "ok") return { kind: "gone", reason: run.reason };
-  const [attached, active, columns, rows] = run.stdout
-    .trim()
-    .split(" ")
-    .map(Number);
+  // [LAW:no-silent-failure] A tmux that did not answer is a fault, never a
+  // pane that closed: only tmux's own answer — no such pane — ends the loop.
+  if (run.kind !== "ok") throw new Error(run.reason);
+  const line = run.stdout.trim();
+  if (line === "") return { kind: "gone" };
+  const [attached, active, columns, rows] = line.split(" ").map(Number);
   return {
     kind: "placed",
     visible: attached! > 0 && active === 1,
@@ -59,31 +71,35 @@ async function placementOf(tmux: TmuxHint, pane: string): Promise<Placement> {
   };
 }
 
-// The text this pane shows for the recording it found.
+// The text this pane shows for the recording it found, given the text it
+// shows now.
 async function frameOf(
   recording: Recording,
   pane: string,
-  extent: { readonly columns: number; readonly rows: number },
+  extent: Extent,
+  shown: string,
 ): Promise<string> {
   if (recording.kind === "absent") {
-    return `waiting for pane ${pane}'s statusline to record ${recording.path} (scripts/bar-pane/record-statusline)`;
+    return `waiting for pane ${pane}'s statusline to record ${recording.path} (${RECORDER})`;
   }
-  const { hookData } = recording;
-  // [LAW:one-source-of-truth] The hints the session's own statusline client
-  // reports, observed from here: its pane (a slash click types into it) and
-  // that pane's size. The daemon records a session's hints from every render,
-  // so hints that differed from the statusline's would rewrite that record —
-  // and invalidate the session's state — on every frame of either.
-  const hints = detectClientHints(
-    { ...process.env, TMUX_PANE: pane, COLUMNS: undefined, LINES: undefined },
-    hookData.cwd,
-    extent,
+  const { hookData, cwd, argv, env } = recording.invocation;
+  // [LAW:one-source-of-truth] The statusline client's own request, replayed:
+  // its argv (a `--config`), its cwd, and the hints detectClientHints derives
+  // from its environment, with the extent its tty answers — the session's
+  // pane. The daemon records a session's hints and render origin from every
+  // render, so a request that differed from the statusline's would rewrite
+  // them, and invalidate the session's state, on every frame of either.
+  const outcome = await tryRenderViaDaemon(
+    hookData,
+    [...argv],
+    cwd,
+    detectClientHints(env, cwd, extent),
   );
-  const plan = planOutcome(
-    await tryRenderViaDaemon(hookData, [], hookData.cwd, hints),
-  );
+  const plan = planOutcome(outcome);
   if (plan.kick) obtainDaemonKick();
-  return plan.output;
+  // A transient outcome is a daemon between processes, back within a frame
+  // or two: the bar it drew stays rather than blanking and resizing the pane.
+  return outcome.kind === "transient" ? shown : plan.output;
 }
 
 function parseArgs(argv: readonly string[]): { pane: string; fps: number } {
@@ -102,22 +118,39 @@ export async function runBarPane(argv: readonly string[]): Promise<void> {
   const tmux = detectTmuxHint(process.env);
   if (tmux === null)
     throw new Error("cc-candybar bar-pane runs in a tmux pane");
+  // The same server's run as the pane it draws beside: detectTmuxHint found
+  // `$TMUX` set.
+  const server = serverOf(process.env.TMUX!);
   const periodMs = 1000 / fps;
-  process.stdout.write("\x1b[?25l");
-  process.on("exit", () => process.stdout.write("\x1b[?25h"));
+  process.stdout.write(DRAWING);
+  process.on("exit", () => process.stdout.write(RESTORED));
+  // Node runs no exit listener when a signal ends it; exiting from the
+  // signal's handler does.
+  for (const [signal, code] of [
+    ["SIGINT", 130],
+    ["SIGTERM", 143],
+    ["SIGHUP", 129],
+  ] as const) {
+    process.once(signal, () => process.exit(code));
+  }
 
   // [LAW:no-ambient-temporal-coupling] This loop is the one clock: each tick
   // renders, paints, then sleeps out the rest of its period, so a slow frame
   // delays the next rather than piling up behind it.
+  let frame = "";
   let shown: Paint = { bytes: "", rows: 0 };
   let placement = await placementOf(tmux, pane);
   let placedAt = performance.now();
   while (placement.kind === "placed") {
     const tickAt = performance.now();
     if (placement.visible) {
-      const next = paint(
-        await frameOf(readRecording(tmux, pane), pane, placement.extent),
+      frame = await frameOf(
+        readRecording(server, pane),
+        pane,
+        placement.extent,
+        frame,
       );
+      const next = paint(frame);
       if (next.rows !== shown.rows) {
         const resized = await runTmuxAsync(tmux, "bar-pane.tmux", [
           "resize-pane",
@@ -137,5 +170,5 @@ export async function runBarPane(argv: readonly string[]): Promise<void> {
     }
     await sleep(Math.max(0, periodMs - (performance.now() - tickAt)));
   }
-  process.stderr.write(`cc-candybar bar-pane: ${placement.reason}\n`);
+  process.stderr.write(`cc-candybar bar-pane: pane ${pane} closed\n`);
 }

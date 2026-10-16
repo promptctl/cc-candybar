@@ -5,19 +5,30 @@
 #   "statusLine": { "type": "command",
 #                   "command": "/path/to/record-statusline cc-candybar" }
 #
-# Records the hook payload Claude Code hands the statusline, keyed by the tmux
-# tmux server and pane the session runs in, then runs the command on the same payload. Outside
-# tmux there is no pane to draw beside, and it records nothing.
+# Records the statusline's whole invocation — the hook payload, its cwd, its
+# argv and its environment — keyed by the tmux server and pane the session runs
+# in, then runs the command on the same payload. The bar pane replays that
+# invocation, so its render requests are the statusline's own. Outside tmux
+# there is no pane to draw beside, and it records nothing.
 #
 # A stopgap: once the daemon pushes a session's frames
 # (candybar-animation-wbxz.jmm.usl) it holds the payload itself.
-# The directory is src/bar-pane/recording.ts's recordingPath.
+# The record's path and layout are src/bar-pane/recording.ts's.
 
 [ -n "$TMUX_PANE" ] || exec "$@"
+# The environment holds the session's secrets: the record is its owner's alone.
+umask 077
+payload=$(cat)
 dir="${XDG_STATE_HOME:-$HOME/.local/state}/cc-candybar/bar-pane"
-mkdir -p "$dir" || exit 1
-socket="${TMUX%%,*}"
-file="$dir/${socket##*/}$TMUX_PANE.json"
-# Renamed into place whole, so the bar pane never reads half a payload.
-cat > "$file.$$" && mv "$file.$$" "$file" || exit 1
-exec "$@" < "$file"
+# `$TMUX` is `socket,server-pid,session`: the socket's file name and the pid
+# name one server run, since pane ids start again at %0 on every server.
+server="${TMUX%,*}"
+file="$dir/${server##*/}$TMUX_PANE"
+# One NUL-separated record, renamed into place whole so the bar pane never
+# reads half of one. A failure to record leaves the bar pane waiting, never
+# the statusline without its payload.
+{ mkdir -p "$dir" &&
+  { printf '%s\0' "$payload" "$(pwd -P)" "$#" "$@" && env -0; } > "$file.$$" &&
+  mv "$file.$$" "$file"; } ||
+  { rm -f "$file.$$"; echo "record-statusline: could not record $file" >&2; }
+printf '%s\n' "$payload" | "$@"
