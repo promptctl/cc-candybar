@@ -84,18 +84,18 @@ export async function renderRequest(
   }
 }
 
-// One status-line render, as Claude Code would ask for it. `hints` are the
-// client-observed facts (termCols/termRows/ssh) spread onto the request the
-// way the real client spreads them; `args` is the client's argv (binary path
-// first, as parseRenderArgs expects), empty for a bare render.
-export function render(
-  sockPath: string,
+// The body of a status-line render request, as Claude Code's client sends it.
+// `hints` are the client-observed facts (termCols/termRows/ssh/tmux) spread
+// onto the request the way the real client spreads them; `args` is the
+// client's argv (binary path first, as parseRenderArgs expects), empty for a
+// bare render.
+export function renderBody(
   sessionId: string,
   cwd: string,
   hints: ClientHints = {},
   args: string[] = [],
-): Promise<string> {
-  return renderRequest(sockPath, {
+): Record<string, unknown> {
+  return {
     hookData: hookData(sessionId, cwd),
     args,
     cwd,
@@ -105,7 +105,18 @@ export function render(
     claudeConfigDir: detectClaudeConfigDir(process.env, cwd),
     mementoEnv: detectMementoEnv(process.env, cwd),
     ...hints,
-  });
+  };
+}
+
+// One status-line render, as Claude Code would ask for it.
+export function render(
+  sockPath: string,
+  sessionId: string,
+  cwd: string,
+  hints: ClientHints = {},
+  args: string[] = [],
+): Promise<string> {
+  return renderRequest(sockPath, renderBody(sessionId, cwd, hints, args));
 }
 
 // A click, decoded the same way `cc-candybar url-handle` decodes it, then sent

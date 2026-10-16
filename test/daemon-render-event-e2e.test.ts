@@ -15,7 +15,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { writeFile } from "node:fs/promises";
+import { constants, open } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -25,6 +25,7 @@ import {
   hookData,
   killAndWait,
   render,
+  renderBody,
   renderRequest,
 } from "./helpers/daemon-e2e";
 import { sendDaemonRequest } from "./helpers/daemon-wire";
@@ -47,13 +48,18 @@ const CONFIGS = {
 };
 
 // [LAW:no-ambient-temporal-coupling] The `tmux` on the daemon's PATH: it says
-// it was asked, then answers only once the test opens the gate — a FIFO, whose
-// read blocks until a writer opens it. The test opens it after the client has
-// been answered TIMEOUT, so the render provably outlives the request timeout:
-// an ordering the test owns, not a bet on how slow a render is. Only a render
-// whose client reports a tmux pane runs it.
-const stubTmux = (asked: string, gate: string): string =>
-  `#!/bin/sh\n: > '${asked}'\nread _ < '${gate}'\necho held\n`;
+// it was asked, then answers only once the test opens the gate beside it — a
+// FIFO, whose read blocks until a writer opens it. The test opens it after the
+// client has been answered TIMEOUT, so the render provably outlives the request
+// timeout: an ordering the test owns, not a bet on how slow a render is. Only a
+// render whose client reports a tmux pane runs it, and src/proc/tmux.ts kills
+// it at 2 s, so a test that never opens the gate leaves no stub behind.
+const STUB_TMUX = `#!/bin/sh
+here=$(dirname "$0")
+: > "$here/asked"
+read _ < "$here/gate"
+echo held
+`;
 
 type Event = {
   level: string;
@@ -91,8 +97,7 @@ describe("every render request writes one render event, whatever its outcome", (
   let env: NodeJS.ProcessEnv;
   let removeTmpDirs: () => void;
   let projectDir: string;
-  let tmuxAsked: string;
-  let tmuxGate: string;
+  let tmuxDir: string;
   let daemon: RunningDaemon | undefined;
 
   const configFlag = (name: keyof typeof CONFIGS): string[] => [
@@ -118,17 +123,13 @@ describe("every render request writes one render event, whatever its outcome", (
     );
     for (const [name, text] of Object.entries(CONFIGS))
       writeFileSync(path.join(projectDir, `${name}.json5`), text);
-    const bin = path.join(projectDir, "bin");
-    mkdirSync(bin);
-    tmuxAsked = path.join(projectDir, "tmux-asked");
-    tmuxGate = path.join(projectDir, "tmux-gate");
-    execFileSync("mkfifo", [tmuxGate]);
-    writeFileSync(path.join(bin, "tmux"), stubTmux(tmuxAsked, tmuxGate), {
-      mode: 0o755,
-    });
+    tmuxDir = path.join(projectDir, "bin");
+    mkdirSync(tmuxDir);
+    execFileSync("mkfifo", [path.join(tmuxDir, "gate")]);
+    writeFileSync(path.join(tmuxDir, "tmux"), STUB_TMUX, { mode: 0o755 });
     daemon = await spawnDaemonWithEnv({
       ...prepared.env,
-      PATH: `${bin}${path.delimiter}${prepared.env.PATH ?? ""}`,
+      PATH: `${tmuxDir}${path.delimiter}${prepared.env.PATH ?? ""}`,
     });
   });
 
@@ -209,15 +210,37 @@ describe("every render request writes one render event, whatever its outcome", (
       sendDaemonRequest(sockPath, {
         v: PROTOCOL_VERSION,
         kind: "render",
-        hookData: hookData("ev-late", projectDir),
-        args: configFlag("held"),
-        cwd: projectDir,
-        tmux: { socket: "/tmp/stub-tmux", pane: "%1", truecolor: null },
+        ...renderBody(
+          "ev-late",
+          projectDir,
+          {
+            // A socket inside the test's own directory: were the stub ever
+            // bypassed, a real tmux would find no server there.
+            tmux: {
+              socket: path.join(tmuxDir, "tmux.sock"),
+              pane: "%1",
+              truecolor: null,
+            },
+          },
+          configFlag("held"),
+        ),
       }),
     ).resolves.toMatchObject({ ok: false, code: "TIMEOUT" });
 
-    await until(() => existsSync(tmuxAsked), "the render never asked tmux");
-    await writeFile(tmuxGate, "open\n");
+    await until(
+      () => existsSync(path.join(tmuxDir, "asked")),
+      "the render never asked tmux",
+    );
+    // Held at the gate, the render has written nothing yet.
+    expect(eventsOf("ev-late")).toEqual([]);
+    // A non-blocking open fails (ENXIO) once the stub has stopped reading,
+    // rather than waiting for a reader that will never come.
+    const gate = await open(
+      path.join(tmuxDir, "gate"),
+      constants.O_WRONLY | constants.O_NONBLOCK,
+    );
+    await gate.write("open\n");
+    await gate.close();
     await until(
       () => eventsOf("ev-late").length > 0,
       "the held render never wrote its event",
