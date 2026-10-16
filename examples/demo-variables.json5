@@ -169,17 +169,14 @@
     // ── 6. template ─────────────────────────────────────────────────────────
     // A Go template evaluated against the live variable store. MobX auto-
     // tracks every variable read during evaluation — the invalidation graph
-    // builds itself. Use for display values derived from other variables.
-    //
-    // depends_on is an explicit optimisation: skip re-evaluation when
-    // unrelated variables change. Omitting it is correct but may over-trigger.
+    // builds itself, so a template variable takes no cache policy. Use for
+    // display values derived from other variables.
 
     // Composed identity string: user@hostname (or user@os if no hostname file).
     "demo.identity": {
       kind: "template",
       template:
         "{{ .demo.user }}@{{ if .demo.hostname }}{{ .demo.hostname }}{{ else }}{{ .demo.os }}{{ end }}",
-      cache: { depends_on: ["demo.user", "demo.hostname", "demo.os"] },
       default: "",
     },
 
@@ -187,7 +184,6 @@
     "demo.shortId": {
       kind: "template",
       template: "{{ trunc 8 .demo.sessionId }}",
-      cache: { depends_on: ["demo.sessionId"] },
       default: "",
     },
 
@@ -290,7 +286,6 @@
           kind: "template",
           template:
             "{{ .demo.user }}@{{ if .demo.hostname }}{{ .demo.hostname }}{{ else }}{{ .demo.os }}{{ end }}",
-          cache: { depends_on: ["demo.user", "demo.hostname", "demo.os"] },
         },
       },
     },

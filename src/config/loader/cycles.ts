@@ -135,8 +135,8 @@ function buildTemplateGraph(cfg: DslConfig): {
   const addVarEdges = (name: string, v: VariableDecl): void => {
     if (v.kind === "template") addTemplateEdges(name, v.template);
     if (hasCacheField(v)) {
-      if (v.cache && "key" in v.cache) addTemplateEdges(name, v.cache.key);
-      if (v.cache && "depends_on" in v.cache) {
+      if ("key" in v.cache) addTemplateEdges(name, v.cache.key);
+      if ("depends_on" in v.cache) {
         for (const dep of v.cache.depends_on) {
           if (allVarNames.has(dep)) graph.get(name)!.add(dep);
         }

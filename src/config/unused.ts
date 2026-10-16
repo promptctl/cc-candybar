@@ -71,7 +71,7 @@ function* templatesOf(config: DslConfig): IterableIterator<string> {
   }
   for (const [, v] of variablesOf(config)) {
     if (v.kind === "template") yield v.template;
-    if (hasCacheField(v) && v.cache && "key" in v.cache) yield v.cache.key;
+    if (hasCacheField(v) && "key" in v.cache) yield v.cache.key;
   }
   for (const a of Object.values(config.actions)) {
     if ("copy" in a) yield a.copy;
@@ -104,7 +104,7 @@ export function unusedDeclarations(
       calledHelpers.add(name);
   }
   for (const [, v] of variablesOf(config)) {
-    if (hasCacheField(v) && v.cache && "depends_on" in v.cache) {
+    if (hasCacheField(v) && "depends_on" in v.cache) {
       for (const dep of v.cache.depends_on) reads.add(dep);
     }
   }

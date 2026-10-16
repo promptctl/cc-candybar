@@ -740,10 +740,11 @@ export function parseArm(
 // excluded: a document with no fields is not a fallback anyone can read.
 export type SourceDefault = Exclude<JsonValue, null>;
 
+// [LAW:types-are-the-program] No `cache`: a template variable is a computed
+// that tracks every variable it reads, so it changes exactly when they do.
 export interface TemplateVarDecl {
   readonly kind: "template";
   readonly template: string;
-  readonly cache?: CacheDecl;
   readonly default?: string;
 }
 
@@ -836,15 +837,12 @@ export type SourceKind = (typeof SOURCE_KINDS)[number];
 // this guard instead of repeating the kind list (`!== "literal" && !==
 // "input" && ...`) at every site — adding a new no-cache kind only requires
 // updating the union and this guard.
-export type VariableDeclWithCache =
-  | FileVarDecl
-  | ShellVarDecl
-  | TemplateVarDecl;
+export type VariableDeclWithCache = FileVarDecl | ShellVarDecl;
 
 export function hasCacheField(v: VariableDecl): v is VariableDeclWithCache {
   // [LAW:types-are-the-program] Named positively: a kind added to the union
   // (a tombstone's `dropped`) has no cache until it is listed here.
-  return v.kind === "file" || v.kind === "shell" || v.kind === "template";
+  return v.kind === "file" || v.kind === "shell";
 }
 
 export const GIT_FIELDS: readonly GitField[] = [

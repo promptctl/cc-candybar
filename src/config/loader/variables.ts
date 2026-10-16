@@ -50,7 +50,7 @@ import {
   type TaggedUnionSchema,
   type ValidateCtx,
 } from "./validate-core.js";
-import { optionalCacheSpec, requireCacheSpec } from "./cache.js";
+import { requireCacheSpec } from "./cache.js";
 
 export function validateVariables(
   ctx: ValidateCtx,
@@ -352,8 +352,14 @@ const SHELL_FIELDS: FieldSpecMap<Omit<ShellVarDecl, "kind">> = {
 };
 const TEMPLATE_FIELDS: FieldSpecMap<Omit<TemplateVarDecl, "kind">> = {
   template: requireStringSpec(),
-  cache: optionalCacheSpec(),
   default: optionalStringSpec(),
+};
+// [LAW:no-silent-failure] A template variable is a computed that tracks every
+// variable it reads; a `cache:` was accepted here and never reached the runtime,
+// so a ttl, a depends_on or a key changed nothing.
+const TEMPLATE_VAR_REMOVED = {
+  cache:
+    "a template variable recomputes whenever a variable it reads changes, so it takes no cache policy — delete the key",
 };
 const TIME_FIELDS: FieldSpecMap<Omit<TimeVarDecl, "kind">> = {
   layout: requireStringSpec(),
@@ -437,7 +443,7 @@ const VARIABLE_SCHEMA: TaggedUnionSchema<AuthoredVariableDecl, "kind"> = {
     env: arm("env", ENV_FIELDS),
     file: arm("file", FILE_FIELDS),
     shell: arm("shell", SHELL_FIELDS),
-    template: arm("template", TEMPLATE_FIELDS),
+    template: arm("template", TEMPLATE_FIELDS, TEMPLATE_VAR_REMOVED),
     time: arm("time", TIME_FIELDS, TIME_VAR_REMOVED),
     git: arm("git", GIT_VAR_FIELDS, GIT_VAR_REMOVED),
     state: arm("state", STATE_FIELDS),
