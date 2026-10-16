@@ -3,7 +3,8 @@
 // Claude Code, a mod, a renderer outside Claude Code (epic
 // candybar-animation-wbxz). Each frame is one line on stdout: the JSON of the
 // response a render request is answered with, `{"ok":true,"output":"…"}`, or
-// why the bar could not be drawn.
+// why the bar could not be drawn — or, with `--format band`, that response
+// as the band mod's rows of styled runs (src/band/frames.ts).
 //
 // The session is named one of two ways, and that decides what stdin is:
 //   --session <id>   stdin is not read; the frames are drawn from the data the
@@ -32,18 +33,35 @@ import {
 import { describeFailure } from "./daemon/client-transport";
 import { obtainDaemonKick } from "./daemon/acquire";
 import { socketPath } from "./daemon/paths";
-import { PROTOCOL_VERSION } from "./daemon/protocol";
+import { PROTOCOL_VERSION, type Response } from "./daemon/protocol";
 import { detectClientHints } from "./client-hints";
 import { newestWins } from "./utils/newest-wins";
+import { bandLine } from "./band/frames";
 
 const RECONNECT_FIRST_MS = 250;
 const RECONNECT_MAX_MS = 2000;
+
+// [LAW:one-type-per-behavior] How a frame is written is a value the one
+// stream carries: the render response as the daemon sent it, or the band
+// mod's rows of styled runs.
+const FORMATS = {
+  response: (resp: Response): string => JSON.stringify(resp),
+  band: bandLine,
+} as const;
+
+function isFormat(name: string): name is keyof typeof FORMATS {
+  return Object.hasOwn(FORMATS, name);
+}
 
 export async function runFrames(argv: readonly string[]): Promise<void> {
   // argv is the process's: [node, script, "frames", ...flags].
   const { values, tokens } = parseArgs({
     args: argv.slice(3),
-    options: { session: { type: "string" }, config: { type: "string" } },
+    options: {
+      session: { type: "string" },
+      config: { type: "string" },
+      format: { type: "string", default: "response" },
+    },
     strict: true,
     tokens: true,
   });
@@ -67,6 +85,13 @@ export async function runFrames(argv: readonly string[]): Promise<void> {
     say("--session needs a session id");
     process.exit(2);
   }
+  if (!isFormat(values.format)) {
+    say(
+      `--format must be one of ${Object.keys(FORMATS).join(", ")}, got ${JSON.stringify(values.format)}`,
+    );
+    process.exit(2);
+  }
+  const encode = FORMATS[values.format];
   if (values.session !== undefined && values.config !== undefined) {
     say(
       "--config has no effect with --session: the session's own statusline client sends its config",
@@ -106,7 +131,7 @@ export async function runFrames(argv: readonly string[]): Promise<void> {
         // A drawn bar is a stream that works: the next failure starts the
         // backoff over.
         if (resp.ok) retryMs = RECONNECT_FIRST_MS;
-        emit(`${JSON.stringify(resp)}\n`);
+        emit(`${encode(resp)}\n`);
       },
       (end) => {
         if (end.kind === "closed-here") return;
