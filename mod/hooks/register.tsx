@@ -86,6 +86,10 @@ function drawRun(
 // The child runs the checkout this mod sits in: `<repo>/mod` beside
 // `<repo>/dist`, built by `pnpm build`.
 function start($: EngineInterface, sessionId: string): Child {
+  // A new session's band starts empty: the last frame is another session's,
+  // its links that session's.
+  void $.state.set(failureRef, null)
+  void $.state.set(frameRef, null)
   const stream = $.process.spawn({
     argv: [
       'node',
@@ -125,7 +129,6 @@ function start($: EngineInterface, sessionId: string): Child {
       if (!stopped) await $.state.set(failureRef, `candybar: frames failed: ${String(error)}`)
     }
   })()
-  void $.state.set(failureRef, null)
   return {
     sessionId,
     stop: () => {

@@ -49,7 +49,7 @@ const FORMATS = {
   band: bandLine,
 } as const;
 
-function frameFormat(name: string): (resp: Response) => string {
+export function frameFormat(name: string): (resp: Response) => string {
   if (!Object.hasOwn(FORMATS, name)) {
     throw new Error(
       `cc-candybar frames: --format must be one of ${Object.keys(FORMATS).join(", ")}, got ${JSON.stringify(name)}`,

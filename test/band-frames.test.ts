@@ -3,6 +3,8 @@
 // survive, and what the statusline would print when the render was refused.
 
 import { bandFrame, bandLine } from "../src/band/frames";
+import { frameFormat } from "../src/frames-cli";
+
 const ESC = "\x1b";
 const link = (url: string, text: string) =>
   `${ESC}]8;;${url}${ESC}\\${text}${ESC}]8;;${ESC}\\`;
@@ -58,6 +60,25 @@ describe("bandFrame", () => {
     expect(bandFrame(`${ESC}[38;5;196mx`).rows).toEqual([
       [{ text: "x", color: "#ff0000" }],
     ]);
+  });
+
+  test.each([
+    ["conceal", 8],
+    ["blink", 5],
+    ["overline", 53],
+  ])("refuses %s text, which the mod's Text cannot draw", (name, sgr) => {
+    expect(() => bandFrame(`${ESC}[${sgr}mx`)).toThrow(
+      `the band cannot draw ${name} text`,
+    );
+  });
+});
+
+describe("frameFormat", () => {
+  test("band is bandLine; any other name is refused with the choices", () => {
+    expect(frameFormat("band")).toBe(bandLine);
+    expect(() => frameFormat("ansi")).toThrow(
+      '--format must be one of response, band, got "ansi"',
+    );
   });
 });
 

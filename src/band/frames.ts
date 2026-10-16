@@ -55,19 +55,55 @@ function runColor(spec: ColorSpec | undefined): RunColor | undefined {
   return name;
 }
 
+type BandAttribute =
+  | "bold"
+  | "dimColor"
+  | "italic"
+  | "underline"
+  | "strikethrough"
+  | "inverse";
+
+// Every text attribute a rich-js `Style` carries, and the `Text` prop that
+// draws it; null where the mod's `Text` has none, which the band refuses
+// rather than drawing concealed text, say, in the clear.
+// [LAW:one-source-of-truth] exception: rich-js keeps this list as
+// ATTRIBUTE_NAMES but does not export it, so its thirteen names are copied.
+const ATTRIBUTES = {
+  bold: "bold",
+  dim: "dimColor",
+  italic: "italic",
+  underline: "underline",
+  strike: "strikethrough",
+  reverse: "inverse",
+  blink: null,
+  blink2: null,
+  conceal: null,
+  underline2: null,
+  frame: null,
+  encircle: null,
+  overline: null,
+} as const satisfies Record<string, BandAttribute | null>;
+
+const ATTRIBUTE_NAMES = Object.keys(ATTRIBUTES) as Array<
+  keyof typeof ATTRIBUTES
+>;
+
 function bandRun(text: string, style: Style): BandRun {
   const color = runColor(style.color);
   const backgroundColor = runColor(style.bgcolor);
+  const attributes: Partial<Record<BandAttribute, true>> = {};
+  for (const name of ATTRIBUTE_NAMES) {
+    if (style[name] !== true) continue;
+    const prop = ATTRIBUTES[name];
+    if (prop === null)
+      throw new Error(`frames: the band cannot draw ${name} text`);
+    attributes[prop] = true;
+  }
   return {
     text,
     ...(color !== undefined && { color }),
     ...(backgroundColor !== undefined && { backgroundColor }),
-    ...(style.bold === true && { bold: true }),
-    ...(style.dim === true && { dimColor: true }),
-    ...(style.italic === true && { italic: true }),
-    ...(style.underline === true && { underline: true }),
-    ...(style.strike === true && { strikethrough: true }),
-    ...(style.reverse === true && { inverse: true }),
+    ...attributes,
     ...(style.link !== undefined && { href: style.link }),
   };
 }
