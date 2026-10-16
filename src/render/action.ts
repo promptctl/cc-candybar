@@ -36,6 +36,7 @@ import {
   type ResolvedDomain,
 } from "../config/option-domain.js";
 import { pickCycleDisplay } from "../config/disclosure.js";
+import { resolvedStyle } from "./rich-theme.js";
 import { CONFIG_KEY_TO_EFFECTIVE_VAR } from "../config/setting-projections.js";
 import { encodeLayoutOp, type LayoutOp } from "../config/layout-ops.js";
 import type { Decor } from "../themes/decor.js";
@@ -639,6 +640,32 @@ export function linkFragment(
   return rt;
 }
 
+// [LAW:one-source-of-truth] The same link, laid into a cell already drawn:
+// the cell's own style and each of its runs keep their colours and carry the
+// click, so a cell of several colours (a name beside its swatch) is one click
+// target. `current` is the current-mark an `{{ action }}` display carries: it
+// makes the cell bold, and never unbolds a display its author made bold.
+export function linkOver(
+  cell: RichText,
+  url: string,
+  current = false,
+): RichText {
+  const link = new Style({ link: url, bold: current ? true : undefined });
+  const linked = new RichText(cell.plain, {
+    style: Style.combine([resolvedStyle(cell.style), link]),
+  });
+  for (const span of cell.spans) {
+    linked.stylize(
+      Style.combine([resolvedStyle(span.style), link]),
+      span.start,
+      span.end,
+    );
+  }
+  linked.overflow = "ignore";
+  linked.end = "";
+  return linked;
+}
+
 // [LAW:one-source-of-truth] THE "unknown current counts as the first member"
 // rule — the one resolution both the display selection and the successor write
 // fold over. Members are ordered default-state-first, so an unset/foreign value
@@ -949,9 +976,9 @@ export function realize(
 function selectDisplay(
   name: string,
   action: CompiledActionDecl,
-  displays: readonly string[],
+  displays: readonly RichText[],
   store: VariableStore,
-): { display: string; boundValue: string | undefined } {
+): { display: RichText; boundValue: string | undefined } {
   if (displays.length === 0) {
     throw new Error(`action "${name}" needs a display (the clickable text)`);
   }
@@ -973,14 +1000,14 @@ function selectDisplay(
       `action "${name}" takes a display and an optional bound value, got ${displays.length} arguments (per-state displays are a cycle action's form)`,
     );
   }
-  return { display: displays[0]!, boundValue: displays[1] };
+  return { display: displays[0]!, boundValue: displays[1]?.plain };
 }
 
 // Realize a named action against the live state into ONE clickable RichText. The
 // `action` template function delegates here.
 export function renderAction(
   name: string,
-  displays: readonly string[],
+  displays: readonly RichText[],
   runtime: ActionRuntime,
 ): RichText {
   const declared = runtime.compiled.get(name);
@@ -1004,22 +1031,24 @@ export function renderAction(
   const sessionId = readVar(store, "session.id");
   const { effects, active } = realize(
     declared,
-    display,
+    display.plain,
     boundValue,
     store,
     sessionId,
   );
-  return linkFragment(display, effectsUrl(effects), active);
+  return linkOver(display, effectsUrl(effects), active);
 }
 
 // ─── FuncMap entry ─────────────────────────────────────────────────────────────
 
 // [LAW:dataflow-not-control-flow] One func; the action NAME selects which declared
-// effect fires, the trailing strings are the bound displays. For most kinds that
-// is the clickable text plus an optional boundValue (absent ⇒ the option IS the
-// display, the common picker form `{{ action "applyTheme" . }}`); for a cycle it
-// is one display per member (the current member's display renders) or one static
-// display. Returns T (RichText), the single fragment go-template-js emits for
+// effect fires, the trailing values are the bound displays. For most kinds that
+// is the clickable display plus an optional boundValue (absent ⇒ the option IS
+// the display's text, the common picker form `{{ action "applyTheme" . }}`); for
+// a cycle it is one display per member (the current member's display renders)
+// or one static display. A display is text or drawn content (text lifts to it),
+// so a swatch can be the click: `{{ action "open" (swatch "applyTheme") }}`.
+// Returns T (RichText), the single fragment go-template-js emits for
 // `{{ action … }}`.
 //
 // [LAW:one-way-deps] The caller injects this FuncMap into createCcCandybarEngine
@@ -1028,9 +1057,9 @@ export function renderAction(
 export function actionFuncs(runtime: ActionRuntime): FuncMap {
   return {
     action: {
-      fn: (name: string, ...displays: string[]) =>
+      fn: (name: string, ...displays: RichText[]) =>
         renderAction(name, displays, runtime),
-      argTypes: ["string", "string"],
+      argTypes: ["string", "liftable"],
       arity: { kind: "variadic" },
       returnType: "T",
     },

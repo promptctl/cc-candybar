@@ -296,14 +296,20 @@ describe("DEFAULT_DSL_CONFIG", () => {
       );
     };
     try {
-      // The theme and style controls live in the synthesized settings menu's
-      // config row (candybar-settings-ui-aok.3), behind two nested
-      // disclosures — open both with the same clicks a "🍫 ▸" then "🎨 look"
-      // tap would dispatch, so the controls this test exercises render.
+      // The theme control lives in the synthesized settings menu's look tab
+      // (candybar-settings-ui-aok.3), behind two nested disclosures, and
+      // names the theme in force once opened (brandon-theme-swatch-8v9r) —
+      // open all three with the same clicks a "🍫", "🎨 look" then
+      // "🎨 theme" tap would dispatch, so the controls this test exercises
+      // render.
       clickUrl(
         effectsUrl([
           { verb: VERB_SET_STATE, args: [SID, "candybar.menu", "open"] },
           { verb: VERB_SET_STATE, args: [SID, "candybar.tab", "look"] },
+          {
+            verb: VERB_SET_STATE,
+            args: [SID, "menus.candybar_pickers", "candybar.apply.theme"],
+          },
         ]),
         ctx,
       );
@@ -318,13 +324,13 @@ describe("DEFAULT_DSL_CONFIG", () => {
             "one other resolvable theme to exercise a theme-switching click",
         );
       }
-      // The theme control names the current theme as `🎨 ◀ name ▶`; its
-      // arrows are links writing the neighbours, so the name is read off the
-      // visible text, as the current value.
-      const names = (out: string, label: string, value: string): boolean =>
-        stripAnsi(out).includes(`${label} ◀ ${value} ▶`);
+      // The open theme picker names the current theme beside its swatch, and
+      // the style control behind its gear as `◐ ◀ name ▀▀▀ ▶`, so the name is
+      // read off the visible text, as the current value.
+      const names = (out: string, shown: string): boolean =>
+        stripAnsi(out).includes(shown);
       const before = render();
-      expect(names(before, "🎨", targetTheme)).toBe(false);
+      expect(names(before, `${targetTheme} ▀▀▀`)).toBe(false);
 
       clickUrl(
         effectsUrl([
@@ -333,7 +339,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         ctx,
       );
       const afterTheme = render();
-      expect(names(afterTheme, "🎨", targetTheme)).toBe(true);
+      expect(names(afterTheme, `${targetTheme} ▀▀▀`)).toBe(true);
       expect(afterTheme).not.toBe(before);
 
       const targetStyle = Object.keys(parsed.styles).find(
@@ -346,11 +352,14 @@ describe("DEFAULT_DSL_CONFIG", () => {
         );
       }
       clickUrl(
-        effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "style", targetStyle] }]),
+        effectsUrl([
+          { verb: VERB_SET_STATE, args: [SID, "style", targetStyle] },
+          { verb: VERB_SET_STATE, args: [SID, "menus.candybar_pickers", "gear"] },
+        ]),
         ctx,
       );
       const afterStyle = render();
-      expect(names(afterStyle, "◐", targetStyle)).toBe(true);
+      expect(names(afterStyle, `◐ ◀ ${targetStyle} ▀▀▀ ▶`)).toBe(true);
       expect(afterStyle).not.toBe(afterTheme);
     } finally {
       registry.dispose();

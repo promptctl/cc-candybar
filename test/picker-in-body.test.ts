@@ -68,7 +68,7 @@ describe("{{ carousel }} with a centre action", () => {
 
   test("a centre naming no declared action is refused: at load when spelled, at render when computed", () => {
     expect(() => renderOf('{{ carousel "pick" 0 "nope" }}')).toThrow(
-      /template references unknown action "nope" \(in a picker, menu or carousel\)/,
+      /template references unknown action "nope" \(in a picker, menu, carousel, swatch, swatches or themePreview\)/,
     );
     expect(
       stripAnsi(renderOf('{{ carousel "pick" 0 (printf "no%s" "pe") }}')),

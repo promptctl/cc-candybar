@@ -56,7 +56,8 @@ import {
   type ActionRuntime,
 } from "./action.js";
 import { renderPicker, requireOptionKind } from "./picker.js";
-import { closeOn, optionItemStyle } from "./band-style.js";
+import { closeOn } from "./band-style.js";
+import { optionPaint } from "./option-paint.js";
 import { bandFor } from "../themes/decor.js";
 import {
   requireActiveSegment,
@@ -168,8 +169,10 @@ function renderMenu(
       placement.disclosure,
       drawnAt,
     ).plane;
+    const apply = requireOptionKind(action, applyName, "menu");
     return renderPicker(
       applyName,
+      apply,
       { key: pageKey, stateVar: pageKey },
       {
         kind: "own",
@@ -183,14 +186,14 @@ function renderMenu(
       action,
       // Placed by THIS menu's distribution: the picker knows positions,
       // the instance knows how it places them. Unless the domain is
-      // colour-valued, in which case every option sits on the plane in
-      // its own text colour; one call decides, the same one the
+      // colour-valued, in which case every option is its name in the
+      // plane's text beside its swatch; one call decides, the same one the
       // standalone `{{ picker }}` makes.
-      optionItemStyle(
+      optionPaint(
         placement,
         options.distribution,
         renderLook(action, "{{ menu }}"),
-        requireOptionKind(action, applyName, "menu").paletteOf,
+        apply.paletteOf,
         drawnAt,
         plane,
       ),

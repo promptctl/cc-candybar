@@ -637,7 +637,7 @@ test("no row longer than ROW_REACH, under any distribution, deals a ground GROUN
   }
   expect(fresh).toEqual([]);
 });
-const DEPTH_HUES = [0, 1, 2].map((depth) => hueAtDepth(OPEN_HUE, depth));
+const DEPTH_HUES = [0, 1, 2, 3].map((depth) => hueAtDepth(OPEN_HUE, depth));
 
 /** The closed cells a trigger on `ground` stands among. */
 const groundCells = (palette: Palette, ground: Ground): ColorRgba[] =>
@@ -898,7 +898,7 @@ describe("done-when: text on a state cell is contrast-chosen and clears the text
             .map((entry) => decorEntryColour(palette, entry)),
         ),
         ...GROUNDS.flatMap(({ ground }) =>
-          [0, 1, 2].flatMap((depth) => {
+          [0, 1, 2, 3].flatMap((depth) => {
             const band = bandFor(palette, { hue: OPEN_HUE, depth, ground }, ColorDepth.TRUECOLOR);
             return [band.state, band.plane];
           }),
@@ -937,7 +937,7 @@ describe("done-when: text on a state cell is contrast-chosen and clears the text
 // any theme under one fails, naming it.
 
 const THEMES = REGISTRY;
-const DEPTHS = [0, 1, 2] as const;
+const DEPTHS = [0, 1, 2, 3] as const;
 // The ground the band facts below are stated on where one suffices: a trigger
 // in the default bar's first row, at the default shade.
 const FIRST_ROW: Ground = rowGround(
@@ -995,7 +995,7 @@ describe("depth advances the hue", () => {
     for (const drawnAt of DRAWN) {
       const shown = shownAt(drawnAt);
       for (const { palette, hue, ground, name } of LINEAGES) {
-        for (const depth of [1, 2]) {
+        for (const depth of [1, 2, 3]) {
           const ratio = contrastRatio(
             shown(drawnGround(bandFor(palette, { hue, depth, ground }, drawnAt).state)),
             shown(drawnGround(bandFor(palette, { hue, depth: depth - 1, ground }, drawnAt).plane)),
@@ -1013,7 +1013,8 @@ describe("a band is a plane", () => {
   // the background, as a band always has — unless that plane would stand too
   // near its trigger (a state the search carried to the background itself) or
   // the plane it hangs in: then into the foreground, then each as far as the
-  // cap.
+  // cap, then the twelfth of the way to either pole nearest the recession,
+  // the background's before the foreground's.
   const recededPlane = (
     palette: Palette,
     state: ColorRgba,
@@ -1036,11 +1037,16 @@ describe("a band is a plane", () => {
         toward("foreground", recession),
         toward("background", BAND_RECESSION.cap),
         toward("foreground", BAND_RECESSION.cap),
-      ].find(holds) ?? background;
+      ].find(holds) ??
+      Array.from({ length: 12 }, (_, i) => (i + 1) / 12)
+        .sort((a, b) => Math.abs(a - recession) - Math.abs(b - recession))
+        .flatMap((amount) => [toward("background", amount), toward("foreground", amount)])
+        .find(holds) ??
+      background;
     return { plane, background };
   };
 
-  test("the plane is the state receded toward background by the depth's recession, capped — or, where that breaks a band floor, toward foreground, then as far as the cap", () => {
+  test("the plane is the state receded toward background by the depth's recession, capped — or, where that breaks a band floor, toward foreground, then as far as the cap, then the nearest twelfth that holds", () => {
     let intoForeground = 0;
     for (const { palette, hue, ground } of LINEAGES) {
       for (const depth of [0, 1, 2, 3, 4]) {
@@ -1250,14 +1256,12 @@ describe("open trigger, its band, and a nested band are mutually distinguishable
   });
 
   test.each(DRAWN)("a nested band's plane stands off the plane it is nested in (depth %s)", (drawnAt) => {
-    // Covered over the depths a bar reaches: the bundled 🍫 → ⚙ → picker is
-    // depth 2, so the adjacent-plane pairs are (0,1) and (1,2). Depth 3 is
-    // deliberately NOT covered: nothing shipped reaches it, and nothing holds
-    // its planes apart — BAND_RECESSION.cap leaves 0.05 of recession between
-    // depths 2 and 3 while hueAtDepth has wrapped back onto a hue already
-    // used, and under a style adjacent planes there fall below the floor. A
-    // trigger still stands off its own plane at depth 3 (the previous test).
-    // The design doc's "Depth advances the hue" has the measurements.
+    // Covered over the depths a bar reaches: the bundled 🍫 → tab → ⚙ → style
+    // list is depth 3, so the adjacent-plane pairs are (0,1), (1,2) and (2,3).
+    // Between depths 2 and 3 BAND_RECESSION.cap leaves 0.05 of recession and
+    // hueAtDepth has wrapped back onto a hue already used, so it is the plane
+    // search's twelfths that hold the pair apart (STYLED below covers it under
+    // every style, where it fell short before them).
     expect(
       below(
         drawnAt,
@@ -1266,10 +1270,38 @@ describe("open trigger, its band, and a nested band are mutually distinguishable
           bandFor(p, { hue, depth, ground }, drawnAt).plane,
           bandFor(p, { hue, depth: depth + 1, ground }, drawnAt).plane,
         ],
-        [0, 1],
+        [0, 1, 2],
       ),
     ).toEqual([]);
   });
+
+  // The settings menu is drawn in the styled palette, and a style is what
+  // brought adjacent planes together at depth 3: under `muted` they stood
+  // ΔE .009 apart in truecolor and drew as one colour at 256 and ansi. One
+  // test per depth and style, as the shortfall tests above are split.
+  test.each(DRAWN.flatMap((drawnAt) => STYLE_NAMES.map((style) => [drawnAt, style] as const)))(
+    "under a style, every band through depth 3 stands off its trigger and the plane it is nested in (depth %s, style %s)",
+    (drawnAt, style) => {
+      const shown = shownAt(drawnAt);
+      const wrong = STYLED.filter((styled) => styled.style === style).flatMap(({ name, palette }) =>
+        GROUNDS.flatMap(({ name: where, ground }) =>
+          DEPTHS.flatMap((depth) => {
+            const band = bandFor(palette, { hue: OPEN_HUE, depth, ground }, drawnAt);
+            const trigger = deltaE(shown(band.state), shown(band.plane));
+            const nested =
+              depth === 0
+                ? Infinity
+                : deltaE(shown(band.plane), shown(bandFor(palette, { hue: OPEN_HUE, depth: depth - 1, ground }, drawnAt).plane));
+            return [
+              ...(trigger < BAND_FLOORS.triggerPlane ? [`${name}@${where} depth ${depth} trigger ${trigger.toFixed(4)}`] : []),
+              ...(nested < BAND_FLOORS.nestedPlane ? [`${name}@${where} depth ${depth} nested ${nested.toFixed(4)}`] : []),
+            ];
+          }),
+        ),
+      );
+      expect(wrong).toEqual([]);
+    },
+  );
 
   test.each(DRAWN)("a band item is drawn as neither its plane nor its trigger (depth %s)", (drawnAt) => {
     const shown = shownAt(drawnAt);

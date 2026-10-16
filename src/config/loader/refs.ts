@@ -211,8 +211,8 @@ export function templateReads(
 }
 
 // [LAW:types-are-the-program] How a template binds a declared action: an
-// `{{ action "name" … }}` region, or the option domain a `picker`, `menu` or
-// `carousel` lays out.
+// `{{ action "name" … }}` region, or the option domain a `picker`, `menu`,
+// `carousel`, `swatch`, `swatches` or `themePreview` lays out.
 export type ActionSite = "action" | "options";
 
 // [LAW:dataflow-not-control-flow] The action names one action's text binds,
@@ -227,18 +227,25 @@ export type ActionSite = "action" | "options";
 // apply action and, when it names one, the action its centre fires
 // (`{{ carousel "applyTheme" 0 "openThemes" }}`: the neighbour cap between
 // them is a number, so the centre action is the call's second string literal).
+// A `swatches` row binds (apply, page) as a picker does; a `swatch` binds only
+// its apply action — the literal after it names an option, not an action —
+// and a `themePreview` binds the apply action it is named, when it is.
 // One scan arms on any keyword with that keyword's own arg count
 // [LAW:single-enforcer], and a name is a literal among the call's OWN
 // arguments: one inside a parenthesised argument belongs to that expression,
 // and the call ends at its closing `)` or a `|`, so an optional name left out
 // is never filled from whatever follows. A keyword after `.` or `$` is a field
 // read (`eq .menu "open"`), never a call.
-const BINDING_KEYWORD_RE = /(?<![.$])\b(action|picker|menu|carousel)\s+$/;
+const BINDING_KEYWORD_RE =
+  /(?<![.$])\b(action|picker|menu|carousel|swatches|swatch|themePreview)\s+$/;
 const NAME_ARGS: Readonly<Record<string, number>> = {
   action: 1,
   picker: 2,
   menu: 1,
   carousel: 2,
+  swatch: 1,
+  swatches: 2,
+  themePreview: 1,
 };
 function* actionBindings(
   code: string,

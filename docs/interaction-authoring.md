@@ -1378,17 +1378,24 @@ there is nothing to go back to), and the bar's row closes up where the door was.
   session started in that directory would load; `cc-candybar doctor <file>`
   checks the file a statusline command names with `--config`.
 
-Preset, theme, style, variation, shade and endcaps are each `◀ value ▶`: `◀` and
-`▶` apply the previous and next value, so stepping through themes recolours the
-bar at each step, and clicking the value opens the list of every choice under
-the row, paged to the width. A theme or style in that list is written in its own
-colour on the menu's one background. The theme and style lists carry
+Preset, style, variation, shade and endcaps are each `◀ value ▶`: `◀` and `▶`
+apply the previous and next value, and clicking the value opens the list of
+every choice under the row, on the page holding the current one, paged to the
+width. A style in that list is its name beside its swatch. The theme is the
+theme picker: closed, it reads `🎨 theme ▀▀▀` — its label and the swatch of the
+theme in force — with a `⚙` beside it. Clicking the label opens it: the label
+names the theme in force beside its swatch, and under it a row
+`◀ ? ▶ ← ▀▀▀ [▀▀▀] ▀▀▀ →` applies the previous theme, a random one and the
+next, then pages through every theme's swatch, the one in force bracketed, so
+stepping through themes recolours the bar at each step; two rows beneath demo
+the selected theme as the bar would draw it. The `⚙` opens the theme's
+configuration — the style, variation and shade controls. The style list carries
 `{{ themePreview }}` in the row beneath; the preset, variation and shade lists
 carry `{{ layoutPreview }}`, the whole arrangement drawn small in the colours
-it would wear. Every one of these
-shares one accordion key, so opening the style list closes the theme list: the
-panel is narrow, and two open drop-downs would overflow it. A pick leaves its
-list open, so you can try several in a row; the `✕` leading it closes it.
+it would wear. Everything a tab opens shares one accordion key, so opening the
+theme's swatches closes the gear: the panel is narrow, and two open drop-downs
+would overflow it. A pick leaves its list open, so you can try several in a
+row; the `✕` leading it closes it.
 
 You do not declare it and you cannot delete it. What you *can* do is choose
 where it goes, by placing the reserved segment name `candybar.menu` in your
@@ -1463,15 +1470,16 @@ action's option domain, dropped onto the line below the enclosing row while
 open.
 
 An option cell is normally coloured by where it sits in the band the menu
-opens. Over a **colour-valued** domain — `themes` and `styles`, the two whose
-members ARE colours — every option sits on the menu's one background and its
-label is written in the `primary` of the palette picking it would put in force,
-lightened or darkened until it reads. Nothing is authored for this and nothing
+opens. Over a **colour-valued** domain — `themes`, `placementThemes` and
+`styles`, the ones whose members ARE colours — every option is its name, written
+in the menu's own text on its one background, then the **swatch** of the palette
+picking it would put in force: three cells, the palette's `primary`, `secondary`
+and `accent` over its own `background`. Nothing is authored for this and nothing
 can turn it off; it follows from the domain, so `{{ menu "applyTheme" … }}`
-writes every theme in its own colour while `{{ menu "applyEndcaps" … }}` keeps
-the band's. A
-`distribution` option has no effect on a colour-valued picker, since the colour
-is a fact about the option rather than about its position.
+draws every theme beside its swatch while `{{ menu "applyEndcaps" … }}` keeps
+the band's colours. A `distribution` option has no effect on a colour-valued
+picker, since the swatch is a fact about the option rather than about its
+position.
 
 ```json5 check:pass
 {
@@ -1585,8 +1593,11 @@ writes unsaved, so the two always show the same theme:
 
 ```render
  🍫  ✱ Opus 4.8 
- ◀ nord ▶ 
+ ◀ nord ▀▀▀ ▶ 
 ```
+
+The name between the arrows carries its swatch, as every option of a
+colour-valued domain does in any picker.
 
 A third argument names a declared action the centre fires instead of applying
 itself — `{{ carousel "applyAction" 0 "openList" }}` keeps the arrows stepping
@@ -1603,12 +1614,57 @@ so the call is the whole declaration. It is a picker, not a disclosure: put it
 in the body of a `kind: "group"` (or anywhere else a row belongs) when it should
 open and close.
 
-`{{ themePreview }}` is its companion: a strip sampling the palette the bar is
-drawn in right now — each tint a closed cell can wear, the colour an open
-disclosure's trigger wears beside its plane, and the `warning`/`error` alerts —
-each drawn by the same function the bar draws that cell with, so it cannot show
-a colour the bar under that theme would not. Under a carousel whose every click
-applies, that is the theme (or style) at the centre of the ring.
+`{{ themePreview }}` is its companion: two rows sampling the palette the bar is
+drawn in right now — first each tint a closed cell can wear, then the colour an
+open disclosure's trigger wears beside its plane, and the `warning`/`error`
+alerts — each drawn by the same function the bar draws that cell with, so it
+cannot show a colour the bar under that theme would not. Under a carousel whose
+every click applies, that is the theme (or style) at the centre of the ring.
+Named an option action, `{{ themePreview "applyAction" }}` samples instead the
+palette the action's domain draws the option its key holds in — what the
+settings menu's theme picker demos. Over `themes` that is the theme as it
+ships, with no style applied: the theme picker shows the theme, and the style
+control beside it shows the style, so under a style the demo is not the bar's
+own colours (`{{ themePreview }}` with no name is). An action over a domain
+that is not colour-valued is a render error, `themePreview references action
+"x", whose options are not colour-valued…`.
+
+`{{ swatch "applyAction" }}` is the swatch of the option the action's key holds;
+`{{ swatch "applyAction" "nord" }}` the swatch of the option named. It is what
+stands beside a theme name, so a name you show in your own template can carry
+it too, and an `{{ action }}` display may be one, so the swatch is the button:
+`{{ action "openThemes" (swatch "applyTheme") }}`. `{{ swatches "applyAction" "pageAction" }}` is the theme picker's row:
+`◀ ? ▶` applying the previous option, a random one other than the one in force
+and the next, then a page of swatches, each applying its option, the one in
+force bracketed, with `←`/`→` turning the page through the `int` action
+`pageAction`. It is a row of a disclosure body, so the body's `✕` closes it:
+
+```json5 check:pass
+{
+  globals: { palette: "nord" },
+  variables: {
+    themesPage: { kind: "state", key: "themes-page", default: "-1" },
+  },
+  actions: {
+    applyTheme: { set: "theme", from: "themes" },
+    themesPage: { set: "themes-page", int: true },
+  },
+  segments: {
+    themeRow: { template: '{{ swatches "applyTheme" "themesPage" }}' },
+    themeDemo: { template: '{{ themePreview "applyTheme" }}' },
+  },
+  root: { v: [
+    { h: ["directory", "model"] },
+    { kind: "group", name: "themes", label: "🎨 theme", children: ["themeRow", "themeDemo"] },
+  ] },
+}
+```
+
+A page cursor below zero is the page holding the option in force, so the row
+opens where the theme is, and `◀ ? ▶` turn the row to the page holding the
+theme they apply, so the row follows the theme they land on. They write that
+page as its number, so a cursor your own `when` reads as closed below zero
+stays open.
 
 `{{ layoutPreview }}` is the same idea for the arrangement: one line per row of
 the layout the bar is in, each segment a block labelled with its name (less any

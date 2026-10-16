@@ -172,7 +172,7 @@ const GLOBALS: {
 } = {
   default_empty_value: textGlobal(optionalStringSpec()),
   default_separator: textGlobal(optionalStringSpec()),
-  palette: { spec: paletteOrRuleSpec, domain: { from: "themes" } },
+  palette: { spec: paletteOrRuleSpec, domain: { themes: "themes" } },
   // [LAW:types-are-the-program] The config-default STYLE name. Unlike the
   // registry-static palette set, the style domain is per-config (the merged
   // `styles` block), so membership is a cross-ref check on the MERGED config —

@@ -112,12 +112,12 @@ export function cycleDisplayIssue(
 // (bound displays, current member index): a single static display shows in
 // every state, per-member displays index by the state. Throws the one rule's
 // text rather than silently dropping or repeating an argument.
-export function pickCycleDisplay(
+export function pickCycleDisplay<D>(
   subject: string,
-  displays: readonly string[],
+  displays: readonly D[],
   members: number,
   index: number,
-): string {
+): D {
   const issue = cycleDisplayIssue(subject, displays.length, members);
   if (issue !== undefined) throw new Error(issue);
   return displays.length === 1 ? displays[0]! : displays[index]!;

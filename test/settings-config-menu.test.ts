@@ -225,6 +225,35 @@ function showTab(
   r.click(url);
 }
 
+// The theme picker's gear (brandon-theme-swatch-8v9r): the style, variation
+// and shade controls are behind it, in the 🎨 look tab.
+function showGear(
+  r: { render: () => string; click: (url: string) => void; sessionState: SessionState },
+): void {
+  showTab(r, "look");
+  if (r.sessionState.get(SID, PICKERS_KEY) === "gear") return;
+  const url = urlsOf(r.render()).find((u) =>
+    effectsOf(u).some((e) => e.args[1] === PICKERS_KEY && e.args[2] === "gear"),
+  );
+  if (url === undefined) throw new Error("no link opens the theme picker's gear");
+  r.click(url);
+}
+// The theme picker, open: its label shows the theme in force beside its swatch.
+function showThemePicker(
+  r: { render: () => string; click: (url: string) => void; sessionState: SessionState },
+): void {
+  showTab(r, "look");
+  if (r.sessionState.get(SID, PICKERS_KEY) === "candybar.apply.theme") return;
+  const url = urlsOf(r.render()).find((u) =>
+    effectsOf(u).some(
+      (e) => e.args[1] === PICKERS_KEY && e.args[2] === "candybar.apply.theme",
+    ),
+  );
+  if (url === undefined) throw new Error("no link opens the theme picker");
+  r.click(url);
+}
+const PICKERS_KEY = "menus.candybar_pickers";
+
 // What a reader SEES: the styling and the OSC-8 link envelopes removed, so an
 // assertion about the panel's text cannot pass on bytes hidden inside a URL.
 function plain(rendered: string): string {
@@ -322,16 +351,19 @@ describe("the config menu, reached from a user config whose root is one row", ()
     )?.url;
 
   test("every setting the menu owns is one control, reachable from that root", () => {
-    const out = ["look", "layout", "config"]
-      .map((tab) => {
+    const out = [
+      ...["look", "layout", "config"].map((tab) => {
         showTab(r, tab);
         return plain(r.render());
-      })
-      .join("\n");
+      }),
+      (showGear(r), plain(r.render())),
+      (showThemePicker(r), plain(r.render())),
+    ].join("\n");
     // One labelled control each, showing the value the bar actually rendered.
     expect(out).toContain("▦ ◀ default ▶"); // preset
-    expect(out).toContain("🎨 ◀ tokyo-night ▶"); // theme
-    expect(out).toContain("◐ ◀ none ▶"); // style
+    expect(out).toContain("🎨 theme ▀▀▀"); // theme, closed: its swatch
+    expect(out).toContain("tokyo-night ▀▀▀"); // theme, open: its name too
+    expect(out).toContain("◐ ◀ none ▀▀▀ ▶"); // style, behind the gear, with its swatch
     expect(out).toContain("✦ ◀ powerline ▶"); // style
     expect(out).toContain("☑ wrap"); // autoWrap
     expect(out).toContain("padding 1"); // padding
@@ -644,7 +676,8 @@ describe("reset returns settings to the bundled default", () => {
 
   test("↺ clears the session's pick and the saved value, and the bar shows the default", () => {
     r.sessionState.set(SID, "theme", "dracula");
-    expect(plain(r.render())).toContain("🎨 ◀ dracula ▶");
+    showThemePicker(r);
+    expect(plain(r.render())).toContain("dracula ▀▀▀");
     r.click(resetOf("palette"));
     expect(r.reloads).toEqual([
       { text: durable.text(), picks: { theme: "dracula", style: null, padding: null } },
@@ -652,7 +685,7 @@ describe("reset returns settings to the bundled default", () => {
     expect(r.sessionState.get(SID, "theme")).toBeNull();
     expect(durable.parsed().globals).not.toHaveProperty("palette");
     const theme = DEFAULT_DSL_CONFIG.globals.palette as string;
-    expect(plain(r.render())).toContain(`🎨 ◀ ${theme} ▶`);
+    expect(plain(r.render())).toContain(`${theme} ▀▀▀`);
     expect(plain(r.render())).not.toContain("💾");
     expect(userContent()).toEqual(USER_CONTENT);
   });
@@ -752,7 +785,8 @@ describe("reset returns settings to the bundled default", () => {
     expect(r.sessionState.get(SID, "style")).toBeNull();
     // Nothing is left for a reset to change, so `⟲` is gone.
     expect(labelled("⟲")).toBeUndefined();
-    expect(plain(r.render())).toContain("◐ ◀ none ▶");
+    showGear(r);
+    expect(plain(r.render())).toContain("◐ ◀ none ▀▀▀ ▶");
     expect(plain(r.render())).not.toContain("💾");
     showTab(r, "layout");
     expect(plain(r.render())).toContain("padding 1");
@@ -870,9 +904,9 @@ describe("the drift marker", () => {
 // trying several, so a pick must leave the picker open with the new pick
 // current. Driven the way a user drives it: clicks found in the rendered
 // bytes and dispatched through the real verb handlers, at 80 columns. The theme
-// control is a picker (brandon-menu-ia-q30.jl1): `◀ name ▶` whose name opens
-// the list of every theme, so "stays open" is a claim about that list after
-// two picks from it.
+// control is the theme picker (brandon-theme-swatch-8v9r): its label opens a
+// row of swatches, so "stays open" is a claim about that row after two picks
+// from it.
 describe("a pick leaves the picker open", () => {
   let r: ReturnType<typeof rig>;
   beforeEach(() => {
@@ -887,34 +921,31 @@ describe("a pick leaves the picker open", () => {
   });
   afterEach(() => r.dispose());
 
-  // An option of the open theme list other than `current`: a link that writes
-  // the session theme and reads as a theme's name, not an arrow.
-  const option = (rendered: string, current: string) =>
-    links(rendered).find((l) => {
-      const text = stripAnsi(l.text);
-      return (
-        text !== "◀" &&
-        text !== "▶" &&
-        text !== current &&
-        effectsOf(l.url).some(
-          (e) => e.verb === "set-state" && e.args[1] === "theme" && e.args[2] === text,
-        )
-      );
-    })!;
-  const theme = (rendered: string) => /🎨 ◀ (\S+) ▶/.exec(plain(rendered))![1]!;
+  // A swatch of the open row other than the one in force (`[▀▀▀]`), and the
+  // theme it writes.
+  const option = (rendered: string) => {
+    const hit = links(rendered).find(
+      (l) =>
+        stripAnsi(l.text) === " ▀▀▀ " &&
+        effectsOf(l.url).some((e) => e.verb === "set-state" && e.args[1] === "theme"),
+    )!;
+    const write = effectsOf(hit.url).find((e) => e.args[1] === "theme")!;
+    return { url: hit.url, theme: write.args[2]! };
+  };
+  // The open picker names the theme in force beside its swatch.
+  const theme = (rendered: string) => /(\S+) ▀▀▀/u.exec(plain(rendered))![1]!;
 
-  test("two picks in a row from the list: still open, the control naming the second pick", () => {
-    const opened = r.render();
-    const pickOne = option(opened, theme(opened));
+  test("two picks in a row from the swatches: still open, the control naming the second pick", () => {
+    const pickOne = option(r.render());
     r.click(pickOne.url);
     const first = r.render();
-    expect(theme(first)).toBe(stripAnsi(pickOne.text));
-    const pickTwo = option(first, theme(first));
+    expect(theme(first)).toBe(pickOne.theme);
+    const pickTwo = option(first);
     r.click(pickTwo.url);
     const second = r.render();
-    expect(theme(second)).toBe(stripAnsi(pickTwo.text));
-    // Still open after each pick: the list's options are still drawn.
-    expect(option(second, theme(second))).toBeDefined();
+    expect(theme(second)).toBe(pickTwo.theme);
+    // Still open after each pick: the row's swatches are still drawn.
+    expect(option(second)).toBeDefined();
   });
 });
 
@@ -1267,10 +1298,12 @@ describe("a theme's default look, set from the bar", () => {
     pick({ variation: "duo" });
     expect(plain(r.render())).not.toContain("⤓ default");
     pick({ shade: "deepest" });
-    expect(plain(r.render())).toContain(SAVE_LABEL);
+    // The theme's name carries its swatch, as every theme name the bar shows
+    // does (brandon-theme-swatch-8v9r).
+    expect(plain(r.render())).toContain(`${SAVE_LABEL} ▀▀▀`);
     // Named after the theme the bar wears.
     pick({ theme: "dracula" });
-    expect(plain(r.render())).toContain("⤓ default for dracula");
+    expect(plain(r.render())).toContain("⤓ default for dracula ▀▀▀");
   });
 
   test("the click writes the look into themeDefaults.<theme>, reloads, then releases the picks", () => {
@@ -1344,6 +1377,7 @@ describe("a theme's default look, set from the bar", () => {
     expect(durable.parsed().themeDefaults).toMatchObject({
       nord: { shade: "deepest" },
     });
+    showGear(r);
     const reset = links(r.render()).find(
       (l) =>
         stripAnsi(l.text) === "↺" &&

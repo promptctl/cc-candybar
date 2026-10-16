@@ -21,6 +21,7 @@ import type { Charset, Endcaps } from "../src/themes/policy";
 import { SessionState } from "../src/daemon/session-state";
 import { CHARSETS, listResolvablePaletteNames } from "../src/themes/policy";
 import { stripAnsi } from "./helpers/ansi";
+import { swatch } from "../src/render/swatch";
 import { instantOf } from "../src/utils/instant";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
@@ -43,7 +44,11 @@ const SHAPE_CHARSET: Array<[Endcaps, Charset]> = SHAPES.flatMap((s) =>
 // longest option plus its mandatory affordances (✕ ← option →) and the strip's
 // caps cannot fit ANY pagination — that's a too-narrow terminal, not the bug
 // (which is page ≥1 overflowing while page 0 fits). Tests sweep at/above it.
-const MAX_OPT = Math.max(...THEMES.map(cw));
+// A theme option is drawn as its name, a space and its swatch.
+const MAX_OPT =
+  Math.max(...THEMES.map(cw)) +
+  cw(" ") +
+  swatch(getThemePalette(THEMES[0]!)!).cellLength;
 const FLOOR = MAX_OPT + cw("✕") + cw("←") + cw("→") + 3 + 2;
 
 function pickerConfig(): string {

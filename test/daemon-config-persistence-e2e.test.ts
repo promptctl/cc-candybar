@@ -33,10 +33,12 @@ import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { effectsOf } from "./helpers/click";
 import { stripAnsi } from "./helpers/ansi";
 
-// The look tab's theme control naming `theme`: `🎨 ◀ name ▶`, read off the
-// visible text, since each arrow and the name are links of their own.
+// The look tab's theme picker, open, naming `theme` beside its swatch
+// (brandon-theme-swatch-8v9r), read off the visible text.
 const showsTheme = (out: string, theme: string): boolean =>
-  stripAnsi(out).includes(`🎨 ◀ ${theme} ▶`);
+  stripAnsi(out).includes(`${theme} ▀▀▀`);
+// Opening the theme picker: the write its label's click makes.
+const OPEN_THEME_PICKER = ["menus.candybar_pickers", "candybar.apply.theme"];
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import {
   click,
@@ -112,11 +114,11 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
 
       const menuOpen = await render(sockPath, SID, projectDir);
 
-      // The look tab reveals the theme control, `◀ name ▶`, not its list of
-      // options: the name is the list's toggle (a set-state write on the
+      // The look tab reveals the theme picker, `🎨 theme ▀▀▀`, not its row of
+      // swatches: the label is the row's toggle (a set-state write on the
       // pickers accordion key, whose member is the apply action's name, with
-      // the list's page reset beside it). Click it before any per-theme option
-      // link exists to click.
+      // the row's page cursor beside it). Click it before any per-theme
+      // swatch exists to click.
       const themeMenuToggleUrl = findUrl(linkUrls(menuOpen), (effects) =>
         effects.some(
           (e) =>
@@ -128,23 +130,39 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
       expect(themeMenuToggleUrl).toBeDefined();
       await click(sockPath, themeMenuToggleUrl!);
 
+      // ── A control writes the SESSION key, and nothing durable: every pick
+      // is a draft until it is saved.
+      const sessionOnly = await render(sockPath, SID, projectDir);
+
       // TWO themes, deliberately: one tried in-session and one committed
       // durably. Using the same name for both would let the session pick
       // satisfy the durability assertions below (a session value wins for its
       // own session), so the test would pass with the durable write missing.
-      const [sessionTheme, targetTheme] = listResolvablePaletteNames().filter(
-        (name) => name !== "tokyo-night", // the bundled default's globals.palette
+      // Both are swatches the open row shows — it opens on the page holding
+      // the theme in force, and a swatch writes its theme alone.
+      const [sessionTheme, targetTheme] = [
+        ...new Set(
+          linkUrls(sessionOnly)
+            .map(effectsOf)
+            .filter(
+              (effects) =>
+                effects.length === 1 &&
+                effects[0]!.verb === "set-state" &&
+                effects[0]!.args[1] === "theme",
+            )
+            .map((effects) => effects[0]!.args[2]!),
+        ),
+      ].filter(
+        (name) =>
+          name !== "tokyo-night" && // the bundled default's globals.palette
+          listResolvablePaletteNames().includes(name),
       );
       if (sessionTheme === undefined || targetTheme === undefined) {
         throw new Error(
-          "listResolvablePaletteNames() returned fewer than two themes besides " +
-            "the bundled default's own palette — need one to try and one to commit",
+          "the open swatch row offered fewer than two themes besides the " +
+            "bundled default's own palette — need one to try and one to commit",
         );
       }
-
-      // ── A control writes the SESSION key, and nothing durable: every pick
-      // is a draft until it is saved.
-      const sessionOnly = await render(sockPath, SID, projectDir);
       const sessionThemeUrl = findUrl(linkUrls(sessionOnly), (effects) =>
         effects[0]!.verb === "set-state" &&
         effects[0]!.args[1] === "theme" &&
@@ -181,11 +199,12 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
         effectsUrl([
           { verb: VERB_SET_STATE, args: [OTHER_SID, "candybar.menu", "open"] },
           { verb: VERB_SET_STATE, args: [OTHER_SID, "candybar.tab", "look"] },
+          { verb: VERB_SET_STATE, args: [OTHER_SID, ...OPEN_THEME_PICKER] },
         ]),
       );
       const otherBar = await render(sockPath, OTHER_SID, projectDir);
       expect(showsTheme(otherBar, "tokyo-night")).toBe(true); // its own default, shown
-      // Not named as current (the ◀ beside it may well write it, as a neighbour).
+      // Not named as current (a swatch beside it may well write it).
       expect(showsTheme(otherBar, sessionTheme)).toBe(false);
       expect(otherBar).not.toContain("💾"); // the draft is this session's alone
 
@@ -298,6 +317,7 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
         effectsUrl([
           { verb: VERB_SET_STATE, args: [FRESH_SID, "candybar.menu", "open"] },
           { verb: VERB_SET_STATE, args: [FRESH_SID, "candybar.tab", "look"] },
+          { verb: VERB_SET_STATE, args: [FRESH_SID, ...OPEN_THEME_PICKER] },
         ]),
       );
       const freshOut = await renderUntil(

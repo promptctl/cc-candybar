@@ -45,6 +45,7 @@ import {
   testVerbContext,
 } from "./helpers/click";
 import { INVISIBLE, linkUrls } from "./helpers/ansi";
+import { SWATCH_GLYPH } from "../src/render/swatch";
 import { instantOf } from "../src/utils/instant";
 
 type Rgb = readonly [number, number, number];
@@ -181,8 +182,10 @@ function compare(label: string, truecolor: Chars, quantized: Chars, failures: st
   let measured = 0;
   truecolor.forEach(({ ch, fg, bg, joiner }, i) => {
     const q = quantized[i]!;
-    // A seam that is an arrow at either depth is a shape, held above.
-    if (joiner || q.joiner || !isRgb(fg) || !isRgb(bg)) return;
+    // A seam that is an arrow at either depth is a shape, held above. A
+    // swatch is no text either: it is a theme's colours side by side, and at
+    // 256 it shows that theme's colours as the terminal draws them.
+    if (joiner || q.joiner || ch === SWATCH_GLYPH || !isRgb(fg) || !isRgb(bg)) return;
     measured++;
     if (!isRgb(q.fg) || !isRgb(q.bg)) {
       failures.push(`${label} ${ch}: drawn in terminal-defined ANSI colours`);

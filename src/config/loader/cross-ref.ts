@@ -854,7 +854,7 @@ function checkSettingWrites(
   const takes = `${key} takes ${describeControlDomain(domain, optionDomains)}`;
   // A stepper writes every integer between its ends, which only a range
   // domain holds by construction; its ends stand for it there and nowhere else.
-  if ("min" in a && (domain === "bool" || "from" in domain)) {
+  if ("min" in a && (domain === "bool" || !("min" in domain))) {
     ctx.issues.push({
       path: `actions.${name}.min`,
       message: `actions.${name}: a stepper writes the integers from ${a.min} to ${a.max}, and ${key} is not an integer range; ${takes}`,
@@ -1200,7 +1200,8 @@ export function validateDeclarations(
         settings,
       });
       // [LAW:locality-or-seam] `{{ action "name" … }}` refs, and the option
-      // domain a `{{ picker }}`/`{{ menu }}`/`{{ carousel }}` lays out, resolve
+      // domain a `{{ picker }}`/`{{ menu }}`/`{{ carousel }}`/`{{ swatches }}`
+      // lays out, resolve
       // against the action table on the merged config — so a segment can
       // reference a default-provided action — through every helper the field
       // calls, exactly as its variable reads do.
@@ -1210,7 +1211,9 @@ export function validateDeclarations(
       )) {
         if (Object.prototype.hasOwnProperty.call(cfg.actions, aref)) continue;
         const inOptions =
-          site === "options" ? " (in a picker, menu or carousel)" : "";
+          site === "options"
+            ? " (in a picker, menu, carousel, swatch, swatches or themePreview)"
+            : "";
         if (via !== null) {
           checkHelperIssue(
             ctx,

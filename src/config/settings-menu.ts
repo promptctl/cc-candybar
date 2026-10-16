@@ -162,6 +162,14 @@ const PRESET_DELETE = `${SETTINGS_NS}preset.delete`;
 // and its VS16 form is honoured unevenly (kgr; test/glyph-width.test.ts).
 export const PRESET_DELETE_GLYPH = "🚮";
 
+// [LAW:one-source-of-truth] A control's names, derived from its setting's
+// name — the segment that shows it, the action it writes through, and the
+// action its ↺ resets — so a control can never name a segment whose action
+// writes a different setting.
+const controlSeg = (name: string): string => `${SETTINGS_NS}${name}`;
+const controlApply = (name: string): string => `${SETTINGS_NS}apply.${name}`;
+const controlReset = (name: string): string => `${SETTINGS_NS}reset.${name}`;
+
 // ─── A theme's default look (candybar-theme-colours-6fq5.ix8) ──────────────
 //
 // `⤓ default for <theme>` in the 🎨 look tab: save the shade, variation and
@@ -173,9 +181,13 @@ export const PRESET_DELETE_GLYPH = "🚮";
 const THEME_DEFAULT_SEG = `${SETTINGS_NS}themeDefault.save`;
 const THEME_DEFAULT_DIFFERS = `${SETTINGS_NS}themeDefault.differs`;
 const THEME_DEFAULT_THEME = `${SETTINGS_NS}themeDefault.theme`;
+// The theme's name carries its swatch, as every theme name the bar shows does
+// (brandon-theme-swatch-8v9r), drawn through the theme control's own action.
 const THEME_DEFAULT_CELL: SegmentDecl = {
   when: `{{ .${THEME_DEFAULT_DIFFERS} }}`,
-  template: `{{ action "${THEME_DEFAULT_SEG}" (printf "⤓ default for %s" .${THEME_DEFAULT_THEME}) }}`,
+  template:
+    `{{ action "${THEME_DEFAULT_SEG}" (printf "⤓ default for %s" .${THEME_DEFAULT_THEME}) }} ` +
+    `{{ swatch "${controlApply("theme")}" .${THEME_DEFAULT_THEME} }}`,
 };
 
 // ─── Reset all (brandon-save-undo-bwi.wt5) ──────────────────────────────────
@@ -241,8 +253,30 @@ const doctorRowSeg = (check: string): string => `${DOCTOR_SEG}.${check}`;
 // `{{ menu }}` an author gives the same shared key joins this accordion.
 const PICKER_KEY = sharedMenuStateKey(`${SETTINGS_NS}pickers`);
 
-// The theme and style pickers share one preview: both choose the palette the
-// bar is drawn in, and `{{ themePreview }}` samples exactly that palette.
+// ─── The theme configuration (brandon-theme-swatch-8v9r) ────────────────────
+//
+// The theme picker is `[Theme ▀▀▀] [⚙]`, and the gear opens "the theme
+// configuration menu … bright/dim, etc, and the primary/secondary, etc": the
+// style, the variation and the shade, the settings that adapt the theme
+// rather than choose it. The gear is one more member of the controls'
+// accordion, so opening it closes the theme's swatches and the reverse — one
+// panel under the row at a time — and the lists of the controls inside it
+// share an accordion of their own: a key nested under a body holding it
+// would close the body that shows it.
+const GEAR_SEG = `${SETTINGS_NS}gear`;
+const GEAR_MEMBER = "gear";
+const GEAR_TOGGLE = `${GEAR_SEG}.toggle`;
+const GEAR_GLYPH = "⚙";
+const GEAR_REF: DisclosureRef = {
+  variable: PICKER_KEY,
+  key: PICKER_KEY,
+  member: GEAR_MEMBER,
+};
+const GEAR_PICKER_KEY = sharedMenuStateKey(`${SETTINGS_NS}gearPickers`);
+
+// A style chooses how the bar's palette is adapted, and `{{ themePreview }}`
+// samples exactly the palette the bar is drawn in. (The theme picker carries
+// its own demo of the theme it has selected.)
 const PALETTE_PREVIEW: readonly SegmentDecl[] = [
   { template: "{{ themePreview }}" },
 ];
@@ -263,7 +297,6 @@ const BENEATH: Partial<Record<SettingName, readonly SegmentDecl[]>> = {
       template: `{{ action "${PRESET_DELETE}" (printf "${PRESET_DELETE_GLYPH} delete %s" .${SETTINGS.preset.effectiveVar}) }}`,
     },
   ],
-  theme: PALETTE_PREVIEW,
   style: PALETTE_PREVIEW,
   // A variation says which role each ROW wears, and a shade which of the
   // role's shades each CELL wears — `{{ layoutPreview }}` draws every row,
@@ -272,16 +305,10 @@ const BENEATH: Partial<Record<SettingName, readonly SegmentDecl[]>> = {
   shade: [LAYOUT_PREVIEW],
 };
 
-// [LAW:one-source-of-truth] A control's names, derived from its setting's
-// name — the segment that shows it, the action it writes through, and the
-// action its ↺ resets — so a control can never name a segment whose action
-// writes a different setting.
-const controlSeg = (name: string): string => `${SETTINGS_NS}${name}`;
-const controlApply = (name: string): string => `${SETTINGS_NS}apply.${name}`;
-const controlReset = (name: string): string => `${SETTINGS_NS}reset.${name}`;
-const controlList = (name: string): string => `${SETTINGS_NS}list.${name}`;
-const controlBeneath = (name: string, row: number): string =>
-  `${controlList(name)}.${row}`;
+// Row `row` of the body a picker opens: its list's rows, then the rows
+// beneath them.
+const controlRow = (name: string, row: number): string =>
+  `${SETTINGS_NS}list.${name}.${row}`;
 // Whether the setting's reset would change anything (RenderPayload.resettable,
 // brandon-menu-ia-q30.nk8): the one fact its `↺`, its tab's `•`, and `⟲` read.
 const controlResettable = (name: string): string =>
@@ -303,6 +330,31 @@ interface MenuControl extends SettingProjection {
   readonly beneath: readonly SegmentDecl[];
 }
 
+// [LAW:types-are-the-program] Where each setting's control renders — the
+// door's first line, exactly one tab, or behind the theme picker's gear — as a
+// record keyed by every setting, so a new setting is a compile error until it
+// is given a place. Switching arrangement is what people open this menu for,
+// so the preset control sits on the door's first line, one click from the
+// door.
+type Place = "door" | TabName | "gear";
+const PLACE = {
+  preset: "door",
+  theme: "look",
+  style: "gear",
+  effect: "look",
+  variation: "gear",
+  shade: "gear",
+  endcaps: "look",
+  transitions: "look",
+  autoWrap: "layout",
+  padding: "layout",
+  updateNotice: "config",
+} as const satisfies Readonly<Record<SettingName, Place>>;
+// The gear sits beside the theme control, so what is behind it is in the
+// theme control's tab.
+const tabOf = (place: Place): "door" | TabName =>
+  place === "gear" ? PLACE.theme : place;
+
 // [LAW:one-source-of-truth] Every setting the menu offers, generated
 // (brandon-settings-coverage-g4p.zoj): one control per row of SETTINGS, its
 // shape — a toggle, a stepper, a picker — decided by the domain the loader
@@ -321,33 +373,35 @@ const CONTROLS: readonly MenuControl[] = (
     row.sessionKey,
     row.effectiveVar,
     controlApply(name),
-    PICKER_KEY,
+    PLACE[name] === "gear" ? GEAR_PICKER_KEY : PICKER_KEY,
   );
   return { ...row, name, control, beneath: BENEATH[name] ?? [] };
 });
 
-// [LAW:types-are-the-program] Where each setting's control renders — the
-// door's first line, or exactly one tab — as a record keyed by every setting,
-// so a new setting is a compile error until it is given a place. Switching
-// arrangement is what people open this menu for, so the preset control sits on
-// the door's first line, one click from the door.
-const PLACE: Readonly<Record<SettingName, "door" | TabName>> = {
-  preset: "door",
-  theme: "look",
-  style: "look",
-  effect: "look",
-  variation: "look",
-  shade: "look",
-  endcaps: "look",
-  transitions: "look",
-  autoWrap: "layout",
-  padding: "layout",
-  updateNotice: "config",
-};
-const controlsIn = (place: "door" | TabName): readonly MenuControl[] =>
+const controlsIn = (place: Place): readonly MenuControl[] =>
   CONTROLS.filter((c) => PLACE[c.name] === place);
+// What a tab holds, the controls behind a gear in it included.
+const controlsUnder = (tab: "door" | TabName): readonly MenuControl[] =>
+  CONTROLS.filter((c) => tabOf(PLACE[c.name]) === tab);
+// [LAW:types-are-the-program] What sits right after a control in its row —
+// the theme picker's gear, opening the controls behind it — keyed by setting,
+// so the gear is laid where the control it configures is.
+const BESIDE: Partial<Record<SettingName, readonly LayoutNode[]>> = {
+  theme: [
+    disclosureNode(
+      GEAR_SEG,
+      GEAR_REF,
+      {
+        kind: "container",
+        direction: "horizontal",
+        children: controlsIn("gear").map(controlNode),
+      },
+      "drop",
+    ),
+  ],
+};
 const controlsAt = (place: "door" | TabName): LayoutNode[] =>
-  controlsIn(place).map(controlNode);
+  controlsIn(place).flatMap((c) => [controlNode(c), ...(BESIDE[c.name] ?? [])]);
 
 // [LAW:one-source-of-truth] Every PLAIN key the settings menu writes — the
 // session key every control picks and the config field its save and ↺ write.
@@ -448,12 +502,9 @@ function controlNode(c: MenuControl): LayoutNode {
     {
       kind: "container",
       direction: "vertical",
-      children: [
-        seg(controlList(c.name)),
-        ...c.beneath.map(
-          (_, row): LayoutNode => seg(controlBeneath(c.name, row)),
-        ),
-      ],
+      children: [...c.control.list.rows, ...c.beneath].map((_, row) =>
+        seg(controlRow(c.name, row)),
+      ),
     },
     "drop",
   );
@@ -829,7 +880,7 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
     artifacts.actions[tabSeg(member)] = {
       do: [tabToggle(member), ...TAB_DISARMS],
     };
-    const marked = anyResettable(controlsIn(member).map((c) => c.name));
+    const marked = anyResettable(controlsUnder(member).map((c) => c.name));
     const mark = `(ternary ${templateLiteral(DRIFT_MARK)} "" ${marked})`;
     const display = (text: string): string =>
       `(print ${templateLiteral(text)} ${mark})`;
@@ -912,15 +963,24 @@ function declareSettingControls(artifacts: MenuArtifacts): void {
       template: `${c.control.template}${resetCell}`,
     };
     if (c.control.kind === "picker") {
-      artifacts.segments[controlList(c.name)] = {
-        template: c.control.list.template,
-      };
+      [
+        ...c.control.list.rows.map((template): SegmentDecl => ({ template })),
+        ...c.beneath,
+      ].forEach((row, i) => {
+        artifacts.segments[controlRow(c.name, i)] = row;
+      });
     }
-    c.beneath.forEach((row, i) => {
-      artifacts.segments[controlBeneath(c.name, i)] = row;
-    });
   }
   Object.assign(artifacts.actions, RESET_ALL.actions);
+  // The theme picker's gear: one static glyph, open or closed — the open
+  // trigger wears its band's state colour, as every disclosure trigger does.
+  artifacts.actions[GEAR_TOGGLE] = disclosureCycleAction(
+    PICKER_KEY,
+    GEAR_MEMBER,
+  );
+  artifacts.segments[GEAR_SEG] = {
+    template: `{{ action "${GEAR_TOGGLE}" "${GEAR_GLYPH}" }}`,
+  };
 }
 
 // [LAW:one-source-of-truth] Edit mode's state and switch, ensured rather than
