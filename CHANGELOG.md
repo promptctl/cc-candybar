@@ -1,3 +1,10 @@
+# [1.145.0](https://github.com/promptctl/cc-candybar/compare/v1.144.0...v1.145.0) (2026-10-19)
+
+
+### Features
+
+* **bar-pane:** the bar in a tmux pane beside its session, as the daemon pushes it (lane C) ([#352](https://github.com/promptctl/cc-candybar/issues/352)) ([ce1fe76](https://github.com/promptctl/cc-candybar/commit/ce1fe765560f459fbb632b047f5953e5ac775481))
+
 # [1.144.0](https://github.com/promptctl/cc-candybar/compare/v1.143.0...v1.144.0) (2026-10-19)
 
 
