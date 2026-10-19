@@ -1,3 +1,10 @@
+# [1.135.0](https://github.com/promptctl/cc-candybar/compare/v1.134.0...v1.135.0) (2026-10-19)
+
+
+### Features
+
+* **plugins:** cc-candybar plugin install <path | owner/repo | git URL> ([#364](https://github.com/promptctl/cc-candybar/issues/364)) ([6a525ce](https://github.com/promptctl/cc-candybar/commit/6a525ce65f4987d8f985cf32a4995a592f8a8139))
+
 # [1.134.0](https://github.com/promptctl/cc-candybar/compare/v1.133.0...v1.134.0) (2026-10-16)
 
 
