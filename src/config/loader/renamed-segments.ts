@@ -9,10 +9,10 @@
 // would answer `constructor` with Object.prototype's function.
 //
 // [LAW:types-are-the-program] A segment that moved into a plugin exists only
-// once that plugin is installed, so its row names the folder that installs it.
+// once that plugin is installed, so its row names the source that installs it.
 type Renamed =
   | { readonly kind: "built-in"; readonly to: string }
-  | { readonly kind: "plugin"; readonly to: string; readonly folder: string };
+  | { readonly kind: "plugin"; readonly to: string; readonly source: string };
 
 export const RENAMED_SEGMENTS: ReadonlyMap<string, Renamed> = new Map<
   string,
@@ -25,14 +25,14 @@ export const RENAMED_SEGMENTS: ReadonlyMap<string, Renamed> = new Map<
   // The settings menu's anchor left `settings.` so `.settings` could be a
   // placement's own settings (brandon-segment-settings-i4n).
   ["settings.menu", { kind: "built-in", to: "candybar.menu" }],
-  // lit's ticket moved out of the bundled bar into the plugin lit ships,
-  // which reads lit's own statusline file (brandon-plugins-ktag.d6f).
+  // lit's ticket moved out of the bundled bar into the plugin lit's repository
+  // ships, which reads lit's own statusline file (brandon-plugins-ktag.d6f).
   [
     "ticket",
     {
       kind: "plugin",
       to: "plugins.lit.ticket",
-      folder: "examples/plugins/lit",
+      source: "promptctl/links-issue-tracker",
     },
   ],
 ]);
@@ -44,6 +44,6 @@ export function renamedHint(name: string): string {
     case "built-in":
       return ` (the built-in segment "${name}" was renamed to "${renamed.to}" — update this reference)`;
     case "plugin":
-      return ` (the built-in segment "${name}" became "${renamed.to}", a segment of the plugin in cc-candybar's ${renamed.folder} — install that folder in a plugin root (docs/segment-authoring.md, "Installing a plugin instead of listing it"), then update this reference)`;
+      return ` (the built-in segment "${name}" became "${renamed.to}", a segment of the plugin \`cc-candybar plugin install ${renamed.source}\` installs — update this reference)`;
   }
 }
