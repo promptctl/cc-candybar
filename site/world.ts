@@ -67,6 +67,10 @@ export function updateRepo(next: Partial<RepoState>): void {
 
 const ok = (stdout: string): ProgramRun => ({ code: 0, stdout });
 
+// The process table the doctor's daemon row reads (src/doctor/edge.ts): the
+// page's daemon is no process, and none other runs on the demo machine.
+programs.set("ps", () => ok(""));
+
 // The four commands the git segment runs (src/segments/git.ts); anything else
 // fails as git does, and says so in the console, so a new one is noticed.
 programs.set("git", (args) => {

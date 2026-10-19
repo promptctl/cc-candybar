@@ -309,8 +309,6 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     ]);
   });
 
-  // brandon-doctor-v62x.tfb: the click judges the client that drew the bar
-  // it came from — one too old to say what it is is the install's failure.
   test("a post-mortem the user has not read fails the daemon row, and [fix] files it read", () => {
     const report = "/state/cc-candybar/memory-2026-10-19T18-01-12-345Z-77.txt";
     const rt = buildRuntime(null, CLEAN_LOAD, GHOSTTY, memoryClickedTerminals(), { hint: healthyClient() }, {
@@ -334,6 +332,8 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     expect(rt.logs.at(-1)).toMatch(/ daemon=ok .* postMortems=0\/1 \(session=s1\)$/);
   });
 
+  // brandon-doctor-v62x.tfb: the click judges the client that drew the bar
+  // it came from — one too old to say what it is is the install's failure.
   test("a bar drawn by a client too old to say what it is fails the install row", () => {
     const rt = buildRuntime(null, CLEAN_LOAD, GHOSTTY, memoryClickedTerminals(), {});
     rt.openTools();

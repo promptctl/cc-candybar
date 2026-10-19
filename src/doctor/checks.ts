@@ -22,6 +22,7 @@ import type { Outcome } from "../utils/outcome.js";
 import type { DeclKind, UnusedDecl } from "../config/unused.js";
 import {
   approachingLimit,
+  mb,
   type PostMortem,
   type ServingDaemon,
 } from "../daemon/limits.js";
@@ -255,7 +256,7 @@ export type InstallFacts = Asked<{
 
 // One cc-candybar daemon process of this user, as the process table shows it
 // (src/doctor/edge.ts `daemonProcesses`): `rss` in bytes, `started` the
-// table's own start time.
+// table's own start time, its zone named.
 export interface DaemonProcess {
   readonly pid: number;
   readonly ppid: number;
@@ -768,8 +769,6 @@ const install: Check = {
   },
 };
 
-export const mb = (bytes: number): number => Math.round(bytes / (1024 * 1024));
-
 // [LAW:one-source-of-truth] The post-mortems the user has not been told of:
 // every one newer than the one filed read, newest first. None can be judged
 // while either list is unreadable. The probe reports them; the doctor's event
@@ -797,7 +796,7 @@ const daemon: Check = {
     if (serving.kind === "failed") {
       const running =
         processes.kind === "ok" && processes.value.length > 0
-          ? ` — daemon ${processes.value.map((p) => p.pid).join(", ")} running but not answering`
+          ? ` — daemon ${processes.value.map((p) => p.pid).join(", ")} running`
           : "";
       return {
         ok: false,

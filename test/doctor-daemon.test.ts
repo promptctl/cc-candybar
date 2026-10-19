@@ -84,17 +84,17 @@ describe("the daemon probe", () => {
         kind: "ok",
         value: [
           HEALTHY_PROCESS,
-          { pid: 4200, ppid: 1, rss: 300 * MB, started: "Sun Oct 18 09:00:00 2026" },
-          { pid: 4300, ppid: 999, rss: 90 * MB, started: "Mon Oct 19 18:20:01 2026" },
+          { pid: 4200, ppid: 1, rss: 300 * MB, started: "Sun Oct 18 09:00:00 2026 UTC" },
+          { pid: 4300, ppid: 999, rss: 90 * MB, started: "Mon Oct 19 18:20:01 2026 UTC" },
         ],
       },
     });
     expect(verdict).toEqual({
       ok: false,
       reason:
-        "daemon 4200 (started Sun Oct 18 09:00:00 2026, 300 MB) runs beside the one serving the bar (4100) — `kill 4200`",
+        "daemon 4200 (started Sun Oct 18 09:00:00 2026 UTC, 300 MB) runs beside the one serving the bar (4100) — `kill 4200`",
       more: [
-        "daemon 4300 (started Mon Oct 19 18:20:01 2026, 90 MB, child of 999) runs beside the one serving the bar (4100) — `kill 4300`",
+        "daemon 4300 (started Mon Oct 19 18:20:01 2026 UTC, 90 MB, child of 999) runs beside the one serving the bar (4100) — `kill 4300`",
       ],
     });
   });
@@ -110,12 +110,12 @@ describe("the daemon probe", () => {
     expect(verdict.ok === false && verdict.more?.at(-1)).toMatch(/^the daemon holds 500 MB/);
   });
 
-  test("no daemon answering is the failure, naming any daemon running but not answering", () => {
+  test("no daemon answering is the failure, naming any daemon running, never as a stray", () => {
     expect(
       verdictOf({ serving: { kind: "failed", reason: "connect ENOENT /tmp/s" } }),
     ).toEqual({
       ok: false,
-      reason: "no daemon answered: connect ENOENT /tmp/s — daemon 4100 running but not answering",
+      reason: "no daemon answered: connect ENOENT /tmp/s — daemon 4100 running",
     });
     expect(
       verdictOf({
@@ -184,10 +184,10 @@ describe("daemonProcesses", () => {
       return !entry.startsWith("/tmp/other/");
     });
     expect(found).toEqual([
-      { pid: 22179, ppid: 1, rss: 341552 * 1024, started: "Mon Oct 19 17:59:51 2026" },
-      { pid: 501, ppid: 1, rss: 300000 * 1024, started: "Mon Oct 19 09:00:00 2026" },
-      { pid: 28227, ppid: 28214, rss: 200000 * 1024, started: "Mon Oct 19 18:20:01 2026" },
-      { pid: 600, ppid: 1, rss: 1000 * 1024, started: "Mon Oct 5 01:02:03 2026" },
+      { pid: 22179, ppid: 1, rss: 341552 * 1024, started: "Mon Oct 19 17:59:51 2026 UTC" },
+      { pid: 501, ppid: 1, rss: 300000 * 1024, started: "Mon Oct 19 09:00:00 2026 UTC" },
+      { pid: 28227, ppid: 28214, rss: 200000 * 1024, started: "Mon Oct 19 18:20:01 2026 UTC" },
+      { pid: 600, ppid: 1, rss: 1000 * 1024, started: "Mon Oct 5 01:02:03 2026 UTC" },
     ]);
     // The entry is the whole absolute path before ` daemon`, space and all;
     // a relative one and a non-daemon command are never asked about.

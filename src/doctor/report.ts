@@ -17,7 +17,6 @@ import {
   NERD_FONT_CHECK,
   glyphSighting,
   clientStanding,
-  mb,
   unreadPostMortems,
   type Asked,
   type CheckReport,
@@ -28,6 +27,7 @@ import {
   type TerminalIdentity,
 } from "./checks.js";
 import { SETTINGS_NS } from "../config/loader/reserved-namespace.js";
+import { mb } from "../daemon/limits.js";
 
 export const DOCTOR_NS = `${SETTINGS_NS}doctor.`;
 

@@ -8,7 +8,7 @@
 
 import { VERB_COPY } from "../src/click/wire";
 import { describeLink, drawnLinks, effectsOf, HOST_VERBS } from "../src/click/read";
-import { handleRequest, reloadConfig } from "../src/daemon/server";
+import { establishLimits, handleRequest, reloadConfig } from "../src/daemon/server";
 import { PROTOCOL_VERSION, type ClickRequest, type RenderRequest } from "../src/daemon/protocol";
 import { parseHandlerUrl } from "../src/install/index";
 import { PACKAGE_VERSION } from "../src/version";
@@ -53,6 +53,9 @@ const onClock = ({ headAt, ...rest }: Partial<ScenarioRepo>): Partial<RepoState>
   headAt === undefined ? rest : { ...rest, headTime: Math.floor(clockAt(headAt)) };
 
 seedWorld(onClock(INITIAL_REPO) as RepoState);
+// The daemon the page runs has the limits a daemon has, so the doctor can ask
+// it what it holds; nothing counts its memory, as no socket was won.
+establishLimits(process.env);
 
 function lines(entry: Entry, at: number): object[] {
   const base = { timestamp: new Date(clockAt(at) * 1000).toISOString(), sessionId, cwd: REPO, isSidechain: false, uuid: id("u") };

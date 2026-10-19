@@ -71,6 +71,10 @@ export function heapCapMb(env: NodeJS.ProcessEnv): number {
 
 const BYTES_PER_MB = 1024 * 1024;
 
+// [LAW:one-source-of-truth] Bytes in the unit the budget is set in, as every
+// sentence about the daemon's memory says them.
+export const mb = (bytes: number): number => Math.round(bytes / BYTES_PER_MB);
+
 // The budget in the unit `process.memoryUsage().rss` reports.
 export function rssLimitBytes(env: NodeJS.ProcessEnv): number {
   return rssLimitMb(env) * BYTES_PER_MB;
@@ -232,10 +236,14 @@ export function makeLimits(deps: LimitsDeps): LimitsHandle {
       );
     });
     attempt(deps.log, "artifact rotation", () => {
+      // Each eviction its own attempt: a file that will not go is logged,
+      // and every other evicts anyway.
       for (const { artifacts } of postMortemsOf(deps.listArtifacts()).slice(
         keep,
       )) {
-        for (const file of Object.values(artifacts)) deps.removeFile(file);
+        for (const file of Object.values(artifacts)) {
+          attempt(deps.log, `evicting ${file}`, () => deps.removeFile(file));
+        }
       }
     });
     deps.shutdown(0);

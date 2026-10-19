@@ -337,7 +337,9 @@ export function daemonProcesses(
       pid: Number(m[1]),
       ppid: Number(m[2]),
       rss: Number(m[3]) * 1024,
-      started: m[4]!.replace(/\s+/g, " "),
+      // The edge runs ps under TZ=UTC; the zone is said, so the time is
+      // not read as local.
+      started: `${m[4]!.replace(/\s+/g, " ")} UTC`,
     });
   }
   return found.filter((p) => !found.some((child) => child.ppid === p.pid));

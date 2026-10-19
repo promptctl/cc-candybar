@@ -261,6 +261,33 @@ describe("heap snapshot rotation", () => {
       "/fake-snapshot-dir/memory-2026-04-01T00-00-00-000Z-4242.txt",
     ]);
   });
+
+  test("a file that will not go is logged, and every other eviction still happens", () => {
+    const rec = newRec();
+    rec.fakeRss = 250 * 1024 * 1024;
+    const stuck = "/d/heap-2026-01-01T00-00-00-000Z-9.heapsnapshot";
+    rec.existingFiles = [
+      stuck,
+      "/d/memory-2026-01-01T00-00-00-000Z-9.txt",
+      "/d/heap-2026-02-01T00-00-00-000Z-9.heapsnapshot",
+    ];
+    const remove = makeDeps(rec).removeFile;
+    makeLimits(
+      makeDeps(rec, {
+        rssLimitBytes: 200 * 1024 * 1024,
+        snapshotsKeep: 1,
+        removeFile: (file) => {
+          if (file === stuck) throw new Error("EBUSY");
+          remove(file);
+        },
+      }),
+    ).checkRss();
+    expect([...rec.removed].sort()).toEqual([
+      "/d/heap-2026-02-01T00-00-00-000Z-9.heapsnapshot",
+      "/d/memory-2026-01-01T00-00-00-000Z-9.txt",
+    ]);
+    expect(rec.logs).toContainEqual({ level: "warn", msg: `evicting ${stuck} failed: EBUSY` });
+  });
 });
 
 describe("describeNextRestart", () => {
