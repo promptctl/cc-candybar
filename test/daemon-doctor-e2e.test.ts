@@ -339,3 +339,48 @@ test("the rate-limit windows each render carried are the segment-data row's fact
     removeTmpDirs();
   }
 });
+
+// brandon-doctor-v62x.p4l: the transcript the session's render named, read by
+// the doctor click — through the real socket, the render's sighting and the
+// daemon's own edge.
+test("the session data row reads the transcript the session's render named", async () => {
+  const { env, sockPath, removeTmpDirs } = prepareIsolatedDaemonEnv(
+    "cc-candybar-doctor-e2e",
+  );
+  const projectDir = realpathSync(
+    mkdtempSync(path.join(os.tmpdir(), "cc-candybar-doctor-e2e-project-")),
+  );
+  const transcript = path.join(projectDir, "session.jsonl");
+  writeFileSync(transcript, `{"type":"user"}\nnot json\n`);
+  const SID = "doctor-e2e-transcript";
+  const renderT = () => {
+    const body = renderBody(SID, projectDir);
+    return renderRequest(sockPath, {
+      ...body,
+      hookData: { ...(body.hookData as object), transcript_path: transcript },
+    });
+  };
+  let daemon: RunningDaemon | undefined;
+  try {
+    daemon = await spawnDaemonWithEnv(env);
+    const closed = await renderT();
+    await click(sockPath, urlWriting(closed, SETTINGS_ANCHOR, SETTINGS_OPEN));
+    const opened = await renderT();
+    await click(sockPath, urlWriting(opened, `${SETTINGS_NS}tab`, "tools"));
+    const run = linkUrls(await renderT()).find((u) =>
+      effectsOf(u).some((e) => e.verb === VERB_DOCTOR_RUN),
+    );
+    expect(run).toBeDefined();
+    await click(sockPath, run!);
+    expect(flat(await renderT())).toContain(
+      `✗ session data — 1 of the 2 lines in the transcript ${transcript} are not JSON objects`,
+    );
+
+    writeFileSync(transcript, `{"type":"user"}\n`);
+    await click(sockPath, run!);
+    expect(flat(await renderT())).toContain("✓ session data");
+  } finally {
+    if (daemon) await killAndWait(daemon);
+    removeTmpDirs();
+  }
+});

@@ -32,6 +32,7 @@ import {
   type DaemonAnswer,
   type DaemonClients,
   type RateLimitSightings,
+  type TranscriptSightings,
 } from "./daemon-answer.js";
 import {
   gatherFacts,
@@ -52,7 +53,10 @@ import { explicitConfigPath } from "../utils/user-path.js";
 import { fallbackState, loadFromDisk } from "../daemon/cache/render.js";
 import { SessionState } from "../daemon/session-state.js";
 import { claudeConfigDir } from "../claude-settings.js";
-import type { RateLimitsSeen } from "../daemon/render-sightings.js";
+import type {
+  RateLimitsSeen,
+  TranscriptSaid,
+} from "../daemon/render-sightings.js";
 
 const EXIT_OK = 0;
 const EXIT_FAILED = 1;
@@ -137,6 +141,21 @@ export function rateLimitsOf(
       };
 }
 
+// The transcripts of every session that drew a bar within RECENT_CLIENT_S —
+// a transcript is its session's, whichever Claude Code directory it runs in.
+export function transcriptsOf(
+  asked: Asked<TranscriptSightings>,
+): Asked<readonly TranscriptSaid[]> {
+  return asked.kind === "failed"
+    ? asked
+    : {
+        kind: "ok",
+        value: asked.value
+          .filter((s) => s.ago <= RECENT_CLIENT_S)
+          .map((s) => s.transcript),
+      };
+}
+
 // [LAW:effects-at-boundaries] The whole CLI as data: facts in, (streams,
 // exit code) out. `runDoctorCli` performs it; a test reads it.
 export async function doctorPlan(
@@ -178,6 +197,7 @@ export async function doctorPlan(
       () => null,
       answer.serving,
       rateLimitsOf(answer.rateLimits, claudeConfigDir(hints.claudeConfigDir)),
+      transcriptsOf(answer.transcripts),
     );
     // Last: the probe opens a link and waits, which a run that cannot report
     // has no reason to do.

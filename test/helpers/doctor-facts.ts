@@ -63,20 +63,38 @@ export const healthyDaemonEdge = (): Pick<
   postMortemsRead: memoryPostMortemsRead(),
 });
 
+// A session's transcript after Claude Code has answered in it.
+export const HEALTHY_TRANSCRIPT = {
+  path: "/claude/projects/p/s.jsonl",
+  answered: true,
+} as const;
+
+// That transcript, as the renders named it.
+export const NAMED = { kind: "ok", value: [HEALTHY_TRANSCRIPT] } as const;
+
 // What a render request said, by the client that sent it: a payload that
 // carried the rate-limit windows, from the default Claude Code directory.
 export const renderSaid = (client: ClientHint | null | undefined) => ({
   client: client ?? null,
   rateLimits: "carried" as const,
   claudeConfigDir: "/claude",
+  transcript: HEALTHY_TRANSCRIPT,
 });
 
 // The rate-limit windows, as a session's renders carried them.
 export const CARRIED = { kind: "ok", value: ["carried"] } as const;
 
-// The edge's reads of the outside data segments need: the checkout's gh
-// logged in, memento installed.
-export const healthyDataEdge = (): Pick<DoctorEdge, "forge" | "memento"> => ({
+// The edge's reads of the outside data segments need and of the session's
+// transcript: the checkout's gh logged in, memento installed, the transcript
+// all JSON.
+export const healthyDataEdge = (): Pick<
+  DoctorEdge,
+  "forge" | "memento" | "transcript"
+> => ({
+  transcript: () => ({
+    kind: "ok",
+    value: { lines: 3, unparsed: 0, whole: true },
+  }),
   forge: () => ({
     kind: "ok",
     value: { cli: "gh", host: "github.com", status: "ready" },
@@ -94,6 +112,10 @@ export const healthyDaemonIn = (
     rateLimits: {
       kind: "ok",
       value: [{ rateLimits: "carried", claudeConfigDir, ago: 1 }],
+    },
+    transcripts: {
+      kind: "ok",
+      value: [{ transcript: HEALTHY_TRANSCRIPT, ago: 1 }],
     },
     clients: {
       kind: "ok",
@@ -134,6 +156,15 @@ export const HEALTHY_FACTS: DoctorFacts = {
     pullRequests: { kind: "unneeded" },
     rateLimits: { kind: "unneeded" },
     memento: { kind: "unneeded" },
+  },
+  transcripts: {
+    kind: "ok",
+    value: [
+      {
+        ...HEALTHY_TRANSCRIPT,
+        read: { kind: "ok", value: { lines: 3, unparsed: 0, whole: true } },
+      },
+    ],
   },
   urlHandler: { kind: "unsupported" },
   install: {

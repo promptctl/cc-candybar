@@ -249,6 +249,7 @@ describe("config probe", () => {
       ["effectRefresh", true],
       ["nerdFont", true],
       ["segmentData", true],
+      ["sessionData", true],
     ]);
   });
 });

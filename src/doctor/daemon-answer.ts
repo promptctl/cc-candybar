@@ -27,6 +27,11 @@ export type RateLimitSightings = ReadonlyArray<
   Pick<RenderSighting, "rateLimits" | "claudeConfigDir" | "ago">
 >;
 
+// Where each recent render's transcript is, and how long ago it rendered.
+export type TranscriptSightings = ReadonlyArray<
+  Pick<RenderSighting, "transcript" | "ago">
+>;
+
 // Each entry of the stats' `clients` as a record of unread fields — a
 // non-object entry has none — for each parser to hold to its own shape.
 function sightingRecords(
@@ -136,11 +141,36 @@ export function parseRateLimitSightings(
       };
 }
 
+// [LAW:parse-dont-validate] The transcript half of the same sightings, read
+// on its own so a daemon older than it fails the session-data check alone.
+export function parseTranscriptSightings(
+  stats: StatsSnapshot,
+): Asked<TranscriptSightings> {
+  const skew = shapeSkew(stats, ["clients"]);
+  if (skew !== null) return { kind: "failed", reason: skew };
+  const sightings = sightingRecords(stats);
+  const wellFormed = sightings.every((c) => {
+    const t = c.transcript as Partial<Record<string, unknown>> | undefined;
+    return (
+      typeof c.ago === "number" &&
+      typeof t?.path === "string" &&
+      typeof t.answered === "boolean"
+    );
+  });
+  return wellFormed
+    ? { kind: "ok", value: sightings as TranscriptSightings }
+    : {
+        kind: "failed",
+        reason: `the running daemon (${stats.version}) reported its renders without their transcripts — restart it on this build: ${JSON.stringify(stats.clients)}`,
+      };
+}
+
 // Each fact the doctor asks the daemon for, parsed on its own: one that does
 // not read fails its own check, never the other's.
 export interface DaemonAnswer {
   readonly clients: Asked<DaemonClients>;
   readonly rateLimits: Asked<RateLimitSightings>;
+  readonly transcripts: Asked<TranscriptSightings>;
   readonly serving: Asked<ServingDaemon>;
 }
 
@@ -151,11 +181,17 @@ export async function askDaemon(): Promise<DaemonAnswer> {
       kind: "failed",
       reason: describeFailure(outcome).split("\n").join(" — "),
     } as const;
-    return { clients: failed, rateLimits: failed, serving: failed };
+    return {
+      clients: failed,
+      rateLimits: failed,
+      transcripts: failed,
+      serving: failed,
+    };
   }
   return {
     clients: parseDaemonClients(outcome.value),
     rateLimits: parseRateLimitSightings(outcome.value),
+    transcripts: parseTranscriptSightings(outcome.value),
     serving: parseServingDaemon(outcome.value),
   };
 }

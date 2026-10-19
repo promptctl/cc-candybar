@@ -26,6 +26,7 @@ import {
   type MarkBook,
   type NerdFontFacts,
   type SegmentDataFacts,
+  type TranscriptRead,
   type TerminalIdentity,
 } from "./checks.js";
 import { SETTINGS_NS } from "../config/loader/reserved-namespace.js";
@@ -168,6 +169,23 @@ export function dataFields(data: SegmentDataFacts): string {
         ? "located"
         : data.memento.fact.located.kind;
   return `data=pr:${pr()},rateLimits:${rateLimits()},memento:${memento}`;
+}
+
+// [LAW:nothing-unseen] What the session-data check reasoned over, as one
+// logfmt field: the transcripts read, absent (no file — a finding only once
+// Claude Code has answered) and unreadable, then the lines that were not JSON
+// objects across them; `failed` when the renders could not be asked.
+export function transcriptFields(
+  transcripts: Asked<readonly TranscriptRead[]>,
+): string {
+  if (transcripts.kind === "failed") return "transcripts=failed";
+  const count = (kind: TranscriptRead["read"]["kind"]) =>
+    transcripts.value.filter((t) => t.read.kind === kind).length;
+  const unparsed = transcripts.value.reduce(
+    (n, t) => n + (t.read.kind === "ok" ? t.read.value.unparsed : 0),
+    0,
+  );
+  return `transcripts=${count("ok")}/${count("absent")}/${count("failed")} unparsed=${unparsed}`;
 }
 
 // [LAW:nothing-unseen] What the Nerd Font check reasoned over, as logfmt

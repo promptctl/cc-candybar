@@ -499,20 +499,44 @@ function makeEntry(parsed: Record<string, unknown>): ParsedEntry | null {
   };
 }
 
+// [LAW:one-source-of-truth] The one framing of transcript text into JSON
+// lines: blank lines are none, and a line that is not a JSON object is
+// counted, not kept. The bar's parse skips those lines; the doctor reports them
+// (brandon-doctor-v62x.p4l), so the two agree on what a bad line is.
+export function splitJsonl(text: string): {
+  readonly values: Array<Record<string, unknown>>;
+  readonly lines: number;
+  readonly unparsed: number;
+} {
+  const values: Array<Record<string, unknown>> = [];
+  let lines = 0;
+  for (const line of text.split("\n")) {
+    if (!line.trim()) continue;
+    lines++;
+    try {
+      const value: unknown = JSON.parse(line);
+      if (
+        typeof value === "object" &&
+        value !== null &&
+        !Array.isArray(value)
+      ) {
+        values.push(value as Record<string, unknown>);
+      }
+    } catch (parseError) {
+      debug(`Failed to parse JSONL line: ${parseError}`);
+    }
+  }
+  return { values, lines, unparsed: lines - values.length };
+}
+
 // [LAW:one-source-of-truth] The one line→entry loop. Both the whole-file parse
 // and the incremental append reader frame their text into lines through here, so
 // a malformed-line policy or a projected field can never diverge between the two.
 function parseJsonlLines(text: string): ParsedEntry[] {
   const entries: ParsedEntry[] = [];
-  for (const line of text.split("\n")) {
-    if (!line.trim()) continue;
-    try {
-      const entry = makeEntry(JSON.parse(line));
-      if (entry) entries.push(entry);
-    } catch (parseError) {
-      debug(`Failed to parse JSONL line: ${parseError}`);
-      continue;
-    }
+  for (const value of splitJsonl(text).values) {
+    const entry = makeEntry(value);
+    if (entry) entries.push(entry);
   }
   return entries;
 }

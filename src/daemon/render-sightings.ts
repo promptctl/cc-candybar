@@ -3,7 +3,8 @@
 // through daemon-stats, since the command itself is no statusline client. A
 // request says which client drew the bar (the install check) and whether
 // Claude Code's hook payload carried the rate-limit windows (the segment-data
-// check, brandon-doctor-v62x.onf).
+// check, brandon-doctor-v62x.onf), and where the session's transcript is (the
+// session-data check, brandon-doctor-v62x.p4l).
 //
 // [LAW:no-ambient-temporal-coupling] Held in memory by this daemon process,
 // keyed by session and the client's role, REPLACED by every render: a
@@ -41,9 +42,28 @@ export function rateLimitsSeen(
   if (windows?.five_hour != null || windows?.seven_day != null) {
     return "carried";
   }
-  return hookData.context_window?.current_usage === null
-    ? "unanswered"
-    : "missing";
+  return answered(hookData) ? "missing" : "unanswered";
+}
+
+// [LAW:one-source-of-truth] Whether the session has an API response to
+// report on, by the one mark Claude Code leaves: `current_usage` is null
+// before the first response and right after a /compact.
+function answered(hookData: Pick<ClaudeHookData, "context_window">): boolean {
+  return hookData.context_window?.current_usage !== null;
+}
+
+// Where the session's transcript is, and whether Claude Code has answered in
+// it — before the first response a transcript that does not exist yet is
+// no finding.
+export interface TranscriptSaid {
+  readonly path: string;
+  readonly answered: boolean;
+}
+
+export function transcriptSaid(
+  hookData: Pick<ClaudeHookData, "transcript_path" | "context_window">,
+): TranscriptSaid {
+  return { path: hookData.transcript_path, answered: answered(hookData) };
 }
 
 // What one render request said. `client` null: the render's client did not
@@ -54,6 +74,7 @@ export interface RenderSaid {
   readonly client: ClientHint | null;
   readonly rateLimits: RateLimitsSeen;
   readonly claudeConfigDir: string;
+  readonly transcript: TranscriptSaid;
 }
 
 export interface RenderSighting extends RenderSaid {
