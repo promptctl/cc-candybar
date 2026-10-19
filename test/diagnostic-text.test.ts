@@ -24,6 +24,13 @@ describe("isControlChar", () => {
     }
   });
 
+  test("classifies the format controls that hold state as control, and the bidi marks as not", () => {
+    for (let code = 0x202a; code <= 0x202e; code++) expect(isControlChar(code)).toBe(true);
+    for (let code = 0x2066; code <= 0x206f; code++) expect(isControlChar(code)).toBe(true);
+    for (const mark of [0x061c, 0x200e, 0x200f]) expect(isControlChar(mark)).toBe(false);
+    expect(sanitizeAndTruncate(`a${String.fromCodePoint(0x202e)}b`, 100)).toBe("a b");
+  });
+
   test("classifies printable ASCII and astral chars as non-control", () => {
     expect(isControlChar(0x20)).toBe(false); // space
     expect(isControlChar(0x41)).toBe(false); // 'A'

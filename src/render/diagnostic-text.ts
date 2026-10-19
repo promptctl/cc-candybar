@@ -29,13 +29,25 @@ const ELLIPSIS = "…";
 //   data (config paths, key names, parse errors), that's reachable from
 //   crafted input even without a malicious daemon.
 //
-// Mirrors rust-client/src/error_glyph.rs's truncate(): `char::is_control()`
-// matches the exact same Unicode Cc set, so the TS and Rust runtimes
-// neutralize the same byte classes. The Rust side also mirrors the
+// Beyond Cc, the format controls that hold state past the text are
+// neutralized too: the bidi embeddings and overrides with their closer
+// (U+202A..U+202E), the isolates with theirs and the deprecated shaping
+// switches (U+2066..U+206F). An unclosed U+202E echoed into a diagnostic
+// reverses the rest of the line. These are the ranges rich-js's Text strips
+// from every segment's text (brandon-unfiled-3248.qum).
+//
+// Mirrors rust-client/src/error_glyph.rs's `neutralized()`: `is_control()`
+// (the same Unicode Cc set) plus the same two ranges, so the TS and Rust
+// runtimes neutralize the same code points. The Rust side also mirrors the
 // collapse-whitespace-runs + trim pass below, so the two runtimes produce
 // byte-identical output — both suites pin the same fixtures.
 export function isControlChar(code: number): boolean {
-  return code < 0x20 || code === 0x7f || (code >= 0x80 && code <= 0x9f);
+  return (
+    code < 0x20 ||
+    (code >= 0x7f && code <= 0x9f) ||
+    (code >= 0x202a && code <= 0x202e) ||
+    (code >= 0x2066 && code <= 0x206f)
+  );
 }
 
 // Sanitize control characters (→ single space) and collapse whitespace runs

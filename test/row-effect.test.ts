@@ -8,6 +8,9 @@ import {
   DEFAULT_TERMINAL_THEME,
   EFFECT_CATALOGUE,
   RichText,
+  ColorDepth,
+  Segment,
+  render as drawSegments,
 } from "@promptctl/rich-js";
 
 import { SessionState } from "../src/daemon/session-state";
@@ -234,6 +237,21 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
     // The menu opens again: the rows it released are made afresh.
     draw(at(2), 5);
     expect(effects.lastFrame()).toMatchObject({ made: 4, reused: 1 });
+  });
+
+  test("a row says when it next changes: now while its loop moves, never while every part holds still", () => {
+    const effects = new SessionEffects<RenderedLine>("s");
+    const motion = effects.motion("shimmer", at(7), STILL_FRAME);
+    const moving = motion.row("flow.own#0", []);
+    if (moving.kind !== "moving") throw new Error("shimmer is still");
+    const row = moving.wrap(new RichText("abc"));
+    const nextChange = (colorSystem: ColorDepth): number =>
+      Segment.nextChange(drawSegments(row, { maxWidth: 80, colorSystem }));
+    // The bar's clock starts at 7, so the row is drawn at its own t = 0.
+    expect(nextChange(ColorDepth.TRUECOLOR)).toBe(0);
+    // At ansi the loop holds every cell still, and the row says so rather than
+    // asking to be drawn again every frame.
+    expect(nextChange(ColorDepth.STANDARD)).toBe(Number.POSITIVE_INFINITY);
   });
 
   test("a row keeps its motion when lines of another kind appear above it", () => {

@@ -8,13 +8,8 @@
 
 import { SessionState } from "../src/daemon/session-state";
 import { stripAnsi } from "./helpers/ansi";
+import { parseAndValidate } from "./helpers/parse-and-validate";
 
-import {
-  parseDslConfig,
-  mergeWithDefault,
-  validateConfig,
-} from "../src/config/dsl-loader";
-import type { ValidatedConfig } from "../src/config/dsl-types";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -27,21 +22,26 @@ const OPTS = {
   width: Number.POSITIVE_INFINITY,
 };
 
-function render(s: string): string {
-  const source = `{
+const CONFIG = parseAndValidate(
+  "<test>",
+  `{
     variables: { s: { kind: "input", path: "s", type: "string", default: "" } },
     segments: { probe: { template: "[{{ .s }}]" } },
     root: "probe",
-  }`;
-  const raw = parseDslConfig("<test>", source);
-  const config = validateConfig(
-    { config: mergeWithDefault(raw, DEFAULT_DSL_CONFIG), raw, source },
-    "<test>",
-  ) as ValidatedConfig;
+  }`,
+  undefined,
+  DEFAULT_DSL_CONFIG,
+);
+
+function render(s: string): string {
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, new SessionState());
-  const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
-  return renderDsl(config, compiled, store, registry, { s }, instantOf(new Date()), OPTS);
+  try {
+    const compiled = registerDslConfig(CONFIG, registry, { cwd: "/tmp" });
+    return renderDsl(CONFIG, compiled, store, registry, { s }, instantOf(new Date()), OPTS);
+  } finally {
+    registry.dispose();
+  }
 }
 
 const RLO = String.fromCodePoint(0x202e);

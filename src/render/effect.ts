@@ -4,7 +4,8 @@
 // as it appears (brandon-effects-2gka.631) and leaves (brandon-effects-2gka.3vt).
 //
 // rich-js owns the effects themselves (`EFFECT_CATALOGUE`, `Effected`,
-// `confined`): pure functions of a time `t` and the colours a frame draws. This
+// `confined`): each made from the frame it draws into an animation of how that
+// frame's colours move, read at a time `t`. This
 // module owns the facts about a SESSION those functions need and cannot know —
 // when each effect came into force, which is that effect's own t = 0, the
 // effect objects already made for its rows, which rich-js reuses a frame's
@@ -18,6 +19,7 @@ import {
   EFFECT_CATALOGUE,
   Effected,
   TerminalTheme,
+  Timeline,
   confined,
   type ColorRgba,
   type Effect,
@@ -248,20 +250,29 @@ function isMoving<P extends { name: EffectName }>(part: P): part is Moving<P> {
 
 // [LAW:one-type-per-behavior] Several effects, each on its own clock, as the one
 // `Effect` an `Effected` takes: every part's animation is made from the frame's
-// `drawn` and read at its own t, then the frames fold over the cell in the
-// order given. The loops are confined to disjoint items, so at most one of them
-// moves any one colour; a transition is confined to its placement's items,
-// which a loop may light too, and comes after the loops so it veils the lit
-// colours — the order is the meaning. The `t` the `Effected` asks at is not
-// read: no clock here is the row's, so the fold cannot say when it holds still
-// on the row's timeline and answers as moving (`Animation.continuous`).
-function together(parts: ReadonlyArray<{ t: number; effect: Effect }>): Effect {
-  return (drawn) => {
-    const frames = parts.map(({ t, effect }) => effect(drawn).at(t));
-    const frame: CellFrame = (colors, cell) =>
-      frames.reduce((moved, part) => part(moved, cell), colors);
-    return Animation.continuous(() => frame);
-  };
+// `drawn` and run on the row's clock, `rowT` being its own `t` — a part `t`
+// seconds into its own clock at `rowT` began at `rowT - t` — then the frames
+// fold over the cell in the order given. The loops are confined to disjoint
+// items, so at most one of them moves any one colour; a transition is confined
+// to its placement's items, which a loop may light too, and comes after the
+// loops so it veils the lit colours — the order is the meaning. Composed with
+// `Animation.all`, the row changes when the soonest of its parts does, so a row
+// whose parts all hold still says so.
+function together(
+  rowT: number,
+  parts: ReadonlyArray<{ t: number; effect: Effect }>,
+): Effect {
+  return (drawn) =>
+    Animation.map(
+      Animation.all(
+        parts.map(({ t, effect }) =>
+          Timeline.run(Timeline.play(rowT - t), effect(drawn)),
+        ),
+      ),
+      (frames): CellFrame =>
+        (colors, cell) =>
+          frames.reduce((moved, part) => part(moved, cell), colors),
+    );
 }
 
 // [LAW:one-source-of-truth] The terminal an effect measures and writes against
@@ -603,7 +614,7 @@ export class SessionEffects<Line> {
         wrap: (strip) =>
           new Effected(
             strip,
-            together([
+            together(bar.t, [
               ...moving.map((part) => {
                 const effect = effectOf(rowKey, part);
                 return {
