@@ -46,6 +46,7 @@ import { VERBS } from "../src/daemon/verbs";
 import type { VerbContext } from "../src/daemon/verbs";
 import { linkUrls, stripAnsi } from "./helpers/ansi";
 import { instantOf } from "../src/utils/instant";
+import { CHECKS } from "../src/doctor/checks";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const THEMES = listResolvablePaletteNames();
@@ -663,7 +664,7 @@ describe("2de.12 — loader proves the ActionDecl invariants", () => {
     root: 'bar',
   }`;
 
-  const expectIssue = (src: string, re: RegExp) => {
+  const expectIssue = (src: string, re: RegExp | string) => {
     try {
       parseAndValidate("<test>", src, ALLOWED);
       throw new Error("expected ConfigError");
@@ -777,7 +778,7 @@ describe("2de.12 — loader proves the ActionDecl invariants", () => {
   test("a doctor fix names a declared check", () => {
     expectIssue(
       base(`{ a: { doctor: 'fix', check: 'ghost' } }`),
-      /doctor fix must name a check \(have: config, urlHandler, links, tmuxTruecolor, effectRefresh, nerdFont\)/,
+      `doctor fix must name a check (have: ${CHECKS.map((c) => c.name).join(", ")})`,
     );
   });
 
@@ -1022,7 +1023,7 @@ describe("2de.4 — loader proves the cycle invariants", () => {
     root: 'bar',
   }`;
 
-  const expectIssue = (src: string, re: RegExp) => {
+  const expectIssue = (src: string, re: RegExp | string) => {
     try {
       parseAndValidate("<test>", src, ALLOWED);
       throw new Error("expected ConfigError");

@@ -123,26 +123,31 @@ export interface ConfigLoad {
 // outer terminal do truecolor (verified on tmux 3.6a: `…,osc7,RGB,sixel,…`).
 // `#{client_termtype}` is that terminal's XTVERSION reply (`iTerm2 3.7.2`,
 // empty from one that does not answer), `#{client_termname}` the TERM it
-// was started under, and `#{client_pid}` the client's process. One display
-// call, the four tab-separated.
+// was started under, `#{client_pid}` the client's process, and
+// `#{client_utf8}` whether tmux writes UTF-8 to it (`1`/`0`). One display
+// call, the five tab-separated.
 const TMUX_CLIENT_FORMAT =
-  "#{client_termfeatures}\t#{client_termtype}\t#{client_termname}\t#{client_pid}";
+  "#{client_termfeatures}\t#{client_termtype}\t#{client_termname}\t#{client_pid}\t#{client_utf8}";
 
-// [LAW:parse-dont-validate] tmux's answer, read as the four fields it was
+// [LAW:parse-dont-validate] tmux's answer, read as the five fields it was
 // asked for. Every field is empty when no client is attached to the pane's
-// session — an answer, `null`, not a failure; any other line that is not four
-// fields with a pid is a failure naming what came back. The client is the one
-// attached to the PANE's session, whatever TMUX_PANE the asker carries
-// (measured on tmux 3.6a).
+// session — an answer, `null`, not a failure; any other line that is not five
+// fields with a pid and a 0/1 is a failure naming what came back. The client
+// is the one attached to the PANE's session, whatever TMUX_PANE the asker
+// carries (measured on tmux 3.6a; the empty line on 3.7b too).
 export function parseTmuxClient(stdout: string): Asked<TmuxClient | null> {
   const line = stdout.replace(/\n$/, "");
-  if (line === "\t\t\t") return { kind: "ok", value: null };
+  if (line === "\t\t\t\t") return { kind: "ok", value: null };
   const fields = line.split("\t");
-  const [features, termtype, termname, pid] = fields;
-  if (fields.length !== 4 || !/^[1-9]\d*$/.test(pid!)) {
+  const [features, termtype, termname, pid, utf8] = fields;
+  if (
+    fields.length !== 5 ||
+    !/^[1-9]\d*$/.test(pid!) ||
+    !/^[01]$/.test(utf8!)
+  ) {
     return {
       kind: "failed",
-      reason: `tmux answered ${JSON.stringify(stdout)}, not the four fields asked for`,
+      reason: `tmux answered ${JSON.stringify(stdout)}, not the five fields asked for`,
     };
   }
   return {
@@ -152,6 +157,7 @@ export function parseTmuxClient(stdout: string): Asked<TmuxClient | null> {
       termtype: termtype!,
       termname: termname!,
       pid: Number(pid),
+      utf8: utf8 === "1",
     },
   };
 }
@@ -410,7 +416,10 @@ function placementEffects(
 // the clicking session, `() => null` for the CLI, which has no session.
 export function gatherFacts(
   edge: DoctorEdge,
-  hints: Pick<ClientHints, "tmux" | "claudeConfigDir" | "terminalEnv" | "ssh">,
+  hints: Pick<
+    ClientHints,
+    "tmux" | "claudeConfigDir" | "terminalEnv" | "ssh" | "termCols"
+  >,
   origin: ConfigOrigin,
   sessionPick: (key: string) => string | null,
 ): Omit<DoctorFacts, "urlHandler" | "askedBy"> {
@@ -435,6 +444,7 @@ export function gatherFacts(
   ].join("");
   return {
     tmux,
+    termCols: hints.termCols ?? null,
     terminal,
     // [LAW:types-are-the-program] The measured glyphs parsed into the facts'
     // union: none to draw is the arm with no terminal to read.

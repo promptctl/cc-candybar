@@ -28,6 +28,7 @@ const client = (features: readonly string[]): TmuxClient => ({
   termtype: "",
   termname: "xterm-256color",
   pid: 4242,
+      utf8: true,
 });
 
 const seen = (

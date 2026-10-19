@@ -4,6 +4,7 @@ import type { DoctorFacts } from "../../src/doctor/checks";
 // test spreads the facts it is about over.
 export const HEALTHY_FACTS: DoctorFacts = {
   tmux: { kind: "outside" },
+  termCols: 120,
   terminal: {
     kind: "seen",
     identified: {

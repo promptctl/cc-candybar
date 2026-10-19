@@ -1078,6 +1078,8 @@
                   "urlHandler",
                   "links",
                   "tmuxTruecolor",
+                  "utf8",
+                  "termWidth",
                   "effectRefresh",
                   "nerdFont"
                 ]

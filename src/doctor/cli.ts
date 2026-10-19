@@ -88,6 +88,9 @@ export async function doctorPlan(
   handler: HandlerProbeEdge,
   env: Readonly<Record<string, string | undefined>>,
   cwd: string,
+  // The terminal the command runs in, measured as a statusline client
+  // measures its own (its stderr).
+  tty: { readonly columns?: number; readonly rows?: number },
   configFile: string | undefined = undefined,
 ): Promise<CliPlan> {
   let facts: DoctorFacts;
@@ -96,7 +99,7 @@ export async function doctorPlan(
       edge,
       // [LAW:one-source-of-truth] The hints a statusline client started here
       // would report, by the client's own detection.
-      detectClientHints(env, cwd, {}),
+      detectClientHints(env, cwd, tty),
       // The config the daemon would load for a session started here: this
       // directory, under the file named on the command line (a statusline
       // command's own `--config`), else the override the statusline client
@@ -148,6 +151,7 @@ export async function runDoctorCli(args: readonly string[]): Promise<never> {
     productionHandlerProbeEdge(),
     process.env,
     cwd,
+    process.stderr,
     args[0],
   );
   process.stdout.write(plan.stdout);

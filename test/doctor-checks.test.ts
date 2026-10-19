@@ -25,7 +25,7 @@ const inside = (
 ): TmuxFacts => ({
   kind: "inside",
   hint: { ...HINT, truecolor },
-  client: { kind: "ok", value: { features, termtype: "", termname: "", pid: 4242 } },
+  client: { kind: "ok", value: { features, termtype: "", termname: "", pid: 4242, utf8: true } },
 });
 
 const LOADED: ConfigFacts = {
@@ -242,6 +242,8 @@ describe("config probe", () => {
       ["urlHandler", true],
       ["links", true],
       ["tmuxTruecolor", true],
+      ["utf8", true],
+      ["termWidth", true],
       ["effectRefresh", true],
       ["nerdFont", true],
     ]);
