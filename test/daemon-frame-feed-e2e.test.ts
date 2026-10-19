@@ -9,7 +9,15 @@
 // nobody can see is drawn at the still rate however it moves, and a request
 // the daemon cannot take is refused with a reply, never a thrown handler.
 
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
@@ -31,7 +39,11 @@ import {
   urlWriting,
 } from "./helpers/daemon-e2e";
 import { sendDaemonRequest } from "./helpers/daemon-wire";
-import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
+import {
+  effectsUrl,
+  VERB_LOAD_CONFIG,
+  VERB_SET_STATE,
+} from "../src/click/wire";
 import {
   prepareIsolatedDaemonEnv,
   spawnDaemonWithEnv,
@@ -46,6 +58,9 @@ jest.setTimeout(30_000);
 const CONFIGS = {
   moving: `{ globals: { effect: "sparkle" }, segments: { a: { template: 'directory ~/code/cc-candybar' }, b: { template: 'branch main' }, c: { template: 'a moving mark' } }, root: { h: ['a', 'b', 'c'] } }`,
   still: `{ segments: { mark: { template: 'a still mark' } }, root: { h: ['mark'] } }`,
+  // Moves, and carries a load warning (a duplicate key) the diagnostic strip
+  // shows on every frame.
+  warned: `{ globals: { effect: "sparkle", effect: "sparkle" }, segments: { mark: { template: 'a warned mark' } }, root: { h: ['mark'] } }`,
   toggle: `{ variables: { face: { kind: "state", key: "face", default: "shut" } }, actions: { flip: { set: "face", cycle: ["shut", "open"] } }, segments: { door: { template: '{{ action "flip" "door shut" "door open" }}' } }, root: { h: ['door'] } }`,
 };
 
@@ -273,6 +288,44 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       feeds: before.feeds,
       subscribers: before.subscribers,
     });
+  });
+
+  test("a frame records nothing: no session-state write and no dump write, which the session's next request makes", async () => {
+    const sid = "feed-frame-records-nothing";
+    const stateDir = path.dirname(sockPath);
+    const stateOf = (): unknown =>
+      (
+        JSON.parse(
+          readFileSync(path.join(stateDir, "session-state.json"), "utf8"),
+        ) as Record<string, unknown>
+      )[sid];
+    const dumpFile = path.join(stateDir, "diagnostics", `${sid}.txt`);
+    await render(sockPath, sid, projectDir, {}, args("still"));
+    // The pick lands before anyone subscribes, so no frame draws until the
+    // snapshot is taken: every frame after it draws the warned config.
+    await click(
+      sockPath,
+      `cc-candybar://${VERB_LOAD_CONFIG}/${encodeURIComponent(sid)}/${encodeURIComponent(path.join(projectDir, "warned.json5"))}`,
+    );
+    await sleep(800); // the session-state file's 500 ms write debounce
+    const before = stateOf();
+    expect(before).toBeDefined();
+    expect(existsSync(dumpFile)).toBe(false);
+    const drawnBefore = (await feedStats()).drawn;
+    const frames = await framesOf(sid, async () => {
+      await sleep(1500);
+    });
+    // Drawn many times; pushed only when the bytes moved.
+    expect((await feedStats()).drawn - drawnBefore).toBeGreaterThan(10);
+    const shown = outputs(frames).map(stripAnsi);
+    expect(shown.length).toBeGreaterThan(0);
+    expect(shown.every((text) => /duplicate key/.test(text))).toBe(true);
+    await sleep(800);
+    expect(stateOf()).toEqual(before);
+    expect(existsSync(dumpFile)).toBe(false);
+    // The session's next request is where both are written.
+    await render(sockPath, sid, projectDir, {}, args("still"));
+    expect(readFileSync(dumpFile, "utf8")).toMatch(/duplicate key/);
   });
 
   test("a failed click's error stays on the pushed frames until a statusline request after the hold releases it", async () => {

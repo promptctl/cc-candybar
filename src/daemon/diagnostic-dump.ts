@@ -1,6 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import type { FullTextLink } from "../render/diagnostic-strip";
+
 // [LAW:no-shared-mutable-globals] The one owner of the per-session diagnostic
 // dump files — the complete diagnostic text the bar's strip links as a plain
 // `file://` URL (src/render/diagnostic-strip.ts). Nothing else writes under
@@ -33,16 +35,17 @@ export class DiagnosticDump {
   }
 
   // Bring the session's file in line with `text`: present with this content,
-  // or absent when null. Returns the fs failure's reason, or null — the same
-  // shape as writeLease: the dump is best-effort beside the strip, which
-  // already shows the text, so a failed write must not cost the render. The
-  // memory of what was written is left as it was, so the next render retries.
-  sync(sessionId: string, text: string | null): string | null {
+  // or absent when null — and the link the strip offers for it. A failed
+  // write is the link's `unavailable` reason, the same shape as writeLease:
+  // the dump is best-effort beside the strip, which already shows the text,
+  // so a failed write must not cost the render. The memory of what was
+  // written is left as it was, so the next render retries.
+  sync(sessionId: string, text: string | null): FullTextLink {
     const file = this.pathFor(sessionId);
     // "Never written" and "absent" are the same desired state, so a session
     // that has never errored costs no syscall per render.
     const last = this.written.get(sessionId) ?? null;
-    if (text === last) return null;
+    if (text === last) return { kind: "file", path: file };
     try {
       if (text === null) {
         fs.rmSync(file, { force: true });
@@ -52,10 +55,25 @@ export class DiagnosticDump {
         fs.writeFileSync(file, text, { mode: 0o600 });
         this.written.set(sessionId, text);
       }
-      return null;
+      return { kind: "file", path: file };
     } catch (e) {
-      return `${file}: ${(e as Error).message}`;
+      return {
+        kind: "unavailable",
+        reason: `${file}: ${(e as Error).message}`,
+      };
     }
+  }
+
+  // [LAW:effects-at-boundaries] The link a FRAME offers: frames only draw,
+  // so the dump is written when a request arrives (`sync`), and a frame whose
+  // text the file does not hold yet says so rather than linking other text.
+  linkFor(sessionId: string, text: string | null): FullTextLink {
+    return (this.written.get(sessionId) ?? null) === text
+      ? { kind: "file", path: this.pathFor(sessionId) }
+      : {
+          kind: "unavailable",
+          reason: "written at the session's next statusline request",
+        };
   }
 
   // Daemon start: forget everything, on disk and in memory. The same shape

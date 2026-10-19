@@ -54,11 +54,34 @@ describe("DiagnosticDump", () => {
   test("a write the filesystem refuses is reported as a reason, not thrown, and is retried", () => {
     // A file where the directory should be: mkdir -p fails with ENOTDIR/EEXIST.
     writeFileSync(path.join(root, "diagnostics"), "");
-    expect(dump.sync("sid", "ERROR\nboom\n")).toMatch(/sid\.txt: /);
+    expect(dump.sync("sid", "ERROR\nboom\n")).toEqual({
+      kind: "unavailable",
+      reason: expect.stringMatching(/sid\.txt: /),
+    });
     rmSync(path.join(root, "diagnostics"));
     // Nothing was recorded, so the same text is written on the next render.
-    expect(dump.sync("sid", "ERROR\nboom\n")).toBeNull();
+    expect(dump.sync("sid", "ERROR\nboom\n")).toEqual({
+      kind: "file",
+      path: dump.pathFor("sid"),
+    });
     expect(readFileSync(dump.pathFor("sid"), "utf8")).toBe("ERROR\nboom\n");
+  });
+
+  test("a frame's link names the file only while it holds that frame's text, and writes nothing", () => {
+    const p = dump.pathFor("sid");
+    const file = { kind: "file", path: p };
+    const unwritten = {
+      kind: "unavailable",
+      reason: "written at the session's next statusline request",
+    };
+    expect(dump.linkFor("sid", "ERROR\nboom\n")).toEqual(unwritten);
+    expect(existsSync(p)).toBe(false);
+    dump.sync("sid", "ERROR\nboom\n");
+    expect(dump.linkFor("sid", "ERROR\nboom\n")).toEqual(file);
+    expect(dump.linkFor("sid", "ERROR\nworse\n")).toEqual(unwritten);
+    expect(readFileSync(p, "utf8")).toBe("ERROR\nboom\n");
+    dump.sync("sid", null);
+    expect(dump.linkFor("sid", null)).toEqual(file);
   });
 
   test("reset wipes the directory and forgets what was written", () => {
@@ -81,7 +104,10 @@ describe("DiagnosticDump", () => {
     }
     rmSync(path.join(root, "diagnostics"), { recursive: true, force: true });
     // Forgotten regardless: the next sync writes, it does not skip.
-    expect(dump.sync("a", "x")).toBeNull();
+    expect(dump.sync("a", "x")).toEqual({
+      kind: "file",
+      path: dump.pathFor("a"),
+    });
     expect(readFileSync(dump.pathFor("a"), "utf8")).toBe("x");
   });
 });
