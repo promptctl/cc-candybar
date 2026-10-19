@@ -63,10 +63,38 @@ export const healthyDaemonEdge = (): Pick<
   postMortemsRead: memoryPostMortemsRead(),
 });
 
+// What a render request said, by the client that sent it: a payload that
+// carried the rate-limit windows, from the default Claude Code directory.
+export const renderSaid = (client: ClientHint | null | undefined) => ({
+  client: client ?? null,
+  rateLimits: "carried" as const,
+  claudeConfigDir: "/claude",
+});
+
+// The rate-limit windows, as a session's renders carried them.
+export const CARRIED = { kind: "ok", value: ["carried"] } as const;
+
+// The edge's reads of the outside data segments need: the checkout's gh
+// logged in, memento installed.
+export const healthyDataEdge = (): Pick<DoctorEdge, "forge" | "memento"> => ({
+  forge: () => ({
+    kind: "ok",
+    value: { cli: "gh", host: "github.com", status: "ready" },
+  }),
+  memento: () => ({ kind: "ok", value: "/plugins/memento" }),
+});
+
 // That daemon, as `cc-candybar doctor` asks it: one session drawn a second
-// ago by the native client beside it.
-export const HEALTHY_DAEMON = (): Promise<DaemonAnswer> =>
+// ago by the native client beside it, whose payload carried the rate-limit
+// windows — a session running with `claudeConfigDir`.
+export const healthyDaemonIn = (
+  claudeConfigDir: string,
+): (() => Promise<DaemonAnswer>) => () =>
   Promise.resolve({
+    rateLimits: {
+      kind: "ok",
+      value: [{ rateLimits: "carried", claudeConfigDir, ago: 1 }],
+    },
     clients: {
       kind: "ok",
       value: {
@@ -81,6 +109,8 @@ export const HEALTHY_DAEMON = (): Promise<DaemonAnswer> =>
     },
     serving: { kind: "ok", value: HEALTHY_SERVING },
   });
+
+export const HEALTHY_DAEMON = healthyDaemonIn("/claude");
 
 // A setup every check passes, asked for by the command: the base a doctor
 // test spreads the facts it is about over.
@@ -100,6 +130,11 @@ export const HEALTHY_FACTS: DoctorFacts = {
   effect: { kind: "decided", name: "none", value: "none" },
   placementEffects: [],
   transitions: false,
+  data: {
+    pullRequests: { kind: "unneeded" },
+    rateLimits: { kind: "unneeded" },
+    memento: { kind: "unneeded" },
+  },
   urlHandler: { kind: "unsupported" },
   install: {
     kind: "ok",

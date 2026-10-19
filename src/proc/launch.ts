@@ -76,6 +76,10 @@ export const LAUNCH_CATEGORIES = [
   // Every cc-candybar daemon this user runs (src/doctor/edge.ts): one `ps`
   // per run, metered apart from the remote-login one.
   "doctor.daemons",
+  // A forge CLI's own local word on whether it is installed and logged in
+  // (`gh auth token`), asked on every doctor click — so, like
+  // `doctor.daemons`, no rate limit.
+  "doctor.forge",
   // `cc-candybar doctor`'s URL-handler probe (src/doctor/handler-probe.ts), in
   // the CLI's own process: the link it opens, and — only for a link that did
   // not come back — the Launch Services lookup and the applet's script.

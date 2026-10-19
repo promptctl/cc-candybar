@@ -289,13 +289,19 @@ function move(root: string, scope: CeilingScope, m: CeilingMove): void {
   if (!result.ok) throw new Error(refusal(result));
 }
 
+// [LAW:single-enforcer] Where memento is installed for a project, in a Claude
+// Code directory — the ceiling lane's `locate` and the doctor's segment-data
+// check (src/doctor/edge.ts) both ask through here.
+export function locateMemento(
+  claudeConfigDir: string,
+  projectDir: string,
+): Outcome<string> {
+  return locateIn(claudeInstalledPluginsPath(claudeConfigDir), projectDir);
+}
+
 export function productionMementoEdge(): MementoEdge {
   return {
-    locate: (scope) =>
-      locateIn(
-        claudeInstalledPluginsPath(scope.claudeConfigDir),
-        scope.projectDir,
-      ),
+    locate: (scope) => locateMemento(scope.claudeConfigDir, scope.projectDir),
     read,
     move,
   };

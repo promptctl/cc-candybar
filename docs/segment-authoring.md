@@ -315,6 +315,18 @@ no further wiring: its `description:` is the line shown beside its name, and its
 `group:` the page it stands on. Every bundled segment declares one, and the
 loader refuses any other value, naming the six.
 
+`missingData:` decides whether the doctor (`🧰 tools › 🩺 doctor`, or
+`cc-candybar doctor`) fails when this segment reads data that cc-candybar
+cannot get from outside itself: a pull request when `gh` is not installed or
+not logged in, the rate-limit windows Claude Code sends only to Claude.ai
+subscription sessions, or memento's ceiling when memento is not installed.
+It is `"fail"` unless you set `"ignore"`. A segment that reads none of that
+data is never judged. The bundled bar places `block`, `weekly` and `ceiling`
+for everyone and hides each one when its data is absent. If your account has
+no rate limits, or you don't use memento, set
+`segments: { ceiling: { missingData: "ignore" } }` and the doctor stops
+counting it.
+
 A segment with no `bg:` wears a tint the theme derives from its position in
 the row. Authoring a `bg:` is a statement of meaning — this cell is hot — and
 the next step is how to state it from a number.

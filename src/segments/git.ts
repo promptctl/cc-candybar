@@ -239,6 +239,26 @@ function nonEmpty(o: Outcome<string>): Outcome<string> {
 //   timeout / signal / rate-limited → failed        (forge couldn't answer)
 export type ForgeName = "github" | "gitlab";
 
+// [LAW:one-source-of-truth] The CLI each forge is asked through — the PR lookup
+// here and the doctor's login probe (src/doctor/edge.ts) name it from this one
+// table.
+export const FORGE_CLI: Readonly<Record<ForgeName, "gh" | "glab">> = {
+  github: "gh",
+  gitlab: "glab",
+};
+
+// [LAW:single-enforcer] "The command is not installed": a spawn the OS refused
+// with ENOENT. Every other spawn failure (EACCES, resource limits) is a CLI
+// that is there but could not launch. The PR lookup reads this as "no forge
+// integration" and the doctor as "not installed" — one rule for both.
+export function isMissingCommand(result: LaunchResult): boolean {
+  return (
+    !result.ok &&
+    result.reason === "spawn-error" &&
+    /ENOENT/i.test(result.error ?? "")
+  );
+}
+
 // [LAW:types-are-the-program] A git remote decomposed into the four facts every
 // consumer of one actually wants. Credentials are absent by construction — the
 // parser never carries userinfo out — so no downstream can leak a token it was
@@ -332,7 +352,7 @@ export function parseRemoteRef(raw: string): RemoteRef | null {
 
 // The host `detectForge` dispatches on. A remote with no host (a `file://`
 // mirror) names no forge, same as an unparseable one.
-function remoteHost(remoteUrl: string): string | null {
+export function remoteHost(remoteUrl: string): string | null {
   return parseRemoteRef(remoteUrl)?.host || null;
 }
 
@@ -379,6 +399,23 @@ export interface GitRemote {
 // global → local, so an unscoped read would put the LEAST specific url first.
 // That precedence — not push-mirror ordering — is why the `git config --get`
 // this replaced returned the last value.
+// [LAW:one-source-of-truth] The one read of a repo's remotes, as git arguments
+// and the fold of their result — the PR cache's async read and the doctor's
+// sync one (src/doctor/edge.ts) run the same command and read it the same way.
+// Exit 1 is "no remotes" (an empty list); every other failure stays failed.
+export const REMOTES_ARGS: readonly string[] = [
+  "config",
+  "--local",
+  "--get-regexp",
+  "^remote\\..*\\.url$",
+];
+
+export function remotesOf(result: LaunchResult): Outcome<GitRemote[]> {
+  const r = classify("git config --get-regexp remote url", result, 1);
+  if (r.kind === "failed") return r;
+  return ok(r.kind === "ok" ? parseRemotes(r.value) : []);
+}
+
 export function parseRemotes(stdout: string): GitRemote[] {
   const urlsByName = new Map<string, string[]>();
   for (const line of stdout.split("\n")) {
@@ -545,8 +582,7 @@ export function classifyForgePr(
   // nothing. [LAW:no-silent-failure] Every OTHER spawn failure (EACCES,
   // resource limits) means the CLI is present but could not launch — a real
   // failure that must stay visible, so it falls through to the `failed` path.
-  if (result.reason === "spawn-error" && /ENOENT/i.test(result.error ?? ""))
-    return ABSENT;
+  if (isMissingCommand(result)) return ABSENT;
   if (result.reason === "non-zero" && noPrPattern.test(result.stderr))
     return ABSENT;
   const detail = [
@@ -1293,16 +1329,9 @@ export class GitService {
   private readonly remotesByConfig = new Map<string, RemotesMemo>();
 
   private async readRemotes(workingDir: string): Promise<Outcome<GitRemote[]>> {
-    const r = classify(
-      "git config --get-regexp remote url",
-      await this.execGitAsync(
-        ["config", "--local", "--get-regexp", "^remote\\..*\\.url$"],
-        { cwd: workingDir, timeout: 2000 },
-      ),
-      1,
+    return remotesOf(
+      await this.execGitAsync(REMOTES_ARGS, { cwd: workingDir, timeout: 2000 }),
     );
-    if (r.kind === "failed") return r;
-    return ok(r.kind === "ok" ? parseRemotes(r.value) : []);
   }
 
   // [LAW:effects-at-boundaries] Pure projection over remotes the caller already
@@ -1377,7 +1406,7 @@ export class GitService {
       return classifyForgePr(
         "gh pr view",
         await this.execForgeAsync(
-          "gh",
+          FORGE_CLI.github,
           ["pr", "view", "--json", "number,state,url,headRefOid"],
           { cwd: workingDir, timeout: 5000 },
         ),
@@ -1388,10 +1417,14 @@ export class GitService {
     if (forge === "gitlab") {
       return classifyForgePr(
         "glab mr view",
-        await this.execForgeAsync("glab", ["mr", "view", "--output", "json"], {
-          cwd: workingDir,
-          timeout: 5000,
-        }),
+        await this.execForgeAsync(
+          FORGE_CLI.gitlab,
+          ["mr", "view", "--output", "json"],
+          {
+            cwd: workingDir,
+            timeout: 5000,
+          },
+        ),
         /no (open )?merge requests? (found|available)/i,
         parseGitlabMr,
       );

@@ -4,7 +4,7 @@
 
 import type { FeedStats } from "./frame-feed";
 import type { ProbeArrival } from "../doctor/handler-probe";
-import type { ClientSighting } from "./client-sightings";
+import type { RenderSighting } from "./render-sightings";
 import type { ServingDaemon } from "./limits";
 import type { LaunchCategory } from "../proc/launch";
 import type { LaunchStatsHandle } from "../proc/stats-handle";
@@ -115,9 +115,9 @@ export interface StatsSnapshot {
   // `cc-candybar doctor` reads to learn whether the link it opened arrived.
   handlerProbes: readonly ProbeArrival[];
   // Each session's latest client, as this daemon process saw its last render
-  // request (src/daemon/client-sightings.ts), and the bundle this daemon
+  // request (src/daemon/render-sightings.ts), and the bundle this daemon
   // runs — what `cc-candybar doctor` judges the install by.
-  clients: readonly ClientSighting[];
+  clients: readonly RenderSighting[];
   bundle: string;
   // This daemon as `cc-candybar doctor` judges it: its memory against its
   // budget and its post-mortems (src/daemon/limits.ts `serving`).
@@ -282,7 +282,7 @@ export class RuntimeStats {
     watchersActive: number;
     nextRestartReason?: string | null;
     handlerProbes: readonly ProbeArrival[];
-    clients: readonly ClientSighting[];
+    clients: readonly RenderSighting[];
     bundle: string;
     daemon: ServingDaemon;
   }): StatsSnapshot {

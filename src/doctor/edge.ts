@@ -22,7 +22,22 @@ import { JSON_DIALECT, setValue } from "../config/json5-edit.js";
 import { writeAtomic } from "../utils/atomic-write.js";
 import type { ClientHints } from "../daemon/protocol.js";
 import { runTmux } from "../proc/tmux.js";
-import { launchSync } from "../proc/launch.js";
+import { launchSync, type LaunchResult } from "../proc/launch.js";
+import {
+  FORGE_CLI,
+  REMOTES_ARGS,
+  detectForge,
+  forgeRemoteUrl,
+  isMissingCommand,
+  remoteHost,
+  remotesOf,
+  type ForgeName,
+} from "../segments/git.js";
+import { gitRootOf } from "../utils/git-root.js";
+import { locateMemento } from "../memento/edge.js";
+import { dataNeeds, type DataNeeds } from "./data-needs.js";
+import type { RateLimitsSeen } from "../daemon/render-sightings.js";
+import type { Outcome } from "../utils/outcome.js";
 import type { TmuxHint } from "../tmux-hint.js";
 import type { UnusedDecl } from "../config/unused.js";
 import type { LoopName } from "@promptctl/rich-js";
@@ -45,8 +60,11 @@ import {
   type DaemonProcess,
   type DoctorFacts,
   type Fix,
+  type DataNeed,
   type FontInUse,
+  type ForgeLogin,
   type PlacementEffectFact,
+  type SegmentDataFacts,
   type TerminalFacts,
   type TerminalIdentity,
   type TmuxClient,
@@ -191,6 +209,14 @@ export interface DoctorEdge {
   // The newest post-mortem the user filed as read
   // (src/doctor/post-mortems-read.ts).
   readonly postMortemsRead: PostMortemsReadStore;
+  // Whether the forge CLI the checkout's remote names is installed and logged
+  // in to its host — null when it names no forge (`forgeLogin`).
+  readonly forge: (cwd: string) => Asked<ForgeLogin | null>;
+  // Where memento is installed for a project in a Claude Code directory.
+  readonly memento: (
+    claudeConfigDir: string,
+    projectDir: string,
+  ) => Outcome<string>;
 }
 
 // The three inputs the config search takes (resolveDslConfig) — a session's
@@ -411,7 +437,99 @@ export function productionEdge(
     install: productionInstallEdge,
     daemons,
     postMortemsRead: filePostMortemsRead(),
+    forge: forgeLogin,
+    memento: locateMemento,
   };
+}
+
+// [LAW:types-are-the-program] How each forge's CLI is asked whether it can
+// answer for a host, LOCALLY — a network check would hold the daemon's loop,
+// which every session's render shares, for its whole timeout. `gh auth token`
+// reads the stored token (or GH_TOKEN) and exits non-zero when there is none;
+// its stdout IS the token, which is never kept or logged. glab has no local
+// login question this was verified against, so it is asked only whether it is
+// installed; a glab that is logged out already shows on the bar as the PR
+// lookup's error (classifyForgePr).
+const FORGE_PROBE: Readonly<
+  Record<
+    ForgeName,
+    {
+      readonly args: (host: string) => readonly string[];
+      readonly nonZero: "logged-out" | "failed";
+    }
+  >
+> = {
+  github: {
+    args: (host) => ["auth", "token", "--hostname", host],
+    nonZero: "logged-out",
+  },
+  gitlab: { args: () => ["--version"], nonZero: "failed" },
+};
+
+function firstLineOf(text: string): string {
+  return text.trim().split("\n")[0] ?? "";
+}
+
+function launchFailure(label: string, run: LaunchResult): string {
+  if (run.ok) return label;
+  return `${label}: ${run.error ?? `${run.reason}${run.exitCode == null ? "" : ` exit ${run.exitCode}`}: ${firstLineOf(run.stderr)}`}`;
+}
+
+// The checkout's forge, read the way the PR lookup reads it (REMOTES_ARGS,
+// remotesOf, forgeRemoteUrl, detectForge), then its CLI asked about the
+// remote's host. Under the daemon's environment for a click — the one the
+// bar's lookup runs with — and the shell's for `cc-candybar doctor`.
+export function forgeLogin(cwd: string): Asked<ForgeLogin | null> {
+  if (gitRootOf(cwd) === undefined) return { kind: "ok", value: null };
+  const remotes = remotesOf(
+    launchSync({
+      bin: "git",
+      args: [...REMOTES_ARGS],
+      cwd,
+      env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
+      timeoutMs: 2000,
+      category: "doctor.forge",
+    }),
+  );
+  if (remotes.kind === "failed") return remotes;
+  const url = forgeRemoteUrl(remotes.kind === "ok" ? remotes.value : []);
+  if (url === null) return { kind: "ok", value: null };
+  const forge = detectForge(url);
+  if (forge === null) return { kind: "ok", value: null };
+  // [LAW:no-defensive-null-guards] detectForge names a forge only by a host.
+  const host = remoteHost(url)!;
+  const cli = FORGE_CLI[forge];
+  const probe = FORGE_PROBE[forge];
+  const run = launchSync({
+    bin: cli,
+    args: [...probe.args(host)],
+    cwd,
+    timeoutMs: 2000,
+    category: "doctor.forge",
+  });
+  return forgeLoginOf(cli, host, probe.nonZero, run);
+}
+
+// [LAW:effects-at-boundaries] What the CLI's answer means, pure over the
+// launch result: ran is ready, not on PATH is missing, a non-zero exit is
+// logged out where the forge's probe says so, anything else could not be
+// asked.
+export function forgeLoginOf(
+  cli: string,
+  host: string,
+  nonZero: "logged-out" | "failed",
+  run: LaunchResult,
+): Asked<ForgeLogin> {
+  const login = (status: ForgeLogin["status"]): Asked<ForgeLogin> => ({
+    kind: "ok",
+    value: { cli, host, status },
+  });
+  if (run.ok) return login("ready");
+  if (isMissingCommand(run)) return login("missing");
+  if (run.reason === "non-zero" && nonZero === "logged-out") {
+    return login({ loggedOut: firstLineOf(run.stderr) });
+  }
+  return { kind: "failed", reason: launchFailure(cli, run) };
 }
 
 // [LAW:dataflow-not-control-flow] The load's two arms become ConfigFacts'
@@ -581,6 +699,33 @@ function placementEffects(
   return [...moving].map(([placement, effect]) => ({ placement, effect }));
 }
 
+// [LAW:dataflow-not-control-flow] A source is asked exactly when a segment
+// needs it: the segments are the arm's discriminator, and a source no segment
+// needs is never probed.
+function need<T>(segments: readonly string[], fact: () => T): DataNeed<T> {
+  const [first, ...rest] = segments;
+  return first === undefined
+    ? { kind: "unneeded" }
+    : { kind: "needed", segments: [first, ...rest], fact: fact() };
+}
+
+function segmentDataFacts(
+  edge: DoctorEdge,
+  needs: DataNeeds,
+  origin: ConfigOrigin,
+  configDir: string,
+  rateLimits: Asked<readonly RateLimitsSeen[]>,
+): SegmentDataFacts {
+  return {
+    pullRequests: need(needs.pullRequests, () => edge.forge(origin.cwd)),
+    rateLimits: need(needs.rateLimits, () => rateLimits),
+    memento: need(needs.memento, () => ({
+      located: edge.memento(configDir, origin.projectDir),
+      claudeConfigDir: configDir,
+    })),
+  };
+}
+
 // [LAW:single-enforcer] Every fact comes from what the CLIENT saw: its tmux,
 // the Claude Code directory its session runs with, and the origin its config
 // resolves from — never the daemon's own env, which answers for whichever
@@ -602,6 +747,10 @@ export function gatherFacts(
   // The daemon that serves the bar, as it reports itself: the click's own
   // process, or the one `cc-candybar doctor` asked.
   serving: Asked<ServingDaemon>,
+  // What the recent renders of this Claude Code's sessions said of the
+  // rate-limit windows (src/daemon/render-sightings.ts): the click's own
+  // session, or every session `cc-candybar doctor` sees in its directory.
+  rateLimits: Asked<readonly RateLimitsSeen[]>,
 ): Omit<DoctorFacts, "urlHandler" | "askedBy" | "install"> {
   const load = edge.loadConfig(origin);
   // [LAW:one-source-of-truth] The render's own resolution, so the doctor and
@@ -651,6 +800,13 @@ export function gatherFacts(
       sessionPick,
     ),
     transitions: globals.transitions,
+    data: segmentDataFacts(
+      edge,
+      dataNeeds(load.config, globals.preset),
+      origin,
+      claudeConfigDir(hints.claudeConfigDir),
+      rateLimits,
+    ),
     claudeSettings: readClaudeSettingsFacts(
       claudeSettingsPath(claudeConfigDir(hints.claudeConfigDir)),
     ),

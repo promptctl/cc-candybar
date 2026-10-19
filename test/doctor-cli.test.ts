@@ -3,7 +3,7 @@
 // settings file, a clean setup, and a failed check carrying a fix.
 
 import { BUNDLED_GLYPHS } from "./helpers/bundled-glyphs";
-import { healthyDaemonEdge, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, HEALTHY_DAEMON, HEALTHY_FACTS } from "./helpers/doctor-facts";
+import { healthyDaemonEdge, healthyDataEdge, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, healthyDaemonIn, HEALTHY_FACTS, CARRIED } from "./helpers/doctor-facts";
 import { glyphSighting } from "../src/doctor/checks";
 import { withMark } from "../src/doctor/mark-book";
 import { memoryMarkBook } from "./helpers/mark-book";
@@ -21,6 +21,10 @@ import type { HandlerProbeEdge } from "../src/doctor/handler-probe";
 import { TMUX_TRUECOLOR_VAR } from "../src/doctor/checks";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 
+// The daemon a healthy bar answers from: its session runs with the Claude
+// Code directory this test's command reports (CLAUDE_CONFIG_DIR, `inDir`).
+const DAEMON = () => healthyDaemonIn(dir)();
+
 const IN_TMUX = { TMUX: "/tmp/tmux-501/default,123,0", TMUX_PANE: "%1" };
 
 let dir: string;
@@ -34,6 +38,7 @@ afterEach(() => {
 const EDGE: DoctorEdge = {
   install: HEALTHY_INSTALL_EDGE,
   ...healthyDaemonEdge(),
+  ...healthyDataEdge(),
   probeTmux: () => ({
     kind: "ok",
     // A terminal that ships its own Nerd Font symbols and draws links, which
@@ -92,7 +97,7 @@ const inDir = (env: Record<string, string>) => ({
 describe("doctorPlan", () => {
   test("an unreadable settings.json is exit 2 naming the file, nothing on stdout", async () => {
     fs.writeFileSync(settingsPath(), '{ "env": [1] }');
-    expect(await doctorPlan(EDGE, NO_HANDLER, HEALTHY_DAEMON, inDir(IN_TMUX), "/", () => ({ columns: 120 }))).toEqual({
+    expect(await doctorPlan(EDGE, NO_HANDLER, DAEMON, inDir(IN_TMUX), "/", () => ({ columns: 120 }))).toEqual({
       stdout: "",
       stderr: `doctor: cannot read ${settingsPath()}: \`env\` is not an object\n`,
       code: 2,
@@ -106,7 +111,7 @@ describe("doctorPlan", () => {
     const plan = await doctorPlan(
       EDGE,
       { ...NO_HANDLER, platform: "darwin", sockets: { own: "/a", handler: "/a" } },
-      HEALTHY_DAEMON,
+      DAEMON,
       inDir(IN_TMUX),
       "/",
       () => ({ columns: 120 }),
@@ -120,7 +125,7 @@ describe("doctorPlan", () => {
   // readable, whatever a looser parser makes of it.
   test("a settings.json that is JSON5 but not JSON is exit 2 naming the file", async () => {
     fs.writeFileSync(settingsPath(), '{ "env": { "A": "1", }, }');
-    const plan = await doctorPlan(EDGE, NO_HANDLER, HEALTHY_DAEMON, inDir(IN_TMUX), "/", () => ({ columns: 120 }));
+    const plan = await doctorPlan(EDGE, NO_HANDLER, DAEMON, inDir(IN_TMUX), "/", () => ({ columns: 120 }));
     expect(plan.stdout).toBe("");
     expect(plan.code).toBe(2);
     expect(plan.stderr).toMatch(/\n$/);
@@ -128,8 +133,8 @@ describe("doctorPlan", () => {
   });
 
   test("every check ok is exit 0, one ✓ line per check", async () => {
-    expect(await doctorPlan(EDGE, NO_HANDLER, HEALTHY_DAEMON, inDir({}), "/", () => ({ columns: 120 }))).toEqual({
-      stdout: "✓ config\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width\n✓ effect refresh\n✓ Nerd Font\n",
+    expect(await doctorPlan(EDGE, NO_HANDLER, DAEMON, inDir({}), "/", () => ({ columns: 120 }))).toEqual({
+      stdout: "✓ config\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n",
       stderr: "",
       code: 0,
     });
@@ -138,18 +143,18 @@ describe("doctorPlan", () => {
   // brandon-doctor-v62x.1ku: the command measures the terminal it runs in —
   // COLUMNS, else the terminal's own geometry.
   test("a terminal the command cannot measure fails terminal width, exit 1", async () => {
-    const plan = await doctorPlan(EDGE, NO_HANDLER, HEALTHY_DAEMON, inDir({}), "/", () => ({}));
+    const plan = await doctorPlan(EDGE, NO_HANDLER, DAEMON, inDir({}), "/", () => ({}));
     expect(plan.code).toBe(1);
     expect(plan.stdout).toContain(
       "\n✗ terminal width — no terminal width was measured",
     );
     expect(
-      (await doctorPlan(EDGE, NO_HANDLER, HEALTHY_DAEMON, inDir({ COLUMNS: "90" }), "/", () => ({}))).code,
+      (await doctorPlan(EDGE, NO_HANDLER, DAEMON, inDir({ COLUMNS: "90" }), "/", () => ({}))).code,
     ).toBe(0);
   });
 
   test("a measurement that throws is a doctor: line, exit 2, no checks", async () => {
-    const plan = await doctorPlan(EDGE, NO_HANDLER, HEALTHY_DAEMON, inDir({}), "/", () => {
+    const plan = await doctorPlan(EDGE, NO_HANDLER, DAEMON, inDir({}), "/", () => {
       throw new Error("EBADF: bad file descriptor");
     });
     expect(plan).toEqual({
@@ -173,7 +178,7 @@ describe("doctorPlan", () => {
         };
       },
     };
-    const plan = await doctorPlan(edge, NO_HANDLER, HEALTHY_DAEMON, inDir(IN_TMUX), "/", () => ({ columns: 120 }));
+    const plan = await doctorPlan(edge, NO_HANDLER, DAEMON, inDir(IN_TMUX), "/", () => ({ columns: 120 }));
     expect(plan.stdout).toContain(
       '\n✗ links — tmux does not pass links through to Ghostty — add `set -as terminal-features ",xterm-ghostty:hyperlinks"` to tmux.conf, then detach and reattach (tmux 3.4 or later)\n',
     );
@@ -182,7 +187,7 @@ describe("doctorPlan", () => {
   test("outside tmux the terminal's own name decides links", async () => {
     const plan = await doctorPlan(
       EDGE,
-      NO_HANDLER, HEALTHY_DAEMON,
+      NO_HANDLER, DAEMON,
       inDir({ TERM_PROGRAM: "Apple_Terminal", TERM_PROGRAM_VERSION: "455.1" }),
       "/",
       () => ({ columns: 120 }),
@@ -195,12 +200,12 @@ describe("doctorPlan", () => {
   // doctor, clicked in kitty, files the proof this command reads.
   test("a terminal whose release went unsaid is settled by a doctor click remembered for it", async () => {
     const kitty = inDir({ TERM_PROGRAM: "", TERM: "xterm-kitty" });
-    const unsettled = await doctorPlan(EDGE, NO_HANDLER, HEALTHY_DAEMON, kitty, "/", () => ({ columns: 120 }));
+    const unsettled = await doctorPlan(EDGE, NO_HANDLER, DAEMON, kitty, "/", () => ({ columns: 120 }));
     expect(unsettled.stdout).toMatch(/\n✗ links — kitty draws links \(OSC 8\) since 0\.19\.0, and did not say which release this is — click 🩺 doctor/);
     const settled = await doctorPlan(
       { ...EDGE, clicked: memoryClickedTerminals(["kitty"]) },
       NO_HANDLER,
-      HEALTHY_DAEMON,
+      DAEMON,
       kitty,
       "/",
       () => ({ columns: 120 }),
@@ -213,7 +218,7 @@ describe("doctorPlan", () => {
   test("a check that shows glyphs to look at prints them, and where to mark them", async () => {
     const plan = await doctorPlan(
       EDGE,
-      NO_HANDLER, HEALTHY_DAEMON,
+      NO_HANDLER, DAEMON,
       inDir({ TERM_PROGRAM: "Hyper" }),
       "/",
       () => ({ columns: 120 }),
@@ -224,7 +229,7 @@ describe("doctorPlan", () => {
         "\n✗ Nerd Font — the doctor cannot read Hyper's font\n" +
           `    look: ${BUNDLED_GLYPHS} — mark them ✓ shapes or ✗ boxes in the bar's doctor, ` +
           "and this command reads your mark: " +
-          `the settings menu \\(${DOOR_GLYPH} by default\\) › 🧰 tools › 🩺 doctor\n$`,
+          `the settings menu \\(${DOOR_GLYPH} by default\\) › 🧰 tools › 🩺 doctor\n✓ segment data\n$`,
         "u",
       ),
     );
@@ -237,23 +242,23 @@ describe("doctorPlan", () => {
     const plan = await doctorPlan(
       { ...EDGE, marks: memoryMarkBook(withMark({}, "nerdFont", id, "drawn")) },
       NO_HANDLER,
-      HEALTHY_DAEMON,
+      DAEMON,
       inDir({ TERM_PROGRAM: "Hyper" }),
       "/",
       () => ({ columns: 120 }),
     );
-    expect(plan.stdout).toContain("\n✓ Nerd Font\n");
+    expect(plan.stdout).toContain("\n✓ Nerd Font\n✓ segment data\n");
   });
 
   test("a failed check is exit 1, its reason and the fix hint on the line", async () => {
-    const plan = await doctorPlan(EDGE, NO_HANDLER, HEALTHY_DAEMON, inDir(IN_TMUX), "/", () => ({ columns: 120 }));
+    const plan = await doctorPlan(EDGE, NO_HANDLER, DAEMON, inDir(IN_TMUX), "/", () => ({ columns: 120 }));
     expect(plan.code).toBe(1);
     expect(plan.stderr).toBe("");
     expect(plan.stdout).toBe(
       "✓ config\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n" +
         "✗ tmux truecolor — Claude Code renders the bar in 256 colours inside tmux" +
         ` (fix: click the settings menu (${DOOR_GLYPH} by default) › 🧰 tools › 🩺 doctor, then [fix] on the bar)\n` +
-        "✓ UTF-8\n✓ terminal width\n✓ effect refresh\n✓ Nerd Font\n",
+        "✓ UTF-8\n✓ terminal width\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n",
     );
   });
 
@@ -261,8 +266,8 @@ describe("doctorPlan", () => {
   // CLAUDE_CONFIG_DIR, not ~/.claude's.
   test("a staged-but-unapplied fix names the settings file it was read from", async () => {
     fs.writeFileSync(settingsPath(), `{ "env": { "${TMUX_TRUECOLOR_VAR}": "1" } }`);
-    expect((await doctorPlan(EDGE, NO_HANDLER, HEALTHY_DAEMON, inDir(IN_TMUX), "/", () => ({ columns: 120 }))).stdout).toBe(
-      `✓ config\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✗ tmux truecolor — ${TMUX_TRUECOLOR_VAR} is set in ${settingsPath()} — restart Claude Code to apply\n✓ UTF-8\n✓ terminal width\n✓ effect refresh\n✓ Nerd Font\n`,
+    expect((await doctorPlan(EDGE, NO_HANDLER, DAEMON, inDir(IN_TMUX), "/", () => ({ columns: 120 }))).stdout).toBe(
+      `✓ config\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✗ tmux truecolor — ${TMUX_TRUECOLOR_VAR} is set in ${settingsPath()} — restart Claude Code to apply\n✓ UTF-8\n✓ terminal width\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n`,
     );
   });
 });
@@ -286,10 +291,10 @@ describe("doctorPlan over a real config", () => {
   });
   const projectConfig = (): string => path.join(project, ".cc-candybar.json5");
   const plan = (env: Record<string, string> = {}) =>
-    doctorPlan(REAL, NO_HANDLER, HEALTHY_DAEMON, inDir(env), project, () => ({ columns: 120 }));
+    doctorPlan(REAL, NO_HANDLER, DAEMON, inDir(env), project, () => ({ columns: 120 }));
 
   test("no config file anywhere: the bundled default is correct", async () => {
-    expect((await plan()).stdout).toBe("✓ config\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width\n✓ effect refresh\n✓ Nerd Font\n");
+    expect((await plan()).stdout).toBe("✓ config\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n");
   });
 
   test("a config using everything it declares is ok", async () => {
@@ -299,7 +304,7 @@ describe("doctorPlan over a real config", () => {
          segments: { s: { template: "{{ .v }}" } }, root: { h: ["s"] } }`,
     );
     expect(await plan()).toEqual({
-      stdout: "✓ config\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width\n✓ effect refresh\n✓ Nerd Font\n",
+      stdout: "✓ config\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n",
       stderr: "",
       code: 0,
     });
@@ -322,7 +327,7 @@ describe("doctorPlan over a real config", () => {
         `    helper "h" is never called\n` +
         `    variable "v" is never read\n` +
         `    action "a" is never clicked\n` +
-        "✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width\n✓ effect refresh\n✓ Nerd Font\n",
+        "✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n",
       stderr: "",
       code: 1,
     });
@@ -358,14 +363,14 @@ describe("doctorPlan over a real config", () => {
       (
         await doctorPlan(
           REAL,
-          NO_HANDLER, HEALTHY_DAEMON,
+          NO_HANDLER, DAEMON,
           inDir({ CC_CANDYBAR_CONFIG: hinted }),
           project, () => ({ columns: 120 }),
           path.relative(project, named),
         )
       )
         .stdout,
-    ).toBe(`✗ config — helper "h" is never called\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width\n✓ effect refresh\n✓ Nerd Font\n`);
+    ).toBe(`✗ config — helper "h" is never called\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n`);
   });
 
   // brandon-effects-2gka.21e: the config the bar draws decides the effect, and
@@ -381,7 +386,7 @@ describe("doctorPlan over a real config", () => {
         "✓ config\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width\n" +
         "✗ effect refresh — the bar wears the shimmer effect, but Claude Code redraws it only on events" +
         ` (fix: click the settings menu (${DOOR_GLYPH} by default) › 🧰 tools › 🩺 doctor, then [fix] on the bar)\n` +
-        "✓ Nerd Font\n",
+        "✓ Nerd Font\n✓ segment data\n",
       stderr: "",
       code: 1,
     });
@@ -390,14 +395,14 @@ describe("doctorPlan over a real config", () => {
   // A config that does not load draws the bundled default — still.
   test("a config that does not load is judged by the bar drawn under the error", async () => {
     fs.writeFileSync(projectConfig(), `{ globals: { effect: "shimmer" }, root: { h: ["ghost"] } }`);
-    expect((await plan()).stdout).toMatch(/\n✓ effect refresh\n✓ Nerd Font\n$/);
+    expect((await plan()).stdout).toMatch(/\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n$/);
   });
 
   test("$CC_CANDYBAR_CONFIG names the file checked, as the client reports it", async () => {
     const named = path.join(dir, "named.json5");
     fs.writeFileSync(named, `{ helpers: { h: "x" } }`);
     expect((await plan({ CC_CANDYBAR_CONFIG: named })).stdout).toBe(
-      `✗ config — helper "h" is never called\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width\n✓ effect refresh\n✓ Nerd Font\n`,
+      `✗ config — helper "h" is never called\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n`,
     );
   });
 
@@ -414,6 +419,7 @@ describe("doctorPlan over a real config", () => {
         { projectDir: project, cwd: project, configFile: null },
         () => null,
         { kind: "ok", value: HEALTHY_SERVING },
+        CARRIED,
       ),
       urlHandler: { kind: "unsupported" },
       askedBy: "command",

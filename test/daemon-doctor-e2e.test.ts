@@ -20,6 +20,8 @@ import {
   killAndWait,
   linkUrls,
   render,
+  renderBody,
+  renderRequest,
   stripAnsi,
   urlWriting,
 } from "./helpers/daemon-e2e";
@@ -44,8 +46,16 @@ import {
 import { PACKAGE_VERSION } from "../src/version";
 import { crateDigest } from "../src/source-digest";
 import { productionInstallEdge } from "../src/doctor/edge";
-import { installOf } from "../src/doctor/cli";
-import { parseDaemonClients } from "../src/doctor/daemon-answer";
+import { installOf, rateLimitsOf } from "../src/doctor/cli";
+import {
+  parseDaemonClients,
+  parseRateLimitSightings,
+} from "../src/doctor/daemon-answer";
+import {
+  claudeConfigDir,
+  detectClaudeConfigDir,
+} from "../src/claude-settings";
+import type { ClientHints } from "../src/daemon/protocol";
 import type { StatsSnapshot } from "../src/daemon/stats";
 
 jest.setTimeout(30_000);
@@ -246,6 +256,84 @@ test("the clients the daemon saw render are the install check's facts", async ()
     // Its next render, by the current client, replaces it at once.
     await render(sockPath, "install-e2e-2", projectDir, { client: native });
     expect(await verdict()).toEqual({ ok: true });
+  } finally {
+    if (daemon) await killAndWait(daemon);
+    removeTmpDirs();
+  }
+});
+
+// brandon-doctor-v62x.onf through a real daemon: a render request records
+// whether its payload carried the rate-limit windows, and with which Claude
+// Code directory its session runs; daemon-stats serves both, and the CLI's
+// reading keeps only its own directory's recent renders.
+test("the rate-limit windows each render carried are the segment-data row's facts", async () => {
+  const { env, sockPath, removeTmpDirs } = prepareIsolatedDaemonEnv(
+    "cc-candybar-doctor-e2e",
+  );
+  const projectDir = realpathSync(
+    mkdtempSync(path.join(os.tmpdir(), "cc-candybar-doctor-e2e-project-")),
+  );
+  const ownDir = claudeConfigDir(detectClaudeConfigDir(process.env, projectDir));
+  const answered = {
+    total_input_tokens: 10,
+    total_output_tokens: 5,
+    context_window_size: 200000,
+    used_percentage: 1,
+    remaining_percentage: 99,
+    current_usage: {
+      input_tokens: 10,
+      output_tokens: 5,
+      cache_creation_input_tokens: 0,
+      cache_read_input_tokens: 0,
+    },
+  };
+  const renderWith = (
+    sid: string,
+    extra: Record<string, unknown>,
+    hints: ClientHints = {},
+  ) => {
+    const body = renderBody(sid, projectDir, hints);
+    return renderRequest(sockPath, {
+      ...body,
+      hookData: { ...(body.hookData as object), ...extra },
+    });
+  };
+  let daemon: RunningDaemon | undefined;
+  try {
+    daemon = await spawnDaemonWithEnv(env);
+    const seen = async () => {
+      const resp = await sendDaemonRequest(
+        sockPath,
+        { v: PROTOCOL_VERSION, kind: "stats" } as never,
+        5000,
+      );
+      return rateLimitsOf(
+        parseRateLimitSightings((resp as { stats: StatsSnapshot }).stats),
+        ownDir,
+      );
+    };
+
+    await renderWith("rl-1", {
+      context_window: answered,
+      rate_limits: { five_hour: { used_percentage: 3, resets_at: 1 } },
+    });
+    await renderWith("rl-2", { context_window: answered });
+    // A session of another Claude Code directory says nothing of this one.
+    await renderWith(
+      "rl-3",
+      { context_window: answered },
+      { claudeConfigDir: "/elsewhere/.claude" },
+    );
+    expect(await seen()).toEqual({ kind: "ok", value: ["carried", "missing"] });
+
+    // The next render of a session replaces what it said.
+    await renderWith("rl-2", {
+      context_window: { ...answered, current_usage: null },
+    });
+    expect(await seen()).toEqual({
+      kind: "ok",
+      value: ["carried", "unanswered"],
+    });
   } finally {
     if (daemon) await killAndWait(daemon);
     removeTmpDirs();

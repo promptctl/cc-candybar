@@ -1092,7 +1092,8 @@
                   "utf8",
                   "termWidth",
                   "effectRefresh",
-                  "nerdFont"
+                  "nerdFont",
+                  "segmentData"
                 ]
               }
             },
@@ -2077,6 +2078,12 @@
               }
             }
           }
+        },
+        "missingData": {
+          "enum": [
+            "fail",
+            "ignore"
+          ]
         }
       },
       "required": [
@@ -2661,6 +2668,12 @@
               }
             }
           }
+        },
+        "missingData": {
+          "enum": [
+            "fail",
+            "ignore"
+          ]
         }
       },
       "additionalProperties": false

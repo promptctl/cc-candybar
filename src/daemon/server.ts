@@ -83,7 +83,8 @@ import { settingCounts } from "./setting-drafts";
 import { validateHookData } from "../utils/schema-validator.js";
 import { productionEdge } from "../doctor/edge";
 import { ProbeArrivals } from "../doctor/handler-probe";
-import { ClientSightings } from "./client-sightings";
+import { RenderSightings, rateLimitsSeen } from "./render-sightings";
+import { claudeConfigDir } from "../claude-settings";
 import { setLaunchStats } from "../proc/launch";
 import { buildDebugSnapshot } from "./debug";
 import { DEBUG_WHATS, isDebugWhat } from "./debug-types";
@@ -154,7 +155,7 @@ import {
 // instances would defeat the share-across-sessions invariant.
 const stats = new RuntimeStats();
 const handlerProbes = new ProbeArrivals();
-const clientSightings = new ClientSightings();
+const renderSightings = new RenderSightings();
 // The bundle this daemon runs: the file the entry was loaded from, as the
 // build watch and the update notice read it — what daemon-stats and the
 // doctor's click name the install by.
@@ -1104,7 +1105,7 @@ export async function handleRequest(
         watchersActive: watcherRegistry.size(),
         nextRestartReason: establishedLimits().describeNextRestart(),
         handlerProbes: handlerProbes.list(),
-        clients: clientSightings.list(instantOf(new Date())),
+        clients: renderSightings.list(instantOf(new Date())),
         bundle: DAEMON_BUNDLE,
         daemon: establishedLimits().serving(),
       }),
@@ -1133,9 +1134,13 @@ export async function handleRequest(
     // frames a feed draws from a session's data are not, so this is the one
     // write, here rather than in renderChecked.
     if (checked.ok) {
-      clientSightings.see(
+      renderSightings.see(
         checked.req.hookData.session_id,
-        checked.req.hints.client,
+        {
+          client: checked.req.hints.client ?? null,
+          rateLimits: rateLimitsSeen(checked.req.hookData),
+          claudeConfigDir: claudeConfigDir(checked.req.hints.claudeConfigDir),
+        },
         at,
       );
     }
@@ -1360,7 +1365,7 @@ const verbCtx = {
     };
   }),
   probes: handlerProbes,
-  clients: clientSightings,
+  clients: renderSightings,
   bundle: DAEMON_BUNDLE,
   serving: () => establishedLimits().serving(),
   memento: mementoProvider,
@@ -1963,7 +1968,7 @@ function recordRequest(req: CheckedRenderRequest): void {
   // hints of its own, so the doctor (verbs/index.ts) reads the facts of this
   // session's last request from here, re-parsed through the same checkpoint.
   // The client itself is not recorded: which client drew a session's bar is
-  // ClientSightings' fact (src/daemon/client-sightings.ts), held in memory,
+  // RenderSightings' fact (src/daemon/render-sightings.ts), held in memory,
   // and two clients drawing one session would otherwise rewrite this
   // persisted record on every request.
   const { client: _client, ...recorded } = req.hints;

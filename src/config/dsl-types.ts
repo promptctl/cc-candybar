@@ -903,6 +903,18 @@ export interface SegmentDecl {
   // is when a placement says nothing. The segment's templates read the
   // placement's resolved values as `.settings.<name>`.
   readonly settings?: Readonly<Record<string, SettingDecl>>;
+  // Whether the doctor counts this segment's missing data as a failure
+  // (brandon-doctor-v62x.onf): a forge CLI that is not installed or logged in,
+  // a payload with no rate limits, memento not installed. Absent is "fail";
+  // read only through `missingDataOf`.
+  readonly missingData?: MissingData;
+}
+
+export const MISSING_DATA = ["fail", "ignore"] as const;
+export type MissingData = (typeof MISSING_DATA)[number];
+
+export function missingDataOf(seg: SegmentDecl): MissingData {
+  return seg.missingData ?? "fail";
 }
 
 // [LAW:one-source-of-truth] Every `state` variable a config declares, by the
