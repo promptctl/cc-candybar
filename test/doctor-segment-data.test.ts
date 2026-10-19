@@ -147,6 +147,20 @@ describe("segment data row", () => {
     ).toMatchObject({ ok: false, reason: expect.stringMatching(/^block, weekly: no session of this Claude Code has drawn a bar/) });
   });
 
+  test("a click from a bar this daemon never served says the daemon restarted", () => {
+    expect(
+      segmentData.probe({
+        ...withData({ rateLimits: rateNeed({ kind: "ok", value: [] }) }),
+        askedBy: "click",
+      }),
+    ).toMatchObject({
+      ok: false,
+      reason: expect.stringMatching(
+        /^block, weekly: the daemon restarted since this bar was drawn/,
+      ),
+    });
+  });
+
   test("memento absent names the Claude Code directory", () => {
     expect(verdict({ memento: mementoNeed({ kind: "absent" }) })).toMatchObject({
       ok: false,
@@ -215,10 +229,25 @@ describe("what a hook payload says of the rate-limit windows", () => {
     current_usage,
   });
 
-  test("windows present are carried", () => {
+  test("either window present is carried", () => {
+    const at = { used_percentage: 10, resets_at: 0 };
     expect(
-      rateLimitsSeen({ rate_limits: {}, context_window: window(null) }),
+      rateLimitsSeen({
+        rate_limits: { five_hour: at },
+        context_window: window(null),
+      }),
     ).toBe("carried");
+    expect(
+      rateLimitsSeen({
+        rate_limits: { seven_day: at },
+        context_window: window(usage),
+      }),
+    ).toBe("carried");
+  });
+  test("a rate_limits holding no window is missing, as the payload reads it", () => {
+    expect(
+      rateLimitsSeen({ rate_limits: {}, context_window: window(usage) }),
+    ).toBe("missing");
   });
   test("none after a response is missing", () => {
     expect(rateLimitsSeen({ context_window: window(usage) })).toBe("missing");
@@ -327,7 +356,7 @@ describe("the forge CLI's own word", () => {
         exitCode: 2,
         stderr: "boom\n",
       }),
-    ).toEqual({ kind: "failed", reason: "glab: non-zero exit 2: boom" });
+    ).toEqual({ kind: "failed", reason: "glab: non-zero, exit 2, boom" });
   });
 });
 
@@ -369,6 +398,15 @@ describe("the forge probe over a real checkout", () => {
 
   test("gh asked for the remote's own host, and logged in", () => {
     remote("git@github.com:o/r.git");
+    gh('[ "$*" = "auth token --hostname github.com" ] && echo tok || exit 3');
+    expect(forgeLogin(repo())).toEqual({
+      kind: "ok",
+      value: { cli: "gh", host: "github.com", status: "ready" },
+    });
+  });
+
+  test("gh asked for github.com under an ssh-over-443 remote, as gh keys its login", () => {
+    remote("ssh://git@ssh.github.com:443/o/r.git");
     gh('[ "$*" = "auth token --hostname github.com" ] && echo tok || exit 3');
     expect(forgeLogin(repo())).toEqual({
       kind: "ok",

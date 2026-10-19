@@ -1266,13 +1266,18 @@ function pullRequestProblems(need: SegmentDataFacts["pullRequests"]): string[] {
       ];
 }
 
-function rateLimitProblems(need: SegmentDataFacts["rateLimits"]): string[] {
+function rateLimitProblems(
+  need: SegmentDataFacts["rateLimits"],
+  askedBy: DoctorFacts["askedBy"],
+): string[] {
   if (need.kind === "unneeded") return [];
   const { segments, fact } = need;
   if (fact.kind === "failed") return [`${named(segments)}: ${fact.reason}`];
   if (fact.value.length === 0) {
     return [
-      `${named(segments)}: no session of this Claude Code has drawn a bar for this daemon in the last ${RECENT_CLIENT_S / 60} minutes, so whether it sends rate_limits is unseen — run the doctor again once the bar has redrawn`,
+      askedBy === "click"
+        ? `${named(segments)}: the daemon restarted since this bar was drawn, so whether Claude Code sends rate_limits is unseen — run the doctor again once the bar has redrawn`
+        : `${named(segments)}: no session of this Claude Code has drawn a bar for this daemon in the last ${RECENT_CLIENT_S / 60} minutes, so whether it sends rate_limits is unseen — run the doctor again once the bar has redrawn`,
     ];
   }
   // The windows are the account's a session bills, which its environment
@@ -1311,10 +1316,10 @@ const segmentData: Check = {
   name: "segmentData",
   label: "segment data",
   takesMark: false,
-  probe: ({ data }) =>
+  probe: ({ data, askedBy }) =>
     problemsVerdict([
       ...pullRequestProblems(data.pullRequests),
-      ...rateLimitProblems(data.rateLimits),
+      ...rateLimitProblems(data.rateLimits, askedBy),
       ...mementoProblems(data.memento),
     ]),
 };

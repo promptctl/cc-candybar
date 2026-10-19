@@ -7,8 +7,9 @@
 // would fetch it for that segment alone: the payload paths it reads come from
 // the render's own closure (`segmentInputPaths`), and each source's predicate
 // is the gate the payload lane fires on — so the doctor and the bar cannot
-// disagree about what a layout reads. A container's `when` reads data too, but
-// belongs to no segment, so the doctor names no data only it needs.
+// disagree about what a layout reads. A placement's own `when` is its
+// segment's read; a container's `when` reads data too, but belongs to no
+// segment, so the doctor names no data only it needs.
 
 import {
   missingDataOf,
@@ -40,17 +41,24 @@ const READS: Readonly<
 export type DataNeeds = Readonly<Record<DataSource, readonly string[]>>;
 
 export function dataNeeds(config: DslConfig, preset: string): DataNeeds {
-  const placed = new Set<string>();
+  // Each placed segment, with the `when` of every placement of it.
+  const placed = new Map<string, string[]>();
   for (const node of walkNodes(presetRoot(config, preset).node)) {
-    if (node.kind === "segment") placed.add(node.name);
+    if (node.kind !== "segment") continue;
+    const whens = placed.get(node.name) ?? [];
+    if (node.when) whens.push(node.when);
+    placed.set(node.name, whens);
   }
   // [LAW:no-defensive-null-guards] cross-ref proved every placed segment is
   // declared.
-  const failing = [...placed].filter(
+  const failing = [...placed.keys()].filter(
     (name) => missingDataOf(config.segments[name]!) === "fail",
   );
   const paths = new Map(
-    failing.map((name) => [name, segmentInputPaths(config, name)]),
+    failing.map((name) => [
+      name,
+      segmentInputPaths(config, name, placed.get(name)!),
+    ]),
   );
   const needs = (source: DataSource): readonly string[] =>
     failing.filter((name) => READS[source](paths.get(name)!));

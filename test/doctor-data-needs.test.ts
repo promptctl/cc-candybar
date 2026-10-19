@@ -54,6 +54,18 @@ describe("dataNeeds", () => {
     ).toEqual(["block", "weekly", "mine"]);
   });
 
+  test("a placement's own when is its segment's read", () => {
+    expect(
+      needsIn(
+        `{ segments: { alert: { template: "hot" } },
+           root: { rows: { extra: { h: [
+             { seg: "alert", when: "{{ gt .block.nativeUtilization 80.0 }}" },
+           ] } } } }`,
+        "default",
+      ).rateLimits,
+    ).toEqual(["block", "weekly", "alert"]);
+  });
+
   test("missingData outside its two words is a load error", () => {
     expect(() =>
       needsIn(`{ segments: { ceiling: { missingData: "warn" } } }`, "default"),

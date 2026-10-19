@@ -28,14 +28,19 @@ export const SIGHTINGS_KEPT = 64;
 // Claude Code nulls `context_window.current_usage` before the first API call
 // and again right after a /compact — so its missing windows are no finding.
 // A payload with no `context_window` at all comes from a Claude Code older
-// than both fields, which sends no windows either: `missing`.
+// than both fields, which sends no windows either: `missing`. Carried means a
+// window the payload reads (`five_hour`, `seven_day` — buildRenderPayload),
+// so an empty or null `rate_limits` is `missing`.
 export const RATE_LIMITS_SEEN = ["carried", "missing", "unanswered"] as const;
 export type RateLimitsSeen = (typeof RATE_LIMITS_SEEN)[number];
 
 export function rateLimitsSeen(
   hookData: Pick<ClaudeHookData, "rate_limits" | "context_window">,
 ): RateLimitsSeen {
-  if (hookData.rate_limits !== undefined) return "carried";
+  const windows = hookData.rate_limits;
+  if (windows?.five_hour != null || windows?.seven_day != null) {
+    return "carried";
+  }
   return hookData.context_window?.current_usage === null
     ? "unanswered"
     : "missing";

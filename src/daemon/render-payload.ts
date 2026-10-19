@@ -1086,14 +1086,20 @@ function segmentReads(config: DslConfig, name: string): string[] {
   );
 }
 
-// [LAW:single-enforcer] The payload paths ONE segment reads, through the same
-// closure the render's gate walks — what the doctor asks to say which segment
-// needs which data (src/doctor/data-needs.ts).
+// [LAW:single-enforcer] The payload paths ONE segment's placements read — its
+// own templates and each placement's `when`, the seeds buildNeededPrefixes
+// takes from them — through the same closure the render's gate walks: what
+// the doctor asks to say which segment needs which data
+// (src/doctor/data-needs.ts).
 export function segmentInputPaths(
   config: DslConfig,
   name: string,
+  whens: readonly string[],
 ): ReadonlySet<string> {
-  return inputClosure(config, segmentReads(config, name));
+  return inputClosure(config, [
+    ...segmentReads(config, name),
+    ...whens.flatMap((w) => [...templateReads(w, config.helpers).keys()]),
+  ]);
 }
 
 // The `kind: "input"` paths a set of refs reaches, through every

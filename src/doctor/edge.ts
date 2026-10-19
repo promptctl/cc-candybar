@@ -28,7 +28,9 @@ import {
   REMOTES_ARGS,
   detectForge,
   forgeRemoteUrl,
+  firstLine,
   isMissingCommand,
+  launchFailure,
   remoteHost,
   remotesOf,
   type ForgeName,
@@ -449,31 +451,31 @@ export function productionEdge(
 // its stdout IS the token, which is never kept or logged. glab has no local
 // login question this was verified against, so it is asked only whether it is
 // installed; a glab that is logged out already shows on the bar as the PR
-// lookup's error (classifyForgePr).
+// lookup's error (classifyForgePr). `loginHost` is the host the CLI keys its
+// login on for the remote's: gh folds every `*.github.com` (an ssh-over-443
+// remote names `ssh.github.com`) into `github.com`, and detectForge names
+// nothing else github.
 const FORGE_PROBE: Readonly<
   Record<
     ForgeName,
     {
+      readonly loginHost: (host: string) => string;
       readonly args: (host: string) => readonly string[];
       readonly nonZero: "logged-out" | "failed";
     }
   >
 > = {
   github: {
+    loginHost: () => "github.com",
     args: (host) => ["auth", "token", "--hostname", host],
     nonZero: "logged-out",
   },
-  gitlab: { args: () => ["--version"], nonZero: "failed" },
+  gitlab: {
+    loginHost: (host) => host,
+    args: () => ["--version"],
+    nonZero: "failed",
+  },
 };
-
-function firstLineOf(text: string): string {
-  return text.trim().split("\n")[0] ?? "";
-}
-
-function launchFailure(label: string, run: LaunchResult): string {
-  if (run.ok) return label;
-  return `${label}: ${run.error ?? `${run.reason}${run.exitCode == null ? "" : ` exit ${run.exitCode}`}: ${firstLineOf(run.stderr)}`}`;
-}
 
 // The checkout's forge, read the way the PR lookup reads it (REMOTES_ARGS,
 // remotesOf, forgeRemoteUrl, detectForge), then its CLI asked about the
@@ -496,10 +498,10 @@ export function forgeLogin(cwd: string): Asked<ForgeLogin | null> {
   if (url === null) return { kind: "ok", value: null };
   const forge = detectForge(url);
   if (forge === null) return { kind: "ok", value: null };
-  // [LAW:no-defensive-null-guards] detectForge names a forge only by a host.
-  const host = remoteHost(url)!;
   const cli = FORGE_CLI[forge];
   const probe = FORGE_PROBE[forge];
+  // [LAW:no-defensive-null-guards] detectForge names a forge only by a host.
+  const host = probe.loginHost(remoteHost(url)!);
   const run = launchSync({
     bin: cli,
     args: [...probe.args(host)],
@@ -527,7 +529,7 @@ export function forgeLoginOf(
   if (run.ok) return login("ready");
   if (isMissingCommand(run)) return login("missing");
   if (run.reason === "non-zero" && nonZero === "logged-out") {
-    return login({ loggedOut: firstLineOf(run.stderr) });
+    return login({ loggedOut: firstLine(run.stderr) });
   }
   return { kind: "failed", reason: launchFailure(cli, run) };
 }

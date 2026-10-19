@@ -186,6 +186,16 @@ function classify(
   if (result.reason === "non-zero" && nonZero === "absent") return ABSENT;
   if (result.reason === "non-zero" && nonZero === result.exitCode)
     return ABSENT;
+  return failed(launchFailure(label, result));
+}
+
+// [LAW:one-source-of-truth] The one spelling of a launch that did not answer —
+// the bar's `git.prError` and the doctor's forge probe (src/doctor/edge.ts)
+// report one launch in the same words.
+export function launchFailure(
+  label: string,
+  result: Extract<LaunchResult, { ok: false }>,
+): string {
   const detail = [
     result.reason,
     result.exitCode != null ? `exit ${result.exitCode}` : null,
@@ -193,10 +203,10 @@ function classify(
   ]
     .filter(Boolean)
     .join(", ");
-  return failed(`${label}: ${detail}`);
+  return `${label}: ${detail}`;
 }
 
-function firstLine(s: string): string {
+export function firstLine(s: string): string {
   return s.trim().split("\n", 1)[0] ?? "";
 }
 
@@ -383,22 +393,6 @@ export interface GitRemote {
   readonly urls: readonly string[];
 }
 
-// [LAW:effects-at-boundaries] Pure text→data over `git config --get-regexp
-// ^remote\..*\.url$` stdout, so the accept/reject table is unit-testable without
-// spawning git. Each line is `remote.<name>.url <url>`; the name capture is
-// greedy so a dotted remote name (`remote.my.fork.url` → `my.fork`) keeps its
-// dots. A line carrying no URL is a remote with no URL, the domain's own
-// "none", not a parse failure.
-//
-// Every url under a name is KEPT, in config order — see GitRemote. Which one
-// represents the repository is `identifyingUrl`'s decision, made where the
-// answer is used rather than by discarding data here.
-//
-// The read this parses is scoped `--local` (see getRemotesAsync), which is what
-// makes config order unambiguous: across merged scopes git lists system →
-// global → local, so an unscoped read would put the LEAST specific url first.
-// That precedence — not push-mirror ordering — is why the `git config --get`
-// this replaced returned the last value.
 // [LAW:one-source-of-truth] The one read of a repo's remotes, as git arguments
 // and the fold of their result — the PR cache's async read and the doctor's
 // sync one (src/doctor/edge.ts) run the same command and read it the same way.
@@ -416,6 +410,22 @@ export function remotesOf(result: LaunchResult): Outcome<GitRemote[]> {
   return ok(r.kind === "ok" ? parseRemotes(r.value) : []);
 }
 
+// [LAW:effects-at-boundaries] Pure text→data over `git config --get-regexp
+// ^remote\..*\.url$` stdout, so the accept/reject table is unit-testable without
+// spawning git. Each line is `remote.<name>.url <url>`; the name capture is
+// greedy so a dotted remote name (`remote.my.fork.url` → `my.fork`) keeps its
+// dots. A line carrying no URL is a remote with no URL, the domain's own
+// "none", not a parse failure.
+//
+// Every url under a name is KEPT, in config order — see GitRemote. Which one
+// represents the repository is `identifyingUrl`'s decision, made where the
+// answer is used rather than by discarding data here.
+//
+// The read this parses is scoped `--local` (see getRemotesAsync), which is what
+// makes config order unambiguous: across merged scopes git lists system →
+// global → local, so an unscoped read would put the LEAST specific url first.
+// That precedence — not push-mirror ordering — is why the `git config --get`
+// this replaced returned the last value.
 export function parseRemotes(stdout: string): GitRemote[] {
   const urlsByName = new Map<string, string[]>();
   for (const line of stdout.split("\n")) {

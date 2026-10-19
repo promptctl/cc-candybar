@@ -198,6 +198,21 @@ describe("every render request writes one render event, whatever its outcome", (
     );
     expect(field(attempts("ev-native", "ok", "info"), "client")).toBe("native");
 
+    // What the hook payload said of the rate-limit windows — the sighting the
+    // doctor's segment-data check reads (brandon-doctor-v62x.onf).
+    expect(field(drawn, "rateLimits")).toBe("missing");
+    const body = renderBody("ev-windows", projectDir, hints, configFlag("drawn"));
+    await renderRequest(sockPath, {
+      ...body,
+      hookData: {
+        ...hookData("ev-windows", projectDir),
+        rate_limits: { five_hour: { used_percentage: 10, resets_at: 0 } },
+      },
+    });
+    expect(field(attempts("ev-windows", "ok", "info"), "rateLimits")).toBe(
+      "carried",
+    );
+
     // The broken gate is a render that finished, warning which gate it was;
     // its fields are the drawn bar's, in the same order.
     const gate = attempts("ev-gate", "ok", "info");

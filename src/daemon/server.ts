@@ -1710,6 +1710,9 @@ async function renderChecked(
     // Which program drew this bar (src/client-hint.ts); `unreported` for a
     // client too old to say.
     client: hints.client?.kind ?? "unreported",
+    // What the hook payload said of the rate-limit windows — the sighting
+    // the doctor's segment-data check reads (RenderSightings).
+    rateLimits: rateLimitsSeen(req.hookData),
   });
   // [LAW:one-source-of-truth] The explicit config path has three
   // spellings and ONE precedence: a load-config pick (sessionRenderOrigin)
