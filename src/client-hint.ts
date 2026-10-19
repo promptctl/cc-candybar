@@ -9,10 +9,7 @@
 // the bundle the program runs. The Rust client reports the
 // `<exe dir>/../dist/index.mjs` it already execs for its daemon and its
 // fallback (rust-client/src/main.rs, `dist_index_path`); a Node client and
-// the daemon name theirs by `bundleOf` below, the same adjacency.
-
-import fs from "node:fs";
-import path from "node:path";
+// the daemon name the file their own entry module was loaded from.
 
 // [LAW:types-are-the-program] Which program sent the render. `node` is the
 // per-render Node relay — the fallback, paying node's startup on every
@@ -32,35 +29,13 @@ export interface ClientHint {
   readonly source: string | null;
 }
 
-// [LAW:one-source-of-truth] THE rule a bundle is named by, from the program
-// a process was started as: a `.mjs`/`.js` is the bundle itself (`node
-// dist/index.mjs`), anything else a bin whose bundle is the adjacent
-// `../dist/index.mjs` — the adjacency the committed shim imports by, and the
-// path the Rust client execs (`dist_index_path`). `install` stages the bundle
-// it names; the daemon names itself by it and a Node client reports it, so
-// the doctor compares two answers of one rule.
-export function bundleOf(program: string | undefined): string {
-  if (!program) {
-    throw new Error("process.argv[1] not set");
-  }
-  if (program.endsWith(".mjs") || program.endsWith(".js")) {
-    return program;
-  }
-  return path.resolve(path.dirname(program), "..", "dist", "index.mjs");
-}
-
-// The bundle this process runs: the rule applied to the FILE it was started
-// as. Node keeps a symlinked bin's own path in argv[1] (an npm global
-// install's `/usr/local/bin/cc-candybar` → `<pkg>/bin/cc-candybar`), and the
-// adjacency holds beside the file the link names, not beside the link.
-export function runningBundle(): string {
-  const program = process.argv[1];
-  return bundleOf(program && fs.realpathSync(program));
-}
-
-// A Node client's identity: the bundle it runs, no build stamp.
+// A Node client's identity: the bundle it runs, no build stamp. `bundle` is
+// the entry's own file (`import.meta.url` in src/index.ts), which Node's
+// loader has already resolved through every link — so naming it costs the
+// render no read, and cannot fail.
 export function nodeClientHint(
   kind: Exclude<ClientKind, "native">,
+  bundle: string,
 ): ClientHint {
-  return { kind, bundle: runningBundle(), source: null };
+  return { kind, bundle, source: null };
 }

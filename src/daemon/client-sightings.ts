@@ -48,12 +48,10 @@ export class ClientSightings {
     }));
   }
 
-  // One session's latest, or none when this process has served it no render
-  // (a daemon restarted under a bar already on screen).
-  ofSession(sessionId: string, now: Instant): readonly ClientSighting[] {
+  // One session's latest client, or none when this process has served it no
+  // render (a daemon restarted under a bar already on screen).
+  ofSession(sessionId: string): ReadonlyArray<{ client: ClientHint | null }> {
     const seen = this.bySession.get(sessionId);
-    return seen === undefined
-      ? []
-      : [{ client: seen.client, ago: now - seen.at }];
+    return seen === undefined ? [] : [{ client: seen.client }];
   }
 }

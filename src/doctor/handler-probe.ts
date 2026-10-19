@@ -203,7 +203,7 @@ async function daemonView(): Promise<Asked<DaemonView>> {
   }
   // A daemon of another build may carry no arrivals and would never record
   // the probe: told by the one shape comparison daemon-stats makes.
-  const skew = shapeSkew(outcome.value);
+  const skew = shapeSkew(outcome.value, ["handlerProbes"]);
   if (skew !== null) return failed(skew);
   const { version, handlerProbes } = outcome.value;
   return ok({ version, arrivals: handlerProbes });

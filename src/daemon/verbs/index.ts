@@ -114,7 +114,6 @@ import {
   type SlashAction,
 } from "../../config/action";
 import { ceilingScope, type CeilingMove } from "../../memento/edge";
-import { runningBundle } from "../../client-hint";
 import type { ClientSightings } from "../client-sightings";
 import type { MementoProvider } from "../../segments/memento";
 import { parseClientHints } from "../protocol";
@@ -165,8 +164,10 @@ export interface VerbContext {
   readonly clientVersion: string | null;
   // Where a `doctor-probe` link records that it arrived.
   readonly probes: ProbeArrivals;
-  // Which client drew each session's bar, as this process saw it render.
+  // Which client drew each session's bar, as this process saw it render, and
+  // the bundle this daemon runs.
   readonly clients: ClientSightings;
+  readonly bundle: string;
   // [LAW:single-enforcer] The one owner of memento's ceiling reading, so the
   // move that makes a reading stale is the one that drops it.
   readonly memento: Pick<MementoProvider, "move">;
@@ -1179,8 +1180,8 @@ function clickFacts(ctx: VerbContext, sid: string): DoctorFacts {
     // click reached — this process.
     install: installFacts(
       ctx.doctor.install,
-      runningBundle(),
-      ctx.clients.ofSession(sid, instantOf(new Date())),
+      ctx.bundle,
+      ctx.clients.ofSession(sid).map((s) => s.client),
     ),
     askedBy: "click",
     clicked: clickedFrom(ctx, gathered),

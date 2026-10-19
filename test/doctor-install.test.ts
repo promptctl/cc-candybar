@@ -6,13 +6,11 @@
 // latest client (ClientSightings) and the hint's checkpoint are each pinned
 // here.
 
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
+import { installOf } from "../src/doctor/cli";
+import { RECENT_CLIENT_S } from "../src/doctor/checks";
 import { RuntimeStats, type StatsSnapshot } from "../src/daemon/stats";
 import { shapeSkew } from "../src/daemon/client-stats";
 import {
-  RECENT_CLIENT_S,
   checkByName,
   type ClientFact,
   type DaemonInstall,
@@ -24,7 +22,6 @@ import { installFields } from "../src/doctor/report";
 import { parseDaemonClients } from "../src/doctor/daemon-clients";
 import { ClientSightings, SIGHTINGS_KEPT } from "../src/daemon/client-sightings";
 import { parseClientHints } from "../src/daemon/protocol";
-import { bundleOf, runningBundle } from "../src/client-hint";
 import type { Instant } from "../src/utils/instant";
 import { HEALTHY_FACTS, HEALTHY_INSTALL_EDGE } from "./helpers/doctor-facts";
 
@@ -37,16 +34,11 @@ const CHECKOUT: DaemonInstall = {
   checkout: { root: ROOT, rustSource: { kind: "ok", value: "abc" } },
 };
 
-const native = (
-  bundle: string,
-  source: string | null = null,
-  ago = 1,
-): ClientFact => ({
+const native = (bundle: string, source: string | null = null): ClientFact => ({
   kind: "reported",
   client: "native",
   bundle: { kind: "ok", value: bundle },
   source,
-  ago,
 });
 
 function verdict(
@@ -74,16 +66,15 @@ describe("install probe", () => {
   });
 
   test("a client too old to report is named, with the install's remedy", () => {
-    expect(verdict(PUBLISHED, [{ kind: "unreported", ago: 0 }])).toEqual({
+    expect(verdict(PUBLISHED, [{ kind: "unreported" }])).toEqual({
       ok: false,
       reason:
         "the bar is drawn by a statusline client too old to say what it is — re-run `cc-candybar install`",
       more: [],
     });
-    expect(verdict(CHECKOUT, [{ kind: "unreported", ago: 0 }])).toEqual({
+    expect(verdict(CHECKOUT, [{ kind: "unreported" }])).toEqual({
       ok: false,
-      reason:
-        "the bar is drawn by a statusline client too old to say what it is — run `just install-rust`",
+      reason: `the bar is drawn by a statusline client too old to say what it is — run \`just install-rust\` and point the statusLine command at ${ROOT}/bin/cc-candybar-native`,
       more: [],
     });
   });
@@ -101,6 +92,20 @@ describe("install probe", () => {
         more: [],
       },
     );
+    expect(
+      verdict(CHECKOUT, [
+        {
+          kind: "reported",
+          client: "frames",
+          bundle: { kind: "ok", value: "/old/dist/index.mjs" },
+          source: null,
+        },
+      ]),
+    ).toEqual({
+      ok: false,
+      reason: `the statusline client runs /old/dist/index.mjs, not the daemon's ${CHECKOUT_BUNDLE} — run \`${ROOT}/bin/cc-candybar frames\``,
+      more: [],
+    });
   });
 
   test("a bundle that cannot be resolved is the finding", () => {
@@ -111,7 +116,6 @@ describe("install probe", () => {
           client: "native",
           bundle: { kind: "failed", reason: "ENOENT: no such file" },
           source: null,
-          ago: 0,
         },
       ]),
     ).toEqual({
@@ -127,7 +131,6 @@ describe("install probe", () => {
     client: kind,
     bundle: { kind: "ok", value: bundle },
     source: null,
-    ago: 0,
   });
 
   test("the Node fallback fails where a native client ships, and only there", () => {
@@ -186,21 +189,30 @@ describe("install probe", () => {
     });
   });
 
-  test("only clients inside the window are judged; none there is the finding", () => {
-    const stale = native("/old/dist/index.mjs", null, RECENT_CLIENT_S + 1);
-    expect(verdict(PUBLISHED, [stale, native(BUNDLE)])).toEqual({ ok: true });
-    expect(verdict(PUBLISHED, [stale])).toEqual({
+  test("no client to judge is the finding, worded for who asked", () => {
+    expect(verdict(PUBLISHED, [])).toEqual({
       ok: false,
       reason:
         "no statusline client has drawn a bar for this daemon in the last 5 minutes — run the doctor again once the bar has redrawn; if it never does, the statusLine command does not run cc-candybar",
+    });
+    const install: InstallFacts = {
+      kind: "ok",
+      value: { daemon: PUBLISHED, nativeShipped: true, clients: [] },
+    };
+    expect(
+      checkByName("install")!.probe({ ...HEALTHY_FACTS, install, askedBy: "click" }),
+    ).toEqual({
+      ok: false,
+      reason:
+        "the daemon restarted since this bar was drawn, so which client draws it is unknown — run the doctor again once the bar has redrawn",
     });
   });
 
   test("sessions sharing a problem share one line; different problems each get one", () => {
     expect(
       verdict(PUBLISHED, [
-        { kind: "unreported", ago: 0 },
-        { kind: "unreported", ago: 2 },
+        { kind: "unreported" },
+        { kind: "unreported" },
         native("/old/dist/index.mjs"),
       ]),
     ).toEqual({
@@ -241,19 +253,9 @@ describe("installFacts: the fold from what the daemon saw", () => {
   test("both bundles resolve through every link, and a checkout carries its Rust digest", () => {
     expect(
       installFacts(edge, "/link/bin/../dist/index.mjs", [
-        {
-          client: {
-            kind: "native",
-            bundle: "/link/bin/../dist/index.mjs",
-            source: "s",
-          },
-          ago: 3,
-        },
-        { client: null, ago: 9 },
-        {
-          client: { kind: "node", bundle: "/missing/index.mjs", source: null },
-          ago: 0,
-        },
+        { kind: "native", bundle: "/link/bin/../dist/index.mjs", source: "s" },
+        null,
+        { kind: "node", bundle: "/missing/index.mjs", source: null },
       ]),
     ).toEqual({
       kind: "ok",
@@ -270,14 +272,13 @@ describe("installFacts: the fold from what the daemon saw", () => {
         },
         nativeShipped: true,
         clients: [
-          native(CHECKOUT_BUNDLE, "s", 3),
-          { kind: "unreported", ago: 9 },
+          native(CHECKOUT_BUNDLE, "s"),
+          { kind: "unreported" },
           {
             kind: "reported",
             client: "node",
             bundle: { kind: "failed", reason: "ENOENT: /missing/index.mjs" },
             source: null,
-            ago: 0,
           },
         ],
       },
@@ -315,7 +316,7 @@ describe("installFields: the doctor's event", () => {
             native(CHECKOUT_BUNDLE, "old"),
             native(CHECKOUT_BUNDLE, null),
             native("/old/dist/index.mjs"),
-            { kind: "unreported", ago: 0 },
+            { kind: "unreported" },
           ],
         },
       }),
@@ -331,6 +332,24 @@ describe("installFields: the doctor's event", () => {
     expect(installFields({ kind: "failed", reason: "x" })).toBe(
       "clients=unasked",
     );
+  });
+});
+
+describe("installOf: the clients the command judges", () => {
+  test("only a session that drew within the window is one the bar runs", () => {
+    const stale = { kind: "native", bundle: "/old/dist/index.mjs", source: null } as const;
+    const current = { kind: "native", bundle: BUNDLE, source: null } as const;
+    const facts = installOf(HEALTHY_INSTALL_EDGE, {
+      kind: "ok",
+      value: {
+        bundle: BUNDLE,
+        clients: [
+          { client: stale, ago: RECENT_CLIENT_S + 1 },
+          { client: current, ago: RECENT_CLIENT_S },
+        ],
+      },
+    });
+    expect(facts.kind === "ok" && facts.value.clients).toEqual([native(BUNDLE)]);
   });
 });
 
@@ -366,7 +385,10 @@ describe("parseDaemonClients: the CLI's read of daemon-stats", () => {
     const { clients: _clients, ...rest } = stats({});
     const older = rest as StatsSnapshot;
     const asked = parseDaemonClients(older);
-    expect(asked).toEqual({ kind: "failed", reason: shapeSkew(older) });
+    expect(asked).toEqual({
+      kind: "failed",
+      reason: shapeSkew(older, ["bundle", "clients"]),
+    });
     expect(asked.kind === "failed" && asked.reason).toMatch(/reports no clients;/);
     expect(
       parseDaemonClients(stats({ bundle: BUNDLE, clients: [{ client: null }] })),
@@ -398,10 +420,8 @@ describe("ClientSightings: each session's latest client", () => {
     const sightings = new ClientSightings();
     sightings.see("s1", client(BUNDLE), at(100));
     sightings.see("s2", undefined, at(104));
-    expect(sightings.ofSession("s1", at(110))).toEqual([
-      { client: client(BUNDLE), ago: 10 },
-    ]);
-    expect(sightings.ofSession("restarted-under-me", at(110))).toEqual([]);
+    expect(sightings.ofSession("s1")).toEqual([{ client: client(BUNDLE) }]);
+    expect(sightings.ofSession("restarted-under-me")).toEqual([]);
   });
 
   test("the sessions longest without a render are the ones dropped", () => {
@@ -429,33 +449,5 @@ describe("the client hint at the checkpoint", () => {
     ]) {
       expect(parseClientHints({ client: bad }).client).toBeUndefined();
     }
-  });
-});
-
-describe("runningBundle: the rule over the file the process was started as", () => {
-  test("a symlinked bin names the bundle beside the file it links to", () => {
-    const pkg = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "ccb-pkg-")));
-    fs.mkdirSync(path.join(pkg, "bin"));
-    fs.writeFileSync(path.join(pkg, "bin", "cc-candybar"), "");
-    const globalBin = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-global-"));
-    const link = path.join(globalBin, "cc-candybar");
-    fs.symlinkSync(path.join(pkg, "bin", "cc-candybar"), link);
-    const argv1 = process.argv[1];
-    try {
-      process.argv[1] = link;
-      expect(runningBundle()).toBe(path.join(pkg, "dist", "index.mjs"));
-    } finally {
-      process.argv[1] = argv1!;
-      fs.rmSync(pkg, { recursive: true, force: true });
-      fs.rmSync(globalBin, { recursive: true, force: true });
-    }
-  });
-});
-
-describe("bundleOf: the one rule a bundle is named by", () => {
-  test("a bundle names itself; a bin names the dist beside it", () => {
-    expect(bundleOf("/opt/cc/dist/index.mjs")).toBe("/opt/cc/dist/index.mjs");
-    expect(bundleOf("/opt/cc/bin/cc-candybar")).toBe("/opt/cc/dist/index.mjs");
-    expect(() => bundleOf(undefined)).toThrow("process.argv[1] not set");
   });
 });

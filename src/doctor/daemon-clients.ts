@@ -22,7 +22,7 @@ export interface DaemonClients {
 // (sanitizeClient), so a malformed one reads as unreported, never as a
 // half-trusted client.
 export function parseDaemonClients(stats: StatsSnapshot): Asked<DaemonClients> {
-  const skew = shapeSkew(stats);
+  const skew = shapeSkew(stats, ["bundle", "clients"]);
   if (skew !== null) return { kind: "failed", reason: skew };
   const sightings = (stats.clients as unknown[]).map((c) =>
     typeof c === "object" && c !== null

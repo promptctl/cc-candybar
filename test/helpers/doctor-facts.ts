@@ -1,18 +1,18 @@
 import type { Asked, DoctorFacts } from "../../src/doctor/checks";
 import type { InstallEdge } from "../../src/doctor/edge";
 import type { DaemonClients } from "../../src/doctor/daemon-clients";
-import { runningBundle, type ClientHint } from "../../src/client-hint";
-
-// The `client` hint a healthy native client records: the bundle beside it is
-// the one this process runs, the daemon a click reaches.
-export const healthyClient = (): ClientHint => ({
-  kind: "native",
-  bundle: runningBundle(),
-  source: null,
-});
+import type { ClientHint } from "../../src/client-hint";
 
 // One published install: the daemon's bundle and the native client beside it.
 export const HEALTHY_BUNDLE = "/opt/cc/dist/index.mjs";
+
+// The `client` hint a healthy native client records: the bundle it execs is
+// the daemon's (testVerbContext's `bundle`).
+export const healthyClient = (): ClientHint => ({
+  kind: "native",
+  bundle: HEALTHY_BUNDLE,
+  source: null,
+});
 
 // The machine of that install: every path resolves to itself, no checkout.
 export const HEALTHY_INSTALL_EDGE: InstallEdge = {
@@ -70,7 +70,6 @@ export const HEALTHY_FACTS: DoctorFacts = {
           client: "native",
           bundle: { kind: "ok", value: HEALTHY_BUNDLE },
           source: null,
-          ago: 1,
         },
       ],
     },

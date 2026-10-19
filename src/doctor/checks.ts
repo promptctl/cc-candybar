@@ -213,17 +213,15 @@ export type DrawnGlyphs = Extract<NerdFontFacts, { kind: "glyphs" }>;
 // [LAW:types-are-the-program] One client the bar was drawn by. A client too
 // old to say what it is is its own arm, never a guessed kind. Its bundle is
 // the path it reported, resolved through every link — or why it could not be:
-// a bundle that does not exist is a finding, not a throw. `ago`: seconds since
-// that client's last render (0 for the render a click came from).
+// a bundle that does not exist is a finding, not a throw.
 export type ClientFact =
-  | { readonly kind: "unreported"; readonly ago: number }
+  | { readonly kind: "unreported" }
   | {
       readonly kind: "reported";
       readonly client: ClientKind;
       readonly bundle: Asked<string>;
       // The native binary's build stamp (src/client-hint.ts).
       readonly source: string | null;
-      readonly ago: number;
     };
 
 // [LAW:types-are-the-program] Where the daemon runs from. `checkout` is null
@@ -580,10 +578,11 @@ const urlHandler: Check = {
   },
 };
 
-// A client that has not rendered for this long is a session that stopped,
-// not one the bar runs: long enough to keep a session with no
-// `refreshInterval`, which renders only on events. A daemon that restarted
-// has seen no client at all until each bar's next render.
+// For the command, which sees every session's latest client: one that has
+// not rendered for this long is a session that stopped, not one the bar runs
+// — long enough to keep a session with no `refreshInterval`, which renders
+// only on events (src/doctor/cli.ts). A click judges its own bar however long
+// it has been idle: the click is the proof it is on screen.
 export const RECENT_CLIENT_S = 300;
 
 // [LAW:types-are-the-program] Where one reported client stands against the
@@ -638,6 +637,15 @@ export function clientStanding(
   };
 }
 
+// What a checkout's client is run as: `frames` through the checkout's own
+// bin (its Node shim); the statusline through the native client
+// `just install-rust` stages beside it.
+function checkoutCommand(root: string, client: ClientKind): string {
+  return client === "frames"
+    ? `run \`${root}/bin/cc-candybar frames\``
+    : `point the statusLine command at ${root}/bin/cc-candybar-native`;
+}
+
 function installProblems(
   daemon: DaemonInstall,
   nativeShipped: boolean,
@@ -646,7 +654,7 @@ function installProblems(
   const { checkout } = daemon;
   if (client.kind === "unreported") {
     return [
-      `the bar is drawn by a statusline client too old to say what it is — ${checkout === null ? REINSTALL : "run `just install-rust`"}`,
+      `the bar is drawn by a statusline client too old to say what it is — ${checkout === null ? REINSTALL : `run \`just install-rust\` and ${checkoutCommand(checkout.root, "native")}`}`,
     ];
   }
   const { bundle, source } = clientStanding(daemon, client);
@@ -660,7 +668,7 @@ function installProblems(
         `the statusline client runs ${bundle.path}, not the daemon's ${daemon.bundle} — ` +
           (checkout === null
             ? REINSTALL
-            : `point the statusLine command at ${checkout.root}/bin/cc-candybar-native`),
+            : checkoutCommand(checkout.root, client.client)),
       ];
     case "same":
       break;
@@ -696,7 +704,7 @@ const install: Check = {
   name: "install",
   label: "install",
   takesMark: false,
-  probe: ({ install }) => {
+  probe: ({ install, askedBy }) => {
     if (install.kind === "failed") {
       return {
         ok: false,
@@ -704,17 +712,19 @@ const install: Check = {
       };
     }
     const { daemon, nativeShipped, clients } = install.value;
-    const recent = clients.filter((c) => c.ago <= RECENT_CLIENT_S);
-    if (recent.length === 0) {
+    if (clients.length === 0) {
       return {
         ok: false,
-        reason: `no statusline client has drawn a bar for this daemon in the last ${RECENT_CLIENT_S / 60} minutes — run the doctor again once the bar has redrawn; if it never does, the statusLine command does not run cc-candybar`,
+        reason:
+          askedBy === "click"
+            ? "the daemon restarted since this bar was drawn, so which client draws it is unknown — run the doctor again once the bar has redrawn"
+            : `no statusline client has drawn a bar for this daemon in the last ${RECENT_CLIENT_S / 60} minutes — run the doctor again once the bar has redrawn; if it never does, the statusLine command does not run cc-candybar`,
       };
     }
     // One line per distinct problem: sessions sharing a client share it.
     return problemsVerdict([
       ...new Set(
-        recent.flatMap((c) => installProblems(daemon, nativeShipped, c)),
+        clients.flatMap((c) => installProblems(daemon, nativeShipped, c)),
       ),
     ]);
   },

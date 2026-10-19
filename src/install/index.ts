@@ -28,7 +28,6 @@ import {
   REGISTRY_URL,
 } from "./currency";
 import { PLATFORM_PACKAGES } from "./platforms";
-import { runningBundle } from "../client-hint";
 
 const BUNDLE_ID = "com.cccandybar.url-handler";
 const APP_NAME = "CCCandybarURLHandler";
@@ -197,10 +196,8 @@ export interface StagedRuntime {
 // Stage the full runtime at the stable path: dist/index.mjs (daemon + CLI
 // bundle) and bin/cc-candybar (render entry) as adjacent files. Adjacency IS
 // the contract — every entry flavor locates the bundle via ../dist/index.mjs.
-export function runStageRuntime(): StagedRuntime {
-  // [LAW:one-source-of-truth] The bundle that contains this function is the
-  // thing to stage, named by the one rule (src/client-hint.ts).
-  const sourceDist = runningBundle();
+// `sourceDist` is the bundle this process runs, as its entry names it.
+export function runStageRuntime(sourceDist: string): StagedRuntime {
   if (!fs.existsSync(sourceDist)) {
     throw new Error(
       `install: bundled dist not found at ${sourceDist}. Reinstall the package.`,
@@ -327,11 +324,11 @@ function installUrlHandlerFrom(stagedDist: string): void {
   );
 }
 
-export function runInstallUrlHandler(): void {
+export function runInstallUrlHandler(bundle: string): void {
   // Precondition before any side effect: on a non-mac this fails with zero
   // files written, not after staging the runtime.
   ensureMacOS();
-  const staged = runStageRuntime();
+  const staged = runStageRuntime(bundle);
   installUrlHandlerFrom(staged.distPath);
 }
 
@@ -456,14 +453,17 @@ function installSuccessMessage(): string {
   );
 }
 
-export async function runInstall(rendererArgs: string[]): Promise<void> {
+export async function runInstall(
+  rendererArgs: string[],
+  bundle: string,
+): Promise<void> {
   const force = rendererArgs.includes("--force");
   const filteredArgs = rendererArgs.filter((a) => a !== "--force");
 
   const argsToInstall =
     filteredArgs.length > 0 ? filteredArgs : [...DEFAULT_INSTALL_ARGS];
 
-  const staged = runStageRuntime();
+  const staged = runStageRuntime(bundle);
 
   if (process.platform === "darwin") {
     installUrlHandlerFrom(staged.distPath);

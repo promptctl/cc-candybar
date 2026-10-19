@@ -83,7 +83,6 @@ import { validateHookData } from "../utils/schema-validator.js";
 import { productionEdge } from "../doctor/edge";
 import { ProbeArrivals } from "../doctor/handler-probe";
 import { ClientSightings } from "./client-sightings";
-import { runningBundle } from "../client-hint";
 import { setLaunchStats } from "../proc/launch";
 import { buildDebugSnapshot } from "./debug";
 import { DEBUG_WHATS, isDebugWhat } from "./debug-types";
@@ -146,6 +145,10 @@ import {
 const stats = new RuntimeStats();
 const handlerProbes = new ProbeArrivals();
 const clientSightings = new ClientSightings();
+// The bundle this daemon runs: the file the entry was loaded from, as the
+// build watch and the update notice read it — what daemon-stats and the
+// doctor's click name the install by.
+const DAEMON_BUNDLE = fileURLToPath(import.meta.url);
 // [LAW:single-enforcer] Route all child_process spawns through src/proc/launch.
 // Installing the metering handle here makes subprocess counts visible in
 // daemon-stats.
@@ -1038,7 +1041,7 @@ export async function handleRequest(
         nextRestartReason: limits?.describeNextRestart() ?? null,
         handlerProbes: handlerProbes.list(),
         clients: clientSightings.list(instantOf(new Date())),
-        bundle: runningBundle(),
+        bundle: DAEMON_BUNDLE,
       }),
     });
   }
@@ -1274,6 +1277,7 @@ const verbCtx = {
   }),
   probes: handlerProbes,
   clients: clientSightings,
+  bundle: DAEMON_BUNDLE,
   memento: mementoProvider,
   claudeInput: productionClaudeInputEdge(),
   history: settingsHistory,

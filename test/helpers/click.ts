@@ -3,6 +3,7 @@
 // content and drive it through the REAL daemon path, so assertions track "what
 // effects does this click apply" rather than the exact wire encoding.
 
+import { HEALTHY_BUNDLE } from "./doctor-facts";
 import { NavigationHistory } from "../../src/daemon/navigation-history";
 import { HEALTHY_INSTALL_EDGE } from "./doctor-facts";
 import { parseHandlerUrl } from "../../src/install/index";
@@ -87,6 +88,7 @@ export function testVerbContext(
     clientVersion: PACKAGE_VERSION,
     probes: new ProbeArrivals(),
     clients: new ClientSightings(),
+    bundle: HEALTHY_BUNDLE,
     // And for memento: a test that drives a ceiling click hands in its own.
     memento: {
       move: () => {

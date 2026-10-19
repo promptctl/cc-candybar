@@ -40,7 +40,11 @@ import { newestWins } from "./utils/newest-wins";
 const RECONNECT_FIRST_MS = 250;
 const RECONNECT_MAX_MS = 2000;
 
-export async function runFrames(argv: readonly string[]): Promise<void> {
+// `bundle`: the bundle this process runs, as its entry names it.
+export async function runFrames(
+  argv: readonly string[],
+  bundle: string,
+): Promise<void> {
   // argv is the process's: [node, script, "frames", ...flags].
   const { values, tokens } = parseArgs({
     args: argv.slice(3),
@@ -93,7 +97,7 @@ export async function runFrames(argv: readonly string[]): Promise<void> {
     // the next one.
     const hints = {
       ...detectClientHints(process.env, cwd, process.stderr),
-      client: nodeClientHint("frames"),
+      client: nodeClientHint("frames", bundle),
     };
     const outcome = await tryRenderViaDaemon(hook, renderArgs, cwd, hints);
     if (outcome.kind === "ok") return;

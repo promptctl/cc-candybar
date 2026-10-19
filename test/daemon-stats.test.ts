@@ -98,6 +98,15 @@ describe("shapeSkew", () => {
     expect(skew).toContain(`this client (${pkg.version} [`);
   });
 
+  test("a reader is refused only for the fields it reads", () => {
+    const snap = RuntimeStats.referenceSnapshot();
+    const { clients: _c, ...older } = snap;
+    expect(shapeSkew(older as typeof snap, ["handlerProbes"])).toBeNull();
+    expect(shapeSkew(older as typeof snap, ["bundle", "clients"])).toContain(
+      "reports no clients;",
+    );
+  });
+
   test("missingFields names a nested field by its path, and an atom in place of an object", () => {
     const snap = RuntimeStats.referenceSnapshot();
     const { observers: _o, ...sessionState } = snap.sessionState;

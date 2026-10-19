@@ -57,9 +57,19 @@ export function fetchStats(): Promise<RoundTripOutcome<StatsSnapshot>> {
 // client reads is there), not the build's identity: a worktree's client
 // reading the main checkout's daemon is a different digest and the same
 // shape, and it is refused by nothing. The fields are checked against this
-// build's own reference snapshot, never a second spelling of the type.
-export function shapeSkew(s: StatsSnapshot): string | null {
-  const missing = missingFields(RuntimeStats.referenceSnapshot(), s);
+// build's own reference snapshot, never a second spelling of the type, and
+// only the fields a reader `reads` (daemon-stats reads them all): a doctor
+// probe that reads `handlerProbes` works against a daemon from before
+// `clients` existed.
+export function shapeSkew(
+  s: StatsSnapshot,
+  reads: ReadonlyArray<keyof StatsSnapshot> = STATS_FIELDS,
+): string | null {
+  const reference = RuntimeStats.referenceSnapshot();
+  const missing = missingFields(
+    Object.fromEntries(reads.map((k) => [k, reference[k]])),
+    s,
+  );
   if (missing.length === 0) return null;
   // [LAW:no-defensive-null-guards] exception: trust boundary — the snapshot
   // is an unchecked cast from socket JSON, and an older daemon's carries no
@@ -68,6 +78,10 @@ export function shapeSkew(s: StatsSnapshot): string | null {
   const mine = buildLabel(PACKAGE_VERSION, bakedDigest());
   return `the daemon (${theirs}) reports no ${missing.join(", ")}; it is another build than this client (${mine}), and restarts only when its own bundle changes`;
 }
+
+const STATS_FIELDS = Object.keys(RuntimeStats.referenceSnapshot()) as Array<
+  keyof StatsSnapshot
+>;
 
 // Every path of a field `reference` carries (recursing through its plain
 // objects) that `value` does not, in reference order.

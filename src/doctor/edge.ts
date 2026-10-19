@@ -63,7 +63,7 @@ import {
 import { fontInUse } from "./font-edge.js";
 import { privateGlyphsIn, stripPrivateGlyphs } from "../render/strip.js";
 import { DoctorBusy } from "./busy.js";
-import type { ClientSighting } from "../daemon/client-sightings.js";
+import type { ClientHint } from "../client-hint.js";
 import { sourceCheckoutOf } from "../daemon/build-currency.js";
 import { crateDigest } from "../source-digest.js";
 import { shipsNative } from "../install/platforms.js";
@@ -103,14 +103,15 @@ export const productionInstallEdge: InstallEdge = {
 };
 
 // [LAW:one-source-of-truth] One fold from (the daemon's bundle, the clients
-// seen) to the facts, for both surfaces: the click passes its own render's
-// client, the CLI every session's latest from daemon-stats. Both bundles are
+// judged) to the facts, for both surfaces: the click passes its own session's
+// latest, the CLI every session's latest from daemon-stats inside the window. Both bundles are
 // resolved through every link here, so `bin/../dist/index.mjs` and a symlinked
 // checkout name the file they are.
 export function installFacts(
   edge: InstallEdge,
   daemonBundle: string,
-  sightings: readonly ClientSighting[],
+  // The clients judged; null for one that did not report what it is.
+  clients: ReadonlyArray<ClientHint | null>,
 ): InstallFacts {
   const bundle = edge.realpath(daemonBundle);
   if (bundle.kind === "failed") {
@@ -134,16 +135,15 @@ export function installFacts(
               },
       },
       nativeShipped: edge.nativeShipped,
-      clients: sightings.map(
-        ({ client, ago }): ClientFact =>
+      clients: clients.map(
+        (client): ClientFact =>
           client === null
-            ? { kind: "unreported", ago }
+            ? { kind: "unreported" }
             : {
                 kind: "reported",
                 client: client.kind,
                 bundle: edge.realpath(client.bundle),
                 source: client.source,
-                ago,
               },
       ),
     },
