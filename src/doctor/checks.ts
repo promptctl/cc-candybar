@@ -637,13 +637,15 @@ export function clientStanding(
   };
 }
 
-// What a checkout's client is run as: `frames` through the checkout's own
-// bin (its Node shim); the statusline through the native client
-// `just install-rust` stages beside it.
-function checkoutCommand(root: string, client: ClientKind): string {
-  return client === "frames"
-    ? `run \`${root}/bin/cc-candybar frames\``
-    : `point the statusLine command at ${root}/bin/cc-candybar-native`;
+// How to run the client the daemon's install draws with. `frames` from the
+// daemon's own bundle, a published install's or a checkout's alike; the
+// statusline through what `cc-candybar install` stages, or in a checkout
+// through the native client `just install-rust` stages beside it.
+function remedy(daemon: DaemonInstall, client: ClientKind): string {
+  if (client === "frames") return `run \`node ${daemon.bundle} frames\``;
+  return daemon.checkout === null
+    ? REINSTALL
+    : `run \`just install-rust\` and point the statusLine command at ${daemon.checkout.root}/bin/cc-candybar-native`;
 }
 
 function installProblems(
@@ -654,7 +656,7 @@ function installProblems(
   const { checkout } = daemon;
   if (client.kind === "unreported") {
     return [
-      `the bar is drawn by a statusline client too old to say what it is — ${checkout === null ? REINSTALL : `run \`just install-rust\` and ${checkoutCommand(checkout.root, "native")}`}`,
+      `the bar is drawn by a statusline client too old to say what it is — ${remedy(daemon, "native")}`,
     ];
   }
   const { bundle, source } = clientStanding(daemon, client);
@@ -665,17 +667,14 @@ function installProblems(
       ];
     case "other":
       return [
-        `the statusline client runs ${bundle.path}, not the daemon's ${daemon.bundle} — ` +
-          (checkout === null
-            ? REINSTALL
-            : checkoutCommand(checkout.root, client.client)),
+        `the statusline client runs ${bundle.path}, not the daemon's ${daemon.bundle} — ${remedy(daemon, client.client)}`,
       ];
     case "same":
       break;
   }
   if (client.client === "node" && (nativeShipped || checkout !== null)) {
     return [
-      `the bar is drawn by the Node fallback, which starts node on every render — ${checkout === null ? REINSTALL : "build the native client: `just install-rust`"}`,
+      `the bar is drawn by the Node fallback, which starts node on every render — ${remedy(daemon, "native")}`,
     ];
   }
   switch (source.kind) {

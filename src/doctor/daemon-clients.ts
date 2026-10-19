@@ -24,6 +24,12 @@ export interface DaemonClients {
 export function parseDaemonClients(stats: StatsSnapshot): Asked<DaemonClients> {
   const skew = shapeSkew(stats, ["bundle", "clients"]);
   if (skew !== null) return { kind: "failed", reason: skew };
+  if (typeof stats.bundle !== "string") {
+    return {
+      kind: "failed",
+      reason: `the running daemon (${stats.version}) reported its bundle as ${JSON.stringify(stats.bundle)}`,
+    };
+  }
   const sightings = (stats.clients as unknown[]).map((c) =>
     typeof c === "object" && c !== null
       ? (c as { client?: unknown; ago?: unknown })

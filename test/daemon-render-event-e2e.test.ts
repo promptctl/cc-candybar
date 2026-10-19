@@ -175,6 +175,18 @@ describe("every render request writes one render event, whatever its outcome", (
     const drawn = attempts(FORGING_SID, "ok", "info");
     expect(renderEvents().filter((e) => field(e, "sid") === "x")).toEqual([]);
 
+    // Which client drew the bar: the program a hint names, and `unreported`
+    // for a client too old to say (brandon-doctor-v62x.tfb).
+    expect(field(drawn, "client")).toBe("unreported");
+    await render(
+      sockPath,
+      "ev-native",
+      projectDir,
+      { ...hints, client: { kind: "native", bundle: "/b/dist/index.mjs", source: null } },
+      configFlag("drawn"),
+    );
+    expect(field(attempts("ev-native", "ok", "info"), "client")).toBe("native");
+
     // The broken gate is a render that finished, warning which gate it was;
     // its fields are the drawn bar's, in the same order.
     const gate = attempts("ev-gate", "ok", "info");

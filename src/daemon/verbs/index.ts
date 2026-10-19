@@ -1181,7 +1181,7 @@ function clickFacts(ctx: VerbContext, sid: string): DoctorFacts {
     install: installFacts(
       ctx.doctor.install,
       ctx.bundle,
-      ctx.clients.ofSession(sid).map((s) => s.client),
+      ctx.clients.ofSession(sid),
     ),
     askedBy: "click",
     clicked: clickedFrom(ctx, gathered),

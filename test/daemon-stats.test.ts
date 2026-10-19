@@ -114,6 +114,10 @@ describe("shapeSkew", () => {
       "sessionState.observers",
     ]);
     expect(missingFields(snap, { ...snap, watchers: 3 })).toEqual(["watchers"]);
+    // A list the reader maps, carried as anything else, is as absent to it.
+    expect(
+      missingFields(snap, { ...snap, clients: null, handlerProbes: {} }),
+    ).toEqual(["handlerProbes", "clients"]);
     expect(missingFields(snap, snap)).toEqual([]);
   });
 });

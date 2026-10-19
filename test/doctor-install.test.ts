@@ -88,7 +88,7 @@ describe("install probe", () => {
     expect(verdict(CHECKOUT, [native("/old/dist/index.mjs", "abc")])).toEqual(
       {
         ok: false,
-        reason: `the statusline client runs /old/dist/index.mjs, not the daemon's ${CHECKOUT_BUNDLE} — point the statusLine command at ${ROOT}/bin/cc-candybar-native`,
+        reason: `the statusline client runs /old/dist/index.mjs, not the daemon's ${CHECKOUT_BUNDLE} — run \`just install-rust\` and point the statusLine command at ${ROOT}/bin/cc-candybar-native`,
         more: [],
       },
     );
@@ -103,7 +103,23 @@ describe("install probe", () => {
       ]),
     ).toEqual({
       ok: false,
-      reason: `the statusline client runs /old/dist/index.mjs, not the daemon's ${CHECKOUT_BUNDLE} — run \`${ROOT}/bin/cc-candybar frames\``,
+      reason: `the statusline client runs /old/dist/index.mjs, not the daemon's ${CHECKOUT_BUNDLE} — run \`node ${CHECKOUT_BUNDLE} frames\``,
+      more: [],
+    });
+    // Re-installing stages the same files and changes nothing a frames
+    // client runs, so a published install's is told the daemon's bundle too.
+    expect(
+      verdict(PUBLISHED, [
+        {
+          kind: "reported",
+          client: "frames",
+          bundle: { kind: "ok", value: "/global/dist/index.mjs" },
+          source: null,
+        },
+      ]),
+    ).toEqual({
+      ok: false,
+      reason: `the statusline client runs /global/dist/index.mjs, not the daemon's ${BUNDLE} — run \`node ${BUNDLE} frames\``,
       more: [],
     });
   });
@@ -149,7 +165,7 @@ describe("install probe", () => {
     expect(verdict(CHECKOUT, [node("node", CHECKOUT_BUNDLE)], false)).toEqual({
       ok: false,
       reason:
-        "the bar is drawn by the Node fallback, which starts node on every render — build the native client: `just install-rust`",
+        `the bar is drawn by the Node fallback, which starts node on every render — run \`just install-rust\` and point the statusLine command at ${ROOT}/bin/cc-candybar-native`,
       more: [],
     });
   });
@@ -420,8 +436,24 @@ describe("ClientSightings: each session's latest client", () => {
     const sightings = new ClientSightings();
     sightings.see("s1", client(BUNDLE), at(100));
     sightings.see("s2", undefined, at(104));
-    expect(sightings.ofSession("s1")).toEqual([{ client: client(BUNDLE) }]);
+    expect(sightings.ofSession("s1")).toEqual([client(BUNDLE)]);
     expect(sightings.ofSession("restarted-under-me")).toEqual([]);
+  });
+
+  test("two clients drawing one session are both kept: the last to render hides neither", () => {
+    const sightings = new ClientSightings();
+    const frames = { kind: "frames", bundle: BUNDLE, source: null } as const;
+    sightings.see("s1", client("/stale/dist/index.mjs"), at(100));
+    sightings.see("s1", frames, at(101));
+    sightings.see("s1", frames, at(102));
+    expect(sightings.ofSession("s1")).toEqual([
+      client("/stale/dist/index.mjs"),
+      frames,
+    ]);
+    expect(sightings.list(at(110))).toHaveLength(2);
+    // A rebuilt statusline client replaces the old one in the same role.
+    sightings.see("s1", undefined, at(103));
+    expect(sightings.ofSession("s1")).toEqual([frames, null]);
   });
 
   test("the sessions longest without a render are the ones dropped", () => {

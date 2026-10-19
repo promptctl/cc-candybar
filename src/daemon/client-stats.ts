@@ -84,12 +84,18 @@ const STATS_FIELDS = Object.keys(RuntimeStats.referenceSnapshot()) as Array<
 >;
 
 // Every path of a field `reference` carries (recursing through its plain
-// objects) that `value` does not, in reference order.
+// objects) that `value` does not, in reference order. A list or a record of
+// the reference's that `value` carries as anything else is missing too: a
+// reader maps a list and walks a record, so a field it cannot treat as one is
+// as absent to it as no field.
 export function missingFields(
   reference: unknown,
   value: unknown,
   at = "",
 ): string[] {
+  if (Array.isArray(reference)) {
+    return Array.isArray(value) ? [] : [at || "<snapshot>"];
+  }
   if (!isPlainObject(reference)) return [];
   if (!isPlainObject(value)) return [at || "<snapshot>"];
   const missing: string[] = [];

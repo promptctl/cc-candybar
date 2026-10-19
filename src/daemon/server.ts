@@ -1554,13 +1554,21 @@ async function renderChecked(
     termCols: String(hints.termCols ?? "?"),
     termRows: String(hints.termRows ?? "?"),
     refused: refused.map((r) => r.hint).join(",") || "-",
+    // Which program drew this bar (src/client-hint.ts); `unreported` for a
+    // client too old to say.
+    client: hints.client?.kind ?? "unreported",
   });
   // [LAW:one-source-of-truth] Record the STAMPED hints per session — the
   // SESSION_RENDER_ORIGIN_KEY move for client facts: a click arrives with
   // no hints of its own, so the doctor (verbs/index.ts) reads the facts of
   // this session's last render from here, re-parsed through the same
   // checkpoint. Compared before writing for the same reason as the origin.
-  const hintRecord = JSON.stringify(hints);
+  // The client itself is not recorded: which client drew a session's bar is
+  // ClientSightings' fact (src/daemon/client-sightings.ts), held in memory,
+  // and two clients drawing one session would otherwise rewrite this
+  // persisted record on every render.
+  const { client: _client, ...recorded } = hints;
+  const hintRecord = JSON.stringify(recorded);
   if (sessionState.get(sessionId, SESSION_CLIENT_HINTS_KEY) !== hintRecord) {
     sessionState.set(sessionId, SESSION_CLIENT_HINTS_KEY, hintRecord);
   }
