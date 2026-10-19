@@ -424,11 +424,14 @@ export class VariableStore {
   // late reader cannot resubscribe the store to the world for good. A
   // declaration after dispose would: it would mint a keepAlive computed with
   // no release to come, so `declare` refuses it. Returns how many computeds it
-  // released, the fact the caller's log line carries. One action, so the
+  // released, the fact the caller's log line carries (0 on a second call). One action, so the
   // cascading unobservation settles once, when it ends. [LAW:single-enforcer]
   // called by SourceRegistry.dispose, the one teardown of everything a config
   // holds.
   dispose(): number {
+    // Idempotent: a second call released nothing, and says so, rather than
+    // reporting the same computeds twice.
+    if (this.disposed) return 0;
     this.disposed = true;
     let released = 0;
     mobxRunInAction(() => {

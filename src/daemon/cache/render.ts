@@ -32,7 +32,7 @@ import type {
   WatcherHandle,
   WatchTargets,
 } from "./watchers.js";
-import { dlog } from "../log.js";
+import { quietLogger, type DaemonLogger } from "../log.js";
 import { pluginDataVar, pluginNameOf } from "../../config/loader/plugins.js";
 
 // [LAW:one-source-of-truth] Each cache entry owns the live DSL state for a
@@ -57,6 +57,10 @@ export interface RenderDeps {
   gitService: GitDataProvider;
   sessionState: SessionStateRW;
   watchers: WatcherRegistry;
+  // Where the cache's events go — every load, every teardown. Only the
+  // daemon passes `dlog`; a caller passing none logs quietly, like the
+  // providers and the usage store.
+  log?: DaemonLogger;
 }
 
 // What building one config's state needs. The git provider is optional
@@ -566,6 +570,7 @@ export function fallbackState(
 export class RenderCache {
   private readonly entries = new Map<string, CacheEntry>();
   private readonly deps: RenderDeps;
+  private readonly log: DaemonLogger;
   private readonly maxEntries: number;
   private readonly observers: RenderCacheObservers;
 
@@ -574,6 +579,7 @@ export class RenderCache {
     opts: { maxEntries?: number; observers?: RenderCacheObservers } = {},
   ) {
     this.deps = deps;
+    this.log = deps.log ?? quietLogger;
     this.maxEntries = opts.maxEntries ?? MAX_ENTRIES;
     this.observers = opts.observers ?? {};
   }
@@ -598,7 +604,7 @@ export class RenderCache {
 
     const loaded = loadFromDisk(projectDir, cwd, configFile, this.deps);
     if (loaded.state !== null)
-      dlog("info", pluginLoadLine(loaded.layers, loaded.state));
+      this.log("info", pluginLoadLine(loaded.layers, loaded.state));
     // [LAW:no-silent-failure] A config that fails its FIRST load still yields
     // a bar: the bundled default, built exactly here and only then — the error
     // rides the diagnostic strip above it, loud, and the settings menu is the
@@ -633,7 +639,7 @@ export class RenderCache {
         // [LAW:single-enforcer] dispose the registry on eviction — it owns
         // timers, fs watchers, and git subscriptions. Dropping the entry
         // without dispose leaks every async handle the config declared.
-        dlog(
+        this.log(
           "info",
           configDisposeLine("evict", evicted.state.registry.dispose()),
         );
@@ -683,11 +689,14 @@ export class RenderCache {
     entry.lastWarning = loaded.warning;
     entry.lastError = loaded.error;
     if (loaded.state !== null) {
-      dlog("info", pluginLoadLine(loaded.layers, loaded.state));
+      this.log("info", pluginLoadLine(loaded.layers, loaded.state));
       // [LAW:single-enforcer] Dispose-before-swap: the old registry owns
       // timers, fs watchers, MobX reactions, and git subscriptions — dropping
       // the reference without disposing would leak them.
-      dlog("info", configDisposeLine("reload", entry.state.registry.dispose()));
+      this.log(
+        "info",
+        configDisposeLine("reload", entry.state.registry.dispose()),
+      );
       entry.state = loaded.state;
     }
     // Rebinds to the broken file (and its sibling candidates) too, so an
@@ -729,7 +738,7 @@ export class RenderCache {
   // (projectDir, cwd) tuple already scopes the entry's watcher set —
   // sibling entries with different scopes don't share this watcher.
   private onConfigChanged(entry: CacheEntry): void {
-    dlog(
+    this.log(
       "info",
       `config change detected for entry projectDir=${entry.projectDir} cwd=${entry.cwd}`,
     );

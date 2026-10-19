@@ -27,6 +27,7 @@ import { GitDataProvider } from "../src/daemon/cache/git";
 import { SessionState } from "../src/daemon/session-state";
 import { stateGate } from "../src/daemon/verbs/state-validators";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
+import type { DaemonLogger } from "../src/daemon/log";
 import { ReloadSignal } from "./helpers/reload-signal";
 import { walkNodes, type LayoutNode } from "../src/config/dsl-types";
 import { rootNode, rootOf } from "../src/config/root";
@@ -47,7 +48,10 @@ const oneRow = (...segments: string[]): LayoutNode => ({
 
 // `observers` defaults to the ReloadSignal's — the tests that hand in their
 // own are probing the observer contract itself, not awaiting a reload.
-function makeCache(observers?: RenderCacheObservers): {
+function makeCache(
+  observers?: RenderCacheObservers,
+  log?: DaemonLogger,
+): {
   cache: RenderCache;
   cleanups: Array<() => void>;
   gitService: GitDataProvider;
@@ -72,7 +76,7 @@ function makeCache(observers?: RenderCacheObservers): {
   const sessionState = new SessionState();
   const reloads = new ReloadSignal();
   const cache = new RenderCache(
-    { gitService, sessionState, watchers },
+    { gitService, sessionState, watchers, log },
     { maxEntries: 4, observers: observers ?? reloads.observers },
   );
   return { cache, cleanups, gitService, reloads, watchers };
@@ -738,6 +742,36 @@ describe("RenderCache", () => {
     }
   });
 
+  // [LAW:nothing-unseen] brandon-unfiled-3248.t14: a teardown that released
+  // nothing was found in a heap snapshot because no teardown said what it
+  // did. Both teardown sites log the count the store returns.
+  test("eviction and reload each log the teardown and how many computeds it released", () => {
+    const lines: string[] = [];
+    const { cache, cleanups } = makeCache(undefined, (_level, msg) =>
+      lines.push(msg),
+    );
+    try {
+      for (let i = 0; i < 5; i++)
+        cache.getOrCreate(`/p${i}`, `/p${i}`, undefined);
+      const evict = lines.filter((l) => l.startsWith("config disposed "));
+      expect(evict).toHaveLength(1);
+      expect(evict[0]).toMatch(
+        /^config disposed reason=evict released=[1-9]\d*$/,
+      );
+
+      cache.reload("/p4", "/p4", undefined);
+      const reload = lines.filter((l) =>
+        l.startsWith("config disposed reason=reload"),
+      );
+      expect(reload).toHaveLength(1);
+      expect(reload[0]).toMatch(
+        /^config disposed reason=reload released=[1-9]\d*$/,
+      );
+    } finally {
+      for (const fn of cleanups) fn();
+    }
+  });
+
   test("two projects declaring one key differently both load: a gate is its own config's", () => {
     // [LAW:one-source-of-truth] brandon-state-gates-lbs. Each config's click
     // gate is derived from that config alone, so one project declaring `k` as
@@ -790,7 +824,9 @@ describe("RenderCache", () => {
       const root = join(dir, ".cc-candybar", "plugins");
       mkdirSync(root, { recursive: true });
       const entry = cache.getOrCreate(dir, dir, undefined);
-      expect(entry.state.config.segments["plugins.deploy.status"]).toBeUndefined();
+      expect(
+        entry.state.config.segments["plugins.deploy.status"],
+      ).toBeUndefined();
       // Staged then renamed in, so every repetition is an event in the root.
       const staging = join(dir, "staging");
       await reloads.after(entry, () => {
@@ -803,7 +839,9 @@ describe("RenderCache", () => {
         renameSync(staging, join(root, "deploy"));
       });
       expect(entry.lastError).toBeNull();
-      expect(entry.state.config.segments["plugins.deploy.status"]).toBeDefined();
+      expect(
+        entry.state.config.segments["plugins.deploy.status"],
+      ).toBeDefined();
     } finally {
       cleanup();
       for (const fn of cleanups) fn();

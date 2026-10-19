@@ -215,6 +215,23 @@ export class RuntimeStats {
     };
   }
 
+  // [LAW:one-source-of-truth] This build's snapshot shape, as data: every
+  // field `snapshot` writes, with zeroed counts. A client reads a snapshot
+  // from whichever daemon is running, and an older build's lacks fields this
+  // one reads; comparing against the producer's own output, not a second
+  // spelling of the type, means a field added here is checked for there.
+  static referenceSnapshot(): StatsSnapshot {
+    return new RuntimeStats().snapshot({
+      gitCache: { size: 0, hits: 0, misses: 0, invalidations: 0, watchers: 0 },
+      usageCache: { size: 0, hits: 0, misses: 0, sweeps: 0 },
+      renderCacheSize: 0,
+      effectCache: { sessions: 0, effects: 0 },
+      sessionState: { sessions: 0, observers: 0 },
+      watchersActive: 0,
+      handlerProbes: [],
+    });
+  }
+
   snapshot(extras: {
     gitCache: StatsSnapshot["gitCache"];
     usageCache: StatsSnapshot["usageCache"];

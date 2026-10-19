@@ -1,5 +1,9 @@
 import { RuntimeStats } from "../src/daemon/stats";
-import { formatStats, buildSkew } from "../src/daemon/client-stats";
+import {
+  formatStats,
+  missingFields,
+  shapeSkew,
+} from "../src/daemon/client-stats";
 import { PROTOCOL_VERSION } from "../src/daemon/protocol";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -63,76 +67,40 @@ describe("RuntimeStats.snapshot", () => {
   // stamp (what `cc-candybar --version` prints for the same build), and the
   // wire contract number lives under its own name — two facts, two fields.
   test("version is the package stamp; protocolVersion is the wire contract", () => {
-    const snap = new RuntimeStats().snapshot({
-      gitCache: { size: 0, hits: 0, misses: 0, invalidations: 0, watchers: 0 },
-      usageCache: { size: 0, hits: 0, misses: 0, sweeps: 0 },
-      renderCacheSize: 0,
-      effectCache: { sessions: 0, effects: 0 },
-      sessionState: { sessions: 0, observers: 0 },
-      watchersActive: 0,
-      handlerProbes: [],
-    });
+    const snap = RuntimeStats.referenceSnapshot();
     expect(snap.version).toBe(pkg.version);
     expect(snap.protocolVersion).toBe(PROTOCOL_VERSION);
   });
 });
 
-describe("buildSkew", () => {
+describe("shapeSkew", () => {
   test("a snapshot from this build is none", () => {
-    const snap = new RuntimeStats().snapshot({
-      gitCache: { size: 0, hits: 0, misses: 0, invalidations: 0, watchers: 0 },
-      usageCache: { size: 0, hits: 0, misses: 0, sweeps: 0 },
-      renderCacheSize: 0,
-      effectCache: { sessions: 0, effects: 0 },
-      sessionState: { sessions: 0, observers: 0 },
-      watchersActive: 0,
-      handlerProbes: [],
-    });
-    expect(buildSkew(snap)).toBeNull();
+    expect(shapeSkew(RuntimeStats.referenceSnapshot())).toBeNull();
   });
 
-  test("a snapshot of this version from another source digest names both", () => {
-    const snap = new RuntimeStats().snapshot({
-      gitCache: { size: 0, hits: 0, misses: 0, invalidations: 0, watchers: 0 },
-      usageCache: { size: 0, hits: 0, misses: 0, sweeps: 0 },
-      renderCacheSize: 0,
-      effectCache: { sessions: 0, effects: 0 },
-      sessionState: { sessions: 0, observers: 0 },
-      watchersActive: 0,
-      handlerProbes: [],
-    });
-    const skew = buildSkew({ ...snap, sourceDigest: "abcdef0123456789" });
-    expect(skew).toContain(`daemon runs ${pkg.version} [abcdef0]`);
-    expect(skew).toContain(`this client is ${pkg.version} [`);
+  test("a snapshot of another digest with every field is none: shape, not identity", () => {
+    const snap = RuntimeStats.referenceSnapshot();
+    expect(shapeSkew({ ...snap, sourceDigest: "abcdef0123456789" })).toBeNull();
+    expect(shapeSkew({ ...snap, version: "0.0.1" })).toBeNull();
   });
 
-  test("a snapshot carrying no sourceDigest field is an older daemon", () => {
-    const snap = new RuntimeStats().snapshot({
-      gitCache: { size: 0, hits: 0, misses: 0, invalidations: 0, watchers: 0 },
-      usageCache: { size: 0, hits: 0, misses: 0, sweeps: 0 },
-      renderCacheSize: 0,
-      effectCache: { sessions: 0, effects: 0 },
-      sessionState: { sessions: 0, observers: 0 },
-      watchersActive: 0,
-      handlerProbes: [],
-    });
-    const { sourceDigest: _dropped, ...older } = snap;
-    expect(buildSkew(older as typeof snap)).toContain("no build identity");
+  test("a snapshot lacking fields this build reads names them and both builds", () => {
+    const snap = RuntimeStats.referenceSnapshot();
+    const { sessionState: _s, sourceDigest: _d, ...older } = snap;
+    const skew = shapeSkew(older as typeof snap);
+    expect(skew).toContain("reports no sourceDigest, sessionState");
+    expect(skew).toContain(`the daemon (${pkg.version} [no digest])`);
+    expect(skew).toContain(`this client (${pkg.version} [`);
   });
 
-  test("a snapshot from another build names both versions", () => {
-    const snap = new RuntimeStats().snapshot({
-      gitCache: { size: 0, hits: 0, misses: 0, invalidations: 0, watchers: 0 },
-      usageCache: { size: 0, hits: 0, misses: 0, sweeps: 0 },
-      renderCacheSize: 0,
-      effectCache: { sessions: 0, effects: 0 },
-      sessionState: { sessions: 0, observers: 0 },
-      watchersActive: 0,
-      handlerProbes: [],
-    });
-    const skew = buildSkew({ ...snap, version: "0.0.1" });
-    expect(skew).toContain("daemon runs 0.0.1");
-    expect(skew).toContain(`this client is ${pkg.version}`);
+  test("missingFields names a nested field by its path, and an atom in place of an object", () => {
+    const snap = RuntimeStats.referenceSnapshot();
+    const { observers: _o, ...sessionState } = snap.sessionState;
+    expect(missingFields(snap, { ...snap, sessionState })).toEqual([
+      "sessionState.observers",
+    ]);
+    expect(missingFields(snap, { ...snap, watchers: 3 })).toEqual(["watchers"]);
+    expect(missingFields(snap, snap)).toEqual([]);
   });
 });
 

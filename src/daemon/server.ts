@@ -176,6 +176,7 @@ const renderCache = new RenderCache(
     gitService,
     sessionState,
     watchers: watcherRegistry,
+    log: dlog,
   },
   {
     observers: {

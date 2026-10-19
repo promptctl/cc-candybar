@@ -104,6 +104,8 @@ describe("VariableStore.dispose releases every computed's subscriptions", () => 
     store.defineComputed("a", "string", () => sessionState.get(SID, "a") ?? "");
     expect(store.read("a")).toBe("");
     expect(store.dispose()).toBe(1);
+    // A second dispose released nothing, and says so.
+    expect(store.dispose()).toBe(0);
     expect(() =>
       store.defineComputed(
         "b",

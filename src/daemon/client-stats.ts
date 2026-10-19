@@ -1,7 +1,7 @@
 import process from "node:process";
 import { describeFailure, requestOutcome } from "./client-transport";
 import type { RoundTripBudgets, RoundTripOutcome } from "./client-transport";
-import type { StatsSnapshot } from "./stats";
+import { RuntimeStats, type StatsSnapshot } from "./stats";
 import { PACKAGE_VERSION } from "../version";
 import { bakedDigest } from "./build-currency";
 import { shortDigest } from "../source-digest";
@@ -22,15 +22,17 @@ export async function runDaemonStats(args: readonly string[]): Promise<void> {
     process.exit(1);
   }
   // The raw object needs no shape, so JSON mode prints whatever the daemon
-  // said — the skew is still named on stderr, and the exit says the pair
-  // disagree.
+  // said before anything is checked. `exitCode`, never `exit()`, after a
+  // stdout write: a piped stdout flushes asynchronously, and exit() would cut
+  // the JSON mid-object.
   if (wantJson) {
     process.stdout.write(JSON.stringify(outcome.value, null, 2) + "\n");
   }
-  const skew = buildSkew(outcome.value);
+  const skew = shapeSkew(outcome.value);
   if (skew !== null) {
     process.stderr.write(`daemon-stats: ${skew}\n`);
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
   if (wantJson) return;
 
@@ -47,28 +49,51 @@ export function fetchStats(): Promise<RoundTripOutcome<StatsSnapshot>> {
   );
 }
 
-// [LAW:no-silent-failure] The snapshot is typed as THIS build's; a daemon on
-// another build answers with another shape (a field this build added is
-// absent), and reading it as ours would throw on the first such field —
-// `pnpm build` then `daemon-stats` inside the minute before the binary watch
-// restarts the daemon. A build is its version AND its source digest: a source
-// checkout rebuilds without bumping the version. Name the skew instead. A
-// daemon reporting no `sourceDigest` at all predates the field, and is named
-// as older rather than read.
-export function buildSkew(s: StatsSnapshot): string | null {
-  const mine = buildLabel(PACKAGE_VERSION, bakedDigest());
+// [LAW:no-silent-failure] The snapshot is typed as THIS build's, and a
+// daemon of another build answers with another shape: a field this build
+// added is absent, and reading it as ours would throw on the first such field
+// — `pnpm build` then `daemon-stats` inside the minute before the binary
+// watch restarts the daemon. The invariant is the SHAPE (every field this
+// client reads is there), not the build's identity: a worktree's client
+// reading the main checkout's daemon is a different digest and the same
+// shape, and it is refused by nothing. The fields are checked against this
+// build's own reference snapshot, never a second spelling of the type.
+export function shapeSkew(s: StatsSnapshot): string | null {
+  const missing = missingFields(RuntimeStats.referenceSnapshot(), s);
+  if (missing.length === 0) return null;
   // [LAW:no-defensive-null-guards] exception: trust boundary — the snapshot
   // is an unchecked cast from socket JSON, and an older daemon's carries no
-  // such field.
-  if (s.sourceDigest === undefined) {
-    return `daemon reports no build identity (older than this client, ${mine}); a rebuilt daemon restarts within a minute`;
-  }
-  const theirs = buildLabel(s.version, s.sourceDigest);
-  if (theirs === mine) return null;
-  return `daemon runs ${theirs}, this client is ${mine}; a rebuilt daemon restarts within a minute`;
+  // digest field.
+  const theirs = buildLabel(s.version, s.sourceDigest ?? null);
+  const mine = buildLabel(PACKAGE_VERSION, bakedDigest());
+  return `the daemon (${theirs}) reports no ${missing.join(", ")}; it is another build than this client (${mine}), and restarts only when its own bundle changes`;
 }
 
-function buildLabel(version: string, digest: string | null): string {
+// Every path of a field `reference` carries (recursing through its plain
+// objects) that `value` does not, in reference order.
+export function missingFields(
+  reference: unknown,
+  value: unknown,
+  at = "",
+): string[] {
+  if (!isPlainObject(reference)) return [];
+  if (!isPlainObject(value)) return [at || "<snapshot>"];
+  const missing: string[] = [];
+  for (const key of Object.keys(reference)) {
+    const path = at === "" ? key : `${at}.${key}`;
+    if (!(key in value)) missing.push(path);
+    else missing.push(...missingFields(reference[key], value[key], path));
+  }
+  return missing;
+}
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+// [LAW:one-source-of-truth] The one spelling of a build to a person: its
+// version and the short digest of the source it was built from.
+export function buildLabel(version: string, digest: string | null): string {
   return `${version} [${digest === null ? "no digest" : shortDigest(digest)}]`;
 }
 
@@ -98,10 +123,7 @@ export function formatStats(s: StatsSnapshot): string {
   lines.push(``);
   lines.push(`process`);
   lines.push(`  pid           ${s.pid}`);
-  lines.push(`  version       ${s.version}`);
-  lines.push(
-    `  source        ${s.sourceDigest === null ? "no digest" : shortDigest(s.sourceDigest)}`,
-  );
+  lines.push(`  build         ${buildLabel(s.version, s.sourceDigest)}`);
   lines.push(`  protocol      ${s.protocolVersion}`);
   lines.push(`  startedAt     ${s.startedAt}`);
   lines.push(`  uptime        ${fmtUptime(s.uptimeSec)}`);
