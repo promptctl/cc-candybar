@@ -19,7 +19,7 @@ import {
 } from "../src/doctor/checks";
 import { installFacts, type InstallEdge } from "../src/doctor/edge";
 import { installFields } from "../src/doctor/report";
-import { parseDaemonClients } from "../src/doctor/daemon-clients";
+import { parseDaemonClients } from "../src/doctor/daemon-answer";
 import { ClientSightings, SIGHTINGS_KEPT } from "../src/daemon/client-sightings";
 import { parseClientHints } from "../src/daemon/protocol";
 import type { Instant } from "../src/utils/instant";

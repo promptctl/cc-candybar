@@ -58,6 +58,7 @@ import { WatcherRegistry } from "./cache/watchers";
 import { RuntimeStats } from "./stats";
 import {
   makeLimits,
+  mb,
   realLimitsDeps,
   rssLimitBytes,
   type LimitsHandle,
@@ -383,7 +384,7 @@ let myStartTime: string | null = null;
 // waiting for the next boot's stale-sweep.
 let breakerRegistryPath: string | null = null;
 
-// The parsed memory budget (bytes); set first thing in runDaemon.
+// The parsed memory budget (bytes); set by establishLimits.
 let budgetBytes = 0;
 
 export function runDaemon(): void {
@@ -415,13 +416,13 @@ export function runDaemon(): void {
   // resource is committed — a malformed override is refused before the breaker
   // registers us, before the bind, before the lease, and before a `daemon up`
   // line could claim a boot that is about to die. Parsed once, threaded into
-  // armLimits and the boot line.
+  // the limits and the boot line.
   // [LAW:single-enforcer] Refused through the same death funnel as every other
   // boot failure. A synchronous throw here is NOT uncaught — it lands in
   // index.ts's catch, whose stderr the detached spawn discards — so the one
   // line that says why the daemon never came up would go nowhere.
   try {
-    budgetBytes = rssLimitBytes(process.env);
+    establishLimits(process.env);
   } catch (err) {
     dlog("error", `refusing to boot: ${(err as Error).message}`);
     shutdown(1);
@@ -628,8 +629,8 @@ function onListening(sockPath: string): void {
     // territory), not the flag the spawner meant to pass (the map) — the one
     // question a silent SIGABRT crash-loop leaves open is "which cap was live".
     `daemon up: pid=${process.pid} v=${PROTOCOL_VERSION} sock=${sockPath} ` +
-      `heapCap=${Math.round(v8.getHeapStatistics().heap_size_limit / 1048576)}MB ` +
-      `rssLimit=${Math.round(budgetBytes / 1048576)}MB`,
+      `heapCap=${mb(v8.getHeapStatistics().heap_size_limit)}MB ` +
+      `rssLimit=${mb(budgetBytes)}MB`,
   );
   // [LAW:single-enforcer] This bind is the one process-wide fact that answers
   // "did an outage just end" — see resetSpawnBackoff's doc comment in
@@ -646,7 +647,7 @@ function onListening(sockPath: string): void {
   binaryWatch.arm();
   updateWatch.arm();
   refreshVisibility();
-  armLimits();
+  establishedLimits().arm();
   armOwnershipWatch(sockPath, boundRead.identity);
 }
 
@@ -674,13 +675,25 @@ function armOwnershipWatch(sockPath: string, bound: SocketIdentity): void {
 
 // --- self-shutdown on RSS / age ---
 let limits: LimitsHandle | null = null;
-function armLimits(): void {
+// [LAW:no-ambient-temporal-coupling] Whatever serves requests establishes the
+// limits before the first one: runDaemon before it binds, the page that runs
+// the daemon (site/transport.ts) as it loads. A request before them would be a
+// boot-order bug, said here rather than answered with a guess.
+function establishedLimits(): LimitsHandle {
+  if (limits === null) throw new Error("daemon: limits not yet established");
+  return limits;
+}
+// Parses the budget from `env` — throwing on a malformed override — and builds
+// the limits. Building starts nothing: only the daemon that won the socket
+// arms them (onListening), so the page answers the doctor's `serving` with no
+// timer counting its memory.
+export function establishLimits(env: NodeJS.ProcessEnv): void {
+  budgetBytes = rssLimitBytes(env);
   limits = makeLimits(
     realLimitsDeps(stats.startedAt.getTime(), (code) => shutdown(code), {
       rssLimitBytes: budgetBytes,
     }),
   );
-  limits.arm();
 }
 
 // --- socket-ownership lease ---
@@ -1042,10 +1055,11 @@ export async function handleRequest(
         },
         frameFeeds: frameFeeds.getStats(),
         watchersActive: watcherRegistry.size(),
-        nextRestartReason: limits?.describeNextRestart() ?? null,
+        nextRestartReason: establishedLimits().describeNextRestart(),
         handlerProbes: handlerProbes.list(),
         clients: clientSightings.list(instantOf(new Date())),
         bundle: DAEMON_BUNDLE,
+        daemon: establishedLimits().serving(),
       }),
     });
   }
@@ -1282,6 +1296,7 @@ const verbCtx = {
   probes: handlerProbes,
   clients: clientSightings,
   bundle: DAEMON_BUNDLE,
+  serving: () => establishedLimits().serving(),
   memento: mementoProvider,
   claudeInput: productionClaudeInputEdge(),
   history: settingsHistory,

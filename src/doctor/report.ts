@@ -17,14 +17,18 @@ import {
   NERD_FONT_CHECK,
   glyphSighting,
   clientStanding,
+  otherDaemons,
+  unreadPostMortems,
   type Asked,
   type CheckReport,
+  type DaemonFacts,
   type InstallFacts,
   type MarkBook,
   type NerdFontFacts,
   type TerminalIdentity,
 } from "./checks.js";
 import { SETTINGS_NS } from "../config/loader/reserved-namespace.js";
+import { mb } from "../daemon/limits.js";
 
 export const DOCTOR_NS = `${SETTINGS_NS}doctor.`;
 
@@ -104,6 +108,35 @@ export function installFields(install: InstallFacts): string {
     return `${c.client}/${bundle.kind}/${source.kind === "uncompared" ? "-" : source.kind}`;
   });
   return `clients=${described.join(",") || "-"}`;
+}
+
+// [LAW:nothing-unseen] What the daemon check reasoned over, as logfmt fields:
+// how many daemons run and which besides the serving one, the serving one's
+// memory against its limit, and its post-mortems as `<unread>/<total>` —
+// `unread` where a list could not be read, `unasked` where no daemon
+// answered.
+export function daemonFields({
+  serving,
+  processes,
+  read,
+}: DaemonFacts): string {
+  const running =
+    processes.kind === "failed"
+      ? "daemons=unread others=-"
+      : `daemons=${processes.value.length} others=${
+          otherDaemons(serving, processes.value)
+            .map((p) => p.pid)
+            .join(",") || "-"
+        }`;
+  if (serving.kind === "failed") {
+    return `${running} rss=unasked postMortems=unasked`;
+  }
+  const { rss, rssLimit, postMortems } = serving.value;
+  const told =
+    postMortems.kind === "failed" || read.kind === "failed"
+      ? "unread"
+      : `${unreadPostMortems(serving.value, read).length}/${postMortems.value.length}`;
+  return `${running} rss=${mb(rss)}/${mb(rssLimit)} postMortems=${told}`;
 }
 
 // [LAW:nothing-unseen] What the Nerd Font check reasoned over, as logfmt

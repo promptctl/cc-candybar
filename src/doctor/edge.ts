@@ -9,6 +9,7 @@
 // checks.ts never sees an effect; this file never decides a verdict.
 
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import {
   claudeConfigDir,
@@ -41,6 +42,7 @@ import {
   type ClientFact,
   type InstallFacts,
   type ConfigFacts,
+  type DaemonProcess,
   type DoctorFacts,
   type Fix,
   type FontInUse,
@@ -72,6 +74,11 @@ import {
   fileClickedTerminals,
   type ClickedTerminalsStore,
 } from "./clicked-terminals.js";
+import {
+  filePostMortemsRead,
+  type PostMortemsReadStore,
+} from "./post-mortems-read.js";
+import type { ServingDaemon } from "../daemon/limits.js";
 
 // [LAW:effects-at-boundaries] The install check's reads of the machine: a
 // path resolved through every link, the checkout a bundle was built in, a
@@ -179,6 +186,11 @@ export interface DoctorEdge {
   // load of its own. Both are the one `loadFromDisk`.
   readonly loadConfig: (origin: ConfigOrigin) => ConfigLoad;
   readonly install: InstallEdge;
+  // Every cc-candybar daemon process this user runs (`daemonProcesses`).
+  readonly daemons: () => Asked<readonly DaemonProcess[]>;
+  // The newest post-mortem the user filed as read
+  // (src/doctor/post-mortems-read.ts).
+  readonly postMortemsRead: PostMortemsReadStore;
 }
 
 // The three inputs the config search takes (resolveDslConfig) — a session's
@@ -295,6 +307,84 @@ function remoteLogin(pid: number): Asked<boolean> {
   return descendsFromRemoteLogin(run.stdout, pid);
 }
 
+// The entries a daemon is started from, under the root they sit in: the
+// bundle the spawners run (src/daemon/acquire.ts, rust-client/src/launch.rs),
+// the source the test harness runs under tsx, and the bin a hand run starts.
+const DAEMON_ENTRY =
+  /^(.*)\/(?:dist\/index\.mjs|src\/index\.ts|bin\/cc-candybar)$/;
+
+// [LAW:effects-at-boundaries] Pure over `ps -o pid=,ppid=,rss=,lstart=,args=`:
+// the processes this user runs whose args end in `<entry> daemon`, with
+// `ownsEntry` the edge's word on whether that entry is cc-candybar's — a file
+// name is no identity, since any Node tool may have a `dist/index.mjs daemon`.
+// The entry is the absolute path before ` daemon`: the last ` /` starts it,
+// so a space inside it ("Application Support") needs no tokenizing, and a
+// relative entry (a hand run from inside a checkout) is no daemon this can
+// name. A daemon whose child is a daemon is that child's launcher (tsx's
+// wrapper around the worker that holds the socket), not a second daemon.
+export function daemonProcesses(
+  table: string,
+  ownsEntry: (entry: string) => boolean,
+): readonly DaemonProcess[] {
+  const found: DaemonProcess[] = [];
+  for (const line of table.split("\n")) {
+    const m =
+      /^\s*(\d+)\s+(\d+)\s+(\d+)\s+(\w{3} \w{3}\s+\d+ [\d:]{8} \d{4})\s+.* (\/.*) daemon$/.exec(
+        line,
+      );
+    if (m === null || !ownsEntry(m[5]!)) continue;
+    found.push({
+      pid: Number(m[1]),
+      ppid: Number(m[2]),
+      rss: Number(m[3]) * 1024,
+      // The edge runs ps under TZ=UTC; the zone is said, so the time is
+      // not read as local.
+      started: `${m[4]!.replace(/\s+/g, " ")} UTC`,
+    });
+  }
+  return found.filter((p) => !found.some((child) => child.ppid === p.pid));
+}
+
+// Whether an entry is cc-candybar's: resolved through every link (an npm
+// `.bin` launcher), it sits in a root that holds `bin/cc-candybar` — a
+// checkout and the staged runtime alike. An entry that no longer resolves
+// names no root to check.
+export function ownsEntry(entry: string): boolean {
+  let real: string;
+  try {
+    real = fs.realpathSync(entry);
+  } catch {
+    return false;
+  }
+  const root = DAEMON_ENTRY.exec(real)?.[1];
+  return (
+    root !== undefined && fs.existsSync(path.join(root, "bin", "cc-candybar"))
+  );
+}
+
+function daemons(): Asked<readonly DaemonProcess[]> {
+  const run = launchSync({
+    bin: "ps",
+    args: [
+      "-U",
+      String(os.userInfo().uid),
+      "-ww",
+      "-o",
+      "pid=,ppid=,rss=,lstart=,args=",
+    ],
+    timeoutMs: 2000,
+    category: "doctor.daemons",
+    // The start time as the table writes it, in one format whatever the
+    // user's locale and zone (src/daemon/process-fingerprint.ts).
+    env: { ...process.env, LC_ALL: "C", TZ: "UTC" },
+  });
+  if (!run.ok) {
+    const detail = run.error ?? `${run.reason}: ${run.stderr.trim()}`;
+    return { kind: "failed", reason: `ps failed (${detail})` };
+  }
+  return { kind: "ok", value: daemonProcesses(run.stdout, ownsEntry) };
+}
+
 function probeTmux(hint: TmuxHint): Asked<TmuxClient | null> {
   const run = runTmux(hint, "doctor.tmux", [
     "display",
@@ -319,6 +409,8 @@ export function productionEdge(
     marks: fileMarkBook(),
     clicked: fileClickedTerminals(),
     install: productionInstallEdge,
+    daemons,
+    postMortemsRead: filePostMortemsRead(),
   };
 }
 
@@ -507,6 +599,9 @@ export function gatherFacts(
   >,
   origin: ConfigOrigin,
   sessionPick: (key: string) => string | null,
+  // The daemon that serves the bar, as it reports itself: the click's own
+  // process, or the one `cc-candybar doctor` asked.
+  serving: Asked<ServingDaemon>,
 ): Omit<DoctorFacts, "urlHandler" | "askedBy" | "install"> {
   const load = edge.loadConfig(origin);
   // [LAW:one-source-of-truth] The render's own resolution, so the doctor and
@@ -543,6 +638,11 @@ export function gatherFacts(
           },
     marks: edge.marks.read(),
     clicked: edge.clicked.read(),
+    daemon: {
+      serving,
+      processes: edge.daemons(),
+      read: edge.postMortemsRead.read(),
+    },
     config: configFacts(load),
     effect: globals.effect,
     placementEffects: placementEffects(
@@ -568,7 +668,11 @@ export function gatherFacts(
 // Returns the facts with the one this fix changed re-read — the performer of
 // an effect is the one place that knows what it touched, so a post-fix report
 // cannot reuse a stale fact or re-probe an unchanged one.
-export function applyFix(fix: Fix, facts: DoctorFacts): DoctorFacts {
+export function applyFix(
+  edge: DoctorEdge,
+  fix: Fix,
+  facts: DoctorFacts,
+): DoctorFacts {
   const settingsPath = facts.claudeSettings.path;
   switch (fix.kind) {
     case "claude-settings": {
@@ -586,8 +690,15 @@ export function applyFix(fix: Fix, facts: DoctorFacts): DoctorFacts {
         claudeSettings: readClaudeSettingsFacts(settingsPath),
       };
     }
+    case "post-mortems-read": {
+      edge.postMortemsRead.record(fix.through);
+      return {
+        ...facts,
+        daemon: { ...facts.daemon, read: edge.postMortemsRead.read() },
+      };
+    }
     default: {
-      const _exhaustive: never = fix.kind;
+      const _exhaustive: never = fix;
       return _exhaustive;
     }
   }

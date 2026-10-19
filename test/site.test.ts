@@ -5,7 +5,8 @@
 // a render draws the bar of the simulated repository, a click on the door is
 // the daemon's click and opens the menu, and the scenario moves the bar without
 // taking the session from the visitor (the menu they opened stays open). A
-// copy the page cannot make says so, with its text.
+// copy the page cannot make says so, with its text, and the doctor runs in the
+// page: the daemon it asks about is the page's own.
 
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -32,17 +33,20 @@ test("the built site renders, clicks, and plays its scenario with no server", ()
     const copied = await transport.click(copy.url, size); // bare Node has no clipboard
     transport.scenario.seek(27 / 90);
     const working = await transport.render(size);
-    console.log(JSON.stringify({ renders: { first: first.ansi, opened: opened.ansi, working: working.ansi }, refused: opened.refused, copied: copied.refused }));
+    const tools = await transport.click(working.links.find((l) => l.text.includes("tools")).url, size);
+    const doctor = await transport.click(tools.links.find((l) => l.text.includes("🩺")).url, size);
+    console.log(JSON.stringify({ renders: { first: first.ansi, opened: opened.ansi, working: working.ansi, doctor: doctor.ansi }, refused: opened.refused, copied: copied.refused, doctorRefused: doctor.refused }));
     process.exit(0);
   `;
   const printed = execFileSync("node", ["--input-type=module", "-e", probe], { encoding: "utf8", timeout: 30_000 });
   fs.rmSync(out, { recursive: true, force: true });
   const { renders, ...said } = JSON.parse(printed.trim().split("\n").pop()!) as {
-    renders: Record<"first" | "opened" | "working", string>;
+    renders: Record<"first" | "opened" | "working" | "doctor", string>;
     refused: string | null;
     copied: string | null;
+    doctorRefused: string | null;
   };
-  const r = { ...said, first: stripAnsi(renders.first), opened: stripAnsi(renders.opened), working: stripAnsi(renders.working) };
+  const r = { ...said, first: stripAnsi(renders.first), opened: stripAnsi(renders.opened), working: stripAnsi(renders.working), doctor: stripAnsi(renders.doctor) };
   expect(r.first).toContain("~/c/tidepool");
   expect(r.first).toContain("fix-cache-timer");
   expect(r.refused).toBeNull();
@@ -53,4 +57,6 @@ test("the built site renders, clicks, and plays its scenario with no server", ()
   // The seek moved the scenario, not the session: the menu the click opened is still open.
   expect(r.working).toContain("🎨 look");
   expect(r.copied).toMatch(/^the browser did not copy .*; the text: \S+$/);
+  expect(r.doctorRefused).toBeNull();
+  expect(r.doctor).toContain("✓ daemon");
 });

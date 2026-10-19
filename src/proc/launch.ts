@@ -73,6 +73,9 @@ export const LAUNCH_CATEGORIES = [
   // Whether the tmux client the bar is drawn through came over a remote login
   // (src/doctor/edge.ts): one `ps` per run.
   "doctor.process",
+  // Every cc-candybar daemon this user runs (src/doctor/edge.ts): one `ps`
+  // per run, metered apart from the remote-login one.
+  "doctor.daemons",
   // `cc-candybar doctor`'s URL-handler probe (src/doctor/handler-probe.ts), in
   // the CLI's own process: the link it opens, and — only for a link that did
   // not come back — the Launch Services lookup and the applet's script.
@@ -135,6 +138,9 @@ const RATE_LIMITS: Partial<Record<LaunchCategory, number>> = {
   "doctor.tmux": 1000,
   "doctor.font": 1000,
   "doctor.process": 1000,
+  // `doctor.daemons` has none: it runs on EVERY doctor click (run, [fix],
+  // mark), so a cap would refuse 🩺 clicked right after [fix]; it is one
+  // `ps` over this user's processes.
   // A double-click is refused rather than typing and submitting its command
   // twice. Daemon-wide, so two sessions typing in one second collide. Only
   // the typing is limited: a click the pane refused typed

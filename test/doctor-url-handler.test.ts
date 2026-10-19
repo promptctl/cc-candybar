@@ -36,7 +36,7 @@ import {
 import { PACKAGE_VERSION } from "../src/version";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { recordRender, testVerbContext } from "./helpers/click";
-import { HEALTHY_FACTS, HEALTHY_INSTALL_EDGE, healthyClient } from "./helpers/doctor-facts";
+import { HEALTHY_FACTS, healthyDaemonEdge, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, healthyClient } from "./helpers/doctor-facts";
 
 const probe = checkByName("urlHandler")!.probe;
 const verdict = (urlHandler: UrlHandlerFacts) =>
@@ -413,6 +413,7 @@ describe("the daemon's side of the round trip", () => {
       dlog: (_level, message) => logs.push(message),
       doctor: {
         install: HEALTHY_INSTALL_EDGE,
+        ...healthyDaemonEdge(),
         probeTmux: () => ({
           kind: "ok",
           value: { features: [], termtype: "", termname: "", pid: 4242, utf8: true },
@@ -491,7 +492,7 @@ describe("the daemon's side of the round trip", () => {
     const row = doctorRow(PACKAGE_VERSION);
     expect(row.verdict).toBe("ok");
     expect(row.logs).toEqual([
-      `doctor: config=ok install=ok urlHandler=ok links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=ok glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=ghostty@- font=- mark=- tmuxLinks=- clicked=yes cols=148 clientUtf8=- clients=native/same/- (session=s1)`,
+      `doctor: config=ok install=ok daemon=ok urlHandler=ok links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=ok glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=ghostty@- font=- mark=- tmuxLinks=- clicked=yes cols=148 clientUtf8=- clients=native/same/- daemons=1 others=- rss=120/512 postMortems=0/0 (session=s1)`,
     ]);
   });
 
@@ -502,7 +503,7 @@ describe("the daemon's side of the round trip", () => {
       `the URL handler runs cc-candybar 0.0.1; the bar runs ${PACKAGE_VERSION} — re-run \`cc-candybar install\``,
     );
     expect(row.logs).toEqual([
-      `doctor: config=ok install=ok urlHandler=failed(1) links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=ok glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=ghostty@- font=- mark=- tmuxLinks=- clicked=yes cols=148 clientUtf8=- clients=native/same/- (session=s1)`,
+      `doctor: config=ok install=ok daemon=ok urlHandler=failed(1) links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=ok glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=ghostty@- font=- mark=- tmuxLinks=- clicked=yes cols=148 clientUtf8=- clients=native/same/- daemons=1 others=- rss=120/512 postMortems=0/0 (session=s1)`,
     ]);
   });
 

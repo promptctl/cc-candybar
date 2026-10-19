@@ -45,7 +45,7 @@ import { PACKAGE_VERSION } from "../src/version";
 import { crateDigest } from "../src/source-digest";
 import { productionInstallEdge } from "../src/doctor/edge";
 import { installOf } from "../src/doctor/cli";
-import { parseDaemonClients } from "../src/doctor/daemon-clients";
+import { parseDaemonClients } from "../src/doctor/daemon-answer";
 import type { StatsSnapshot } from "../src/daemon/stats";
 
 jest.setTimeout(30_000);

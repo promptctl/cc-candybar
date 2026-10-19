@@ -5,7 +5,7 @@
 
 import { HEALTHY_BUNDLE } from "./doctor-facts";
 import { NavigationHistory } from "../../src/daemon/navigation-history";
-import { HEALTHY_INSTALL_EDGE } from "./doctor-facts";
+import { HEALTHY_INSTALL_EDGE, HEALTHY_SERVING } from "./doctor-facts";
 import { parseHandlerUrl } from "../../src/install/index";
 import {
   VERBS,
@@ -82,6 +82,17 @@ export function testVerbContext(
       loadConfig: () => {
         throw new Error("doctor: no config edge in this test");
       },
+      daemons: () => {
+        throw new Error("doctor: no process table in this test");
+      },
+      postMortemsRead: {
+        read: () => {
+          throw new Error("doctor: no post-mortem record in this test");
+        },
+        record: () => {
+          throw new Error("doctor: no post-mortem record in this test");
+        },
+      },
     },
     // A click from the handler this build would stage, and nowhere of the
     // daemon's for a probe to land: a test that reads arrivals hands in its own.
@@ -89,6 +100,7 @@ export function testVerbContext(
     probes: new ProbeArrivals(),
     clients: new ClientSightings(),
     bundle: HEALTHY_BUNDLE,
+    serving: () => HEALTHY_SERVING,
     // And for memento: a test that drives a ceiling click hands in its own.
     memento: {
       move: () => {

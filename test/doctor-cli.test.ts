@@ -3,7 +3,7 @@
 // settings file, a clean setup, and a failed check carrying a fix.
 
 import { BUNDLED_GLYPHS } from "./helpers/bundled-glyphs";
-import { HEALTHY_INSTALL_EDGE, HEALTHY_DAEMON, HEALTHY_FACTS } from "./helpers/doctor-facts";
+import { healthyDaemonEdge, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, HEALTHY_DAEMON, HEALTHY_FACTS } from "./helpers/doctor-facts";
 import { glyphSighting } from "../src/doctor/checks";
 import { withMark } from "../src/doctor/mark-book";
 import { memoryMarkBook } from "./helpers/mark-book";
@@ -33,6 +33,7 @@ afterEach(() => {
 
 const EDGE: DoctorEdge = {
   install: HEALTHY_INSTALL_EDGE,
+  ...healthyDaemonEdge(),
   probeTmux: () => ({
     kind: "ok",
     // A terminal that ships its own Nerd Font symbols and draws links, which
@@ -128,7 +129,7 @@ describe("doctorPlan", () => {
 
   test("every check ok is exit 0, one ✓ line per check", async () => {
     expect(await doctorPlan(EDGE, NO_HANDLER, HEALTHY_DAEMON, inDir({}), "/", () => ({ columns: 120 }))).toEqual({
-      stdout: "✓ config\n✓ install\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width\n✓ effect refresh\n✓ Nerd Font\n",
+      stdout: "✓ config\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width\n✓ effect refresh\n✓ Nerd Font\n",
       stderr: "",
       code: 0,
     });
@@ -249,7 +250,7 @@ describe("doctorPlan", () => {
     expect(plan.code).toBe(1);
     expect(plan.stderr).toBe("");
     expect(plan.stdout).toBe(
-      "✓ config\n✓ install\n✓ URL handler\n✓ links\n" +
+      "✓ config\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n" +
         "✗ tmux truecolor — Claude Code renders the bar in 256 colours inside tmux" +
         ` (fix: click the settings menu (${DOOR_GLYPH} by default) › 🧰 tools › 🩺 doctor, then [fix] on the bar)\n` +
         "✓ UTF-8\n✓ terminal width\n✓ effect refresh\n✓ Nerd Font\n",
@@ -261,7 +262,7 @@ describe("doctorPlan", () => {
   test("a staged-but-unapplied fix names the settings file it was read from", async () => {
     fs.writeFileSync(settingsPath(), `{ "env": { "${TMUX_TRUECOLOR_VAR}": "1" } }`);
     expect((await doctorPlan(EDGE, NO_HANDLER, HEALTHY_DAEMON, inDir(IN_TMUX), "/", () => ({ columns: 120 }))).stdout).toBe(
-      `✓ config\n✓ install\n✓ URL handler\n✓ links\n✗ tmux truecolor — ${TMUX_TRUECOLOR_VAR} is set in ${settingsPath()} — restart Claude Code to apply\n✓ UTF-8\n✓ terminal width\n✓ effect refresh\n✓ Nerd Font\n`,
+      `✓ config\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✗ tmux truecolor — ${TMUX_TRUECOLOR_VAR} is set in ${settingsPath()} — restart Claude Code to apply\n✓ UTF-8\n✓ terminal width\n✓ effect refresh\n✓ Nerd Font\n`,
     );
   });
 });
@@ -288,7 +289,7 @@ describe("doctorPlan over a real config", () => {
     doctorPlan(REAL, NO_HANDLER, HEALTHY_DAEMON, inDir(env), project, () => ({ columns: 120 }));
 
   test("no config file anywhere: the bundled default is correct", async () => {
-    expect((await plan()).stdout).toBe("✓ config\n✓ install\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width\n✓ effect refresh\n✓ Nerd Font\n");
+    expect((await plan()).stdout).toBe("✓ config\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width\n✓ effect refresh\n✓ Nerd Font\n");
   });
 
   test("a config using everything it declares is ok", async () => {
@@ -298,7 +299,7 @@ describe("doctorPlan over a real config", () => {
          segments: { s: { template: "{{ .v }}" } }, root: { h: ["s"] } }`,
     );
     expect(await plan()).toEqual({
-      stdout: "✓ config\n✓ install\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width\n✓ effect refresh\n✓ Nerd Font\n",
+      stdout: "✓ config\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width\n✓ effect refresh\n✓ Nerd Font\n",
       stderr: "",
       code: 0,
     });
@@ -321,7 +322,7 @@ describe("doctorPlan over a real config", () => {
         `    helper "h" is never called\n` +
         `    variable "v" is never read\n` +
         `    action "a" is never clicked\n` +
-        "✓ install\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width\n✓ effect refresh\n✓ Nerd Font\n",
+        "✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width\n✓ effect refresh\n✓ Nerd Font\n",
       stderr: "",
       code: 1,
     });
@@ -364,7 +365,7 @@ describe("doctorPlan over a real config", () => {
         )
       )
         .stdout,
-    ).toBe(`✗ config — helper "h" is never called\n✓ install\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width\n✓ effect refresh\n✓ Nerd Font\n`);
+    ).toBe(`✗ config — helper "h" is never called\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width\n✓ effect refresh\n✓ Nerd Font\n`);
   });
 
   // brandon-effects-2gka.21e: the config the bar draws decides the effect, and
@@ -377,7 +378,7 @@ describe("doctorPlan over a real config", () => {
     );
     expect(await plan()).toEqual({
       stdout:
-        "✓ config\n✓ install\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width\n" +
+        "✓ config\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width\n" +
         "✗ effect refresh — the bar wears the shimmer effect, but Claude Code redraws it only on events" +
         ` (fix: click the settings menu (${DOOR_GLYPH} by default) › 🧰 tools › 🩺 doctor, then [fix] on the bar)\n` +
         "✓ Nerd Font\n",
@@ -396,7 +397,7 @@ describe("doctorPlan over a real config", () => {
     const named = path.join(dir, "named.json5");
     fs.writeFileSync(named, `{ helpers: { h: "x" } }`);
     expect((await plan({ CC_CANDYBAR_CONFIG: named })).stdout).toBe(
-      `✗ config — helper "h" is never called\n✓ install\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width\n✓ effect refresh\n✓ Nerd Font\n`,
+      `✗ config — helper "h" is never called\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width\n✓ effect refresh\n✓ Nerd Font\n`,
     );
   });
 
@@ -412,6 +413,7 @@ describe("doctorPlan over a real config", () => {
         { tmux: null, claudeConfigDir: dir },
         { projectDir: project, cwd: project, configFile: null },
         () => null,
+        { kind: "ok", value: HEALTHY_SERVING },
       ),
       urlHandler: { kind: "unsupported" },
       askedBy: "command",

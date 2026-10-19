@@ -6,7 +6,12 @@ import {
   RSS_LIMIT_ENV,
   rssLimitMb,
   heapCapMb,
+  postMortemsOf,
+  realLimitsDeps,
 } from "../src/daemon/limits";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
 interface Recorder {
   shutdownCalls: number[];
@@ -256,6 +261,33 @@ describe("heap snapshot rotation", () => {
       "/fake-snapshot-dir/memory-2026-04-01T00-00-00-000Z-4242.txt",
     ]);
   });
+
+  test("a file that will not go is logged, and every other eviction still happens", () => {
+    const rec = newRec();
+    rec.fakeRss = 250 * 1024 * 1024;
+    const stuck = "/d/heap-2026-01-01T00-00-00-000Z-9.heapsnapshot";
+    rec.existingFiles = [
+      stuck,
+      "/d/memory-2026-01-01T00-00-00-000Z-9.txt",
+      "/d/heap-2026-02-01T00-00-00-000Z-9.heapsnapshot",
+    ];
+    const remove = makeDeps(rec).removeFile;
+    makeLimits(
+      makeDeps(rec, {
+        rssLimitBytes: 200 * 1024 * 1024,
+        snapshotsKeep: 1,
+        removeFile: (file) => {
+          if (file === stuck) throw new Error("EBUSY");
+          remove(file);
+        },
+      }),
+    ).checkRss();
+    expect([...rec.removed].sort()).toEqual([
+      "/d/heap-2026-02-01T00-00-00-000Z-9.heapsnapshot",
+      "/d/memory-2026-01-01T00-00-00-000Z-9.txt",
+    ]);
+    expect(rec.logs).toContainEqual({ level: "warn", msg: `evicting ${stuck} failed: EBUSY` });
+  });
 });
 
 describe("describeNextRestart", () => {
@@ -334,5 +366,101 @@ describe("rssLimitMb / heapCapMb (the memory-budget grammar)", () => {
   test.each(REJECT)("rejects %j loudly rather than defaulting", (raw) => {
     expect(() => rssLimitMb(env(raw))).toThrow(RSS_LIMIT_ENV);
     expect(() => heapCapMb(env(raw))).toThrow(RSS_LIMIT_ENV);
+  });
+});
+
+// brandon-doctor-v62x.5mq: the post-mortems the doctor reads are the breaches
+// rotation keeps — one grouping.
+describe("post-mortems", () => {
+  test("group by breach, newest first, each artifact under its kind, the memory report first; a file no breach wrote is none", () => {
+    expect(
+      postMortemsOf([
+        "/s/heap-2026-04-01T00-00-00-000Z-9.heapsnapshot",
+        "/s/memory-2026-04-02T00-00-00-000Z-9.txt",
+        "/s/daemon.log",
+        "/s/memory-2026-04-01T00-00-00-000Z-9.txt",
+        "/s/heap-2026-04-02T00-00-00-000Z-9.heapsnapshot",
+        "/s/heap-2026-04-03T00-00-00-000Z-9.heapsnapshot",
+      ]),
+    ).toEqual([
+      {
+        identity: "2026-04-03T00-00-00-000Z-9",
+        artifacts: { heapSnapshot: "/s/heap-2026-04-03T00-00-00-000Z-9.heapsnapshot" },
+      },
+      {
+        identity: "2026-04-02T00-00-00-000Z-9",
+        artifacts: {
+          memoryReport: "/s/memory-2026-04-02T00-00-00-000Z-9.txt",
+          heapSnapshot: "/s/heap-2026-04-02T00-00-00-000Z-9.heapsnapshot",
+        },
+      },
+      {
+        identity: "2026-04-01T00-00-00-000Z-9",
+        artifacts: {
+          memoryReport: "/s/memory-2026-04-01T00-00-00-000Z-9.txt",
+          heapSnapshot: "/s/heap-2026-04-01T00-00-00-000Z-9.heapsnapshot",
+        },
+      },
+    ]);
+    // Listed heap-first, read memory-first.
+    expect(
+      Object.keys(
+        postMortemsOf([
+          "/s/heap-2026-04-01T00-00-00-000Z-9.heapsnapshot",
+          "/s/memory-2026-04-01T00-00-00-000Z-9.txt",
+        ])[0]!.artifacts,
+      ),
+    ).toEqual(["memoryReport", "heapSnapshot"]);
+  });
+
+  test("serving() reports one memory reading against the budget, and the breaches the directory keeps", () => {
+    const rec = newRec();
+    rec.existingFiles.push("/snap/memory-2026-03-01T00-00-00-000Z-7.txt");
+    const limits = makeLimits(makeDeps(rec, { rssLimitBytes: 200 * 1024 * 1024 }));
+    expect(limits.serving()).toEqual({
+      pid: rec.pid,
+      rss: rec.fakeRss,
+      rssLimit: 200 * 1024 * 1024,
+      postMortems: {
+        kind: "ok",
+        value: [
+          {
+            identity: "2026-03-01T00-00-00-000Z-7",
+            artifacts: { memoryReport: "/snap/memory-2026-03-01T00-00-00-000Z-7.txt" },
+          },
+        ],
+      },
+    });
+  });
+
+  test("a directory that cannot be listed is a failure naming why, never no breaches", () => {
+    const rec = newRec();
+    const limits = makeLimits(
+      makeDeps(rec, {
+        listArtifacts: () => {
+          throw new Error("EACCES: permission denied, scandir '/snap'");
+        },
+      }),
+    );
+    expect(limits.serving().postMortems).toEqual({
+      kind: "failed",
+      reason: "EACCES: permission denied, scandir '/snap'",
+    });
+  });
+
+  test("the real lister: a directory not yet made holds none; one that is a file is said so", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "pm-"));
+    const prev = process.env.XDG_STATE_HOME;
+    try {
+      process.env.XDG_STATE_HOME = path.join(root, "absent");
+      expect(realLimitsDeps(0, () => {}).listArtifacts()).toEqual([]);
+      fs.writeFileSync(path.join(root, "file"), "");
+      process.env.XDG_STATE_HOME = path.join(root, "file");
+      expect(() => realLimitsDeps(0, () => {}).listArtifacts()).toThrow(/ENOTDIR/);
+    } finally {
+      if (prev === undefined) delete process.env.XDG_STATE_HOME;
+      else process.env.XDG_STATE_HOME = prev;
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 });

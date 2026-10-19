@@ -5,6 +5,7 @@
 import type { FeedStats } from "./frame-feed";
 import type { ProbeArrival } from "../doctor/handler-probe";
 import type { ClientSighting } from "./client-sightings";
+import type { ServingDaemon } from "./limits";
 import type { LaunchCategory } from "../proc/launch";
 import type { LaunchStatsHandle } from "../proc/stats-handle";
 import { PROTOCOL_VERSION } from "./protocol";
@@ -118,6 +119,9 @@ export interface StatsSnapshot {
   // runs — what `cc-candybar doctor` judges the install by.
   clients: readonly ClientSighting[];
   bundle: string;
+  // This daemon as `cc-candybar doctor` judges it: its memory against its
+  // budget and its post-mortems (src/daemon/limits.ts `serving`).
+  daemon: ServingDaemon;
 }
 
 export class RuntimeStats {
@@ -251,6 +255,12 @@ export class RuntimeStats {
       handlerProbes: [],
       clients: [],
       bundle: "/",
+      daemon: {
+        pid: 0,
+        rss: 0,
+        rssLimit: 0,
+        postMortems: { kind: "ok", value: [] },
+      },
     });
   }
 
@@ -266,6 +276,7 @@ export class RuntimeStats {
     handlerProbes: readonly ProbeArrival[];
     clients: readonly ClientSighting[];
     bundle: string;
+    daemon: ServingDaemon;
   }): StatsSnapshot {
     const mem = process.memoryUsage();
     return {
@@ -303,6 +314,7 @@ export class RuntimeStats {
       handlerProbes: extras.handlerProbes,
       clients: extras.clients,
       bundle: extras.bundle,
+      daemon: extras.daemon,
     };
   }
 }
