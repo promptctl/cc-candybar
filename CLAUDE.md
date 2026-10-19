@@ -35,7 +35,7 @@ Start by running `lit quickstart` to load the workflow instructions. It prints h
 
 `prepublishOnly` runs lint → typecheck → check:protocol → build, in that order. Any of those failing blocks publish — fix the root cause; never bypass.
 
-Jest is configured for ESM via `ts-jest` (see `jest.config.js`), with explicit `transformIgnorePatterns` allow-listing `rich-js` and width helpers under both `node_modules/<pkg>` and pnpm's `.pnpm/` shadow path. If you add an ESM dep that ships untranspiled, extend that allow-list.
+Jest is configured for ESM via `ts-jest` (see `jest.config.js`), with explicit `transformIgnorePatterns` allow-listing `rich-js`, `go-template-js` and `@noble/hashes` under both `node_modules/<pkg>` and pnpm's `.pnpm/` shadow path. If you add an ESM dep that ships untranspiled, extend that allow-list.
 
 ## Architecture: the big picture
 

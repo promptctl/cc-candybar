@@ -62,10 +62,16 @@ fn describe(cause: &PermanentCause) -> String {
 // closing both bypass classes — including the 8-bit CSI which
 // `is_ascii_control()` would have missed.
 //
+// Beyond Cc, `neutralized` takes the format controls that hold state past
+// the text: the bidi embeddings and overrides with their closer
+// (U+202A..=U+202E), the isolates with theirs and the deprecated shaping
+// switches (U+2066..=U+206F). An unclosed U+202E would reverse the rest of
+// the line.
+//
 // [LAW:one-type-per-behavior] Matches the TS source at
 // src/render/diagnostic-text.ts `sanitizeAndTruncate` byte-for-byte: its
 // `isControlChar` predicate covers the exact same code-point set as
-// `char::is_control()` (Unicode Cc), and the same collapse-whitespace-runs +
+// `neutralized()` (Unicode Cc plus those two ranges), and the same collapse-whitespace-runs +
 // trim pass runs between sanitization and truncation, so a multi-control
 // input (e.g. "\r\n") yields identical output in both runtimes.
 //
@@ -74,13 +80,17 @@ fn describe(cause: &PermanentCause) -> String {
 // (NEL — Cc, already sanitized to a space on both sides before collapse)
 // plus U+FEFF (ZWNBSP). With that one addition the two predicates agree on
 // every post-sanitize code point.
+fn neutralized(ch: char) -> bool {
+    ch.is_control() || matches!(ch, '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{206F}')
+}
+
 fn truncate(s: &str) -> String {
     // Sanitize controls to spaces, collapse whitespace runs to one space,
     // trim both ends — one pass, mirroring the TS sanitize + collapse + trim.
     let mut sanitized = String::new();
     let mut gap = false;
     for raw in s.chars() {
-        let ch = if raw.is_control() { ' ' } else { raw };
+        let ch = if neutralized(raw) { ' ' } else { raw };
         if ch.is_whitespace() || ch == '\u{FEFF}' {
             // A gap only renders if visible content precedes it (leading
             // runs trim away); a trailing gap never flushes.
@@ -197,6 +207,17 @@ mod tests {
         assert!(body.contains("verb=danger"), "lost safe content: {g:?}");
         assert!(body.contains("injected"), "lost safe content: {g:?}");
         assert!(body.contains("bypass"), "lost safe content after C1: {g:?}");
+    }
+
+    // The bidi format controls that hold state are neutralized like Cc, and
+    // a mark, which holds none, passes — the same set the TS side pins.
+    #[test]
+    fn truncate_neutralizes_stateful_format_controls() {
+        for code in (0x202A..=0x202E).chain(0x2066..=0x206F) {
+            let ch = char::from_u32(code).unwrap();
+            assert_eq!(truncate(&format!("a{ch}b")), "a b", "U+{code:04X}");
+        }
+        assert_eq!(truncate("a\u{200F}b"), "a\u{200F}b");
     }
 
     // [LAW:one-type-per-behavior] Newline-sanitization coverage symmetric to
