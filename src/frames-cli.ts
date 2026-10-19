@@ -3,7 +3,8 @@
 // Claude Code, a mod, a renderer outside Claude Code (epic
 // candybar-animation-wbxz). Each frame is one line on stdout: the JSON of the
 // response a render request is answered with, `{"ok":true,"output":"…"}`, or
-// why the bar could not be drawn.
+// why the bar could not be drawn — or, with `--format band`, that response
+// as the band mod's rows of styled runs (src/band/frames.ts).
 //
 // `--lane <band|statusline|pane>` names the animation lane this stream serves
 // (src/config/lanes.ts). While the session's toggle for it is off the daemon
@@ -39,8 +40,46 @@ import { detectClientHints } from "./client-hints";
 import { nodeClientHint } from "./client-hint";
 import { newestWins } from "./utils/newest-wins";
 import { LANE_NAMES, parseLane } from "./config/lanes";
+import type { Response } from "./daemon/protocol";
+import { bandLine } from "./band/frames";
+
+// [LAW:one-type-per-behavior] How a frame is written is a value the one
+// stream carries: the render response as the daemon sent it, or the band
+// mod's rows of styled runs.
+const FORMATS = {
+  response: (resp: Response): string => JSON.stringify(resp),
+  band: bandLine,
+} as const;
+
+function isFormat(name: string): name is keyof typeof FORMATS {
+  return Object.hasOwn(FORMATS, name);
+}
 
 // `bundle`: the bundle this process runs, as its entry names it.
+// What a stream last said: nothing yet, a frame or the lane-off refusal on
+// stdout, or a fault on stderr, by its reason.
+export type Said =
+  | { readonly kind: "none" }
+  | { readonly kind: "frame" }
+  | { readonly kind: "off" }
+  | { readonly kind: "fault"; readonly reason: string };
+type Event = Exclude<Said, { kind: "none" }>;
+
+// [LAW:types-are-the-program] One value, what the stream last said, decides
+// what is said next: every frame (each is new), and any other event that
+// differs from the last thing said. So a state that persists across retries —
+// the lane off, the same fault — is said once, and every change is said: a
+// refusal after a fault is written again, so a reader that clears what stderr
+// said at the next stdout line (the band) always gets that line.
+export function worthSaying(last: Said, next: Event): boolean {
+  if (next.kind === "frame" || next.kind !== last.kind) return true;
+  return (
+    next.kind === "fault" &&
+    last.kind === "fault" &&
+    next.reason !== last.reason
+  );
+}
+
 export async function runFrames(
   argv: readonly string[],
   bundle: string,
@@ -52,6 +91,7 @@ export async function runFrames(
       session: { type: "string" },
       config: { type: "string" },
       lane: { type: "string" },
+      format: { type: "string", default: "response" },
     },
     strict: true,
     tokens: true,
@@ -81,6 +121,13 @@ export async function runFrames(
     say(`--lane needs one of ${LANE_NAMES.join(", ")}`);
     process.exit(2);
   }
+  if (!isFormat(values.format)) {
+    say(
+      `--format must be one of ${Object.keys(FORMATS).join(", ")}, got ${JSON.stringify(values.format)}`,
+    );
+    process.exit(2);
+  }
+  const encode = FORMATS[values.format];
   if (values.session !== undefined && values.config !== undefined) {
     say(
       "--config has no effect with --session: the session's own statusline client sends its config",
@@ -97,11 +144,11 @@ export async function runFrames(
   let sessionId: string | null = values.session ?? null;
   let lastHook: ClaudeHookData | null = null;
   let follower: FrameFollower | null = null;
-  // What was last written about a stream that is not flowing — the fault on
-  // stderr, the lane-off refusal on stdout — so a state that persists is
-  // written once, not on every retry. A frame clears both.
-  let lastFault: string | null = null;
-  let offShown = false;
+  let said: Said = { kind: "none" };
+  const tell = (next: Event, write: () => void): void => {
+    if (worthSaying(said, next)) write();
+    said = next;
+  };
 
   // The session's data, to the daemon. Its reply is the bar the stream
   // carries, so only a failure is said here.
@@ -121,23 +168,12 @@ export async function runFrames(
   const subscribe = (id: string): void => {
     follower?.close();
     follower = followFrames(socketPath(), id, lane, {
-      frame: (resp) => {
-        lastFault = null;
-        offShown = false;
-        emit(`${JSON.stringify(resp)}\n`);
-      },
-      // The daemon answered: whatever outage came before is over, so the
-      // next one is news even if it reads the same.
-      off: (resp) => {
-        lastFault = null;
-        if (!offShown) emit(`${JSON.stringify(resp)}\n`);
-        offShown = true;
-      },
-      fault: (reason, retryMs) => {
-        if (reason !== lastFault)
-          say(`${reason}; reconnecting in ${retryMs}ms`);
-        lastFault = reason;
-      },
+      frame: (resp) => tell({ kind: "frame" }, () => emit(`${encode(resp)}\n`)),
+      off: (resp) => tell({ kind: "off" }, () => emit(`${encode(resp)}\n`)),
+      fault: (reason, retryMs) =>
+        tell({ kind: "fault", reason }, () =>
+          say(`${reason}; reconnecting in ${retryMs}ms`),
+        ),
       exit: (reason) => {
         say(reason);
         process.exit(1);

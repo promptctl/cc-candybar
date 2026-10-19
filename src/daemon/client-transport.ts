@@ -118,7 +118,7 @@ function asProtocolVersion(v: unknown): number {
   return typeof v === "number" && Number.isInteger(v) && v >= 0 ? v : 0;
 }
 
-function interpretResponse<T>(
+export function interpretResponse<T>(
   kind: Request["kind"],
   resp: Response,
   project: (resp: OkResponse) => T | undefined,

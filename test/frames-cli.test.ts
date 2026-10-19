@@ -2,7 +2,7 @@
 // calls for, and a flag that could do nothing refused rather than ignored.
 
 import { PROTOCOL_VERSION } from "../src/daemon/protocol";
-import { runFrames } from "../src/frames-cli";
+import { runFrames, worthSaying, type Said } from "../src/frames-cli";
 import { afterStreamEnd } from "../src/daemon/frame-follow";
 
 const refused = (
@@ -104,4 +104,34 @@ test("a missing or unknown --lane is refused with exit 2, naming the lanes", asy
       stderr.mockRestore();
     }
   }
+});
+
+// What a stream says, over a run of events: each event says something exactly
+// when worthSaying lets it.
+const sayings = (events: readonly Exclude<Said, { kind: "none" }>[]): string[] => {
+  let last: Said = { kind: "none" };
+  const out: string[] = [];
+  for (const next of events) {
+    if (worthSaying(last, next)) out.push(next.kind === "fault" ? `fault:${next.reason}` : next.kind);
+    last = next;
+  }
+  return out;
+};
+const off = { kind: "off" } as const;
+const frame = { kind: "frame" } as const;
+const fault = (reason: string) => ({ kind: "fault", reason }) as const;
+
+test("a state that persists is said once; every change is said", () => {
+  expect(sayings([off, off, off])).toEqual(["off"]);
+  expect(sayings([fault("A"), fault("A")])).toEqual(["fault:A"]);
+  expect(sayings([fault("A"), fault("B")])).toEqual(["fault:A", "fault:B"]);
+  expect(sayings([frame, frame])).toEqual(["frame", "frame"]);
+  expect(sayings([off, frame, off])).toEqual(["off", "frame", "off"]);
+});
+
+// The band clears what stderr said only at the next stdout line: a daemon
+// restart while the lane is off must end on the refusal said again.
+test("a refusal after a fault is said again, and a fault after a refusal too", () => {
+  expect(sayings([off, fault("ENOENT"), off])).toEqual(["off", "fault:ENOENT", "off"]);
+  expect(sayings([fault("A"), off, fault("A")])).toEqual(["fault:A", "off", "fault:A"]);
 });
