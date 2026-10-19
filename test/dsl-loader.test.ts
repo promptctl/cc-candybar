@@ -1208,7 +1208,7 @@ describe("loadDslConfig — renamed built-in segment", () => {
     expect(() =>
       validateAgainstDefault(`{ root: { h: ["directory", "ticket"] } }`),
     ).toThrow(
-      /the built-in segment "ticket" became "plugins.lit.ticket", a segment of the plugin lit installs — run lit in this checkout/,
+      /the built-in segment "ticket" became "plugins.lit.ticket", a segment of the plugin lit installs whenever it runs — update this reference/,
     );
   });
 

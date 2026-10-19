@@ -44,6 +44,6 @@ export function renamedHint(name: string): string {
     case "built-in":
       return ` (the built-in segment "${name}" was renamed to "${renamed.to}" — update this reference)`;
     case "plugin":
-      return ` (the built-in segment "${name}" became "${renamed.to}", a segment of the plugin ${renamed.app} installs — run ${renamed.app} in this checkout, then update this reference)`;
+      return ` (the built-in segment "${name}" became "${renamed.to}", a segment of the plugin ${renamed.app} installs whenever it runs — update this reference)`;
   }
 }
