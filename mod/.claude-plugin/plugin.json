@@ -1,0 +1,6 @@
+{
+  "name": "candybar-band",
+  "version": "0.1.0",
+  "description": "Draws the session's candybar, menus and effects, animated in the band above the prompt.",
+  "types": "./types/index.d.ts"
+}

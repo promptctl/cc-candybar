@@ -3,7 +3,8 @@
 // Claude Code, a mod, a renderer outside Claude Code (epic
 // candybar-animation-wbxz). Each frame is one line on stdout: the JSON of the
 // response a render request is answered with, `{"ok":true,"output":"…"}`, or
-// why the bar could not be drawn.
+// why the bar could not be drawn — or, with `--format band`, that response
+// as the band mod's rows of styled runs (src/band/frames.ts).
 //
 // `--lane <band|statusline|pane>` names the animation lane this stream serves
 // (src/config/lanes.ts). While the session's toggle for it is off the daemon
@@ -39,6 +40,20 @@ import { detectClientHints } from "./client-hints";
 import { nodeClientHint } from "./client-hint";
 import { newestWins } from "./utils/newest-wins";
 import { LANE_NAMES, parseLane } from "./config/lanes";
+import type { Response } from "./daemon/protocol";
+import { bandLine } from "./band/frames";
+
+// [LAW:one-type-per-behavior] How a frame is written is a value the one
+// stream carries: the render response as the daemon sent it, or the band
+// mod's rows of styled runs.
+const FORMATS = {
+  response: (resp: Response): string => JSON.stringify(resp),
+  band: bandLine,
+} as const;
+
+function isFormat(name: string): name is keyof typeof FORMATS {
+  return Object.hasOwn(FORMATS, name);
+}
 
 // `bundle`: the bundle this process runs, as its entry names it.
 export async function runFrames(
@@ -52,6 +67,7 @@ export async function runFrames(
       session: { type: "string" },
       config: { type: "string" },
       lane: { type: "string" },
+      format: { type: "string", default: "response" },
     },
     strict: true,
     tokens: true,
@@ -81,6 +97,13 @@ export async function runFrames(
     say(`--lane needs one of ${LANE_NAMES.join(", ")}`);
     process.exit(2);
   }
+  if (!isFormat(values.format)) {
+    say(
+      `--format must be one of ${Object.keys(FORMATS).join(", ")}, got ${JSON.stringify(values.format)}`,
+    );
+    process.exit(2);
+  }
+  const encode = FORMATS[values.format];
   if (values.session !== undefined && values.config !== undefined) {
     say(
       "--config has no effect with --session: the session's own statusline client sends its config",
@@ -124,13 +147,13 @@ export async function runFrames(
       frame: (resp) => {
         lastFault = null;
         offShown = false;
-        emit(`${JSON.stringify(resp)}\n`);
+        emit(`${encode(resp)}\n`);
       },
       // The daemon answered: whatever outage came before is over, so the
       // next one is news even if it reads the same.
       off: (resp) => {
         lastFault = null;
-        if (!offShown) emit(`${JSON.stringify(resp)}\n`);
+        if (!offShown) emit(`${encode(resp)}\n`);
         offShown = true;
       },
       fault: (reason, retryMs) => {

@@ -80,7 +80,7 @@ Subcommands:
   daemon-stats [--json]    Query the running daemon for runtime stats:
                            uptime, RSS, cache hit rates, watcher count,
                            request totals. Does not spawn a daemon.
-  frames --lane LANE [--session ID | --config PATH]
+  frames --lane LANE [--session ID | --config PATH] [--format response|band]
                            One session's bar as the daemon pushes it — up to
                            30 frames a second while it moves, at once on a
                            click — one JSON render response per stdout line.
@@ -90,6 +90,8 @@ Subcommands:
                            LANE is band, statusline or pane: the experimental
                            lane this stream serves, which streams only while
                            its toggle in the settings menu's ⚙ config tab is on.
+                           --format band writes each frame as rows of styled
+                           runs, for the mod in mod/.
 
 Config tooling:
   doctor [file]            Check your setup the way the bar's 🩺 doctor does —
