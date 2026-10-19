@@ -144,13 +144,13 @@ describe("doctorPlan", () => {
     ).toBe(0);
   });
 
-  test("a terminal that cannot be opened is a doctor: line, exit 2, no checks", async () => {
+  test("a measurement that throws is a doctor: line, exit 2, no checks", async () => {
     const plan = await doctorPlan(EDGE, NO_HANDLER, inDir({}), "/", () => {
-      throw new Error("EACCES: permission denied, open '/dev/tty'");
+      throw new Error("EBADF: bad file descriptor");
     });
     expect(plan).toEqual({
       stdout: "",
-      stderr: "doctor: EACCES: permission denied, open '/dev/tty'\n",
+      stderr: "doctor: EBADF: bad file descriptor\n",
       code: 2,
     });
   });

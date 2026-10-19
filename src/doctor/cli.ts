@@ -91,8 +91,8 @@ export async function doctorPlan(
   env: Readonly<Record<string, string | undefined>>,
   cwd: string,
   // Measures the terminal the command runs in (`commandTerminal`), inside
-  // the one try below, so a terminal that cannot be opened is a `doctor:`
-  // line and exit 2 like every other fact the run could not gather.
+  // the one try below, so a measurement that throws is a `doctor:` line and
+  // exit 2 like every other fact the run could not gather.
   measureTerminal: () => { readonly columns?: number; readonly rows?: number },
   configFile: string | undefined = undefined,
 ): Promise<CliPlan> {
@@ -141,17 +141,17 @@ export async function doctorPlan(
 
 // The terminal the command runs in, which the bar of a Claude Code started
 // here would be drawn in: its stderr, else — `2>&1 | tee`, `2>/dev/null` —
-// its controlling terminal. A process with neither (an agent's tool shell)
-// has no terminal to measure, which the width check then names.
+// its controlling terminal. A process that cannot open one — none at all
+// (ENXIO, an agent's tool shell), none in its container (ENOENT), or one a
+// sandbox refuses (EACCES) — has no terminal to measure, which is the width
+// row's failure, not the run's: every other check still has its facts.
 function commandTerminal(): { readonly columns?: number } {
   if (process.stderr.isTTY) return process.stderr;
   let fd: number;
   try {
     fd = openSync("/dev/tty", "r+");
-  } catch (err) {
-    // ENXIO is the kernel's "no controlling terminal"; anything else is loud.
-    if ((err as NodeJS.ErrnoException).code === "ENXIO") return {};
-    throw err;
+  } catch {
+    return {};
   }
   const tty = new WriteStream(fd);
   const { columns } = tty;
