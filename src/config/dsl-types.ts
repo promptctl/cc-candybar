@@ -907,6 +907,26 @@ export interface SegmentDecl {
   readonly settings?: Readonly<Record<string, SettingDecl>>;
 }
 
+// [LAW:one-source-of-truth] Every `state` variable a config declares, by the
+// name the store and the scope read it under: the config's own first, then
+// each segment's locals as `<segment>.<var>`. The render's key → variable map
+// and the daemon's seed of a stepped key (its `default` before any click) both
+// walk this one set, so a segment-local state var is as real to a click as a
+// global one.
+export function* stateVarDecls(
+  config: Pick<DslConfig, "variables" | "segments">,
+): IterableIterator<readonly [name: string, decl: StateVarDecl]> {
+  for (const [name, decl] of Object.entries(config.variables)) {
+    if (decl.kind === "state") yield [name, decl];
+  }
+  for (const [segName, seg] of Object.entries(config.segments)) {
+    if (!seg.vars) continue;
+    for (const [varName, decl] of Object.entries(seg.vars)) {
+      if (decl.kind === "state") yield [`${segName}.${varName}`, decl];
+    }
+  }
+}
+
 // The settings every placement has without its segment declaring them.
 export const THEME_SETTING = "theme";
 export const EFFECT_SETTING = "effect";
