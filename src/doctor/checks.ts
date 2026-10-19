@@ -1073,7 +1073,7 @@ const effectRefresh: Check = {
     const wearing = drawn.includes("moves")
       ? "the bar moves (an effect, a fade, or an animated segment)"
       : drawn.includes("can-move")
-        ? "the bar can start moving with no click (a globals.effect rule, or placements that fade in and out)"
+        ? "the bar can start moving (a globals.effect rule, placements that fade in and out, or a placement with an effect of its own that is not drawn now)"
         : null;
     if (wearing === null) {
       if (drawn.includes("still")) return { ok: true };
@@ -1082,7 +1082,9 @@ const effectRefresh: Check = {
           ? drawn.includes("drawing")
             ? "the bar's latest render has not finished"
             : "the bar's recent renders failed"
-          : askedBy === "click"
+          : frames.value.length > 0
+            ? "only a `cc-candybar frames` display has drawn this bar, not Claude Code's statusline"
+            : askedBy === "click"
             ? NO_RENDER_OF_THIS_BAR
             : `no session of this Claude Code has drawn a statusline for this daemon in the last ${RECENT_CLIENT_S / 60} minutes`;
       return {

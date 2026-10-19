@@ -89,6 +89,7 @@ import {
   type ThemeSelection,
 } from "../themes/index.js";
 import { FOLLOW_BAR } from "../themes/policy.js";
+import type { DrawnMotion } from "../render/drawn-motion.js";
 import { buildScope, placementScope } from "../template-engine/scope.js";
 import {
   createCcCandybarEngine,
@@ -983,14 +984,14 @@ export interface RenderObservers {
 // [LAW:types-are-the-program] A drawn frame: its bytes, and its motion
 // (brandon-doctor-v62x.tgp). `moves` is what its cells say (`DrawnRow.moves`),
 // never what the config asked for: a template's `frames` moves the bar as
-// surely as an effect does. `can-move` is a still frame whose config can start
-// motion at a later render with no click — a `globals.effect` rule, placements
-// that fade as they come and go, or a placement wearing its own effect that is
-// not drawn now — which no still cell can say.
-export type FrameMotion = "moves" | "can-move" | "still";
+// surely as an effect does. `can-move` is a still frame whose config, under
+// the settings in force, can draw motion at a later render — a
+// `globals.effect` rule, placements that fade as they come and go, or a
+// placement wearing its own effect that is not drawn now (hidden by its
+// `when`, or in a closed body) — which no still cell can say.
 export interface DrawnFrame {
   readonly text: string;
-  readonly motion: FrameMotion;
+  readonly motion: DrawnMotion;
 }
 
 // [LAW:types-are-the-program] What a render could not honour, by what failed:
@@ -1542,19 +1543,20 @@ export function drawDsl(
       );
     });
   motion.drawn();
-  // What the config arms with no click, drawn or not: an effect rule, fades,
-  // or a placement of this preset — hidden by its `when` or a closed body
-  // right now — wearing an effect of its own.
-  const armed =
+  // What the config arms under the settings in force, drawn or not: an effect
+  // rule, fades, or a placement of this preset — hidden by its `when` or a
+  // closed body right now — wearing an effect of its own. Asked only of a
+  // frame no row of which moves.
+  const armed = (): boolean =>
     selectedEffect.kind === "expression" ||
     transitions ||
     segmentsUnder(root).some(
       ({ settings }) =>
         settings.effect !== FOLLOW_BAR && settings.effect !== EFFECT_FLOOR,
     );
-  const frameMotion: FrameMotion = rendered.some((row) => row.moves)
+  const frameMotion: DrawnMotion = rendered.some((row) => row.moves)
     ? "moves"
-    : armed
+    : armed()
       ? "can-move"
       : "still";
   for (const message of shortfalls) warn({ kind: "band-floor", message });

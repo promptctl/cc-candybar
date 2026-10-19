@@ -179,7 +179,7 @@ export function dataFields(data: SegmentDataFacts): string {
 
 // [LAW:nothing-unseen] What the effect-refresh check reasoned over, as one
 // logfmt field: the frames the recent statusline renders drew, counted per
-// `FRAMES_SEEN` member in its order — moves/can-move/still/failed
+// `FRAMES_SEEN` member in its order — moves/can-move/still/failed/drawing
 // (brandon-doctor-v62x.tgp); `failed` when the renders could not be asked.
 export function frameFields(frames: Asked<readonly FrameSighting[]>): string {
   if (frames.kind === "failed") return "frames=failed";

@@ -100,11 +100,8 @@ import { claudeConfigDir } from "../claude-settings";
 import { setLaunchStats } from "../proc/launch";
 import { buildDebugSnapshot } from "./debug";
 import { DEBUG_WHATS, isDebugWhat } from "./debug-types";
-import {
-  drawDsl,
-  type FrameMotion,
-  type RenderWarning,
-} from "../dsl/render.js";
+import { drawDsl, type RenderWarning } from "../dsl/render.js";
+import type { DrawnMotion } from "../render/drawn-motion.js";
 import {
   renderStripCells,
   DEFAULT_COLOR_COMPATIBILITY,
@@ -1731,7 +1728,7 @@ const refusedRender = (problems: string[]) => ({
   delivered: NOTHING_DELIVERED,
 });
 
-// The bar for a checked request, at `at`, and its motion (`FrameMotion`, read
+// The bar for a checked request, at `at`, and its motion (`DrawnMotion`, read
 // off the frame this render drew). A throw is the caller's to record. `facts` is the render event's
 // record, filled as each stage learns its part.
 async function renderChecked(
@@ -1741,7 +1738,7 @@ async function renderChecked(
   render: ClickErrorRender,
 ): Promise<{
   drawn: DrawnBar;
-  motion: FrameMotion;
+  motion: DrawnMotion;
   clickShown: ClickErrorRecord | null;
 }> {
   noteFacts(facts, {
@@ -2076,7 +2073,7 @@ async function answerRequest(
   facts: RenderFacts,
 ): Promise<{
   output: string;
-  motion: FrameMotion;
+  motion: DrawnMotion;
   clickShown: ClickErrorRecord | null;
 }> {
   recordRequest(req);

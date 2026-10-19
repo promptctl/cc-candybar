@@ -373,7 +373,7 @@ describe("effectRefresh probe", () => {
     expect(effectRefresh(drew("can-move"), interval(undefined))).toEqual({
       ok: false,
       reason:
-        "the bar can start moving with no click (a globals.effect rule, or placements that fade in and out), but Claude Code redraws it only on events",
+        "the bar can start moving (a globals.effect rule, placements that fade in and out, or a placement with an effect of its own that is not drawn now), but Claude Code redraws it only on events",
       fix: FIX,
     });
   });
@@ -387,6 +387,20 @@ describe("effectRefresh probe", () => {
         interval(undefined),
       ),
     ).toEqual({ ok: true });
+  });
+
+  test("only a frames display seen → failed, unknown, naming it", () => {
+    expect(
+      effectRefresh(
+        { kind: "ok", value: [{ role: "frames", frame: "still" }] },
+        interval(undefined),
+        "click",
+      ),
+    ).toEqual({
+      ok: false,
+      reason:
+        "only a `cc-candybar frames` display has drawn this bar, not Claude Code's statusline, so whether it moves is unknown — run the doctor again once the bar has redrawn",
+    });
   });
 
   // Once the file redraws every second, nothing a bar draws needs more —

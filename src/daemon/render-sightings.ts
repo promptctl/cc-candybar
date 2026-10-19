@@ -19,6 +19,7 @@
 // for a client nothing runs any more.
 
 import type { ClientHint } from "../client-hint.js";
+import { DRAWN_MOTIONS } from "../render/drawn-motion.js";
 import type { ClaudeHookData } from "../utils/claude.js";
 import type { Instant } from "../utils/instant.js";
 
@@ -83,13 +84,7 @@ export function transcriptSaid(
 // without a click — a `globals.effect` rule, placements fading as they come
 // and go, a placement wearing its own effect — so it needs the redraw a moving
 // bar does. `drawing`: the request arrived and its render has not settled.
-export const FRAMES_SEEN = [
-  "moves",
-  "can-move",
-  "still",
-  "failed",
-  "drawing",
-] as const;
+export const FRAMES_SEEN = [...DRAWN_MOTIONS, "failed", "drawing"] as const;
 export type FrameSeen = (typeof FRAMES_SEEN)[number];
 
 // [LAW:one-source-of-truth] Which client drew a sighting: Claude Code's

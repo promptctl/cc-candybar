@@ -8,9 +8,10 @@ import { SourceRegistry } from "../src/var-system/sources";
 import {
   registerDslConfig,
   drawDsl,
-  type FrameMotion,
 } from "../src/dsl/render";
+import type { DrawnMotion } from "../src/render/drawn-motion";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
+import { decideEffectName } from "../src/themes";
 import type { Instant } from "../src/utils/instant";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 
@@ -22,7 +23,8 @@ function motionOf(
   template: string,
   globals = "{}",
   root = '{ h: ["cell"] }',
-): FrameMotion {
+  selection: Parameters<typeof drawDsl>[8] = undefined,
+): DrawnMotion {
   const config = parseAndValidate(
     "<test>",
     `{ globals: ${globals}, segments: { cell: { template: ${JSON.stringify(template)} } }, root: ${root} }`,
@@ -47,6 +49,8 @@ function motionOf(
         padding: 1,
         width: 160,
       },
+      undefined,
+      selection,
     ).motion;
   } finally {
     registry.dispose();
@@ -78,6 +82,15 @@ describe("a drawn frame says whether it moves", () => {
         `{ h: [{ seg: "cell", when: "{{ false }}", settings: { effect: "pulse" } }, "model"] }`,
       ),
     ).toBe("can-move");
+  });
+
+  // A session's pick of `none` is a decision: the rule it outranks arms nothing.
+  test("a session's pick of no effect over an effect rule is still", () => {
+    expect(
+      motionOf("still", `{ effect: '{{ "pulse" }}' }`, undefined, {
+        effect: decideEffectName("none"),
+      }),
+    ).toBe("still");
   });
 
   test("placements that fade as they come and go can move it later", () => {
