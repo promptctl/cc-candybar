@@ -65,10 +65,12 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   ];
 
   // Every frame pushed for `sessionId` while `during` runs, with when each
-  // arrived (ms since the subscription opened).
+  // arrived (ms since the subscription opened). `during` is handed the frames
+  // received so far, so it can wait for ones the daemon has sent before the
+  // stream closes: closing drops whatever is still in flight.
   async function framesOf(
     sessionId: string,
-    during: () => Promise<void>,
+    during: (received: ReadonlyArray<unknown>) => Promise<void>,
   ): Promise<Array<{ at: number; resp: Response }>> {
     const frames: Array<{ at: number; resp: Response }> = [];
     const opened = Date.now();
@@ -80,7 +82,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
         if (end.kind === "failed") throw end.error;
       },
     );
-    await during();
+    await during(frames);
     stream.close();
     return frames;
   }
@@ -134,8 +136,18 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   test("a moving bar is drawn many times a second and pushed whenever its bytes move", async () => {
     await render(sockPath, "feed-moving", projectDir, {}, args("moving"));
     const before = await feedStats();
-    const frames = await framesOf("feed-moving", () => sleep(2000));
-    const after = await feedStats();
+    // [LAW:no-ambient-temporal-coupling] The daemon's count is read while the
+    // stream is still open, and the stream stays open until every frame that
+    // count includes has arrived: comparing after close raced the frames still
+    // in flight, which closing drops.
+    let after = before;
+    const frames = await framesOf("feed-moving", async (received) => {
+      await sleep(2000);
+      after = await feedStats();
+      const sent = after.pushed - before.pushed;
+      const deadline = Date.now() + 5000;
+      while (received.length < sent && Date.now() < deadline) await sleep(20);
+    });
     const pushed = outputs(frames);
     for (const output of pushed)
       expect(stripAnsi(output)).toContain("a moving mark");
@@ -145,7 +157,9 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     // The daemon draws at 30 a second while the bar moves; half that leaves
     // room for a slow CI box, and is far past Claude Code's one a second.
     expect(after.drawn - before.drawn).toBeGreaterThanOrEqual(30);
-    expect(after.pushed - before.pushed).toBe(pushed.length);
+    // Every frame the daemon counted reached the subscriber; any after the
+    // count are frames it pushed while the stream was still open.
+    expect(pushed.length).toBeGreaterThanOrEqual(after.pushed - before.pushed);
     expect(pushed.length).toBeGreaterThan(2);
   });
 
