@@ -10,6 +10,7 @@
 // `tmux` hint: socket and pane, src/tmux-hint.ts); whether that pane is shown
 // comes from its tmux server, asked once a second per server.
 
+import { inspect } from "node:util";
 import type { TmuxHint } from "../tmux-hint.js";
 import type { TmuxRun } from "../proc/tmux.js";
 
@@ -71,20 +72,92 @@ export interface VisibilityDeps {
   // in LIST_PANES_FORMAT and LIST_CLIENTS_FORMAT.
   listPanes(socket: string): Promise<TmuxRun>;
   listClients(socket: string): Promise<TmuxRun>;
+  // The servers to ask, read as each refresh of the loop starts.
+  sockets(): ReadonlySet<string>;
   // Called after a refresh in which any server's shown panes changed, or
   // whether it could be asked, with those servers' sockets.
   onChange(sockets: ReadonlySet<string>): void;
-  log(level: "info" | "warn", line: string): void;
+  // From the start of one refresh of the loop to the next.
+  intervalMs: number;
+  log(level: "info" | "warn" | "error", line: string): void;
 }
+
+// [LAW:no-ambient-temporal-coupling] The loop, as state: not running; a
+// refresh in flight, and whether another follows it; or the next refresh due
+// at a timer. One refresh at a time, so a server slower than the interval is
+// never asked twice at once, nor answered out of order.
+type Loop =
+  | { readonly kind: "idle" }
+  | { kind: "asking"; following: boolean }
+  | { readonly kind: "due"; readonly timer: ReturnType<typeof setTimeout> };
 
 /**
  * [LAW:no-shared-mutable-globals] Every tmux server's last answer, by socket:
- * one owner, written only by `refresh`.
+ * one owner, written only by `refresh`, held only while the loop runs.
  */
 export class PaneVisibility {
   private readonly servers = new Map<string, ServerView>();
+  private loop: Loop = { kind: "idle" };
 
   constructor(private readonly deps: VisibilityDeps) {}
+
+  // Asks the servers at once, then once per interval until the returned stop.
+  // Stopped, it keeps no timer and forgets every server's answer.
+  follow(): () => void {
+    switch (this.loop.kind) {
+      case "idle":
+        this.deps.log("info", "visibility following");
+        this.ask();
+        break;
+      case "asking":
+        this.loop.following = true;
+        break;
+      case "due":
+        break;
+    }
+    return () => this.stop();
+  }
+
+  private stop(): void {
+    switch (this.loop.kind) {
+      case "due":
+        clearTimeout(this.loop.timer);
+        this.end();
+        return;
+      case "asking":
+        // The refresh in flight ends the loop when it answers.
+        this.loop.following = false;
+        return;
+      case "idle":
+        return;
+    }
+  }
+
+  private ask(): void {
+    const loop: Loop = { kind: "asking", following: true };
+    this.loop = loop;
+    void this.refresh(this.deps.sockets())
+      .catch((err: unknown) =>
+        this.deps.log("error", `visibility refresh threw: ${inspect(err)}`),
+      )
+      .then(() => {
+        if (loop.following) {
+          this.loop = {
+            kind: "due",
+            timer: setTimeout(() => this.ask(), this.deps.intervalMs).unref(),
+          };
+          return;
+        }
+        this.end();
+      });
+  }
+
+  // [LAW:nothing-unseen] The loop's end, said once, with the answers it drops.
+  private end(): void {
+    this.deps.log("info", `visibility stopped forgot=${this.servers.size}`);
+    this.loop = { kind: "idle" };
+    this.servers.clear();
+  }
 
   // Whether a session whose client reported `tmux` is on a screen. A session
   // outside tmux, from a client too old to say, or on a server not yet asked,

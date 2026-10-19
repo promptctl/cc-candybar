@@ -14,20 +14,16 @@ import { inspect } from "node:util";
 import { PROTOCOL_VERSION, type Response } from "./protocol";
 import { laneOffReason, type Lane, type LaneSwitches } from "../config/lanes";
 
-// [LAW:types-are-the-program] Why the next frame falls due when it does: the
-// bar moves and someone can see it; it moves where nobody can, so it is drawn
-// at the still rate; or nothing on it moves.
-export type Motion = "moving" | "unseen" | "still";
-
-// What one render produced for a feed: the response its subscribers receive
-// (the one a render request is answered with), the instant it was drawn at (ms
-// since the epoch), how the bar moves, which decides when the next frame is
-// due, and — for a render that threw — the render event describing it, logged
-// when that failure is first pushed.
+// What one render drew: the response its subscribers receive (the one a
+// render request is answered with), the instant it was drawn at (ms since the
+// epoch), whether the bar it drew moves, and — for a render that threw — the
+// render event describing it, logged when that failure is first pushed.
+// [LAW:decomposition] A frame says only what was drawn. Whether anyone can see
+// it is the feed's question, asked when it schedules the next.
 export interface FeedFrame {
   readonly resp: Response;
   readonly drawnAt: number;
-  readonly motion: Motion;
+  readonly moves: boolean;
   readonly failure: LogLine | null;
 }
 
@@ -69,8 +65,12 @@ export interface FeedDeps<Req> {
   // now — its config under its session's picks, never a copy taken when a
   // frame was drawn, so a toggle turned on is honoured at the next subscribe.
   lanes(req: Req): LaneSwitches;
-  // A feed opened: whatever runs only while some feed exists starts.
-  opened(): void;
+  // Whether the bar of the session `req` is from is on a screen now: a bar
+  // nobody can see is drawn at the still rate however it moves.
+  shown(req: Req): boolean;
+  // The first feed opened: whatever runs only while some feed exists starts,
+  // and the returned stop is called when the last feed closes.
+  watching(): () => void;
   // Calls `onChange` whenever the session's own state changes (a click opening
   // a menu), so its next frame is drawn at once rather than when it falls due.
   // Returns the disposer.
@@ -153,6 +153,9 @@ export interface FeedStats {
 export class FrameFeeds<Req> {
   private readonly requests = new Map<string, Noted<Req>>();
   private readonly feeds = new Map<string, Feed>();
+  // [LAW:no-ambient-temporal-coupling] The stop of what runs while any feed
+  // exists: held exactly from the first feed opening to the last closing.
+  private stopWatching: (() => void) | null = null;
   private drawn = 0;
   private pushed = 0;
   private refused = 0;
@@ -244,6 +247,13 @@ export class FrameFeeds<Req> {
     }
   }
 
+  // Draw at once the next frame of every watched session whose latest request
+  // `match` accepts.
+  wakeWhere(match: (req: Req) => boolean): void {
+    for (const { sessionId, req } of this.watched())
+      if (match(req)) this.wake(sessionId);
+  }
+
   // The session of the newest request `match` accepts, among the latest
   // request of each session the daemon holds, or null when none does.
   newestWhere(match: (req: Req) => boolean): string | null {
@@ -297,7 +307,7 @@ export class FrameFeeds<Req> {
       summarizedAt: now,
     };
     this.feeds.set(sessionId, feed);
-    this.deps.opened();
+    this.stopWatching ??= this.deps.watching();
     // A feed's clock starts when it opens: its first frame is drawn at once,
     // and pushed to the subscriber that opened it once the render is out. A
     // later subscriber is handed the frame as it stands.
@@ -310,6 +320,10 @@ export class FrameFeeds<Req> {
     if (feed.phase.kind === "due") clearTimeout(feed.phase.timer);
     feed.unwatch();
     this.feeds.delete(feed.sessionId);
+    if (this.feeds.size === 0) {
+      this.stopWatching?.();
+      this.stopWatching = null;
+    }
     this.summarize(feed, "closed");
   }
 
@@ -371,16 +385,19 @@ export class FrameFeeds<Req> {
   // this one STARTED, so the rate holds whatever a render costs, up to a
   // render as slow as the period, when frames are drawn back to back. A frame
   // step that faulted is followed at the still rate.
+  // [LAW:dataflow-not-control-flow] The moving period is for a bar that moves
+  // where someone can see it, asked here, as the next frame is set.
   private schedule(
     feed: Feed,
     frame: FeedFrame | null,
     started: number,
     finished: number,
   ): void {
-    const period =
-      frame?.motion === "moving"
-        ? this.deps.periods.moving
-        : this.deps.periods.still;
+    const moves = frame?.moves === true;
+    const seen = moves && this.shown(feed);
+    if (seen) feed.moving++;
+    if (moves && !seen) feed.unseen++;
+    const period = seen ? this.deps.periods.moving : this.deps.periods.still;
     feed.phase = {
       kind: "due",
       timer: setTimeout(
@@ -390,9 +407,12 @@ export class FrameFeeds<Req> {
     };
   }
 
+  private shown(feed: Feed): boolean {
+    const noted = this.requests.get(feed.sessionId);
+    return noted === undefined || this.deps.shown(noted.req);
+  }
+
   private count(feed: Feed, frame: FeedFrame): void {
-    if (frame.motion === "moving") feed.moving++;
-    if (frame.motion === "unseen") feed.unseen++;
     if (frame.failure !== null) feed.failed++;
   }
 

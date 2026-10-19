@@ -1,14 +1,14 @@
 // The page's transport on GitHub Pages: the daemon runs in this page.
 //
 // [LAW:single-enforcer] A render and a click are the daemon's own request
-// handler (src/daemon/server.ts `handleRequest`), sent the request the Rust
+// handler (src/daemon/server.ts `replyTo`), sent the request the Rust
 // client and the URL handler send. Nothing here renders: the daemon reads the
 // simulated machine (world.ts) through node:fs and node:child_process, as it
 // reads a real one, and the scenario (scenario.ts) moves that machine.
 
 import { VERB_COPY } from "../src/click/wire";
 import { describeLink, drawnLinks, effectsOf, HOST_VERBS } from "../src/click/read";
-import { establishLimits, handleRequest, reloadConfig } from "../src/daemon/server";
+import { establishLimits, reloadConfig, replyTo } from "../src/daemon/server";
 import { PROTOCOL_VERSION, type ClickRequest, type RenderRequest } from "../src/daemon/protocol";
 import { parseHandlerUrl } from "../src/install/index";
 import { PACKAGE_VERSION } from "../src/version";
@@ -139,10 +139,7 @@ function hookData(): ClaudeHookData {
 
 async function daemon(request: RenderRequest | ClickRequest): Promise<string> {
   // In the page there is no socket, so no reply timer to have fired.
-  const handled = await handleRequest(request, () => false);
-  // A render or a click is answered with a reply; only a subscribe streams.
-  if (handled.kind !== "reply") throw new Error(`${request.kind} was not answered with a reply`);
-  const { resp } = handled;
+  const { resp } = await replyTo(request, () => false);
   if (!resp.ok) throw new Error(`${resp.error} (${resp.code})`);
   return "output" in resp ? resp.output : "";
 }

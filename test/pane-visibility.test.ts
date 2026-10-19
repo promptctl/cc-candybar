@@ -42,17 +42,32 @@ describe("shownPanes", () => {
   });
 });
 
+const sleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));
+
 describe("PaneVisibility", () => {
-  function harness(answers: Record<string, TmuxRun>) {
+  // `answerMs` holds each list-panes answer back that long; `asks` counts
+  // them and `inFlight`/`overlap` record whether two were ever out at once.
+  function harness(answers: Record<string, TmuxRun>, answerMs = 0) {
     const changes: string[][] = [];
     const log: string[] = [];
+    const counts = { asks: 0, inFlight: 0, overlap: false };
     const visibility = new PaneVisibility({
-      listPanes: (socket) => Promise.resolve(answers[socket]!),
+      listPanes: async (socket) => {
+        counts.asks++;
+        counts.inFlight++;
+        if (counts.inFlight > 1) counts.overlap = true;
+        if (answerMs > 0) await sleep(answerMs);
+        counts.inFlight--;
+        return answers[socket]!;
+      },
       listClients: () => Promise.resolve({ kind: "ok", stdout: "" } as TmuxRun),
+      sockets: () => new Set(Object.keys(answers)),
       onChange: (sockets) => changes.push([...sockets]),
+      intervalMs: 20,
       log: (_level, line) => log.push(line),
     });
-    return { visibility, changes, log, answers };
+    return { visibility, changes, log, answers, counts };
   }
 
   test("a session outside tmux, or on a server not yet asked, counts as shown", () => {
@@ -102,5 +117,51 @@ describe("PaneVisibility", () => {
     expect(h.visibility.shown(hint("/s", "%1"))).toBe(false);
     await h.visibility.refresh(new Set());
     expect(h.visibility.shown(hint("/s", "%1"))).toBe(true);
+  });
+
+  test("follow asks at once and each interval after, never twice at once, until it stops", async () => {
+    // Each answer takes longer than the interval.
+    const h = harness({ "/s": { kind: "ok", stdout: "%1 $1 0 1 0 1\n" } }, 30);
+    const stop = h.visibility.follow();
+    // A second follow while the loop runs starts no second loop.
+    h.visibility.follow();
+    await sleep(10);
+    expect(h.counts.asks).toBe(1);
+    await sleep(150);
+    const asked = h.counts.asks;
+    expect(asked).toBeGreaterThanOrEqual(3);
+    expect(h.counts.overlap).toBe(false);
+    expect(h.visibility.shown(hint("/s", "%1"))).toBe(false);
+    stop();
+    await sleep(100);
+    // The ask in flight at the stop may answer; no other is made, and the
+    // stopped loop keeps no server's answer.
+    expect(h.counts.asks).toBeLessThanOrEqual(asked + 1);
+    expect(h.visibility.shown(hint("/s", "%1"))).toBe(true);
+    // One start and one stop, the stop naming the answers it dropped.
+    expect(h.log.filter((l) => !l.startsWith("visibility socket="))).toEqual([
+      "visibility following",
+      "visibility stopped forgot=1",
+    ]);
+  });
+
+  test("an answer that arrives after the stop does not stand, and a follow at once after it waits its turn", async () => {
+    const h = harness({ "/s": { kind: "ok", stdout: "%1 $1 0 1 0 1\n" } }, 30);
+    const stop = h.visibility.follow();
+    await sleep(5);
+    stop();
+    await sleep(60);
+    expect(h.counts.asks).toBe(1);
+    expect(h.visibility.shown(hint("/s", "%1"))).toBe(true);
+    // Stopped and followed again while an ask is out: the loop carries on
+    // from that ask rather than starting a second beside it.
+    const again = h.visibility.follow();
+    await sleep(5);
+    again();
+    const resumed = h.visibility.follow();
+    await sleep(100);
+    resumed();
+    expect(h.counts.overlap).toBe(false);
+    expect(h.counts.asks).toBeGreaterThanOrEqual(3);
   });
 });
