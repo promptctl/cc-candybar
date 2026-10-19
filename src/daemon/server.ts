@@ -53,7 +53,7 @@ import {
 } from "./protocol";
 import type { ClientHints, RenderRequest, Request, Response } from "./protocol";
 import { createPayloadProviders } from "./payload-providers";
-import { RenderCache } from "./cache/render";
+import { RenderCache, type DslRenderState } from "./cache/render";
 import { WatcherRegistry } from "./cache/watchers";
 import { RuntimeStats } from "./stats";
 import {
@@ -114,6 +114,12 @@ import {
   type PassageFrame,
 } from "../render/effect.js";
 import { FEED_PERIODS, FrameFeeds, type FeedFrame } from "./frame-feed.js";
+import {
+  LANE_NAMES,
+  parseLane,
+  type Lane,
+  type LaneSwitches,
+} from "../config/lanes.js";
 import { heldClickError, releaseClickError } from "./click-error.js";
 import { newestWins } from "../utils/newest-wins.js";
 import {
@@ -203,6 +209,8 @@ const frameFeeds = new FrameFeeds<CheckedRenderRequest>({
     reaction(() => sessionState.revision(sessionId), onChange, {
       scheduler: (run) => setImmediate(run),
     }),
+  lanes: (req) => lanesOf(req),
+  opened: () => startVisibility(),
   periods: FEED_PERIODS,
   now: () => Date.now(),
   log: dlog,
@@ -249,14 +257,26 @@ const watchedTmuxServers = (): ReadonlySet<string> =>
   );
 // [LAW:no-ambient-temporal-coupling] The next refresh is scheduled when this
 // one has its answers, so a tmux server slower than the interval is never
-// asked twice at once, nor answered out of order.
+// asked twice at once, nor answered out of order. The refresh runs only while
+// a feed exists: a feed opening starts it, and it stops scheduling itself once
+// none is left, so a daemon nobody subscribes to keeps no timer.
+let visibilityRunning = false;
+const startVisibility = (): void => {
+  if (visibilityRunning) return;
+  visibilityRunning = true;
+  refreshVisibility();
+};
 const refreshVisibility = (): void => {
   void paneVisibility
     .refresh(watchedTmuxServers())
     .catch((err: unknown) =>
       dlog("error", `visibility refresh threw: ${inspect(err)}`),
     )
-    .then(() => setTimeout(refreshVisibility, VISIBILITY_INTERVAL_MS).unref());
+    .then(() => {
+      visibilityRunning = frameFeeds.getStats().feeds > 0;
+      if (visibilityRunning)
+        setTimeout(refreshVisibility, VISIBILITY_INTERVAL_MS).unref();
+    });
 };
 // [LAW:locality-or-seam] Same terms as sessionState: naming the directory is
 // free; the daemon wipes it in onListening() (reset), once the bind is
@@ -646,7 +666,6 @@ function onListening(sockPath: string): void {
     dlog("warn", `diagnostic dump wipe failed: ${wipeFailure}`);
   binaryWatch.arm();
   updateWatch.arm();
-  refreshVisibility();
   establishedLimits().arm();
   armOwnershipWatch(sockPath, boundRead.identity);
 }
@@ -896,7 +915,7 @@ function handleConnection(sock: net.Socket): void {
         .then((r) =>
           r.kind === "reply"
             ? respond(r.resp, r.exitAfterFlush)
-            : stream(r.sessionId),
+            : stream(r.sessionId, r.lane),
         )
         .catch((err: unknown) => {
           dlog("error", `handler threw: ${inspect(err)}`);
@@ -922,7 +941,7 @@ function handleConnection(sock: net.Socket): void {
   // way only, so anything more the subscriber sends is not read.
   // [LAW:no-ambient-temporal-coupling] A subscriber slower than the frames
   // gets the newest one when its socket drains, never a backlog of stale ones.
-  const stream = (sessionId: string): void => {
+  const stream = (sessionId: string, lane: Lane): void => {
     // A connection the request timer already answered — TIMEOUT, then ended, while a cold or busy
     // daemon had not yet read the subscribe — is not a subscription: its socket is closing, and a
     // feed attached to it would never hear the close. The subscriber was told, and opens another.
@@ -931,16 +950,22 @@ function handleConnection(sock: net.Socket): void {
     // already fired, so a feed attached now would never hear it.
     if (sock.destroyed) return;
     clearTimeout(timer);
-    responded = true;
     leaveInFlight();
     sock.off("data", reader);
     const write = newestWins(sock);
-    sock.on(
-      "close",
-      frameFeeds.subscribe(sessionId, (_resp, json) =>
-        write(encodeJsonFrame(json)),
-      ),
-    );
+    const unsubscribe = frameFeeds.subscribe(sessionId, {
+      lane,
+      frame: (_resp, json) => write(encodeJsonFrame(json)),
+      // A refused subscription is over: its refusal ends the stream, and a
+      // frame still waiting for the socket to drain is dropped, as
+      // newest-wins drops any frame a newer one replaces.
+      refused: (resp) => sock.end(encodeFrame(resp)),
+    });
+    // Answered only once the subscription stands: a subscribe that threw is
+    // the connection's `handler threw`, answered RENDER_FAILED and ended,
+    // never an open socket nothing feeds.
+    responded = true;
+    sock.on("close", unsubscribe);
   };
 
   sock.on("data", reader);
@@ -965,7 +990,7 @@ function handleConnection(sock: net.Socket): void {
 // the connection boundary turns its socket over to the session's feed.
 type HandledRequest =
   | { kind: "reply"; resp: Response; exitAfterFlush: number | null }
-  | { kind: "subscribe"; sessionId: string };
+  | { kind: "subscribe"; sessionId: string; lane: Lane };
 
 const stay = (resp: Response): HandledRequest => ({
   kind: "reply",
@@ -1131,16 +1156,35 @@ export async function handleRequest(
   }
 
   if (req.kind === "subscribe") {
-    // [LAW:no-defensive-null-guards] exception: trust boundary — the session
-    // id is untrusted JSON, and it keys the feed.
-    return typeof req.sessionId === "string" && req.sessionId !== ""
-      ? { kind: "subscribe", sessionId: req.sessionId }
-      : stay({
-          ok: false,
-          error: "subscribe needs a non-empty string sessionId",
-          code: "BAD_REQUEST",
-          daemonV: PROTOCOL_VERSION,
-        });
+    // [LAW:parse-dont-validate] Trust boundary: the session id and the lane
+    // are untrusted JSON; the id keys the feed and the lane is what its
+    // toggle gates.
+    const refuse = (error: string): HandledRequest =>
+      stay({
+        ok: false,
+        error,
+        code: "BAD_REQUEST",
+        daemonV: PROTOCOL_VERSION,
+      });
+    if (typeof req.sessionId !== "string" || req.sessionId === "")
+      return refuse("subscribe needs a non-empty string sessionId");
+    // A subscribe that names no lane speaks the contract from before the
+    // lane toggles: VERSION_MISMATCH, which every older client reads as "this
+    // client is out of date" and stops on, rather than BAD_REQUEST, which it
+    // reads as a daemon too old to take subscribe and retries forever.
+    if (req.lane === undefined)
+      return stay({
+        ok: false,
+        error: `this client's subscribe names no lane (${LANE_NAMES.join(", ")}): it predates the lane toggles — update it`,
+        code: "VERSION_MISMATCH",
+        daemonV: PROTOCOL_VERSION,
+      });
+    const lane = parseLane(req.lane);
+    if (lane === null)
+      return refuse(
+        `subscribe needs a lane, one of ${LANE_NAMES.join(", ")}: got ${JSON.stringify(req.lane)}`,
+      );
+    return { kind: "subscribe", sessionId: req.sessionId, lane };
   }
 
   if (req.kind === "click") {
@@ -1469,6 +1513,37 @@ function feedFrameOf(
   };
 }
 
+// [LAW:one-source-of-truth] A session's globals over the render state it
+// draws with: the one resolution a render draws by and the lane gate reads.
+// `.preset.customized` reads THIS state's authoredRoots — the set computed
+// from the SAME raw parse that produced state.config, on the same reload —
+// never a fresh file read that could race a concurrent write and disagree with
+// the tree that actually rendered.
+function sessionGlobals(
+  sessionId: string,
+  state: DslRenderState,
+): EffectiveGlobals {
+  return resolveEffectiveGlobals(
+    state.config,
+    (key) => sessionState.get(sessionId, key),
+    (preset) => state.authoredRoots.has(preset),
+  );
+}
+
+// The lanes the settings of the session `req` is from switch on now: its
+// config, as the render cache holds it for the inputs the request named, under
+// its session's picks.
+function lanesOf(req: CheckedRenderRequest): LaneSwitches {
+  const sessionId = req.hookData.session_id;
+  const origin = sessionRenderOrigin(req.requested, sessionState, sessionId);
+  using hold = renderCache.hold(
+    origin.projectDir,
+    origin.cwd,
+    origin.configFile ?? undefined,
+  );
+  return sessionGlobals(sessionId, hold.state).lanes;
+}
+
 // A render request that crossed the checkpoint: its hookData carries every
 // required field with its declared type, its cwd is absolute, `hints` is its
 // client hints, parsed, and its args are parsed into `requested` — the config
@@ -1641,20 +1716,13 @@ async function renderChecked(
   // readers, so a label can never disagree with the bar. The precedence
   // the resolver applies, and why each rung sits where it does, lives
   // with the chain (resolveEffectiveGlobals, and src/config/presets.ts).
-  // [LAW:one-source-of-truth] `.preset.customized` reads THIS entry's
-  // authoredRoots — the set computed from the SAME raw parse that
-  // produced state.config, on the same reload — never a fresh
-  // file read here that could race a concurrent write and disagree
-  // with the tree that actually rendered. That is why it arrives as
-  // a closure over this entry rather than a lookup inside the resolver.
-  const { authoredRoots } = state;
   const sessionPick = (key: string): string | null =>
     sessionState.get(req.hookData.session_id, key);
-  const effective: EffectiveGlobals = resolveEffectiveGlobals(
-    state.config,
-    sessionPick,
-    (preset: string) => authoredRoots.has(preset),
-  );
+  const effective: EffectiveGlobals = sessionGlobals(sessionId, state);
+  // Which animation lanes this session's settings switch on.
+  noteFacts(facts, {
+    lanes: LANE_NAMES.filter((lane) => effective.lanes[lane]).join(",") || "-",
+  });
   const payload = await buildRenderPayload(
     req.hookData,
     at,

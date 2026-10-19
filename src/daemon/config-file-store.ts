@@ -106,6 +106,9 @@ const GLOBALS_FIELD_KIND: Readonly<
   padding: "number",
   updateNotice: "boolean",
   transitions: "boolean",
+  experimentalBand: "boolean",
+  experimentalStatusline: "boolean",
+  experimentalPane: "boolean",
   colorCompatibility: "string",
   menuGlyph: "string",
 };

@@ -2,10 +2,11 @@
 // calls for, and a flag that could do nothing refused rather than ignored.
 
 import { PROTOCOL_VERSION } from "../src/daemon/protocol";
-import { afterStreamEnd, runFrames } from "../src/frames-cli";
+import { runFrames } from "../src/frames-cli";
+import { afterStreamEnd } from "../src/daemon/frame-follow";
 
 const refused = (
-  code: "BAD_REQUEST" | "VERSION_MISMATCH" | "TIMEOUT",
+  code: "BAD_REQUEST" | "VERSION_MISMATCH" | "TIMEOUT" | "SWITCHED_OFF",
   daemonV = PROTOCOL_VERSION,
 ) =>
   ({
@@ -40,6 +41,12 @@ test("only a daemon newer than this client ends it; an older, busy, restarted or
     kind: "reconnect",
     kick: false,
   });
+  // The lane's toggle is off: the stream's state, not a fault, and asked
+  // again, so turning it on resumes the stream.
+  expect(afterStreamEnd(refused("SWITCHED_OFF"))).toEqual({
+    kind: "off",
+    resp: refused("SWITCHED_OFF").resp,
+  });
   // No daemon answered: one is kicked into existence before the reconnect.
   expect(
     afterStreamEnd({ kind: "failed", error: new Error("ENOENT") }),
@@ -53,7 +60,7 @@ test("--config beside --session is refused with exit 2, since no data is forward
   const stderr = jest.spyOn(process.stderr, "write").mockImplementation(() => true);
   try {
     await expect(
-      runFrames(["node", "cc-candybar", "frames", "--session", "s", "--config", "/tmp/x.json5"], "/opt/cc/dist/index.mjs"),
+      runFrames(["node", "cc-candybar", "frames", "--lane", "band", "--session", "s", "--config", "/tmp/x.json5"], "/opt/cc/dist/index.mjs"),
     ).rejects.toThrow("exit 2");
     expect(String(stderr.mock.calls[0]?.[0])).toMatch(/--config has no effect with --session/);
   } finally {
@@ -68,12 +75,33 @@ test("an empty --session is refused with exit 2: the subscribe this client sends
   });
   const stderr = jest.spyOn(process.stderr, "write").mockImplementation(() => true);
   try {
-    await expect(runFrames(["node", "cc-candybar", "frames", "--session", ""], "/opt/cc/dist/index.mjs")).rejects.toThrow(
+    await expect(runFrames(["node", "cc-candybar", "frames", "--lane", "band", "--session", ""], "/opt/cc/dist/index.mjs")).rejects.toThrow(
       "exit 2",
     );
     expect(String(stderr.mock.calls[0]?.[0])).toMatch(/--session needs a session id/);
   } finally {
     exit.mockRestore();
     stderr.mockRestore();
+  }
+});
+
+test("a missing or unknown --lane is refused with exit 2, naming the lanes", async () => {
+  for (const argv of [
+    ["node", "cc-candybar", "frames", "--session", "s"],
+    ["node", "cc-candybar", "frames", "--lane", "everywhere", "--session", "s"],
+  ]) {
+    const exit = jest.spyOn(process, "exit").mockImplementation((code) => {
+      throw new Error(`exit ${String(code)}`);
+    });
+    const stderr = jest.spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      await expect(runFrames(argv, "/opt/cc/dist/index.mjs")).rejects.toThrow("exit 2");
+      expect(String(stderr.mock.calls[0]?.[0])).toMatch(
+        /--lane needs one of band, statusline, pane/,
+      );
+    } finally {
+      exit.mockRestore();
+      stderr.mockRestore();
+    }
   }
 });

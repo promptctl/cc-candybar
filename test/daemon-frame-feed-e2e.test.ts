@@ -23,6 +23,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { openFrameStream, type StreamEnd } from "../src/daemon/client-frames";
+import { followFrames, SWITCHED_OFF_RETRY_MS } from "../src/daemon/frame-follow";
 import {
   PROTOCOL_VERSION,
   encodeFrame,
@@ -55,13 +56,15 @@ jest.setTimeout(30_000);
 // `moving` wears sparkle, the bundled loop whose bytes change most often from
 // one thirtieth of a second to the next (the others were tuned to move about
 // one just-noticeable step a second). `toggle` is a still bar a click changes.
+// Every config but `off` switches on the band lane these subscribers name.
 const CONFIGS = {
-  moving: `{ globals: { effect: "sparkle" }, segments: { a: { template: 'directory ~/code/cc-candybar' }, b: { template: 'branch main' }, c: { template: 'a moving mark' } }, root: { h: ['a', 'b', 'c'] } }`,
-  still: `{ segments: { mark: { template: 'a still mark' } }, root: { h: ['mark'] } }`,
+  moving: `{ globals: { effect: "sparkle", experimentalBand: true }, segments: { a: { template: 'directory ~/code/cc-candybar' }, b: { template: 'branch main' }, c: { template: 'a moving mark' } }, root: { h: ['a', 'b', 'c'] } }`,
+  still: `{ globals: { experimentalBand: true }, segments: { mark: { template: 'a still mark' } }, root: { h: ['mark'] } }`,
+  off: `{ segments: { mark: { template: 'an unswitched mark' } }, root: { h: ['mark'] } }`,
   // Moves, and carries a load warning (a duplicate key) the diagnostic strip
   // shows on every frame.
-  warned: `{ globals: { effect: "sparkle", effect: "sparkle" }, segments: { mark: { template: 'a warned mark' } }, root: { h: ['mark'] } }`,
-  toggle: `{ variables: { face: { kind: "state", key: "face", default: "shut" } }, actions: { flip: { set: "face", cycle: ["shut", "open"] } }, segments: { door: { template: '{{ action "flip" "door shut" "door open" }}' } }, root: { h: ['door'] } }`,
+  warned: `{ globals: { effect: "sparkle", effect: "sparkle", experimentalBand: true }, segments: { mark: { template: 'a warned mark' } }, root: { h: ['mark'] } }`,
+  toggle: `{ globals: { experimentalBand: true }, variables: { face: { kind: "state", key: "face", default: "shut" } }, actions: { flip: { set: "face", cycle: ["shut", "open"] } }, segments: { door: { template: '{{ action "flip" "door shut" "door open" }}' } }, root: { h: ['door'] } }`,
 };
 
 const sleep = (ms: number): Promise<void> =>
@@ -92,6 +95,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     const stream = openFrameStream(
       sockPath,
       sessionId,
+      "band",
       (resp) => frames.push({ at: Date.now() - opened, resp }),
       (end) => {
         if (end.kind === "failed") throw end.error;
@@ -244,7 +248,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   test("a subscribe that names no session is refused, and the stream ends on the refusal", async () => {
     const frames: Response[] = [];
     const end = await new Promise<StreamEnd>((resolve) =>
-      openFrameStream(sockPath, "", (resp) => frames.push(resp), resolve),
+      openFrameStream(sockPath, "", "band", (resp) => frames.push(resp), resolve),
     );
     expect(end).toMatchObject({
       kind: "refused",
@@ -252,6 +256,108 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     });
     expect(frames).toEqual([]);
   });
+
+  // The lane toggles (candybar-animation-wbxz.81o.azo).
+  const subscribeUntilEnd = (sessionId: string, lane: "band" | "pane") => {
+    const frames: Response[] = [];
+    const ended = new Promise<StreamEnd>((resolve) =>
+      openFrameStream(sockPath, sessionId, lane, (resp) => frames.push(resp), resolve),
+    );
+    return { frames, ended };
+  };
+  const setState = (sid: string, key: string, value: string): Promise<void> =>
+    click(sockPath, effectsUrl([{ verb: VERB_SET_STATE, args: [sid, key, value] }]));
+
+  // A subscribe naming no lane is a client from before the toggles, told to
+  // update (VERSION_MISMATCH stops it; BAD_REQUEST would have it retry).
+  test("a subscribe that names no lane, or one nobody declared, is refused", async () => {
+    await render(sockPath, "feed-nolane", projectDir, {}, args("still"));
+    const subscribe = (lane: unknown) =>
+      sendDaemonRequest(
+        sockPath,
+        { v: PROTOCOL_VERSION, kind: "subscribe", sessionId: "feed-nolane", lane },
+        5000,
+      );
+    expect(await subscribe(undefined)).toMatchObject({
+      ok: false,
+      code: "VERSION_MISMATCH",
+      daemonV: PROTOCOL_VERSION,
+      error: expect.stringMatching(/names no lane .*predates the lane toggles/),
+    });
+    expect(await subscribe("everywhere")).toMatchObject({
+      ok: false,
+      code: "BAD_REQUEST",
+      error: expect.stringMatching(/needs a lane, one of band, statusline, pane/),
+    });
+  });
+
+  test("a subscribe for a lane its session leaves off is refused, naming the toggle, and opens no feed", async () => {
+    await render(sockPath, "feed-off", projectDir, {}, args("off"));
+    const before = await feedStats();
+    const { frames, ended } = subscribeUntilEnd("feed-off", "band");
+    expect(await ended).toMatchObject({
+      kind: "refused",
+      resp: {
+        ok: false,
+        code: "SWITCHED_OFF",
+        error: expect.stringContaining("globals.experimentalBand"),
+      },
+    });
+    expect(frames).toEqual([]);
+    expect(await feedStats()).toMatchObject({
+      feeds: before.feeds,
+      subscribers: before.subscribers,
+      refused: before.refused + 1,
+    });
+  });
+
+  test("a lane the session switches on streams, and switching it off ends the stream", async () => {
+    await render(sockPath, "feed-lane", projectDir, {}, args("off"));
+    // The menu's toggle is a session pick, honoured at the next subscribe
+    // with no statusline request between.
+    await setState("feed-lane", "experimentalBand", "true");
+    const band = subscribeUntilEnd("feed-lane", "band");
+    // Another lane of the same session is still off.
+    const pane = subscribeUntilEnd("feed-lane", "pane");
+    expect(await pane.ended).toMatchObject({
+      kind: "refused",
+      resp: { code: "SWITCHED_OFF", error: expect.stringContaining("experimentalPane") },
+    });
+    await sleep(300);
+    expect(band.frames.map((r) => (r.ok && "output" in r ? stripAnsi(r.output) : r))).toEqual([
+      expect.stringContaining("an unswitched mark"),
+    ]);
+    // Switching it off wakes the feed, whose next frame ends the stream.
+    await setState("feed-lane", "experimentalBand", "false");
+    expect(await band.ended).toMatchObject({
+      kind: "refused",
+      resp: { code: "SWITCHED_OFF" },
+    });
+  });
+
+  test("a follower waits out a lane switched off and resumes the frames once it is on", async () => {
+    await render(sockPath, "feed-follow", projectDir, {}, args("off"));
+    const seen: string[] = [];
+    let offs = 0;
+    const follower = followFrames(sockPath, "feed-follow", "band", {
+      frame: (resp) => seen.push(resp.ok && "output" in resp ? stripAnsi(resp.output) : JSON.stringify(resp)),
+      off: () => offs++,
+      fault: (reason) => seen.push(`fault: ${reason}`),
+      exit: (reason) => seen.push(`exit: ${reason}`),
+    });
+    try {
+      const deadline = (ms: number) => Date.now() + ms;
+      let until = deadline(2000);
+      while (offs === 0 && Date.now() < until) await sleep(20);
+      expect(offs).toBe(1);
+      await setState("feed-follow", "experimentalBand", "true");
+      until = deadline(SWITCHED_OFF_RETRY_MS + 3000);
+      while (seen.length === 0 && Date.now() < until) await sleep(50);
+      expect(seen).toEqual([expect.stringContaining("an unswitched mark")]);
+    } finally {
+      follower.close();
+    }
+  }, 20_000);
 
   test("a render request whose cwd is not a string is refused and counted, not thrown", async () => {
     const before = (await stats()).requests.errored;
@@ -278,7 +384,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     const before = await feedStats();
     await new Promise<void>((resolve) => {
       const sock = net.createConnection({ path: sockPath }, () => {
-        sock.end(encodeFrame({ v: PROTOCOL_VERSION, kind: "subscribe", sessionId: "feed-hangup" }));
+        sock.end(encodeFrame({ v: PROTOCOL_VERSION, kind: "subscribe", sessionId: "feed-hangup", lane: "band" }));
         sock.destroy();
         resolve();
       });

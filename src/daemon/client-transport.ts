@@ -53,6 +53,7 @@ export type PermanentOutcome =
     }
   | { kind: "permanent"; cause: "bad_request"; message: string }
   | { kind: "permanent"; cause: "render_failed"; message: string }
+  | { kind: "permanent"; cause: "switched_off"; message: string }
   | { kind: "permanent"; cause: "malformed_response"; message: string };
 
 // [LAW:single-enforcer] The protocol version is stamped here, on every
@@ -170,6 +171,12 @@ function interpretResponse<T>(
         cause: "render_failed",
         message: errorMessage,
       };
+    case "SWITCHED_OFF":
+      return {
+        kind: "permanent",
+        cause: "switched_off",
+        message: errorMessage,
+      };
     default:
       // Unknown wire code — mirrors rust-client's `_ => MalformedResponse(...)`
       // so both runtimes converge on the same observable behavior for any
@@ -267,6 +274,7 @@ export function describeFailure(outcome: FailureOutcome): string {
     }
     case "bad_request":
     case "render_failed":
+    case "switched_off":
     case "malformed_response":
       return `daemon error (${outcome.cause}): ${outcome.message}`;
   }

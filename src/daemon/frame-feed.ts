@@ -10,7 +10,9 @@
 // each instant they are drawn, so a frame between two of Claude Code's ticks is
 // the same bar the next tick would draw, at a later instant.
 
-import type { Response } from "./protocol";
+import { inspect } from "node:util";
+import { PROTOCOL_VERSION, type Response } from "./protocol";
+import { laneOffReason, type Lane, type LaneSwitches } from "../config/lanes";
 
 // [LAW:types-are-the-program] Why the next frame falls due when it does: the
 // bar moves and someone can see it; it moves where nobody can, so it is drawn
@@ -50,8 +52,25 @@ export const FEED_PERIODS: FeedPeriods = { moving: 1000 / 30, still: 1000 };
 // once for every subscriber.
 export type Sink = (resp: Response, json: string) => void;
 
+export type Refusal = Extract<Response, { ok: false }>;
+
+// One subscription: the lane it serves, where its frames go, and where its
+// refusal goes — the last thing it receives, since a refused subscription is
+// over.
+export interface Subscriber {
+  readonly lane: Lane;
+  readonly frame: Sink;
+  readonly refused: (resp: Refusal) => void;
+}
+
 export interface FeedDeps<Req> {
   render(req: Req): Promise<FeedFrame>;
+  // Which animation lanes the settings of the session `req` is from switch on
+  // now — its config under its session's picks, never a copy taken when a
+  // frame was drawn, so a toggle turned on is honoured at the next subscribe.
+  lanes(req: Req): LaneSwitches;
+  // A feed opened: whatever runs only while some feed exists starts.
+  opened(): void;
   // Calls `onChange` whenever the session's own state changes (a click opening
   // a menu), so its next frame is drawn at once rather than when it falls due.
   // Returns the disposer.
@@ -77,7 +96,7 @@ type Phase =
 
 interface Feed {
   readonly sessionId: string;
-  readonly sinks: Set<Sink>;
+  readonly sinks: Set<Subscriber>;
   readonly unwatch: () => void;
   phase: Phase;
   // The last frame pushed, as sent, so an unchanged frame is never sent twice
@@ -117,6 +136,8 @@ export interface FeedStats {
   readonly subscribers: number;
   readonly drawn: number;
   readonly pushed: number;
+  // Subscriptions refused or ended because their lane was off.
+  readonly refused: number;
 }
 
 /**
@@ -130,6 +151,7 @@ export class FrameFeeds<Req> {
   private readonly feeds = new Map<string, Feed>();
   private drawn = 0;
   private pushed = 0;
+  private refused = 0;
 
   constructor(private readonly deps: FeedDeps<Req>) {}
 
@@ -160,6 +182,7 @@ export class FrameFeeds<Req> {
     feed.noted++;
     this.count(feed, frame);
     this.push(feed, frame);
+    if (this.feeds.get(sessionId) !== feed) return;
     const now = this.deps.now();
     switch (feed.phase.kind) {
       case "drawing":
@@ -176,15 +199,25 @@ export class FrameFeeds<Req> {
     this.schedule(feed, frame, now, now);
   }
 
-  subscribe(sessionId: string, sink: Sink): () => void {
+  // [LAW:single-enforcer] The one gate on the lanes: a subscription whose
+  // lane the session's settings switch off is refused here before any feed
+  // opens, and one whose lane is switched off while it streams is ended in
+  // `push`. A session the daemon holds no request of yet waits, and its first
+  // frame decides.
+  subscribe(sessionId: string, sub: Subscriber): () => void {
+    const noted = this.requests.get(sessionId);
+    if (noted !== undefined && !this.deps.lanes(noted.req)[sub.lane]) {
+      this.refuse(sessionId, sub);
+      return () => {};
+    }
     const feed = this.feeds.get(sessionId) ?? this.open(sessionId);
-    feed.sinks.add(sink);
-    if (feed.last !== null) sink(feed.last.resp, feed.last.bytes);
+    feed.sinks.add(sub);
+    if (feed.last !== null) sub.frame(feed.last.resp, feed.last.bytes);
     this.deps.log(
       "info",
-      `feed sid=${JSON.stringify(sessionId)} subscribed subscribers=${feed.sinks.size} data=${this.requests.has(sessionId) ? "Y" : "N"}`,
+      `feed sid=${JSON.stringify(sessionId)} subscribed lane=${sub.lane} subscribers=${feed.sinks.size} data=${this.requests.has(sessionId) ? "Y" : "N"}`,
     );
-    return () => this.unsubscribe(feed, sink);
+    return () => this.unsubscribe(feed, sub);
   }
 
   // Draw the session's next frame now, if anyone is watching it.
@@ -221,6 +254,7 @@ export class FrameFeeds<Req> {
       subscribers,
       drawn: this.drawn,
       pushed: this.pushed,
+      refused: this.refused,
     };
   }
 
@@ -243,6 +277,7 @@ export class FrameFeeds<Req> {
       summarizedAt: now,
     };
     this.feeds.set(sessionId, feed);
+    this.deps.opened();
     // A feed's clock starts when it opens: its first frame is drawn at once,
     // and pushed to the subscriber that opened it once the render is out. A
     // later subscriber is handed the frame as it stands.
@@ -250,15 +285,32 @@ export class FrameFeeds<Req> {
     return feed;
   }
 
-  private unsubscribe(feed: Feed, sink: Sink): void {
-    if (!feed.sinks.delete(sink) || feed.sinks.size > 0) return;
+  private unsubscribe(feed: Feed, sub: Subscriber): void {
+    if (!feed.sinks.delete(sub) || feed.sinks.size > 0) return;
     if (feed.phase.kind === "due") clearTimeout(feed.phase.timer);
     feed.unwatch();
     this.feeds.delete(feed.sessionId);
     this.summarize(feed, "closed");
   }
 
-  private async draw(feed: Feed): Promise<void> {
+  // [LAW:single-enforcer] The one fault path of a feed's frame step: a throw
+  // anywhere in it — the render adapter, the lane gate, a subscriber's sink —
+  // is logged as the feed's fault, and the feed's next frame falls due at the
+  // still rate. A frame step runs off a timer, so a throw it let go would be an
+  // unhandled rejection, which exits the daemon.
+  private draw(feed: Feed): Promise<void> {
+    return this.step(feed).catch((error: unknown) => {
+      this.deps.log(
+        "error",
+        `feed sid=${JSON.stringify(feed.sessionId)} threw: ${inspect(error)}`,
+      );
+      if (this.feeds.get(feed.sessionId) !== feed) return;
+      const now = this.deps.now();
+      this.schedule(feed, null, now, now);
+    });
+  }
+
+  private async step(feed: Feed): Promise<void> {
     const noted = this.requests.get(feed.sessionId);
     if (noted === undefined) {
       feed.phase = { kind: "waiting" };
@@ -268,17 +320,9 @@ export class FrameFeeds<Req> {
     const phase: Phase = { kind: "drawing", again: false, superseded: null };
     feed.phase = phase;
     const started = this.deps.now();
-    const frame = await this.deps
-      .render(req)
-      .catch((error: unknown): FeedFrame | null => {
-        // [LAW:no-silent-failure] The render adapter answers a failed render
-        // with its error response; reaching here is a fault in the adapter.
-        this.deps.log(
-          "error",
-          `feed sid=${JSON.stringify(feed.sessionId)} render adapter threw: ${String(error)}`,
-        );
-        return null;
-      });
+    // The render adapter answers a failed render with its error frame; a throw
+    // out of it is a fault in the adapter, `draw`'s to report.
+    const frame = await this.deps.render(req);
     const finished = this.deps.now();
     this.drawn++;
     feed.drawn++;
@@ -286,11 +330,13 @@ export class FrameFeeds<Req> {
     // Unsubscribed while this frame was drawn: the feed is gone, and so is
     // its clock.
     if (this.feeds.get(feed.sessionId) !== feed) return;
-    if (frame !== null) this.count(feed, frame);
+    this.count(feed, frame);
     // A request noted while this frame was drawn was pushed as its own frame;
     // this one, of the data before it, would step the bar back.
-    if (frame !== null && this.requests.get(feed.sessionId) === noted)
+    if (this.requests.get(feed.sessionId) === noted) {
       this.push(feed, frame);
+      if (this.feeds.get(feed.sessionId) !== feed) return;
+    }
     if (finished - feed.summarizedAt >= SUMMARY_EVERY_MS)
       this.summarize(feed, "running");
     if (phase.again) {
@@ -304,7 +350,7 @@ export class FrameFeeds<Req> {
   // [LAW:no-ambient-temporal-coupling] The next frame is due a period after
   // this one STARTED, so the rate holds whatever a render costs, up to a
   // render as slow as the period, when frames are drawn back to back. A frame
-  // the render adapter could not produce is followed at the still rate.
+  // step that faulted is followed at the still rate.
   private schedule(
     feed: Feed,
     frame: FeedFrame | null,
@@ -331,6 +377,17 @@ export class FrameFeeds<Req> {
   }
 
   private push(feed: Feed, frame: FeedFrame): void {
+    // The lanes the session's settings switch on as this frame goes out.
+    const noted = this.requests.get(feed.sessionId);
+    if (noted !== undefined) {
+      const lanes = this.deps.lanes(noted.req);
+      for (const sub of [...feed.sinks]) {
+        if (lanes[sub.lane]) continue;
+        this.unsubscribe(feed, sub);
+        this.refuse(feed.sessionId, sub);
+      }
+    }
+    if (feed.sinks.size === 0) return;
     const { resp } = frame;
     const bytes = JSON.stringify(resp);
     if (feed.last?.bytes === bytes) return;
@@ -342,7 +399,22 @@ export class FrameFeeds<Req> {
     // same bytes, which are not pushed again, and the summary counts it.
     if (frame.failure !== null)
       this.deps.log(frame.failure.level, frame.failure.line);
-    for (const sink of feed.sinks) sink(resp, bytes);
+    for (const sub of feed.sinks) sub.frame(resp, bytes);
+  }
+
+  // A subscription its lane's toggle refuses, told why.
+  private refuse(sessionId: string, sub: Subscriber): void {
+    this.refused++;
+    this.deps.log(
+      "info",
+      `feed sid=${JSON.stringify(sessionId)} refused lane=${sub.lane} switched-off`,
+    );
+    sub.refused({
+      ok: false,
+      error: laneOffReason(sub.lane),
+      code: "SWITCHED_OFF",
+      daemonV: PROTOCOL_VERSION,
+    });
   }
 
   // [LAW:nothing-unseen] A feed's frames are not render requests, so they write
@@ -352,7 +424,7 @@ export class FrameFeeds<Req> {
     const now = this.deps.now();
     this.deps.log(
       "info",
-      `feed sid=${JSON.stringify(feed.sessionId)} ${state} subscribers=${feed.sinks.size} for=${Math.round((now - feed.since) / 1000)}s drawn=${feed.drawn} noted=${feed.noted} moving=${feed.moving} unseen=${feed.unseen} failed=${feed.failed} pushed=${feed.pushed} meanDraw=${feed.drawn === 0 ? "-" : (feed.drawMs / feed.drawn).toFixed(2)}ms`,
+      `feed sid=${JSON.stringify(feed.sessionId)} ${state} subscribers=${feed.sinks.size} lanes=${[...feed.sinks].map((s) => s.lane).join(",") || "-"} for=${Math.round((now - feed.since) / 1000)}s drawn=${feed.drawn} noted=${feed.noted} moving=${feed.moving} unseen=${feed.unseen} failed=${feed.failed} pushed=${feed.pushed} meanDraw=${feed.drawn === 0 ? "-" : (feed.drawMs / feed.drawn).toFixed(2)}ms`,
     );
     feed.summarizedAt = now;
   }

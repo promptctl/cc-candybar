@@ -12,6 +12,7 @@
 
 import type { VariableDecl } from "./dsl-types.js";
 import { SESSION_ID_VAR_NAME } from "../var-system/sources.js";
+import { LANE_FLOOR, LANE_NAMES, laneEffectiveVar } from "./lanes.js";
 
 // The width a compile-only caller (no render, so no width injected) fits and
 // reads: `term.cols`'s default below and ActionRuntime.width's floor.
@@ -148,6 +149,17 @@ export const PAYLOAD_INPUTS: Readonly<Record<string, VariableDecl>> = {
     type: "boolean",
     default: true,
   },
+  ...Object.fromEntries(
+    LANE_NAMES.map((lane) => [
+      laneEffectiveVar(lane),
+      {
+        kind: "input",
+        path: laneEffectiveVar(lane),
+        type: "boolean",
+        default: LANE_FLOOR,
+      },
+    ]),
+  ),
 
   // [LAW:one-source-of-truth] The usable terminal width for THIS render —
   // the exact post-reserve cell count FlexStrip wraps to. renderDsl injects
