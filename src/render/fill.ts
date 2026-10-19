@@ -8,14 +8,14 @@
 // immediately before the row is serialized — the one seam where the cells and the
 // width are both in hand [LAW:single-enforcer].
 
+import { cellLen } from "@promptctl/rich-js";
+
 import {
   sizeCell,
   stripItem,
   type CellSizing,
   type LaidCell,
 } from "../template-engine/layout.js";
-import { cellLen } from "@promptctl/rich-js";
-
 import { renderStripCells, type BuildLineOptions } from "./strip.js";
 import { INVISIBLE } from "./ansi.js";
 import type { RowItem } from "./effect.js";
