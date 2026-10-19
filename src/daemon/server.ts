@@ -1143,10 +1143,11 @@ const DEBUG_RENDER_OPTS: BuildLineOptions = {
 // the DaemonDslState type requires the field.
 const EMPTY_RENDER_MAP = new Map<string, string>();
 
-// [LAW:one-source-of-truth] The color depth is a serialization-time choice. A debug request carries no session, so the
-// sampled entry's CONFIG values are the ones it can state — a session's own
-// pick, like its endcaps, is not visible here. The caller threads the
-// entry-resolved values; this serializer never re-defaults them.
+// [LAW:one-source-of-truth] The color depth is a serialization-time choice.
+// A debug request carries no session, so the sampled entry's CONFIG values
+// are the ones it can state — a session's own pick, like its endcaps, is not
+// visible here. The caller threads the entry-resolved values; this
+// serializer never re-defaults them.
 function serializeSegmentCells(
   cells: ReadonlyMap<string, readonly RichText[]>,
   colorCompatibility: ColorCompatibility,

@@ -541,8 +541,8 @@ set in the config file, so `persist:` is its only click, and a `set` on its key
 is a load error (it would write a session value no render reads).
 `colorCompatibilities` is a registered domain exactly like `themes`/`endcaps`,
 sourced from the same enum the loader validates `globals.colorCompatibility`
-against, so there is no second list to drift out of sync. `autoWrap` is boolean, so it takes a two-member `cycle`; `padding` is a
-bounded range, so it takes a stepper pair — neither needs a registered domain.
+against, so there is no second list to drift out of sync. `autoWrap` is
+boolean, so it takes a two-member `cycle`; `padding` is a bounded range, so it takes a stepper pair — neither needs a registered domain.
 
 `autoWrap` and `padding` resolve like every other pickable global: **the
 session's own pick, over the persisted default, over the config file's value,
