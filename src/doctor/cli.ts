@@ -31,6 +31,7 @@ import {
   askDaemon,
   type DaemonAnswer,
   type DaemonClients,
+  type RateLimitSightings,
 } from "./daemon-answer.js";
 import {
   gatherFacts,
@@ -50,6 +51,8 @@ import { detectConfigEnv } from "../config-hint.js";
 import { explicitConfigPath } from "../utils/user-path.js";
 import { fallbackState, loadFromDisk } from "../daemon/cache/render.js";
 import { SessionState } from "../daemon/session-state.js";
+import { claudeConfigDir } from "../claude-settings.js";
+import type { RateLimitsSeen } from "../daemon/render-sightings.js";
 
 const EXIT_OK = 0;
 const EXIT_FAILED = 1;
@@ -114,6 +117,26 @@ export function installOf(
       );
 }
 
+// What the recent renders of sessions running with this Claude Code
+// directory said of the rate-limit windows — the windows are that
+// directory's account's, so a session of another (a second Claude Code
+// directory on the machine) says nothing about this one.
+export function rateLimitsOf(
+  asked: Asked<RateLimitSightings>,
+  configDir: string,
+): Asked<readonly RateLimitsSeen[]> {
+  return asked.kind === "failed"
+    ? asked
+    : {
+        kind: "ok",
+        value: asked.value
+          .filter(
+            (s) => s.ago <= RECENT_CLIENT_S && s.claudeConfigDir === configDir,
+          )
+          .map((s) => s.rateLimits),
+      };
+}
+
 // [LAW:effects-at-boundaries] The whole CLI as data: facts in, (streams,
 // exit code) out. `runDoctorCli` performs it; a test reads it.
 export async function doctorPlan(
@@ -131,13 +154,14 @@ export async function doctorPlan(
   let facts: DoctorFacts;
   try {
     const answer = await daemon();
+    // [LAW:one-source-of-truth] The hints a statusline client started here
+    // would report, by the client's own detection — over the terminal the
+    // command runs in, standing in for the stream Claude Code would hand
+    // that client (which the command's own redirects say nothing about).
+    const hints = detectClientHints(env, cwd, measureTerminal());
     const gathered = gatherFacts(
       edge,
-      // [LAW:one-source-of-truth] The hints a statusline client started here
-      // would report, by the client's own detection — over the terminal the
-      // command runs in, standing in for the stream Claude Code would hand
-      // that client (which the command's own redirects say nothing about).
-      detectClientHints(env, cwd, measureTerminal()),
+      hints,
       // The config the daemon would load for a session started here: this
       // directory, under the file named on the command line (a statusline
       // command's own `--config`), else the override the statusline client
@@ -153,6 +177,7 @@ export async function doctorPlan(
       // No session: the bar a session started here opens on.
       () => null,
       answer.serving,
+      rateLimitsOf(answer.rateLimits, claudeConfigDir(hints.claudeConfigDir)),
     );
     // Last: the probe opens a link and waits, which a run that cannot report
     // has no reason to do.

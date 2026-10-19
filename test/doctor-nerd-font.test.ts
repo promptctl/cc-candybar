@@ -37,7 +37,7 @@ import {
 import { fileMarkBook, parseMarkBook, withMark } from "../src/doctor/mark-book";
 import { memoryMarkBook } from "./helpers/mark-book";
 import { memoryClickedTerminals } from "./helpers/clicked-terminals";
-import { HEALTHY_FACTS, healthyDaemonEdge, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE } from "./helpers/doctor-facts";
+import { HEALTHY_FACTS, healthyDaemonEdge, healthyDataEdge, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, CARRIED } from "./helpers/doctor-facts";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -499,6 +499,7 @@ describe("gatherFacts: where the Nerd Font facts come from", () => {
     const e: DoctorEdge = {
       install: HEALTHY_INSTALL_EDGE,
       ...healthyDaemonEdge(),
+      ...healthyDataEdge(),
       probeTmux: client,
       remoteLogin: (pid) => {
         pids.push(pid);
@@ -522,10 +523,15 @@ describe("gatherFacts: where the Nerd Font facts come from", () => {
     e: DoctorEdge,
     hints: Partial<Pick<ClientHints, "tmux" | "terminalEnv" | "ssh">>,
     pick: (key: string) => string | null = () => null,
-  ) => gatherFacts(e, { claudeConfigDir: conf, ...hints }, ORIGIN, pick, {
-    kind: "ok",
-    value: HEALTHY_SERVING,
-  });
+  ) =>
+    gatherFacts(
+      e,
+      { claudeConfigDir: conf, ...hints },
+      ORIGIN,
+      pick,
+      { kind: "ok", value: HEALTHY_SERVING },
+      CARRIED,
+    );
   const drawn = (
     e: DoctorEdge,
     hints: Partial<Pick<ClientHints, "tmux" | "terminalEnv" | "ssh">>,

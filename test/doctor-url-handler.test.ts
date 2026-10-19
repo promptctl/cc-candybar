@@ -6,7 +6,7 @@
 // app's script against the installer that writes it.
 
 import { instantOf } from "../src/utils/instant";
-import { ClientSightings } from "../src/daemon/client-sightings";
+import { RenderSightings } from "../src/daemon/render-sightings";
 import {
   BUNDLED_GLYPHS,
   BUNDLED_GLYPHS_LOGGED,
@@ -36,7 +36,7 @@ import {
 import { PACKAGE_VERSION } from "../src/version";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { recordRender, testVerbContext } from "./helpers/click";
-import { HEALTHY_FACTS, healthyDaemonEdge, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, healthyClient } from "./helpers/doctor-facts";
+import { HEALTHY_FACTS, healthyDaemonEdge, healthyDataEdge, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, healthyClient, renderSaid } from "./helpers/doctor-facts";
 
 const probe = checkByName("urlHandler")!.probe;
 const verdict = (urlHandler: UrlHandlerFacts) =>
@@ -402,8 +402,8 @@ describe("the daemon's side of the round trip", () => {
     const sessionState = new SessionState();
     const probes = new ProbeArrivals();
     // The client the session's last render carried, as the daemon saw it.
-    const clients = new ClientSightings();
-    clients.see("s1", healthyClient(), instantOf(new Date()));
+    const clients = new RenderSightings();
+    clients.see("s1", renderSaid(healthyClient()), instantOf(new Date()));
     const logs: string[] = [];
     const ctx: VerbContext = {
       ...testVerbContext(sessionState),
@@ -414,6 +414,7 @@ describe("the daemon's side of the round trip", () => {
       doctor: {
         install: HEALTHY_INSTALL_EDGE,
         ...healthyDaemonEdge(),
+        ...healthyDataEdge(),
         probeTmux: () => ({
           kind: "ok",
           value: { features: [], termtype: "", termname: "", pid: 4242, utf8: true },
@@ -492,7 +493,7 @@ describe("the daemon's side of the round trip", () => {
     const row = doctorRow(PACKAGE_VERSION);
     expect(row.verdict).toBe("ok");
     expect(row.logs).toEqual([
-      `doctor: config=ok install=ok daemon=ok urlHandler=ok links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=ok glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=ghostty@- font=- mark=- tmuxLinks=- clicked=yes cols=148 clientUtf8=- clients=native/same/- daemons=1 others=- rss=120/512 postMortems=0/0 (session=s1)`,
+      `doctor: config=ok install=ok daemon=ok urlHandler=ok links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=ok segmentData=ok glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=ghostty@- font=- mark=- tmuxLinks=- clicked=yes cols=148 clientUtf8=- clients=native/same/- daemons=1 others=- rss=120/512 postMortems=0/0 data=pr:-,rateLimits:1/0/0,memento:located (session=s1)`,
     ]);
   });
 
@@ -503,7 +504,7 @@ describe("the daemon's side of the round trip", () => {
       `the URL handler runs cc-candybar 0.0.1; the bar runs ${PACKAGE_VERSION} — re-run \`cc-candybar install\``,
     );
     expect(row.logs).toEqual([
-      `doctor: config=ok install=ok daemon=ok urlHandler=failed(1) links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=ok glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=ghostty@- font=- mark=- tmuxLinks=- clicked=yes cols=148 clientUtf8=- clients=native/same/- daemons=1 others=- rss=120/512 postMortems=0/0 (session=s1)`,
+      `doctor: config=ok install=ok daemon=ok urlHandler=failed(1) links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=ok segmentData=ok glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=ghostty@- font=- mark=- tmuxLinks=- clicked=yes cols=148 clientUtf8=- clients=native/same/- daemons=1 others=- rss=120/512 postMortems=0/0 data=pr:-,rateLimits:1/0/0,memento:located (session=s1)`,
     ]);
   });
 

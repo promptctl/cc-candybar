@@ -89,7 +89,12 @@ import { settingCounts } from "./setting-drafts";
 import { validateHookData } from "../utils/schema-validator.js";
 import { productionEdge } from "../doctor/edge";
 import { ProbeArrivals } from "../doctor/handler-probe";
-import { ClientSightings } from "./client-sightings";
+import {
+  RenderSightings,
+  rateLimitsSeen,
+  type RateLimitsSeen,
+} from "./render-sightings";
+import { claudeConfigDir } from "../claude-settings";
 import { setLaunchStats } from "../proc/launch";
 import { buildDebugSnapshot } from "./debug";
 import { DEBUG_WHATS, isDebugWhat } from "./debug-types";
@@ -160,7 +165,7 @@ import {
 // instances would defeat the share-across-sessions invariant.
 const stats = new RuntimeStats();
 const handlerProbes = new ProbeArrivals();
-const clientSightings = new ClientSightings();
+const renderSightings = new RenderSightings();
 // The bundle this daemon runs: the file the entry was loaded from, as the
 // build watch and the update notice read it — what daemon-stats and the
 // doctor's click name the install by.
@@ -1144,7 +1149,7 @@ export async function replyTo(
         watchersActive: watcherRegistry.size(),
         nextRestartReason: establishedLimits().describeNextRestart(),
         handlerProbes: handlerProbes.list(),
-        clients: clientSightings.list(instantOf(new Date())),
+        clients: renderSightings.list(instantOf(new Date())),
         bundle: DAEMON_BUNDLE,
         daemon: establishedLimits().serving(),
       }),
@@ -1174,9 +1179,13 @@ export async function replyTo(
     // frames a feed draws from a session's data are not, so this is the one
     // write, here rather than in renderChecked.
     if (checked.ok) {
-      clientSightings.see(
+      renderSightings.see(
         checked.req.hookData.session_id,
-        checked.req.hints.client,
+        {
+          client: checked.req.hints.client ?? null,
+          rateLimits: checked.req.rateLimits,
+          claudeConfigDir: claudeConfigDir(checked.req.hints.claudeConfigDir),
+        },
         at,
       );
     }
@@ -1365,7 +1374,7 @@ const verbCtx = {
     };
   }),
   probes: handlerProbes,
-  clients: clientSightings,
+  clients: renderSightings,
   bundle: DAEMON_BUNDLE,
   serving: () => establishedLimits().serving(),
   memento: mementoProvider,
@@ -1560,12 +1569,14 @@ function lanesOf(req: CheckedRenderRequest): LaneSwitches {
 // required field with its declared type, its cwd is absolute, `hints` is its
 // client hints, parsed, and its args are parsed into `requested` — the config
 // inputs it named, its explicit path the `--config` flag over the client's
-// `CC_CANDYBAR_CONFIG` hint — and `unknownFlagsError`. Raw `req.*` hint
+// `CC_CANDYBAR_CONFIG` hint — and `unknownFlagsError`, and `rateLimits` is
+// what its hookData says of the rate-limit windows. Raw `req.*` hint
 // fields and `req.args` are not read past the checkpoint. Only
 // checkRenderRequest makes one.
 declare const CHECKED: unique symbol;
 type CheckedRenderRequest = RenderRequest & {
   readonly hints: ClientHints;
+  readonly rateLimits: RateLimitsSeen;
   readonly requested: RenderOrigin;
   readonly unknownFlagsError: string | null;
   readonly [CHECKED]: true;
@@ -1636,6 +1647,7 @@ function checkRenderRequest(
     req: {
       ...req,
       hints,
+      rateLimits: rateLimitsSeen(req.hookData),
       requested: {
         projectDir: req.hookData.workspace.project_dir,
         cwd: req.cwd,
@@ -1695,6 +1707,9 @@ async function renderChecked(
     // Which program drew this bar (src/client-hint.ts); `unreported` for a
     // client too old to say.
     client: hints.client?.kind ?? "unreported",
+    // What the sighting recorded of the rate-limit windows — the fact the
+    // doctor's segment-data check reads (RenderSightings).
+    rateLimits: req.rateLimits,
   });
   // [LAW:one-source-of-truth] The explicit config path has three
   // spellings and ONE precedence: a load-config pick (sessionRenderOrigin)
@@ -1953,7 +1968,7 @@ function recordRequest(req: CheckedRenderRequest): void {
   // hints of its own, so the doctor (verbs/index.ts) reads the facts of this
   // session's last request from here, re-parsed through the same checkpoint.
   // The client itself is not recorded: which client drew a session's bar is
-  // ClientSightings' fact (src/daemon/client-sightings.ts), held in memory,
+  // RenderSightings' fact (src/daemon/render-sightings.ts), held in memory,
   // and two clients drawing one session would otherwise rewrite this
   // persisted record on every request.
   const { client: _client, ...recorded } = req.hints;

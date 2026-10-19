@@ -3,7 +3,7 @@
 // built from the source beside it. The probe is pure over InstallFacts; the
 // fold from what the daemon saw to those facts (installFacts), the CLI's read
 // of daemon-stats (parseDaemonClients), the daemon's record of each session's
-// latest client (ClientSightings) and the hint's checkpoint are each pinned
+// latest client (RenderSightings) and the hint's checkpoint are each pinned
 // here.
 
 import { installOf } from "../src/doctor/cli";
@@ -20,10 +20,10 @@ import {
 import { installFacts, type InstallEdge } from "../src/doctor/edge";
 import { installFields } from "../src/doctor/report";
 import { parseDaemonClients } from "../src/doctor/daemon-answer";
-import { ClientSightings, SIGHTINGS_KEPT } from "../src/daemon/client-sightings";
+import { RenderSightings, SIGHTINGS_KEPT } from "../src/daemon/render-sightings";
 import { parseClientHints } from "../src/daemon/protocol";
 import type { Instant } from "../src/utils/instant";
-import { HEALTHY_FACTS, HEALTHY_INSTALL_EDGE } from "./helpers/doctor-facts";
+import { HEALTHY_FACTS, HEALTHY_INSTALL_EDGE, renderSaid } from "./helpers/doctor-facts";
 
 const BUNDLE = "/opt/cc/dist/index.mjs";
 const ROOT = "/src/cc";
@@ -220,7 +220,7 @@ describe("install probe", () => {
     ).toEqual({
       ok: false,
       reason:
-        "the daemon restarted since this bar was drawn, so which client draws it is unknown — run the doctor again once the bar has redrawn",
+        "this daemon holds no render of this bar (it restarted since the bar was drawn, or has served 64 newer sessions), so which client draws it is unknown — run the doctor again once the bar has redrawn",
     });
   });
 
@@ -416,54 +416,57 @@ describe("parseDaemonClients: the CLI's read of daemon-stats", () => {
   });
 });
 
-describe("ClientSightings: each session's latest client", () => {
+describe("RenderSightings: each session's latest client", () => {
   const at = (s: number) => s as Instant;
   const client = (bundle: string) =>
     ({ kind: "native", bundle, source: null }) as const;
 
   test("a session's next render replaces its client at once", () => {
-    const sightings = new ClientSightings();
-    sightings.see("s1", client("/old/dist/index.mjs"), at(100));
-    sightings.see("s1", client(BUNDLE), at(105));
-    sightings.see("s2", undefined, at(103));
+    const sightings = new RenderSightings();
+    sightings.see("s1", renderSaid(client("/old/dist/index.mjs")), at(100));
+    sightings.see("s1", renderSaid(client(BUNDLE)), at(105));
+    sightings.see("s2", renderSaid(undefined), at(103));
     expect(sightings.list(at(110))).toEqual([
-      { client: client(BUNDLE), ago: 5 },
-      { client: null, ago: 7 },
+      { ...renderSaid(client(BUNDLE)), ago: 5 },
+      { ...renderSaid(null), ago: 7 },
     ]);
   });
 
   test("a click reads its own session's sighting, and none this process has not seen", () => {
-    const sightings = new ClientSightings();
-    sightings.see("s1", client(BUNDLE), at(100));
-    sightings.see("s2", undefined, at(104));
-    expect(sightings.ofSession("s1")).toEqual([client(BUNDLE)]);
+    const sightings = new RenderSightings();
+    sightings.see("s1", renderSaid(client(BUNDLE)), at(100));
+    sightings.see("s2", renderSaid(undefined), at(104));
+    expect(sightings.ofSession("s1")).toEqual([renderSaid(client(BUNDLE))]);
     expect(sightings.ofSession("restarted-under-me")).toEqual([]);
   });
 
   test("two clients drawing one session are both kept: the last to render hides neither", () => {
-    const sightings = new ClientSightings();
+    const sightings = new RenderSightings();
     const frames = { kind: "frames", bundle: BUNDLE, source: null } as const;
-    sightings.see("s1", client("/stale/dist/index.mjs"), at(100));
-    sightings.see("s1", frames, at(101));
-    sightings.see("s1", frames, at(102));
+    sightings.see("s1", renderSaid(client("/stale/dist/index.mjs")), at(100));
+    sightings.see("s1", renderSaid(frames), at(101));
+    sightings.see("s1", renderSaid(frames), at(102));
     expect(sightings.ofSession("s1")).toEqual([
-      client("/stale/dist/index.mjs"),
-      frames,
+      renderSaid(client("/stale/dist/index.mjs")),
+      renderSaid(frames),
     ]);
     expect(sightings.list(at(110))).toHaveLength(2);
     // A rebuilt statusline client replaces the old one in the same role.
-    sightings.see("s1", undefined, at(103));
-    expect(sightings.ofSession("s1")).toEqual([frames, null]);
+    sightings.see("s1", renderSaid(undefined), at(103));
+    expect(sightings.ofSession("s1")).toEqual([
+      renderSaid(frames),
+      renderSaid(null),
+    ]);
   });
 
   test("the sessions longest without a render are the ones dropped", () => {
-    const sightings = new ClientSightings();
+    const sightings = new RenderSightings();
     for (let i = 0; i <= SIGHTINGS_KEPT; i++) {
-      sightings.see(`s${i}`, undefined, at(i));
+      sightings.see(`s${i}`, renderSaid(undefined), at(i));
     }
     const kept = sightings.list(at(1000));
     expect(kept).toHaveLength(SIGHTINGS_KEPT);
-    expect(kept[0]).toEqual({ client: null, ago: 999 });
+    expect(kept[0]).toEqual({ ...renderSaid(null), ago: 999 });
   });
 });
 

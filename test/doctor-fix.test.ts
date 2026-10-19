@@ -7,7 +7,7 @@
 // in the Claude Code directory the client's `claudeConfigDir` hint names.
 
 import { memoryMarkBook } from "./helpers/mark-book";
-import { healthyDaemonEdge, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, HEALTHY_FACTS } from "./helpers/doctor-facts";
+import { healthyDaemonEdge, healthyDataEdge, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, HEALTHY_FACTS, CARRIED } from "./helpers/doctor-facts";
 import { memoryClickedTerminals } from "./helpers/clicked-terminals";
 import fs from "node:fs";
 import os from "node:os";
@@ -40,6 +40,7 @@ const loadsConfig = (config: DslConfig): DoctorEdge["loadConfig"] => () => ({
 const NO_TMUX: DoctorEdge = {
   install: HEALTHY_INSTALL_EDGE,
   ...healthyDaemonEdge(),
+  ...healthyDataEdge(),
   probeTmux: () => {
     throw new Error("probeTmux must not run in this case");
   },
@@ -82,10 +83,14 @@ const factsIn = (
   sessionPick: (key: string) => string | null = NO_SESSION,
 ) =>
 ({
-    ...gatherFacts(edge, { tmux, claudeConfigDir: conf }, ORIGIN, sessionPick, {
-      kind: "ok",
-      value: HEALTHY_SERVING,
-    }),
+    ...gatherFacts(
+      edge,
+      { tmux, claudeConfigDir: conf },
+      ORIGIN,
+      sessionPick,
+      { kind: "ok", value: HEALTHY_SERVING },
+      CARRIED,
+    ),
     urlHandler: { kind: "unsupported" } as const,
     askedBy: "command" as const,
     install: HEALTHY_FACTS.install,
@@ -355,6 +360,7 @@ describe("gatherFacts", () => {
     const edge: DoctorEdge = {
       install: HEALTHY_INSTALL_EDGE,
       ...healthyDaemonEdge(),
+      ...healthyDataEdge(),
       probeTmux: (hint) => {
         asked.push(hint);
         return {

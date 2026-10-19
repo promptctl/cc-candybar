@@ -25,6 +25,7 @@ import {
   type InstallFacts,
   type MarkBook,
   type NerdFontFacts,
+  type SegmentDataFacts,
   type TerminalIdentity,
 } from "./checks.js";
 import { SETTINGS_NS } from "../config/loader/reserved-namespace.js";
@@ -137,6 +138,36 @@ export function daemonFields({
       ? "unread"
       : `${unreadPostMortems(serving.value, read).length}/${postMortems.value.length}`;
   return `${running} rss=${mb(rss)}/${mb(rssLimit)} postMortems=${told}`;
+}
+
+// [LAW:nothing-unseen] What the segment-data check reasoned over, as one
+// logfmt field: per source, what was found — `-` where no segment needs it.
+// `pr`: ready, missing, logged-out, no-forge (the checkout names none) or
+// failed; `rateLimits`: the renders that carried / lacked / had no response
+// yet; `memento`: located, absent or failed.
+export function dataFields(data: SegmentDataFacts): string {
+  const pr = (): string => {
+    if (data.pullRequests.kind === "unneeded") return "-";
+    const fact = data.pullRequests.fact;
+    if (fact.kind === "failed") return "failed";
+    if (fact.value === null) return "no-forge";
+    const { status } = fact.value;
+    return typeof status === "string" ? status : "logged-out";
+  };
+  const rateLimits = (): string => {
+    if (data.rateLimits.kind === "unneeded") return "-";
+    const fact = data.rateLimits.fact;
+    if (fact.kind === "failed") return "failed";
+    const count = (seen: string) => fact.value.filter((v) => v === seen).length;
+    return `${count("carried")}/${count("missing")}/${count("unanswered")}`;
+  };
+  const memento =
+    data.memento.kind === "unneeded"
+      ? "-"
+      : data.memento.fact.located.kind === "ok"
+        ? "located"
+        : data.memento.fact.located.kind;
+  return `data=pr:${pr()},rateLimits:${rateLimits()},memento:${memento}`;
 }
 
 // [LAW:nothing-unseen] What the Nerd Font check reasoned over, as logfmt

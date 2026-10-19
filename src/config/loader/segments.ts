@@ -14,6 +14,7 @@
 
 import {
   JUSTIFY_MODES,
+  MISSING_DATA,
   TRUNCATE_MODES,
   type DslConfig,
   type RawSegmentDecl,
@@ -180,6 +181,7 @@ const SEGMENT_FIELDS: FieldSpecMap<SegmentDecl> = {
   palette: paletteSpec(),
   vars: varsSpec(),
   settings: settingsDeclSpec(),
+  missingData: optionalEnumSpec(MISSING_DATA),
 };
 
 const SEGMENT_SCHEMA: RecordSchema<SegmentDecl> = {

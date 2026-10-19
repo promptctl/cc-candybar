@@ -19,6 +19,10 @@ import { DEFAULT_TERMINAL_WIDTH } from "../render/strip.js";
 import type { LoopName } from "@promptctl/rich-js";
 import { EFFECT_FLOOR, type EffectSelection } from "../themes/policy.js";
 import type { Outcome } from "../utils/outcome.js";
+import {
+  SIGHTINGS_KEPT,
+  type RateLimitsSeen,
+} from "../daemon/render-sightings.js";
 import type { DeclKind, UnusedDecl } from "../config/unused.js";
 import {
   approachingLimit,
@@ -275,6 +279,43 @@ export interface DaemonFacts {
   readonly read: Asked<string | null>;
 }
 
+// [LAW:types-are-the-program] One outside source of segment data
+// (src/doctor/data-needs.ts): no placed segment counts its absence as a
+// failure — so nothing was asked — or the segments that do, never empty, and
+// what was found.
+export type DataNeed<T> =
+  | { readonly kind: "unneeded" }
+  | {
+      readonly kind: "needed";
+      readonly segments: readonly [string, ...string[]];
+      readonly fact: T;
+    };
+
+// What the forge CLI said of itself, asked locally (`gh auth token`): ready,
+// not installed, or installed with no login for the remote's host (its own
+// line saying so).
+export type ForgeStatus = "ready" | "missing" | { readonly loggedOut: string };
+
+export interface ForgeLogin {
+  readonly cli: string;
+  readonly host: string;
+  readonly status: ForgeStatus;
+}
+
+export interface SegmentDataFacts {
+  // null: the session's checkout names no forge (or is no checkout) — a PR
+  // lookup has nothing to ask, so there is nothing to have.
+  readonly pullRequests: DataNeed<Asked<ForgeLogin | null>>;
+  // What each recent render's payload said of the rate-limit windows.
+  readonly rateLimits: DataNeed<Asked<readonly RateLimitsSeen[]>>;
+  // The installed memento's root, or absent (not installed, or disabled), in
+  // `claudeConfigDir`.
+  readonly memento: DataNeed<{
+    readonly located: Outcome<string>;
+    readonly claudeConfigDir: string;
+  }>;
+}
+
 export interface PlacementEffectFact {
   readonly placement: string;
   readonly effect: LoopName;
@@ -294,7 +335,7 @@ export interface DoctorFacts {
   readonly urlHandler: UrlHandlerFacts;
   // The clients that drew the bar and the install the daemon runs from: the
   // click's own render, or — for the CLI — every session's latest render this
-  // daemon process served (src/daemon/client-sightings.ts).
+  // daemon process served (src/daemon/render-sightings.ts).
   readonly install: InstallFacts;
   readonly daemon: DaemonFacts;
   readonly nerdFont: NerdFontFacts;
@@ -317,6 +358,9 @@ export interface DoctorFacts {
   // .3vt), resolved as the render resolves it: a fade moves over 20 s, a
   // dissolve over 30 s.
   readonly transitions: boolean;
+  // The outside data the session's placed segments read
+  // (brandon-doctor-v62x.onf).
+  readonly data: SegmentDataFacts;
   // The session's Claude Code settings file and the entries read from it — a
   // second, daemon-observable fact beside the client-observed env, so a
   // verdict can say the truthful thing after a fix has landed but Claude Code
@@ -741,6 +785,10 @@ function installProblems(
 // beside it. Judged on the clients that DREW the bar, not on the settings
 // file — managed settings, a project file or a launcher script may stand
 // between what it names and what runs.
+// [LAW:one-source-of-truth] Why a click finds no sighting of its own bar —
+// the install and segment-data checks both say it.
+const NO_RENDER_OF_THIS_BAR = `this daemon holds no render of this bar (it restarted since the bar was drawn, or has served ${SIGHTINGS_KEPT} newer sessions)`;
+
 const install: Check = {
   name: "install",
   label: "install",
@@ -758,7 +806,7 @@ const install: Check = {
         ok: false,
         reason:
           askedBy === "click"
-            ? "the daemon restarted since this bar was drawn, so which client draws it is unknown — run the doctor again once the bar has redrawn"
+            ? `${NO_RENDER_OF_THIS_BAR}, so which client draws it is unknown — run the doctor again once the bar has redrawn`
             : `no statusline client has drawn a bar for this daemon in the last ${RECENT_CLIENT_S / 60} minutes — run the doctor again once the bar has redrawn; if it never does, the statusLine command does not run cc-candybar`,
       };
     }
@@ -1196,6 +1244,93 @@ const nerdFont: Check = {
   },
 };
 
+// How the segments that need a source read in a reason, and how to stop
+// counting it.
+function named(segments: readonly string[]): string {
+  return segments.join(", ");
+}
+function optOut(segments: readonly string[]): string {
+  return `or set missingData: "ignore" on ${named(segments)}`;
+}
+
+function pullRequestProblems(need: SegmentDataFacts["pullRequests"]): string[] {
+  if (need.kind === "unneeded") return [];
+  const { segments, fact } = need;
+  if (fact.kind === "failed") {
+    return [
+      `${named(segments)}: whether the forge CLI is ready could not be asked: ${fact.reason}`,
+    ];
+  }
+  if (fact.value === null) return [];
+  const { cli, host, status } = fact.value;
+  if (status === "ready") return [];
+  return status === "missing"
+    ? [
+        `${named(segments)}: ${cli} is not installed, so no pull request is ever shown — install it, ${optOut(segments)}`,
+      ]
+    : [
+        `${named(segments)}: ${cli} is not logged in to ${host} (${status.loggedOut}) — run \`${cli} auth login --hostname ${host}\`, ${optOut(segments)}`,
+      ];
+}
+
+function rateLimitProblems(
+  need: SegmentDataFacts["rateLimits"],
+  askedBy: DoctorFacts["askedBy"],
+): string[] {
+  if (need.kind === "unneeded") return [];
+  const { segments, fact } = need;
+  if (fact.kind === "failed") return [`${named(segments)}: ${fact.reason}`];
+  if (fact.value.length === 0) {
+    return [
+      askedBy === "click"
+        ? `${named(segments)}: ${NO_RENDER_OF_THIS_BAR}, so whether Claude Code sends rate_limits is unseen — run the doctor again once the bar has redrawn`
+        : `${named(segments)}: no session of this Claude Code has drawn a bar for this daemon in the last ${RECENT_CLIENT_S / 60} minutes, so whether it sends rate_limits is unseen — run the doctor again once the bar has redrawn`,
+    ];
+  }
+  // The windows are the account's a session bills, which its environment
+  // can change (an API key, another endpoint): one session of another
+  // account says nothing of whether this Claude Code sends them, so only a
+  // response no render carried them after is a finding — for a click, its
+  // own session's.
+  return fact.value.includes("missing") && !fact.value.includes("carried")
+    ? [
+        `${named(segments)}: Claude Code sent no rate_limits — it sends them only to Claude.ai subscription sessions; on any other account, set missingData: "ignore" on ${named(segments)}`,
+      ]
+    : [];
+}
+
+function mementoProblems(need: SegmentDataFacts["memento"]): string[] {
+  if (need.kind === "unneeded") return [];
+  const { segments, fact } = need;
+  switch (fact.located.kind) {
+    case "ok":
+      return [];
+    case "absent":
+      return [
+        `${named(segments)}: memento is not installed (or is disabled) for ${fact.claudeConfigDir} — install the memento plugin, ${optOut(segments)}`,
+      ];
+    case "failed":
+      return [
+        `${named(segments)}: whether memento is installed could not be read: ${fact.located.reason}`,
+      ];
+  }
+}
+
+// "Segments have their data" (brandon-doctor-v62x.onf): every placed segment
+// whose `missingData` is "fail" gets the outside data it reads. No fix:
+// installing a CLI, logging in, or a subscription is the user's to do.
+const segmentData: Check = {
+  name: "segmentData",
+  label: "segment data",
+  takesMark: false,
+  probe: ({ data, askedBy }) =>
+    problemsVerdict([
+      ...pullRequestProblems(data.pullRequests),
+      ...rateLimitProblems(data.rateLimits, askedBy),
+      ...mementoProblems(data.memento),
+    ]),
+};
+
 export const CHECKS: readonly Check[] = [
   config,
   install,
@@ -1207,6 +1342,7 @@ export const CHECKS: readonly Check[] = [
   termWidth,
   effectRefresh,
   nerdFont,
+  segmentData,
 ];
 
 // The checks that take the user's mark — the only ones a mark may name.

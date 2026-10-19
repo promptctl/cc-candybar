@@ -248,6 +248,7 @@ describe("config probe", () => {
       ["termWidth", true],
       ["effectRefresh", true],
       ["nerdFont", true],
+      ["segmentData", true],
     ]);
   });
 });

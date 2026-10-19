@@ -40,12 +40,16 @@ describe("RuntimeStats.snapshot", () => {
       frameFeeds: { feeds: 0, subscribers: 0, drawn: 0, pushed: 0, refused: 0, lookups: 0, found: 0 },
       watchersActive: 2,
       handlerProbes: [{ nonce: "n", handler: "1.2.3" }],
-      clients: [{ client: null, ago: 4 }],
+      clients: [
+        { client: null, rateLimits: "carried", claudeConfigDir: "/c", ago: 4 },
+      ],
       bundle: "/opt/cc/dist/index.mjs",
       daemon: { pid: 1234, rss: 0, rssLimit: 1, postMortems: { kind: "ok", value: [] } },
     });
     expect(snap.handlerProbes).toEqual([{ nonce: "n", handler: "1.2.3" }]);
-    expect(snap.clients).toEqual([{ client: null, ago: 4 }]);
+    expect(snap.clients).toEqual([
+      { client: null, rateLimits: "carried", claudeConfigDir: "/c", ago: 4 },
+    ]);
     expect(snap.bundle).toBe("/opt/cc/dist/index.mjs");
 
     expect(snap.requests).toEqual({

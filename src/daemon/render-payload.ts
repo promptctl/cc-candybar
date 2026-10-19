@@ -1046,29 +1046,12 @@ export function buildNeededPrefixes(
   config: DslConfig,
   preset: string,
 ): ReadonlySet<string> {
-  // 1. Variable name → declaration index for fast lookup. Global vars first;
-  //    per-segment vars are namespaced `segName.varName` (same as runtime).
-  const allDecls = new Map<string, VariableDecl>();
-  for (const [name, decl] of Object.entries(config.variables)) {
-    allDecls.set(name, decl);
-  }
-  for (const [segName, seg] of Object.entries(config.segments)) {
-    if (!seg.vars) continue;
-    for (const [varName, decl] of Object.entries(seg.vars)) {
-      allDecls.set(`${segName}.${varName}`, decl);
-    }
-  }
-
-  // 2. BFS from layout segments. Frontier seeds with refs from each
-  //    rendered segment's template/when/bg/fg ONLY — segment-local vars in
-  //    `seg.vars` are reached transitively via those refs (their declared
-  //    names appear in the templates that need them). Seeding from
-  //    `seg.vars` directly would mark unused per-segment template vars as
-  //    needed and pull in their providers without justification.
-  //    `visited` tracks vars whose own `template`-kind body we've already
-  //    followed.
+  // Seeds: refs from each rendered segment's template/when/bg/fg ONLY —
+  // segment-local vars in `seg.vars` are reached transitively via those refs
+  // (their declared names appear in the templates that need them). Seeding
+  // from `seg.vars` directly would mark unused per-segment template vars as
+  // needed and pull in their providers without justification.
   const frontier: string[] = [];
-  const visited = new Set<string>();
   const reads = (src: string): Iterable<string> =>
     templateReads(src, config.helpers).keys();
 
@@ -1089,12 +1072,61 @@ export function buildNeededPrefixes(
     // only a predicate (e.g. a state var gating a row/container) isn't gated out.
     if (node.when) for (const ref of reads(node.when)) frontier.push(ref);
     if (node.kind !== "segment") continue;
-    const seg = config.segments[node.name];
-    if (!seg) continue;
-    for (const src of [seg.template, seg.when, seg.bg, seg.fg]) {
-      if (src) for (const ref of reads(src)) frontier.push(ref);
+    frontier.push(...segmentReads(config, node.name));
+  }
+  return inputClosure(config, frontier);
+}
+
+// The refs one segment's own templates read — what it seeds the closure with.
+function segmentReads(config: DslConfig, name: string): string[] {
+  const seg = config.segments[name];
+  if (!seg) return [];
+  return [seg.template, seg.when, seg.bg, seg.fg].flatMap((src) =>
+    src ? [...templateReads(src, config.helpers).keys()] : [],
+  );
+}
+
+// [LAW:single-enforcer] The payload paths ONE segment's placements read — its
+// own templates and each placement's `when`, the seeds buildNeededPrefixes
+// takes from them — through the same closure the render's gate walks: what
+// the doctor asks to say which segment needs which data
+// (src/doctor/data-needs.ts).
+export function segmentInputPaths(
+  config: DslConfig,
+  name: string,
+  whens: readonly string[],
+): ReadonlySet<string> {
+  return inputClosure(config, [
+    ...segmentReads(config, name),
+    ...whens.flatMap((w) => [...templateReads(w, config.helpers).keys()]),
+  ]);
+}
+
+// The `kind: "input"` paths a set of refs reaches, through every
+// `template`-kind variable they read.
+function inputClosure(
+  config: DslConfig,
+  seeds: readonly string[],
+): ReadonlySet<string> {
+  // 1. Variable name → declaration index for fast lookup. Global vars first;
+  //    per-segment vars are namespaced `segName.varName` (same as runtime).
+  const allDecls = new Map<string, VariableDecl>();
+  for (const [name, decl] of Object.entries(config.variables)) {
+    allDecls.set(name, decl);
+  }
+  for (const [segName, seg] of Object.entries(config.segments)) {
+    if (!seg.vars) continue;
+    for (const [varName, decl] of Object.entries(seg.vars)) {
+      allDecls.set(`${segName}.${varName}`, decl);
     }
   }
+
+  // 2. `visited` tracks vars whose own `template`-kind body we've already
+  //    followed.
+  const frontier = [...seeds];
+  const visited = new Set<string>();
+  const reads = (src: string): Iterable<string> =>
+    templateReads(src, config.helpers).keys();
 
   // 3. Walk the closure. A ref is the dotted form `a.b.c`. Two cases:
   //    - LEAF: `ref` exactly matches a declared variable. The scope proxy
@@ -1171,7 +1203,7 @@ function expandRef(
   return matches;
 }
 
-function anyPathStartsWith(
+export function anyPathStartsWith(
   paths: ReadonlySet<string>,
   prefix: string,
 ): boolean {
@@ -1188,7 +1220,9 @@ function anyPathStartsWith(
 // computing them requires extra git invocations), and a user who declares
 // `git.sha` or `git.staged` would see their template evaluate against
 // empty strings or zeros.
-function gitOptionsFromClosure(needed: ReadonlySet<string>): GitInfoOptions {
+export function gitOptionsFromClosure(
+  needed: ReadonlySet<string>,
+): GitInfoOptions {
   const has = (path: string): boolean => needed.has(path);
   // `git.staged` / `git.unstaged` / `git.untracked` / `git.conflicts` all
   // come from one `git status --porcelain` call — any one of them turning

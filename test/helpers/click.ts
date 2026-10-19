@@ -17,7 +17,7 @@ import type { SessionStateRW } from "../../src/daemon/session-state";
 import { SettingsHistory } from "../../src/daemon/settings-history";
 import type { DslConfig } from "../../src/config/dsl-types";
 import { ProbeArrivals } from "../../src/doctor/handler-probe";
-import { ClientSightings } from "../../src/daemon/client-sightings";
+import { RenderSightings } from "../../src/daemon/render-sightings";
 import { PACKAGE_VERSION } from "../../src/version";
 
 // The record a session's render leaves behind, which a click resolves its
@@ -85,6 +85,12 @@ export function testVerbContext(
       daemons: () => {
         throw new Error("doctor: no process table in this test");
       },
+      forge: () => {
+        throw new Error("doctor: no forge edge in this test");
+      },
+      memento: () => {
+        throw new Error("doctor: no memento edge in this test");
+      },
       postMortemsRead: {
         read: () => {
           throw new Error("doctor: no post-mortem record in this test");
@@ -98,7 +104,7 @@ export function testVerbContext(
     // daemon's for a probe to land: a test that reads arrivals hands in its own.
     clientVersion: PACKAGE_VERSION,
     probes: new ProbeArrivals(),
-    clients: new ClientSightings(),
+    clients: new RenderSightings(),
     bundle: HEALTHY_BUNDLE,
     serving: () => HEALTHY_SERVING,
     // And for memento: a test that drives a ceiling click hands in its own.
