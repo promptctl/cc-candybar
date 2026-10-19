@@ -950,21 +950,22 @@ function handleConnection(sock: net.Socket): void {
     // already fired, so a feed attached now would never hear it.
     if (sock.destroyed) return;
     clearTimeout(timer);
-    responded = true;
     leaveInFlight();
     sock.off("data", reader);
     const write = newestWins(sock);
-    sock.on(
-      "close",
-      frameFeeds.subscribe(sessionId, {
-        lane,
-        frame: (_resp, json) => write(encodeJsonFrame(json)),
-        // A refused subscription is over: its refusal ends the stream, and a
-        // frame still waiting for the socket to drain is dropped, as
-        // newest-wins drops any frame a newer one replaces.
-        refused: (resp) => sock.end(encodeFrame(resp)),
-      }),
-    );
+    const unsubscribe = frameFeeds.subscribe(sessionId, {
+      lane,
+      frame: (_resp, json) => write(encodeJsonFrame(json)),
+      // A refused subscription is over: its refusal ends the stream, and a
+      // frame still waiting for the socket to drain is dropped, as
+      // newest-wins drops any frame a newer one replaces.
+      refused: (resp) => sock.end(encodeFrame(resp)),
+    });
+    // Answered only once the subscription stands: a subscribe that threw is
+    // the connection's `handler threw`, answered RENDER_FAILED and ended,
+    // never an open socket nothing feeds.
+    responded = true;
+    sock.on("close", unsubscribe);
   };
 
   sock.on("data", reader);

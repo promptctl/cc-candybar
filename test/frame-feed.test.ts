@@ -33,6 +33,10 @@ function harness(opts: { motion: Motion; renderMs?: number; fails?: boolean }) {
     // asks; `opened` counts the feeds opened.
     lanes: { band: true, statusline: true, pane: true } as LaneSwitches,
     opened: 0,
+    // A lane gate that throws, as a daemon bug in reading the settings would.
+    gateThrows: false,
+    // Added to the feed's clock, to reach the once-a-minute summary.
+    skewMs: 0,
   };
   const frameOf = (req: string): FeedFrame =>
     opts.fails === true
@@ -56,14 +60,17 @@ function harness(opts: { motion: Motion; renderMs?: number; fails?: boolean }) {
       if (opts.renderMs !== undefined) await sleep(opts.renderMs);
       return frameOf(req);
     },
-    lanes: () => state.lanes,
+    lanes: () => {
+      if (state.gateThrows) throw new Error("the gate broke");
+      return state.lanes;
+    },
     opened: () => state.opened++,
     watch: (sessionId, onChange) => {
       changes.set(sessionId, onChange);
       return () => changes.delete(sessionId);
     },
     periods: PERIODS,
-    now: () => Date.now(),
+    now: () => Date.now() + state.skewMs,
     log: (_level, line) => log.push(line),
   });
   const note = (sessionId: string, req: string, order = ++state.order): void =>
@@ -327,10 +334,38 @@ describe("a subscription's lane", () => {
     expect(band.length).toBe(bandSeen);
     expect(pane.length).toBeGreaterThan(bandSeen);
     expect(feeds.getStats()).toMatchObject({ feeds: 1, subscribers: 1, refused: 1 });
+    // Each subscribe names its lane; the running summary names the lanes still
+    // subscribed when it is written.
+    expect(log).toContain('feed sid="s" subscribed lane=band subscribers=1 data=Y');
+    expect(log).toContain('feed sid="s" subscribed lane=pane subscribers=2 data=Y');
+    state.skewMs = 60_000;
+    changes.get("s")!();
+    await sleep(30);
+    expect(log.some((l) => /feed sid="s" running subscribers=1 lanes=pane /.test(l))).toBe(true);
     closePane();
     expect(feeds.getStats()).toMatchObject({ feeds: 0, subscribers: 0 });
-    // The summary names the lanes still subscribed when it was written.
-    expect(log.some((l) => /feed sid="s" closed subscribers=0 lanes=- /.test(l))).toBe(true);
+  });
+
+  // [LAW:no-silent-failure] A frame step runs off a timer: a throw it let go
+  // would be an unhandled rejection, which exits the daemon. It is the feed's
+  // logged fault, and the feed draws on.
+  test("a lane gate that throws while a frame goes out is the feed's logged fault, and the feed draws on", async () => {
+    const { feeds, note, state, changes, log } = harness({ motion: "still" });
+    note("s", "bar");
+    const got: string[] = [];
+    const close = feeds.subscribe("s", sub((r) => got.push(outputOf(r))));
+    await sleep(20);
+    state.gateThrows = true;
+    changes.get("s")!();
+    await sleep(20);
+    expect(log.some((l) => l.startsWith('feed sid="s" threw: Error: the gate broke'))).toBe(true);
+    expect(feeds.getStats()).toMatchObject({ feeds: 1, subscribers: 1 });
+    state.gateThrows = false;
+    state.motion = "moving";
+    changes.get("s")!();
+    await sleep(40);
+    close();
+    expect(got.length).toBeGreaterThan(1);
   });
 
   test("of a session with no frame yet waits, and the first frame decides", async () => {

@@ -126,7 +126,10 @@ export async function runFrames(
         offShown = false;
         emit(`${JSON.stringify(resp)}\n`);
       },
+      // The daemon answered: whatever outage came before is over, so the
+      // next one is news even if it reads the same.
       off: (resp) => {
+        lastFault = null;
         if (!offShown) emit(`${JSON.stringify(resp)}\n`);
         offShown = true;
       },

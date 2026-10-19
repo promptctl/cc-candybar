@@ -10,6 +10,7 @@
 // each instant they are drawn, so a frame between two of Claude Code's ticks is
 // the same bar the next tick would draw, at a later instant.
 
+import { inspect } from "node:util";
 import { PROTOCOL_VERSION, type Response } from "./protocol";
 import { laneOffReason, type Lane, type LaneSwitches } from "../config/lanes";
 
@@ -292,7 +293,24 @@ export class FrameFeeds<Req> {
     this.summarize(feed, "closed");
   }
 
-  private async draw(feed: Feed): Promise<void> {
+  // [LAW:single-enforcer] The one fault path of a feed's frame step: a throw
+  // anywhere in it — the render adapter, the lane gate, a subscriber's sink —
+  // is logged as the feed's fault, and the feed's next frame falls due at the
+  // still rate. A frame step runs off a timer, so a throw it let go would be an
+  // unhandled rejection, which exits the daemon.
+  private draw(feed: Feed): Promise<void> {
+    return this.step(feed).catch((error: unknown) => {
+      this.deps.log(
+        "error",
+        `feed sid=${JSON.stringify(feed.sessionId)} threw: ${inspect(error)}`,
+      );
+      if (this.feeds.get(feed.sessionId) !== feed) return;
+      const now = this.deps.now();
+      this.schedule(feed, null, now, now);
+    });
+  }
+
+  private async step(feed: Feed): Promise<void> {
     const noted = this.requests.get(feed.sessionId);
     if (noted === undefined) {
       feed.phase = { kind: "waiting" };
@@ -302,17 +320,9 @@ export class FrameFeeds<Req> {
     const phase: Phase = { kind: "drawing", again: false, superseded: null };
     feed.phase = phase;
     const started = this.deps.now();
-    const frame = await this.deps
-      .render(req)
-      .catch((error: unknown): FeedFrame | null => {
-        // [LAW:no-silent-failure] The render adapter answers a failed render
-        // with its error response; reaching here is a fault in the adapter.
-        this.deps.log(
-          "error",
-          `feed sid=${JSON.stringify(feed.sessionId)} render adapter threw: ${String(error)}`,
-        );
-        return null;
-      });
+    // The render adapter answers a failed render with its error frame; a throw
+    // out of it is a fault in the adapter, `draw`'s to report.
+    const frame = await this.deps.render(req);
     const finished = this.deps.now();
     this.drawn++;
     feed.drawn++;
@@ -320,10 +330,10 @@ export class FrameFeeds<Req> {
     // Unsubscribed while this frame was drawn: the feed is gone, and so is
     // its clock.
     if (this.feeds.get(feed.sessionId) !== feed) return;
-    if (frame !== null) this.count(feed, frame);
+    this.count(feed, frame);
     // A request noted while this frame was drawn was pushed as its own frame;
     // this one, of the data before it, would step the bar back.
-    if (frame !== null && this.requests.get(feed.sessionId) === noted) {
+    if (this.requests.get(feed.sessionId) === noted) {
       this.push(feed, frame);
       if (this.feeds.get(feed.sessionId) !== feed) return;
     }
@@ -340,7 +350,7 @@ export class FrameFeeds<Req> {
   // [LAW:no-ambient-temporal-coupling] The next frame is due a period after
   // this one STARTED, so the rate holds whatever a render costs, up to a
   // render as slow as the period, when frames are drawn back to back. A frame
-  // the render adapter could not produce is followed at the still rate.
+  // step that faulted is followed at the still rate.
   private schedule(
     feed: Feed,
     frame: FeedFrame | null,
