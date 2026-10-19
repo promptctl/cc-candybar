@@ -762,8 +762,11 @@ What the definition can say, and what follows from it:
 - **Only `data`, `segments`, `helpers` and `actions`.** A definition
   declares no sources of its own (so loading one from a cloned repository runs
   nothing) and never edits `root` — placing a segment is your choice. A
-  segment declares no `vars` for the same reason. The plugin name is one
-  lowercase identifier.
+  segment's `vars` may hold only `state` variables, for the same reason: a
+  `state` variable reads what the session's own clicks wrote, so a segment can
+  open a detail row of its own (`{ kind: "state", key, default }` beside a
+  `{ set: key, cycle: [...] }` action, read as `.plugins.<plugin>.<segment>.<var>`),
+  and any other kind is a source. The plugin name is one lowercase identifier.
 - **Merge order is bundled < installed plugins < listed plugins < your
   file**, so your file can
   retune a plugin's segment by its full name, one field at a time

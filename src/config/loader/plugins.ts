@@ -572,13 +572,20 @@ function fragmentOf(
       default: {},
     },
   });
-  // A segment's own `vars` are sources (a shell among them): a definition
-  // declares none, so loading one runs nothing.
+  // [LAW:types-are-the-program] A segment's own `vars` may be sources (a
+  // shell among them), and a definition declares none, so loading one runs
+  // nothing. A `state` variable is not a source: it reads what the session's
+  // own clicks wrote, which is how a plugin segment opens and closes a detail
+  // of its own (lit's ticket description) — so that one kind is admitted and
+  // every other is refused by name.
   for (const [name, seg] of Object.entries(json.segments as object)) {
-    if (isPlainObject(seg) && "vars" in seg) {
+    if (!isPlainObject(seg) || !isPlainObject(seg.vars)) continue;
+    for (const [varName, decl] of Object.entries(seg.vars)) {
+      const kind = isPlainObject(decl) ? decl.kind : undefined;
+      if (kind === "state") continue;
       issues.push({
-        path: `segments.${name}.vars`,
-        message: `a plugin segment may not declare "vars": a plugin's only source is its data file`,
+        path: `segments.${name}.vars.${varName}`,
+        message: `a plugin segment's vars may declare only state variables (kind: "state"), never a source such as ${JSON.stringify(kind ?? decl)}: a plugin's only source is its data file`,
       });
     }
   }
