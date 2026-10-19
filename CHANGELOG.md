@@ -1,3 +1,16 @@
+# [1.138.0](https://github.com/promptctl/cc-candybar/compare/v1.137.0...v1.138.0) (2026-10-19)
+
+
+### Bug Fixes
+
+* **config:** a persist/reset target naming a removed globals field says why; plugin 2.1.0; stale charset refs gone (brandon-unfiled-3248.btn) ([048b88e](https://github.com/promptctl/cc-candybar/commit/048b88e062035ac88bbe3cf4b40c0bb54425246f))
+* **daemon:** a render in flight pins its render-cache entry; eviction takes the oldest unpinned ([#367](https://github.com/promptctl/cc-candybar/issues/367)) ([cae3cf6](https://github.com/promptctl/cc-candybar/commit/cae3cf663759d84c0751c9dfaa45683072c087d8))
+
+
+### Features
+
+* **config:** delete ascii mode — the bar always draws Nerd Font glyphs (brandon-unfiled-3248.btn) ([4c61e85](https://github.com/promptctl/cc-candybar/commit/4c61e85656ec7dbd313f11cfb4b7841dcf87d1e4))
+
 # [1.137.0](https://github.com/promptctl/cc-candybar/compare/v1.136.1...v1.137.0) (2026-10-19)
 
 
