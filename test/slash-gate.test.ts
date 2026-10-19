@@ -53,6 +53,7 @@ const EFFECTIVE: EffectiveGlobals = {
   padding: 0,
   updateNotice: true,
   transitions: false,
+  lanes: { band: false, statusline: false, pane: false },
   separator: undefined,
 };
 const HOOK_DATA = {

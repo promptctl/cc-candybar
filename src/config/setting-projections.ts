@@ -14,6 +14,7 @@
 // sides depend downhill.
 
 import type { Globals } from "./dsl-types.js";
+import { LANES, laneEffectiveVar, type Lane } from "./lanes.js";
 
 // A globals field the render publishes an `.effective` projection of.
 export interface ConfigProjection {
@@ -34,6 +35,16 @@ export interface SettingProjection extends ConfigProjection {
   // control shows its value beside it, a word where it does not.
   readonly label: string;
 }
+
+// A lane's toggle (src/config/lanes.ts): its globals field is also its session
+// key, and it reads back through the payload's `lanes.<lane>.effective`.
+const laneSetting = <L extends Lane>(lane: L) =>
+  ({
+    configKey: LANES[lane].setting,
+    sessionKey: LANES[lane].setting,
+    effectiveVar: laneEffectiveVar(lane),
+    label: LANES[lane].label,
+  }) as const;
 
 export const SETTINGS = {
   theme: {
@@ -105,6 +116,9 @@ export const SETTINGS = {
     effectiveVar: "updateNotice.effective",
     label: "update notice",
   },
+  experimentalBand: laneSetting("band"),
+  experimentalStatusline: laneSetting("statusline"),
+  experimentalPane: laneSetting("pane"),
 } as const satisfies Record<string, SettingProjection>;
 
 export const SETTING_PROJECTIONS: readonly SettingProjection[] =

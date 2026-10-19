@@ -356,6 +356,9 @@ const PLACE = {
   autoWrap: "layout",
   padding: "layout",
   updateNotice: "config",
+  experimentalBand: "config",
+  experimentalStatusline: "config",
+  experimentalPane: "config",
 } as const satisfies Readonly<Record<SettingName, Place>>;
 // The gear sits beside the theme control, so what is behind it is in the
 // theme control's tab.

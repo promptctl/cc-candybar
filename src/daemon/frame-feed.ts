@@ -10,7 +10,8 @@
 // each instant they are drawn, so a frame between two of Claude Code's ticks is
 // the same bar the next tick would draw, at a later instant.
 
-import type { Response } from "./protocol";
+import { PROTOCOL_VERSION, type Response } from "./protocol";
+import { laneOffReason, type Lane, type LaneSwitches } from "../config/lanes";
 
 // [LAW:types-are-the-program] Why the next frame falls due when it does: the
 // bar moves and someone can see it; it moves where nobody can, so it is drawn
@@ -20,12 +21,15 @@ export type Motion = "moving" | "unseen" | "still";
 // What one render produced for a feed: the response its subscribers receive
 // (the one a render request is answered with), the instant it was drawn at (ms
 // since the epoch), how the bar moves, which decides when the next frame is
-// due, and — for a render that threw — the render event describing it, logged
-// when that failure is first pushed.
+// due, which animation lanes the session's settings switch on as this render
+// resolved them — null for a render that threw before it knew, which leaves
+// the switches as the last frame left them — and, for a render that threw,
+// the render event describing it, logged when that failure is first pushed.
 export interface FeedFrame {
   readonly resp: Response;
   readonly drawnAt: number;
   readonly motion: Motion;
+  readonly lanes: LaneSwitches | null;
   readonly failure: LogLine | null;
 }
 
@@ -49,6 +53,17 @@ export const FEED_PERIODS: FeedPeriods = { moving: 1000 / 30, still: 1000 };
 // A subscriber: each frame's response, and its JSON as the feed serialized it
 // once for every subscriber.
 export type Sink = (resp: Response, json: string) => void;
+
+export type Refusal = Extract<Response, { ok: false }>;
+
+// One subscription: the lane it serves, where its frames go, and where its
+// refusal goes — the last thing it receives, since a refused subscription is
+// over.
+export interface Subscriber {
+  readonly lane: Lane;
+  readonly frame: Sink;
+  readonly refused: (resp: Refusal) => void;
+}
 
 export interface FeedDeps<Req> {
   render(req: Req): Promise<FeedFrame>;
@@ -77,7 +92,7 @@ type Phase =
 
 interface Feed {
   readonly sessionId: string;
-  readonly sinks: Set<Sink>;
+  readonly sinks: Set<Subscriber>;
   readonly unwatch: () => void;
   phase: Phase;
   // The last frame pushed, as sent, so an unchanged frame is never sent twice
@@ -106,10 +121,12 @@ const MAX_REQUESTS = 256;
 
 // A session's latest request and `order`: where it came in the order the
 // daemon received requests, which is what makes one request later than another
-// when their renders finish out of order.
+// when their renders finish out of order; and which lanes the session's newest
+// frame switched on.
 interface Noted<Req> {
   readonly req: Req;
   readonly order: number;
+  lanes: LaneSwitches;
 }
 
 export interface FeedStats {
@@ -117,6 +134,8 @@ export interface FeedStats {
   readonly subscribers: number;
   readonly drawn: number;
   readonly pushed: number;
+  // Subscriptions refused or ended because their lane was off.
+  readonly refused: number;
 }
 
 /**
@@ -130,6 +149,7 @@ export class FrameFeeds<Req> {
   private readonly feeds = new Map<string, Feed>();
   private drawn = 0;
   private pushed = 0;
+  private refused = 0;
 
   constructor(private readonly deps: FeedDeps<Req>) {}
 
@@ -140,11 +160,16 @@ export class FrameFeeds<Req> {
   // [LAW:one-source-of-truth] The answer IS the request's frame at this
   // instant, so it is pushed as one, and the next frame falls due a period
   // after it rather than being drawn again at once.
-  note(sessionId: string, req: Req, order: number, frame: FeedFrame): void {
+  note(
+    sessionId: string,
+    req: Req,
+    order: number,
+    frame: FeedFrame & { readonly lanes: LaneSwitches },
+  ): void {
     const held = this.requests.get(sessionId);
     if (held !== undefined && held.order > order) return;
     this.requests.delete(sessionId);
-    this.requests.set(sessionId, { req, order });
+    this.requests.set(sessionId, { req, order, lanes: frame.lanes });
     for (const oldest of this.requests.keys()) {
       if (this.requests.size <= MAX_REQUESTS) break;
       if (!this.feeds.has(oldest)) this.requests.delete(oldest);
@@ -160,6 +185,7 @@ export class FrameFeeds<Req> {
     feed.noted++;
     this.count(feed, frame);
     this.push(feed, frame);
+    if (this.feeds.get(sessionId) !== feed) return;
     const now = this.deps.now();
     switch (feed.phase.kind) {
       case "drawing":
@@ -176,15 +202,24 @@ export class FrameFeeds<Req> {
     this.schedule(feed, frame, now, now);
   }
 
-  subscribe(sessionId: string, sink: Sink): () => void {
+  // [LAW:single-enforcer] The one gate on the lanes: a subscription whose
+  // lane the session's newest frame switched off is refused here before any
+  // feed opens, and one whose lane a later frame switches off is ended in
+  // `push`. A session with no frame yet waits, and its first frame decides.
+  subscribe(sessionId: string, sub: Subscriber): () => void {
+    const lanes = this.requests.get(sessionId)?.lanes;
+    if (lanes !== undefined && !lanes[sub.lane]) {
+      this.refuse(sessionId, sub);
+      return () => {};
+    }
     const feed = this.feeds.get(sessionId) ?? this.open(sessionId);
-    feed.sinks.add(sink);
-    if (feed.last !== null) sink(feed.last.resp, feed.last.bytes);
+    feed.sinks.add(sub);
+    if (feed.last !== null) sub.frame(feed.last.resp, feed.last.bytes);
     this.deps.log(
       "info",
-      `feed sid=${JSON.stringify(sessionId)} subscribed subscribers=${feed.sinks.size} data=${this.requests.has(sessionId) ? "Y" : "N"}`,
+      `feed sid=${JSON.stringify(sessionId)} subscribed lane=${sub.lane} subscribers=${feed.sinks.size} data=${this.requests.has(sessionId) ? "Y" : "N"}`,
     );
-    return () => this.unsubscribe(feed, sink);
+    return () => this.unsubscribe(feed, sub);
   }
 
   // Draw the session's next frame now, if anyone is watching it.
@@ -221,6 +256,7 @@ export class FrameFeeds<Req> {
       subscribers,
       drawn: this.drawn,
       pushed: this.pushed,
+      refused: this.refused,
     };
   }
 
@@ -250,8 +286,8 @@ export class FrameFeeds<Req> {
     return feed;
   }
 
-  private unsubscribe(feed: Feed, sink: Sink): void {
-    if (!feed.sinks.delete(sink) || feed.sinks.size > 0) return;
+  private unsubscribe(feed: Feed, sub: Subscriber): void {
+    if (!feed.sinks.delete(sub) || feed.sinks.size > 0) return;
     if (feed.phase.kind === "due") clearTimeout(feed.phase.timer);
     feed.unwatch();
     this.feeds.delete(feed.sessionId);
@@ -289,8 +325,11 @@ export class FrameFeeds<Req> {
     if (frame !== null) this.count(feed, frame);
     // A request noted while this frame was drawn was pushed as its own frame;
     // this one, of the data before it, would step the bar back.
-    if (frame !== null && this.requests.get(feed.sessionId) === noted)
+    if (frame !== null && this.requests.get(feed.sessionId) === noted) {
+      if (frame.lanes !== null) noted.lanes = frame.lanes;
       this.push(feed, frame);
+      if (this.feeds.get(feed.sessionId) !== feed) return;
+    }
     if (finished - feed.summarizedAt >= SUMMARY_EVERY_MS)
       this.summarize(feed, "running");
     if (phase.again) {
@@ -331,6 +370,17 @@ export class FrameFeeds<Req> {
   }
 
   private push(feed: Feed, frame: FeedFrame): void {
+    // The lanes the session's newest frame switched on: this one's, or the
+    // last one's when this render threw before it knew.
+    const lanes = this.requests.get(feed.sessionId)?.lanes;
+    if (lanes !== undefined) {
+      for (const sub of [...feed.sinks]) {
+        if (lanes[sub.lane]) continue;
+        this.unsubscribe(feed, sub);
+        this.refuse(feed.sessionId, sub);
+      }
+    }
+    if (feed.sinks.size === 0) return;
     const { resp } = frame;
     const bytes = JSON.stringify(resp);
     if (feed.last?.bytes === bytes) return;
@@ -342,7 +392,22 @@ export class FrameFeeds<Req> {
     // same bytes, which are not pushed again, and the summary counts it.
     if (frame.failure !== null)
       this.deps.log(frame.failure.level, frame.failure.line);
-    for (const sink of feed.sinks) sink(resp, bytes);
+    for (const sub of feed.sinks) sub.frame(resp, bytes);
+  }
+
+  // A subscription its lane's toggle refuses, told why.
+  private refuse(sessionId: string, sub: Subscriber): void {
+    this.refused++;
+    this.deps.log(
+      "info",
+      `feed sid=${JSON.stringify(sessionId)} refused lane=${sub.lane} switched-off`,
+    );
+    sub.refused({
+      ok: false,
+      error: laneOffReason(sub.lane),
+      code: "SWITCHED_OFF",
+      daemonV: PROTOCOL_VERSION,
+    });
   }
 
   // [LAW:nothing-unseen] A feed's frames are not render requests, so they write

@@ -6,12 +6,14 @@
 import net from "node:net";
 import { PROTOCOL_VERSION, encodeFrame, makeFrameReader } from "./protocol";
 import type { Response, SubscribeRequest } from "./protocol";
+import type { Lane } from "../config/lanes";
 
 // [LAW:types-are-the-program] Why a stream ended: the caller closed it, the
 // daemon closed it (a restart, a shutdown), the daemon answered the subscribe
 // with a refusal instead of frames (`resp`: too busy, a request it does not
-// accept, another protocol version), or the connection failed (no daemon
-// listening, a frame that would not parse).
+// accept, another protocol version, the lane switched off — which also ends a
+// stream already running), or the connection failed (no daemon listening, a
+// frame that would not parse).
 export type StreamEnd =
   | { readonly kind: "closed-here" }
   | { readonly kind: "closed-there" }
@@ -33,6 +35,7 @@ export interface FrameStream {
 export function openFrameStream(
   sockPath: string,
   sessionId: string,
+  lane: Lane,
   onFrame: (resp: Response) => void,
   onEnd: (end: StreamEnd) => void,
 ): FrameStream {
@@ -48,6 +51,7 @@ export function openFrameStream(
     v: PROTOCOL_VERSION,
     kind: "subscribe",
     sessionId,
+    lane,
   };
   sock.once("connect", () => sock.write(encodeFrame(subscribe)));
   sock.on(

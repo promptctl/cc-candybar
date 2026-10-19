@@ -29,6 +29,7 @@ import type {
 } from "../themes/decor.js";
 import type { JsonValue } from "../var-system/types.js";
 import type { SegmentGroup } from "./segment-groups.js";
+import type { LaneSetting } from "./lanes.js";
 import {
   FOLLOW_BAR,
   isPlacementThemeName,
@@ -520,7 +521,12 @@ export type ValidatedConfig = DslConfig & {
   readonly [__validated]: true;
 };
 
-export interface Globals {
+// Whether each animation lane may subscribe to a session's frames (LANES,
+// src/config/lanes.ts). Default false. A session's pick over each —
+// `resolveEffectiveGlobals` resolves them into `EffectiveGlobals.lanes`.
+type LaneGlobals = { readonly [K in LaneSetting]?: boolean };
+
+export interface Globals extends LaneGlobals {
   readonly default_empty_value?: string;
   readonly default_separator?: string;
   // [LAW:one-source-of-truth] A palette NAME, not a resolved Palette: DslConfig

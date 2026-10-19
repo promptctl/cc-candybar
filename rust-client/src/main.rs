@@ -238,6 +238,10 @@ pub enum PermanentCause {
     VersionMismatch { client_v: u32, daemon_v: u32 },
     BadRequest(String),
     RenderFailed(String),
+    // A setting the user controls refuses the request (an animation lane
+    // switched off). The render path never asks for one; the arm keeps the
+    // error-code vocabulary whole (scripts/check-protocol.mjs).
+    SwitchedOff(String),
     MalformedResponse(String),
 }
 
@@ -400,6 +404,7 @@ fn interpret_response(resp: serde_json::Value) -> RenderOutcome {
         "TIMEOUT" => RenderOutcome::Transient(TransientCause::Timeout),
         "BAD_REQUEST" => RenderOutcome::Permanent(PermanentCause::BadRequest(msg)),
         "RENDER_FAILED" => RenderOutcome::Permanent(PermanentCause::RenderFailed(msg)),
+        "SWITCHED_OFF" => RenderOutcome::Permanent(PermanentCause::SwitchedOff(msg)),
         _ => RenderOutcome::Permanent(PermanentCause::MalformedResponse(format!(
             "unknown error code: {code}"
         ))),

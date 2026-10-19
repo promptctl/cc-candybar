@@ -26,6 +26,13 @@ import type { BuildLineOptions } from "../render/strip.js";
 import type { SettingName } from "../config/setting-projections.js";
 import type { RenderSelection } from "../dsl/render.js";
 import {
+  LANES,
+  LANE_FLOOR,
+  perLane,
+  type Lane,
+  type LaneSwitches,
+} from "../config/lanes.js";
+import {
   effectivePresetName,
   presetGlobals,
   presetRoot,
@@ -46,6 +53,8 @@ import {
   effectiveShade,
   effectiveUpdateNotice,
   effectiveTransitions,
+  effectiveGlobal,
+  parseSessionBoolean,
   EXPRESSION_SLOTS,
   isExpression,
   DEFAULT_COLOR_COMPATIBILITY,
@@ -174,6 +183,8 @@ export interface EffectiveGlobals {
   // Whether placements fade in and dissolve out (Globals.transitions) — carried
   // into the walk by the render's selection (RenderSelection.transitions).
   readonly transitions: boolean;
+  // Which animation lanes may subscribe to this session's frames (LANES).
+  readonly lanes: LaneSwitches;
 }
 
 // [LAW:one-source-of-truth] THE resolution — one function, so the precedence
@@ -278,6 +289,16 @@ export function resolveEffectiveGlobals(
       staged.colorCompatibility ??
       globals.colorCompatibility ??
       DEFAULT_COLOR_COMPATIBILITY,
+    lanes: perLane((lane) => {
+      const field = LANES[lane].setting;
+      return effectiveGlobal(
+        staged[field],
+        sessionPick(field),
+        globals[field],
+        LANE_FLOOR,
+        parseSessionBoolean,
+      );
+    }),
   };
 }
 
@@ -333,6 +354,7 @@ export type EffectiveInputs = Pick<
   | "padding"
   | "updateNotice"
   | "transitions"
+  | "lanes"
 >;
 
 export function effectiveInputs(effective: EffectiveGlobals): EffectiveInputs {
@@ -350,6 +372,7 @@ export function effectiveInputs(effective: EffectiveGlobals): EffectiveInputs {
     padding: { effective: effective.padding },
     updateNotice: { effective: effective.updateNotice },
     transitions: { effective: effective.transitions },
+    lanes: perLane((lane) => ({ effective: effective.lanes[lane] })),
   };
 }
 
@@ -432,6 +455,9 @@ export interface RenderPayload extends ClaudeHookData {
   readonly padding: { readonly effective: number };
   readonly updateNotice: { readonly effective: boolean };
   readonly transitions: { readonly effective: boolean };
+  // Each animation lane's toggle as the render resolved it, read back by its
+  // menu control through `lanes.<lane>.effective` (src/config/lanes.ts).
+  readonly lanes: Readonly<Record<Lane, { readonly effective: boolean }>>;
   // [LAW:one-source-of-truth] How many steps this session's settings history
   // can undo and redo (src/daemon/settings-history.ts), read from the history
   // itself every render, so the menu's `↶`/`↷` exist exactly while there is

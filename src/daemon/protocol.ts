@@ -7,6 +7,7 @@ import type { TmuxHint } from "../tmux-hint";
 import { MEMENTO_ENV_VARS, type MementoEnvHint } from "../memento-hint";
 import { TERMINAL_ENV_VARS, type TerminalEnvHint } from "../terminal-hint";
 import { CLIENT_KINDS, type ClientHint, type ClientKind } from "../client-hint";
+import type { Lane } from "../config/lanes";
 
 // [LAW:types-are-the-program] PROTOCOL_VERSION encodes one thing:
 // "old-client × new-daemon (or vice versa) cannot communicate." It moves on
@@ -331,11 +332,14 @@ export interface DebugRequest {
 // for the session whose bytes differ from the last one sent, until the
 // subscriber closes the socket. The frames are drawn from the session's latest
 // render request (src/daemon/frame-feed.ts), so a session subscribed to before
-// its first render streams nothing until that render arrives.
+// its first render streams nothing until that render arrives. A subscription
+// names the animation lane it serves (src/config/lanes.ts); the session's own
+// settings decide whether that lane may have its frames.
 export interface SubscribeRequest {
   v: number;
   kind: "subscribe";
   sessionId: string;
+  lane: Lane;
 }
 
 export type Request =
@@ -370,11 +374,16 @@ export type Response =
 // so the spiral-breaker contract requires the client NOT to kick. The
 // kick-vs-no-kick decision is encoded off this code, not off the error
 // string.
+// SWITCHED_OFF is a third class: the request is well formed and the daemon
+// is healthy, but a setting the user controls refuses it — a subscription
+// whose animation lane is off. The same request succeeds once the setting is
+// turned on, so a client waits and asks again rather than kicking or giving up.
 export type ErrorCode =
   | "VERSION_MISMATCH"
   | "TIMEOUT"
   | "RENDER_FAILED"
-  | "BAD_REQUEST";
+  | "BAD_REQUEST"
+  | "SWITCHED_OFF";
 
 // [LAW:types-are-the-program] A typed error class for failures that originate
 // inside the wire-protocol layer (oversized frame, JSON decode failure).

@@ -88,6 +88,10 @@ const SPELLING: {
   autoWrap: (e) => (e.autoWrap ? BOOLEAN_TRUE : BOOLEAN_FALSE),
   padding: (e) => String(e.padding),
   updateNotice: (e) => (e.updateNotice ? BOOLEAN_TRUE : BOOLEAN_FALSE),
+  experimentalBand: (e) => (e.lanes.band ? BOOLEAN_TRUE : BOOLEAN_FALSE),
+  experimentalStatusline: (e) =>
+    e.lanes.statusline ? BOOLEAN_TRUE : BOOLEAN_FALSE,
+  experimentalPane: (e) => (e.lanes.pane ? BOOLEAN_TRUE : BOOLEAN_FALSE),
 };
 
 const SETTING_ROWS = Object.entries(SETTINGS) as ReadonlyArray<

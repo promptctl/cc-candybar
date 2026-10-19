@@ -45,6 +45,9 @@ fn describe(cause: &PermanentCause) -> String {
         PermanentCause::RenderFailed(msg) => {
             format!("render failed: {}", truncate(msg))
         }
+        PermanentCause::SwitchedOff(msg) => {
+            format!("switched off: {}", truncate(msg))
+        }
         PermanentCause::MalformedResponse(msg) => {
             format!("malformed daemon response: {}", truncate(msg))
         }

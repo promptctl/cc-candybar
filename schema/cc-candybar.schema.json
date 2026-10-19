@@ -90,6 +90,15 @@
         "transitions": {
           "type": "boolean"
         },
+        "experimentalBand": {
+          "type": "boolean"
+        },
+        "experimentalStatusline": {
+          "type": "boolean"
+        },
+        "experimentalPane": {
+          "type": "boolean"
+        },
         "colorCompatibility": {
           "enum": [
             "truecolor",
@@ -1328,6 +1337,15 @@
               "transitions": {
                 "type": "boolean"
               },
+              "experimentalBand": {
+                "type": "boolean"
+              },
+              "experimentalStatusline": {
+                "type": "boolean"
+              },
+              "experimentalPane": {
+                "type": "boolean"
+              },
               "colorCompatibility": {
                 "enum": [
                   "truecolor",
@@ -1440,6 +1458,15 @@
           "type": "boolean"
         },
         "transitions": {
+          "type": "boolean"
+        },
+        "experimentalBand": {
+          "type": "boolean"
+        },
+        "experimentalStatusline": {
+          "type": "boolean"
+        },
+        "experimentalPane": {
           "type": "boolean"
         },
         "colorCompatibility": {

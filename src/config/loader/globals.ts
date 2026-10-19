@@ -214,6 +214,10 @@ const GLOBALS: {
   },
   updateNotice: boolGlobal(),
   transitions: boolGlobal(),
+  // The animation lanes' toggles (LANES, src/config/lanes.ts).
+  experimentalBand: boolGlobal(),
+  experimentalStatusline: boolGlobal(),
+  experimentalPane: boolGlobal(),
   // Closed enum with a bespoke "auto" rejection — see colorCompatibilitySpec.
   colorCompatibility: {
     spec: colorCompatibilitySpec,

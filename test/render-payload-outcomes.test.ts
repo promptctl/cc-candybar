@@ -69,6 +69,7 @@ const EFFECTIVE_GLOBALS: EffectiveGlobals = {
   padding: 1,
   updateNotice: true,
   transitions: false,
+  lanes: { band: false, statusline: false, pane: false },
   separator: undefined,
 };
 
@@ -495,6 +496,7 @@ describe("buildRenderPayload — effective globals projection", () => {
       padding: 3,
       updateNotice: true,
       transitions: false,
+      lanes: { band: false, statusline: false, pane: false },
       separator: undefined,
     };
     const logs: LogEntry[] = [];

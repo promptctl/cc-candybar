@@ -114,6 +114,12 @@ import {
   type PassageFrame,
 } from "../render/effect.js";
 import { FEED_PERIODS, FrameFeeds, type FeedFrame } from "./frame-feed.js";
+import {
+  LANE_NAMES,
+  parseLane,
+  type Lane,
+  type LaneSwitches,
+} from "../config/lanes.js";
 import { heldClickError, releaseClickError } from "./click-error.js";
 import { newestWins } from "../utils/newest-wins.js";
 import {
@@ -896,7 +902,7 @@ function handleConnection(sock: net.Socket): void {
         .then((r) =>
           r.kind === "reply"
             ? respond(r.resp, r.exitAfterFlush)
-            : stream(r.sessionId),
+            : stream(r.sessionId, r.lane),
         )
         .catch((err: unknown) => {
           dlog("error", `handler threw: ${inspect(err)}`);
@@ -922,7 +928,7 @@ function handleConnection(sock: net.Socket): void {
   // way only, so anything more the subscriber sends is not read.
   // [LAW:no-ambient-temporal-coupling] A subscriber slower than the frames
   // gets the newest one when its socket drains, never a backlog of stale ones.
-  const stream = (sessionId: string): void => {
+  const stream = (sessionId: string, lane: Lane): void => {
     // A connection the request timer already answered — TIMEOUT, then ended, while a cold or busy
     // daemon had not yet read the subscribe — is not a subscription: its socket is closing, and a
     // feed attached to it would never hear the close. The subscriber was told, and opens another.
@@ -937,9 +943,13 @@ function handleConnection(sock: net.Socket): void {
     const write = newestWins(sock);
     sock.on(
       "close",
-      frameFeeds.subscribe(sessionId, (_resp, json) =>
-        write(encodeJsonFrame(json)),
-      ),
+      frameFeeds.subscribe(sessionId, {
+        lane,
+        frame: (_resp, json) => write(encodeJsonFrame(json)),
+        // A refused subscription is over: its refusal is the stream's last
+        // frame, written behind whatever frame is still queued.
+        refused: (resp) => sock.end(encodeFrame(resp)),
+      }),
     );
   };
 
@@ -965,7 +975,7 @@ function handleConnection(sock: net.Socket): void {
 // the connection boundary turns its socket over to the session's feed.
 type HandledRequest =
   | { kind: "reply"; resp: Response; exitAfterFlush: number | null }
-  | { kind: "subscribe"; sessionId: string };
+  | { kind: "subscribe"; sessionId: string; lane: Lane };
 
 const stay = (resp: Response): HandledRequest => ({
   kind: "reply",
@@ -1095,7 +1105,7 @@ export async function handleRequest(
     const rendered: { outcome: RenderOutcome; resp: Response } = !checked.ok
       ? refusedRender(checked.problems)
       : await answerRequest(checked.req, order, at, facts).then(
-          ({ output, moves }) => {
+          ({ output, moves, lanes }) => {
             const resp = { ok: true, output } as const;
             releaseClickError(
               sessionState,
@@ -1109,7 +1119,7 @@ export async function handleRequest(
               checked.req.hookData.session_id,
               checked.req,
               order,
-              feedFrameOf(checked.req, resp, t0, moves),
+              feedFrameOf(checked.req, resp, t0, moves, lanes),
             );
             return { outcome: { kind: "ok" } as const, resp };
           },
@@ -1131,16 +1141,24 @@ export async function handleRequest(
   }
 
   if (req.kind === "subscribe") {
-    // [LAW:no-defensive-null-guards] exception: trust boundary — the session
-    // id is untrusted JSON, and it keys the feed.
-    return typeof req.sessionId === "string" && req.sessionId !== ""
-      ? { kind: "subscribe", sessionId: req.sessionId }
-      : stay({
-          ok: false,
-          error: "subscribe needs a non-empty string sessionId",
-          code: "BAD_REQUEST",
-          daemonV: PROTOCOL_VERSION,
-        });
+    // [LAW:parse-dont-validate] Trust boundary: the session id and the lane
+    // are untrusted JSON; the id keys the feed and the lane is what its
+    // toggle gates.
+    const refuse = (error: string): HandledRequest =>
+      stay({
+        ok: false,
+        error,
+        code: "BAD_REQUEST",
+        daemonV: PROTOCOL_VERSION,
+      });
+    if (typeof req.sessionId !== "string" || req.sessionId === "")
+      return refuse("subscribe needs a non-empty string sessionId");
+    const lane = parseLane(req.lane);
+    if (lane === null)
+      return refuse(
+        `subscribe needs a lane, one of ${LANE_NAMES.join(", ")}: got ${JSON.stringify(req.lane)}`,
+      );
+    return { kind: "subscribe", sessionId: req.sessionId, lane };
   }
 
   if (req.kind === "click") {
@@ -1420,7 +1438,7 @@ async function renderFrame(req: CheckedRenderRequest): Promise<FeedFrame> {
   const started = new Date();
   const facts: RenderFacts = [];
   try {
-    const { drawn, moves } = await renderChecked(
+    const { drawn, moves, lanes } = await renderChecked(
       req,
       instantOf(started),
       facts,
@@ -1432,7 +1450,13 @@ async function renderFrame(req: CheckedRenderRequest): Promise<FeedFrame> {
       drawn,
       diagnosticDump.linkFor(req.hookData.session_id, dumpTextOf(drawn)),
     );
-    return feedFrameOf(req, { ok: true, output }, started.getTime(), moves);
+    return feedFrameOf(
+      req,
+      { ok: true, output },
+      started.getTime(),
+      moves,
+      lanes,
+    );
   } catch (error) {
     const outcome = { kind: "threw", error } as const;
     const { level, line } = renderEvent(
@@ -1444,19 +1468,22 @@ async function renderFrame(req: CheckedRenderRequest): Promise<FeedFrame> {
       resp: renderFailed(error),
       drawnAt: started.getTime(),
       motion: "still",
+      lanes: null,
       failure: { level, line: `frame ${line}` },
     };
   }
 }
 
 // The frame a render of `req` just drew at `drawnAt` (ms): the bar is due
-// again at the moving rate while it `moves` AND someone can see it.
+// again at the moving rate while it `moves` AND someone can see it, and the
+// lanes its settings switch on are the ones that may have it.
 function feedFrameOf(
   req: CheckedRenderRequest,
   resp: Response,
   drawnAt: number,
   moves: boolean,
-): FeedFrame {
+  lanes: LaneSwitches,
+): FeedFrame & { readonly lanes: LaneSwitches } {
   return {
     resp,
     drawnAt,
@@ -1465,6 +1492,7 @@ function feedFrameOf(
       : paneVisibility.shown(req.hints.tmux)
         ? "moving"
         : "unseen",
+    lanes,
     failure: null,
   };
 }
@@ -1578,7 +1606,7 @@ async function renderChecked(
   req: CheckedRenderRequest,
   at: Instant,
   facts: RenderFacts,
-): Promise<{ drawn: DrawnBar; moves: boolean }> {
+): Promise<{ drawn: DrawnBar; moves: boolean; lanes: LaneSwitches }> {
   noteFacts(facts, {
     sid: req.hookData.session_id,
     at: at.toFixed(3),
@@ -1825,6 +1853,7 @@ async function renderChecked(
       },
     },
     moves: frameMoves(fx),
+    lanes: effective.lanes,
   };
 }
 
@@ -1903,9 +1932,9 @@ async function answerRequest(
   order: number,
   at: Instant,
   facts: RenderFacts,
-): Promise<{ output: string; moves: boolean }> {
+): Promise<{ output: string; moves: boolean; lanes: LaneSwitches }> {
   recordRequest(req);
-  const { drawn, moves } = await renderChecked(req, at, facts);
+  const { drawn, moves, lanes } = await renderChecked(req, at, facts);
   const { link, failure } = diagnosticDump.sync(
     req.hookData.session_id,
     order,
@@ -1916,5 +1945,5 @@ async function answerRequest(
   noteFacts(facts, {
     dumpFailed: failure === null ? "-" : JSON.stringify(failure),
   });
-  return { output: composeBar(drawn, link), moves };
+  return { output: composeBar(drawn, link), moves, lanes };
 }
