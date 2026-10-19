@@ -1,3 +1,10 @@
+# [1.137.0](https://github.com/promptctl/cc-candybar/compare/v1.136.1...v1.137.0) (2026-10-19)
+
+
+### Features
+
+* **model:** effort gauge beside the model name ([#318](https://github.com/promptctl/cc-candybar/issues/318)) ([e3fe381](https://github.com/promptctl/cc-candybar/commit/e3fe38110b24f576bb5d1e980a642e779d845770))
+
 ## [1.136.1](https://github.com/promptctl/cc-candybar/compare/v1.136.0...v1.136.1) (2026-10-19)
 
 
