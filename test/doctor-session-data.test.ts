@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 // brandon-doctor-v62x.p4l: "Session data is readable" — the transcript each
 // recent render named exists once Claude Code has answered, opens, and reads
 // as the JSON lines the bar folds its session cost, metrics and activity from.
@@ -114,6 +115,14 @@ describe("readTranscriptWindow", () => {
     fs.writeFileSync(file, `{"a":1}\n${bad}${fill}`);
     expect(readTranscriptWindow(file)).toEqual(
       window({ lines: 2, unparsed: 1, whole: false }),
+    );
+  });
+
+  test("a FIFO at the path does not block the read", () => {
+    const fifo = path.join(dir, "pipe.jsonl");
+    execFileSync("mkfifo", [fifo]);
+    expect(readTranscriptWindow(fifo)).toEqual(
+      window({ lines: 0, unparsed: 0, whole: true }),
     );
   });
 

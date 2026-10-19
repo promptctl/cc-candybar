@@ -5,7 +5,14 @@ import {
   stat as fsStat,
 } from "node:fs/promises";
 import type { FileHandle } from "node:fs/promises";
-import { closeSync, fstatSync, openSync, readSync, statSync } from "node:fs";
+import {
+  closeSync,
+  constants,
+  fstatSync,
+  openSync,
+  readSync,
+  statSync,
+} from "node:fs";
 
 import { ABSENT, failed, ok, type Outcome } from "./outcome";
 import { debug } from "./logger";
@@ -300,7 +307,10 @@ export function readTailSync(
 ): Outcome<{ buf: Buffer; fromStart: boolean }> {
   let fd: number;
   try {
-    fd = openSync(path, "r");
+    // Non-blocking: the path is the client's word, and a synchronous open of
+    // a FIFO with no writer would hold the daemon's loop for good. The read
+    // is bounded by fstat's size, so a pipe or device reads nothing.
+    fd = openSync(path, constants.O_RDONLY | constants.O_NONBLOCK);
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === "ENOENT") return ABSENT;
     return failed(e instanceof Error ? e.message : String(e));

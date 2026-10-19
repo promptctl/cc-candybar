@@ -504,10 +504,11 @@ function makeEntry(parsed: Record<string, unknown>): ParsedEntry | null {
 // parse skips those lines; the doctor counts them (brandon-doctor-v62x.p4l),
 // so the two agree on what a bad line is. Per line, so no reader holds more
 // than one line's full object at once — makeEntry drops it straight away.
+// [LAW:effects-at-boundaries] Pure: a reader that wants the reason logs it.
 export type JsonLine =
   | { readonly kind: "blank" }
   | { readonly kind: "object"; readonly value: Record<string, unknown> }
-  | { readonly kind: "unparsed" };
+  | { readonly kind: "unparsed"; readonly reason: string };
 
 export function jsonLine(line: string): JsonLine {
   const trimmed = line.trim();
@@ -516,16 +517,17 @@ export function jsonLine(line: string): JsonLine {
     const value: unknown = JSON.parse(trimmed);
     return typeof value === "object" && value !== null && !Array.isArray(value)
       ? { kind: "object", value: value as Record<string, unknown> }
-      : { kind: "unparsed" };
+      : { kind: "unparsed", reason: "not a JSON object" };
   } catch (parseError) {
-    debug(`Failed to parse JSONL line: ${parseError}`);
-    return { kind: "unparsed" };
+    return { kind: "unparsed", reason: String(parseError) };
   }
 }
 
 // The entry one line contributes, if any — the step every parse loop takes.
 function entryOf(line: string): ParsedEntry | null {
   const read = jsonLine(line);
+  if (read.kind === "unparsed")
+    debug(`Failed to parse JSONL line: ${read.reason}`);
   return read.kind === "object" ? makeEntry(read.value) : null;
 }
 
