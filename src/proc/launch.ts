@@ -107,6 +107,10 @@ export const LAUNCH_CATEGORIES = [
   // over a published install). One click, one long-running child; the
   // notice's own running/failed state serialises clicks, so no rate limit.
   "update.apply",
+  // `cc-candybar plugin install`'s clone of a plugin's repo
+  // (src/plugin-install.ts): two git calls per install, in the CLI's own
+  // process, apart from the daemon's per-render "git".
+  "plugin.git",
 ] as const;
 
 export type LaunchCategory = (typeof LAUNCH_CATEGORIES)[number];

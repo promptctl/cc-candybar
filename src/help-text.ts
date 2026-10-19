@@ -71,6 +71,12 @@ Subcommands:
   url-handle URL           Internal — invoked by the URL handler app on
                            cmd-click. Parses cc-candybar://<verb>/<value> and
                            dispatches (currently: copy to clipboard).
+  plugin install SOURCE    Install a repository's plugins into
+                           $XDG_DATA_HOME/cc-candybar/plugins: SOURCE is a
+                           local path, a GitHub slug (owner/repo) or a git URL,
+                           and its plugins are the folders under
+                           .cc-candybar/plugins/. A definition the bar would
+                           drop installs nothing. Re-run to update.
   daemon-stats [--json]    Query the running daemon for runtime stats:
                            uptime, RSS, cache hit rates, watcher count,
                            request totals. Does not spawn a daemon.
