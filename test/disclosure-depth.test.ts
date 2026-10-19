@@ -68,7 +68,6 @@ const OPTS = {
   colorCompatibility: "truecolor" as const,
   wrap: true,
   padding: 0,
-  charset: "unicode" as const,
   width: Number.POSITIVE_INFINITY,
 };
 
@@ -90,7 +89,6 @@ const PAYLOAD = {
   style: { effective: "none" },
   endcaps: { effective: "powerline" },
   preset: { effective: "default" },
-  charset: { effective: "unicode" },
   colorCompatibility: { effective: "truecolor" },
   autoWrap: { effective: true },
   padding: { effective: 1 },

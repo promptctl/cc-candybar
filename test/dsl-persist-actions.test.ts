@@ -62,7 +62,6 @@ function opts(width = Number.POSITIVE_INFINITY) {
     colorCompatibility: "truecolor" as const,
     wrap: true,
     padding: 0,
-    charset: "unicode" as const,
     width,
   };
 }
@@ -218,9 +217,9 @@ describe("config-validators gate", () => {
   });
 
   test("a gate's keys are the ones its own config persists", () => {
-    const applyCharset = `{ applyCharset: { persist: 'charset', from: 'charsets' } }`;
-    expect(gateOf(applyCharset).listKeys()).toContain("charset");
-    expect(gateOf("{}").listKeys()).not.toContain("charset");
+    const applyDepth = `{ applyDepth: { persist: 'colorCompatibility', from: 'colorCompatibilities' } }`;
+    expect(gateOf(applyDepth).listKeys()).toContain("colorCompatibility");
+    expect(gateOf("{}").listKeys()).not.toContain("colorCompatibility");
   });
 
   // [LAW:one-type-per-behavior] The shared validator algebra is one
@@ -230,8 +229,8 @@ describe("config-validators gate", () => {
   // rejected them.
   test("an out-of-domain rejection names the config keyspace, not state", () => {
     const result = gateOf(
-      `{ applyCharset: { persist: 'charset', from: 'charsets' } }`,
-    ).validate("charset", "bogus");
+      `{ applyDepth: { persist: 'colorCompatibility', from: 'colorCompatibilities' } }`,
+    ).validate("colorCompatibility", "bogus");
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.reason).toContain("config");
@@ -361,6 +360,17 @@ describe("persist/reset action loader shape", () => {
     expect(() =>
       parseAndValidate("<test>", base(`{ a: { reset: 'pallete' } }`), ALLOWED),
     ).toThrow(/"pallete" is not a config globals field \(have: /);
+  });
+
+  test("a persist or reset target naming a removed globals field says why it is gone", () => {
+    for (const action of [
+      `{ a: { persist: 'charset', to: 'unicode' } }`,
+      `{ a: { reset: 'charset' } }`,
+    ]) {
+      expect(() => parseAndValidate("<test>", base(action), ALLOWED)).toThrow(
+        /the globals field "charset" was removed: the bar always draws Nerd Font glyphs/,
+      );
+    }
   });
 
   test("persist targeting a real Globals field passes", () => {
@@ -514,9 +524,9 @@ describe("persist action click → the config file", () => {
   // [LAW:verifiable-goals] candybar-config-engine-71o.4 found this the hard
   // way against a real daemon: `{{ menu }}`'s picker grid (src/render/
   // picker.ts) hard-required a set-option apply action, so a persist-option
-  // apply (the ONLY seam charset/colorCompatibility/autoWrap/padding have —
+  // apply (the ONLY seam colorCompatibility/autoWrap/padding have —
   // see docs/interaction-authoring.md's "Persisting the display globals",
-  // which had ALREADY documented `{{ menu "applyCharset" "▸" "▾" }}` over a persist
+  // which had ALREADY documented `{{ menu "applyDepth" "▸" "▾" }}` over a persist
   // action as the canonical pattern) threw at render the moment the menu was
   // actually opened. A `{{ menu }}`'s own open/close disclosure is a
   // SessionState write and its option a config-file write, so this test's
@@ -527,12 +537,12 @@ describe("persist action click → the config file", () => {
       globals: {},
       variables: {
         'session.id': { kind: 'input', path: 'session_id', default: '' },
-        'charset.effective': { kind: 'literal', value: 'unicode' },
+        'colorCompatibility.effective': { kind: 'literal', value: 'truecolor' },
         'term.cols': { kind: 'input', path: 'term.cols', type: 'number', default: 80 },
       },
-      actions: { applyCharsetForever: { persist: 'charset', from: 'charsets' } },
+      actions: { applyDepthForever: { persist: 'colorCompatibility', from: 'colorCompatibilities' } },
       segments: {
-        bar: { template: '{{ .charset.effective }} {{ menu "applyCharsetForever" "▸" "▾" }}', bg: 'surface', fg: 'foreground' },
+        bar: { template: '{{ .colorCompatibility.effective }} {{ menu "applyDepthForever" "▸" "▾" }}', bg: 'surface', fg: 'foreground' },
       },
       root: 'bar',
     }`;
@@ -542,7 +552,9 @@ describe("persist action click → the config file", () => {
     durable.seedOrigin(sessionState, "s1");
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "", undefined, sessionState);
-    const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
+    const compiled = registerDslConfig(config, registry, {
+      cwd: process.cwd(),
+    });
     const basePalette = getThemePalette("textual-dark"!);
     const render = (): string =>
       renderDsl(
@@ -577,24 +589,24 @@ describe("persist action click → the config file", () => {
       click(toggleUrl);
 
       // Opened: this must not throw (the bug threw here) and must list
-      // "ascii" as a set-config-backed option, never set-state.
+      // "256" as a set-config-backed option, never set-state.
       const openUrls = ownUrls(render());
-      const asciiUrl = openUrls.find((u) =>
+      const depthUrl = openUrls.find((u) =>
         effectsOf(u).some(
-          (e) => e.verb === "set-config" && e.args[2] === "ascii",
+          (e) => e.verb === "set-config" && e.args[2] === "256",
         ),
       );
-      expect(asciiUrl).toBeDefined();
+      expect(depthUrl).toBeDefined();
       expect(
         openUrls.some((u) =>
           effectsOf(u).some(
-            (e) => e.verb === "set-state" && e.args.includes("ascii"),
+            (e) => e.verb === "set-state" && e.args.includes("256"),
           ),
         ),
       ).toBe(false);
 
-      click(asciiUrl!);
-      expect(globalsInFile()).toEqual({ charset: "ascii" });
+      click(depthUrl!);
+      expect(globalsInFile()).toEqual({ colorCompatibility: "256" });
     } finally {
       registry.dispose();
     }
@@ -716,32 +728,33 @@ describe("persist action click → the config file", () => {
   });
 
   test("a persist stepper under a preset silent on its field still writes top-level globals", () => {
-    const { render, click, sessionState } =
-      buildPersistRuntime(SRC_UNDER_PRESET.replace("padding: 4, ", ""));
+    const { render, click, sessionState } = buildPersistRuntime(
+      SRC_UNDER_PRESET.replace("padding: 4, ", ""),
+    );
     sessionState.set("s1", "preset", "roomy");
     click(ownUrls(render())[0]!);
     expect(globalsInFile()).toEqual({ padding: 3, autoWrap: true });
   });
 
   // [LAW:verifiable-goals] candybar-config-engine-71o.3: proves the NEW
-  // CONFIG_KEY_TO_EFFECTIVE_VAR entries (charset → charset.effective, …)
+  // CONFIG_KEY_TO_EFFECTIVE_VAR entries (colorCompatibility → colorCompatibility.effective, …)
   // actually drive the "current selection" bold marking — not just that the
   // write lands (covered above), but that the render-side read-back works.
   // Without the wiring this test would see NOTHING marked active (the stale
   // fallback comment removed from render/action.ts): the stateVar would fall
-  // back to the bare key "charset", which no variable projects, so readVar
+  // back to the bare key "colorCompatibility", which no variable projects, so readVar
   // would always see "".
-  test("a persist-option action over a newly-exposed field (charset) marks the matching link active via its *.effective projection", () => {
+  test("a persist-option action over a newly-exposed field (colorCompatibility) marks the matching link active via its *.effective projection", () => {
     const { render } = buildPersistRuntime(`{
       globals: {},
       variables: {
         'session.id': { kind: 'input', path: 'session_id', default: '' },
-        'charset.effective': { kind: 'literal', value: 'ascii' },
+        'colorCompatibility.effective': { kind: 'literal', value: '256' },
       },
-      actions: { applyCharset: { persist: 'charset', from: 'charsets' } },
+      actions: { applyDepth: { persist: 'colorCompatibility', from: 'colorCompatibilities' } },
       segments: {
         bar: {
-          template: '{{ action "applyCharset" "ascii" }} {{ action "applyCharset" "unicode" }}',
+          template: '{{ action "applyDepth" "256" }} {{ action "applyDepth" "truecolor" }}',
           bg: 'surface', fg: 'foreground',
         },
       },
@@ -749,7 +762,7 @@ describe("persist action click → the config file", () => {
     }`);
     const active = boldUrls(render()).map(effectsOf);
     expect(active).toHaveLength(1);
-    expect(active[0]![0]!.args[2]).toBe("ascii");
+    expect(active[0]![0]!.args[2]).toBe("256");
   });
 
   // [LAW:verifiable-goals] candybar-config-engine-71o.3: autoWrap is the one
@@ -988,7 +1001,7 @@ describe("RenderCache: the config file is the durable store", () => {
   test("an active preset's own field wins over the file's default; a field the preset doesn't touch keeps reading the file", () => {
     durable.write(
       JSON.stringify({
-        globals: { padding: 2, charset: "ascii" },
+        globals: { padding: 2, colorCompatibility: "256" },
         segments: {},
         presets: { roomy: { globals: { padding: 4 } } },
       }),
@@ -1005,13 +1018,13 @@ describe("RenderCache: the config file is the durable store", () => {
       // No active preset (the floor): the file's globals apply as-is.
       const atFloor = presetGlobals(entry.state.config, PRESET_FLOOR);
       expect(atFloor.padding).toBe(2);
-      expect(atFloor.charset).toBe("ascii");
+      expect(atFloor.colorCompatibility).toBe("256");
 
       // "roomy" declares padding — it wins over the file's 2. It says
-      // nothing about charset — the file's "ascii" survives underneath.
+      // nothing about colorCompatibility — the file's "256" survives underneath.
       const atRoomy = presetGlobals(entry.state.config, "roomy");
       expect(atRoomy.padding).toBe(4);
-      expect(atRoomy.charset).toBe("ascii");
+      expect(atRoomy.colorCompatibility).toBe("256");
     } finally {
       for (const fn of cleanups) fn();
     }

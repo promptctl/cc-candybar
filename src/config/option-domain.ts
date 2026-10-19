@@ -28,7 +28,6 @@
 
 import type { Palette, ThemeKey } from "@promptctl/rich-js";
 import {
-  CHARSETS,
   COLOR_COMPATIBILITIES,
   listResolvablePaletteNames,
   placementThemeNames,
@@ -56,7 +55,7 @@ export type OptionDomainResolver = () => readonly string[];
 // the palette that picking a member would put in force. `themes` answers with
 // the theme's own palette; `styles` answers with the render's base palette
 // transposed by that style's ThemeKey. Every other domain (endcaps, presets,
-// charsets, an inline array, edit mode's addable segment names) has no answer,
+// colour depths, an inline array, edit mode's addable segment names) has no answer,
 // which is exactly the absence below.
 //
 // `render` is the render's two palettes. `basePalette` is the one the render's
@@ -157,10 +156,9 @@ registerBuiltinDomain("variations", () => VARIATION_NAMES);
 registerBuiltinDomain("shades", () => SHADE_NAMES);
 // [LAW:one-source-of-truth] Same shape as themes/endcaps: the exact consts
 // the loader's own field validation and the render layer's glyph/color-depth
-// dispatch already derive from (themes/policy.ts CHARSETS/COLOR_COMPATIBILITIES)
-// — a menu drawing from these can never enumerate a value the render layer
-// would reject.
-registerBuiltinDomain("charsets", () => CHARSETS);
+// dispatch already derive from (themes/policy.ts COLOR_COMPATIBILITIES) — a
+// menu drawing from it can never enumerate a value the render layer would
+// reject.
 registerBuiltinDomain("colorCompatibilities", () => COLOR_COMPATIBILITIES);
 
 // [LAW:no-silent-failure] A built-in domain can never be re-claimed — a

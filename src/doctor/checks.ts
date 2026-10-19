@@ -193,8 +193,8 @@ export type MarkBook = Readonly<
 
 // [LAW:types-are-the-program] A bar that draws no private-use glyph has no
 // terminal to ask about, so `none` carries none and nothing is read for it.
-// `glyphs` are the private-use glyphs the session's bar draws (its joiner, in
-// the charset in force — src/render/strip.ts measures them), never empty.
+// `glyphs` are the private-use glyphs the session's bar draws (its joiner's,
+// src/render/strip.ts measures them, and its config text's), never empty.
 export type NerdFontFacts =
   | { readonly kind: "none" }
   | {
@@ -719,9 +719,6 @@ export function glyphSighting(
     : { glyphs: facts.glyphs, id: `${where}|${codePoints(facts.glyphs)}` };
 }
 
-const ASCII_WAY =
-  'or set globals.charset to "ascii" to draw the bar without them';
-
 // "A Nerd Font is set up and in use" (brandon-doctor-v62x.2ww): the terminal
 // that draws the bar has the private-use glyphs the bar draws — its joiner's
 // caps and seams — so they read as shapes, not boxes. A terminal cannot be
@@ -760,7 +757,7 @@ const nerdFont: Check = {
         return { ok: true };
       case "boxes":
         return failed(
-          `${called} draws ${codePoints(facts.glyphs)} as boxes — set a Nerd Font as its font, ${ASCII_WAY}`,
+          `${called} draws ${codePoints(facts.glyphs)} as boxes — set a Nerd Font as its font`,
         );
       case null:
         break;
@@ -790,7 +787,7 @@ const nerdFont: Check = {
         return failed(
           shipped === null
             ? `${label} ships Nerd Font symbols since ${since}, and did not say which release this is`
-            : `${called} ships no Nerd Font symbols (they came in ${since}) — update ${label}, or set a Nerd Font as its font, ${ASCII_WAY}`,
+            : `${called} ships no Nerd Font symbols (they came in ${since}) — update ${label}, or set a Nerd Font as its font`,
         );
       }
       case "configured": {
@@ -802,12 +799,12 @@ const nerdFont: Check = {
         const { font, from, lacks } = terminal.font.value;
         if (lacks === null) {
           return failed(
-            `${called} is set to ${font} (${from}), which is not installed — install it or set a Nerd Font, ${ASCII_WAY}`,
+            `${called} is set to ${font} (${from}), which is not installed — install it or set a Nerd Font`,
           );
         }
         if (lacks.length === 0) return { ok: true };
         return failed(
-          `${called} draws with ${font} (${from}), which has no ${codePoints(lacks)} — set a Nerd Font as its font, ${ASCII_WAY}`,
+          `${called} draws with ${font} (${from}), which has no ${codePoints(lacks)} — set a Nerd Font as its font`,
         );
       }
     }

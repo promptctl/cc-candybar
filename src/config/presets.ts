@@ -174,7 +174,7 @@ export function presetRoot(
 // function of the name: the config's globals with the preset's shallow-merged
 // over them, per field — the SAME per-field cascade mergeWithDefault applies to
 // `globals` everywhere else in the loader, so a preset naming `padding` says
-// nothing about `charset`. The empty fragment yields the config's globals
+// nothing about `endcaps`. The empty fragment yields the config's globals
 // unchanged, so again no floor-shaped branch.
 export function presetGlobals(config: DslConfig, name: string): Globals {
   return { ...config.globals, ...presetByName(config.presets, name).globals };

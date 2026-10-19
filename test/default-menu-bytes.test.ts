@@ -17,7 +17,7 @@
 // because adding one fails the coverage snapshot until it is acknowledged.
 //
 // The bundled default hosts none today: every settings-menu control — preset,
-// theme, style, endcaps, charset, colour depth — opens a carousel
+// theme, style, endcaps, colour depth — opens a carousel
 // (test/theme-carousel.test.ts), and the coverage snapshot below says so. The
 // menus left to pin are edit mode's `+` insert affordances.
 
@@ -57,7 +57,6 @@ const OPTS = {
   colorCompatibility: "truecolor" as const,
   wrap: true,
   padding: 0,
-  charset: "unicode" as const,
   width: Number.POSITIVE_INFINITY,
 };
 
@@ -79,7 +78,6 @@ const PAYLOAD = {
   endcaps: { effective: "powerline" },
   variation: { effective: "accent" },
   preset: { effective: "default" },
-  charset: { effective: "unicode" },
   colorCompatibility: { effective: "truecolor" },
   autoWrap: { effective: true },
   padding: { effective: 1 },

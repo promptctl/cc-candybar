@@ -87,13 +87,11 @@ import { DEBUG_WHATS, isDebugWhat } from "./debug-types";
 import { renderDsl, type RenderWarning } from "../dsl/render.js";
 import {
   renderStripCells,
-  DEFAULT_CHARSET,
   DEFAULT_COLOR_COMPATIBILITY,
   DEFAULT_PADDING,
   DEFAULT_TERMINAL_WIDTH,
   DEFAULT_WRAP,
   type BuildLineOptions,
-  type Charset,
   type ColorCompatibility,
 } from "../render/strip.js";
 import { applyClaudeCodeReserve } from "../utils/terminal-width.js";
@@ -1002,7 +1000,6 @@ export async function handleRequest(
               req.what === "segments"
                 ? serializeSegmentCells(
                     dbgEntry.lastRenderCellsBySegment,
-                    dbgEntry.config.globals.charset ?? DEFAULT_CHARSET,
                     dbgEntry.config.globals.colorCompatibility ??
                       DEFAULT_COLOR_COMPATIBILITY,
                   )
@@ -1135,7 +1132,6 @@ const RENDER_OPTS_BASE = {
   colorCompatibility: DEFAULT_COLOR_COMPATIBILITY,
   wrap: DEFAULT_WRAP,
   padding: DEFAULT_PADDING,
-  charset: DEFAULT_CHARSET,
 };
 const DEBUG_RENDER_OPTS: BuildLineOptions = {
   ...RENDER_OPTS_BASE,
@@ -1147,14 +1143,13 @@ const DEBUG_RENDER_OPTS: BuildLineOptions = {
 // the DaemonDslState type requires the field.
 const EMPTY_RENDER_MAP = new Map<string, string>();
 
-// [LAW:one-source-of-truth] The joiner glyph vocabulary and the color depth
-// are serialization-time choices. A debug request carries no session, so the
-// sampled entry's CONFIG values are the ones it can state — a session's own
-// pick, like its endcaps, is not visible here. The caller threads the
-// entry-resolved values; this serializer never re-defaults them.
+// [LAW:one-source-of-truth] The color depth is a serialization-time choice.
+// A debug request carries no session, so the sampled entry's CONFIG values
+// are the ones it can state — a session's own pick, like its endcaps, is not
+// visible here. The caller threads the entry-resolved values; this
+// serializer never re-defaults them.
 function serializeSegmentCells(
   cells: ReadonlyMap<string, readonly RichText[]>,
-  charset: Charset,
   colorCompatibility: ColorCompatibility,
 ): Map<string, string> {
   const out = new Map<string, string>();
@@ -1163,7 +1158,6 @@ function serializeSegmentCells(
       name,
       renderStripCells(segCells, {
         ...DEBUG_RENDER_OPTS,
-        charset,
         colorCompatibility,
       }),
     );

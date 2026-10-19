@@ -17,7 +17,7 @@ You are running an interactive setup wizard to configure the cc-candybar statusl
 ## Operating rules
 
 - One question per step. Wait for the user's answer before moving on. Do not skip or combine steps.
-- Track the user's choices as four variables: `charset`, `theme`, `endcaps`, `preset`. Every later command and the final config are built from exactly those four.
+- Track the user's choices as three variables: `theme`, `endcaps`, `preset`. Every later command and the final config are built from exactly those three.
 - Do NOT use the Agent tool or Explore subagents. Everything you need is in this document.
 - Do NOT read source code from the cc-candybar package. Run only the subcommands this document names (`install`, `check`) and the plugin's preview script against it.
 - IMPORTANT: After running any Bash or Read tool, repeat the key output as text in your response. Some users have a collapsed UI mode where tool outputs need a click to expand. Relay versions, option names, file paths, and command results in your text so the user sees them without expanding.
@@ -83,8 +83,13 @@ Then ask:
 - **Question**: "Do the powerline arrows and capsule half-circles render as shapes?"
 - **Header**: "Nerd Font"
 - **Options**:
-  - "Yes, I see arrows and half-circles" -> Set `charset=unicode`
-  - "No, I see boxes, blanks, or question marks" -> Set `charset=ascii`
+  - "Yes, I see arrows and half-circles" -> Continue to Step 3
+  - "No, I see boxes, blanks, or question marks" -> The bar draws Nerd Font glyphs, so it needs one. Tell them to install a Nerd Font (https://www.nerdfonts.com) and set it as their terminal's font, then ask:
+    - **Question**: "Set a Nerd Font, then check again?"
+    - **Header**: "Nerd Font"
+    - **Options**:
+      - "I set one, check again" -> Re-run Step 2 from the top
+      - "Exit wizard" -> Tell them to set a Nerd Font as their terminal's font and rerun `/candybar`, then stop
 
 ## Step 3: Theme
 
@@ -95,7 +100,7 @@ Then ask:
 > After running, tell the user to expand the bash output if they cannot see the previews.
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/bin/preview.sh --compare-themes --charset=${charset}
+${CLAUDE_PLUGIN_ROOT}/bin/preview.sh --compare-themes
 ```
 
 The output is one block per theme: a label line of the theme's name followed by a colon, then that theme's rendered bar. That label list is the theme list; there is no other. List the labeled names in your text (names only, in the order printed) and tell the user the previews are in the bash output above.
@@ -117,7 +122,7 @@ If the user types a name in the free text field, accept it only if the preview l
 > After running, tell the user to expand the bash output if they cannot see the previews.
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/bin/preview.sh --compare-endcaps --theme=${theme} --charset=${charset}
+${CLAUDE_PLUGIN_ROOT}/bin/preview.sh --compare-endcaps --theme=${theme}
 ```
 
 Tell the user: "The endcaps previews are in the bash output above, each under its name. Expand it if needed. A preview drawn with boxes or question marks uses glyphs your font lacks — pick another."
@@ -145,7 +150,7 @@ The preset is the bar's arrangement: which segments, on how many rows.
 > After running, tell the user to expand the bash output if they cannot see the previews.
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/bin/preview.sh --compare-presets --theme=${theme} --endcaps=${endcaps} --charset=${charset}
+${CLAUDE_PLUGIN_ROOT}/bin/preview.sh --compare-presets --theme=${theme} --endcaps=${endcaps}
 ```
 
 Tell the user the previews are in the bash output above, then display:
@@ -202,13 +207,12 @@ stamp=$(date -u +%Y%m%dT%H%M%SZ)
    ${CLAUDE_PLUGIN_ROOT}/templates/config.json
    ```
 
-2. Replace the four placeholders in the template content:
+2. Replace the three placeholders in the template content:
 
    | Placeholder | Replace with |
    |-------------|--------------|
    | `replace:THEME` | `theme` (the name chosen in Step 3) |
    | `replace:ENDCAPS` | `endcaps` (a name the endcaps preview showed) |
-   | `replace:CHARSET` | `charset` (`unicode` or `ascii`) |
    | `replace:PRESET` | `preset` (a name from Step 5's list) |
 
 3. Write the result to `~/.config/cc-candybar/config.json5` with the Write tool (create the directory if needed). Do NOT read or merge with any existing config; the file is replaced whole.
@@ -249,7 +253,7 @@ Exit 0 has two outcomes, told apart by the output:
 > After running, tell the user to expand the bash output if they cannot see the preview.
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/bin/preview.sh --theme=${theme} --endcaps=${endcaps} --charset=${charset} --preset=${preset}
+${CLAUDE_PLUGIN_ROOT}/bin/preview.sh --theme=${theme} --endcaps=${endcaps} --preset=${preset}
 ```
 
 Tell the user: "Your statusline is in the bash output above. Expand it if needed."

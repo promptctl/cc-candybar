@@ -47,7 +47,6 @@ const EFFECTIVE_GLOBALS: EffectiveGlobals = {
   endcaps: "powerline",
   variation: "accent",
   shade: "middle",
-  charset: "unicode",
   colorCompatibility: "truecolor",
   autoWrap: true,
   padding: 1,
@@ -167,7 +166,6 @@ describe("the bundled host segment", () => {
           colorCompatibility: "none" as const,
           wrap: true,
           padding: 1,
-          charset: "unicode" as const,
           width: Number.POSITIVE_INFINITY,
         },
       );

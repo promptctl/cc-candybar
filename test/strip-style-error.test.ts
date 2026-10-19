@@ -14,7 +14,6 @@ describe("strip draw: an unresolvable style is loud", () => {
         colorCompatibility: "truecolor",
         wrap: false,
         padding: 1,
-        charset: "unicode",
         width: 80,
       }),
     ).toThrow(StyleSyntaxError);

@@ -16,7 +16,7 @@ const EDGE_OPTS = { maxWidth: 80 };
 function renderCells(cells: readonly RichText[]): string {
   return renderStripCells(cells, {
     endcaps: "plain",
-    colorCompatibility: "truecolor", wrap: true, padding: 0, charset: "unicode" as const,
+    colorCompatibility: "truecolor", wrap: true, padding: 0,
     width: Number.POSITIVE_INFINITY,
   });
 }
@@ -341,7 +341,7 @@ describe("baseStyle merge preserves per-fragment fg as cell parts", () => {
     // red — plus possibly more for transitions back to baseline).
     const rendered = renderStripCells(cells, {
       endcaps: "plain",
-      colorCompatibility: "truecolor", wrap: true, padding: 0, charset: "unicode" as const,
+      colorCompatibility: "truecolor", wrap: true, padding: 0,
       width: Number.POSITIVE_INFINITY,
     });
     expect(stripAnsi(rendered)).toBe(" prefix SU suffix ");

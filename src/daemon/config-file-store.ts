@@ -104,7 +104,6 @@ const GLOBALS_FIELD_KIND: Readonly<
   shade: "string",
   autoWrap: "boolean",
   padding: "number",
-  charset: "string",
   updateNotice: "boolean",
   transitions: "boolean",
   colorCompatibility: "string",

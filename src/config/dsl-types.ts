@@ -20,7 +20,7 @@ import type { ActionDecl } from "./action.js";
 // a compile error here, never silent drift. Type-only: no runtime rich-js
 // dependency enters the config layer.
 import type { ThemeKey } from "@promptctl/rich-js";
-import type { Charset, ColorCompatibility, Endcaps } from "../themes/policy.js";
+import type { ColorCompatibility, Endcaps } from "../themes/policy.js";
 import type {
   Axis,
   DistributionName,
@@ -377,7 +377,7 @@ export interface PresetDecl {
   readonly root?: RootFragment;
   // Absent ⇒ no display-default changes. Shallow-merged OVER the config's own
   // globals when this preset is active, so a preset naming `padding` says
-  // nothing about `charset`.
+  // nothing about `endcaps`.
   readonly globals?: Globals;
 }
 
@@ -583,14 +583,6 @@ export interface Globals {
   // The config default under a session pick — `effectivePadding` resolves
   // both into renderOpts.padding.
   readonly padding?: number;
-
-  // The legacy display.charset knob: which glyph vocabulary the strip joiners
-  // render with. Default "unicode" (current behavior — rich-js's powerline
-  // caps, U+E0Bx). "ascii" swaps the caps for single-column ASCII glyphs so
-  // terminals/fonts without powerline glyphs render cleanly instead of tofu.
-  // Orthogonal to `endcaps`: endcaps pick the joiner shape, charset the glyphs.
-  // Set only in the config file: it has no session pick.
-  readonly charset?: Charset;
 
   // Which theme role each ROW of the closed bar wears, in order — a named
   // entry of VARIATIONS (src/themes/decor.ts). Default "accent".

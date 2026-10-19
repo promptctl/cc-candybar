@@ -52,7 +52,6 @@ const PAYLOAD = {
   endcaps: { effective: "powerline" },
   variation: { effective: "accent" },
   preset: { effective: "default" },
-  charset: { effective: "unicode" },
   colorCompatibility: { effective: "truecolor" },
   autoWrap: { effective: true },
   padding: { effective: 1 },
@@ -81,7 +80,6 @@ function rig(width: number, userSegments = "") {
       colorCompatibility: "truecolor",
       wrap: true,
       padding: 1,
-      charset: "unicode",
       width,
     });
   // The `+` opener is the one coupled write whose 4th argument is the page

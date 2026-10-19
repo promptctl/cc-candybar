@@ -97,7 +97,6 @@ function buildRuntime(source: string) {
         colorCompatibility: "truecolor" as const,
         wrap: effective.autoWrap,
         padding: effective.padding,
-        charset: effective.charset,
         width: Number.POSITIVE_INFINITY,
       },
       undefined,
@@ -278,13 +277,8 @@ describe("editGlobals — the loader's contract", () => {
 });
 
 describe("the bundled default's edit look", () => {
-  test("ships plain joiners with a charset-safe separator", () => {
-    // " | " rather than a box-drawing glyph: the fragment layers over globals
-    // that may declare `charset: "ascii"`, and it must not assume otherwise.
+  test("ships plain joiners with a stated separator", () => {
     expect(DEFAULT_DSL_CONFIG.editGlobals.endcaps).toBe("plain");
     expect(DEFAULT_DSL_CONFIG.editGlobals.default_separator).toBe(" | ");
-    expect(DEFAULT_DSL_CONFIG.editGlobals.default_separator).toMatch(
-      /^[\x20-\x7e]*$/,
-    );
   });
 });

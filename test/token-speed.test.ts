@@ -283,7 +283,6 @@ const EFFECTIVE_GLOBALS: EffectiveGlobals = {
   endcaps: "powerline",
   variation: "accent",
   shade: "middle",
-  charset: "unicode",
   colorCompatibility: "truecolor",
   autoWrap: true,
   padding: 1,
@@ -469,7 +468,7 @@ function renderSpeed(payload: Record<string, unknown>): string {
     const compiled = registerDslConfig(cfg, registry, { cwd: "/tmp" });
     return renderDsl(cfg, compiled, store, registry, payload, instantOf(new Date()), {
       endcaps: "powerline",
-      colorCompatibility: "none", wrap: true, padding: 0, charset: "unicode" as const,
+      colorCompatibility: "none", wrap: true, padding: 0,
       width: Number.POSITIVE_INFINITY,
     });
   } finally {

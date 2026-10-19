@@ -115,7 +115,7 @@ its state is synthesized, see below.) A `persist` action reads its current
 value back through whatever variable already projects that `globals` field —
 every persistable field has one, declared by the bundled default: `palette` →
 `theme.effective`, and every other field → `<field>.effective` (`style`,
-`endcaps`, `variation`, `shade`, `charset`, `colorCompatibility`, `autoWrap`, `padding`). A `persist`
+`endcaps`, `variation`, `shade`, `colorCompatibility`, `autoWrap`, `padding`). A `persist`
 action over a field with no such variable (a hand-authored globals field with
 no projection of its own) still writes correctly; it just has no "current
 selection" highlight.
@@ -513,7 +513,7 @@ domain, and a style a name your `styles` declare:
 themeDefaults.nord.shade must be one of: muted, deepest, deeper, middle, brighter, brightest; got "darkest"
 ```
 
-### The display globals: charset, colorCompatibility, autoWrap, padding
+### The display globals: colorCompatibility, autoWrap, padding
 
 `updateNotice` is
 the boolean (default `true`) behind the `⬆ Newer source: … [rebuild]
@@ -536,15 +536,13 @@ something newer appears.
 much bar fits in the terminal a session runs in, and two sessions on one
 machine can sit in two different terminals. Both spellings are available for
 them: `persist:` writes the durable default every session sees, `set:` writes
-only the clicking session's. `charset` and `colorCompatibility` have no session
-half: they are set in the config file, so `persist:` is their only click, and a
-`set` on either key is a load error (it would write a session value no render
-reads). `charsets` and
-`colorCompatibilities` are registered domains exactly like `themes`/`endcaps`,
-sourced from the same enums the loader validates `globals.charset` and
-`globals.colorCompatibility` against, so there is no second list to drift out of
-sync. `autoWrap` is boolean, so it takes a two-member `cycle`; `padding` is a
-bounded range, so it takes a stepper pair — neither needs a registered domain.
+only the clicking session's. `colorCompatibility` has no session half: it is
+set in the config file, so `persist:` is its only click, and a `set` on its key
+is a load error (it would write a session value no render reads).
+`colorCompatibilities` is a registered domain exactly like `themes`/`endcaps`,
+sourced from the same enum the loader validates `globals.colorCompatibility`
+against, so there is no second list to drift out of sync. `autoWrap` is
+boolean, so it takes a two-member `cycle`; `padding` is a bounded range, so it takes a stepper pair — neither needs a registered domain.
 
 `autoWrap` and `padding` resolve like every other pickable global: **the
 session's own pick, over the persisted default, over the config file's value,
@@ -557,16 +555,12 @@ disagrees with.
 ```json5 check:pass
 {
   actions: {
-    applyCharset: { persist: "charset", from: "charsets" },
     applyColorCompat: { persist: "colorCompatibility", from: "colorCompatibilities" },
     toggleWrap: { persist: "autoWrap", cycle: ["true", "false"] },
     paddingDown: { persist: "padding", min: 0, max: 16, by: -1 },
     paddingUp: { persist: "padding", min: 0, max: 16, by: 1 },
   },
   segments: {
-    charsetControl: {
-      template: '{{ .charset.effective }} {{ menu "applyCharset" "▸" "▾" }}',
-    },
     colorControl: {
       template: '{{ .colorCompatibility.effective }} {{ menu "applyColorCompat" "▸" "▾" }}',
     },
@@ -579,16 +573,16 @@ disagrees with.
   },
   root: { v: [
     { h: ["directory", "model"] },
-    { h: ["charsetControl", "colorControl", "wrapToggle", "paddingControl"] },
+    { h: ["colorControl", "wrapToggle", "paddingControl"] },
   ] },
 }
 ```
 
-`{{ .charset.effective }}` / `{{ .colorCompatibility.effective }}` /
+`{{ .colorCompatibility.effective }}` /
 `{{ .padding.effective }}` are the bundled default's projections of the
 resolved config value — the same seam `{{ .theme.effective }}` rides for
 `palette` — so each trigger's label is always the value that actually
-rendered, never a restated guess. A charset or padding change takes effect
+rendered, never a restated guess. A colour-depth or padding change takes effect
 on the very next render, live, with no daemon restart: `persist` edits the
 config file, and the daemon reloads it through the same watcher a hand edit
 trips.
@@ -1082,7 +1076,7 @@ mode — `-`/`+` are ordinary `SegmentDecl`s with ordinary `removeSegment`/
 `insertSegmentFrom` actions, spliced into the same container and segment
 nodes every root lowers to — inside disclosure bodies too, so the cells of an
 open group keep their `+`/`-`. Toggling `edit.mode` changes which `when`
-predicates pass; it never changes what code runs. Padding, charset, and
+predicates pass; it never changes what code runs. Padding and
 endcaps apply to chrome exactly as they apply to any segment you'd write
 by hand.
 
@@ -1275,8 +1269,8 @@ it, so the segment tracks the bundled declaration again.
 
 A segment's `palette:` has no SessionState half — `persist` is its only seam,
 so there is no session `set` twin to pair it with. (The display globals
-`autoWrap` and `padding` do have one; `charset` and `colorCompatibility` do
-not, and a `set` on either is a load error.)
+`autoWrap` and `padding` do have one; `colorCompatibility` does not, and a
+`set` on it is a load error.)
 
 ### The global settings menu: `candybar.menu`
 
@@ -1352,9 +1346,9 @@ there is nothing to go back to), and the bar's row closes up where the door was.
   of values gets a `◀ value ▶` picker, a boolean a `☑`/`☐` toggle, a bounded number a
   `◀ ▶` stepper — the same controls configure mode generates for a
   placement's `settings`. `default_empty_value`, `default_separator` and
-  `menuGlyph` are free text and are set in the config file only, as are
-  `charset` (the joiner glyphs: `unicode` or `ascii`) and `colorCompatibility`
-  (`truecolor`, `256`, `ansi`, `none`), which have no control at all.
+  `menuGlyph` are free text and are set in the config file only, as is
+  `colorCompatibility` (`truecolor`, `256`, `ansi`, `none`), which has no
+  control at all.
 - **`✎ arrange`** enters edit mode (and `✎ done` leaves it, as `✓ done` and `↩ cancel` do on the edit row). The
   menu stays open, so `◁ back` and the tabs stay in reach while you arrange.
 - **`🧰 tools`** holds the `🩺 doctor`: click it and one row per check drops
@@ -1372,8 +1366,8 @@ there is nothing to go back to), and the bar's row closes up where the door was.
   colour inside tmux; its `[fix]` writes `CLAUDE_CODE_TMUX_TRUECOLOR=1` into
   the `env` of `~/.claude/settings.json`, which takes effect for Claude Code
   sessions started afterwards, and the row says so. `Nerd Font` passes when
-  the terminal drawing the bar has the private-use glyphs your joiner draws
-  (none under `charset: "ascii"`): kitty from 0.36, WezTerm and Ghostty ship
+  the terminal drawing the bar has the private-use glyphs your bar draws
+  (its joiner's, and any your config's text writes): kitty from 0.36, WezTerm and Ghostty ship
   their own, and for iTerm2 and Alacritty the doctor reads the font they are
   set to and asks the system whether it has them (counting the glyphs
   iTerm2's built-in Powerline glyphs draw). A terminal across ssh is on

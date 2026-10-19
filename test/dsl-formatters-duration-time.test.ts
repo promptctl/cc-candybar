@@ -36,7 +36,7 @@ import { instantOf } from "../src/utils/instant";
 
 const OPTS = {
   endcaps: "powerline" as const,
-  colorCompatibility: "truecolor" as const, wrap: true, padding: 0, charset: "unicode" as const,
+  colorCompatibility: "truecolor" as const, wrap: true, padding: 0,
   width: Number.POSITIVE_INFINITY,
 };
 // A whole-second-aligned frozen instant: clock().getTime() === NOW_MS exactly,

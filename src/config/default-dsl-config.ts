@@ -1483,9 +1483,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
   // The separator is stated rather than left to the bundled `plain` joiner's
   // glyph: this fragment layers over the user's globals, so a config that set
   // `default_separator` for its own powerline bar would otherwise carry that
-  // choice into edit mode, where the separator is the entire affordance. " | "
-  // (not "│") because it must survive `charset: "ascii"` — the fragment does
-  // not, and should not, know the terminal's glyph coverage.
+  // choice into edit mode, where the separator is the entire affordance.
   editGlobals: {
     endcaps: "plain",
     default_separator: " | ",

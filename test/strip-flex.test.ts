@@ -9,7 +9,7 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
       const out = buildLineStrip([seg("alpha"), seg("beta"), seg("gamma")], {
         endcaps: "plain",
         colorCompatibility: "none",
-        wrap: true, padding: 1, charset: "unicode" as const,
+        wrap: true, padding: 1,
         width: 200,
       });
       expect(out.split("\n")).toHaveLength(1);
@@ -24,7 +24,7 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
       const out = buildLineStrip([seg("alpha"), seg("beta"), seg("gamma")], {
         endcaps: "plain",
         colorCompatibility: "none",
-        wrap: true, padding: 1, charset: "unicode" as const,
+        wrap: true, padding: 1,
         width: oneLine.length,
       });
       expect(out.split("\n")).toHaveLength(1);
@@ -36,7 +36,7 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
       const out = buildLineStrip([seg("alpha"), seg("beta"), seg("gamma")], {
         endcaps: "plain",
         colorCompatibility: "none",
-        wrap: true, padding: 1, charset: "unicode" as const,
+        wrap: true, padding: 1,
         width: 16,
       });
       const rows = out.split("\n");
@@ -54,7 +54,6 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
         colorCompatibility: "none",
         wrap: true,
         padding: 0,
-        charset: "unicode",
         width: 200,
       });
       expect(out).toBe("alpha | beta");
@@ -66,7 +65,6 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
         colorCompatibility: "none",
         wrap: true,
         padding: 2,
-        charset: "unicode",
         width: 200,
       });
       expect(out).toBe("  alpha   |   beta  ");
@@ -78,7 +76,7 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
       const out = buildLineStrip([seg("alpha"), seg("beta"), seg("gamma")], {
         endcaps: "plain",
         colorCompatibility: "none",
-        wrap: false, padding: 1, charset: "unicode" as const,
+        wrap: false, padding: 1,
         width: 16,
       });
       expect(out.split("\n")).toHaveLength(1);
@@ -95,12 +93,12 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
       };
       const noWrap = buildLineStrip(segments, {
         ...base,
-        wrap: false, padding: 1, charset: "unicode" as const,
+        wrap: false, padding: 1,
         width: 16,
       });
       const unbounded = buildLineStrip(segments, {
         ...base,
-        wrap: true, padding: 1, charset: "unicode" as const,
+        wrap: true, padding: 1,
         width: Number.POSITIVE_INFINITY,
       });
       expect(noWrap).toBe(unbounded);
@@ -110,7 +108,7 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
       const base = {
         endcaps: "plain" as const,
         colorCompatibility: "none" as const,
-        wrap: true, padding: 1, charset: "unicode" as const,
+        wrap: true, padding: 1,
       };
       const segments = [seg("a"), seg("bb"), seg("ccc")];
       const unbounded = buildLineStrip(segments, {
@@ -125,7 +123,7 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
       const out = buildLineStrip([], {
         endcaps: "plain",
         colorCompatibility: "none",
-        wrap: true, padding: 1, charset: "unicode" as const,
+        wrap: true, padding: 1,
         width: 80,
       });
       expect(out).toBe("");
@@ -135,13 +133,13 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
       const wide = buildLineStrip([seg("a")], {
         endcaps: "plain",
         colorCompatibility: "none",
-        wrap: true, padding: 1, charset: "unicode" as const,
+        wrap: true, padding: 1,
         width: 80,
       });
       const wrapped = buildLineStrip([seg("alpha"), seg("beta")], {
         endcaps: "plain",
         colorCompatibility: "none",
-        wrap: true, padding: 1, charset: "unicode" as const,
+        wrap: true, padding: 1,
         width: 8,
       });
       expect(wide.endsWith("\n")).toBe(false);
@@ -158,7 +156,7 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
       const out = buildLineStrip([lit("aaa"), lit("bbb"), lit("ccc")], {
         endcaps: "powerline",
         colorCompatibility: "none",
-        wrap: true, padding: 1, charset: "unicode" as const,
+        wrap: true, padding: 1,
         width: 8,
       });
       const rows = out.split("\n");
@@ -169,77 +167,6 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
         expect(row.startsWith(POWERLINE.lead)).toBe(true);
         expect(row.endsWith(POWERLINE.tail)).toBe(true);
       }
-    });
-  });
-
-  // brandon-display-dam.3: globals.charset swaps the joiner glyph vocabulary.
-  // Style picks the joiner SHAPE, charset the glyph VALUES \u2014 orthogonal axes.
-  describe("charset", () => {
-    const lit = (text: string) => ({ type: "x", text, bgHex: "#445566" });
-    // Any powerline private-use glyph is mojibake on a non-Nerd-Font terminal;
-    // the ascii renders must contain NONE, not merely different caps.
-    const PUA = /[\u{E000}-\u{F8FF}]/u;
-
-    it("powerline + ascii joins and tails with '>', begins each run flat, and emits no private-use glyphs", () => {
-      const out = buildLineStrip([lit("aaa"), lit("bbb")], {
-        endcaps: "powerline",
-        colorCompatibility: "none",
-        wrap: true,
-        padding: 1,
-        charset: "ascii",
-        width: 200,
-      });
-      // An ascii arrow reversed out of the terminal's ground would be a block
-      // of nothing, so the run begins flat; the shared #445566 seam draws the
-      // ascii divider, which is the arrow itself.
-      expect(out).toBe(" aaa > bbb >");
-      expect(PUA.test(out)).toBe(false);
-    });
-
-    it("capsule + ascii brackets each row with '(' and ')' and emits no private-use glyphs", () => {
-      const out = buildLineStrip([lit("aaa"), lit("bbb")], {
-        endcaps: "capsule",
-        colorCompatibility: "none",
-        wrap: true,
-        padding: 1,
-        charset: "ascii",
-        width: 200,
-      });
-      expect(out.startsWith("(")).toBe(true);
-      expect(out.endsWith(")")).toBe(true);
-      expect(PUA.test(out)).toBe(false);
-    });
-
-    it("plain is charset-invariant (its separator is already user data)", () => {
-      const base = {
-        endcaps: "plain" as const,
-        colorCompatibility: "none" as const,
-        wrap: true,
-        padding: 1,
-        width: 200,
-      };
-      const ascii = buildLineStrip([seg("aaa"), seg("bbb")], {
-        ...base,
-        charset: "ascii",
-      });
-      const unicode = buildLineStrip([seg("aaa"), seg("bbb")], {
-        ...base,
-        charset: "unicode",
-      });
-      expect(ascii).toBe(unicode);
-    });
-
-    it("charset composes with the configured plain separator", () => {
-      const out = buildLineStrip([seg("aaa"), seg("bbb")], {
-        endcaps: "plain",
-        colorCompatibility: "none",
-        separator: " :: ",
-        wrap: true,
-        padding: 1,
-        charset: "ascii",
-        width: 200,
-      });
-      expect(out).toBe(" aaa  ::  bbb ");
     });
   });
 
@@ -254,7 +181,6 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
         colorCompatibility,
         wrap: true,
         padding: 1,
-        charset: "unicode",
         width: 200,
       });
 
