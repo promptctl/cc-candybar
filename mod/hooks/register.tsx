@@ -160,7 +160,12 @@ function start($: EngineInterface, sessionId: string): Child {
       $.ui.log(`candybar-band: frames for ${sessionId} failed: ${String(error)}`, { to: 'debug' })
       if (!stopped) await draw(`candybar: frames failed: ${String(error)}`)
     }
-  })()
+  })().catch(error => {
+    // [LAW:no-silent-failure] The band could not even say why its child
+    // ended: the engine refused the write, as it does once a reload has
+    // unloaded this module (and killed its child). Said where it still can be.
+    $.ui.log(`candybar-band: frames for ${sessionId} could not be drawn: ${String(error)}`, { to: 'debug' })
+  })
   return {
     sessionId,
     stop: () => {

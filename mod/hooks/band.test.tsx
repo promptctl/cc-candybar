@@ -70,6 +70,41 @@ test('the band draws the session’s pushed frame, its links as Links', async ($
   await ui.unmount()
 })
 
+// The band's lane switched off in candybar's settings is an empty frame on
+// the child's stdout (`--format band` encodes SWITCHED_OFF so): the band draws
+// nothing, and the child goes on, so switching it back on brings the bar back.
+test('an empty frame draws nothing, and the next frame draws the bar again', { timeoutMs: 15_000 }, async ($, on) => {
+  const clock = mock.clock(on)
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  on('session.id', () => ({ value: 'sid-1' }))
+  on('ui.render', ($, e) => {
+    const { Box } = $.ui.resolve(e)
+    return <Box />
+  })
+  on('process.spawn', async function* () {
+    yield { stream: 'stdout' as const, text: `${JSON.stringify(FRAME)}\n` }
+    await clock.sleep(250)
+    yield { stream: 'stdout' as const, text: `${JSON.stringify({ rows: [] })}\n` }
+    await clock.sleep(250)
+    yield { stream: 'stdout' as const, text: `${JSON.stringify(FRAME)}\n` }
+    await clock.sleep(60_000)
+    return { value: { code: 0, signal: null } }
+  })
+
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  await clock.advance(1)
+  expect(await ui.find({ type: 'Link' })).toBeDefined()
+
+  await clock.advance(250)
+  expect(await ui.find({ type: 'Link' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text' })).toBeUndefined()
+
+  await clock.advance(250)
+  expect(await ui.find({ type: 'Link' })).toBeDefined()
+  await ui.unmount()
+})
+
 for (const reason of ['clear', 'resume'] as const) {
   test(`a ${reason} moves the band to the new session, dropping the old one’s frame`, async ($, on) => {
     const spawned: (readonly string[])[] = []
