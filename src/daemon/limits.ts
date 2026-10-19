@@ -101,6 +101,14 @@ export type BreachArtifact = keyof typeof BREACH_ARTIFACTS;
 // identity and each artifact it left, by kind. Keyed rather than listed
 // because the two are written in separate attempts and either may be missing,
 // so a reader asks for the memory report by name instead of searching paths.
+// [LAW:one-source-of-truth] THE order of post-mortem identities, by code
+// unit as the ISO stamp is written (a collation may weigh its `-` and `:`
+// otherwise): the listing sorts by it and the doctor's "unread" filters by it,
+// so the newest it files read answers for every one it listed.
+export function laterIdentity(a: string, b: string): boolean {
+  return a > b;
+}
+
 export interface PostMortem {
   readonly identity: string;
   readonly artifacts: Readonly<Partial<Record<BreachArtifact, string>>>;
@@ -323,7 +331,7 @@ export function postMortemsOf(files: readonly string[]): PostMortem[] {
   // first, leads.
   const kinds = Object.keys(BREACH_ARTIFACTS) as BreachArtifact[];
   return [...byIdentity]
-    .sort(([a], [b]) => b.localeCompare(a))
+    .sort(([a], [b]) => (laterIdentity(a, b) ? -1 : 1))
     .map(([identity, found]) => ({
       identity,
       artifacts: Object.fromEntries(

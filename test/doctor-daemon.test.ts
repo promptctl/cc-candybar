@@ -5,11 +5,12 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { checkByName, type DaemonFacts, type Verdict } from "../src/doctor/checks";
+import { checkByName, unreadPostMortems, type DaemonFacts, type Verdict } from "../src/doctor/checks";
 import { daemonProcesses, ownsEntry } from "../src/doctor/edge";
 import { parseServingDaemon } from "../src/doctor/daemon-answer";
 import { filePostMortemsRead } from "../src/doctor/post-mortems-read";
 import { RuntimeStats } from "../src/daemon/stats";
+import { postMortemsOf } from "../src/daemon/limits";
 import { HEALTHY_FACTS, HEALTHY_PROCESS, HEALTHY_SERVING } from "./helpers/doctor-facts";
 
 const MB = 1024 * 1024;
@@ -116,13 +117,41 @@ describe("the daemon probe", () => {
     ).toEqual({
       ok: false,
       reason: "connect ENOENT /tmp/s — daemon 4100 running",
+      more: [],
     });
     expect(
       verdictOf({
         serving: { kind: "failed", reason: "connect ENOENT /tmp/s" },
         processes: { kind: "ok", value: [] },
       }),
-    ).toEqual({ ok: false, reason: "connect ENOENT /tmp/s" });
+    ).toEqual({ ok: false, reason: "connect ENOENT /tmp/s", more: [] });
+  });
+
+  test("the newest listed, filed read, leaves none unread — two breaches in one instant included", () => {
+    const listed = postMortemsOf([
+      "/s/memory-2026-10-19T18-01-12-345Z-999.txt",
+      "/s/memory-2026-10-19T18-01-12-345Z-1000.txt",
+    ]);
+    const serving = { ...HEALTHY_SERVING, postMortems: { kind: "ok", value: listed } } as const;
+    expect(unreadPostMortems(serving, { kind: "ok", value: null })).toHaveLength(2);
+    expect(unreadPostMortems(serving, { kind: "ok", value: listed[0]!.identity })).toEqual([]);
+  });
+
+  test("no daemon answering keeps every other fact that could not be read", () => {
+    expect(
+      verdictOf({
+        serving: { kind: "failed", reason: "connect ENOENT /tmp/s" },
+        processes: { kind: "failed", reason: "ps failed (timeout)" },
+        read: { kind: "failed", reason: "/s/read.json is not JSON" },
+      }),
+    ).toEqual({
+      ok: false,
+      reason: "connect ENOENT /tmp/s",
+      more: [
+        "which post-mortems were read could not be read: /s/read.json is not JSON",
+        "the process table could not be read: ps failed (timeout)",
+      ],
+    });
   });
 
   test("a list that cannot be read is its own problem, and no post-mortem is judged — or fixed — without the record", () => {

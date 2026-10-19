@@ -22,6 +22,7 @@ import type { Outcome } from "../utils/outcome.js";
 import type { DeclKind, UnusedDecl } from "../config/unused.js";
 import {
   approachingLimit,
+  laterIdentity,
   mb,
   type PostMortem,
   type ServingDaemon,
@@ -779,7 +780,7 @@ export function unreadPostMortems(
 ): readonly PostMortem[] {
   return postMortems.kind === "ok" && read.kind === "ok"
     ? postMortems.value.filter(
-        (m) => read.value === null || m.identity > read.value,
+        (m) => read.value === null || laterIdentity(m.identity, read.value),
       )
     : [];
 }
@@ -805,16 +806,26 @@ const daemon: Check = {
   label: "daemon",
   takesMark: false,
   probe: ({ daemon: { serving, processes, read } }) => {
+    // Every fact that could not be read is its own problem, whether or not a
+    // daemon answered.
+    const unreadable = [
+      ...(read.kind === "failed"
+        ? [`which post-mortems were read could not be read: ${read.reason}`]
+        : []),
+      ...(processes.kind === "failed"
+        ? [`the process table could not be read: ${processes.reason}`]
+        : []),
+    ];
+    const others =
+      processes.kind === "ok" ? otherDaemons(serving, processes.value) : [];
     if (serving.kind === "failed") {
       // The reason says what went wrong in its own words: no daemon, or one
       // of another build that answered without saying what it holds.
-      const others =
-        processes.kind === "ok" ? otherDaemons(serving, processes.value) : [];
       const running =
         others.length > 0
           ? ` — daemon ${others.map((p) => p.pid).join(", ")} running`
           : "";
-      return { ok: false, reason: `${serving.reason}${running}` };
+      return problemsVerdict([`${serving.reason}${running}`, ...unreadable]);
     }
     const { pid, rss, rssLimit, postMortems } = serving.value;
     const unread = unreadPostMortems(serving.value, read);
@@ -828,15 +839,11 @@ const daemon: Check = {
             `the daemon's post-mortems could not be listed: ${postMortems.reason}`,
           ]
         : []),
-      ...(read.kind === "failed"
-        ? [`which post-mortems were read could not be read: ${read.reason}`]
-        : []),
-      ...(processes.kind === "failed"
-        ? [`the process table could not be read: ${processes.reason}`]
-        : otherDaemons(serving, processes.value).map(
-            (p) =>
-              `daemon ${p.pid} (started ${p.started}, ${mb(p.rss)} MB${p.ppid === 1 ? "" : `, child of ${p.ppid}`}) runs beside the one serving the bar (${pid}) — \`kill ${p.pid}\``,
-          )),
+      ...unreadable,
+      ...others.map(
+        (p) =>
+          `daemon ${p.pid} (started ${p.started}, ${mb(p.rss)} MB${p.ppid === 1 ? "" : `, child of ${p.ppid}`}) runs beside the one serving the bar (${pid}) — \`kill ${p.pid}\``,
+      ),
       ...(approachingLimit(rss, rssLimit)
         ? [
             `the daemon holds ${mb(rss)} MB of its ${mb(rssLimit)} MB limit — at the limit it records a post-mortem and restarts`,
