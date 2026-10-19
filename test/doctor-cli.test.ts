@@ -2,9 +2,9 @@
 // the argv binding performs: the exit code and the streams for an unreadable
 // settings file, a clean setup, and a failed check carrying a fix.
 
+import { BUNDLED_GLYPHS } from "./helpers/bundled-glyphs";
 import { glyphSighting } from "../src/doctor/checks";
 import { withMark } from "../src/doctor/mark-book";
-import { stripPrivateGlyphs } from "../src/render/strip";
 import { memoryMarkBook } from "./helpers/mark-book";
 import { memoryClickedTerminals } from "./helpers/clicked-terminals";
 import fs from "node:fs";
@@ -188,7 +188,7 @@ describe("doctorPlan", () => {
     expect(plan.stdout).toMatch(
       new RegExp(
         "\n✗ Nerd Font — the doctor cannot read Hyper's font\n" +
-          "    look:  — mark them ✓ shapes or ✗ boxes in the bar's doctor, " +
+          `    look: ${BUNDLED_GLYPHS} — mark them ✓ shapes or ✗ boxes in the bar's doctor, ` +
           "and this command reads your mark: " +
           `the settings menu \\(${DOOR_GLYPH} by default\\) › 🧰 tools › 🩺 doctor\n$`,
         "u",
@@ -199,8 +199,7 @@ describe("doctorPlan", () => {
   // brandon-doctor-v62x.2ww: the mark is the machine's, so the CLI reads a
   // mark made in the bar's doctor and passes on it.
   test("a ✓ the bar's doctor filed in the mark book settles the check here too", async () => {
-    const glyphs = stripPrivateGlyphs({ endcaps: "powerline", charset: "unicode" });
-    const id = glyphSighting({ glyphs, terminal: { kind: "unknown", called: "Hyper" } })!.id;
+    const id = glyphSighting({ glyphs: BUNDLED_GLYPHS, terminal: { kind: "unknown", called: "Hyper" } })!.id;
     const plan = await doctorPlan(
       { ...EDGE, marks: memoryMarkBook(withMark({}, "nerdFont", id, "drawn")) },
       NO_HANDLER,

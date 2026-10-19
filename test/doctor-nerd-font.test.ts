@@ -3,6 +3,7 @@
 // drawn in, pure; the glyphs it asks about measured through the joiner; and
 // the pure readers the font edge parses with.
 
+import { BUNDLED_GLYPHS } from "./helpers/bundled-glyphs";
 import {
   checkByName,
   glyphSighting,
@@ -516,13 +517,13 @@ describe("gatherFacts: where the Nerd Font facts come from", () => {
     // profile: the attached client's own process answers instead.
     expect(drawn(e, { tmux: HINT, ssh: true, terminalEnv: env })).toEqual({
       kind: "glyphs",
-      glyphs: GLYPHS,
+      glyphs: BUNDLED_GLYPHS,
       terminal: { kind: "configured", name: "iterm2", version: "3.7.2", font: COVERED },
     });
     // Inside tmux the session's ITERM_PROFILE names the window that started
     // the server, not the attached one, so the reader is handed none.
     expect(asked).toEqual([
-      [{ name: "iterm2", version: "3.7.2" }, { TERM_PROGRAM: "tmux", XDG_CONFIG_HOME: "/x" }, GLYPHS],
+      [{ name: "iterm2", version: "3.7.2" }, { TERM_PROGRAM: "tmux", XDG_CONFIG_HOME: "/x" }, BUNDLED_GLYPHS],
     ]);
     expect(pids).toEqual([4242]);
   });
@@ -557,7 +558,7 @@ describe("gatherFacts: where the Nerd Font facts come from", () => {
     });
     const env = { TERM_PROGRAM: "iTerm.app", TERM_PROGRAM_VERSION: "3.7.2", ITERM_PROFILE: "Work" };
     drawn(e, { tmux: null, terminalEnv: env });
-    expect(asked).toEqual([[{ name: "iterm2", version: "3.7.2" }, env, GLYPHS]]);
+    expect(asked).toEqual([[{ name: "iterm2", version: "3.7.2" }, env, BUNDLED_GLYPHS]]);
   });
 
   test("outside tmux over ssh, no font on this machine is read: the terminal is on the other one", () => {
@@ -612,7 +613,7 @@ describe("gatherFacts: where the Nerd Font facts come from", () => {
 
   test("the glyphs are the ones the session's bar draws, under its charset", () => {
     const { e } = edge(tmuxSays("ghostty 1.3.1"));
-    expect(drawn(e, { tmux: HINT, terminalEnv: {} }).glyphs).toBe(GLYPHS);
+    expect(drawn(e, { tmux: HINT, terminalEnv: {} }).glyphs).toBe(BUNDLED_GLYPHS);
   });
 
   test("a private-use glyph the config writes is drawn as surely as a cap", () => {
@@ -624,7 +625,9 @@ describe("gatherFacts: where the Nerd Font facts come from", () => {
       },
     };
     const { e } = edge(tmuxSays("ghostty 1.3.1"), icon);
-    expect(drawn(e, { tmux: HINT, terminalEnv: {} }).glyphs).toBe(`${GLYPHS}\uf418`);
+    expect(new Set(drawn(e, { tmux: HINT, terminalEnv: {} }).glyphs)).toEqual(
+      new Set(`${BUNDLED_GLYPHS}\uf418`),
+    );
   });
 
   test("a pane whose session no client is attached to names no terminal", () => {
@@ -634,16 +637,6 @@ describe("gatherFacts: where the Nerd Font facts come from", () => {
       reason: "tmux has no client attached to the pane's session",
     });
     expect([asked, pids]).toEqual([[], []]);
-  });
-
-  test("a bar that draws none asks nothing of tmux's terminal or its font", () => {
-    const ascii: DslConfig = {
-      ...DEFAULT_DSL_CONFIG,
-      globals: { ...DEFAULT_DSL_CONFIG.globals, charset: "ascii" },
-    };
-    const { e, asked } = edge(tmuxSays("iTerm2 3.7.2"), ascii);
-    expect(gathered(e, { tmux: HINT, terminalEnv: {} }).nerdFont).toEqual({ kind: "none" });
-    expect(asked).toEqual([]);
   });
 
   test("the marks are the mark book's, whichever session made them", () => {

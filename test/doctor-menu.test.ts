@@ -5,6 +5,11 @@
 // recorded `claudeConfigDir` hint names. The recorded client hints are seeded the way server.ts records them, so the click reads
 // the facts of the session's "last render" exactly as production does.
 
+import {
+  BUNDLED_GLYPHS,
+  BUNDLED_GLYPHS_LOGGED,
+  BUNDLED_GLYPHS_NAMED,
+} from "./helpers/bundled-glyphs";
 import { DoctorBusy } from "../src/doctor/busy";
 import { memoryMarkBook } from "./helpers/mark-book";
 import { memoryClickedTerminals } from "./helpers/clicked-terminals";
@@ -262,7 +267,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     expect(out).toContain("✓ tmux truecolor");
     expect(rt.urlOfVerb(VERB_DOCTOR_FIX)).toBeUndefined();
     expect(rt.logs.filter((line) => line.startsWith("doctor:"))).toEqual([
-      "doctor: config=failed(2) urlHandler=ok links=ok tmuxTruecolor=ok effectRefresh=ok nerdFont=ok glyphs=e0b0,e0b1 terminal=ghostty@- font=- mark=- tmuxLinks=- clicked=yes (session=s1)",
+      `doctor: config=failed(2) urlHandler=ok links=ok tmuxTruecolor=ok effectRefresh=ok nerdFont=ok glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=ghostty@- font=- mark=- tmuxLinks=- clicked=yes (session=s1)`,
     ]);
   });
 
@@ -282,7 +287,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     expect(out).toContain("✗ Nerd Font — the doctor cannot read Terminal 455.1's font");
     expect(rt.clicked.list()).toEqual(["Terminal"]);
     expect(rt.logs.filter((line) => line.startsWith("doctor:"))).toEqual([
-      "doctor: config=ok urlHandler=ok links=ok tmuxTruecolor=ok effectRefresh=ok nerdFont=failed(1) glyphs=e0b0,e0b1 terminal=apple-terminal@455.1 font=- mark=- tmuxLinks=- clicked=yes (session=s1)",
+      `doctor: config=ok urlHandler=ok links=ok tmuxTruecolor=ok effectRefresh=ok nerdFont=failed(1) glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=apple-terminal@455.1 font=- mark=- tmuxLinks=- clicked=yes (session=s1)`,
     ]);
   });
 
@@ -425,15 +430,15 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
       rt.clickVerb(VERB_DOCTOR_RUN);
       const out = rt.render();
       expect(out).toContain(
-        '✗ Nerd Font — iTerm2 3.7.2 draws with Menlo-Regular (iTerm2 profile "Default"), which has no U+E0B0 U+E0B1',
+        `✗ Nerd Font — iTerm2 3.7.2 draws with Menlo-Regular (iTerm2 profile "Default"), which has no ${BUNDLED_GLYPHS_NAMED}`,
       );
-      expect(out).toContain("\ue0b0\ue0b1 [✓ shapes] [✗ boxes]");
+      expect(out).toContain(`${BUNDLED_GLYPHS} [✓ shapes] [✗ boxes]`);
       // The font edge was asked about exactly the glyphs the bar draws.
       expect(fontCalls).toEqual([
-        [{ name: "iterm2", version: "3.7.2" }, ITERM_MENLO.env, "\ue0b0\ue0b1"],
+        [{ name: "iterm2", version: "3.7.2" }, ITERM_MENLO.env, BUNDLED_GLYPHS],
       ]);
       expect(rt.logs.filter((l) => l.startsWith("doctor:"))).toEqual([
-        'doctor: config=ok urlHandler=ok links=ok tmuxTruecolor=ok effectRefresh=ok nerdFont=failed(1) glyphs=e0b0,e0b1 terminal=iterm2@3.7.2 font="Menlo-Regular":lacks2 mark=- tmuxLinks=- clicked=yes (session=s1)',
+        `doctor: config=ok urlHandler=ok links=ok tmuxTruecolor=ok effectRefresh=ok nerdFont=failed(1) glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=iterm2@3.7.2 font="Menlo-Regular":lacks${[...BUNDLED_GLYPHS].length} mark=- tmuxLinks=- clicked=yes (session=s1)`,
       ]);
     });
 
@@ -449,7 +454,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
       expect(out).toContain("✓ Nerd Font");
       expect(out).not.toContain("[✓ shapes]");
       expect(rt.logs).toContain(
-        'doctor-mark: nerdFont drawn on iTerm2 with Menlo-Regular (iTerm2 profile "Default")|U+E0B0 U+E0B1 (session=s1)',
+        `doctor-mark: nerdFont drawn on iTerm2 with Menlo-Regular (iTerm2 profile "Default")|${BUNDLED_GLYPHS_NAMED} (session=s1)`,
       );
       expect(rt.logs.at(-1)).toMatch(/nerdFont=ok .* mark=drawn tmuxLinks=- clicked=yes \(session=s1\)$/);
     });
@@ -460,7 +465,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
       rt.clickVerb(VERB_DOCTOR_RUN);
       rt.click(markUrl(rt, "boxes")!);
       const out = rt.render();
-      expect(out).toContain("✗ Nerd Font — iTerm2 3.7.2 draws U+E0B0 U+E0B1 as boxes");
+      expect(out).toContain(`✗ Nerd Font — iTerm2 3.7.2 draws ${BUNDLED_GLYPHS_NAMED} as boxes`);
       expect(markUrl(rt, "drawn")).toBeDefined();
     });
 

@@ -12,6 +12,7 @@ import { stripAnsi } from "./helpers/ansi";
 import {
   DEFAULT_DSL_CONFIG,
   RAW_DEFAULT_DSL_CONFIG,
+  EFFORT_BUBBLE_CONTRAST,
 } from "../src/config/default-dsl-config";
 import { walkNodes, type DslConfig } from "../src/config/dsl-types";
 import { isReservedName } from "../src/config/loader/reserved-namespace";
@@ -61,7 +62,7 @@ import { resolvedStyle } from "../src/render/rich-theme";
 import { TEXT_MIN_CONTRAST } from "../src/themes/decor";
 import { QUIET_MIN_CONTRAST } from "../src/config/quiet-text";
 import { INVISIBLE, linkUrls } from "./helpers/ansi";
-import { instantOf } from "../src/utils/instant";
+import { type Instant, instantOf } from "../src/utils/instant";
 
 // Visible segment text: every zero-width escape, plus the powerline cap glyphs.
 const ANSI_AND_CAPS = new RegExp(`${INVISIBLE.source}|[\\u{E0B0}-\\u{E0BC}]`, "gu");
@@ -257,7 +258,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
       medium: { glyph: "\u{F0143}", floor: TEXT_MIN_CONTRAST },
       high: { glyph: "\u{F013F}", floor: TEXT_MIN_CONTRAST },
       xhigh: { glyph: "\u{F0DBC}", floor: TEXT_MIN_CONTRAST },
-      max: { glyph: "\u{F09D1}", floor: TEXT_MIN_CONTRAST },
       "something-new": { glyph: "?", floor: QUIET_MIN_CONTRAST },
     } as const;
     const NAME = "Opus 4.8 ";
@@ -266,7 +266,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     // by the daemon's own resolution, over `check`'s fixture with Claude Code
     // sending `effort` (or none). Returns the row holding the model cell.
     function modelRows(theme: string): {
-      row: (effort: { level: string } | undefined) => string;
+      row: (effort: { level: string } | undefined, when?: Instant) => string;
       dispose: () => void;
     } {
       const effective = resolveEffectiveGlobals(
@@ -284,11 +284,14 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const compiled = registerDslConfig(parsed, registry, {
         cwd: process.cwd(),
       });
-      const row = (effort: { level: string } | undefined): string => {
+      const row = (
+        effort: { level: string } | undefined,
+        when: Instant = at,
+      ): string => {
         const { effort: _fixtureEffort, ...payload } = checkPayload(
           effective,
           null,
-          at,
+          when,
         );
         const errors: string[] = [];
         const rendered = renderDsl(
@@ -297,7 +300,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
           store,
           registry,
           effort === undefined ? payload : { ...payload, effort },
-          at,
+          when,
           renderOptionsOf(effective, Number.POSITIVE_INFINITY),
           { onSegmentError: (id, message) => errors.push(`${id}: ${message}`) },
           renderSelectionOf(effective),
@@ -327,26 +330,32 @@ describe("DEFAULT_DSL_CONFIG", () => {
       return spec.getTruecolor();
     };
 
-    // The rung after the model's name — its glyph, its colour, and the
+    // The rung after the model's name (past `skip` characters: max's cap) — its glyph, its colour, and the
     // contrast it is drawn at on its ground — read through rich-js's own
     // decoder (the inverse of the writer).
-    function rungOf(row: string): {
+    function rungOf(
+      row: string,
+      skip = 0,
+    ): {
       glyph: string;
       colour: string;
+      ground: string;
       contrast: number;
     } {
       const text = decodeAnsi(row);
-      const start = text.plain.indexOf(NAME) + NAME.length;
+      const start = text.plain.indexOf(NAME) + NAME.length + skip;
       const span = text.spans.findLast(
         (s) => s.start <= start && start < s.end,
       );
       if (span === undefined) throw new Error(`no span draws the rung: ${row}`);
       const { color, bgcolor } = resolvedStyle(span.style);
       const fg = drawn(color, "colour");
+      const ground = drawn(bgcolor, "ground");
       return {
         glyph: String.fromCodePoint(text.plain.codePointAt(start)!),
         colour: fg.hex,
-        contrast: contrastRatio(fg, drawn(bgcolor, "ground")),
+        ground: ground.hex,
+        contrast: contrastRatio(fg, ground),
       };
     }
 
@@ -387,6 +396,59 @@ describe("DEFAULT_DSL_CONFIG", () => {
           for (const { glyph } of Object.values(RUNGS)) {
             expect(none).not.toContain(`${NAME}${glyph}`);
           }
+        } finally {
+          dispose();
+        }
+      },
+    );
+    // Max climbs the ladder on a bubble: one chevron, two, three, a second
+    // each, a colour per frame, every frame at the text floor on the bubble
+    // and the bubble standing off the cell the other rungs sit on.
+    test.each(listResolvablePaletteNames())(
+      "under %s, max climbs the ladder on a bubble, a frame a second",
+      (theme) => {
+        const { row, dispose } = modelRows(theme);
+        try {
+          // The cycle is three one-second frames on the epoch's clock: the
+          // middle of each second of a cycle draws that second's frame.
+          const cycle = 3000 * Math.floor(Date.now() / 3000);
+          const frames = [0, 1, 2].map((k) =>
+            rungOf(
+              row(
+                { level: "max" },
+                instantOf(new Date(cycle + k * 1000 + 500)),
+              ),
+              1,
+            ),
+          );
+          expect(frames.map(({ glyph }) => glyph)).toEqual([
+            "\u{F0143}",
+            "\u{F013F}",
+            "\u{F0DBC}",
+          ]);
+          expect(
+            frames
+              .filter(({ contrast }) => contrast < TEXT_MIN_CONTRAST)
+              .map(({ glyph, contrast }) => `${glyph}: ${contrast.toFixed(2)}`),
+          ).toEqual([]);
+          const cell = drawn(
+            ColorSpec.parse(rungOf(row({ level: "xhigh" })).ground),
+            "cell",
+          );
+          expect(new Set(frames.map(({ ground }) => ground))).toEqual(
+            new Set([frames[0]!.ground]),
+          );
+          expect(
+            contrastRatio(
+              drawn(ColorSpec.parse(frames[0]!.ground), "bubble"),
+              cell,
+            ),
+          ).toBeGreaterThanOrEqual(EFFORT_BUBBLE_CONTRAST);
+          // The bubble's caps sit either side of the climb.
+          const plain = stripAnsi(row({ level: "max" }));
+          expect(plain).toMatch(
+            new RegExp(`${NAME}\u{E0B6}.\u{E0B4}`, "u"),
+          );
         } finally {
           dispose();
         }
