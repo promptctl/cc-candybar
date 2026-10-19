@@ -40,8 +40,12 @@ describe("RuntimeStats.snapshot", () => {
       frameFeeds: { feeds: 0, subscribers: 0, drawn: 0, pushed: 0 },
       watchersActive: 2,
       handlerProbes: [{ nonce: "n", handler: "1.2.3" }],
+      clients: [{ client: null, ago: 4 }],
+      bundle: "/opt/cc/dist/index.mjs",
     });
     expect(snap.handlerProbes).toEqual([{ nonce: "n", handler: "1.2.3" }]);
+    expect(snap.clients).toEqual([{ client: null, ago: 4 }]);
+    expect(snap.bundle).toBe("/opt/cc/dist/index.mjs");
 
     expect(snap.requests).toEqual({
       total: 10,
@@ -143,6 +147,8 @@ describe("formatStats", () => {
       },
       nextRestartReason: null,
       handlerProbes: [],
+      clients: [],
+      bundle: "/",
     });
     expect(out).toContain("pid           1234");
     expect(out).toContain("uptime        2m5s");
@@ -184,6 +190,8 @@ describe("formatStats", () => {
       },
       nextRestartReason: null,
       handlerProbes: [],
+      clients: [],
+      bundle: "/",
     });
     expect(out).toContain("hit rate      n/a");
   });

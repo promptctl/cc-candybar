@@ -52,10 +52,14 @@ export type BuildCurrency =
   | { readonly kind: "not-source-checkout" }
   | { readonly kind: "unchecked"; readonly reason: string };
 
-// The checkout root is the bundle's grandparent (`<root>/dist/index.mjs`),
-// and the source it was built from is `<root>/src`.
-function checkoutRootOf(bundlePath: string): string {
-  return path.dirname(path.dirname(bundlePath));
+// [LAW:one-source-of-truth] THE reading of "this bundle was built in a
+// source checkout": the checkout root is the bundle's grandparent
+// (`<root>/dist/index.mjs`), and it is a checkout exactly when `<root>/src`
+// exists. The update notice and the doctor's install check both read it, so
+// they cannot disagree about which remedy (rebuild vs reinstall) applies.
+export function sourceCheckoutOf(bundlePath: string): string | null {
+  const root = path.dirname(path.dirname(bundlePath));
+  return fs.existsSync(path.join(root, "src")) ? root : null;
 }
 
 // [LAW:no-silent-failure] The stamp of the code that is RUNNING. A bundle
@@ -111,11 +115,10 @@ export function assessBuild(
   runningStamp: () => SourceStamp,
 ): BuildCurrency {
   try {
-    const root = checkoutRootOf(fileURLToPath(entryUrl));
-    const srcDir = path.join(root, "src");
-    if (!fs.existsSync(srcDir)) return { kind: "not-source-checkout" };
+    const root = sourceCheckoutOf(fileURLToPath(entryUrl));
+    if (root === null) return { kind: "not-source-checkout" };
     const running = runningStamp();
-    const digest = sourceDigest(srcDir);
+    const digest = sourceDigest(path.join(root, "src"));
     if (digest === running.digest)
       return { kind: "current", root, stamp: running };
     return {

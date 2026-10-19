@@ -6,6 +6,7 @@
 // report a session differently from the other. The Rust client mirrors it.
 
 import type { ClientHints } from "./daemon/protocol";
+import type { ClientHint } from "./client-hint";
 import { detectClaudeConfigDir } from "./claude-settings";
 import { detectConfigEnv } from "./config-hint";
 import { detectMementoEnv } from "./memento-hint";
@@ -35,6 +36,8 @@ export function detectClientHints(
   env: NodeJS.ProcessEnv,
   cwd: string,
   tty: { readonly columns?: number; readonly rows?: number },
+  // What the calling program is — a fact of the process, not its env.
+  client: ClientHint,
 ): ClientHints {
   return {
     termCols: detectTermExtent(env.COLUMNS, tty.columns),
@@ -61,5 +64,6 @@ export function detectClientHints(
     // Total like mementoEnv. The doctor reads which terminal draws the bar
     // from these (src/doctor/terminal.ts).
     terminalEnv: detectTerminalEnv(env),
+    client,
   };
 }

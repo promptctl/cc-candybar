@@ -131,7 +131,7 @@ From Brandon:
 
 Added by me, at Brandon's request to fill out the list:
 
-- **Install is current.** The statusline command in `~/.claude/settings.json` points at the staged runtime, which exists and is executable. Its version matches the daemon's. It is the native client, not the Node fallback.
+- **Install is current.** The client that drew the bar is the native client of the install the daemon runs from, not the Node fallback, and in a checkout it was built from the Rust source there. The check reads the client the bar actually ran, which reports itself on every render. It does not read the settings file, because managed settings or a launcher script can stand between the file and what runs.
 - **Daemon is healthy.** Exactly one daemon is running. Memory is well under the 512 MB limit. There are no crash reports since the last check.
 - **Segments have their data.** `gitPr` is placed and `gh`/`glab` is installed and logged in. `block`/`weekly` are placed and the hook payload carries `rate_limits`. The ceiling widget is placed and memento is installed.
 - **Session data is readable.** The transcript can be read.

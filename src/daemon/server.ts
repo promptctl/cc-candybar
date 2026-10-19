@@ -82,6 +82,8 @@ import { settingCounts } from "./setting-drafts";
 import { validateHookData } from "../utils/schema-validator.js";
 import { productionEdge } from "../doctor/edge";
 import { ProbeArrivals } from "../doctor/handler-probe";
+import { ClientSightings } from "./client-sightings";
+import { runningBundle } from "../client-hint";
 import { setLaunchStats } from "../proc/launch";
 import { buildDebugSnapshot } from "./debug";
 import { DEBUG_WHATS, isDebugWhat } from "./debug-types";
@@ -143,6 +145,7 @@ import {
 // instances would defeat the share-across-sessions invariant.
 const stats = new RuntimeStats();
 const handlerProbes = new ProbeArrivals();
+const clientSightings = new ClientSightings();
 // [LAW:single-enforcer] Route all child_process spawns through src/proc/launch.
 // Installing the metering handle here makes subprocess counts visible in
 // daemon-stats.
@@ -1034,6 +1037,8 @@ export async function handleRequest(
         watchersActive: watcherRegistry.size(),
         nextRestartReason: limits?.describeNextRestart() ?? null,
         handlerProbes: handlerProbes.list(),
+        clients: clientSightings.list(instantOf(new Date())),
+        bundle: runningBundle(),
       }),
     });
   }
@@ -1056,6 +1061,16 @@ export async function handleRequest(
     // can finish out of it.
     const order = ++renderArrivals;
     const checked = checkRenderRequest(req);
+    // [LAW:single-enforcer] A render REQUEST is a client sighting — the
+    // frames a feed draws from a session's data are not, so this is the one
+    // write, here rather than in renderChecked.
+    if (checked.ok) {
+      clientSightings.see(
+        checked.req.hookData.session_id,
+        checked.req.hints.client,
+        at,
+      );
+    }
     const rendered: { outcome: RenderOutcome; resp: Response } = !checked.ok
       ? refusedRender(checked.problems)
       : await renderChecked(checked.req, at, facts).then(

@@ -14,6 +14,7 @@
 // membership in it.
 
 import { TMUX_ENV, type TmuxHint } from "../tmux-hint.js";
+import type { ClientKind } from "../client-hint.js";
 import { DEFAULT_TERMINAL_WIDTH } from "../render/strip.js";
 import type { LoopName } from "@promptctl/rich-js";
 import { EFFECT_FLOOR, type EffectSelection } from "../themes/policy.js";
@@ -209,6 +210,44 @@ export type NerdFontFacts =
 
 export type DrawnGlyphs = Extract<NerdFontFacts, { kind: "glyphs" }>;
 
+// [LAW:types-are-the-program] One client the bar was drawn by. A client too
+// old to say what it is is its own arm, never a guessed kind. Its bundle is
+// the path it reported, resolved through every link — or why it could not be:
+// a bundle that does not exist is a finding, not a throw. `ago`: seconds since
+// that client's last render (0 for the render a click came from).
+export type ClientFact =
+  | { readonly kind: "unreported"; readonly ago: number }
+  | {
+      readonly kind: "reported";
+      readonly client: ClientKind;
+      readonly bundle: Asked<string>;
+      // The native binary's build stamp (src/client-hint.ts).
+      readonly source: string | null;
+      readonly ago: number;
+    };
+
+// [LAW:types-are-the-program] Where the daemon runs from. `checkout` is null
+// for a published install; in a source checkout it carries the digest of the
+// Rust source a native client there must be built from, or why it could not
+// be taken.
+export interface DaemonInstall {
+  readonly bundle: string;
+  readonly checkout: {
+    readonly root: string;
+    readonly rustSource: Asked<string>;
+  } | null;
+}
+
+// What the install check reasons over, or why the daemon could not be asked
+// (the CLI's one way to see the clients the bar runs). `nativeShipped`: a
+// native client exists for this platform, so the Node fallback is a choice
+// the install made rather than the only one there is.
+export type InstallFacts = Asked<{
+  readonly daemon: DaemonInstall;
+  readonly nativeShipped: boolean;
+  readonly clients: readonly ClientFact[];
+}>;
+
 export interface PlacementEffectFact {
   readonly placement: string;
   readonly effect: LoopName;
@@ -226,6 +265,10 @@ export interface DoctorFacts {
   readonly askedBy: "click" | "command";
   readonly config: ConfigFacts;
   readonly urlHandler: UrlHandlerFacts;
+  // The clients that drew the bar and the install the daemon runs from: the
+  // click's own render, or — for the CLI — every session's latest render this
+  // daemon process served (src/daemon/client-sightings.ts).
+  readonly install: InstallFacts;
   readonly nerdFont: NerdFontFacts;
   // The user's marks, or why the book could not be read; a check honours
   // only the mark on the sighting it shows.
@@ -532,6 +575,147 @@ const urlHandler: Check = {
             : `a cc-candybar:// link could not be opened — ${urlHandler.unopened}`,
         ]);
     }
+  },
+};
+
+// A client that has not rendered for this long is a session that stopped,
+// not one the bar runs: long enough to keep a session with no
+// `refreshInterval`, which renders only on events.
+export const RECENT_CLIENT_S = 300;
+
+// [LAW:types-are-the-program] Where one reported client stands against the
+// daemon's install, each arm carrying what its finding names: whether its
+// bundle is the daemon's, and whether its build is the Rust source of the
+// checkout — `uncompared` for a Node client or a published install, where
+// there is no such source.
+export interface ClientStanding {
+  readonly bundle:
+    | { readonly kind: "same" }
+    | { readonly kind: "other"; readonly path: string }
+    | { readonly kind: "unresolved"; readonly reason: string };
+  readonly source:
+    | { readonly kind: "uncompared" }
+    | {
+        readonly kind: "unreadable";
+        readonly root: string;
+        readonly reason: string;
+      }
+    | { readonly kind: "unstamped" }
+    | { readonly kind: "same" }
+    | { readonly kind: "other"; readonly root: string };
+}
+
+// [LAW:one-source-of-truth] The one comparison of a client with the install:
+// the probe words it, the doctor's event logs it (src/doctor/report.ts).
+export function clientStanding(
+  { bundle, checkout }: DaemonInstall,
+  client: Extract<ClientFact, { kind: "reported" }>,
+): ClientStanding {
+  return {
+    bundle:
+      client.bundle.kind === "failed"
+        ? { kind: "unresolved", reason: client.bundle.reason }
+        : client.bundle.value === bundle
+          ? { kind: "same" }
+          : { kind: "other", path: client.bundle.value },
+    source:
+      client.client !== "native" || checkout === null
+        ? { kind: "uncompared" }
+        : checkout.rustSource.kind === "failed"
+          ? {
+              kind: "unreadable",
+              root: checkout.root,
+              reason: checkout.rustSource.reason,
+            }
+          : client.source === null
+            ? { kind: "unstamped" }
+            : client.source === checkout.rustSource.value
+              ? { kind: "same" }
+              : { kind: "other", root: checkout.root },
+  };
+}
+
+function installProblems(
+  daemon: DaemonInstall,
+  nativeShipped: boolean,
+  client: ClientFact,
+): string[] {
+  const { checkout } = daemon;
+  if (client.kind === "unreported") {
+    return [
+      `the bar is drawn by a statusline client too old to say what it is — ${checkout === null ? REINSTALL : "run `just install-rust`"}`,
+    ];
+  }
+  const { bundle, source } = clientStanding(daemon, client);
+  switch (bundle.kind) {
+    case "unresolved":
+      return [
+        `the statusline client's bundle cannot be resolved: ${bundle.reason}`,
+      ];
+    case "other":
+      return [
+        `the statusline client runs ${bundle.path}, not the daemon's ${daemon.bundle} — ` +
+          (checkout === null
+            ? REINSTALL
+            : `point the statusLine command at ${checkout.root}/bin/cc-candybar-native`),
+      ];
+    case "same":
+      break;
+  }
+  if (client.client === "node" && nativeShipped) {
+    return [
+      `the bar is drawn by the Node fallback, which starts node on every render — ${checkout === null ? REINSTALL : "build the native client: `just install-rust`"}`,
+    ];
+  }
+  switch (source.kind) {
+    case "uncompared":
+    case "same":
+      return [];
+    case "unreadable":
+      return [
+        `${source.root}/rust-client/src could not be read: ${source.reason}`,
+      ];
+    case "unstamped":
+      return [
+        "the native client carries no source stamp, so which source it was built from is unknown — run `just install-rust`",
+      ];
+    case "other":
+      return [
+        `the native client was built from other source than ${source.root}/rust-client/src holds — run \`just install-rust\``,
+      ];
+  }
+}
+
+// "The install is current" (brandon-doctor-v62x.tfb): the bar is drawn by the
+// native client of the install the daemon runs from, built from the source
+// beside it. Judged on the clients that DREW the bar, not on the settings
+// file — managed settings, a project file or a launcher script may stand
+// between what it names and what runs.
+const install: Check = {
+  name: "install",
+  label: "install",
+  takesMark: false,
+  probe: ({ install }) => {
+    if (install.kind === "failed") {
+      return {
+        ok: false,
+        reason: `the daemon could not be asked which clients draw the bar: ${install.reason}`,
+      };
+    }
+    const { daemon, nativeShipped, clients } = install.value;
+    const recent = clients.filter((c) => c.ago <= RECENT_CLIENT_S);
+    if (recent.length === 0) {
+      return {
+        ok: false,
+        reason: `no statusline client has drawn a bar in the last ${RECENT_CLIENT_S / 60} minutes — does the statusLine command run cc-candybar?`,
+      };
+    }
+    // One line per distinct problem: sessions sharing a client share it.
+    return problemsVerdict([
+      ...new Set(
+        recent.flatMap((c) => installProblems(daemon, nativeShipped, c)),
+      ),
+    ]);
   },
 };
 
@@ -872,6 +1056,7 @@ const nerdFont: Check = {
 
 export const CHECKS: readonly Check[] = [
   config,
+  install,
   urlHandler,
   links,
   tmuxTruecolor,

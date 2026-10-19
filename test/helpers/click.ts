@@ -4,6 +4,7 @@
 // effects does this click apply" rather than the exact wire encoding.
 
 import { NavigationHistory } from "../../src/daemon/navigation-history";
+import { HEALTHY_INSTALL_EDGE } from "./doctor-facts";
 import { parseHandlerUrl } from "../../src/install/index";
 import {
   VERBS,
@@ -50,6 +51,7 @@ export function testVerbContext(
     // Same posture for the doctor's edge: a test that drives a doctor click
     // hands in its own fake edge; reaching this one is a test bug.
     doctor: {
+      install: HEALTHY_INSTALL_EDGE,
       probeTmux: () => {
         throw new Error("doctor: no tmux edge in this test");
       },

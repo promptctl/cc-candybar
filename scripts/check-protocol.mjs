@@ -103,6 +103,7 @@ const TS_TMUX_HINT = "src/tmux-hint.ts";
 const TS_CONFIG_HINT = "src/config-hint.ts";
 const TS_MEMENTO_HINT = "src/memento-hint.ts";
 const TS_TERMINAL_HINT = "src/terminal-hint.ts";
+const TS_CLIENT_HINT = "src/client-hint.ts";
 const TS_CLAUDE_SETTINGS = "src/claude-settings.ts";
 const TS_GLYPH = "src/render/error-glyph.ts";
 const TS_STYLE = "src/render/diagnostic-style.ts";
@@ -179,6 +180,22 @@ const CHECKS = [
       RS_MAIN,
       /--- client hints[\s\S]+?--- end client hints ---/,
       /request\["(\w+)"\]/g,
+    ),
+  },
+  // What the native client says it is: the field names of the `client` hint.
+  // A renamed field would make every native render read as "unreported" to
+  // the doctor's install check, on the one client path that ships.
+  {
+    label: "client hint fields",
+    ts: memberSet(
+      TS_CLIENT_HINT,
+      /export interface ClientHint \{[\s\S]+?\n\}/,
+      /readonly (\w+):/g,
+    ),
+    rust: memberSet(
+      RS_MAIN,
+      /fn client_hint\([\s\S]+?\n\}/,
+      /"(\w+)": /g,
     ),
   },
   // What "this session is over SSH" MEANS. Both runtimes answer the same

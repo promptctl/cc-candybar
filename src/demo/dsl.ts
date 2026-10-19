@@ -28,6 +28,7 @@ import process from "node:process";
 import { setTimeout as sleep } from "node:timers/promises";
 
 import { detectClientHints } from "../client-hints.js";
+import { nodeClientHint } from "../client-hint.js";
 import { ConfigError } from "../config/loader/diagnostics.js";
 import { buildRenderState } from "../daemon/cache/render.js";
 import { WatcherRegistry } from "../daemon/cache/watchers.js";
@@ -73,7 +74,7 @@ const hookData: ClaudeHookData = {
 };
 // The demo's frames go to stdout, so stdout is the stream on the terminal.
 const hints = parseClientHints(
-  detectClientHints(process.env, cwd, process.stdout),
+  detectClientHints(process.env, cwd, process.stdout, nodeClientHint("node")),
 );
 const width = applyClaudeCodeReserve(hints.termCols ?? DEFAULT_TERMINAL_WIDTH);
 

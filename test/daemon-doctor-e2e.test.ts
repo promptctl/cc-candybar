@@ -41,6 +41,10 @@ import {
   productionHandlerProbeEdge,
 } from "../src/doctor/handler-probe";
 import { PACKAGE_VERSION } from "../src/version";
+import { sourceDigest } from "../src/source-digest";
+import { installFacts, productionInstallEdge } from "../src/doctor/edge";
+import { parseDaemonClients } from "../src/doctor/daemon-clients";
+import type { StatsSnapshot } from "../src/daemon/stats";
 
 jest.setTimeout(30_000);
 
@@ -182,6 +186,67 @@ test("the CLI's probe reads its own link back from the daemon it was delivered t
   } finally {
     if (savedSocket === undefined) delete process.env.CC_CANDYBAR_SOCKET;
     else process.env.CC_CANDYBAR_SOCKET = savedSocket;
+    if (daemon) await killAndWait(daemon);
+    removeTmpDirs();
+  }
+});
+
+// brandon-doctor-v62x.tfb through a real daemon: a render request records its
+// session's client, daemon-stats serves each session's latest, and the CLI's
+// reading of them is the install verdict. The daemon runs this checkout's
+// source, so it names the checkout's dist (bundleOf) and a native client of
+// it must carry the digest of the checkout's rust-client/src.
+test("the clients the daemon saw render are the install check's facts", async () => {
+  const { env, sockPath, removeTmpDirs } = prepareIsolatedDaemonEnv(
+    "cc-candybar-doctor-e2e",
+  );
+  const projectDir = realpathSync(
+    mkdtempSync(path.join(os.tmpdir(), "cc-candybar-doctor-e2e-project-")),
+  );
+  const repo = process.cwd();
+  const native = {
+    kind: "native",
+    bundle: path.join(repo, "bin", "..", "dist", "index.mjs"),
+    source: sourceDigest(path.join(repo, "rust-client", "src")),
+  } as const;
+  let daemon: RunningDaemon | undefined;
+  try {
+    daemon = await spawnDaemonWithEnv(env);
+    const verdict = async () => {
+      const resp = await sendDaemonRequest(
+        sockPath,
+        { v: PROTOCOL_VERSION, kind: "stats" } as never,
+        5000,
+      );
+      const stats = (resp as { stats: StatsSnapshot }).stats;
+      const asked = parseDaemonClients(stats.version, stats);
+      const install =
+        asked.kind === "failed"
+          ? asked
+          : installFacts(
+              productionInstallEdge,
+              asked.value.bundle,
+              asked.value.clients,
+            );
+      return checkByName("install")!.probe({ install } as never);
+    };
+
+    await render(sockPath, "install-e2e-1", projectDir, { client: native });
+    expect(await verdict()).toEqual({ ok: true });
+
+    // A second session drawn by a client too old to report itself.
+    await render(sockPath, "install-e2e-2", projectDir);
+    expect(await verdict()).toEqual({
+      ok: false,
+      reason:
+        "the bar is drawn by a statusline client too old to say what it is — run `just install-rust`",
+      more: [],
+    });
+
+    // Its next render, by the current client, replaces it at once.
+    await render(sockPath, "install-e2e-2", projectDir, { client: native });
+    expect(await verdict()).toEqual({ ok: true });
+  } finally {
     if (daemon) await killAndWait(daemon);
     removeTmpDirs();
   }

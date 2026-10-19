@@ -6,6 +6,7 @@ import type { DebugSnapshot, DebugWhat } from "./debug-types";
 import type { TmuxHint } from "../tmux-hint";
 import { MEMENTO_ENV_VARS, type MementoEnvHint } from "../memento-hint";
 import { TERMINAL_ENV_VARS, type TerminalEnvHint } from "../terminal-hint";
+import { CLIENT_KINDS, type ClientHint, type ClientKind } from "../client-hint";
 
 // [LAW:types-are-the-program] PROTOCOL_VERSION encodes one thing:
 // "old-client × new-daemon (or vice versa) cannot communicate." It moves on
@@ -53,6 +54,8 @@ export interface RenderRequest {
   configEnv?: string;
   claudeConfigDir?: string;
   mementoEnv?: MementoEnvHint;
+  terminalEnv?: TerminalEnvHint;
+  client?: ClientHint;
 }
 
 // [LAW:locality-or-seam] The seam for "a fact the daemon cannot observe about
@@ -110,6 +113,10 @@ export interface RenderRequest {
 //     MEMENTO_ENV_VARS the client's environment sets, and a name left out is
 //     one it does not set — the daemon's own value for it is dropped, never
 //     inherited (src/memento/edge.ts).
+//   • `client` absent — the client did not REPORT what it is: a client too
+//     old to carry the field, which is itself the doctor's finding (an
+//     install whose client predates its daemon). Present, it is total: the
+//     client's kind, the bundle it runs, its build stamp (src/client-hint.ts).
 export interface ClientHints {
   readonly termCols?: number;
   readonly termRows?: number;
@@ -119,6 +126,7 @@ export interface ClientHints {
   readonly claudeConfigDir?: string;
   readonly mementoEnv?: MementoEnvHint;
   readonly terminalEnv?: TerminalEnvHint;
+  readonly client?: ClientHint;
 }
 
 // [LAW:one-source-of-truth] Every field of ClientHints, keyed by the type so
@@ -132,6 +140,7 @@ const CLIENT_HINT_FIELDS = Object.keys({
   claudeConfigDir: true,
   mementoEnv: true,
   terminalEnv: true,
+  client: true,
 } satisfies Record<keyof ClientHints, true>) as ReadonlyArray<
   keyof ClientHints
 >;
@@ -154,6 +163,7 @@ export function parseClientHints(
   const claudeConfigDir = sanitizeAbsolutePath(req.claudeConfigDir);
   const mementoEnv = sanitizeMementoEnv(req.mementoEnv);
   const terminalEnv = sanitizeTerminalEnv(req.terminalEnv);
+  const client = sanitizeClient(req.client);
   return {
     ...(termCols !== undefined && { termCols }),
     ...(termRows !== undefined && { termRows }),
@@ -163,6 +173,7 @@ export function parseClientHints(
     ...(claudeConfigDir !== undefined && { claudeConfigDir }),
     ...(mementoEnv !== undefined && { mementoEnv }),
     ...(terminalEnv !== undefined && { terminalEnv }),
+    ...(client !== undefined && { client }),
   };
 }
 
@@ -481,4 +492,19 @@ export function sendOne(
 
     sock.write(encodeFrame(req));
   });
+}
+
+// [LAW:no-defensive-null-guards] exception: trust boundary, the shape of
+// sanitizeTerminalEnv. A hint whose fields are anything but a known kind, an
+// absolute bundle path and a non-empty-or-null stamp is unreported
+// (`undefined`) — refused whole, never half-trusted.
+export function sanitizeClient(v: unknown): ClientHint | undefined {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return undefined;
+  const { kind, bundle, source } = v as Record<string, unknown>;
+  const path = sanitizeAbsolutePath(bundle);
+  return (CLIENT_KINDS as readonly unknown[]).includes(kind) &&
+    path !== undefined &&
+    (source === null || (typeof source === "string" && source !== ""))
+    ? { kind: kind as ClientKind, bundle: path, source }
+    : undefined;
 }

@@ -114,6 +114,7 @@ import {
   type SlashAction,
 } from "../../config/action";
 import { ceilingScope, type CeilingMove } from "../../memento/edge";
+import { runningBundle } from "../../client-hint";
 import type { MementoProvider } from "../../segments/memento";
 import { parseClientHints } from "../protocol";
 import {
@@ -129,12 +130,14 @@ import {
   linkFields,
   nerdFontFields,
   terminalFeatureFields,
+  installFields,
 } from "../../doctor/report";
 import { withMark } from "../../doctor/mark-book";
 import { DoctorBusy } from "../../doctor/busy";
 import {
   applyFix,
   clickArrived,
+  installFacts,
   gatherFacts,
   type DoctorEdge,
 } from "../../doctor/edge";
@@ -1145,7 +1148,7 @@ function writeReport(ctx: VerbContext, sid: string, facts: DoctorFacts): void {
   ctx.sessionState.setBatch(sid, doctorReportPairs(reports));
   ctx.dlog(
     "info",
-    `doctor: ${reports.map((r) => `${r.check.name}=${r.verdict.ok ? "ok" : `failed(${1 + (r.verdict.more?.length ?? 0)})`}`).join(" ")} ${nerdFontFields(facts.nerdFont, facts.marks)} ${linkFields(facts.terminal, facts.clicked)} ${terminalFeatureFields(facts.terminal, facts.termCols)} (session=${sid})`,
+    `doctor: ${reports.map((r) => `${r.check.name}=${r.verdict.ok ? "ok" : `failed(${1 + (r.verdict.more?.length ?? 0)})`}`).join(" ")} ${nerdFontFields(facts.nerdFont, facts.marks)} ${linkFields(facts.terminal, facts.clicked)} ${terminalFeatureFields(facts.terminal, facts.termCols)} ${installFields(facts.install)} (session=${sid})`,
   );
 }
 
@@ -1154,13 +1157,11 @@ function writeReport(ctx: VerbContext, sid: string, facts: DoctorFacts): void {
 // refused refuses the click (DoctorBusy), so no report is written over facts
 // the doctor did not see.
 function clickFacts(ctx: VerbContext, sid: string): DoctorFacts {
+  const hints = sessionHints(ctx, sid);
   let gathered: ReturnType<typeof gatherFacts>;
   try {
-    gathered = gatherFacts(
-      ctx.doctor,
-      sessionHints(ctx, sid),
-      sessionOrigin(ctx, sid),
-      (key) => ctx.sessionState.get(sid, key),
+    gathered = gatherFacts(ctx.doctor, hints, sessionOrigin(ctx, sid), (key) =>
+      ctx.sessionState.get(sid, key),
     );
   } catch (e) {
     if (e instanceof DoctorBusy) throw new BadVerbArgs(e.message);
@@ -1169,6 +1170,11 @@ function clickFacts(ctx: VerbContext, sid: string): DoctorFacts {
   return {
     ...gathered,
     urlHandler: clickArrived(ctx.clientVersion),
+    // The client that drew the bar this click came from, and the daemon the
+    // click reached — this process.
+    install: installFacts(ctx.doctor.install, runningBundle(), [
+      { client: hints.client ?? null, ago: 0 },
+    ]),
     askedBy: "click",
     clicked: clickedFrom(ctx, gathered),
   };

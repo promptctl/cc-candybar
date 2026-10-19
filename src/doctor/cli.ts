@@ -19,9 +19,17 @@ import { WriteStream } from "node:tty";
 import type { CliPlan } from "../check.js";
 import { DOOR_GLYPH } from "../config/disclosure.js";
 import { detectClientHints } from "../client-hints.js";
-import { runDoctor, type CheckReport, type DoctorFacts } from "./checks.js";
+import { nodeClientHint } from "../client-hint.js";
+import {
+  runDoctor,
+  type Asked,
+  type CheckReport,
+  type DoctorFacts,
+} from "./checks.js";
+import { askDaemonClients, type DaemonClients } from "./daemon-clients.js";
 import {
   gatherFacts,
+  installFacts,
   productionEdge,
   type ConfigLoad,
   type ConfigOrigin,
@@ -88,6 +96,7 @@ export function loadConfigOnce(origin: ConfigOrigin): ConfigLoad {
 export async function doctorPlan(
   edge: DoctorEdge,
   handler: HandlerProbeEdge,
+  daemon: () => Promise<Asked<DaemonClients>>,
   env: Readonly<Record<string, string | undefined>>,
   cwd: string,
   // Measures the terminal the command runs in (`commandTerminal`), inside
@@ -104,7 +113,7 @@ export async function doctorPlan(
       // would report, by the client's own detection — over the terminal the
       // command runs in, standing in for the stream Claude Code would hand
       // that client (which the command's own redirects say nothing about).
-      detectClientHints(env, cwd, measureTerminal()),
+      detectClientHints(env, cwd, measureTerminal(), nodeClientHint("node")),
       // The config the daemon would load for a session started here: this
       // directory, under the file named on the command line (a statusline
       // command's own `--config`), else the override the statusline client
@@ -125,6 +134,11 @@ export async function doctorPlan(
     facts = {
       ...gathered,
       urlHandler: await probeUrlHandler(handler),
+      install: await daemon().then((asked) =>
+        asked.kind === "failed"
+          ? asked
+          : installFacts(edge.install, asked.value.bundle, asked.value.clients),
+      ),
       askedBy: "command",
     };
   } catch (e) {
@@ -174,6 +188,7 @@ export async function runDoctorCli(args: readonly string[]): Promise<never> {
   const plan = await doctorPlan(
     productionEdge(loadConfigOnce),
     productionHandlerProbeEdge(),
+    askDaemonClients,
     process.env,
     cwd,
     commandTerminal,

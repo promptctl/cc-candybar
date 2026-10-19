@@ -20,6 +20,7 @@ import { HELP_TEXT } from "./help-text";
 import { NODE_FLAGS } from "./cli-flags";
 import { PACKAGE_VERSION } from "./version";
 import { detectClientHints } from "./client-hints";
+import { nodeClientHint } from "./client-hint";
 import { runDoctorCli } from "./doctor/cli";
 import { runFrames } from "./frames-cli";
 
@@ -154,7 +155,12 @@ echo '{"session_id":"test-session","workspace":{"project_dir":"/path/to/project"
       hookData,
       process.argv,
       process.cwd(),
-      detectClientHints(process.env, process.cwd(), process.stderr),
+      detectClientHints(
+        process.env,
+        process.cwd(),
+        process.stderr,
+        nodeClientHint("node"),
+      ),
     );
     // [LAW:types-are-the-program] Three variants, one per outcome kind. The
     // "kick on every failure" pattern was the load-bearing half of the

@@ -7,6 +7,7 @@
 // in the Claude Code directory the client's `claudeConfigDir` hint names.
 
 import { memoryMarkBook } from "./helpers/mark-book";
+import { HEALTHY_INSTALL_EDGE, HEALTHY_FACTS } from "./helpers/doctor-facts";
 import { memoryClickedTerminals } from "./helpers/clicked-terminals";
 import fs from "node:fs";
 import os from "node:os";
@@ -37,6 +38,7 @@ const loadsConfig = (config: DslConfig): DoctorEdge["loadConfig"] => () => ({
   config,
 });
 const NO_TMUX: DoctorEdge = {
+  install: HEALTHY_INSTALL_EDGE,
   probeTmux: () => {
     throw new Error("probeTmux must not run in this case");
   },
@@ -82,6 +84,7 @@ const factsIn = (
     ...gatherFacts(edge, { tmux, claudeConfigDir: conf }, ORIGIN, sessionPick),
     urlHandler: { kind: "unsupported" } as const,
     askedBy: "command" as const,
+    install: HEALTHY_FACTS.install,
   });
 // Outside tmux: the settings half alone.
 const factsOf = (conf: string) => factsIn(conf, null);
@@ -346,6 +349,7 @@ describe("gatherFacts", () => {
     expect(factsIn(absent, null).tmux).toEqual({ kind: "outside" });
     const asked: unknown[] = [];
     const edge: DoctorEdge = {
+      install: HEALTHY_INSTALL_EDGE,
       probeTmux: (hint) => {
         asked.push(hint);
         return {
