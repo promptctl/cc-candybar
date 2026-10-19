@@ -1063,6 +1063,28 @@ export async function handleRequest(
     return { kind: "reply", resp: { ok: true, output: "" }, exitAfterFlush: 0 };
   }
 
+  if (req.kind === "pane-session") {
+    // [LAW:parse-dont-validate] Trust boundary: both are untrusted JSON.
+    const { socket, pane } = req as { socket: unknown; pane: unknown };
+    if (typeof socket !== "string" || typeof pane !== "string")
+      return stay({
+        ok: false,
+        error: "pane-session needs a string socket and pane",
+        code: "BAD_REQUEST",
+        daemonV: PROTOCOL_VERSION,
+      });
+    return stay({
+      ok: true,
+      paneSession: frameFeeds.newestWhere(
+        ({ hints: { tmux } }) =>
+          tmux !== null &&
+          tmux !== undefined &&
+          tmux.socket === socket &&
+          tmux.pane === pane,
+      ),
+    });
+  }
+
   if (req.kind === "stats") {
     // [LAW:single-enforcer] Stats requests do NOT bump request counters —
     // observability shouldn't pollute the metric being observed.

@@ -70,6 +70,19 @@ export function tryRenderViaDaemon(
   );
 }
 
+// The session that last rendered from a tmux pane (PaneSessionRequest), or
+// null when the daemon holds no request from it.
+export function trySessionInPane(
+  socket: string,
+  pane: string,
+): Promise<RoundTripOutcome<string | null>> {
+  return requestOutcome(
+    { kind: "pane-session", socket, pane },
+    CLICK_BUDGETS,
+    (resp) => ("paneSession" in resp ? resp.paneSession : undefined),
+  );
+}
+
 // [LAW:single-enforcer] Same outcome translator for click as for render —
 // click failures decompose into the same transient/permanent split, so the
 // caller's "ok? done : kick + fallback" logic gets the same typed input.

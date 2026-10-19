@@ -238,6 +238,16 @@ export class FrameFeeds<Req> {
     }
   }
 
+  // The session of the newest request `match` accepts, among the latest
+  // request of each session the daemon holds, or null when none does.
+  newestWhere(match: (req: Req) => boolean): string | null {
+    let newest: { sessionId: string; order: number } | null = null;
+    for (const [sessionId, { req, order }] of this.requests)
+      if (match(req) && (newest === null || order > newest.order))
+        newest = { sessionId, order };
+    return newest?.sessionId ?? null;
+  }
+
   // The latest request of every session someone is watching, by session.
   watched(): Array<{ readonly sessionId: string; readonly req: Req }> {
     return [...this.feeds.keys()].flatMap((sessionId) => {

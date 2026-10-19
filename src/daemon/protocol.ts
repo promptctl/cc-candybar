@@ -342,9 +342,21 @@ export interface SubscribeRequest {
   lane: Lane;
 }
 
+// Which session last rendered from a tmux pane: the session of the daemon's
+// newest render request whose client reported that pane. A tmux bar pane
+// (lane C) knows the pane it draws beside, not the session in it, which
+// changes on a /clear; it asks again to follow.
+export interface PaneSessionRequest {
+  v: number;
+  kind: "pane-session";
+  socket: string;
+  pane: string;
+}
+
 export type Request =
   | RenderRequest
   | SubscribeRequest
+  | PaneSessionRequest
   | ShutdownRequest
   | StatsRequest
   | ClickRequest
@@ -358,6 +370,9 @@ export type Response =
   // client. A `{ ok: true; debug: { what: "vars"; vars: [...] } }` shape is
   // self-describing — the client doesn't need to remember which `what` it sent.
   | { ok: true; debug: DebugSnapshot }
+  // A pane-session answer: the session, or null when no request the daemon
+  // holds came from that pane.
+  | { ok: true; paneSession: string | null }
   // [LAW:types-are-the-program] `daemonV` is the daemon's own
   // PROTOCOL_VERSION, echoed on every error response so the client can render
   // a meaningful diagnostic on VERSION_MISMATCH without parsing the human

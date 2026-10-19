@@ -24,6 +24,7 @@ import { detectClientHints } from "./client-hints";
 import { nodeClientHint } from "./client-hint";
 import { runDoctorCli } from "./doctor/cli";
 import { runFrames } from "./frames-cli";
+import { runBarPane } from "./bar-pane";
 
 // [LAW:one-source-of-truth] The bundle this process runs: the file this entry
 // was loaded from, which Node's loader resolved through every link (an npm
@@ -101,6 +102,10 @@ async function main(): Promise<void> {
     if (subcommand === "doctor") {
       await runDoctorCli(process.argv.slice(3)); // owns its own exit code
       return;
+    }
+    if (subcommand === "bar-pane") {
+      // Runs until the pane closes; owns its own exit code.
+      process.exit(await runBarPane(process.argv.slice(3)));
     }
     // [LAW:dataflow-not-control-flow] vars/segments/config are ONE handler
     // parameterized by `what` — the subcommand name IS the DebugWhat. The guard
