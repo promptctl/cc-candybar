@@ -7,8 +7,10 @@
 //
 // `--lane <band|statusline|pane>` names the animation lane this stream serves
 // (src/config/lanes.ts). While the session's toggle for it is off the daemon
-// refuses the stream; this client says so once on stderr and asks again on its
-// backoff, so turning the toggle on resumes the stream.
+// refuses the stream with SWITCHED_OFF: that refusal is the stream's state, so
+// it is written to stdout like a frame — once, until a frame replaces it — and
+// the client asks again on its own (src/daemon/frame-follow.ts), so turning
+// the toggle on resumes the stream. stderr carries only what went wrong.
 //
 // The session is named one of two ways, and that decides what stdin is:
 //   --session <id>   stdin is not read; the frames are drawn from the data the
@@ -29,22 +31,14 @@ import { createInterface } from "node:readline";
 import { parseArgs } from "node:util";
 import type { ClaudeHookData } from "./utils/claude";
 import { tryRenderViaDaemon } from "./daemon/client";
-import {
-  openFrameStream,
-  type FrameStream,
-  type StreamEnd,
-} from "./daemon/client-frames";
+import { followFrames, type FrameFollower } from "./daemon/frame-follow";
 import { describeFailure } from "./daemon/client-transport";
 import { obtainDaemonKick } from "./daemon/acquire";
 import { socketPath } from "./daemon/paths";
-import { PROTOCOL_VERSION } from "./daemon/protocol";
 import { detectClientHints } from "./client-hints";
 import { nodeClientHint } from "./client-hint";
 import { newestWins } from "./utils/newest-wins";
 import { LANE_NAMES, parseLane } from "./config/lanes";
-
-const RECONNECT_FIRST_MS = 250;
-const RECONNECT_MAX_MS = 2000;
 
 // `bundle`: the bundle this process runs, as its entry names it.
 export async function runFrames(
@@ -102,11 +96,12 @@ export async function runFrames(
 
   let sessionId: string | null = values.session ?? null;
   let lastHook: ClaudeHookData | null = null;
-  let stream: FrameStream | null = null;
-  let retryMs = RECONNECT_FIRST_MS;
-  // The refusal last said, so a lane that stays off is said once, not on
-  // every retry.
-  let lastSaid: string | null = null;
+  let follower: FrameFollower | null = null;
+  // What was last written about a stream that is not flowing — the fault on
+  // stderr, the lane-off refusal on stdout — so a state that persists is
+  // written once, not on every retry. A frame clears both.
+  let lastFault: string | null = null;
+  let offShown = false;
 
   // The session's data, to the daemon. Its reply is the bar the stream
   // carries, so only a failure is said here.
@@ -124,40 +119,29 @@ export async function runFrames(
   };
 
   const subscribe = (id: string): void => {
-    stream?.close();
-    stream = openFrameStream(
-      socketPath(),
-      id,
-      lane,
-      (resp) => {
-        // A drawn bar is a stream that works: the next failure starts the
-        // backoff over.
-        if (resp.ok) retryMs = RECONNECT_FIRST_MS;
-        lastSaid = null;
+    follower?.close();
+    follower = followFrames(socketPath(), id, lane, {
+      frame: (resp) => {
+        lastFault = null;
+        offShown = false;
         emit(`${JSON.stringify(resp)}\n`);
       },
-      (end) => {
-        if (end.kind === "closed-here") return;
-        const next = afterStreamEnd(end);
-        if (next.kind === "exit") {
-          say(next.reason);
-          process.exit(1);
-        }
-        if (next.reason !== lastSaid)
-          say(`${next.reason}; reconnecting in ${retryMs}ms`);
-        lastSaid = next.reason;
-        if (next.kick) obtainDaemonKick();
-        const wait = retryMs;
-        retryMs = Math.min(RECONNECT_MAX_MS, retryMs * 2);
-        setTimeout(() => {
-          void (lastHook === null ? Promise.resolve() : forward(lastHook)).then(
-            () => {
-              if (sessionId === id) subscribe(id);
-            },
-          );
-        }, wait);
+      off: (resp) => {
+        if (!offShown) emit(`${JSON.stringify(resp)}\n`);
+        offShown = true;
       },
-    );
+      fault: (reason, retryMs) => {
+        if (reason !== lastFault)
+          say(`${reason}; reconnecting in ${retryMs}ms`);
+        lastFault = reason;
+      },
+      exit: (reason) => {
+        say(reason);
+        process.exit(1);
+      },
+      beforeReconnect: () =>
+        lastHook === null ? Promise.resolve() : forward(lastHook),
+    });
   };
 
   if (sessionId !== null) {
@@ -185,68 +169,4 @@ export async function runFrames(
     }
   }
   process.exit(0);
-}
-
-// [LAW:effects-at-boundaries] What a stream the daemon ended calls for: a
-// reconnect — kicking a daemon into existence when none answered, or when the
-// one that answered speaks an older protocol (it exits on that answer so a
-// respawn runs the newer build) — or, when the daemon speaks a newer protocol
-// than this client, which it will do however often it is asked, the end of
-// this client. A BAD_REQUEST is from a daemon too old to take subscribe (this
-// client's own subscribe is well formed); it restarts itself on the new build.
-export type AfterEnd =
-  | {
-      readonly kind: "reconnect";
-      readonly reason: string;
-      readonly kick: boolean;
-    }
-  | { readonly kind: "exit"; readonly reason: string };
-
-export function afterStreamEnd(
-  end: Exclude<StreamEnd, { kind: "closed-here" }>,
-): AfterEnd {
-  switch (end.kind) {
-    case "failed":
-      return {
-        kind: "reconnect",
-        reason: `stream failed (${end.error.message})`,
-        kick: true,
-      };
-    case "closed-there":
-      return {
-        kind: "reconnect",
-        reason: "daemon closed the stream",
-        kick: false,
-      };
-    case "refused":
-      // The lane's toggle is off: the same subscribe succeeds once it is on.
-      if (end.resp.code === "SWITCHED_OFF")
-        return { kind: "reconnect", reason: end.resp.error, kick: false };
-      if (end.resp.code === "TIMEOUT")
-        return {
-          kind: "reconnect",
-          reason: `the daemon was too busy to open the stream (${end.resp.error})`,
-          kick: false,
-        };
-      if (end.resp.code === "BAD_REQUEST")
-        return {
-          kind: "reconnect",
-          reason: `the daemon does not take subscribe (${end.resp.error}); it restarts on the new build`,
-          kick: false,
-        };
-      if (
-        end.resp.code === "VERSION_MISMATCH" &&
-        end.resp.daemonV !== undefined &&
-        end.resp.daemonV < PROTOCOL_VERSION
-      )
-        return {
-          kind: "reconnect",
-          reason: `the daemon is older than this client (${end.resp.error})`,
-          kick: true,
-        };
-      return {
-        kind: "exit",
-        reason: `the daemon refused the stream: ${end.resp.code}: ${end.resp.error}`,
-      };
-  }
 }

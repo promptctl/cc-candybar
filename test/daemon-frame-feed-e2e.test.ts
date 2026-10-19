@@ -23,6 +23,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { openFrameStream, type StreamEnd } from "../src/daemon/client-frames";
+import { followFrames, SWITCHED_OFF_RETRY_MS } from "../src/daemon/frame-follow";
 import {
   PROTOCOL_VERSION,
   encodeFrame,
@@ -327,6 +328,31 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       resp: { code: "SWITCHED_OFF" },
     });
   });
+
+  test("a follower waits out a lane switched off and resumes the frames once it is on", async () => {
+    await render(sockPath, "feed-follow", projectDir, {}, args("off"));
+    const seen: string[] = [];
+    let offs = 0;
+    const follower = followFrames(sockPath, "feed-follow", "band", {
+      frame: (resp) => seen.push(resp.ok && "output" in resp ? stripAnsi(resp.output) : JSON.stringify(resp)),
+      off: () => offs++,
+      fault: (reason) => seen.push(`fault: ${reason}`),
+      exit: (reason) => seen.push(`exit: ${reason}`),
+    });
+    try {
+      const deadline = (ms: number) => Date.now() + ms;
+      let until = deadline(2000);
+      while (offs === 0 && Date.now() < until) await sleep(20);
+      expect(offs).toBe(1);
+      await setState("feed-follow", "experimentalBand", "true");
+      await render(sockPath, "feed-follow", projectDir, {}, args("off"));
+      until = deadline(SWITCHED_OFF_RETRY_MS + 3000);
+      while (seen.length === 0 && Date.now() < until) await sleep(50);
+      expect(seen).toEqual([expect.stringContaining("an unswitched mark")]);
+    } finally {
+      follower.close();
+    }
+  }, 20_000);
 
   test("a render request whose cwd is not a string is refused and counted, not thrown", async () => {
     const before = (await stats()).requests.errored;

@@ -2,7 +2,8 @@
 // calls for, and a flag that could do nothing refused rather than ignored.
 
 import { PROTOCOL_VERSION } from "../src/daemon/protocol";
-import { afterStreamEnd, runFrames } from "../src/frames-cli";
+import { runFrames } from "../src/frames-cli";
+import { afterStreamEnd } from "../src/daemon/frame-follow";
 
 const refused = (
   code: "BAD_REQUEST" | "VERSION_MISMATCH" | "TIMEOUT" | "SWITCHED_OFF",
@@ -40,12 +41,11 @@ test("only a daemon newer than this client ends it; an older, busy, restarted or
     kind: "reconnect",
     kick: false,
   });
-  // The lane's toggle is off: asked again on the backoff, so turning it on
-  // resumes the stream, and said in the daemon's own words.
+  // The lane's toggle is off: the stream's state, not a fault, and asked
+  // again, so turning it on resumes the stream.
   expect(afterStreamEnd(refused("SWITCHED_OFF"))).toEqual({
-    kind: "reconnect",
-    reason: "SWITCHED_OFF said",
-    kick: false,
+    kind: "off",
+    resp: refused("SWITCHED_OFF").resp,
   });
   // No daemon answered: one is kicked into existence before the reconnect.
   expect(
