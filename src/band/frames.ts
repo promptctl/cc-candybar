@@ -12,7 +12,7 @@
 
 import { AnsiDecoder, ColorDepth, Style } from "@promptctl/rich-js";
 import type { ColorSpec, StyleOptions } from "@promptctl/rich-js";
-import type { BandFrame, BandRun, RunColor } from "../../mod/types";
+import type { BandBar, BandFrame, BandRun, RunColor } from "../../mod/types";
 import { renderOutcomeOf } from "../daemon/client";
 import type { Response } from "../daemon/protocol";
 import {
@@ -126,7 +126,7 @@ const PLAIN = new Style();
 
 // One rendered bar, ANSI and OSC 8, as the rows of runs the mod draws. Text
 // no span covers is drawn plain.
-export function bandFrame(ansi: string): BandFrame {
+export function bandFrame(ansi: string): BandBar {
   const rows = new AnsiDecoder().decode(ansi).map((line) => {
     const plain = line.plain;
     const runs: BandRun[] = [];
@@ -145,7 +145,7 @@ export function bandFrame(ansi: string): BandFrame {
     if (at < plain.length) runs.push(bandRun(plain.slice(at), PLAIN));
     return runs;
   });
-  return { rows };
+  return { kind: "bar", rows };
 }
 
 // One pushed render response as the line the mod reads.
@@ -153,11 +153,14 @@ export function bandFrame(ansi: string): BandFrame {
 // in the diagnostic strip's colours. The stream goes on, so the next bar it
 // can draw takes its place, as the statusline's next render replaces its
 // error glyph: a config fixed brings the band back.
-// The band's lane switched off (src/config/lanes.ts) is no bar at all: the
-// band draws nothing until the toggle is on again.
+// The band's lane switched off (src/config/lanes.ts) is the `off` line, which
+// the band draws as nothing until the toggle is on again.
 export function bandLine(resp: Response): string {
   if (!resp.ok && resp.code === "SWITCHED_OFF")
-    return JSON.stringify({ rows: [] } satisfies BandFrame);
+    return JSON.stringify({
+      kind: "off",
+      reason: resp.error,
+    } satisfies BandFrame);
   const ansi = planOutcome(renderOutcomeOf(resp)).output;
   try {
     return JSON.stringify(bandFrame(ansi));

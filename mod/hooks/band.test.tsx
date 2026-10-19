@@ -1,6 +1,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 
 const FRAME = {
+  kind: 'bar',
   rows: [
     [
       { text: '🍫', color: '#181825', backgroundColor: '#b592e1', href: 'cc-candybar://dispatch/e=x' },
@@ -70,21 +71,25 @@ test('the band draws the session’s pushed frame, its links as Links', async ($
   await ui.unmount()
 })
 
-// The band's lane switched off in candybar's settings is an empty frame on
-// the child's stdout (`--format band` encodes SWITCHED_OFF so): the band draws
-// nothing, and the child goes on, so switching it back on brings the bar back.
-test('an empty frame draws nothing, and the next frame draws the bar again', { timeoutMs: 15_000 }, async ($, on) => {
+// The band's lane switched off in candybar's settings is the `off` line on the
+// child's stdout (`--format band` encodes SWITCHED_OFF so): the band hands the
+// prompt area back to what is beneath it, the debug log says why, and the
+// child goes on, so switching it back on brings the bar back.
+test('the lane switched off hands the band back, and the next bar draws again', { timeoutMs: 15_000 }, async ($, on) => {
+  const logged: string[] = []
   const clock = mock.clock(on)
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('session.id', () => ({ value: 'sid-1' }))
+  on('ui.log', (_$, e) => (logged.push(e.text), { value: undefined }))
+  // What is beneath the band: drawn only when the band hands it on.
   on('ui.render', ($, e) => {
-    const { Box } = $.ui.resolve(e)
-    return <Box />
+    const { Box, Text } = $.ui.resolve(e)
+    return <Box><Text>beneath</Text></Box>
   })
   on('process.spawn', async function* () {
     yield { stream: 'stdout' as const, text: `${JSON.stringify(FRAME)}\n` }
     await clock.sleep(250)
-    yield { stream: 'stdout' as const, text: `${JSON.stringify({ rows: [] })}\n` }
+    yield { stream: 'stdout' as const, text: `${JSON.stringify({ kind: 'off', reason: '🧪 band (A) is off' })}\n` }
     await clock.sleep(250)
     yield { stream: 'stdout' as const, text: `${JSON.stringify(FRAME)}\n` }
     await clock.sleep(60_000)
@@ -95,13 +100,16 @@ test('an empty frame draws nothing, and the next frame draws the bar again', { t
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
   await clock.advance(1)
   expect(await ui.find({ type: 'Link' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /beneath/ })).toBeUndefined()
 
   await clock.advance(250)
   expect(await ui.find({ type: 'Link' })).toBeUndefined()
-  expect(await ui.find({ type: 'Text' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /beneath/ })).toBeDefined()
+  expect(logged).toContain('candybar-band: lane A is off for sid-1: 🧪 band (A) is off')
 
   await clock.advance(250)
   expect(await ui.find({ type: 'Link' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /beneath/ })).toBeUndefined()
   await ui.unmount()
 })
 

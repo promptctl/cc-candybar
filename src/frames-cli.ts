@@ -56,6 +56,30 @@ function isFormat(name: string): name is keyof typeof FORMATS {
 }
 
 // `bundle`: the bundle this process runs, as its entry names it.
+// What a stream last said: nothing yet, a frame or the lane-off refusal on
+// stdout, or a fault on stderr, by its reason.
+export type Said =
+  | { readonly kind: "none" }
+  | { readonly kind: "frame" }
+  | { readonly kind: "off" }
+  | { readonly kind: "fault"; readonly reason: string };
+type Event = Exclude<Said, { kind: "none" }>;
+
+// [LAW:types-are-the-program] One value, what the stream last said, decides
+// what is said next: every frame (each is new), and any other event that
+// differs from the last thing said. So a state that persists across retries —
+// the lane off, the same fault — is said once, and every change is said: a
+// refusal after a fault is written again, so a reader that clears what stderr
+// said at the next stdout line (the band) always gets that line.
+export function worthSaying(last: Said, next: Event): boolean {
+  if (next.kind === "frame" || next.kind !== last.kind) return true;
+  return (
+    next.kind === "fault" &&
+    last.kind === "fault" &&
+    next.reason !== last.reason
+  );
+}
+
 export async function runFrames(
   argv: readonly string[],
   bundle: string,
@@ -120,11 +144,11 @@ export async function runFrames(
   let sessionId: string | null = values.session ?? null;
   let lastHook: ClaudeHookData | null = null;
   let follower: FrameFollower | null = null;
-  // What was last written about a stream that is not flowing — the fault on
-  // stderr, the lane-off refusal on stdout — so a state that persists is
-  // written once, not on every retry. A frame clears both.
-  let lastFault: string | null = null;
-  let offShown = false;
+  let said: Said = { kind: "none" };
+  const tell = (next: Event, write: () => void): void => {
+    if (worthSaying(said, next)) write();
+    said = next;
+  };
 
   // The session's data, to the daemon. Its reply is the bar the stream
   // carries, so only a failure is said here.
@@ -144,23 +168,12 @@ export async function runFrames(
   const subscribe = (id: string): void => {
     follower?.close();
     follower = followFrames(socketPath(), id, lane, {
-      frame: (resp) => {
-        lastFault = null;
-        offShown = false;
-        emit(`${encode(resp)}\n`);
-      },
-      // The daemon answered: whatever outage came before is over, so the
-      // next one is news even if it reads the same.
-      off: (resp) => {
-        lastFault = null;
-        if (!offShown) emit(`${encode(resp)}\n`);
-        offShown = true;
-      },
-      fault: (reason, retryMs) => {
-        if (reason !== lastFault)
-          say(`${reason}; reconnecting in ${retryMs}ms`);
-        lastFault = reason;
-      },
+      frame: (resp) => tell({ kind: "frame" }, () => emit(`${encode(resp)}\n`)),
+      off: (resp) => tell({ kind: "off" }, () => emit(`${encode(resp)}\n`)),
+      fault: (reason, retryMs) =>
+        tell({ kind: "fault", reason }, () =>
+          say(`${reason}; reconnecting in ${retryMs}ms`),
+        ),
       exit: (reason) => {
         say(reason);
         process.exit(1);

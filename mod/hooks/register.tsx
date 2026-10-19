@@ -71,9 +71,9 @@ export const register: Register = on => {
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const { frame, failure } = await read($, bandAtom)
-    // A frame with no rows is the band's lane switched off (🧪 band (A) in
-    // candybar's settings menu): the band draws nothing.
-    const rows = frame?.rows ?? []
+    // Nothing to draw — no frame yet, the band's lane switched off (🧪 band (A)
+    // in candybar's settings menu), an empty bar — hands the band on.
+    const rows = frame?.kind === 'bar' ? frame.rows : []
     if (e.props.hasSurvey || (rows.length === 0 && failure === null)) return next(e)
 
     const { Box, Text, Link } = $.ui.resolve(e)
@@ -149,7 +149,12 @@ function start($: EngineInterface, sessionId: string): Child {
         // Only the newest frame in a piece is worth drawing.
         const newest = lines.at(-1)
         if (newest === undefined) continue
-        frame = JSON.parse(newest) as BandFrame
+        const next = JSON.parse(newest) as BandFrame
+        // [LAW:no-silent-failure] A band switched off draws nothing, so the
+        // debug log says why it is blank, once each time it goes off.
+        if (next.kind === 'off' && frame?.kind !== 'off')
+          $.ui.log(`candybar-band: lane A is off for ${sessionId}: ${next.reason}`, { to: 'debug' })
+        frame = next
         await draw(null)
       }
       const { code, signal } = await stream.result

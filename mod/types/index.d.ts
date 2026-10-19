@@ -24,10 +24,22 @@ export interface BandRun {
   readonly href?: string;
 }
 
-// One frame: every row the bar draws, top to bottom.
-export interface BandFrame {
+// One bar: every row it draws, top to bottom.
+export interface BandBar {
+  readonly kind: 'bar';
   readonly rows: readonly (readonly BandRun[])[];
 }
+
+// The band's lane switched off in candybar's settings (`🧪 band (A)`): the
+// band draws nothing, and `reason` is the daemon's sentence naming the toggle.
+export interface BandOff {
+  readonly kind: 'off';
+  readonly reason: string;
+}
+
+// [LAW:types-are-the-program] One line of the stream: a bar, or the lane
+// switched off. An empty bar is a bar, never mistaken for the lane being off.
+export type BandFrame = BandBar | BandOff;
 
 declare module 'claude-code' {
   interface PluginState {

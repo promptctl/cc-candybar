@@ -124,12 +124,16 @@ describe("bandLine", () => {
     );
   });
 
-  test("the band's lane switched off is no rows: the band draws nothing", () => {
+  test("the band's lane switched off is the off line, carrying the daemon's sentence", () => {
     expect(
       JSON.parse(
         bandLine({ ok: false, code: "SWITCHED_OFF", error: "🧪 band (A) is off" }),
       ),
-    ).toEqual({ rows: [] });
+    ).toEqual({ kind: "off", reason: "🧪 band (A) is off" });
+  });
+
+  test("an empty bar is a bar, never the lane switched off", () => {
+    expect(JSON.parse(bandLine({ ok: true, output: "" }))).toEqual({ kind: "bar", rows: [] });
   });
 
   test("a refused render draws the statusline's error glyph", () => {
