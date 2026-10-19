@@ -1,3 +1,10 @@
+# [1.147.0](https://github.com/promptctl/cc-candybar/compare/v1.146.0...v1.147.0) (2026-10-19)
+
+
+### Features
+
+* **doctor:** session data is readable (brandon-doctor-v62x.p4l) ([#379](https://github.com/promptctl/cc-candybar/issues/379)) ([0e3c74d](https://github.com/promptctl/cc-candybar/commit/0e3c74dc51b5607578089e1f10b0c0615054edf4))
+
 # [1.146.0](https://github.com/promptctl/cc-candybar/compare/v1.145.0...v1.146.0) (2026-10-19)
 
 
