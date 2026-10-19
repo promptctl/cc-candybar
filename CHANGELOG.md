@@ -1,3 +1,10 @@
+## [1.139.1](https://github.com/promptctl/cc-candybar/compare/v1.139.0...v1.139.1) (2026-10-19)
+
+
+### Bug Fixes
+
+* **render:** segment text no longer carries bidi overrides or C1 controls to the terminal (brandon-unfiled-3248.qum) ([#370](https://github.com/promptctl/cc-candybar/issues/370)) ([078b549](https://github.com/promptctl/cc-candybar/commit/078b549a334d17a9c3c53dc17790dd8c5f23f12a))
+
 # [1.139.0](https://github.com/promptctl/cc-candybar/compare/v1.138.0...v1.139.0) (2026-10-19)
 
 
