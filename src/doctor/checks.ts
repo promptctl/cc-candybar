@@ -21,6 +21,11 @@ import { EFFECT_FLOOR, type EffectSelection } from "../themes/policy.js";
 import type { Outcome } from "../utils/outcome.js";
 import type { DeclKind, UnusedDecl } from "../config/unused.js";
 import {
+  approachingLimit,
+  type PostMortem,
+  type ServingDaemon,
+} from "../daemon/limits.js";
+import {
   LINK_TERMINALS,
   TERMINALS,
   identifiedAs,
@@ -248,6 +253,26 @@ export type InstallFacts = Asked<{
   readonly clients: readonly ClientFact[];
 }>;
 
+// One cc-candybar daemon process of this user, as the process table shows it
+// (src/doctor/edge.ts `daemonProcesses`): `rss` in bytes, `started` the
+// table's own start time.
+export interface DaemonProcess {
+  readonly pid: number;
+  readonly ppid: number;
+  readonly rss: number;
+  readonly started: string;
+}
+
+// The daemon row's facts (brandon-doctor-v62x.5mq): the daemon that serves
+// this bar, as it reports itself (src/daemon/limits.ts `serving`); every
+// daemon process running; and the newest post-mortem the user filed as read
+// (src/doctor/post-mortems-read.ts).
+export interface DaemonFacts {
+  readonly serving: Asked<ServingDaemon>;
+  readonly processes: Asked<readonly DaemonProcess[]>;
+  readonly read: Asked<string | null>;
+}
+
 export interface PlacementEffectFact {
   readonly placement: string;
   readonly effect: LoopName;
@@ -269,6 +294,7 @@ export interface DoctorFacts {
   // click's own render, or — for the CLI — every session's latest render this
   // daemon process served (src/daemon/client-sightings.ts).
   readonly install: InstallFacts;
+  readonly daemon: DaemonFacts;
   readonly nerdFont: NerdFontFacts;
   // The user's marks, or why the book could not be read; a check honours
   // only the mark on the sighting it shows.
@@ -303,12 +329,25 @@ export interface DoctorFacts {
 // [LAW:types-are-the-program] A fix is a DESCRIPTION of an edit the edge
 // performs, discriminated by kind so a second repair shape is one more arm
 // here and one more case at the edge, never a callback smuggled in a verdict.
-// Every fix so far sets one value at one key path in the session's Claude Code
-// settings file, so a new entry to repair is a new value of this arm.
-export interface Fix {
-  readonly kind: "claude-settings";
-  readonly path: readonly [string, ...string[]];
-  readonly value: string | number;
+// `claude-settings` sets one value at one key path in the session's Claude
+// Code settings file; `post-mortems-read` files every post-mortem up to
+// `through` as read (src/doctor/post-mortems-read.ts).
+export type Fix =
+  | {
+      readonly kind: "claude-settings";
+      readonly path: readonly [string, ...string[]];
+      readonly value: string | number;
+    }
+  | { readonly kind: "post-mortems-read"; readonly through: string };
+
+// The fix as the doctor's event names it.
+export function describeFix(fix: Fix): string {
+  switch (fix.kind) {
+    case "claude-settings":
+      return `${fix.kind} ${fix.path.join(".")}=${JSON.stringify(fix.value)}`;
+    case "post-mortems-read":
+      return `${fix.kind} through=${fix.through}`;
+  }
 }
 
 // What a check asks the user to look at when it cannot see for itself — a
@@ -729,6 +768,81 @@ const install: Check = {
   },
 };
 
+export const mb = (bytes: number): number => Math.round(bytes / (1024 * 1024));
+
+// [LAW:one-source-of-truth] The post-mortems the user has not been told of:
+// every one newer than the one filed read, newest first. None can be judged
+// while either list is unreadable. The probe reports them; the doctor's event
+// counts them (src/doctor/report.ts).
+export function unreadPostMortems(
+  { postMortems }: ServingDaemon,
+  read: Asked<string | null>,
+): readonly PostMortem[] {
+  return postMortems.kind === "ok" && read.kind === "ok"
+    ? postMortems.value.filter(
+        (m) => read.value === null || m.identity > read.value,
+      )
+    : [];
+}
+
+// "The daemon is healthy" (brandon-doctor-v62x.5mq): exactly one daemon runs,
+// it holds well under its memory budget, and it has died of memory no time
+// the user has not been told of. A post-mortem leads when there is one: it is
+// the one problem with a fix, and a verdict carries its lead's.
+const daemon: Check = {
+  name: "daemon",
+  label: "daemon",
+  takesMark: false,
+  probe: ({ daemon: { serving, processes, read } }) => {
+    if (serving.kind === "failed") {
+      const running =
+        processes.kind === "ok" && processes.value.length > 0
+          ? ` — daemon ${processes.value.map((p) => p.pid).join(", ")} running but not answering`
+          : "";
+      return {
+        ok: false,
+        reason: `no daemon answered: ${serving.reason}${running}`,
+      };
+    }
+    const { pid, rss, rssLimit, postMortems } = serving.value;
+    const unread = unreadPostMortems(serving.value, read);
+    const verdict = problemsVerdict([
+      ...unread.map(
+        (m) =>
+          `the daemon ran out of memory and restarted (${m.identity}) — post-mortem: ${Object.values(m.artifacts).join(", ")}`,
+      ),
+      ...(postMortems.kind === "failed"
+        ? [
+            `the daemon's post-mortems could not be listed: ${postMortems.reason}`,
+          ]
+        : []),
+      ...(read.kind === "failed"
+        ? [`which post-mortems were read could not be read: ${read.reason}`]
+        : []),
+      ...(processes.kind === "failed"
+        ? [`the process table could not be read: ${processes.reason}`]
+        : processes.value
+            .filter((p) => p.pid !== pid)
+            .map(
+              (p) =>
+                `daemon ${p.pid} (started ${p.started}, ${mb(p.rss)} MB${p.ppid === 1 ? "" : `, child of ${p.ppid}`}) runs beside the one serving the bar (${pid}) — \`kill ${p.pid}\``,
+            )),
+      ...(approachingLimit(rss, rssLimit)
+        ? [
+            `the daemon holds ${mb(rss)} MB of its ${mb(rssLimit)} MB limit — at the limit it records a post-mortem and restarts`,
+          ]
+        : []),
+    ]);
+    const newest = unread[0];
+    return verdict.ok || newest === undefined
+      ? verdict
+      : {
+          ...verdict,
+          fix: { kind: "post-mortems-read", through: newest.identity },
+        };
+  },
+};
+
 type SeenTerminal = Extract<TerminalIdentity, { kind: "seen" }>;
 
 const CLICK_TO_SEE =
@@ -1067,6 +1181,7 @@ const nerdFont: Check = {
 export const CHECKS: readonly Check[] = [
   config,
   install,
+  daemon,
   urlHandler,
   links,
   tmuxTruecolor,

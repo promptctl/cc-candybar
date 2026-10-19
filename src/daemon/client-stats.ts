@@ -87,7 +87,10 @@ const STATS_FIELDS = Object.keys(RuntimeStats.referenceSnapshot()) as Array<
 // objects) that `value` does not, in reference order. A list or a record of
 // the reference's that `value` carries as anything else is missing too: a
 // reader maps a list and walks a record, so a field it cannot treat as one is
-// as absent to it as no field.
+// as absent to it as no field. A union tagged by `kind` (an `Asked`) is
+// judged present or absent, never below its tag: its arms carry different
+// fields, so the reference's arm is no spec of the value's, and its reader
+// parses the arm it got.
 export function missingFields(
   reference: unknown,
   value: unknown,
@@ -98,6 +101,7 @@ export function missingFields(
   }
   if (!isPlainObject(reference)) return [];
   if (!isPlainObject(value)) return [at || "<snapshot>"];
+  if ("kind" in reference) return [];
   const missing: string[] = [];
   for (const key of Object.keys(reference)) {
     const path = at === "" ? key : `${at}.${key}`;

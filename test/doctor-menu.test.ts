@@ -6,7 +6,8 @@
 // the facts of the session's "last render" exactly as production does.
 
 import { ClientSightings } from "../src/daemon/client-sightings";
-import { HEALTHY_INSTALL_EDGE, healthyClient } from "./helpers/doctor-facts";
+import type { ServingDaemon } from "../src/daemon/limits";
+import { healthyDaemonEdge, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, healthyClient } from "./helpers/doctor-facts";
 import type { ClientHint } from "../src/client-hint";
 import {
   BUNDLED_GLYPHS,
@@ -112,6 +113,8 @@ function buildRuntime(
   // The `client` hint the session's last render carried, as the daemon's
   // sightings hold it; none is a client too old to report one.
   client: { readonly hint?: ClientHint } = { hint: healthyClient() },
+  // The daemon serving the bar, as it reports itself.
+  serving: ServingDaemon = HEALTHY_SERVING,
 ) {
   const config = parseAndValidate(
     "<user>",
@@ -147,6 +150,7 @@ function buildRuntime(
   let probes = 0;
   const doctor: DoctorEdge = {
     install: HEALTHY_INSTALL_EDGE,
+    ...healthyDaemonEdge(),
     probeTmux: () => {
       probes += 1;
       return {
@@ -173,6 +177,7 @@ function buildRuntime(
     ...testVerbContext(sessionState, undefined, config),
     doctor,
     clients,
+    serving: () => serving,
     dlog: (level, message) => logs.push(level === "warn" ? `warn: ${message}` : message),
   };
   const click = (url: string): void => {
@@ -248,15 +253,16 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     // row; the report row leads with the blank of its width, a cell of its own
     // right after the row's lead cap, and its text follows the seam.
     expect(lines[toolsRow + 1]!.startsWith(POWERLINE.lead + DISCLOSURE_GLYPH_CLOSE)).toBe(true);
-    const reports = lines.slice(toolsRow + 2, toolsRow + 7);
+    const reports = lines.slice(toolsRow + 2, toolsRow + 8);
     for (const report of reports) {
       expect(report.startsWith(`${POWERLINE.lead} `)).toBe(true);
     }
     expect(reports[0]).toContain("✓ config");
     expect(reports[1]).toContain("✓ install");
-    expect(reports[2]).toContain("✓ URL handler");
-    expect(reports[3]).toContain("✓ links");
-    expect(reports[4]).toContain("✗ tmux truecolor");
+    expect(reports[2]).toContain("✓ daemon");
+    expect(reports[3]).toContain("✓ URL handler");
+    expect(reports[4]).toContain("✓ links");
+    expect(reports[5]).toContain("✗ tmux truecolor");
   });
 
   // brandon-doctor-v62x.e91: the config check's row, and the run's log line
@@ -279,7 +285,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     expect(out).toContain("✓ tmux truecolor");
     expect(rt.urlOfVerb(VERB_DOCTOR_FIX)).toBeUndefined();
     expect(rt.logs.filter((line) => line.startsWith("doctor:"))).toEqual([
-      `doctor: config=failed(2) install=ok urlHandler=ok links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=ok glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=ghostty@- font=- mark=- tmuxLinks=- clicked=yes cols=148 clientUtf8=- clients=native/same/- (session=s1)`,
+      `doctor: config=failed(2) install=ok daemon=ok urlHandler=ok links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=ok glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=ghostty@- font=- mark=- tmuxLinks=- clicked=yes cols=148 clientUtf8=- clients=native/same/- daemons=1 others=- rss=120/512 postMortems=0/0 (session=s1)`,
     ]);
   });
 
@@ -299,12 +305,35 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     expect(out).toContain("✗ Nerd Font — the doctor cannot read Terminal 455.1's font");
     expect(rt.clicked.list()).toEqual(["Terminal"]);
     expect(rt.logs.filter((line) => line.startsWith("doctor:"))).toEqual([
-      `doctor: config=ok install=ok urlHandler=ok links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=failed(1) glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=apple-terminal@455.1 font=- mark=- tmuxLinks=- clicked=yes cols=148 clientUtf8=- clients=native/same/- (session=s1)`,
+      `doctor: config=ok install=ok daemon=ok urlHandler=ok links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=failed(1) glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=apple-terminal@455.1 font=- mark=- tmuxLinks=- clicked=yes cols=148 clientUtf8=- clients=native/same/- daemons=1 others=- rss=120/512 postMortems=0/0 (session=s1)`,
     ]);
   });
 
   // brandon-doctor-v62x.tfb: the click judges the client that drew the bar
   // it came from — one too old to say what it is is the install's failure.
+  test("a post-mortem the user has not read fails the daemon row, and [fix] files it read", () => {
+    const report = "/state/cc-candybar/memory-2026-10-19T18-01-12-345Z-77.txt";
+    const rt = buildRuntime(null, CLEAN_LOAD, GHOSTTY, memoryClickedTerminals(), { hint: healthyClient() }, {
+      ...HEALTHY_SERVING,
+      postMortems: {
+        kind: "ok",
+        value: [{ identity: "2026-10-19T18-01-12-345Z-77", artifacts: { memoryReport: report } }],
+      },
+    });
+    rt.openTools();
+    rt.clickVerb(VERB_DOCTOR_RUN);
+    const failed = rt.render();
+    expect(failed).toContain("✗ daemon");
+    expect(failed).toContain(`ran out of memory and restarted (2026-10-19T18-01-12-345Z-77) — post-mortem: ${report}`);
+    expect(rt.logs.at(-1)).toMatch(/ daemon=failed\(1\) .* daemons=1 others=- rss=120\/512 postMortems=1\/1 \(session=s1\)$/);
+    rt.clickVerb(VERB_DOCTOR_FIX);
+    expect(rt.logs).toContain(
+      "doctor-fix: daemon → post-mortems-read through=2026-10-19T18-01-12-345Z-77 (session=s1)",
+    );
+    expect(rt.render()).toContain("✓ daemon");
+    expect(rt.logs.at(-1)).toMatch(/ daemon=ok .* postMortems=0\/1 \(session=s1\)$/);
+  });
+
   test("a bar drawn by a client too old to say what it is fails the install row", () => {
     const rt = buildRuntime(null, CLEAN_LOAD, GHOSTTY, memoryClickedTerminals(), {});
     rt.openTools();
@@ -313,7 +342,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
       "✗ install — the bar is drawn by a statusline client too old to say what it is",
     );
     expect(rt.logs.find((line) => line.startsWith("doctor:"))).toMatch(
-      / install=failed\(1\) .* clients=unreported\/-\/- \(session=s1\)$/,
+      / install=failed\(1\) .* clients=unreported\/-\/- daemons=1 others=- rss=120\/512 postMortems=0\/0 \(session=s1\)$/,
     );
   });
 
@@ -333,7 +362,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     expect(rt.logs).toContain(
       'warn: doctor: clicked terminal not filed for "Ghostty": EROFS: read-only file system',
     );
-    expect(rt.logs.find((line) => line.startsWith("doctor:"))).toMatch(/ clicked=no cols=148 clientUtf8=- clients=native\/same\/- \(session=s1\)$/);
+    expect(rt.logs.find((line) => line.startsWith("doctor:"))).toMatch(/ clicked=no cols=148 clientUtf8=- clients=native\/same\/- daemons=1 others=- rss=120\/512 postMortems=0\/0 \(session=s1\)$/);
   });
 
   test("in tmux with RGB and the var unset: failed row with [fix]; the fix lands and the row says restart", () => {
@@ -464,7 +493,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
         [{ name: "iterm2", version: "3.7.2" }, ITERM_MENLO.env, BUNDLED_GLYPHS],
       ]);
       expect(rt.logs.filter((l) => l.startsWith("doctor:"))).toEqual([
-        `doctor: config=ok install=ok urlHandler=ok links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=failed(1) glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=iterm2@3.7.2 font="Menlo-Regular":lacks${[...BUNDLED_GLYPHS].length} mark=- tmuxLinks=- clicked=yes cols=148 clientUtf8=- clients=native/same/- (session=s1)`,
+        `doctor: config=ok install=ok daemon=ok urlHandler=ok links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=failed(1) glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=iterm2@3.7.2 font="Menlo-Regular":lacks${[...BUNDLED_GLYPHS].length} mark=- tmuxLinks=- clicked=yes cols=148 clientUtf8=- clients=native/same/- daemons=1 others=- rss=120/512 postMortems=0/0 (session=s1)`,
       ]);
     });
 
@@ -482,7 +511,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
       expect(rt.logs).toContain(
         `doctor-mark: nerdFont drawn on iTerm2 with Menlo-Regular (iTerm2 profile "Default")|${BUNDLED_GLYPHS_NAMED} (session=s1)`,
       );
-      expect(rt.logs.at(-1)).toMatch(/nerdFont=ok .* mark=drawn tmuxLinks=- clicked=yes cols=148 clientUtf8=- clients=native\/same\/- \(session=s1\)$/);
+      expect(rt.logs.at(-1)).toMatch(/nerdFont=ok .* mark=drawn tmuxLinks=- clicked=yes cols=148 clientUtf8=- clients=native\/same\/- daemons=1 others=- rss=120\/512 postMortems=0\/0 \(session=s1\)$/);
     });
 
     test("marking ✗ keeps the row failed, says boxes, and leaves ✓ to mark later", () => {

@@ -27,7 +27,11 @@ import {
   type DoctorFacts,
   type InstallFacts,
 } from "./checks.js";
-import { askDaemonClients, type DaemonClients } from "./daemon-clients.js";
+import {
+  askDaemon,
+  type DaemonAnswer,
+  type DaemonClients,
+} from "./daemon-answer.js";
 import {
   gatherFacts,
   installFacts,
@@ -115,7 +119,7 @@ export function installOf(
 export async function doctorPlan(
   edge: DoctorEdge,
   handler: HandlerProbeEdge,
-  daemon: () => Promise<Asked<DaemonClients>>,
+  daemon: () => Promise<DaemonAnswer>,
   env: Readonly<Record<string, string | undefined>>,
   cwd: string,
   // Measures the terminal the command runs in (`commandTerminal`), inside
@@ -126,6 +130,7 @@ export async function doctorPlan(
 ): Promise<CliPlan> {
   let facts: DoctorFacts;
   try {
+    const answer = await daemon();
     const gathered = gatherFacts(
       edge,
       // [LAW:one-source-of-truth] The hints a statusline client started here
@@ -147,13 +152,14 @@ export async function doctorPlan(
       },
       // No session: the bar a session started here opens on.
       () => null,
+      answer.serving,
     );
     // Last: the probe opens a link and waits, which a run that cannot report
     // has no reason to do.
     facts = {
       ...gathered,
       urlHandler: await probeUrlHandler(handler),
-      install: installOf(edge.install, await daemon()),
+      install: installOf(edge.install, answer.clients),
       askedBy: "command",
     };
   } catch (e) {
@@ -203,7 +209,7 @@ export async function runDoctorCli(args: readonly string[]): Promise<never> {
   const plan = await doctorPlan(
     productionEdge(loadConfigOnce),
     productionHandlerProbeEdge(),
-    askDaemonClients,
+    askDaemon,
     process.env,
     cwd,
     commandTerminal,

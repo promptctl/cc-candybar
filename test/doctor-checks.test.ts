@@ -240,6 +240,7 @@ describe("config probe", () => {
     ).toEqual([
       ["config", true],
       ["install", true],
+      ["daemon", true],
       ["urlHandler", true],
       ["links", true],
       ["tmuxTruecolor", true],

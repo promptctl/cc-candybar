@@ -42,6 +42,7 @@ describe("RuntimeStats.snapshot", () => {
       handlerProbes: [{ nonce: "n", handler: "1.2.3" }],
       clients: [{ client: null, ago: 4 }],
       bundle: "/opt/cc/dist/index.mjs",
+      daemon: { pid: 1234, rss: 0, rssLimit: 1, postMortems: { kind: "ok", value: [] } },
     });
     expect(snap.handlerProbes).toEqual([{ nonce: "n", handler: "1.2.3" }]);
     expect(snap.clients).toEqual([{ client: null, ago: 4 }]);
@@ -119,6 +120,16 @@ describe("shapeSkew", () => {
       missingFields(snap, { ...snap, clients: null, handlerProbes: {} }),
     ).toEqual(["handlerProbes", "clients"]);
     expect(missingFields(snap, snap)).toEqual([]);
+    // A union's arms differ: the reference's `ok` arm is no spec of a
+    // `failed` one, so a tagged union is judged present, not below its tag.
+    const unlisted = {
+      ...snap,
+      daemon: { ...snap.daemon, postMortems: { kind: "failed", reason: "EACCES" } },
+    };
+    expect(missingFields(snap, unlisted)).toEqual([]);
+    expect(
+      missingFields(snap, { ...snap, daemon: { ...snap.daemon, postMortems: 3 } }),
+    ).toEqual(["daemon.postMortems"]);
   });
 });
 
@@ -162,6 +173,7 @@ describe("formatStats", () => {
       handlerProbes: [],
       clients: [],
       bundle: "/",
+      daemon: { pid: 1234, rss: 0, rssLimit: 1, postMortems: { kind: "ok", value: [] } },
     });
     expect(out).toContain("pid           1234");
     expect(out).toContain("uptime        2m5s");
@@ -206,6 +218,7 @@ describe("formatStats", () => {
       handlerProbes: [],
       clients: [],
       bundle: "/",
+      daemon: { pid: 1234, rss: 0, rssLimit: 1, postMortems: { kind: "ok", value: [] } },
     });
     expect(out).toContain("hit rate      n/a");
   });

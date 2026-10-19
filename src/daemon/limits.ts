@@ -91,7 +91,34 @@ const BREACH_ARTIFACTS = {
   heapSnapshot: { prefix: "heap-", suffix: ".heapsnapshot" },
 } as const;
 
-type BreachArtifact = keyof typeof BREACH_ARTIFACTS;
+export type BreachArtifact = keyof typeof BREACH_ARTIFACTS;
+
+// [LAW:types-are-the-program] One breach's post-mortem: its `<stamp>-<pid>`
+// identity and each artifact it left, by kind. Keyed rather than listed
+// because the two are written in separate attempts and either may be missing,
+// so a reader asks for the memory report by name instead of searching paths.
+export interface PostMortem {
+  readonly identity: string;
+  readonly artifacts: Readonly<Partial<Record<BreachArtifact, string>>>;
+}
+
+// The daemon as the doctor judges it (brandon-doctor-v62x.5mq): which process
+// it is, how much of its budget it holds, and the post-mortems its directory
+// keeps — or why they could not be listed.
+export interface ServingDaemon {
+  readonly pid: number;
+  readonly rss: number;
+  readonly rssLimit: number;
+  readonly postMortems:
+    | { readonly kind: "ok"; readonly value: readonly PostMortem[] }
+    | { readonly kind: "failed"; readonly reason: string };
+}
+
+// [LAW:single-enforcer] THE judgment of "near the limit": the restart
+// forecast in daemon-stats and the doctor's daemon row both ask it.
+export function approachingLimit(rss: number, limit: number): boolean {
+  return rss > limit * 0.75;
+}
 
 function artifactFile(
   dir: string,
@@ -155,6 +182,9 @@ export interface LimitsDeps {
 export interface LimitsHandle {
   checkRss(): boolean;
   describeNextRestart(): string | null;
+  // [LAW:one-source-of-truth] The one producer of `ServingDaemon`, from one
+  // memory reading: daemon-stats carries it, a doctor click calls it.
+  serving(): ServingDaemon;
   arm(intervalMs?: number): { disarm(): void };
 }
 
@@ -202,7 +232,11 @@ export function makeLimits(deps: LimitsDeps): LimitsHandle {
       );
     });
     attempt(deps.log, "artifact rotation", () => {
-      rotateBreaches(deps.listArtifacts(), keep, deps.removeFile);
+      for (const { artifacts } of postMortemsOf(deps.listArtifacts()).slice(
+        keep,
+      )) {
+        for (const file of Object.values(artifacts)) deps.removeFile(file);
+      }
     });
     deps.shutdown(0);
     return true;
@@ -210,13 +244,24 @@ export function makeLimits(deps: LimitsDeps): LimitsHandle {
 
   function describeNextRestart(): string | null {
     const { rss, heapTotal } = deps.memoryBytes();
-    if (rss > rssLimit * 0.75) {
+    if (approachingLimit(rss, rssLimit)) {
       // The heap share is the actionable half of the sentence: growth inside V8
       // is a cache to fix, growth outside it is not, and the reader cannot tell
       // which from an RSS number alone.
       return `rss ${rss} approaching limit ${rssLimit} (v8 heap ${heapTotal})`;
     }
     return null;
+  }
+
+  function serving(): ServingDaemon {
+    const { rss } = deps.memoryBytes();
+    let postMortems: ServingDaemon["postMortems"];
+    try {
+      postMortems = { kind: "ok", value: postMortemsOf(deps.listArtifacts()) };
+    } catch (e) {
+      postMortems = { kind: "failed", reason: (e as Error).message };
+    }
+    return { pid: deps.pid, rss, rssLimit, postMortems };
   }
 
   function arm(intervalMs: number = DEFAULT_CHECK_INTERVAL): {
@@ -231,7 +276,7 @@ export function makeLimits(deps: LimitsDeps): LimitsHandle {
     };
   }
 
-  return { checkRss, describeNextRestart, arm };
+  return { checkRss, describeNextRestart, serving, arm };
 }
 
 // [LAW:no-silent-failure] The death path's one shape for "do this, and if it
@@ -246,45 +291,37 @@ function attempt(log: DaemonLogger, what: string, body: () => void): void {
   }
 }
 
-// [LAW:types-are-the-program] Rotation's unit is the BREACH, not the file. A
-// breach leaves a heap snapshot AND a memory report sharing one `<stamp>-<pid>`
-// identity, so counting files would keep one and a half post-mortems and evict
-// half of another — leaving a heap snapshot whose attribution is gone, which is
-// the pairing this whole change exists to create.
-function breachIdentity(filePath: string): string {
-  const base = filePath.slice(filePath.lastIndexOf("/") + 1);
-  const kind = breachArtifactOf(base);
-  // A file we did not write keeps its whole name as its identity, so it groups
-  // alone and is rotated on its own terms rather than pairing with a real breach.
-  if (kind === null) return base;
-  const { prefix, suffix } = BREACH_ARTIFACTS[kind];
-  return base.slice(prefix.length, base.length - suffix.length);
-}
-
-function rotateBreaches(
-  files: string[],
-  keep: number,
-  remove: (p: string) => void,
-): void {
-  // Newest-first by identity (the leading ISO timestamp is lexically ordered;
-  // the trailing -<pid> only tiebreaks same-instant writes). Grouping by
-  // identity rather than sorting paths is also what keeps a breach's two files
-  // adjacent regardless of which prefix sorts first.
-  const byIdentity = new Map<string, string[]>();
-  for (const f of files) {
-    const id = breachIdentity(f);
-    const group = byIdentity.get(id);
-    if (group === undefined) byIdentity.set(id, [f]);
-    else group.push(f);
+// [LAW:types-are-the-program] A post-mortem's unit is the BREACH, not the
+// file. A breach leaves a heap snapshot AND a memory report sharing one
+// `<stamp>-<pid>` identity, so rotation counting files would keep one and a
+// half post-mortems and evict half of another — leaving a heap snapshot whose
+// attribution is gone. Newest first: the leading ISO timestamp orders the
+// identities lexically, the trailing -<pid> only tiebreaks same-instant
+// writes. A file no breach wrote is not ours, so it is no post-mortem.
+// [LAW:one-source-of-truth] The one grouping: rotation evicts its tail, the
+// doctor reads it whole.
+export function postMortemsOf(files: readonly string[]): PostMortem[] {
+  const byIdentity = new Map<string, Partial<Record<BreachArtifact, string>>>();
+  for (const file of files) {
+    const base = path.basename(file);
+    const kind = breachArtifactOf(base);
+    if (kind === null) continue;
+    const { prefix, suffix } = BREACH_ARTIFACTS[kind];
+    const identity = base.slice(prefix.length, base.length - suffix.length);
+    byIdentity.set(identity, { ...byIdentity.get(identity), [kind]: file });
   }
-  const newestFirst = [...byIdentity.keys()].sort((a, b) => b.localeCompare(a));
-  for (const id of newestFirst.slice(keep)) {
-    for (const f of byIdentity.get(id) ?? []) {
-      try {
-        remove(f);
-      } catch {}
-    }
-  }
+  // Each breach's artifacts in the table's order, whatever order the
+  // directory listed them in: the memory report, the one a person reads
+  // first, leads.
+  const kinds = Object.keys(BREACH_ARTIFACTS) as BreachArtifact[];
+  return [...byIdentity]
+    .sort(([a], [b]) => b.localeCompare(a))
+    .map(([identity, found]) => ({
+      identity,
+      artifacts: Object.fromEntries(
+        kinds.flatMap((k) => (found[k] === undefined ? [] : [[k, found[k]]])),
+      ),
+    }));
 }
 
 // Default real-fs deps for the daemon. Test code constructs its own.
@@ -315,15 +352,19 @@ export function realLimitsDeps(
     writeMemoryReport: (file, text) =>
       fs.writeFileSync(file, text, { mode: 0o600 }),
     writeHeapSnapshot: (file) => v8.writeHeapSnapshot(file),
+    // [LAW:no-silent-failure] A directory not yet made holds no breaches;
+    // one that cannot be read is said so — never read as "none".
     listArtifacts: () => {
+      let names: string[];
       try {
-        return fs
-          .readdirSync(dir)
-          .filter((f) => breachArtifactOf(f) !== null)
-          .map((f) => path.join(dir, f));
-      } catch {
-        return [];
+        names = fs.readdirSync(dir);
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code === "ENOENT") return [];
+        throw e;
       }
+      return names
+        .filter((f) => breachArtifactOf(f) !== null)
+        .map((f) => path.join(dir, f));
     },
     removeFile: (file) => fs.unlinkSync(file),
     shutdown,

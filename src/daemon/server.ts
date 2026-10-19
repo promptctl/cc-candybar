@@ -674,6 +674,13 @@ function armOwnershipWatch(sockPath: string, bound: SocketIdentity): void {
 
 // --- self-shutdown on RSS / age ---
 let limits: LimitsHandle | null = null;
+// [LAW:no-ambient-temporal-coupling] onListening arms the limits before it
+// returns, so no request can arrive before them; one that did would be a
+// boot-order bug, said here rather than answered with a guess.
+function armedLimits(): LimitsHandle {
+  if (limits === null) throw new Error("daemon: limits not yet armed");
+  return limits;
+}
 function armLimits(): void {
   limits = makeLimits(
     realLimitsDeps(stats.startedAt.getTime(), (code) => shutdown(code), {
@@ -1046,6 +1053,7 @@ export async function handleRequest(
         handlerProbes: handlerProbes.list(),
         clients: clientSightings.list(instantOf(new Date())),
         bundle: DAEMON_BUNDLE,
+        daemon: armedLimits().serving(),
       }),
     });
   }
@@ -1282,6 +1290,7 @@ const verbCtx = {
   probes: handlerProbes,
   clients: clientSightings,
   bundle: DAEMON_BUNDLE,
+  serving: () => armedLimits().serving(),
   memento: mementoProvider,
   claudeInput: productionClaudeInputEdge(),
   history: settingsHistory,

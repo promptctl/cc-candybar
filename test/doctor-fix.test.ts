@@ -7,7 +7,7 @@
 // in the Claude Code directory the client's `claudeConfigDir` hint names.
 
 import { memoryMarkBook } from "./helpers/mark-book";
-import { HEALTHY_INSTALL_EDGE, HEALTHY_FACTS } from "./helpers/doctor-facts";
+import { healthyDaemonEdge, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, HEALTHY_FACTS } from "./helpers/doctor-facts";
 import { memoryClickedTerminals } from "./helpers/clicked-terminals";
 import fs from "node:fs";
 import os from "node:os";
@@ -39,6 +39,7 @@ const loadsConfig = (config: DslConfig): DoctorEdge["loadConfig"] => () => ({
 });
 const NO_TMUX: DoctorEdge = {
   install: HEALTHY_INSTALL_EDGE,
+  ...healthyDaemonEdge(),
   probeTmux: () => {
     throw new Error("probeTmux must not run in this case");
   },
@@ -81,7 +82,10 @@ const factsIn = (
   sessionPick: (key: string) => string | null = NO_SESSION,
 ) =>
 ({
-    ...gatherFacts(edge, { tmux, claudeConfigDir: conf }, ORIGIN, sessionPick),
+    ...gatherFacts(edge, { tmux, claudeConfigDir: conf }, ORIGIN, sessionPick, {
+      kind: "ok",
+      value: HEALTHY_SERVING,
+    }),
     urlHandler: { kind: "unsupported" } as const,
     askedBy: "command" as const,
     install: HEALTHY_FACTS.install,
@@ -111,7 +115,7 @@ describe("applyFix (claude-settings, env)", () => {
 }
 `;
     const conf = writeSettings(before);
-    const facts = applyFix(FIX, factsOf(conf));
+    const facts = applyFix(NO_TMUX, FIX, factsOf(conf));
     const after = fs.readFileSync(settingsIn(conf), "utf8");
     expect(JSON.parse(after)).toEqual({
       permissions: { allow: ["Bash(ls:*)"] },
@@ -141,7 +145,7 @@ describe("applyFix (claude-settings, env)", () => {
 }
 `;
     const conf = writeSettings(before);
-    applyFix(FIX, factsOf(conf));
+    applyFix(NO_TMUX, FIX, factsOf(conf));
     const after = fs.readFileSync(settingsIn(conf), "utf8");
     expect(JSON.parse(after)).toEqual({
       model: "opus",
@@ -157,14 +161,14 @@ describe("applyFix (claude-settings, env)", () => {
   test("a stale value is overwritten in place, not duplicated", () => {
     const before = `{ "env": { "${TMUX_TRUECOLOR_VAR}": "" } }\n`;
     const conf = writeSettings(before);
-    applyFix(FIX, factsOf(conf));
+    applyFix(NO_TMUX, FIX, factsOf(conf));
     const after = fs.readFileSync(settingsIn(conf), "utf8");
     expect(after).toBe(`{ "env": { "${TMUX_TRUECOLOR_VAR}": "1" } }\n`);
   });
 
   test("no settings file: the file (and its directory) is created", () => {
     const conf = configDir(path.join("nested", "claude"));
-    applyFix(FIX, factsOf(conf));
+    applyFix(NO_TMUX, FIX, factsOf(conf));
     expect(JSON.parse(fs.readFileSync(settingsIn(conf), "utf8"))).toEqual({
       env: { [TMUX_TRUECOLOR_VAR]: "1" },
     });
@@ -198,7 +202,7 @@ describe("applyFix (effectRefresh)", () => {
     expect(verdict.ok).toBe(false);
     if (verdict.ok || verdict.fix === undefined) throw new Error("no fix");
 
-    const after = applyFix(verdict.fix, facts);
+    const after = applyFix(NO_TMUX, verdict.fix, facts);
     const text = fs.readFileSync(settingsIn(conf), "utf8");
     expect(JSON.parse(text)).toEqual({
       statusLine: {
@@ -218,7 +222,7 @@ describe("applyFix (effectRefresh)", () => {
     const facts = factsIn(conf, null, SHIMMERING);
     const verdict = check.probe(facts);
     if (verdict.ok || verdict.fix === undefined) throw new Error("no fix");
-    applyFix(verdict.fix, facts);
+    applyFix(NO_TMUX, verdict.fix, facts);
     expect(fs.readFileSync(settingsIn(conf), "utf8")).toBe(
       before.replace('"refreshInterval": 5', '"refreshInterval": 1'),
     );
@@ -350,6 +354,7 @@ describe("gatherFacts", () => {
     const asked: unknown[] = [];
     const edge: DoctorEdge = {
       install: HEALTHY_INSTALL_EDGE,
+      ...healthyDaemonEdge(),
       probeTmux: (hint) => {
         asked.push(hint);
         return {

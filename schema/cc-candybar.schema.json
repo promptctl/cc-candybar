@@ -1076,6 +1076,7 @@
                 "enum": [
                   "config",
                   "install",
+                  "daemon",
                   "urlHandler",
                   "links",
                   "tmuxTruecolor",
