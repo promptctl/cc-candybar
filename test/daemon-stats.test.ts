@@ -36,7 +36,7 @@ describe("RuntimeStats.snapshot", () => {
       usageCache: { size: 10, hits: 50, misses: 5, sweeps: 1 },
       renderCache: { size: 3, held: 1, retired: 0 },
       effectCache: { sessions: 2, effects: 5 },
-      sessionState: { sessions: 2, observers: 11 },
+      sessionState: { sessions: 2, observers: 11, revision: 7 },
       frameFeeds: { feeds: 0, subscribers: 0, drawn: 0, pushed: 0 },
       watchersActive: 2,
       handlerProbes: [{ nonce: "n", handler: "1.2.3" }],
@@ -56,7 +56,7 @@ describe("RuntimeStats.snapshot", () => {
     expect(snap.gitCache.hits).toBe(100);
     expect(snap.usageCache.size).toBe(10);
     expect(snap.effectCache).toEqual({ sessions: 2, effects: 5 });
-    expect(snap.sessionState).toEqual({ sessions: 2, observers: 11 });
+    expect(snap.sessionState).toEqual({ sessions: 2, observers: 11, revision: 7 });
     expect(snap.watchers).toEqual({
       active: 2,
       opened: 5,
@@ -147,7 +147,7 @@ describe("formatStats", () => {
       usageCache: { size: 3, hits: 40, misses: 10, sweeps: 0 },
       renderCache: { size: 4, held: 0, retired: 1 },
       effectCache: { sessions: 2, effects: 3 },
-      sessionState: { sessions: 2, observers: 11 },
+      sessionState: { sessions: 2, observers: 11, revision: 7 },
       frameFeeds: { feeds: 0, subscribers: 0, drawn: 0, pushed: 0 },
       watchers: { active: 5, opened: 7, closed: 2, evicted: 0 },
       subprocesses: {
@@ -170,6 +170,7 @@ describe("formatStats", () => {
     expect(out).toContain("active        5");
     expect(out).toContain("effects       3");
     expect(out).toContain("observers     11");
+    expect(out).toContain("revision      7");
   });
 
   test("hit rate is n/a when no observations", () => {
@@ -190,7 +191,7 @@ describe("formatStats", () => {
       usageCache: { size: 0, hits: 0, misses: 0, sweeps: 0 },
       renderCache: { size: 0, held: 0, retired: 0 },
       effectCache: { sessions: 0, effects: 0 },
-      sessionState: { sessions: 0, observers: 0 },
+      sessionState: { sessions: 0, observers: 0, revision: 0 },
       frameFeeds: { feeds: 0, subscribers: 0, drawn: 0, pushed: 0 },
       watchers: { active: 0, opened: 0, closed: 0, evicted: 0 },
       subprocesses: {

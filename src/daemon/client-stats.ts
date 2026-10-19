@@ -185,6 +185,7 @@ export function formatStats(s: StatsSnapshot): string {
   lines.push(`sessionState`);
   lines.push(`  sessions      ${s.sessionState.sessions}`);
   lines.push(`  observers     ${s.sessionState.observers}`);
+  lines.push(`  revision      ${s.sessionState.revision}`);
   lines.push(``);
   lines.push(`watchers`);
   lines.push(`  active        ${s.watchers.active}`);

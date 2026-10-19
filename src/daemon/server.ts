@@ -72,10 +72,10 @@ import { stateGate } from "./verbs/state-validators";
 import {
   VERBS,
   BadVerbArgs,
-  SESSION_CONFIG_OVERRIDE_KEY,
   SESSION_RENDER_ORIGIN_KEY,
   SESSION_CLIENT_HINTS_KEY,
   encodeRenderOrigin,
+  sessionRenderOrigin,
   type RenderOrigin,
 } from "./verbs";
 import { settingCounts } from "./setting-drafts";
@@ -130,6 +130,9 @@ import {
   composeWithDiagnostics,
   diagnosticRowCap,
   formatDiagnosticDump,
+  type DiagnosticGeometry,
+  type Diagnostics,
+  type FullTextLink,
 } from "../render/diagnostic-strip.js";
 import { DiagnosticDump } from "./diagnostic-dump.js";
 import { instantOf, type Instant } from "../utils/instant.js";
@@ -1035,6 +1038,7 @@ export async function handleRequest(
         sessionState: {
           sessions: sessionState.size(),
           observers: sessionState.observers(),
+          revision: sessionState.latestRevision(),
         },
         frameFeeds: frameFeeds.getStats(),
         watchersActive: watcherRegistry.size(),
@@ -1076,7 +1080,7 @@ export async function handleRequest(
     }
     const rendered: { outcome: RenderOutcome; resp: Response } = !checked.ok
       ? refusedRender(checked.problems)
-      : await renderChecked(checked.req, at, facts).then(
+      : await answerRequest(checked.req, order, at, facts).then(
           ({ output, moves }) => {
             const resp = { ok: true, output } as const;
             releaseClickError(
@@ -1401,10 +1405,17 @@ async function renderFrame(req: CheckedRenderRequest): Promise<FeedFrame> {
   const started = new Date();
   const facts: RenderFacts = [];
   try {
-    const { output, moves } = await renderChecked(
+    const { drawn, moves } = await renderChecked(
       req,
       instantOf(started),
       facts,
+    );
+    // [LAW:effects-at-boundaries] A frame only draws: the dump is the
+    // session's requests' to write, and the frame links it only when it holds
+    // this frame's text.
+    const output = composeBar(
+      drawn,
+      diagnosticDump.linkFor(req.hookData.session_id, dumpTextOf(drawn)),
     );
     return feedFrameOf(req, { ok: true, output }, started.getTime(), moves);
   } catch (error) {
@@ -1444,12 +1455,17 @@ function feedFrameOf(
 }
 
 // A render request that crossed the checkpoint: its hookData carries every
-// required field with its declared type, its cwd is absolute, and `hints` is
-// its client hints, parsed. Raw `req.*` hint fields are not read past the
-// checkpoint. Only checkRenderRequest makes one.
+// required field with its declared type, its cwd is absolute, `hints` is its
+// client hints, parsed, and its args are parsed into `requested` — the config
+// inputs it named, its explicit path the `--config` flag over the client's
+// `CC_CANDYBAR_CONFIG` hint — and `unknownFlagsError`. Raw `req.*` hint
+// fields and `req.args` are not read past the checkpoint. Only
+// checkRenderRequest makes one.
 declare const CHECKED: unique symbol;
 type CheckedRenderRequest = RenderRequest & {
   readonly hints: ClientHints;
+  readonly requested: RenderOrigin;
+  readonly unknownFlagsError: string | null;
   readonly [CHECKED]: true;
 };
 
@@ -1496,12 +1512,36 @@ function checkRenderRequest(
       `request 'cwd' is not an absolute path: ${JSON.stringify(req.cwd)}`,
     );
   }
-  return wireProblems.length > 0
-    ? { ok: false, problems: wireProblems }
-    : {
-        ok: true,
-        req: { ...req, hints: parseClientHints(req) } as CheckedRenderRequest,
-      };
+  // The args too: parseRenderArgs reads them below, outside the render's own
+  // error path, so a value that is not a list of strings is refused here
+  // rather than thrown past the render event.
+  if (
+    !Array.isArray(req.args) ||
+    !(req.args as unknown[]).every((a) => typeof a === "string")
+  ) {
+    wireProblems.push(
+      `request 'args' is not a list of strings: ${JSON.stringify(req.args)}`,
+    );
+  }
+  if (wireProblems.length > 0) return { ok: false, problems: wireProblems };
+  const hints = parseClientHints(req);
+  // [LAW:dataflow-not-control-flow] The *request's* cwd, not the daemon's
+  // process.cwd(), so config resolution depends only on request data — the
+  // daemon's own working directory must not influence output.
+  const { configFile, unknownFlagsError } = parseRenderArgs(req.args, req.cwd);
+  return {
+    ok: true,
+    req: {
+      ...req,
+      hints,
+      requested: {
+        projectDir: req.hookData.workspace.project_dir,
+        cwd: req.cwd,
+        configFile: configFile ?? hints.configEnv ?? null,
+      },
+      unknownFlagsError,
+    } as CheckedRenderRequest,
+  };
 }
 
 // The answer to a request the checkpoint refused.
@@ -1523,16 +1563,12 @@ async function renderChecked(
   req: CheckedRenderRequest,
   at: Instant,
   facts: RenderFacts,
-): Promise<{ output: string; moves: boolean }> {
+): Promise<{ drawn: DrawnBar; moves: boolean }> {
   noteFacts(facts, {
     sid: req.hookData.session_id,
     at: at.toFixed(3),
   });
-  const projectDir = req.hookData.workspace.project_dir;
-  // [LAW:dataflow-not-control-flow] thread the *request's* cwd, not the
-  // daemon's process.cwd(), so config resolution depends only on request
-  // data — the daemon's own working directory must not influence output.
-  const { configFile, unknownFlagsError } = parseRenderArgs(req.args, req.cwd);
+  const { unknownFlagsError } = req;
   const sessionId = req.hookData.session_id;
   // [LAW:parse-dont-validate] The ONE checkpoint for everything the client
   // observed and the daemon cannot. Raw `req.*` hint fields are not read
@@ -1558,54 +1594,23 @@ async function renderChecked(
     // client too old to say.
     client: hints.client?.kind ?? "unreported",
   });
-  // [LAW:one-source-of-truth] Record the STAMPED hints per session — the
-  // SESSION_RENDER_ORIGIN_KEY move for client facts: a click arrives with
-  // no hints of its own, so the doctor (verbs/index.ts) reads the facts of
-  // this session's last render from here, re-parsed through the same
-  // checkpoint. Compared before writing for the same reason as the origin.
-  // The client itself is not recorded: which client drew a session's bar is
-  // ClientSightings' fact (src/daemon/client-sightings.ts), held in memory,
-  // and two clients drawing one session would otherwise rewrite this
-  // persisted record on every render.
-  const { client: _client, ...recorded } = hints;
-  const hintRecord = JSON.stringify(recorded);
-  if (sessionState.get(sessionId, SESSION_CLIENT_HINTS_KEY) !== hintRecord) {
-    sessionState.set(sessionId, SESSION_CLIENT_HINTS_KEY, hintRecord);
-  }
-  // [LAW:effects-at-boundaries] The load-config verb writes per-session
-  // config overrides into SessionState; this is the one read point.
   // [LAW:one-source-of-truth] The explicit config path has three
-  // spellings and ONE precedence, composed here: a load-config pick, the
-  // `--config` flag, the client's `CC_CANDYBAR_CONFIG` hint. All three are
-  // client facts; the daemon's own env is never consulted
-  // (brandon-config-5g8).
-  const sessionConfigFile =
-    sessionState.get(sessionId, SESSION_CONFIG_OVERRIDE_KEY) ??
-    configFile ??
-    hints.configEnv;
+  // spellings and ONE precedence: a load-config pick (sessionRenderOrigin)
+  // over the `--config` flag over the client's `CC_CANDYBAR_CONFIG` hint
+  // (checkRenderRequest). All three are client facts; the daemon's own env is
+  // never consulted (brandon-config-5g8).
+  const origin = sessionRenderOrigin(req.requested, sessionState, sessionId);
   // [LAW:no-ambient-temporal-coupling] Held, not fetched: `state` is what
   // this render resolves its payload from and draws with after the payload
   // await below. An eviction or a reload meanwhile retires it, and the cache
   // disposes it when this hold is released — never under the render
   // (brandon-unfiled-3248.6rc). `using` releases the hold on every exit.
-  using hold = renderCache.hold(projectDir, req.cwd, sessionConfigFile);
+  using hold = renderCache.hold(
+    origin.projectDir,
+    origin.cwd,
+    origin.configFile ?? undefined,
+  );
   const { entry, state } = hold;
-  // [LAW:one-source-of-truth] Record the inputs THIS render resolved its
-  // config from, so a durable click on this session resolves the same
-  // chain and writes the file the next reload reads (verbs/index.ts
-  // sessionConfigFile) — never a path re-derived from the daemon's own
-  // cwd. Compared before writing: every
-  // set() persists and fires the session's MobX atom, so an unconditional
-  // per-render write would invalidate every state-driven computed each
-  // render.
-  const origin = encodeRenderOrigin({
-    projectDir,
-    cwd: req.cwd,
-    configFile: sessionConfigFile ?? null,
-  });
-  if (sessionState.get(sessionId, SESSION_RENDER_ORIGIN_KEY) !== origin) {
-    sessionState.set(sessionId, SESSION_RENDER_ORIGIN_KEY, origin);
-  }
   const termCols = hints.termCols;
   const width = applyClaudeCodeReserve(termCols ?? DEFAULT_TERMINAL_WIDTH);
   const rowCap = diagnosticRowCap(hints.termRows);
@@ -1747,33 +1752,6 @@ async function renderChecked(
     updates,
     warnings.map((w) => w.message).join("\n"),
   );
-  // [LAW:effects-at-boundaries] The one write the strip depends on, at
-  // the edge: the session's dump file mirrors this render's diagnostics
-  // (present with the full text, absent when there are none) before the
-  // strip that links it goes out — and the link is built from the
-  // write's outcome, so the trailer never names a file that is not there.
-  const dumpFailure = diagnosticDump.sync(
-    sessionId,
-    diagnostics === null ? null : formatDiagnosticDump(diagnostics),
-  );
-  // [LAW:nothing-unseen] On the render event, not a line of its own: a frame
-  // writes no event, and a subscribed session renders thirty times a second.
-  // The strip's trailer row says it on the bar either way.
-  noteFacts(facts, {
-    dumpFailed: dumpFailure === null ? "-" : JSON.stringify(dumpFailure),
-  });
-  const output = composeWithDiagnostics(
-    body,
-    diagnostics,
-    {
-      fullText:
-        dumpFailure === null
-          ? { kind: "file", path: diagnosticDump.pathFor(sessionId) }
-          : { kind: "unavailable", reason: dumpFailure },
-      failedConfigFile,
-    },
-    { width, rowCap, colorCompatibility: effective.colorCompatibility },
-  );
   const g = gitService.getStats();
   const u = usageStore.getStats();
   const fx = effects.lastFrame();
@@ -1820,5 +1798,108 @@ async function renderChecked(
     upd: String(updates.length),
     warn: warned,
   });
-  return { output: output + "\n", moves: frameMoves(fx) };
+  return {
+    drawn: {
+      body,
+      diagnostics,
+      failedConfigFile,
+      geometry: {
+        width,
+        rowCap,
+        colorCompatibility: effective.colorCompatibility,
+      },
+    },
+    moves: frameMoves(fx),
+  };
+}
+
+// What one render drew, before the diagnostic strip is composed over it: the
+// strip's full-text link is the dump's to give, and only a request writes
+// the dump.
+interface DrawnBar {
+  readonly body: string;
+  readonly diagnostics: Diagnostics | null;
+  // The file whose load failed, linked beside its error so the strip offers
+  // the way back into the file when our own click path may be what is broken.
+  readonly failedConfigFile: string | null;
+  readonly geometry: DiagnosticGeometry;
+}
+
+// The response's bar: the strip over the body, linking the full text as
+// `fullText` says.
+function composeBar(drawn: DrawnBar, fullText: FullTextLink): string {
+  return (
+    composeWithDiagnostics(
+      drawn.body,
+      drawn.diagnostics,
+      { fullText, failedConfigFile: drawn.failedConfigFile },
+      drawn.geometry,
+    ) + "\n"
+  );
+}
+
+// The complete text the session's dump holds for `drawn`: present with the
+// full text, absent when there are no diagnostics.
+function dumpTextOf(drawn: DrawnBar): string | null {
+  return drawn.diagnostics === null
+    ? null
+    : formatDiagnosticDump(drawn.diagnostics);
+}
+
+// [LAW:effects-at-boundaries] What a render request said, recorded where the
+// request arrives — never by a frame, which only draws, and which would wake
+// its own feed by writing the session's state. Compared before writing:
+// every set() persists and fires the session's MobX atom, so an
+// unconditional per-request write would invalidate every state-driven
+// computed each render.
+function recordRequest(req: CheckedRenderRequest): void {
+  const sessionId = req.hookData.session_id;
+  // [LAW:one-source-of-truth] The STAMPED hints: a click arrives with no
+  // hints of its own, so the doctor (verbs/index.ts) reads the facts of this
+  // session's last request from here, re-parsed through the same checkpoint.
+  // The client itself is not recorded: which client drew a session's bar is
+  // ClientSightings' fact (src/daemon/client-sightings.ts), held in memory,
+  // and two clients drawing one session would otherwise rewrite this
+  // persisted record on every request.
+  const { client: _client, ...recorded } = req.hints;
+  const hintRecord = JSON.stringify(recorded);
+  if (sessionState.get(sessionId, SESSION_CLIENT_HINTS_KEY) !== hintRecord) {
+    sessionState.set(sessionId, SESSION_CLIENT_HINTS_KEY, hintRecord);
+  }
+  // [LAW:one-source-of-truth] The config inputs this request named, so a
+  // durable click on this session resolves the same chain (under the
+  // session's load-config pick, verbs/index.ts sessionOrigin) and writes the
+  // file the next reload reads — never a path re-derived from the daemon's
+  // own cwd.
+  const origin = encodeRenderOrigin(req.requested);
+  if (sessionState.get(sessionId, SESSION_RENDER_ORIGIN_KEY) !== origin) {
+    sessionState.set(sessionId, SESSION_RENDER_ORIGIN_KEY, origin);
+  }
+}
+
+// A render request's answer: what it said is recorded, the bar is drawn, and
+// the session's dump is brought in line with it before the strip that links
+// it goes out — the link is built from the write's outcome, so the trailer
+// never names a file that is not there. `order` is where the request came in
+// the order they arrived: the dump holds the newest request's text, however
+// the renders finish.
+async function answerRequest(
+  req: CheckedRenderRequest,
+  order: number,
+  at: Instant,
+  facts: RenderFacts,
+): Promise<{ output: string; moves: boolean }> {
+  recordRequest(req);
+  const { drawn, moves } = await renderChecked(req, at, facts);
+  const { link, failure } = diagnosticDump.sync(
+    req.hookData.session_id,
+    order,
+    dumpTextOf(drawn),
+  );
+  // [LAW:nothing-unseen] On the render event, not a line of its own: the
+  // strip's trailer row says it on the bar either way.
+  noteFacts(facts, {
+    dumpFailed: failure === null ? "-" : JSON.stringify(failure),
+  });
+  return { output: composeBar(drawn, link), moves };
 }

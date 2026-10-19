@@ -82,12 +82,15 @@ export interface StatsSnapshot {
     sessions: number;
     effects: number;
   };
-  // The per-session click store: how many sessions it holds, and how many
-  // derivations are subscribed to it. Observers climbing while renderCache
-  // holds steady is a disposed config's store still held.
+  // The per-session click store: how many sessions it holds, how many
+  // derivations are subscribed to it, and its revision — how many changes it
+  // has taken. Observers climbing while renderCache holds steady is a
+  // disposed config's store still held; the revision climbing while nobody
+  // clicks is something writing session state on every render.
   sessionState: {
     sessions: number;
     observers: number;
+    revision: number;
   };
   // Subscribed sessions, their subscribers, and the frames drawn for them and
   // pushed (a drawn frame identical to the last is not pushed).
@@ -242,7 +245,7 @@ export class RuntimeStats {
       usageCache: { size: 0, hits: 0, misses: 0, sweeps: 0 },
       renderCache: { size: 0, held: 0, retired: 0 },
       effectCache: { sessions: 0, effects: 0 },
-      sessionState: { sessions: 0, observers: 0 },
+      sessionState: { sessions: 0, observers: 0, revision: 0 },
       frameFeeds: { feeds: 0, subscribers: 0, drawn: 0, pushed: 0 },
       watchersActive: 0,
       handlerProbes: [],

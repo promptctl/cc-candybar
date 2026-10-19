@@ -12,7 +12,11 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { VERB_LOAD_CONFIG } from "../src/click/wire";
+import {
+  effectsUrl,
+  VERB_LOAD_CONFIG,
+  VERB_SET_CONFIG,
+} from "../src/click/wire";
 import { logPath } from "../src/daemon/paths";
 import {
   click,
@@ -120,6 +124,31 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
 
     expect(viaRejected).not.toBe(plain);
     expect(viaAbsent).not.toBe(plain);
+  });
+
+  // A durable click resolves its file from what the session's last request
+  // named, under the session's pick — so a click made the moment after a pick
+  // writes the picked file, with no render between them to record it.
+  test("a durable click right after a load-config pick writes the picked file", async () => {
+    const sid = "config-env-pick-then-durable-click";
+    const named = path.join(projectDir, "named.json5");
+    const picked = path.join(projectDir, "picked.json5");
+    const plain = `{ segments: { a: { template: 'plain' } }, root: { h: ['a'] } }`;
+    writeFileSync(named, plain);
+    writeFileSync(picked, plain);
+    await render(sockPath, sid, projectDir, {}, configFlag(named));
+    await click(
+      sockPath,
+      `cc-candybar://${VERB_LOAD_CONFIG}/${encodeURIComponent(sid)}/${encodeURIComponent(picked)}`,
+    );
+    await click(
+      sockPath,
+      effectsUrl([
+        { verb: VERB_SET_CONFIG, args: [sid, "updateNotice", "false"] },
+      ]),
+    );
+    expect(readFileSync(picked, "utf8")).toMatch(/updateNotice: false/);
+    expect(readFileSync(named, "utf8")).toBe(plain);
   });
 
   // The three spellings of an explicit config have ONE precedence, composed

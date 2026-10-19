@@ -19,7 +19,7 @@
 //   cc-candybar://<verb>/<value>   where <value> may itself contain `/`.
 
 import { launchSync } from "../../proc/launch";
-import type { SessionStateRW } from "../session-state";
+import type { SessionStateReader, SessionStateRW } from "../session-state";
 import { holdClickError } from "../click-error";
 import { instantOf } from "../../utils/instant";
 import { stateGate, stateKeySeed } from "./state-validators";
@@ -544,10 +544,11 @@ function stepFrom(
 // ─── The durable store: which file, and the history over it ─────────────────
 
 // [LAW:one-source-of-truth] The config FILE is the one durable store
-// (candybar-config-dqe). A click carries only a session id, so the render
-// records — under this daemon-internal key, the SESSION_CONFIG_OVERRIDE_KEY
-// precedent — the INPUTS its config resolution ran on, and a durable verb
-// runs the same resolution over them at click time (durableConfig). The
+// (candybar-config-dqe). A click carries only a session id, so a render
+// request records — under this daemon-internal key, the
+// SESSION_CONFIG_OVERRIDE_KEY precedent — the INPUTS it named for config
+// resolution, and a durable verb runs the same resolution over them, under
+// the session's load-config pick, at click time (durableConfig). The
 // file it lands in is the one the NEXT reload reads, not a snapshot of the
 // one the last render read: RenderCache re-resolves the same chain whenever
 // a candidate appears (a higher-precedence file supersedes a lower one), so
@@ -557,12 +558,32 @@ function stepFrom(
 export const SESSION_RENDER_ORIGIN_KEY = "render-origin";
 
 // [LAW:types-are-the-program] Exactly the three inputs resolveDslConfig
-// takes. `configFile` is the session's explicit path as server.ts composed
-// it (load-config pick, `--config`, `configEnv` hint) or null.
+// takes. Recorded, `configFile` is the explicit path the REQUEST named
+// (`--config` over the `configEnv` hint) or null; the session's load-config
+// pick is a session fact, joined over it by `sessionRenderOrigin`.
 export interface RenderOrigin {
   readonly projectDir: string;
   readonly cwd: string;
   readonly configFile: string | null;
+}
+
+// [LAW:one-source-of-truth] The one place a load-config pick outranks the
+// path the request named: what the render draws from (server.ts) and what a
+// durable click resolves (sessionOrigin) both come through here, so a click
+// made right after a pick lands in the file the bar now draws from, without
+// waiting for the session's next request to record it.
+// [LAW:effects-at-boundaries] The load-config verb writes per-session config
+// overrides into SessionState; this is the one read point.
+export function sessionRenderOrigin(
+  requested: RenderOrigin,
+  state: SessionStateReader,
+  sid: string,
+): RenderOrigin {
+  return {
+    ...requested,
+    configFile:
+      state.get(sid, SESSION_CONFIG_OVERRIDE_KEY) ?? requested.configFile,
+  };
 }
 
 export function encodeRenderOrigin(origin: RenderOrigin): string {
@@ -597,13 +618,22 @@ function parseRenderOrigin(raw: string): RenderOrigin {
 // and therefore no config — a loud BadVerbArgs, not the daemon's own XDG
 // guess.
 function sessionOrigin(ctx: VerbContext, sid: string): RenderOrigin {
-  const raw = ctx.sessionState.get(sid, SESSION_RENDER_ORIGIN_KEY);
-  if (raw === null) {
+  const origin = recordedOrigin(ctx, sid);
+  if (origin === null) {
     throw new BadVerbArgs(
       `session ${sid} has not rendered yet — no config to act on`,
     );
   }
-  return parseRenderOrigin(raw);
+  return origin;
+}
+
+// The origin the session's last request recorded, under its load-config
+// pick; null for a session that has never rendered.
+function recordedOrigin(ctx: VerbContext, sid: string): RenderOrigin | null {
+  const raw = ctx.sessionState.get(sid, SESSION_RENDER_ORIGIN_KEY);
+  return raw === null
+    ? null
+    : sessionRenderOrigin(parseRenderOrigin(raw), ctx.sessionState, sid);
 }
 
 // [LAW:no-ambient-temporal-coupling] A history step that rewrote the file this
@@ -612,9 +642,8 @@ function sessionOrigin(ctx: VerbContext, sid: string): RenderOrigin {
 // Another session's file reaches its render through the fs watcher.
 function reloadIfWritten(ctx: VerbContext, sid: string, step: Step): void {
   // A session with no recorded render has no cache entry to draw stale.
-  const raw = ctx.sessionState.get(sid, SESSION_RENDER_ORIGIN_KEY);
-  if (raw === null) return;
-  const origin = parseRenderOrigin(raw);
+  const origin = recordedOrigin(ctx, sid);
+  if (origin === null) return;
   const { path } = originHome(origin);
   if (step.some((c) => c.kind === "file" && c.file === path)) {
     ctx.reloadConfig(origin);
@@ -1115,7 +1144,7 @@ const applyUpdate: VerbHandler = (value, ctx) => {
 
 // [LAW:one-source-of-truth] Where the daemon records each session's STAMPED
 // client hints (server.ts writes `JSON.stringify(parseClientHints(req))` here
-// on every render that changes them) — the SESSION_RENDER_ORIGIN_KEY move for
+// on every render request that changes them) — the SESSION_RENDER_ORIGIN_KEY move for
 // client facts. A click carries no hints, so the doctor reasons over the facts
 // of the session's last render, read back through the SAME checkpoint the live
 // frame crossed (parseClientHints), never over the daemon's own env.
