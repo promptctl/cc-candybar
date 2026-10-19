@@ -1880,7 +1880,7 @@ async function answerRequest(
 ): Promise<{ output: string; moves: boolean }> {
   recordRequest(req);
   const { drawn, moves } = await renderChecked(req, at, facts);
-  const fullText = diagnosticDump.sync(
+  const { link, failure } = diagnosticDump.sync(
     req.hookData.session_id,
     order,
     dumpTextOf(drawn),
@@ -1888,8 +1888,7 @@ async function answerRequest(
   // [LAW:nothing-unseen] On the render event, not a line of its own: the
   // strip's trailer row says it on the bar either way.
   noteFacts(facts, {
-    dumpFailed:
-      fullText.kind === "unavailable" ? JSON.stringify(fullText.reason) : "-",
+    dumpFailed: failure === null ? "-" : JSON.stringify(failure),
   });
-  return { output: composeBar(drawn, fullText), moves };
+  return { output: composeBar(drawn, link), moves };
 }

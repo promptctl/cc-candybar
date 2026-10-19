@@ -32,6 +32,19 @@ interface Synced {
 
 const NEVER_SYNCED: Synced = { order: -Infinity, text: null, failure: null };
 
+// Why a render's link names no file when the file holds another render's
+// text: the session's next statusline request writes its own.
+export const OTHER_TEXT =
+  "the file holds another render's text until the session's next statusline request";
+
+// [LAW:types-are-the-program] What one sync settled: the strip's link, and
+// the reason THIS sync's write failed — a fact apart from the link, whose
+// `unavailable` arm also covers a file holding another render's text.
+export interface DumpSync {
+  readonly link: FullTextLink;
+  readonly failure: string | null;
+}
+
 export class DiagnosticDump {
   private readonly synced = new Map<string, Synced>();
 
@@ -48,39 +61,36 @@ export class DiagnosticDump {
 
   // Bring the session's file in line with `text`, the text of the request
   // that arrived `order`-th: present with this content, or absent when null —
-  // and the link the strip offers for it. A failed write is the link's
-  // `unavailable` reason, the same shape as writeLease: the dump is
-  // best-effort beside the strip, which already shows the text, so a failed
-  // write must not cost the render; the next request retries it.
-  sync(sessionId: string, order: number, text: string | null): FullTextLink {
+  // the link the strip offers for it, and the reason this sync's write
+  // failed, or null. A failed write is the same shape as writeLease: the dump
+  // is best-effort beside the strip, which already shows the text, so a
+  // failed write must not cost the render; the next request retries it.
+  sync(sessionId: string, order: number, text: string | null): DumpSync {
     const last = this.synced.get(sessionId) ?? NEVER_SYNCED;
     // [LAW:no-ambient-temporal-coupling] The file is the newest request's: a
-    // request that finishes after a newer one leaves it alone.
-    if (order < last.order) return this.linkFor(sessionId, text);
-    this.synced.set(sessionId, {
-      order,
-      text,
-      // "Never written" and "absent" are the same desired state, so a session
-      // that has never errored costs no syscall per request.
-      failure:
-        text === last.text && last.failure === null
-          ? null
-          : this.write(sessionId, text),
-    });
-    return this.linkFor(sessionId, text);
+    // request that finishes after a newer one leaves it alone, and wrote
+    // nothing that could fail.
+    if (order < last.order)
+      return { link: this.linkFor(sessionId, text), failure: null };
+    // "Never written" and "absent" are the same desired state, so a session
+    // that has never errored costs no syscall per request.
+    const failure =
+      text === last.text && last.failure === null
+        ? null
+        : this.write(sessionId, text);
+    this.synced.set(sessionId, { order, text, failure });
+    return { link: this.linkFor(sessionId, text), failure };
   }
 
   // [LAW:effects-at-boundaries] The link a FRAME offers, and a request's once
   // `sync` has run: frames only draw, so the dump is written when a request
-  // arrives, and a frame whose text the file does not hold says so rather
-  // than linking other text — naming the write's failure when it failed.
+  // arrives, and a render whose text the file does not hold — a frame, or a
+  // request a newer one superseded — says so rather than linking other text,
+  // naming the write's failure when it failed.
   linkFor(sessionId: string, text: string | null): FullTextLink {
     const last = this.synced.get(sessionId) ?? NEVER_SYNCED;
     return last.text !== text
-      ? {
-          kind: "unavailable",
-          reason: "written at the session's next statusline request",
-        }
+      ? { kind: "unavailable", reason: OTHER_TEXT }
       : last.failure !== null
         ? { kind: "unavailable", reason: last.failure }
         : { kind: "file", path: this.pathFor(sessionId) };

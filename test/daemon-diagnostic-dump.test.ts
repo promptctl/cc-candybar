@@ -13,7 +13,7 @@ import {
 } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { DiagnosticDump } from "../src/daemon/diagnostic-dump";
+import { DiagnosticDump, OTHER_TEXT } from "../src/daemon/diagnostic-dump";
 
 describe("DiagnosticDump", () => {
   let root: string;
@@ -58,38 +58,37 @@ describe("DiagnosticDump", () => {
   test("a write the filesystem refuses is reported as a reason, not thrown, and is retried", () => {
     // A file where the directory should be: mkdir -p fails with ENOTDIR/EEXIST.
     writeFileSync(path.join(root, "diagnostics"), "");
+    const reason = expect.stringMatching(/sid\.txt: /);
     expect(sync("sid", "ERROR\nboom\n")).toEqual({
-      kind: "unavailable",
-      reason: expect.stringMatching(/sid\.txt: /),
+      link: { kind: "unavailable", reason },
+      failure: reason,
     });
     rmSync(path.join(root, "diagnostics"));
     // The write failed, so the same text is written again on the next request.
     expect(sync("sid", "ERROR\nboom\n")).toEqual({
-      kind: "file",
-      path: dump.pathFor("sid"),
+      link: { kind: "file", path: dump.pathFor("sid") },
+      failure: null,
     });
     expect(readFileSync(dump.pathFor("sid"), "utf8")).toBe("ERROR\nboom\n");
   });
 
   test("a frame drawing the text a write failed on names that failure, not a later write", () => {
     writeFileSync(path.join(root, "diagnostics"), "");
-    const failed = sync("sid", "ERROR\nboom\n");
-    expect(failed).toEqual({
-      kind: "unavailable",
-      reason: expect.stringMatching(/sid\.txt: /),
-    });
-    expect(dump.linkFor("sid", "ERROR\nboom\n")).toEqual(failed);
+    const { link, failure } = sync("sid", "ERROR\nboom\n");
+    expect(failure).toMatch(/sid\.txt: /);
+    expect(link).toEqual({ kind: "unavailable", reason: failure });
+    expect(dump.linkFor("sid", "ERROR\nboom\n")).toEqual(link);
   });
 
-  test("a request that finishes after a newer one leaves the newer one's file alone", () => {
+  test("a request that finishes after a newer one leaves the newer one's file alone, and failed at nothing", () => {
     const p = dump.pathFor("sid");
     expect(dump.sync("sid", 2, "ERROR\nnewer\n")).toEqual({
-      kind: "file",
-      path: p,
+      link: { kind: "file", path: p },
+      failure: null,
     });
     expect(dump.sync("sid", 1, "ERROR\nolder\n")).toEqual({
-      kind: "unavailable",
-      reason: "written at the session's next statusline request",
+      link: { kind: "unavailable", reason: OTHER_TEXT },
+      failure: null,
     });
     expect(readFileSync(p, "utf8")).toBe("ERROR\nnewer\n");
     expect(dump.linkFor("sid", "ERROR\nnewer\n")).toEqual({
@@ -101,10 +100,7 @@ describe("DiagnosticDump", () => {
   test("a frame's link names the file only while it holds that frame's text, and writes nothing", () => {
     const p = dump.pathFor("sid");
     const file = { kind: "file", path: p };
-    const unwritten = {
-      kind: "unavailable",
-      reason: "written at the session's next statusline request",
-    };
+    const unwritten = { kind: "unavailable", reason: OTHER_TEXT };
     expect(dump.linkFor("sid", "ERROR\nboom\n")).toEqual(unwritten);
     expect(existsSync(p)).toBe(false);
     sync("sid", "ERROR\nboom\n");
@@ -136,8 +132,8 @@ describe("DiagnosticDump", () => {
     rmSync(path.join(root, "diagnostics"), { recursive: true, force: true });
     // Forgotten regardless: the next sync writes, it does not skip.
     expect(sync("a", "x")).toEqual({
-      kind: "file",
-      path: dump.pathFor("a"),
+      link: { kind: "file", path: dump.pathFor("a") },
+      failure: null,
     });
     expect(readFileSync(dump.pathFor("a"), "utf8")).toBe("x");
   });
