@@ -1093,7 +1093,8 @@
                   "termWidth",
                   "effectRefresh",
                   "nerdFont",
-                  "segmentData"
+                  "segmentData",
+                  "sessionData"
                 ]
               }
             },

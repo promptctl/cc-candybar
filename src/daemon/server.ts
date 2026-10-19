@@ -92,6 +92,7 @@ import { ProbeArrivals } from "../doctor/handler-probe";
 import {
   RenderSightings,
   rateLimitsSeen,
+  transcriptSaid,
   type RateLimitsSeen,
 } from "./render-sightings";
 import { claudeConfigDir } from "../claude-settings";
@@ -1185,6 +1186,7 @@ export async function replyTo(
           client: checked.req.hints.client ?? null,
           rateLimits: checked.req.rateLimits,
           claudeConfigDir: claudeConfigDir(checked.req.hints.claudeConfigDir),
+          transcript: transcriptSaid(checked.req.hookData),
         },
         at,
       );

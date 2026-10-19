@@ -7,7 +7,7 @@
 // in the Claude Code directory the client's `claudeConfigDir` hint names.
 
 import { memoryMarkBook } from "./helpers/mark-book";
-import { healthyDaemonEdge, healthyDataEdge, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, HEALTHY_FACTS, CARRIED } from "./helpers/doctor-facts";
+import { healthyDaemonEdge, healthyDataEdge, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, HEALTHY_FACTS, CARRIED, NAMED } from "./helpers/doctor-facts";
 import { memoryClickedTerminals } from "./helpers/clicked-terminals";
 import fs from "node:fs";
 import os from "node:os";
@@ -90,6 +90,7 @@ const factsIn = (
       sessionPick,
       { kind: "ok", value: HEALTHY_SERVING },
       CARRIED,
+      NAMED,
     ),
     urlHandler: { kind: "unsupported" } as const,
     askedBy: "command" as const,

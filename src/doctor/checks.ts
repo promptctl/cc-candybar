@@ -22,6 +22,7 @@ import type { Outcome } from "../utils/outcome.js";
 import {
   SIGHTINGS_KEPT,
   type RateLimitsSeen,
+  type TranscriptSaid,
 } from "../daemon/render-sightings.js";
 import type { DeclKind, UnusedDecl } from "../config/unused.js";
 import {
@@ -316,6 +317,24 @@ export interface SegmentDataFacts {
   }>;
 }
 
+// The last TRANSCRIPT_WINDOW_BYTES of a transcript, read as the bar's parse
+// reads each line (`jsonLine`, src/utils/claude.ts): how many lines it held, how
+// many were not a JSON object, and whether the window reached the file's
+// start.
+export const TRANSCRIPT_WINDOW_BYTES = 1024 * 1024;
+
+export interface TranscriptWindow {
+  readonly lines: number;
+  readonly unparsed: number;
+  readonly whole: boolean;
+}
+
+// One session's transcript as its render named it, and what reading it found:
+// absent is no file at the path.
+export interface TranscriptRead extends TranscriptSaid {
+  readonly read: Outcome<TranscriptWindow>;
+}
+
 export interface PlacementEffectFact {
   readonly placement: string;
   readonly effect: LoopName;
@@ -361,6 +380,10 @@ export interface DoctorFacts {
   // The outside data the session's placed segments read
   // (brandon-doctor-v62x.onf).
   readonly data: SegmentDataFacts;
+  // The transcripts the recent renders named, each read (brandon-doctor-v62x
+  // .p4l): the click's own session's, or every session `cc-candybar doctor`
+  // sees.
+  readonly transcripts: Asked<readonly TranscriptRead[]>;
   // The session's Claude Code settings file and the entries read from it — a
   // second, daemon-observable fact beside the client-observed env, so a
   // verdict can say the truthful thing after a fix has landed but Claude Code
@@ -1331,6 +1354,56 @@ const segmentData: Check = {
     ]),
 };
 
+function transcriptProblems({
+  path,
+  answered,
+  read,
+}: TranscriptRead): string[] {
+  switch (read.kind) {
+    case "absent":
+      return answered
+        ? [
+            `the transcript ${path} does not exist, though Claude Code has answered in its session — the bar's session cost, metrics and activity read nothing`,
+          ]
+        : [];
+    case "failed":
+      return [`the transcript ${path} cannot be read: ${read.reason}`];
+    case "ok": {
+      const { lines, unparsed, whole } = read.value;
+      return unparsed === 0
+        ? []
+        : [
+            `${unparsed} of the ${lines} lines ${whole ? "in" : `in the last ${TRANSCRIPT_WINDOW_BYTES / 1024 / 1024} MiB of`} the transcript ${path} are not JSON objects — the bar skips them, so what it counts from them is missing`,
+          ];
+    }
+  }
+}
+
+// "Session data is readable" (brandon-doctor-v62x.p4l): the transcript each
+// recent render named exists once Claude Code has answered, opens, and reads
+// as the JSON lines the bar folds its session cost, metrics and activity
+// from. No fix: the file is Claude Code's.
+const sessionData: Check = {
+  name: "sessionData",
+  label: "session data",
+  takesMark: false,
+  probe: ({ transcripts, askedBy }) => {
+    if (transcripts.kind === "failed") {
+      return { ok: false, reason: transcripts.reason };
+    }
+    if (transcripts.value.length === 0) {
+      return {
+        ok: false,
+        reason:
+          askedBy === "click"
+            ? `${NO_RENDER_OF_THIS_BAR}, so which transcript it reads is unknown — run the doctor again once the bar has redrawn`
+            : `no session has drawn a bar for this daemon in the last ${RECENT_CLIENT_S / 60} minutes, so no transcript was named — run the doctor again once the bar has redrawn`,
+      };
+    }
+    return problemsVerdict(transcripts.value.flatMap(transcriptProblems));
+  },
+};
+
 export const CHECKS: readonly Check[] = [
   config,
   install,
@@ -1343,6 +1416,7 @@ export const CHECKS: readonly Check[] = [
   effectRefresh,
   nerdFont,
   segmentData,
+  sessionData,
 ];
 
 // The checks that take the user's mark — the only ones a mark may name.

@@ -499,20 +499,56 @@ function makeEntry(parsed: Record<string, unknown>): ParsedEntry | null {
   };
 }
 
-// [LAW:one-source-of-truth] The one line→entry loop. Both the whole-file parse
-// and the incremental append reader frame their text into lines through here, so
-// a malformed-line policy or a projected field can never diverge between the two.
+// [LAW:one-source-of-truth] The one reading of a transcript line: blank lines
+// are none, and a line that is not a JSON object is `unparsed`. The bar's
+// parse skips those lines; the doctor counts them (brandon-doctor-v62x.p4l),
+// so the two agree on what a bad line is. Per line, so no reader holds more
+// than one line's full object at once — makeEntry drops it straight away.
+// [LAW:effects-at-boundaries] Pure: a reader that wants the reason logs it.
+export type JsonLine =
+  | { readonly kind: "blank" }
+  | { readonly kind: "object"; readonly value: Record<string, unknown> }
+  | { readonly kind: "unparsed"; readonly reason: string };
+
+export function jsonLine(line: string): JsonLine {
+  const trimmed = line.trim();
+  if (!trimmed) return { kind: "blank" };
+  try {
+    const value: unknown = JSON.parse(trimmed);
+    return typeof value === "object" && value !== null && !Array.isArray(value)
+      ? { kind: "object", value: value as Record<string, unknown> }
+      : { kind: "unparsed", reason: "not a JSON object" };
+  } catch (parseError) {
+    return { kind: "unparsed", reason: String(parseError) };
+  }
+}
+
+// The entry one line contributes, if any — the step every parse loop takes.
+function entryOf(line: string): ParsedEntry | null {
+  const read = jsonLine(line);
+  if (read.kind === "unparsed") {
+    debug(`Failed to parse JSONL line: ${read.reason}`);
+    return null;
+  }
+  if (read.kind === "blank") return null;
+  // A projection that throws on one odd line skips that line, as a parse
+  // failure does, rather than losing the whole transcript.
+  try {
+    return makeEntry(read.value);
+  } catch (projectionError) {
+    debug(`Failed to project JSONL line: ${projectionError}`);
+    return null;
+  }
+}
+
+// [LAW:one-source-of-truth] The one line→entry loop over text in hand. Both
+// the whole-file parse and the incremental append reader go through here, so
+// a projected field can never diverge between the two.
 function parseJsonlLines(text: string): ParsedEntry[] {
   const entries: ParsedEntry[] = [];
   for (const line of text.split("\n")) {
-    if (!line.trim()) continue;
-    try {
-      const entry = makeEntry(JSON.parse(line));
-      if (entry) entries.push(entry);
-    } catch (parseError) {
-      debug(`Failed to parse JSONL line: ${parseError}`);
-      continue;
-    }
+    const entry = entryOf(line);
+    if (entry) entries.push(entry);
   }
   return entries;
 }
@@ -590,15 +626,8 @@ async function parseJsonlFileStreaming(
     });
 
     rl.on("line", (line) => {
-      const trimmedLine = line.trim();
-      if (!trimmedLine) return;
-
-      try {
-        const entry = makeEntry(JSON.parse(trimmedLine));
-        if (entry) entries.push(entry);
-      } catch (parseError) {
-        debug(`Failed to parse JSONL line: ${parseError}`);
-      }
+      const entry = entryOf(line);
+      if (entry) entries.push(entry);
     });
 
     rl.on("close", () => {

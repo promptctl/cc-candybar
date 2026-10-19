@@ -3,7 +3,8 @@
 // through daemon-stats, since the command itself is no statusline client. A
 // request says which client drew the bar (the install check) and whether
 // Claude Code's hook payload carried the rate-limit windows (the segment-data
-// check, brandon-doctor-v62x.onf).
+// check, brandon-doctor-v62x.onf), and where the session's transcript is (the
+// session-data check, brandon-doctor-v62x.p4l).
 //
 // [LAW:no-ambient-temporal-coupling] Held in memory by this daemon process,
 // keyed by session and the client's role, REPLACED by every render: a
@@ -23,14 +24,25 @@ import type { Instant } from "../utils/instant.js";
 // The newest sightings kept; a daemon serves a handful of sessions at once.
 export const SIGHTINGS_KEPT = 64;
 
+// [LAW:one-source-of-truth] What the one mark Claude Code leaves says of
+// whether it has answered: `current_usage` is null before the first response
+// and right after a /compact. A payload without the field — a Claude Code
+// before 2.0.70, or before `context_window` — says nothing either way.
+type Answered = "yes" | "no" | "unknown";
+
+function answeredOf(
+  hookData: Pick<ClaudeHookData, "context_window">,
+): Answered {
+  const usage = hookData.context_window?.current_usage;
+  return usage === null ? "no" : usage === undefined ? "unknown" : "yes";
+}
+
 // [LAW:types-are-the-program] What one hook payload says of the rate-limit
-// windows. `unanswered` is a session with no API response to report on —
-// Claude Code nulls `context_window.current_usage` before the first API call
-// and again right after a /compact — so its missing windows are no finding.
-// A payload with no `context_window` at all comes from a Claude Code older
-// than both fields, which sends no windows either: `missing`. Carried means a
-// window the payload reads (`five_hour`, `seven_day` — buildRenderPayload),
-// so an empty or null `rate_limits` is `missing`.
+// windows. `unanswered` is a session with no API response to report on, so
+// its missing windows are no finding. A Claude Code too old to leave the mark
+// sends no windows either: `missing`. Carried means a window the payload
+// reads (`five_hour`, `seven_day` — buildRenderPayload), so an empty or null
+// `rate_limits` is `missing`.
 export const RATE_LIMITS_SEEN = ["carried", "missing", "unanswered"] as const;
 export type RateLimitsSeen = (typeof RATE_LIMITS_SEEN)[number];
 
@@ -41,9 +53,24 @@ export function rateLimitsSeen(
   if (windows?.five_hour != null || windows?.seven_day != null) {
     return "carried";
   }
-  return hookData.context_window?.current_usage === null
-    ? "unanswered"
-    : "missing";
+  return answeredOf(hookData) === "no" ? "unanswered" : "missing";
+}
+
+// Where the session's transcript is, and whether Claude Code has shown it
+// answered in it — until it has, a transcript that does not exist yet is no
+// finding, since a session before its first prompt has none.
+export interface TranscriptSaid {
+  readonly path: string;
+  readonly answered: boolean;
+}
+
+export function transcriptSaid(
+  hookData: Pick<ClaudeHookData, "transcript_path" | "context_window">,
+): TranscriptSaid {
+  return {
+    path: hookData.transcript_path,
+    answered: answeredOf(hookData) === "yes",
+  };
 }
 
 // What one render request said. `client` null: the render's client did not
@@ -54,6 +81,7 @@ export interface RenderSaid {
   readonly client: ClientHint | null;
   readonly rateLimits: RateLimitsSeen;
   readonly claudeConfigDir: string;
+  readonly transcript: TranscriptSaid;
 }
 
 export interface RenderSighting extends RenderSaid {

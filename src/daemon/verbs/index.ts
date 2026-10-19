@@ -130,6 +130,7 @@ import { sightingOf } from "../../doctor/terminal";
 import {
   daemonFields,
   dataFields,
+  transcriptFields,
   doctorReportPairs,
   linkFields,
   nerdFontFields,
@@ -1187,7 +1188,7 @@ function writeReport(ctx: VerbContext, sid: string, facts: DoctorFacts): void {
   ctx.sessionState.setBatch(sid, doctorReportPairs(reports));
   ctx.dlog(
     "info",
-    `doctor: ${reports.map((r) => `${r.check.name}=${r.verdict.ok ? "ok" : `failed(${1 + (r.verdict.more?.length ?? 0)})`}`).join(" ")} ${nerdFontFields(facts.nerdFont, facts.marks)} ${linkFields(facts.terminal, facts.clicked)} ${terminalFeatureFields(facts.terminal, facts.termCols)} ${installFields(facts.install)} ${daemonFields(facts.daemon)} ${dataFields(facts.data)} (session=${sid})`,
+    `doctor: ${reports.map((r) => `${r.check.name}=${r.verdict.ok ? "ok" : `failed(${1 + (r.verdict.more?.length ?? 0)})`}`).join(" ")} ${nerdFontFields(facts.nerdFont, facts.marks)} ${linkFields(facts.terminal, facts.clicked)} ${terminalFeatureFields(facts.terminal, facts.termCols)} ${installFields(facts.install)} ${daemonFields(facts.daemon)} ${dataFields(facts.data)} ${transcriptFields(facts.transcripts)} (session=${sid})`,
   );
 }
 
@@ -1196,6 +1197,9 @@ function writeReport(ctx: VerbContext, sid: string, facts: DoctorFacts): void {
 // refused refuses the click (DoctorBusy), so no report is written over facts
 // the doctor did not see.
 function clickFacts(ctx: VerbContext, sid: string): DoctorFacts {
+  // The session's own renders, read once: whatever its Claude Code sends, it
+  // sends to this session.
+  const said = ctx.clients.ofSession(sid);
   let gathered: ReturnType<typeof gatherFacts>;
   try {
     gathered = gatherFacts(
@@ -1204,12 +1208,8 @@ function clickFacts(ctx: VerbContext, sid: string): DoctorFacts {
       sessionOrigin(ctx, sid),
       (key) => ctx.sessionState.get(sid, key),
       { kind: "ok", value: ctx.serving() },
-      // The session's own renders: whatever its Claude Code sends, it sends
-      // to this session.
-      {
-        kind: "ok",
-        value: ctx.clients.ofSession(sid).map((said) => said.rateLimits),
-      },
+      { kind: "ok", value: said.map((s) => s.rateLimits) },
+      { kind: "ok", value: said.map((s) => s.transcript) },
     );
   } catch (e) {
     if (e instanceof DoctorBusy) throw new BadVerbArgs(e.message);
@@ -1223,7 +1223,7 @@ function clickFacts(ctx: VerbContext, sid: string): DoctorFacts {
     install: installFacts(
       ctx.doctor.install,
       ctx.bundle,
-      ctx.clients.ofSession(sid).map((said) => said.client),
+      said.map((s) => s.client),
     ),
     askedBy: "click",
     clicked: clickedFrom(ctx, gathered),

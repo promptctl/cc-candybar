@@ -91,6 +91,9 @@ export function testVerbContext(
       memento: () => {
         throw new Error("doctor: no memento edge in this test");
       },
+      transcript: () => {
+        throw new Error("doctor: no transcript edge in this test");
+      },
       postMortemsRead: {
         read: () => {
           throw new Error("doctor: no post-mortem record in this test");

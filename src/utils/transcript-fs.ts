@@ -5,7 +5,14 @@ import {
   stat as fsStat,
 } from "node:fs/promises";
 import type { FileHandle } from "node:fs/promises";
-import { statSync } from "node:fs";
+import {
+  closeSync,
+  constants,
+  fstatSync,
+  openSync,
+  readSync,
+  statSync,
+} from "node:fs";
 
 import { ABSENT, failed, ok, type Outcome } from "./outcome";
 import { debug } from "./logger";
@@ -287,4 +294,48 @@ export async function readTail(
       });
     }
   });
+}
+
+// [LAW:one-source-of-truth] exception: readTail for a caller that must not yield — a
+// doctor probe, which runs synchronously on the daemon's loop. Outside the
+// gate: a synchronous read holds its one descriptor only while nothing else
+// runs. The window, the short-read loop, ENOENT as `absent` and the close that
+// never overrides the read are readTail's, copied: a core generic over sync
+// and async reads would cost more than these lines.
+export function readTailSync(
+  path: string,
+  maxBytes: number,
+): Outcome<{ buf: Buffer; fromStart: boolean }> {
+  let fd: number;
+  try {
+    // Non-blocking: the path is the client's word, and a synchronous open of
+    // a FIFO with no writer would hold the daemon's loop for good. The read
+    // is bounded by fstat's size, so a pipe or device reads nothing.
+    fd = openSync(path, constants.O_RDONLY | constants.O_NONBLOCK);
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") return ABSENT;
+    return failed(e instanceof Error ? e.message : String(e));
+  }
+  try {
+    const { size } = fstatSync(fd);
+    const start = Math.max(0, size - maxBytes);
+    const buf = Buffer.alloc(size - start);
+    let off = 0;
+    while (off < buf.length) {
+      const n = readSync(fd, buf, off, buf.length - off, start + off);
+      if (n === 0) break;
+      off += n;
+    }
+    return ok({ buf: buf.subarray(0, off), fromStart: start === 0 });
+  } catch (e) {
+    return failed(e instanceof Error ? e.message : String(e));
+  } finally {
+    try {
+      closeSync(fd);
+    } catch (e) {
+      debug(
+        `transcript-fs: close failed: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+  }
 }

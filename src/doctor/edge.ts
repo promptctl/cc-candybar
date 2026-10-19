@@ -38,8 +38,13 @@ import {
 import { gitRootOf } from "../utils/git-root.js";
 import { locateMemento } from "../memento/edge.js";
 import { dataNeeds, type DataNeeds } from "./data-needs.js";
-import type { RateLimitsSeen } from "../daemon/render-sightings.js";
-import type { Outcome } from "../utils/outcome.js";
+import type {
+  RateLimitsSeen,
+  TranscriptSaid,
+} from "../daemon/render-sightings.js";
+import { ok, type Outcome } from "../utils/outcome.js";
+import { jsonLine } from "../utils/claude.js";
+import { readTailSync } from "../utils/transcript-fs.js";
 import type { TmuxHint } from "../tmux-hint.js";
 import type { UnusedDecl } from "../config/unused.js";
 import type { LoopName } from "@promptctl/rich-js";
@@ -69,6 +74,9 @@ import {
   type SegmentDataFacts,
   type TerminalFacts,
   type TerminalIdentity,
+  TRANSCRIPT_WINDOW_BYTES,
+  type TranscriptRead,
+  type TranscriptWindow,
   type TmuxClient,
   type TmuxFacts,
   type UrlHandlerFacts,
@@ -219,6 +227,9 @@ export interface DoctorEdge {
     claudeConfigDir: string,
     projectDir: string,
   ) => Outcome<string>;
+  // The tail of a session's transcript, read as the bar reads it — absent
+  // when no file is at the path (`readTranscriptWindow`).
+  readonly transcript: (path: string) => Outcome<TranscriptWindow>;
 }
 
 // The three inputs the config search takes (resolveDslConfig) — a session's
@@ -441,6 +452,63 @@ export function productionEdge(
     postMortemsRead: filePostMortemsRead(),
     forge: forgeLogin,
     memento: locateMemento,
+    transcript: readTranscriptWindow,
+  };
+}
+
+// [LAW:effects-at-boundaries] Pure over the bytes read: the window's first
+// line is cut short unless the window starts the file, and its last is still
+// being written unless a newline ends it, so neither is judged. The bytes
+// start one before the window (`readTranscriptWindow`), so a window that
+// begins on a line boundary drops only that newline, not a whole line.
+export function transcriptWindow(
+  bytes: Buffer,
+  whole: boolean,
+): TranscriptWindow {
+  const text = bytes.toString("utf-8");
+  const from = whole ? 0 : text.indexOf("\n") + 1;
+  const to = text.lastIndexOf("\n") + 1;
+  let lines = 0;
+  let unparsed = 0;
+  for (const line of text.slice(from, to).split("\n")) {
+    const read = jsonLine(line);
+    if (read.kind === "blank") continue;
+    lines++;
+    if (read.kind === "unparsed") unparsed++;
+  }
+  return { lines, unparsed, whole };
+}
+
+// The last TRANSCRIPT_WINDOW_BYTES of a transcript, synchronously like every
+// doctor probe — bounded, since a transcript grows for as long as its session
+// runs and the click holds the daemon's loop while it reads. No file at the
+// path is `absent` (a session before its first response has none).
+export function readTranscriptWindow(file: string): Outcome<TranscriptWindow> {
+  const read = readTailSync(file, TRANSCRIPT_WINDOW_BYTES + 1);
+  return read.kind === "ok"
+    ? ok(transcriptWindow(read.value.buf, read.value.fromStart))
+    : read;
+}
+
+// Each distinct transcript the renders named, read once: a statusline and a
+// `frames` display drawing one session name one file. A render that saw an
+// answer answers for the file.
+function transcriptReads(
+  edge: DoctorEdge,
+  said: Asked<readonly TranscriptSaid[]>,
+): Asked<readonly TranscriptRead[]> {
+  if (said.kind === "failed") return said;
+  const byPath = new Map<string, boolean>();
+  for (const { path: file, answered } of said.value) {
+    byPath.set(file, answered || (byPath.get(file) ?? false));
+  }
+  return {
+    kind: "ok",
+    value: [...byPath].map(([file, answered]) => ({
+      path: file,
+      answered,
+      read: edge.transcript(file),
+    })),
   };
 }
 
@@ -753,6 +821,9 @@ export function gatherFacts(
   // rate-limit windows (src/daemon/render-sightings.ts): the click's own
   // session, or every session `cc-candybar doctor` sees in its directory.
   rateLimits: Asked<readonly RateLimitsSeen[]>,
+  // The transcripts those renders named: the click's own session's, or every
+  // session `cc-candybar doctor` sees.
+  transcripts: Asked<readonly TranscriptSaid[]>,
 ): Omit<DoctorFacts, "urlHandler" | "askedBy" | "install"> {
   const load = edge.loadConfig(origin);
   // [LAW:one-source-of-truth] The render's own resolution, so the doctor and
@@ -809,6 +880,7 @@ export function gatherFacts(
       claudeConfigDir(hints.claudeConfigDir),
       rateLimits,
     ),
+    transcripts: transcriptReads(edge, transcripts),
     claudeSettings: readClaudeSettingsFacts(
       claudeSettingsPath(claudeConfigDir(hints.claudeConfigDir)),
     ),
