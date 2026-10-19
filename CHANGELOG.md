@@ -1,3 +1,10 @@
+## [1.136.1](https://github.com/promptctl/cc-candybar/compare/v1.136.0...v1.136.1) (2026-10-19)
+
+
+### Bug Fixes
+
+* **daemon:** a disposed config's store lets go of the SessionState atom (brandon-unfiled-3248.t14) ([#365](https://github.com/promptctl/cc-candybar/issues/365)) ([0e3f5b8](https://github.com/promptctl/cc-candybar/commit/0e3f5b8fec56e28bac29e18453273db42a4f1662))
+
 # [1.136.0](https://github.com/promptctl/cc-candybar/compare/v1.135.0...v1.136.0) (2026-10-19)
 
 
