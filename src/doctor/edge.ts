@@ -38,6 +38,8 @@ import { EFFECT_FLOOR, FOLLOW_BAR } from "../themes/policy.js";
 import { resolveEffectiveGlobals } from "../daemon/render-payload.js";
 import {
   type Asked,
+  type ClientFact,
+  type InstallFacts,
   type ConfigFacts,
   type DoctorFacts,
   type Fix,
@@ -61,11 +63,92 @@ import {
 import { fontInUse } from "./font-edge.js";
 import { privateGlyphsIn, stripPrivateGlyphs } from "../render/strip.js";
 import { DoctorBusy } from "./busy.js";
+import type { ClientHint } from "../client-hint.js";
+import { sourceCheckoutOf } from "../daemon/build-currency.js";
+import { crateDigest } from "../source-digest.js";
+import { shipsNative } from "../install/platforms.js";
 import { fileMarkBook, type MarkBookStore } from "./mark-book.js";
 import {
   fileClickedTerminals,
   type ClickedTerminalsStore,
 } from "./clicked-terminals.js";
+
+// [LAW:effects-at-boundaries] The install check's reads of the machine: a
+// path resolved through every link, the checkout a bundle was built in, a
+// crate's source digest, and whether a native client ships here.
+export interface InstallEdge {
+  readonly realpath: (p: string) => Asked<string>;
+  readonly checkoutOf: (bundle: string) => string | null;
+  readonly digest: (dir: string) => Asked<string>;
+  readonly nativeShipped: boolean;
+}
+
+// Every fs read here throws its own errno text; the facts carry it instead.
+function asked<T>(read: () => T): Asked<T> {
+  try {
+    return { kind: "ok", value: read() };
+  } catch (e) {
+    return {
+      kind: "failed",
+      reason: e instanceof Error ? e.message : String(e),
+    };
+  }
+}
+
+export const productionInstallEdge: InstallEdge = {
+  realpath: (p) => asked(() => fs.realpathSync(p)),
+  checkoutOf: sourceCheckoutOf,
+  digest: (crateDir) => asked(() => crateDigest(crateDir)),
+  nativeShipped: shipsNative(process.platform, process.arch),
+};
+
+// [LAW:one-source-of-truth] One fold from (the daemon's bundle, the clients
+// judged) to the facts, for both surfaces: the click passes its own session's
+// latest, the CLI every session's latest from daemon-stats inside the window. Both bundles are
+// resolved through every link here, so `bin/../dist/index.mjs` and a symlinked
+// checkout name the file they are.
+export function installFacts(
+  edge: InstallEdge,
+  daemonBundle: string,
+  // The clients judged; null for one that did not report what it is.
+  clients: ReadonlyArray<ClientHint | null>,
+): InstallFacts {
+  const bundle = edge.realpath(daemonBundle);
+  if (bundle.kind === "failed") {
+    return {
+      kind: "failed",
+      reason: `the daemon's bundle ${daemonBundle} cannot be resolved: ${bundle.reason}`,
+    };
+  }
+  const root = edge.checkoutOf(bundle.value);
+  return {
+    kind: "ok",
+    value: {
+      daemon: {
+        bundle: bundle.value,
+        checkout:
+          root === null
+            ? null
+            : {
+                root,
+                rustSource: edge.digest(path.join(root, "rust-client")),
+              },
+      },
+      nativeShipped: edge.nativeShipped,
+      clients: clients.map(
+        (client): ClientFact =>
+          client === null
+            ? { kind: "unreported" }
+            : {
+                kind: "reported",
+                client: client.kind,
+                bundle: edge.realpath(client.bundle),
+                source: client.source,
+              },
+      ),
+    },
+  };
+}
 
 export interface DoctorEdge {
   // tmux's own word on the attached client's terminal, asked of THE server
@@ -95,6 +178,7 @@ export interface DoctorEdge {
   // (so the doctor and the bar's strip report one load), the CLI runs one
   // load of its own. Both are the one `loadFromDisk`.
   readonly loadConfig: (origin: ConfigOrigin) => ConfigLoad;
+  readonly install: InstallEdge;
 }
 
 // The three inputs the config search takes (resolveDslConfig) — a session's
@@ -234,6 +318,7 @@ export function productionEdge(
     loadConfig,
     marks: fileMarkBook(),
     clicked: fileClickedTerminals(),
+    install: productionInstallEdge,
   };
 }
 
@@ -422,7 +507,7 @@ export function gatherFacts(
   >,
   origin: ConfigOrigin,
   sessionPick: (key: string) => string | null,
-): Omit<DoctorFacts, "urlHandler" | "askedBy"> {
+): Omit<DoctorFacts, "urlHandler" | "askedBy" | "install"> {
   const load = edge.loadConfig(origin);
   // [LAW:one-source-of-truth] The render's own resolution, so the doctor and
   // the bar cannot disagree about which effect is on, or which joiner draws

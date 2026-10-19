@@ -82,6 +82,7 @@ import { settingCounts } from "./setting-drafts";
 import { validateHookData } from "../utils/schema-validator.js";
 import { productionEdge } from "../doctor/edge";
 import { ProbeArrivals } from "../doctor/handler-probe";
+import { ClientSightings } from "./client-sightings";
 import { setLaunchStats } from "../proc/launch";
 import { buildDebugSnapshot } from "./debug";
 import { DEBUG_WHATS, isDebugWhat } from "./debug-types";
@@ -143,6 +144,11 @@ import {
 // instances would defeat the share-across-sessions invariant.
 const stats = new RuntimeStats();
 const handlerProbes = new ProbeArrivals();
+const clientSightings = new ClientSightings();
+// The bundle this daemon runs: the file the entry was loaded from, as the
+// build watch and the update notice read it — what daemon-stats and the
+// doctor's click name the install by.
+const DAEMON_BUNDLE = fileURLToPath(import.meta.url);
 // [LAW:single-enforcer] Route all child_process spawns through src/proc/launch.
 // Installing the metering handle here makes subprocess counts visible in
 // daemon-stats.
@@ -1034,6 +1040,8 @@ export async function handleRequest(
         watchersActive: watcherRegistry.size(),
         nextRestartReason: limits?.describeNextRestart() ?? null,
         handlerProbes: handlerProbes.list(),
+        clients: clientSightings.list(instantOf(new Date())),
+        bundle: DAEMON_BUNDLE,
       }),
     });
   }
@@ -1056,6 +1064,16 @@ export async function handleRequest(
     // can finish out of it.
     const order = ++renderArrivals;
     const checked = checkRenderRequest(req);
+    // [LAW:single-enforcer] A render REQUEST is a client sighting — the
+    // frames a feed draws from a session's data are not, so this is the one
+    // write, here rather than in renderChecked.
+    if (checked.ok) {
+      clientSightings.see(
+        checked.req.hookData.session_id,
+        checked.req.hints.client,
+        at,
+      );
+    }
     const rendered: { outcome: RenderOutcome; resp: Response } = !checked.ok
       ? refusedRender(checked.problems)
       : await renderChecked(checked.req, at, facts).then(
@@ -1258,6 +1276,8 @@ const verbCtx = {
     };
   }),
   probes: handlerProbes,
+  clients: clientSightings,
+  bundle: DAEMON_BUNDLE,
   memento: mementoProvider,
   claudeInput: productionClaudeInputEdge(),
   history: settingsHistory,
@@ -1534,13 +1554,21 @@ async function renderChecked(
     termCols: String(hints.termCols ?? "?"),
     termRows: String(hints.termRows ?? "?"),
     refused: refused.map((r) => r.hint).join(",") || "-",
+    // Which program drew this bar (src/client-hint.ts); `unreported` for a
+    // client too old to say.
+    client: hints.client?.kind ?? "unreported",
   });
   // [LAW:one-source-of-truth] Record the STAMPED hints per session — the
   // SESSION_RENDER_ORIGIN_KEY move for client facts: a click arrives with
   // no hints of its own, so the doctor (verbs/index.ts) reads the facts of
   // this session's last render from here, re-parsed through the same
   // checkpoint. Compared before writing for the same reason as the origin.
-  const hintRecord = JSON.stringify(hints);
+  // The client itself is not recorded: which client drew a session's bar is
+  // ClientSightings' fact (src/daemon/client-sightings.ts), held in memory,
+  // and two clients drawing one session would otherwise rewrite this
+  // persisted record on every render.
+  const { client: _client, ...recorded } = hints;
+  const hintRecord = JSON.stringify(recorded);
   if (sessionState.get(sessionId, SESSION_CLIENT_HINTS_KEY) !== hintRecord) {
     sessionState.set(sessionId, SESSION_CLIENT_HINTS_KEY, hintRecord);
   }

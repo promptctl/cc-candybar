@@ -27,6 +27,7 @@ import {
   PACKAGE_NAME,
   REGISTRY_URL,
 } from "./currency";
+import { PLATFORM_PACKAGES } from "./platforms";
 
 const BUNDLE_ID = "com.cccandybar.url-handler";
 const APP_NAME = "CCCandybarURLHandler";
@@ -37,15 +38,6 @@ const APP_NAME = "CCCandybarURLHandler";
 // .json5 preferred); the install command's job is staging the runtime,
 // wiring the URL handler, and pointing settings at the staged entry.
 const DEFAULT_INSTALL_ARGS: readonly string[] = [];
-
-// [LAW:one-type-per-behavior] One platform → one package name; the render
-// entry is the same contract everywhere, only the artifact differs.
-const PLATFORM_PACKAGES: Record<string, string> = {
-  "darwin-arm64": "@promptctl/cc-candybar-darwin-arm64",
-  "darwin-x64": "@promptctl/cc-candybar-darwin-x64",
-  "linux-x64": "@promptctl/cc-candybar-linux-x64",
-  "linux-arm64": "@promptctl/cc-candybar-linux-arm64",
-};
 
 function buildStatusLineCommand(
   binPath: string,
@@ -120,22 +112,6 @@ export function handlerCommand(
 // Where `osacompile` puts the compiled script inside the bundle it builds.
 export function handlerScriptPath(app: string): string {
   return path.join(app, "Contents", "Resources", "Scripts", "main.scpt");
-}
-
-// [LAW:one-source-of-truth] The bundle that contains *this* function is
-// the thing we need to stage. Two invocation paths reach us:
-//   - via the bin shim: process.argv[1] = ".../bin/cc-candybar" which
-//     dynamically imports ../dist/index.mjs — resolve the sibling dist.
-//   - direct node:      process.argv[1] = ".../dist/index.mjs". Use as-is.
-export function locateBundledDist(argv1: string | undefined): string {
-  if (!argv1) {
-    throw new Error("install: process.argv[1] not set");
-  }
-  if (argv1.endsWith(".mjs") || argv1.endsWith(".js")) {
-    return argv1;
-  }
-  // Treat argv[1] as a bin shim and assume sibling dist/index.mjs.
-  return path.resolve(path.dirname(argv1), "..", "dist", "index.mjs");
 }
 
 // The staged render entry: the prebuilt native binary when this platform has
@@ -220,8 +196,8 @@ export interface StagedRuntime {
 // Stage the full runtime at the stable path: dist/index.mjs (daemon + CLI
 // bundle) and bin/cc-candybar (render entry) as adjacent files. Adjacency IS
 // the contract — every entry flavor locates the bundle via ../dist/index.mjs.
-export function runStageRuntime(): StagedRuntime {
-  const sourceDist = locateBundledDist(process.argv[1]);
+// `sourceDist` is the bundle this process runs, as its entry names it.
+export function runStageRuntime(sourceDist: string): StagedRuntime {
   if (!fs.existsSync(sourceDist)) {
     throw new Error(
       `install: bundled dist not found at ${sourceDist}. Reinstall the package.`,
@@ -348,11 +324,11 @@ function installUrlHandlerFrom(stagedDist: string): void {
   );
 }
 
-export function runInstallUrlHandler(): void {
+export function runInstallUrlHandler(bundle: string): void {
   // Precondition before any side effect: on a non-mac this fails with zero
   // files written, not after staging the runtime.
   ensureMacOS();
-  const staged = runStageRuntime();
+  const staged = runStageRuntime(bundle);
   installUrlHandlerFrom(staged.distPath);
 }
 
@@ -477,14 +453,17 @@ function installSuccessMessage(): string {
   );
 }
 
-export async function runInstall(rendererArgs: string[]): Promise<void> {
+export async function runInstall(
+  rendererArgs: string[],
+  bundle: string,
+): Promise<void> {
   const force = rendererArgs.includes("--force");
   const filteredArgs = rendererArgs.filter((a) => a !== "--force");
 
   const argsToInstall =
     filteredArgs.length > 0 ? filteredArgs : [...DEFAULT_INSTALL_ARGS];
 
-  const staged = runStageRuntime();
+  const staged = runStageRuntime(bundle);
 
   if (process.platform === "darwin") {
     installUrlHandlerFrom(staged.distPath);

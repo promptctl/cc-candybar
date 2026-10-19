@@ -4,6 +4,7 @@
 
 import type { FeedStats } from "./frame-feed";
 import type { ProbeArrival } from "../doctor/handler-probe";
+import type { ClientSighting } from "./client-sightings";
 import type { LaunchCategory } from "../proc/launch";
 import type { LaunchStatsHandle } from "../proc/stats-handle";
 import { PROTOCOL_VERSION } from "./protocol";
@@ -109,6 +110,11 @@ export interface StatsSnapshot {
   // The `doctor-probe` links that reached this daemon, newest last — what
   // `cc-candybar doctor` reads to learn whether the link it opened arrived.
   handlerProbes: readonly ProbeArrival[];
+  // Each session's latest client, as this daemon process saw its last render
+  // request (src/daemon/client-sightings.ts), and the bundle this daemon
+  // runs — what `cc-candybar doctor` judges the install by.
+  clients: readonly ClientSighting[];
+  bundle: string;
 }
 
 export class RuntimeStats {
@@ -240,6 +246,8 @@ export class RuntimeStats {
       frameFeeds: { feeds: 0, subscribers: 0, drawn: 0, pushed: 0 },
       watchersActive: 0,
       handlerProbes: [],
+      clients: [],
+      bundle: "/",
     });
   }
 
@@ -253,6 +261,8 @@ export class RuntimeStats {
     watchersActive: number;
     nextRestartReason?: string | null;
     handlerProbes: readonly ProbeArrival[];
+    clients: readonly ClientSighting[];
+    bundle: string;
   }): StatsSnapshot {
     const mem = process.memoryUsage();
     return {
@@ -288,6 +298,8 @@ export class RuntimeStats {
       subprocesses: this.snapshotSubprocesses(),
       nextRestartReason: extras.nextRestartReason ?? null,
       handlerProbes: extras.handlerProbes,
+      clients: extras.clients,
+      bundle: extras.bundle,
     };
   }
 }

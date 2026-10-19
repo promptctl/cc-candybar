@@ -181,6 +181,26 @@ fn exec_node_fallback(argv: &[String]) {
     eprintln!("cc-candybar: exec node failed: {err}");
 }
 
+// The crateDigest of the rust-client crate this binary was built from, as
+// `just install-rust` hands it to the build (scripts/crate-digest.ts over
+// src/source-digest.ts — the one digest function); None for a build that
+// passed none (CI's, a bare `cargo build`). Cargo rebuilds when it changes.
+const RUST_SOURCE: Option<&str> = option_env!("CC_CANDYBAR_RUST_SOURCE");
+
+// [LAW:one-source-of-truth] Mirrors ClientHint in src/client-hint.ts: the
+// native client names the bundle it execs (dist_index_path) — the one rule a
+// bundle is named by — and its build stamp, where an empty one (a variable
+// set blank) names nothing and is no stamp. Pure over both so the test below
+// pins the shape.
+fn client_hint(bundle: Option<PathBuf>, source: Option<&str>) -> Option<serde_json::Value> {
+    let bundle = bundle?;
+    Some(serde_json::json!({
+        "kind": "native",
+        "bundle": bundle.to_string_lossy(),
+        "source": source.filter(|s| !s.is_empty()),
+    }))
+}
+
 fn dist_index_path() -> Option<PathBuf> {
     // <binary_dir>/../dist/index.mjs — works for both the in-package layout
     // (bin/cc-candybar → ../dist/index.mjs) and the platform-package layout
@@ -287,6 +307,12 @@ fn render(argv: &[String], hook_data: &serde_json::Value) -> RenderOutcome {
     request["mementoEnv"] = memento_env;
     // terminalEnv is UNCONDITIONAL like mementoEnv: always an object.
     request["terminalEnv"] = terminal_env;
+    // client is CONDITIONAL only on the binary naming its own path: one that
+    // cannot (current_exe failed) can spawn no daemon either, and its absence
+    // reads as the doctor's "unreported" — never a guessed bundle.
+    if let Some(client) = client_hint(dist_index_path(), RUST_SOURCE) {
+        request["client"] = client;
+    }
     // --- end client hints ---
     let body = match serde_json::to_vec(&request) {
         Ok(b) => b,
@@ -1203,6 +1229,32 @@ mod tests {
         assert_eq!(hint(Some("~/bar.json5")), Some("/home/u/bar.json5".into()));
         assert_eq!(hint(Some("~")), Some("/home/u".into()));
         assert_eq!(hint(Some("~alice/c.json5")), Some("/work/proj/~alice/c.json5".into()));
+    }
+
+    #[test]
+    fn client_hint_names_the_bundle_and_the_build_stamp() {
+        let bundle = PathBuf::from("/opt/cc/bin/../dist/index.mjs");
+        assert_eq!(
+            client_hint(Some(bundle.clone()), Some("abc")),
+            Some(serde_json::json!({
+                "kind": "native",
+                "bundle": "/opt/cc/bin/../dist/index.mjs",
+                "source": "abc",
+            }))
+        );
+        assert_eq!(
+            client_hint(Some(bundle), None),
+            Some(serde_json::json!({
+                "kind": "native",
+                "bundle": "/opt/cc/bin/../dist/index.mjs",
+                "source": null,
+            }))
+        );
+        assert_eq!(
+            client_hint(Some(PathBuf::from("/b")), Some("")),
+            client_hint(Some(PathBuf::from("/b")), None)
+        );
+        assert_eq!(client_hint(None, Some("abc")), None);
     }
 
     // The same table as test/terminal-hint.test.ts.

@@ -36,14 +36,19 @@ function entryBytes(p: string, st: fs.Stats): Buffer {
     : fs.readFileSync(p);
 }
 
-// Every source entry under `dir`, as `[relative posix path, bytes]`, in a
-// total order — the digest must not depend on readdir order, which differs
-// across filesystems. An entry deleted between readdir and lstat (a `git
-// pull` racing the walk) simply has no contribution.
-function sourceEntries(root: string, dir: string): Array<[string, Buffer]> {
+// Every source entry under `dir` whose name `keep` admits, as `[path
+// relative to root, bytes]`, in a total order — the digest must not depend on
+// readdir order, which differs across filesystems. `dir` itself is read, so a
+// tree that is not there throws; an entry deleted between readdir and lstat
+// (a `git pull` racing the walk) simply has no contribution.
+function sourceEntries(
+  root: string,
+  dir: string,
+  keep: (name: string) => boolean = isSourceEntry,
+): Array<[string, Buffer]> {
   return fs
     .readdirSync(dir)
-    .filter(isSourceEntry)
+    .filter(keep)
     .sort()
     .flatMap((name): Array<[string, Buffer]> => {
       const p = path.join(dir, name);
@@ -55,15 +60,36 @@ function sourceEntries(root: string, dir: string): Array<[string, Buffer]> {
     });
 }
 
-// The digest itself: sha256 over `path NUL bytes NUL` per entry, so a rename
-// (same bytes, new path) and a content edit both change it, and no two
-// entry boundaries can be confused. Lowercase hex.
-export function sourceDigest(srcDir: string): string {
+// sha256 over `path NUL bytes NUL` per entry, so a rename (same bytes, new
+// path) and a content edit both change it, and no two entry boundaries can be
+// confused. Lowercase hex.
+function digestOf(entries: ReadonlyArray<[string, Buffer]>): string {
   const h = crypto.createHash("sha256");
-  for (const [rel, bytes] of sourceEntries(srcDir, srcDir)) {
+  for (const [rel, bytes] of entries) {
     h.update(rel).update("\0").update(bytes).update("\0");
   }
   return h.digest("hex");
+}
+
+// The digest of a source tree: every entry under `srcDir`.
+export function sourceDigest(srcDir: string): string {
+  return digestOf(sourceEntries(srcDir, srcDir));
+}
+
+// What cargo builds the native client from: the crate's manifest, its
+// lockfile and its source — a dependency bump in Cargo.lock is as much a
+// change to the binary as an edit under src/. `target/` is cargo's output.
+export const CRATE_SOURCE = ["Cargo.toml", "Cargo.lock", "src"] as const;
+
+// [LAW:one-source-of-truth] The native client's build stamp: `just
+// install-rust` bakes it in (scripts/crate-digest.ts) and the doctor
+// recomputes it over the checkout (src/doctor/edge.ts), one function.
+export function crateDigest(crateDir: string): string {
+  return digestOf(
+    sourceEntries(crateDir, crateDir, (name) =>
+      (CRATE_SOURCE as readonly string[]).includes(name),
+    ),
+  );
 }
 
 // How much of a digest a person is shown: seven hex characters, the length

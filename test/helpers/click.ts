@@ -3,7 +3,9 @@
 // content and drive it through the REAL daemon path, so assertions track "what
 // effects does this click apply" rather than the exact wire encoding.
 
+import { HEALTHY_BUNDLE } from "./doctor-facts";
 import { NavigationHistory } from "../../src/daemon/navigation-history";
+import { HEALTHY_INSTALL_EDGE } from "./doctor-facts";
 import { parseHandlerUrl } from "../../src/install/index";
 import {
   VERBS,
@@ -15,6 +17,7 @@ import type { SessionStateRW } from "../../src/daemon/session-state";
 import { SettingsHistory } from "../../src/daemon/settings-history";
 import type { DslConfig } from "../../src/config/dsl-types";
 import { ProbeArrivals } from "../../src/doctor/handler-probe";
+import { ClientSightings } from "../../src/daemon/client-sightings";
 import { PACKAGE_VERSION } from "../../src/version";
 
 // The record a session's render leaves behind, which a click resolves its
@@ -50,6 +53,7 @@ export function testVerbContext(
     // Same posture for the doctor's edge: a test that drives a doctor click
     // hands in its own fake edge; reaching this one is a test bug.
     doctor: {
+      install: HEALTHY_INSTALL_EDGE,
       probeTmux: () => {
         throw new Error("doctor: no tmux edge in this test");
       },
@@ -83,6 +87,8 @@ export function testVerbContext(
     // daemon's for a probe to land: a test that reads arrivals hands in its own.
     clientVersion: PACKAGE_VERSION,
     probes: new ProbeArrivals(),
+    clients: new ClientSightings(),
+    bundle: HEALTHY_BUNDLE,
     // And for memento: a test that drives a ceiling click hands in its own.
     memento: {
       move: () => {

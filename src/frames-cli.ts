@@ -34,12 +34,17 @@ import { obtainDaemonKick } from "./daemon/acquire";
 import { socketPath } from "./daemon/paths";
 import { PROTOCOL_VERSION } from "./daemon/protocol";
 import { detectClientHints } from "./client-hints";
+import { nodeClientHint } from "./client-hint";
 import { newestWins } from "./utils/newest-wins";
 
 const RECONNECT_FIRST_MS = 250;
 const RECONNECT_MAX_MS = 2000;
 
-export async function runFrames(argv: readonly string[]): Promise<void> {
+// `bundle`: the bundle this process runs, as its entry names it.
+export async function runFrames(
+  argv: readonly string[],
+  bundle: string,
+): Promise<void> {
   // argv is the process's: [node, script, "frames", ...flags].
   const { values, tokens } = parseArgs({
     args: argv.slice(3),
@@ -90,7 +95,10 @@ export async function runFrames(argv: readonly string[]): Promise<void> {
   const forward = async (hook: ClaudeHookData): Promise<void> => {
     // The terminal as it is now: a resize between two statusline ticks is in
     // the next one.
-    const hints = detectClientHints(process.env, cwd, process.stderr);
+    const hints = {
+      ...detectClientHints(process.env, cwd, process.stderr),
+      client: nodeClientHint("frames", bundle),
+    };
     const outcome = await tryRenderViaDaemon(hook, renderArgs, cwd, hints);
     if (outcome.kind === "ok") return;
     say(describeFailure(outcome));

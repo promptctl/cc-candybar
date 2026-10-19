@@ -15,8 +15,12 @@ deploy:
 # The committed bin/cc-candybar node shim stays untouched — the native binary
 # is a separate, gitignored artifact. CI stages release binaries into the
 # per-platform npm packages instead (see .github/workflows/release.yml).
+# The build is stamped with the digest of the crate's source (Cargo.toml,
+# Cargo.lock, src/), so the doctor can tell a binary from the source it was
+# built from. `cargo metadata` settles Cargo.lock before the digest is taken,
+# and `--locked` refuses a build that would change it after.
 install-rust:
-    cd rust-client && cargo build --release
+    cd rust-client && cargo metadata --format-version 1 >/dev/null && digest="$(../node_modules/.bin/tsx ../scripts/crate-digest.ts .)" && CC_CANDYBAR_RUST_SOURCE="$digest" cargo build --release --locked
     cp rust-client/target/release/cc-candybar bin/cc-candybar-native
     chmod +x bin/cc-candybar-native
     @file bin/cc-candybar-native

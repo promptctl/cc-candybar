@@ -5,6 +5,9 @@
 // recorded `claudeConfigDir` hint names. The recorded client hints are seeded the way server.ts records them, so the click reads
 // the facts of the session's "last render" exactly as production does.
 
+import { ClientSightings } from "../src/daemon/client-sightings";
+import { HEALTHY_INSTALL_EDGE, healthyClient } from "./helpers/doctor-facts";
+import type { ClientHint } from "../src/client-hint";
 import {
   BUNDLED_GLYPHS,
   BUNDLED_GLYPHS_LOGGED,
@@ -106,6 +109,9 @@ function buildRuntime(
   load: LoadOutcome = CLEAN_LOAD,
   terminal: TerminalFixture = GHOSTTY,
   clicked: ReturnType<typeof memoryClickedTerminals> = memoryClickedTerminals(),
+  // The `client` hint the session's last render carried, as the daemon's
+  // sightings hold it; none is a client too old to report one.
+  client: { readonly hint?: ClientHint } = { hint: healthyClient() },
 ) {
   const config = parseAndValidate(
     "<user>",
@@ -125,6 +131,8 @@ function buildRuntime(
       termCols: 148,
     }),
   );
+  const clients = new ClientSightings();
+  clients.see("s1", client.hint, instantOf(new Date()));
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
@@ -138,6 +146,7 @@ function buildRuntime(
   const settingsPath = path.join(dir, "settings.json");
   let probes = 0;
   const doctor: DoctorEdge = {
+    install: HEALTHY_INSTALL_EDGE,
     probeTmux: () => {
       probes += 1;
       return {
@@ -163,6 +172,7 @@ function buildRuntime(
   const ctx: VerbContext = {
     ...testVerbContext(sessionState, undefined, config),
     doctor,
+    clients,
     dlog: (level, message) => logs.push(level === "warn" ? `warn: ${message}` : message),
   };
   const click = (url: string): void => {
@@ -238,14 +248,15 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     // row; the report row leads with the blank of its width, a cell of its own
     // right after the row's lead cap, and its text follows the seam.
     expect(lines[toolsRow + 1]!.startsWith(POWERLINE.lead + DISCLOSURE_GLYPH_CLOSE)).toBe(true);
-    const reports = lines.slice(toolsRow + 2, toolsRow + 6);
+    const reports = lines.slice(toolsRow + 2, toolsRow + 7);
     for (const report of reports) {
       expect(report.startsWith(`${POWERLINE.lead} `)).toBe(true);
     }
     expect(reports[0]).toContain("✓ config");
-    expect(reports[1]).toContain("✓ URL handler");
-    expect(reports[2]).toContain("✓ links");
-    expect(reports[3]).toContain("✗ tmux truecolor");
+    expect(reports[1]).toContain("✓ install");
+    expect(reports[2]).toContain("✓ URL handler");
+    expect(reports[3]).toContain("✓ links");
+    expect(reports[4]).toContain("✗ tmux truecolor");
   });
 
   // brandon-doctor-v62x.e91: the config check's row, and the run's log line
@@ -268,7 +279,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     expect(out).toContain("✓ tmux truecolor");
     expect(rt.urlOfVerb(VERB_DOCTOR_FIX)).toBeUndefined();
     expect(rt.logs.filter((line) => line.startsWith("doctor:"))).toEqual([
-      `doctor: config=failed(2) urlHandler=ok links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=ok glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=ghostty@- font=- mark=- tmuxLinks=- clicked=yes cols=148 clientUtf8=- (session=s1)`,
+      `doctor: config=failed(2) install=ok urlHandler=ok links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=ok glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=ghostty@- font=- mark=- tmuxLinks=- clicked=yes cols=148 clientUtf8=- clients=native/same/- (session=s1)`,
     ]);
   });
 
@@ -288,8 +299,22 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     expect(out).toContain("✗ Nerd Font — the doctor cannot read Terminal 455.1's font");
     expect(rt.clicked.list()).toEqual(["Terminal"]);
     expect(rt.logs.filter((line) => line.startsWith("doctor:"))).toEqual([
-      `doctor: config=ok urlHandler=ok links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=failed(1) glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=apple-terminal@455.1 font=- mark=- tmuxLinks=- clicked=yes cols=148 clientUtf8=- (session=s1)`,
+      `doctor: config=ok install=ok urlHandler=ok links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=failed(1) glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=apple-terminal@455.1 font=- mark=- tmuxLinks=- clicked=yes cols=148 clientUtf8=- clients=native/same/- (session=s1)`,
     ]);
+  });
+
+  // brandon-doctor-v62x.tfb: the click judges the client that drew the bar
+  // it came from — one too old to say what it is is the install's failure.
+  test("a bar drawn by a client too old to say what it is fails the install row", () => {
+    const rt = buildRuntime(null, CLEAN_LOAD, GHOSTTY, memoryClickedTerminals(), {});
+    rt.openTools();
+    rt.clickVerb(VERB_DOCTOR_RUN);
+    expect(rt.render()).toContain(
+      "✗ install — the bar is drawn by a statusline client too old to say what it is",
+    );
+    expect(rt.logs.find((line) => line.startsWith("doctor:"))).toMatch(
+      / install=failed\(1\) .* clients=unreported\/-\/- \(session=s1\)$/,
+    );
   });
 
   // Filing the click rides along with the run: a list that cannot be written
@@ -308,7 +333,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     expect(rt.logs).toContain(
       'warn: doctor: clicked terminal not filed for "Ghostty": EROFS: read-only file system',
     );
-    expect(rt.logs.find((line) => line.startsWith("doctor:"))).toMatch(/ clicked=no cols=148 clientUtf8=- \(session=s1\)$/);
+    expect(rt.logs.find((line) => line.startsWith("doctor:"))).toMatch(/ clicked=no cols=148 clientUtf8=- clients=native\/same\/- \(session=s1\)$/);
   });
 
   test("in tmux with RGB and the var unset: failed row with [fix]; the fix lands and the row says restart", () => {
@@ -439,7 +464,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
         [{ name: "iterm2", version: "3.7.2" }, ITERM_MENLO.env, BUNDLED_GLYPHS],
       ]);
       expect(rt.logs.filter((l) => l.startsWith("doctor:"))).toEqual([
-        `doctor: config=ok urlHandler=ok links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=failed(1) glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=iterm2@3.7.2 font="Menlo-Regular":lacks${[...BUNDLED_GLYPHS].length} mark=- tmuxLinks=- clicked=yes cols=148 clientUtf8=- (session=s1)`,
+        `doctor: config=ok install=ok urlHandler=ok links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=failed(1) glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=iterm2@3.7.2 font="Menlo-Regular":lacks${[...BUNDLED_GLYPHS].length} mark=- tmuxLinks=- clicked=yes cols=148 clientUtf8=- clients=native/same/- (session=s1)`,
       ]);
     });
 
@@ -457,7 +482,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
       expect(rt.logs).toContain(
         `doctor-mark: nerdFont drawn on iTerm2 with Menlo-Regular (iTerm2 profile "Default")|${BUNDLED_GLYPHS_NAMED} (session=s1)`,
       );
-      expect(rt.logs.at(-1)).toMatch(/nerdFont=ok .* mark=drawn tmuxLinks=- clicked=yes cols=148 clientUtf8=- \(session=s1\)$/);
+      expect(rt.logs.at(-1)).toMatch(/nerdFont=ok .* mark=drawn tmuxLinks=- clicked=yes cols=148 clientUtf8=- clients=native\/same\/- \(session=s1\)$/);
     });
 
     test("marking ✗ keeps the row failed, says boxes, and leaves ✓ to mark later", () => {

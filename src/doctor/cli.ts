@@ -19,11 +19,21 @@ import { WriteStream } from "node:tty";
 import type { CliPlan } from "../check.js";
 import { DOOR_GLYPH } from "../config/disclosure.js";
 import { detectClientHints } from "../client-hints.js";
-import { runDoctor, type CheckReport, type DoctorFacts } from "./checks.js";
+import {
+  RECENT_CLIENT_S,
+  runDoctor,
+  type Asked,
+  type CheckReport,
+  type DoctorFacts,
+  type InstallFacts,
+} from "./checks.js";
+import { askDaemonClients, type DaemonClients } from "./daemon-clients.js";
 import {
   gatherFacts,
+  installFacts,
   productionEdge,
   type ConfigLoad,
+  type InstallEdge,
   type ConfigOrigin,
   type DoctorEdge,
 } from "./edge.js";
@@ -83,11 +93,29 @@ export function loadConfigOnce(origin: ConfigOrigin): ConfigLoad {
   };
 }
 
+// The install facts of the daemon's answer: every session's latest client
+// that drew a bar within RECENT_CLIENT_S — the clients the bar runs.
+export function installOf(
+  edge: InstallEdge,
+  asked: Asked<DaemonClients>,
+): InstallFacts {
+  return asked.kind === "failed"
+    ? asked
+    : installFacts(
+        edge,
+        asked.value.bundle,
+        asked.value.clients
+          .filter(({ ago }) => ago <= RECENT_CLIENT_S)
+          .map(({ client }) => client),
+      );
+}
+
 // [LAW:effects-at-boundaries] The whole CLI as data: facts in, (streams,
 // exit code) out. `runDoctorCli` performs it; a test reads it.
 export async function doctorPlan(
   edge: DoctorEdge,
   handler: HandlerProbeEdge,
+  daemon: () => Promise<Asked<DaemonClients>>,
   env: Readonly<Record<string, string | undefined>>,
   cwd: string,
   // Measures the terminal the command runs in (`commandTerminal`), inside
@@ -125,6 +153,7 @@ export async function doctorPlan(
     facts = {
       ...gathered,
       urlHandler: await probeUrlHandler(handler),
+      install: installOf(edge.install, await daemon()),
       askedBy: "command",
     };
   } catch (e) {
@@ -174,6 +203,7 @@ export async function runDoctorCli(args: readonly string[]): Promise<never> {
   const plan = await doctorPlan(
     productionEdge(loadConfigOnce),
     productionHandlerProbeEdge(),
+    askDaemonClients,
     process.env,
     cwd,
     commandTerminal,

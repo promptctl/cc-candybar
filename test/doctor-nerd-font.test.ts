@@ -37,7 +37,7 @@ import {
 import { fileMarkBook, parseMarkBook, withMark } from "../src/doctor/mark-book";
 import { memoryMarkBook } from "./helpers/mark-book";
 import { memoryClickedTerminals } from "./helpers/clicked-terminals";
-import { HEALTHY_FACTS } from "./helpers/doctor-facts";
+import { HEALTHY_FACTS, HEALTHY_INSTALL_EDGE } from "./helpers/doctor-facts";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -497,6 +497,7 @@ describe("gatherFacts: where the Nerd Font facts come from", () => {
     const asked: unknown[][] = [];
     const pids: number[] = [];
     const e: DoctorEdge = {
+      install: HEALTHY_INSTALL_EDGE,
       probeTmux: client,
       remoteLogin: (pid) => {
         pids.push(pid);

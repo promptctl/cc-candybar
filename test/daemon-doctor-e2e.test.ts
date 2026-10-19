@@ -5,6 +5,7 @@
 // daemon's own is exercised — a project config found first, a user config
 // unread behind it, and a declaration the project config never uses.
 
+import { builtBundle } from "./helpers/spawn-test-daemon";
 import {
   mkdtempSync,
   mkdirSync,
@@ -41,6 +42,11 @@ import {
   productionHandlerProbeEdge,
 } from "../src/doctor/handler-probe";
 import { PACKAGE_VERSION } from "../src/version";
+import { crateDigest } from "../src/source-digest";
+import { productionInstallEdge } from "../src/doctor/edge";
+import { installOf } from "../src/doctor/cli";
+import { parseDaemonClients } from "../src/doctor/daemon-clients";
+import type { StatsSnapshot } from "../src/daemon/stats";
 
 jest.setTimeout(30_000);
 
@@ -182,6 +188,65 @@ test("the CLI's probe reads its own link back from the daemon it was delivered t
   } finally {
     if (savedSocket === undefined) delete process.env.CC_CANDYBAR_SOCKET;
     else process.env.CC_CANDYBAR_SOCKET = savedSocket;
+    if (daemon) await killAndWait(daemon);
+    removeTmpDirs();
+  }
+});
+
+// brandon-doctor-v62x.tfb through a real daemon: a render request records its
+// session's client, daemon-stats serves each session's latest, and the CLI's
+// reading of them is the install verdict. The daemon runs this checkout's
+// built bundle (`pnpm build` first), so it names the checkout's dist and a native client of
+// it must carry the crateDigest of the checkout's rust-client.
+test("the clients the daemon saw render are the install check's facts", async () => {
+  const { env, sockPath, removeTmpDirs } = prepareIsolatedDaemonEnv(
+    "cc-candybar-doctor-e2e",
+  );
+  const projectDir = realpathSync(
+    mkdtempSync(path.join(os.tmpdir(), "cc-candybar-doctor-e2e-project-")),
+  );
+  const repo = process.cwd();
+  const native = {
+    kind: "native",
+    bundle: path.join(repo, "bin", "..", "dist", "index.mjs"),
+    source: crateDigest(path.join(repo, "rust-client")),
+  } as const;
+  let daemon: RunningDaemon | undefined;
+  try {
+    // The built bundle, as production runs it: a daemon from src/ under tsx
+    // runs no bundle, and names the module it was loaded from.
+    daemon = await spawnDaemonWithEnv(
+      env,
+      builtBundle(path.join(repo, "dist", "index.mjs")),
+    );
+    const verdict = async () => {
+      const resp = await sendDaemonRequest(
+        sockPath,
+        { v: PROTOCOL_VERSION, kind: "stats" } as never,
+        5000,
+      );
+      const stats = (resp as { stats: StatsSnapshot }).stats;
+      const asked = parseDaemonClients(stats);
+      const install = installOf(productionInstallEdge, asked);
+      return checkByName("install")!.probe({ install } as never);
+    };
+
+    await render(sockPath, "install-e2e-1", projectDir, { client: native });
+    expect(await verdict()).toEqual({ ok: true });
+
+    // A second session drawn by a client too old to report itself.
+    await render(sockPath, "install-e2e-2", projectDir);
+    expect(await verdict()).toEqual({
+      ok: false,
+      reason:
+        `the bar is drawn by a statusline client too old to say what it is — run \`just install-rust\` and point the statusLine command at ${repo}/bin/cc-candybar-native`,
+      more: [],
+    });
+
+    // Its next render, by the current client, replaces it at once.
+    await render(sockPath, "install-e2e-2", projectDir, { client: native });
+    expect(await verdict()).toEqual({ ok: true });
+  } finally {
     if (daemon) await killAndWait(daemon);
     removeTmpDirs();
   }

@@ -16,8 +16,10 @@ import { sightingOf } from "./terminal.js";
 import {
   NERD_FONT_CHECK,
   glyphSighting,
+  clientStanding,
   type Asked,
   type CheckReport,
+  type InstallFacts,
   type MarkBook,
   type NerdFontFacts,
   type TerminalIdentity,
@@ -85,6 +87,23 @@ export function terminalFeatureFields(
 ): string {
   const client = terminal.kind === "seen" ? terminal.tmuxClient : null;
   return `cols=${termCols ?? "-"} clientUtf8=${client === null ? "-" : client.utf8 ? "yes" : "no"}`;
+}
+
+// [LAW:nothing-unseen] What the install check reasoned over, as one logfmt
+// field: each client it judged as `<kind>/<bundle>/<source>` — its kind
+// (`unreported` for one too old to say), and its standing (clientStanding):
+// its bundle `same`/`other`/`unresolved`, its build `same`/`other`/
+// `unstamped`/`unreadable`, `-` where it is not compared. `unasked` when the daemon could
+// not be asked, `-` when no client was.
+export function installFields(install: InstallFacts): string {
+  if (install.kind === "failed") return "clients=unasked";
+  const { daemon, clients } = install.value;
+  const described = clients.map((c) => {
+    if (c.kind === "unreported") return "unreported/-/-";
+    const { bundle, source } = clientStanding(daemon, c);
+    return `${c.client}/${bundle.kind}/${source.kind === "uncompared" ? "-" : source.kind}`;
+  });
+  return `clients=${described.join(",") || "-"}`;
 }
 
 // [LAW:nothing-unseen] What the Nerd Font check reasoned over, as logfmt

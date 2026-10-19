@@ -3,6 +3,7 @@
 import type { ClaudeHookData } from "./utils/claude";
 
 import process from "node:process";
+import { fileURLToPath } from "node:url";
 import { json } from "node:stream/consumers";
 import { debug } from "./utils/logger";
 import { runInstall, runInstallUrlHandler, runUrlHandle } from "./install";
@@ -20,8 +21,15 @@ import { HELP_TEXT } from "./help-text";
 import { NODE_FLAGS } from "./cli-flags";
 import { PACKAGE_VERSION } from "./version";
 import { detectClientHints } from "./client-hints";
+import { nodeClientHint } from "./client-hint";
 import { runDoctorCli } from "./doctor/cli";
 import { runFrames } from "./frames-cli";
+
+// [LAW:one-source-of-truth] The bundle this process runs: the file this entry
+// was loaded from, which Node's loader resolved through every link (an npm
+// global bin is a symlink, and argv[1] keeps the link). It stages on install
+// and names a Node client to the doctor.
+const RUNNING_BUNDLE = fileURLToPath(import.meta.url);
 
 const hasFlag = (flags: readonly string[]): boolean =>
   flags.some((f) => process.argv.includes(f));
@@ -50,11 +58,11 @@ async function main(): Promise<void> {
     // Default fallthrough = the existing stdin-driven render flow.
     const subcommand = process.argv[2];
     if (subcommand === "install") {
-      await runInstall(process.argv.slice(3));
+      await runInstall(process.argv.slice(3), RUNNING_BUNDLE);
       process.exit(0);
     }
     if (subcommand === "install-url-handler") {
-      runInstallUrlHandler();
+      runInstallUrlHandler(RUNNING_BUNDLE);
       process.exit(0);
     }
     if (subcommand === "url-handle") {
@@ -70,7 +78,7 @@ async function main(): Promise<void> {
       process.exit(0);
     }
     if (subcommand === "frames") {
-      await runFrames(process.argv);
+      await runFrames(process.argv, RUNNING_BUNDLE);
       return; // the stream owns its own lifecycle
     }
     // [LAW:one-type-per-behavior] `lint` is an alias of `check` — one config
@@ -154,7 +162,10 @@ echo '{"session_id":"test-session","workspace":{"project_dir":"/path/to/project"
       hookData,
       process.argv,
       process.cwd(),
-      detectClientHints(process.env, process.cwd(), process.stderr),
+      {
+        ...detectClientHints(process.env, process.cwd(), process.stderr),
+        client: nodeClientHint("node", RUNNING_BUNDLE),
+      },
     );
     // [LAW:types-are-the-program] Three variants, one per outcome kind. The
     // "kick on every failure" pattern was the load-bearing half of the

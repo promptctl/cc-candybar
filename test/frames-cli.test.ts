@@ -53,7 +53,7 @@ test("--config beside --session is refused with exit 2, since no data is forward
   const stderr = jest.spyOn(process.stderr, "write").mockImplementation(() => true);
   try {
     await expect(
-      runFrames(["node", "cc-candybar", "frames", "--session", "s", "--config", "/tmp/x.json5"]),
+      runFrames(["node", "cc-candybar", "frames", "--session", "s", "--config", "/tmp/x.json5"], "/opt/cc/dist/index.mjs"),
     ).rejects.toThrow("exit 2");
     expect(String(stderr.mock.calls[0]?.[0])).toMatch(/--config has no effect with --session/);
   } finally {
@@ -68,7 +68,7 @@ test("an empty --session is refused with exit 2: the subscribe this client sends
   });
   const stderr = jest.spyOn(process.stderr, "write").mockImplementation(() => true);
   try {
-    await expect(runFrames(["node", "cc-candybar", "frames", "--session", ""])).rejects.toThrow(
+    await expect(runFrames(["node", "cc-candybar", "frames", "--session", ""], "/opt/cc/dist/index.mjs")).rejects.toThrow(
       "exit 2",
     );
     expect(String(stderr.mock.calls[0]?.[0])).toMatch(/--session needs a session id/);

@@ -114,6 +114,7 @@ import {
   type SlashAction,
 } from "../../config/action";
 import { ceilingScope, type CeilingMove } from "../../memento/edge";
+import type { ClientSightings } from "../client-sightings";
 import type { MementoProvider } from "../../segments/memento";
 import { parseClientHints } from "../protocol";
 import {
@@ -129,12 +130,14 @@ import {
   linkFields,
   nerdFontFields,
   terminalFeatureFields,
+  installFields,
 } from "../../doctor/report";
 import { withMark } from "../../doctor/mark-book";
 import { DoctorBusy } from "../../doctor/busy";
 import {
   applyFix,
   clickArrived,
+  installFacts,
   gatherFacts,
   type DoctorEdge,
 } from "../../doctor/edge";
@@ -161,6 +164,10 @@ export interface VerbContext {
   readonly clientVersion: string | null;
   // Where a `doctor-probe` link records that it arrived.
   readonly probes: ProbeArrivals;
+  // Which client drew each session's bar, as this process saw it render, and
+  // the bundle this daemon runs.
+  readonly clients: ClientSightings;
+  readonly bundle: string;
   // [LAW:single-enforcer] The one owner of memento's ceiling reading, so the
   // move that makes a reading stale is the one that drops it.
   readonly memento: Pick<MementoProvider, "move">;
@@ -1145,7 +1152,7 @@ function writeReport(ctx: VerbContext, sid: string, facts: DoctorFacts): void {
   ctx.sessionState.setBatch(sid, doctorReportPairs(reports));
   ctx.dlog(
     "info",
-    `doctor: ${reports.map((r) => `${r.check.name}=${r.verdict.ok ? "ok" : `failed(${1 + (r.verdict.more?.length ?? 0)})`}`).join(" ")} ${nerdFontFields(facts.nerdFont, facts.marks)} ${linkFields(facts.terminal, facts.clicked)} ${terminalFeatureFields(facts.terminal, facts.termCols)} (session=${sid})`,
+    `doctor: ${reports.map((r) => `${r.check.name}=${r.verdict.ok ? "ok" : `failed(${1 + (r.verdict.more?.length ?? 0)})`}`).join(" ")} ${nerdFontFields(facts.nerdFont, facts.marks)} ${linkFields(facts.terminal, facts.clicked)} ${terminalFeatureFields(facts.terminal, facts.termCols)} ${installFields(facts.install)} (session=${sid})`,
   );
 }
 
@@ -1169,6 +1176,13 @@ function clickFacts(ctx: VerbContext, sid: string): DoctorFacts {
   return {
     ...gathered,
     urlHandler: clickArrived(ctx.clientVersion),
+    // The client that drew the bar this click came from, and the daemon the
+    // click reached — this process.
+    install: installFacts(
+      ctx.doctor.install,
+      ctx.bundle,
+      ctx.clients.ofSession(sid),
+    ),
     askedBy: "click",
     clicked: clickedFrom(ctx, gathered),
   };

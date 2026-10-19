@@ -31,11 +31,13 @@ const SSH_ENV_VARS = ["SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"] as const;
 
 // `tty` is the stream still attached to the session's terminal: stderr for a
 // statusline client, whose stdin is the hook JSON and stdout the captured line.
+// Every hint but `client`: what the calling program IS is no fact of its
+// environment, and only a statusline client has one to report.
 export function detectClientHints(
   env: NodeJS.ProcessEnv,
   cwd: string,
   tty: { readonly columns?: number; readonly rows?: number },
-): ClientHints {
+): Omit<ClientHints, "client"> {
   return {
     termCols: detectTermExtent(env.COLUMNS, tty.columns),
     // The diagnostic strip's row cap reads this

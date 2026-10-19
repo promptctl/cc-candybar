@@ -239,6 +239,7 @@ describe("config probe", () => {
       runDoctor(facts({ kind: "outside" })).map((r) => [r.check.name, r.verdict.ok]),
     ).toEqual([
       ["config", true],
+      ["install", true],
       ["urlHandler", true],
       ["links", true],
       ["tmuxTruecolor", true],
