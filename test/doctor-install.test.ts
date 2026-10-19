@@ -220,7 +220,7 @@ describe("install probe", () => {
     ).toEqual({
       ok: false,
       reason:
-        "the daemon restarted since this bar was drawn, so which client draws it is unknown — run the doctor again once the bar has redrawn",
+        "this daemon holds no render of this bar (it restarted since the bar was drawn, or has served 64 newer sessions), so which client draws it is unknown — run the doctor again once the bar has redrawn",
     });
   });
 

@@ -494,7 +494,7 @@ export function forgeLogin(cwd: string): Asked<ForgeLogin | null> {
     }),
   );
   if (remotes.kind === "failed") return remotes;
-  const url = forgeRemoteUrl(remotes.kind === "ok" ? remotes.value : []);
+  const url = forgeRemoteUrl(remotes.value);
   if (url === null) return { kind: "ok", value: null };
   const forge = detectForge(url);
   if (forge === null) return { kind: "ok", value: null };

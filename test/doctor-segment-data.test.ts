@@ -156,7 +156,7 @@ describe("segment data row", () => {
     ).toMatchObject({
       ok: false,
       reason: expect.stringMatching(
-        /^block, weekly: the daemon restarted since this bar was drawn/,
+        /^block, weekly: this daemon holds no render of this bar \(it restarted since the bar was drawn, or has served 64 newer sessions\)/,
       ),
     });
   });

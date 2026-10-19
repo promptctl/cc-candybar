@@ -27,6 +27,18 @@ export type RateLimitSightings = ReadonlyArray<
   Pick<RenderSighting, "rateLimits" | "claudeConfigDir" | "ago">
 >;
 
+// Each entry of the stats' `clients` as a record of unread fields — a
+// non-object entry has none — for each parser to hold to its own shape.
+function sightingRecords(
+  stats: StatsSnapshot,
+): Array<Partial<Record<keyof RenderSighting, unknown>>> {
+  return (stats.clients as unknown[]).map((c) =>
+    typeof c === "object" && c !== null
+      ? (c as Partial<Record<keyof RenderSighting, unknown>>)
+      : {},
+  );
+}
+
 // [LAW:parse-dont-validate] Socket JSON from whichever daemon is running
 // becomes DaemonClients here or a failure naming why. A daemon of another
 // build is told by the one shape comparison daemon-stats makes (shapeSkew),
@@ -42,11 +54,7 @@ export function parseDaemonClients(stats: StatsSnapshot): Asked<DaemonClients> {
       reason: `the running daemon (${stats.version}) reported its bundle as ${JSON.stringify(stats.bundle)}`,
     };
   }
-  const sightings = (stats.clients as unknown[]).map((c) =>
-    typeof c === "object" && c !== null
-      ? (c as { client?: unknown; ago?: unknown })
-      : {},
-  );
+  const sightings = sightingRecords(stats);
   if (!sightings.every((c) => typeof c.ago === "number")) {
     return {
       kind: "failed",
@@ -110,11 +118,7 @@ export function parseRateLimitSightings(
 ): Asked<RateLimitSightings> {
   const skew = shapeSkew(stats, ["clients"]);
   if (skew !== null) return { kind: "failed", reason: skew };
-  const sightings = (stats.clients as unknown[]).map((c) =>
-    typeof c === "object" && c !== null
-      ? (c as Partial<Record<keyof RenderSighting, unknown>>)
-      : {},
-  );
+  const sightings = sightingRecords(stats);
   const wellFormed = sightings.every(
     (c) =>
       typeof c.ago === "number" &&

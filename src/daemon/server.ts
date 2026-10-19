@@ -83,7 +83,11 @@ import { settingCounts } from "./setting-drafts";
 import { validateHookData } from "../utils/schema-validator.js";
 import { productionEdge } from "../doctor/edge";
 import { ProbeArrivals } from "../doctor/handler-probe";
-import { RenderSightings, rateLimitsSeen } from "./render-sightings";
+import {
+  RenderSightings,
+  rateLimitsSeen,
+  type RateLimitsSeen,
+} from "./render-sightings";
 import { claudeConfigDir } from "../claude-settings";
 import { setLaunchStats } from "../proc/launch";
 import { buildDebugSnapshot } from "./debug";
@@ -1138,7 +1142,7 @@ export async function handleRequest(
         checked.req.hookData.session_id,
         {
           client: checked.req.hints.client ?? null,
-          rateLimits: rateLimitsSeen(checked.req.hookData),
+          rateLimits: checked.req.rateLimits,
           claudeConfigDir: claudeConfigDir(checked.req.hints.claudeConfigDir),
         },
         at,
@@ -1575,12 +1579,14 @@ function lanesOf(req: CheckedRenderRequest): LaneSwitches {
 // required field with its declared type, its cwd is absolute, `hints` is its
 // client hints, parsed, and its args are parsed into `requested` — the config
 // inputs it named, its explicit path the `--config` flag over the client's
-// `CC_CANDYBAR_CONFIG` hint — and `unknownFlagsError`. Raw `req.*` hint
+// `CC_CANDYBAR_CONFIG` hint — and `unknownFlagsError`, and `rateLimits` is
+// what its hookData says of the rate-limit windows. Raw `req.*` hint
 // fields and `req.args` are not read past the checkpoint. Only
 // checkRenderRequest makes one.
 declare const CHECKED: unique symbol;
 type CheckedRenderRequest = RenderRequest & {
   readonly hints: ClientHints;
+  readonly rateLimits: RateLimitsSeen;
   readonly requested: RenderOrigin;
   readonly unknownFlagsError: string | null;
   readonly [CHECKED]: true;
@@ -1651,6 +1657,7 @@ function checkRenderRequest(
     req: {
       ...req,
       hints,
+      rateLimits: rateLimitsSeen(req.hookData),
       requested: {
         projectDir: req.hookData.workspace.project_dir,
         cwd: req.cwd,
@@ -1710,9 +1717,9 @@ async function renderChecked(
     // Which program drew this bar (src/client-hint.ts); `unreported` for a
     // client too old to say.
     client: hints.client?.kind ?? "unreported",
-    // What the hook payload said of the rate-limit windows — the sighting
-    // the doctor's segment-data check reads (RenderSightings).
-    rateLimits: rateLimitsSeen(req.hookData),
+    // What the sighting recorded of the rate-limit windows — the fact the
+    // doctor's segment-data check reads (RenderSightings).
+    rateLimits: req.rateLimits,
   });
   // [LAW:one-source-of-truth] The explicit config path has three
   // spellings and ONE precedence: a load-config pick (sessionRenderOrigin)

@@ -19,7 +19,10 @@ import { DEFAULT_TERMINAL_WIDTH } from "../render/strip.js";
 import type { LoopName } from "@promptctl/rich-js";
 import { EFFECT_FLOOR, type EffectSelection } from "../themes/policy.js";
 import type { Outcome } from "../utils/outcome.js";
-import type { RateLimitsSeen } from "../daemon/render-sightings.js";
+import {
+  SIGHTINGS_KEPT,
+  type RateLimitsSeen,
+} from "../daemon/render-sightings.js";
 import type { DeclKind, UnusedDecl } from "../config/unused.js";
 import {
   approachingLimit,
@@ -782,6 +785,10 @@ function installProblems(
 // beside it. Judged on the clients that DREW the bar, not on the settings
 // file — managed settings, a project file or a launcher script may stand
 // between what it names and what runs.
+// [LAW:one-source-of-truth] Why a click finds no sighting of its own bar —
+// the install and segment-data checks both say it.
+const NO_RENDER_OF_THIS_BAR = `this daemon holds no render of this bar (it restarted since the bar was drawn, or has served ${SIGHTINGS_KEPT} newer sessions)`;
+
 const install: Check = {
   name: "install",
   label: "install",
@@ -799,7 +806,7 @@ const install: Check = {
         ok: false,
         reason:
           askedBy === "click"
-            ? "the daemon restarted since this bar was drawn, so which client draws it is unknown — run the doctor again once the bar has redrawn"
+            ? `${NO_RENDER_OF_THIS_BAR}, so which client draws it is unknown — run the doctor again once the bar has redrawn`
             : `no statusline client has drawn a bar for this daemon in the last ${RECENT_CLIENT_S / 60} minutes — run the doctor again once the bar has redrawn; if it never does, the statusLine command does not run cc-candybar`,
       };
     }
@@ -1276,7 +1283,7 @@ function rateLimitProblems(
   if (fact.value.length === 0) {
     return [
       askedBy === "click"
-        ? `${named(segments)}: the daemon restarted since this bar was drawn, so whether Claude Code sends rate_limits is unseen — run the doctor again once the bar has redrawn`
+        ? `${named(segments)}: ${NO_RENDER_OF_THIS_BAR}, so whether Claude Code sends rate_limits is unseen — run the doctor again once the bar has redrawn`
         : `${named(segments)}: no session of this Claude Code has drawn a bar for this daemon in the last ${RECENT_CLIENT_S / 60} minutes, so whether it sends rate_limits is unseen — run the doctor again once the bar has redrawn`,
     ];
   }

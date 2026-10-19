@@ -404,10 +404,13 @@ export const REMOTES_ARGS: readonly string[] = [
   "^remote\\..*\\.url$",
 ];
 
-export function remotesOf(result: LaunchResult): Outcome<GitRemote[]> {
+// Never absent: no remotes is the empty list.
+export function remotesOf(
+  result: LaunchResult,
+): Extract<Outcome<GitRemote[]>, { kind: "ok" | "failed" }> {
   const r = classify("git config --get-regexp remote url", result, 1);
   if (r.kind === "failed") return r;
-  return ok(r.kind === "ok" ? parseRemotes(r.value) : []);
+  return { kind: "ok", value: r.kind === "ok" ? parseRemotes(r.value) : [] };
 }
 
 // [LAW:effects-at-boundaries] Pure text→data over `git config --get-regexp
