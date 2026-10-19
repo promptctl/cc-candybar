@@ -1,3 +1,10 @@
+# [1.146.0](https://github.com/promptctl/cc-candybar/compare/v1.145.0...v1.146.0) (2026-10-19)
+
+
+### Features
+
+* **doctor:** segments have their data (brandon-doctor-v62x.onf) ([#376](https://github.com/promptctl/cc-candybar/issues/376)) ([17b7a9b](https://github.com/promptctl/cc-candybar/commit/17b7a9b894238eb2ff1cf2d293f423aab7c37fca))
+
 # [1.145.0](https://github.com/promptctl/cc-candybar/compare/v1.144.0...v1.145.0) (2026-10-19)
 
 
