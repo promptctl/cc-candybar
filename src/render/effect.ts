@@ -18,6 +18,8 @@ import {
   Effected,
   TerminalTheme,
   confined,
+  nextChangeOf,
+  withNextChange,
   type ColorRgba,
   type Effect,
   type LoopName,
@@ -268,6 +270,20 @@ function fromGround(effect: Effect, ground: ColorRgba): Effect {
     ASSUMED_TERMINAL.palette,
   );
   return (t, drawn) => effect(t, { ...drawn, theme: terminal });
+}
+
+// [LAW:one-source-of-truth] A loop on a bar measures the ROW — its extent is
+// what places a shimmer's band and spaces sparkle's fireflies — and paints only
+// the cells it is confined to. rich-js `confined` narrows what the effect
+// measures as well as what it paints, so the bar's effect around a placement at
+// a row's edge would be measured on a shorter row, and every cell following the
+// bar would move by the setting. The narrowing keeps deciding which colours are
+// painted; the loop is handed the row's frame.
+function paintedOn(effect: Effect, owners: readonly object[]): Effect {
+  return withNextChange(
+    (t, row) => confined(() => effect(t, row), ...owners)(t, row),
+    (t, row) => nextChangeOf(effect, t, row),
+  );
 }
 
 // FNV-1a over a string, as a fraction in [0, 1): where an element sits in an
@@ -583,7 +599,7 @@ export class SessionEffects<Line> {
                   effect:
                     part.owners === undefined
                       ? effect
-                      : confined(effect, ...part.owners),
+                      : paintedOn(effect, part.owners),
                 };
               }),
               ...passing,

@@ -104,7 +104,7 @@
   "optionalDependencies": {
     "@promptctl/cc-candybar-darwin-arm64": "1.134.0",
     "@promptctl/cc-candybar-darwin-x64": "1.134.0",
-    "@promptctl/cc-candybar-linux-arm64": "1.134.0",
-    "@promptctl/cc-candybar-linux-x64": "1.134.0"
+    "@promptctl/cc-candybar-linux-x64": "1.134.0",
+    "@promptctl/cc-candybar-linux-arm64": "1.134.0"
   }
 }

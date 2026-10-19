@@ -415,8 +415,9 @@ export const PLACEMENT_EFFECTS: readonly PlacementEffect[] = Object.freeze([
 ]);
 
 // An effect's selection carries its NAME as its value: what a settled name
-// denotes is a catalogue entry made per row by the render (a row's span is a
-// fact only the render has), so the name is the whole of what crosses here.
+// denotes is a catalogue entry made per row by the render (each row sits at its
+// own place in the noise and keeps its own effect object across frames), so the
+// name is the whole of what crosses here.
 export type EffectSelection = Selection<EffectName>;
 export type DecidedEffect = Decided<EffectName>;
 

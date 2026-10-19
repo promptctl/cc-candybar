@@ -5,7 +5,6 @@ import {
   CellJoiner,
   JOINERS,
   FlexStrip,
-  cellLen,
   renderToString,
   type Joiner,
   type SeamForm,
@@ -15,18 +14,7 @@ import {
 import type { Charset, ColorCompatibility, Endcaps } from "../themes/policy.js";
 import { isAsciiText } from "../themes/policy.js";
 import { RENDER_THEME } from "./rich-theme.js";
-import { INVISIBLE } from "./ansi.js";
 import { STILL, type RowMotion } from "./effect.js";
-
-// The columns the widest line of a drawing occupies: SGR and OSC-8 are
-// zero-width, and `cellLen` is the measure the strip wraps by, so this is the
-// row's own arithmetic rather than a second opinion about character widths.
-export function drawnCols(drawing: string): number {
-  return Math.max(
-    0,
-    ...drawing.split("\n").map((line) => cellLen(line.replace(INVISIBLE, ""))),
-  );
-}
 
 // [LAW:single-enforcer] Every renderable this module serializes is drawn here,
 // with `RENDER_THEME` — the theme the cell splitter resolves a fragment's style
@@ -126,7 +114,11 @@ function plainWith(separator: string): CellJoiner {
   const known = separatorJoiners.get(separator);
   if (known !== undefined) return known;
   const withGlyph = (form: SeamForm): SeamForm => {
-    const seam = form.seam.map((cell) => ({ ...cell, glyph: separator }));
+    // [LAW:types-are-the-program] A cap standing in the seam's place is drawn
+    // as the caps it names; only a join cell carries the authored glyph.
+    const seam = form.seam.map((cell) =>
+      "cap" in cell ? cell : { ...cell, glyph: separator },
+    );
     return { seam, divider: seam };
   };
   const { seam, caps } = JOINERS.plain;

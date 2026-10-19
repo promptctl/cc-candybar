@@ -14,8 +14,21 @@ import {
   type CellSizing,
   type LaidCell,
 } from "../template-engine/layout.js";
-import { drawnCols, renderStripCells, type BuildLineOptions } from "./strip.js";
+import { cellLen } from "@promptctl/rich-js";
+
+import { renderStripCells, type BuildLineOptions } from "./strip.js";
+import { INVISIBLE } from "./ansi.js";
 import type { RowItem } from "./effect.js";
+
+// The columns the widest line of a drawing occupies: SGR and OSC-8 are
+// zero-width, and `cellLen` is the measure the strip wraps by, so this is the
+// row's own arithmetic rather than a second opinion about character widths.
+function drawnCols(drawing: string): number {
+  return Math.max(
+    0,
+    ...drawing.split("\n").map((line) => cellLen(line.replace(INVISIBLE, ""))),
+  );
+}
 
 /**
  * Give every fill-demanding cell in one row its share of the leftover width, and
