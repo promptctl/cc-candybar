@@ -90,8 +90,10 @@ export async function doctorPlan(
   handler: HandlerProbeEdge,
   env: Readonly<Record<string, string | undefined>>,
   cwd: string,
-  // The terminal the command runs in (`commandTerminal`).
-  tty: { readonly columns?: number; readonly rows?: number },
+  // Measures the terminal the command runs in (`commandTerminal`), inside
+  // the one try below, so a terminal that cannot be opened is a `doctor:`
+  // line and exit 2 like every other fact the run could not gather.
+  measureTerminal: () => { readonly columns?: number; readonly rows?: number },
   configFile: string | undefined = undefined,
 ): Promise<CliPlan> {
   let facts: DoctorFacts;
@@ -99,8 +101,10 @@ export async function doctorPlan(
     const gathered = gatherFacts(
       edge,
       // [LAW:one-source-of-truth] The hints a statusline client started here
-      // would report, by the client's own detection.
-      detectClientHints(env, cwd, tty),
+      // would report, by the client's own detection — over the terminal the
+      // command runs in, standing in for the stream Claude Code would hand
+      // that client (which the command's own redirects say nothing about).
+      detectClientHints(env, cwd, measureTerminal()),
       // The config the daemon would load for a session started here: this
       // directory, under the file named on the command line (a statusline
       // command's own `--config`), else the override the statusline client
@@ -172,7 +176,7 @@ export async function runDoctorCli(args: readonly string[]): Promise<never> {
     productionHandlerProbeEdge(),
     process.env,
     cwd,
-    commandTerminal(),
+    commandTerminal,
     args[0],
   );
   process.stdout.write(plan.stdout);

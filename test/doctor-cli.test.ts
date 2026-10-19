@@ -89,7 +89,7 @@ const inDir = (env: Record<string, string>) => ({
 describe("doctorPlan", () => {
   test("an unreadable settings.json is exit 2 naming the file, nothing on stdout", async () => {
     fs.writeFileSync(settingsPath(), '{ "env": [1] }');
-    expect(await doctorPlan(EDGE, NO_HANDLER, inDir(IN_TMUX), "/", { columns: 120 })).toEqual({
+    expect(await doctorPlan(EDGE, NO_HANDLER, inDir(IN_TMUX), "/", () => ({ columns: 120 }))).toEqual({
       stdout: "",
       stderr: `doctor: cannot read ${settingsPath()}: \`env\` is not an object\n`,
       code: 2,
@@ -105,7 +105,7 @@ describe("doctorPlan", () => {
       { ...NO_HANDLER, platform: "darwin", sockets: { own: "/a", handler: "/a" } },
       inDir(IN_TMUX),
       "/",
-      { columns: 120 },
+      () => ({ columns: 120 }),
     );
     expect(plan.stderr).toBe(
       `doctor: cannot read ${settingsPath()}: \`env\` is not an object\n`,
@@ -116,7 +116,7 @@ describe("doctorPlan", () => {
   // readable, whatever a looser parser makes of it.
   test("a settings.json that is JSON5 but not JSON is exit 2 naming the file", async () => {
     fs.writeFileSync(settingsPath(), '{ "env": { "A": "1", }, }');
-    const plan = await doctorPlan(EDGE, NO_HANDLER, inDir(IN_TMUX), "/", { columns: 120 });
+    const plan = await doctorPlan(EDGE, NO_HANDLER, inDir(IN_TMUX), "/", () => ({ columns: 120 }));
     expect(plan.stdout).toBe("");
     expect(plan.code).toBe(2);
     expect(plan.stderr).toMatch(/\n$/);
@@ -124,7 +124,7 @@ describe("doctorPlan", () => {
   });
 
   test("every check ok is exit 0, one ✓ line per check", async () => {
-    expect(await doctorPlan(EDGE, NO_HANDLER, inDir({}), "/", { columns: 120 })).toEqual({
+    expect(await doctorPlan(EDGE, NO_HANDLER, inDir({}), "/", () => ({ columns: 120 }))).toEqual({
       stdout: "✓ config\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width\n✓ effect refresh\n✓ Nerd Font\n",
       stderr: "",
       code: 0,
@@ -134,14 +134,25 @@ describe("doctorPlan", () => {
   // brandon-doctor-v62x.1ku: the command measures the terminal it runs in —
   // COLUMNS, else the terminal's own geometry.
   test("a terminal the command cannot measure fails terminal width, exit 1", async () => {
-    const plan = await doctorPlan(EDGE, NO_HANDLER, inDir({}), "/", {});
+    const plan = await doctorPlan(EDGE, NO_HANDLER, inDir({}), "/", () => ({}));
     expect(plan.code).toBe(1);
     expect(plan.stdout).toContain(
       "\n✗ terminal width — no terminal width was measured",
     );
     expect(
-      (await doctorPlan(EDGE, NO_HANDLER, inDir({ COLUMNS: "90" }), "/", {})).code,
+      (await doctorPlan(EDGE, NO_HANDLER, inDir({ COLUMNS: "90" }), "/", () => ({}))).code,
     ).toBe(0);
+  });
+
+  test("a terminal that cannot be opened is a doctor: line, exit 2, no checks", async () => {
+    const plan = await doctorPlan(EDGE, NO_HANDLER, inDir({}), "/", () => {
+      throw new Error("EACCES: permission denied, open '/dev/tty'");
+    });
+    expect(plan).toEqual({
+      stdout: "",
+      stderr: "doctor: EACCES: permission denied, open '/dev/tty'\n",
+      code: 2,
+    });
   });
 
   // brandon-doctor-v62x.ryu: the command has no click to prove links work, so
@@ -158,7 +169,7 @@ describe("doctorPlan", () => {
         };
       },
     };
-    const plan = await doctorPlan(edge, NO_HANDLER, inDir(IN_TMUX), "/", { columns: 120 });
+    const plan = await doctorPlan(edge, NO_HANDLER, inDir(IN_TMUX), "/", () => ({ columns: 120 }));
     expect(plan.stdout).toContain(
       '\n✗ links — tmux does not pass links through to Ghostty — add `set -as terminal-features ",xterm-ghostty:hyperlinks"` to tmux.conf, then detach and reattach (tmux 3.4 or later)\n',
     );
@@ -170,7 +181,7 @@ describe("doctorPlan", () => {
       NO_HANDLER,
       inDir({ TERM_PROGRAM: "Apple_Terminal", TERM_PROGRAM_VERSION: "455.1" }),
       "/",
-      { columns: 120 },
+      () => ({ columns: 120 }),
     );
     expect(plan.code).toBe(1);
     expect(plan.stdout).toMatch(/\n✗ links — Terminal draws no links \(OSC 8\)/);
@@ -180,14 +191,14 @@ describe("doctorPlan", () => {
   // doctor, clicked in kitty, files the proof this command reads.
   test("a terminal whose release went unsaid is settled by a doctor click remembered for it", async () => {
     const kitty = inDir({ TERM_PROGRAM: "", TERM: "xterm-kitty" });
-    const unsettled = await doctorPlan(EDGE, NO_HANDLER, kitty, "/", { columns: 120 });
+    const unsettled = await doctorPlan(EDGE, NO_HANDLER, kitty, "/", () => ({ columns: 120 }));
     expect(unsettled.stdout).toMatch(/\n✗ links — kitty draws links \(OSC 8\) since 0\.19\.0, and did not say which release this is — click 🩺 doctor/);
     const settled = await doctorPlan(
       { ...EDGE, clicked: memoryClickedTerminals(["kitty"]) },
       NO_HANDLER,
       kitty,
       "/",
-      { columns: 120 },
+      () => ({ columns: 120 }),
     );
     expect(settled.stdout).toContain("\n✓ links\n");
   });
@@ -200,7 +211,7 @@ describe("doctorPlan", () => {
       NO_HANDLER,
       inDir({ TERM_PROGRAM: "Hyper" }),
       "/",
-      { columns: 120 },
+      () => ({ columns: 120 }),
     );
     expect(plan.code).toBe(1);
     expect(plan.stdout).toMatch(
@@ -223,13 +234,13 @@ describe("doctorPlan", () => {
       NO_HANDLER,
       inDir({ TERM_PROGRAM: "Hyper" }),
       "/",
-      { columns: 120 },
+      () => ({ columns: 120 }),
     );
     expect(plan.stdout).toContain("\n✓ Nerd Font\n");
   });
 
   test("a failed check is exit 1, its reason and the fix hint on the line", async () => {
-    const plan = await doctorPlan(EDGE, NO_HANDLER, inDir(IN_TMUX), "/", { columns: 120 });
+    const plan = await doctorPlan(EDGE, NO_HANDLER, inDir(IN_TMUX), "/", () => ({ columns: 120 }));
     expect(plan.code).toBe(1);
     expect(plan.stderr).toBe("");
     expect(plan.stdout).toBe(
@@ -244,7 +255,7 @@ describe("doctorPlan", () => {
   // CLAUDE_CONFIG_DIR, not ~/.claude's.
   test("a staged-but-unapplied fix names the settings file it was read from", async () => {
     fs.writeFileSync(settingsPath(), `{ "env": { "${TMUX_TRUECOLOR_VAR}": "1" } }`);
-    expect((await doctorPlan(EDGE, NO_HANDLER, inDir(IN_TMUX), "/", { columns: 120 })).stdout).toBe(
+    expect((await doctorPlan(EDGE, NO_HANDLER, inDir(IN_TMUX), "/", () => ({ columns: 120 }))).stdout).toBe(
       `✓ config\n✓ URL handler\n✓ links\n✗ tmux truecolor — ${TMUX_TRUECOLOR_VAR} is set in ${settingsPath()} — restart Claude Code to apply\n✓ UTF-8\n✓ terminal width\n✓ effect refresh\n✓ Nerd Font\n`,
     );
   });
@@ -269,7 +280,7 @@ describe("doctorPlan over a real config", () => {
   });
   const projectConfig = (): string => path.join(project, ".cc-candybar.json5");
   const plan = (env: Record<string, string> = {}) =>
-    doctorPlan(REAL, NO_HANDLER, inDir(env), project, { columns: 120 });
+    doctorPlan(REAL, NO_HANDLER, inDir(env), project, () => ({ columns: 120 }));
 
   test("no config file anywhere: the bundled default is correct", async () => {
     expect((await plan()).stdout).toBe("✓ config\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width\n✓ effect refresh\n✓ Nerd Font\n");
@@ -343,7 +354,7 @@ describe("doctorPlan over a real config", () => {
           REAL,
           NO_HANDLER,
           inDir({ CC_CANDYBAR_CONFIG: hinted }),
-          project, { columns: 120 },
+          project, () => ({ columns: 120 }),
           path.relative(project, named),
         )
       )
