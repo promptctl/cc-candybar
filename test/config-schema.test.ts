@@ -197,7 +197,7 @@ const BAD_STRUCTURAL: ReadonlyArray<readonly [string, string]> = [
   // brandon-config-349: removed globals keys — closed out by the schema's
   // `additionalProperties: false` (never listed, so never completed), refused by
   // the loader with its pointer, wherever globals are authored.
-  ...["default_bg", "default_fg", "default_truncate_marker"].flatMap(
+  ...["default_bg", "default_fg", "default_truncate_marker", "charset"].flatMap(
     (key) =>
       [
         [`removed globals.${key}`, `{ globals: { ${key}: 'x' } }`],

@@ -11,8 +11,7 @@ import {
   type Renderable,
   type RenderToStringOptions,
 } from "@promptctl/rich-js";
-import type { Charset, ColorCompatibility, Endcaps } from "../themes/policy.js";
-import { isAsciiText } from "../themes/policy.js";
+import type { ColorCompatibility, Endcaps } from "../themes/policy.js";
 import { RENDER_THEME } from "./rich-theme.js";
 import { STILL, type RowMotion } from "./effect.js";
 
@@ -43,11 +42,11 @@ export interface RenderedSegmentLike {
   fgHex?: string;
 }
 
-// [LAW:one-source-of-truth] `Endcaps`/`Charset` and their value lists live
+// [LAW:one-source-of-truth] `Endcaps`/`ColorCompatibility` and their value lists live
 // in themes/policy.ts (the render-identifier policy module, importable by the
 // option-source machinery without a render→template-engine cycle). Re-exported
 // here so render-layer consumers can keep importing them from the strip module.
-export type { Charset, ColorCompatibility, Endcaps };
+export type { ColorCompatibility, Endcaps };
 
 // [LAW:one-source-of-truth] Raw terminal cols we assume when the wire
 // didn't give us one (older client, env-stripped spawn). RAW — not
@@ -64,7 +63,6 @@ export const DEFAULT_TERMINAL_WIDTH = 120;
 export {
   DEFAULT_WRAP,
   DEFAULT_PADDING,
-  DEFAULT_CHARSET,
   DEFAULT_COLOR_COMPATIBILITY,
 } from "../themes/policy.js";
 
@@ -95,20 +93,13 @@ export interface BuildLineOptions {
   // site states the resolved value; the cell builders derive from it and
   // never re-default.
   padding: number;
-  // [LAW:one-source-of-truth] Which glyph vocabulary the joiners render with
-  // (globals.charset, default "unicode" — the legacy display.charset).
-  // Required for the same reason as padding: the resolved value reaches every
-  // render explicitly; pickJoiner derives from it and never re-defaults.
-  charset: Charset;
 }
 
 // Plain drawn with an authored separator (globals.default_separator): the
 // bundled plain shape with the separator as its one glyph, drawn as written.
 // rich-js builds a joiner's ascii form up front and refuses a non-ASCII glyph
-// in it, so a non-ASCII separator keeps plain's own ascii form in that slot —
-// never drawn, since the loader refuses that separator under charset ascii
-// ([LAW:single-enforcer], cross-ref's `asciiSeparators`). Memoised per
-// separator, so a render does not re-parse it.
+// in it; the bar never draws that form, so plain's own fills the slot.
+// Memoised per separator, so a render does not re-parse it.
 const separatorJoiners = new Map<string, CellJoiner>();
 function plainWith(separator: string): CellJoiner {
   const known = separatorJoiners.get(separator);
@@ -125,7 +116,7 @@ function plainWith(separator: string): CellJoiner {
   const joiner = new CellJoiner(
     {
       glyph: withGlyph(seam.glyph),
-      ascii: isAsciiText(separator) ? withGlyph(seam.ascii) : seam.ascii,
+      ascii: seam.ascii,
     },
     caps,
   );
@@ -135,23 +126,15 @@ function plainWith(separator: string): CellJoiner {
 
 // [LAW:dataflow-not-control-flow] The joiner is a lookup: rich-js's `JOINERS`
 // holds every one by the name `Endcaps` admits, so there is no arm per shape
-// to keep in step with the list. Charset is not an argument — it reaches the
-// render as rich-js's `asciiOnly` (`drawOptions`), which picks the joiner's
-// ascii form, so the two stay orthogonal. Plain alone reads the authored
-// separator, which is user data.
+// to keep in step with the list. Plain alone reads the authored separator,
+// which is user data.
 function pickJoiner(endcaps: Endcaps, separator?: string): Joiner {
   return endcaps === "plain" && separator !== undefined
     ? plainWith(separator)
     : JOINERS[endcaps];
 }
 
-// What the strip shape puts in a render's options: charset, as the one
-// option rich-js reads to choose a joiner's ascii form.
-const drawOptions = (charset: Charset): { asciiOnly: boolean } => ({
-  asciiOnly: charset === "ascii",
-});
-
-type StripShape = Pick<BuildLineOptions, "endcaps" | "charset" | "separator">;
+type StripShape = Pick<BuildLineOptions, "endcaps" | "separator">;
 
 // [LAW:single-enforcer] Strip geometry has one owner — this module builds every
 // joiner (pickJoiner), so it alone measures what a styled row costs beyond its
@@ -161,11 +144,7 @@ type StripShape = Pick<BuildLineOptions, "endcaps" | "charset" | "separator">;
 // time a joiner changes. Memoised per joiner shape: a render asks once per shape.
 const geometryMemo = new Map<string, { chrome: number; seam: number }>();
 function stripGeometry(options: StripShape): { chrome: number; seam: number } {
-  const key = JSON.stringify([
-    options.endcaps,
-    options.charset,
-    options.separator ?? null,
-  ]);
+  const key = JSON.stringify([options.endcaps, options.separator ?? null]);
   const known = geometryMemo.get(key);
   if (known !== undefined) return known;
   const joiner = pickJoiner(options.endcaps, options.separator);
@@ -177,10 +156,7 @@ function stripGeometry(options: StripShape): { chrome: number; seam: number } {
     });
   const width = (cells: RichText[]): number =>
     new RichText(
-      draw(new Strip(cells, joiner), {
-        colorSystem: null,
-        ...drawOptions(options.charset),
-      }).replace(/\n$/, ""),
+      draw(new Strip(cells, joiner), { colorSystem: null }).replace(/\n$/, ""),
     ).cellLength;
   const one = width([cell("#101010")]);
   const geometry = {
@@ -227,10 +203,7 @@ export function stripPrivateGlyphs(options: StripShape): string {
   const cell = (bgcolor: string): RichText =>
     new RichText("x", { end: "", style: new Style({ bgcolor }) });
   const cells = [cell("#101010"), cell("#202020"), cell("#202020")];
-  const drawn = draw(new Strip(cells, joiner), {
-    colorSystem: null,
-    ...drawOptions(options.charset),
-  });
+  const drawn = draw(new Strip(cells, joiner), { colorSystem: null });
   return privateGlyphsIn(drawn);
 }
 
@@ -270,7 +243,6 @@ export function renderStripCells(
   const flex = options.wrap && Number.isFinite(options.width);
   const drawn = {
     colorSystem: options.colorCompatibility,
-    ...drawOptions(options.charset),
     ...(flex ? { width: options.width } : {}),
   };
   const strip = flex

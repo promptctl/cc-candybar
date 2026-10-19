@@ -30,7 +30,7 @@ import { instantOf } from "../src/utils/instant";
 
 const OPTS = {
   endcaps: "powerline" as const,
-  colorCompatibility: "truecolor" as const, wrap: true, padding: 0, charset: "unicode" as const,
+  colorCompatibility: "truecolor" as const, wrap: true, padding: 0,
   width: Number.POSITIVE_INFINITY,
 };
 // Input vars the test segment reads; all numeric, default 0 so an absent payload

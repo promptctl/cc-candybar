@@ -64,7 +64,6 @@ const EFFECTIVE_GLOBALS: EffectiveGlobals = {
   endcaps: "powerline",
   variation: "accent",
   shade: "middle",
-  charset: "unicode",
   colorCompatibility: "truecolor",
   autoWrap: true,
   padding: 1,
@@ -475,7 +474,7 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
   });
 });
 
-// [LAW:one-source-of-truth] candybar-config-engine-71o.3: style/charset/
+// [LAW:one-source-of-truth] candybar-config-engine-71o.3: style/
 // colorCompatibility/autoWrap/padding are style's twins — this pins
 // that buildRenderPayload projects the EffectiveGlobals struct into the
 // payload verbatim (no name typo, no dropped field, unconditionally present
@@ -491,7 +490,6 @@ describe("buildRenderPayload — effective globals projection", () => {
       endcaps: "capsule",
       variation: "mono",
       shade: "muted",
-      charset: "ascii",
       colorCompatibility: "256",
       autoWrap: false,
       padding: 3,
@@ -525,7 +523,6 @@ describe("buildRenderPayload — effective globals projection", () => {
     expect(payload.endcaps).toEqual({ effective: "capsule" });
     expect(payload.variation).toEqual({ effective: "mono" });
     expect(payload.shade).toEqual({ effective: "muted" });
-    expect(payload.charset).toEqual({ effective: "ascii" });
     expect(payload.colorCompatibility).toEqual({ effective: "256" });
     expect(payload.autoWrap).toEqual({ effective: false });
     expect(payload.padding).toEqual({ effective: 3 });

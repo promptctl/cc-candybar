@@ -73,7 +73,7 @@ describe("shipped examples load and render through the real cascade", () => {
       instantOf(new Date()),
       {
         endcaps: "powerline",
-        colorCompatibility: "truecolor", wrap: true, padding: 0, charset: "unicode" as const,
+        colorCompatibility: "truecolor", wrap: true, padding: 0,
         width: 200,
       },
     );

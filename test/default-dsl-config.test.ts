@@ -147,7 +147,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
   // window is active).
   //
   // No setting sits on the bar: every one lives behind the settings-menu door
-  // (brandon-menu-ia-q30.42a moved the last of them, charset and colour depth,
+  // (brandon-menu-ia-q30.42a moved the last of them, colour depth,
   // out of a `⚙ terminal` drawer on the identity row). The `settings.*`
   // segments are NOT in this list because this walks DEFAULT_DSL_CONFIG.root,
   // the AUTHORED tree, and the menu is spliced in later by validateConfig (see
@@ -235,7 +235,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
         colorCompatibility: "truecolor",
         wrap: true,
         padding: 1,
-        charset: "unicode",
         width: Number.POSITIVE_INFINITY,
       });
       // Hidden segments (no git repo, no usage data) drop out; the
@@ -546,7 +545,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
       colorCompatibility: "truecolor" as const,
       wrap: true,
       padding: 1,
-      charset: "unicode" as const,
       width: Number.POSITIVE_INFINITY,
     };
     const render = (): string => {
@@ -686,7 +684,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
           colorCompatibility: "truecolor",
           wrap: true,
           padding,
-          charset: "unicode",
           width: Number.POSITIVE_INFINITY,
         }).replace(INVISIBLE, "");
       } finally {
@@ -733,7 +730,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
       colorCompatibility: "truecolor" as const,
       wrap: true,
       padding: 1,
-      charset: "unicode" as const,
       width: Number.POSITIVE_INFINITY,
     };
 
@@ -793,7 +789,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
       colorCompatibility: "truecolor" as const,
       wrap: true,
       padding: 1,
-      charset: "unicode" as const,
       width: Number.POSITIVE_INFINITY,
     };
 
@@ -868,7 +863,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
             colorCompatibility: "truecolor",
             wrap: true,
             padding: 1,
-            charset: "unicode",
             width: Number.POSITIVE_INFINITY,
           },
         );
@@ -969,7 +963,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
           colorCompatibility: "truecolor",
           wrap: true,
           padding: 1,
-          charset: "unicode",
           width: Number.POSITIVE_INFINITY,
         });
         // Strip ANSI escapes AND the Powerline joiner glyphs
@@ -1170,7 +1163,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
             colorCompatibility: "truecolor",
             wrap: true,
             padding: 1,
-            charset: "unicode",
             width: Number.POSITIVE_INFINITY,
           },
         );
@@ -1512,7 +1504,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
             colorCompatibility: "truecolor",
             wrap: true,
             padding: 1,
-            charset: "unicode",
             width: Number.POSITIVE_INFINITY,
           },
         );
@@ -1602,7 +1593,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
             colorCompatibility: "truecolor",
             wrap: true,
             padding: 1,
-            charset: "unicode",
             width: Number.POSITIVE_INFINITY,
           });
         } finally {
@@ -1684,7 +1674,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
             colorCompatibility: "truecolor",
             wrap: true,
             padding: 1,
-            charset: "unicode",
             width: Number.POSITIVE_INFINITY,
           },
         );
@@ -1822,7 +1811,6 @@ describe("bundled preset library renders clean at every width — brandon-preset
           colorCompatibility: effective.colorCompatibility,
           wrap: effective.autoWrap,
           padding: effective.padding,
-          charset: effective.charset,
         },
         {
           onSegmentError: (segName, message) =>
@@ -1891,7 +1879,7 @@ describe("bundled preset library renders clean at every width — brandon-preset
     }
   });
 
-  // The powerline joiner's arrow in the unicode charset (rich-js's glyph).
+  // The powerline joiner's arrow (rich-js's glyph).
   const POWERLINE_ARROW = "\uE0B0";
   const visible = (rendered: string): string => rendered.replace(INVISIBLE, "");
   const visibleLines = (rendered: string): string[] =>

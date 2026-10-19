@@ -148,7 +148,6 @@ function opts() {
     colorCompatibility: "truecolor" as const,
     wrap: true,
     padding: 0,
-    charset: "unicode" as const,
     width: Number.POSITIVE_INFINITY,
   };
 }
@@ -475,40 +474,40 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
   });
 
   // An inherited base whose rows place a menu host: the bundled default plus
-  // one row carrying a charset picker.
+  // one row carrying a colour-depth picker.
   const MENU_HOST_BASE = parseAndValidate(
     "<base>",
     `{
-      actions: { applyCharset: { persist: 'charset', from: 'charsets' } },
-      segments: { charsetControl: { template: '{{ menu "applyCharset" "▸" "▾" }}' } },
-      root: { rows: { terminal: { h: ['charsetControl'] } } },
+      actions: { applyDepth: { persist: 'colorCompatibility', from: 'colorCompatibilities' } },
+      segments: { depthControl: { template: '{{ menu "applyDepth" "▸" "▾" }}' } },
+      root: { rows: { terminal: { h: ['depthControl'] } } },
     }`,
     ALLOWED,
     DEFAULT_DSL_CONFIG,
   );
 
   test("a `{ rows }` fragment re-placing a menu host under the id the inherited rows already use is rejected — counted over the tree that renders", () => {
-    const src = `{ root: { rows: { extra: { h: ['charsetControl'] } } } }`;
+    const src = `{ root: { rows: { extra: { h: ['depthControl'] } } } }`;
     try {
       parseAndValidate("<test>", src, ALLOWED, MENU_HOST_BASE);
       throw new Error("expected ConfigError");
     } catch (e) {
       expect(e).toBeInstanceOf(ConfigError);
       expect((e as ConfigError).message).toMatch(
-        /has 2 placements with the id "charsetControl"/,
+        /has 2 placements with the id "depthControl"/,
       );
     }
   });
 
   test("a preset's `{ rows }` fragment re-placing a menu host under the id the inherited rows already use is rejected at the preset", () => {
-    const src = `{ presets: { wide: { root: { rows: { extra: { h: ['charsetControl'] } } } } } }`;
+    const src = `{ presets: { wide: { root: { rows: { extra: { h: ['depthControl'] } } } } } }`;
     try {
       parseAndValidate("<test>", src, ALLOWED, MENU_HOST_BASE);
       throw new Error("expected ConfigError");
     } catch (e) {
       expect(e).toBeInstanceOf(ConfigError);
       const issue = (e as ConfigError).issues.find((i) =>
-        /has 2 placements with the id "charsetControl"/.test(i.message),
+        /has 2 placements with the id "depthControl"/.test(i.message),
       )!;
       expect(issue.path).toBe("presets.wide.root");
     }

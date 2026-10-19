@@ -14,7 +14,7 @@
 // "the wizard's config passes check" and "the bar renders it" are one fact.
 //
 // [LAW:one-source-of-truth] The value domains come from the SOURCE the loader
-// validates against (palette registry, ENDCAPS_SHAPES, CHARSETS, the bundled
+// validates against (palette registry, ENDCAPS_SHAPES, the bundled
 // presets), never from a list restated here. The template directory is
 // globbed, so a template added later is covered on arrival.
 
@@ -24,7 +24,6 @@ import path from "node:path";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { presetNames } from "../src/config/presets";
 import {
-  CHARSETS,
   ENDCAPS_SHAPES,
   listResolvablePaletteNames,
 } from "../src/themes/policy";
@@ -45,7 +44,6 @@ const wizardDoc = fs.readFileSync(
 const DOMAINS: Readonly<Record<string, readonly string[]>> = {
   THEME: listResolvablePaletteNames(),
   ENDCAPS: ENDCAPS_SHAPES,
-  CHARSET: CHARSETS,
   PRESET: presetNames(DEFAULT_DSL_CONFIG.presets),
 };
 
@@ -142,7 +140,6 @@ describe("plugin/bin/preview.sh renders the same template it offers", () => {
 
   test.each([
     ["ENDCAPS_SHAPES", "ENDCAPS"],
-    ["CHARSETS", "CHARSET"],
     ["PRESETS", "PRESET"],
   ])("%s is exactly the daemon's %s domain", (array, domain) => {
     expect([...previewArray(array)].sort()).toEqual([...DOMAINS[domain]!].sort());

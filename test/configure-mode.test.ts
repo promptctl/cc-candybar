@@ -122,7 +122,6 @@ function buildRuntime(
         colorCompatibility: "truecolor" as const,
         wrap: true,
         padding: 0,
-        charset: "unicode" as const,
         width: 200,
       },
       undefined,

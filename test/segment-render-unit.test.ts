@@ -35,7 +35,7 @@ const DIVIDER = POWERLINE.divider;
 // joiner walk's output — no width-driven wrap to perturb it.
 const OPTS = {
   endcaps: "powerline" as const,
-  colorCompatibility: "truecolor" as const, wrap: true, padding: 0, charset: "unicode" as const,
+  colorCompatibility: "truecolor" as const, wrap: true, padding: 0,
   width: Number.POSITIVE_INFINITY,
 };
 

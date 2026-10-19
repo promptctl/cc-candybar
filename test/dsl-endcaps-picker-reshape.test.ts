@@ -67,7 +67,7 @@ function buildRuntime() {
         sessionState.get(SID, "endcaps"),
         config.globals.endcaps,
       ),
-      colorCompatibility: "truecolor" as const, wrap: true, padding: 0, charset: "unicode" as const,
+      colorCompatibility: "truecolor" as const, wrap: true, padding: 0,
       width: Number.POSITIVE_INFINITY,
     });
 

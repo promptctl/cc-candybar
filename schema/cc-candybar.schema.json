@@ -84,12 +84,6 @@
           "minimum": 0,
           "maximum": 16
         },
-        "charset": {
-          "enum": [
-            "unicode",
-            "ascii"
-          ]
-        },
         "updateNotice": {
           "type": "boolean"
         },
@@ -1324,12 +1318,6 @@
                 "minimum": 0,
                 "maximum": 16
               },
-              "charset": {
-                "enum": [
-                  "unicode",
-                  "ascii"
-                ]
-              },
               "updateNotice": {
                 "type": "boolean"
               },
@@ -1443,12 +1431,6 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 16
-        },
-        "charset": {
-          "enum": [
-            "unicode",
-            "ascii"
-          ]
         },
         "updateNotice": {
           "type": "boolean"

@@ -25,7 +25,7 @@ const ALLOWED_PALETTES = new Set(["textual-dark"]);
 
 const OPTS = {
   endcaps: "powerline" as const,
-  colorCompatibility: "truecolor" as const, wrap: true, padding: 0, charset: "unicode" as const,
+  colorCompatibility: "truecolor" as const, wrap: true, padding: 0,
   width: Number.POSITIVE_INFINITY,
 };
 

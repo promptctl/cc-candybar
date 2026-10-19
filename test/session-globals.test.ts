@@ -81,7 +81,6 @@ function buildRuntime(padding: number = CONFIG_PADDING) {
       {
         endcaps: "powerline" as const,
         colorCompatibility: "truecolor" as const,
-        charset: "unicode" as const,
         wrap: effectiveAutoWrap(
           undefined,
           sessionState.get(sid, "autoWrap"),
@@ -358,18 +357,17 @@ describe("padding's bound is one declaration, not three copies", () => {
   });
 });
 
-// brandon-menu-ia-q30.5y4: charset and colour depth are set in the config file
-// only, so a session write to either key — a stale entry from when they had a
-// session half, or an author's `set` — moves nothing.
-describe("charset and colour depth have no session half", () => {
+// brandon-menu-ia-q30.5y4: colour depth is set in the config file only, so a
+// session write to its key — a stale entry from when it had a session half, or
+// an author's `set` — moves nothing.
+describe("colour depth has no session half", () => {
   it("the config file's value renders whatever the session holds", () => {
     const config = parseAndValidate(
       "<no-session-half>",
-      `{ globals: { palette: '${BASE_THEME}', charset: 'ascii', colorCompatibility: '256' } }`,
+      `{ globals: { palette: '${BASE_THEME}', colorCompatibility: '256' } }`,
       ALLOWED,
     );
     const picks: Record<string, string> = {
-      charset: "unicode",
       colorCompatibility: "none",
     };
     const effective = resolveEffectiveGlobals(
@@ -377,13 +375,10 @@ describe("charset and colour depth have no session half", () => {
       (key) => picks[key] ?? null,
       () => false,
     );
-    expect([effective.charset, effective.colorCompatibility]).toEqual([
-      "ascii",
-      "256",
-    ]);
+    expect(effective.colorCompatibility).toBe("256");
   });
 
-  it.each(["charset", "colorCompatibility"])(
+  it.each(["colorCompatibility"])(
     "an authored `set` on %s is a load error naming persist",
     (key) => {
       expect(() =>
@@ -404,7 +399,7 @@ describe("charset and colour depth have no session half", () => {
     expect(() =>
       parseAndValidate(
         "<persist-config-only>",
-        `{ globals: { palette: '${BASE_THEME}' }, actions: { pick: { persist: 'charset', from: 'charsets' } } }`,
+        `{ globals: { palette: '${BASE_THEME}' }, actions: { pick: { persist: 'colorCompatibility', from: 'colorCompatibilities' } } }`,
         ALLOWED,
       ),
     ).not.toThrow();

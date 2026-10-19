@@ -56,7 +56,6 @@ import type { SourceParse } from "../var-system/parse.js";
 import type { JsonValue } from "../var-system/types.js";
 import type { BuildLineOptions } from "../render/strip.js";
 import {
-  DEFAULT_CHARSET,
   DEFAULT_PADDING,
   renderStripCells,
   stripChromeCols,
@@ -479,18 +478,15 @@ export function registerDslConfig(
     // [LAW:types-are-the-program] Always present — renderDsl republishes the live
     // chrome each render; the default shape's is the registration-time value so a
     // compile-only path (no render) still has a valid one.
-    chromeCols: stripChromeCols({
-      endcaps: "powerline",
-      charset: DEFAULT_CHARSET,
-    }),
+    chromeCols: stripChromeCols({ endcaps: "powerline" }),
     // Same contract as chromeCols; the floor is `term.cols`'s own default.
     width: TERM_COLS_FLOOR,
     // Same contract as chromeCols: renderDsl republishes the live resolved
     // globals.padding each render; the constant is only the compile-only floor.
     padding: DEFAULT_PADDING,
     // Same contract again: the compile-only floor is the registration-time
-    // endcaps shape's seam under the default charset.
-    seamCols: stripSeamCols({ endcaps: "powerline", charset: DEFAULT_CHARSET }),
+    // endcaps shape's seam.
+    seamCols: stripSeamCols({ endcaps: "powerline" }),
     // Same contract again: with no render there is no walk, and no rows.
     layout: () => [],
     // [LAW:one-source-of-truth] Unlike the geometry above, a look has no

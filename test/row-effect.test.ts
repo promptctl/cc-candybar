@@ -81,7 +81,6 @@ function renderer(
     colorCompatibility,
     wrap: true,
     padding: 1,
-    charset: "unicode" as const,
     width: 160,
   };
   return {

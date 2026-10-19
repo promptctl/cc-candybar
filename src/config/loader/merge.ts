@@ -76,7 +76,7 @@ export function mergeWithDefault(
     // `globals` cascade above, not the by-name cascades around it, because it
     // IS a globals fragment: a user retuning edit mode's separator says nothing
     // about its `endcaps`, exactly as a user setting `globals.padding` says
-    // nothing about `globals.charset`.
+    // nothing about `globals.endcaps`.
     editGlobals: { ...dflt.editGlobals, ...(raw.editGlobals ?? {}) },
     // [LAW:one-source-of-truth] helpers merge by name, same cascade — a user
     // overrides one formatter helper by re-declaring its name; the rest inherit

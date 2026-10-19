@@ -75,7 +75,6 @@ function opts(width = Number.POSITIVE_INFINITY) {
     colorCompatibility: "truecolor" as const,
     wrap: true,
     padding: 0,
-    charset: "unicode" as const,
     width,
   };
 }

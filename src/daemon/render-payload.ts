@@ -48,7 +48,6 @@ import {
   effectiveTransitions,
   EXPRESSION_SLOTS,
   isExpression,
-  DEFAULT_CHARSET,
   DEFAULT_COLOR_COMPATIBILITY,
 } from "../themes/policy.js";
 import {
@@ -95,7 +94,7 @@ import {
 import { claudeConfigDir, claudeSettingsPath } from "../claude-settings.js";
 import { resumeCommand } from "../claude-resume.js";
 import type { GitDataProvider } from "./cache/git.js";
-import type { Charset, ColorCompatibility, Endcaps } from "../themes/policy.js";
+import type { ColorCompatibility, Endcaps } from "../themes/policy.js";
 import type { ShadeName, VariationName } from "../themes/decor.js";
 import { dateOf, type Instant } from "../utils/instant.js";
 
@@ -107,7 +106,7 @@ import { dateOf, type Instant } from "../utils/instant.js";
 // that actually shaped the render can never disagree — the same reasoning
 // theme/style already followed, generalized to every globals field a menu or
 // stepper can persist. Those with a session pick compose it over the config
-// default; `charset`, `colorCompatibility` and `separator` have none and
+// default; `colorCompatibility` and `separator` have none and
 // resolve from the config alone (see resolveEffectiveGlobals).
 export interface EffectiveGlobals {
   // [LAW:types-are-the-program] The theme as far as it can be resolved HERE
@@ -164,7 +163,6 @@ export interface EffectiveGlobals {
   // It has no SessionState half — the config global (as staged by whatever
   // fragment is on top) is its whole resolution.
   readonly separator: string | undefined;
-  readonly charset: Charset;
   readonly colorCompatibility: ColorCompatibility;
   readonly autoWrap: boolean;
   readonly padding: number;
@@ -252,7 +250,7 @@ export function resolveEffectiveGlobals(
     ),
     shade: effectiveShade(staged.shade, sessionPick("shade"), globals.shade),
     // [LAW:one-source-of-truth] The fields with no SessionState half (this one,
-    // charset, colorCompatibility) resolve as `staged ?? config ?? floor` — the
+    // colorCompatibility) resolve as `staged ?? config ?? floor` — the
     // same chain minus the rung they do not have, spelled with the same `??`
     // rather than a second mechanism.
     separator: staged.default_separator ?? globals.default_separator,
@@ -266,7 +264,6 @@ export function resolveEffectiveGlobals(
       sessionPick("padding"),
       globals.padding,
     ),
-    charset: staged.charset ?? globals.charset ?? DEFAULT_CHARSET,
     updateNotice: effectiveUpdateNotice(
       staged.updateNotice,
       sessionPick("updateNotice"),
@@ -300,7 +297,6 @@ export function renderOptionsOf(
     colorCompatibility: effective.colorCompatibility,
     wrap: effective.autoWrap,
     padding: effective.padding,
-    charset: effective.charset,
     width,
   };
 }
@@ -332,7 +328,6 @@ export type EffectiveInputs = Pick<
   | "endcaps"
   | "variation"
   | "shade"
-  | "charset"
   | "colorCompatibility"
   | "autoWrap"
   | "padding"
@@ -350,7 +345,6 @@ export function effectiveInputs(effective: EffectiveGlobals): EffectiveInputs {
     endcaps: { effective: effective.endcaps },
     variation: { effective: effective.variation },
     shade: { effective: effective.shade },
-    charset: { effective: effective.charset },
     colorCompatibility: { effective: effective.colorCompatibility },
     autoWrap: { effective: effective.autoWrap },
     padding: { effective: effective.padding },
@@ -418,7 +412,7 @@ export interface RenderPayload extends ClaudeHookData {
     readonly customized: boolean;
     readonly bundled: boolean;
   };
-  // [LAW:one-type-per-behavior] endcaps/charset/colorCompatibility/autoWrap/
+  // [LAW:one-type-per-behavior] endcaps/colorCompatibility/autoWrap/
   // padding are theme/style's twins over the remaining persistable globals
   // (candybar-config-engine-71o.3) — each REQUIRED and unconditionally
   // present for the same reason: the daemon already resolves the value for
@@ -426,14 +420,13 @@ export interface RenderPayload extends ClaudeHookData {
   // trigger's "current selection" highlight and the render it describes
   // trace to one resolution. See EffectiveGlobals for how each is derived.
   // [LAW:types-are-the-program] Unlike theme/style (open, registry-extensible
-  // names with no closed union to narrow to), endcaps/charset/colorCompatibility
-  // DO have one (Endcaps/Charset/ColorCompatibility) — narrowed to it
+  // names with no closed union to narrow to), endcaps/colorCompatibility
+  // DO have one (Endcaps/ColorCompatibility) — narrowed to it
   // rather than widened to `string`, so a downstream `switch` over these
   // fields gets real exhaustiveness checking.
   readonly endcaps: { readonly effective: Endcaps };
   readonly variation: { readonly effective: VariationName };
   readonly shade: { readonly effective: ShadeName };
-  readonly charset: { readonly effective: Charset };
   readonly colorCompatibility: { readonly effective: ColorCompatibility };
   readonly autoWrap: { readonly effective: boolean };
   readonly padding: { readonly effective: number };

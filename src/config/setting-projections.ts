@@ -123,8 +123,6 @@ export const UNCONTROLLED_GLOBALS: Readonly<
   default_empty_value: "free text: no control shape fits it",
   default_separator: "free text: no control shape fits it",
   menuGlyph: "free text: no control shape fits it",
-  charset:
-    "set in the config file: Brandon cut the control (brandon-menu-ia-q30.5y4)",
   colorCompatibility:
     "set in the config file: Brandon cut the control (brandon-menu-ia-q30.5y4)",
 };
@@ -138,7 +136,6 @@ const CONFIG_ONLY_PROJECTIONS: ReadonlyArray<
     readonly configKey: UncontrolledField;
   }
 > = [
-  { configKey: "charset", effectiveVar: "charset.effective" },
   {
     configKey: "colorCompatibility",
     effectiveVar: "colorCompatibility.effective",

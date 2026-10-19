@@ -76,7 +76,6 @@ function renderPair(
         colorCompatibility: "truecolor",
         wrap: true,
         padding: 0,
-        charset: "unicode",
         width: Number.POSITIVE_INFINITY,
       },
       { perSegmentSink: sink },

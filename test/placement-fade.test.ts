@@ -79,7 +79,6 @@ function renderer(cfg: ValidatedConfig, session = new SessionState()) {
     colorCompatibility: "truecolor" as const,
     wrap: true,
     padding: 1,
-    charset: "unicode" as const,
     width: 160,
   };
   return {

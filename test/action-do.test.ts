@@ -26,7 +26,6 @@ const OPTS = {
   colorCompatibility: "truecolor" as const,
   wrap: true,
   padding: 0,
-  charset: "unicode" as const,
   width: Number.POSITIVE_INFINITY,
 };
 const PAYLOAD = { session_id: "s1", workspace: { current_dir: "/tmp/proj" } };

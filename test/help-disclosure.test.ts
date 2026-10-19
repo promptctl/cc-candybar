@@ -98,7 +98,6 @@ function buildRuntime(src: string = TWO_SEGMENT_ROOT) {
         colorCompatibility: "truecolor" as const,
         wrap: effective.autoWrap,
         padding: effective.padding,
-        charset: effective.charset,
         width,
       },
       undefined,
