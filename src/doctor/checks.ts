@@ -784,6 +784,18 @@ export function unreadPostMortems(
     : [];
 }
 
+// [LAW:one-source-of-truth] The daemons beside the one serving the bar:
+// every one but it — every one at all when none answered. The probe names
+// them; the doctor's event lists them (src/doctor/report.ts).
+export function otherDaemons(
+  serving: Asked<ServingDaemon>,
+  processes: readonly DaemonProcess[],
+): readonly DaemonProcess[] {
+  return serving.kind === "failed"
+    ? processes
+    : processes.filter((p) => p.pid !== serving.value.pid);
+}
+
 // "The daemon is healthy" (brandon-doctor-v62x.5mq): exactly one daemon runs,
 // it holds well under its memory budget, and it has died of memory no time
 // the user has not been told of. A post-mortem leads when there is one: it is
@@ -794,14 +806,15 @@ const daemon: Check = {
   takesMark: false,
   probe: ({ daemon: { serving, processes, read } }) => {
     if (serving.kind === "failed") {
+      // The reason says what went wrong in its own words: no daemon, or one
+      // of another build that answered without saying what it holds.
+      const others =
+        processes.kind === "ok" ? otherDaemons(serving, processes.value) : [];
       const running =
-        processes.kind === "ok" && processes.value.length > 0
-          ? ` — daemon ${processes.value.map((p) => p.pid).join(", ")} running`
+        others.length > 0
+          ? ` — daemon ${others.map((p) => p.pid).join(", ")} running`
           : "";
-      return {
-        ok: false,
-        reason: `no daemon answered: ${serving.reason}${running}`,
-      };
+      return { ok: false, reason: `${serving.reason}${running}` };
     }
     const { pid, rss, rssLimit, postMortems } = serving.value;
     const unread = unreadPostMortems(serving.value, read);
@@ -820,12 +833,10 @@ const daemon: Check = {
         : []),
       ...(processes.kind === "failed"
         ? [`the process table could not be read: ${processes.reason}`]
-        : processes.value
-            .filter((p) => p.pid !== pid)
-            .map(
-              (p) =>
-                `daemon ${p.pid} (started ${p.started}, ${mb(p.rss)} MB${p.ppid === 1 ? "" : `, child of ${p.ppid}`}) runs beside the one serving the bar (${pid}) — \`kill ${p.pid}\``,
-            )),
+        : otherDaemons(serving, processes.value).map(
+            (p) =>
+              `daemon ${p.pid} (started ${p.started}, ${mb(p.rss)} MB${p.ppid === 1 ? "" : `, child of ${p.ppid}`}) runs beside the one serving the bar (${pid}) — \`kill ${p.pid}\``,
+          )),
       ...(approachingLimit(rss, rssLimit)
         ? [
             `the daemon holds ${mb(rss)} MB of its ${mb(rssLimit)} MB limit — at the limit it records a post-mortem and restarts`,

@@ -115,14 +115,14 @@ describe("the daemon probe", () => {
       verdictOf({ serving: { kind: "failed", reason: "connect ENOENT /tmp/s" } }),
     ).toEqual({
       ok: false,
-      reason: "no daemon answered: connect ENOENT /tmp/s — daemon 4100 running",
+      reason: "connect ENOENT /tmp/s — daemon 4100 running",
     });
     expect(
       verdictOf({
         serving: { kind: "failed", reason: "connect ENOENT /tmp/s" },
         processes: { kind: "ok", value: [] },
       }),
-    ).toEqual({ ok: false, reason: "no daemon answered: connect ENOENT /tmp/s" });
+    ).toEqual({ ok: false, reason: "connect ENOENT /tmp/s" });
   });
 
   test("a list that cannot be read is its own problem, and no post-mortem is judged — or fixed — without the record", () => {

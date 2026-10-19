@@ -17,6 +17,7 @@ import {
   NERD_FONT_CHECK,
   glyphSighting,
   clientStanding,
+  otherDaemons,
   unreadPostMortems,
   type Asked,
   type CheckReport,
@@ -123,10 +124,7 @@ export function daemonFields({
     processes.kind === "failed"
       ? "daemons=unread others=-"
       : `daemons=${processes.value.length} others=${
-          processes.value
-            .filter(
-              (p) => serving.kind === "failed" || p.pid !== serving.value.pid,
-            )
+          otherDaemons(serving, processes.value)
             .map((p) => p.pid)
             .join(",") || "-"
         }`;
