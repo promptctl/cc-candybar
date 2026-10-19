@@ -1197,6 +1197,9 @@ function writeReport(ctx: VerbContext, sid: string, facts: DoctorFacts): void {
 // refused refuses the click (DoctorBusy), so no report is written over facts
 // the doctor did not see.
 function clickFacts(ctx: VerbContext, sid: string): DoctorFacts {
+  // The session's own renders, read once: whatever its Claude Code sends, it
+  // sends to this session.
+  const said = ctx.clients.ofSession(sid);
   let gathered: ReturnType<typeof gatherFacts>;
   try {
     gathered = gatherFacts(
@@ -1205,16 +1208,8 @@ function clickFacts(ctx: VerbContext, sid: string): DoctorFacts {
       sessionOrigin(ctx, sid),
       (key) => ctx.sessionState.get(sid, key),
       { kind: "ok", value: ctx.serving() },
-      // The session's own renders: whatever its Claude Code sends, it sends
-      // to this session.
-      {
-        kind: "ok",
-        value: ctx.clients.ofSession(sid).map((said) => said.rateLimits),
-      },
-      {
-        kind: "ok",
-        value: ctx.clients.ofSession(sid).map((said) => said.transcript),
-      },
+      { kind: "ok", value: said.map((s) => s.rateLimits) },
+      { kind: "ok", value: said.map((s) => s.transcript) },
     );
   } catch (e) {
     if (e instanceof DoctorBusy) throw new BadVerbArgs(e.message);
@@ -1228,7 +1223,7 @@ function clickFacts(ctx: VerbContext, sid: string): DoctorFacts {
     install: installFacts(
       ctx.doctor.install,
       ctx.bundle,
-      ctx.clients.ofSession(sid).map((said) => said.client),
+      said.map((s) => s.client),
     ),
     askedBy: "click",
     clicked: clickedFrom(ctx, gathered),

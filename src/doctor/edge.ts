@@ -42,8 +42,9 @@ import type {
   RateLimitsSeen,
   TranscriptSaid,
 } from "../daemon/render-sightings.js";
-import { ABSENT, failed, ok, type Outcome } from "../utils/outcome.js";
-import { splitJsonl } from "../utils/claude.js";
+import { ok, type Outcome } from "../utils/outcome.js";
+import { jsonLine } from "../utils/claude.js";
+import { readTailSync } from "../utils/transcript-fs.js";
 import type { TmuxHint } from "../tmux-hint.js";
 import type { UnusedDecl } from "../config/unused.js";
 import type { LoopName } from "@promptctl/rich-js";
@@ -457,7 +458,9 @@ export function productionEdge(
 
 // [LAW:effects-at-boundaries] Pure over the bytes read: the window's first
 // line is cut short unless the window starts the file, and its last is still
-// being written unless a newline ends it, so neither is judged.
+// being written unless a newline ends it, so neither is judged. The bytes
+// start one before the window (`readTranscriptWindow`), so a window that
+// begins on a line boundary drops only that newline, not a whole line.
 export function transcriptWindow(
   bytes: Buffer,
   whole: boolean,
@@ -465,39 +468,26 @@ export function transcriptWindow(
   const text = bytes.toString("utf-8");
   const from = whole ? 0 : text.indexOf("\n") + 1;
   const to = text.lastIndexOf("\n") + 1;
-  const { lines, unparsed } = splitJsonl(text.slice(from, Math.max(from, to)));
+  let lines = 0;
+  let unparsed = 0;
+  for (const line of text.slice(from, Math.max(from, to)).split("\n")) {
+    const read = jsonLine(line);
+    if (read.kind === "blank") continue;
+    lines++;
+    if (read.kind === "unparsed") unparsed++;
+  }
   return { lines, unparsed, whole };
 }
 
 // The last TRANSCRIPT_WINDOW_BYTES of a transcript, synchronously like every
 // doctor probe — bounded, since a transcript grows for as long as its session
-// runs and the click holds the daemon's loop while it reads.
-// [LAW:no-silent-failure] No file at the path is `absent` (a session before
-// its first response has none); any other error is `failed`, with its reason.
+// runs and the click holds the daemon's loop while it reads. No file at the
+// path is `absent` (a session before its first response has none).
 export function readTranscriptWindow(file: string): Outcome<TranscriptWindow> {
-  let fd: number;
-  try {
-    fd = fs.openSync(file, "r");
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === "ENOENT") return ABSENT;
-    return failed(e instanceof Error ? e.message : String(e));
-  }
-  try {
-    const { size } = fs.fstatSync(fd);
-    const start = Math.max(0, size - TRANSCRIPT_WINDOW_BYTES);
-    const buf = Buffer.alloc(size - start);
-    let off = 0;
-    while (off < buf.length) {
-      const n = fs.readSync(fd, buf, off, buf.length - off, start + off);
-      if (n === 0) break;
-      off += n;
-    }
-    return ok(transcriptWindow(buf.subarray(0, off), start === 0));
-  } catch (e) {
-    return failed(e instanceof Error ? e.message : String(e));
-  } finally {
-    fs.closeSync(fd);
-  }
+  const read = readTailSync(file, TRANSCRIPT_WINDOW_BYTES + 1);
+  return read.kind === "ok"
+    ? ok(transcriptWindow(read.value.buf, read.value.fromStart))
+    : read;
 }
 
 // Each distinct transcript the renders named, read once: a statusline and a

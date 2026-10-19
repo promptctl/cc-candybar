@@ -106,6 +106,17 @@ describe("readTranscriptWindow", () => {
     );
   });
 
+  test("a window that starts on a line boundary judges its first line", () => {
+    const file = path.join(dir, "s.jsonl");
+    const bad = "not json\n";
+    const fill = `${JSON.stringify({ p: "x".repeat(TRANSCRIPT_WINDOW_BYTES - bad.length - 9) })}\n`;
+    expect(bad.length + fill.length).toBe(TRANSCRIPT_WINDOW_BYTES);
+    fs.writeFileSync(file, `{"a":1}\n${bad}${fill}`);
+    expect(readTranscriptWindow(file)).toEqual(
+      window({ lines: 2, unparsed: 1, whole: false }),
+    );
+  });
+
   test("a file past the window reads only its last window", () => {
     const file = path.join(dir, "s.jsonl");
     const line = `${JSON.stringify({ pad: "x".repeat(1000) })}\n`;

@@ -318,7 +318,7 @@ export interface SegmentDataFacts {
 }
 
 // The last TRANSCRIPT_WINDOW_BYTES of a transcript, read as the bar's parse
-// frames it (`splitJsonl`, src/utils/claude.ts): how many lines it held, how
+// reads each line (`jsonLine`, src/utils/claude.ts): how many lines it held, how
 // many were not a JSON object, and whether the window reached the file's
 // start.
 export const TRANSCRIPT_WINDOW_BYTES = 1024 * 1024;
