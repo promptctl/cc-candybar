@@ -1,3 +1,10 @@
+## [1.147.1](https://github.com/promptctl/cc-candybar/compare/v1.147.0...v1.147.1) (2026-10-19)
+
+
+### Bug Fixes
+
+* **daemon:** a click error's hold is a question of time, asked by every render alike (candybar-animation-wbxz.81o.t39) ([#378](https://github.com/promptctl/cc-candybar/issues/378)) ([1aabe99](https://github.com/promptctl/cc-candybar/commit/1aabe9972311c952015bfb01da6cfba481dc70f0))
+
 # [1.147.0](https://github.com/promptctl/cc-candybar/compare/v1.146.0...v1.147.0) (2026-10-19)
 
 
