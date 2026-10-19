@@ -13,7 +13,9 @@
 // itself here (handler-probe.ts), the click that asked there — and the fold
 // is one function either way.
 
+import { openSync } from "node:fs";
 import process from "node:process";
+import { WriteStream } from "node:tty";
 import type { CliPlan } from "../check.js";
 import { DOOR_GLYPH } from "../config/disclosure.js";
 import { detectClientHints } from "../client-hints.js";
@@ -88,6 +90,10 @@ export async function doctorPlan(
   handler: HandlerProbeEdge,
   env: Readonly<Record<string, string | undefined>>,
   cwd: string,
+  // Measures the terminal the command runs in (`commandTerminal`), inside
+  // the one try below, so a measurement that throws is a `doctor:` line and
+  // exit 2 like every other fact the run could not gather.
+  measureTerminal: () => { readonly columns?: number; readonly rows?: number },
   configFile: string | undefined = undefined,
 ): Promise<CliPlan> {
   let facts: DoctorFacts;
@@ -95,8 +101,10 @@ export async function doctorPlan(
     const gathered = gatherFacts(
       edge,
       // [LAW:one-source-of-truth] The hints a statusline client started here
-      // would report, by the client's own detection.
-      detectClientHints(env, cwd, {}),
+      // would report, by the client's own detection — over the terminal the
+      // command runs in, standing in for the stream Claude Code would hand
+      // that client (which the command's own redirects say nothing about).
+      detectClientHints(env, cwd, measureTerminal()),
       // The config the daemon would load for a session started here: this
       // directory, under the file named on the command line (a statusline
       // command's own `--config`), else the override the statusline client
@@ -131,6 +139,26 @@ export async function doctorPlan(
   };
 }
 
+// The terminal the command runs in, which the bar of a Claude Code started
+// here would be drawn in: its stderr, else — `2>&1 | tee`, `2>/dev/null` —
+// its controlling terminal. A process that cannot open one — none at all
+// (ENXIO, an agent's tool shell), none in its container (ENOENT), or one a
+// sandbox refuses (EACCES) — has no terminal to measure, which is the width
+// row's failure, not the run's: every other check still has its facts.
+function commandTerminal(): { readonly columns?: number } {
+  if (process.stderr.isTTY) return process.stderr;
+  let fd: number;
+  try {
+    fd = openSync("/dev/tty", "r+");
+  } catch {
+    return {};
+  }
+  const tty = new WriteStream(fd);
+  const { columns } = tty;
+  tty.destroy();
+  return { columns };
+}
+
 // `cc-candybar doctor [config-file]` — the argv binding. The one argument is
 // the config file a session's statusline command names with `--config`, so
 // the CLI can check the file that session's bar renders.
@@ -148,6 +176,7 @@ export async function runDoctorCli(args: readonly string[]): Promise<never> {
     productionHandlerProbeEdge(),
     process.env,
     cwd,
+    commandTerminal,
     args[0],
   );
   process.stdout.write(plan.stdout);

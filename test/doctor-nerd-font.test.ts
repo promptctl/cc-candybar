@@ -347,25 +347,38 @@ describe("the doctor event's Nerd Font fields", () => {
 });
 
 describe("parseTmuxClient", () => {
-  test("reads the three fields asked for", () => {
-    expect(parseTmuxClient("osc7,RGB\tiTerm2 3.7.2\txterm-256color\t84566\n")).toEqual({
+  test("reads the five fields asked for", () => {
+    expect(parseTmuxClient("osc7,RGB\tiTerm2 3.7.2\txterm-256color\t84566\t1\n")).toEqual({
       kind: "ok",
       value: {
         features: ["osc7", "RGB"],
         termtype: "iTerm2 3.7.2",
         termname: "xterm-256color",
         pid: 84566,
+        utf8: true,
       },
     });
+    expect(parseTmuxClient("osc7\t\txterm\t7\t0\n")).toEqual({
+      kind: "ok",
+      value: { features: ["osc7"], termtype: "", termname: "xterm", pid: 7, utf8: false },
+    });
     // No client attached to the pane's session: every field empty, an answer.
-    expect(parseTmuxClient("\t\t\t\n")).toEqual({ kind: "ok", value: null });
+    expect(parseTmuxClient("\t\t\t\t\n")).toEqual({ kind: "ok", value: null });
   });
 
   test("anything else is a failure naming what came back", () => {
-    for (const out of ["osc7,RGB\n", "osc7\tiTerm2\txterm\tx1\n", "osc7\tiTerm2\txterm\t0\n"]) {
+    for (const out of [
+      "osc7,RGB\n",
+      "osc7\tiTerm2\txterm\tx1\t1\n",
+      "osc7\tiTerm2\txterm\t0\t1\n",
+      // The four fields an older format asked for.
+      "osc7\tiTerm2\txterm\t84566\n",
+      "osc7\tiTerm2\txterm\t84566\tyes\n",
+      "\t\t\t\n",
+    ]) {
       expect(parseTmuxClient(out)).toEqual({
         kind: "failed",
-        reason: `tmux answered ${JSON.stringify(out)}, not the four fields asked for`,
+        reason: `tmux answered ${JSON.stringify(out)}, not the five fields asked for`,
       });
     }
   });
@@ -501,7 +514,7 @@ describe("gatherFacts: where the Nerd Font facts come from", () => {
   };
   const tmuxSays = (termtype: string): DoctorEdge["probeTmux"] => () => ({
     kind: "ok",
-    value: { features: [], termtype, termname: "xterm-256color", pid: 4242 },
+    value: { features: [], termtype, termname: "xterm-256color", pid: 4242, utf8: true },
   });
   const gathered = (
     e: DoctorEdge,

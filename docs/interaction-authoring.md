@@ -1365,7 +1365,11 @@ there is nothing to go back to), and the bar's row closes up where the door was.
   missing when it does not come back. `tmux truecolor` passes when Claude Code draws the bar in full
   colour inside tmux; its `[fix]` writes `CLAUDE_CODE_TMUX_TRUECOLOR=1` into
   the `env` of `~/.claude/settings.json`, which takes effect for Claude Code
-  sessions started afterwards, and the row says so. `Nerd Font` passes when
+  sessions started afterwards, and the row says so. `UTF-8` passes unless
+  tmux writes to your terminal without UTF-8, which turns every glyph on the
+  bar into `_` (attach with `tmux -u`, or start tmux under a UTF-8 locale).
+  `terminal width` passes when the statusline client could measure the
+  terminal; otherwise the bar is laid out for 120 columns. `Nerd Font` passes when
   the terminal drawing the bar has the private-use glyphs your bar draws
   (its joiner's, and any your config's text writes): kitty from 0.36, WezTerm and Ghostty ship
   their own, and for iTerm2 and Alacritty the doctor reads the font they are

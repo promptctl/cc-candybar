@@ -75,6 +75,18 @@ export function linkFields(
   return `tmuxLinks=${client === null ? "-" : client.features.includes("hyperlinks") ? "yes" : "no"} clicked=${from}`;
 }
 
+// [LAW:nothing-unseen] What the UTF-8 and terminal-width checks reasoned
+// over, as logfmt fields: the columns measured (`-`: none was), and whether
+// tmux writes UTF-8 to the client attached to the pane's session — the same
+// client `linkFields` reads (`-` where none was seen).
+export function terminalFeatureFields(
+  terminal: TerminalIdentity,
+  termCols: number | null,
+): string {
+  const client = terminal.kind === "seen" ? terminal.tmuxClient : null;
+  return `cols=${termCols ?? "-"} clientUtf8=${client === null ? "-" : client.utf8 ? "yes" : "no"}`;
+}
+
 // [LAW:nothing-unseen] What the Nerd Font check reasoned over, as logfmt
 // fields for the doctor's event: the glyphs it needed, the terminal it found
 // (`<name>@<release>`, `-` for an unsaid release, else the arm that kept it

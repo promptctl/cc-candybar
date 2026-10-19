@@ -14,6 +14,7 @@
 // membership in it.
 
 import { TMUX_ENV, type TmuxHint } from "../tmux-hint.js";
+import { DEFAULT_TERMINAL_WIDTH } from "../render/strip.js";
 import type { LoopName } from "@promptctl/rich-js";
 import { EFFECT_FLOOR, type EffectSelection } from "../themes/policy.js";
 import type { Outcome } from "../utils/outcome.js";
@@ -44,6 +45,9 @@ import {
 export interface TmuxClient extends TmuxClientTerm {
   readonly features: readonly string[];
   readonly pid: number;
+  // `#{client_utf8}`: whether tmux writes UTF-8 to this client. Without it
+  // tmux draws every non-ASCII cell as `_` (measured on tmux 3.7b).
+  readonly utf8: boolean;
 }
 
 // A question put to the system: it answers or it fails, never "no opinion".
@@ -212,6 +216,10 @@ export interface PlacementEffectFact {
 
 export interface DoctorFacts {
   readonly tmux: TmuxFacts;
+  // The columns the terminal was measured at (COLUMNS, else the terminal's
+  // own geometry), or null: none was, so the daemon laid the bar out for
+  // DEFAULT_TERMINAL_WIDTH.
+  readonly termCols: number | null;
   readonly terminal: TerminalIdentity;
   // What asked for this run: a click on the bar's 🩺 doctor — a link the
   // terminal drew and the user clicked — or the `cc-candybar doctor` command.
@@ -320,6 +328,38 @@ export interface CheckReport {
 
 export const TMUX_TRUECOLOR_VAR = TMUX_ENV.truecolor;
 
+// [LAW:single-enforcer] Every check of how tmux draws the bar reads the tmux
+// facts through here, so none can disagree with another about what an
+// unreported hint, a failed query, or a session nobody is attached to means:
+// outside tmux and with no client attached, tmux draws nothing for the bar,
+// so there is nothing to fault. (Which TERMINAL is attached is a different
+// question — `terminalIdentity` in edge.ts — and no client there is unasked.)
+function ofTmuxClient(
+  tmux: TmuxFacts,
+  decide: (client: TmuxClient, hint: TmuxHint) => Verdict<never>,
+): Verdict<never> {
+  switch (tmux.kind) {
+    case "unreported":
+      return {
+        ok: false,
+        reason:
+          "the client reported no tmux facts — re-run `cc-candybar install` to stage a current client",
+      };
+    case "outside":
+      return { ok: true };
+    case "inside":
+      if (tmux.client.kind === "failed") {
+        return {
+          ok: false,
+          reason: `tmux could not be asked: ${tmux.client.reason}`,
+        };
+      }
+      return tmux.client.value === null
+        ? { ok: true }
+        : decide(tmux.client.value, tmux.hint);
+  }
+}
+
 // Diagnosed 2026-09-04 (brandon-doctor-b6a): Claude Code re-encodes the
 // statusline at 256 colours whenever TMUX is in its environment, unless its own
 // CLAUDE_CODE_TMUX_TRUECOLOR switch is truthy. The bar's daemon emits identical
@@ -333,53 +373,72 @@ const tmuxTruecolor: Check = {
   name: "tmuxTruecolor",
   label: "tmux truecolor",
   takesMark: false,
-  probe: ({ tmux, claudeSettings }) => {
-    switch (tmux.kind) {
-      case "unreported":
+  probe: ({ tmux, claudeSettings }) =>
+    ofTmuxClient(tmux, (client, hint) => {
+      // Not applicable is not a failure: without RGB there is nothing for
+      // Claude Code to be told about.
+      if (!client.features.includes("RGB")) return { ok: true };
+      if (hint.truecolor !== null) return { ok: true };
+      // [LAW:one-source-of-truth] The same truthiness Claude Code applies to
+      // its env: a non-empty string. Anything else in settings.json — absent,
+      // empty, a non-string — is "not told", and the fix overwrites it.
+      const staged = claudeSettings.env[TMUX_TRUECOLOR_VAR];
+      if (typeof staged === "string" && staged !== "") {
         return {
           ok: false,
-          reason:
-            "the client reported no tmux facts — re-run `cc-candybar install` to stage a current client",
-        };
-      case "outside":
-        return { ok: true };
-      case "inside": {
-        if (tmux.client.kind === "failed") {
-          return {
-            ok: false,
-            reason: `tmux could not be asked: ${tmux.client.reason}`,
-          };
-        }
-        // Not applicable is not a failure: without RGB there is nothing for
-        // Claude Code to be told about.
-        if (
-          tmux.client.value === null ||
-          !tmux.client.value.features.includes("RGB")
-        )
-          return { ok: true };
-        if (tmux.hint.truecolor !== null) return { ok: true };
-        // [LAW:one-source-of-truth] The same truthiness Claude Code applies to
-        // its env: a non-empty string. Anything else in settings.json — absent,
-        // empty, a non-string — is "not told", and the fix overwrites it.
-        const staged = claudeSettings.env[TMUX_TRUECOLOR_VAR];
-        if (typeof staged === "string" && staged !== "") {
-          return {
-            ok: false,
-            reason: `${TMUX_TRUECOLOR_VAR} is set in ${claudeSettings.path} — restart Claude Code to apply`,
-          };
-        }
-        return {
-          ok: false,
-          reason: "Claude Code renders the bar in 256 colours inside tmux",
-          fix: {
-            kind: "claude-settings",
-            path: ["env", TMUX_TRUECOLOR_VAR],
-            value: "1",
-          },
+          reason: `${TMUX_TRUECOLOR_VAR} is set in ${claudeSettings.path} — restart Claude Code to apply`,
         };
       }
-    }
-  },
+      return {
+        ok: false,
+        reason: "Claude Code renders the bar in 256 colours inside tmux",
+        fix: {
+          kind: "claude-settings",
+          path: ["env", TMUX_TRUECOLOR_VAR],
+          value: "1",
+        },
+      };
+    }),
+};
+
+// "A UTF-8 locale" (brandon-doctor-v62x.1ku) is tmux's question, not the
+// session's: the bar's bytes are UTF-8 whatever Claude Code's locale, and
+// outside tmux nothing re-encodes them on the way to the terminal. tmux
+// decides per client whether to write UTF-8, from the environment the client
+// was started in, and the doctor reads its decision rather than re-deriving
+// it — tmux 3.7b answered `1` for `LANG=C` and `0` for `LC_ALL=C`, which no
+// reading of the variables would have predicted.
+const utf8: Check = {
+  name: "utf8",
+  label: "UTF-8",
+  takesMark: false,
+  probe: ({ tmux }) =>
+    ofTmuxClient(tmux, (client) =>
+      client.utf8
+        ? { ok: true }
+        : {
+            ok: false,
+            reason:
+              "tmux draws this terminal without UTF-8, so every glyph on the bar arrives as `_` — attach with `tmux -u`, or set a UTF-8 LC_ALL/LC_CTYPE/LANG in the shell that runs tmux",
+          },
+    ),
+};
+
+// The client measures the terminal so the daemon can fit the bar to it: rows
+// wrap, fills spread and menus page at that width. A client that could not
+// measure leaves the bar laid out for a terminal it is not drawn in. No fix:
+// Claude Code, not cc-candybar, decides what the client is spawned with.
+const termWidth: Check = {
+  name: "termWidth",
+  label: "terminal width",
+  takesMark: false,
+  probe: ({ termCols }) =>
+    termCols !== null
+      ? { ok: true }
+      : {
+          ok: false,
+          reason: `no terminal width was measured (no COLUMNS, and no terminal to ask — or the daemon refused the width sent, which the bar's red strip names), so the bar is laid out as if the terminal were ${DEFAULT_TERMINAL_WIDTH} columns wide`,
+        },
 };
 
 const UNUSED: Readonly<Record<DeclKind, string>> = {
@@ -816,6 +875,8 @@ export const CHECKS: readonly Check[] = [
   urlHandler,
   links,
   tmuxTruecolor,
+  utf8,
+  termWidth,
   effectRefresh,
   nerdFont,
 ];

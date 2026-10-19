@@ -350,7 +350,7 @@ describe("gatherFacts", () => {
         asked.push(hint);
         return {
           kind: "ok",
-          value: { features: ["osc7", "RGB"], termtype: "", termname: "", pid: 4242 },
+          value: { features: ["osc7", "RGB"], termtype: "", termname: "", pid: 4242, utf8: true },
         };
       },
       remoteLogin: NO_TMUX.remoteLogin,
@@ -364,7 +364,7 @@ describe("gatherFacts", () => {
       hint: HINT,
       client: {
         kind: "ok",
-        value: { features: ["osc7", "RGB"], termtype: "", termname: "", pid: 4242 },
+        value: { features: ["osc7", "RGB"], termtype: "", termname: "", pid: 4242, utf8: true },
       },
     });
     expect(asked).toEqual([HINT]);

@@ -128,6 +128,7 @@ import {
   doctorReportPairs,
   linkFields,
   nerdFontFields,
+  terminalFeatureFields,
 } from "../../doctor/report";
 import { withMark } from "../../doctor/mark-book";
 import { DoctorBusy } from "../../doctor/busy";
@@ -1144,7 +1145,7 @@ function writeReport(ctx: VerbContext, sid: string, facts: DoctorFacts): void {
   ctx.sessionState.setBatch(sid, doctorReportPairs(reports));
   ctx.dlog(
     "info",
-    `doctor: ${reports.map((r) => `${r.check.name}=${r.verdict.ok ? "ok" : `failed(${1 + (r.verdict.more?.length ?? 0)})`}`).join(" ")} ${nerdFontFields(facts.nerdFont, facts.marks)} ${linkFields(facts.terminal, facts.clicked)} (session=${sid})`,
+    `doctor: ${reports.map((r) => `${r.check.name}=${r.verdict.ok ? "ok" : `failed(${1 + (r.verdict.more?.length ?? 0)})`}`).join(" ")} ${nerdFontFields(facts.nerdFont, facts.marks)} ${linkFields(facts.terminal, facts.clicked)} ${terminalFeatureFields(facts.terminal, facts.termCols)} (session=${sid})`,
   );
 }
 
