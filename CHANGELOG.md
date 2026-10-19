@@ -1,3 +1,10 @@
+# [1.144.0](https://github.com/promptctl/cc-candybar/compare/v1.143.0...v1.144.0) (2026-10-19)
+
+
+### Features
+
+* **mod:** candybar's bar and menus, animated in the band above the prompt (lane A) ([#354](https://github.com/promptctl/cc-candybar/issues/354)) ([e7b76e0](https://github.com/promptctl/cc-candybar/commit/e7b76e098658b05be0759200a3b3491f8bb202e2))
+
 # [1.143.0](https://github.com/promptctl/cc-candybar/compare/v1.142.0...v1.143.0) (2026-10-19)
 
 
