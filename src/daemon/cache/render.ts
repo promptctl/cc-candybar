@@ -203,12 +203,29 @@ export function pluginLoadLine(
 // [LAW:nothing-unseen] A config's teardown releases every computed's MobX
 // subscriptions (brandon-unfiled-3248.t14 was a teardown that released none,
 // found in a heap snapshot because nothing said so). Why it was torn down and
-// how many it released, beside the load line of what replaced it.
+// how many it released, beside the load line of what replaced it. An eviction
+// also says how many older entries it passed over because a render held them
+// (brandon-unfiled-3248.6rc): a cache growing past its cap is explained by
+// exactly that count.
+export type Teardown =
+  | { readonly reason: "reload" }
+  | { readonly reason: "evict"; readonly pinned: number };
+
 export function configDisposeLine(
-  reason: "reload" | "evict",
+  teardown: Teardown,
   released: number,
 ): string {
-  return `config disposed reason=${reason} released=${released}`;
+  const base = `config disposed reason=${teardown.reason} released=${released}`;
+  return teardown.reason === "evict"
+    ? `${base} pinned=${teardown.pinned}`
+    : base;
+}
+
+// [LAW:nothing-unseen] The cap could not be honoured: every older entry has a
+// render in flight, so nothing was torn down and the map grew. Said once per
+// such insertion; the next eviction's `pinned=` count is the other half.
+export function evictionDeferredLine(size: number): string {
+  return `config eviction deferred: every older entry has a render in flight size=${size}`;
 }
 
 // [LAW:one-source-of-truth] Each entry tracks the last *valid* DSL state +
@@ -247,6 +264,18 @@ export interface CacheEntry {
   watcher: WatcherHandle | null;
   // The key `watcher` was acquired under — the identity of its target set.
   watcherKey: string | null;
+  // [LAW:no-ambient-temporal-coupling] How many renders hold this entry
+  // across their payload await (brandon-unfiled-3248.6rc). The LRU bound
+  // evicts only an entry nobody holds, so a render never resumes on a
+  // disposed state — the entry's lifetime is a fact the cache owns, not an
+  // accident of which request's await resolved first.
+  pins: number;
+}
+
+// A render's hold on its entry: the entry, and the release that `using`
+// runs on every exit of the holder's scope (return and throw alike).
+export interface Pin extends Disposable {
+  readonly entry: CacheEntry;
 }
 
 // [LAW:one-source-of-truth] Cache key includes every input that affects DSL
@@ -623,6 +652,7 @@ export class RenderCache {
       state: loaded.state ?? fallbackState(cwd, projectDir, this.deps),
       watcher: null,
       watcherKey: null,
+      pins: 0,
     };
     // [LAW:single-enforcer] Insert, bound, watch, then notify — in that
     // order. From the moment the entry is in the map it is reachable for
@@ -632,25 +662,59 @@ export class RenderCache {
     // fact about the MAP, complete at insertion: nothing later (including an
     // observer throwing) can skip it. [LAW:dataflow-not-control-flow]
     this.entries.set(key, entry);
-    if (this.entries.size > this.maxEntries) {
-      const oldest = this.entries.entries().next().value;
-      if (oldest !== undefined) {
-        const [oldestKey, evicted] = oldest;
-        // [LAW:single-enforcer] dispose the registry on eviction — it owns
-        // timers, fs watchers, and git subscriptions. Dropping the entry
-        // without dispose leaks every async handle the config declared.
-        this.log(
-          "info",
-          configDisposeLine("evict", evicted.state.registry.dispose()),
-        );
-        evicted.watcher?.release();
-        this.entries.delete(oldestKey);
-      }
-    }
+    if (this.entries.size > this.maxEntries) this.evictOldestUnpinned(entry);
     this.refreshWatcher(entry, loaded);
     this.observers.onReload?.(entry);
 
     return entry;
+  }
+
+  // [LAW:no-ambient-temporal-coupling] A render holds its entry for as long
+  // as it runs — across the payload await, where another session's first
+  // render can push the map past its cap. Eviction passes over a held entry,
+  // so the render resumes on the live state it started with, never on one
+  // disposed under it (brandon-unfiled-3248.6rc). `using` at the call site
+  // releases the hold on every exit, a throw included.
+  pin(projectDir: string, cwd: string, configFile: string | undefined): Pin {
+    const entry = this.getOrCreate(projectDir, cwd, configFile);
+    entry.pins++;
+    return {
+      entry,
+      [Symbol.dispose]: () => {
+        entry.pins--;
+      },
+    };
+  }
+
+  // The LRU bound: tear down the oldest entry no render holds, among the
+  // entries older than the newcomer — the newcomer is the entry about to be
+  // handed to its caller, so it is never a candidate. The entries passed over
+  // ride the teardown line; a map where every older entry is held grows past
+  // the cap and says so, rather than tearing down a state a render is about
+  // to draw with.
+  private evictOldestUnpinned(newcomer: CacheEntry): void {
+    let pinned = 0;
+    for (const [key, entry] of this.entries) {
+      if (entry === newcomer) break;
+      if (entry.pins > 0) {
+        pinned++;
+        continue;
+      }
+      // [LAW:single-enforcer] dispose the registry on eviction — it owns
+      // timers, fs watchers, and git subscriptions. Dropping the entry
+      // without dispose leaks every async handle the config declared.
+      this.log(
+        "info",
+        configDisposeLine(
+          { reason: "evict", pinned },
+          entry.state.registry.dispose(),
+        ),
+      );
+      entry.watcher?.release();
+      this.entries.delete(key);
+      return;
+    }
+    this.log("info", evictionDeferredLine(this.entries.size));
   }
 
   // Re-read an entry from disk NOW, for a caller that just wrote its file and
@@ -695,7 +759,7 @@ export class RenderCache {
       // the reference without disposing would leak them.
       this.log(
         "info",
-        configDisposeLine("reload", entry.state.registry.dispose()),
+        configDisposeLine({ reason: "reload" }, entry.state.registry.dispose()),
       );
       entry.state = loaded.state;
     }

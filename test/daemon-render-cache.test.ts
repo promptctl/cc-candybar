@@ -21,6 +21,7 @@ import { join } from "node:path";
 import {
   RenderCache,
   type CacheEntry,
+  type Pin,
   type RenderCacheObservers,
 } from "../src/daemon/cache/render";
 import { GitDataProvider } from "../src/daemon/cache/git";
@@ -756,7 +757,7 @@ describe("RenderCache", () => {
       const evict = lines.filter((l) => l.startsWith("config disposed "));
       expect(evict).toHaveLength(1);
       expect(evict[0]).toMatch(
-        /^config disposed reason=evict released=[1-9]\d*$/,
+        /^config disposed reason=evict released=[1-9]\d* pinned=0$/,
       );
 
       cache.reload("/p4", "/p4", undefined);
@@ -768,6 +769,82 @@ describe("RenderCache", () => {
         /^config disposed reason=reload released=[1-9]\d*$/,
       );
     } finally {
+      for (const fn of cleanups) fn();
+    }
+  });
+
+  // [LAW:no-ambient-temporal-coupling] brandon-unfiled-3248.6rc: a render
+  // holds its entry across its payload await; the LRU bound evicts only an
+  // entry nobody holds, so the render never resumes on a disposed state.
+  test("eviction passes over a pinned entry and takes the oldest unpinned one", () => {
+    const lines: string[] = [];
+    const { cache, cleanups } = makeCache(undefined, (_level, msg) =>
+      lines.push(msg),
+    );
+    try {
+      // maxEntries=4. /p0 is the oldest, and held.
+      const pin = cache.pin("/p0", "/p0", undefined);
+      for (let i = 1; i < 5; i++)
+        cache.getOrCreate(`/p${i}`, `/p${i}`, undefined);
+      expect(cache.size).toBe(4);
+      // /p1 went, not /p0: the same object is still the cache's.
+      expect(cache.getOrCreate("/p0", "/p0", undefined)).toBe(pin.entry);
+      expect(
+        lines.filter((l) => l.startsWith("config disposed reason=evict")),
+      ).toEqual([
+        expect.stringMatching(
+          /^config disposed reason=evict released=[1-9]\d* pinned=1$/,
+        ),
+      ]);
+      // Released, /p0 is evictable like any other: it is now the most
+      // recently used, so the next insertion takes /p2 and the one after
+      // that walks on until /p0 is the oldest again.
+      pin[Symbol.dispose]();
+      expect(pin.entry.pins).toBe(0);
+      for (let i = 5; i < 9; i++)
+        cache.getOrCreate(`/p${i}`, `/p${i}`, undefined);
+      expect(cache.getOrCreate("/p0", "/p0", undefined)).not.toBe(pin.entry);
+    } finally {
+      for (const fn of cleanups) fn();
+    }
+  });
+
+  test("eviction is deferred, and says so, while every entry is pinned", () => {
+    const lines: string[] = [];
+    const { cache, cleanups } = makeCache(undefined, (_level, msg) =>
+      lines.push(msg),
+    );
+    const pins: Pin[] = [];
+    try {
+      for (let i = 0; i < 4; i++)
+        pins.push(cache.pin(`/p${i}`, `/p${i}`, undefined));
+      cache.getOrCreate("/p4", "/p4", undefined);
+      // Nothing torn down; the map grew past its cap and the log says why.
+      expect(cache.size).toBe(5);
+      expect(
+        lines.filter((l) => l.startsWith("config disposed ")),
+      ).toHaveLength(0);
+      expect(lines).toContain(
+        "config eviction deferred: every older entry has a render in flight size=5",
+      );
+      // One release, and the next insertion tears exactly that entry down,
+      // having passed over the held ones before it.
+      const released = pins.splice(2, 1)[0]!;
+      released[Symbol.dispose]();
+      cache.getOrCreate("/p5", "/p5", undefined);
+      expect(cache.size).toBe(5);
+      expect(
+        lines.filter((l) => l.startsWith("config disposed reason=evict")),
+      ).toEqual([
+        expect.stringMatching(
+          /^config disposed reason=evict released=[1-9]\d* pinned=2$/,
+        ),
+      ]);
+      expect(cache.getOrCreate("/p2", "/p2", undefined)).not.toBe(
+        released.entry,
+      );
+    } finally {
+      for (const p of pins) p[Symbol.dispose]();
       for (const fn of cleanups) fn();
     }
   });

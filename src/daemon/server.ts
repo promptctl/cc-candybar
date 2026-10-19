@@ -1318,7 +1318,12 @@ async function renderRequest(
     sessionState.get(sessionId, SESSION_CONFIG_OVERRIDE_KEY) ??
     configFile ??
     hints.configEnv;
-  const entry = renderCache.getOrCreate(projectDir, req.cwd, sessionConfigFile);
+  // [LAW:no-ambient-temporal-coupling] Held, not fetched: this render reads
+  // `entry.state` again after the payload await below, and the LRU bound
+  // evicts only an entry no render holds, so the state it resumes on is live
+  // (brandon-unfiled-3248.6rc). `using` releases the hold on every exit.
+  using pin = renderCache.pin(projectDir, req.cwd, sessionConfigFile);
+  const { entry } = pin;
   // [LAW:one-source-of-truth] Record the inputs THIS render resolved its
   // config from, so a durable click on this session resolves the same
   // chain and writes the file the next reload reads (verbs/index.ts
