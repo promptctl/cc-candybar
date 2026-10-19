@@ -3,7 +3,7 @@
 // settings file, a clean setup, and a failed check carrying a fix.
 
 import { BUNDLED_GLYPHS } from "./helpers/bundled-glyphs";
-import { healthyDaemonEdge, healthyDataEdge, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, healthyDaemonIn, HEALTHY_FACTS, CARRIED, NAMED } from "./helpers/doctor-facts";
+import { healthyDaemonEdge, healthyDataEdge, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, healthyDaemonIn, HEALTHY_FACTS, CARRIED, NAMED, STILL } from "./helpers/doctor-facts";
 import { glyphSighting } from "../src/doctor/checks";
 import { withMark } from "../src/doctor/mark-book";
 import { memoryMarkBook } from "./helpers/mark-book";
@@ -20,6 +20,8 @@ import type { DoctorEdge } from "../src/doctor/edge";
 import type { HandlerProbeEdge } from "../src/doctor/handler-probe";
 import { TMUX_TRUECOLOR_VAR } from "../src/doctor/checks";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
+import type { DaemonAnswer } from "../src/doctor/daemon-answer";
+import type { FrameSeen } from "../src/daemon/render-sightings";
 
 // The daemon a healthy bar answers from: its session runs with the Claude
 // Code directory this test's command reports (CLAUDE_CONFIG_DIR, `inDir`).
@@ -373,18 +375,28 @@ describe("doctorPlan over a real config", () => {
     ).toBe(`✗ config — helper "h" is never called\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n✓ session data\n`);
   });
 
-  // brandon-effects-2gka.21e: the config the bar draws decides the effect, and
-  // the settings file in this shell's CLAUDE_CONFIG_DIR decides the cadence.
-  test("a config wearing an effect under a statusLine with no interval fails effect refresh, with the fix hint", async () => {
-    fs.writeFileSync(projectConfig(), `{ globals: { effect: "shimmer" } }`);
+  // brandon-effects-2gka.21e, brandon-doctor-v62x.tgp: what the recent bars of
+  // this Claude Code directory drew decides whether the bar moves, and the
+  // settings file in this shell's CLAUDE_CONFIG_DIR decides the cadence.
+  const drawing = (frame: FrameSeen, claudeConfigDir: string) => async () => ({
+    ...(await DAEMON()),
+    frames: {
+      kind: "ok" as const,
+      value: [{ role: "statusline" as const, frame, claudeConfigDir, ago: 1 }],
+    },
+  });
+  const planOver = (daemon: () => Promise<DaemonAnswer>) =>
+    doctorPlan(REAL, NO_HANDLER, daemon, inDir({}), project, () => ({ columns: 120 }));
+
+  test("a bar seen moving under a statusLine with no interval fails effect refresh, with the fix hint", async () => {
     fs.writeFileSync(
       settingsPath(),
       `{ "statusLine": { "type": "command", "command": "cc-candybar" } }`,
     );
-    expect(await plan()).toEqual({
+    expect(await planOver(drawing("moves", dir))).toEqual({
       stdout:
         "✓ config\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width\n" +
-        "✗ effect refresh — the bar wears the shimmer effect, but Claude Code redraws it only on events" +
+        "✗ effect refresh — the bar moves (an effect, a fade, or an animated segment), but Claude Code redraws it only on events" +
         ` (fix: click the settings menu (${DOOR_GLYPH} by default) › 🧰 tools › 🩺 doctor, then [fix] on the bar)\n` +
         "✓ Nerd Font\n✓ segment data\n✓ session data\n",
       stderr: "",
@@ -392,10 +404,11 @@ describe("doctorPlan over a real config", () => {
     });
   });
 
-  // A config that does not load draws the bundled default — still.
-  test("a config that does not load is judged by the bar drawn under the error", async () => {
-    fs.writeFileSync(projectConfig(), `{ globals: { effect: "shimmer" }, root: { h: ["ghost"] } }`);
-    expect((await plan()).stdout).toMatch(/\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n✓ session data\n$/);
+  // Another directory's settings file redraws that session, not this one's.
+  test("a bar of another Claude Code directory says nothing about this one", async () => {
+    expect((await planOver(drawing("moves", "/elsewhere"))).stdout).toMatch(
+      /✗ effect refresh — no session of this Claude Code has drawn a statusline for this daemon in the last 5 minutes, so whether it moves is unknown/,
+    );
   });
 
   test("$CC_CANDYBAR_CONFIG names the file checked, as the client reports it", async () => {
@@ -421,6 +434,7 @@ describe("doctorPlan over a real config", () => {
         { kind: "ok", value: HEALTHY_SERVING },
         CARRIED,
         NAMED,
+        STILL,
       ),
       urlHandler: { kind: "unsupported" },
       askedBy: "command",

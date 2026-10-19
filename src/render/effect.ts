@@ -189,19 +189,6 @@ export interface EffectFrame {
   readonly leaves: readonly PassageFrame[];
 }
 
-// Whether anything the frame drew moves: the bar's effect, a placement's own,
-// or a placement fading in or dissolving out. A frame that moves differs from
-// the next one at any instant; one that does not changes only when its data
-// does.
-export function frameMoves(frame: EffectFrame): boolean {
-  return (
-    frame.effect !== EFFECT_FLOOR ||
-    frame.own.some((o) => o.effect !== EFFECT_FLOOR) ||
-    frame.fades.length > 0 ||
-    frame.leaves.length > 0
-  );
-}
-
 // A placement passing through a transition: a `fade` in as it appears, a
 // `dissolve` out as it leaves. Since the instant it began, its own t = 0, made
 // once from the placement's ground — rich-js keeps each cell's place in it.

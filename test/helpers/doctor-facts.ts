@@ -1,4 +1,5 @@
 import type { DaemonProcess, DoctorFacts } from "../../src/doctor/checks";
+import type { FrameSeen } from "../../src/daemon/render-sightings";
 import type { DoctorEdge, InstallEdge } from "../../src/doctor/edge";
 import type { DaemonAnswer } from "../../src/doctor/daemon-answer";
 import type { ServingDaemon } from "../../src/daemon/limits";
@@ -79,7 +80,17 @@ export const renderSaid = (client: ClientHint | null | undefined) => ({
   rateLimits: "carried" as const,
   claudeConfigDir: "/claude",
   transcript: HEALTHY_TRANSCRIPT,
+  frame: "still" as const,
 });
+
+// The frames a session's statusline renders drew.
+export const drew = (...frames: FrameSeen[]): DoctorFacts["frames"] => ({
+  kind: "ok",
+  value: frames.map((frame) => ({ role: "statusline", frame })),
+});
+
+// A bar whose frame holds still, as a session's renders drew it.
+export const STILL = drew("still");
 
 // The rate-limit windows, as a session's renders carried them.
 export const CARRIED = { kind: "ok", value: ["carried"] } as const;
@@ -117,6 +128,10 @@ export const healthyDaemonIn = (
       kind: "ok",
       value: [{ transcript: HEALTHY_TRANSCRIPT, ago: 1 }],
     },
+    frames: {
+      kind: "ok",
+      value: [{ role: "statusline", frame: "still", claudeConfigDir, ago: 1 }],
+    },
     clients: {
       kind: "ok",
       value: {
@@ -149,9 +164,7 @@ export const HEALTHY_FACTS: DoctorFacts = {
   },
   askedBy: "command",
   config: { kind: "loaded", layers: [], warnings: [], unused: [] },
-  effect: { kind: "decided", name: "none", value: "none" },
-  placementEffects: [],
-  transitions: false,
+  frames: STILL,
   data: {
     pullRequests: { kind: "unneeded" },
     rateLimits: { kind: "unneeded" },

@@ -93,13 +93,18 @@ import {
   RenderSightings,
   rateLimitsSeen,
   transcriptSaid,
+  type FrameSeen,
   type RateLimitsSeen,
 } from "./render-sightings";
 import { claudeConfigDir } from "../claude-settings";
 import { setLaunchStats } from "../proc/launch";
 import { buildDebugSnapshot } from "./debug";
 import { DEBUG_WHATS, isDebugWhat } from "./debug-types";
-import { renderDsl, type RenderWarning } from "../dsl/render.js";
+import {
+  drawDsl,
+  type FrameMotion,
+  type RenderWarning,
+} from "../dsl/render.js";
 import {
   renderStripCells,
   DEFAULT_COLOR_COMPATIBILITY,
@@ -120,11 +125,7 @@ import {
   type EffectiveGlobals,
   type RenderPayloadDeps,
 } from "./render-payload.js";
-import {
-  EffectSessions,
-  frameMoves,
-  type PassageFrame,
-} from "../render/effect.js";
+import { EffectSessions, type PassageFrame } from "../render/effect.js";
 import { FEED_PERIODS, FrameFeeds, type FeedFrame } from "./frame-feed.js";
 import {
   LANE_NAMES,
@@ -1208,19 +1209,23 @@ export async function replyTo(
     const checked = checkRenderRequest(req);
     // [LAW:single-enforcer] A render REQUEST is a client sighting — the
     // frames a feed draws from a session's data are not, so this is the one
-    // write, here rather than in renderChecked.
-    if (checked.ok) {
+    // write, here rather than in renderChecked. It is written as the request
+    // arrives, `drawing`, and again once its render settles, carrying what the
+    // frame drew — both stamped with the instant and order it arrived in.
+    const sighted = (req: CheckedRenderRequest, frame: FrameSeen): void =>
       renderSightings.see(
-        checked.req.hookData.session_id,
+        req.hookData.session_id,
         {
-          client: checked.req.hints.client ?? null,
-          rateLimits: checked.req.rateLimits,
-          claudeConfigDir: claudeConfigDir(checked.req.hints.claudeConfigDir),
-          transcript: transcriptSaid(checked.req.hookData),
+          client: req.hints.client ?? null,
+          rateLimits: req.rateLimits,
+          claudeConfigDir: claudeConfigDir(req.hints.claudeConfigDir),
+          transcript: transcriptSaid(req.hookData),
+          frame,
         },
         at,
+        order,
       );
-    }
+    if (checked.ok) sighted(checked.req, "drawing");
     const rendered: {
       outcome: RenderOutcome;
       resp: Response;
@@ -1228,7 +1233,8 @@ export async function replyTo(
     } = !checked.ok
       ? refusedRender(checked.problems)
       : await answerRequest(checked.req, order, at, facts).then(
-          ({ output, moves, clickShown }) => {
+          ({ output, motion, clickShown }) => {
+            sighted(checked.req, motion);
             const resp = { ok: true, output } as const;
             // [LAW:one-source-of-truth] A request the render took is the
             // session's data from now on: its frames are drawn from it, and
@@ -1237,7 +1243,7 @@ export async function replyTo(
               checked.req.hookData.session_id,
               checked.req,
               order,
-              { resp, drawnAt: t0, moves, failure: null },
+              { resp, drawnAt: t0, moves: motion === "moves", failure: null },
             );
             return {
               outcome: { kind: "ok" } as const,
@@ -1256,11 +1262,14 @@ export async function replyTo(
                       ),
             };
           },
-          (error: unknown) => ({
-            outcome: { kind: "threw", error } as const,
-            resp: renderFailed(error),
-            delivered: NOTHING_DELIVERED,
-          }),
+          (error: unknown) => {
+            sighted(checked.req, "failed");
+            return {
+              outcome: { kind: "threw", error } as const,
+              resp: renderFailed(error),
+              delivered: NOTHING_DELIVERED,
+            };
+          },
         );
     if (rendered.outcome.kind !== "ok") stats.requestsErrored++;
     // Whether the client was already told TIMEOUT while this render ran on.
@@ -1551,7 +1560,7 @@ async function renderFrame(req: CheckedRenderRequest): Promise<FeedFrame> {
   const started = new Date();
   const facts: RenderFacts = [];
   try {
-    const { drawn, moves } = await renderChecked(
+    const { drawn, motion } = await renderChecked(
       req,
       instantOf(started),
       facts,
@@ -1567,7 +1576,7 @@ async function renderFrame(req: CheckedRenderRequest): Promise<FeedFrame> {
     return {
       resp: { ok: true, output },
       drawnAt: started.getTime(),
-      moves,
+      moves: motion === "moves",
       failure: null,
     };
   } catch (error) {
@@ -1722,9 +1731,8 @@ const refusedRender = (problems: string[]) => ({
   delivered: NOTHING_DELIVERED,
 });
 
-// The bar for a checked request, at `at`, and whether anything on it moves
-// (read off this render's own effect frame, in the same synchronous step that
-// drew it). A throw is the caller's to record. `facts` is the render event's
+// The bar for a checked request, at `at`, and its motion (`FrameMotion`, read
+// off the frame this render drew). A throw is the caller's to record. `facts` is the render event's
 // record, filled as each stage learns its part.
 async function renderChecked(
   req: CheckedRenderRequest,
@@ -1733,7 +1741,7 @@ async function renderChecked(
   render: ClickErrorRender,
 ): Promise<{
   drawn: DrawnBar;
-  moves: boolean;
+  motion: FrameMotion;
   clickShown: ClickErrorRecord | null;
 }> {
   noteFacts(facts, {
@@ -1792,7 +1800,7 @@ async function renderChecked(
   noteFacts(facts, { width: String(width) });
   // [LAW:dataflow-not-control-flow] One composition every render: the
   // entry always holds a renderable state (the bundled default until a
-  // config loads — src/daemon/cache/render.ts), so body = renderDsl(state)
+  // config loads — src/daemon/cache/render.ts), so body = drawDsl(state)
   // and output = diagnostics + body, with no "did the config load" branch.
   // [LAW:one-source-of-truth] Every globals field resolved ONCE per
   // render, here — before the payload build, so the same struct feeds
@@ -1856,7 +1864,7 @@ async function renderChecked(
   // src/dsl/render.ts). The daemon must not pre-apply — doing so
   // would run the MobX action twice per render and clear last_error
   // diagnostics on the round trip.
-  const body = renderDsl(
+  const frame = drawDsl(
     state.config,
     state.compiled,
     state.store,
@@ -1968,6 +1976,8 @@ async function renderChecked(
     stateRev: String(fx.revision),
     fades: passages(fx.fades),
     leaves: passages(fx.leaves),
+    // What the frame drew: whether anything on it changes without new data.
+    motion: frame.motion,
     err: combinedError ? "Y" : "N",
     clickError: clickHold.kind === "none" ? "-" : clickHold.kind,
     upd: String(updates.length),
@@ -1975,7 +1985,7 @@ async function renderChecked(
   });
   return {
     drawn: {
-      body,
+      body: frame.text,
       diagnostics,
       failedConfigFile,
       geometry: {
@@ -1984,7 +1994,7 @@ async function renderChecked(
         colorCompatibility: effective.colorCompatibility,
       },
     },
-    moves: frameMoves(fx),
+    motion: frame.motion,
     clickShown,
   };
 }
@@ -2066,11 +2076,11 @@ async function answerRequest(
   facts: RenderFacts,
 ): Promise<{
   output: string;
-  moves: boolean;
+  motion: FrameMotion;
   clickShown: ClickErrorRecord | null;
 }> {
   recordRequest(req);
-  const { drawn, moves, clickShown } = await renderChecked(
+  const { drawn, motion, clickShown } = await renderChecked(
     req,
     at,
     facts,
@@ -2086,5 +2096,5 @@ async function answerRequest(
   noteFacts(facts, {
     dumpFailed: failure === null ? "-" : JSON.stringify(failure),
   });
-  return { output: composeBar(drawn, link), moves, clickShown };
+  return { output: composeBar(drawn, link), motion, clickShown };
 }

@@ -31,6 +31,7 @@ import {
   askDaemon,
   type DaemonAnswer,
   type DaemonClients,
+  type FrameSightings,
   type RateLimitSightings,
   type TranscriptSightings,
 } from "./daemon-answer.js";
@@ -54,6 +55,7 @@ import { fallbackState, loadFromDisk } from "../daemon/cache/render.js";
 import { SessionState } from "../daemon/session-state.js";
 import { claudeConfigDir } from "../claude-settings.js";
 import type {
+  FrameSighting,
   RateLimitsSeen,
   TranscriptSaid,
 } from "../daemon/render-sightings.js";
@@ -156,6 +158,25 @@ export function transcriptsOf(
       };
 }
 
+// What the recent renders of sessions running with this Claude Code
+// directory drew — the refresh that would redraw them is that directory's
+// settings file's, so a session of another says nothing about it.
+export function framesOf(
+  asked: Asked<FrameSightings>,
+  configDir: string,
+): Asked<readonly FrameSighting[]> {
+  return asked.kind === "failed"
+    ? asked
+    : {
+        kind: "ok",
+        value: asked.value
+          .filter(
+            (s) => s.ago <= RECENT_CLIENT_S && s.claudeConfigDir === configDir,
+          )
+          .map(({ role, frame }) => ({ role, frame })),
+      };
+}
+
 // [LAW:effects-at-boundaries] The whole CLI as data: facts in, (streams,
 // exit code) out. `runDoctorCli` performs it; a test reads it.
 export async function doctorPlan(
@@ -198,6 +219,7 @@ export async function doctorPlan(
       answer.serving,
       rateLimitsOf(answer.rateLimits, claudeConfigDir(hints.claudeConfigDir)),
       transcriptsOf(answer.transcripts),
+      framesOf(answer.frames, claudeConfigDir(hints.claudeConfigDir)),
     );
     // Last: the probe opens a link and waits, which a run that cannot report
     // has no reason to do.

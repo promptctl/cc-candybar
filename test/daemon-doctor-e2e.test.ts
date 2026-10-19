@@ -9,6 +9,7 @@ import { builtBundle } from "./helpers/spawn-test-daemon";
 import {
   mkdtempSync,
   mkdirSync,
+  readFileSync,
   realpathSync,
   writeFileSync,
 } from "node:fs";
@@ -44,6 +45,7 @@ import {
   productionHandlerProbeEdge,
 } from "../src/doctor/handler-probe";
 import { PACKAGE_VERSION } from "../src/version";
+import { logPath } from "../src/daemon/paths";
 import { crateDigest } from "../src/source-digest";
 import { productionInstallEdge } from "../src/doctor/edge";
 import { installOf, rateLimitsOf } from "../src/doctor/cli";
@@ -379,6 +381,70 @@ test("the session data row reads the transcript the session's render named", asy
     writeFileSync(transcript, `{"type":"user"}\n`);
     await click(sockPath, run!);
     expect(flat(await renderT())).toContain("✓ session data");
+  } finally {
+    if (daemon) await killAndWait(daemon);
+    removeTmpDirs();
+  }
+});
+
+// brandon-doctor-v62x.tgp: the effect-refresh row reads what the session's
+// bar drew, through a real daemon. A bar whose only motion is a template's
+// `frames` — no effect, no transitions — fails under a statusLine with no
+// interval, and the same bar drawn still passes; each render event says which.
+test("a bar whose only motion is a template's fails effect refresh", async () => {
+  const { env, sockPath, removeTmpDirs } = prepareIsolatedDaemonEnv(
+    "cc-candybar-doctor-e2e",
+  );
+  const projectDir = realpathSync(
+    mkdtempSync(path.join(os.tmpdir(), "cc-candybar-doctor-e2e-project-")),
+  );
+  const claudeDir = realpathSync(
+    mkdtempSync(path.join(os.tmpdir(), "cc-candybar-doctor-e2e-claude-")),
+  );
+  writeFileSync(
+    path.join(claudeDir, "settings.json"),
+    `{ "statusLine": { "type": "command", "command": "cc-candybar" } }`,
+  );
+  const projectConfig = path.join(projectDir, ".cc-candybar.json5");
+  const barOf = (template: string): string =>
+    `{ segments: { cell: { template: ${JSON.stringify(template)} } }, root: { h: ["cell"] } }`;
+  writeFileSync(projectConfig, barOf('{{ frames 1 "a" 1 "b" }}'));
+
+  let daemon: RunningDaemon | undefined;
+  try {
+    daemon = await spawnDaemonWithEnv(env);
+    const SID = "doctor-e2e-frames";
+    const hints = { claudeConfigDir: claudeDir };
+    const draw = () => render(sockPath, SID, projectDir, hints);
+    await click(sockPath, urlWriting(await draw(), SETTINGS_ANCHOR, SETTINGS_OPEN));
+    await click(sockPath, urlWriting(await draw(), `${SETTINGS_NS}tab`, "tools"));
+    const run = linkUrls(await draw()).find((u) =>
+      effectsOf(u).some((e) => e.verb === VERB_DOCTOR_RUN),
+    );
+    expect(run).toBeDefined();
+    await click(sockPath, run!);
+    expect(flat(await draw())).toContain(
+      "✗ effect refresh — the bar moves (an effect, a fade, or an animated segment), but Claude Code redraws it only on events",
+    );
+
+    writeFileSync(projectConfig, barOf("still"));
+    await click(sockPath, run!);
+    await draw();
+    await click(sockPath, run!);
+    expect(flat(await draw())).toContain("✓ effect refresh");
+
+    const motion = readFileSync(logPath(env), "utf8")
+      .split("\n")
+      .filter((l) => l.includes(`render sid=${SID} `))
+      .map((l) => l.match(/ motion=(\S+) /)?.[1]);
+    expect(motion[0]).toBe("moves");
+    expect(motion.at(-1)).toBe("still");
+    expect(
+      readFileSync(logPath(env), "utf8")
+        .split("\n")
+        .filter((l) => l.includes("doctor:") && l.includes(`session=${SID}`))
+        .map((l) => l.match(/ frames=(\S+) /)?.[1]),
+    ).toEqual(["1/0/0/0/0", "1/0/0/0/0", "0/0/1/0/0"]);
   } finally {
     if (daemon) await killAndWait(daemon);
     removeTmpDirs();

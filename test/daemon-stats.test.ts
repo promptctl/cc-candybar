@@ -46,6 +46,8 @@ describe("RuntimeStats.snapshot", () => {
           rateLimits: "carried",
           claudeConfigDir: "/c",
           transcript: { path: "/c/t.jsonl", answered: true },
+          frame: "still",
+          role: "statusline",
           ago: 4,
         },
       ],
@@ -59,6 +61,8 @@ describe("RuntimeStats.snapshot", () => {
           rateLimits: "carried",
           claudeConfigDir: "/c",
           transcript: { path: "/c/t.jsonl", answered: true },
+          frame: "still",
+          role: "statusline",
           ago: 4,
         },
     ]);

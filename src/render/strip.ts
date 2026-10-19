@@ -5,34 +5,67 @@ import {
   CellJoiner,
   JOINERS,
   FlexStrip,
-  renderToString,
+  Segment,
+  render,
+  resolveDestination,
+  segmentsToString,
   type Joiner,
   type SeamForm,
   type Renderable,
-  type RenderToStringOptions,
+  type ColorSystemName,
 } from "@promptctl/rich-js";
 import type { ColorCompatibility, Endcaps } from "../themes/policy.js";
 import { RENDER_THEME } from "./rich-theme.js";
 import { STILL, type RowMotion } from "./effect.js";
 
+// rich-js `renderToString`'s width when it is handed none: what an unbounded
+// Strip is drawn at, so a row drawn here is the bytes it always was.
+const UNBOUNDED_DRAW_WIDTH = 80;
+
+// [LAW:types-are-the-program] A drawn row: its bytes, and whether anything on
+// it changes without new data — a looping effect, a transition in flight, a
+// template's `frames`. Read off the drawn cells (rich-js `Segment.nextChange`)
+// rather than inferred from what the config asked for, so motion a template
+// draws counts exactly as an effect does. The answer is a time on the clock of
+// whoever drew each cell — an effect's own, the epoch for a template — so the
+// one fact a row of mixed cells can state is whether it is finite.
+export interface DrawnRow {
+  readonly text: string;
+  readonly moves: boolean;
+}
+
 // [LAW:single-enforcer] Every renderable this module serializes is drawn here,
 // with `RENDER_THEME` — the theme the cell splitter resolves a fragment's style
 // through before the render — so the two agree by construction rather than by
-// each call site remembering the option.
+// each call site remembering the option. The segments are drawn once and read
+// twice: encoded as bytes, and asked when they next change.
 function draw(
   renderable: Renderable,
-  options: Omit<RenderToStringOptions, "theme">,
-): string {
-  return renderToString(renderable, {
-    ...options,
-    theme: RENDER_THEME,
-    // [LAW:no-silent-failure] rich-js would draw a style it cannot resolve
-    // as no style at all; a name the theme lacks is a broken config, so it
-    // throws here exactly as the cell splitter throws on it.
-    onStyleError: (error) => {
-      throw error;
-    },
-  });
+  options: {
+    readonly colorSystem: ColorSystemName | null;
+    readonly width?: number;
+  },
+): DrawnRow {
+  const destination = resolveDestination(options.colorSystem);
+  const segments = [
+    ...render(renderable, {
+      maxWidth: options.width ?? UNBOUNDED_DRAW_WIDTH,
+      isTerminal: false,
+      asciiOnly: false,
+      theme: RENDER_THEME,
+      colorSystem: destination.colorSystem,
+      // [LAW:no-silent-failure] rich-js would draw a style it cannot resolve
+      // as no style at all; a name the theme lacks is a broken config, so it
+      // throws here exactly as the cell splitter throws on it.
+      onStyleError: (error) => {
+        throw error;
+      },
+    }),
+  ];
+  return {
+    text: segmentsToString(segments, destination),
+    moves: Number.isFinite(Segment.nextChange(segments)),
+  };
 }
 
 export interface RenderedSegmentLike {
@@ -156,7 +189,10 @@ function stripGeometry(options: StripShape): { chrome: number; seam: number } {
     });
   const width = (cells: RichText[]): number =>
     new RichText(
-      draw(new Strip(cells, joiner), { colorSystem: null }).replace(/\n$/, ""),
+      draw(new Strip(cells, joiner), { colorSystem: null }).text.replace(
+        /\n$/,
+        "",
+      ),
     ).cellLength;
   const one = width([cell("#101010")]);
   const geometry = {
@@ -204,7 +240,7 @@ export function stripPrivateGlyphs(options: StripShape): string {
     new RichText("x", { end: "", style: new Style({ bgcolor }) });
   const cells = [cell("#101010"), cell("#202020"), cell("#202020")];
   const drawn = draw(new Strip(cells, joiner), { colorSystem: null });
-  return privateGlyphsIn(drawn);
+  return privateGlyphsIn(drawn.text);
 }
 
 function toCell(seg: RenderedSegmentLike, padding: number): RichText {
@@ -233,12 +269,12 @@ function toCell(seg: RenderedSegmentLike, padding: number): RichText {
  * width acts as a break limit. An infinite width has nothing to break at,
  * so it renders unbounded regardless of `wrap`.
  */
-export function renderStripCells(
+export function drawStripCells(
   cells: readonly RichText[],
   options: BuildLineOptions,
   motion: RowMotion = STILL,
-): string {
-  if (cells.length === 0) return "";
+): DrawnRow {
+  if (cells.length === 0) return { text: "", moves: false };
   const joiner = pickJoiner(options.endcaps, options.separator);
   const flex = options.wrap && Number.isFinite(options.width);
   const drawn = {
@@ -255,12 +291,20 @@ export function renderStripCells(
   // [LAW:single-enforcer] Strip and FlexStrip each end their own last line (a
   // block renderable's contract in rich-js); a row here is a line's CONTENT —
   // the caller joins rows with "\n" — so the one terminator comes off here.
-  if (!out.endsWith("\n")) {
+  if (!out.text.endsWith("\n")) {
     throw new Error(
-      "renderStripCells: rich-js strip output did not end its last line",
+      "drawStripCells: rich-js strip output did not end its last line",
     );
   }
-  return out.slice(0, -1);
+  return { text: out.text.slice(0, -1), moves: out.moves };
+}
+
+// A row's bytes alone, for a caller that draws no motion.
+export function renderStripCells(
+  cells: readonly RichText[],
+  options: BuildLineOptions,
+): string {
+  return drawStripCells(cells, options).text;
 }
 
 /**
