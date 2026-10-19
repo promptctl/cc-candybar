@@ -241,6 +241,20 @@ describe("every render request writes one render event, whatever its outcome", (
     );
   });
 
+  // The kind is untrusted JSON: one no request carries — a name, or a value a
+  // property lookup would coerce into one — is refused, never thrown on.
+  test("a request of a kind no request carries is refused BAD_REQUEST", async () => {
+    for (const kind of ["nope", ["click"], 7])
+      await expect(
+        sendDaemonRequest(sockPath, { v: PROTOCOL_VERSION, kind }),
+      ).resolves.toEqual({
+        ok: false,
+        error: "unknown kind",
+        code: "BAD_REQUEST",
+        daemonV: PROTOCOL_VERSION,
+      });
+  });
+
   // A render still running when its client was answered TIMEOUT says so: its
   // event is written when it ends, after that reply, and is the one record
   // that the reply the client read was not this render's.

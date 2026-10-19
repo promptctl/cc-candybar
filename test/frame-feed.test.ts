@@ -7,7 +7,6 @@
 import {
   FrameFeeds,
   type FeedFrame,
-  type Motion,
   type Refusal,
   type Subscriber,
 } from "../src/daemon/frame-feed";
@@ -18,6 +17,10 @@ const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
 const PERIODS = { moving: 20, still: 400 };
+
+// How the harness's bar moves: on a screen, where nobody can see it, or not at
+// all. A frame says only whether it moves; the feed asks whether it is shown.
+type Motion = "moving" | "unseen" | "still";
 
 // A feed over a render whose bar moves as `motion` says, every frame a new
 // one while it does. `renders` counts the renders, `changes` the watches'
@@ -30,9 +33,11 @@ function harness(opts: { motion: Motion; renderMs?: number; fails?: boolean }) {
     n: 0,
     order: 0,
     // The lanes the session's settings switch on, read by the feed when it
-    // asks; `opened` counts the feeds opened.
+    // asks; `opened` counts the times the feeds began to watch, `stopped` the
+    // times they stopped.
     lanes: { band: true, statusline: true, pane: true } as LaneSwitches,
     opened: 0,
+    stopped: 0,
     // A lane gate that throws, as a daemon bug in reading the settings would.
     gateThrows: false,
     // Added to the feed's clock, to reach the once-a-minute summary.
@@ -43,13 +48,13 @@ function harness(opts: { motion: Motion; renderMs?: number; fails?: boolean }) {
       ? {
           resp: { ok: false, error: `${req} threw`, code: "RENDER_FAILED" },
           drawnAt: Date.now(),
-          motion: "still",
+          moves: false,
           failure: { level: "error", line: `frame ${req} threw` },
         }
       : {
           resp: { ok: true, output: `${req}#${state.motion === "still" ? state.n : ++state.n}` },
           drawnAt: Date.now(),
-          motion: state.motion,
+          moves: state.motion !== "still",
           failure: null,
         };
   const changes = new Map<string, () => void>();
@@ -64,7 +69,11 @@ function harness(opts: { motion: Motion; renderMs?: number; fails?: boolean }) {
       if (state.gateThrows) throw new Error("the gate broke");
       return state.lanes;
     },
-    opened: () => state.opened++,
+    shown: () => state.motion !== "unseen",
+    watching: () => {
+      state.opened++;
+      return () => state.stopped++;
+    },
     watch: (sessionId, onChange) => {
       changes.set(sessionId, onChange);
       return () => changes.delete(sessionId);
@@ -263,7 +272,7 @@ test("an answer drawn at an earlier instant than the frame already out is drawn 
   feeds.note("s", "newer", ++state.order, {
     resp: { ok: true, output: "drawn before the frame out" },
     drawnAt: Date.now() - 60_000,
-    motion: "still",
+    moves: false,
     failure: null,
   });
   await sleep(20);
@@ -280,7 +289,7 @@ test("a moving answer noted while a still frame is drawn sets the pace of the ne
   feeds.note("s", "moving", ++state.order, {
     resp: { ok: true, output: "moving#1" },
     drawnAt: Date.now(),
-    motion: "moving",
+    moves: true,
     failure: null,
   });
   // The still frame finishes at 30 ms; the next is due a moving period (20 ms)
@@ -288,6 +297,67 @@ test("a moving answer noted while a still frame is drawn sets the pace of the ne
   await sleep(150);
   close();
   expect(state.renders).toBeGreaterThanOrEqual(2);
+});
+
+// On a faked clock, so a count of frames is exact.
+describe("on a faked clock", () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+  const pass = (ms: number): Promise<void> => jest.advanceTimersByTimeAsync(ms);
+
+  // Whether anyone can see a bar is the feed's question, asked as it sets the
+  // next frame: one that comes into view is drawn at the moving rate from then.
+  test("a moving bar that comes into view is drawn at the moving rate from then", async () => {
+    const { feeds, note, state, log } = harness({ motion: "unseen" });
+    note("s", "bar");
+    const close = feeds.subscribe("s", sub(() => {}));
+    await pass(50);
+    expect(state.renders).toBe(1);
+    state.motion = "moving";
+    feeds.wakeWhere(() => true);
+    // Drawn at once at 50 ms, then a moving period apart through 150.
+    await pass(100);
+    close();
+    expect(state.renders).toBe(7);
+    expect(log.at(-1)).toMatch(/ moving=6 unseen=1 /);
+  });
+
+  test("wakeWhere draws at once only the watched sessions it matches", async () => {
+    const { feeds, note, state } = harness({ motion: "still" });
+    note("a", "%1:a");
+    note("b", "%2:b");
+    note("c", "%1:c");
+    const closeA = feeds.subscribe("a", sub(() => {}));
+    const closeB = feeds.subscribe("b", sub(() => {}));
+    await pass(20);
+    expect(state.renders).toBe(2);
+    // c matches but nobody watches it, so nothing is drawn for it.
+    feeds.wakeWhere((req) => req.startsWith("%1:"));
+    await pass(20);
+    closeA();
+    closeB();
+    expect(state.renders).toBe(3);
+  });
+});
+
+// What runs while any feed exists (the tmux visibility loop) starts with the
+// first feed and stops with the last, not a moment later.
+test("the feeds watch from the first feed opening to the last closing", async () => {
+  const { feeds, note, state } = harness({ motion: "still" });
+  note("a", "x");
+  note("b", "y");
+  expect(state.opened).toBe(0);
+  const closeA = feeds.subscribe("a", sub(() => {}));
+  const closeA2 = feeds.subscribe("a", sub(() => {}));
+  const closeB = feeds.subscribe("b", sub(() => {}));
+  expect([state.opened, state.stopped]).toEqual([1, 0]);
+  closeA();
+  closeA2();
+  expect([state.opened, state.stopped]).toEqual([1, 0]);
+  closeB();
+  expect([state.opened, state.stopped]).toEqual([1, 1]);
+  feeds.subscribe("a", sub(() => {}))();
+  expect([state.opened, state.stopped]).toEqual([2, 2]);
 });
 
 // The lane toggles (candybar-animation-wbxz.81o.azo): FrameFeeds is the one

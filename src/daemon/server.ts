@@ -51,7 +51,13 @@ import {
   refusedHintsError,
   sanitizeClientVersion,
 } from "./protocol";
-import type { ClientHints, RenderRequest, Request, Response } from "./protocol";
+import type {
+  ClientHints,
+  RenderRequest,
+  Request,
+  Response,
+  SubscribeRequest,
+} from "./protocol";
 import { createPayloadProviders } from "./payload-providers";
 import { RenderCache, type DslRenderState } from "./cache/render";
 import { WatcherRegistry } from "./cache/watchers";
@@ -200,7 +206,7 @@ const effectSessions = new EffectSessions<RenderedLine>();
 // Each subscribed session's frames, drawn from its latest render request
 // (candybar-animation-wbxz.jmm.usl). A change to the session's own state — a
 // click — draws its next frame at once.
-const frameFeeds = new FrameFeeds<CheckedRenderRequest>({
+const frameFeeds: FrameFeeds<CheckedRenderRequest> = new FrameFeeds({
   render: (req) => renderFrame(req),
   // [LAW:no-ambient-temporal-coupling] The wake runs on the next turn of the
   // event loop, not inside the session write that changed the revision, so a
@@ -210,15 +216,17 @@ const frameFeeds = new FrameFeeds<CheckedRenderRequest>({
       scheduler: (run) => setImmediate(run),
     }),
   lanes: (req) => lanesOf(req),
-  opened: () => startVisibility(),
+  shown: (req) => paneVisibility.shown(req.hints.tmux),
+  watching: () => paneVisibility.follow(),
   periods: FEED_PERIODS,
   now: () => Date.now(),
   log: dlog,
 });
 // Which watched sessions' panes are on a screen, asked of their tmux servers
-// once a second: a session nobody can see is drawn at the still rate however
-// its bar moves, and one that comes into view is drawn at once.
-const paneVisibility = new PaneVisibility({
+// once a second while some feed exists: a session nobody can see is drawn at
+// the still rate however its bar moves, and one that comes into view is drawn
+// at once.
+const paneVisibility: PaneVisibility = new PaneVisibility({
   listPanes: (socket) =>
     runTmuxAsync({ socket }, "frames.visibility", [
       "list-panes",
@@ -232,52 +240,24 @@ const paneVisibility = new PaneVisibility({
       "-F",
       LIST_CLIENTS_FORMAT,
     ]),
+  // The servers of the sessions someone is watching.
+  sockets: () =>
+    new Set(frameFeeds.watched().flatMap(({ req }) => tmuxServersOf(req))),
   // Only the sessions on a server whose view changed are drawn again.
-  onChange: (sockets) => {
-    for (const { sessionId, req } of frameFeeds.watched())
-      if (req.hints.tmux && sockets.has(req.hints.tmux.socket))
-        frameFeeds.wake(sessionId);
-  },
+  onChange: (sockets) =>
+    frameFeeds.wakeWhere((req) =>
+      tmuxServersOf(req).some((socket) => sockets.has(socket)),
+    ),
+  intervalMs: 1000,
   log: dlog,
 });
-const VISIBILITY_INTERVAL_MS = 1000;
-// Render requests received so far: each one's place in the order they arrived.
-let renderArrivals = 0;
-// The servers of the sessions someone is watching; none, so no query, while
-// nobody is.
-const watchedTmuxServers = (): ReadonlySet<string> =>
-  new Set(
-    frameFeeds.watched().flatMap(
-      ({
-        req: {
-          hints: { tmux },
-        },
-      }) => (tmux === null || tmux === undefined ? [] : [tmux.socket]),
-    ),
-  );
-// [LAW:no-ambient-temporal-coupling] The next refresh is scheduled when this
-// one has its answers, so a tmux server slower than the interval is never
-// asked twice at once, nor answered out of order. The refresh runs only while
-// a feed exists: a feed opening starts it, and it stops scheduling itself once
-// none is left, so a daemon nobody subscribes to keeps no timer.
-let visibilityRunning = false;
-const startVisibility = (): void => {
-  if (visibilityRunning) return;
-  visibilityRunning = true;
-  refreshVisibility();
-};
-const refreshVisibility = (): void => {
-  void paneVisibility
-    .refresh(watchedTmuxServers())
-    .catch((err: unknown) =>
-      dlog("error", `visibility refresh threw: ${inspect(err)}`),
-    )
-    .then(() => {
-      visibilityRunning = frameFeeds.getStats().feeds > 0;
-      if (visibilityRunning)
-        setTimeout(refreshVisibility, VISIBILITY_INTERVAL_MS).unref();
-    });
-};
+// [LAW:one-source-of-truth] The tmux server a session's bar is on, as the
+// servers it is on: none outside tmux or from a client too old to say.
+function tmuxServersOf({
+  hints: { tmux },
+}: CheckedRenderRequest): readonly string[] {
+  return tmux === null || tmux === undefined ? [] : [tmux.socket];
+}
 // [LAW:locality-or-seam] Same terms as sessionState: naming the directory is
 // free; the daemon wipes it in onListening() (reset), once the bind is
 // won, and is the only writer.
@@ -986,17 +966,30 @@ function handleConnection(sock: net.Socket): void {
 // completion. No timer stands between respond and exit.
 // [LAW:effects-at-boundaries] handleRequest computes the description; the
 // socket boundary performs it.
+export interface Reply {
+  readonly resp: Response;
+  readonly exitAfterFlush: number | null;
+}
 // A subscription is the one request answered by a stream rather than a reply:
 // the connection boundary turns its socket over to the session's feed.
 type HandledRequest =
-  | { kind: "reply"; resp: Response; exitAfterFlush: number | null }
+  | ({ kind: "reply" } & Reply)
   | { kind: "subscribe"; sessionId: string; lane: Lane };
 
-const stay = (resp: Response): HandledRequest => ({
-  kind: "reply",
-  resp,
-  exitAfterFlush: null,
-});
+const stay = (resp: Response): Reply => ({ resp, exitAfterFlush: null });
+const replied = (reply: Reply): HandledRequest => ({ kind: "reply", ...reply });
+
+// [LAW:types-are-the-program] Every request kind answered with a reply: all
+// but a subscribe, the compiler naming one added to the protocol until it is.
+type ReplyRequest = Exclude<Request, SubscribeRequest>;
+const REPLY_KINDS: Readonly<Record<ReplyRequest["kind"], true>> = {
+  render: true,
+  "pane-session": true,
+  shutdown: true,
+  stats: true,
+  click: true,
+  debug: true,
+};
 
 // [LAW:single-enforcer] The one reply to a request whose handler threw — a
 // render's own throw, or any other handler's that reached the connection.
@@ -1007,6 +1000,42 @@ const renderFailed = (err: unknown): Response => ({
   daemonV: PROTOCOL_VERSION,
 });
 
+// [LAW:single-enforcer] The checkpoint's one refusal: the request is
+// answered, never streamed, and the connection stays up.
+const refuse = (
+  code: "BAD_REQUEST" | "VERSION_MISMATCH",
+  error: string,
+): HandledRequest =>
+  replied(stay({ ok: false, error, code, daemonV: PROTOCOL_VERSION }));
+
+// A subscribe past the connection's checkpoint: the subscription it opens, or
+// the reply refusing it.
+// [LAW:parse-dont-validate] Trust boundary: the session id and the lane are
+// untrusted JSON; the id keys the feed and the lane is what its toggle gates.
+function subscription(req: SubscribeRequest): HandledRequest {
+  if (typeof req.sessionId !== "string" || req.sessionId === "")
+    return refuse(
+      "BAD_REQUEST",
+      "subscribe needs a non-empty string sessionId",
+    );
+  // A subscribe that names no lane speaks the contract from before the
+  // lane toggles: VERSION_MISMATCH, which every older client reads as "this
+  // client is out of date" and stops on, rather than BAD_REQUEST, which it
+  // reads as a daemon too old to take subscribe and retries forever.
+  if (req.lane === undefined)
+    return refuse(
+      "VERSION_MISMATCH",
+      `this client's subscribe names no lane (${LANE_NAMES.join(", ")}): it predates the lane toggles — update it`,
+    );
+  const lane = parseLane(req.lane);
+  if (lane === null)
+    return refuse(
+      "BAD_REQUEST",
+      `subscribe needs a lane, one of ${LANE_NAMES.join(", ")}: got ${JSON.stringify(req.lane)}`,
+    );
+  return { kind: "subscribe", sessionId: req.sessionId, lane };
+}
+
 export async function handleRequest(
   req: Request,
   timedOut: () => boolean,
@@ -1016,12 +1045,7 @@ export async function handleRequest(
     typeof req !== "object" ||
     typeof (req as Request).v !== "number"
   ) {
-    return stay({
-      ok: false,
-      error: "malformed request",
-      code: "BAD_REQUEST",
-      daemonV: PROTOCOL_VERSION,
-    });
+    return refuse("BAD_REQUEST", "malformed request");
   }
 
   if (req.v !== PROTOCOL_VERSION) {
@@ -1059,8 +1083,24 @@ export async function handleRequest(
     };
   }
 
+  if (req.kind === "subscribe") return subscription(req);
+  // [LAW:parse-dont-validate] The kind is untrusted JSON: one no request
+  // carries — a name no kind has, or no name at all, which `Object.hasOwn`
+  // would coerce into one — is refused here, so replyTo is total over the
+  // kinds it is typed for.
+  if (typeof req.kind !== "string" || !Object.hasOwn(REPLY_KINDS, req.kind))
+    return refuse("BAD_REQUEST", "unknown kind");
+  return replied(await replyTo(req, timedOut));
+}
+
+// The reply to a request of any kind but a subscribe, past the connection's
+// checkpoint. The site (site/transport.ts) calls it with requests it built.
+export async function replyTo(
+  req: ReplyRequest,
+  timedOut: () => boolean,
+): Promise<Reply> {
   if (req.kind === "shutdown") {
-    return { kind: "reply", resp: { ok: true, output: "" }, exitAfterFlush: 0 };
+    return { resp: { ok: true, output: "" }, exitAfterFlush: 0 };
   }
 
   if (req.kind === "pane-session") {
@@ -1112,7 +1152,6 @@ export async function handleRequest(
   }
 
   if (req.kind === "render") {
-    stats.requestsTotal++;
     // [LAW:effects-at-boundaries] The one clock read of a render request: the
     // instant the bar is drawn at (every time read in the render reads it) and
     // the start its duration is measured from.
@@ -1127,7 +1166,9 @@ export async function handleRequest(
     const facts: RenderFacts = [];
     // Where this request came in the order they arrived: renders of one session
     // can finish out of it.
-    const order = ++renderArrivals;
+    // [LAW:one-source-of-truth] The count of render requests received is that
+    // order.
+    const order = ++stats.requestsTotal;
     const checked = checkRenderRequest(req);
     // [LAW:single-enforcer] A render REQUEST is a client sighting — the
     // frames a feed draws from a session's data are not, so this is the one
@@ -1156,7 +1197,7 @@ export async function handleRequest(
               checked.req.hookData.session_id,
               checked.req,
               order,
-              feedFrameOf(checked.req, resp, t0, moves),
+              { resp, drawnAt: t0, moves, failure: null },
             );
             return { outcome: { kind: "ok" } as const, resp };
           },
@@ -1175,38 +1216,6 @@ export async function handleRequest(
     );
     dlog(level, line);
     return stay(rendered.resp);
-  }
-
-  if (req.kind === "subscribe") {
-    // [LAW:parse-dont-validate] Trust boundary: the session id and the lane
-    // are untrusted JSON; the id keys the feed and the lane is what its
-    // toggle gates.
-    const refuse = (error: string): HandledRequest =>
-      stay({
-        ok: false,
-        error,
-        code: "BAD_REQUEST",
-        daemonV: PROTOCOL_VERSION,
-      });
-    if (typeof req.sessionId !== "string" || req.sessionId === "")
-      return refuse("subscribe needs a non-empty string sessionId");
-    // A subscribe that names no lane speaks the contract from before the
-    // lane toggles: VERSION_MISMATCH, which every older client reads as "this
-    // client is out of date" and stops on, rather than BAD_REQUEST, which it
-    // reads as a daemon too old to take subscribe and retries forever.
-    if (req.lane === undefined)
-      return stay({
-        ok: false,
-        error: `this client's subscribe names no lane (${LANE_NAMES.join(", ")}): it predates the lane toggles — update it`,
-        code: "VERSION_MISMATCH",
-        daemonV: PROTOCOL_VERSION,
-      });
-    const lane = parseLane(req.lane);
-    if (lane === null)
-      return refuse(
-        `subscribe needs a lane, one of ${LANE_NAMES.join(", ")}: got ${JSON.stringify(req.lane)}`,
-      );
-    return { kind: "subscribe", sessionId: req.sessionId, lane };
   }
 
   if (req.kind === "click") {
@@ -1274,12 +1283,8 @@ export async function handleRequest(
     return stay({ ok: true, debug: buildDebugSnapshot(req.what, dbgState) });
   }
 
-  return stay({
-    ok: false,
-    error: "unknown kind",
-    code: "BAD_REQUEST",
-    daemonV: PROTOCOL_VERSION,
-  });
+  const unanswered: never = req;
+  throw new Error(`no reply for request ${inspect(unanswered)}`);
 }
 
 // [LAW:single-enforcer][LAW:no-silent-failure] Parse render-path args with
@@ -1392,7 +1397,7 @@ export const reloadConfig = verbCtx.reloadConfig;
 
 // [LAW:single-enforcer] Style + color compatibility shared by the render
 // path and the lazy debug-side per-segment serializer. Per-request `width`
-// is composed on top at the wire boundary (handleRequest("render")) and
+// is composed on top at the wire boundary (replyTo's render arm) and
 // passed through as renderOpts. Debug serialization composes its own
 // per-segment opts with width: Number.POSITIVE_INFINITY since each segment
 // is rendered standalone (wrap doesn't apply to a one-segment projection).
@@ -1498,7 +1503,12 @@ async function renderFrame(req: CheckedRenderRequest): Promise<FeedFrame> {
       drawn,
       diagnosticDump.linkFor(req.hookData.session_id, dumpTextOf(drawn)),
     );
-    return feedFrameOf(req, { ok: true, output }, started.getTime(), moves);
+    return {
+      resp: { ok: true, output },
+      drawnAt: started.getTime(),
+      moves,
+      failure: null,
+    };
   } catch (error) {
     const outcome = { kind: "threw", error } as const;
     const { level, line } = renderEvent(
@@ -1509,30 +1519,10 @@ async function renderFrame(req: CheckedRenderRequest): Promise<FeedFrame> {
     return {
       resp: renderFailed(error),
       drawnAt: started.getTime(),
-      motion: "still",
+      moves: false,
       failure: { level, line: `frame ${line}` },
     };
   }
-}
-
-// The frame a render of `req` just drew at `drawnAt` (ms): the bar is due
-// again at the moving rate while it `moves` AND someone can see it.
-function feedFrameOf(
-  req: CheckedRenderRequest,
-  resp: Response,
-  drawnAt: number,
-  moves: boolean,
-): FeedFrame {
-  return {
-    resp,
-    drawnAt,
-    motion: !moves
-      ? "still"
-      : paneVisibility.shown(req.hints.tmux)
-        ? "moving"
-        : "unseen",
-    failure: null,
-  };
 }
 
 // [LAW:one-source-of-truth] A session's globals over the render state it
