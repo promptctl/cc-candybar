@@ -1,3 +1,10 @@
+# [1.140.0](https://github.com/promptctl/cc-candybar/compare/v1.139.1...v1.140.0) (2026-10-19)
+
+
+### Features
+
+* **doctor:** UTF-8 and terminal-width rows ([#369](https://github.com/promptctl/cc-candybar/issues/369)) ([0a29f32](https://github.com/promptctl/cc-candybar/commit/0a29f3201755cdaf4300f16bb9a7db677b0d9a4c))
+
 ## [1.139.1](https://github.com/promptctl/cc-candybar/compare/v1.139.0...v1.139.1) (2026-10-19)
 
 
