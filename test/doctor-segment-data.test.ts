@@ -371,8 +371,14 @@ describe("the forge probe over a real checkout", () => {
     bin = path.join(dir, "bin");
     fs.mkdirSync(bin);
     execFileSync("git", ["init", "-q", path.join(dir, "repo")]);
-    // Only the stub dir and the system git: no real gh can answer.
-    process.env.PATH = `${bin}:${path.dirname(execFileSync("which", ["git"]).toString().trim())}:/bin`;
+    // Only the stub dir, holding a link to the system git: git's own
+    // directory can hold a real gh (/usr/bin on a CI runner), so it is never
+    // on PATH, and no gh but a stub can answer.
+    fs.symlinkSync(
+      execFileSync("which", ["git"]).toString().trim(),
+      path.join(bin, "git"),
+    );
+    process.env.PATH = bin;
   });
   afterEach(() => {
     process.env.PATH = PATH;
