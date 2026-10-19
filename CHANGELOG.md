@@ -1,3 +1,10 @@
+## [1.141.1](https://github.com/promptctl/cc-candybar/compare/v1.141.0...v1.141.1) (2026-10-19)
+
+
+### Bug Fixes
+
+* **daemon:** a pushed frame only draws; the request records what it said (candybar-animation-wbxz.81o.7ah) ([#371](https://github.com/promptctl/cc-candybar/issues/371)) ([6e8cd27](https://github.com/promptctl/cc-candybar/commit/6e8cd27442d1f060f17a5ee192207d40c2af0f89))
+
 # [1.141.0](https://github.com/promptctl/cc-candybar/compare/v1.140.0...v1.141.0) (2026-10-19)
 
 
