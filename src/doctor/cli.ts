@@ -19,7 +19,6 @@ import { WriteStream } from "node:tty";
 import type { CliPlan } from "../check.js";
 import { DOOR_GLYPH } from "../config/disclosure.js";
 import { detectClientHints } from "../client-hints.js";
-import { nodeClientHint } from "../client-hint.js";
 import {
   runDoctor,
   type Asked,
@@ -113,7 +112,7 @@ export async function doctorPlan(
       // would report, by the client's own detection — over the terminal the
       // command runs in, standing in for the stream Claude Code would hand
       // that client (which the command's own redirects say nothing about).
-      detectClientHints(env, cwd, measureTerminal(), nodeClientHint("node")),
+      detectClientHints(env, cwd, measureTerminal()),
       // The config the daemon would load for a session started here: this
       // directory, under the file named on the command line (a statusline
       // command's own `--config`), else the override the statusline client

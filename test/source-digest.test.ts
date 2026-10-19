@@ -12,6 +12,7 @@ import {
   SHORT_DIGEST_LENGTH,
   shortDigest,
   sourceDigest,
+  crateDigest,
 } from "../src/source-digest";
 
 const HOUR_S = 60 * 60;
@@ -116,6 +117,37 @@ describe("sourceDigest", () => {
     expect(() => sourceDigest(path.join(os.tmpdir(), "ccb-digest-absent"))).toThrow(
       /ENOENT/,
     );
+  });
+});
+
+// The native client's stamp: what cargo builds the binary from, and nothing
+// cargo writes.
+describe("crateDigest", () => {
+  const CRATE = {
+    "Cargo.toml": "[package]\n",
+    "Cargo.lock": "lock v1\n",
+    "src/main.rs": "fn main() {}\n",
+    "README.md": "readme\n",
+    "target/release/cc-candybar": "binary\n",
+  };
+
+  test("the manifest, the lockfile and src/ are the crate's source", () => {
+    const root = scratch(CRATE);
+    const before = crateDigest(root);
+    fs.writeFileSync(path.join(root, "Cargo.lock"), "lock v2\n");
+    expect(crateDigest(root)).not.toBe(before);
+  });
+
+  test("cargo's output and the crate's other files are not", () => {
+    const root = scratch(CRATE);
+    const before = crateDigest(root);
+    fs.writeFileSync(path.join(root, "target", "release", "cc-candybar"), "rebuilt\n");
+    fs.writeFileSync(path.join(root, "README.md"), "edited\n");
+    expect(crateDigest(root)).toBe(before);
+  });
+
+  test("a missing crate throws", () => {
+    expect(() => crateDigest(path.join(os.tmpdir(), "ccb-crate-absent"))).toThrow(/ENOENT/);
   });
 });
 

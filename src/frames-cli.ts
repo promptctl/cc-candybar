@@ -91,12 +91,10 @@ export async function runFrames(argv: readonly string[]): Promise<void> {
   const forward = async (hook: ClaudeHookData): Promise<void> => {
     // The terminal as it is now: a resize between two statusline ticks is in
     // the next one.
-    const hints = detectClientHints(
-      process.env,
-      cwd,
-      process.stderr,
-      nodeClientHint("frames"),
-    );
+    const hints = {
+      ...detectClientHints(process.env, cwd, process.stderr),
+      client: nodeClientHint("frames"),
+    };
     const outcome = await tryRenderViaDaemon(hook, renderArgs, cwd, hints);
     if (outcome.kind === "ok") return;
     say(describeFailure(outcome));

@@ -115,6 +115,7 @@ import {
 } from "../../config/action";
 import { ceilingScope, type CeilingMove } from "../../memento/edge";
 import { runningBundle } from "../../client-hint";
+import type { ClientSightings } from "../client-sightings";
 import type { MementoProvider } from "../../segments/memento";
 import { parseClientHints } from "../protocol";
 import {
@@ -164,6 +165,8 @@ export interface VerbContext {
   readonly clientVersion: string | null;
   // Where a `doctor-probe` link records that it arrived.
   readonly probes: ProbeArrivals;
+  // Which client drew each session's bar, as this process saw it render.
+  readonly clients: ClientSightings;
   // [LAW:single-enforcer] The one owner of memento's ceiling reading, so the
   // move that makes a reading stale is the one that drops it.
   readonly memento: Pick<MementoProvider, "move">;
@@ -1157,11 +1160,13 @@ function writeReport(ctx: VerbContext, sid: string, facts: DoctorFacts): void {
 // refused refuses the click (DoctorBusy), so no report is written over facts
 // the doctor did not see.
 function clickFacts(ctx: VerbContext, sid: string): DoctorFacts {
-  const hints = sessionHints(ctx, sid);
   let gathered: ReturnType<typeof gatherFacts>;
   try {
-    gathered = gatherFacts(ctx.doctor, hints, sessionOrigin(ctx, sid), (key) =>
-      ctx.sessionState.get(sid, key),
+    gathered = gatherFacts(
+      ctx.doctor,
+      sessionHints(ctx, sid),
+      sessionOrigin(ctx, sid),
+      (key) => ctx.sessionState.get(sid, key),
     );
   } catch (e) {
     if (e instanceof DoctorBusy) throw new BadVerbArgs(e.message);
@@ -1172,9 +1177,11 @@ function clickFacts(ctx: VerbContext, sid: string): DoctorFacts {
     urlHandler: clickArrived(ctx.clientVersion),
     // The client that drew the bar this click came from, and the daemon the
     // click reached — this process.
-    install: installFacts(ctx.doctor.install, runningBundle(), [
-      { client: hints.client ?? null, ago: 0 },
-    ]),
+    install: installFacts(
+      ctx.doctor.install,
+      runningBundle(),
+      ctx.clients.ofSession(sid, instantOf(new Date())),
+    ),
     askedBy: "click",
     clicked: clickedFrom(ctx, gathered),
   };

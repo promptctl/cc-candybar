@@ -6,6 +6,11 @@
 // latest client (ClientSightings) and the hint's checkpoint are each pinned
 // here.
 
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { RuntimeStats, type StatsSnapshot } from "../src/daemon/stats";
+import { shapeSkew } from "../src/daemon/client-stats";
 import {
   RECENT_CLIENT_S,
   checkByName,
@@ -19,7 +24,7 @@ import { installFields } from "../src/doctor/report";
 import { parseDaemonClients } from "../src/doctor/daemon-clients";
 import { ClientSightings, SIGHTINGS_KEPT } from "../src/daemon/client-sightings";
 import { parseClientHints } from "../src/daemon/protocol";
-import { bundleOf } from "../src/client-hint";
+import { bundleOf, runningBundle } from "../src/client-hint";
 import type { Instant } from "../src/utils/instant";
 import { HEALTHY_FACTS, HEALTHY_INSTALL_EDGE } from "./helpers/doctor-facts";
 
@@ -137,6 +142,15 @@ describe("install probe", () => {
     });
   });
 
+  test("in a checkout the Node fallback fails on any platform: `just install-rust` builds a native client", () => {
+    expect(verdict(CHECKOUT, [node("node", CHECKOUT_BUNDLE)], false)).toEqual({
+      ok: false,
+      reason:
+        "the bar is drawn by the Node fallback, which starts node on every render — build the native client: `just install-rust`",
+      more: [],
+    });
+  });
+
   test("`cc-candybar frames` is Node by design, never the fallback", () => {
     expect(verdict(CHECKOUT, [node("frames", CHECKOUT_BUNDLE)])).toEqual({
       ok: true,
@@ -146,7 +160,7 @@ describe("install probe", () => {
   test("a checkout's native client built from other source, or with no stamp, says so", () => {
     expect(verdict(CHECKOUT, [native(CHECKOUT_BUNDLE, "old")])).toEqual({
       ok: false,
-      reason: `the native client was built from other source than ${ROOT}/rust-client/src holds — run \`just install-rust\``,
+      reason: `the native client was built from other source than ${ROOT}/rust-client holds — run \`just install-rust\``,
       more: [],
     });
     expect(verdict(CHECKOUT, [native(CHECKOUT_BUNDLE, null)])).toEqual({
@@ -167,7 +181,7 @@ describe("install probe", () => {
     };
     expect(verdict(unreadable, [native(CHECKOUT_BUNDLE, "abc")])).toEqual({
       ok: false,
-      reason: `${ROOT}/rust-client/src could not be read: EACCES`,
+      reason: `${ROOT}/rust-client could not be read: EACCES`,
       more: [],
     });
   });
@@ -178,7 +192,7 @@ describe("install probe", () => {
     expect(verdict(PUBLISHED, [stale])).toEqual({
       ok: false,
       reason:
-        "no statusline client has drawn a bar in the last 5 minutes — does the statusLine command run cc-candybar?",
+        "no statusline client has drawn a bar for this daemon in the last 5 minutes — run the doctor again once the bar has redrawn; if it never does, the statusLine command does not run cc-candybar",
     });
   });
 
@@ -250,7 +264,7 @@ describe("installFacts: the fold from what the daemon saw", () => {
             root: ROOT,
             rustSource: {
               kind: "ok",
-              value: `digest of ${ROOT}/rust-client/src`,
+              value: `digest of ${ROOT}/rust-client`,
             },
           },
         },
@@ -321,16 +335,20 @@ describe("installFields: the doctor's event", () => {
 });
 
 describe("parseDaemonClients: the CLI's read of daemon-stats", () => {
+  // A snapshot of this build's shape, as the daemon would send it.
+  const stats = (fields: object): StatsSnapshot =>
+    ({ ...RuntimeStats.referenceSnapshot(), version: "1.0.0", ...fields }) as StatsSnapshot;
+
   test("a sighting's client crosses the hint checkpoint; a malformed one is unreported", () => {
     expect(
-      parseDaemonClients("1.0.0", {
+      parseDaemonClients(stats({
         bundle: BUNDLE,
         clients: [
           { client: { kind: "native", bundle: BUNDLE, source: null }, ago: 2 },
           { client: { kind: "native", bundle: "relative", source: null }, ago: 1 },
           { client: null, ago: 0 },
         ],
-      }),
+      })),
     ).toEqual({
       kind: "ok",
       value: {
@@ -344,13 +362,14 @@ describe("parseDaemonClients: the CLI's read of daemon-stats", () => {
     });
   });
 
-  test("a daemon from before this check, or one reporting no age, is refused", () => {
-    expect(parseDaemonClients("1.0.0", {})).toEqual({
-      kind: "failed",
-      reason: "the running daemon (1.0.0) predates this check",
-    });
+  test("a daemon of another build, or one reporting no age, is refused", () => {
+    const { clients: _clients, ...rest } = stats({});
+    const older = rest as StatsSnapshot;
+    const asked = parseDaemonClients(older);
+    expect(asked).toEqual({ kind: "failed", reason: shapeSkew(older) });
+    expect(asked.kind === "failed" && asked.reason).toMatch(/reports no clients;/);
     expect(
-      parseDaemonClients("1.0.0", { bundle: BUNDLE, clients: [{ client: null }] }),
+      parseDaemonClients(stats({ bundle: BUNDLE, clients: [{ client: null }] })),
     ).toEqual({
       kind: "failed",
       reason:
@@ -373,6 +392,16 @@ describe("ClientSightings: each session's latest client", () => {
       { client: client(BUNDLE), ago: 5 },
       { client: null, ago: 7 },
     ]);
+  });
+
+  test("a click reads its own session's sighting, and none this process has not seen", () => {
+    const sightings = new ClientSightings();
+    sightings.see("s1", client(BUNDLE), at(100));
+    sightings.see("s2", undefined, at(104));
+    expect(sightings.ofSession("s1", at(110))).toEqual([
+      { client: client(BUNDLE), ago: 10 },
+    ]);
+    expect(sightings.ofSession("restarted-under-me", at(110))).toEqual([]);
   });
 
   test("the sessions longest without a render are the ones dropped", () => {
@@ -399,6 +428,26 @@ describe("the client hint at the checkpoint", () => {
       null,
     ]) {
       expect(parseClientHints({ client: bad }).client).toBeUndefined();
+    }
+  });
+});
+
+describe("runningBundle: the rule over the file the process was started as", () => {
+  test("a symlinked bin names the bundle beside the file it links to", () => {
+    const pkg = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "ccb-pkg-")));
+    fs.mkdirSync(path.join(pkg, "bin"));
+    fs.writeFileSync(path.join(pkg, "bin", "cc-candybar"), "");
+    const globalBin = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-global-"));
+    const link = path.join(globalBin, "cc-candybar");
+    fs.symlinkSync(path.join(pkg, "bin", "cc-candybar"), link);
+    const argv1 = process.argv[1];
+    try {
+      process.argv[1] = link;
+      expect(runningBundle()).toBe(path.join(pkg, "dist", "index.mjs"));
+    } finally {
+      process.argv[1] = argv1!;
+      fs.rmSync(pkg, { recursive: true, force: true });
+      fs.rmSync(globalBin, { recursive: true, force: true });
     }
   });
 });

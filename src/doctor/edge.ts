@@ -65,7 +65,7 @@ import { privateGlyphsIn, stripPrivateGlyphs } from "../render/strip.js";
 import { DoctorBusy } from "./busy.js";
 import type { ClientSighting } from "../daemon/client-sightings.js";
 import { sourceCheckoutOf } from "../daemon/build-currency.js";
-import { sourceDigest } from "../source-digest.js";
+import { crateDigest } from "../source-digest.js";
 import { shipsNative } from "../install/platforms.js";
 import { fileMarkBook, type MarkBookStore } from "./mark-book.js";
 import {
@@ -75,7 +75,7 @@ import {
 
 // [LAW:effects-at-boundaries] The install check's reads of the machine: a
 // path resolved through every link, the checkout a bundle was built in, a
-// directory's source digest, and whether a native client ships here.
+// crate's source digest, and whether a native client ships here.
 export interface InstallEdge {
   readonly realpath: (p: string) => Asked<string>;
   readonly checkoutOf: (bundle: string) => string | null;
@@ -98,7 +98,7 @@ function asked<T>(read: () => T): Asked<T> {
 export const productionInstallEdge: InstallEdge = {
   realpath: (p) => asked(() => fs.realpathSync(p)),
   checkoutOf: sourceCheckoutOf,
-  digest: (dir) => asked(() => sourceDigest(dir)),
+  digest: (crateDir) => asked(() => crateDigest(crateDir)),
   nativeShipped: shipsNative(process.platform, process.arch),
 };
 
@@ -130,7 +130,7 @@ export function installFacts(
             ? null
             : {
                 root,
-                rustSource: edge.digest(path.join(root, "rust-client", "src")),
+                rustSource: edge.digest(path.join(root, "rust-client")),
               },
       },
       nativeShipped: edge.nativeShipped,

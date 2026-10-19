@@ -41,7 +41,7 @@ import {
   productionHandlerProbeEdge,
 } from "../src/doctor/handler-probe";
 import { PACKAGE_VERSION } from "../src/version";
-import { sourceDigest } from "../src/source-digest";
+import { crateDigest } from "../src/source-digest";
 import { installFacts, productionInstallEdge } from "../src/doctor/edge";
 import { parseDaemonClients } from "../src/doctor/daemon-clients";
 import type { StatsSnapshot } from "../src/daemon/stats";
@@ -195,7 +195,7 @@ test("the CLI's probe reads its own link back from the daemon it was delivered t
 // session's client, daemon-stats serves each session's latest, and the CLI's
 // reading of them is the install verdict. The daemon runs this checkout's
 // source, so it names the checkout's dist (bundleOf) and a native client of
-// it must carry the digest of the checkout's rust-client/src.
+// it must carry the crateDigest of the checkout's rust-client.
 test("the clients the daemon saw render are the install check's facts", async () => {
   const { env, sockPath, removeTmpDirs } = prepareIsolatedDaemonEnv(
     "cc-candybar-doctor-e2e",
@@ -207,7 +207,7 @@ test("the clients the daemon saw render are the install check's facts", async ()
   const native = {
     kind: "native",
     bundle: path.join(repo, "bin", "..", "dist", "index.mjs"),
-    source: sourceDigest(path.join(repo, "rust-client", "src")),
+    source: crateDigest(path.join(repo, "rust-client")),
   } as const;
   let daemon: RunningDaemon | undefined;
   try {
@@ -219,7 +219,7 @@ test("the clients the daemon saw render are the install check's facts", async ()
         5000,
       );
       const stats = (resp as { stats: StatsSnapshot }).stats;
-      const asked = parseDaemonClients(stats.version, stats);
+      const asked = parseDaemonClients(stats);
       const install =
         asked.kind === "failed"
           ? asked

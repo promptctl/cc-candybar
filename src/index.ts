@@ -155,12 +155,10 @@ echo '{"session_id":"test-session","workspace":{"project_dir":"/path/to/project"
       hookData,
       process.argv,
       process.cwd(),
-      detectClientHints(
-        process.env,
-        process.cwd(),
-        process.stderr,
-        nodeClientHint("node"),
-      ),
+      {
+        ...detectClientHints(process.env, process.cwd(), process.stderr),
+        client: nodeClientHint("node"),
+      },
     );
     // [LAW:types-are-the-program] Three variants, one per outcome kind. The
     // "kick on every failure" pattern was the load-bearing half of the

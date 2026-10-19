@@ -11,6 +11,7 @@
 // fallback (rust-client/src/main.rs, `dist_index_path`); a Node client and
 // the daemon name theirs by `bundleOf` below, the same adjacency.
 
+import fs from "node:fs";
 import path from "node:path";
 
 // [LAW:types-are-the-program] Which program sent the render. `node` is the
@@ -24,8 +25,8 @@ export interface ClientHint {
   readonly kind: ClientKind;
   // Absolute path of the bundle the client runs or execs.
   readonly bundle: string;
-  // The native binary's build stamp: the `sourceDigest` of `rust-client/src`
-  // it was built from (`just install-rust` passes it in), null for a binary
+  // The native binary's build stamp: the `crateDigest` of the rust-client
+  // crate it was built from (`just install-rust` passes it in), null for a binary
   // built without one (CI's, a bare `cargo build`) and for a Node client,
   // whose code IS its bundle.
   readonly source: string | null;
@@ -48,9 +49,13 @@ export function bundleOf(program: string | undefined): string {
   return path.resolve(path.dirname(program), "..", "dist", "index.mjs");
 }
 
-// The bundle this process runs.
+// The bundle this process runs: the rule applied to the FILE it was started
+// as. Node keeps a symlinked bin's own path in argv[1] (an npm global
+// install's `/usr/local/bin/cc-candybar` → `<pkg>/bin/cc-candybar`), and the
+// adjacency holds beside the file the link names, not beside the link.
 export function runningBundle(): string {
-  return bundleOf(process.argv[1]);
+  const program = process.argv[1];
+  return bundleOf(program && fs.realpathSync(program));
 }
 
 // A Node client's identity: the bundle it runs, no build stamp.

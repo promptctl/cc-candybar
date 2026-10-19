@@ -23,7 +23,8 @@ export interface ClientSighting {
 }
 
 // [LAW:single-enforcer] The render path is the one writer (`see`, at the
-// instant it serves a render); daemon-stats the one reader (`list`).
+// instant it serves a render); the doctor the one reader — daemon-stats for
+// the CLI (`list`), the click for its own session (`ofSession`).
 export class ClientSightings {
   private readonly bySession = new Map<
     string,
@@ -45,5 +46,14 @@ export class ClientSightings {
       client,
       ago: now - at,
     }));
+  }
+
+  // One session's latest, or none when this process has served it no render
+  // (a daemon restarted under a bar already on screen).
+  ofSession(sessionId: string, now: Instant): readonly ClientSighting[] {
+    const seen = this.bySession.get(sessionId);
+    return seen === undefined
+      ? []
+      : [{ client: seen.client, ago: now - seen.at }];
   }
 }

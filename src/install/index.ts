@@ -28,7 +28,7 @@ import {
   REGISTRY_URL,
 } from "./currency";
 import { PLATFORM_PACKAGES } from "./platforms";
-import { bundleOf } from "../client-hint";
+import { runningBundle } from "../client-hint";
 
 const BUNDLE_ID = "com.cccandybar.url-handler";
 const APP_NAME = "CCCandybarURLHandler";
@@ -200,7 +200,7 @@ export interface StagedRuntime {
 export function runStageRuntime(): StagedRuntime {
   // [LAW:one-source-of-truth] The bundle that contains this function is the
   // thing to stage, named by the one rule (src/client-hint.ts).
-  const sourceDist = bundleOf(process.argv[1]);
+  const sourceDist = runningBundle();
   if (!fs.existsSync(sourceDist)) {
     throw new Error(
       `install: bundled dist not found at ${sourceDist}. Reinstall the package.`,

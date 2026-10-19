@@ -16,7 +16,7 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import { URL_SCHEME, VERB_DOCTOR_PROBE } from "../click/wire.js";
 import { describeFailure } from "../daemon/client-transport.js";
-import { fetchStats } from "../daemon/client-stats.js";
+import { fetchStats, shapeSkew } from "../daemon/client-stats.js";
 import { defaultSocketPath, socketPath } from "../daemon/paths.js";
 import { handlerCommand, handlerScriptPath } from "../install/index.js";
 import { launchSync, type LaunchCategory } from "../proc/launch.js";
@@ -201,13 +201,11 @@ async function daemonView(): Promise<Asked<DaemonView>> {
   if (outcome.kind !== "ok") {
     return failed(describeFailure(outcome).split("\n").join(" — "));
   }
+  // A daemon of another build may carry no arrivals and would never record
+  // the probe: told by the one shape comparison daemon-stats makes.
+  const skew = shapeSkew(outcome.value);
+  if (skew !== null) return failed(skew);
   const { version, handlerProbes } = outcome.value;
-  // [LAW:no-defensive-null-guards] exception: trust boundary. The snapshot is
-  // socket JSON from whichever daemon is running; one from before this check
-  // carries no arrivals and would never record the probe.
-  if (!Array.isArray(handlerProbes)) {
-    return failed(`the running daemon (${version}) predates this check`);
-  }
   return ok({ version, arrivals: handlerProbes });
 }
 

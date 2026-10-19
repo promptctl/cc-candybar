@@ -5,6 +5,8 @@
 // verb, the handler version a click carries), and the reading of the handler
 // app's script against the installer that writes it.
 
+import { instantOf } from "../src/utils/instant";
+import { ClientSightings } from "../src/daemon/client-sightings";
 import {
   BUNDLED_GLYPHS,
   BUNDLED_GLYPHS_LOGGED,
@@ -399,11 +401,15 @@ describe("the daemon's side of the round trip", () => {
   function daemon(clientVersion: string | null) {
     const sessionState = new SessionState();
     const probes = new ProbeArrivals();
+    // The client the session's last render carried, as the daemon saw it.
+    const clients = new ClientSightings();
+    clients.see("s1", healthyClient(), instantOf(new Date()));
     const logs: string[] = [];
     const ctx: VerbContext = {
       ...testVerbContext(sessionState),
       clientVersion,
       probes,
+      clients,
       dlog: (_level, message) => logs.push(message),
       doctor: {
         install: HEALTHY_INSTALL_EDGE,
@@ -471,7 +477,7 @@ describe("the daemon's side of the round trip", () => {
   function doctorRow(clientVersion: string | null) {
     const d = daemon(clientVersion);
     recordRender(d.sessionState, "s1");
-    d.sessionState.set("s1", SESSION_CLIENT_HINTS_KEY, JSON.stringify({ tmux: null, terminalEnv: { TERM_PROGRAM: "ghostty" }, termCols: 148, client: healthyClient() }));
+    d.sessionState.set("s1", SESSION_CLIENT_HINTS_KEY, JSON.stringify({ tmux: null, terminalEnv: { TERM_PROGRAM: "ghostty" }, termCols: 148 }));
     d.click(VERB_DOCTOR_RUN, "s1");
     const keys = doctorReportKeys("urlHandler");
     return {

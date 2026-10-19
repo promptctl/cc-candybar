@@ -1273,6 +1273,7 @@ const verbCtx = {
     };
   }),
   probes: handlerProbes,
+  clients: clientSightings,
   memento: mementoProvider,
   claudeInput: productionClaudeInputEdge(),
   history: settingsHistory,

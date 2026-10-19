@@ -240,8 +240,10 @@ export interface DaemonInstall {
 
 // What the install check reasons over, or why the daemon could not be asked
 // (the CLI's one way to see the clients the bar runs). `nativeShipped`: a
-// native client exists for this platform, so the Node fallback is a choice
-// the install made rather than the only one there is.
+// native client ships for this platform. Either it does, or the daemon runs
+// from a checkout, where `just install-rust` builds one on any platform cargo
+// targets; then the Node fallback is a choice the install made rather than
+// the only client there is.
 export type InstallFacts = Asked<{
   readonly daemon: DaemonInstall;
   readonly nativeShipped: boolean;
@@ -580,7 +582,8 @@ const urlHandler: Check = {
 
 // A client that has not rendered for this long is a session that stopped,
 // not one the bar runs: long enough to keep a session with no
-// `refreshInterval`, which renders only on events.
+// `refreshInterval`, which renders only on events. A daemon that restarted
+// has seen no client at all until each bar's next render.
 export const RECENT_CLIENT_S = 300;
 
 // [LAW:types-are-the-program] Where one reported client stands against the
@@ -662,7 +665,7 @@ function installProblems(
     case "same":
       break;
   }
-  if (client.client === "node" && nativeShipped) {
+  if (client.client === "node" && (nativeShipped || checkout !== null)) {
     return [
       `the bar is drawn by the Node fallback, which starts node on every render — ${checkout === null ? REINSTALL : "build the native client: `just install-rust`"}`,
     ];
@@ -672,16 +675,14 @@ function installProblems(
     case "same":
       return [];
     case "unreadable":
-      return [
-        `${source.root}/rust-client/src could not be read: ${source.reason}`,
-      ];
+      return [`${source.root}/rust-client could not be read: ${source.reason}`];
     case "unstamped":
       return [
         "the native client carries no source stamp, so which source it was built from is unknown — run `just install-rust`",
       ];
     case "other":
       return [
-        `the native client was built from other source than ${source.root}/rust-client/src holds — run \`just install-rust\``,
+        `the native client was built from other source than ${source.root}/rust-client holds — run \`just install-rust\``,
       ];
   }
 }
@@ -707,7 +708,7 @@ const install: Check = {
     if (recent.length === 0) {
       return {
         ok: false,
-        reason: `no statusline client has drawn a bar in the last ${RECENT_CLIENT_S / 60} minutes — does the statusLine command run cc-candybar?`,
+        reason: `no statusline client has drawn a bar for this daemon in the last ${RECENT_CLIENT_S / 60} minutes — run the doctor again once the bar has redrawn; if it never does, the statusLine command does not run cc-candybar`,
       };
     }
     // One line per distinct problem: sessions sharing a client share it.

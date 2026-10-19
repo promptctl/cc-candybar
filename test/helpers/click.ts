@@ -16,6 +16,7 @@ import type { SessionStateRW } from "../../src/daemon/session-state";
 import { SettingsHistory } from "../../src/daemon/settings-history";
 import type { DslConfig } from "../../src/config/dsl-types";
 import { ProbeArrivals } from "../../src/doctor/handler-probe";
+import { ClientSightings } from "../../src/daemon/client-sightings";
 import { PACKAGE_VERSION } from "../../src/version";
 
 // The record a session's render leaves behind, which a click resolves its
@@ -85,6 +86,7 @@ export function testVerbContext(
     // daemon's for a probe to land: a test that reads arrivals hands in its own.
     clientVersion: PACKAGE_VERSION,
     probes: new ProbeArrivals(),
+    clients: new ClientSightings(),
     // And for memento: a test that drives a ceiling click hands in its own.
     memento: {
       move: () => {

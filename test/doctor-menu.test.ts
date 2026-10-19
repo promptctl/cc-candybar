@@ -5,6 +5,7 @@
 // recorded `claudeConfigDir` hint names. The recorded client hints are seeded the way server.ts records them, so the click reads
 // the facts of the session's "last render" exactly as production does.
 
+import { ClientSightings } from "../src/daemon/client-sightings";
 import { HEALTHY_INSTALL_EDGE, healthyClient } from "./helpers/doctor-facts";
 import type { ClientHint } from "../src/client-hint";
 import {
@@ -108,8 +109,8 @@ function buildRuntime(
   load: LoadOutcome = CLEAN_LOAD,
   terminal: TerminalFixture = GHOSTTY,
   clicked: ReturnType<typeof memoryClickedTerminals> = memoryClickedTerminals(),
-  // The `client` hint the session's last render recorded; none is a client
-  // too old to report one.
+  // The `client` hint the session's last render carried, as the daemon's
+  // sightings hold it; none is a client too old to report one.
   client: { readonly hint?: ClientHint } = { hint: healthyClient() },
 ) {
   const config = parseAndValidate(
@@ -128,9 +129,10 @@ function buildRuntime(
       claudeConfigDir: dir,
       terminalEnv: terminal.env,
       termCols: 148,
-      client: client.hint,
     }),
   );
+  const clients = new ClientSightings();
+  clients.see("s1", client.hint, instantOf(new Date()));
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
@@ -170,6 +172,7 @@ function buildRuntime(
   const ctx: VerbContext = {
     ...testVerbContext(sessionState, undefined, config),
     doctor,
+    clients,
     dlog: (level, message) => logs.push(level === "warn" ? `warn: ${message}` : message),
   };
   const click = (url: string): void => {
