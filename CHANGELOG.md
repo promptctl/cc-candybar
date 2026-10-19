@@ -1,3 +1,10 @@
+# [1.141.0](https://github.com/promptctl/cc-candybar/compare/v1.140.0...v1.141.0) (2026-10-19)
+
+
+### Features
+
+* **doctor:** install is current (brandon-doctor-v62x.tfb) ([#372](https://github.com/promptctl/cc-candybar/issues/372)) ([b7f6fb2](https://github.com/promptctl/cc-candybar/commit/b7f6fb2924e34f74ad9573b52d6f81002a4a520c))
+
 # [1.140.0](https://github.com/promptctl/cc-candybar/compare/v1.139.1...v1.140.0) (2026-10-19)
 
 
