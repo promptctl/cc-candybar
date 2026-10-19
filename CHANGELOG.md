@@ -1,3 +1,10 @@
+# [1.142.0](https://github.com/promptctl/cc-candybar/compare/v1.141.1...v1.142.0) (2026-10-19)
+
+
+### Features
+
+* **doctor:** daemon is healthy (brandon-doctor-v62x.5mq) ([#373](https://github.com/promptctl/cc-candybar/issues/373)) ([dbe653f](https://github.com/promptctl/cc-candybar/commit/dbe653fce99cf5db8bf54cfb3b25763b6a8329d7))
+
 ## [1.141.1](https://github.com/promptctl/cc-candybar/compare/v1.141.0...v1.141.1) (2026-10-19)
 
 
