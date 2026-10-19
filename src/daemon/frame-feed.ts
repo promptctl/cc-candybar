@@ -138,6 +138,10 @@ export interface FeedStats {
   readonly pushed: number;
   // Subscriptions refused or ended because their lane was off.
   readonly refused: number;
+  // `newestWhere` lookups (a tmux bar pane asking whose bar its pane holds),
+  // and how many found a session.
+  readonly lookups: number;
+  readonly found: number;
 }
 
 /**
@@ -152,6 +156,8 @@ export class FrameFeeds<Req> {
   private drawn = 0;
   private pushed = 0;
   private refused = 0;
+  private lookups = 0;
+  private found = 0;
 
   constructor(private readonly deps: FeedDeps<Req>) {}
 
@@ -238,6 +244,18 @@ export class FrameFeeds<Req> {
     }
   }
 
+  // The session of the newest request `match` accepts, among the latest
+  // request of each session the daemon holds, or null when none does.
+  newestWhere(match: (req: Req) => boolean): string | null {
+    let newest: { sessionId: string; order: number } | null = null;
+    for (const [sessionId, { req, order }] of this.requests)
+      if (match(req) && (newest === null || order > newest.order))
+        newest = { sessionId, order };
+    this.lookups++;
+    if (newest !== null) this.found++;
+    return newest?.sessionId ?? null;
+  }
+
   // The latest request of every session someone is watching, by session.
   watched(): Array<{ readonly sessionId: string; readonly req: Req }> {
     return [...this.feeds.keys()].flatMap((sessionId) => {
@@ -255,6 +273,8 @@ export class FrameFeeds<Req> {
       drawn: this.drawn,
       pushed: this.pushed,
       refused: this.refused,
+      lookups: this.lookups,
+      found: this.found,
     };
   }
 

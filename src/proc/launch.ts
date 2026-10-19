@@ -117,6 +117,10 @@ export const LAUNCH_CATEGORIES = [
   // Which panes each watched session's tmux server shows (pane-visibility.ts):
   // one query per server a second, paced by its own clock, so no rate limit.
   "frames.visibility",
+  // `cc-candybar bar-pane` (src/bar-pane), in its own process: where the
+  // session's pane sits, twice a second, and the pane's height when the frame's
+  // changes. Never in the daemon.
+  "bar-pane.tmux",
 ] as const;
 
 export type LaunchCategory = (typeof LAUNCH_CATEGORIES)[number];
