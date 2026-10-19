@@ -9,10 +9,10 @@
 // would answer `constructor` with Object.prototype's function.
 //
 // [LAW:types-are-the-program] A segment that moved into a plugin exists only
-// once that plugin is installed, so its row names the folder that installs it.
+// once that plugin is installed, so its row names the app that installs it.
 type Renamed =
   | { readonly kind: "built-in"; readonly to: string }
-  | { readonly kind: "plugin"; readonly to: string; readonly folder: string };
+  | { readonly kind: "plugin"; readonly to: string; readonly app: string };
 
 export const RENAMED_SEGMENTS: ReadonlyMap<string, Renamed> = new Map<
   string,
@@ -32,7 +32,7 @@ export const RENAMED_SEGMENTS: ReadonlyMap<string, Renamed> = new Map<
     {
       kind: "plugin",
       to: "plugins.lit.ticket",
-      folder: "examples/plugins/lit",
+      app: "lit",
     },
   ],
 ]);
@@ -44,6 +44,6 @@ export function renamedHint(name: string): string {
     case "built-in":
       return ` (the built-in segment "${name}" was renamed to "${renamed.to}" — update this reference)`;
     case "plugin":
-      return ` (the built-in segment "${name}" became "${renamed.to}", a segment of the plugin in cc-candybar's ${renamed.folder} — install that folder in a plugin root (docs/segment-authoring.md, "Installing a plugin instead of listing it"), then update this reference)`;
+      return ` (the built-in segment "${name}" became "${renamed.to}", a segment of the plugin ${renamed.app} installs — run ${renamed.app} in this checkout, then update this reference)`;
   }
 }

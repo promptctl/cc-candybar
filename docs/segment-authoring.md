@@ -757,8 +757,8 @@ What the definition can say, and what follows from it:
   `data: { checkout: ".lit/statusline.json" }` reads it relative to the
   root of the git checkout the session works in instead — each worktree its
   own, a session in no checkout reading from its working directory — so one
-  installed definition shows each checkout's own data. lit's plugin
-  (`examples/plugins/lit`) reads lit's state this way.
+  installed definition shows each checkout's own data. The plugin lit
+  installs reads lit's state this way.
 - **Only `data`, `segments`, `helpers` and `actions`.** A definition
   declares no sources of its own (so loading one from a cloned repository runs
   nothing) and never edits `root` — placing a segment is your choice. A
