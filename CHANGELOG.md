@@ -1,3 +1,10 @@
+# [1.136.0](https://github.com/promptctl/cc-candybar/compare/v1.135.0...v1.136.0) (2026-10-19)
+
+
+### Features
+
+* **plugins:** a plugin segment may hold a state variable, so a click can open a detail of its own ([#366](https://github.com/promptctl/cc-candybar/issues/366)) ([4060f0d](https://github.com/promptctl/cc-candybar/commit/4060f0d6ce41ecd294d603e5e44d00f8f8e60345))
+
 # [1.135.0](https://github.com/promptctl/cc-candybar/compare/v1.134.0...v1.135.0) (2026-10-19)
 
 
