@@ -106,6 +106,12 @@ const DIR_TEMPLATE =
 // The recipe and its measured floor are `QUIET_TEXT` (src/config/quiet-text.ts).
 const GIT_QUIET_FG = `{{ ${QUIET_TEXT} }}`;
 
+// How far max effort's bubble stands off the model cell, at least. The
+// bubble is 40% of the way from the cell to accent, which stands 1.09–1.12:1
+// off the cell in every bundled theme but `textual-ansi`, whose cell IS the
+// accent: there the floor lifts it as far as it stands everywhere else.
+export const EFFORT_BUBBLE_CONTRAST = 1.08;
+
 // [LAW:dataflow-not-control-flow] Every threshold cascade below is one
 // `ramp <value> "step" <at> <colour> …` call (rich-js `paletteFuncs`): the
 // value flows through ascending stops and the cell wears the last stop it
@@ -131,11 +137,6 @@ const GIT_QUIET_FG = `{{ ${QUIET_TEXT} }}`;
 // from configure mode, and a ramp's ascending stops are declared as an
 // `atLeast` relation between them: a pick that would put them out of order is
 // refused where it is written, and a file that does fails to load.
-// How far max effort's bubble stands off the model cell, at least. The
-// bubble is 40% of the way from the cell to accent, which stands 1.09–1.12:1
-// off the cell in every bundled theme but `textual-ansi`, whose cell IS the
-// accent: there the floor lifts it as far as it stands everywhere else.
-export const EFFORT_BUBBLE_CONTRAST = 1.08;
 
 const PERCENT = { min: 0, max: 100, step: 5 } as const;
 
@@ -220,7 +221,8 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // icons (nf-md, U+F0143 / U+F013F / U+F0DBC). Max has no entry: it climbs
     // the low, high and xhigh rungs. Low and medium share the single chevron
     // on purpose and are told apart by colour: low is quiet. A font without
-    // the icons overrides this one variable (e.g. `"? ↑ ↑ ⇈ ⤊"`).
+    // the icons overrides this variable (e.g. `"? ↑ ↑ ⇈ ⤊"`) — and, for max,
+    // the `effortGauge` helper, which draws the bubble's caps (U+E0B6/U+E0B4).
     "effort.glyphs": {
       kind: "literal",
       value: "? \u{F0143} \u{F0143} \u{F013F} \u{F0DBC}",
@@ -1515,25 +1517,24 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // `textual-ansi`. Effort is a choice, not an alert, so no rung wears
     // `warning`/`error` — those hues keep their meaning for the cells that
     // measure danger.
-    // [LAW:dataflow-not-control-flow] Every level runs the same operations:
-    // a three-frame cycle on a bubble between two caps. Below max the three
-    // frames are the level's one rung, the bubble is the cell's own
-    // background and the caps are empty, so only the values say which level
-    // it is. The level is folded to an ordinal once and glyph, colour and
-    // bubble are all read off it. A level outside the five known names is
-    // ordinal 0: the ladder's `?`, visible rather than blank. Called with the
-    // scope as dot.
+    // [LAW:dataflow-not-control-flow] The level is folded to an ordinal once
+    // and the one branch is the domain's own: max draws a bubble, every other
+    // level draws its rung on the cell as the cell is filled — which may be no
+    // fill at all (`bg: "none"`), so below max nothing paints a background.
+    // A level outside the five known names is ordinal 0: the ladder's `?`,
+    // visible rather than blank. The ladder is split on runs of spaces, so a
+    // doubled space shifts no rung. Called with the scope as dot.
     effortGauge:
       '{{ $ord := default 0 (get (dict "low" 1 "medium" 2 "high" 3 "xhigh" 4 "max" 5) .effort.level) }}' +
-      "{{ $max := eq $ord 5 }}" +
-      '{{ $glyphs := splitList " " .effort.glyphs }}' +
-      "{{ $climb := ternary (list 1 3 4) (list $ord $ord $ord) $max }}" +
-      `{{ $bubble := ramp $ord "step" 0 (bgOf) 5 (readableOn (mix (bgOf) (color "accent") 40) (bgOf) ${EFFORT_BUBBLE_CONTRAST}) }}` +
-      `{{ $steady := ramp $ord "step" 0 (${QUIET_TEXT}) 2 (readableOn (color "accent") (bgOf) ${TEXT_MIN_CONTRAST}) }}` +
-      `{{ $climbing := readableOn (stepped 1 (color "primary") 1 (color "secondary") 1 (color "accent")) $bubble ${TEXT_MIN_CONTRAST} }}` +
-      '{{ fg $bubble (ternary "\u{E0B6}" "" $max) }}' +
-      "{{ bg $bubble (fg (ternary $climbing $steady $max) (frames 1 (index $glyphs (index $climb 0)) 1 (index $glyphs (index $climb 1)) 1 (index $glyphs (index $climb 2)))) }}" +
-      '{{ fg $bubble (ternary "\u{E0B4}" "" $max) }}',
+      '{{ $glyphs := compact (splitList " " .effort.glyphs) }}' +
+      "{{ if eq $ord 5 }}" +
+      `{{ $bubble := readableOn (mix (bgOf) (color "accent") 40) (bgOf) ${EFFORT_BUBBLE_CONTRAST} }}` +
+      '{{ fg $bubble "\u{E0B6}" }}' +
+      `{{ bg $bubble (fg (readableOn (stepped 1 (color "primary") 1 (color "secondary") 1 (color "accent")) $bubble ${TEXT_MIN_CONTRAST}) (frames 1 (index $glyphs 1) 1 (index $glyphs 3) 1 (index $glyphs 4))) }}` +
+      '{{ fg $bubble "\u{E0B4}" }}' +
+      "{{ else }}" +
+      `{{ fg (ramp $ord "step" 0 (${QUIET_TEXT}) 2 (readableOn (color "accent") (bgOf) ${TEXT_MIN_CONTRAST})) (index $glyphs $ord) }}` +
+      "{{ end }}",
     // Text in a palette colour, floored at TEXT_MIN_CONTRAST against the cell
     // it sits on: a theme's `success`/`warning`/`accent` is designed against
     // its own background, not the tint a bar cell wears (the raw role measured

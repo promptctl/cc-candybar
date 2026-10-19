@@ -639,6 +639,26 @@ describe("gatherFacts: where the Nerd Font facts come from", () => {
     expect([asked, pids]).toEqual([[], []]);
   });
 
+  test("a bar that draws none asks nothing of tmux's terminal or its font", () => {
+    // ascii joiners, and the effort gauge written without its Nerd icons:
+    // its ladder and the helper that draws max's bubble caps.
+    const ascii: DslConfig = {
+      ...DEFAULT_DSL_CONFIG,
+      globals: { ...DEFAULT_DSL_CONFIG.globals, charset: "ascii" },
+      variables: {
+        ...DEFAULT_DSL_CONFIG.variables,
+        "effort.glyphs": { kind: "literal", value: "? ^ ^ ^^ ^^^" },
+      },
+      helpers: {
+        ...DEFAULT_DSL_CONFIG.helpers,
+        effortGauge: "{{ .effort.level }}",
+      },
+    };
+    const { e, asked } = edge(tmuxSays("iTerm2 3.7.2"), ascii);
+    expect(gathered(e, { tmux: HINT, terminalEnv: {} }).nerdFont).toEqual({ kind: "none" });
+    expect(asked).toEqual([]);
+  });
+
   test("the marks are the mark book's, whichever session made them", () => {
     const book = withMark({}, "nerdFont", "Ghostty 1.3.1|U+E0B0 U+E0B1", "drawn");
     const { e } = edge(tmuxSays("ghostty 1.3.1"), DEFAULT_DSL_CONFIG, LOCAL, book);

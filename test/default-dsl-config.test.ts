@@ -14,7 +14,11 @@ import {
   RAW_DEFAULT_DSL_CONFIG,
   EFFORT_BUBBLE_CONTRAST,
 } from "../src/config/default-dsl-config";
-import { walkNodes, type DslConfig } from "../src/config/dsl-types";
+import {
+  walkNodes,
+  type DslConfig,
+  type ValidatedConfig,
+} from "../src/config/dsl-types";
 import { isReservedName } from "../src/config/loader/reserved-namespace";
 import { rootNode } from "../src/config/root";
 import {
@@ -265,12 +269,15 @@ describe("DEFAULT_DSL_CONFIG", () => {
     // [LAW:one-source-of-truth] The theme resolved as a session's pick is,
     // by the daemon's own resolution, over `check`'s fixture with Claude Code
     // sending `effort` (or none). Returns the row holding the model cell.
-    function modelRows(theme: string): {
+    function modelRows(
+      theme: string,
+      config: ValidatedConfig = parsed,
+    ): {
       row: (effort: { level: string } | undefined, when?: Instant) => string;
       dispose: () => void;
     } {
       const effective = resolveEffectiveGlobals(
-        parsed,
+        config,
         (key) => (key === "theme" ? theme : null),
         () => false,
       );
@@ -281,7 +288,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         undefined,
         new SessionState(),
       );
-      const compiled = registerDslConfig(parsed, registry, {
+      const compiled = registerDslConfig(config, registry, {
         cwd: process.cwd(),
       });
       const row = (
@@ -295,7 +302,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         );
         const errors: string[] = [];
         const rendered = renderDsl(
-          parsed,
+          config,
           compiled,
           store,
           registry,
@@ -401,6 +408,64 @@ describe("DEFAULT_DSL_CONFIG", () => {
         }
       },
     );
+    // A default config with `edit` applied to its raw declarations.
+    const variant = (
+      edit: (raw: { segments: Record<string, object>; variables: Record<string, object> }) => void,
+    ) => {
+      const raw = structuredClone(RAW_DEFAULT_DSL_CONFIG) as unknown as {
+        segments: Record<string, object>;
+        variables: Record<string, object>;
+      };
+      edit(raw);
+      return parseAndValidate("<default>", JSON.stringify(raw));
+    };
+
+    test("below max, a rung on a cell with no fill paints no background", () => {
+      const { row, dispose } = modelRows(
+        listResolvablePaletteNames()[0]!,
+        variant((raw) => {
+          raw.segments.model = { ...raw.segments.model, bg: "none" };
+        }),
+      );
+      try {
+        const painted = (["low", "medium", "high", "xhigh"] as const).flatMap(
+          (level) => {
+            const text = decodeAnsi(row({ level }));
+            const start = text.plain.indexOf(NAME) + NAME.length;
+            const span = text.spans.findLast(
+              (s) => s.start <= start && start < s.end,
+            );
+            const { bgcolor } = resolvedStyle(span!.style);
+            return bgcolor === undefined ? [] : [`${level}: ${String(bgcolor)}`];
+          },
+        );
+        expect(painted).toEqual([]);
+      } finally {
+        dispose();
+      }
+    });
+
+    test("the ladder is split on runs of spaces, so a doubled one shifts no rung", () => {
+      const { row, dispose } = modelRows(
+        listResolvablePaletteNames()[0]!,
+        variant((raw) => {
+          raw.variables["effort.glyphs"] = {
+            kind: "literal",
+            value: " ?  a b  c d",
+          };
+        }),
+      );
+      try {
+        expect(
+          ["low", "medium", "high", "xhigh"].map(
+            (level) => rungOf(row({ level })).glyph,
+          ),
+        ).toEqual(["a", "b", "c", "d"]);
+      } finally {
+        dispose();
+      }
+    });
+
     // Max climbs the ladder on a bubble: one chevron, two, three, a second
     // each, a colour per frame, every frame at the text floor on the bubble
     // and the bubble standing off the cell the other rungs sit on.
