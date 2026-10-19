@@ -64,12 +64,22 @@ function checkoutRootOf(bundlePath: string): string {
 // check" must never read as "current" — the throw lands in assessBuild's
 // `unchecked` arm like every other way the comparison cannot be made.
 export function bakedStamp(): SourceStamp {
-  if (typeof __SOURCE_DIGEST__ === "undefined") {
+  const digest = bakedDigest();
+  if (digest === null) {
     throw new Error(
       "this bundle carries no source digest (build via `pnpm build`, which stamps it)",
     );
   }
-  return { version: PACKAGE_VERSION, digest: __SOURCE_DIGEST__ };
+  return { version: PACKAGE_VERSION, digest };
+}
+
+// [LAW:one-source-of-truth] The digest this bundle was stamped with, `null`
+// when it carries none (untranspiled under Jest, or built by something other
+// than tsdown.config.ts). The one read of `__SOURCE_DIGEST__`; the stats
+// snapshot reports it so a client can tell one build of a version from
+// another — a source checkout rebuilds without bumping the version.
+export function bakedDigest(): string | null {
+  return typeof __SOURCE_DIGEST__ === "undefined" ? null : __SOURCE_DIGEST__;
 }
 
 // The version the checkout's source would report once built — read from

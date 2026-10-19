@@ -1333,8 +1333,9 @@ export class SourceRegistry {
   // Tear down all TTL timers, fs watchers, MobX reactions, git
   // subscriptions, and in-flight reads registered by async source kinds.
   // Call when the registry is no longer needed (e.g. on daemon shutdown or
-  // config hot-reload).
-  dispose(): void {
+  // config hot-reload). Returns how many computeds the store released, for
+  // the caller's log line.
+  dispose(): number {
     this.abort.abort();
     for (const cleanup of this.cleanups) cleanup();
     this.cleanups.length = 0;
@@ -1347,6 +1348,12 @@ export class SourceRegistry {
     this.watchMgr.dispose();
     this.ttlMgr.dispose();
     if (this.ownsGitProvider) this.gitProvider.close();
+    // The store's computeds are the last handles outward: a keepAlive computed
+    // stays subscribed to the daemon-wide SessionState atom until released, and
+    // that subscription held every disposed config's store for the life of the
+    // daemon (brandon-unfiled-3248.t14). [LAW:single-enforcer] released here,
+    // where every other handle a config holds is.
+    return this.store.dispose();
   }
 
   // ─── Private helpers ──────────────────────────────────────────────────────

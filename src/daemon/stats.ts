@@ -7,6 +7,7 @@ import type { LaunchCategory } from "../proc/launch";
 import type { LaunchStatsHandle } from "../proc/stats-handle";
 import { PROTOCOL_VERSION } from "./protocol";
 import { PACKAGE_VERSION } from "../version";
+import { bakedDigest } from "./build-currency";
 
 // Rolling window for "last minute" counts. Keep timestamps for each launch in
 // a ring buffer; eviction happens lazily on read.
@@ -34,6 +35,11 @@ export interface StatsSnapshot {
   // against `cc-candybar --version` to diagnose client-vs-daemon skew in one
   // step. The wire contract number is a different fact under its own name.
   version: string;
+  // The digest of the source the daemon's bundle was built from (`null` for a
+  // bundle carrying none) — with `version`, the build's identity: a source
+  // checkout rebuilds without bumping the version, and a client of another
+  // build cannot read this snapshot's shape as its own.
+  sourceDigest: string | null;
   protocolVersion: number;
   startedAt: string;
   uptimeSec: number;
@@ -67,6 +73,13 @@ export interface StatsSnapshot {
   effectCache: {
     sessions: number;
     effects: number;
+  };
+  // The per-session click store: how many sessions it holds, and how many
+  // derivations are subscribed to it. Observers climbing while renderCache
+  // holds steady is a disposed config's store still held.
+  sessionState: {
+    sessions: number;
+    observers: number;
   };
   watchers: {
     active: number;
@@ -202,11 +215,29 @@ export class RuntimeStats {
     };
   }
 
+  // [LAW:one-source-of-truth] This build's snapshot shape, as data: every
+  // field `snapshot` writes, with zeroed counts. A client reads a snapshot
+  // from whichever daemon is running, and an older build's lacks fields this
+  // one reads; comparing against the producer's own output, not a second
+  // spelling of the type, means a field added here is checked for there.
+  static referenceSnapshot(): StatsSnapshot {
+    return new RuntimeStats().snapshot({
+      gitCache: { size: 0, hits: 0, misses: 0, invalidations: 0, watchers: 0 },
+      usageCache: { size: 0, hits: 0, misses: 0, sweeps: 0 },
+      renderCacheSize: 0,
+      effectCache: { sessions: 0, effects: 0 },
+      sessionState: { sessions: 0, observers: 0 },
+      watchersActive: 0,
+      handlerProbes: [],
+    });
+  }
+
   snapshot(extras: {
     gitCache: StatsSnapshot["gitCache"];
     usageCache: StatsSnapshot["usageCache"];
     renderCacheSize: number;
     effectCache: StatsSnapshot["effectCache"];
+    sessionState: StatsSnapshot["sessionState"];
     watchersActive: number;
     nextRestartReason?: string | null;
     handlerProbes: readonly ProbeArrival[];
@@ -215,6 +246,7 @@ export class RuntimeStats {
     return {
       pid: process.pid,
       version: PACKAGE_VERSION,
+      sourceDigest: bakedDigest(),
       protocolVersion: PROTOCOL_VERSION,
       startedAt: this.startedAt.toISOString(),
       uptimeSec: Math.floor((Date.now() - this.startedAt.getTime()) / 1000),
@@ -233,6 +265,7 @@ export class RuntimeStats {
       usageCache: extras.usageCache,
       renderCache: { size: extras.renderCacheSize },
       effectCache: extras.effectCache,
+      sessionState: extras.sessionState,
       watchers: {
         active: extras.watchersActive,
         opened: this.watchersOpened,

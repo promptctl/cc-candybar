@@ -188,6 +188,25 @@ export class SessionState implements SessionStateReader, SessionStateRW {
     return this.sessions.get(sessionId)?.revision ?? 0;
   }
 
+  // How many derivations are subscribed to this store right now — every
+  // computed that read session state and has not been released. Live configs
+  // keep a bounded number; a count that climbs while the render cache does not
+  // is a disposed store still held (brandon-unfiled-3248.t14 was found in a
+  // heap snapshot because nothing reported this). [LAW:nothing-unseen]
+  // The atom's own observer set (`IDepTreeNode.observers_`, the field MobX's
+  // dependency-tree API reads), `null` once nothing observes it. The other
+  // public view, `getObserverTree`, materialises the whole recursive tree —
+  // one node per observer per path — to answer this direct count, on the
+  // daemon's request thread.
+  observers(): number {
+    return this.atom.observers_?.size ?? 0;
+  }
+
+  // How many sessions the store holds.
+  size(): number {
+    return this.sessions.size;
+  }
+
   // [LAW:one-source-of-truth] set is the degenerate single-pair form of
   // setBatch — one write path through the store. The previous shape (a
   // standalone set body) split the write semantics across two routes

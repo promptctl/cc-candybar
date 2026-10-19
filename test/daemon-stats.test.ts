@@ -1,12 +1,18 @@
 import { RuntimeStats } from "../src/daemon/stats";
-import { formatStats } from "../src/daemon/client-stats";
+import {
+  formatStats,
+  missingFields,
+  shapeSkew,
+} from "../src/daemon/client-stats";
 import { PROTOCOL_VERSION } from "../src/daemon/protocol";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 // package.json is the version's sole authority; the tests read it the same way
 // the build does rather than restating the number.
-const pkg = JSON.parse(readFileSync(join(process.cwd(), "package.json"), "utf8")) as { version: string };
+const pkg = JSON.parse(
+  readFileSync(join(process.cwd(), "package.json"), "utf8"),
+) as { version: string };
 
 describe("RuntimeStats.snapshot", () => {
   test("produces a stable shape with extras merged in", () => {
@@ -30,6 +36,7 @@ describe("RuntimeStats.snapshot", () => {
       usageCache: { size: 10, hits: 50, misses: 5, sweeps: 1 },
       renderCacheSize: 3,
       effectCache: { sessions: 2, effects: 5 },
+      sessionState: { sessions: 2, observers: 11 },
       watchersActive: 2,
       handlerProbes: [{ nonce: "n", handler: "1.2.3" }],
     });
@@ -44,6 +51,7 @@ describe("RuntimeStats.snapshot", () => {
     expect(snap.gitCache.hits).toBe(100);
     expect(snap.usageCache.size).toBe(10);
     expect(snap.effectCache).toEqual({ sessions: 2, effects: 5 });
+    expect(snap.sessionState).toEqual({ sessions: 2, observers: 11 });
     expect(snap.watchers).toEqual({
       active: 2,
       opened: 5,
@@ -59,16 +67,40 @@ describe("RuntimeStats.snapshot", () => {
   // stamp (what `cc-candybar --version` prints for the same build), and the
   // wire contract number lives under its own name — two facts, two fields.
   test("version is the package stamp; protocolVersion is the wire contract", () => {
-    const snap = new RuntimeStats().snapshot({
-      gitCache: { size: 0, hits: 0, misses: 0, invalidations: 0, watchers: 0 },
-      usageCache: { size: 0, hits: 0, misses: 0, sweeps: 0 },
-      renderCacheSize: 0,
-      effectCache: { sessions: 0, effects: 0 },
-      watchersActive: 0,
-      handlerProbes: [],
-    });
+    const snap = RuntimeStats.referenceSnapshot();
     expect(snap.version).toBe(pkg.version);
     expect(snap.protocolVersion).toBe(PROTOCOL_VERSION);
+  });
+});
+
+describe("shapeSkew", () => {
+  test("a snapshot from this build is none", () => {
+    expect(shapeSkew(RuntimeStats.referenceSnapshot())).toBeNull();
+  });
+
+  test("a snapshot of another digest with every field is none: shape, not identity", () => {
+    const snap = RuntimeStats.referenceSnapshot();
+    expect(shapeSkew({ ...snap, sourceDigest: "abcdef0123456789" })).toBeNull();
+    expect(shapeSkew({ ...snap, version: "0.0.1" })).toBeNull();
+  });
+
+  test("a snapshot lacking fields this build reads names them and both builds", () => {
+    const snap = RuntimeStats.referenceSnapshot();
+    const { sessionState: _s, sourceDigest: _d, ...older } = snap;
+    const skew = shapeSkew(older as typeof snap);
+    expect(skew).toContain("reports no sourceDigest, sessionState");
+    expect(skew).toContain(`the daemon (${pkg.version} [no digest])`);
+    expect(skew).toContain(`this client (${pkg.version} [`);
+  });
+
+  test("missingFields names a nested field by its path, and an atom in place of an object", () => {
+    const snap = RuntimeStats.referenceSnapshot();
+    const { observers: _o, ...sessionState } = snap.sessionState;
+    expect(missingFields(snap, { ...snap, sessionState })).toEqual([
+      "sessionState.observers",
+    ]);
+    expect(missingFields(snap, { ...snap, watchers: 3 })).toEqual(["watchers"]);
+    expect(missingFields(snap, snap)).toEqual([]);
   });
 });
 
@@ -77,6 +109,7 @@ describe("formatStats", () => {
     const out = formatStats({
       pid: 1234,
       version: "1.41.2",
+      sourceDigest: null,
       protocolVersion: 2,
       startedAt: "2026-04-28T00:00:00.000Z",
       uptimeSec: 125,
@@ -86,10 +119,17 @@ describe("formatStats", () => {
       externalBytes: 1 * 1024 * 1024,
       arrayBuffersBytes: 256 * 1024,
       requests: { total: 100, errored: 2, timedOut: 1, inFlight: 0 },
-      gitCache: { size: 5, hits: 80, misses: 20, invalidations: 3, watchers: 5 },
+      gitCache: {
+        size: 5,
+        hits: 80,
+        misses: 20,
+        invalidations: 3,
+        watchers: 5,
+      },
       usageCache: { size: 3, hits: 40, misses: 10, sweeps: 0 },
       renderCache: { size: 4 },
       effectCache: { sessions: 2, effects: 3 },
+      sessionState: { sessions: 2, observers: 11 },
       watchers: { active: 5, opened: 7, closed: 2, evicted: 0 },
       subprocesses: {
         total: 0,
@@ -108,12 +148,14 @@ describe("formatStats", () => {
     expect(out).toContain("hit rate      80.0%");
     expect(out).toContain("active        5");
     expect(out).toContain("effects       3");
+    expect(out).toContain("observers     11");
   });
 
   test("hit rate is n/a when no observations", () => {
     const out = formatStats({
       pid: 1,
       version: "1.41.2",
+      sourceDigest: null,
       protocolVersion: 2,
       startedAt: "2026-04-28T00:00:00.000Z",
       uptimeSec: 0,
@@ -127,6 +169,7 @@ describe("formatStats", () => {
       usageCache: { size: 0, hits: 0, misses: 0, sweeps: 0 },
       renderCache: { size: 0 },
       effectCache: { sessions: 0, effects: 0 },
+      sessionState: { sessions: 0, observers: 0 },
       watchers: { active: 0, opened: 0, closed: 0, evicted: 0 },
       subprocesses: {
         total: 0,

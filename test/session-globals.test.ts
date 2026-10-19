@@ -82,11 +82,13 @@ function buildRuntime(padding: number = CONFIG_PADDING) {
         endcaps: "powerline" as const,
         colorCompatibility: "truecolor" as const,
         charset: "unicode" as const,
-        wrap: effectiveAutoWrap(undefined, 
+        wrap: effectiveAutoWrap(
+          undefined,
           sessionState.get(sid, "autoWrap"),
           config.globals.autoWrap,
         ),
-        padding: effectivePadding(undefined, 
+        padding: effectivePadding(
+          undefined,
           sessionState.get(sid, "padding"),
           config.globals.padding,
         ),
@@ -94,7 +96,9 @@ function buildRuntime(padding: number = CONFIG_PADDING) {
       },
     );
 
-  const dispose = (): void => registry.dispose();
+  const dispose = (): void => {
+    registry.dispose();
+  };
 
   return { config, sessionState, render, dispose };
 }
@@ -116,7 +120,6 @@ function setState(
   );
 }
 
-
 const WIDE = 200;
 // Narrow enough that the row cannot fit on one line, so wrapping is observable
 // as extra rendered rows.
@@ -132,7 +135,13 @@ describe("a padding click changes one session's bar", () => {
     try {
       const bystanderBefore = stripAnsi(clicked.render("s-bystander", WIDE));
 
-      setState(clicked.config, clicked.sessionState, "s-clicker", "padding", "5");
+      setState(
+        clicked.config,
+        clicked.sessionState,
+        "s-clicker",
+        "padding",
+        "5",
+      );
 
       expect(stripAnsi(clicked.render("s-clicker", WIDE))).toBe(
         stripAnsi(asIfConfigured.render("s-clicker", WIDE)),
@@ -202,14 +211,18 @@ describe("a session value outside the domain is not a session value", () => {
     ["padded digits", " 3 "],
     ["not a number", "wide"],
   ])("padding %s falls through to the config default", (_label, raw) => {
-    expect(effectivePadding(undefined, raw, CONFIG_PADDING)).toBe(CONFIG_PADDING);
+    expect(effectivePadding(undefined, raw, CONFIG_PADDING)).toBe(
+      CONFIG_PADDING,
+    );
   });
 
   it.each([
     ["both ends of the range are admitted", PADDING_RANGE.min],
     ["and the top", PADDING_RANGE.max],
   ])("%s", (_label, value) => {
-    expect(effectivePadding(undefined, String(value), CONFIG_PADDING)).toBe(value);
+    expect(effectivePadding(undefined, String(value), CONFIG_PADDING)).toBe(
+      value,
+    );
   });
 
   // `configured` is FALSE throughout, which is the whole point: `DEFAULT_WRAP`
@@ -234,8 +247,12 @@ describe("a session value outside the domain is not a session value", () => {
   });
 
   it("with no config default either, both land on their floor", () => {
-    expect(effectivePadding(undefined, "nonsense", undefined)).toBe(DEFAULT_PADDING);
-    expect(effectiveAutoWrap(undefined, "nonsense", undefined)).toBe(DEFAULT_WRAP);
+    expect(effectivePadding(undefined, "nonsense", undefined)).toBe(
+      DEFAULT_PADDING,
+    );
+    expect(effectiveAutoWrap(undefined, "nonsense", undefined)).toBe(
+      DEFAULT_WRAP,
+    );
   });
 });
 
@@ -270,7 +287,9 @@ describe("a stale session pick falls to the config default, not the floor", () =
   it("variation: the session pick over the configured one, a stale pick falling through", () => {
     expect(effectiveVariation(undefined, "mono", "duo")).toBe("mono");
     expect(effectiveVariation(undefined, "accent-primary", "duo")).toBe("duo");
-    expect(effectiveVariation(undefined, "accent-primary", undefined)).toBe("accent");
+    expect(effectiveVariation(undefined, "accent-primary", undefined)).toBe(
+      "accent",
+    );
     expect(effectiveVariation("mono", "duo", undefined)).toBe("mono");
   });
 
@@ -282,8 +301,12 @@ describe("a stale session pick falls to the config default, not the floor", () =
   });
 
   it("strip style: a removed vocabulary member yields the configured style", () => {
-    expect(effectiveEndcaps(undefined, "no-such-style", "capsule")).toBe("capsule");
-    expect(effectiveEndcaps(undefined, "no-such-style", undefined)).toBe("powerline");
+    expect(effectiveEndcaps(undefined, "no-such-style", "capsule")).toBe(
+      "capsule",
+    );
+    expect(effectiveEndcaps(undefined, "no-such-style", undefined)).toBe(
+      "powerline",
+    );
   });
 
   it("style: an orphaned name yields the configured style", () => {
@@ -370,7 +393,9 @@ describe("charset and colour depth have no session half", () => {
           ALLOWED,
         ),
       ).toThrow(
-        new RegExp(`actions\\.pick sets "${key}", which has no session pick.*persist: "${key}"`),
+        new RegExp(
+          `actions\\.pick sets "${key}", which has no session pick.*persist: "${key}"`,
+        ),
       );
     },
   );

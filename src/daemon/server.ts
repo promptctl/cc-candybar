@@ -176,6 +176,7 @@ const renderCache = new RenderCache(
     gitService,
     sessionState,
     watchers: watcherRegistry,
+    log: dlog,
   },
   {
     observers: {
@@ -901,6 +902,10 @@ export async function handleRequest(
         usageCache: usageStore.getStats(),
         renderCacheSize: renderCache.size,
         effectCache: effectSessions.getStats(),
+        sessionState: {
+          sessions: sessionState.size(),
+          observers: sessionState.observers(),
+        },
         watchersActive: watcherRegistry.size(),
         nextRestartReason: limits?.describeNextRestart() ?? null,
         handlerProbes: handlerProbes.list(),
