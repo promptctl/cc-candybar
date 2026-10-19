@@ -31,6 +31,7 @@ import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { linkUrls } from "./helpers/ansi";
 import { instantOf } from "../src/utils/instant";
+import { heldClickError } from "../src/daemon/click-error";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = "s1";
@@ -139,7 +140,7 @@ describe("block's thresholds are settings configure mode steps", () => {
     expect(() => rt.click(down)).toThrow(reason);
     expect(rt.pick("block", "errorAt")).toBe("50");
     // The reason is what the next render's strip shows.
-    expect(rt.sessionState.get(SID, "click.error")).toMatch(reason);
+    expect(heldClickError(rt.sessionState, SID)?.text ?? null).toMatch(reason);
     // The other way round is the same relation: warnAt may not climb past it.
     const up = rt.stepper("block", "warnAt", 5);
     expect(() => rt.click(up)).toThrow(/"errorAt" \(50\) is below "warnAt" \(55\)/);

@@ -315,8 +315,21 @@ export interface DebugRequest {
   what: DebugWhat;
 }
 
+// [LAW:one-type-per-behavior] A subscription's stream is a stream of the
+// responses a render request is answered with: every frame the daemon draws
+// for the session whose bytes differ from the last one sent, until the
+// subscriber closes the socket. The frames are drawn from the session's latest
+// render request (src/daemon/frame-feed.ts), so a session subscribed to before
+// its first render streams nothing until that render arrives.
+export interface SubscribeRequest {
+  v: number;
+  kind: "subscribe";
+  sessionId: string;
+}
+
 export type Request =
   | RenderRequest
+  | SubscribeRequest
   | ShutdownRequest
   | StatsRequest
   | ClickRequest
@@ -378,7 +391,13 @@ export const FRAME_HEADER_BYTES = 4;
 export const MAX_FRAME_BYTES = 16 * 1024 * 1024;
 
 export function encodeFrame(value: unknown): Buffer {
-  const body = Buffer.from(JSON.stringify(value), "utf8");
+  return encodeJsonFrame(JSON.stringify(value));
+}
+
+// A frame of JSON already serialized: a pushed frame is serialized once for
+// every subscriber.
+export function encodeJsonFrame(json: string): Buffer {
+  const body = Buffer.from(json, "utf8");
   const header = Buffer.alloc(FRAME_HEADER_BYTES);
   header.writeUInt32BE(body.length, 0);
   return Buffer.concat([header, body]);

@@ -21,6 +21,7 @@ import { NODE_FLAGS } from "./cli-flags";
 import { PACKAGE_VERSION } from "./version";
 import { detectClientHints } from "./client-hints";
 import { runDoctorCli } from "./doctor/cli";
+import { runFrames } from "./frames-cli";
 
 const hasFlag = (flags: readonly string[]): boolean =>
   flags.some((f) => process.argv.includes(f));
@@ -67,6 +68,10 @@ async function main(): Promise<void> {
     if (subcommand === "daemon-stats") {
       await runDaemonStats(process.argv.slice(3));
       process.exit(0);
+    }
+    if (subcommand === "frames") {
+      await runFrames(process.argv);
+      return; // the stream owns its own lifecycle
     }
     // [LAW:one-type-per-behavior] `lint` is an alias of `check` — one config
     // verdict, one pipeline, one exit-code contract (0/1/2). check subsumes the
