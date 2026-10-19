@@ -766,7 +766,10 @@ What the definition can say, and what follows from it:
   `state` variable reads what the session's own clicks wrote, so a segment can
   open a detail row of its own (`{ kind: "state", key, default }` beside a
   `{ set: key, cycle: [...] }` action, read as `.plugins.<plugin>.<segment>.<var>`),
-  and any other kind is a source. The plugin name is one lowercase identifier.
+  and any other kind is a source. The `key` and the action's `set` are written
+  bare and meet under `plugins.<plugin>.` — a plugin's session keys are
+  namespaced as its names are, so none can clash with the bar's or your file's.
+  The plugin name is one lowercase identifier.
 - **Merge order is bundled < installed plugins < listed plugins < your
   file**, so your file can
   retune a plugin's segment by its full name, one field at a time

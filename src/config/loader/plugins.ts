@@ -18,7 +18,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import JSON5 from "json5";
-import { type DslConfig, type RawDslConfig } from "../dsl-types.js";
+import {
+  type DslConfig,
+  type RawDslConfig,
+  type RawSegmentDecl,
+} from "../dsl-types.js";
+import type { ActionDecl } from "../action.js";
 import { listResolvablePaletteNames } from "../../themes/policy.js";
 import { ConfigError, type ConfigIssue } from "./diagnostics.js";
 import { resolveUserPath } from "../../utils/user-path.js";
@@ -577,23 +582,27 @@ function fragmentOf(
   // nothing. A `state` variable is not a source: it reads what the session's
   // own clicks wrote, which is how a plugin segment opens and closes a detail
   // of its own (lit's ticket description) — so that one kind is admitted and
-  // every other is refused by name.
+  // every other kind is refused by name. A declaration naming no kind at all
+  // is a shape error the variable schema reports itself, once.
   for (const [name, seg] of Object.entries(json.segments as object)) {
     if (!isPlainObject(seg) || !isPlainObject(seg.vars)) continue;
     for (const [varName, decl] of Object.entries(seg.vars)) {
       const kind = isPlainObject(decl) ? decl.kind : undefined;
-      if (kind === "state") continue;
+      if (typeof kind !== "string" || kind === "state") continue;
       issues.push({
         path: `segments.${name}.vars.${varName}`,
-        message: `a plugin segment's vars may declare only state variables (kind: "state"), never a source such as ${JSON.stringify(kind ?? decl)}: a plugin's only source is its data file`,
+        message: `a plugin segment's vars may declare only state variables (kind: "state"), never a source such as ${JSON.stringify(kind)}: a plugin's only source is its data file`,
       });
     }
   }
   const fragment: RawDslConfig = {
     variables,
-    segments: prefixed(ns, validateSegments(ctx, json.segments, new Set())),
+    segments: prefixed(
+      ns,
+      stateKeysUnder(ns, validateSegments(ctx, json.segments, new Set())),
+    ),
     helpers: prefixed(ns, validateHelpers(ctx, json.helpers)),
-    actions: prefixed(ns, validateActions(ctx, json.actions)),
+    actions: prefixed(ns, setKeysUnder(ns, validateActions(ctx, json.actions))),
   };
   // [LAW:single-enforcer] Template syntax is otherwise first parsed by the
   // compile, after every plugin has merged — too late to drop just this one.
@@ -637,6 +646,54 @@ function prefixed<T>(
 ): Record<string, T> {
   return Object.fromEntries(
     Object.entries(decls).map(([name, d]) => [`${PLUGIN_NS}${ns}.${name}`, d]),
+  );
+}
+
+// [LAW:one-source-of-truth] A plugin's session KEYS live under its namespace
+// exactly as its NAMES do: the `key` of every `state` variable its segments
+// hold and the `set` of every action, so a plugin can neither clash with a key
+// the user's file or another plugin declares (a kind clash there would fail
+// the whole load, not drop the plugin) nor write one the bar owns
+// (`edit.mode`, `candybar.tab`). The author writes the bare key on both sides
+// and the two meet under `plugins.<ns>.`; a key outside the namespace is
+// unrepresentable, not refused.
+function keyUnder(ns: string, key: string): string {
+  return `${PLUGIN_NS}${ns}.${key}`;
+}
+
+function stateKeysUnder(
+  ns: string,
+  segments: Readonly<Record<string, RawSegmentDecl>>,
+): Record<string, RawSegmentDecl> {
+  return Object.fromEntries(
+    Object.entries(segments).map(([name, seg]) => [
+      name,
+      seg.vars === undefined
+        ? seg
+        : {
+            ...seg,
+            vars: Object.fromEntries(
+              Object.entries(seg.vars).map(([v, decl]) => [
+                v,
+                decl.kind === "state"
+                  ? { ...decl, key: keyUnder(ns, decl.key) }
+                  : decl,
+              ]),
+            ),
+          },
+    ]),
+  );
+}
+
+function setKeysUnder(
+  ns: string,
+  actions: Readonly<Record<string, ActionDecl>>,
+): Record<string, ActionDecl> {
+  return Object.fromEntries(
+    Object.entries(actions).map(([name, a]) => [
+      name,
+      "set" in a ? { ...a, set: keyUnder(ns, a.set) } : a,
+    ]),
   );
 }
 

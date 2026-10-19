@@ -855,4 +855,72 @@ describe("a plugin segment's state variable", () => {
     expect(stripAnsi(opened.rendered)).toMatch(/n-1 ▾[^\n]*\n[^\n]*the long form/);
     expect(stripAnsi((await bar.click("▾")).rendered)).not.toContain("the long form");
   });
+
+  // The bare `key` the plugin writes on both sides meets under `plugins.x.`,
+  // so the user's file may hold the same bare key, under another kind, and
+  // neither clashes with nor hears the other: a kind clash on one key fails a
+  // whole load, which would take the user's bar away for a plugin's choice of
+  // word.
+  test("its key lives under the plugin's namespace, apart from the same bare key in the user's file", async () => {
+    write(
+      "x/plugin.json5",
+      `{
+        data: "./state.json",
+        segments: {
+          s: {
+            template: '{{ action "plugins.x.more" "▸" "▾" }}{{ if eq .plugins.x.s.detail "open" }} detail{{ end }}',
+            vars: { detail: { kind: "state", key: "x-detail", default: "closed" } },
+          },
+        },
+        actions: { more: { set: "x-detail", cycle: ["closed", "open"] } },
+      }`,
+    );
+    write("x/state.json", `{}`);
+    const p = write(
+      "config.json5",
+      `{
+        plugins: [${JSON.stringify(path.join(dir, "x/plugin.json5"))}],
+        variables: { mine: { kind: "state", key: "x-detail", default: "user" } },
+        actions: { page: { set: "x-detail", int: true } },
+        segments: { u: { template: "mine={{ .mine }}" } },
+        root: { h: ["u", "plugins.x.s"] },
+      }`,
+    );
+    bar = await startBar({ width: 120, rows: 40, config: p, cwd: dir, ssh: false });
+    expect(stripAnsi(await bar.render())).toContain("mine=user");
+    const opened = await bar.click("▸");
+    expect(opened.refused).toBeNull();
+    const text = stripAnsi(opened.rendered);
+    expect(text).toContain("▾ detail");
+    expect(text).toContain("mine=user");
+  });
+
+  // A stepped key starts from its `state` variable's `default`, a segment
+  // local's included: the first click on a stepper over a plugin's var steps
+  // from what the cell shows, not from the range's floor.
+  test("a stepper over it steps from the default the cell shows", async () => {
+    write(
+      "x/plugin.json5",
+      `{
+        data: "./state.json",
+        segments: {
+          s: {
+            template: 'n={{ .plugins.x.s.n }} {{ action "plugins.x.up" "+" }}',
+            vars: { n: { kind: "state", key: "n", default: "3" } },
+          },
+        },
+        actions: { up: { set: "n", min: 0, max: 5, by: 1 } },
+      }`,
+    );
+    write("x/state.json", `{}`);
+    const p = write(
+      "config.json5",
+      `{ plugins: [${JSON.stringify(path.join(dir, "x/plugin.json5"))}], root: { h: ["plugins.x.s"] } }`,
+    );
+    bar = await startBar({ width: 120, rows: 40, config: p, cwd: dir, ssh: false });
+    expect(stripAnsi(await bar.render())).toContain("n=3");
+    const stepped = await bar.click("+");
+    expect(stepped.refused).toBeNull();
+    expect(stripAnsi(stepped.rendered)).toContain("n=4");
+  });
 });

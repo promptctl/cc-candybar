@@ -25,7 +25,7 @@ import {
   resolveOptionDomain,
   type ResolvedDomain,
 } from "../../config/option-domain";
-import type { DslConfig } from "../../config/dsl-types";
+import { stateVarDecls, type DslConfig } from "../../config/dsl-types";
 import { SESSION_KEY_TO_SETTING } from "../../config/setting-projections";
 import { sessionSettingValue } from "../setting-drafts";
 import {
@@ -194,10 +194,10 @@ export function stateKeySeed(
   if (setting !== undefined) {
     return sessionSettingValue(config, sessionPick, setting);
   }
-  const decl = Object.values(config.variables).find(
-    (d) => d.kind === "state" && d.key === key,
-  );
-  return decl?.kind === "state" ? (decl.default ?? null) : null;
+  for (const [, decl] of stateVarDecls(config)) {
+    if (decl.key === key) return decl.default ?? null;
+  }
+  return null;
 }
 
 // [LAW:one-source-of-truth] The writable-key surface a config's `set` actions

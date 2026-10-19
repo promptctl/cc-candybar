@@ -26,7 +26,12 @@ import type {
   SettingValue,
   SourceDefault,
 } from "../config/dsl-types.js";
-import { parseArm, placementSetting, settingsOf } from "../config/dsl-types.js";
+import {
+  parseArm,
+  placementSetting,
+  settingsOf,
+  stateVarDecls,
+} from "../config/dsl-types.js";
 import { TERM_COLS_FLOOR } from "../config/payload-inputs.js";
 import {
   themeDefaultsOf,
@@ -601,22 +606,12 @@ export function registerDslConfig(
   for (const [key, name] of SESSION_KEY_TO_EFFECTIVE_VAR) {
     if (name in config.variables) stateKeyToVar.set(key, name);
   }
-  for (const [name, decl] of Object.entries(config.variables)) {
-    if (decl.kind === "state" && !stateKeyToVar.has(decl.key)) {
-      stateKeyToVar.set(decl.key, name);
-    }
-  }
-  // Segment-local state vars read the same SessionState keys; they register
-  // under the namespaced `segName.varName` (the form the store + scope use), so
-  // map the key to that namespaced name. Global wins on key collision (added
-  // first) — the value is the same key regardless, so either reads correctly.
-  for (const [segName, seg] of Object.entries(config.segments)) {
-    if (!seg.vars) continue;
-    for (const [varName, decl] of Object.entries(seg.vars)) {
-      if (decl.kind === "state" && !stateKeyToVar.has(decl.key)) {
-        stateKeyToVar.set(decl.key, `${segName}.${varName}`);
-      }
-    }
+  // Segment-local state vars read the same SessionState keys under their
+  // namespaced `segName.varName` (the form the store + scope use); a global
+  // wins on key collision (yielded first) — the value is the same key
+  // regardless, so either reads correctly.
+  for (const [name, decl] of stateVarDecls(config)) {
+    if (!stateKeyToVar.has(decl.key)) stateKeyToVar.set(decl.key, name);
   }
   // [LAW:one-source-of-truth] Actions resolve their set key → the reading
   // variable through the stateKeyToVar map, so an apply action and the picker
