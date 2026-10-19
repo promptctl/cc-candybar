@@ -20,24 +20,35 @@ describe("bar-pane paint", () => {
   });
 });
 
-// tmux's `list-panes` lines: pane id, sessions attached, window active, window
-// zoomed, pane active.
+// tmux's answers in the daemon's formats (src/daemon/pane-visibility.ts):
+// `list-panes` lines of pane id, session id, clients attached, window current,
+// window zoomed, pane active; `list-clients` lines of session id and
+// control mode.
 describe("bar-pane placement", () => {
   const at = (...lines: string[]): string => `${lines.join("\n")}\n`;
+  const client = at("$1 0");
 
-  it("is shown while its window is the active one of an attached session", () => {
-    expect(placementFrom(at("%3 1 1 0 1", "%4 1 1 0 0"), "%3", "%4")).toEqual({
+  it("is shown while its window is the current one of an attached session", () => {
+    expect(placementFrom(at("%3 $1 1 1 0 1", "%4 $1 1 1 0 0"), client, "%3", "%4")).toEqual({
       kind: "shown",
       zoomed: false,
     });
   });
 
-  it("is hidden in an inactive window or a detached session", () => {
-    expect(placementFrom(at("%3 1 0 0 1", "%4 1 0 0 0"), "%3", "%4")).toEqual({
+  it("is hidden in another window or a detached session", () => {
+    expect(placementFrom(at("%3 $1 1 0 0 1", "%4 $1 1 0 0 0"), client, "%3", "%4")).toEqual({
       kind: "hidden",
     });
-    expect(placementFrom(at("%3 0 1 0 1", "%4 0 1 0 0"), "%3", "%4")).toEqual({
+    expect(placementFrom(at("%3 $1 0 1 0 1", "%4 $1 0 1 0 0"), "", "%3", "%4")).toEqual({
       kind: "hidden",
+    });
+  });
+
+  // iTerm2's `tmux -CC` draws every window of its session as a native window.
+  it("is shown in any window of a session a control-mode client draws", () => {
+    expect(placementFrom(at("%3 $1 1 0 0 1", "%4 $1 1 0 0 0"), at("$1 1"), "%3", "%4")).toEqual({
+      kind: "shown",
+      zoomed: false,
     });
   });
 
@@ -45,10 +56,10 @@ describe("bar-pane placement", () => {
   // nobody, and one that is itself the zoomed pane must not be resized, which
   // would unzoom it.
   it("is hidden behind another pane's zoom, and shown but zoomed as the zoomed pane", () => {
-    expect(placementFrom(at("%3 1 1 1 1", "%4 1 1 1 0"), "%3", "%4")).toEqual({
+    expect(placementFrom(at("%3 $1 1 1 1 1", "%4 $1 1 1 1 0"), client, "%3", "%4")).toEqual({
       kind: "hidden",
     });
-    expect(placementFrom(at("%3 1 1 1 0", "%4 1 1 1 1"), "%3", "%4")).toEqual({
+    expect(placementFrom(at("%3 $1 1 1 1 0", "%4 $1 1 1 1 1"), client, "%3", "%4")).toEqual({
       kind: "shown",
       zoomed: true,
     });
@@ -56,12 +67,17 @@ describe("bar-pane placement", () => {
 
   it("is shown when any session holding a linked window shows it", () => {
     expect(
-      placementFrom(at("%3 0 1 0 1", "%4 0 1 0 0", "%3 1 1 0 1", "%4 1 1 0 0"), "%3", "%4"),
+      placementFrom(
+        at("%3 $1 0 1 0 1", "%4 $1 0 1 0 0", "%3 $2 1 1 0 1", "%4 $2 1 1 0 0"),
+        at("$2 0"),
+        "%3",
+        "%4",
+      ),
     ).toEqual({ kind: "shown", zoomed: false });
   });
 
   it("is gone once tmux no longer lists the session's pane", () => {
-    expect(placementFrom(at("%4 1 1 0 1"), "%3", "%4")).toEqual({ kind: "gone" });
+    expect(placementFrom(at("%4 $1 1 1 0 1"), client, "%3", "%4")).toEqual({ kind: "gone" });
   });
 });
 

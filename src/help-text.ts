@@ -94,7 +94,9 @@ Subcommands:
                            runs, for the mod in mod/.
   bar-pane PANE            Draw the bar of the Claude Code session in tmux
                            pane PANE (e.g. %3) in this pane, as the daemon
-                           pushes it, while this pane is shown. Experimental:
+                           pushes it, while this pane is shown. The bar is
+                           drawn at PANE's width, so split PANE with -v for a
+                           pane under it that fits. Experimental:
                            runs while 🧪 tmux pane (C) is on in the settings
                            menu's ⚙ config tab.
 

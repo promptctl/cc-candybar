@@ -398,3 +398,22 @@ describe("a subscription's lane", () => {
     expect(state.opened).toBe(1);
   });
 });
+
+// A tmux bar pane knows its pane, not the session in it, which a /clear
+// replaces: the session is that of the newest request from the pane, by the
+// order the daemon received them.
+test("newestWhere finds the session of the newest request it matches, and counts its lookups", () => {
+  const { feeds, note } = harness({ motion: "still" });
+  const fromPane = (req: string): boolean => req.startsWith("%3:");
+  expect(feeds.newestWhere(fromPane)).toBeNull();
+  note("before-clear", "%3:a");
+  note("elsewhere", "%4:a");
+  note("after-clear", "%3:b");
+  expect(feeds.newestWhere(fromPane)).toBe("after-clear");
+  // A slow render of the old session arriving late is not newer.
+  note("before-clear", "%3:late", 1);
+  expect(feeds.newestWhere(fromPane)).toBe("after-clear");
+  note("before-clear", "%3:c");
+  expect(feeds.newestWhere(fromPane)).toBe("before-clear");
+  expect(feeds.getStats()).toMatchObject({ lookups: 4, found: 3 });
+});

@@ -138,6 +138,10 @@ export interface FeedStats {
   readonly pushed: number;
   // Subscriptions refused or ended because their lane was off.
   readonly refused: number;
+  // `newestWhere` lookups (a tmux bar pane asking whose bar its pane holds),
+  // and how many found a session.
+  readonly lookups: number;
+  readonly found: number;
 }
 
 /**
@@ -152,6 +156,8 @@ export class FrameFeeds<Req> {
   private drawn = 0;
   private pushed = 0;
   private refused = 0;
+  private lookups = 0;
+  private found = 0;
 
   constructor(private readonly deps: FeedDeps<Req>) {}
 
@@ -245,6 +251,8 @@ export class FrameFeeds<Req> {
     for (const [sessionId, { req, order }] of this.requests)
       if (match(req) && (newest === null || order > newest.order))
         newest = { sessionId, order };
+    this.lookups++;
+    if (newest !== null) this.found++;
     return newest?.sessionId ?? null;
   }
 
@@ -265,6 +273,8 @@ export class FrameFeeds<Req> {
       drawn: this.drawn,
       pushed: this.pushed,
       refused: this.refused,
+      lookups: this.lookups,
+      found: this.found,
     };
   }
 

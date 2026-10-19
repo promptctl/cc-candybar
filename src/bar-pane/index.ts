@@ -21,69 +21,99 @@ import { obtainDaemonKick } from "../daemon/acquire";
 import { socketPath } from "../daemon/paths";
 import { planOutcome } from "../render/outcome-plan";
 import { detectTmuxHint, type TmuxHint } from "../tmux-hint";
-import { runTmuxAsync } from "../proc/tmux";
-import { DRAWING, RESTORED, paint, type Paint } from "./paint";
+import { runTmuxAsync, type TmuxRun } from "../proc/tmux";
+import {
+  LIST_CLIENTS_FORMAT,
+  LIST_PANES_FORMAT,
+  controlledSessions,
+  shownPanes,
+} from "../daemon/pane-visibility";
+import { DRAWING, RESTORED, paint } from "./paint";
 
 // How stale the pane's placement and its session may be: a window switched to
 // waits this long for its first frame, and a /clear this long for its new
 // session's.
 const TICK_MS = 500;
-// How long tmux may go unanswered before the bar pane gives up: a loaded
-// machine misses a call now and then, a tmux server that is gone misses them
-// all.
+// How long a tmux call may go unanswered (tmuxPatience).
 const TMUX_PATIENCE_MS = 5000;
 const USAGE = "usage: cc-candybar bar-pane <claude-code-pane-id, e.g. %3>";
 
-// [LAW:types-are-the-program] Where the bar pane stands. `shown`: its window is
-// the one shown in an attached session, and no zoom hides it — frames are seen
-// where they are drawn, so a frame drawn while it is not is seen by nobody
-// (Brandon: "if we can find some way of not rendering terminals that aren't
-// visible that would be great"). `zoomed`: it is shown as the zoomed pane, which
-// a resize would unzoom. `gone`: the session's pane has closed, and with it the
-// bar this pane draws.
+// [LAW:types-are-the-program] Where the bar pane stands. `shown`: a client
+// shows it — frames are seen where they are drawn, so a frame drawn while it is
+// not is seen by nobody (Brandon: "if we can find some way of not rendering
+// terminals that aren't visible that would be great"). `zoomed`: it is shown as
+// the zoomed pane, which a resize would unzoom. `gone`: the session's pane has
+// closed, and with it the bar this pane draws.
 export type Placement =
   | { readonly kind: "shown"; readonly zoomed: boolean }
   | { readonly kind: "hidden" }
   | { readonly kind: "gone" };
 
-export const PLACEMENT_FORMAT =
-  "#{pane_id} #{session_attached} #{window_active} #{window_zoomed_flag} #{pane_active}";
-
-// [LAW:effects-at-boundaries] Pure: tmux's answer for the session's pane and
-// the bar pane (`own`), one line per session holding the pane's window — a
-// window linked into several sessions, or a grouped session, lists its panes
-// once in each.
+// [LAW:one-source-of-truth] Whether the bar pane is shown is the daemon's own
+// rule for a session's pane (src/daemon/pane-visibility.ts), over tmux's answers
+// in its formats: `list-panes` for the session's pane and the bar pane (`own`),
+// one line per session holding the pane's window, and `list-clients`.
+// [LAW:effects-at-boundaries] Pure.
 export function placementFrom(
-  stdout: string,
+  listPanes: string,
+  listClients: string,
   pane: string,
   own: string,
 ): Placement {
-  const lines = stdout
-    .split("\n")
-    .filter((line) => line !== "")
-    .map((line) => line.split(" "));
+  const lines = listPanes.split("\n").map((line) => line.trim().split(" "));
   if (!lines.some(([id]) => id === pane)) return { kind: "gone" };
-  const seen = lines.find(
-    ([id, attached, active, zoomed, paneActive]) =>
-      id === own &&
-      Number(attached) > 0 &&
-      active === "1" &&
-      (zoomed === "0" || paneActive === "1"),
-  );
-  return seen === undefined
-    ? { kind: "hidden" }
-    : { kind: "shown", zoomed: seen[3] === "1" };
+  if (!shownPanes(listPanes, controlledSessions(listClients)).has(own))
+    return { kind: "hidden" };
+  return {
+    kind: "shown",
+    zoomed: lines.some(([id, , , , zoomed]) => id === own && zoomed === "1"),
+  };
 }
 
-function listPlacement(tmux: TmuxHint, pane: string) {
-  return runTmuxAsync(tmux, "bar-pane.tmux", [
-    "list-panes",
-    "-a",
-    "-f",
-    `#{||:#{==:#{pane_id},${pane}},#{==:#{pane_id},${tmux.pane}}}`,
-    "-F",
-    PLACEMENT_FORMAT,
+type TmuxMissed = Exclude<TmuxRun, { kind: "ok" }>;
+
+async function askPlacement(
+  tmux: TmuxHint,
+  pane: string,
+): Promise<
+  { readonly kind: "ok"; readonly placement: Placement } | TmuxMissed
+> {
+  const [panes, clients] = await Promise.all([
+    runTmuxAsync(tmux, "bar-pane.tmux", [
+      "list-panes",
+      "-a",
+      "-f",
+      `#{||:#{==:#{pane_id},${pane}},#{==:#{pane_id},${tmux.pane}}}`,
+      "-F",
+      LIST_PANES_FORMAT,
+    ]),
+    runTmuxAsync(tmux, "bar-pane.tmux", [
+      "list-clients",
+      "-F",
+      LIST_CLIENTS_FORMAT,
+    ]),
   ]);
+  if (panes.kind !== "ok") return panes;
+  if (clients.kind !== "ok") return clients;
+  return {
+    kind: "ok",
+    placement: placementFrom(panes.stdout, clients.stdout, pane, tmux.pane),
+  };
+}
+
+// [LAW:one-type-per-behavior] How long one tmux call may go unanswered before
+// the bar pane gives up: a loaded machine misses a call now and then, a tmux
+// server that is gone misses them all. One per call the bar pane makes, so a
+// call that keeps failing is not excused by another that answers.
+function tmuxPatience(): (run: { readonly kind: "ok" } | TmuxMissed) => void {
+  let answeredAt = Date.now();
+  return (run) => {
+    if (run.kind === "ok") answeredAt = Date.now();
+    else if (Date.now() - answeredAt > TMUX_PATIENCE_MS)
+      throw new Error(
+        `tmux has not answered for ${TMUX_PATIENCE_MS / 1000} s: ${run.reason}`,
+      );
+  };
 }
 
 export function parseArgs(argv: readonly string[]): { pane: string } {
@@ -118,11 +148,13 @@ async function drawBarPane(argv: readonly string[]): Promise<void> {
   const tmux = detectTmuxHint(process.env);
   if (tmux === null)
     throw new Error("cc-candybar bar-pane runs in a tmux pane");
+  if (!process.stdout.isTTY)
+    throw new Error("cc-candybar bar-pane draws on its pane's terminal");
   // [LAW:no-silent-failure] A pane id this tmux server does not have is a
   // mistake to say, not a pane that closed.
-  const first = await listPlacement(tmux, pane);
+  const first = await askPlacement(tmux, pane);
   if (first.kind !== "ok") throw new Error(first.reason);
-  let placement = placementFrom(first.stdout, pane, tmux.pane);
+  let placement = first.placement;
   if (placement.kind === "gone")
     throw new Error(`no pane ${pane} on this tmux server (${tmux.socket})`);
 
@@ -137,95 +169,126 @@ async function drawBarPane(argv: readonly string[]): Promise<void> {
   ] as const) {
     process.once(signal, () => process.exit(code));
   }
-
-  // What the pane shows, and what it last painted. A resized pane no longer
-  // holds what was painted: the next draw paints the frame whole.
-  let text = `waiting for pane ${pane}'s bar`;
-  let shown: Paint = { bytes: "", rows: 0 };
-  process.stdout.on("resize", () => {
-    shown = { ...shown, bytes: "" };
-  });
-  // The pane's height follows the frame's, except while the bar pane is the
-  // zoomed pane, which a resize would unzoom.
-  const draw = async (): Promise<void> => {
-    if (placement.kind !== "shown") return;
-    const next = paint(text);
-    if (next.rows !== shown.rows && !placement.zoomed) {
-      const resized = await runTmuxAsync(tmux, "bar-pane.tmux", [
-        "resize-pane",
-        "-t",
-        tmux.pane,
-        "-y",
-        String(next.rows),
-      ]);
-      if (resized.kind !== "ok") throw new Error(resized.reason);
-    }
-    if (next.bytes !== shown.bytes) process.stdout.write(next.bytes);
-    shown = next;
-  };
-  const show = (next: string): void => {
-    text = next;
-    void draw().catch((e: unknown) => {
-      process.stderr.write(`cc-candybar bar-pane: ${(e as Error).message}\n`);
-      process.exit(1);
-    });
+  const die = (e: unknown): never => {
+    process.stderr.write(`cc-candybar bar-pane: ${(e as Error).message}\n`);
+    process.exit(1);
   };
 
   // The session's frames while the bar pane is shown: one follower, for the
-  // session tmux pane `pane` holds now. Hidden, it follows nothing, so the
-  // daemon draws nothing for it.
-  let following: { sessionId: string; follower: FrameFollower } | null = null;
+  // session tmux pane `pane` holds now, and the last thing it said. Hidden, it
+  // follows nothing, so the daemon draws nothing for it.
+  let following: {
+    readonly sessionId: string;
+    readonly said: { latest: string | null };
+    readonly follower: FrameFollower;
+  } | null = null;
+  // What the loop last learned of the pane's session, shown until its follower
+  // says something.
+  let status = `waiting for pane ${pane}'s bar`;
+  // [LAW:one-source-of-truth] What the pane shows is derived, never set: a
+  // lookup that fails beside a live follower cannot cover its frames.
+  const text = (): string => following?.said.latest ?? status;
+
+  // What the pane last painted. Anything that disturbs the pane — a resize, a
+  // line written to its stderr — makes the next draw paint the frame whole.
+  let painted = "";
+  const resizeAnswered = tmuxPatience();
+  // The pane's height follows the frame's, except while the bar pane is the
+  // zoomed pane, which a resize would unzoom. The height compared is the
+  // pane's own, so an unzoom or a hand resize is put right too.
+  const drawOnce = async (): Promise<void> => {
+    if (placement.kind !== "shown") return;
+    const next = paint(text());
+    if (next.rows !== process.stdout.rows && !placement.zoomed)
+      // Missed: the pane keeps its height, and the next draw asks again.
+      resizeAnswered(
+        await runTmuxAsync(tmux, "bar-pane.tmux", [
+          "resize-pane",
+          "-t",
+          tmux.pane,
+          "-y",
+          String(next.rows),
+        ]),
+      );
+    if (next.bytes !== painted) process.stdout.write(next.bytes);
+    painted = next.bytes;
+  };
+  // [LAW:no-ambient-temporal-coupling] One draw at a time: a frame arriving
+  // while one is drawn is drawn after it, the newest only, so no frame is
+  // written over a newer one and no two resizes race.
+  let drawing: Promise<void> | null = null;
+  let stale = false;
+  const redraw = (): void => {
+    stale = true;
+    drawing ??= (async () => {
+      try {
+        while (stale) {
+          stale = false;
+          await drawOnce();
+        }
+      } finally {
+        drawing = null;
+      }
+    })();
+    void drawing.catch(die);
+  };
+  process.stdout.on("resize", () => {
+    painted = "";
+    redraw();
+  });
+
   const follow = (sessionId: string | null): void => {
     if (following?.sessionId === sessionId) return;
     following?.follower.close();
-    following =
-      sessionId === null
-        ? null
-        : {
-            sessionId,
-            follower: followFrames(socketPath(), sessionId, "pane", {
-              frame: (resp) => show(planOutcome(renderOutcomeOf(resp)).output),
-              off: (resp) => show(resp.error),
-              fault: (reason) => show(reason),
-              exit: (reason) => {
-                process.stderr.write(`cc-candybar bar-pane: ${reason}\n`);
-                process.exit(1);
-              },
-            }),
-          };
+    if (sessionId === null) {
+      following = null;
+      return;
+    }
+    const said: { latest: string | null } = { latest: null };
+    const say = (line: string): void => {
+      said.latest = line;
+      redraw();
+    };
+    following = {
+      sessionId,
+      said,
+      follower: followFrames(socketPath(), sessionId, "pane", {
+        frame: (resp) => say(planOutcome(renderOutcomeOf(resp)).output),
+        off: (resp) => say(resp.error),
+        fault: say,
+        exit: (reason) => die(new Error(reason)),
+      }),
+    };
   };
 
   // [LAW:no-ambient-temporal-coupling] This loop is the one clock for where
   // the pane is and whose bar it shows; the frames arrive on their own.
-  let tmuxAnsweredAt = Date.now();
+  const placementAnswered = tmuxPatience();
   while (placement.kind !== "gone") {
     if (placement.kind === "hidden") {
       follow(null);
     } else {
       const found = await trySessionInPane(tmux.socket, pane);
       if (found.kind === "ok") {
-        if (found.value === null) {
-          follow(null);
-          show(
-            `waiting for pane ${pane}'s statusline to render on ${socketPath()}`,
-          );
-        } else {
-          follow(found.value);
-        }
+        follow(found.value);
+        status =
+          found.value === null
+            ? `waiting for pane ${pane}'s statusline to render on ${socketPath()}`
+            : `waiting for pane ${pane}'s bar`;
       } else {
-        if (found.kind === "transient") obtainDaemonKick();
-        show(describeFailure(found));
+        if (found.kind === "transient") {
+          obtainDaemonKick();
+          // The kick may say why on stderr, which is this pane.
+          painted = "";
+        }
+        status = describeFailure(found);
       }
-      await draw();
     }
+    redraw();
     await sleep(TICK_MS);
-    const listed = await listPlacement(tmux, pane);
-    if (listed.kind === "ok") {
-      tmuxAnsweredAt = Date.now();
-      placement = placementFrom(listed.stdout, pane, tmux.pane);
-    } else if (Date.now() - tmuxAnsweredAt > TMUX_PATIENCE_MS) {
-      throw new Error(`tmux has not answered for 5 s: ${listed.reason}`);
-    }
+    const asked = await askPlacement(tmux, pane);
+    placementAnswered(asked);
+    if (asked.kind === "ok") placement = asked.placement;
   }
   follow(null);
   process.stderr.write(`cc-candybar bar-pane: pane ${pane} closed\n`);
