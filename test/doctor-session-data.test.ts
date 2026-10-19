@@ -237,6 +237,20 @@ test("a render's transcript is answered once Claude Code has a response", () => 
   expect(said(null)).toEqual({ path: "/t/s.jsonl", answered: false });
 });
 
+test("a Claude Code that leaves no mark has not shown it answered", () => {
+  // Before 2.0.70 there is no current_usage; before that, no context_window.
+  expect(
+    transcriptSaid({
+      transcript_path: "/t/s.jsonl",
+      context_window: {} as never,
+    }),
+  ).toEqual({ path: "/t/s.jsonl", answered: false });
+  expect(transcriptSaid({ transcript_path: "/t/s.jsonl" })).toEqual({
+    path: "/t/s.jsonl",
+    answered: false,
+  });
+});
+
 describe("the CLI's transcripts", () => {
   const stats = (clients: unknown[]) =>
     ({ version: "9.9.9", clients }) as unknown as StatsSnapshot;

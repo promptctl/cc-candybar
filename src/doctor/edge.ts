@@ -470,7 +470,7 @@ export function transcriptWindow(
   const to = text.lastIndexOf("\n") + 1;
   let lines = 0;
   let unparsed = 0;
-  for (const line of text.slice(from, Math.max(from, to)).split("\n")) {
+  for (const line of text.slice(from, to).split("\n")) {
     const read = jsonLine(line);
     if (read.kind === "blank") continue;
     lines++;

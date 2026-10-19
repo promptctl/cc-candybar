@@ -296,11 +296,12 @@ export async function readTail(
   });
 }
 
-// [LAW:one-source-of-truth] readTail for a caller that must not yield — a
+// [LAW:one-source-of-truth] exception: readTail for a caller that must not yield — a
 // doctor probe, which runs synchronously on the daemon's loop. Outside the
 // gate: a synchronous read holds its one descriptor only while nothing else
 // runs. The window, the short-read loop, ENOENT as `absent` and the close that
-// never overrides the read are readTail's.
+// never overrides the read are readTail's, copied: a core generic over sync
+// and async reads would cost more than these lines.
 export function readTailSync(
   path: string,
   maxBytes: number,

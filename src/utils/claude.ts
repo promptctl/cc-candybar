@@ -526,9 +526,19 @@ export function jsonLine(line: string): JsonLine {
 // The entry one line contributes, if any — the step every parse loop takes.
 function entryOf(line: string): ParsedEntry | null {
   const read = jsonLine(line);
-  if (read.kind === "unparsed")
+  if (read.kind === "unparsed") {
     debug(`Failed to parse JSONL line: ${read.reason}`);
-  return read.kind === "object" ? makeEntry(read.value) : null;
+    return null;
+  }
+  if (read.kind === "blank") return null;
+  // A projection that throws on one odd line skips that line, as a parse
+  // failure does, rather than losing the whole transcript.
+  try {
+    return makeEntry(read.value);
+  } catch (projectionError) {
+    debug(`Failed to project JSONL line: ${projectionError}`);
+    return null;
+  }
 }
 
 // [LAW:one-source-of-truth] The one line→entry loop over text in hand. Both
