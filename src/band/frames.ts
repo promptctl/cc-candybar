@@ -153,7 +153,11 @@ export function bandFrame(ansi: string): BandFrame {
 // in the diagnostic strip's colours. The stream goes on, so the next bar it
 // can draw takes its place, as the statusline's next render replaces its
 // error glyph: a config fixed brings the band back.
+// The band's lane switched off (src/config/lanes.ts) is no bar at all: the
+// band draws nothing until the toggle is on again.
 export function bandLine(resp: Response): string {
+  if (!resp.ok && resp.code === "SWITCHED_OFF")
+    return JSON.stringify({ rows: [] } satisfies BandFrame);
   const ansi = planOutcome(renderOutcomeOf(resp)).output;
   try {
     return JSON.stringify(bandFrame(ansi));

@@ -7,7 +7,7 @@ statusline's one. Every `cc-candybar://` link is an OSC 8 span, so a click
 reaches the daemon as a statusline click does.
 
 Run it from a built checkout (`pnpm build`); the mod starts
-`node <checkout>/dist/index.mjs frames --session <id> --format band`, the
+`node <checkout>/dist/index.mjs frames --lane band --session <id> --format band`, the
 checkout it sits in:
 
 ```sh
@@ -18,7 +18,9 @@ claude --plugin-dir <checkout>/mod
 from the data its own statusline client sends, and `--format band` writes each
 as one JSON line of styled runs (`mod/types/index.d.ts`); the mod draws them as
 `Text` runs and `Link`s. The band shows nothing until the session's statusline
-has rendered once.
+has rendered once, and nothing while lane A's toggle is off: turn on
+`🧪 band (A)` in the settings menu's `⚙ config` tab (a draft until `💾 save`),
+or set `globals.experimentalBand: true` in the config file.
 
 What it cannot do yet:
 

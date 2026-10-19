@@ -99,7 +99,7 @@ test("an unknown --format is refused with exit 2 and the choices, as the other u
   try {
     await expect(
       runFrames(
-        ["node", "cc-candybar", "frames", "--format", "ansi"],
+        ["node", "cc-candybar", "frames", "--lane", "band", "--format", "ansi"],
         "/opt/cc/dist/index.mjs",
       ),
     ).rejects.toThrow("exit 2");
@@ -122,6 +122,14 @@ describe("bandLine", () => {
     expect(JSON.parse(bandLine({ ok: true, output: "a\nb\n" }))).toEqual(
       bandFrame("a\nb\n"),
     );
+  });
+
+  test("the band's lane switched off is no rows: the band draws nothing", () => {
+    expect(
+      JSON.parse(
+        bandLine({ ok: false, code: "SWITCHED_OFF", error: "🧪 band (A) is off" }),
+      ),
+    ).toEqual({ rows: [] });
   });
 
   test("a refused render draws the statusline's error glyph", () => {

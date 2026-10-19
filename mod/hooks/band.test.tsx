@@ -49,7 +49,7 @@ test('the band draws the session’s pushed frame, its links as Links', async ($
 
   // The child is asked for the session alone: its data is the statusline's.
   expect(spawned.map(argv => argv.slice(2))).toEqual([
-    ['frames', '--session', 'sid-1', '--format', 'band'],
+    ['frames', '--lane', 'band', '--session', 'sid-1', '--format', 'band'],
   ])
   expect(await ui.find({ type: 'Link' })).toMatchObject({
     props: { href: 'cc-candybar://dispatch/e=x' },
@@ -100,7 +100,7 @@ for (const reason of ['clear', 'resume'] as const) {
     await $.session.end({ reason, sessionId: 'sid-1', resume: { id: 'sid-1' } })
     await clock.advance(1)
 
-    expect(spawned.map(argv => argv[4])).toEqual(['sid-1', 'sid-2'])
+    expect(spawned.map(argv => argv[argv.indexOf('--session') + 1])).toEqual(['sid-1', 'sid-2'])
     expect(logged).toContain('candybar-band: frames for sid-1 stopped')
     expect(logged).toContain('candybar-band: frames started for sid-2')
     // Its links name the old session, so none of its frame is left to click.
@@ -233,7 +233,7 @@ test('follows run in the order they were asked for, so the newest session id win
     return { value: 'sid-1' }
   })
   on('process.spawn', async function* (_$, e) {
-    spawned.push(e.argv[4]!)
+    spawned.push(e.argv[e.argv.indexOf('--session') + 1]!)
     await clock.sleep(60_000)
     return { value: { code: 0, signal: null } }
   })

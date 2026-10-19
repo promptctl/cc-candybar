@@ -71,13 +71,16 @@ export const register: Register = on => {
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const { frame, failure } = await read($, bandAtom)
-    if (e.props.hasSurvey || (frame === null && failure === null)) return next(e)
+    // A frame with no rows is the band's lane switched off (🧪 band (A) in
+    // candybar's settings menu): the band draws nothing.
+    const rows = frame?.rows ?? []
+    if (e.props.hasSurvey || (rows.length === 0 && failure === null)) return next(e)
 
     const { Box, Text, Link } = $.ui.resolve(e)
     return (
       <Box flexDirection="column">
         {failure !== null && <Text color="error" wrap="truncate-end">{failure}</Text>}
-        {(frame?.rows ?? []).map((row, i) => (
+        {rows.map((row, i) => (
           <Text key={String(i)} wrap="truncate-end">
             {row.map((run, j) => drawRun(Text, Link, run, j))}
           </Text>
@@ -109,6 +112,8 @@ function start($: EngineInterface, sessionId: string): Child {
       'node',
       `${$.plugin.root}/../dist/index.mjs`,
       'frames',
+      '--lane',
+      'band',
       '--session',
       sessionId,
       '--format',
