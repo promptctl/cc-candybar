@@ -155,6 +155,8 @@ export function formatStats(s: StatsSnapshot): string {
   lines.push(``);
   lines.push(`renderCache`);
   lines.push(`  size          ${s.renderCache.size}`);
+  lines.push(`  held          ${s.renderCache.held}`);
+  lines.push(`  retired       ${s.renderCache.retired}`);
   lines.push(``);
   lines.push(`effectCache`);
   lines.push(`  sessions      ${s.effectCache.sessions}`);

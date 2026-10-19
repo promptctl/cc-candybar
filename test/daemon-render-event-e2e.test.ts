@@ -224,8 +224,15 @@ describe("every render request writes one render event, whatever its outcome", (
       () => existsSync(path.join(tmuxDir, "asked")),
       "the render never asked tmux",
     );
-    // Held at the gate, the render has written nothing yet.
+    // Held at the gate, the render has written nothing yet — and holds the
+    // config state it is drawing with (brandon-unfiled-3248.6rc).
     expect(eventsOf("ev-late")).toEqual([]);
+    const stats = () =>
+      sendDaemonRequest(sockPath, { v: PROTOCOL_VERSION, kind: "stats" });
+    await expect(stats()).resolves.toMatchObject({
+      ok: true,
+      stats: { renderCache: { held: 1 } },
+    });
     // A non-blocking open fails (ENXIO) once the stub has stopped reading,
     // rather than waiting for a reader that will never come.
     const gate = await open(
@@ -242,6 +249,11 @@ describe("every render request writes one render event, whatever its outcome", (
     const late = only(eventsOf("ev-late"));
     expect(field(late, "timedOut")).toBe("Y");
     expect(field(late, "outcome")).toBe("ok");
+    // Returned, it holds nothing: `using` released the hold on exit.
+    await expect(stats()).resolves.toMatchObject({
+      ok: true,
+      stats: { renderCache: { held: 0, retired: 0 } },
+    });
   });
 });
 
