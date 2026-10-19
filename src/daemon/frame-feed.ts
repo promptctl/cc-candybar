@@ -109,6 +109,9 @@ interface Feed {
   readonly since: number;
   drawn: number;
   noted: number;
+  // Next frames set at the moving rate, and those set at the still rate
+  // because the moving bar was on no screen: counts of the decision, since
+  // only the decision asks whether a bar is seen.
   moving: number;
   unseen: number;
   failed: number;

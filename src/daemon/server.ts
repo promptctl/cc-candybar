@@ -242,24 +242,22 @@ const paneVisibility: PaneVisibility = new PaneVisibility({
     ]),
   // The servers of the sessions someone is watching.
   sockets: () =>
-    new Set(
-      frameFeeds
-        .watched()
-        .flatMap(({ req: { hints } }) =>
-          hints.tmux === null || hints.tmux === undefined
-            ? []
-            : [hints.tmux.socket],
-        ),
-    ),
+    new Set(frameFeeds.watched().flatMap(({ req }) => tmuxServersOf(req))),
   // Only the sessions on a server whose view changed are drawn again.
   onChange: (sockets) =>
-    frameFeeds.wakeWhere(
-      ({ hints: { tmux } }) =>
-        tmux !== null && tmux !== undefined && sockets.has(tmux.socket),
+    frameFeeds.wakeWhere((req) =>
+      tmuxServersOf(req).some((socket) => sockets.has(socket)),
     ),
   intervalMs: 1000,
   log: dlog,
 });
+// [LAW:one-source-of-truth] The tmux server a session's bar is on, as the
+// servers it is on: none outside tmux or from a client too old to say.
+function tmuxServersOf({
+  hints: { tmux },
+}: CheckedRenderRequest): readonly string[] {
+  return tmux === null || tmux === undefined ? [] : [tmux.socket];
+}
 // [LAW:locality-or-seam] Same terms as sessionState: naming the directory is
 // free; the daemon wipes it in onListening() (reset), once the bind is
 // won, and is the only writer.
@@ -1088,8 +1086,10 @@ export async function handleRequest(
 
   if (req.kind === "subscribe") return subscription(req);
   // [LAW:parse-dont-validate] The kind is untrusted JSON: one no request
-  // carries is refused here, so replyTo is total over the kinds it is typed for.
-  if (!Object.hasOwn(REPLY_KINDS, req.kind))
+  // carries — a name no kind has, or no name at all, which `Object.hasOwn`
+  // would coerce into one — is refused here, so replyTo is total over the
+  // kinds it is typed for.
+  if (typeof req.kind !== "string" || !Object.hasOwn(REPLY_KINDS, req.kind))
     return replied(
       stay({
         ok: false,

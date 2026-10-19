@@ -299,37 +299,45 @@ test("a moving answer noted while a still frame is drawn sets the pace of the ne
   expect(state.renders).toBeGreaterThanOrEqual(2);
 });
 
-// Whether anyone can see a bar is the feed's question, asked as it sets the
-// next frame: one that comes into view is drawn at the moving rate from then.
-test("a moving bar that comes into view is drawn at the moving rate from then", async () => {
-  const { feeds, note, state, log } = harness({ motion: "unseen" });
-  note("s", "bar");
-  const close = feeds.subscribe("s", sub(() => {}));
-  await sleep(50);
-  expect(state.renders).toBe(1);
-  state.motion = "moving";
-  feeds.wakeWhere(() => true);
-  await sleep(100);
-  close();
-  expect(state.renders).toBeGreaterThanOrEqual(4);
-  expect(log.at(-1)).toMatch(/ moving=[1-9]\d* unseen=1 /);
-});
+// On a faked clock, so a count of frames is exact.
+describe("on a faked clock", () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+  const pass = (ms: number): Promise<void> => jest.advanceTimersByTimeAsync(ms);
 
-test("wakeWhere draws at once only the watched sessions it matches", async () => {
-  const { feeds, note, state } = harness({ motion: "still" });
-  note("a", "%1:a");
-  note("b", "%2:b");
-  note("c", "%1:c");
-  const closeA = feeds.subscribe("a", sub(() => {}));
-  const closeB = feeds.subscribe("b", sub(() => {}));
-  await sleep(20);
-  const renders = state.renders;
-  // c matches but nobody watches it, so nothing is drawn for it.
-  feeds.wakeWhere((req) => req.startsWith("%1:"));
-  await sleep(20);
-  closeA();
-  closeB();
-  expect(state.renders).toBe(renders + 1);
+  // Whether anyone can see a bar is the feed's question, asked as it sets the
+  // next frame: one that comes into view is drawn at the moving rate from then.
+  test("a moving bar that comes into view is drawn at the moving rate from then", async () => {
+    const { feeds, note, state, log } = harness({ motion: "unseen" });
+    note("s", "bar");
+    const close = feeds.subscribe("s", sub(() => {}));
+    await pass(50);
+    expect(state.renders).toBe(1);
+    state.motion = "moving";
+    feeds.wakeWhere(() => true);
+    // Drawn at once at 50 ms, then a moving period apart through 150.
+    await pass(100);
+    close();
+    expect(state.renders).toBe(7);
+    expect(log.at(-1)).toMatch(/ moving=6 unseen=1 /);
+  });
+
+  test("wakeWhere draws at once only the watched sessions it matches", async () => {
+    const { feeds, note, state } = harness({ motion: "still" });
+    note("a", "%1:a");
+    note("b", "%2:b");
+    note("c", "%1:c");
+    const closeA = feeds.subscribe("a", sub(() => {}));
+    const closeB = feeds.subscribe("b", sub(() => {}));
+    await pass(20);
+    expect(state.renders).toBe(2);
+    // c matches but nobody watches it, so nothing is drawn for it.
+    feeds.wakeWhere((req) => req.startsWith("%1:"));
+    await pass(20);
+    closeA();
+    closeB();
+    expect(state.renders).toBe(3);
+  });
 });
 
 // What runs while any feed exists (the tmux visibility loop) starts with the

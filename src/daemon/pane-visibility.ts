@@ -136,7 +136,11 @@ export class PaneVisibility {
   private ask(): void {
     const loop: Loop = { kind: "asking", following: true };
     this.loop = loop;
-    void this.refresh(this.deps.sockets())
+    // [LAW:no-ambient-temporal-coupling] Reading which servers to ask is part
+    // of the refresh: a throw from it takes the same catch, and the loop goes
+    // on rather than staying "asking" with nothing in flight.
+    void Promise.resolve()
+      .then(() => this.refresh(this.deps.sockets()))
       .catch((err: unknown) =>
         this.deps.log("error", `visibility refresh threw: ${inspect(err)}`),
       )
@@ -170,7 +174,7 @@ export class PaneVisibility {
 
   // Asks each of `sockets` which panes it shows, and forgets every server not
   // among them. One query per server, all at once.
-  async refresh(sockets: ReadonlySet<string>): Promise<void> {
+  private async refresh(sockets: ReadonlySet<string>): Promise<void> {
     for (const socket of this.servers.keys())
       if (!sockets.has(socket)) this.servers.delete(socket);
     const answers = await Promise.all(

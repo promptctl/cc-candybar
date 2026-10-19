@@ -45,13 +45,25 @@ describe("shownPanes", () => {
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
+// The loop's clock is faked: each test passes its time, so a count of asks is
+// exact rather than a guess at what a loaded machine fits in a wall-clock wait.
 describe("PaneVisibility", () => {
-  // `answerMs` holds each list-panes answer back that long; `asks` counts
-  // them and `inFlight`/`overlap` record whether two were ever out at once.
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+
+  const INTERVAL_MS = 1000;
+  // Lets the loop's clock run `ms` on, every ask that falls due answering.
+  const pass = (ms: number): Promise<void> => jest.advanceTimersByTimeAsync(ms);
+
+  // `sockets` is the servers the loop is told to ask, and reading them throws
+  // while `readFails` is set. `answerMs` holds each
+  // list-panes answer back that long; `asks` counts them and `overlap`
+  // records whether two were ever out at once.
   function harness(answers: Record<string, TmuxRun>, answerMs = 0) {
     const changes: string[][] = [];
     const log: string[] = [];
-    const counts = { asks: 0, inFlight: 0, overlap: false };
+    const sockets = new Set(Object.keys(answers));
+    const counts = { asks: 0, inFlight: 0, overlap: false, readFails: false };
     const visibility = new PaneVisibility({
       listPanes: async (socket) => {
         counts.asks++;
@@ -62,12 +74,16 @@ describe("PaneVisibility", () => {
         return answers[socket]!;
       },
       listClients: () => Promise.resolve({ kind: "ok", stdout: "" } as TmuxRun),
-      sockets: () => new Set(Object.keys(answers)),
-      onChange: (sockets) => changes.push([...sockets]),
-      intervalMs: 20,
+      sockets: () => {
+        if (counts.readFails) throw new Error("the read broke");
+        return sockets;
+      },
+      onChange: (changed) => changes.push([...changed]),
+      intervalMs: INTERVAL_MS,
       log: (_level, line) => log.push(line),
     });
-    return { visibility, changes, log, answers, counts };
+    const serverLog = () => log.filter((l) => l.startsWith("visibility socket="));
+    return { visibility, changes, log, serverLog, answers, sockets, counts };
   }
 
   test("a session outside tmux, or on a server not yet asked, counts as shown", () => {
@@ -81,17 +97,18 @@ describe("PaneVisibility", () => {
     const h = harness({
       "/s": { kind: "ok", stdout: "%1 $1 1 1 0 1\n%2 $2 0 1 0 1\n" },
     });
-    await h.visibility.refresh(new Set(["/s"]));
+    const stop = h.visibility.follow();
+    await pass(0);
     expect(h.visibility.shown(hint("/s", "%1"))).toBe(true);
     expect(h.visibility.shown(hint("/s", "%2"))).toBe(false);
     expect(h.changes).toHaveLength(1);
-    await h.visibility.refresh(new Set(["/s"]));
+    await pass(INTERVAL_MS);
     expect(h.changes).toHaveLength(1);
     h.answers["/s"] = { kind: "ok", stdout: "%2 $2 1 1 0 1\n" };
-    await h.visibility.refresh(new Set(["/s"]));
-    expect(h.visibility.shown(hint("/s", "%2"))).toBe(true);
+    await pass(INTERVAL_MS);
+    stop();
     expect(h.changes).toEqual([["/s"], ["/s"]]);
-    expect(h.log).toEqual([
+    expect(h.serverLog()).toEqual([
       'visibility socket="/s" shown=%1',
       'visibility socket="/s" shown=%2',
     ]);
@@ -99,44 +116,63 @@ describe("PaneVisibility", () => {
 
   test("a server that cannot be asked shows every pane, and says why once", async () => {
     const h = harness({ "/s": { kind: "ok", stdout: "%1 $1 0 1 0 1\n" } });
-    await h.visibility.refresh(new Set(["/s"]));
+    const stop = h.visibility.follow();
+    await pass(0);
     expect(h.visibility.shown(hint("/s", "%1"))).toBe(false);
     h.answers["/s"] = {
       kind: "failed",
       reason: "tmux list-panes failed (no server)",
     };
-    await h.visibility.refresh(new Set(["/s"]));
-    await h.visibility.refresh(new Set(["/s"]));
+    await pass(2 * INTERVAL_MS);
+    stop();
     expect(h.visibility.shown(hint("/s", "%1"))).toBe(true);
     expect(h.log.filter((l) => l.includes("unasked"))).toHaveLength(1);
   });
 
   test("a server no watched session is on is forgotten", async () => {
     const h = harness({ "/s": { kind: "ok", stdout: "%1 $1 0 1 0 1\n" } });
-    await h.visibility.refresh(new Set(["/s"]));
+    const stop = h.visibility.follow();
+    await pass(0);
     expect(h.visibility.shown(hint("/s", "%1"))).toBe(false);
-    await h.visibility.refresh(new Set());
+    h.sockets.delete("/s");
+    await pass(INTERVAL_MS);
+    stop();
     expect(h.visibility.shown(hint("/s", "%1"))).toBe(true);
   });
 
+  test("a throw reading which servers to ask is logged, and the loop goes on", async () => {
+    const h = harness({ "/s": { kind: "ok", stdout: "%1 $1 0 1 0 1\n" } });
+    h.counts.readFails = true;
+    const stop = h.visibility.follow();
+    await pass(0);
+    expect(h.log.filter((l) => l.includes("refresh threw"))).toEqual([
+      expect.stringContaining("the read broke"),
+    ]);
+    h.counts.readFails = false;
+    await pass(INTERVAL_MS);
+    expect(h.visibility.shown(hint("/s", "%1"))).toBe(false);
+    stop();
+  });
+
   test("follow asks at once and each interval after, never twice at once, until it stops", async () => {
-    // Each answer takes longer than the interval.
-    const h = harness({ "/s": { kind: "ok", stdout: "%1 $1 0 1 0 1\n" } }, 30);
+    // Each answer takes longer than the interval: the next ask is due an
+    // interval after the last answered, at 0, 2500 and 5000 ms.
+    const h = harness({ "/s": { kind: "ok", stdout: "%1 $1 0 1 0 1\n" } }, 1500);
     const stop = h.visibility.follow();
     // A second follow while the loop runs starts no second loop.
     h.visibility.follow();
-    await sleep(10);
+    await pass(10);
     expect(h.counts.asks).toBe(1);
-    await sleep(150);
-    const asked = h.counts.asks;
-    expect(asked).toBeGreaterThanOrEqual(3);
+    await pass(5090);
+    expect(h.counts.asks).toBe(3);
     expect(h.counts.overlap).toBe(false);
     expect(h.visibility.shown(hint("/s", "%1"))).toBe(false);
+    // Stopped with an ask out: it answers, and no other is made.
     stop();
-    await sleep(100);
-    // The ask in flight at the stop may answer; no other is made, and the
-    // stopped loop keeps no server's answer.
-    expect(h.counts.asks).toBeLessThanOrEqual(asked + 1);
+    await pass(10 * INTERVAL_MS);
+    expect(h.counts.asks).toBe(3);
+    // The stopped loop keeps no timer and no server's answer.
+    expect(jest.getTimerCount()).toBe(0);
     expect(h.visibility.shown(hint("/s", "%1"))).toBe(true);
     // One start and one stop, the stop naming the answers it dropped.
     expect(h.log.filter((l) => !l.startsWith("visibility socket="))).toEqual([
@@ -146,22 +182,24 @@ describe("PaneVisibility", () => {
   });
 
   test("an answer that arrives after the stop does not stand, and a follow at once after it waits its turn", async () => {
-    const h = harness({ "/s": { kind: "ok", stdout: "%1 $1 0 1 0 1\n" } }, 30);
+    const h = harness({ "/s": { kind: "ok", stdout: "%1 $1 0 1 0 1\n" } }, 1500);
     const stop = h.visibility.follow();
-    await sleep(5);
+    await pass(5);
     stop();
-    await sleep(60);
+    await pass(3000);
     expect(h.counts.asks).toBe(1);
     expect(h.visibility.shown(hint("/s", "%1"))).toBe(true);
     // Stopped and followed again while an ask is out: the loop carries on
     // from that ask rather than starting a second beside it.
     const again = h.visibility.follow();
-    await sleep(5);
+    await pass(5);
     again();
     const resumed = h.visibility.follow();
-    await sleep(100);
+    await pass(10 * INTERVAL_MS);
     resumed();
     expect(h.counts.overlap).toBe(false);
-    expect(h.counts.asks).toBeGreaterThanOrEqual(3);
+    // The one before the stop, then from the follow at 3005 ms an ask every
+    // 2500 ms through 13005.
+    expect(h.counts.asks).toBe(6);
   });
 });
