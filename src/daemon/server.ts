@@ -1000,13 +1000,19 @@ const renderFailed = (err: unknown): Response => ({
   daemonV: PROTOCOL_VERSION,
 });
 
+// [LAW:single-enforcer] The checkpoint's one refusal: the request is
+// answered, never streamed, and the connection stays up.
+const refuse = (
+  code: "BAD_REQUEST" | "VERSION_MISMATCH",
+  error: string,
+): HandledRequest =>
+  replied(stay({ ok: false, error, code, daemonV: PROTOCOL_VERSION }));
+
 // A subscribe past the connection's checkpoint: the subscription it opens, or
 // the reply refusing it.
 // [LAW:parse-dont-validate] Trust boundary: the session id and the lane are
 // untrusted JSON; the id keys the feed and the lane is what its toggle gates.
 function subscription(req: SubscribeRequest): HandledRequest {
-  const refuse = (code: "BAD_REQUEST" | "VERSION_MISMATCH", error: string) =>
-    replied(stay({ ok: false, error, code, daemonV: PROTOCOL_VERSION }));
   if (typeof req.sessionId !== "string" || req.sessionId === "")
     return refuse(
       "BAD_REQUEST",
@@ -1039,14 +1045,7 @@ export async function handleRequest(
     typeof req !== "object" ||
     typeof (req as Request).v !== "number"
   ) {
-    return replied(
-      stay({
-        ok: false,
-        error: "malformed request",
-        code: "BAD_REQUEST",
-        daemonV: PROTOCOL_VERSION,
-      }),
-    );
+    return refuse("BAD_REQUEST", "malformed request");
   }
 
   if (req.v !== PROTOCOL_VERSION) {
@@ -1090,14 +1089,7 @@ export async function handleRequest(
   // would coerce into one — is refused here, so replyTo is total over the
   // kinds it is typed for.
   if (typeof req.kind !== "string" || !Object.hasOwn(REPLY_KINDS, req.kind))
-    return replied(
-      stay({
-        ok: false,
-        error: "unknown kind",
-        code: "BAD_REQUEST",
-        daemonV: PROTOCOL_VERSION,
-      }),
-    );
+    return refuse("BAD_REQUEST", "unknown kind");
   return replied(await replyTo(req, timedOut));
 }
 
@@ -1405,7 +1397,7 @@ export const reloadConfig = verbCtx.reloadConfig;
 
 // [LAW:single-enforcer] Style + color compatibility shared by the render
 // path and the lazy debug-side per-segment serializer. Per-request `width`
-// is composed on top at the wire boundary (handleRequest("render")) and
+// is composed on top at the wire boundary (replyTo's render arm) and
 // passed through as renderOpts. Debug serialization composes its own
 // per-segment opts with width: Number.POSITIVE_INFINITY since each segment
 // is rendered standalone (wrap doesn't apply to a one-segment projection).

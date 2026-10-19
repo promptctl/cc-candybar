@@ -192,7 +192,7 @@ export class FrameFeeds<Req> {
       return;
     }
     feed.noted++;
-    this.count(feed, frame);
+    this.countFailure(feed, frame);
     this.push(feed, frame);
     if (this.feeds.get(sessionId) !== feed) return;
     const now = this.deps.now();
@@ -367,7 +367,7 @@ export class FrameFeeds<Req> {
     // Unsubscribed while this frame was drawn: the feed is gone, and so is
     // its clock.
     if (this.feeds.get(feed.sessionId) !== feed) return;
-    this.count(feed, frame);
+    this.countFailure(feed, frame);
     // A request noted while this frame was drawn was pushed as its own frame;
     // this one, of the data before it, would step the bar back.
     if (this.requests.get(feed.sessionId) === noted) {
@@ -415,7 +415,7 @@ export class FrameFeeds<Req> {
     return noted === undefined || this.deps.shown(noted.req);
   }
 
-  private count(feed: Feed, frame: FeedFrame): void {
+  private countFailure(feed: Feed, frame: FeedFrame): void {
     if (frame.failure !== null) feed.failed++;
   }
 
