@@ -1601,7 +1601,7 @@ writes unsaved, so the two always show the same theme:
 ```
 
 ```render
- 🍫  ✱ Opus 4.8 
+ 🍫  ✱ Opus 4.8 󰶼 
  ◀ nord ▀▀▀ ▶ 
 ```
 

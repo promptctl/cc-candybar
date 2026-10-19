@@ -120,6 +120,12 @@ export function checkPayload(
     cwd: `${home}/code/cc-candybar/src`,
     transcript_path: `${home}/.claude/projects/x/test.jsonl`,
     model: { id: "claude-opus-4-8", display_name: "Opus 4.8" },
+    // An effort level, so the model cell draws its effort gauge and gets that
+    // template checked. Not max: max climbs a frame a second, and `check`
+    // renders at the wall clock, so its bar (and every doc fence pinned to
+    // it) would change from one second to the next. Every level computes
+    // max's bubble, colours and frames, so xhigh evaluates them too.
+    effort: { level: "xhigh" },
     workspace,
     git: {
       repoName: "cc-candybar",

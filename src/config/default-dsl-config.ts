@@ -106,6 +106,12 @@ const DIR_TEMPLATE =
 // The recipe and its measured floor are `QUIET_TEXT` (src/config/quiet-text.ts).
 const GIT_QUIET_FG = `{{ ${QUIET_TEXT} }}`;
 
+// How far max effort's bubble stands off the model cell, at least. The
+// bubble is 40% of the way from the cell to accent, which stands 1.09–1.12:1
+// off the cell in every bundled theme but `textual-ansi`, whose cell IS the
+// accent: there the floor lifts it as far as it stands everywhere else.
+export const EFFORT_BUBBLE_CONTRAST = 1.08;
+
 // [LAW:dataflow-not-control-flow] Every threshold cascade below is one
 // `ramp <value> "step" <at> <colour> …` call (rich-js `paletteFuncs`): the
 // value flows through ascending stops and the cell wears the last stop it
@@ -200,6 +206,25 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       kind: "input",
       path: "model.display_name",
       default: "",
+    },
+    // The session's reasoning-effort setting (`/effort`): one of
+    // low|medium|high|xhigh|max, or "" when Claude Code sends none.
+    "effort.level": {
+      kind: "input",
+      path: "effort.level",
+      default: "",
+    },
+    // The effort gauge's glyph ladder, space-separated, one entry per ordinal
+    // the `effortGauge` helper folds a level to: unknown, low, medium, high,
+    // xhigh — the Nerd Font chevron_up / chevron_double_up / chevron_triple_up
+    // icons (nf-md, U+F0143 / U+F013F / U+F0DBC). Max has no entry: it climbs
+    // the low, high and xhigh rungs. Low and medium share the single chevron
+    // on purpose and are told apart by colour: low is quiet. A font without
+    // the icons overrides this variable (e.g. `"? ↑ ↑ ⇈ ⤊"`) — and, for max,
+    // the `effortGauge` helper, which draws the bubble's caps (U+E0B6/U+E0B4).
+    "effort.glyphs": {
+      kind: "literal",
+      value: "? \u{F0143} \u{F0143} \u{F013F} \u{F0DBC}",
     },
     version: { kind: "input", path: "version", default: "" },
 
@@ -633,8 +658,10 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     },
     model: {
       group: "model-context",
-      description: "The active model's display name.",
-      template: "✱ {{ formatModelName .model.display_name }}",
+      description:
+        "The active model's display name, followed by the effort gauge (a chevron ladder, climbing on a bubble at max) when an effort level is set.",
+      template:
+        '✱ {{ formatModelName .model.display_name }}{{ if ne .effort.level "" }} {{ template "effortGauge" . }}{{ end }}',
       when: '{{ ne .model.display_name "" }}',
     },
     sessionId: {
@@ -1476,6 +1503,40 @@ export const RAW_DEFAULT_DSL_CONFIG = {
   // single dot arg — variability flows as data across one boundary, not as a
   // bespoke multi-arg signature.
   helpers: {
+    // The effort gauge: the `effort.glyphs` rung for the level, in quiet text
+    // at low (the inactive colour, the same recipe the menu's inert controls
+    // wear) and in the theme's `accent` from medium to xhigh. Max climbs the
+    // ladder — one chevron, two, three, a second each — on a bubble 40% of the
+    // way from the cell to accent, stepping through the decorative roles as it
+    // climbs. The bubble is what keeps a frame of the climb from reading as
+    // low, high or xhigh. A second a frame because Claude Code redraws at most
+    // once a second (`statusLine.refreshInterval: 1`); a shorter hold would
+    // only alias. Every colour is floored at TEXT_MIN_CONTRAST on its ground:
+    // the cell wears the accent hue, where the raw accent measured 1.00:1 on
+    // `textual-ansi`. Effort is a choice, not an alert, so no rung wears
+    // `warning`/`error` — those hues keep their meaning for the cells that
+    // measure danger.
+    // [LAW:dataflow-not-control-flow] The level is folded to an ordinal once,
+    // and every level computes max's bubble, colours and frames, so a render at
+    // any level evaluates the whole template (`check` renders xhigh: max moves
+    // a frame a second). The one branch is the domain's own, and it chooses
+    // only what is drawn: max draws its bubble, every other level its rung on
+    // the cell as the cell is filled — which may be no fill at all
+    // (`bg: "none"`), so below max nothing paints a background. A level
+    // outside the five known names is ordinal 0: the ladder's `?`, visible
+    // rather than blank. The ladder is split on runs of spaces, so a doubled
+    // space shifts no rung. Called with the scope as dot.
+    effortGauge:
+      '{{ $ord := default 0 (get (dict "low" 1 "medium" 2 "high" 3 "xhigh" 4 "max" 5) .effort.level) }}' +
+      '{{ $glyphs := compact (splitList " " .effort.glyphs) }}' +
+      `{{ $bubble := readableOn (mix (bgOf) (color "accent") 40) (bgOf) ${EFFORT_BUBBLE_CONTRAST} }}` +
+      `{{ $climbing := readableOn (stepped 1 (color "primary") 1 (color "secondary") 1 (color "accent")) $bubble ${TEXT_MIN_CONTRAST} }}` +
+      "{{ $climb := frames 1 (index $glyphs 1) 1 (index $glyphs 3) 1 (index $glyphs 4) }}" +
+      "{{ if eq $ord 5 }}" +
+      '{{ fg $bubble "\u{E0B6}" }}{{ bg $bubble (fg $climbing $climb) }}{{ fg $bubble "\u{E0B4}" }}' +
+      "{{ else }}" +
+      `{{ fg (ramp $ord "step" 0 (${QUIET_TEXT}) 2 (readableOn (color "accent") (bgOf) ${TEXT_MIN_CONTRAST})) (index $glyphs $ord) }}` +
+      "{{ end }}",
     // Text in a palette colour, floored at TEXT_MIN_CONTRAST against the cell
     // it sits on: a theme's `success`/`warning`/`accent` is designed against
     // its own background, not the tint a bar cell wears (the raw role measured

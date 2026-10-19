@@ -12,8 +12,13 @@ import { stripAnsi } from "./helpers/ansi";
 import {
   DEFAULT_DSL_CONFIG,
   RAW_DEFAULT_DSL_CONFIG,
+  EFFORT_BUBBLE_CONTRAST,
 } from "../src/config/default-dsl-config";
-import { walkNodes, type DslConfig } from "../src/config/dsl-types";
+import {
+  walkNodes,
+  type DslConfig,
+  type ValidatedConfig,
+} from "../src/config/dsl-types";
 import { isReservedName } from "../src/config/loader/reserved-namespace";
 import { rootNode } from "../src/config/root";
 import {
@@ -27,7 +32,13 @@ import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
-import { getThemePalette, ColorRgba, contrastRatio } from "@promptctl/rich-js";
+import {
+  getThemePalette,
+  ColorRgba,
+  ColorSpec,
+  contrastRatio,
+  decodeAnsi,
+} from "@promptctl/rich-js";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import {
   resolveThemeSelection,
@@ -46,11 +57,16 @@ import { EDIT_MODE_KEY, EDIT_MODE_ARRANGE } from "../src/config/loader/edit-mode
 import { narrowToSegment } from "./helpers/narrow-to-segment";
 import { checkPayload } from "../src/check";
 import {
+  renderOptionsOf,
+  renderSelectionOf,
   resolveEffectiveGlobals,
   type EffectiveGlobals,
 } from "../src/daemon/render-payload";
+import { resolvedStyle } from "../src/render/rich-theme";
+import { TEXT_MIN_CONTRAST } from "../src/themes/decor";
+import { QUIET_MIN_CONTRAST } from "../src/config/quiet-text";
 import { INVISIBLE, linkUrls } from "./helpers/ansi";
-import { instantOf } from "../src/utils/instant";
+import { type Instant, instantOf } from "../src/utils/instant";
 
 // Visible segment text: every zero-width escape, plus the powerline cap glyphs.
 const ANSI_AND_CAPS = new RegExp(`${INVISIBLE.source}|[\\u{E0B0}-\\u{E0BC}]`, "gu");
@@ -228,6 +244,281 @@ describe("DEFAULT_DSL_CONFIG", () => {
     } finally {
       registry.dispose();
     }
+  });
+
+  // The model segment's effort gauge: one rung of the ladder per level,
+  // present exactly when Claude Code sends an effort level, `?` for a level
+  // the gauge does not know — visible, never silently blank — and every rung
+  // legible on the model cell in every bundled theme, measured on the colours
+  // drawn. That cell wears the accent hue, so a rung drawn in the raw accent
+  // vanishes on it (1.00:1 on textual-ansi): the floors are what keep it.
+  describe("the model segment's effort gauge", () => {
+    const parsed = parseAndValidate("<default>", SERIALIZED);
+    const at = instantOf(new Date());
+    // The rung each level draws, and the floor it stands at on the cell: the
+    // quiet rungs at the quiet floor, every other at the text floor.
+    const RUNGS = {
+      low: { glyph: "\u{F0143}", floor: QUIET_MIN_CONTRAST },
+      medium: { glyph: "\u{F0143}", floor: TEXT_MIN_CONTRAST },
+      high: { glyph: "\u{F013F}", floor: TEXT_MIN_CONTRAST },
+      xhigh: { glyph: "\u{F0DBC}", floor: TEXT_MIN_CONTRAST },
+      "something-new": { glyph: "?", floor: QUIET_MIN_CONTRAST },
+    } as const;
+    const NAME = "Opus 4.8 ";
+
+    // [LAW:one-source-of-truth] The theme resolved as a session's pick is,
+    // by the daemon's own resolution, over `check`'s fixture with Claude Code
+    // sending `effort` (or none). Returns the row holding the model cell.
+    function modelRows(
+      theme: string,
+      config: ValidatedConfig = parsed,
+    ): {
+      row: (effort: { level: string } | undefined, when?: Instant) => string;
+      dispose: () => void;
+    } {
+      const effective = resolveEffectiveGlobals(
+        config,
+        (key) => (key === "theme" ? theme : null),
+        () => false,
+      );
+      const store = new VariableStore();
+      const registry = new SourceRegistry(
+        store,
+        "",
+        undefined,
+        new SessionState(),
+      );
+      const compiled = registerDslConfig(config, registry, {
+        cwd: process.cwd(),
+      });
+      const row = (
+        effort: { level: string } | undefined,
+        when: Instant = at,
+      ): string => {
+        const { effort: _fixtureEffort, ...payload } = checkPayload(
+          effective,
+          null,
+          when,
+        );
+        const errors: string[] = [];
+        const rendered = renderDsl(
+          config,
+          compiled,
+          store,
+          registry,
+          effort === undefined ? payload : { ...payload, effort },
+          when,
+          renderOptionsOf(effective, Number.POSITIVE_INFINITY),
+          { onSegmentError: (id, message) => errors.push(`${id}: ${message}`) },
+          renderSelectionOf(effective),
+        );
+        expect(errors).toEqual([]);
+        const found = rendered
+          .split("\n")
+          .find((line) => stripAnsi(line).includes(NAME));
+        if (found === undefined)
+          throw new Error(`${theme}: no row holds the model cell`);
+        return found;
+      };
+      return { row, dispose: () => registry.dispose() };
+    }
+
+    // [LAW:parse-dont-validate] A colour the terminal draws, or a loud
+    // failure naming what was not one.
+    const drawn = (
+      spec: string | ColorSpec | undefined,
+      what: string,
+    ): ColorRgba => {
+      if (!(spec instanceof ColorSpec)) {
+        throw new Error(
+          `the rung's ${what} is not a drawn colour: ${String(spec)}`,
+        );
+      }
+      return spec.getTruecolor();
+    };
+
+    // The rung after the model's name (past `skip` characters: max's cap) — its glyph, its colour, and the
+    // contrast it is drawn at on its ground — read through rich-js's own
+    // decoder (the inverse of the writer).
+    function rungOf(
+      row: string,
+      skip = 0,
+    ): {
+      glyph: string;
+      colour: string;
+      ground: string;
+      contrast: number;
+    } {
+      const text = decodeAnsi(row);
+      const start = text.plain.indexOf(NAME) + NAME.length + skip;
+      const span = text.spans.findLast(
+        (s) => s.start <= start && start < s.end,
+      );
+      if (span === undefined) throw new Error(`no span draws the rung: ${row}`);
+      const { color, bgcolor } = resolvedStyle(span.style);
+      const fg = drawn(color, "colour");
+      const ground = drawn(bgcolor, "ground");
+      return {
+        glyph: String.fromCodePoint(text.plain.codePointAt(start)!),
+        colour: fg.hex,
+        ground: ground.hex,
+        contrast: contrastRatio(fg, ground),
+      };
+    }
+
+    test.each(listResolvablePaletteNames())(
+      "under %s, each level draws its rung, on the cell at its floor",
+      (theme) => {
+        const { row, dispose } = modelRows(theme);
+        try {
+          const rungs = Object.entries(RUNGS).map(([level, { floor }]) => ({
+            level,
+            floor,
+            ...rungOf(row({ level })),
+          }));
+          // The whole ladder at once, then every rung under its floor.
+          expect(
+            Object.fromEntries(rungs.map(({ level, glyph }) => [level, glyph])),
+          ).toEqual(
+            Object.fromEntries(
+              Object.entries(RUNGS).map(([level, { glyph }]) => [level, glyph]),
+            ),
+          );
+          expect(
+            rungs
+              .filter(({ contrast, floor }) => contrast < floor)
+              .map(
+                ({ level, contrast, floor }) =>
+                  `${level}: ${contrast.toFixed(2)} (floor ${floor})`,
+              ),
+          ).toEqual([]);
+          // Low and medium share a glyph: colour is what tells them apart.
+          const colourOf = new Map(
+            rungs.map(({ level, colour }) => [level, colour]),
+          );
+          expect(colourOf.get("low")).not.toBe(colourOf.get("medium"));
+          // No effort level draws no rung at all.
+          const none = stripAnsi(row(undefined));
+          expect(none).toContain(NAME);
+          for (const { glyph } of Object.values(RUNGS)) {
+            expect(none).not.toContain(`${NAME}${glyph}`);
+          }
+        } finally {
+          dispose();
+        }
+      },
+    );
+    // A default config with `edit` applied to its raw declarations.
+    const variant = (
+      edit: (raw: { segments: Record<string, object>; variables: Record<string, object> }) => void,
+    ) => {
+      const raw = structuredClone(RAW_DEFAULT_DSL_CONFIG) as unknown as {
+        segments: Record<string, object>;
+        variables: Record<string, object>;
+      };
+      edit(raw);
+      return parseAndValidate("<default>", JSON.stringify(raw));
+    };
+
+    test("below max, a rung on a cell with no fill paints no background", () => {
+      const { row, dispose } = modelRows(
+        listResolvablePaletteNames()[0]!,
+        variant((raw) => {
+          raw.segments.model = { ...raw.segments.model, bg: "none" };
+        }),
+      );
+      try {
+        const painted = (["low", "medium", "high", "xhigh"] as const).flatMap(
+          (level) => {
+            const text = decodeAnsi(row({ level }));
+            const start = text.plain.indexOf(NAME) + NAME.length;
+            const span = text.spans.findLast(
+              (s) => s.start <= start && start < s.end,
+            );
+            const { bgcolor } = resolvedStyle(span!.style);
+            return bgcolor === undefined ? [] : [`${level}: ${String(bgcolor)}`];
+          },
+        );
+        expect(painted).toEqual([]);
+      } finally {
+        dispose();
+      }
+    });
+
+    test("the ladder is split on runs of spaces, so a doubled one shifts no rung", () => {
+      const { row, dispose } = modelRows(
+        listResolvablePaletteNames()[0]!,
+        variant((raw) => {
+          raw.variables["effort.glyphs"] = {
+            kind: "literal",
+            value: " ?  a b  c d",
+          };
+        }),
+      );
+      try {
+        expect(
+          ["low", "medium", "high", "xhigh"].map(
+            (level) => rungOf(row({ level })).glyph,
+          ),
+        ).toEqual(["a", "b", "c", "d"]);
+      } finally {
+        dispose();
+      }
+    });
+
+    // Max climbs the ladder on a bubble: one chevron, two, three, a second
+    // each, a colour per frame, every frame at the text floor on the bubble
+    // and the bubble standing off the cell the other rungs sit on.
+    test.each(listResolvablePaletteNames())(
+      "under %s, max climbs the ladder on a bubble, a frame a second",
+      (theme) => {
+        const { row, dispose } = modelRows(theme);
+        try {
+          // The cycle is three one-second frames on the epoch's clock: the
+          // middle of each second of a cycle draws that second's frame.
+          const cycle = 3000 * Math.floor(Date.now() / 3000);
+          const frames = [0, 1, 2].map((k) =>
+            rungOf(
+              row(
+                { level: "max" },
+                instantOf(new Date(cycle + k * 1000 + 500)),
+              ),
+              1,
+            ),
+          );
+          expect(frames.map(({ glyph }) => glyph)).toEqual([
+            "\u{F0143}",
+            "\u{F013F}",
+            "\u{F0DBC}",
+          ]);
+          expect(
+            frames
+              .filter(({ contrast }) => contrast < TEXT_MIN_CONTRAST)
+              .map(({ glyph, contrast }) => `${glyph}: ${contrast.toFixed(2)}`),
+          ).toEqual([]);
+          const cell = drawn(
+            ColorSpec.parse(rungOf(row({ level: "xhigh" })).ground),
+            "cell",
+          );
+          expect(new Set(frames.map(({ ground }) => ground))).toEqual(
+            new Set([frames[0]!.ground]),
+          );
+          expect(
+            contrastRatio(
+              drawn(ColorSpec.parse(frames[0]!.ground), "bubble"),
+              cell,
+            ),
+          ).toBeGreaterThanOrEqual(EFFORT_BUBBLE_CONTRAST);
+          // The bubble's caps sit either side of the climb.
+          const plain = stripAnsi(row({ level: "max" }));
+          expect(plain).toMatch(
+            new RegExp(`${NAME}\u{E0B6}.\u{E0B4}`, "u"),
+          );
+        } finally {
+          dispose();
+        }
+      },
+    );
   });
 
   // [LAW:verifiable-goals] brandon-theming-8uj.1 done-gate: the bundled default

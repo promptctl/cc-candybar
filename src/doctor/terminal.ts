@@ -37,7 +37,10 @@ interface TerminalRow {
 }
 
 // Bundled symbols: kitty's changelog, 0.36.0 "Add NERD fonts builtin";
-// WezTerm's, 20220319 "Symbols Nerd Font Mono is now bundled"; Ghostty embeds
+// WezTerm's, 20230712 — its copy moved to Nerd Fonts 3.0, the first with the
+// nf-md icons at U+F0001+ the bundled bar's effort gauge draws (the copy it
+// bundled from 20220319 is v2, which has none; wezterm.org's
+// `wezterm.nerdfonts` page dates the move); Ghostty embeds
 // Symbols Nerd Font in its binary, and its first public release did.
 //
 // Links: OSC 8 adoption in terminal emulators,
@@ -66,7 +69,7 @@ export const TERMINALS = {
     programVersion: true,
     term: "wezterm",
     links: { since: null },
-    glyphs: { kind: "bundled", since: "20220319" },
+    glyphs: { kind: "bundled", since: "20230712" },
   },
   ghostty: {
     label: "Ghostty",

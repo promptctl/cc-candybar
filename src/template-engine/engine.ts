@@ -25,6 +25,8 @@
 //    names) and asking for the current segment's background (`{{ bgOf }}`)
 //    are segment-scoped, so they arrive through `extraFuncs` from the DSL
 //    render layer, which is the only place that knows which segment is rendering.
+//  • animationFuncs: frames, stepped — the frame and the colour in progress
+//    at the render's instant (rich-js).
 //  • ccCandybarFuncs: basename, dirname, int, string, bool, urlEncode,
 //    themes, endcaps, sparkline.
 //  • formatterFuncs: minutesUntilReset (clock-reading numeric primitive),
@@ -46,7 +48,10 @@ import {
   sprigDicts,
 } from "@promptctl/go-template-js";
 import { RichText, type ColorDepth } from "@promptctl/rich-js";
-import { richTextFuncs } from "@promptctl/rich-js/template-bindings";
+import {
+  animationFuncs,
+  richTextFuncs,
+} from "@promptctl/rich-js/template-bindings";
 import { ccCandybarFuncs, formatterFuncs } from "./funcs.js";
 
 // [LAW:single-enforcer] fromString/toString are declared once here.
@@ -101,6 +106,10 @@ export function createCcCandybarEngine(opts: {
       // decoupled from any payload's nesting — no per-payload helper variant.
       ...sprigDicts(),
       ...richTextFuncs(drawnAt && (() => ({ depth: drawnAt() }))),
+      // [LAW:single-enforcer] `frames`/`stepped` draw for the same instant
+      // every other time read in the render does: the one `clock`, in seconds
+      // since the epoch.
+      ...animationFuncs(() => clock().getTime() / 1000),
       // Domain-specific overrides last (wins on collision with sprig aliases).
       // [LAW:one-source-of-truth] ccCandybarFuncs' `int` is the var-system cast
       // (toNumber over VarValue); it intentionally shadows sprigConversions' `int`
