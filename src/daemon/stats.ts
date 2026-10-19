@@ -67,8 +67,14 @@ export interface StatsSnapshot {
     misses: number;
     sweeps: number;
   };
+  // Config states: entries the map serves, those a render is drawing with
+  // now, and those retired (evicted or reloaded over) whose teardown waits
+  // on one. `retired` climbing while `size` holds is a render that never
+  // returned.
   renderCache: {
     size: number;
+    held: number;
+    retired: number;
   };
   effectCache: {
     sessions: number;
@@ -224,7 +230,7 @@ export class RuntimeStats {
     return new RuntimeStats().snapshot({
       gitCache: { size: 0, hits: 0, misses: 0, invalidations: 0, watchers: 0 },
       usageCache: { size: 0, hits: 0, misses: 0, sweeps: 0 },
-      renderCacheSize: 0,
+      renderCache: { size: 0, held: 0, retired: 0 },
       effectCache: { sessions: 0, effects: 0 },
       sessionState: { sessions: 0, observers: 0 },
       watchersActive: 0,
@@ -235,7 +241,7 @@ export class RuntimeStats {
   snapshot(extras: {
     gitCache: StatsSnapshot["gitCache"];
     usageCache: StatsSnapshot["usageCache"];
-    renderCacheSize: number;
+    renderCache: StatsSnapshot["renderCache"];
     effectCache: StatsSnapshot["effectCache"];
     sessionState: StatsSnapshot["sessionState"];
     watchersActive: number;
@@ -263,7 +269,7 @@ export class RuntimeStats {
       },
       gitCache: extras.gitCache,
       usageCache: extras.usageCache,
-      renderCache: { size: extras.renderCacheSize },
+      renderCache: extras.renderCache,
       effectCache: extras.effectCache,
       sessionState: extras.sessionState,
       watchers: {

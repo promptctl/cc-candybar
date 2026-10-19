@@ -21,6 +21,7 @@ import { join } from "node:path";
 import {
   RenderCache,
   type CacheEntry,
+  type Hold,
   type RenderCacheObservers,
 } from "../src/daemon/cache/render";
 import { GitDataProvider } from "../src/daemon/cache/git";
@@ -756,7 +757,7 @@ describe("RenderCache", () => {
       const evict = lines.filter((l) => l.startsWith("config disposed "));
       expect(evict).toHaveLength(1);
       expect(evict[0]).toMatch(
-        /^config disposed reason=evict released=[1-9]\d*$/,
+        /^config disposed reason=evict released=[1-9]\d* held=0$/,
       );
 
       cache.reload("/p4", "/p4", undefined);
@@ -765,8 +766,113 @@ describe("RenderCache", () => {
       );
       expect(reload).toHaveLength(1);
       expect(reload[0]).toMatch(
-        /^config disposed reason=reload released=[1-9]\d*$/,
+        /^config disposed reason=reload released=[1-9]\d* held=0$/,
       );
+    } finally {
+      for (const fn of cleanups) fn();
+    }
+  });
+
+  // [LAW:no-ambient-temporal-coupling] brandon-unfiled-3248.6rc: a render
+  // holds the state it draws with across its payload await. The map moves
+  // at once — the cap stays a bound, a reload swaps at once — and a retired
+  // state is disposed when its last holder returns, never under the render.
+  test("a held state survives its entry's eviction and is disposed at the release", () => {
+    const lines: string[] = [];
+    const { cache, cleanups } = makeCache(undefined, (_level, msg) =>
+      lines.push(msg),
+    );
+    const disposals = () =>
+      lines.filter((l) => l.startsWith("config disposed reason=evict"));
+    try {
+      // maxEntries=4. /p0 is the oldest, and held.
+      const hold = cache.hold("/p0", "/p0", undefined);
+      expect(cache.stats).toEqual({ size: 1, held: 1, retired: 0 });
+      for (let i = 1; i < 5; i++)
+        cache.getOrCreate(`/p${i}`, `/p${i}`, undefined);
+      // The cap held: /p0 left the map. Its state is retired, not disposed —
+      // the render still draws with it, and its store still answers.
+      expect(cache.stats).toEqual({ size: 4, held: 1, retired: 1 });
+      expect(disposals()).toEqual([]);
+      expect(hold.state.store.read("session.id")).toBe("");
+      // Asking for /p0 again is a new entry with a state of its own — and a
+      // fifth insertion, so unheld /p1 goes at once.
+      const again = cache.getOrCreate("/p0", "/p0", undefined);
+      expect(again).not.toBe(hold.entry);
+      expect(again.state).not.toBe(hold.state);
+      expect(disposals()).toEqual([expect.stringMatching(/ held=0$/)]);
+      // The release is the teardown, and the line says one render held it.
+      hold[Symbol.dispose]();
+      expect(disposals()).toEqual([
+        expect.stringMatching(/ held=0$/),
+        expect.stringMatching(
+          /^config disposed reason=evict released=[1-9]\d* held=1$/,
+        ),
+      ]);
+      expect(cache.stats).toEqual({ size: 4, held: 0, retired: 0 });
+    } finally {
+      for (const fn of cleanups) fn();
+    }
+  });
+
+  test("a reload under a held state swaps the entry and defers the old state's teardown", () => {
+    const lines: string[] = [];
+    const { cache, cleanups } = makeCache(undefined, (_level, msg) =>
+      lines.push(msg),
+    );
+    const disposals = () =>
+      lines.filter((l) => l.startsWith("config disposed reason=reload"));
+    try {
+      const hold = cache.hold("/p0", "/p0", undefined);
+      cache.reload("/p0", "/p0", undefined);
+      // The entry serves the fresh state; the render keeps the one it
+      // started on, undisposed, until it returns.
+      expect(hold.entry.state).not.toBe(hold.state);
+      expect(cache.getOrCreate("/p0", "/p0", undefined)).toBe(hold.entry);
+      expect(disposals()).toEqual([]);
+      expect(cache.stats).toEqual({ size: 1, held: 1, retired: 1 });
+      hold[Symbol.dispose]();
+      expect(disposals()).toEqual([
+        expect.stringMatching(
+          /^config disposed reason=reload released=[1-9]\d* held=1$/,
+        ),
+      ]);
+      expect(cache.stats).toEqual({ size: 1, held: 0, retired: 0 });
+      // The fresh state is served and torn down like any other.
+      cache.reload("/p0", "/p0", undefined);
+      expect(disposals()).toHaveLength(2);
+      expect(disposals()[1]).toMatch(/ held=0$/);
+    } finally {
+      for (const fn of cleanups) fn();
+    }
+  });
+
+  test("two renders holding one state: the teardown waits for the last", () => {
+    const lines: string[] = [];
+    const { cache, cleanups } = makeCache(undefined, (_level, msg) =>
+      lines.push(msg),
+    );
+    try {
+      const holds: Hold[] = [
+        cache.hold("/p0", "/p0", undefined),
+        cache.hold("/p0", "/p0", undefined),
+      ];
+      expect(holds[1]!.state).toBe(holds[0]!.state);
+      expect(cache.stats).toEqual({ size: 1, held: 1, retired: 0 });
+      cache.reload("/p0", "/p0", undefined);
+      holds[0]![Symbol.dispose]();
+      expect(lines.filter((l) => l.startsWith("config disposed "))).toEqual(
+        [],
+      );
+      holds[1]![Symbol.dispose]();
+      expect(lines.filter((l) => l.startsWith("config disposed "))).toEqual([
+        expect.stringMatching(/ held=2$/),
+      ]);
+      // [LAW:no-silent-failure] A second release is a bug, said so.
+      expect(() => holds[1]![Symbol.dispose]()).toThrow(
+        "render-cache hold released twice",
+      );
+      expect(cache.stats).toEqual({ size: 1, held: 0, retired: 0 });
     } finally {
       for (const fn of cleanups) fn();
     }

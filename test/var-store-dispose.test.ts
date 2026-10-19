@@ -89,8 +89,8 @@ describe("VariableStore.dispose releases every computed's subscriptions", () => 
     const released = first.dispose();
     expect(released).toBeGreaterThanOrEqual(perEntry);
     expect(sessionState.observers()).toBe(perEntry);
-    expect(configDisposeLine("reload", released)).toBe(
-      `config disposed reason=reload released=${released}`,
+    expect(configDisposeLine({ reason: "reload", held: 0 }, released)).toBe(
+      `config disposed reason=reload released=${released} held=0`,
     );
 
     second.dispose();

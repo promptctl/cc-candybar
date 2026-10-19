@@ -202,13 +202,22 @@ export function pluginLoadLine(
 
 // [LAW:nothing-unseen] A config's teardown releases every computed's MobX
 // subscriptions (brandon-unfiled-3248.t14 was a teardown that released none,
-// found in a heap snapshot because nothing said so). Why it was torn down and
-// how many it released, beside the load line of what replaced it.
+// found in a heap snapshot because nothing said so). Why it was torn down,
+// how many it released, and how many renders were still drawing with it when
+// the cache retired it — those deferred the teardown to the last one's return
+// (brandon-unfiled-3248.6rc) — beside the load line of what replaced it.
+export interface Teardown {
+  readonly reason: "reload" | "evict";
+  // Renders holding the state when it was retired: 0 is a teardown at
+  // retirement, more is one deferred to the last release.
+  readonly held: number;
+}
+
 export function configDisposeLine(
-  reason: "reload" | "evict",
+  teardown: Teardown,
   released: number,
 ): string {
-  return `config disposed reason=${reason} released=${released}`;
+  return `config disposed reason=${teardown.reason} released=${released} held=${teardown.held}`;
 }
 
 // [LAW:one-source-of-truth] Each entry tracks the last *valid* DSL state +
@@ -247,6 +256,36 @@ export interface CacheEntry {
   watcher: WatcherHandle | null;
   // The key `watcher` was acquired under — the identity of its target set.
   watcherKey: string | null;
+}
+
+// [LAW:no-ambient-temporal-coupling] A state's lifetime is a fact the cache
+// owns (brandon-unfiled-3248.6rc): the renders holding it across their
+// payload await, and the teardown it is due once the cache stopped serving
+// it — evicted, or replaced by a reload. Deferred reclamation, RCU-style:
+// the map moves at once (the cap stays a bound, a reload swaps at once) and
+// a retired state is disposed when its last holder returns, never under a
+// render — which otherwise resumed on a disposed store, every chained read
+// recomputed untracked.
+interface StateHold {
+  holders: number;
+  retired: Teardown | null;
+}
+
+// A render's hold on the state it draws with: the state, the entry it was
+// served from, and the release that `using` runs on every exit of the
+// holder's scope (return and throw alike). Released exactly once.
+export interface Hold extends Disposable {
+  readonly entry: CacheEntry;
+  readonly state: DslRenderState;
+}
+
+// [LAW:nothing-unseen] The states renders are drawing with now, and those
+// retired but not yet reclaimed because one still is (`daemon-stats`):
+// `retired` climbing while `size` holds is a render that never returned.
+export interface RenderCacheStats {
+  readonly size: number;
+  readonly held: number;
+  readonly retired: number;
 }
 
 // [LAW:one-source-of-truth] Cache key includes every input that affects DSL
@@ -569,6 +608,8 @@ export function fallbackState(
 
 export class RenderCache {
   private readonly entries = new Map<string, CacheEntry>();
+  // Every state the map serves or served, until reclaimed.
+  private readonly holds = new Map<DslRenderState, StateHold>();
   private readonly deps: RenderDeps;
   private readonly log: DaemonLogger;
   private readonly maxEntries: number;
@@ -624,6 +665,7 @@ export class RenderCache {
       watcher: null,
       watcherKey: null,
     };
+    this.serve(entry.state);
     // [LAW:single-enforcer] Insert, bound, watch, then notify — in that
     // order. From the moment the entry is in the map it is reachable for
     // eviction and dispose, so a throwing observer cannot strand a registry
@@ -636,21 +678,83 @@ export class RenderCache {
       const oldest = this.entries.entries().next().value;
       if (oldest !== undefined) {
         const [oldestKey, evicted] = oldest;
-        // [LAW:single-enforcer] dispose the registry on eviction — it owns
-        // timers, fs watchers, and git subscriptions. Dropping the entry
-        // without dispose leaks every async handle the config declared.
-        this.log(
-          "info",
-          configDisposeLine("evict", evicted.state.registry.dispose()),
-        );
         evicted.watcher?.release();
         this.entries.delete(oldestKey);
+        this.retire(evicted.state, "evict");
       }
     }
     this.refreshWatcher(entry, loaded);
     this.observers.onReload?.(entry);
 
     return entry;
+  }
+
+  // [LAW:no-ambient-temporal-coupling] A render holds the state it draws
+  // with for as long as it runs — across the payload await, where another
+  // session's first render can evict its entry and a saved file can reload
+  // it. Either retires the state; the cache disposes it when this hold is
+  // released, so the render finishes on the state it resolved its payload
+  // from (brandon-unfiled-3248.6rc). `using` at the call site releases on
+  // every exit, a throw included.
+  hold(projectDir: string, cwd: string, configFile: string | undefined): Hold {
+    const entry = this.getOrCreate(projectDir, cwd, configFile);
+    const { state } = entry;
+    const hold = this.holdOf(state);
+    hold.holders++;
+    let released = false;
+    return {
+      entry,
+      state,
+      [Symbol.dispose]: () => {
+        // [LAW:no-silent-failure] A second release would count a render that
+        // is not there, and a later render's hold would then read as none.
+        if (released) throw new Error("render-cache hold released twice");
+        released = true;
+        hold.holders--;
+        this.reclaim(state, hold);
+      },
+    };
+  }
+
+  get stats(): RenderCacheStats {
+    let held = 0;
+    let retired = 0;
+    for (const hold of this.holds.values()) {
+      if (hold.holders > 0) held++;
+      if (hold.retired !== null) retired++;
+    }
+    return { size: this.entries.size, held, retired };
+  }
+
+  // The cache starts serving `state`: unheld, and not yet retired.
+  private serve(state: DslRenderState): void {
+    this.holds.set(state, { holders: 0, retired: null });
+  }
+
+  private holdOf(state: DslRenderState): StateHold {
+    const hold = this.holds.get(state);
+    // [LAW:no-silent-failure] Every state the map serves was entered at its
+    // creation or its reload; one that was not is a cache bug, not a miss.
+    if (hold === undefined) throw new Error("render-cache state never served");
+    return hold;
+  }
+
+  // The cache stopped serving `state`: it left the map, or a reload
+  // replaced it. Its teardown is due — now, or at its last holder's return.
+  private retire(state: DslRenderState, reason: Teardown["reason"]): void {
+    const hold = this.holdOf(state);
+    hold.retired = { reason, held: hold.holders };
+    this.reclaim(state, hold);
+  }
+
+  // [LAW:single-enforcer] The one place a state is disposed: once it is
+  // retired AND unheld, from whichever of the two transitions came last. The
+  // registry owns timers, fs watchers, MobX reactions, and git subscriptions
+  // — dropping it without dispose leaks every handle the config declared.
+  private reclaim(state: DslRenderState, hold: StateHold): void {
+    if (hold.retired === null || hold.holders > 0) return;
+    this.holds.delete(state);
+    this.log("info", configDisposeLine(hold.retired, state.registry.dispose()));
   }
 
   // Re-read an entry from disk NOW, for a caller that just wrote its file and
@@ -667,14 +771,15 @@ export class RenderCache {
 
   // Re-populate `entry` from the current state of disk (watcher-driven).
   //
-  // - Load success: dispose the prior state, swap the fresh one in.
+  // - Load success: swap the fresh state in, retire the prior one.
   // - Load failure: keep the prior state (the bundled default before any
   //   config has loaded), set lastError.
   //
   // [LAW:single-enforcer] hot-reload contract: any reload that produces a
-  // new DslConfig disposes the old SourceRegistry before constructing a new
-  // one. The registry owns timers, watchers, MobX reactions, and git
-  // subscriptions — dropping it without dispose leaks every handle.
+  // new DslConfig retires the old state, and `reclaim` disposes its
+  // SourceRegistry — at once when no render holds it, else when the last
+  // one returns. Dropping the reference without that would leak every
+  // timer, watcher, MobX reaction and git subscription it owns.
   //
   // [LAW:single-enforcer] One publish point for "this reload completed":
   // straight-line, so the signal structurally cannot be skipped by whichever
@@ -690,14 +795,10 @@ export class RenderCache {
     entry.lastError = loaded.error;
     if (loaded.state !== null) {
       this.log("info", pluginLoadLine(loaded.layers, loaded.state));
-      // [LAW:single-enforcer] Dispose-before-swap: the old registry owns
-      // timers, fs watchers, MobX reactions, and git subscriptions — dropping
-      // the reference without disposing would leak them.
-      this.log(
-        "info",
-        configDisposeLine("reload", entry.state.registry.dispose()),
-      );
+      const retired = entry.state;
       entry.state = loaded.state;
+      this.serve(loaded.state);
+      this.retire(retired, "reload");
     }
     // Rebinds to the broken file (and its sibling candidates) too, so an
     // in-place save OR a higher-precedence file appearing recovers.

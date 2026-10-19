@@ -900,7 +900,7 @@ export async function handleRequest(
       stats: stats.snapshot({
         gitCache: gitService.getStats(),
         usageCache: usageStore.getStats(),
-        renderCacheSize: renderCache.size,
+        renderCache: renderCache.stats,
         effectCache: effectSessions.getStats(),
         sessionState: {
           sessions: sessionState.size(),
@@ -1318,7 +1318,13 @@ async function renderRequest(
     sessionState.get(sessionId, SESSION_CONFIG_OVERRIDE_KEY) ??
     configFile ??
     hints.configEnv;
-  const entry = renderCache.getOrCreate(projectDir, req.cwd, sessionConfigFile);
+  // [LAW:no-ambient-temporal-coupling] Held, not fetched: `state` is what
+  // this render resolves its payload from and draws with after the payload
+  // await below. An eviction or a reload meanwhile retires it, and the cache
+  // disposes it when this hold is released — never under the render
+  // (brandon-unfiled-3248.6rc). `using` releases the hold on every exit.
+  using hold = renderCache.hold(projectDir, req.cwd, sessionConfigFile);
+  const { entry, state } = hold;
   // [LAW:one-source-of-truth] Record the inputs THIS render resolved its
   // config from, so a durable click on this session resolves the same
   // chain and writes the file the next reload reads (verbs/index.ts
@@ -1352,15 +1358,15 @@ async function renderRequest(
   // with the chain (resolveEffectiveGlobals, and src/config/presets.ts).
   // [LAW:one-source-of-truth] `.preset.customized` reads THIS entry's
   // authoredRoots — the set computed from the SAME raw parse that
-  // produced entry.state.config, on the same reload — never a fresh
+  // produced state.config, on the same reload — never a fresh
   // file read here that could race a concurrent write and disagree
   // with the tree that actually rendered. That is why it arrives as
   // a closure over this entry rather than a lookup inside the resolver.
-  const { authoredRoots } = entry.state;
+  const { authoredRoots } = state;
   const sessionPick = (key: string): string | null =>
     sessionState.get(req.hookData.session_id, key);
   const effective: EffectiveGlobals = resolveEffectiveGlobals(
-    entry.state.config,
+    state.config,
     sessionPick,
     (preset: string) => authoredRoots.has(preset),
   );
@@ -1374,19 +1380,15 @@ async function renderRequest(
         navigationHistory.depth(
           sessionId,
           sessionState,
-          stateGate(entry.state.config),
+          stateGate(state.config),
         ),
     },
     req.cwd,
-    entry.state.neededInputPaths(effective.preset),
+    state.neededInputPaths(effective.preset),
     effective,
     hints,
     {
-      ...settingCounts(
-        entry.state.config,
-        entry.state.fileHeldSettings,
-        sessionPick,
-      ),
+      ...settingCounts(state.config, state.fileHeldSettings, sessionPick),
       // The file the menu's saves and resets edit, once it exists.
       configPath: entry.configLayers.includes(entry.configHome)
         ? entry.configHome
@@ -1417,10 +1419,10 @@ async function renderRequest(
   // would run the MobX action twice per render and clear last_error
   // diagnostics on the round trip.
   const body = renderDsl(
-    entry.state.config,
-    entry.state.compiled,
-    entry.state.store,
-    entry.state.registry,
+    state.config,
+    state.compiled,
+    state.store,
+    state.registry,
     payload,
     at,
     renderOpts,
@@ -1431,7 +1433,7 @@ async function renderRequest(
     // the per-segment ANSI serialization happens lazily inside the
     // debug handler so normal renders pay no extra serializer cost.
     {
-      perSegmentSink: entry.state.lastRenderCellsBySegment,
+      perSegmentSink: state.lastRenderCellsBySegment,
       onRenderWarning: (warning) => renderWarnings.push(warning),
     },
     // [LAW:one-source-of-truth] The theme crosses as the SELECTION, palette
