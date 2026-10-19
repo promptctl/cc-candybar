@@ -1,3 +1,10 @@
+# [1.139.0](https://github.com/promptctl/cc-candybar/compare/v1.138.0...v1.139.0) (2026-10-19)
+
+
+### Features
+
+* **daemon:** push a session's frames to subscribers ([#357](https://github.com/promptctl/cc-candybar/issues/357)) ([8844689](https://github.com/promptctl/cc-candybar/commit/88446893c4cc2fe275ac609b613ee15059761280))
+
 # [1.138.0](https://github.com/promptctl/cc-candybar/compare/v1.137.0...v1.138.0) (2026-10-19)
 
 
