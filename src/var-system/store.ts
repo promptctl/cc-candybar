@@ -119,7 +119,9 @@ class ComputedNode implements VarNode {
     // [LAW:no-silent-failure] A MobX whose computed no longer tears itself
     // down this way — or guards the teardown by another flag, so lifting this
     // one leaves `suspend_` a no-op — would leak every disposed store again,
-    // quietly, until the RSS backstop fired. Refuse to build the node instead.
+    // quietly, until the RSS backstop fired. Throw instead: registerDslConfig
+    // folds a declaration's throw into a load warning per variable, so the
+    // first such build shows the message on every computed's ⚠ cell.
     if (typeof this.cell.suspend_ !== "function") {
       throw new TypeError(
         `Variable "${name}": this MobX's computed has no suspend_; release() cannot unsubscribe it`,

@@ -1,5 +1,5 @@
 import { RuntimeStats } from "../src/daemon/stats";
-import { formatStats, versionSkew } from "../src/daemon/client-stats";
+import { formatStats, buildSkew } from "../src/daemon/client-stats";
 import { PROTOCOL_VERSION } from "../src/daemon/protocol";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -77,7 +77,7 @@ describe("RuntimeStats.snapshot", () => {
   });
 });
 
-describe("versionSkew", () => {
+describe("buildSkew", () => {
   test("a snapshot from this build is none", () => {
     const snap = new RuntimeStats().snapshot({
       gitCache: { size: 0, hits: 0, misses: 0, invalidations: 0, watchers: 0 },
@@ -88,7 +88,36 @@ describe("versionSkew", () => {
       watchersActive: 0,
       handlerProbes: [],
     });
-    expect(versionSkew(snap)).toBeNull();
+    expect(buildSkew(snap)).toBeNull();
+  });
+
+  test("a snapshot of this version from another source digest names both", () => {
+    const snap = new RuntimeStats().snapshot({
+      gitCache: { size: 0, hits: 0, misses: 0, invalidations: 0, watchers: 0 },
+      usageCache: { size: 0, hits: 0, misses: 0, sweeps: 0 },
+      renderCacheSize: 0,
+      effectCache: { sessions: 0, effects: 0 },
+      sessionState: { sessions: 0, observers: 0 },
+      watchersActive: 0,
+      handlerProbes: [],
+    });
+    const skew = buildSkew({ ...snap, sourceDigest: "abcdef0123456789" });
+    expect(skew).toContain(`daemon runs ${pkg.version} [abcdef0]`);
+    expect(skew).toContain(`this client is ${pkg.version} [`);
+  });
+
+  test("a snapshot carrying no sourceDigest field is an older daemon", () => {
+    const snap = new RuntimeStats().snapshot({
+      gitCache: { size: 0, hits: 0, misses: 0, invalidations: 0, watchers: 0 },
+      usageCache: { size: 0, hits: 0, misses: 0, sweeps: 0 },
+      renderCacheSize: 0,
+      effectCache: { sessions: 0, effects: 0 },
+      sessionState: { sessions: 0, observers: 0 },
+      watchersActive: 0,
+      handlerProbes: [],
+    });
+    const { sourceDigest: _dropped, ...older } = snap;
+    expect(buildSkew(older as typeof snap)).toContain("no build identity");
   });
 
   test("a snapshot from another build names both versions", () => {
@@ -101,7 +130,7 @@ describe("versionSkew", () => {
       watchersActive: 0,
       handlerProbes: [],
     });
-    const skew = versionSkew({ ...snap, version: "0.0.1" });
+    const skew = buildSkew({ ...snap, version: "0.0.1" });
     expect(skew).toContain("daemon runs 0.0.1");
     expect(skew).toContain(`this client is ${pkg.version}`);
   });
@@ -112,6 +141,7 @@ describe("formatStats", () => {
     const out = formatStats({
       pid: 1234,
       version: "1.41.2",
+      sourceDigest: null,
       protocolVersion: 2,
       startedAt: "2026-04-28T00:00:00.000Z",
       uptimeSec: 125,
@@ -157,6 +187,7 @@ describe("formatStats", () => {
     const out = formatStats({
       pid: 1,
       version: "1.41.2",
+      sourceDigest: null,
       protocolVersion: 2,
       startedAt: "2026-04-28T00:00:00.000Z",
       uptimeSec: 0,

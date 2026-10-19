@@ -3,6 +3,8 @@ import { describeFailure, requestOutcome } from "./client-transport";
 import type { RoundTripBudgets, RoundTripOutcome } from "./client-transport";
 import type { StatsSnapshot } from "./stats";
 import { PACKAGE_VERSION } from "../version";
+import { bakedDigest } from "./build-currency";
+import { shortDigest } from "../source-digest";
 
 // Operator-driven introspection path: legitimately slower budgets than the
 // render hot path, carried as this caller's values through the shared
@@ -19,16 +21,18 @@ export async function runDaemonStats(args: readonly string[]): Promise<void> {
     process.stderr.write(`daemon-stats: ${describeFailure(outcome)}\n`);
     process.exit(1);
   }
-  const skew = versionSkew(outcome.value);
+  // The raw object needs no shape, so JSON mode prints whatever the daemon
+  // said — the skew is still named on stderr, and the exit says the pair
+  // disagree.
+  if (wantJson) {
+    process.stdout.write(JSON.stringify(outcome.value, null, 2) + "\n");
+  }
+  const skew = buildSkew(outcome.value);
   if (skew !== null) {
     process.stderr.write(`daemon-stats: ${skew}\n`);
     process.exit(1);
   }
-
-  if (wantJson) {
-    process.stdout.write(JSON.stringify(outcome.value, null, 2) + "\n");
-    return;
-  }
+  if (wantJson) return;
 
   process.stdout.write(formatStats(outcome.value));
 }
@@ -47,10 +51,25 @@ export function fetchStats(): Promise<RoundTripOutcome<StatsSnapshot>> {
 // another build answers with another shape (a field this build added is
 // absent), and reading it as ours would throw on the first such field —
 // `pnpm build` then `daemon-stats` inside the minute before the binary watch
-// restarts the daemon. Name the skew instead, in both output modes.
-export function versionSkew(s: StatsSnapshot): string | null {
-  if (s.version === PACKAGE_VERSION) return null;
-  return `daemon runs ${s.version}, this client is ${PACKAGE_VERSION}; a rebuilt daemon restarts within a minute`;
+// restarts the daemon. A build is its version AND its source digest: a source
+// checkout rebuilds without bumping the version. Name the skew instead. A
+// daemon reporting no `sourceDigest` at all predates the field, and is named
+// as older rather than read.
+export function buildSkew(s: StatsSnapshot): string | null {
+  const mine = buildLabel(PACKAGE_VERSION, bakedDigest());
+  // [LAW:no-defensive-null-guards] exception: trust boundary — the snapshot
+  // is an unchecked cast from socket JSON, and an older daemon's carries no
+  // such field.
+  if (s.sourceDigest === undefined) {
+    return `daemon reports no build identity (older than this client, ${mine}); a rebuilt daemon restarts within a minute`;
+  }
+  const theirs = buildLabel(s.version, s.sourceDigest);
+  if (theirs === mine) return null;
+  return `daemon runs ${theirs}, this client is ${mine}; a rebuilt daemon restarts within a minute`;
+}
+
+function buildLabel(version: string, digest: string | null): string {
+  return `${version} [${digest === null ? "no digest" : shortDigest(digest)}]`;
 }
 
 function fmtBytes(n: number): string {
@@ -80,6 +99,9 @@ export function formatStats(s: StatsSnapshot): string {
   lines.push(`process`);
   lines.push(`  pid           ${s.pid}`);
   lines.push(`  version       ${s.version}`);
+  lines.push(
+    `  source        ${s.sourceDigest === null ? "no digest" : shortDigest(s.sourceDigest)}`,
+  );
   lines.push(`  protocol      ${s.protocolVersion}`);
   lines.push(`  startedAt     ${s.startedAt}`);
   lines.push(`  uptime        ${fmtUptime(s.uptimeSec)}`);

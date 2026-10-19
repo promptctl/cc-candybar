@@ -7,6 +7,7 @@ import type { LaunchCategory } from "../proc/launch";
 import type { LaunchStatsHandle } from "../proc/stats-handle";
 import { PROTOCOL_VERSION } from "./protocol";
 import { PACKAGE_VERSION } from "../version";
+import { bakedDigest } from "./build-currency";
 
 // Rolling window for "last minute" counts. Keep timestamps for each launch in
 // a ring buffer; eviction happens lazily on read.
@@ -34,6 +35,11 @@ export interface StatsSnapshot {
   // against `cc-candybar --version` to diagnose client-vs-daemon skew in one
   // step. The wire contract number is a different fact under its own name.
   version: string;
+  // The digest of the source the daemon's bundle was built from (`null` for a
+  // bundle carrying none) — with `version`, the build's identity: a source
+  // checkout rebuilds without bumping the version, and a client of another
+  // build cannot read this snapshot's shape as its own.
+  sourceDigest: string | null;
   protocolVersion: number;
   startedAt: string;
   uptimeSec: number;
@@ -223,6 +229,7 @@ export class RuntimeStats {
     return {
       pid: process.pid,
       version: PACKAGE_VERSION,
+      sourceDigest: bakedDigest(),
       protocolVersion: PROTOCOL_VERSION,
       startedAt: this.startedAt.toISOString(),
       uptimeSec: Math.floor((Date.now() - this.startedAt.getTime()) / 1000),
