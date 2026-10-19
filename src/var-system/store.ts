@@ -84,9 +84,18 @@ class BoxNode implements VarNode {
   }
 }
 
+// What MobX's ComputedValue keeps private: the keepAlive flag its teardown is
+// guarded by, and the teardown itself (`suspend_`: unsubscribe from every
+// dependency and drop the cached value). The computed the public `computed()`
+// returns is this object; the type names the two members `release` reaches.
+interface KeepAliveComputed<T> extends IComputedValue<T> {
+  keepAlive_: boolean;
+  suspend_(): void;
+}
+
 class ComputedNode implements VarNode {
   readonly kind = "computed" as const;
-  private readonly cell: IComputedValue<VarValue>;
+  private readonly cell: KeepAliveComputed<VarValue>;
 
   constructor(
     readonly name: string,
@@ -106,11 +115,36 @@ class ComputedNode implements VarNode {
         return v;
       },
       { keepAlive: true },
-    );
+    ) as KeepAliveComputed<VarValue>;
+    if (typeof this.cell.suspend_ !== "function") {
+      // [LAW:no-silent-failure] A MobX whose computed no longer tears itself
+      // down this way would leak every disposed store again, quietly, until
+      // the RSS backstop fired. Refuse to build the node instead.
+      throw new TypeError(
+        `Variable "${name}": this MobX's computed has no suspend_; release() cannot unsubscribe it`,
+      );
+    }
   }
 
   read(): VarValue {
     return this.cell.get();
+  }
+
+  // Unsubscribe from every dependency and drop the cached value. A keepAlive
+  // computed never does this on its own — MobX keeps it subscribed to whatever
+  // it read for as long as those observables live, which for a daemon-wide
+  // observable (the SessionState atom) is the life of the daemon, and that
+  // subscription kept every disposed config's whole store reachable
+  // (brandon-unfiled-3248.t14). MobX offers no public release for a keepAlive
+  // computed, so this lifts the guard its own teardown checks and runs that
+  // teardown. Must run inside an action: the unobservation it cascades is
+  // settled when the outermost batch ends.
+  // [LAW:single-enforcer] exception: two MobX internals (`keepAlive_`,
+  // `suspend_`) are reached here and nowhere else; the constructor refuses a
+  // MobX without them, and test/var-store-dispose.test.ts pins the effect.
+  release(): void {
+    this.cell.keepAlive_ = false;
+    this.cell.suspend_();
   }
 
   lastUpdatedMs(): null {
@@ -371,6 +405,22 @@ export class VariableStore {
 
   names(): string[] {
     return [...this.nodes.keys()];
+  }
+
+  // Release every computed's subscriptions, so nothing outliving this store
+  // (the daemon-wide SessionState atom) keeps it reachable. The store's own
+  // boxes and documents die with it; only the computeds hold references
+  // outward. Reads after dispose still answer — a released computed recomputes
+  // uncached, subscribing to nothing — so a late reader cannot resubscribe the
+  // store to the world. One action, so the cascading unobservation settles
+  // once, when it ends. [LAW:single-enforcer] called by SourceRegistry.dispose,
+  // the one teardown of everything a config holds.
+  dispose(): void {
+    mobxRunInAction(() => {
+      for (const node of this.nodes.values()) {
+        if (node instanceof ComputedNode) node.release();
+      }
+    });
   }
 
   private requireNode(name: string): StoreNode {

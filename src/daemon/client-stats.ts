@@ -100,6 +100,10 @@ export function formatStats(s: StatsSnapshot): string {
   lines.push(`  sessions      ${s.effectCache.sessions}`);
   lines.push(`  effects       ${s.effectCache.effects}`);
   lines.push(``);
+  lines.push(`sessionState`);
+  lines.push(`  sessions      ${s.sessionState.sessions}`);
+  lines.push(`  observers     ${s.sessionState.observers}`);
+  lines.push(``);
   lines.push(`watchers`);
   lines.push(`  active        ${s.watchers.active}`);
   lines.push(`  opened        ${s.watchers.opened}`);

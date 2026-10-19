@@ -68,6 +68,13 @@ export interface StatsSnapshot {
     sessions: number;
     effects: number;
   };
+  // The per-session click store: how many sessions it holds, and how many
+  // derivations are subscribed to it. Observers climbing while renderCache
+  // holds steady is a disposed config's store still held.
+  sessionState: {
+    sessions: number;
+    observers: number;
+  };
   watchers: {
     active: number;
     opened: number;
@@ -207,6 +214,7 @@ export class RuntimeStats {
     usageCache: StatsSnapshot["usageCache"];
     renderCacheSize: number;
     effectCache: StatsSnapshot["effectCache"];
+    sessionState: StatsSnapshot["sessionState"];
     watchersActive: number;
     nextRestartReason?: string | null;
     handlerProbes: readonly ProbeArrival[];
@@ -233,6 +241,7 @@ export class RuntimeStats {
       usageCache: extras.usageCache,
       renderCache: { size: extras.renderCacheSize },
       effectCache: extras.effectCache,
+      sessionState: extras.sessionState,
       watchers: {
         active: extras.watchersActive,
         opened: this.watchersOpened,

@@ -1347,6 +1347,12 @@ export class SourceRegistry {
     this.watchMgr.dispose();
     this.ttlMgr.dispose();
     if (this.ownsGitProvider) this.gitProvider.close();
+    // The store's computeds are the last handles outward: a keepAlive computed
+    // stays subscribed to the daemon-wide SessionState atom until released, and
+    // that subscription held every disposed config's store for the life of the
+    // daemon (brandon-unfiled-3248.t14). [LAW:single-enforcer] released here,
+    // where every other handle a config holds is.
+    this.store.dispose();
   }
 
   // ─── Private helpers ──────────────────────────────────────────────────────

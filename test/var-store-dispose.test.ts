@@ -1,0 +1,122 @@
+// A disposed config leaves nothing subscribed to the daemon-wide SessionState
+// atom, and keeps the pull-only cache it was built for while it lives
+// (brandon-unfiled-3248.t14).
+//
+// A keepAlive computed never unsubscribes from what it read on its own. Every
+// RenderCache entry's store reads session state through one atom that lives as
+// long as the daemon, so before this, every reload or eviction left the whole
+// disposed store reachable from that atom — 2,500 observers against 12 live
+// entries in the breach snapshot of 2026-10-19 — until the RSS backstop fired.
+import { describe, expect, it } from "@jest/globals";
+import { VariableStore } from "../src/var-system/store";
+import { SourceRegistry } from "../src/var-system/sources";
+import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { SessionState } from "../src/daemon/session-state";
+import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
+import { listResolvablePaletteNames } from "../src/themes/policy";
+import { parseAndValidate } from "./helpers/parse-and-validate";
+import { instantOf } from "../src/utils/instant";
+
+const SID = "s1";
+
+const OPTS = {
+  endcaps: "powerline" as const,
+  colorCompatibility: "truecolor" as const,
+  wrap: true,
+  padding: 0,
+  charset: "unicode" as const,
+  width: Number.POSITIVE_INFINITY,
+};
+
+const PAYLOAD = {
+  session_id: SID,
+  tmux: { pane: "%0" },
+  cwd: "/tmp/proj",
+  model: { id: "claude-opus-4-7", display_name: "Opus" },
+  workspace: { current_dir: "/tmp/proj", project_dir: "/tmp/proj", added_dirs: [] },
+  theme: { effective: "textual-dark" },
+  style: { effective: "none" },
+  endcaps: { effective: "powerline" },
+  preset: { effective: "default" },
+  charset: { effective: "unicode" },
+  colorCompatibility: { effective: "truecolor" },
+  autoWrap: { effective: true },
+  padding: { effective: 1 },
+};
+
+// The bundled default, registered into a fresh store against the shared
+// SessionState and rendered once — what every RenderCache entry is.
+function renderedEntry(sessionState: SessionState): SourceRegistry {
+  const config = parseAndValidate(
+    "<test>",
+    "{}",
+    new Set(listResolvablePaletteNames()),
+    DEFAULT_DSL_CONFIG,
+  );
+  const store = new VariableStore();
+  const registry = new SourceRegistry(store, "", undefined, sessionState);
+  const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
+  renderDsl(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), OPTS);
+  return registry;
+}
+
+describe("VariableStore.dispose releases every computed's subscriptions", () => {
+  it("a disposed registry leaves the SessionState atom with only the live entries' observers", () => {
+    const sessionState = new SessionState();
+    expect(sessionState.observers()).toBe(0);
+
+    const first = renderedEntry(sessionState);
+    const perEntry = sessionState.observers();
+    expect(perEntry).toBeGreaterThan(0);
+
+    const second = renderedEntry(sessionState);
+    expect(sessionState.observers()).toBe(2 * perEntry);
+
+    first.dispose();
+    expect(sessionState.observers()).toBe(perEntry);
+
+    second.dispose();
+    expect(sessionState.observers()).toBe(0);
+  });
+
+  it("a never-rendered registry subscribes nothing, and its dispose changes nothing", () => {
+    const sessionState = new SessionState();
+    const store = new VariableStore();
+    const registry = new SourceRegistry(store, "", undefined, sessionState);
+    registerDslConfig(
+      parseAndValidate("<test>", "{}", new Set(listResolvablePaletteNames()), DEFAULT_DSL_CONFIG),
+      registry,
+      { cwd: "/tmp/proj" },
+    );
+    expect(sessionState.observers()).toBe(0);
+    registry.dispose();
+    expect(sessionState.observers()).toBe(0);
+  });
+
+  it("keeps the pull-only cache while live: two reads with no change evaluate once", () => {
+    const sessionState = new SessionState();
+    const store = new VariableStore();
+    let evaluations = 0;
+    store.defineComputed("theme", "string", () => {
+      evaluations++;
+      return sessionState.get(SID, "theme") ?? "none";
+    });
+
+    expect(store.read("theme")).toBe("none");
+    expect(store.read("theme")).toBe("none");
+    expect(evaluations).toBe(1);
+    expect(sessionState.observers()).toBe(1);
+
+    sessionState.set(SID, "theme", "nord");
+    expect(store.read("theme")).toBe("nord");
+    expect(evaluations).toBe(2);
+
+    store.dispose();
+    expect(sessionState.observers()).toBe(0);
+
+    // A late read still answers, uncached, and does not resubscribe the store.
+    sessionState.set(SID, "theme", "gruvbox");
+    expect(store.read("theme")).toBe("gruvbox");
+    expect(sessionState.observers()).toBe(0);
+  });
+});

@@ -14,7 +14,7 @@
 // renderer), atom.reportObserved is a no-op. Tests that construct SessionState
 // without any observer see no change in behavior.
 
-import { createAtom, type IAtom, runInAction } from "mobx";
+import { createAtom, getObserverTree, type IAtom, runInAction } from "mobx";
 
 export interface SessionStateReader {
   get(sessionId: string, key: string): string | null;
@@ -186,6 +186,20 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   revision(sessionId: string): number {
     this.atom.reportObserved();
     return this.sessions.get(sessionId)?.revision ?? 0;
+  }
+
+  // How many derivations are subscribed to this store right now — every
+  // computed that read session state and has not been released. Live configs
+  // keep a bounded number; a count that climbs while the render cache does not
+  // is a disposed store still held (brandon-unfiled-3248.t14 was found in a
+  // heap snapshot because nothing reported this). [LAW:nothing-unseen]
+  observers(): number {
+    return getObserverTree(this.atom).observers?.length ?? 0;
+  }
+
+  // How many sessions the store holds.
+  size(): number {
+    return this.sessions.size;
   }
 
   // [LAW:one-source-of-truth] set is the degenerate single-pair form of
