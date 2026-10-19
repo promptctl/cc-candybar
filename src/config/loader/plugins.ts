@@ -649,14 +649,15 @@ function prefixed<T>(
   );
 }
 
-// [LAW:one-source-of-truth] A plugin's session KEYS live under its namespace
+// [LAW:one-source-of-truth] A plugin's SESSION keys live under its namespace
 // exactly as its NAMES do: the `key` of every `state` variable its segments
-// hold and the `set` of every action, so a plugin can neither clash with a key
-// the user's file or another plugin declares (a kind clash there would fail
-// the whole load, not drop the plugin) nor write one the bar owns
+// hold and the `set` of every action, so a `set` can neither clash with a
+// session key the user's file or another plugin declares (a kind clash there
+// would fail the whole load, not drop the plugin) nor write one the bar owns
 // (`edit.mode`, `candybar.tab`). The author writes the bare key on both sides
-// and the two meet under `plugins.<ns>.`; a key outside the namespace is
-// unrepresentable, not refused.
+// and the two meet under `plugins.<ns>.`; a `set` outside the namespace is
+// unrepresentable, not refused. A `persist`'s or `reset`'s target is a path in
+// the user's config file, not a session key, and is left as written.
 function keyUnder(ns: string, key: string): string {
   return `${PLUGIN_NS}${ns}.${key}`;
 }
