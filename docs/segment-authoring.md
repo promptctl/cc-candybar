@@ -807,9 +807,11 @@ cc-candybar plugin install ~/code/links-issue-tracker      # a local path
 cc-candybar plugin install https://example.com/app.git     # any git URL
 ```
 
-which copies each folder there into the user's plugin root, and refuses
-the whole install, with the loader's reason, if any definition would not
-load. Re-running it updates them. A plugin installs with no config edit
+which copies each folder's `plugin.json5` into a folder of that name in the
+user's plugin root, and refuses the whole install, with the loader's
+reason, if any definition would not load. Re-running it updates them,
+replacing only each `plugin.json5`, so a data file the app keeps beside it
+stays. A plugin installs with no config edit
 because it sits in a plugin root:
 
 - `$XDG_DATA_HOME/cc-candybar/plugins/<name>/` (default

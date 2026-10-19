@@ -16,6 +16,7 @@ import {
 } from "./config/loader/plugin-folders.js";
 import { DEFINITION_FILE } from "./config/loader/plugins.js";
 import { launchSync } from "./proc/launch.js";
+import { isDirectory } from "./var-system/sources.js";
 import { resolveUserPath } from "./utils/user-path.js";
 
 // [LAW:types-are-the-program] What a source argument names, decided once.
@@ -26,7 +27,7 @@ export type PluginSource =
 const URL_SCHEME = /^[a-z][a-z0-9+.-]*:\/\//i;
 // git's scp-like form: `git@github.com:owner/repo.git`.
 const SCP_LIKE = /^[^@\s/]+@[^:\s/]+:/;
-const GITHUB_SLUG = /^[A-Za-z0-9-]+\/[A-Za-z0-9._-]+$/;
+const GITHUB_SLUG = /^([A-Za-z0-9-]+\/[A-Za-z0-9._-]+?)(?:\.git)?$/;
 
 /**
  * A directory that exists is a path, whatever it looks like; then a URL; then
@@ -41,39 +42,45 @@ export function parsePluginSource(
   if (isDirectory(dir)) return { kind: "path", dir };
   if (URL_SCHEME.test(arg) || SCP_LIKE.test(arg))
     return { kind: "git", url: arg };
-  if (GITHUB_SLUG.test(arg))
-    return { kind: "git", url: `https://github.com/${arg}.git` };
+  const slug = GITHUB_SLUG.exec(arg);
+  if (slug) return { kind: "git", url: `https://github.com/${slug[1]}.git` };
   return {
     error: `"${arg}" is not a directory, a GitHub repo slug (owner/repo) or a git URL`,
   };
 }
 
 // The plugins a repository holds: one definition per folder under
-// REPO_PLUGIN_DIR. [LAW:no-silent-failure] No such directory, a file where a
-// folder belongs, or a directory that cannot be listed is an error, never an
-// empty install.
-function repoDefinitions(repo: string): readonly string[] {
+// REPO_PLUGIN_DIR, named in messages by `source`. [LAW:no-silent-failure] No
+// such directory, a file where a folder belongs, or a directory that cannot
+// be listed is an error, never an empty install.
+function repoDefinitions(repo: string, source: string): readonly string[] {
   const root = path.join(repo, REPO_PLUGIN_DIR);
   const listed = listFolders(root);
   if ("error" in listed)
-    throw new Error(`could not list ${root}: ${listed.error}`);
+    throw new Error(
+      `${source}: could not list ${REPO_PLUGIN_DIR}: ${listed.error}`,
+    );
   if (listed.files.length > 0)
     throw new Error(
-      `${root} holds files (${listed.files.join(", ")}): a plugin is a folder holding its ${DEFINITION_FILE}`,
+      `${source}: ${REPO_PLUGIN_DIR} holds files (${listed.files.join(", ")}): a plugin is a folder holding its ${DEFINITION_FILE}`,
     );
   if (listed.folders.length === 0)
     throw new Error(
-      `${repo} has no plugins: none at ${REPO_PLUGIN_DIR}/<name>/${DEFINITION_FILE}`,
+      `${source} has no plugins: none at ${REPO_PLUGIN_DIR}/<name>/${DEFINITION_FILE}`,
     );
   return listed.folders.map((name) => path.join(root, name, DEFINITION_FILE));
 }
 
-// [LAW:effects-at-boundaries] The one network edge: a shallow, blobless clone
-// that checks out only REPO_PLUGIN_DIR. `--` keeps a source spelled like an
-// option from being read as one.
+// [LAW:effects-at-boundaries] The one network edge: a shallow, blobless,
+// sparse clone that checks out only REPO_PLUGIN_DIR — a repo without it
+// checks out nothing, and repoDefinitions says so. `--` keeps a source
+// spelled like an option from being read as one. With terminal prompts off,
+// a repo that is not there (GitHub asks for credentials) fails rather than
+// waiting on a prompt; a credential helper still answers.
 function cloneRepo(url: string, into: string): void {
+  const env = { ...process.env, GIT_TERMINAL_PROMPT: "0" };
   const git = (...args: string[]): void => {
-    const run = launchSync({ bin: "git", args, category: "plugin.git" });
+    const run = launchSync({ bin: "git", args, env, category: "plugin.git" });
     if (!run.ok)
       throw new Error(
         `git ${args.join(" ")} failed (${run.reason}): ${run.stderr.trim() || run.error || ""}`,
@@ -85,12 +92,19 @@ function cloneRepo(url: string, into: string): void {
     "--depth",
     "1",
     "--filter=blob:none",
-    "--no-checkout",
+    "--sparse",
     "--",
     url,
     into,
   );
-  git("-C", into, "checkout", "--quiet", "HEAD", "--", REPO_PLUGIN_DIR);
+  git(
+    "-C",
+    into,
+    "sparse-checkout",
+    "set",
+    "--no-cone",
+    `/${REPO_PLUGIN_DIR}/`,
+  );
 }
 
 // The source as a directory on disk for as long as `use` runs: a path is
@@ -111,15 +125,35 @@ function withRepo<T>(source: PluginSource, use: (repo: string) => T): T {
   }
 }
 
-// Put a staged plugin folder at `target`, replacing whatever is there — a
-// folder, or a link to one, which is moved aside and never written through.
-function place(staged: string, target: string, aside: string): void {
-  try {
-    fs.renameSync(target, aside);
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+// What `place` found at a plugin's target, which is what the install reports.
+type Placed = "installed" | "updated" | "replaced";
+
+// Put a staged plugin folder at `target`. The repo owns only the definition:
+// an installed folder keeps whatever the app wrote beside it (a relative
+// `data` file) and has its definition replaced in one rename. Anything else
+// there — a link, which is never written through, or a stray file — is moved
+// aside and the folder renamed in whole.
+function place(staged: string, target: string, aside: string): Placed {
+  const found = lstatOrAbsent(target);
+  if (found?.isDirectory()) {
+    fs.renameSync(
+      path.join(staged, DEFINITION_FILE),
+      path.join(target, DEFINITION_FILE),
+    );
+    return "updated";
   }
+  if (found) fs.renameSync(target, aside);
   fs.renameSync(staged, target);
+  return found ? "replaced" : "installed";
+}
+
+function lstatOrAbsent(p: string): fs.Stats | null {
+  try {
+    return fs.lstatSync(p);
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw e;
+  }
 }
 
 /**
@@ -127,23 +161,29 @@ function place(staged: string, target: string, aside: string): void {
  * once, into a staging folder inside `root` (a dot-name, which no load
  * reads); the staged bytes are what the loader checks and what is installed,
  * and a definition it would drop installs nothing. `source` names the repo in
- * messages. Returns each installed path.
+ * messages. Returns each installed definition and what was there before.
  */
 // [LAW:no-ambient-temporal-coupling] The daemon watches `root`, so each
-// plugin appears whole: its folder is renamed into place.
+// plugin appears whole: a folder or a definition is renamed into place.
 export function installFromRepo(
   repo: string,
   root: string,
   source: string,
-): readonly string[] {
-  const definitions = repoDefinitions(repo);
+): ReadonlyArray<{ readonly path: string; readonly placed: Placed }> {
+  const definitions = repoDefinitions(repo, source);
   fs.mkdirSync(root, { recursive: true });
   const stage = fs.mkdtempSync(path.join(root, ".install-"));
   try {
     const staged = definitions.map((d) => {
       const folder = path.join(stage, path.basename(path.dirname(d)));
       fs.mkdirSync(folder);
-      fs.copyFileSync(d, path.join(folder, DEFINITION_FILE));
+      // [LAW:single-enforcer] A folder with no definition stages as one, and
+      // the loader's verdict below names it.
+      try {
+        fs.copyFileSync(d, path.join(folder, DEFINITION_FILE));
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+      }
       return folder;
     });
     const problems = definitionProblems(
@@ -162,12 +202,12 @@ export function installFromRepo(
       );
     return staged.map((folder) => {
       const name = path.basename(folder);
-      place(
+      const placed = place(
         folder,
         path.join(root, name),
         path.join(stage, `.replaced-${name}`),
       );
-      return path.join(root, name, DEFINITION_FILE);
+      return { path: path.join(root, name, DEFINITION_FILE), placed };
     });
   } finally {
     fs.rmSync(stage, { recursive: true, force: true });
@@ -183,13 +223,7 @@ export function runPlugin(argv: readonly string[]): number {
     console.error(USAGE);
     return 2;
   }
-  const source = parsePluginSource(arg, process.cwd(), (p) => {
-    try {
-      return fs.statSync(p).isDirectory();
-    } catch {
-      return false;
-    }
-  });
+  const source = parsePluginSource(arg, process.cwd(), isDirectory);
   if ("error" in source) {
     console.error(`plugin install: ${source.error}`);
     return 2;
@@ -199,9 +233,9 @@ export function runPlugin(argv: readonly string[]): number {
     const installed = withRepo(source, (repo) =>
       installFromRepo(repo, userPluginRoot(), from),
     );
-    for (const p of installed)
+    for (const { path: p, placed } of installed)
       console.log(
-        `installed plugin ${path.basename(path.dirname(p))} → ${p} (from ${from})`,
+        `${placed} plugin ${path.basename(path.dirname(p))} → ${p} (from ${from})`,
       );
     return 0;
   } catch (e) {

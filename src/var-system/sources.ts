@@ -439,7 +439,7 @@ function resolvedPath(p: string): string {
   }
 }
 
-function isDirectory(p: string): boolean {
+export function isDirectory(p: string): boolean {
   try {
     return statSync(p).isDirectory();
   } catch {

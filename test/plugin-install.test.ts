@@ -41,6 +41,7 @@ describe("parsePluginSource", () => {
 
   test.each([
     ["owner/repo", "https://github.com/owner/repo.git"],
+    ["owner/repo.git", "https://github.com/owner/repo.git"],
     [
       "promptctl/links-issue-tracker",
       "https://github.com/promptctl/links-issue-tracker.git",
@@ -76,7 +77,7 @@ describe("installFromRepo", () => {
     const root = path.join(dir, "plugins");
     const repo = repoWith({ app: DEFINITION });
     expect(installFromRepo(repo, root, "repo")).toEqual([
-      path.join(root, "app/plugin.json5"),
+      { path: path.join(root, "app/plugin.json5"), placed: "installed" },
     ]);
     expect(fs.readFileSync(path.join(root, "app/plugin.json5"), "utf8")).toBe(
       DEFINITION,
@@ -87,13 +88,24 @@ describe("installFromRepo", () => {
       path.join(repo, ".cc-candybar/plugins/app/plugin.json5"),
       updated,
     );
-    installFromRepo(repo, root, "repo");
+    // The app's data beside the installed definition is the app's, not the
+    // repo's: an update replaces the definition and keeps it.
+    fs.writeFileSync(path.join(root, "app/state.json"), '{"status":"ok"}');
+    expect(installFromRepo(repo, root, "repo")).toEqual([
+      { path: path.join(root, "app/plugin.json5"), placed: "updated" },
+    ]);
     expect(fs.readFileSync(path.join(root, "app/plugin.json5"), "utf8")).toBe(
       updated,
     );
+    expect(fs.readFileSync(path.join(root, "app/state.json"), "utf8")).toBe(
+      '{"status":"ok"}',
+    );
     // Nothing staged is left behind beside the plugin.
     expect(fs.readdirSync(root)).toEqual(["app"]);
-    expect(fs.readdirSync(path.join(root, "app"))).toEqual(["plugin.json5"]);
+    expect(fs.readdirSync(path.join(root, "app")).sort()).toEqual([
+      "plugin.json5",
+      "state.json",
+    ]);
   });
 
   test("a plugin folder that is a link is replaced, never written through", () => {
@@ -103,7 +115,9 @@ describe("installFromRepo", () => {
     fs.writeFileSync(path.join(work, "plugin.json5"), "// my edits");
     fs.mkdirSync(root);
     fs.symlinkSync(work, path.join(root, "app"));
-    installFromRepo(repoWith({ app: DEFINITION }), root, "repo");
+    expect(installFromRepo(repoWith({ app: DEFINITION }), root, "repo")).toEqual([
+      { path: path.join(root, "app/plugin.json5"), placed: "replaced" },
+    ]);
     expect(fs.readFileSync(path.join(work, "plugin.json5"), "utf8")).toBe(
       "// my edits",
     );
@@ -130,8 +144,18 @@ describe("installFromRepo", () => {
     expect(() =>
       installFromRepo(repoWith({}), path.join(dir, "plugins"), "repo"),
     ).toThrow(
-      /has no plugins: none at \.cc-candybar\/plugins\/<name>\/plugin\.json5/,
+      /^repo has no plugins: none at \.cc-candybar\/plugins\/<name>\/plugin\.json5/,
     );
+  });
+
+  test("a plugin folder with no definition is the loader's refusal, named by the source", () => {
+    const root = path.join(dir, "plugins");
+    const repo = repoWith({ app: DEFINITION });
+    fs.mkdirSync(path.join(repo, ".cc-candybar/plugins/empty"));
+    expect(() => installFromRepo(repo, root, "repo")).toThrow(
+      /^repo: \.cc-candybar\/plugins\/empty\/plugin\.json5 would not load: .*ENOENT/,
+    );
+    expect(fs.readdirSync(root)).toEqual([]);
   });
 });
 
@@ -172,7 +196,7 @@ describe("runPlugin", () => {
     );
   });
 
-  test("a git repo without the plugins folder fails, naming it", () => {
+  test("a git repo without the plugins folder fails, naming the source", () => {
     const repo = repoWith({});
     fs.writeFileSync(path.join(repo, "README"), "x");
     const git = (...args: string[]) =>
@@ -181,8 +205,8 @@ describe("runPlugin", () => {
     git("add", ".");
     git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "c");
     expect(runPlugin(["install", `file://${repo}`])).toBe(1);
-    expect(err.mock.calls[0]![0]).toMatch(
-      /plugin install: git .*\.cc-candybar\/plugins.*failed/s,
+    expect(err).toHaveBeenCalledWith(
+      `plugin install: file://${repo} has no plugins: none at .cc-candybar/plugins/<name>/plugin.json5`,
     );
   });
 
