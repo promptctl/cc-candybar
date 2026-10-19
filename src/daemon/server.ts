@@ -132,7 +132,12 @@ import {
   type Lane,
   type LaneSwitches,
 } from "../config/lanes.js";
-import { heldClickError, releaseClickError } from "./click-error.js";
+import {
+  answeredClickError,
+  clickErrorAt,
+  type ClickErrorRecord,
+  type ClickErrorRender,
+} from "./click-error.js";
 import { newestWins } from "../utils/newest-wins.js";
 import {
   LIST_CLIENTS_FORMAT,
@@ -838,7 +843,11 @@ function handleConnection(sock: net.Socket): void {
   // (unix-socket data survives writer exit). No fixed sleep stands between
   // respond and exit; the SIGKILL backstop inside shutdown() is the
   // unrelated last-resort safety.
-  const respond = (resp: Response, exitAfterFlush: number | null): void => {
+  const respond = (
+    resp: Response,
+    exitAfterFlush: number | null,
+    delivered: () => void,
+  ): void => {
     if (responded) {
       // First responder owns the flush. Reaching here with an exit wish is
       // unreachable today (both exit-carrying arms resolve synchronously,
@@ -859,7 +868,12 @@ function handleConnection(sock: net.Socket): void {
         ? undefined
         : (): void => shutdown(exitAfterFlush);
     try {
-      sock.end(encodeFrame(resp), settle);
+      // A peer that already left fails the flush (it ended its side), so a
+      // clean one is the client holding the response.
+      sock.end(encodeFrame(resp), (err?: Error | null) => {
+        if (err == null) delivered();
+        settle?.();
+      });
     } catch (e) {
       // [LAW:no-silent-failure] The response is lost (socket already torn
       // down), but the exit wish must not be.
@@ -892,6 +906,7 @@ function handleConnection(sock: net.Socket): void {
         daemonV: PROTOCOL_VERSION,
       },
       null,
+      NOTHING_DELIVERED,
     );
   }, REQUEST_TIMEOUT_MS);
 
@@ -900,12 +915,12 @@ function handleConnection(sock: net.Socket): void {
       void handleRequest(frame as Request, () => timedOut)
         .then((r) =>
           r.kind === "reply"
-            ? respond(r.resp, r.exitAfterFlush)
+            ? respond(r.resp, r.exitAfterFlush, r.delivered)
             : stream(r.sessionId, r.lane),
         )
         .catch((err: unknown) => {
           dlog("error", `handler threw: ${inspect(err)}`);
-          respond(renderFailed(err), null);
+          respond(renderFailed(err), null, NOTHING_DELIVERED);
         });
     },
     (err) => {
@@ -918,6 +933,7 @@ function handleConnection(sock: net.Socket): void {
           daemonV: PROTOCOL_VERSION,
         },
         null,
+        NOTHING_DELIVERED,
       );
     },
   );
@@ -975,14 +991,23 @@ function handleConnection(sock: net.Socket): void {
 export interface Reply {
   readonly resp: Response;
   readonly exitAfterFlush: number | null;
+  // [LAW:effects-at-boundaries] What the reply's sender records once the
+  // client holds the response — only the connection knows when that is: a
+  // render whose answer carried a click error marks it answered.
+  readonly delivered: () => void;
 }
+const NOTHING_DELIVERED = (): void => {};
 // A subscription is the one request answered by a stream rather than a reply:
 // the connection boundary turns its socket over to the session's feed.
 type HandledRequest =
   | ({ kind: "reply" } & Reply)
   | { kind: "subscribe"; sessionId: string; lane: Lane };
 
-const stay = (resp: Response): Reply => ({ resp, exitAfterFlush: null });
+const stay = (resp: Response): Reply => ({
+  resp,
+  exitAfterFlush: null,
+  delivered: NOTHING_DELIVERED,
+});
 const replied = (reply: Reply): HandledRequest => ({ kind: "reply", ...reply });
 
 // [LAW:types-are-the-program] Every request kind answered with a reply: all
@@ -1086,6 +1111,7 @@ export async function handleRequest(
       // Exit is sequenced on the response flush, so the client always sees
       // the VERSION_MISMATCH diagnostic — never a dead socket.
       exitAfterFlush: req.v > PROTOCOL_VERSION ? 0 : null,
+      delivered: NOTHING_DELIVERED,
     };
   }
 
@@ -1106,7 +1132,11 @@ export async function replyTo(
   timedOut: () => boolean,
 ): Promise<Reply> {
   if (req.kind === "shutdown") {
-    return { resp: { ok: true, output: "" }, exitAfterFlush: 0 };
+    return {
+      resp: { ok: true, output: "" },
+      exitAfterFlush: 0,
+      delivered: NOTHING_DELIVERED,
+    };
   }
 
   if (req.kind === "pane-session") {
@@ -1191,16 +1221,15 @@ export async function replyTo(
         at,
       );
     }
-    const rendered: { outcome: RenderOutcome; resp: Response } = !checked.ok
+    const rendered: {
+      outcome: RenderOutcome;
+      resp: Response;
+      delivered: () => void;
+    } = !checked.ok
       ? refusedRender(checked.problems)
       : await answerRequest(checked.req, order, at, facts).then(
-          ({ output, moves }) => {
+          ({ output, moves, clickShown }) => {
             const resp = { ok: true, output } as const;
-            releaseClickError(
-              sessionState,
-              checked.req.hookData.session_id,
-              at,
-            );
             // [LAW:one-source-of-truth] A request the render took is the
             // session's data from now on: its frames are drawn from it, and
             // this answer is its frame now.
@@ -1210,11 +1239,27 @@ export async function replyTo(
               order,
               { resp, drawnAt: t0, moves, failure: null },
             );
-            return { outcome: { kind: "ok" } as const, resp };
+            return {
+              outcome: { kind: "ok" } as const,
+              resp,
+              // [LAW:single-enforcer] An answer carrying the click error that
+              // reaches its client is the one that delivered it
+              // (src/daemon/click-error.ts).
+              delivered:
+                clickShown === null
+                  ? NOTHING_DELIVERED
+                  : () =>
+                      answeredClickError(
+                        sessionState,
+                        checked.req.hookData.session_id,
+                        clickShown,
+                      ),
+            };
           },
           (error: unknown) => ({
             outcome: { kind: "threw", error } as const,
             resp: renderFailed(error),
+            delivered: NOTHING_DELIVERED,
           }),
         );
     if (rendered.outcome.kind !== "ok") stats.requestsErrored++;
@@ -1226,7 +1271,11 @@ export async function replyTo(
       Date.now() - t0,
     );
     dlog(level, line);
-    return stay(rendered.resp);
+    return {
+      resp: rendered.resp,
+      exitAfterFlush: null,
+      delivered: rendered.delivered,
+    };
   }
 
   if (req.kind === "click") {
@@ -1506,6 +1555,7 @@ async function renderFrame(req: CheckedRenderRequest): Promise<FeedFrame> {
       req,
       instantOf(started),
       facts,
+      "frame",
     );
     // [LAW:effects-at-boundaries] A frame only draws: the dump is the
     // session's requests' to write, and the frame links it only when it holds
@@ -1669,6 +1719,7 @@ const refusedRender = (problems: string[]) => ({
     code: "BAD_REQUEST",
     daemonV: PROTOCOL_VERSION,
   } satisfies Response,
+  delivered: NOTHING_DELIVERED,
 });
 
 // The bar for a checked request, at `at`, and whether anything on it moves
@@ -1679,7 +1730,12 @@ async function renderChecked(
   req: CheckedRenderRequest,
   at: Instant,
   facts: RenderFacts,
-): Promise<{ drawn: DrawnBar; moves: boolean }> {
+  render: ClickErrorRender,
+): Promise<{
+  drawn: DrawnBar;
+  moves: boolean;
+  clickShown: ClickErrorRecord | null;
+}> {
   noteFacts(facts, {
     sid: req.hookData.session_id,
     at: at.toFixed(3),
@@ -1825,8 +1881,14 @@ async function renderChecked(
     { ...renderSelectionOf(effective), effects },
   );
   // [LAW:one-source-of-truth] The click error dispatch held for this session,
-  // shown by every render while it is held; a render request releases it.
-  const clickError = heldClickError(sessionState, sessionId)?.text ?? null;
+  // shown by every render inside its hold, and past it by a request until an
+  // answer has carried it.
+  const clickHold = clickErrorAt(sessionState, sessionId, at, render);
+  const clickShown =
+    clickHold.kind === "held" || clickHold.kind === "owed"
+      ? clickHold.error
+      : null;
+  const clickError = clickShown?.text ?? null;
   const combinedError = [
     unknownFlagsError,
     hintsError,
@@ -1907,6 +1969,7 @@ async function renderChecked(
     fades: passages(fx.fades),
     leaves: passages(fx.leaves),
     err: combinedError ? "Y" : "N",
+    clickError: clickHold.kind === "none" ? "-" : clickHold.kind,
     upd: String(updates.length),
     warn: warned,
   });
@@ -1922,6 +1985,7 @@ async function renderChecked(
       },
     },
     moves: frameMoves(fx),
+    clickShown,
   };
 }
 
@@ -2000,9 +2064,18 @@ async function answerRequest(
   order: number,
   at: Instant,
   facts: RenderFacts,
-): Promise<{ output: string; moves: boolean }> {
+): Promise<{
+  output: string;
+  moves: boolean;
+  clickShown: ClickErrorRecord | null;
+}> {
   recordRequest(req);
-  const { drawn, moves } = await renderChecked(req, at, facts);
+  const { drawn, moves, clickShown } = await renderChecked(
+    req,
+    at,
+    facts,
+    "request",
+  );
   const { link, failure } = diagnosticDump.sync(
     req.hookData.session_id,
     order,
@@ -2013,5 +2086,5 @@ async function answerRequest(
   noteFacts(facts, {
     dumpFailed: failure === null ? "-" : JSON.stringify(failure),
   });
-  return { output: composeBar(drawn, link), moves };
+  return { output: composeBar(drawn, link), moves, clickShown };
 }

@@ -29,7 +29,7 @@ import {
   clickUrl,
 } from "./helpers/click";
 import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
-import { heldClickError } from "../src/daemon/click-error";
+import { lastClickError } from "../src/daemon/click-error";
 
 const SID = "s1";
 // A session that has rendered a config declaring no action: its gate holds
@@ -258,7 +258,7 @@ describe("dispatch verb — run all, aggregate, no nesting", () => {
       { verb: VERB_SET_STATE, args: [SID, "no-such-key", "x"] },
     ]);
     expect(() => clickUrl(url, ctx(sessionState))).toThrow();
-    const clickError = heldClickError(sessionState, SID)?.text ?? null;
+    const clickError = lastClickError(sessionState, SID)?.text ?? null;
     expect(clickError).not.toBeNull();
     expect(clickError).toMatch(/no-such-key/);
     // Session ID is extracted from the first set-state effect.
@@ -270,6 +270,6 @@ describe("dispatch verb — run all, aggregate, no nesting", () => {
     // copy-only dispatch with an unknown verb — no session ID available.
     const url = effectsUrl([{ verb: VERB_DISPATCH, args: ["whatever"] }]);
     expect(() => clickUrl(url, ctx(sessionState))).toThrow();
-    expect(heldClickError(sessionState, SID)?.text ?? null).toBeNull();
+    expect(lastClickError(sessionState, SID)?.text ?? null).toBeNull();
   });
 });

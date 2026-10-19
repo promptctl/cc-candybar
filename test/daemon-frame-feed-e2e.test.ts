@@ -22,6 +22,7 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 
+import { CLICK_ERROR_HOLD_S } from "../src/daemon/click-error";
 import { openFrameStream, type StreamEnd } from "../src/daemon/client-frames";
 import { followFrames, SWITCHED_OFF_RETRY_MS } from "../src/daemon/frame-follow";
 import {
@@ -431,34 +432,36 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     expect(readFileSync(dumpFile, "utf8")).toMatch(/duplicate key/);
   });
 
-  test("a failed click's error stays on the pushed frames until a statusline request after the hold releases it", async () => {
+  test("a failed click's error shows on the pushed frames and Claude Code's bar for the hold, and leaves by time alone", async () => {
     await render(sockPath, "feed-click-error", projectDir, {}, args("toggle"));
     const bad = effectsUrl([
       { verb: VERB_SET_STATE, args: ["feed-click-error", "face", "bogus"] },
     ]);
-    const outputs: string[] = [];
-    let first = "";
-    let second = "";
+    let inside = "";
     const frames = await framesOf("feed-click-error", async () => {
       await sleep(100);
       expect((await sendClick(sockPath, bad)).ok).toBe(false);
-      await sleep(1200);
-      first = await render(sockPath, "feed-click-error", projectDir, {}, args("toggle"));
-      second = await render(sockPath, "feed-click-error", projectDir, {}, args("toggle"));
-      await sleep(100);
+      inside = await render(sockPath, "feed-click-error", projectDir, {}, args("toggle"));
+      // No statusline request from here on: only time ends the hold. A still
+      // bar's frames come a period apart, each after the last answers, so the
+      // first one past the hold can land a full period and their drift late.
+      await sleep(CLICK_ERROR_HOLD_S * 1000 + 2500);
     });
-    for (const { resp } of frames)
-      if (resp.ok && "output" in resp) outputs.push(stripAnsi(resp.output));
     const shows = (text: string): boolean => /bogus/.test(text);
-    // Claude Code's own bar shows it once, and its next render is clear.
-    expect(shows(stripAnsi(first))).toBe(true);
-    expect(shows(stripAnsi(second))).toBe(false);
-    // The frames: the bar, the bar with the error for over a second, the bar.
-    const errorAt = frames.findIndex(({ resp }) => resp.ok && "output" in resp && shows(stripAnsi(resp.output)));
-    const clearAt = frames.findIndex((f, i) => i > errorAt && f.resp.ok && "output" in f.resp && !shows(stripAnsi(f.resp.output)));
+    expect(shows(stripAnsi(inside))).toBe(true);
+    const outputs = frames.flatMap(({ at, resp }) =>
+      resp.ok && "output" in resp ? [{ at, text: stripAnsi(resp.output) }] : [],
+    );
+    // The frames: the bar, the bar with the error for the hold, the bar.
+    const errorAt = outputs.findIndex(({ text }) => shows(text));
+    const clearAt = outputs.findIndex((f, i) => i > errorAt && !shows(f.text));
+    expect(shows(outputs[0]!.text)).toBe(false);
     expect(errorAt).toBeGreaterThan(0);
     expect(clearAt).toBeGreaterThan(errorAt);
-    expect(frames[clearAt]!.at - frames[errorAt]!.at).toBeGreaterThanOrEqual(1000);
-    expect(shows(outputs[0]!)).toBe(false);
+    // The error frame is pushed a moment after the click, so the gap may fall
+    // short of the hold by that moment, never by a frame.
+    expect(outputs[clearAt]!.at - outputs[errorAt]!.at).toBeGreaterThanOrEqual(
+      CLICK_ERROR_HOLD_S * 1000 - 250,
+    );
   });
 });

@@ -15,11 +15,12 @@ import {
   writeFileSync,
 } from "node:fs";
 import { constants, open } from "node:fs/promises";
+import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 
 import { stripAnsi } from "./helpers/ansi";
-import { PROTOCOL_VERSION } from "../src/daemon/protocol";
+import { encodeFrame, PROTOCOL_VERSION } from "../src/daemon/protocol";
 import { logPath, stateDir } from "../src/daemon/paths";
 import {
   hookData,
@@ -27,7 +28,10 @@ import {
   render,
   renderBody,
   renderRequest,
+  sendClick,
 } from "./helpers/daemon-e2e";
+import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
+import { CLICK_ERROR_HOLD_S } from "../src/daemon/click-error";
 import { sendDaemonRequest } from "./helpers/daemon-wire";
 import {
   prepareIsolatedDaemonEnv,
@@ -236,6 +240,53 @@ describe("every render request writes one render event, whatever its outcome", (
       expect(event.level).toBe("warn");
       expect(field(event, "sid")).toBeUndefined();
     }
+  });
+
+  // A failed click's error shows on every render inside its hold, and past it
+  // on a request until an answer has carried it — what a bar Claude Code
+  // redraws only on events needs — then on none.
+  test("a failed click's error is the render event's clickError: held, owed, then over", async () => {
+    const sid = "ev-click";
+    const renderOne = async (): Promise<Event> => {
+      await render(sockPath, sid, projectDir, {}, configFlag("drawn"));
+      return eventsOf(sid).at(-1)!;
+    };
+    expect(field(await renderOne(), "clickError")).toBe("-");
+    const bad = effectsUrl([
+      { verb: VERB_SET_STATE, args: [sid, "no-such-key", "x"] },
+    ]);
+    expect((await sendClick(sockPath, bad)).ok).toBe(false);
+    const held = await renderOne();
+    expect(field(held, "clickError")).toBe("held");
+    expect(field(held, "err")).toBe("Y");
+    // That answer carried the first failure; this one no answer carries
+    // inside its hold. A request whose client is gone before its answer is
+    // written is answered to no one, so it carries nothing.
+    expect((await sendClick(sockPath, bad)).ok).toBe(false);
+    const rendered = eventsOf(sid).length;
+    // Sent and half-closed at once: the daemon's side ends with it, before the
+    // render's answer is written.
+    const gone = net.connect(sockPath, () =>
+      gone.end(
+        encodeFrame({
+          v: PROTOCOL_VERSION,
+          kind: "render",
+          ...renderBody(sid, projectDir, {}, configFlag("drawn")),
+        }),
+      ),
+    );
+    for (let waited = 0; eventsOf(sid).length === rendered; waited += 20) {
+      if (waited > 5000) throw new Error("the abandoned request wrote no event");
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    expect(field(eventsOf(sid).at(-1)!, "clickError")).toBe("held");
+    await new Promise((r) => setTimeout(r, (CLICK_ERROR_HOLD_S + 0.2) * 1000));
+    const owed = await renderOne();
+    expect(field(owed, "clickError")).toBe("owed");
+    expect(field(owed, "err")).toBe("Y");
+    const over = await renderOne();
+    expect(field(over, "clickError")).toBe("over");
+    expect(field(over, "err")).toBe("N");
   });
 
   // A dump write the filesystem refuses costs the render nothing: the bar is
