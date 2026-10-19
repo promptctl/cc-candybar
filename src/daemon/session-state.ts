@@ -202,6 +202,11 @@ export class SessionState implements SessionStateReader, SessionStateRW {
     return this.atom.observers_?.size ?? 0;
   }
 
+  // The store's revision: how many changes any writer has made to it.
+  latestRevision(): number {
+    return this.head;
+  }
+
   // How many sessions the store holds.
   size(): number {
     return this.sessions.size;

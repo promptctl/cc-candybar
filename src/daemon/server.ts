@@ -72,7 +72,6 @@ import { stateGate } from "./verbs/state-validators";
 import {
   VERBS,
   BadVerbArgs,
-  SESSION_CONFIG_OVERRIDE_KEY,
   SESSION_RENDER_ORIGIN_KEY,
   SESSION_CLIENT_HINTS_KEY,
   encodeRenderOrigin,
@@ -1039,6 +1038,7 @@ export async function handleRequest(
         sessionState: {
           sessions: sessionState.size(),
           observers: sessionState.observers(),
+          revision: sessionState.latestRevision(),
         },
         frameFeeds: frameFeeds.getStats(),
         watchersActive: watcherRegistry.size(),
@@ -1080,7 +1080,7 @@ export async function handleRequest(
     }
     const rendered: { outcome: RenderOutcome; resp: Response } = !checked.ok
       ? refusedRender(checked.problems)
-      : await answerRequest(checked.req, at, facts).then(
+      : await answerRequest(checked.req, order, at, facts).then(
           ({ output, moves }) => {
             const resp = { ok: true, output } as const;
             releaseClickError(
@@ -1455,12 +1455,17 @@ function feedFrameOf(
 }
 
 // A render request that crossed the checkpoint: its hookData carries every
-// required field with its declared type, its cwd is absolute, and `hints` is
-// its client hints, parsed. Raw `req.*` hint fields are not read past the
-// checkpoint. Only checkRenderRequest makes one.
+// required field with its declared type, its cwd is absolute, `hints` is its
+// client hints, parsed, and its args are parsed into `requested` — the config
+// inputs it named, its explicit path the `--config` flag over the client's
+// `CC_CANDYBAR_CONFIG` hint — and `unknownFlagsError`. Raw `req.*` hint
+// fields and `req.args` are not read past the checkpoint. Only
+// checkRenderRequest makes one.
 declare const CHECKED: unique symbol;
 type CheckedRenderRequest = RenderRequest & {
   readonly hints: ClientHints;
+  readonly requested: RenderOrigin;
+  readonly unknownFlagsError: string | null;
   readonly [CHECKED]: true;
 };
 
@@ -1507,12 +1512,25 @@ function checkRenderRequest(
       `request 'cwd' is not an absolute path: ${JSON.stringify(req.cwd)}`,
     );
   }
-  return wireProblems.length > 0
-    ? { ok: false, problems: wireProblems }
-    : {
-        ok: true,
-        req: { ...req, hints: parseClientHints(req) } as CheckedRenderRequest,
-      };
+  if (wireProblems.length > 0) return { ok: false, problems: wireProblems };
+  const hints = parseClientHints(req);
+  // [LAW:dataflow-not-control-flow] The *request's* cwd, not the daemon's
+  // process.cwd(), so config resolution depends only on request data — the
+  // daemon's own working directory must not influence output.
+  const { configFile, unknownFlagsError } = parseRenderArgs(req.args, req.cwd);
+  return {
+    ok: true,
+    req: {
+      ...req,
+      hints,
+      requested: {
+        projectDir: req.hookData.workspace.project_dir,
+        cwd: req.cwd,
+        configFile: configFile ?? hints.configEnv ?? null,
+      },
+      unknownFlagsError,
+    } as CheckedRenderRequest,
+  };
 }
 
 // The answer to a request the checkpoint refused.
@@ -1539,7 +1557,7 @@ async function renderChecked(
     sid: req.hookData.session_id,
     at: at.toFixed(3),
   });
-  const { unknownFlagsError } = parseRenderArgs(req.args, req.cwd);
+  const { unknownFlagsError } = req;
   const sessionId = req.hookData.session_id;
   // [LAW:parse-dont-validate] The ONE checkpoint for everything the client
   // observed and the daemon cannot. Raw `req.*` hint fields are not read
@@ -1568,12 +1586,9 @@ async function renderChecked(
   // [LAW:one-source-of-truth] The explicit config path has three
   // spellings and ONE precedence: a load-config pick (sessionRenderOrigin)
   // over the `--config` flag over the client's `CC_CANDYBAR_CONFIG` hint
-  // (requestedOrigin). All three are client facts; the daemon's own env is
+  // (checkRenderRequest). All three are client facts; the daemon's own env is
   // never consulted (brandon-config-5g8).
-  const origin = sessionRenderOrigin(
-    requestedOrigin(req),
-    sessionState.get(sessionId, SESSION_CONFIG_OVERRIDE_KEY),
-  );
+  const origin = sessionRenderOrigin(req.requested, sessionState, sessionId);
   // [LAW:no-ambient-temporal-coupling] Held, not fetched: `state` is what
   // this render resolves its payload from and draws with after the payload
   // await below. An eviction or a reload meanwhile retires it, and the cache
@@ -1820,22 +1835,6 @@ function dumpTextOf(drawn: DrawnBar): string | null {
     : formatDiagnosticDump(drawn.diagnostics);
 }
 
-// The config inputs a request named: its project, its cwd, and its explicit
-// path, the `--config` flag over the client's `CC_CANDYBAR_CONFIG` hint.
-// [LAW:dataflow-not-control-flow] The *request's* cwd, not the daemon's
-// process.cwd(), so config resolution depends only on request data — the
-// daemon's own working directory must not influence output.
-function requestedOrigin(req: CheckedRenderRequest): RenderOrigin {
-  return {
-    projectDir: req.hookData.workspace.project_dir,
-    cwd: req.cwd,
-    configFile:
-      parseRenderArgs(req.args, req.cwd).configFile ??
-      req.hints.configEnv ??
-      null,
-  };
-}
-
 // [LAW:effects-at-boundaries] What a render request said, recorded where the
 // request arrives — never by a frame, which only draws, and which would wake
 // its own feed by writing the session's state. Compared before writing:
@@ -1861,7 +1860,7 @@ function recordRequest(req: CheckedRenderRequest): void {
   // session's load-config pick, verbs/index.ts sessionOrigin) and writes the
   // file the next reload reads — never a path re-derived from the daemon's
   // own cwd.
-  const origin = encodeRenderOrigin(requestedOrigin(req));
+  const origin = encodeRenderOrigin(req.requested);
   if (sessionState.get(sessionId, SESSION_RENDER_ORIGIN_KEY) !== origin) {
     sessionState.set(sessionId, SESSION_RENDER_ORIGIN_KEY, origin);
   }
@@ -1870,9 +1869,12 @@ function recordRequest(req: CheckedRenderRequest): void {
 // A render request's answer: what it said is recorded, the bar is drawn, and
 // the session's dump is brought in line with it before the strip that links
 // it goes out — the link is built from the write's outcome, so the trailer
-// never names a file that is not there.
+// never names a file that is not there. `order` is where the request came in
+// the order they arrived: the dump holds the newest request's text, however
+// the renders finish.
 async function answerRequest(
   req: CheckedRenderRequest,
+  order: number,
   at: Instant,
   facts: RenderFacts,
 ): Promise<{ output: string; moves: boolean }> {
@@ -1880,6 +1882,7 @@ async function answerRequest(
   const { drawn, moves } = await renderChecked(req, at, facts);
   const fullText = diagnosticDump.sync(
     req.hookData.session_id,
+    order,
     dumpTextOf(drawn),
   );
   // [LAW:nothing-unseen] On the render event, not a line of its own: the

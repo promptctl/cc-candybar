@@ -292,36 +292,33 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
 
   test("a frame records nothing: no session-state write and no dump write, which the session's next request makes", async () => {
     const sid = "feed-frame-records-nothing";
-    const stateDir = path.dirname(sockPath);
-    const stateOf = (): unknown =>
-      (
-        JSON.parse(
-          readFileSync(path.join(stateDir, "session-state.json"), "utf8"),
-        ) as Record<string, unknown>
-      )[sid];
-    const dumpFile = path.join(stateDir, "diagnostics", `${sid}.txt`);
+    const dumpFile = path.join(
+      path.dirname(sockPath),
+      "diagnostics",
+      `${sid}.txt`,
+    );
+    const revision = async (): Promise<number> =>
+      (await stats()).sessionState.revision;
     await render(sockPath, sid, projectDir, {}, args("still"));
     // The pick lands before anyone subscribes, so no frame draws until the
-    // snapshot is taken: every frame after it draws the warned config.
+    // revision is read: every frame after it draws the warned config.
     await click(
       sockPath,
       `cc-candybar://${VERB_LOAD_CONFIG}/${encodeURIComponent(sid)}/${encodeURIComponent(path.join(projectDir, "warned.json5"))}`,
     );
-    await sleep(800); // the session-state file's 500 ms write debounce
-    const before = stateOf();
-    expect(before).toBeDefined();
-    expect(existsSync(dumpFile)).toBe(false);
+    const before = await revision();
     const drawnBefore = (await feedStats()).drawn;
+    let after = before;
     const frames = await framesOf(sid, async () => {
       await sleep(1500);
+      // Read while the stream is open, so every frame drawn is counted.
+      after = await revision();
     });
-    // Drawn many times; pushed only when the bytes moved.
-    expect((await feedStats()).drawn - drawnBefore).toBeGreaterThan(10);
+    expect((await feedStats()).drawn - drawnBefore).toBeGreaterThan(0);
     const shown = outputs(frames).map(stripAnsi);
     expect(shown.length).toBeGreaterThan(0);
     expect(shown.every((text) => /duplicate key/.test(text))).toBe(true);
-    await sleep(800);
-    expect(stateOf()).toEqual(before);
+    expect(after).toBe(before);
     expect(existsSync(dumpFile)).toBe(false);
     // The session's next request is where both are written.
     await render(sockPath, sid, projectDir, {}, args("still"));

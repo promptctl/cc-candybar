@@ -20,7 +20,7 @@ import path from "node:path";
 
 import { stripAnsi } from "./helpers/ansi";
 import { PROTOCOL_VERSION } from "../src/daemon/protocol";
-import { logPath } from "../src/daemon/paths";
+import { logPath, stateDir } from "../src/daemon/paths";
 import {
   hookData,
   killAndWait,
@@ -191,6 +191,8 @@ describe("every render request writes one render event, whatever its outcome", (
     // its fields are the drawn bar's, in the same order.
     const gate = attempts("ev-gate", "ok", "info");
     expect(field(gate, "warn")).toBe("when");
+    // Its strip's full text was written beside it.
+    expect(field(gate, "dumpFailed")).toBe("-");
     const keys = (event: Event) => event.fields.map(([k]) => k);
     expect(keys(gate)).toEqual(keys(drawn));
     expect(readFileSync(logPath(env), "utf8")).not.toContain("handler threw");
@@ -205,6 +207,24 @@ describe("every render request writes one render event, whatever its outcome", (
       `request 'cwd' is not an absolute path: "proj"`,
     );
     expect(field(refused, "sid")).toBeUndefined();
+  });
+
+  // A dump write the filesystem refuses costs the render nothing: the bar is
+  // drawn, and its event names the refusal.
+  test("a refused dump write is the render event's dumpFailed", async () => {
+    const dir = path.join(stateDir(env), "diagnostics");
+    rmSync(dir, { recursive: true, force: true });
+    writeFileSync(dir, ""); // a file where the directory should be
+    try {
+      await render(sockPath, "ev-dump-refused", projectDir, {}, configFlag("broken"));
+    } finally {
+      rmSync(dir, { force: true });
+    }
+    const event = only(eventsOf("ev-dump-refused"));
+    expect(field(event, "outcome")).toBe("ok");
+    expect(JSON.parse(field(event, "dumpFailed") ?? "null")).toMatch(
+      /ev-dump-refused\.txt: /,
+    );
   });
 
   // A render still running when its client was answered TIMEOUT says so: its

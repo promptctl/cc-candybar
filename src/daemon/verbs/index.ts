@@ -19,7 +19,7 @@
 //   cc-candybar://<verb>/<value>   where <value> may itself contain `/`.
 
 import { launchSync } from "../../proc/launch";
-import type { SessionStateRW } from "../session-state";
+import type { SessionStateReader, SessionStateRW } from "../session-state";
 import { holdClickError } from "../click-error";
 import { instantOf } from "../../utils/instant";
 import { stateGate, stateKeySeed } from "./state-validators";
@@ -572,11 +572,18 @@ export interface RenderOrigin {
 // durable click resolves (sessionOrigin) both come through here, so a click
 // made right after a pick lands in the file the bar now draws from, without
 // waiting for the session's next request to record it.
+// [LAW:effects-at-boundaries] The load-config verb writes per-session config
+// overrides into SessionState; this is the one read point.
 export function sessionRenderOrigin(
   requested: RenderOrigin,
-  override: string | null,
+  state: SessionStateReader,
+  sid: string,
 ): RenderOrigin {
-  return { ...requested, configFile: override ?? requested.configFile };
+  return {
+    ...requested,
+    configFile:
+      state.get(sid, SESSION_CONFIG_OVERRIDE_KEY) ?? requested.configFile,
+  };
 }
 
 export function encodeRenderOrigin(origin: RenderOrigin): string {
@@ -626,10 +633,7 @@ function recordedOrigin(ctx: VerbContext, sid: string): RenderOrigin | null {
   const raw = ctx.sessionState.get(sid, SESSION_RENDER_ORIGIN_KEY);
   return raw === null
     ? null
-    : sessionRenderOrigin(
-        parseRenderOrigin(raw),
-        ctx.sessionState.get(sid, SESSION_CONFIG_OVERRIDE_KEY),
-      );
+    : sessionRenderOrigin(parseRenderOrigin(raw), ctx.sessionState, sid);
 }
 
 // [LAW:no-ambient-temporal-coupling] A history step that rewrote the file this

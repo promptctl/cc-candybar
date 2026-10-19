@@ -8,20 +8,32 @@ import type { FullTextLink } from "../render/diagnostic-strip";
 // `file://` URL (src/render/diagnostic-strip.ts). Nothing else writes under
 // its directory.
 //
-// [LAW:one-source-of-truth] The directory MIRRORS render state: a session's
-// file exists iff that session's last render carried a diagnostic, and holds
-// exactly the text that render showed an excerpt of. `sync` is the
-// reconciler — it compares the desired text with what it last wrote and
-// touches the disk only on a change, so a steady error costs no I/O per
-// render and a repaired config removes its file on the next render.
+// [LAW:one-source-of-truth] The directory MIRRORS request state: a session's
+// file exists iff that session's newest render request — newest by arrival,
+// however the renders finish — carried a diagnostic, and holds exactly the
+// text that render showed an excerpt of. `sync` is the reconciler — it
+// compares the desired text with what it last wrote and touches the disk
+// only on a change or after a failed write, so a steady error costs no I/O
+// per render and a repaired config removes its file on the next request.
 //
 // [LAW:carrying-cost] Bounded by construction: one file per session that has
 // errored since the daemon started, and `reset` wipes the directory when the
 // daemon starts (its memory of what it wrote is gone with the old process,
 // so the files it named are stale by definition — like every other cold-
 // rebuilt cache).
+// What a session's file was last brought in line with: the text of the
+// newest request to sync it, where that request arrived, and the reason its
+// write failed — null once the file holds the text.
+interface Synced {
+  readonly order: number;
+  readonly text: string | null;
+  readonly failure: string | null;
+}
+
+const NEVER_SYNCED: Synced = { order: -Infinity, text: null, failure: null };
+
 export class DiagnosticDump {
-  private readonly written = new Map<string, string>();
+  private readonly synced = new Map<string, Synced>();
 
   constructor(private readonly dir: string) {}
 
@@ -34,53 +46,68 @@ export class DiagnosticDump {
     return path.join(this.dir, `${encodeURIComponent(sessionId)}.txt`);
   }
 
-  // Bring the session's file in line with `text`: present with this content,
-  // or absent when null — and the link the strip offers for it. A failed
-  // write is the link's `unavailable` reason, the same shape as writeLease:
-  // the dump is best-effort beside the strip, which already shows the text,
-  // so a failed write must not cost the render. The memory of what was
-  // written is left as it was, so the next render retries.
-  sync(sessionId: string, text: string | null): FullTextLink {
+  // Bring the session's file in line with `text`, the text of the request
+  // that arrived `order`-th: present with this content, or absent when null —
+  // and the link the strip offers for it. A failed write is the link's
+  // `unavailable` reason, the same shape as writeLease: the dump is
+  // best-effort beside the strip, which already shows the text, so a failed
+  // write must not cost the render; the next request retries it.
+  sync(sessionId: string, order: number, text: string | null): FullTextLink {
+    const last = this.synced.get(sessionId) ?? NEVER_SYNCED;
+    // [LAW:no-ambient-temporal-coupling] The file is the newest request's: a
+    // request that finishes after a newer one leaves it alone.
+    if (order < last.order) return this.linkFor(sessionId, text);
+    this.synced.set(sessionId, {
+      order,
+      text,
+      // "Never written" and "absent" are the same desired state, so a session
+      // that has never errored costs no syscall per request.
+      failure:
+        text === last.text && last.failure === null
+          ? null
+          : this.write(sessionId, text),
+    });
+    return this.linkFor(sessionId, text);
+  }
+
+  // [LAW:effects-at-boundaries] The link a FRAME offers, and a request's once
+  // `sync` has run: frames only draw, so the dump is written when a request
+  // arrives, and a frame whose text the file does not hold says so rather
+  // than linking other text — naming the write's failure when it failed.
+  linkFor(sessionId: string, text: string | null): FullTextLink {
+    const last = this.synced.get(sessionId) ?? NEVER_SYNCED;
+    return last.text !== text
+      ? {
+          kind: "unavailable",
+          reason: "written at the session's next statusline request",
+        }
+      : last.failure !== null
+        ? { kind: "unavailable", reason: last.failure }
+        : { kind: "file", path: this.pathFor(sessionId) };
+  }
+
+  // The one write: the session's file holding `text`, or gone. The fs
+  // failure's reason, or null.
+  private write(sessionId: string, text: string | null): string | null {
     const file = this.pathFor(sessionId);
-    // "Never written" and "absent" are the same desired state, so a session
-    // that has never errored costs no syscall per render.
-    const last = this.written.get(sessionId) ?? null;
-    if (text === last) return { kind: "file", path: file };
     try {
       if (text === null) {
         fs.rmSync(file, { force: true });
-        this.written.delete(sessionId);
       } else {
         fs.mkdirSync(this.dir, { recursive: true, mode: 0o700 });
         fs.writeFileSync(file, text, { mode: 0o600 });
-        this.written.set(sessionId, text);
       }
-      return { kind: "file", path: file };
+      return null;
     } catch (e) {
-      return {
-        kind: "unavailable",
-        reason: `${file}: ${(e as Error).message}`,
-      };
+      return `${file}: ${(e as Error).message}`;
     }
-  }
-
-  // [LAW:effects-at-boundaries] The link a FRAME offers: frames only draw,
-  // so the dump is written when a request arrives (`sync`), and a frame whose
-  // text the file does not hold yet says so rather than linking other text.
-  linkFor(sessionId: string, text: string | null): FullTextLink {
-    return (this.written.get(sessionId) ?? null) === text
-      ? { kind: "file", path: this.pathFor(sessionId) }
-      : {
-          kind: "unavailable",
-          reason: "written at the session's next statusline request",
-        };
   }
 
   // Daemon start: forget everything, on disk and in memory. The same shape
   // as sync: a wipe the filesystem refuses is a reason, not a throw that
   // would take the daemon down over its auxiliary directory.
   reset(): string | null {
-    this.written.clear();
+    this.synced.clear();
     try {
       fs.rmSync(this.dir, { recursive: true, force: true });
       return null;

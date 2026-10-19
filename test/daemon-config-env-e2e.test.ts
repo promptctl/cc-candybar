@@ -126,12 +126,6 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
     expect(viaAbsent).not.toBe(plain);
   });
 
-  // The three spellings of an explicit config have ONE precedence, composed
-  // at the request boundary (server.ts): a load-config pick over the
-  // `--config` flag over the `configEnv` hint. Each render below carries the
-  // two lower spellings naming DIFFERENT files, so the bar itself says which
-  // one won. An empty `--config` is no override at all — the hint applies —
-  // never an empty path collapsing the chain to nothing.
   // A durable click resolves its file from what the session's last request
   // named, under the session's pick — so a click made the moment after a pick
   // writes the picked file, with no render between them to record it.
@@ -157,6 +151,12 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
     expect(readFileSync(named, "utf8")).toBe(plain);
   });
 
+  // The three spellings of an explicit config have ONE precedence, composed
+  // at the request boundary (server.ts): a load-config pick over the
+  // `--config` flag over the `configEnv` hint. Each render below carries the
+  // two lower spellings naming DIFFERENT files, so the bar itself says which
+  // one won. An empty `--config` is no override at all — the hint applies —
+  // never an empty path collapsing the chain to nothing.
   test("a load-config pick outranks --config, which outranks the configEnv hint; an empty flag is no flag", async () => {
     const sid = "cfg-env-precedence";
     const hints = { configEnv: absent };
