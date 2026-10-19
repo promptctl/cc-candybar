@@ -21,15 +21,12 @@ export type Motion = "moving" | "unseen" | "still";
 // What one render produced for a feed: the response its subscribers receive
 // (the one a render request is answered with), the instant it was drawn at (ms
 // since the epoch), how the bar moves, which decides when the next frame is
-// due, which animation lanes the session's settings switch on as this render
-// resolved them — null for a render that threw before it knew, which leaves
-// the switches as the last frame left them — and, for a render that threw,
-// the render event describing it, logged when that failure is first pushed.
+// due, and — for a render that threw — the render event describing it, logged
+// when that failure is first pushed.
 export interface FeedFrame {
   readonly resp: Response;
   readonly drawnAt: number;
   readonly motion: Motion;
-  readonly lanes: LaneSwitches | null;
   readonly failure: LogLine | null;
 }
 
@@ -67,6 +64,12 @@ export interface Subscriber {
 
 export interface FeedDeps<Req> {
   render(req: Req): Promise<FeedFrame>;
+  // Which animation lanes the settings of the session `req` is from switch on
+  // now — its config under its session's picks, never a copy taken when a
+  // frame was drawn, so a toggle turned on is honoured at the next subscribe.
+  lanes(req: Req): LaneSwitches;
+  // A feed opened: whatever runs only while some feed exists starts.
+  opened(): void;
   // Calls `onChange` whenever the session's own state changes (a click opening
   // a menu), so its next frame is drawn at once rather than when it falls due.
   // Returns the disposer.
@@ -121,12 +124,10 @@ const MAX_REQUESTS = 256;
 
 // A session's latest request and `order`: where it came in the order the
 // daemon received requests, which is what makes one request later than another
-// when their renders finish out of order; and which lanes the session's newest
-// frame switched on.
+// when their renders finish out of order.
 interface Noted<Req> {
   readonly req: Req;
   readonly order: number;
-  lanes: LaneSwitches;
 }
 
 export interface FeedStats {
@@ -160,16 +161,11 @@ export class FrameFeeds<Req> {
   // [LAW:one-source-of-truth] The answer IS the request's frame at this
   // instant, so it is pushed as one, and the next frame falls due a period
   // after it rather than being drawn again at once.
-  note(
-    sessionId: string,
-    req: Req,
-    order: number,
-    frame: FeedFrame & { readonly lanes: LaneSwitches },
-  ): void {
+  note(sessionId: string, req: Req, order: number, frame: FeedFrame): void {
     const held = this.requests.get(sessionId);
     if (held !== undefined && held.order > order) return;
     this.requests.delete(sessionId);
-    this.requests.set(sessionId, { req, order, lanes: frame.lanes });
+    this.requests.set(sessionId, { req, order });
     for (const oldest of this.requests.keys()) {
       if (this.requests.size <= MAX_REQUESTS) break;
       if (!this.feeds.has(oldest)) this.requests.delete(oldest);
@@ -203,12 +199,13 @@ export class FrameFeeds<Req> {
   }
 
   // [LAW:single-enforcer] The one gate on the lanes: a subscription whose
-  // lane the session's newest frame switched off is refused here before any
-  // feed opens, and one whose lane a later frame switches off is ended in
-  // `push`. A session with no frame yet waits, and its first frame decides.
+  // lane the session's settings switch off is refused here before any feed
+  // opens, and one whose lane is switched off while it streams is ended in
+  // `push`. A session the daemon holds no request of yet waits, and its first
+  // frame decides.
   subscribe(sessionId: string, sub: Subscriber): () => void {
-    const lanes = this.requests.get(sessionId)?.lanes;
-    if (lanes !== undefined && !lanes[sub.lane]) {
+    const noted = this.requests.get(sessionId);
+    if (noted !== undefined && !this.deps.lanes(noted.req)[sub.lane]) {
       this.refuse(sessionId, sub);
       return () => {};
     }
@@ -279,6 +276,7 @@ export class FrameFeeds<Req> {
       summarizedAt: now,
     };
     this.feeds.set(sessionId, feed);
+    this.deps.opened();
     // A feed's clock starts when it opens: its first frame is drawn at once,
     // and pushed to the subscriber that opened it once the render is out. A
     // later subscriber is handed the frame as it stands.
@@ -326,7 +324,6 @@ export class FrameFeeds<Req> {
     // A request noted while this frame was drawn was pushed as its own frame;
     // this one, of the data before it, would step the bar back.
     if (frame !== null && this.requests.get(feed.sessionId) === noted) {
-      if (frame.lanes !== null) noted.lanes = frame.lanes;
       this.push(feed, frame);
       if (this.feeds.get(feed.sessionId) !== feed) return;
     }
@@ -370,10 +367,10 @@ export class FrameFeeds<Req> {
   }
 
   private push(feed: Feed, frame: FeedFrame): void {
-    // The lanes the session's newest frame switched on: this one's, or the
-    // last one's when this render threw before it knew.
-    const lanes = this.requests.get(feed.sessionId)?.lanes;
-    if (lanes !== undefined) {
+    // The lanes the session's settings switch on as this frame goes out.
+    const noted = this.requests.get(feed.sessionId);
+    if (noted !== undefined) {
+      const lanes = this.deps.lanes(noted.req);
       for (const sub of [...feed.sinks]) {
         if (lanes[sub.lane]) continue;
         this.unsubscribe(feed, sub);
@@ -417,7 +414,7 @@ export class FrameFeeds<Req> {
     const now = this.deps.now();
     this.deps.log(
       "info",
-      `feed sid=${JSON.stringify(feed.sessionId)} ${state} subscribers=${feed.sinks.size} for=${Math.round((now - feed.since) / 1000)}s drawn=${feed.drawn} noted=${feed.noted} moving=${feed.moving} unseen=${feed.unseen} failed=${feed.failed} pushed=${feed.pushed} meanDraw=${feed.drawn === 0 ? "-" : (feed.drawMs / feed.drawn).toFixed(2)}ms`,
+      `feed sid=${JSON.stringify(feed.sessionId)} ${state} subscribers=${feed.sinks.size} lanes=${[...feed.sinks].map((s) => s.lane).join(",") || "-"} for=${Math.round((now - feed.since) / 1000)}s drawn=${feed.drawn} noted=${feed.noted} moving=${feed.moving} unseen=${feed.unseen} failed=${feed.failed} pushed=${feed.pushed} meanDraw=${feed.drawn === 0 ? "-" : (feed.drawMs / feed.drawn).toFixed(2)}ms`,
     );
     feed.summarizedAt = now;
   }

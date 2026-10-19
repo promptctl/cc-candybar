@@ -187,6 +187,8 @@ describe("every render request writes one render event, whatever its outcome", (
     // Which client drew the bar: the program a hint names, and `unreported`
     // for a client too old to say (brandon-doctor-v62x.tfb).
     expect(field(drawn, "client")).toBe("unreported");
+    // Which animation lanes the session's settings switch on: none by default.
+    expect(field(drawn, "lanes")).toBe("-");
     await render(
       sockPath,
       "ev-native",

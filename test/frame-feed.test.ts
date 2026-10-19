@@ -29,24 +29,23 @@ function harness(opts: { motion: Motion; renderMs?: number; fails?: boolean }) {
     renders: 0,
     n: 0,
     order: 0,
+    // The lanes the session's settings switch on, read by the feed when it
+    // asks; `opened` counts the feeds opened.
     lanes: { band: true, statusline: true, pane: true } as LaneSwitches,
-    // A drawn frame that resolved no switches, as a render that threw.
-    unresolved: false,
+    opened: 0,
   };
-  const frameOf = (req: string): FeedFrame & { lanes: LaneSwitches } =>
+  const frameOf = (req: string): FeedFrame =>
     opts.fails === true
       ? {
           resp: { ok: false, error: `${req} threw`, code: "RENDER_FAILED" },
           drawnAt: Date.now(),
           motion: "still",
-          lanes: state.lanes,
           failure: { level: "error", line: `frame ${req} threw` },
         }
       : {
           resp: { ok: true, output: `${req}#${state.motion === "still" ? state.n : ++state.n}` },
           drawnAt: Date.now(),
           motion: state.motion,
-          lanes: state.lanes,
           failure: null,
         };
   const changes = new Map<string, () => void>();
@@ -55,9 +54,10 @@ function harness(opts: { motion: Motion; renderMs?: number; fails?: boolean }) {
     render: async (req): Promise<FeedFrame> => {
       state.renders++;
       if (opts.renderMs !== undefined) await sleep(opts.renderMs);
-      const frame = frameOf(req);
-      return state.unresolved ? { ...frame, lanes: null } : frame;
+      return frameOf(req);
     },
+    lanes: () => state.lanes,
+    opened: () => state.opened++,
     watch: (sessionId, onChange) => {
       changes.set(sessionId, onChange);
       return () => changes.delete(sessionId);
@@ -257,7 +257,6 @@ test("an answer drawn at an earlier instant than the frame already out is drawn 
     resp: { ok: true, output: "drawn before the frame out" },
     drawnAt: Date.now() - 60_000,
     motion: "still",
-    lanes: state.lanes,
     failure: null,
   });
   await sleep(20);
@@ -275,7 +274,6 @@ test("a moving answer noted while a still frame is drawn sets the pace of the ne
     resp: { ok: true, output: "moving#1" },
     drawnAt: Date.now(),
     motion: "moving",
-    lanes: state.lanes,
     failure: null,
   });
   // The still frame finishes at 30 ms; the next is due a moving period (20 ms)
@@ -286,9 +284,9 @@ test("a moving answer noted while a still frame is drawn sets the pace of the ne
 });
 
 // The lane toggles (candybar-animation-wbxz.81o.azo): FrameFeeds is the one
-// gate, reading the lanes the session's newest frame resolved.
+// gate, reading the lanes the session's settings switch on as it asks.
 describe("a subscription's lane", () => {
-  test("switched off in the session's newest frame is refused before any feed opens", async () => {
+  test("switched off in the session's settings is refused before any feed opens", async () => {
     const { feeds, note, state, log } = harness({ motion: "moving" });
     state.lanes = { band: false, statusline: true, pane: true };
     note("s", "bar");
@@ -305,12 +303,13 @@ describe("a subscription's lane", () => {
     ]);
     expect(frames).toEqual([]);
     expect(state.renders).toBe(0);
+    expect(state.opened).toBe(0);
     expect(feeds.getStats()).toMatchObject({ feeds: 0, subscribers: 0, refused: 1 });
     expect(log).toContain('feed sid="s" refused lane=band switched-off');
   });
 
-  test("switched off by a later frame ends that subscriber and leaves the other lanes' running", async () => {
-    const { feeds, note, state, changes } = harness({ motion: "still" });
+  test("switched off while it streams ends that subscriber and leaves the other lanes' running", async () => {
+    const { feeds, note, state, changes, log } = harness({ motion: "still" });
     note("s", "bar");
     const band: string[] = [];
     const pane: string[] = [];
@@ -330,6 +329,8 @@ describe("a subscription's lane", () => {
     expect(feeds.getStats()).toMatchObject({ feeds: 1, subscribers: 1, refused: 1 });
     closePane();
     expect(feeds.getStats()).toMatchObject({ feeds: 0, subscribers: 0 });
+    // The summary names the lanes still subscribed when it was written.
+    expect(log.some((l) => /feed sid="s" closed subscribers=0 lanes=- /.test(l))).toBe(true);
   });
 
   test("of a session with no frame yet waits, and the first frame decides", async () => {
@@ -344,19 +345,21 @@ describe("a subscription's lane", () => {
     expect(feeds.getStats()).toMatchObject({ feeds: 0, subscribers: 0 });
   });
 
-  test("a drawn frame that resolved no switches keeps the ones the last frame did", async () => {
-    const { feeds, note, state, changes } = harness({ motion: "still" });
+  // The switches are read when the gate asks, not copied from a frame: a
+  // toggle turned on is honoured by the next subscribe, with no new request.
+  test("turned on in the session's settings is honoured at once, with no frame between", async () => {
+    const { feeds, note, state } = harness({ motion: "still" });
+    state.lanes = { band: false, statusline: true, pane: true };
     note("s", "bar");
     const refusals: Refusal[] = [];
+    feeds.subscribe("s", sub(() => {}, "band", (r) => refusals.push(r)));
+    expect(refusals.map((r) => r.code)).toEqual(["SWITCHED_OFF"]);
+    state.lanes = { band: true, statusline: true, pane: true };
     const frames: string[] = [];
-    feeds.subscribe("s", sub((r) => frames.push(outputOf(r)), "band", (r) => refusals.push(r)));
+    const close = feeds.subscribe("s", sub((r) => frames.push(outputOf(r))));
     await sleep(20);
-    state.lanes = { band: false, statusline: true, pane: true };
-    state.unresolved = true;
-    state.motion = "moving";
-    changes.get("s")!();
-    await sleep(40);
-    expect(refusals).toEqual([]);
-    expect(frames.length).toBeGreaterThan(1);
+    close();
+    expect(frames).toEqual(["bar#0"]);
+    expect(state.opened).toBe(1);
   });
 });

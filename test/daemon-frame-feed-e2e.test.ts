@@ -268,20 +268,27 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   const setState = (sid: string, key: string, value: string): Promise<void> =>
     click(sockPath, effectsUrl([{ verb: VERB_SET_STATE, args: [sid, key, value] }]));
 
+  // A subscribe naming no lane is a client from before the toggles, told to
+  // update (VERSION_MISMATCH stops it; BAD_REQUEST would have it retry).
   test("a subscribe that names no lane, or one nobody declared, is refused", async () => {
     await render(sockPath, "feed-nolane", projectDir, {}, args("still"));
-    for (const lane of [undefined, "everywhere"]) {
-      const resp = await sendDaemonRequest(
+    const subscribe = (lane: unknown) =>
+      sendDaemonRequest(
         sockPath,
         { v: PROTOCOL_VERSION, kind: "subscribe", sessionId: "feed-nolane", lane },
         5000,
       );
-      expect(resp).toMatchObject({
-        ok: false,
-        code: "BAD_REQUEST",
-        error: expect.stringMatching(/needs a lane, one of band, statusline, pane/),
-      });
-    }
+    expect(await subscribe(undefined)).toMatchObject({
+      ok: false,
+      code: "VERSION_MISMATCH",
+      daemonV: PROTOCOL_VERSION,
+      error: expect.stringMatching(/names no lane .*predates the lane toggles/),
+    });
+    expect(await subscribe("everywhere")).toMatchObject({
+      ok: false,
+      code: "BAD_REQUEST",
+      error: expect.stringMatching(/needs a lane, one of band, statusline, pane/),
+    });
   });
 
   test("a subscribe for a lane its session leaves off is refused, naming the toggle, and opens no feed", async () => {
@@ -306,10 +313,9 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
 
   test("a lane the session switches on streams, and switching it off ends the stream", async () => {
     await render(sockPath, "feed-lane", projectDir, {}, args("off"));
-    // The menu's toggle is a session pick; the next statusline request draws
-    // the bar with it.
+    // The menu's toggle is a session pick, honoured at the next subscribe
+    // with no statusline request between.
     await setState("feed-lane", "experimentalBand", "true");
-    await render(sockPath, "feed-lane", projectDir, {}, args("off"));
     const band = subscribeUntilEnd("feed-lane", "band");
     // Another lane of the same session is still off.
     const pane = subscribeUntilEnd("feed-lane", "pane");
@@ -345,7 +351,6 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       while (offs === 0 && Date.now() < until) await sleep(20);
       expect(offs).toBe(1);
       await setState("feed-follow", "experimentalBand", "true");
-      await render(sockPath, "feed-follow", projectDir, {}, args("off"));
       until = deadline(SWITCHED_OFF_RETRY_MS + 3000);
       while (seen.length === 0 && Date.now() < until) await sleep(50);
       expect(seen).toEqual([expect.stringContaining("an unswitched mark")]);

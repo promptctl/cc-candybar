@@ -683,7 +683,8 @@ export function clientStanding(
 // statusline through what `cc-candybar install` stages, or in a checkout
 // through the native client `just install-rust` stages beside it.
 function remedy(daemon: DaemonInstall, client: ClientKind): string {
-  if (client === "frames") return `run \`node ${daemon.bundle} frames\``;
+  if (client === "frames")
+    return `run \`node ${daemon.bundle} frames --lane <band|statusline|pane>\``;
   return daemon.checkout === null
     ? REINSTALL
     : `run \`just install-rust\` and point the statusLine command at ${daemon.checkout.root}/bin/cc-candybar-native`;

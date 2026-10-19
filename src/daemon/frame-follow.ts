@@ -118,10 +118,14 @@ export function followFrames(
   let closed = false;
   let retryMs = RECONNECT_FIRST_MS;
 
-  const reopenAfter = (ms: number): void => {
+  // `refresh`: hand the daemon the session's data again first — after a
+  // fault, which may be a daemon that restarted without it; never after a
+  // lane switched off, which the daemon answered with the data in hand.
+  const reopenAfter = (ms: number, refresh: boolean): void => {
     timer = setTimeout(() => {
       timer = null;
-      void (follow.beforeReconnect?.() ?? Promise.resolve()).then(() => {
+      const before = refresh ? follow.beforeReconnect?.() : undefined;
+      void (before ?? Promise.resolve()).then(() => {
         if (!closed) open();
       });
     }, ms);
@@ -147,14 +151,14 @@ export function followFrames(
             return;
           case "off":
             follow.off(next.resp);
-            reopenAfter(SWITCHED_OFF_RETRY_MS);
+            reopenAfter(SWITCHED_OFF_RETRY_MS, false);
             return;
           case "reconnect": {
             follow.fault(next.reason, retryMs);
             if (next.kick) obtainDaemonKick();
             const wait = retryMs;
             retryMs = Math.min(RECONNECT_MAX_MS, retryMs * 2);
-            reopenAfter(wait);
+            reopenAfter(wait, true);
             return;
           }
         }

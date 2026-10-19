@@ -47,6 +47,8 @@ function describe(outcome: PermanentOutcome): string {
       return `daemon rejected request: ${sanitizeAndTruncate(outcome.message, MAX_MESSAGE_LEN)}`;
     case "render_failed":
       return `render failed: ${sanitizeAndTruncate(outcome.message, MAX_MESSAGE_LEN)}`;
+    case "switched_off":
+      return `switched off: ${sanitizeAndTruncate(outcome.message, MAX_MESSAGE_LEN)}`;
     case "malformed_response":
       return `malformed daemon response: ${sanitizeAndTruncate(outcome.message, MAX_MESSAGE_LEN)}`;
   }

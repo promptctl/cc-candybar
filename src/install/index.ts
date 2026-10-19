@@ -432,6 +432,8 @@ function formatPermanent(outcome: PermanentOutcome): string {
       return `url-handle: daemon rejected click (bad request: ${outcome.message})`;
     case "render_failed":
       return `url-handle: daemon rejected click (handler failed: ${outcome.message})`;
+    case "switched_off":
+      return `url-handle: daemon rejected click (switched off: ${outcome.message})`;
     case "malformed_response":
       return `url-handle: daemon rejected click (malformed response: ${outcome.message})`;
   }

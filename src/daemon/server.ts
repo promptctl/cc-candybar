@@ -53,7 +53,7 @@ import {
 } from "./protocol";
 import type { ClientHints, RenderRequest, Request, Response } from "./protocol";
 import { createPayloadProviders } from "./payload-providers";
-import { RenderCache } from "./cache/render";
+import { RenderCache, type DslRenderState } from "./cache/render";
 import { WatcherRegistry } from "./cache/watchers";
 import { RuntimeStats } from "./stats";
 import {
@@ -209,6 +209,8 @@ const frameFeeds = new FrameFeeds<CheckedRenderRequest>({
     reaction(() => sessionState.revision(sessionId), onChange, {
       scheduler: (run) => setImmediate(run),
     }),
+  lanes: (req) => lanesOf(req),
+  opened: () => startVisibility(),
   periods: FEED_PERIODS,
   now: () => Date.now(),
   log: dlog,
@@ -255,14 +257,26 @@ const watchedTmuxServers = (): ReadonlySet<string> =>
   );
 // [LAW:no-ambient-temporal-coupling] The next refresh is scheduled when this
 // one has its answers, so a tmux server slower than the interval is never
-// asked twice at once, nor answered out of order.
+// asked twice at once, nor answered out of order. The refresh runs only while
+// a feed exists: a feed opening starts it, and it stops scheduling itself once
+// none is left, so a daemon nobody subscribes to keeps no timer.
+let visibilityRunning = false;
+const startVisibility = (): void => {
+  if (visibilityRunning) return;
+  visibilityRunning = true;
+  refreshVisibility();
+};
 const refreshVisibility = (): void => {
   void paneVisibility
     .refresh(watchedTmuxServers())
     .catch((err: unknown) =>
       dlog("error", `visibility refresh threw: ${inspect(err)}`),
     )
-    .then(() => setTimeout(refreshVisibility, VISIBILITY_INTERVAL_MS).unref());
+    .then(() => {
+      visibilityRunning = frameFeeds.getStats().feeds > 0;
+      if (visibilityRunning)
+        setTimeout(refreshVisibility, VISIBILITY_INTERVAL_MS).unref();
+    });
 };
 // [LAW:locality-or-seam] Same terms as sessionState: naming the directory is
 // free; the daemon wipes it in onListening() (reset), once the bind is
@@ -652,7 +666,6 @@ function onListening(sockPath: string): void {
     dlog("warn", `diagnostic dump wipe failed: ${wipeFailure}`);
   binaryWatch.arm();
   updateWatch.arm();
-  refreshVisibility();
   establishedLimits().arm();
   armOwnershipWatch(sockPath, boundRead.identity);
 }
@@ -946,8 +959,9 @@ function handleConnection(sock: net.Socket): void {
       frameFeeds.subscribe(sessionId, {
         lane,
         frame: (_resp, json) => write(encodeJsonFrame(json)),
-        // A refused subscription is over: its refusal is the stream's last
-        // frame, written behind whatever frame is still queued.
+        // A refused subscription is over: its refusal ends the stream, and a
+        // frame still waiting for the socket to drain is dropped, as
+        // newest-wins drops any frame a newer one replaces.
         refused: (resp) => sock.end(encodeFrame(resp)),
       }),
     );
@@ -1105,7 +1119,7 @@ export async function handleRequest(
     const rendered: { outcome: RenderOutcome; resp: Response } = !checked.ok
       ? refusedRender(checked.problems)
       : await answerRequest(checked.req, order, at, facts).then(
-          ({ output, moves, lanes }) => {
+          ({ output, moves }) => {
             const resp = { ok: true, output } as const;
             releaseClickError(
               sessionState,
@@ -1119,7 +1133,7 @@ export async function handleRequest(
               checked.req.hookData.session_id,
               checked.req,
               order,
-              feedFrameOf(checked.req, resp, t0, moves, lanes),
+              feedFrameOf(checked.req, resp, t0, moves),
             );
             return { outcome: { kind: "ok" } as const, resp };
           },
@@ -1153,6 +1167,17 @@ export async function handleRequest(
       });
     if (typeof req.sessionId !== "string" || req.sessionId === "")
       return refuse("subscribe needs a non-empty string sessionId");
+    // A subscribe that names no lane speaks the contract from before the
+    // lane toggles: VERSION_MISMATCH, which every older client reads as "this
+    // client is out of date" and stops on, rather than BAD_REQUEST, which it
+    // reads as a daemon too old to take subscribe and retries forever.
+    if (req.lane === undefined)
+      return stay({
+        ok: false,
+        error: `this client's subscribe names no lane (${LANE_NAMES.join(", ")}): it predates the lane toggles — update it`,
+        code: "VERSION_MISMATCH",
+        daemonV: PROTOCOL_VERSION,
+      });
     const lane = parseLane(req.lane);
     if (lane === null)
       return refuse(
@@ -1438,7 +1463,7 @@ async function renderFrame(req: CheckedRenderRequest): Promise<FeedFrame> {
   const started = new Date();
   const facts: RenderFacts = [];
   try {
-    const { drawn, moves, lanes } = await renderChecked(
+    const { drawn, moves } = await renderChecked(
       req,
       instantOf(started),
       facts,
@@ -1450,13 +1475,7 @@ async function renderFrame(req: CheckedRenderRequest): Promise<FeedFrame> {
       drawn,
       diagnosticDump.linkFor(req.hookData.session_id, dumpTextOf(drawn)),
     );
-    return feedFrameOf(
-      req,
-      { ok: true, output },
-      started.getTime(),
-      moves,
-      lanes,
-    );
+    return feedFrameOf(req, { ok: true, output }, started.getTime(), moves);
   } catch (error) {
     const outcome = { kind: "threw", error } as const;
     const { level, line } = renderEvent(
@@ -1468,22 +1487,19 @@ async function renderFrame(req: CheckedRenderRequest): Promise<FeedFrame> {
       resp: renderFailed(error),
       drawnAt: started.getTime(),
       motion: "still",
-      lanes: null,
       failure: { level, line: `frame ${line}` },
     };
   }
 }
 
 // The frame a render of `req` just drew at `drawnAt` (ms): the bar is due
-// again at the moving rate while it `moves` AND someone can see it, and the
-// lanes its settings switch on are the ones that may have it.
+// again at the moving rate while it `moves` AND someone can see it.
 function feedFrameOf(
   req: CheckedRenderRequest,
   resp: Response,
   drawnAt: number,
   moves: boolean,
-  lanes: LaneSwitches,
-): FeedFrame & { readonly lanes: LaneSwitches } {
+): FeedFrame {
   return {
     resp,
     drawnAt,
@@ -1492,9 +1508,39 @@ function feedFrameOf(
       : paneVisibility.shown(req.hints.tmux)
         ? "moving"
         : "unseen",
-    lanes,
     failure: null,
   };
+}
+
+// [LAW:one-source-of-truth] A session's globals over the render state it
+// draws with: the one resolution a render draws by and the lane gate reads.
+// `.preset.customized` reads THIS state's authoredRoots — the set computed
+// from the SAME raw parse that produced state.config, on the same reload —
+// never a fresh file read that could race a concurrent write and disagree with
+// the tree that actually rendered.
+function sessionGlobals(
+  sessionId: string,
+  state: DslRenderState,
+): EffectiveGlobals {
+  return resolveEffectiveGlobals(
+    state.config,
+    (key) => sessionState.get(sessionId, key),
+    (preset) => state.authoredRoots.has(preset),
+  );
+}
+
+// The lanes the settings of the session `req` is from switch on now: its
+// config, as the render cache holds it for the inputs the request named, under
+// its session's picks.
+function lanesOf(req: CheckedRenderRequest): LaneSwitches {
+  const sessionId = req.hookData.session_id;
+  const origin = sessionRenderOrigin(req.requested, sessionState, sessionId);
+  using hold = renderCache.hold(
+    origin.projectDir,
+    origin.cwd,
+    origin.configFile ?? undefined,
+  );
+  return sessionGlobals(sessionId, hold.state).lanes;
 }
 
 // A render request that crossed the checkpoint: its hookData carries every
@@ -1606,7 +1652,7 @@ async function renderChecked(
   req: CheckedRenderRequest,
   at: Instant,
   facts: RenderFacts,
-): Promise<{ drawn: DrawnBar; moves: boolean; lanes: LaneSwitches }> {
+): Promise<{ drawn: DrawnBar; moves: boolean }> {
   noteFacts(facts, {
     sid: req.hookData.session_id,
     at: at.toFixed(3),
@@ -1669,20 +1715,13 @@ async function renderChecked(
   // readers, so a label can never disagree with the bar. The precedence
   // the resolver applies, and why each rung sits where it does, lives
   // with the chain (resolveEffectiveGlobals, and src/config/presets.ts).
-  // [LAW:one-source-of-truth] `.preset.customized` reads THIS entry's
-  // authoredRoots — the set computed from the SAME raw parse that
-  // produced state.config, on the same reload — never a fresh
-  // file read here that could race a concurrent write and disagree
-  // with the tree that actually rendered. That is why it arrives as
-  // a closure over this entry rather than a lookup inside the resolver.
-  const { authoredRoots } = state;
   const sessionPick = (key: string): string | null =>
     sessionState.get(req.hookData.session_id, key);
-  const effective: EffectiveGlobals = resolveEffectiveGlobals(
-    state.config,
-    sessionPick,
-    (preset: string) => authoredRoots.has(preset),
-  );
+  const effective: EffectiveGlobals = sessionGlobals(sessionId, state);
+  // Which animation lanes this session's settings switch on.
+  noteFacts(facts, {
+    lanes: LANE_NAMES.filter((lane) => effective.lanes[lane]).join(",") || "-",
+  });
   const payload = await buildRenderPayload(
     req.hookData,
     at,
@@ -1853,7 +1892,6 @@ async function renderChecked(
       },
     },
     moves: frameMoves(fx),
-    lanes: effective.lanes,
   };
 }
 
@@ -1932,9 +1970,9 @@ async function answerRequest(
   order: number,
   at: Instant,
   facts: RenderFacts,
-): Promise<{ output: string; moves: boolean; lanes: LaneSwitches }> {
+): Promise<{ output: string; moves: boolean }> {
   recordRequest(req);
-  const { drawn, moves, lanes } = await renderChecked(req, at, facts);
+  const { drawn, moves } = await renderChecked(req, at, facts);
   const { link, failure } = diagnosticDump.sync(
     req.hookData.session_id,
     order,
@@ -1945,5 +1983,5 @@ async function answerRequest(
   noteFacts(facts, {
     dumpFailed: failure === null ? "-" : JSON.stringify(failure),
   });
-  return { output: composeBar(drawn, link), moves, lanes };
+  return { output: composeBar(drawn, link), moves };
 }

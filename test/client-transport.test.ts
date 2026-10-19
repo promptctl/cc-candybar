@@ -32,6 +32,7 @@ describe("describeFailure", () => {
       { kind: "permanent", cause: "version_mismatch", clientV: 3, daemonV: 4 },
       { kind: "permanent", cause: "bad_request", message: "x" },
       { kind: "permanent", cause: "render_failed", message: "x" },
+      { kind: "permanent", cause: "switched_off", message: "x" },
       { kind: "permanent", cause: "malformed_response", message: "x" },
     ];
     for (const outcome of outcomes) {
