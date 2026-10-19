@@ -137,7 +137,6 @@ export const EFFORT_BUBBLE_CONTRAST = 1.08;
 // from configure mode, and a ramp's ascending stops are declared as an
 // `atLeast` relation between them: a pick that would put them out of order is
 // refused where it is written, and a file that does fails to load.
-
 const PERCENT = { min: 0, max: 100, step: 5 } as const;
 
 const QUOTA_SETTINGS: Readonly<Record<string, SettingDecl>> = {
