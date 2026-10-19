@@ -26,8 +26,17 @@ const at = (seconds: number): Instant => (START + seconds) as Instant;
 // row this short only after its first three.
 const INSTANTS = [0, 5, 11, 20, 33, 47, 90, 180, 200, 230, 260, 300];
 
-// A row of placements, the middle one named by text no other cell draws.
-const row = (middle: string): ValidatedConfig =>
+// Where on its row the placement named by text no other cell draws sits: a
+// looping effect measures the row's extent, which an edge placement bounds.
+type Seat = "first" | "middle" | "last";
+const SEATS: Readonly<Record<Seat, (placed: string) => string>> = {
+  first: (placed) => `${placed}, "left", "right"`,
+  middle: (placed) => `"left", ${placed}, "right"`,
+  last: (placed) => `"left", "right", ${placed}`,
+};
+
+// A row of placements, one of them named by text no other cell draws.
+const row = (middle: string, seat: Seat = "middle"): ValidatedConfig =>
   parseAndValidate(
     "<test>",
     `{
@@ -36,13 +45,14 @@ const row = (middle: string): ValidatedConfig =>
         middle: { template: 'MIDDLE' },
         right: { template: 'right cell' },
       },
-      root: { h: ["left", ${middle}, "right"] },
+      root: { h: [${SEATS[seat](middle)}] },
     }`,
     undefined,
     DEFAULT_DSL_CONFIG,
   );
+const PULSE = `{ seg: "middle", settings: { effect: "pulse" } }`;
 const PLAIN = row(`"middle"`);
-const PULSING = row(`{ seg: "middle", settings: { effect: "pulse" } }`);
+const PULSING = row(PULSE);
 
 // The session every render here draws for, whose state `renderer` seeds.
 const PAYLOAD = { session_id: "s" };
@@ -116,11 +126,15 @@ describe("a placement's effect setting", () => {
     });
   });
 
-  test.each(["none", "shimmer"] as const)(
-    "under a bar wearing %s, pulse on one placement moves its cells and nothing else",
-    (bar) => {
-      const plain = renderer(PLAIN);
-      const pulsing = renderer(PULSING);
+  test.each(
+    (["none", "shimmer", "sparkle"] as const).flatMap((bar) =>
+      (Object.keys(SEATS) as Seat[]).map((seat) => [bar, seat] as const),
+    ),
+  )(
+    "under a bar wearing %s, pulse on the %s placement of its row moves its cells and nothing else",
+    (bar, seat) => {
+      const plain = renderer(row(`"middle"`, seat));
+      const pulsing = renderer(row(PULSE, seat));
       try {
         const plainFx = new SessionEffects<RenderedLine>("s");
         const pulsingFx = new SessionEffects<RenderedLine>("s");

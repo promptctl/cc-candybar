@@ -5,28 +5,16 @@ import {
   CellJoiner,
   JOINERS,
   FlexStrip,
-  cellLen,
   renderToString,
   type Joiner,
-  type JoinShape,
+  type SeamForm,
   type Renderable,
   type RenderToStringOptions,
 } from "@promptctl/rich-js";
 import type { Charset, ColorCompatibility, Endcaps } from "../themes/policy.js";
 import { isAsciiText } from "../themes/policy.js";
 import { RENDER_THEME } from "./rich-theme.js";
-import { INVISIBLE } from "./ansi.js";
 import { STILL, type RowMotion } from "./effect.js";
-
-// The columns the widest line of a drawing occupies: SGR and OSC-8 are
-// zero-width, and `cellLen` is the measure the strip wraps by, so this is the
-// row's own arithmetic rather than a second opinion about character widths.
-export function drawnCols(drawing: string): number {
-  return Math.max(
-    0,
-    ...drawing.split("\n").map((line) => cellLen(line.replace(INVISIBLE, ""))),
-  );
-}
 
 // [LAW:single-enforcer] Every renderable this module serializes is drawn here,
 // with `RENDER_THEME` — the theme the cell splitter resolves a fragment's style
@@ -125,14 +113,21 @@ const separatorJoiners = new Map<string, CellJoiner>();
 function plainWith(separator: string): CellJoiner {
   const known = separatorJoiners.get(separator);
   if (known !== undefined) return known;
-  const withGlyph = (shape: JoinShape): JoinShape => {
-    const seam = shape.seam.map((cell) => ({ ...cell, glyph: separator }));
-    return { ...shape, seam, divider: seam };
+  const withGlyph = (form: SeamForm): SeamForm => {
+    // [LAW:types-are-the-program] A cap standing in the seam's place is drawn
+    // as the caps it names; only a join cell carries the authored glyph.
+    const seam = form.seam.map((cell) =>
+      "cap" in cell ? cell : { ...cell, glyph: separator },
+    );
+    return { seam, divider: seam };
   };
-  const { shape, ascii } = JOINERS.plain;
+  const { seam, caps } = JOINERS.plain;
   const joiner = new CellJoiner(
-    withGlyph(shape),
-    isAsciiText(separator) ? withGlyph(ascii) : ascii,
+    {
+      glyph: withGlyph(seam.glyph),
+      ascii: isAsciiText(separator) ? withGlyph(seam.ascii) : seam.ascii,
+    },
+    caps,
   );
   separatorJoiners.set(separator, joiner);
   return joiner;
@@ -282,13 +277,9 @@ export function renderStripCells(
     ? new FlexStrip([...cells], { joiner })
     : new Strip([...cells], joiner);
   // [LAW:single-enforcer] An effect wraps the whole composed strip, here, so a
-  // powerline seam's ink — its left cell's fill — moves with that cell. Its span
-  // is the row's width as drawn, MEASURED as fill.ts measures a row, never
-  // modelled from the joiner's chrome.
-  const out =
-    motion.kind === "still"
-      ? draw(strip, drawn)
-      : draw(motion.wrap(strip, drawnCols(draw(strip, drawn))), drawn);
+  // powerline seam's ink — its left cell's fill — moves with that cell. The
+  // effect reads the row's width off the frame it draws.
+  const out = draw(motion.kind === "still" ? strip : motion.wrap(strip), drawn);
   // [LAW:single-enforcer] Strip and FlexStrip each end their own last line (a
   // block renderable's contract in rich-js); a row here is a line's CONTENT —
   // the caller joins rows with "\n" — so the one terminator comes off here.

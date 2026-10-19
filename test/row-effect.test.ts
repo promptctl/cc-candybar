@@ -222,7 +222,7 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
       for (let row = 0; row < rows; row++) {
         const moving = motion.row(`flow.own#${row}`, []);
         if (moving.kind !== "moving") throw new Error("shimmer is still");
-        moving.wrap(new RichText("x"), 10);
+        moving.wrap(new RichText("x"));
       }
       motion.drawn();
     };

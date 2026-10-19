@@ -121,22 +121,21 @@ export interface FrameMotion<Line> {
 }
 
 // [LAW:types-are-the-program] What one row is drawn under: nothing, or an
-// effect made for the row once the row's span is known. A still row has no
+// effect made for the row. A still row has no
 // `Effected` around it at all, so `none` draws exactly the bytes it always drew.
 export type RowMotion =
   | { readonly kind: "still" }
   | {
       readonly kind: "moving";
-      readonly wrap: (strip: Renderable, span: number) => Renderable;
+      readonly wrap: (strip: Renderable) => Renderable;
     };
 
 export const STILL: RowMotion = { kind: "still" };
 
 // An effect made for one row — the bar's, or one placement's on that row — and
-// the name and span it was made for.
+// the name it was made for.
 interface RowEffect {
   readonly name: EffectName;
-  readonly span: number;
   readonly effect: Effect;
 }
 
@@ -271,6 +270,17 @@ function fromGround(effect: Effect, ground: ColorRgba): Effect {
   return (t, drawn) => effect(t, { ...drawn, theme: terminal });
 }
 
+// [LAW:one-source-of-truth] A loop on a bar measures the ROW — its cells'
+// extent places a shimmer's band and spaces sparkle's fireflies — and paints
+// only the colours it is confined to. rich-js `confined` also narrows the cells
+// it hands the effect, so the bar's effect around a placement at a row's edge
+// would be measured on a shorter row and every cell following the bar would
+// move by the setting. The narrowing keeps deciding which colours are painted;
+// the loop is handed the row's frame.
+function paintedOn(effect: Effect, owners: readonly object[]): Effect {
+  return (t, row) => confined(() => effect(t, row), ...owners)(t, row);
+}
+
 // FNV-1a over a string, as a fraction in [0, 1): where an element sits in an
 // effect's noise, so two sessions' bars — and two rows of one bar — do not move
 // in lockstep.
@@ -303,8 +313,7 @@ export class SessionEffects<Line> {
   // effect comes into force for it again.
   private placements = new Map<string, InForce>();
   // The effects made for the rows the latest render drew, by row and scope (the
-  // bar's, or one placement's), with the name and span each was made for. One
-  // whose span changes gets a new one; its clock does not restart. Each render
+  // bar's, or one placement's), with the name each was made for. Each render
   // starts an empty map and keeps only what it draws, so a row that stopped
   // being drawn (a menu closed) takes its effects and their settled shares with
   // it.
@@ -407,10 +416,6 @@ export class SessionEffects<Line> {
       { ground }: Drawing<Line>,
     ): Passage => {
       const made = EFFECT_CATALOGUE.transitions[transition]({
-        // [LAW:types-are-the-program] exception: rich-js's transitions take
-        // the loops' `EffectTarget` and read only its `z` (`fadeIn`,
-        // `dissolveOut`); no width is measured for them, so none is claimed.
-        span: 0,
         z: noiseOffset(`${this.key}@${id}`) * NOISE_DEPTH,
       });
       return {
@@ -493,17 +498,13 @@ export class SessionEffects<Line> {
     };
     // The effect a moving part's cells are drawn under, made once per row and
     // scope: every cell following the bar shares the bar's.
-    const effectOf = (
-      rowKey: string,
-      part: Moving<Part>,
-      span: number,
-    ): Effect => {
+    const effectOf = (rowKey: string, part: Moving<Part>): Effect => {
       const row = made.get(rowKey) ?? new Map<Scope, RowEffect>();
       made.set(rowKey, row);
       const current = row.get(part.scope);
       if (current !== undefined) return current.effect;
       const last = known.get(rowKey)?.get(part.scope);
-      const reuse = last?.name === part.name && last.span === span;
+      const reuse = last?.name === part.name;
       // [LAW:one-source-of-truth] The bar's noise offset is its row's, as it
       // was before any placement wore its own, so a cell following the bar
       // draws the bytes it always drew.
@@ -512,9 +513,9 @@ export class SessionEffects<Line> {
       );
       const effect = reuse
         ? last.effect
-        : EFFECT_CATALOGUE.loops[part.name]({ span, z: z * NOISE_DEPTH });
+        : EFFECT_CATALOGUE.loops[part.name]({ z: z * NOISE_DEPTH });
       frame[reuse ? "reused" : "made"]++;
-      row.set(part.scope, { name: part.name, span, effect });
+      row.set(part.scope, { name: part.name, effect });
       return effect;
     };
 
@@ -582,18 +583,18 @@ export class SessionEffects<Line> {
       const rowKey = `${this.key}#${rowName}`;
       return {
         kind: "moving",
-        wrap: (strip, span) =>
+        wrap: (strip) =>
           new Effected(
             strip,
             together([
               ...moving.map((part) => {
-                const effect = effectOf(rowKey, part, span);
+                const effect = effectOf(rowKey, part);
                 return {
                   t: part.t,
                   effect:
                     part.owners === undefined
                       ? effect
-                      : confined(effect, ...part.owners),
+                      : paintedOn(effect, part.owners),
                 };
               }),
               ...passing,
