@@ -1517,21 +1517,24 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // `textual-ansi`. Effort is a choice, not an alert, so no rung wears
     // `warning`/`error` — those hues keep their meaning for the cells that
     // measure danger.
-    // [LAW:dataflow-not-control-flow] The level is folded to an ordinal once
-    // and the one branch is the domain's own: max draws a bubble, every other
-    // level draws its rung on the cell as the cell is filled — which may be no
-    // fill at all (`bg: "none"`), so below max nothing paints a background.
-    // A level outside the five known names is ordinal 0: the ladder's `?`,
-    // visible rather than blank. The ladder is split on runs of spaces, so a
-    // doubled space shifts no rung. Called with the scope as dot.
+    // [LAW:dataflow-not-control-flow] The level is folded to an ordinal once,
+    // and every level computes max's bubble, colours and frames, so a render at
+    // any level evaluates the whole template (`check` renders xhigh: max moves
+    // a frame a second). The one branch is the domain's own, and it chooses
+    // only what is drawn: max draws its bubble, every other level its rung on
+    // the cell as the cell is filled — which may be no fill at all
+    // (`bg: "none"`), so below max nothing paints a background. A level
+    // outside the five known names is ordinal 0: the ladder's `?`, visible
+    // rather than blank. The ladder is split on runs of spaces, so a doubled
+    // space shifts no rung. Called with the scope as dot.
     effortGauge:
       '{{ $ord := default 0 (get (dict "low" 1 "medium" 2 "high" 3 "xhigh" 4 "max" 5) .effort.level) }}' +
       '{{ $glyphs := compact (splitList " " .effort.glyphs) }}' +
-      "{{ if eq $ord 5 }}" +
       `{{ $bubble := readableOn (mix (bgOf) (color "accent") 40) (bgOf) ${EFFORT_BUBBLE_CONTRAST} }}` +
-      '{{ fg $bubble "\u{E0B6}" }}' +
-      `{{ bg $bubble (fg (readableOn (stepped 1 (color "primary") 1 (color "secondary") 1 (color "accent")) $bubble ${TEXT_MIN_CONTRAST}) (frames 1 (index $glyphs 1) 1 (index $glyphs 3) 1 (index $glyphs 4))) }}` +
-      '{{ fg $bubble "\u{E0B4}" }}' +
+      `{{ $climbing := readableOn (stepped 1 (color "primary") 1 (color "secondary") 1 (color "accent")) $bubble ${TEXT_MIN_CONTRAST} }}` +
+      "{{ $climb := frames 1 (index $glyphs 1) 1 (index $glyphs 3) 1 (index $glyphs 4) }}" +
+      "{{ if eq $ord 5 }}" +
+      '{{ fg $bubble "\u{E0B6}" }}{{ bg $bubble (fg $climbing $climb) }}{{ fg $bubble "\u{E0B4}" }}' +
       "{{ else }}" +
       `{{ fg (ramp $ord "step" 0 (${QUIET_TEXT}) 2 (readableOn (color "accent") (bgOf) ${TEXT_MIN_CONTRAST})) (index $glyphs $ord) }}` +
       "{{ end }}",

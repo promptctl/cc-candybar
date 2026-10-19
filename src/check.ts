@@ -123,8 +123,8 @@ export function checkPayload(
     // An effort level, so the model cell draws its effort gauge and gets that
     // template checked. Not max: max climbs a frame a second, and `check`
     // renders at the wall clock, so its bar (and every doc fence pinned to
-    // it) would change from one second to the next. Every level runs max's
-    // operations, so xhigh checks the whole template.
+    // it) would change from one second to the next. Every level computes
+    // max's bubble, colours and frames, so xhigh evaluates them too.
     effort: { level: "xhigh" },
     workspace,
     git: {

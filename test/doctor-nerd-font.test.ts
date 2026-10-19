@@ -110,6 +110,14 @@ describe("nerdFont probe", () => {
     );
   });
 
+  test("a WezTerm bundling Nerd Fonts v2, without the gauge's nf-md icons, is not ok", () => {
+    const t: TerminalFacts = { kind: "bundling", name: "wezterm", version: "20230408-112425-69ae8472" };
+    expect(expectFailedWithSighting(verdictIn(t), t)).toContain("(they came in 20230712)");
+    expect(
+      verdictIn({ kind: "bundling", name: "wezterm", version: "20230712-072601-f4abf8fd" }),
+    ).toEqual({ ok: true });
+  });
+
   test("a bundling terminal that did not say its release asks the user to look", () => {
     const t: TerminalFacts = { kind: "bundling", name: "kitty", version: null };
     expect(expectFailedWithSighting(verdictIn(t), t)).toBe(
