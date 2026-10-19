@@ -1,3 +1,10 @@
+# [1.143.0](https://github.com/promptctl/cc-candybar/compare/v1.142.0...v1.143.0) (2026-10-19)
+
+
+### Features
+
+* **animation:** each lane behind its own toggle, in the settings menu ([#374](https://github.com/promptctl/cc-candybar/issues/374)) ([11b805b](https://github.com/promptctl/cc-candybar/commit/11b805ba084d4b84f380453ab0b1a439fc8b89e5))
+
 # [1.142.0](https://github.com/promptctl/cc-candybar/compare/v1.141.1...v1.142.0) (2026-10-19)
 
 
