@@ -8,6 +8,6 @@ Set Height 1200
 Set Theme "Dracula"
 Set TypingSpeed 0ms
 
-Type "./plugin/bin/preview.sh --compare-styles --theme=dark --charset=unicode"
+Type "./plugin/bin/preview.sh --compare-styles --theme=dark"
 Enter
 Sleep 5s

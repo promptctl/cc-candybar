@@ -38,7 +38,11 @@ import {
   type ResolvedDomain,
 } from "../option-domain.js";
 import { configOptionDomains } from "../edit-chrome.js";
-import { listGlobalsFieldNames, settingControlDomain } from "./globals.js";
+import {
+  listGlobalsFieldNames,
+  removedGlobalPointer,
+  settingControlDomain,
+} from "./globals.js";
 import {
   CONFIG_ONLY_KEYS,
   SESSION_KEY_TO_SETTING,
@@ -1059,9 +1063,13 @@ export function validateDeclarations(
     const discriminator = "persist" in a ? "persist" : "reset";
     const target = parsePersistTarget(key);
     if (target === null) {
+      const removed = removedGlobalPointer(key);
       ctx.issues.push({
         path: `actions.${name}.${discriminator}`,
-        message: `actions.${name}: "${key}" is not a config globals field (have: ${listGlobalsFieldNames().join(", ")}), a "segments.<name>.palette" target, a "presets.<name>.globals.<field>" target, a "themeDefaults.<theme>.<shade|variation|style>" target, or a "presets.<name>.root" target`,
+        message:
+          removed !== undefined
+            ? `actions.${name}: the globals field "${key}" was removed: ${removed}`
+            : `actions.${name}: "${key}" is not a config globals field (have: ${listGlobalsFieldNames().join(", ")}), a "segments.<name>.palette" target, a "presets.<name>.globals.<field>" target, a "themeDefaults.<theme>.<shade|variation|style>" target, or a "presets.<name>.root" target`,
         line: findKeyLine(ctx.source, ["actions", name, discriminator]),
       });
       continue;

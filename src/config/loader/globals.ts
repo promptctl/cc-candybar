@@ -545,6 +545,12 @@ export function isGlobalsField(key: string): key is keyof Globals {
   return GLOBALS_FIELD_NAMES.has(key);
 }
 
+// [LAW:one-source-of-truth] Why a removed globals key is gone, for a reader
+// that meets it outside a globals block — a persist or reset target.
+export function removedGlobalPointer(key: string): string | undefined {
+  return Object.hasOwn(REMOVED_GLOBALS, key) ? REMOVED_GLOBALS[key] : undefined;
+}
+
 export function listGlobalsFieldNames(): readonly string[] {
   return [...GLOBALS_FIELD_NAMES];
 }
