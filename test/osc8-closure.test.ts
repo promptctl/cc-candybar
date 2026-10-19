@@ -94,7 +94,7 @@ describe("OSC-8 closure (render-bugs-pdu.1)", () => {
     test(`every link is closed and output never ends mid-link (width=${width})`, () => {
       const out = render(TOOLBAR, {
         endcaps: "powerline",
-        colorCompatibility: "truecolor", wrap: true, padding: 0, charset: "unicode" as const,
+        colorCompatibility: "truecolor", wrap: true, padding: 0,
         width,
       });
       const { opens, closes, endsLinked } = osc8Walk(out);
@@ -129,7 +129,7 @@ describe("OSC-8 closure (render-bugs-pdu.1)", () => {
     // The bar's own row; the settings door (a link of its own) sits above it.
     const out = render(src, {
       endcaps: "powerline",
-      colorCompatibility: "truecolor", wrap: true, padding: 0, charset: "unicode" as const,
+      colorCompatibility: "truecolor", wrap: true, padding: 0,
       width: Number.POSITIVE_INFINITY,
     }).split("\n")[1]!;
     const { opens, closes, endsLinked } = osc8Walk(out);
@@ -153,7 +153,7 @@ describe("OSC-8 closure (render-bugs-pdu.1)", () => {
     }`;
     const out = render(src, {
       endcaps: "powerline",
-      colorCompatibility: "truecolor", wrap: true, padding: 0, charset: "unicode" as const,
+      colorCompatibility: "truecolor", wrap: true, padding: 0,
       width: Number.POSITIVE_INFINITY,
     });
     const idsByUrl = new Map<string, string[]>();

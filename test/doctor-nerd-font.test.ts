@@ -106,7 +106,7 @@ describe("nerdFont probe", () => {
   test("an older bundling terminal says the release its symbols came in", () => {
     const t: TerminalFacts = { kind: "bundling", name: "kitty", version: "0.35.2" };
     expect(expectFailedWithSighting(verdictIn(t), t)).toBe(
-      'kitty 0.35.2 ships no Nerd Font symbols (they came in 0.36.0) — update kitty, or set a Nerd Font as its font, or set globals.charset to "ascii" to draw the bar without them',
+      'kitty 0.35.2 ships no Nerd Font symbols (they came in 0.36.0) — update kitty, or set a Nerd Font as its font',
     );
   });
 
@@ -135,7 +135,7 @@ describe("nerdFont probe", () => {
 
   test("a configured terminal whose font lacks glyphs names the font, where it was read, and what it lacks", () => {
     expect(expectFailedWithSighting(verdictIn(MENLO), MENLO)).toBe(
-      'iTerm2 3.7.2 draws with Menlo-Regular (iTerm2 profile "Default"), which has no U+E0B0 U+E0B1 — set a Nerd Font as its font, or set globals.charset to "ascii" to draw the bar without them',
+      'iTerm2 3.7.2 draws with Menlo-Regular (iTerm2 profile "Default"), which has no U+E0B0 U+E0B1 — set a Nerd Font as its font',
     );
   });
 
@@ -150,7 +150,7 @@ describe("nerdFont probe", () => {
       },
     };
     expect(expectFailedWithSighting(verdictIn(t), t)).toBe(
-      'Alacritty is set to Hack Nerd Font (/h/.config/alacritty/alacritty.toml), which is not installed — install it or set a Nerd Font, or set globals.charset to "ascii" to draw the bar without them',
+      'Alacritty is set to Hack Nerd Font (/h/.config/alacritty/alacritty.toml), which is not installed — install it or set a Nerd Font',
     );
   });
 
@@ -230,7 +230,7 @@ describe("nerdFont probe", () => {
     const sighting = idIn(MENLO);
     expect(verdictIn(MENLO, { mark: "drawn", sighting })).toEqual({ ok: true });
     expect(expectFailedWithSighting(verdictIn(MENLO, { mark: "boxes", sighting }), MENLO)).toBe(
-      'iTerm2 3.7.2 draws U+E0B0 U+E0B1 as boxes — set a Nerd Font as its font, or set globals.charset to "ascii" to draw the bar without them',
+      'iTerm2 3.7.2 draws U+E0B0 U+E0B1 as boxes — set a Nerd Font as its font',
     );
     // Made in another terminal, or on another joiner's glyphs: no mark here.
     const elsewhere = idIn({ kind: "unknown", called: "Apple_Terminal" });
@@ -254,18 +254,17 @@ describe("nerdFont probe", () => {
 });
 
 describe("the glyphs the bar draws", () => {
-  test("are measured through the joiner, divider included, in the charset in force", () => {
-    expect(stripPrivateGlyphs({ endcaps: "powerline", charset: "unicode" })).toBe("");
-    expect(stripPrivateGlyphs({ endcaps: "capsule", charset: "unicode" })).toBe("");
-    expect(stripPrivateGlyphs({ endcaps: "powerline", charset: "ascii" })).toBe("");
-    expect(stripPrivateGlyphs({ endcaps: "stitch", charset: "unicode" })).toBe("");
+  test("are measured through the joiner, divider included", () => {
+    expect(stripPrivateGlyphs({ endcaps: "powerline" })).toBe("");
+    expect(stripPrivateGlyphs({ endcaps: "capsule" })).toBe("");
+    expect(stripPrivateGlyphs({ endcaps: "stitch" })).toBe("");
   });
 
   test("include a private-use separator the author chose for plain", () => {
     expect(
-      stripPrivateGlyphs({ endcaps: "plain", charset: "unicode", separator: "" }),
+      stripPrivateGlyphs({ endcaps: "plain", separator: "" }),
     ).toBe("");
-    expect(stripPrivateGlyphs({ endcaps: "plain", charset: "unicode", separator: "|" })).toBe("");
+    expect(stripPrivateGlyphs({ endcaps: "plain", separator: "|" })).toBe("");
   });
 });
 
@@ -619,7 +618,7 @@ describe("gatherFacts: where the Nerd Font facts come from", () => {
     });
   });
 
-  test("the glyphs are the ones the session's bar draws, under its charset", () => {
+  test("the glyphs are the ones the session's bar draws", () => {
     const { e } = edge(tmuxSays("ghostty 1.3.1"));
     expect(drawn(e, { tmux: HINT, terminalEnv: {} }).glyphs).toBe(BUNDLED_GLYPHS);
   });
@@ -648,11 +647,12 @@ describe("gatherFacts: where the Nerd Font facts come from", () => {
   });
 
   test("a bar that draws none asks nothing of tmux's terminal or its font", () => {
-    // ascii joiners, and the effort gauge written without its Nerd icons:
-    // its ladder and the helper that draws max's bubble caps.
+    // plain joiners with an ASCII separator, and the effort gauge written
+    // without its Nerd icons: its ladder and the helper that draws max's
+    // bubble caps.
     const ascii: DslConfig = {
       ...DEFAULT_DSL_CONFIG,
-      globals: { ...DEFAULT_DSL_CONFIG.globals, charset: "ascii" },
+      globals: { ...DEFAULT_DSL_CONFIG.globals, endcaps: "plain", default_separator: " | " },
       variables: {
         ...DEFAULT_DSL_CONFIG.variables,
         "effort.glyphs": { kind: "literal", value: "? ^ ^ ^^ ^^^" },

@@ -76,9 +76,7 @@ const ratio = (a: Rgb, b: Rgb): number => {
 const deltaE = (a: Rgb, b: Rgb): number =>
   Oklch.fromRgba(new ColorRgba(...a)).deltaE(Oklch.fromRgba(new ColorRgba(...b)));
 
-// The unicode charset's joiners — every render here uses it, so the ascii
-// glyphs (`>`, `(`, `)`) are text and are measured like any other. The thin
-// divider is not a joiner here: rich-js draws a divider in
+// The joiners' glyphs. The thin divider is not a joiner here: rich-js draws a divider in
 // the left cell's text colour on the left cell's own ground, so it IS that
 // cell's text and is measured as text. Whether a seam is an arrow or a
 // divider is decided on the drawn colours, so a seam is compared as one
@@ -269,7 +267,6 @@ function forEachStage(
     endcaps: "powerline" as const,
     wrap: true,
     padding: 1,
-    charset: "unicode" as const,
     width: 200,
   };
   const PAYLOAD = {

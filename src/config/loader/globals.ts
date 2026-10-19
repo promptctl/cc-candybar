@@ -9,7 +9,6 @@ import {
   type ThemeDefault,
 } from "../dsl-types.js";
 import {
-  CHARSETS,
   COLOR_COMPATIBILITIES,
   DEFAULT_PADDING,
   EFFECT_NAMES,
@@ -43,7 +42,7 @@ import { findKeyLine } from "./diagnostics.js";
 import { DISCLOSURE_GLYPH_CLOSE, DOOR_CLOSE_GLYPH } from "../disclosure.js";
 import type { ControlDomain } from "../setting-control.js";
 
-// [LAW:types-are-the-program] Closed enum like `charset`, plus one
+// [LAW:types-are-the-program] Closed enum like `endcaps`, plus one
 // migration-pointing rejection: "auto" was the LEGACY default, so migrating
 // configs will carry it — but the daemon runs detached, so rich-js env
 // detection would downsample against the daemon's terminal, not the client's.
@@ -213,10 +212,6 @@ const GLOBALS: {
     spec: optionalIntSpec(PADDING_RANGE),
     domain: { ...PADDING_RANGE, step: 1 },
   },
-  // [LAW:types-are-the-program] Closed enum like `endcaps`: the joiner glyph
-  // vocabularies pickJoiner can render — validates by membership, emits a
-  // JSON-Schema `enum` from the same CHARSETS literal.
-  charset: enumGlobal(CHARSETS),
   updateNotice: boolGlobal(),
   transitions: boolGlobal(),
   // Closed enum with a bespoke "auto" rejection — see colorCompatibilitySpec.
@@ -363,6 +358,10 @@ const REMOVED_GLOBALS: Readonly<Record<string, string>> = {
   look: 'it was renamed "style" — write the same name as style: "<name>"',
   progression:
     'it was renamed "variation", and its values with it: accent (was secondary-accent), duo (was primary-secondary), mono (was primary)',
+  // Brandon cut ascii mode: the bar draws Nerd Font glyphs, and the doctor's
+  // nerdFont check names the font that lacks them.
+  charset:
+    "the bar always draws Nerd Font glyphs. Delete the key; `cc-candybar doctor` names what your terminal's font is missing.",
 };
 
 const GLOBALS_SCHEMA: RecordSchema<Globals> = {

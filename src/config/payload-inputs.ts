@@ -98,7 +98,7 @@ export const PAYLOAD_INPUTS: Readonly<Record<string, VariableDecl>> = {
     type: "boolean",
     default: true,
   },
-  // [LAW:one-type-per-behavior] endcaps/charset/colorCompatibility/autoWrap/
+  // [LAW:one-type-per-behavior] endcaps/colorCompatibility/autoWrap/
   // padding are theme/style's twins over the remaining persistable globals
   // (candybar-config-engine-71o.3) — the SAME values BuildLineOptions
   // renders with, each read back through this projection so a `persist`
@@ -117,11 +117,6 @@ export const PAYLOAD_INPUTS: Readonly<Record<string, VariableDecl>> = {
   "shade.effective": {
     kind: "input",
     path: "shade.effective",
-    default: "",
-  },
-  "charset.effective": {
-    kind: "input",
-    path: "charset.effective",
     default: "",
   },
   "colorCompatibility.effective": {

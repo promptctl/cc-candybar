@@ -121,7 +121,6 @@ const EFFECTIVE_GLOBALS: EffectiveGlobals = {
   endcaps: "powerline",
   variation: "accent",
   shade: "middle",
-  charset: "unicode",
   colorCompatibility: "truecolor",
   autoWrap: true,
   padding: 1,

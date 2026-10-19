@@ -26,7 +26,7 @@ import { instantOf } from "../src/utils/instant";
 const SERIALIZED = JSON.stringify(RAW_DEFAULT_DSL_CONFIG, null, 2);
 
 // Narrow the root to just the directory segment so the rendered line is exactly
-// that segment's text. Plain style + ascii + padding 0 strips all chrome, so
+// that segment's text. One plain cell + padding 0 draws no chrome, so
 // after removing ANSI/OSC-8 escapes what remains IS the directory string.
 const dirOnlyRoot = {
   rows: {
@@ -90,7 +90,6 @@ function renderDirRaw(paths: DirPaths): string {
       colorCompatibility: "none",
       wrap: true,
       padding: 0,
-      charset: "ascii",
       width: Number.POSITIVE_INFINITY,
     });
   } finally {
@@ -230,7 +229,6 @@ describe("configurability seam: user template override restores full path", () =
           colorCompatibility: "none",
           wrap: true,
           padding: 0,
-          charset: "ascii",
           width: Number.POSITIVE_INFINITY,
         },
       )

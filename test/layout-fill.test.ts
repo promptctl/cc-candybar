@@ -8,7 +8,7 @@
 // serializer, powerline and capsule cost their caps and seams, and plain's cost
 // is the author's own separator text — so the resolution
 // MEASURES the row instead of modelling any of it, and this test pins the result
-// over the whole style × charset product, the same shape as the measured-chrome pin
+// over every endcaps shape, the same shape as the measured-chrome pin
 // in test/picker-pagination.test.ts.
 //
 // Two wrong answers were caught here rather than shipped: reserving
@@ -25,7 +25,6 @@ import { renderStripCells } from "../src/render/strip";
 import type { CellSizing, LaidCell } from "../src/template-engine/layout";
 import type { BuildLineOptions } from "../src/render/strip";
 import {
-  CHARSETS,
   listResolvablePaletteNames,
   ENDCAPS_SHAPES,
 } from "../src/themes/policy";
@@ -48,7 +47,6 @@ const SIZING: CellSizing = {
 function opts(over: Partial<BuildLineOptions> = {}): BuildLineOptions {
   return {
     endcaps: "powerline",
-    charset: "unicode",
     width: 40,
     wrap: true,
     colorCompatibility: "none",
@@ -81,25 +79,20 @@ function serialize(
 
 describe("a fill segment absorbs the row's leftover width", () => {
   // The product pin: whatever the chrome costs, the row lands on the width.
-  test.each(
-    ENDCAPS_SHAPES.flatMap((style) =>
-      CHARSETS.map((charset) => [style, charset] as const),
-    ),
-  )(
-    "%s/%s: the row serializes to exactly the available width",
-    (style, charset) => {
+  test.each(ENDCAPS_SHAPES.map((style) => [style] as const))(
+    "%s: the row serializes to exactly the available width",
+    (style) => {
       for (const width of [30, 40, 67]) {
         const lines = serialize(
           [fixed("left"), fill("mid"), fixed("right")],
-          opts({ endcaps: style, charset, width }),
+          opts({ endcaps: style, width }),
         );
         expect({
           style,
-          charset,
           width,
           lines: lines.length,
           cols: cols(lines[0]!),
-        }).toEqual({ style, charset, width, lines: 1, cols: width });
+        }).toEqual({ style, width, lines: 1, cols: width });
       }
     },
   );

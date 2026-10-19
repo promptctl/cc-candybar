@@ -20,7 +20,6 @@ import {
   transposedPalette,
 } from "../src/themes/palette-resolvers";
 import {
-  CHARSETS,
   COLOR_COMPATIBILITIES,
   listResolvablePaletteNames,
   ENDCAPS_SHAPES,
@@ -34,13 +33,12 @@ describe("option-domain registry", () => {
     expect(resolveOptionDomain("endcaps", new Map()).members).toEqual(ENDCAPS_SHAPES);
   });
 
-  // [LAW:one-source-of-truth] candybar-config-engine-71o.3: charsets/
-  // colorCompatibilities must resolve to the EXACT same consts the loader's
-  // own globals.charset/globals.colorCompatibility field validation checks
-  // against (themes/policy.ts) — a menu drawing from these can never
-  // enumerate a value the loader or the render layer would reject.
-  test("charsets/colorCompatibilities are built-in registrations sourced from the loader's own enums", () => {
-    expect(resolveOptionDomain("charsets", new Map()).members).toEqual(CHARSETS);
+  // [LAW:one-source-of-truth] candybar-config-engine-71o.3:
+  // colorCompatibilities must resolve to the EXACT const the loader's own
+  // globals.colorCompatibility field validation checks against
+  // (themes/policy.ts) — a menu drawing from it can never enumerate a value
+  // the loader or the render layer would reject.
+  test("colorCompatibilities is a built-in registration sourced from the loader's own enum", () => {
     expect(resolveOptionDomain("colorCompatibilities", new Map()).members).toEqual(
       COLOR_COMPATIBILITIES,
     );
@@ -221,7 +219,7 @@ describe("a colour-valued domain resolves its own painter", () => {
       styles: {},
       presets: { compact: {} },
     });
-    for (const name of ["endcaps", "charsets", "colorCompatibilities"]) {
+    for (const name of ["endcaps", "colorCompatibilities"]) {
       expect(resolveOptionDomain(name, new Map()).paletteOf).toBeUndefined();
     }
     expect(resolveOptionDomain("presets", domains).paletteOf).toBeUndefined();

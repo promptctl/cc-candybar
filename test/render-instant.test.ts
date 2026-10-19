@@ -16,7 +16,6 @@ const OPTS = {
   colorCompatibility: "truecolor" as const,
   wrap: true,
   padding: 1,
-  charset: "unicode" as const,
   width: Number.POSITIVE_INFINITY,
 };
 

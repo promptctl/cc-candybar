@@ -239,7 +239,6 @@ function stripOptions(geometry: DiagnosticGeometry): BuildLineOptions {
     width: geometry.width,
     wrap: true,
     padding: 0,
-    charset: "unicode",
     colorCompatibility: geometry.colorCompatibility,
   };
 }

@@ -25,7 +25,7 @@
 //   6. Remove, then add (picked from the menu), then undo twice returns the
 //      file to its original bytes.
 //   7. Edit chrome is ordinary segment/action data — it renders through the
-//      SAME padding/charset/style pipeline as hand-authored segments, no
+//      SAME padding/style pipeline as hand-authored segments, no
 //      special-cased chrome path.
 
 import { withoutSettingsLinks } from "./helpers/ambient-chrome";
@@ -116,7 +116,6 @@ function opts(width = Number.POSITIVE_INFINITY) {
     colorCompatibility: "truecolor" as const,
     wrap: true,
     padding: 0,
-    charset: "unicode" as const,
     width,
   };
 }

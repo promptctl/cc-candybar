@@ -519,41 +519,11 @@ export function effectiveEndcaps(
   );
 }
 
-// --- Joiner charset identifiers ---
-
-// [LAW:one-source-of-truth][LAW:types-are-the-program] The single canonical set
-// of glyph vocabularies the strip joiners can render with (the legacy
-// display.charset). Same species as ENDCAPS_SHAPES — a closed render-vocabulary
-// enum hosted in this leaf policy module so the config loader (validation +
-// JSON-schema emit) and the render layer (glyph dispatch) both derive from one
-// literal without a config↔render cycle [LAW:one-way-deps]. "ascii" draws each
-// joiner in the ascii form rich-js gives it, in place of the powerline
-// private-use glyphs (U+E0Bx — tofu without a Nerd Font); it is orthogonal to
-// Endcaps: endcaps picks the joiner, charset picks which of its two forms draws.
-// Unlike endcaps it has no session pick: the config file is its only source
-// (brandon-menu-ia-q30.5y4), and so for COLOR_COMPATIBILITIES below.
-export const CHARSETS = ["unicode", "ascii"] as const;
-export type Charset = (typeof CHARSETS)[number];
-
-// [LAW:single-enforcer] What `charset: "ascii"` can draw: the loader refuses
-// authored text that fails it, and the strip relies on that refusal.
-export function isAsciiText(text: string): boolean {
-  return [...text].every((c) => c.codePointAt(0)! <= 0x7f);
-}
-
-// [LAW:one-source-of-truth] The one statement of the globals.charset default
-// (powerline unicode glyphs, matching the legacy display.charset).
-export const DEFAULT_CHARSET: Charset = "unicode";
-
-export function isCharset(value: string): value is Charset {
-  return (CHARSETS as readonly string[]).includes(value);
-}
-
 // --- Color-depth identifiers ---
 
 // [LAW:one-source-of-truth][LAW:types-are-the-program] The single canonical set
 // of color depths a config can pin (the legacy display.colorCompatibility).
-// Same species as CHARSETS: a closed render-vocabulary enum hosted in this leaf
+// Same species as ENDCAPS_SHAPES: a closed render-vocabulary enum hosted in this leaf
 // policy module so the config loader (validation + JSON-schema emit) and the
 // render layer both derive from one literal without a config↔render cycle
 // [LAW:one-way-deps]. Every member is a name rich-js's `resolveColorSystem`
@@ -669,7 +639,7 @@ export function effectiveShade(
 //
 // Wrapping and cell padding are how much bar you want on your screen right now
 // — a taste that legitimately differs between one session in a wide terminal
-// and another in a split pane, so, unlike charset and colorCompatibility above,
+// and another in a split pane, so, unlike colorCompatibility above,
 // each resolves a session pick over the config default. Their floors and
 // domains live here, beside the other globals vocabularies, because both the
 // config loader (range validation, JSON-schema emit) and the render layer need

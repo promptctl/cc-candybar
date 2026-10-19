@@ -188,7 +188,6 @@ function render(theme: string, calm: boolean, { variation, shade, look }: Varian
       colorCompatibility: e.colorCompatibility,
       wrap: e.autoWrap,
       padding: e.padding,
-      charset: e.charset,
     },
     undefined,
     { theme: e.theme, style: e.style, preset: e.preset, variation: e.variation, shade: e.shade },

@@ -80,7 +80,6 @@ test("colour depth none keeps every link the bar draws in colour", () => {
           endcaps: "powerline",
           wrap: true,
           padding: 1,
-          charset: "unicode",
           width: 200,
           colorCompatibility: drawnAt,
         },

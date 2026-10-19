@@ -22,7 +22,6 @@ import {
   walkNodes,
   AXIS_OF,
   type DslConfig,
-  type Globals,
   type LayoutNode,
   type PresetDecl,
   type RawDslConfig,
@@ -51,20 +50,13 @@ import {
   describeControlDomain,
 } from "../setting-control.js";
 import {
-  DEFAULT_CHARSET,
   isExpression,
-  isAsciiText,
   isStyleEraEndcaps,
   retiredThemeNote,
 } from "../../themes/policy.js";
 import { endcapsNameMessage } from "./styles.js";
 import { parsePersistTarget } from "./persist-target.js";
-import {
-  presetByName,
-  presetGlobals,
-  presetNames,
-  presetRoot,
-} from "../presets.js";
+import { presetNames, presetRoot } from "../presets.js";
 import { fragmentNodePaths, rootNode } from "../root.js";
 import {
   anchorUnderGate,
@@ -218,7 +210,6 @@ export function validateCrossReferences(
     });
   }
   presetIdentCollisions(ctx, cfg.presets);
-  asciiSeparators(ctx, cfg);
   // [LAW:one-source-of-truth] THE set of resolvable variable names — a
   // faithful mirror of the runtime store's key set (declareOne in
   // src/dsl/render.ts registers globals under their bare names and segment
@@ -1244,39 +1235,6 @@ export function validateDeclarations(
         templateScope,
         segName,
       );
-    }
-  }
-}
-
-// [LAW:no-silent-failure] Under `charset: "ascii"` a joiner draws only ASCII,
-// and `plain` draws `default_separator` as one of its glyphs, so a non-ASCII
-// separator there is a config that asks for two things at once. It is refused
-// for every pair a render can resolve — each preset's globals, with and without
-// edit mode's fragment over them — at the fragment that supplied the separator.
-function asciiSeparators(ctx: ValidateCtx, cfg: DslConfig): void {
-  const refused = new Set<string>();
-  for (const preset of presetNames(cfg.presets)) {
-    const globals = presetGlobals(cfg, preset);
-    const fragments: ReadonlyArray<Partial<Globals>> = [{}, cfg.editGlobals];
-    for (const staged of fragments) {
-      const charset = staged.charset ?? globals.charset ?? DEFAULT_CHARSET;
-      const separator = staged.default_separator ?? globals.default_separator;
-      if (charset !== "ascii" || isAsciiText(separator ?? "")) continue;
-      const at =
-        staged.default_separator !== undefined
-          ? ["editGlobals"]
-          : presetByName(cfg.presets, preset).globals?.default_separator !==
-              undefined
-            ? ["presets", preset, "globals"]
-            : ["globals"];
-      const path = [...at, "default_separator"].join(".");
-      if (refused.has(path)) continue;
-      refused.add(path);
-      ctx.issues.push({
-        path,
-        message: `${path} ${JSON.stringify(separator)} is not ASCII, but charset is "ascii" — under ascii a joiner draws only ASCII; write an ASCII separator or set charset: "unicode"`,
-        line: findKeyLine(ctx.source, [...at, "default_separator"]),
-      });
     }
   }
 }

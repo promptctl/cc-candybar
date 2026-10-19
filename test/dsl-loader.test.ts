@@ -219,6 +219,7 @@ describe("loadDslConfig — globals", () => {
     ["default_bg", "author `bg:` on the segments"],
     ["default_fg", "author `fg:` on the segments"],
     ["default_truncate_marker", 'always ends in "…"'],
+    ["charset", "the bar always draws Nerd Font glyphs"],
   ];
   const WHERE: ReadonlyArray<readonly [string, (body: string) => string]> = [
     ["globals", (body) => `{ globals: { ${body} } }`],
@@ -234,7 +235,7 @@ describe("loadDslConfig — globals", () => {
     expect(err.issues).toHaveLength(1);
     const issue = err.issues[0]!;
     expect(issue.path).toBe(path);
-    expect(issue.message).toContain(`${path} was removed: nothing reads it`);
+    expect(issue.message).toContain(`${path} was removed: `);
     expect(issue.message).toContain(pointer);
     expect(issue.line).toBe(1);
   });
@@ -274,36 +275,8 @@ describe("loadDslConfig — globals", () => {
     }
   });
 
-  test("charset accepts each closed-enum member", () => {
-    const cfg = parseAndValidate(FILE, `{ globals: { charset: "ascii" } }`);
-    expect(cfg.globals.charset).toBe("ascii");
-    const cfg2 = parseAndValidate(FILE, `{ globals: { charset: "unicode" } }`);
-    expect(cfg2.globals.charset).toBe("unicode");
-  });
-
-  test("a charset outside the enum is rejected", () => {
-    expectIssue(`{ globals: { charset: "latin1" } }`, {
-      path: "globals.charset",
-      message: "globals.charset must be one of: unicode, ascii",
-    });
-  });
-
-  test.each([
-    ["globals", `{ globals: { charset: "ascii", default_separator: " │ " } }`],
-    ["presets.p.globals", `{ globals: { charset: "ascii" }, presets: { p: { globals: { default_separator: " │ " } } } }`],
-    ["editGlobals", `{ globals: { charset: "ascii" }, editGlobals: { default_separator: " │ " } }`],
-  ])("a non-ASCII separator under charset ascii is refused at %s", (at, src) => {
-    expectIssue(src, {
-      path: `${at}.default_separator`,
-      message: `is not ASCII, but charset is "ascii"`,
-    });
-  });
-
-  test("a non-ASCII separator loads under unicode, and an ASCII one under ascii", () => {
+  test("a non-ASCII separator loads", () => {
     expect(() => parseAndValidate(FILE, `{ globals: { default_separator: " │ " } }`)).not.toThrow();
-    expect(() =>
-      parseAndValidate(FILE, `{ globals: { charset: "ascii", default_separator: " : " } }`),
-    ).not.toThrow();
   });
 
   test("colorCompatibility accepts each closed-enum member", () => {

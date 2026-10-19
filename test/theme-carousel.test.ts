@@ -28,12 +28,10 @@ import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import {
   effectiveShade,
   effectiveVariation,
-  DEFAULT_CHARSET,
   DEFAULT_COLOR_COMPATIBILITY,
   listResolvablePaletteNames,
 } from "../src/themes/policy";
 import type {
-  Charset,
   ColorCompatibility,
   Endcaps,
 } from "../src/themes/policy";
@@ -74,10 +72,9 @@ function opts(
   width: number,
   padding: number,
   endcaps: Endcaps,
-  charset: Charset = "unicode",
   colorCompatibility: ColorCompatibility = "truecolor",
 ) {
-  return { endcaps, colorCompatibility, wrap: true, padding, charset, width };
+  return { endcaps, colorCompatibility, wrap: true, padding, width };
 }
 
 // One rig over the real cascade: parse on the bundled default (where the
@@ -112,7 +109,6 @@ function rig(
       config.globals.preset,
       config.presets,
     );
-    const charset = config.globals.charset ?? DEFAULT_CHARSET;
     const depth =
       config.globals.colorCompatibility ?? DEFAULT_COLOR_COMPATIBILITY;
     const variation = effectiveVariation(
@@ -141,13 +137,12 @@ function rig(
         preset: { effective: preset },
         autoWrap: { effective: true },
         padding: { effective: padding },
-        charset: { effective: charset },
         colorCompatibility: { effective: depth },
         variation: { effective: variation },
         shade: { effective: shade },
       },
       instantOf(new Date()),
-      opts(width, padding, style, charset, depth),
+      opts(width, padding, style, depth),
       { perSegmentSink: sink },
       {
         theme: resolveThemeSelection(
@@ -704,8 +699,8 @@ describe("the shade control", () => {
 });
 
 // brandon-menu-ia-q30.5y4: "make users set them in the config file."
-describe("glyphs and colour depth are set in the config file, not the menu", () => {
-  test("no link on the bar or in the ⚙ config tab writes either key", () => {
+describe("colour depth is set in the config file, not the menu", () => {
+  test("no link on the bar or in the ⚙ config tab writes its key", () => {
     const rt = rig(`{}`);
     rt.render();
     rt.clickText("🍫");
@@ -714,7 +709,7 @@ describe("glyphs and colour depth are set in the config file, not the menu", () 
     expect(stripAnsi(rendered)).not.toMatch(/🔣|🌈/u);
     const writers = links(rendered).filter((l) =>
       effectsOf(l.url).some((e) =>
-        ["charset", "colorCompatibility"].includes(e.args[1] ?? ""),
+        e.args[1] === "colorCompatibility",
       ),
     );
     expect(writers).toEqual([]);

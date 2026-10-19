@@ -29,7 +29,6 @@ const OPTS = {
   colorCompatibility: "truecolor" as const,
   wrap: true,
   padding: 0,
-  charset: "unicode" as const,
   width: Number.POSITIVE_INFINITY,
 };
 
@@ -561,7 +560,6 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
       colorCompatibility: "truecolor",
       wrap: true,
       padding: 0,
-      charset: "unicode",
       width: Number.POSITIVE_INFINITY,
     });
     expect(stripAnsi(out)).toContain("calm");
