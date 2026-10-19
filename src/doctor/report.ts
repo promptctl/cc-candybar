@@ -21,7 +21,6 @@ import {
   type MarkBook,
   type NerdFontFacts,
   type TerminalIdentity,
-  type TmuxFacts,
 } from "./checks.js";
 import { SETTINGS_NS } from "../config/loader/reserved-namespace.js";
 
@@ -77,17 +76,14 @@ export function linkFields(
 }
 
 // [LAW:nothing-unseen] What the UTF-8 and terminal-width checks reasoned
-// over, as logfmt fields: the columns the client measured (`-`: it could
-// not), and whether tmux writes UTF-8 to the client attached to the pane's
-// session (`-` outside tmux, or where no client was seen).
+// over, as logfmt fields: the columns measured (`-`: none was), and whether
+// tmux writes UTF-8 to the client attached to the pane's session — the same
+// client `linkFields` reads (`-` where none was seen).
 export function terminalFeatureFields(
-  tmux: TmuxFacts,
+  terminal: TerminalIdentity,
   termCols: number | null,
 ): string {
-  const client =
-    tmux.kind === "inside" && tmux.client.kind === "ok"
-      ? tmux.client.value
-      : null;
+  const client = terminal.kind === "seen" ? terminal.tmuxClient : null;
   return `cols=${termCols ?? "-"} clientUtf8=${client === null ? "-" : client.utf8 ? "yes" : "no"}`;
 }
 

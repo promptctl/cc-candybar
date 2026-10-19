@@ -104,7 +104,8 @@ describe("doctorPlan", () => {
       EDGE,
       { ...NO_HANDLER, platform: "darwin", sockets: { own: "/a", handler: "/a" } },
       inDir(IN_TMUX),
-      "/", { columns: 120 },
+      "/",
+      { columns: 120 },
     );
     expect(plan.stderr).toBe(
       `doctor: cannot read ${settingsPath()}: \`env\` is not an object\n`,
@@ -130,13 +131,13 @@ describe("doctorPlan", () => {
     });
   });
 
-  // brandon-doctor-v62x.1ku: the command measures its own terminal as a
-  // statusline client started there would — COLUMNS, else its stderr.
+  // brandon-doctor-v62x.1ku: the command measures the terminal it runs in —
+  // COLUMNS, else the terminal's own geometry.
   test("a terminal the command cannot measure fails terminal width, exit 1", async () => {
     const plan = await doctorPlan(EDGE, NO_HANDLER, inDir({}), "/", {});
     expect(plan.code).toBe(1);
     expect(plan.stdout).toContain(
-      "\n✗ terminal width — the statusline client could not measure the terminal",
+      "\n✗ terminal width — no terminal width was measured",
     );
     expect(
       (await doctorPlan(EDGE, NO_HANDLER, inDir({ COLUMNS: "90" }), "/", {})).code,
@@ -168,7 +169,8 @@ describe("doctorPlan", () => {
       EDGE,
       NO_HANDLER,
       inDir({ TERM_PROGRAM: "Apple_Terminal", TERM_PROGRAM_VERSION: "455.1" }),
-      "/", { columns: 120 },
+      "/",
+      { columns: 120 },
     );
     expect(plan.code).toBe(1);
     expect(plan.stdout).toMatch(/\n✗ links — Terminal draws no links \(OSC 8\)/);
@@ -184,7 +186,8 @@ describe("doctorPlan", () => {
       { ...EDGE, clicked: memoryClickedTerminals(["kitty"]) },
       NO_HANDLER,
       kitty,
-      "/", { columns: 120 },
+      "/",
+      { columns: 120 },
     );
     expect(settled.stdout).toContain("\n✓ links\n");
   });
@@ -196,7 +199,8 @@ describe("doctorPlan", () => {
       EDGE,
       NO_HANDLER,
       inDir({ TERM_PROGRAM: "Hyper" }),
-      "/", { columns: 120 },
+      "/",
+      { columns: 120 },
     );
     expect(plan.code).toBe(1);
     expect(plan.stdout).toMatch(
@@ -218,7 +222,8 @@ describe("doctorPlan", () => {
       { ...EDGE, marks: memoryMarkBook(withMark({}, "nerdFont", id, "drawn")) },
       NO_HANDLER,
       inDir({ TERM_PROGRAM: "Hyper" }),
-      "/", { columns: 120 },
+      "/",
+      { columns: 120 },
     );
     expect(plan.stdout).toContain("\n✓ Nerd Font\n");
   });

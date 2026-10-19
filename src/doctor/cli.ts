@@ -13,7 +13,9 @@
 // itself here (handler-probe.ts), the click that asked there — and the fold
 // is one function either way.
 
+import { openSync } from "node:fs";
 import process from "node:process";
+import { WriteStream } from "node:tty";
 import type { CliPlan } from "../check.js";
 import { DOOR_GLYPH } from "../config/disclosure.js";
 import { detectClientHints } from "../client-hints.js";
@@ -88,8 +90,7 @@ export async function doctorPlan(
   handler: HandlerProbeEdge,
   env: Readonly<Record<string, string | undefined>>,
   cwd: string,
-  // The terminal the command runs in, measured as a statusline client
-  // measures its own (its stderr).
+  // The terminal the command runs in (`commandTerminal`).
   tty: { readonly columns?: number; readonly rows?: number },
   configFile: string | undefined = undefined,
 ): Promise<CliPlan> {
@@ -134,6 +135,26 @@ export async function doctorPlan(
   };
 }
 
+// The terminal the command runs in, which the bar of a Claude Code started
+// here would be drawn in: its stderr, else — `2>&1 | tee`, `2>/dev/null` —
+// its controlling terminal. A process with neither (an agent's tool shell)
+// has no terminal to measure, which the width check then names.
+function commandTerminal(): { readonly columns?: number } {
+  if (process.stderr.isTTY) return process.stderr;
+  let fd: number;
+  try {
+    fd = openSync("/dev/tty", "r+");
+  } catch (err) {
+    // ENXIO is the kernel's "no controlling terminal"; anything else is loud.
+    if ((err as NodeJS.ErrnoException).code === "ENXIO") return {};
+    throw err;
+  }
+  const tty = new WriteStream(fd);
+  const { columns } = tty;
+  tty.destroy();
+  return { columns };
+}
+
 // `cc-candybar doctor [config-file]` — the argv binding. The one argument is
 // the config file a session's statusline command names with `--config`, so
 // the CLI can check the file that session's bar renders.
@@ -151,7 +172,7 @@ export async function runDoctorCli(args: readonly string[]): Promise<never> {
     productionHandlerProbeEdge(),
     process.env,
     cwd,
-    process.stderr,
+    commandTerminal(),
     args[0],
   );
   process.stdout.write(plan.stdout);

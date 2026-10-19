@@ -216,9 +216,9 @@ export interface PlacementEffectFact {
 
 export interface DoctorFacts {
   readonly tmux: TmuxFacts;
-  // The columns the client measured its terminal at (COLUMNS, else its
-  // stderr's own geometry), or null: it could not, so the daemon laid the
-  // bar out for DEFAULT_TERMINAL_WIDTH.
+  // The columns the terminal was measured at (COLUMNS, else the terminal's
+  // own geometry), or null: none was, so the daemon laid the bar out for
+  // DEFAULT_TERMINAL_WIDTH.
   readonly termCols: number | null;
   readonly terminal: TerminalIdentity;
   // What asked for this run: a click on the bar's 🩺 doctor — a link the
@@ -328,11 +328,12 @@ export interface CheckReport {
 
 export const TMUX_TRUECOLOR_VAR = TMUX_ENV.truecolor;
 
-// [LAW:single-enforcer] Every check that asks tmux about its client reads
-// the tmux facts through here, so none can disagree with another about what
-// an unreported hint, a failed query, or a session nobody is attached to
-// means: outside tmux and with no client attached, tmux draws nothing for the
-// bar, so a check of tmux's drawing has nothing to fault.
+// [LAW:single-enforcer] Every check of how tmux draws the bar reads the tmux
+// facts through here, so none can disagree with another about what an
+// unreported hint, a failed query, or a session nobody is attached to means:
+// outside tmux and with no client attached, tmux draws nothing for the bar,
+// so there is nothing to fault. (Which TERMINAL is attached is a different
+// question — `terminalIdentity` in edge.ts — and no client there is unasked.)
 function ofTmuxClient(
   tmux: TmuxFacts,
   decide: (client: TmuxClient, hint: TmuxHint) => Verdict<never>,
@@ -436,7 +437,7 @@ const termWidth: Check = {
       ? { ok: true }
       : {
           ok: false,
-          reason: `the statusline client could not measure the terminal (no COLUMNS, and its stderr is not a terminal), so the bar is laid out for ${DEFAULT_TERMINAL_WIDTH} columns`,
+          reason: `no terminal width was measured (no COLUMNS, and no terminal to ask — or the daemon refused the width sent, which the bar's red strip names), so the bar is laid out as if the terminal were ${DEFAULT_TERMINAL_WIDTH} columns wide`,
         },
 };
 

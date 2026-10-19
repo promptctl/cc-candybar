@@ -2,7 +2,12 @@
 // off the probes over fixture facts, and the event fields that carry what
 // they reasoned over.
 
-import { checkByName, type TmuxClient, type TmuxFacts } from "../src/doctor/checks";
+import {
+  checkByName,
+  type TerminalIdentity,
+  type TmuxClient,
+  type TmuxFacts,
+} from "../src/doctor/checks";
 import { terminalFeatureFields } from "../src/doctor/report";
 import { DEFAULT_TERMINAL_WIDTH } from "../src/render/strip";
 import { HEALTHY_FACTS } from "./helpers/doctor-facts";
@@ -17,7 +22,9 @@ const client = (utf8: boolean): TmuxClient => ({
   utf8,
 });
 
-const inside = (asked: Extract<TmuxFacts, { kind: "inside" }>["client"]): TmuxFacts => ({
+const inside = (
+  asked: Extract<TmuxFacts, { kind: "inside" }>["client"],
+): TmuxFacts => ({
   kind: "inside",
   hint: HINT,
   client: asked,
@@ -28,7 +35,9 @@ describe("utf8 probe", () => {
   const run = (tmux: TmuxFacts) => probe({ ...HEALTHY_FACTS, tmux });
 
   test("a client tmux writes UTF-8 to is ok", () => {
-    expect(run(inside({ kind: "ok", value: client(true) }))).toEqual({ ok: true });
+    expect(run(inside({ kind: "ok", value: client(true) }))).toEqual({
+      ok: true,
+    });
   });
 
   test("a client tmux writes no UTF-8 to fails, naming the `_` and the way out", () => {
@@ -79,27 +88,33 @@ describe("termWidth probe", () => {
   test("one that could not fails, naming the width the bar is laid out for", () => {
     expect(probe({ ...HEALTHY_FACTS, termCols: null })).toEqual({
       ok: false,
-      reason: `the statusline client could not measure the terminal (no COLUMNS, and its stderr is not a terminal), so the bar is laid out for ${DEFAULT_TERMINAL_WIDTH} columns`,
+      reason: `no terminal width was measured (no COLUMNS, and no terminal to ask — or the daemon refused the width sent, which the bar's red strip names), so the bar is laid out as if the terminal were ${DEFAULT_TERMINAL_WIDTH} columns wide`,
     });
   });
 });
 
 describe("terminalFeatureFields", () => {
+  const seen = (tmuxClient: TmuxClient | null): TerminalIdentity => ({
+    kind: "seen",
+    identified: { kind: "unnamed", term: "xterm-256color" },
+    tmuxClient,
+  });
+
   test("carries the measured columns and tmux's word on UTF-8", () => {
-    expect(terminalFeatureFields(inside({ kind: "ok", value: client(true) }), 148)).toBe(
+    expect(terminalFeatureFields(seen(client(true)), 148)).toBe(
       "cols=148 clientUtf8=yes",
     );
-    expect(terminalFeatureFields(inside({ kind: "ok", value: client(false) }), null)).toBe(
+    expect(terminalFeatureFields(seen(client(false)), null)).toBe(
       "cols=- clientUtf8=no",
     );
   });
 
   test("`-` where no client was seen", () => {
-    expect(terminalFeatureFields({ kind: "outside" }, 80)).toBe("cols=80 clientUtf8=-");
-    expect(terminalFeatureFields(inside({ kind: "ok", value: null }), 80)).toBe(
+    expect(terminalFeatureFields(seen(null), 80)).toBe("cols=80 clientUtf8=-");
+    expect(terminalFeatureFields({ kind: "unasked", reason: "x" }, 80)).toBe(
       "cols=80 clientUtf8=-",
     );
-    expect(terminalFeatureFields(inside({ kind: "failed", reason: "x" }), 80)).toBe(
+    expect(terminalFeatureFields({ kind: "unreported" }, 80)).toBe(
       "cols=80 clientUtf8=-",
     );
   });

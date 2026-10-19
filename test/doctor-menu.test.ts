@@ -147,7 +147,7 @@ function buildRuntime(
           termtype: "ghostty 1.3.1",
           termname: "xterm-ghostty",
           pid: 4242,
-      utf8: true,
+          utf8: true,
         },
       };
     },
