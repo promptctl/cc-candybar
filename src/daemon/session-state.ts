@@ -14,7 +14,7 @@
 // renderer), atom.reportObserved is a no-op. Tests that construct SessionState
 // without any observer see no change in behavior.
 
-import { createAtom, getObserverTree, type IAtom, runInAction } from "mobx";
+import { createAtom, type IAtom, runInAction } from "mobx";
 
 export interface SessionStateReader {
   get(sessionId: string, key: string): string | null;
@@ -193,8 +193,13 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   // keep a bounded number; a count that climbs while the render cache does not
   // is a disposed store still held (brandon-unfiled-3248.t14 was found in a
   // heap snapshot because nothing reported this). [LAW:nothing-unseen]
+  // The atom's own observer set (`IDepTreeNode.observers_`, the field MobX's
+  // dependency-tree API reads), `null` once nothing observes it. The other
+  // public view, `getObserverTree`, materialises the whole recursive tree —
+  // one node per observer per path — to answer this direct count, on the
+  // daemon's request thread.
   observers(): number {
-    return getObserverTree(this.atom).observers?.length ?? 0;
+    return this.atom.observers_?.size ?? 0;
   }
 
   // How many sessions the store holds.

@@ -107,7 +107,9 @@ describe("styles block — loader validation", () => {
       parseDslConfig("<looks>", `{ globals: { style: "vapor" } }`, ALLOWED),
       DEFAULT_DSL_CONFIG,
     );
-    expect(() => validateConfig(unauthored(merged), "<looks>", ALLOWED)).toThrow(
+    expect(() =>
+      validateConfig(unauthored(merged), "<looks>", ALLOWED),
+    ).toThrow(
       /globals\.style "vapor" does not match any declared style \(have: none, vivid, muted, dim, bright, inverted\)/,
     );
   });
@@ -117,7 +119,9 @@ describe("styles block — loader validation", () => {
       parseDslConfig("<looks>", `{ globals: { style: "vivid" } }`, ALLOWED),
       DEFAULT_DSL_CONFIG,
     );
-    expect(() => validateConfig(unauthored(merged), "<looks>", ALLOWED)).not.toThrow();
+    expect(() =>
+      validateConfig(unauthored(merged), "<looks>", ALLOWED),
+    ).not.toThrow();
   });
 });
 
@@ -152,7 +156,9 @@ describe("the renamed keys refuse their old spellings", () => {
     ["presets.p.globals", `{ presets: { p: { globals: { look: "dim" } } } }`],
     ["editGlobals", `{ editGlobals: { look: "dim" } }`],
   ])("%s.look names `style`", (at, src) => {
-    expect(issues(src)).toContain(`${at}.look was removed: it was renamed "style"`);
+    expect(issues(src)).toContain(
+      `${at}.look was removed: it was renamed "style"`,
+    );
   });
 
   test("globals.progression names `variation` and the new value names", () => {
@@ -172,7 +178,9 @@ describe("the renamed keys refuse their old spellings", () => {
 
   test("an undeclared style named after a joiner `style` never held is a missing style", () => {
     const message = issues(`{ globals: { style: "flame" } }`);
-    expect(message).toContain(`globals.style "flame" does not match any declared style`);
+    expect(message).toContain(
+      `globals.style "flame" does not match any declared style`,
+    );
     expect(message).not.toContain("renamed");
   });
 
@@ -187,7 +195,10 @@ describe("the renamed keys refuse their old spellings", () => {
 
   test.each([
     ["globals", `{ globals: { style: "capsule" } }`],
-    ["presets.p.globals", `{ presets: { p: { globals: { style: "capsule" } } } }`],
+    [
+      "presets.p.globals",
+      `{ presets: { p: { globals: { style: "capsule" } } } }`,
+    ],
     ["editGlobals", `{ editGlobals: { style: "capsule" } }`],
   ])("%s.style holding an endcaps shape names `endcaps`", (at, src) => {
     expect(issues(src)).toContain(
@@ -197,7 +208,9 @@ describe("the renamed keys refuse their old spellings", () => {
 
   test("a session pick of an endcaps shape under `style` names no style and falls through to the config", () => {
     const { styles } = DEFAULT_DSL_CONFIG;
-    expect(resolveStyleSelection(undefined, "capsule", "dim", styles)).toMatchObject({
+    expect(
+      resolveStyleSelection(undefined, "capsule", "dim", styles),
+    ).toMatchObject({
       kind: "decided",
       name: "dim",
     });
@@ -293,7 +306,9 @@ describe('from: "styles" — rendered options and the derived gate share the con
       undefined,
       new SessionState(),
     );
-    const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
+    const compiled = registerDslConfig(config, registry, {
+      cwd: process.cwd(),
+    });
     try {
       const rendered = renderDsl(
         config,
@@ -342,7 +357,9 @@ describe("style click — live whole-bar recolor over the active theme", () => {
     const sessionState = new SessionState();
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "", undefined, sessionState);
-    const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
+    const compiled = registerDslConfig(config, registry, {
+      cwd: process.cwd(),
+    });
     // A click is gated by the config its session renders: record the render
     // the click below resolves that config from.
     recordRender(sessionState, SID);
@@ -370,7 +387,9 @@ describe("style click — live whole-bar recolor over the active theme", () => {
         { theme, style: look },
       );
     };
-    const dispose = (): void => registry.dispose();
+    const dispose = (): void => {
+      registry.dispose();
+    };
     return { config, sessionState, render, dispose };
   }
 
@@ -489,7 +508,9 @@ describe("globals.style as an expression — a style chosen by data", () => {
     const sessionState = new SessionState();
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "", undefined, sessionState);
-    const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
+    const compiled = registerDslConfig(config, registry, {
+      cwd: process.cwd(),
+    });
     const render = (pct: number, staged?: string): string =>
       renderDsl(
         config,
@@ -688,12 +709,16 @@ describe("globals.style as an expression — a style chosen by data", () => {
       validateConfig(unauthored(withExpr), "<looks-expr>", ALLOWED),
     ).not.toThrow();
     const withName = mergeWithDefault(
-      parseDslConfig("<looks-expr>", `{ globals: { style: "vapor" } }`, ALLOWED),
+      parseDslConfig(
+        "<looks-expr>",
+        `{ globals: { style: "vapor" } }`,
+        ALLOWED,
+      ),
       DEFAULT_DSL_CONFIG,
     );
-    expect(() => validateConfig(unauthored(withName), "<looks-expr>", ALLOWED)).toThrow(
-      /globals\.style "vapor" does not match any declared style/,
-    );
+    expect(() =>
+      validateConfig(unauthored(withName), "<looks-expr>", ALLOWED),
+    ).toThrow(/globals\.style "vapor" does not match any declared style/);
   });
 
   test("a malformed style expression fails at LOAD, not at render", () => {
@@ -710,9 +735,9 @@ describe("globals.style as an expression — a style chosen by data", () => {
       new SessionState(),
     );
     try {
-      expect(() => registerDslConfig(config, registry, { cwd: process.cwd() })).toThrow(
-        /globals\.style/,
-      );
+      expect(() =>
+        registerDslConfig(config, registry, { cwd: process.cwd() }),
+      ).toThrow(/globals\.style/);
     } finally {
       registry.dispose();
     }
@@ -773,7 +798,9 @@ describe("resolveStyleSelection", () => {
       source: EXPR,
     });
     // With no expression, a stale name collapses to the floor as it always did.
-    expect(resolveStyleSelection(undefined, "vapor", undefined, STYLES)).toEqual({
+    expect(
+      resolveStyleSelection(undefined, "vapor", undefined, STYLES),
+    ).toEqual({
       kind: "decided",
       name: "none",
       value: STYLES.none,

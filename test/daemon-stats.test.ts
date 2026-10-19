@@ -1,12 +1,14 @@
 import { RuntimeStats } from "../src/daemon/stats";
-import { formatStats } from "../src/daemon/client-stats";
+import { formatStats, versionSkew } from "../src/daemon/client-stats";
 import { PROTOCOL_VERSION } from "../src/daemon/protocol";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 // package.json is the version's sole authority; the tests read it the same way
 // the build does rather than restating the number.
-const pkg = JSON.parse(readFileSync(join(process.cwd(), "package.json"), "utf8")) as { version: string };
+const pkg = JSON.parse(
+  readFileSync(join(process.cwd(), "package.json"), "utf8"),
+) as { version: string };
 
 describe("RuntimeStats.snapshot", () => {
   test("produces a stable shape with extras merged in", () => {
@@ -75,6 +77,36 @@ describe("RuntimeStats.snapshot", () => {
   });
 });
 
+describe("versionSkew", () => {
+  test("a snapshot from this build is none", () => {
+    const snap = new RuntimeStats().snapshot({
+      gitCache: { size: 0, hits: 0, misses: 0, invalidations: 0, watchers: 0 },
+      usageCache: { size: 0, hits: 0, misses: 0, sweeps: 0 },
+      renderCacheSize: 0,
+      effectCache: { sessions: 0, effects: 0 },
+      sessionState: { sessions: 0, observers: 0 },
+      watchersActive: 0,
+      handlerProbes: [],
+    });
+    expect(versionSkew(snap)).toBeNull();
+  });
+
+  test("a snapshot from another build names both versions", () => {
+    const snap = new RuntimeStats().snapshot({
+      gitCache: { size: 0, hits: 0, misses: 0, invalidations: 0, watchers: 0 },
+      usageCache: { size: 0, hits: 0, misses: 0, sweeps: 0 },
+      renderCacheSize: 0,
+      effectCache: { sessions: 0, effects: 0 },
+      sessionState: { sessions: 0, observers: 0 },
+      watchersActive: 0,
+      handlerProbes: [],
+    });
+    const skew = versionSkew({ ...snap, version: "0.0.1" });
+    expect(skew).toContain("daemon runs 0.0.1");
+    expect(skew).toContain(`this client is ${pkg.version}`);
+  });
+});
+
 describe("formatStats", () => {
   test("renders human-readable output with hit rates", () => {
     const out = formatStats({
@@ -89,7 +121,13 @@ describe("formatStats", () => {
       externalBytes: 1 * 1024 * 1024,
       arrayBuffersBytes: 256 * 1024,
       requests: { total: 100, errored: 2, timedOut: 1, inFlight: 0 },
-      gitCache: { size: 5, hits: 80, misses: 20, invalidations: 3, watchers: 5 },
+      gitCache: {
+        size: 5,
+        hits: 80,
+        misses: 20,
+        invalidations: 3,
+        watchers: 5,
+      },
       usageCache: { size: 3, hits: 40, misses: 10, sweeps: 0 },
       renderCache: { size: 4 },
       effectCache: { sessions: 2, effects: 3 },

@@ -196,6 +196,17 @@ export function pluginLoadLine(
   );
 }
 
+// [LAW:nothing-unseen] A config's teardown releases every computed's MobX
+// subscriptions (brandon-unfiled-3248.t14 was a teardown that released none,
+// found in a heap snapshot because nothing said so). Why it was torn down and
+// how many it released, beside the load line of what replaced it.
+export function configDisposeLine(
+  reason: "reload" | "evict",
+  released: number,
+): string {
+  return `config disposed reason=${reason} released=${released}`;
+}
+
 // [LAW:one-source-of-truth] Each entry tracks the last *valid* DSL state +
 // the last error AND last warning from a reload attempt. A state is only
 // ever replaced by a state — a load failure means "show the error but keep
@@ -622,7 +633,10 @@ export class RenderCache {
         // [LAW:single-enforcer] dispose the registry on eviction — it owns
         // timers, fs watchers, and git subscriptions. Dropping the entry
         // without dispose leaks every async handle the config declared.
-        evicted.state.registry.dispose();
+        dlog(
+          "info",
+          configDisposeLine("evict", evicted.state.registry.dispose()),
+        );
         evicted.watcher?.release();
         this.entries.delete(oldestKey);
       }
@@ -673,7 +687,7 @@ export class RenderCache {
       // [LAW:single-enforcer] Dispose-before-swap: the old registry owns
       // timers, fs watchers, MobX reactions, and git subscriptions — dropping
       // the reference without disposing would leak them.
-      entry.state.registry.dispose();
+      dlog("info", configDisposeLine("reload", entry.state.registry.dispose()));
       entry.state = loaded.state;
     }
     // Rebinds to the broken file (and its sibling candidates) too, so an

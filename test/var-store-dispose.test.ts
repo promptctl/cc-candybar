@@ -16,6 +16,7 @@ import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { instantOf } from "../src/utils/instant";
+import { configDisposeLine } from "../src/daemon/cache/render";
 
 const SID = "s1";
 
@@ -33,7 +34,11 @@ const PAYLOAD = {
   tmux: { pane: "%0" },
   cwd: "/tmp/proj",
   model: { id: "claude-opus-4-7", display_name: "Opus" },
-  workspace: { current_dir: "/tmp/proj", project_dir: "/tmp/proj", added_dirs: [] },
+  workspace: {
+    current_dir: "/tmp/proj",
+    project_dir: "/tmp/proj",
+    added_dirs: [],
+  },
   theme: { effective: "textual-dark" },
   style: { effective: "none" },
   endcaps: { effective: "powerline" },
@@ -56,7 +61,15 @@ function renderedEntry(sessionState: SessionState): SourceRegistry {
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
-  renderDsl(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), OPTS);
+  renderDsl(
+    config,
+    compiled,
+    store,
+    registry,
+    PAYLOAD,
+    instantOf(new Date()),
+    OPTS,
+  );
   return registry;
 }
 
@@ -72,10 +85,35 @@ describe("VariableStore.dispose releases every computed's subscriptions", () => 
     const second = renderedEntry(sessionState);
     expect(sessionState.observers()).toBe(2 * perEntry);
 
-    first.dispose();
+    // Every computed is released, not only those that read the atom; the
+    // count is what the daemon's dispose line carries.
+    const released = first.dispose();
+    expect(released).toBeGreaterThanOrEqual(perEntry);
     expect(sessionState.observers()).toBe(perEntry);
+    expect(configDisposeLine("reload", released)).toBe(
+      `config disposed reason=reload released=${released}`,
+    );
 
     second.dispose();
+    expect(sessionState.observers()).toBe(0);
+  });
+
+  it("refuses a declaration after dispose: it would subscribe with no release to come", () => {
+    const sessionState = new SessionState();
+    const store = new VariableStore();
+    store.defineComputed("a", "string", () => sessionState.get(SID, "a") ?? "");
+    expect(store.read("a")).toBe("");
+    expect(store.dispose()).toBe(1);
+    expect(() =>
+      store.defineComputed(
+        "b",
+        "string",
+        () => sessionState.get(SID, "b") ?? "",
+      ),
+    ).toThrow(/cannot declare on a disposed store/);
+    expect(() => store.defineBox("c", "string", "")).toThrow(
+      /cannot declare on a disposed store/,
+    );
     expect(sessionState.observers()).toBe(0);
   });
 
@@ -84,7 +122,12 @@ describe("VariableStore.dispose releases every computed's subscriptions", () => 
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "", undefined, sessionState);
     registerDslConfig(
-      parseAndValidate("<test>", "{}", new Set(listResolvablePaletteNames()), DEFAULT_DSL_CONFIG),
+      parseAndValidate(
+        "<test>",
+        "{}",
+        new Set(listResolvablePaletteNames()),
+        DEFAULT_DSL_CONFIG,
+      ),
       registry,
       { cwd: "/tmp/proj" },
     );

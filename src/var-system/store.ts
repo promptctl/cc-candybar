@@ -116,12 +116,18 @@ class ComputedNode implements VarNode {
       },
       { keepAlive: true },
     ) as KeepAliveComputed<VarValue>;
+    // [LAW:no-silent-failure] A MobX whose computed no longer tears itself
+    // down this way — or guards the teardown by another flag, so lifting this
+    // one leaves `suspend_` a no-op — would leak every disposed store again,
+    // quietly, until the RSS backstop fired. Refuse to build the node instead.
     if (typeof this.cell.suspend_ !== "function") {
-      // [LAW:no-silent-failure] A MobX whose computed no longer tears itself
-      // down this way would leak every disposed store again, quietly, until
-      // the RSS backstop fired. Refuse to build the node instead.
       throw new TypeError(
         `Variable "${name}": this MobX's computed has no suspend_; release() cannot unsubscribe it`,
+      );
+    }
+    if (typeof this.cell.keepAlive_ !== "boolean") {
+      throw new TypeError(
+        `Variable "${name}": this MobX's computed has no keepAlive_ flag; release() cannot lift it`,
       );
     }
   }
@@ -411,17 +417,30 @@ export class VariableStore {
   // (the daemon-wide SessionState atom) keeps it reachable. The store's own
   // boxes and documents die with it; only the computeds hold references
   // outward. Reads after dispose still answer — a released computed recomputes
-  // uncached, subscribing to nothing — so a late reader cannot resubscribe the
-  // store to the world. One action, so the cascading unobservation settles
-  // once, when it ends. [LAW:single-enforcer] called by SourceRegistry.dispose,
-  // the one teardown of everything a config holds.
-  dispose(): void {
+  // uncached, and outside a batch subscribes to nothing (inside one, MobX
+  // tracks it for the batch and unobserves again as the batch ends) — so a
+  // late reader cannot resubscribe the store to the world for good. A
+  // declaration after dispose would: it would mint a keepAlive computed with
+  // no release to come, so `declare` refuses it. Returns how many computeds it
+  // released, the fact the caller's log line carries. One action, so the
+  // cascading unobservation settles once, when it ends. [LAW:single-enforcer]
+  // called by SourceRegistry.dispose, the one teardown of everything a config
+  // holds.
+  dispose(): number {
+    this.disposed = true;
+    let released = 0;
     mobxRunInAction(() => {
       for (const node of this.nodes.values()) {
-        if (node instanceof ComputedNode) node.release();
+        if (node instanceof ComputedNode) {
+          node.release();
+          released++;
+        }
       }
     });
+    return released;
   }
+
+  private disposed = false;
 
   private requireNode(name: string): StoreNode {
     const node = this.nodes.get(name);
@@ -443,6 +462,12 @@ export class VariableStore {
   }
 
   private declare(name: string, node: StoreNode): void {
+    // [LAW:no-silent-failure] A computed declared after dispose has no
+    // release to come: it would subscribe to the world and hold this store
+    // exactly as before brandon-unfiled-3248.t14.
+    if (this.disposed) {
+      throw new Error(`Variable "${name}": cannot declare on a disposed store`);
+    }
     if (this.nodes.has(name)) {
       throw new Error(`Variable "${name}" is already declared`);
     }

@@ -2,6 +2,7 @@ import process from "node:process";
 import { describeFailure, requestOutcome } from "./client-transport";
 import type { RoundTripBudgets, RoundTripOutcome } from "./client-transport";
 import type { StatsSnapshot } from "./stats";
+import { PACKAGE_VERSION } from "../version";
 
 // Operator-driven introspection path: legitimately slower budgets than the
 // render hot path, carried as this caller's values through the shared
@@ -16,6 +17,11 @@ export async function runDaemonStats(args: readonly string[]): Promise<void> {
   const outcome = await fetchStats();
   if (outcome.kind !== "ok") {
     process.stderr.write(`daemon-stats: ${describeFailure(outcome)}\n`);
+    process.exit(1);
+  }
+  const skew = versionSkew(outcome.value);
+  if (skew !== null) {
+    process.stderr.write(`daemon-stats: ${skew}\n`);
     process.exit(1);
   }
 
@@ -35,6 +41,16 @@ export function fetchStats(): Promise<RoundTripOutcome<StatsSnapshot>> {
   return requestOutcome({ kind: "stats" }, BUDGETS, (resp) =>
     "stats" in resp ? resp.stats : undefined,
   );
+}
+
+// [LAW:no-silent-failure] The snapshot is typed as THIS build's; a daemon on
+// another build answers with another shape (a field this build added is
+// absent), and reading it as ours would throw on the first such field —
+// `pnpm build` then `daemon-stats` inside the minute before the binary watch
+// restarts the daemon. Name the skew instead, in both output modes.
+export function versionSkew(s: StatsSnapshot): string | null {
+  if (s.version === PACKAGE_VERSION) return null;
+  return `daemon runs ${s.version}, this client is ${PACKAGE_VERSION}; a rebuilt daemon restarts within a minute`;
 }
 
 function fmtBytes(n: number): string {
