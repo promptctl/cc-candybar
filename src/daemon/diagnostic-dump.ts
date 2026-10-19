@@ -20,7 +20,9 @@ import type { FullTextLink } from "../render/diagnostic-strip";
 // errored since the daemon started, and `reset` wipes the directory when the
 // daemon starts (its memory of what it wrote is gone with the old process,
 // so the files it named are stale by definition — like every other cold-
-// rebuilt cache).
+// rebuilt cache). Its memory of a session holding no file is kept only for
+// the MAX_CLEAN most recently synced, which is where a request finishing
+// out of arrival order can be.
 // What a session's file was last brought in line with: the text of the
 // newest request to sync it, where that request arrived, and the reason its
 // write failed — null once the file holds the text.
@@ -31,6 +33,10 @@ interface Synced {
 }
 
 const NEVER_SYNCED: Synced = { order: -Infinity, text: null, failure: null };
+
+// Sessions holding no file whose arrival order is remembered, least recently
+// synced forgotten first: a request still in flight is a recent one.
+const MAX_CLEAN = 256;
 
 // Why a render's link names no file when the file holds another render's
 // text: the session's next statusline request writes its own.
@@ -78,7 +84,9 @@ export class DiagnosticDump {
       text === last.text && last.failure === null
         ? null
         : this.write(sessionId, text);
+    this.synced.delete(sessionId);
     this.synced.set(sessionId, { order, text, failure });
+    this.forgetOldestClean();
     return { link: this.linkFor(sessionId, text), failure };
   }
 
@@ -94,6 +102,20 @@ export class DiagnosticDump {
       : last.failure !== null
         ? { kind: "unavailable", reason: last.failure }
         : { kind: "file", path: this.pathFor(sessionId) };
+  }
+
+  // A session holding no file, and no failed write to retry, is remembered only
+  // for its arrival order; the map keeps sync order, oldest first.
+  private forgetOldestClean(): void {
+    let clean = 0;
+    for (const s of this.synced.values())
+      if (s.text === null && s.failure === null) clean++;
+    for (const [sessionId, s] of this.synced) {
+      if (clean <= MAX_CLEAN) return;
+      if (s.text !== null || s.failure !== null) continue;
+      this.synced.delete(sessionId);
+      clean--;
+    }
   }
 
   // The one write: the session's file holding `text`, or gone. The fs

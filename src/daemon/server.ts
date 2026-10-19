@@ -1512,6 +1512,17 @@ function checkRenderRequest(
       `request 'cwd' is not an absolute path: ${JSON.stringify(req.cwd)}`,
     );
   }
+  // The args too: parseRenderArgs reads them below, outside the render's own
+  // error path, so a value that is not a list of strings is refused here
+  // rather than thrown past the render event.
+  if (
+    !Array.isArray(req.args) ||
+    !(req.args as unknown[]).every((a) => typeof a === "string")
+  ) {
+    wireProblems.push(
+      `request 'args' is not a list of strings: ${JSON.stringify(req.args)}`,
+    );
+  }
   if (wireProblems.length > 0) return { ok: false, problems: wireProblems };
   const hints = parseClientHints(req);
   // [LAW:dataflow-not-control-flow] The *request's* cwd, not the daemon's

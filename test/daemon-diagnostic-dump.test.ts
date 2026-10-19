@@ -97,6 +97,18 @@ describe("DiagnosticDump", () => {
     });
   });
 
+  test("remembers sessions holding no file only while they are among the most recently synced", () => {
+    // A session that errored keeps its memory however many clean ones follow.
+    sync("errored", "ERROR\nboom\n");
+    sync("clean-0", null);
+    for (let i = 1; i <= 300; i++) sync(`clean-${i}`, null);
+    const held = (dump as unknown as { synced: Map<string, unknown> }).synced;
+    expect(held.has("errored")).toBe(true);
+    expect(held.has("clean-0")).toBe(false);
+    expect(held.has("clean-300")).toBe(true);
+    expect(held.size).toBe(1 + 256);
+  });
+
   test("a frame's link names the file only while it holds that frame's text, and writes nothing", () => {
     const p = dump.pathFor("sid");
     const file = { kind: "file", path: p };

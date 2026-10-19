@@ -159,6 +159,15 @@ describe("every render request writes one render event, whatever its outcome", (
         cwd: "proj",
       }),
     ).rejects.toThrow(/BAD_REQUEST/);
+    // Args that are not a list of strings are refused at the checkpoint too,
+    // never thrown past the render event by the flag parser.
+    await expect(
+      renderRequest(sockPath, {
+        hookData: hookData("ev-refused-args", projectDir),
+        args: "x" as unknown as string[],
+        cwd: projectDir,
+      }),
+    ).rejects.toThrow(/BAD_REQUEST/);
 
     // A request the helper retried after a reply timeout is logged once per
     // attempt: every attempt ended the same way, and exactly one of them is
@@ -199,14 +208,17 @@ describe("every render request writes one render event, whatever its outcome", (
 
     // A refused request names its problems. The request was not trusted, so
     // nothing it said is recorded as a fact of the render — not even its sid.
-    const refused = only(
-      renderEvents().filter((e) => field(e, "outcome") === "bad-request"),
+    const refused = renderEvents().filter(
+      (e) => field(e, "outcome") === "bad-request",
     );
-    expect(refused.level).toBe("warn");
-    expect(field(refused, "problems")).toBe(
+    expect(refused.map((e) => field(e, "problems"))).toEqual([
       `request 'cwd' is not an absolute path: "proj"`,
-    );
-    expect(field(refused, "sid")).toBeUndefined();
+      `request 'args' is not a list of strings: "x"`,
+    ]);
+    for (const event of refused) {
+      expect(event.level).toBe("warn");
+      expect(field(event, "sid")).toBeUndefined();
+    }
   });
 
   // A dump write the filesystem refuses costs the render nothing: the bar is
