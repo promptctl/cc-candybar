@@ -798,8 +798,21 @@ was not loaded: a plugin definition may not declare "variables"
 
 ### Installing a plugin instead of listing it
 
-An app can install its plugin with no config edit, by putting the folder in
-a plugin root:
+An app ships its plugin in its own repository, at
+`.cc-candybar/plugins/<name>/plugin.json5`, and a user installs it with
+
+```sh
+cc-candybar plugin install promptctl/links-issue-tracker   # a GitHub slug
+cc-candybar plugin install ~/code/links-issue-tracker      # a local path
+cc-candybar plugin install https://example.com/app.git     # any git URL
+```
+
+which copies each folder's `plugin.json5` into a folder of that name in the
+user's plugin root, and refuses the whole install, with the loader's
+reason, if any definition would not load. Re-running it updates them,
+replacing only each `plugin.json5`, so a data file the app keeps beside it
+stays. A plugin installs with no config edit
+because it sits in a plugin root:
 
 - `$XDG_DATA_HOME/cc-candybar/plugins/<name>/` (default
   `~/.local/share/cc-candybar/plugins/`) — the user's;

@@ -21,21 +21,30 @@ export function pluginRoots(projectDir: string | null): readonly string[] {
   const dataDirs = (process.env.XDG_DATA_DIRS || defaultDataDirs())
     .split(":")
     .filter((d) => d !== "");
-  const dataHome =
-    process.env.XDG_DATA_HOME || path.join(os.homedir(), ".local", "share");
   const roots = [
     ...[...dataDirs]
       .reverse()
       .map((d) => path.join(d, "cc-candybar", "plugins")),
-    path.join(dataHome, "cc-candybar", "plugins"),
-    ...(projectDir === null
-      ? []
-      : [path.join(projectDir, ".cc-candybar", "plugins")]),
+    userPluginRoot(),
+    ...(projectDir === null ? [] : [path.join(projectDir, REPO_PLUGIN_DIR)]),
   ];
   // A root listed twice keeps its NEAREST position: `$XDG_DATA_HOME` named in
   // `$XDG_DATA_DIRS` too still outranks every package manager's root.
   return roots.filter((r, i) => roots.lastIndexOf(r) === i);
 }
+
+// The user's plugin root, `$XDG_DATA_HOME/cc-candybar/plugins`: where
+// `cc-candybar plugin install` puts what it installs.
+export function userPluginRoot(): string {
+  const dataHome =
+    process.env.XDG_DATA_HOME || path.join(os.homedir(), ".local", "share");
+  return path.join(dataHome, "cc-candybar", "plugins");
+}
+
+// [LAW:one-source-of-truth] Where a repository keeps its plugins, relative to
+// its root: the root sessions working in it load, and the one
+// `cc-candybar plugin install` installs from.
+export const REPO_PLUGIN_DIR = path.join(".cc-candybar", "plugins");
 
 // The XDG default, and on macOS Homebrew's share/ first — Apple-silicon
 // Homebrew lives outside `/usr/local` (`$HOMEBREW_PREFIX`, set by its shellenv,
@@ -88,7 +97,7 @@ export function installedPlugins(projectDir: string | null): InstalledPlugins {
   return { roots, definitions: [...byName.values()], unchecked, strays };
 }
 
-function listFolders(
+export function listFolders(
   root: string,
 ):
   | { readonly folders: readonly string[]; readonly files: readonly string[] }

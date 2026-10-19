@@ -290,6 +290,28 @@ function installedLayer(
   return layer;
 }
 
+/**
+ * Why each of `definitions` would not load, laid over `dflt` exactly as the
+ * installed layer lays them: what `cc-candybar plugin install` refuses before
+ * it writes anything. `checkout` stands in for a session's, so a
+ * `data: { checkout }` path resolves; the data file need not exist.
+ */
+// [LAW:single-enforcer] The install's verdict is the loader's own, so a
+// definition the bar would drop is never installed.
+export function definitionProblems(
+  definitions: readonly string[],
+  dflt: DslConfig,
+  checkout: Checkout,
+): readonly DroppedPlugin[] {
+  return applyPlugins(
+    definitions,
+    { projectDir: null, checkout },
+    { config: dflt, rendering: new Map() },
+    (c, plugin, replaces) =>
+      checkPlugin(c, plugin, replaces, "<plugin install>", undefined),
+  ).dropped;
+}
+
 // What a definition's bytes are, as cheaply as a stat says: a rewrite moves
 // its mtime, size or inode; one that cannot be seen is its own state.
 function statKey(file: string): string {

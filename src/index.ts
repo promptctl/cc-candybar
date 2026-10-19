@@ -13,6 +13,7 @@ import { runDebug } from "./daemon/client-debug";
 import { isDebugWhat } from "./daemon/debug-types";
 import { runSchema } from "./config/cli";
 import { runCheck } from "./check";
+import { runPlugin } from "./plugin-install";
 import { obtainDaemonKick } from "./daemon/acquire";
 import { planOutcome } from "./render/outcome-plan";
 import { HELP_TEXT } from "./help-text";
@@ -73,6 +74,9 @@ async function main(): Promise<void> {
     if (subcommand === "check" || subcommand === "lint") {
       await runCheck(process.argv.slice(3)); // owns its own exit code (0/1/2)
       return;
+    }
+    if (subcommand === "plugin") {
+      process.exit(runPlugin(process.argv.slice(3)));
     }
     if (subcommand === "schema") {
       runSchema(); // owns its own exit code
