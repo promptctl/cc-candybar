@@ -362,6 +362,17 @@ describe("persist/reset action loader shape", () => {
     ).toThrow(/"pallete" is not a config globals field \(have: /);
   });
 
+  test("a persist or reset target naming a removed globals field says why it is gone", () => {
+    for (const action of [
+      `{ a: { persist: 'charset', to: 'unicode' } }`,
+      `{ a: { reset: 'charset' } }`,
+    ]) {
+      expect(() => parseAndValidate("<test>", base(action), ALLOWED)).toThrow(
+        /the globals field "charset" was removed: the bar always draws Nerd Font glyphs/,
+      );
+    }
+  });
+
   test("persist targeting a real Globals field passes", () => {
     expect(() =>
       parseAndValidate(
@@ -541,7 +552,9 @@ describe("persist action click → the config file", () => {
     durable.seedOrigin(sessionState, "s1");
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "", undefined, sessionState);
-    const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
+    const compiled = registerDslConfig(config, registry, {
+      cwd: process.cwd(),
+    });
     const basePalette = getThemePalette("textual-dark"!);
     const render = (): string =>
       renderDsl(
@@ -715,8 +728,9 @@ describe("persist action click → the config file", () => {
   });
 
   test("a persist stepper under a preset silent on its field still writes top-level globals", () => {
-    const { render, click, sessionState } =
-      buildPersistRuntime(SRC_UNDER_PRESET.replace("padding: 4, ", ""));
+    const { render, click, sessionState } = buildPersistRuntime(
+      SRC_UNDER_PRESET.replace("padding: 4, ", ""),
+    );
     sessionState.set("s1", "preset", "roomy");
     click(ownUrls(render())[0]!);
     expect(globalsInFile()).toEqual({ padding: 3, autoWrap: true });
