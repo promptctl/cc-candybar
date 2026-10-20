@@ -190,8 +190,8 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
   // brandon-unfiled-3248.8bz: a bare `--config` (only ever the last token —
   // the flag takes whatever follows it) was read as no override, silently,
   // even when an earlier `--config` named a file. It is refused on the strip
-  // and on the render event, like an unknown flag, and the bar renders
-  // with no --config.
+  // and on the render event, like an unknown flag or a stray word, and the
+  // bar renders with no --config.
   test("a bare --config is refused on the bar and the render event, not silently dropped", async () => {
     const bare = stripAnsi(
       await render(sockPath, "cfg-flag-bare", projectDir, {}, [
@@ -225,6 +225,15 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
     expect(unknown).not.toContain("names no file");
     expect(unknown).toContain("OVERRIDE-WINS");
 
+    const positional = stripAnsi(
+      await render(sockPath, "cfg-flag-positional", projectDir, {}, [
+        ...configFlag(override),
+        "stray.json5",
+      ]),
+    );
+    expect(positional).toContain("Unexpected arguments: stray.json5");
+    expect(positional).toContain("OVERRIDE-WINS");
+
     await render(
       sockPath,
       "cfg-flag-clean",
@@ -232,15 +241,18 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
       {},
       configFlag(override),
     );
-    const badFlagsOf = (sid: string) =>
+    const badArgsOf = (sid: string) =>
       readFileSync(logPath(env), "utf8")
         .split("\n")
         .filter((l) => l.includes(`render sid=${sid} `))
-        .map((l) => l.match(/ badFlags=(\S+) /)?.[1]);
-    expect(badFlagsOf("cfg-flag-bare")).toEqual(["--config:no-value"]);
-    expect(badFlagsOf("cfg-flag-last-bare")).toEqual(["--config:no-value"]);
-    expect(badFlagsOf("cfg-flag-unknown")).toEqual(["--bogus:unknown"]);
-    expect(badFlagsOf("cfg-flag-clean")).toEqual(["-"]);
+        .map((l) => l.match(/ badArgs=(\S+) /)?.[1]);
+    expect(badArgsOf("cfg-flag-bare")).toEqual(["--config:no-value"]);
+    expect(badArgsOf("cfg-flag-last-bare")).toEqual(["--config:no-value"]);
+    expect(badArgsOf("cfg-flag-unknown")).toEqual(["--bogus:unknown"]);
+    expect(badArgsOf("cfg-flag-positional")).toEqual([
+      "stray.json5:positional",
+    ]);
+    expect(badArgsOf("cfg-flag-clean")).toEqual(["-"]);
   });
 
   // brandon-config-nuq6: `--config` arrives as the client's raw argv, so a

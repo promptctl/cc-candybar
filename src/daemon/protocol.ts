@@ -215,33 +215,40 @@ export function refusedHintsError(
         )} — is the statusline client older than the daemon? Reinstall it (\`cc-candybar install\`, or \`just install-rust\` in a checkout).`;
 }
 
-// A flag in a render request's argv that the render does not act on: one it
-// does not know, or `--config` with no file after it (brandon-unfiled-3248.8bz:
-// `parseArgs` without `strict` reads a bare `--config` as `true`, which was
-// rendered as no override with no word why).
-export interface RefusedFlag {
-  readonly flag: string;
-  readonly why: "unknown" | "no-value";
+// An argument in a render request's argv that the render does not act on: a
+// flag it does not know, `--config` with no file after it
+// (brandon-unfiled-3248.8bz: `parseArgs` without `strict` reads a bare
+// `--config` as `true`, which was rendered as no override with no word why),
+// or a positional word (only flags reach a render: a positional first word is
+// a subcommand, which never gets here).
+export interface RefusedArg {
+  readonly arg: string;
+  readonly why: "unknown" | "no-value" | "positional";
 }
 
-// The red strip's lines for the refused flags, null when every flag was
-// taken. Either way the bar renders without them.
-export function refusedFlagsError(
-  refused: readonly RefusedFlag[],
+// [LAW:types-are-the-program] One line per kind of refusal, keyed by the
+// union, so a new kind does not compile until it is said.
+const REFUSAL_LINES: Readonly<
+  Record<RefusedArg["why"], (args: string) => string>
+> = {
+  unknown: (args) => `Unknown flags: ${args}`,
+  // Only the last `--config` can lack a file, and it wins, so an earlier one
+  // that named a file is not applied either.
+  "no-value": (arg) => `${arg} names no file — the bar renders with no ${arg}`,
+  positional: (args) => `Unexpected arguments: ${args}`,
+};
+
+// The red strip's lines for the refused arguments, null when every argument
+// was taken. Either way the bar renders without them.
+export function refusedArgsError(
+  refused: readonly RefusedArg[],
 ): string | null {
-  const unknown = refused.filter((r) => r.why === "unknown");
-  const lines = [
-    ...(unknown.length > 0
-      ? [`Unknown flags: ${unknown.map((r) => r.flag).join(", ")}`]
-      : []),
-    ...refused
-      .filter((r) => r.why === "no-value")
-      // Only the last `--config` can lack a file, and it wins, so an earlier
-      // one that named a file is not applied either.
-      .map(
-        (r) => `${r.flag} names no file — the bar renders with no ${r.flag}`,
-      ),
-  ];
+  const lines = (
+    Object.keys(REFUSAL_LINES) as Array<RefusedArg["why"]>
+  ).flatMap((why) => {
+    const args = refused.filter((r) => r.why === why).map((r) => r.arg);
+    return args.length === 0 ? [] : [REFUSAL_LINES[why](args.join(", "))];
+  });
   return lines.length === 0 ? null : lines.join("\n");
 }
 

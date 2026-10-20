@@ -50,13 +50,13 @@ import {
   makeFrameReader,
   parseClientHints,
   refusedHints,
-  refusedFlagsError,
+  refusedArgsError,
   refusedHintsError,
   sanitizeClientVersion,
 } from "./protocol";
 import type {
   ClientHints,
-  RefusedFlag,
+  RefusedArg,
   RenderRequest,
   Request,
   Response,
@@ -1324,8 +1324,9 @@ export async function replyTo(
 
 // [LAW:single-enforcer][LAW:no-silent-failure] Parse render-path args with
 // the standard util at the trust boundary. `--config <path>` is the sole
-// valid render flag; every other flag, and a `--config` with no path after
-// it, is a refused flag the caller shows on the strip and the render event.
+// valid render flag; every other flag, a `--config` with no path after it,
+// and a positional word are refused arguments the caller shows on the strip
+// and the render event.
 // The `--config` value crosses `explicitConfigPath` against the CLIENT's cwd
 // (the request's, brandon-config-nuq6), the rule the client applies to its
 // `configEnv` hint: empty is no override, `~` is expanded once, here.
@@ -1341,7 +1342,7 @@ function parseRenderArgs(
   cwd: string,
 ): {
   configFile: string | undefined;
-  refusedFlags: readonly RefusedFlag[];
+  refusedArgs: readonly RefusedArg[];
 } {
   const { tokens } = parseArgs({
     args: args.slice(1), // skip binary path
@@ -1361,11 +1362,14 @@ function parseRenderArgs(
   );
   return {
     configFile: explicitConfigPath(cwd, config?.value),
-    refusedFlags: [
-      ...[...unknown].map((flag): RefusedFlag => ({ flag, why: "unknown" })),
+    refusedArgs: [
+      ...[...unknown].map((arg): RefusedArg => ({ arg, why: "unknown" })),
       ...(config !== undefined && config.value === undefined
-        ? [{ flag: config.rawName, why: "no-value" } as const]
+        ? [{ arg: config.rawName, why: "no-value" } as const]
         : []),
+      ...(tokens ?? []).flatMap((t): RefusedArg[] =>
+        t.kind === "positional" ? [{ arg: t.value, why: "positional" }] : [],
+      ),
     ],
   };
 }
@@ -1601,7 +1605,7 @@ function lanesOf(req: CheckedRenderRequest): LaneSwitches {
 // required field with its declared type, its cwd is absolute, `hints` is its
 // client hints, parsed, and its args are parsed into `requested` — the config
 // inputs it named, its explicit path the `--config` flag over the client's
-// `CC_CANDYBAR_CONFIG` hint — and `refusedFlags`, and `rateLimits` is
+// `CC_CANDYBAR_CONFIG` hint — and `refusedArgs`, and `rateLimits` is
 // what its hookData says of the rate-limit windows. Raw `req.*` hint
 // fields and `req.args` are not read past the checkpoint. Only
 // checkRenderRequest makes one.
@@ -1610,7 +1614,7 @@ type CheckedRenderRequest = RenderRequest & {
   readonly hints: ClientHints;
   readonly rateLimits: RateLimitsSeen;
   readonly requested: RenderOrigin;
-  readonly refusedFlags: readonly RefusedFlag[];
+  readonly refusedArgs: readonly RefusedArg[];
   readonly [CHECKED]: true;
 };
 
@@ -1673,7 +1677,7 @@ function checkRenderRequest(
   // [LAW:dataflow-not-control-flow] The *request's* cwd, not the daemon's
   // process.cwd(), so config resolution depends only on request data — the
   // daemon's own working directory must not influence output.
-  const { configFile, refusedFlags } = parseRenderArgs(req.args, req.cwd);
+  const { configFile, refusedArgs } = parseRenderArgs(req.args, req.cwd);
   return {
     ok: true,
     req: {
@@ -1685,7 +1689,7 @@ function checkRenderRequest(
         cwd: req.cwd,
         configFile: configFile ?? hints.configEnv ?? null,
       },
-      refusedFlags,
+      refusedArgs,
     } as CheckedRenderRequest,
   };
 }
@@ -1740,8 +1744,7 @@ async function renderChecked(
     termCols: String(hints.termCols ?? "?"),
     termRows: String(hints.termRows ?? "?"),
     refused: refused.map((r) => r.hint).join(",") || "-",
-    badFlags:
-      req.refusedFlags.map((r) => `${r.flag}:${r.why}`).join(",") || "-",
+    badArgs: req.refusedArgs.map((r) => `${r.arg}:${r.why}`).join(",") || "-",
     // Which program drew this bar (src/client-hint.ts); `unreported` for a
     // client too old to say.
     client: hints.client?.kind ?? "unreported",
@@ -1870,7 +1873,7 @@ async function renderChecked(
       : null;
   const clickError = clickShown?.text ?? null;
   const combinedError = [
-    refusedFlagsError(req.refusedFlags),
+    refusedArgsError(req.refusedArgs),
     hintsError,
     entry.lastError,
     clickError,
