@@ -1,3 +1,10 @@
+## [1.148.1](https://github.com/promptctl/cc-candybar/compare/v1.148.0...v1.148.1) (2026-10-20)
+
+
+### Bug Fixes
+
+* **doctor:** effect refresh reads the statusLine Claude Code runs (brandon-doctor-v62x.49w) ([#382](https://github.com/promptctl/cc-candybar/issues/382)) ([2dac849](https://github.com/promptctl/cc-candybar/commit/2dac8491de8a4ad1432f43de09a7b234a1d289d9))
+
 # [1.148.0](https://github.com/promptctl/cc-candybar/compare/v1.147.2...v1.148.0) (2026-10-20)
 
 
