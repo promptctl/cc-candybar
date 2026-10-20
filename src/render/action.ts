@@ -25,6 +25,7 @@ import { RichText, Style } from "@promptctl/rich-js";
 import type { Palette } from "@promptctl/rich-js";
 import type { FuncMap, Template } from "@promptctl/go-template-js";
 import type { VariableStore } from "../var-system/store.js";
+import type { SourceRegistry } from "../var-system/sources.js";
 import { toString as varToString } from "../var-system/types.js";
 import { buildScope } from "../template-engine/scope.js";
 import { ceilingMoveArgs, type ActionDecl } from "../config/action.js";
@@ -249,50 +250,18 @@ export type CompiledActions = ReadonlyMap<string, CompiledActionDecl>;
 // [LAW:locality-or-seam] The runtime holder the `action` template function closes
 // over. Populated after the engine is constructed (the func references the
 // engine, the compiled actions reference the engine — the holder breaks the
-// cycle). `store` is the live VariableStore the renderer reads, so the action
-// reads session.id and the current value from the same source the rest of the
-// render does.
+// cycle). The render in progress is bound into it, so the action reads
+// session.id and the current value from the same store the rest of the render
+// does.
 export interface ActionRuntime {
-  // [LAW:types-are-the-program] Always present — registerDslConfig sources it
-  // from the registry it is handed (registry.variableStore), so "no store" is
-  // structurally unrepresentable. The action reads session.id and current
-  // values from the same store the renderer reads.
-  store: VariableStore;
+  // [LAW:no-ambient-temporal-coupling] The render in progress, bound by
+  // drawDsl for its synchronous walk and unbound on every exit. One compile
+  // serves every render-cache entry whose config compiles alike
+  // (brandon-unfiled-3248.8yp), so what it reads is the RENDER's, never the
+  // compile's: read through `renderBinding`, which refuses a read with no
+  // render bound rather than answering from whichever entry drew last.
+  bound: RenderBinding | undefined;
   compiled: CompiledActions;
-  // [LAW:locality-or-seam] The columns the current render's strip spends on a
-  // row's caps (`stripChromeCols`), published per render by renderDsl. The picker
-  // reserves them at its pagination seam — the one place that needs strip
-  // geometry, kept off the shared `term.cols` budget. Defaulted at registration;
-  // renders are sequential and synchronous, so the per-render write never leaks
-  // across renders. [LAW:no-ambient-temporal-coupling]
-  chromeCols: number;
-  // [LAW:locality-or-seam] The width the current render's strip wraps to
-  // (`opts.width`, the value renderDsl also injects as `term.cols`), published
-  // beside chromeCols. The row-fitting functions read it here rather than from
-  // the store, so fitting a row to the width reads no variable a config must
-  // declare.
-  width: number;
-  // [LAW:locality-or-seam] The current render's intra-cell padding (resolved
-  // globals.padding), published per render by renderDsl exactly like
-  // chromeCols. The picker reserves 2×padding at its pagination seam — the
-  // segment layout pads every line it emits, so a page packed to the full
-  // budget would otherwise be pushed past the width by the pad spaces.
-  padding: number;
-  // [LAW:locality-or-seam] The columns one more cell costs the current render's
-  // strip beyond its content (`stripSeamCols`), published beside chromeCols. A
-  // disclosure body leads each row with its ✕ as a cell of its own, so a row
-  // fitted inside a body reserves that cell: its glyph, its padding, this seam.
-  seamCols: number;
-  // [LAW:no-ambient-temporal-coupling] The look THIS render draws in, published
-  // by renderDsl once it has resolved the theme, the style and the decor —
-  // absent until a render has, because only a render can resolve them (a
-  // `globals.palette` rule needs the payload). Read through `renderLook`.
-  look: RenderLook | undefined;
-  // [LAW:one-source-of-truth] The rows the bar lays its closed segments out in
-  // THIS render — `layoutRows` of the compiled tree the walk renders, under the
-  // walk's own visibility — published by renderDsl at the same site, lazily,
-  // since only `{{ layoutPreview }}` asks.
-  layout: () => PreviewRows;
 }
 
 /** The look a render draws in, as that render resolved it. */
@@ -305,17 +274,108 @@ export interface RenderLook extends RenderPalettes {
 }
 
 /**
- * The look of the render `reader` is evaluated in. Every reader is a template
- * function, so it runs inside a render, after renderDsl published the look;
- * [LAW:no-silent-failure] a read before any render throws, naming the reader.
+ * What a render binds into the compile it draws with: everything a template
+ * function reads of the render in progress. [LAW:no-ambient-temporal-coupling]
+ * It lives exactly as long as the render — drawDsl builds it, binds it, and
+ * drops it on every exit — so a compile shared between render-cache entries
+ * holds nothing of whichever entry drew last.
  */
-export function renderLook(runtime: ActionRuntime, reader: string): RenderLook {
-  if (runtime.look === undefined) {
+export interface RenderBinding {
+  // [LAW:one-source-of-truth] The store the render reads every variable from —
+  // so an action reads session.id and the current values the bar shows.
+  readonly store: VariableStore;
+  // The render's clocks: the instant it is drawn at and the depth it draws.
+  readonly registry: Pick<SourceRegistry, "now" | "drawnAt">;
+  // [LAW:locality-or-seam] The width the render's strip wraps to (the value
+  // `term.cols` carries), so fitting a row reads no variable a config must
+  // declare.
+  readonly width: number;
+  // [LAW:locality-or-seam] The columns the render's strip spends on a row's
+  // caps (`stripChromeCols`). The picker reserves them at its pagination seam
+  // — the one place that needs strip geometry, kept off the `term.cols`
+  // budget every template reads.
+  readonly chromeCols: number;
+  // The render's intra-cell padding (resolved globals.padding): the segment
+  // layout pads every line it emits, so the picker reserves 2×padding too.
+  readonly padding: number;
+  // The columns one more cell costs the strip beyond its content
+  // (`stripSeamCols`): a disclosure body leads each row with its ✕ as a cell
+  // of its own, so a row fitted inside a body reserves that cell.
+  readonly seamCols: number;
+  // [LAW:no-ambient-temporal-coupling] The look this render draws in and the
+  // rows it lays its closed segments out in. Only the render can resolve them
+  // (a `globals.palette` rule needs the payload), so drawDsl publishes each
+  // once it has, before the walk evaluates a template that reads it; read
+  // through `renderLook` / `renderLayout`.
+  look: RenderLook | undefined;
+  layout: (() => PreviewRows) | undefined;
+}
+
+/**
+ * The binding of the render `reader` is evaluated in. Every reader runs inside
+ * drawDsl's walk; [LAW:no-silent-failure] a read outside one throws, naming
+ * the reader.
+ */
+export function renderBinding(
+  runtime: ActionRuntime,
+  reader: string,
+): RenderBinding {
+  if (runtime.bound === undefined) {
     throw new Error(
-      `${reader} read the render's look before any render resolved one`,
+      `${reader} ran outside a render: no render bound its store and clocks`,
     );
   }
-  return runtime.look;
+  return runtime.bound;
+}
+
+/**
+ * The look of the render `reader` is evaluated in. [LAW:no-silent-failure] A
+ * read before drawDsl published it throws, naming the reader.
+ */
+export function renderLook(runtime: ActionRuntime, reader: string): RenderLook {
+  const { look } = renderBinding(runtime, reader);
+  if (look === undefined) {
+    throw new Error(`${reader} read the render's look before it was resolved`);
+  }
+  return look;
+}
+
+/**
+ * The rows the render `reader` is evaluated in lays its closed segments out in
+ * — `layoutRows` of the compiled tree under the walk's own visibility, built
+ * lazily, since only `{{ layoutPreview }}` asks.
+ */
+export function renderLayout(
+  runtime: ActionRuntime,
+  reader: string,
+): PreviewRows {
+  const { layout } = renderBinding(runtime, reader);
+  if (layout === undefined) {
+    throw new Error(`${reader} read the render's rows before they were laid`);
+  }
+  return layout();
+}
+
+/**
+ * Bind a render into the compile it draws with, for as long
+ * as the returned handle lives (`using` at drawDsl's top). Renders are
+ * synchronous, so one is bound at a time: [LAW:no-silent-failure] a second
+ * bind while one is live is a reentrant render, refused rather than allowed
+ * to read the other render's store.
+ */
+export function bindRender(
+  runtime: ActionRuntime,
+  binding: RenderBinding,
+): Disposable {
+  if (runtime.bound !== undefined) {
+    throw new Error("a render bound a compile another render holds");
+  }
+  runtime.bound = binding;
+  return {
+    [Symbol.dispose]: () => {
+      runtime.bound = undefined;
+    },
+  };
 }
 
 /** A segment the layout places, with the palette it renders in. */
@@ -1037,7 +1097,7 @@ export function renderAction(
   if (!declared) {
     throw new Error(`action "${name}" is not declared in this config`);
   }
-  const store = runtime.store;
+  const store = renderBinding(runtime, `action "${name}"`).store;
   // [LAW:dataflow-not-control-flow] DISPLAY selection reads the action the
   // click presents as, while REALIZATION is handed the declaration itself — a
   // `do` realizes as every member, and that belongs to the one fold that owns

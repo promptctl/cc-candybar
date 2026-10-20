@@ -181,6 +181,10 @@ export function formatStats(s: StatsSnapshot): string {
   lines.push(`  size          ${s.renderCache.size}`);
   lines.push(`  held          ${s.renderCache.held}`);
   lines.push(`  retired       ${s.renderCache.retired}`);
+  lines.push(`  compiles      ${s.renderCache.compiles}`);
+  lines.push(
+    `  accounted     ${fmtBytes(s.renderCache.accountedBytes)} / ${fmtBytes(s.renderCache.budgetBytes)}`,
+  );
   lines.push(``);
   lines.push(`effectCache`);
   lines.push(`  sessions      ${s.effectCache.sessions}`);

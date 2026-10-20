@@ -11,7 +11,8 @@
 // the input values (kind discriminators, layout length, palette presence)
 // govern output, not whether operations run.
 
-import type { RichText, Palette } from "@promptctl/rich-js";
+import { createHash } from "node:crypto";
+import type { ColorDepth, RichText, Palette } from "@promptctl/rich-js";
 import { Defines, type Engine, type Template } from "@promptctl/go-template-js";
 import type { Instant } from "../utils/instant.js";
 import type {
@@ -32,7 +33,6 @@ import {
   settingsOf,
   stateVarDecls,
 } from "../config/dsl-types.js";
-import { TERM_COLS_FLOOR } from "../config/payload-inputs.js";
 import {
   themeDefaultsOf,
   underThemeDefault,
@@ -56,7 +56,6 @@ import type { SourceParse } from "../var-system/parse.js";
 import type { JsonValue } from "../var-system/types.js";
 import type { BuildLineOptions } from "../render/strip.js";
 import {
-  DEFAULT_PADDING,
   drawStripCells,
   stripChromeCols,
   stripSeamCols,
@@ -101,7 +100,10 @@ import {
 import {
   compileActions,
   actionFuncs,
+  bindRender,
+  renderBinding,
   type ActionRuntime,
+  type RenderBinding,
 } from "../render/action.js";
 import { SESSION_KEY_TO_EFFECTIVE_VAR } from "../config/setting-projections.js";
 import { disclosureCloseFragment } from "../render/disclosure-close.js";
@@ -219,12 +221,6 @@ export interface CompiledConfig {
   // synchronous, so no cross-render leak) — the spatial cousin of the hue
   // cursor, one owner. [LAW:no-ambient-temporal-coupling]
   readonly activeSegment: ActiveSegmentRef;
-  // [LAW:types-are-the-program] Variable declaration failures that did NOT
-  // prevent the config from loading (type mismatches, bad defaults). The
-  // affected variables are absent from the store; segments that reference them
-  // render as error cells. Non-empty means "partial load" — the config is
-  // usable but degraded.
-  readonly loadWarnings: readonly string[];
 }
 
 // ─── CacheDecl → CachePolicy ─────────────────────────────────────────────────
@@ -462,132 +458,81 @@ export function registerDslConfig(
   // and `shell` sources run in, and the daemon's own process.cwd() is
   // whichever shell spawned it — a default here would be that wrong answer.
   opts: { cwd: string },
-): CompiledConfig {
-  const cwd = opts.cwd;
+): RegisteredConfig {
+  const { compiled, loadWarnings } = registerCompiled(
+    config,
+    registry,
+    opts.cwd,
+    compileAlone,
+  );
+  return { ...compiled, loadWarnings };
+}
 
-  // [LAW:locality-or-seam] One engine per config load, carrying THIS config's
-  // action runtime. Engine creation amortizes across all of this config's segment
-  // templates (parse-once); per-config (not per-render) is the right granularity
-  // because the action set is config-scoped. The runtime holder is populated below
-  // — the `action`/`picker` funcs reference the engine, and the compiled actions
-  // reference the engine, so the holder breaks that cycle.
-  // [LAW:one-source-of-truth] The action runtime reads through the SAME store the
-  // registry declares into and the renderer reads back — sourced from the registry
-  // itself, not a redundant opts field a caller could forget (or pass a divergent
-  // store for). Every config has a registry, so the action store is never null.
-  const actionRuntime: ActionRuntime = {
-    store: registry.variableStore,
-    compiled: new Map(),
-    // [LAW:types-are-the-program] Always present — renderDsl republishes the live
-    // chrome each render; the default shape's is the registration-time value so a
-    // compile-only path (no render) still has a valid one.
-    chromeCols: stripChromeCols({ endcaps: "powerline" }),
-    // Same contract as chromeCols; the floor is `term.cols`'s own default.
-    width: TERM_COLS_FLOOR,
-    // Same contract as chromeCols: renderDsl republishes the live resolved
-    // globals.padding each render; the constant is only the compile-only floor.
-    padding: DEFAULT_PADDING,
-    // Same contract again: the compile-only floor is the registration-time
-    // endcaps shape's seam.
-    seamCols: stripSeamCols({ endcaps: "powerline" }),
-    // Same contract again: with no render there is no walk, and no rows.
-    layout: () => [],
-    // [LAW:one-source-of-truth] Unlike the geometry above, a look has no
-    // floor to stand in for it: only a render resolves one, so there is none
-    // until renderDsl publishes its own.
-    look: undefined,
+/** The compile for a config's compile key and input. */
+export type CompileProvider = (
+  key: string,
+  input: CompileInput,
+) => CompiledConfig;
+
+/** A compile of its own, for a caller with no other entry to share one with. */
+export const compileAlone: CompileProvider = (_key, input) =>
+  compileDslConfig(input);
+
+/** A config composed into a registry: its compile, and its store's declarations. */
+export interface Registration {
+  readonly compiled: CompiledConfig;
+  // [LAW:one-source-of-truth] The identity of `compiled`: what it was compiled
+  // from, so registrations carrying one key may carry one compile.
+  readonly compileKey: string;
+  readonly loadWarnings: readonly string[];
+}
+
+// [LAW:single-enforcer] The one composition of a config into a registry, which
+// `cc-candybar check` (registerDslConfig) and the daemon (buildRenderState)
+// both take: the compile `compile` hands back for the config's key — a render
+// cache's shared one, or one of its own — then the variables declared into
+// the registry.
+export function registerCompiled(
+  config: ValidatedConfig,
+  registry: SourceRegistry,
+  cwd: string,
+  compile: CompileProvider,
+): Registration {
+  const input = compileInputOf(config);
+  const key = compileKey(input);
+  return {
+    compiled: compile(key, input),
+    compileKey: key,
+    loadWarnings: declareDslVariables(config, registry, cwd),
   };
-  // [LAW:one-way-deps] Inject action + picker feature funcs as data — the engine
-  // stays generic. The picker shares the ACTION runtime (it resolves its
-  // apply/page actions from the same compiled table), so they read one source.
-  // [LAW:one-source-of-truth] ONE record for "which segment is rendering", read
-  // by every segment-scoped template function: `{{ menu }}` takes its identity
-  // from the name, `{{ color }}` its palette, `{{ bgOf }}` its background. A
-  // per-feature pointer would let two features disagree about which segment is
-  // current. Built before the engine so the funcs can close over it; `current`
-  // stays null until a render walk publishes one.
-  const activeSegment = createActiveSegmentRef(registry.drawnAt);
-  // [LAW:locality-or-seam] The menu runtime shares the action runtime (a menu's
-  // glyph + body resolve from the same compiled table + store) and reads the
-  // active segment through the shared record above.
-  const menuRuntime: MenuRuntime = {
-    action: actionRuntime,
-    activeSegment,
-  };
-  // [LAW:one-source-of-truth] The config's style names — the one PER-CONFIG
-  // option domain. Fed to every consumer (the `styles()` binding below, and —
-  // via configOptionDomains, the SAME map cross-ref.ts and both gates
-  // use — the compiled set-option domains), so the
-  // rendered options, a hand-authored `range styles`, and the derived click
-  // gate (which reads the same config in deriveActionValidators) trace to
-  // one source.
-  const styleNames = Object.keys(config.styles);
-  const presetOptions = presetNames(config.presets);
-  const perConfigDomains = configOptionDomains(config);
-  const engine = createCcCandybarEngine({
-    extraFuncs: {
-      ...actionFuncs(actionRuntime),
-      ...pickerFuncs(actionRuntime, activeSegment),
-      ...carouselFuncs(actionRuntime, activeSegment),
-      ...themePreviewFuncs(actionRuntime, activeSegment),
-      // The swatch row's `?` picks from the render's one instant, so a render
-      // at a given instant offers one pick, as it shows one clock.
-      ...swatchFuncs(actionRuntime, activeSegment, registry.now),
-      ...layoutPreviewFuncs(actionRuntime, activeSegment),
-      ...menuFuncs(menuRuntime),
-      // [LAW:one-source-of-truth] `{{ color }}` reads the palette of the
-      // segment currently rendering — the same palette its `bg:`/`fg:` resolve
-      // from, published by the walk. Binding it to a palette captured HERE
-      // (registration runs once per config load, renders happen per tick) was
-      // the two-clocks bug this seam exists to close: a session theme click or
-      // a style moved a segment's background while every in-body color stayed
-      // where it was, so one segment painted from two palettes at once. Reading
-      // live costs nothing structurally — FuncMap bodies run at evaluate time,
-      // so parse-once/evaluate-many is untouched.
-      // `{{ bgOf }}` rides the same record. [LAW:one-source-of-truth]
-      ...segmentColorFuncs(activeSegment),
-      // [LAW:one-type-per-behavior] The per-config sibling of the static
-      // themes()/styles() bindings (template-engine/funcs.ts): zero-arg
-      // projection of the "styles" option domain. Injected here — not in the
-      // static FuncMap — because the domain is this config's styles block.
-      styles: { fn: () => styleNames, argTypes: [], arity: { kind: "exact" } },
-      // The presets domain's twin of the binding above — same per-config
-      // reason, same shape. A hand-authored `range presets` and a
-      // `{{ menu "applyPreset" }}` therefore enumerate the same names the
-      // derived click gate admits.
-      presets: {
-        fn: () => presetOptions,
-        argTypes: [],
-        arity: { kind: "exact" },
-      },
-    },
-    // [LAW:one-source-of-truth] The registry's clocks: this engine's datetime
-    // functions read the instant its variables' do, and its `readableOn` floors
-    // at the same depth theirs does.
-    clock: registry.now,
-    drawnAt: registry.drawnAt,
-  });
-  // [LAW:single-enforcer] THE one parse path for this config: every template —
-  // segment template/when/bg/fg, node `when`, and action copy/open — inherits
-  // the same helper define set, so `{{ template "name" }}` resolves against one
-  // shared AST. One closure, not raw engine.parse scattered across sites, so
-  // there is exactly one boundary where helpers come into scope (and one place
-  // a helper could fail to be visible). The helpers are parsed ONCE here.
-  const helpers = compileHelpers(engine, config.helpers);
-  const parse = (src: string): Template<RichText> => engine.parse(src, helpers);
-  // A node's templates recur across many nodes — edit mode gates every chrome
-  // cell and every placed segment in every preset by a handful of predicates,
-  // and draws one segment's remove lead and configure trail on both its label and its content —
-  // so each distinct source is parsed once and its template shared. A parsed
-  // template holds no evaluation state, so sharing one is sharing its AST.
-  const nodeTemplates = new Map<string, Template<RichText>>();
-  const parseShared = (src: string): Template<RichText> => {
-    const known = nodeTemplates.get(src);
-    if (known !== undefined) return known;
-    const parsed = parse(src);
-    nodeTemplates.set(src, parsed);
-    return parsed;
-  };
+}
+
+// A compile and the declaration failures of the store it was registered into.
+export interface RegisteredConfig extends CompiledConfig {
+  // [LAW:types-are-the-program] Variable declaration failures that did NOT
+  // prevent the config from loading (type mismatches, bad defaults). The
+  // affected variables are absent from the store; segments that reference them
+  // render as error cells. Non-empty means "partial load" — the config is
+  // usable but degraded. The store's, not the compile's: one compile serves
+  // every store its config is declared into.
+  readonly loadWarnings: readonly string[];
+}
+
+// [LAW:decomposition] What a compile reads — the config less its variables,
+// and the one fact it derives from them: which variable reads back each
+// session key. A variable's SOURCE is the store's business (declareDslVariables):
+// a plugin's `{ checkout }` data path is resolved per checkout into
+// `config.variables`, so a compile that could read it would differ per
+// worktree. Plain JSON data by type — `stateReads` is entries sorted by key,
+// never a Map, which JSON.stringify writes as `{}` — so its serialization is
+// the identity of every compile it can produce (brandon-unfiled-3248.8yp).
+export interface CompileInput {
+  readonly config: Omit<ValidatedConfig, "variables">;
+  readonly stateReads: ReadonlyArray<readonly [key: string, variable: string]>;
+}
+
+export function compileInputOf(config: ValidatedConfig): CompileInput {
+  const { variables, ...rest } = config;
   // [LAW:one-source-of-truth] Map each SessionState key → the variable a `set`
   // on it reads back, so an option picker marks its current selection by
   // reading the SAME value the templates read — independent of whether the
@@ -603,7 +548,7 @@ export function registerDslConfig(
   // and the menu cannot disagree (brandon-theme-picker-bgw.exj).
   const stateKeyToVar = new Map<string, string>();
   for (const [key, name] of SESSION_KEY_TO_EFFECTIVE_VAR) {
-    if (name in config.variables) stateKeyToVar.set(key, name);
+    if (name in variables) stateKeyToVar.set(key, name);
   }
   // Segment-local state vars read the same SessionState keys under their
   // namespaced `segName.varName` (the form the store + scope use); a global
@@ -612,16 +557,26 @@ export function registerDslConfig(
   for (const [name, decl] of stateVarDecls(config)) {
     if (!stateKeyToVar.has(decl.key)) stateKeyToVar.set(decl.key, name);
   }
-  // [LAW:one-source-of-truth] Actions resolve their set key → the reading
-  // variable through the stateKeyToVar map, so an apply action and the picker
-  // that references it read one value.
-  actionRuntime.compiled = compileActions(
-    parse,
-    config.actions,
-    stateKeyToVar,
-    perConfigDomains,
-  );
+  return {
+    config: rest,
+    stateReads: [...stateKeyToVar].sort(([a], [b]) => (a < b ? -1 : 1)),
+  };
+}
 
+// [LAW:one-source-of-truth] THE compile identity: two inputs with one key
+// compile alike, so the render cache shares one compile between them.
+export function compileKey(input: CompileInput): string {
+  return createHash("sha256").update(JSON.stringify(input)).digest("hex");
+}
+
+// Declare every variable the config holds into the registry, the global ones
+// and each segment's locals under `segName.varName`. Returns the declaration
+// failures: the rest are declared (see RegisteredConfig.loadWarnings).
+export function declareDslVariables(
+  config: ValidatedConfig,
+  registry: SourceRegistry,
+  cwd: string,
+): readonly string[] {
   // [LAW:dataflow-not-control-flow] One variable failing to declare does not
   // abort the rest. Errors are data (accumulated in loadWarnings); the store
   // simply lacks the broken variable. Segments that reference it get a
@@ -651,6 +606,133 @@ export function registerDslConfig(
       }
     }
   }
+  return loadWarnings;
+}
+
+// Pre-parse every template the config holds against one engine whose
+// template functions read the store and clocks of the render in progress
+// (ActionRuntime.bound), so the compile holds no store of its own.
+export function compileDslConfig({
+  config,
+  stateReads,
+}: CompileInput): CompiledConfig {
+  // [LAW:locality-or-seam] One engine per config load, carrying THIS config's
+  // action runtime. Engine creation amortizes across all of this config's segment
+  // templates (parse-once); per-config (not per-render) is the right granularity
+  // because the action set is config-scoped. The runtime holder is populated below
+  // — the `action`/`picker` funcs reference the engine, and the compiled actions
+  // reference the engine, so the holder breaks that cycle.
+  // [LAW:one-source-of-truth] The action runtime reads through the SAME store the
+  // render reads back — the one drawDsl binds for its walk, never one captured
+  // here, since one compile serves every store its config is declared into.
+  const actionRuntime: ActionRuntime = {
+    bound: undefined,
+    compiled: new Map(),
+  };
+  // [LAW:one-way-deps] Inject action + picker feature funcs as data — the engine
+  // stays generic. The picker shares the ACTION runtime (it resolves its
+  // apply/page actions from the same compiled table), so they read one source.
+  // [LAW:one-source-of-truth] ONE record for "which segment is rendering", read
+  // by every segment-scoped template function: `{{ menu }}` takes its identity
+  // from the name, `{{ color }}` its palette, `{{ bgOf }}` its background. A
+  // per-feature pointer would let two features disagree about which segment is
+  // current. Built before the engine so the funcs can close over it; `current`
+  // stays null until a render walk publishes one.
+  // [LAW:one-source-of-truth] The render's clocks: this engine's datetime
+  // functions read the instant its variables' do, and its `readableOn` floors
+  // at the same depth theirs does — the registry the render bound.
+  const now = (): Date => renderBinding(actionRuntime, "now").registry.now();
+  const drawnAt = (): ColorDepth =>
+    renderBinding(actionRuntime, "drawnAt").registry.drawnAt();
+  const activeSegment = createActiveSegmentRef(drawnAt);
+  // [LAW:locality-or-seam] The menu runtime shares the action runtime (a menu's
+  // glyph + body resolve from the same compiled table + store) and reads the
+  // active segment through the shared record above.
+  const menuRuntime: MenuRuntime = {
+    action: actionRuntime,
+    activeSegment,
+  };
+  // [LAW:one-source-of-truth] The config's style names — the one PER-CONFIG
+  // option domain. Fed to every consumer (the `styles()` binding below, and —
+  // via configOptionDomains, the SAME map cross-ref.ts and both gates
+  // use — the compiled set-option domains), so the
+  // rendered options, a hand-authored `range styles`, and the derived click
+  // gate (which reads the same config in deriveActionValidators) trace to
+  // one source.
+  const styleNames = Object.keys(config.styles);
+  const presetOptions = presetNames(config.presets);
+  const perConfigDomains = configOptionDomains(config);
+  const engine = createCcCandybarEngine({
+    extraFuncs: {
+      ...actionFuncs(actionRuntime),
+      ...pickerFuncs(actionRuntime, activeSegment),
+      ...carouselFuncs(actionRuntime, activeSegment),
+      ...themePreviewFuncs(actionRuntime, activeSegment),
+      // The swatch row's `?` picks from the render's one instant, so a render
+      // at a given instant offers one pick, as it shows one clock.
+      ...swatchFuncs(actionRuntime, activeSegment, now),
+      ...layoutPreviewFuncs(actionRuntime, activeSegment),
+      ...menuFuncs(menuRuntime),
+      // [LAW:one-source-of-truth] `{{ color }}` reads the palette of the
+      // segment currently rendering — the same palette its `bg:`/`fg:` resolve
+      // from, published by the walk. Binding it to a palette captured HERE
+      // (registration runs once per config load, renders happen per tick) was
+      // the two-clocks bug this seam exists to close: a session theme click or
+      // a style moved a segment's background while every in-body color stayed
+      // where it was, so one segment painted from two palettes at once. Reading
+      // live costs nothing structurally — FuncMap bodies run at evaluate time,
+      // so parse-once/evaluate-many is untouched.
+      // `{{ bgOf }}` rides the same record. [LAW:one-source-of-truth]
+      ...segmentColorFuncs(activeSegment),
+      // [LAW:one-type-per-behavior] The per-config sibling of the static
+      // themes()/styles() bindings (template-engine/funcs.ts): zero-arg
+      // projection of the "styles" option domain. Injected here — not in the
+      // static FuncMap — because the domain is this config's styles block.
+      styles: { fn: () => styleNames, argTypes: [], arity: { kind: "exact" } },
+      // The presets domain's twin of the binding above — same per-config
+      // reason, same shape. A hand-authored `range presets` and a
+      // `{{ menu "applyPreset" }}` therefore enumerate the same names the
+      // derived click gate admits.
+      presets: {
+        fn: () => presetOptions,
+        argTypes: [],
+        arity: { kind: "exact" },
+      },
+    },
+    clock: now,
+    drawnAt,
+  });
+  // [LAW:single-enforcer] THE one parse path for this config: every template —
+  // segment template/when/bg/fg, node `when`, and action copy/open — inherits
+  // the same helper define set, so `{{ template "name" }}` resolves against one
+  // shared AST. One closure, not raw engine.parse scattered across sites, so
+  // there is exactly one boundary where helpers come into scope (and one place
+  // a helper could fail to be visible). The helpers are parsed ONCE here.
+  const helpers = compileHelpers(engine, config.helpers);
+  const parse = (src: string): Template<RichText> => engine.parse(src, helpers);
+  // A node's templates recur across many nodes — edit mode gates every chrome
+  // cell and every placed segment in every preset by a handful of predicates,
+  // and draws one segment's remove lead and configure trail on both its label and its content —
+  // so each distinct source is parsed once and its template shared. A parsed
+  // template holds no evaluation state, so sharing one is sharing its AST.
+  const nodeTemplates = new Map<string, Template<RichText>>();
+  const parseShared = (src: string): Template<RichText> => {
+    const known = nodeTemplates.get(src);
+    if (known !== undefined) return known;
+    const parsed = parse(src);
+    nodeTemplates.set(src, parsed);
+    return parsed;
+  };
+  const stateKeyToVar = new Map(stateReads);
+  // [LAW:one-source-of-truth] Actions resolve their set key → the reading
+  // variable through the stateKeyToVar map, so an apply action and the picker
+  // that references it read one value.
+  actionRuntime.compiled = compileActions(
+    parse,
+    config.actions,
+    stateKeyToVar,
+    perConfigDomains,
+  );
 
   // Pre-parse all segment templates once.
   // renderDsl calls evaluate() only — parse() never runs in the hot render
@@ -708,7 +790,6 @@ export function registerDslConfig(
   // value filled here — so the render shows a session's unsaved pick the
   // moment it lands, and the file's value while there is none. A pick the
   // declaration no longer admits parses to nothing and reads as no pick.
-  const store = registry.variableStore;
   const resolvedSettings = (node: SegmentNode): PlacementSettings => {
     // [LAW:no-defensive-null-guards] cross-ref proved every placed segment
     // is declared.
@@ -719,7 +800,11 @@ export function registerDslConfig(
         enumerable: true,
         get: () =>
           placementSetting(node, name, decl, (draft) =>
-            String(store.read(draft.variable)),
+            String(
+              renderBinding(actionRuntime, `setting ${name}`).store.read(
+                draft.variable,
+              ),
+            ),
           ),
       });
     }
@@ -805,7 +890,6 @@ export function registerDslConfig(
     activeSegment,
     menuRuntime,
     globalExpressions,
-    loadWarnings,
   };
 }
 
@@ -1120,6 +1204,22 @@ export function drawDsl(
   // `readableOn` — is floored on the one depth.
   registry.renderAt(at);
   registry.drawAt(drawnDepth(opts.colorCompatibility));
+  // [LAW:no-ambient-temporal-coupling] The compile may serve many stores (one
+  // per render-cache entry its config compiles alike in): every template it
+  // evaluates below reads THIS render's binding, bound for the walk and dropped
+  // on every exit, a throw included, so the compile keeps nothing of it.
+  const binding: RenderBinding = {
+    store,
+    registry,
+    width: opts.width,
+    chromeCols: stripChromeCols(opts),
+    padding: opts.padding,
+    seamCols: stripSeamCols(opts),
+    look: undefined,
+    layout: undefined,
+  };
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- held for its disposal
+  using _bound = bindRender(compiled.menuRuntime.action, binding);
   const { preset = PRESET_FLOOR } = selection ?? {};
   // [LAW:one-source-of-truth] What an omitting caller falls back to is the
   // config default as the daemon reads it: the ACTIVE preset's globals over the
@@ -1158,7 +1258,7 @@ export function drawDsl(
     resolveEffectSelection(undefined, null, declared.effect);
   // [LAW:one-source-of-truth] Inject the usable width as `term.cols` from the
   // SAME opts.width the strip wraps to (below) and a row fits to (published as
-  // ActionRuntime.width), so a template reads the exact wrap width — never a
+  // RenderBinding.width), so a template reads the exact wrap width — never a
   // cached or independently-measured copy. This is the RAW usable width
   // (terminal cols minus the Claude-Code reserve), the honest meaning every
   // template — incl. user configs reading `.term.cols` — expects. The picker's
@@ -1199,20 +1299,6 @@ export function drawDsl(
       provisionalName(selectedEffect, "effect"),
     ),
   );
-  // [LAW:single-enforcer] Publish the columns the render's strip spends on a
-  // row's caps onto the shared action runtime, so the picker can reserve them at
-  // its pagination seam (the menu body renders through the same renderPicker). Set
-  // once per render here — the same one-owner, per-render-mutation idiom as the
-  // menu placement cursor below. [LAW:no-ambient-temporal-coupling]
-  compiled.menuRuntime.action.chromeCols = stripChromeCols(opts);
-  // [LAW:one-source-of-truth] Publish the render's intra-cell padding beside the
-  // style: the picker reserves 2×padding at its pagination seam, the same seam
-  // that reserves the joiner chrome — one resolved value, read where needed.
-  compiled.menuRuntime.action.padding = opts.padding;
-  // The width the rows wrap to, the one value `term.cols` carries above.
-  compiled.menuRuntime.action.width = opts.width;
-  // The seam one more cell costs, from the same options the rows serialize by.
-  compiled.menuRuntime.action.seamCols = stripSeamCols(opts);
   const scope = buildScope(store);
   // The other half of each fold, which could only ever happen here: a rule reads
   // the store the push above just filled with this render's values. A decided
@@ -1269,7 +1355,7 @@ export function drawDsl(
   const palette = transposedPalette(basePalette, style.value);
   // The look the walk below draws in, published before it evaluates a template
   // that reads it (`renderLook`).
-  compiled.menuRuntime.action.look = { basePalette, palette, decor };
+  binding.look = { basePalette, palette, decor };
   // The motion of each row this render draws: the session's effect memory
   // records the settled effect coming into force, so its clock starts there,
   // and what each placement this frame draws, so one the last frame — drawn
@@ -1285,7 +1371,7 @@ export function drawDsl(
   ).motion(effect.value, at, {
     transitions,
     source: {
-      config: compiled,
+      config,
       preset,
       revision: registry.stateRevision(),
       width: opts.width,
@@ -1512,7 +1598,7 @@ export function drawDsl(
       return true;
     }
   };
-  compiled.menuRuntime.action.layout = () =>
+  binding.layout = () =>
     layoutRows(root, shown).map((row) =>
       row.flatMap(({ name: placedName, address, settings }) => {
         const name = arrangedSegment(placedName);

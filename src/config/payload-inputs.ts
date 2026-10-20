@@ -14,8 +14,8 @@ import type { VariableDecl } from "./dsl-types.js";
 import { SESSION_ID_VAR_NAME } from "../var-system/sources.js";
 import { LANE_FLOOR, LANE_NAMES, laneEffectiveVar } from "./lanes.js";
 
-// The width a compile-only caller (no render, so no width injected) fits and
-// reads: `term.cols`'s default below and ActionRuntime.width's floor.
+// `term.cols`'s default below: the width a template reads when no render
+// injected one.
 export const TERM_COLS_FLOOR = 80;
 
 export const PAYLOAD_INPUTS: Readonly<Record<string, VariableDecl>> = {
@@ -164,7 +164,7 @@ export const PAYLOAD_INPUTS: Readonly<Record<string, VariableDecl>> = {
   // [LAW:one-source-of-truth] The usable terminal width for THIS render —
   // the exact post-reserve cell count FlexStrip wraps to. renderDsl injects
   // it into the payload from its own `opts.width`, the value a row fits to
-  // (ActionRuntime.width) and the strip wraps to, so a template reading it
+  // (RenderBinding.width) and the strip wraps to, so a template reading it
   // and the wrap algebra can never disagree. Never cached: a resize is just a
   // new value on the same path, re-read every render. The default only
   // applies to compile-only callers that render without injecting a width.

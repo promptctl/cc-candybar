@@ -34,7 +34,14 @@ describe("RuntimeStats.snapshot", () => {
         watchers: 2,
       },
       usageCache: { size: 10, hits: 50, misses: 5, sweeps: 1 },
-      renderCache: { size: 3, held: 1, retired: 0 },
+      renderCache: {
+        size: 3,
+        held: 1,
+        retired: 0,
+        compiles: 1,
+        accountedBytes: 3,
+        budgetBytes: 9,
+      },
       effectCache: { sessions: 2, effects: 5 },
       sessionState: { sessions: 2, observers: 11, revision: 7 },
       frameFeeds: { feeds: 0, subscribers: 0, drawn: 0, pushed: 0, refused: 0, lookups: 0, found: 0 },
@@ -176,7 +183,14 @@ describe("formatStats", () => {
         watchers: 5,
       },
       usageCache: { size: 3, hits: 40, misses: 10, sweeps: 0 },
-      renderCache: { size: 4, held: 0, retired: 1 },
+      renderCache: {
+        size: 4,
+        held: 0,
+        retired: 1,
+        compiles: 2,
+        accountedBytes: 32 * 1024 * 1024,
+        budgetBytes: 128 * 1024 * 1024,
+      },
       effectCache: { sessions: 2, effects: 3 },
       sessionState: { sessions: 2, observers: 11, revision: 7 },
       frameFeeds: { feeds: 0, subscribers: 0, drawn: 0, pushed: 0, refused: 0, lookups: 0, found: 0 },
@@ -203,6 +217,8 @@ describe("formatStats", () => {
     expect(out).toContain("effects       3");
     expect(out).toContain("observers     11");
     expect(out).toContain("revision      7");
+    expect(out).toContain("compiles      2");
+    expect(out).toContain("accounted     32.0MB / 128.0MB");
   });
 
   test("hit rate is n/a when no observations", () => {
@@ -221,7 +237,14 @@ describe("formatStats", () => {
       requests: { total: 0, errored: 0, timedOut: 0, inFlight: 0 },
       gitCache: { size: 0, hits: 0, misses: 0, invalidations: 0, watchers: 0 },
       usageCache: { size: 0, hits: 0, misses: 0, sweeps: 0 },
-      renderCache: { size: 0, held: 0, retired: 0 },
+      renderCache: {
+        size: 0,
+        held: 0,
+        retired: 0,
+        compiles: 0,
+        accountedBytes: 0,
+        budgetBytes: 0,
+      },
       effectCache: { sessions: 0, effects: 0 },
       sessionState: { sessions: 0, observers: 0, revision: 0 },
       frameFeeds: { feeds: 0, subscribers: 0, drawn: 0, pushed: 0, refused: 0, lookups: 0, found: 0 },

@@ -52,6 +52,7 @@ import { effectsUrl, VERB_SET_STATE } from "../click/wire.js";
 import {
   linkFragment,
   readVar,
+  renderBinding,
   renderLook,
   type ActionRuntime,
 } from "./action.js";
@@ -111,7 +112,8 @@ function renderMenu(
   // closed here — exactly the binary [closed, member] cycle the synthesized action
   // gates. This ONE read drives both the glyph and the body, so what the glyph
   // promises and what drops below cannot disagree.
-  const open = readVar(action.store, stateKey) === member;
+  const store = renderBinding(action, "menu").store;
+  const open = readVar(store, stateKey) === member;
 
   // [LAW:one-source-of-truth] / [LAW:locality-or-seam] The disclosure click is ONE
   // atomic set-state that keeps the two split keys coherent: it toggles the open-
@@ -124,7 +126,7 @@ function renderMenu(
   // [LAW:decomposition] — does the same. The synthesized cycle action stays the
   // GATE source (deriveActionValidators); both keys are independently gated, so the
   // coupled batch passes the same wire gate every click does [LAW:single-enforcer].
-  const sessionId = readVar(action.store, "session.id");
+  const sessionId = readVar(store, "session.id");
   const successor = open ? DISCLOSURE_CLOSED : member;
   // [LAW:one-source-of-truth] The trigger's text is AUTHORED, resolved through
   // the one display rule a cycle `{{ action }}` uses — a menu's disclosure is a

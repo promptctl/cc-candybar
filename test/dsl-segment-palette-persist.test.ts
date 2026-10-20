@@ -58,7 +58,11 @@ import {
   RAW_DEFAULT_DSL_CONFIG,
 } from "../src/config/default-dsl-config";
 import type { DslConfig } from "../src/config/dsl-types";
-import { RenderCache } from "../src/daemon/cache/render";
+import { rssLimitBytes } from "../src/daemon/limits";
+import {
+  RenderCache,
+  renderCacheBudget,
+} from "../src/daemon/cache/render";
 import { GitDataProvider } from "../src/daemon/cache/git";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { ReloadSignal } from "./helpers/reload-signal";
@@ -491,7 +495,7 @@ function makeCache(): {
   const reloads = new ReloadSignal();
   const cache = new RenderCache(
     { gitService, sessionState, watchers },
-    { observers: reloads.observers },
+    { budgetBytes: () => renderCacheBudget(rssLimitBytes({})), observers: reloads.observers },
   );
   return { cache, cleanups, reloads };
 }

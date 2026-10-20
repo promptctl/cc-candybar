@@ -32,6 +32,7 @@ import {
   linkOver,
   realize,
   readVar,
+  renderBinding,
   renderLook,
   type ActionRuntime,
   type CompiledActionDecl,
@@ -71,7 +72,8 @@ export function cellWidth(text: string): number {
 // the per-shape geometry. The picker and the carousel both fit a row by this
 // one budget.
 export function rowBudget(runtime: ActionRuntime): number {
-  return Math.max(1, runtime.width - runtime.chromeCols - 2 * runtime.padding);
+  const { width, chromeCols, padding } = renderBinding(runtime, "a row fit");
+  return Math.max(1, width - chromeCols - 2 * padding);
 }
 
 // [LAW:single-enforcer] The width a row may fill when it sits in an open
@@ -81,12 +83,11 @@ export function rowBudget(runtime: ActionRuntime): number {
 // next cell. Reserved whether or not the row really sits in a body, so a bare
 // row fits the same width a body's would; the template cannot see where it is.
 export function ledRowBudget(runtime: ActionRuntime): number {
+  const { padding, seamCols } = renderBinding(runtime, "a row fit");
   return Math.max(
     1,
     rowBudget(runtime) -
-      (cellWidth(DISCLOSURE_GLYPH_CLOSE) +
-        2 * runtime.padding +
-        runtime.seamCols),
+      (cellWidth(DISCLOSURE_GLYPH_CLOSE) + 2 * padding + seamCols),
   );
 }
 
@@ -319,7 +320,7 @@ export function renderPicker(
   // `do` is, and there is no second projection of "what does this option
   // write" to drift from realize's.
   const declared = runtime.compiled.get(applyName)!;
-  const store = runtime.store;
+  const store = renderBinding(runtime, "picker").store;
   const sessionId = readVar(store, "session.id");
   // [LAW:no-defensive-null-guards] layout-op-option carries no `stateVar` —
   // a structural insert is a one-shot trigger, not a persisted single value,

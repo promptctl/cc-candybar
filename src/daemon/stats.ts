@@ -3,6 +3,7 @@
 // canonical object lives here. Stats are read-only after serialization.
 
 import type { FeedStats } from "./frame-feed";
+import type { RenderCacheStats } from "./cache/render";
 import type { ProbeArrival } from "../doctor/handler-probe";
 import type { RenderSighting } from "./render-sightings";
 import type { ServingDaemon } from "./limits";
@@ -73,12 +74,9 @@ export interface StatsSnapshot {
   // Config states: entries the map serves, those a render is drawing with
   // now, and those retired (evicted or reloaded over) whose teardown waits
   // on one. `retired` climbing while `size` holds is a render that never
-  // returned.
-  renderCache: {
-    size: number;
-    held: number;
-    retired: number;
-  };
+  // returned. `compiles` below `size` is entries sharing one; `accountedBytes`
+  // is what the entries are charged against `budgetBytes`.
+  renderCache: RenderCacheStats;
   effectCache: {
     sessions: number;
     effects: number;
@@ -247,7 +245,14 @@ export class RuntimeStats {
     return new RuntimeStats().snapshot({
       gitCache: { size: 0, hits: 0, misses: 0, invalidations: 0, watchers: 0 },
       usageCache: { size: 0, hits: 0, misses: 0, sweeps: 0 },
-      renderCache: { size: 0, held: 0, retired: 0 },
+      renderCache: {
+        size: 0,
+        held: 0,
+        retired: 0,
+        compiles: 0,
+        accountedBytes: 0,
+        budgetBytes: 0,
+      },
       effectCache: { sessions: 0, effects: 0 },
       sessionState: { sessions: 0, observers: 0, revision: 0 },
       frameFeeds: {

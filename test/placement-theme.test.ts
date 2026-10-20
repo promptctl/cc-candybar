@@ -17,6 +17,8 @@ import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { bindRender } from "../src/render/action";
+import { lastBinding } from "./helpers/render-binding";
 import { SessionState } from "../src/daemon/session-state";
 import {
   FOLLOW_BAR,
@@ -120,7 +122,7 @@ function buildRuntime(src: string, sessionState = new SessionState()) {
       verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
     for (const e of effects) VERBS.get(e.verb)!(e.value, ctx);
   };
-  return { config, compiled, sessionState, render, bgOf, click, ctx };
+  return { config, compiled, store, registry, sessionState, render, bgOf, click, ctx };
 }
 
 const hex = (palette: Palette, role: "background"): string =>
@@ -329,25 +331,32 @@ describe("the layout preview while arranging", () => {
   // In the names view each placement's cell is held by its label, and the
   // preview draws the label as the placement it stands for — in that
   // placement's theme: its pin, and its unsaved pick.
+  // The rows a render lays its closed segments out in — what
+  // `{{ layoutPreview }}` reads — taken from the binding that render bound
+  // into its compile, which drawDsl drops when the render returns.
   const previewPalette = (
     rt: ReturnType<typeof buildRuntime>,
     segment: string,
-  ): Palette[] =>
-    rt.compiled.menuRuntime.action
-      .layout()
+  ): Palette[] => {
+    const runtime = rt.compiled.menuRuntime.action;
+    const drawn = lastBinding(runtime);
+    rt.render(BAR_A);
+    // A placement's settings read the render's store, so the rows are laid
+    // with that render bound again.
+    using _bound = bindRender(runtime, drawn());
+    return drawn().layout!()
       .flat()
       .filter((b) => b.name === segment)
       .map((b) => b.palette);
+  };
 
   test("a pinned placement keeps its theme, and an unsaved pick shows", () => {
     const rt = buildRuntime(TWO);
     rt.sessionState.set(SID, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
-    rt.render(BAR_A);
     const drawn = previewPalette(rt, "tag");
     expect(drawn).toHaveLength(2);
     expect(drawn).toContain(paletteForThemeName(PIN));
     rt.sessionState.set(SID, placementDraftKey("default", "tag", "theme"), BAR_B);
-    rt.render(BAR_A);
     expect(previewPalette(rt, "tag")).toEqual([
       paletteForThemeName(BAR_B),
       paletteForThemeName(PIN),
