@@ -1,3 +1,10 @@
+## [1.148.7](https://github.com/promptctl/cc-candybar/compare/v1.148.6...v1.148.7) (2026-10-20)
+
+
+### Bug Fixes
+
+* **doctor:** tmuxTruecolor reads CLAUDE_CODE_TMUX_TRUECOLOR over the settings chain (brandon-doctor-v62x.cbn) ([#392](https://github.com/promptctl/cc-candybar/issues/392)) ([1930d50](https://github.com/promptctl/cc-candybar/commit/1930d50795ce7b4916be94d98467ffcd75740f91))
+
 ## [1.148.6](https://github.com/promptctl/cc-candybar/compare/v1.148.5...v1.148.6) (2026-10-20)
 
 
