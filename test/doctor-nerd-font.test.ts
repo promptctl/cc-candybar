@@ -10,7 +10,6 @@ import {
   type DoctorFacts,
   type NerdFontFacts,
   type GlyphMark,
-  type MarkBook,
   type TerminalFacts,
   type Verdict,
 } from "../src/doctor/checks";
@@ -29,14 +28,14 @@ import {
   gatherFacts,
   parseTmuxClient,
   type DoctorEdge,
+  type StoresRead,
 } from "../src/doctor/edge";
 import type { Asked } from "../src/doctor/checks";
 import {
   nerdFontFields,
 } from "../src/doctor/report";
 import { parseMarkBook, withMark } from "../src/doctor/mark-book";
-import { memoryStateFile } from "./helpers/state-file";
-import { HEALTHY_FACTS, healthyDaemonEdge, healthyDataEdge, noManagedSettings, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, CARRIED, NAMED, STILL } from "./helpers/doctor-facts";
+import { EMPTY_STORES, HEALTHY_FACTS, healthyDaemonEdge, healthyDataEdge, noManagedSettings, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, CARRIED, NAMED, STILL } from "./helpers/doctor-facts";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -213,13 +212,21 @@ describe("nerdFont probe", () => {
     expect(idIn(builtIn)).not.toBe(idIn(MENLO));
   });
 
-  test("a mark book that cannot be read fails this check alone, and offers no mark", () => {
+  test("a mark book that cannot be read is told beside a failure a mark could settle, which offers no mark; a pass needs no book", () => {
     const broken: DoctorFacts["marks"] = { kind: "failed", reason: "/s/doctor-marks.json is not JSON" };
     const f = facts({ kind: "glyphs", glyphs: GLYPHS, terminal: MENLO }, null, broken);
     expect(probe(f)).toEqual({
       ok: false,
-      reason: "the mark book could not be read: /s/doctor-marks.json is not JSON",
+      reason: 'iTerm2 3.7.2 draws with Menlo-Regular (iTerm2 profile "Default"), which has no U+E0B0 U+E0B1 — set a Nerd Font as its font',
+      more: ["the mark book could not be read: /s/doctor-marks.json is not JSON"],
     });
+    // Nothing names the terminal, so no mark could settle it, and no book is told.
+    expect(probe(facts({ kind: "glyphs", glyphs: GLYPHS, terminal: { kind: "unreported" } }, null, broken))).toEqual({
+      ok: false,
+      reason: "the client reported no terminal — re-run `cc-candybar install` to stage a current client",
+    });
+    const ghostty: TerminalFacts = { kind: "bundling", name: "ghostty", version: null };
+    expect(probe(facts({ kind: "glyphs", glyphs: GLYPHS, terminal: ghostty }, null, broken))).toEqual({ ok: true });
     expect(checkByName("config")!.probe(f)).toEqual({ ok: true });
     // A bar with no private-use glyph needs no mark, so no book.
     expect(probe(facts({ kind: "none" }, null, broken))).toEqual({ ok: true });
@@ -464,7 +471,6 @@ describe("gatherFacts: where the Nerd Font facts come from", () => {
     client: DoctorEdge["probeTmux"],
     config: DslConfig = DEFAULT_DSL_CONFIG,
     remote: Asked<boolean> = LOCAL,
-    book: MarkBook = {},
   ) => {
     const asked: unknown[][] = [];
     const pids: number[] = [];
@@ -483,8 +489,6 @@ describe("gatherFacts: where the Nerd Font facts come from", () => {
         return COVERED;
       },
       loadConfig: () => ({ layers: [], error: null, warning: null, unused: [], config }),
-      marks: memoryStateFile(book),
-      clicked: memoryStateFile<readonly string[]>([]),
     };
     return { e, asked, pids };
   };
@@ -496,6 +500,7 @@ describe("gatherFacts: where the Nerd Font facts come from", () => {
     e: DoctorEdge,
     hints: Partial<Pick<ClientHints, "tmux" | "terminalEnv" | "ssh">>,
     pick: (key: string) => string | null = () => null,
+    stores: StoresRead = EMPTY_STORES,
   ) =>
     gatherFacts(
       e,
@@ -506,6 +511,7 @@ describe("gatherFacts: where the Nerd Font facts come from", () => {
       CARRIED,
       NAMED,
       STILL,
+      stores,
     );
   const drawn = (
     e: DoctorEdge,
@@ -668,8 +674,9 @@ describe("gatherFacts: where the Nerd Font facts come from", () => {
 
   test("the marks are the mark book's, whichever session made them", () => {
     const book = withMark({}, "nerdFont", "Ghostty 1.3.1|U+E0B0 U+E0B1", "drawn");
-    const { e } = edge(tmuxSays("ghostty 1.3.1"), DEFAULT_DSL_CONFIG, LOCAL, book);
-    expect(gathered(e, { tmux: HINT }).marks).toEqual({ kind: "ok", value: book });
+    const { e } = edge(tmuxSays("ghostty 1.3.1"));
+    const marks = { kind: "ok", value: book } as const;
+    expect(gathered(e, { tmux: HINT }, undefined, { ...EMPTY_STORES, marks }).marks).toEqual(marks);
   });
 });
 

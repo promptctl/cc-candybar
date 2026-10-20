@@ -61,22 +61,6 @@ export function testVerbContext(
       remoteLogin: () => {
         throw new Error("doctor: no process edge in this test");
       },
-      marks: {
-        read: () => {
-          throw new Error("doctor: no mark book in this test");
-        },
-        update: () => {
-          throw new Error("doctor: no mark book in this test");
-        },
-      },
-      clicked: {
-        read: () => {
-          throw new Error("doctor: no clicked terminals in this test");
-        },
-        update: () => {
-          throw new Error("doctor: no clicked terminals in this test");
-        },
-      },
       fontInUse: () => {
         throw new Error("doctor: no font edge in this test");
       },
@@ -94,6 +78,24 @@ export function testVerbContext(
       },
       transcript: () => {
         throw new Error("doctor: no transcript edge in this test");
+      },
+    },
+    doctorStores: {
+      marks: {
+        read: () => {
+          throw new Error("doctor: no mark book in this test");
+        },
+        update: () => {
+          throw new Error("doctor: no mark book in this test");
+        },
+      },
+      clicked: {
+        read: () => {
+          throw new Error("doctor: no clicked terminals in this test");
+        },
+        update: () => {
+          throw new Error("doctor: no clicked terminals in this test");
+        },
       },
       postMortemsRead: {
         read: () => {

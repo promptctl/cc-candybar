@@ -17,6 +17,10 @@ import {
 } from "../daemon/render-sightings.js";
 import type { Asked } from "./checks.js";
 import type { PostMortem, ServingDaemon } from "../daemon/limits.js";
+import type { StoresRead } from "./edge.js";
+import { parseMarkBook } from "./mark-book.js";
+import { parseClickedTerminals } from "./clicked-terminals.js";
+import { parsePostMortemsRead } from "./post-mortems-read.js";
 
 export interface DaemonClients {
   readonly bundle: string;
@@ -98,24 +102,45 @@ const isPostMortem = (m: unknown): m is PostMortem => {
 // [LAW:parse-dont-validate] The daemon's report of itself becomes a
 // ServingDaemon here or a failure naming why — an older daemon carries no
 // `daemon` field (shapeSkew), and anything else misshapen is named whole.
+// [LAW:parse-dont-validate] An `Asked<T>` as another build spelled it: its
+// failure kept in the daemon's own words, its value re-read by `parse` — or
+// `misshapen`, with why, for the caller to name the answer it sat in.
+function askedOnWire<T>(
+  wire: unknown,
+  parse: (value: unknown) => Asked<T>,
+): Asked<T> | { readonly kind: "misshapen"; readonly reason: string } {
+  const w = wire as {
+    kind?: unknown;
+    value?: unknown;
+    reason?: unknown;
+  } | null;
+  if (w?.kind === "failed" && typeof w.reason === "string") {
+    return { kind: "failed", reason: w.reason };
+  }
+  if (w?.kind !== "ok")
+    return { kind: "misshapen", reason: "is not an answer" };
+  const parsed = parse(w.value);
+  return parsed.kind === "ok"
+    ? parsed
+    : { kind: "misshapen", reason: parsed.reason };
+}
+
 export function parseServingDaemon(stats: StatsSnapshot): Asked<ServingDaemon> {
   const skew = shapeSkew(stats, ["daemon"]);
   if (skew !== null) return { kind: "failed", reason: skew };
   const d = stats.daemon as Partial<ServingDaemon> | null;
-  const postMortems = d?.postMortems as
-    | { kind?: unknown; value?: unknown; reason?: unknown }
-    | undefined;
+  const postMortems = askedOnWire(d?.postMortems, (v) =>
+    Array.isArray(v) && v.every(isPostMortem)
+      ? { kind: "ok", value: v }
+      : { kind: "failed", reason: "is not a list of post-mortems" },
+  );
   const wellFormed =
     typeof d?.pid === "number" &&
     typeof d.rss === "number" &&
     typeof d.rssLimit === "number" &&
-    ((postMortems?.kind === "ok" &&
-      Array.isArray(postMortems.value) &&
-      postMortems.value.every(isPostMortem)) ||
-      (postMortems?.kind === "failed" &&
-        typeof postMortems.reason === "string"));
+    postMortems.kind !== "misshapen";
   return wellFormed
-    ? { kind: "ok", value: d as ServingDaemon }
+    ? { kind: "ok", value: { ...(d as ServingDaemon), postMortems } }
     : {
         kind: "failed",
         reason: `the running daemon (${stats.version}) reported itself as ${JSON.stringify(stats.daemon)}`,
@@ -195,6 +220,45 @@ export function parseFrameSightings(
       };
 }
 
+// [LAW:parse-dont-validate] One store as the daemon read it: what it holds,
+// re-read by the store's own parser (the wire is another build's word), or
+// why the daemon could not read it.
+function answeredStore<T>(
+  stats: StatsSnapshot,
+  name: keyof StoresRead,
+  parse: (doc: unknown) => Asked<T>,
+): Asked<T> {
+  const wire = (
+    stats.doctorStores as Partial<Record<keyof StoresRead, unknown>> | null
+  )?.[name];
+  const answered = askedOnWire(wire, parse);
+  return answered.kind === "misshapen"
+    ? {
+        kind: "failed",
+        reason: `the running daemon (${stats.version}) reported its ${name} as ${JSON.stringify(wire)}, which ${answered.reason}`,
+      }
+    : answered;
+}
+
+// What the doctor's stores hold, as the daemon that owns them read them — a
+// daemon older than the field reads as that skew in every store.
+export function parseDoctorStores(stats: StatsSnapshot): StoresRead {
+  const skew = shapeSkew(stats, ["doctorStores"]);
+  if (skew !== null) {
+    const failed = { kind: "failed", reason: skew } as const;
+    return { marks: failed, clicked: failed, postMortemsRead: failed };
+  }
+  return {
+    marks: answeredStore(stats, "marks", parseMarkBook),
+    clicked: answeredStore(stats, "clicked", parseClickedTerminals),
+    postMortemsRead: answeredStore(
+      stats,
+      "postMortemsRead",
+      parsePostMortemsRead,
+    ),
+  };
+}
+
 // Each fact the doctor asks the daemon for, parsed on its own: one that does
 // not read fails its own check, never the other's.
 export interface DaemonAnswer {
@@ -203,6 +267,7 @@ export interface DaemonAnswer {
   readonly transcripts: Asked<TranscriptSightings>;
   readonly frames: Asked<FrameSightings>;
   readonly serving: Asked<ServingDaemon>;
+  readonly stores: StoresRead;
 }
 
 export async function askDaemon(): Promise<DaemonAnswer> {
@@ -218,6 +283,7 @@ export async function askDaemon(): Promise<DaemonAnswer> {
       transcripts: failed,
       frames: failed,
       serving: failed,
+      stores: { marks: failed, clicked: failed, postMortemsRead: failed },
     };
   }
   return {
@@ -226,5 +292,6 @@ export async function askDaemon(): Promise<DaemonAnswer> {
     transcripts: parseTranscriptSightings(outcome.value),
     frames: parseFrameSightings(outcome.value),
     serving: parseServingDaemon(outcome.value),
+    stores: parseDoctorStores(outcome.value),
   };
 }

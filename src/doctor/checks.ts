@@ -950,16 +950,11 @@ const daemon: Check = {
   label: "daemon",
   takesMark: false,
   probe: ({ daemon: { serving, processes, read } }) => {
-    // Every fact that could not be read is its own problem, whether or not a
-    // daemon answered.
-    const unreadable = [
-      ...(read.kind === "failed"
-        ? [`which post-mortems were read could not be read: ${read.reason}`]
-        : []),
-      ...(processes.kind === "failed"
+    // The process table is its own problem whether or not a daemon answered.
+    const unreadable =
+      processes.kind === "failed"
         ? [`the process table could not be read: ${processes.reason}`]
-        : []),
-    ];
+        : [];
     const others =
       processes.kind === "ok" ? otherDaemons(serving, processes.value) : [];
     if (serving.kind === "failed") {
@@ -982,6 +977,11 @@ const daemon: Check = {
         ? [
             `the daemon's post-mortems could not be listed: ${postMortems.reason}`,
           ]
+        : []),
+      // Which were read decides nothing only while none are listed.
+      ...(read.kind === "failed" &&
+      !(postMortems.kind === "ok" && postMortems.value.length === 0)
+        ? [`which post-mortems were read could not be read: ${read.reason}`]
         : []),
       ...unreadable,
       ...others.map(
@@ -1314,22 +1314,23 @@ const nerdFont: Check = {
   takesMark: true,
   probe: ({ nerdFont: facts, marks }) => {
     if (facts.kind === "none") return { ok: true };
-    if (marks.kind === "failed") {
-      return {
-        ok: false,
-        reason: `the mark book could not be read: ${marks.reason}`,
-      };
-    }
     const sighting = glyphSighting(facts);
-    const failed = (reason: string): Verdict => ({
-      ok: false,
-      reason,
-      ...(sighting !== undefined && { sighting }),
-    });
+    // [LAW:no-silent-failure] A book that does not read is told where a mark
+    // could have settled the verdict — beside every failure, which then offers
+    // no mark the book would refuse to file — and nowhere else: a terminal
+    // whose own facts pass needs no mark.
+    const failed = (reason: string): Verdict =>
+      marks.kind === "failed" && sighting !== undefined
+        ? {
+            ok: false,
+            reason,
+            more: [`the mark book could not be read: ${marks.reason}`],
+          }
+        : { ok: false, reason, ...(sighting !== undefined && { sighting }) };
     const terminal = facts.terminal;
     const called = terminalCalled(terminal);
     const mark =
-      sighting === undefined
+      sighting === undefined || marks.kind === "failed"
         ? null
         : (marks.value[NERD_FONT_CHECK]?.[sighting.id] ?? null);
     switch (mark) {

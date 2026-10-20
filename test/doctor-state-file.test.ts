@@ -7,6 +7,8 @@ import path from "node:path";
 import { stateFile } from "../src/doctor/state-file";
 import type { Asked } from "../src/doctor/checks";
 
+const NAME = "numbers.json";
+
 const numbers = (doc: unknown): Asked<readonly number[]> =>
   Array.isArray(doc) && doc.every((n) => typeof n === "number")
     ? { kind: "ok", value: doc }
@@ -17,19 +19,20 @@ describe("a doctor state file", () => {
   let file: string;
   beforeEach(() => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-state-file-"));
-    file = path.join(dir, "state", "numbers.json");
+    file = path.join(dir, "state", NAME);
   });
+  const at = (): string => path.dirname(file);
   afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
 
   test("absent is the empty value; an update is read back by the next reader, its directory made", () => {
-    expect(stateFile(file, [], numbers).read()).toEqual({ kind: "ok", value: [] });
-    expect(stateFile(file, [], numbers).update((ns) => [...ns, 1])).toEqual({ kind: "ok", value: [1] });
+    expect(stateFile(at(), NAME, [], numbers).read()).toEqual({ kind: "ok", value: [] });
+    expect(stateFile(at(), NAME, [], numbers).update((ns) => [...ns, 1])).toEqual({ kind: "ok", value: [1] });
     // Another process — the CLI, a later daemon — reads the same document.
-    expect(stateFile(file, [], numbers).read()).toEqual({ kind: "ok", value: [1] });
+    expect(stateFile(at(), NAME, [], numbers).read()).toEqual({ kind: "ok", value: [1] });
   });
 
   test("an update that returns what it was given writes nothing", () => {
-    const store = stateFile<readonly number[]>(file, [], numbers);
+    const store = stateFile<readonly number[]>(at(), NAME, [], numbers);
     store.update(() => [1]);
     fs.utimesSync(file, 0, 0);
     expect(store.update((ns) => ns)).toEqual({ kind: "ok", value: [1] });
@@ -39,12 +42,12 @@ describe("a doctor state file", () => {
   test("text that does not read is a failure naming the file, never the empty value", () => {
     fs.mkdirSync(path.dirname(file));
     fs.writeFileSync(file, "{");
-    expect(stateFile(file, [], numbers).read()).toMatchObject({
+    expect(stateFile(at(), NAME, [], numbers).read()).toMatchObject({
       kind: "failed",
       reason: expect.stringContaining(`${file} is not JSON: `),
     });
     fs.writeFileSync(file, '["x"]');
-    expect(stateFile(file, [], numbers).read()).toEqual({
+    expect(stateFile(at(), NAME, [], numbers).read()).toEqual({
       kind: "failed",
       reason: `${file} is not a list of numbers`,
     });
@@ -52,7 +55,7 @@ describe("a doctor state file", () => {
 
   test("a file that cannot be read for any reason but absence is a failure naming it", () => {
     fs.mkdirSync(file, { recursive: true });
-    expect(stateFile(file, [], numbers).read()).toMatchObject({
+    expect(stateFile(at(), NAME, [], numbers).read()).toMatchObject({
       kind: "failed",
       reason: expect.stringContaining(`${file}: EISDIR`),
     });
@@ -61,7 +64,7 @@ describe("a doctor state file", () => {
   test("nothing is filed over a file that does not read", () => {
     fs.mkdirSync(path.dirname(file));
     fs.writeFileSync(file, "junk");
-    expect(stateFile(file, [], numbers).update((ns) => [...ns, 1])).toMatchObject({
+    expect(stateFile(at(), NAME, [], numbers).update((ns) => [...ns, 1])).toMatchObject({
       kind: "failed",
       reason: expect.stringContaining(`${file} is not JSON`),
     });
@@ -72,7 +75,7 @@ describe("a doctor state file", () => {
     // A directory where the write's tmp goes fails it for every user, root
     // included, while the file itself is absent and so reads.
     fs.mkdirSync(`${file}.tmp`, { recursive: true });
-    expect(() => stateFile(file, [], numbers).update((ns) => [...ns, 1])).toThrow(/EISDIR/);
+    expect(() => stateFile(at(), NAME, [], numbers).update((ns) => [...ns, 1])).toThrow(/EISDIR/);
     expect(fs.existsSync(file)).toBe(false);
   });
 });

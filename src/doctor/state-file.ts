@@ -11,6 +11,7 @@
 // (src/doctor/edge.ts).
 
 import fs from "node:fs";
+import path from "node:path";
 import { writeAtomic } from "../utils/atomic-write.js";
 import type { Asked } from "./checks.js";
 
@@ -23,15 +24,20 @@ export interface StateFile<T> {
   readonly update: (next: (current: T) => T) => Asked<T>;
 }
 
-// `parse` reads the parsed document; its failure reason is told after the
-// file's name ("<file> is not a list of terminals"). Only the doctor writes
-// these files, so text that does not read is that failure, never the empty
-// value.
+// The store named `name` under the daemon's state directory. `parse` reads
+// the parsed document; its failure reason is told after the file's name
+// ("<file> is not a list of terminals"). Only the doctor writes these files,
+// so text that does not read is that failure, never the empty value.
+// [LAW:one-source-of-truth] The directory is always given, and only the
+// daemon gives one: `cc-candybar doctor` reads the stores in the daemon's
+// answer (src/doctor/daemon-answer.ts), never at a path of its own guessing.
 export function stateFile<T>(
-  file: string,
+  dir: string,
+  name: string,
   empty: T,
   parse: (doc: unknown) => Asked<T>,
 ): StateFile<T> {
+  const file = path.join(dir, name);
   const read = (): Asked<T> => {
     let text: string;
     try {

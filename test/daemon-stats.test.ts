@@ -1,4 +1,5 @@
 import { RuntimeStats } from "../src/daemon/stats";
+import { EMPTY_STORES } from "./helpers/doctor-facts";
 import {
   formatStats,
   missingFields,
@@ -60,6 +61,7 @@ describe("RuntimeStats.snapshot", () => {
       ],
       bundle: "/opt/cc/dist/index.mjs",
       daemon: { pid: 1234, rss: 0, rssLimit: 1, postMortems: { kind: "ok", value: [] } },
+      doctorStores: EMPTY_STORES,
     });
     expect(snap.handlerProbes).toEqual([{ nonce: "n", handler: "1.2.3" }]);
     expect(snap.clients).toEqual([
@@ -74,6 +76,7 @@ describe("RuntimeStats.snapshot", () => {
         },
     ]);
     expect(snap.bundle).toBe("/opt/cc/dist/index.mjs");
+    expect(snap.doctorStores).toEqual(EMPTY_STORES);
 
     expect(snap.requests).toEqual({
       total: 10,
@@ -208,6 +211,7 @@ describe("formatStats", () => {
       clients: [],
       bundle: "/",
       daemon: { pid: 1234, rss: 0, rssLimit: 1, postMortems: { kind: "ok", value: [] } },
+      doctorStores: EMPTY_STORES,
     });
     expect(out).toContain("pid           1234");
     expect(out).toContain("uptime        2m5s");
@@ -262,6 +266,7 @@ describe("formatStats", () => {
       clients: [],
       bundle: "/",
       daemon: { pid: 1234, rss: 0, rssLimit: 1, postMortems: { kind: "ok", value: [] } },
+      doctorStores: EMPTY_STORES,
     });
     expect(out).toContain("hit rate      n/a");
   });

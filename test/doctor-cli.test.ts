@@ -3,10 +3,9 @@
 // settings file, a clean setup, and a failed check carrying a fix.
 
 import { BUNDLED_GLYPHS } from "./helpers/bundled-glyphs";
-import { healthyDaemonEdge, healthyDataEdge, noManagedSettings, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, healthyDaemonIn, HEALTHY_FACTS, CARRIED, NAMED, STILL } from "./helpers/doctor-facts";
-import { glyphSighting, type MarkBook } from "../src/doctor/checks";
+import { EMPTY_STORES, healthyDaemonEdge, healthyDataEdge, noManagedSettings, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, healthyDaemonIn, HEALTHY_FACTS, CARRIED, NAMED, STILL } from "./helpers/doctor-facts";
+import { glyphSighting } from "../src/doctor/checks";
 import { withMark } from "../src/doctor/mark-book";
-import { memoryStateFile } from "./helpers/state-file";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -15,7 +14,7 @@ import { doctorReportKeys, doctorReportPairs } from "../src/doctor/report";
 import { runDoctor } from "../src/doctor/checks";
 import { gatherFacts } from "../src/doctor/edge";
 import { DOOR_GLYPH } from "../src/config/disclosure";
-import type { DoctorEdge } from "../src/doctor/edge";
+import type { DoctorEdge, StoresRead } from "../src/doctor/edge";
 import type { HandlerProbeEdge } from "../src/doctor/handler-probe";
 import { TMUX_TRUECOLOR_VAR } from "../src/doctor/checks";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
@@ -25,6 +24,12 @@ import type { FrameSeen } from "../src/daemon/render-sightings";
 // The daemon a healthy bar answers from: its session runs with the Claude
 // Code directory this test's command reports (CLAUDE_CONFIG_DIR, `inDir`).
 const DAEMON = () => healthyDaemonIn(dir)();
+// That daemon, answering what the doctor's stores hold.
+const daemonHolding =
+  (stores: Partial<StoresRead>) => async (): Promise<DaemonAnswer> => ({
+    ...(await DAEMON()),
+    stores: { ...EMPTY_STORES, ...stores },
+  });
 
 const IN_TMUX = { TMUX: "/tmp/tmux-501/default,123,0", TMUX_PANE: "%1" };
 
@@ -57,8 +62,6 @@ const EDGE: DoctorEdge = {
   remoteLogin: () => {
     throw new Error("remoteLogin must not run in this case");
   },
-  marks: memoryStateFile<MarkBook>({}),
-  clicked: memoryStateFile<readonly string[]>([]),
   fontInUse: () => {
     throw new Error("fontInUse must not run in this case");
   },
@@ -191,9 +194,9 @@ describe("doctorPlan", () => {
     const unsettled = await doctorPlan(EDGE, NO_HANDLER, DAEMON, kitty, "/", () => ({ columns: 120 }));
     expect(unsettled.stdout).toMatch(/\n✗ links — kitty draws links \(OSC 8\) since 0\.19\.0, and did not say which release this is — click 🩺 doctor/);
     const settled = await doctorPlan(
-      { ...EDGE, clicked: memoryStateFile<readonly string[]>(["kitty"]) },
+      EDGE,
       NO_HANDLER,
-      DAEMON,
+      daemonHolding({ clicked: { kind: "ok", value: ["kitty"] } }),
       kitty,
       "/",
       () => ({ columns: 120 }),
@@ -228,14 +231,59 @@ describe("doctorPlan", () => {
   test("a ✓ the bar's doctor filed in the mark book settles the check here too", async () => {
     const id = glyphSighting({ glyphs: BUNDLED_GLYPHS, terminal: { kind: "unknown", called: "Hyper" } })!.id;
     const plan = await doctorPlan(
-      { ...EDGE, marks: memoryStateFile(withMark({}, "nerdFont", id, "drawn")) },
+      EDGE,
       NO_HANDLER,
-      DAEMON,
+      daemonHolding({ marks: { kind: "ok", value: withMark({}, "nerdFont", id, "drawn") } }),
       inDir({ TERM_PROGRAM: "Hyper" }),
       "/",
       () => ({ columns: 120 }),
     );
     expect(plan.stdout).toContain("\n✓ Nerd Font\n✓ segment data\n✓ session data\n");
+  });
+
+  // brandon-doctor-v62x.bmf: the bar's doctor files its stores under the
+  // DAEMON's state directory, from whichever shell spawned it; this command
+  // reads what they hold in the daemon's answer, never a file of its own.
+  test("the doctor's stores are the daemon's answer", async () => {
+    const breach = "2026-10-19T18-01-12-345Z-77";
+    const breached = (postMortemsRead: StoresRead["postMortemsRead"]) => async (): Promise<DaemonAnswer> => ({
+      ...(await daemonHolding({ postMortemsRead })()),
+      serving: {
+        kind: "ok",
+        value: {
+          ...HEALTHY_SERVING,
+          postMortems: { kind: "ok", value: [{ identity: breach, artifacts: { memoryReport: "/m.txt" } }] },
+        },
+      },
+    });
+    const plan = (daemon: () => Promise<DaemonAnswer>) =>
+      doctorPlan(EDGE, NO_HANDLER, daemon, inDir(IN_TMUX), "/", () => ({ columns: 120 }));
+    expect((await plan(breached({ kind: "ok", value: { through: breach } }))).stdout).toContain("\n✓ daemon\n");
+    expect((await plan(breached({ kind: "failed", reason: "EACCES" }))).stdout).toContain(
+      "\n✗ daemon — which post-mortems were read could not be read: EACCES\n",
+    );
+  });
+
+  // With no daemon to answer, the stores are unknown: a check whose own facts
+  // settle it needs no store, and the daemon row says why once.
+  test("no daemon: the daemon row says why once, and checks the stores cannot settle still pass", async () => {
+    const reason = "could not connect to the daemon";
+    const failed = { kind: "failed", reason } as const;
+    const plan = await doctorPlan(
+      EDGE,
+      NO_HANDLER,
+      async () => ({
+        ...(await DAEMON()),
+        serving: failed,
+        stores: { marks: failed, clicked: failed, postMortemsRead: failed },
+      }),
+      inDir(IN_TMUX),
+      "/",
+      () => ({ columns: 120 }),
+    );
+    expect(plan.stdout).toContain(`\n✗ daemon — ${reason} — daemon 4100 running\n✓ URL handler\n`);
+    expect(plan.stdout).toContain("\n✓ links\n");
+    expect(plan.stdout).toContain("\n✓ Nerd Font\n");
   });
 
   test("a failed check is exit 1, its reason and the fix hint on the line", async () => {
@@ -422,6 +470,7 @@ describe("doctorPlan over a real config", () => {
         CARRIED,
         NAMED,
         STILL,
+        EMPTY_STORES,
       ),
       urlHandler: { kind: "unsupported" },
       askedBy: "command",

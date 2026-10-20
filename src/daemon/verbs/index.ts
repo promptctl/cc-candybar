@@ -147,7 +147,9 @@ import {
   clickArrived,
   installFacts,
   gatherFacts,
+  readStores,
   type DoctorEdge,
+  type DoctorStores,
 } from "../../doctor/edge";
 import {
   parseProbeNonce,
@@ -166,6 +168,8 @@ export interface VerbContext {
   // tmux query and the settings.json read/write, handed in so the handlers
   // below stay a fold over pure verdicts and a test drives them with fakes.
   readonly doctor: DoctorEdge;
+  // The doctor's stores, which this daemon files (src/doctor/edge.ts).
+  readonly doctorStores: DoctorStores;
   // The package version of the client that delivered THIS click (the URL
   // handler's staged runtime), or null from one too old to report it — the
   // one per-click fact here; the daemon's dispatcher sets it on each click.
@@ -1217,6 +1221,7 @@ function clickFacts(ctx: VerbContext, sid: string): DoctorFacts {
         kind: "ok",
         value: said.map(({ role, frame }) => ({ role, frame })),
       },
+      readStores(ctx.doctorStores),
     );
   } catch (e) {
     if (e instanceof DoctorBusy) throw new BadVerbArgs(e.message);
@@ -1254,7 +1259,9 @@ function clickedFrom(
     terminal.kind === "seen" ? sightingOf(terminal.identified) : null;
   if (sighting === null) return clicked;
   try {
-    return ctx.doctor.clicked.update((list) => withClicked(list, sighting));
+    return ctx.doctorStores.clicked.update((list) =>
+      withClicked(list, sighting),
+    );
   } catch (e) {
     ctx.dlog(
       "warn",
@@ -1303,7 +1310,7 @@ const doctorFix: VerbHandler = (value, ctx) => {
       `doctor-fix: ${check.label} — ${verdict.ok ? "nothing to fix" : verdict.reason}`,
     );
   }
-  const after = applyFix(ctx.doctor, verdict.fix, facts);
+  const after = applyFix(ctx.doctorStores, verdict.fix, facts);
   if (after.kind === "failed") {
     throw new BadVerbArgs(`doctor-fix: ${check.label} — ${after.reason}`);
   }
@@ -1345,7 +1352,9 @@ const doctorMark: VerbHandler = (value, ctx) => {
   const made = [check.name, verdict.sighting.id, mark as GlyphMark] as const;
   // [LAW:single-enforcer] The store refuses to file over a book that does not
   // read; that refusal is the click's.
-  const marks = ctx.doctor.marks.update((book) => withMark(book, ...made));
+  const marks = ctx.doctorStores.marks.update((book) =>
+    withMark(book, ...made),
+  );
   if (marks.kind === "failed") {
     throw new BadVerbArgs(`doctor-mark: ${marks.reason}`);
   }

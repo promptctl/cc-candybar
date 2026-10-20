@@ -13,6 +13,7 @@ import {
   socketPath,
   sessionStatePath,
   settingsHistoryPath,
+  stateDir,
 } from "./paths";
 import {
   arbitrateSocket,
@@ -95,7 +96,7 @@ import {
 } from "./verbs";
 import { settingCounts } from "./setting-drafts";
 import { validateHookData } from "../utils/schema-validator.js";
-import { productionEdge } from "../doctor/edge";
+import { fileStores, productionEdge, readStores } from "../doctor/edge";
 import { ProbeArrivals } from "../doctor/handler-probe";
 import {
   RenderSightings,
@@ -182,6 +183,10 @@ const renderSightings = new RenderSightings();
 // build watch and the update notice read it — what daemon-stats and the
 // doctor's click name the install by.
 const DAEMON_BUNDLE = fileURLToPath(import.meta.url);
+// [LAW:one-source-of-truth] The doctor's stores, under this daemon's state
+// directory: its click files them, and daemon-stats answers what they hold
+// to `cc-candybar doctor`.
+const DOCTOR_STORES = fileStores(stateDir());
 // [LAW:single-enforcer] Route all child_process spawns through src/proc/launch.
 // Installing the metering handle here makes subprocess counts visible in
 // daemon-stats.
@@ -1161,6 +1166,7 @@ export async function replyTo(
         clients: renderSightings.list(instantOf(new Date())),
         bundle: DAEMON_BUNDLE,
         daemon: establishedLimits().serving(),
+        doctorStores: readStores(DOCTOR_STORES),
       }),
     });
   }
@@ -1429,6 +1435,7 @@ const verbCtx = {
       config: entry.state.config,
     };
   }),
+  doctorStores: DOCTOR_STORES,
   probes: handlerProbes,
   clients: renderSightings,
   bundle: DAEMON_BUNDLE,

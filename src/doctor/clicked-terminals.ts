@@ -6,10 +6,8 @@
 // click rather than one the user makes. So it is its own file beside the mark
 // book (src/doctor/mark-book.ts), which holds only the user's word: the bar's
 // doctor files a terminal here, and `cc-candybar doctor`, which cannot click,
-// reads it.
+// reads it in the daemon's answer.
 
-import path from "node:path";
-import { stateDir } from "../daemon/paths.js";
 import type { Asked } from "./checks.js";
 import { stateFile, type StateFile } from "./state-file.js";
 
@@ -31,5 +29,6 @@ export const withClicked = (
   clicked.includes(sighting) ? clicked : [...clicked, sighting];
 
 export const fileClickedTerminals = (
-  file: string = path.join(stateDir(), "doctor-clicked-terminals.json"),
-): StateFile<readonly string[]> => stateFile(file, [], parseClickedTerminals);
+  dir: string,
+): StateFile<readonly string[]> =>
+  stateFile(dir, "doctor-clicked-terminals.json", [], parseClickedTerminals);

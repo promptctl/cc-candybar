@@ -220,6 +220,9 @@ export async function doctorPlan(
       rateLimitsOf(answer.rateLimits, claudeConfigDir(hints.claudeConfigDir)),
       transcriptsOf(answer.transcripts),
       framesOf(answer.frames, claudeConfigDir(hints.claudeConfigDir)),
+      // [LAW:one-source-of-truth] The stores as the daemon that files them
+      // read them, never under this shell's own XDG_STATE_HOME.
+      answer.stores,
     );
     // Last: the probe opens a link and waits, which a run that cannot report
     // has no reason to do.
