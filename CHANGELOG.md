@@ -1,3 +1,11 @@
+## [1.148.6](https://github.com/promptctl/cc-candybar/compare/v1.148.5...v1.148.6) (2026-10-20)
+
+
+### Bug Fixes
+
+* **daemon:** render-cache entries share one compile per config, bounded by bytes (brandon-unfiled-3248.8yp) ([#391](https://github.com/promptctl/cc-candybar/issues/391)) ([a14ede9](https://github.com/promptctl/cc-candybar/commit/a14ede93f98021c81dbb86a192b84674a45a3c34))
+* **doctor:** cc-candybar doctor reads the doctor's stores under the daemon's state dir (brandon-doctor-v62x.bmf) ([#388](https://github.com/promptctl/cc-candybar/issues/388)) ([513a905](https://github.com/promptctl/cc-candybar/commit/513a9059e4413dbc752f5102110912dc6974f824))
+
 ## [1.148.5](https://github.com/promptctl/cc-candybar/compare/v1.148.4...v1.148.5) (2026-10-20)
 
 
