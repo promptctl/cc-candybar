@@ -2,23 +2,25 @@
 // Guard: every wire-affecting constant the Rust client mirrors from the TS
 // source must agree. The wire contract is one source of truth
 // (src/daemon/protocol.ts, src/daemon/client.ts, src/render/error-glyph.ts,
-// src/render/diagnostic-style.ts);
+// src/render/diagnostic-style.ts, src/render/diagnostic-text.ts);
 // the Rust binary embeds each value as a literal const because mirroring is
 // cheaper than codegen at this scale. This script diffs the entire mirrored
 // set — protocol version, frame cap and header, timeout budgets, error-code
-// vocabulary, and the diagnostic glyph styling — so a drift in ANY of them
-// fails `prepublishOnly`, not production.
+// vocabulary, the diagnostic glyph styling, and the code points its sanitizer
+// neutralizes — so a drift in ANY of them fails `prepublishOnly`, not
+// production.
 //
 // [LAW:one-source-of-truth] The mirror is legal only because this file
 // proves synchronization. Adding a new mirrored constant without adding a
 // row to CHECKS reopens the drift hole — add both in the same commit.
-// Escalation path (recorded in ticket brandon-protocol-d55): if the mirrored
-// set outgrows a handful, replace mirror+check with a wire-spec data file
-// both runtimes embed.
+// What belongs here: a fact either runtime can spell as a literal an anchor
+// reads. A fact only behaviour can state is a fixture both test suites read
+// instead (test/fixtures/frame-follow-cases.json, jest and `cargo test`).
 
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { rangeSpans, uncommented } from "./protocol-source.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, "..");
@@ -29,6 +31,13 @@ function read(relPath) {
     sources.set(relPath, readFileSync(resolve(ROOT, relPath), "utf8"));
   }
   return sources.get(relPath);
+}
+
+// The source less its comment lines, for an anchor that must match what the
+// runtime runs, never a commented-out copy. Raw `read` stays for the rows
+// whose region delimiters are comments (`// --- client hints`).
+function code(relPath) {
+  return uncommented(read(relPath));
 }
 
 // --- extractors -----------------------------------------------------------
@@ -86,11 +95,20 @@ function memberSet(relPath, blockRegex, memberRegex) {
   };
 }
 
-// Structural marker: every pattern must appear; the canonical value is the
-// shared description, so both sides agree iff both still use the primitive.
+// Set of code points in the range table blockRegex's group 1 captures; see
+// rangeSpans for how a table reads.
+function codeRanges(relPath, blockRegex) {
+  return () => {
+    const block = code(relPath).match(blockRegex);
+    return block ? rangeSpans(block[1]) : null;
+  };
+}
+
+// Structural marker: every pattern must appear in code; the canonical value is
+// the shared description, so both sides agree iff both still use the primitive.
 function markers(relPath, patterns, description) {
   return () =>
-    patterns.every((p) => p.test(read(relPath))) ? description : null;
+    patterns.every((p) => p.test(code(relPath))) ? description : null;
 }
 
 // --- the mirrored set -----------------------------------------------------
@@ -106,6 +124,7 @@ const TS_TERMINAL_HINT = "src/terminal-hint.ts";
 const TS_CLIENT_HINT = "src/client-hint.ts";
 const TS_CLAUDE_SETTINGS = "src/claude-settings.ts";
 const TS_GLYPH = "src/render/error-glyph.ts";
+const TS_DIAG_TEXT = "src/render/diagnostic-text.ts";
 const TS_STYLE = "src/render/diagnostic-style.ts";
 const TS_PATHS = "src/daemon/paths.ts";
 const TS_ACQUIRE = "src/daemon/acquire.ts";
@@ -435,6 +454,34 @@ const CHECKS = [
     label: "glyph PREFIX",
     ts: lit(TS_GLYPH, /const PREFIX = "((?:[^"\\]|\\.)*)";/),
     rust: lit(RS_GLYPH, /const PREFIX: &str = "((?:[^"\\]|\\.)*)";/),
+  },
+  // The code points the diagnostic sanitizer turns into spaces. The tables
+  // alone would not do: a term beside the fold, in the predicate or at its one
+  // use, changes the set with the tables still equal — so the second row
+  // anchors both whole (whitespace aside): a term added to either breaks it.
+  {
+    label: "diagnostic sanitizer code points",
+    ts: codeRanges(TS_DIAG_TEXT, /const NEUTRALIZED_RANGES = \[([\s\S]*?)\] as const;/),
+    rust: codeRanges(RS_GLYPH, /const NEUTRALIZED_RANGES: &\[\(u32, u32\)\] = &\[([\s\S]*?)\];/),
+  },
+  {
+    label: "diagnostic sanitizer predicate",
+    ts: markers(
+      TS_DIAG_TEXT,
+      [
+        /export function isControlChar\(code: number\): boolean \{\s*return NEUTRALIZED_RANGES\.some\(\(\[lo, hi\]\) => code >= lo && code <= hi\);\s*\}/,
+        /sanitized \+= isControlChar\(ch\.codePointAt\(0\) \?\? 0\) \? " " : ch;/,
+      ],
+      "the fold over NEUTRALIZED_RANGES, mapped to a space",
+    ),
+    rust: markers(
+      RS_GLYPH,
+      [
+        /fn neutralized\(ch: char\) -> bool \{\s*NEUTRALIZED_RANGES\.iter\(\)\.any\(\|&\(lo, hi\)\| \(lo\.\.=hi\)\.contains\(&u32::from\(ch\)\)\)\s*\}/,
+        /let ch = if neutralized\(raw\) \{ ' ' \} else \{ raw \};/,
+      ],
+      "the fold over NEUTRALIZED_RANGES, mapped to a space",
+    ),
   },
   {
     label: "glyph MAX_MESSAGE_LEN",
