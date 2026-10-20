@@ -38,6 +38,7 @@ import {
 } from "./fork-bomb-breaker";
 import { dlog } from "./log";
 import { makeUpdateWatch, UPDATE_DISMISSED_KEY } from "./update-notice";
+import { makeBinaryWatch } from "./binary-watch";
 import { LANE_FRAMES } from "./lane-frames";
 import { REGISTRY_URL } from "../install/currency";
 import { isAbsolute } from "node:path";
@@ -303,60 +304,21 @@ const BIN_CHECK_INTERVAL_MS = 60 * 1000;
 // The registry is a network resource with releases hours apart; ask rarely.
 const RELEASE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
-// --- binary-mtime self-restart ---
-//
-// If the daemon's compiled output changes on disk (rebuild, upgrade, edit),
-// exit at the next sample so the next client respawns from the fresh code.
-// Cheap (one statSync/min) and avoids the user having to manually kill the
-// daemon during development. unref() so this timer doesn't hold the process
-// alive. `checkNow` is the same sampler the interval runs, for the moment the
-// daemon itself changed the bundle (the update notice's rebuild) and need not
-// wait a minute to notice.
-function makeBinaryWatch(): { arm(): void; checkNow(): void } {
-  // Watch the resolved entry point, not the bin shim — npm run build updates
-  // dist/index.mjs but the bin/cc-candybar shim never changes.
-  const entryUrl = import.meta.url;
-  const targets: string[] = [];
-  if (entryUrl.startsWith("file://")) {
-    targets.push(fileURLToPath(entryUrl));
-  }
-  // Also watch argv[1] as fallback (covers global installs, symlinks, etc.)
-  if (process.argv[1]) targets.push(process.argv[1]!);
-
-  const originalMtimes = new Map<string, number>();
-  for (const t of targets) {
-    try {
-      originalMtimes.set(t, fs.statSync(t).mtimeMs);
-    } catch {
-      // File may not exist yet — skip it.
-    }
-  }
-  let timer: NodeJS.Timeout | null = null;
-  const sample = (): void => {
-    for (const [t, originalMtime] of originalMtimes) {
-      try {
-        const nowMtime = fs.statSync(t).mtimeMs;
-        if (nowMtime !== originalMtime) {
-          dlog("info", `binary mtime changed (${t}); shutting down`);
-          if (timer) clearInterval(timer);
-          shutdown(0);
-          return;
-        }
-      } catch (e) {
-        dlog("warn", `bin stat failed: ${(e as Error).message}`);
-      }
-    }
-  };
-  return {
-    arm() {
-      if (originalMtimes.size === 0) return;
-      timer = setInterval(sample, BIN_CHECK_INTERVAL_MS);
-      timer.unref();
-    },
-    checkNow: sample,
-  };
-}
-const binaryWatch = makeBinaryWatch();
+// Watch the resolved entry point, not the bin shim — a build updates
+// dist/index.mjs but the bin/cc-candybar shim never changes — and argv[1]
+// beside it (global installs, symlinks).
+const binaryWatch = makeBinaryWatch({
+  targets: [
+    ...(import.meta.url.startsWith("file://")
+      ? [fileURLToPath(import.meta.url)]
+      : []),
+    ...(process.argv[1] ? [process.argv[1]] : []),
+  ],
+  intervalMs: BIN_CHECK_INTERVAL_MS,
+  stat: fs.statSync,
+  exit: () => shutdown(0),
+  log: dlog,
+});
 
 // [LAW:single-enforcer] The daemon is the process that observes the bundle
 // it runs (the binary watch restarts it on rebuild), so it is the one place
