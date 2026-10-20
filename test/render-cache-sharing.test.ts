@@ -42,7 +42,7 @@ afterEach(() => {
   for (const fn of cleanups.reverse()) fn();
 });
 
-function makeCache(budgetBytes: number) {
+function makeCache(budgetBytes: number, maxEntries?: number) {
   const lines: string[] = [];
   const watchers = new WatcherRegistry({
     counters: { watchersOpened: 0, watchersClosed: 0, watchersEvicted: 0 },
@@ -52,7 +52,7 @@ function makeCache(budgetBytes: number) {
   cleanups.push(() => watchers.closeAll(), () => gitService.close());
   const cache = new RenderCache(
     { gitService, sessionState: new SessionState(), watchers, log: (_level, line) => lines.push(line) },
-    { budgetBytes: () => budgetBytes },
+    { budgetBytes: () => budgetBytes, maxEntries },
   );
   // Every state a test is served is torn down after it: the cache disposes
   // only what it evicts, and a live registry's timers keep jest from exiting.
@@ -192,6 +192,20 @@ describe("the cache is bounded by bytes", () => {
     expect(built()).toBe(3);
     at("a");
     expect(built()).toBe(4);
+  });
+
+  // Every entry holds watchers and timers the byte budget does not see; the
+  // count ceiling bounds them however high the RSS limit is raised.
+  test("past the count ceiling the least recently used entry leaves, whatever the bytes", () => {
+    const { cache, lines } = makeCache(64 * COMPILE_BYTES, 2);
+    const cfg = file("config.json5", carouselConfig("mode", "alpha"));
+    const at = (d: string) => cache.getOrCreate(path.join(dir, d), path.join(dir, d), cfg);
+    const [, b, c] = ["a", "b", "c"].map((d) => at(d).state);
+    expect(cache.stats.size).toBe(2);
+    expect(cache.stats.accountedBytes).toBeLessThan(cache.stats.budgetBytes);
+    expect(lines.filter((l) => l.startsWith("config disposed reason=evict"))).toHaveLength(1);
+    expect(at("b").state).toBe(b);
+    expect(at("c").state).toBe(c);
   });
 
   test("a budget no entry fits still serves the newest", () => {

@@ -19,13 +19,15 @@ import type {
 } from "../../config/dsl-types.js";
 import { DEFAULT_DSL_CONFIG } from "../../config/default-dsl-config.js";
 import {
+  compileAlone,
   compileDslConfig,
-  compileInputOf,
-  compileKey,
-  declareDslVariables,
+  registerCompiled,
   type CompileInput,
+  type CompileProvider,
   type CompiledConfig,
+  type Registration,
 } from "../../dsl/render.js";
+import { mb } from "../limits.js";
 import { stateGate } from "../verbs/state-validators.js";
 import { configGate } from "../verbs/config-validators.js";
 import { presetNames, presetRoot } from "../../config/presets.js";
@@ -75,7 +77,12 @@ export function renderCacheBudget(rssLimitBytes: number): number {
   return Math.floor(rssLimitBytes / 4);
 }
 
-const mb = (bytes: number): number => Math.round(bytes / (1024 * 1024));
+// The count ceiling beside the byte budget: every entry holds a
+// SourceRegistry (fs watchers, TTL timers, git subscriptions) and a config
+// watcher, a resource the byte budget does not see. At the default RSS limit
+// the bytes bind long before this; it is what bounds watchers when
+// CC_CANDYBAR_RSS_LIMIT_MB is raised.
+export const MAX_ENTRIES = 256;
 
 // [LAW:single-enforcer] These are the cache-and-registry deps — git data
 // (for declareGit subscriptions), session state (for declareState atoms),
@@ -102,7 +109,7 @@ export interface StateDeps {
   // The compile for a config's compile key. A cache shares one between every
   // entry whose config compiles alike (RenderCache's table); a one-shot load
   // has no other entry to share with and compiles its own.
-  readonly compile?: (key: string, input: CompileInput) => CompiledConfig;
+  readonly compile?: CompileProvider;
 }
 
 // [LAW:no-ambient-temporal-coupling] The cache's outward lifecycle signal. A
@@ -494,22 +501,24 @@ export function buildRenderState(
     deps.sessionState,
   );
 
-  let key: string;
-  let compiled: CompiledConfig;
+  let registration: Registration;
   try {
-    const input = compileInputOf(config);
-    key = compileKey(input);
     // [LAW:one-source-of-truth] The compile holds no store: each render binds
     // its own (drawDsl), so the entry's registry is the store its renders read
     // — and the compile can be one shared by every entry whose config
     // compiles alike (brandon-unfiled-3248.8yp).
-    compiled = (deps.compile ?? ((_, i) => compileDslConfig(i)))(key, input);
+    registration = registerCompiled(
+      config,
+      registry,
+      cwd,
+      deps.compile ?? compileAlone,
+    );
     // [LAW:dataflow-not-control-flow] Partial-load warnings (variable
     // declaration failures that didn't abort the load) flow through the
     // same warning channel as collision warnings; both visible at once —
     // appended before the validator pass so a derive throw still carries
     // them.
-    warnings.push(...declareDslVariables(config, registry, cwd));
+    warnings.push(...registration.loadWarnings);
     // [LAW:no-silent-failure] The gates this config's sessions click through
     // are derived from its action table on demand (stateGate / configGate),
     // so nothing is installed here. They are built once now so an action
@@ -530,10 +539,10 @@ export function buildRenderState(
   // from the effective theme (resolveThemeSelection, settled by renderDsl).
   return {
     config,
-    compileKey: key,
+    compileKey: registration.compileKey,
     store,
     registry,
-    compiled,
+    compiled: registration.compiled,
     neededInputPaths: neededPrefixesByPreset(config),
     lastRenderCellsBySegment: new Map<string, readonly RichText[]>(),
     // What a reset clears is the home's: resets write nowhere else.
@@ -665,11 +674,16 @@ export class RenderCache {
   private readonly log: DaemonLogger;
   // Read when an eviction is decided: the budget is a boot-time fact.
   private readonly budgetBytes: () => number;
+  private readonly maxEntries: number;
   private readonly observers: RenderCacheObservers;
 
   constructor(
     deps: RenderDeps,
-    opts: { budgetBytes: () => number; observers?: RenderCacheObservers },
+    opts: {
+      budgetBytes: () => number;
+      maxEntries?: number;
+      observers?: RenderCacheObservers;
+    },
   ) {
     this.deps = {
       ...deps,
@@ -677,6 +691,7 @@ export class RenderCache {
     };
     this.log = deps.log ?? quietLogger;
     this.budgetBytes = opts.budgetBytes;
+    this.maxEntries = opts.maxEntries ?? MAX_ENTRIES;
     this.observers = opts.observers ?? {};
   }
 
@@ -800,13 +815,17 @@ export class RenderCache {
     };
   }
 
-  // [LAW:single-enforcer] The one place the budget is enforced, run after
-  // every change to what the map serves (an insertion, a reload): least
-  // recently used first, until the map fits — never `served`, the entry the
-  // change was for, which a render is about to draw.
+  // [LAW:single-enforcer] The one place the cache's bounds are enforced — its
+  // bytes and its count — run after every change to what the map serves (an
+  // insertion, a reload): least recently used first, until the map fits both
+  // — never `served`, the entry the change was for, which a render is about
+  // to draw.
   private fit(served: CacheEntry): void {
+    const fits = (): boolean =>
+      this.entries.size <= this.maxEntries &&
+      this.accountedBytes() <= this.budgetBytes();
     for (const [key, evicted] of this.entries) {
-      if (this.accountedBytes() <= this.budgetBytes()) return;
+      if (fits()) return;
       if (evicted === served) continue;
       evicted.watcher?.release();
       this.entries.delete(key);

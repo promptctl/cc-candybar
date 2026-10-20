@@ -459,9 +459,51 @@ export function registerDslConfig(
   // whichever shell spawned it — a default here would be that wrong answer.
   opts: { cwd: string },
 ): RegisteredConfig {
+  const { compiled, loadWarnings } = registerCompiled(
+    config,
+    registry,
+    opts.cwd,
+    compileAlone,
+  );
+  return { ...compiled, loadWarnings };
+}
+
+/** The compile for a config's compile key and input. */
+export type CompileProvider = (
+  key: string,
+  input: CompileInput,
+) => CompiledConfig;
+
+/** A compile of its own, for a caller with no other entry to share one with. */
+export const compileAlone: CompileProvider = (_key, input) =>
+  compileDslConfig(input);
+
+/** A config composed into a registry: its compile, and its store's declarations. */
+export interface Registration {
+  readonly compiled: CompiledConfig;
+  // [LAW:one-source-of-truth] The identity of `compiled`: what it was compiled
+  // from, so registrations carrying one key may carry one compile.
+  readonly compileKey: string;
+  readonly loadWarnings: readonly string[];
+}
+
+// [LAW:single-enforcer] The one composition of a config into a registry, which
+// `cc-candybar check` (registerDslConfig) and the daemon (buildRenderState)
+// both take: the compile `compile` hands back for the config's key — a render
+// cache's shared one, or one of its own — then the variables declared into
+// the registry.
+export function registerCompiled(
+  config: ValidatedConfig,
+  registry: SourceRegistry,
+  cwd: string,
+  compile: CompileProvider,
+): Registration {
+  const input = compileInputOf(config);
+  const key = compileKey(input);
   return {
-    ...compileDslConfig(compileInputOf(config)),
-    loadWarnings: declareDslVariables(config, registry, opts.cwd),
+    compiled: compile(key, input),
+    compileKey: key,
+    loadWarnings: declareDslVariables(config, registry, cwd),
   };
 }
 
