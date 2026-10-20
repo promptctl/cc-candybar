@@ -20,6 +20,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { rangeSpans, uncommented } from "./protocol-source.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, "..");
@@ -32,11 +33,11 @@ function read(relPath) {
   return sources.get(relPath);
 }
 
-// Source with its comments removed, so no extractor reads a commented-out or
-// quoted-in-prose copy of what it anchors. A comment opens at a line start or
-// after whitespace; `//` after a non-space (`cc-candybar://`) is string text.
-function uncommented(text) {
-  return text.replace(/(^|\s)(?:\/\*[\s\S]*?\*\/|\/\/[^\n]*)/g, "$1");
+// The source less its comment lines, for an anchor that must match what the
+// runtime runs, never a commented-out copy. Raw `read` stays for the rows
+// whose region delimiters are comments (`// --- client hints`).
+function code(relPath) {
+  return uncommented(read(relPath));
 }
 
 // --- extractors -----------------------------------------------------------
@@ -94,45 +95,20 @@ function memberSet(relPath, blockRegex, memberRegex) {
   };
 }
 
-// Set of code points in a table of inclusive range pairs — the body captured
-// by blockRegex's group 1, `[lo, hi]` (TS) or `(lo, hi)` (Rust) entries —
-// canonicalized as merged, sorted spans: the two sides agree iff they cover
-// the same code points, however each splits, cases or groups its literals.
-// [LAW:parse-dont-validate] The body is parsed whole, comments aside: text no
-// pair accounts for, or an inverted pair (a typo that covers nothing), makes
-// the table unreadable (null) rather than a set short of what it spells.
-const RANGE_NUM = String.raw`(0x[0-9a-fA-F_]+|\d[\d_]*)`;
-const RANGE_PAIR = new RegExp(String.raw`[[(]\s*${RANGE_NUM}\s*,\s*${RANGE_NUM}\s*[\])]`, "g");
+// Set of code points in the range table blockRegex's group 1 captures; see
+// rangeSpans for how a table reads.
 function codeRanges(relPath, blockRegex) {
   return () => {
-    const block = read(relPath).match(blockRegex);
-    if (!block) return null;
-    const body = uncommented(block[1]);
-    if (body.replace(RANGE_PAIR, "").replace(/[\s,]/g, "") !== "") return null;
-    const value = (s) => Number(s.replace(/_/g, ""));
-    const pairs = [...body.matchAll(RANGE_PAIR)]
-      .map((m) => [value(m[1]), value(m[2])])
-      .sort((a, b) => a[0] - b[0]);
-    if (pairs.length === 0 || pairs.some(([lo, hi]) => !(lo <= hi))) return null;
-    const spans = [];
-    for (const [lo, hi] of pairs) {
-      const last = spans.at(-1);
-      if (last && lo <= last[1] + 1) last[1] = Math.max(last[1], hi);
-      else spans.push([lo, hi]);
-    }
-    const u = (n) => `U+${n.toString(16).toUpperCase().padStart(4, "0")}`;
-    return spans.map(([lo, hi]) => `${u(lo)}-${u(hi)}`).join(", ");
+    const block = code(relPath).match(blockRegex);
+    return block ? rangeSpans(block[1]) : null;
   };
 }
 
-// Structural marker: every pattern must appear in code, not in a comment; the
-// canonical value is the shared description, so both sides agree iff both
-// still use the primitive.
+// Structural marker: every pattern must appear in code; the canonical value is
+// the shared description, so both sides agree iff both still use the primitive.
 function markers(relPath, patterns, description) {
-  return () => {
-    const code = uncommented(read(relPath));
-    return patterns.every((p) => p.test(code)) ? description : null;
-  };
+  return () =>
+    patterns.every((p) => p.test(code(relPath))) ? description : null;
 }
 
 // --- the mirrored set -----------------------------------------------------
