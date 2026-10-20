@@ -622,17 +622,7 @@ function configFacts(load: ConfigLoad): ConfigFacts {
 // the chain, never the whole run — a broken settings.json committed in some
 // project concerns two checks, not every one.
 function readSettingsFacts(at: SettingsChainAt): DoctorFacts["claudeSettings"] {
-  try {
-    return { at, sources: { kind: "ok", value: readSettingsChain(at) } };
-  } catch (e) {
-    return {
-      at,
-      sources: {
-        kind: "failed",
-        reason: e instanceof Error ? e.message : String(e),
-      },
-    };
-  }
+  return { at, sources: asked(() => readSettingsChain(at)) };
 }
 
 // [LAW:dataflow-not-control-flow] The three wire states of the recorded hint

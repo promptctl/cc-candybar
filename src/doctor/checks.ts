@@ -1142,9 +1142,10 @@ const effectRefresh: Check = {
     // draws needs more. Unset runs on events only; anything under the minimum
     // or not a number is a value the docs give no meaning, so the reason names
     // it rather than guess, and the fix overwrites it.
-    const interval =
-      statusLine.kind === "present" ? statusLine.refreshInterval : undefined;
-    if (interval === EFFECT_REFRESH_INTERVAL && statusLine.kind === "present") {
+    if (
+      statusLine.kind === "present" &&
+      statusLine.refreshInterval === EFFECT_REFRESH_INTERVAL
+    ) {
       return {
         ok: true,
         note: `statusLine.refreshInterval is ${EFFECT_REFRESH_INTERVAL} in ${statusLine.from.path}`,
@@ -1193,21 +1194,24 @@ const effectRefresh: Check = {
           reason: `${wearing}, and ${statusLine.from.path} sets statusLine to ${JSON.stringify(statusLine.value)}, not a statusLine object — re-run \`cc-candybar install\` to write one`,
         };
       case "present": {
-        const { from } = statusLine;
+        const { from, refreshInterval: interval } = statusLine;
         const redraws =
           interval === undefined
             ? `${wearing}, but Claude Code redraws it only on events`
             : typeof interval === "number" && interval > EFFECT_REFRESH_INTERVAL
               ? `${wearing}, but Claude Code redraws it only every ${interval} s`
               : `${wearing}, but statusLine.refreshInterval is ${JSON.stringify(interval)}, not a number of seconds Claude Code accepts (its minimum is ${EFFECT_REFRESH_INTERVAL})`;
-        // [LAW:single-enforcer] Managed settings are a policy the doctor
-        // reads and never writes: an administrator's (or a dotfiles repo's —
-        // a drop-in is often a symlink, which an atomic write would replace
-        // with a copy), so the reason says where the line goes instead.
-        return from.scope === "managed"
+        // [LAW:single-enforcer] The doctor writes only a file that is the
+        // user's own: managed settings are an administrator's policy, and
+        // `.claude/settings.json` is checked into somebody's repository. Nor
+        // can it write the line into a file it owns instead: under the
+        // scope-wins-whole reading above, a statusLine holding only an
+        // interval would outrank the one holding the command. So for those
+        // two the reason says where the line goes.
+        return from.scope === "managed" || from.scope === "project"
           ? {
               ok: false,
-              reason: `${redraws} — its statusLine is in managed settings, ${from.path}: set "refreshInterval": ${EFFECT_REFRESH_INTERVAL} there`,
+              reason: `${redraws} — its statusLine is in ${from.scope === "managed" ? "managed settings" : "the project's checked-in settings"}, ${from.path}: set "refreshInterval": ${EFFECT_REFRESH_INTERVAL} there`,
             }
           : {
               ok: false,

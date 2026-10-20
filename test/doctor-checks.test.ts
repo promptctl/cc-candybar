@@ -419,14 +419,16 @@ describe("effectRefresh probe", () => {
     ).toEqual({ ok: true, note: `statusLine.refreshInterval is 1 in ${low}` });
   });
 
-  // A project's statusLine outranks the user file, so the fix writes there.
-  test("a project statusLine wins: the fix targets the project file", () => {
-    const project = "/p/.claude/settings.json";
+  // A project-local statusLine outranks the user file, so the fix writes
+  // there; the checked-in project file is somebody's repository, so it gets
+  // the reason and no fix, as managed settings do.
+  test("a project-local statusLine wins: the fix targets that file", () => {
+    const local = "/p/.claude/settings.local.json";
     expect(
       effectRefresh(
         MOVES,
         ok([
-          source("project", project, { statusLine: { command: "cc-candybar" } }),
+          source("project-local", local, { statusLine: { command: "cc-candybar" } }),
           source("user", SETTINGS_PATH, {
             statusLine: { command: "cc-candybar", refreshInterval: 1 },
           }),
@@ -434,8 +436,21 @@ describe("effectRefresh probe", () => {
       ),
     ).toEqual({
       ok: false,
-      reason: `${MOVING}, but Claude Code redraws it only on events (statusLine from ${project})`,
-      fix: { ...FIX, file: project },
+      reason: `${MOVING}, but Claude Code redraws it only on events (statusLine from ${local})`,
+      fix: { ...FIX, file: local },
+    });
+  });
+
+  test("a checked-in project statusLine wins, and gets NO fix", () => {
+    const project = "/p/.claude/settings.json";
+    expect(
+      effectRefresh(
+        MOVES,
+        ok([source("project", project, { statusLine: { command: "cc-candybar" } })]),
+      ),
+    ).toEqual({
+      ok: false,
+      reason: `${MOVING}, but Claude Code redraws it only on events — its statusLine is in the project's checked-in settings, ${project}: set "refreshInterval": 1 there`,
     });
   });
 

@@ -312,6 +312,22 @@ describe("gatherFacts", () => {
   // brandon-doctor-v62x.49w — Claude Code's order: managed (its drop-ins over
   // managed-settings.json, alphabetically later over earlier, hidden and
   // non-.json files skipped) > project-local > project > user.
+  // A dotfiles-managed settings.json is a symlink: the fix writes the file
+  // it points at, and the link stays a link.
+  test("the fix writes through a symlinked settings file", () => {
+    const conf = configDir("linked");
+    fs.mkdirSync(conf, { recursive: true });
+    const target = path.join(dir, "dotfiles-settings.json");
+    fs.writeFileSync(target, JSON.stringify({ statusLine: { command: "cc-candybar" } }));
+    fs.symlinkSync(target, settingsIn(conf));
+    const facts = factsIn(conf, null, NO_TMUX, NO_SESSION, drew("moves"));
+    const verdict = checkByName("effectRefresh")!.probe(facts);
+    if (verdict.ok || verdict.fix === undefined) throw new Error("no fix");
+    applyFix(NO_TMUX, verdict.fix, facts);
+    expect(fs.lstatSync(settingsIn(conf)).isSymbolicLink()).toBe(true);
+    expect(JSON.parse(fs.readFileSync(target, "utf8")).statusLine.refreshInterval).toBe(1);
+  });
+
   describe("the settings chain", () => {
     const managedDir = (): string => path.join(dir, "managed");
     const MANAGED: () => DoctorEdge = () => ({ ...NO_TMUX, managedSettingsDir: managedDir() });
@@ -414,11 +430,26 @@ describe("gatherFacts", () => {
       expect(fs.readFileSync(managed, "utf8")).toBe(before);
     });
 
+    // [LAW:no-silent-failure] Only a missing file is absent: one that is
+    // there but cannot be read is a file Claude Code may run with.
+    test("an unreadable settings file fails the chain, naming it", () => {
+      const locked = put(path.join(projectDir(), ".claude", "settings.json"), line(1));
+      fs.chmodSync(locked, 0o000);
+      try {
+        expect(sourcesOf(configDir("absent"))).toEqual({
+          kind: "failed",
+          reason: expect.stringMatching(new RegExp(`^cannot read ${locked}: .*EACCES`)),
+        });
+      } finally {
+        fs.chmodSync(locked, 0o644);
+      }
+    });
+
     // The fix writes the file the statusLine came from, and the re-read is
     // the whole chain's.
-    test("a project winner's fix lands in the project file, and the re-probe passes", () => {
+    test("a project-local winner's fix lands in that file, and the re-probe passes", () => {
       const conf = writeSettings(JSON.stringify(line()));
-      const shared = put(path.join(projectDir(), ".claude", "settings.json"), line());
+      const shared = put(path.join(projectDir(), ".claude", "settings.local.json"), line());
       const facts = factsIn(conf, null, NO_TMUX, NO_SESSION, drew("moves"));
       const check = checkByName("effectRefresh")!;
       const verdict = check.probe(facts);

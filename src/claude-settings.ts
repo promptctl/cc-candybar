@@ -55,13 +55,26 @@ export function claudeInstalledPluginsPath(configDir: string): string {
   return path.join(configDir, "plugins", "installed_plugins.json");
 }
 
+// A settings file's bytes, or null for no file. [LAW:no-silent-failure] Only
+// ENOENT is absence: a file the daemon cannot stat or read (EACCES, ELOOP) is
+// a file Claude Code may still run with, so it throws rather than vanishing
+// from the chain.
+function readSettingsFile(settingsPath: string): string | null {
+  try {
+    return fs.readFileSync(settingsPath, "utf8");
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw new Error(`cannot read ${settingsPath}: ${messageOf(e)}`, {
+      cause: e,
+    });
+  }
+}
+
 // The settings file's bytes, for an editor that splices it. A missing file is
 // the one absence with a meaning — Claude Code has written nothing yet — so it
 // reads as the empty document.
 export function readClaudeSettingsText(settingsPath: string): string {
-  return fs.existsSync(settingsPath)
-    ? fs.readFileSync(settingsPath, "utf8")
-    : "";
+  return readSettingsFile(settingsPath) ?? "";
 }
 
 // [LAW:one-source-of-truth] The ONE reading of Claude Code's settings as a
@@ -74,9 +87,15 @@ export function readClaudeSettingsText(settingsPath: string): string {
 export function readClaudeSettings(
   settingsPath: string,
 ): Readonly<Record<string, unknown>> {
+  return parseSettings(settingsPath, readClaudeSettingsText(settingsPath));
+}
+
+function parseSettings(
+  settingsPath: string,
+  text: string,
+): Readonly<Record<string, unknown>> {
   let parsed: unknown;
   try {
-    const text = readClaudeSettingsText(settingsPath);
     if (/^\s*$/.test(text)) return {};
     parsed = JSON_DIALECT.parse(text);
   } catch (e) {
@@ -162,16 +181,16 @@ export function readSettingsChain(
     },
     { scope: "user", path: at.userFile },
   ];
-  return located
-    .filter((l) => fs.existsSync(l.path))
-    .map((l) => {
-      const settings = readClaudeSettings(l.path);
-      const { env = {} } = settings;
-      if (!isJsonObject(env)) {
-        throw new Error(`cannot read ${l.path}: \`env\` is not an object`);
-      }
-      return { ...l, settings, env };
-    });
+  return located.flatMap((l) => {
+    const text = readSettingsFile(l.path);
+    if (text === null) return [];
+    const settings = parseSettings(l.path, text);
+    const { env = {} } = settings;
+    if (!isJsonObject(env)) {
+      throw new Error(`cannot read ${l.path}: \`env\` is not an object`);
+    }
+    return [{ ...l, settings, env }];
+  });
 }
 
 // A directory's `*.json` entries that are not hidden, in alphabetical order;
