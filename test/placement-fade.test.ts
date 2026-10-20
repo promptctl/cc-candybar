@@ -24,7 +24,7 @@ import {
   renderDsl,
   type CompiledConfig,
 } from "../src/dsl/render";
-import { renderLook } from "../src/render/action";
+import { lastBinding } from "./helpers/render-binding";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import type { ValidatedConfig } from "../src/config/dsl-types";
 import { SessionEffects, type RowItem } from "../src/render/effect";
@@ -94,10 +94,11 @@ function renderer(
     padding: 1,
     width: 160,
   };
+  const drawn = lastBinding(compiled.menuRuntime.action);
   return {
     session,
     // The palette the latest render wore.
-    palette: () => renderLook(compiled.menuRuntime.action, "the fade test").palette,
+    palette: () => drawn().look!.palette,
     render: (
       { shown, when }: Frame,
       effects: SessionEffects<RenderedLine>,

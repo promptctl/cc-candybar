@@ -33,7 +33,8 @@ import {
   type CompiledConfig,
   type RenderWarning,
 } from "../src/dsl/render";
-import { renderLook } from "../src/render/action";
+import { bindRender, renderLook } from "../src/render/action";
+import { lastBinding } from "./helpers/render-binding";
 import { SessionState } from "../src/daemon/session-state";
 import { ConfigError } from "../src/config/dsl-loader";
 import type { RichText } from "@promptctl/rich-js";
@@ -305,15 +306,25 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
     expect(() => buildRuntime().dispose()).not.toThrow();
   });
 
-  test("the look a template reads is the render's own, and there is none before one", () => {
+  test("the look a template reads is the render's own, and none outlives it", () => {
     const rt = buildRuntime();
     try {
       const runtime = rt.compiled.menuRuntime.action;
+      const drawn = lastBinding(runtime);
       expect(() => renderLook(runtime, "{{ probe }}")).toThrow(
-        "{{ probe }} read the render's look before any render resolved one",
+        "{{ probe }} ran outside a render",
       );
       rt.render(90);
-      expect(renderLook(runtime, "{{ probe }}").basePalette.name).toBe("dracula");
+      expect(drawn().look!.basePalette.name).toBe("dracula");
+      // The render dropped its binding, and the look with it.
+      expect(() => renderLook(runtime, "{{ probe }}")).toThrow(
+        "{{ probe }} ran outside a render",
+      );
+      // Bound, but before the render resolved its look.
+      using _bound = bindRender(runtime, { ...drawn(), look: undefined });
+      expect(() => renderLook(runtime, "{{ probe }}")).toThrow(
+        "{{ probe }} read the render's look before it was resolved",
+      );
     } finally {
       rt.dispose();
     }

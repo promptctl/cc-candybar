@@ -11,7 +11,14 @@ import {
 import { GitDataProvider } from "../src/daemon/cache/git";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { SessionState } from "../src/daemon/session-state";
-import { compileDslConfig, compileInputOf, renderDsl } from "../src/dsl/render";
+import {
+  compileDslConfig,
+  compileInputOf,
+  declareDslVariables,
+  renderDsl,
+} from "../src/dsl/render";
+import { SourceRegistry } from "../src/var-system/sources";
+import { VariableStore } from "../src/var-system/store";
 import { instantOf } from "../src/utils/instant";
 import { stripAnsi } from "./helpers/ansi";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -167,6 +174,29 @@ describe("the cache is bounded by bytes", () => {
     expect(render(state)).toContain("alpha");
   });
 
+  // [LAW:single-enforcer] The budget is held after every change to what the
+  // map serves: a reload can move an entry onto a compile no other entry
+  // carries, which charges a compile as surely as a new entry does.
+  test("a reload onto a compile of its own is held to the budget", () => {
+    const { cache, lines } = makeCache(2 * ENTRY_BYTES + COMPILE_BYTES);
+    const a = path.join(dir, "a");
+    const b = path.join(dir, "b");
+    fs.mkdirSync(a);
+    fs.mkdirSync(b);
+    const cfgA = file("a.json5", carouselConfig("mode", "alpha"));
+    const cfgB = file("b.json5", carouselConfig("mode", "alpha"));
+    cache.getOrCreate(a, a, cfgA);
+    cache.getOrCreate(b, b, cfgB);
+    expect(cache.stats).toMatchObject({ size: 2, compiles: 1 });
+    fs.writeFileSync(cfgB, carouselConfig("other", "beta"));
+    cache.reload(b, b, cfgB);
+    // `b` moved onto a compile of its own; `a`, least recently used, left.
+    expect(cache.stats).toMatchObject({ size: 1, compiles: 1 });
+    expect(cache.stats.accountedBytes).toBeLessThanOrEqual(cache.stats.budgetBytes);
+    expect(lines.filter((l) => l.startsWith("config disposed reason=evict"))).toHaveLength(1);
+    expect(render(cache.getOrCreate(b, b, cfgB).state)).toContain("beta");
+  });
+
   test("a compile leaves with the last state carrying it, held or not", () => {
     const { cache } = makeCache(ENTRY_BYTES + COMPILE_BYTES);
     const one = file("one.json5", carouselConfig("mode", "alpha"));
@@ -199,6 +229,40 @@ test("a compile's store and clocks are the render's: read outside one, it refuse
   expect(() => compiled.segments["clock"]!.template.evaluate({})).toThrow(
     /now ran outside a render: no render bound its store and clocks/,
   );
+});
+
+// A compile outlives the entries that share it, so it may keep nothing of a
+// render once that render returns: the store, the scope its layout rows were
+// laid under. Kept, an evicted entry's store would stay on the heap for as
+// long as any other entry carried the compile, charged to no one.
+test("a compile keeps nothing of a render once it returns", async () => {
+  v8.setFlagsFromString("--expose_gc");
+  const gc = vm.runInNewContext("gc") as () => void;
+  const config = parseAndValidate("<test>", carouselConfig("mode", "alpha"));
+  const compiled = compileDslConfig(compileInputOf(config));
+  const drawOnce = (): WeakRef<VariableStore> => {
+    const store = new VariableStore();
+    const registry = new SourceRegistry(store, "", undefined, new SessionState());
+    declareDslVariables(config, registry, dir);
+    renderDsl(
+      config,
+      compiled,
+      store,
+      registry,
+      { session_id: "s", project_dir: dir },
+      instantOf(new Date()),
+      { endcaps: "powerline", colorCompatibility: "truecolor", wrap: true, padding: 1, width: 200 },
+    );
+    registry.dispose();
+    return new WeakRef(store);
+  };
+  const drawn = drawOnce();
+  // A WeakRef holds its target until the job that made it ends.
+  await new Promise((resolve) => setImmediate(resolve));
+  gc();
+  gc();
+  expect(drawn.deref()).toBeUndefined();
+  expect(compiled.menuRuntime.action.bound).toBeUndefined();
 });
 
 // [LAW:verifiable-goals] ENTRY_BYTES and COMPILE_BYTES are the cache's map of

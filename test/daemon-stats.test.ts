@@ -188,8 +188,8 @@ describe("formatStats", () => {
         held: 0,
         retired: 1,
         compiles: 2,
-        accountedBytes: 4,
-        budgetBytes: 9,
+        accountedBytes: 32 * 1024 * 1024,
+        budgetBytes: 128 * 1024 * 1024,
       },
       effectCache: { sessions: 2, effects: 3 },
       sessionState: { sessions: 2, observers: 11, revision: 7 },
@@ -217,6 +217,8 @@ describe("formatStats", () => {
     expect(out).toContain("effects       3");
     expect(out).toContain("observers     11");
     expect(out).toContain("revision      7");
+    expect(out).toContain("compiles      2");
+    expect(out).toContain("accounted     32.0MB / 128.0MB");
   });
 
   test("hit rate is n/a when no observations", () => {

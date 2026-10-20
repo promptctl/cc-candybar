@@ -5,7 +5,7 @@
 //
 // Nothing here chooses a segment, a row or a colour. The rows are
 // `layoutRows` of the compiled tree the render is walking, under the walk's
-// own visibility (`ActionRuntime.layout`, published by renderDsl); each block
+// own visibility (`RenderBinding.layout`, published by drawDsl); each block
 // wears `decorationFor` of the segment's bar address under the render's
 // decor — the function the walk colours every closed cell with, its tint and
 // the text paired with it — on the palette that segment renders in.
@@ -19,7 +19,12 @@ import { RichText } from "@promptctl/rich-js";
 import type { ColorDepth } from "@promptctl/rich-js";
 import type { FuncMap } from "@promptctl/go-template-js";
 import { decorationFor, type Decor } from "../themes/decor.js";
-import { renderLook, type ActionRuntime, type PreviewRows } from "./action.js";
+import {
+  renderLayout,
+  renderLook,
+  type ActionRuntime,
+  type PreviewRows,
+} from "./action.js";
 import type { ActiveSegmentRef } from "./active-segment.js";
 import { decoratedCell } from "./band-style.js";
 import { cellWidth, ledRowBudget } from "./picker.js";
@@ -100,7 +105,7 @@ export function layoutPreviewFuncs(
     layoutPreview: {
       fn: () =>
         renderLayoutPreview(
-          runtime.layout(),
+          renderLayout(runtime, "{{ layoutPreview }}"),
           renderLook(runtime, "{{ layoutPreview }}").decor,
           activeSegment.drawnAt(),
           ledRowBudget(runtime),

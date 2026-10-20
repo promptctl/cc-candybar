@@ -33,7 +33,6 @@ import {
   settingsOf,
   stateVarDecls,
 } from "../config/dsl-types.js";
-import { TERM_COLS_FLOOR } from "../config/payload-inputs.js";
 import {
   themeDefaultsOf,
   underThemeDefault,
@@ -57,7 +56,6 @@ import type { SourceParse } from "../var-system/parse.js";
 import type { JsonValue } from "../var-system/types.js";
 import type { BuildLineOptions } from "../render/strip.js";
 import {
-  DEFAULT_PADDING,
   drawStripCells,
   stripChromeCols,
   stripSeamCols,
@@ -105,6 +103,7 @@ import {
   bindRender,
   renderBinding,
   type ActionRuntime,
+  type RenderBinding,
 } from "../render/action.js";
 import { SESSION_KEY_TO_EFFECTIVE_VAR } from "../config/setting-projections.js";
 import { disclosureCloseFragment } from "../render/disclosure-close.js";
@@ -587,24 +586,6 @@ export function compileDslConfig({
   const actionRuntime: ActionRuntime = {
     bound: undefined,
     compiled: new Map(),
-    // [LAW:types-are-the-program] Always present — renderDsl republishes the live
-    // chrome each render; the default shape's is the registration-time value so a
-    // compile-only path (no render) still has a valid one.
-    chromeCols: stripChromeCols({ endcaps: "powerline" }),
-    // Same contract as chromeCols; the floor is `term.cols`'s own default.
-    width: TERM_COLS_FLOOR,
-    // Same contract as chromeCols: renderDsl republishes the live resolved
-    // globals.padding each render; the constant is only the compile-only floor.
-    padding: DEFAULT_PADDING,
-    // Same contract again: the compile-only floor is the registration-time
-    // endcaps shape's seam.
-    seamCols: stripSeamCols({ endcaps: "powerline" }),
-    // Same contract again: with no render there is no walk, and no rows.
-    layout: () => [],
-    // [LAW:one-source-of-truth] Unlike the geometry above, a look has no
-    // floor to stand in for it: only a render resolves one, so there is none
-    // until renderDsl publishes its own.
-    look: undefined,
   };
   // [LAW:one-way-deps] Inject action + picker feature funcs as data — the engine
   // stays generic. The picker shares the ACTION runtime (it resolves its
@@ -1183,10 +1164,20 @@ export function drawDsl(
   registry.drawAt(drawnDepth(opts.colorCompatibility));
   // [LAW:no-ambient-temporal-coupling] The compile may serve many stores (one
   // per render-cache entry its config compiles alike in): every template it
-  // evaluates below reads THIS render's, bound for the walk and unbound on
-  // every exit, a throw included.
+  // evaluates below reads THIS render's binding, bound for the walk and dropped
+  // on every exit, a throw included, so the compile keeps nothing of it.
+  const binding: RenderBinding = {
+    store,
+    registry,
+    width: opts.width,
+    chromeCols: stripChromeCols(opts),
+    padding: opts.padding,
+    seamCols: stripSeamCols(opts),
+    look: undefined,
+    layout: undefined,
+  };
   // eslint-disable-next-line @typescript-eslint/no-unused-vars -- held for its disposal
-  using _bound = bindRender(compiled.menuRuntime.action, { store, registry });
+  using _bound = bindRender(compiled.menuRuntime.action, binding);
   const { preset = PRESET_FLOOR } = selection ?? {};
   // [LAW:one-source-of-truth] What an omitting caller falls back to is the
   // config default as the daemon reads it: the ACTIVE preset's globals over the
@@ -1225,7 +1216,7 @@ export function drawDsl(
     resolveEffectSelection(undefined, null, declared.effect);
   // [LAW:one-source-of-truth] Inject the usable width as `term.cols` from the
   // SAME opts.width the strip wraps to (below) and a row fits to (published as
-  // ActionRuntime.width), so a template reads the exact wrap width — never a
+  // RenderBinding.width), so a template reads the exact wrap width — never a
   // cached or independently-measured copy. This is the RAW usable width
   // (terminal cols minus the Claude-Code reserve), the honest meaning every
   // template — incl. user configs reading `.term.cols` — expects. The picker's
@@ -1266,20 +1257,6 @@ export function drawDsl(
       provisionalName(selectedEffect, "effect"),
     ),
   );
-  // [LAW:single-enforcer] Publish the columns the render's strip spends on a
-  // row's caps onto the shared action runtime, so the picker can reserve them at
-  // its pagination seam (the menu body renders through the same renderPicker). Set
-  // once per render here — the same one-owner, per-render-mutation idiom as the
-  // menu placement cursor below. [LAW:no-ambient-temporal-coupling]
-  compiled.menuRuntime.action.chromeCols = stripChromeCols(opts);
-  // [LAW:one-source-of-truth] Publish the render's intra-cell padding beside the
-  // style: the picker reserves 2×padding at its pagination seam, the same seam
-  // that reserves the joiner chrome — one resolved value, read where needed.
-  compiled.menuRuntime.action.padding = opts.padding;
-  // The width the rows wrap to, the one value `term.cols` carries above.
-  compiled.menuRuntime.action.width = opts.width;
-  // The seam one more cell costs, from the same options the rows serialize by.
-  compiled.menuRuntime.action.seamCols = stripSeamCols(opts);
   const scope = buildScope(store);
   // The other half of each fold, which could only ever happen here: a rule reads
   // the store the push above just filled with this render's values. A decided
@@ -1336,7 +1313,7 @@ export function drawDsl(
   const palette = transposedPalette(basePalette, style.value);
   // The look the walk below draws in, published before it evaluates a template
   // that reads it (`renderLook`).
-  compiled.menuRuntime.action.look = { basePalette, palette, decor };
+  binding.look = { basePalette, palette, decor };
   // The motion of each row this render draws: the session's effect memory
   // records the settled effect coming into force, so its clock starts there,
   // and what each placement this frame draws, so one the last frame — drawn
@@ -1579,7 +1556,7 @@ export function drawDsl(
       return true;
     }
   };
-  compiled.menuRuntime.action.layout = () =>
+  binding.layout = () =>
     layoutRows(root, shown).map((row) =>
       row.flatMap(({ name: placedName, address, settings }) => {
         const name = arrangedSegment(placedName);

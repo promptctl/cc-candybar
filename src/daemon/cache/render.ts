@@ -487,10 +487,11 @@ export function buildRenderState(
     deps.sessionState,
   );
 
-  const input = compileInputOf(config);
-  const key = compileKey(input);
+  let key: string;
   let compiled: CompiledConfig;
   try {
+    const input = compileInputOf(config);
+    key = compileKey(input);
     // [LAW:one-source-of-truth] The compile holds no store: each render binds
     // its own (drawDsl), so the entry's registry is the store its renders read
     // — and the compile can be one shared by every entry whose config
@@ -737,16 +738,7 @@ export class RenderCache {
     // fact about the MAP, complete at insertion: nothing later (including an
     // observer throwing) can skip it. [LAW:dataflow-not-control-flow]
     this.entries.set(key, entry);
-    // [LAW:dataflow-not-control-flow] Least recently used first, until what
-    // the map serves fits the budget — never the entry being served, which is
-    // the newest.
-    for (const [oldestKey, evicted] of this.entries) {
-      if (evicted === entry || this.accountedBytes() <= this.budgetBytes())
-        break;
-      evicted.watcher?.release();
-      this.entries.delete(oldestKey);
-      this.retire(evicted.state, "evict");
-    }
+    this.fit(entry);
     this.log(
       "info",
       `render-cache entry projectDir=${projectDir} cwd=${cwd} compile=${entry.state.compileKey.slice(0, 12)} entries=${this.entries.size} compiles=${this.compiles.size} accounted=${mb(this.accountedBytes())}/${mb(this.budgetBytes())}MB`,
@@ -799,6 +791,20 @@ export class RenderCache {
       accountedBytes: this.accountedBytes(),
       budgetBytes: this.budgetBytes(),
     };
+  }
+
+  // [LAW:single-enforcer] The one place the budget is enforced, run after
+  // every change to what the map serves (an insertion, a reload): least
+  // recently used first, until the map fits — never `served`, the entry the
+  // change was for, which a render is about to draw.
+  private fit(served: CacheEntry): void {
+    for (const [key, evicted] of this.entries) {
+      if (this.accountedBytes() <= this.budgetBytes()) return;
+      if (evicted === served) continue;
+      evicted.watcher?.release();
+      this.entries.delete(key);
+      this.retire(evicted.state, "evict");
+    }
   }
 
   // The cache starts serving `state`: unheld, and not yet retired — and the
@@ -887,6 +893,8 @@ export class RenderCache {
       this.serve(loaded.state);
       this.retire(retired, "reload");
     }
+    // A reload can move the entry onto a compile no other entry carries.
+    this.fit(entry);
     // Rebinds to the broken file (and its sibling candidates) too, so an
     // in-place save OR a higher-precedence file appearing recovers.
     this.refreshWatcher(entry, loaded);
