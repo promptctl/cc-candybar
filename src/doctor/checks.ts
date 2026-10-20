@@ -1085,8 +1085,8 @@ const effectRefresh: Check = {
           : frames.value.length > 0
             ? "only a `cc-candybar frames` display has drawn this bar, not Claude Code's statusline"
             : askedBy === "click"
-            ? NO_RENDER_OF_THIS_BAR
-            : `no session of this Claude Code has drawn a statusline for this daemon in the last ${RECENT_CLIENT_S / 60} minutes`;
+              ? NO_RENDER_OF_THIS_BAR
+              : `no session of this Claude Code has drawn a statusline for this daemon in the last ${RECENT_CLIENT_S / 60} minutes`;
       return {
         ok: false,
         reason: `${unseen}, so whether it moves is unknown — run the doctor again once the bar has redrawn`,
