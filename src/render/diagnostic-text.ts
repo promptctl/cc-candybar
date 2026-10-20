@@ -39,13 +39,13 @@ const ELLIPSIS = "…";
 // [LAW:one-source-of-truth] Mirrored by rust-client/src/error_glyph.rs's
 // `NEUTRALIZED_RANGES` and `neutralized()`. scripts/check-protocol.mjs holds
 // the two tables to one set of code points and both predicates (and their
-// one use) to the bare fold, so an edit to either runtime alone fails
+// one use) to the bare fold, so a change to either runtime's set alone fails
 // `pnpm check:protocol`. The Rust side also mirrors the collapse-whitespace-
 // runs + trim pass below, so the two runtimes produce byte-identical output.
 //
 // Inclusive ranges: C0 (U+0000..U+001F), DEL and C1 (U+007F..U+009F) — the
 // Unicode Cc class — then the two bidi/format ranges above.
-export const NEUTRALIZED_RANGES = [
+const NEUTRALIZED_RANGES = [
   [0x00, 0x1f],
   [0x7f, 0x9f],
   [0x202a, 0x202e],

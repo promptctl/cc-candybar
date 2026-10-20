@@ -53,7 +53,7 @@ The shipped `bin/cc-candybar` is the **Rust** render-path client (`rust-client/s
 
 The Node entry (`src/index.ts`) is **not** a parallel renderer — it's a dumb relay (`tryRenderViaDaemon`). There is intentionally no inline render path; the daemon is the single renderer (`[LAW:one-source-of-truth]`).
 
-Wire format lives in `src/daemon/protocol.ts`. The Rust client mirrors the wire contract as literal consts — protocol version, frame cap and header, timeout budgets, the error-code vocabulary, and the diagnostic glyph styling. `scripts/check-protocol.mjs` diffs every mirrored constant TS↔Rust (anchor missing counts as drift) — change any of them in **both** runtimes in lockstep or `prepublishOnly` fails. Adding a new mirrored constant means adding a row to the script's `CHECKS` table in the same commit.
+Wire format lives in `src/daemon/protocol.ts`. The Rust client mirrors the wire contract as literal consts — protocol version, frame cap and header, timeout budgets, the error-code vocabulary, the diagnostic glyph styling, and the code points the diagnostic sanitizer neutralizes (`NEUTRALIZED_RANGES`). `scripts/check-protocol.mjs` diffs every mirrored constant TS↔Rust (anchor missing counts as drift) — change any of them in **both** runtimes in lockstep or `prepublishOnly` fails. Adding a new mirrored constant means adding a row to the script's `CHECKS` table in the same commit.
 
 ### Daemon (`src/daemon/server.ts`)
 

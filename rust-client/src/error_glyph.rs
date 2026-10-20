@@ -78,7 +78,8 @@ fn describe(cause: &PermanentCause) -> String {
 // in both runtimes. [LAW:one-source-of-truth] The table and the predicate
 // mirror its `NEUTRALIZED_RANGES` and `isControlChar`; scripts/check-protocol.mjs
 // holds the tables to one set of code points and both predicates (and their
-// one use) to the bare fold, so an edit to either runtime alone fails it.
+// one use) to the bare fold, so a change to either runtime's set alone
+// fails it.
 //
 // The collapse predicate adds U+FEFF to `char::is_whitespace()`: the TS
 // side collapses on JS `\s`, which is Unicode White_Space minus U+0085

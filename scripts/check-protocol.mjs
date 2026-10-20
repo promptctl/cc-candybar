@@ -2,12 +2,13 @@
 // Guard: every wire-affecting constant the Rust client mirrors from the TS
 // source must agree. The wire contract is one source of truth
 // (src/daemon/protocol.ts, src/daemon/client.ts, src/render/error-glyph.ts,
-// src/render/diagnostic-style.ts);
+// src/render/diagnostic-style.ts, src/render/diagnostic-text.ts);
 // the Rust binary embeds each value as a literal const because mirroring is
 // cheaper than codegen at this scale. This script diffs the entire mirrored
 // set — protocol version, frame cap and header, timeout budgets, error-code
-// vocabulary, and the diagnostic glyph styling — so a drift in ANY of them
-// fails `prepublishOnly`, not production.
+// vocabulary, the diagnostic glyph styling, and the code points its sanitizer
+// neutralizes — so a drift in ANY of them fails `prepublishOnly`, not
+// production.
 //
 // [LAW:one-source-of-truth] The mirror is legal only because this file
 // proves synchronization. Adding a new mirrored constant without adding a
@@ -86,20 +87,26 @@ function memberSet(relPath, blockRegex, memberRegex) {
   };
 }
 
-// Set of code points spelled as inclusive `0x…, 0x…` range pairs within the
-// slice matched by blockRegex, canonicalized as merged, sorted spans: the two
-// sides agree iff they cover the same code points, however each splits or
-// cases its ranges. An inverted pair covers nothing in either runtime's fold,
-// so it contributes nothing here either.
+// Set of code points in a table of inclusive range pairs — the body captured
+// by blockRegex's group 1, `[lo, hi]` (TS) or `(lo, hi)` (Rust) entries —
+// canonicalized as merged, sorted spans: the two sides agree iff they cover
+// the same code points, however each splits, cases or groups its literals.
+// [LAW:parse-dont-validate] The body is parsed whole, comments aside: text no
+// pair accounts for, or an inverted pair (a typo that covers nothing), makes
+// the table unreadable (null) rather than a set short of what it spells.
+const RANGE_NUM = String.raw`(0x[0-9a-fA-F_]+|\d[\d_]*)`;
+const RANGE_PAIR = new RegExp(String.raw`[[(]\s*${RANGE_NUM}\s*,\s*${RANGE_NUM}\s*[\])]`, "g");
 function codeRanges(relPath, blockRegex) {
   return () => {
     const block = read(relPath).match(blockRegex);
     if (!block) return null;
-    const pairs = [...block[0].matchAll(/0x([0-9a-fA-F]+)\s*,\s*0x([0-9a-fA-F]+)/g)]
-      .map((m) => [parseInt(m[1], 16), parseInt(m[2], 16)])
-      .filter(([lo, hi]) => lo <= hi)
+    const body = block[1].replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, "");
+    if (body.replace(RANGE_PAIR, "").replace(/[\s,]/g, "") !== "") return null;
+    const value = (s) => Number(s.replace(/_/g, ""));
+    const pairs = [...body.matchAll(RANGE_PAIR)]
+      .map((m) => [value(m[1]), value(m[2])])
       .sort((a, b) => a[0] - b[0]);
-    if (pairs.length === 0) return null;
+    if (pairs.length === 0 || pairs.some(([lo, hi]) => !(lo <= hi))) return null;
     const spans = [];
     for (const [lo, hi] of pairs) {
       const last = spans.at(-1);
@@ -465,18 +472,18 @@ const CHECKS = [
   // The code points the diagnostic sanitizer turns into spaces. The tables
   // alone would not do: a term beside the fold, in the predicate or at its one
   // use, changes the set with the tables still equal — so the second row
-  // anchors both whole, and any added term breaks the anchor.
+  // anchors both whole (whitespace aside), and any added term breaks it.
   {
     label: "diagnostic sanitizer code points",
-    ts: codeRanges(TS_DIAG_TEXT, /export const NEUTRALIZED_RANGES = \[[\s\S]*?\] as const;/),
-    rust: codeRanges(RS_GLYPH, /const NEUTRALIZED_RANGES: &\[\(u32, u32\)\] = &\[[\s\S]*?\];/),
+    ts: codeRanges(TS_DIAG_TEXT, /const NEUTRALIZED_RANGES = \[([\s\S]*?)\] as const;/),
+    rust: codeRanges(RS_GLYPH, /const NEUTRALIZED_RANGES: &\[\(u32, u32\)\] = &\[([\s\S]*?)\];/),
   },
   {
     label: "diagnostic sanitizer predicate",
     ts: markers(
       TS_DIAG_TEXT,
       [
-        /export function isControlChar\(code: number\): boolean \{\n {2}return NEUTRALIZED_RANGES\.some\(\(\[lo, hi\]\) => code >= lo && code <= hi\);\n\}/,
+        /export function isControlChar\(code: number\): boolean \{\s*return NEUTRALIZED_RANGES\.some\(\(\[lo, hi\]\) => code >= lo && code <= hi\);\s*\}/,
         /sanitized \+= isControlChar\(ch\.codePointAt\(0\) \?\? 0\) \? " " : ch;/,
       ],
       "the fold over NEUTRALIZED_RANGES, mapped to a space",
@@ -484,7 +491,7 @@ const CHECKS = [
     rust: markers(
       RS_GLYPH,
       [
-        /fn neutralized\(ch: char\) -> bool \{\n {4}NEUTRALIZED_RANGES\.iter\(\)\.any\(\|&\(lo, hi\)\| \(lo\.\.=hi\)\.contains\(&u32::from\(ch\)\)\)\n\}/,
+        /fn neutralized\(ch: char\) -> bool \{\s*NEUTRALIZED_RANGES\.iter\(\)\.any\(\|&\(lo, hi\)\| \(lo\.\.=hi\)\.contains\(&u32::from\(ch\)\)\)\s*\}/,
         /let ch = if neutralized\(raw\) \{ ' ' \} else \{ raw \};/,
       ],
       "the fold over NEUTRALIZED_RANGES, mapped to a space",
