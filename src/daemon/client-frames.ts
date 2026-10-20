@@ -26,12 +26,18 @@ export interface FrameStream {
   close(): void;
 }
 
-// Each pushed frame is the response a render request is answered with — the
-// bar, or why it could not be drawn — handed to `onFrame` as the daemon sent
-// it. `onEnd` is called once.
-// [LAW:parse-dont-validate] A frame that could not be drawn says so with
-// RENDER_FAILED; every other failure code is the daemon refusing the subscribe
-// itself, which ends the stream rather than reaching `onFrame`.
+// [LAW:parse-dont-validate] Whether a message on a stream is its end: a frame
+// that could not be drawn says so with RENDER_FAILED, and is a frame; every
+// other failure code is the daemon refusing the subscribe itself, which ends
+// the stream. The native follower decides by the same cases
+// (test/fixtures/frame-follow-cases.json, `message`).
+export function isRefusal(resp: Response): resp is Refusal {
+  return !resp.ok && resp.code !== "RENDER_FAILED";
+}
+
+// Each pushed frame is the message the daemon sent for the lane — the bar, or
+// why it could not be drawn — handed to `onFrame` as the daemon sent it, and a
+// refusal ends the stream rather than reaching it. `onEnd` is called once.
 export function openFrameStream(
   sockPath: string,
   sessionId: string,
@@ -59,8 +65,7 @@ export function openFrameStream(
     makeFrameReader(
       (frame) => {
         const resp = frame as Response;
-        if (!resp.ok && resp.code !== "RENDER_FAILED")
-          finish({ kind: "refused", resp });
+        if (isRefusal(resp)) finish({ kind: "refused", resp });
         else onFrame(resp);
       },
       (error) => finish({ kind: "failed", error }),

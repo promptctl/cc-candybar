@@ -8,6 +8,7 @@ import { MEMENTO_ENV_VARS, type MementoEnvHint } from "../memento-hint";
 import { TERMINAL_ENV_VARS, type TerminalEnvHint } from "../terminal-hint";
 import { CLIENT_KINDS, type ClientHint, type ClientKind } from "../client-hint";
 import type { Lane } from "../config/lanes";
+import type { BandBar } from "../../mod/types";
 
 // [LAW:types-are-the-program] PROTOCOL_VERSION encodes one thing:
 // "old-client × new-daemon (or vice versa) cannot communicate." It moves on
@@ -87,7 +88,7 @@ export interface RenderRequest {
 //     that to `false` here would fuse "we know it's local" with "we don't
 //     know" ([LAW:no-silent-failure]); instead it travels onward as an absent
 //     payload field, where the DSL input-fallback chain emits the declared
-//     default AND records a `last_error` that `cc-candybar debug vars`
+//     default AND records a `last_error` that `cc-candybar vars`
 //     surfaces.
 //   • `tmux` has THREE states, and they are never collapsed: absent — the
 //     client did not report (too old, same as `ssh`); `null` — the client
@@ -373,6 +374,9 @@ export type Response =
   // A pane-session answer: the session, or null when no request the daemon
   // holds came from that pane.
   | { ok: true; paneSession: string | null }
+  // A band-lane subscriber's frame: the bar as the band mod's rows of styled
+  // runs (src/daemon/lane-frames.ts), declared by the mod (mod/types).
+  | BandBar
   // [LAW:types-are-the-program] `daemonV` is the daemon's own
   // PROTOCOL_VERSION, echoed on every error response so the client can render
   // a meaningful diagnostic on VERSION_MISMATCH without parsing the human

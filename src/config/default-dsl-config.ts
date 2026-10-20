@@ -259,7 +259,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // Defaults are the "unknown" values, and for `ssh` that is `false`: an
     // absent field (a client too old to send the hint) renders as local, which
     // is the pre-feature behavior, while the input-fallback chain records a
-    // `last_error` so `cc-candybar debug vars` can still tell the two apart.
+    // `last_error` so `cc-candybar vars` can still tell the two apart.
     "host.name": { kind: "input", path: "host.name", default: "" },
     "host.user": { kind: "input", path: "host.user", default: "" },
     "host.ssh": {

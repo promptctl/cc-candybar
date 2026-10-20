@@ -14,13 +14,32 @@ import {
 import { PROTOCOL_VERSION, type Response } from "./protocol";
 import type { Lane } from "../config/lanes";
 
-const RECONNECT_FIRST_MS = 250;
-const RECONNECT_MAX_MS = 2000;
+export const RECONNECT_FIRST_MS = 250;
+export const RECONNECT_MAX_MS = 2000;
 // A lane switched off is a setting, not a fault, so it is asked again at a
 // slower pace: a toggle left off costs the daemon one refusal per this.
 export const SWITCHED_OFF_RETRY_MS = 5000;
 
 type Refusal = Extract<Response, { ok: false }>;
+
+// What moves the reconnect backoff: a frame drawn (the stream works, so the
+// next failure starts over), a frame that could not be drawn (RENDER_FAILED:
+// the stream works but says nothing about the next failure), a fault.
+export type RetryEvent = "frame-ok" | "frame-failed" | "fault";
+
+// [LAW:one-source-of-truth] The one step of the backoff, the wait before the
+// next reopening after `event`. The native follower steps by the same cases
+// (test/fixtures/frame-follow-cases.json, `backoff`).
+export function nextRetryMs(retryMs: number, event: RetryEvent): number {
+  switch (event) {
+    case "frame-ok":
+      return RECONNECT_FIRST_MS;
+    case "frame-failed":
+      return retryMs;
+    case "fault":
+      return Math.min(RECONNECT_MAX_MS, retryMs * 2);
+  }
+}
 
 // [LAW:effects-at-boundaries] What a stream the daemon ended calls for: a
 // reconnect — kicking a daemon into existence when none answered, or when the
@@ -137,9 +156,7 @@ export function followFrames(
       sessionId,
       lane,
       (resp) => {
-        // A drawn bar is a stream that works: the next failure starts the
-        // backoff over.
-        if (resp.ok) retryMs = RECONNECT_FIRST_MS;
+        retryMs = nextRetryMs(retryMs, resp.ok ? "frame-ok" : "frame-failed");
         follow.frame(resp);
       },
       (end) => {
@@ -157,7 +174,7 @@ export function followFrames(
             follow.fault(next.reason, retryMs);
             if (next.kick) obtainDaemonKick();
             const wait = retryMs;
-            retryMs = Math.min(RECONNECT_MAX_MS, retryMs * 2);
+            retryMs = nextRetryMs(retryMs, "fault");
             reopenAfter(wait, true);
             return;
           }

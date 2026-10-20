@@ -1,8 +1,10 @@
 // Native render-path client for cc-candybar.
 //
-// Replaces `node dist/index.mjs` on the statusline hot path. Subcommands
-// (install, daemon, daemon-stats, url-handle, install-url-handler, --help)
-// transparently exec the Node fallback so this binary stays minimal.
+// Replaces `node dist/index.mjs` on the statusline hot path, and runs the one
+// subcommand of its own, `follow` (follow.rs), for a long-lived process that
+// should not cost a Node runtime. Every other subcommand (install, daemon,
+// daemon-stats, url-handle, install-url-handler, --help) transparently execs
+// the Node fallback so this binary stays minimal.
 //
 // Wire format mirrors src/daemon/protocol.ts:
 //   - 4-byte big-endian length prefix
@@ -22,6 +24,7 @@
 // when one suffices.
 
 mod error_glyph;
+mod follow;
 mod launch;
 
 use std::env;
@@ -49,6 +52,9 @@ const FRAME_HEADER_BYTES: usize = 4;
 fn main() {
     let argv: Vec<String> = env::args().collect();
 
+    if let Some(run) = native_subcommand(&argv) {
+        run(&argv[2..]);
+    }
     if should_dispatch_to_node(&argv, unsafe { libc::isatty(0) } == 1) {
         exec_node_fallback(&argv);
         eprintln!("cc-candybar: failed to exec node fallback");
@@ -135,11 +141,26 @@ fn parse_stdin() -> Result<ParsedInput, BadInput> {
 
 // --- argv dispatch -------------------------------------------------------
 
-// [LAW:one-source-of-truth] The Rust client is a fast relay for the render hot
-// path and delegates EVERY subcommand to Node — Node is the single authority on
-// what subcommands exist. A subcommand is structurally a positional first arg (a
-// word, not a flag); the render path is invoked with no args, or flags only,
-// so it never has one. Discriminating on that shape — rather than a
+// [LAW:one-source-of-truth] Every subcommand is Node's except the ones this
+// binary runs itself, named here and nowhere else — Node does not spell them
+// (it refuses them as unknown, which is what a Node-shim install, with no
+// native binary, says), and scripts/check-protocol.mjs holds this list apart
+// from Node's SUBCOMMANDS so neither shadows the other. A native subcommand
+// owns its whole argv, `--help` included.
+type NativeSubcommand = fn(&[String]) -> !;
+const NATIVE_SUBCOMMANDS: [(&str, NativeSubcommand); 1] = [("follow", follow::run)];
+
+fn native_subcommand(argv: &[String]) -> Option<NativeSubcommand> {
+    let first = argv.get(1)?;
+    NATIVE_SUBCOMMANDS
+        .iter()
+        .find(|(name, _)| name == first)
+        .map(|&(_, run)| run)
+}
+
+// Every other subcommand is Node's: a subcommand is structurally a positional
+// first arg (a word, not a flag); the render path is invoked with no args, or
+// flags only, so it never has one. Discriminating on that shape — rather than a
 // hand-maintained name list — means a subcommand Node adds (lint/schema/vars/…)
 // works here with no Rust mirror to update and no drift to ship. `stdin_is_tty`
 // is injected so this is a pure, testable function.
@@ -1434,6 +1455,20 @@ mod tests {
                 should_dispatch_to_node(&argv(&["cc-candybar", cmd]), false),
                 "subcommand `{cmd}` must dispatch to Node even with non-TTY stdin"
             );
+        }
+    }
+
+    // A native subcommand runs here, `--help` included; a Node subcommand, and
+    // the render path, never reach the native table.
+    #[test]
+    fn dispatch_runs_only_native_subcommands_here() {
+        assert!(native_subcommand(&argv(&["cc-candybar", "follow", "--help"])).is_some());
+        for args in [
+            &["cc-candybar", "frames", "--lane", "band"][..],
+            &["cc-candybar", "--config", "x.json5"][..],
+            &["cc-candybar"][..],
+        ] {
+            assert!(native_subcommand(&argv(args)).is_none(), "{args:?}");
         }
     }
 

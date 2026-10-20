@@ -1,0 +1,44 @@
+{
+  "//": "The frame follower's four decisions, asserted by both runtimes: test/frame-follow-cases.test.ts (src/daemon/frame-follow.ts, src/daemon/client-frames.ts, src/frames-cli.ts) and rust-client/src/follow.rs. A daemonV of \"older\" or \"newer\" is the runtime's own PROTOCOL_VERSION minus or plus one.",
+  "message": [
+    { "resp": { "ok": true, "output": "bar\n" }, "refusal": false },
+    { "resp": { "ok": true, "band": [] }, "refusal": false },
+    { "resp": { "ok": false, "code": "RENDER_FAILED", "error": "boom" }, "refusal": false },
+    { "resp": { "ok": false, "code": "SWITCHED_OFF", "error": "off" }, "refusal": true },
+    { "resp": { "ok": false, "code": "TIMEOUT", "error": "busy" }, "refusal": true },
+    { "resp": { "ok": false, "code": "BAD_REQUEST", "error": "what" }, "refusal": true },
+    { "resp": { "ok": false, "code": "VERSION_MISMATCH", "error": "v", "daemonV": "newer" }, "refusal": true },
+    { "resp": { "error": "says no ok" }, "refusal": true }
+  ],
+  "streamEnd": [
+    { "end": { "kind": "failed" }, "then": { "kind": "reconnect", "kick": true } },
+    { "end": { "kind": "closed-there" }, "then": { "kind": "reconnect", "kick": false } },
+    { "end": { "kind": "refused", "code": "SWITCHED_OFF" }, "then": { "kind": "off" } },
+    { "end": { "kind": "refused", "code": "TIMEOUT" }, "then": { "kind": "reconnect", "kick": false } },
+    { "end": { "kind": "refused", "code": "BAD_REQUEST" }, "then": { "kind": "reconnect", "kick": false } },
+    { "end": { "kind": "refused", "code": "VERSION_MISMATCH", "daemonV": "older" }, "then": { "kind": "reconnect", "kick": true } },
+    { "end": { "kind": "refused", "code": "VERSION_MISMATCH", "daemonV": "newer" }, "then": { "kind": "exit" } },
+    { "end": { "kind": "refused", "code": "VERSION_MISMATCH" }, "then": { "kind": "exit" } }
+  ],
+  "worthSaying": [
+    { "last": { "kind": "none" }, "next": { "kind": "frame" }, "says": true },
+    { "last": { "kind": "frame" }, "next": { "kind": "frame" }, "says": true },
+    { "last": { "kind": "none" }, "next": { "kind": "off" }, "says": true },
+    { "last": { "kind": "off" }, "next": { "kind": "off" }, "says": false },
+    { "last": { "kind": "frame" }, "next": { "kind": "off" }, "says": true },
+    { "last": { "kind": "fault", "reason": "a" }, "next": { "kind": "fault", "reason": "a" }, "says": false },
+    { "last": { "kind": "fault", "reason": "a" }, "next": { "kind": "fault", "reason": "b" }, "says": true },
+    { "last": { "kind": "fault", "reason": "a" }, "next": { "kind": "off" }, "says": true },
+    { "last": { "kind": "off" }, "next": { "kind": "fault", "reason": "a" }, "says": true },
+    { "last": { "kind": "frame" }, "next": { "kind": "fault", "reason": "a" }, "says": true }
+  ],
+  "backoff": [
+    { "retryMs": 250, "event": "fault", "next": 500 },
+    { "retryMs": 500, "event": "fault", "next": 1000 },
+    { "retryMs": 1000, "event": "fault", "next": 2000 },
+    { "retryMs": 2000, "event": "fault", "next": 2000 },
+    { "retryMs": 1000, "event": "frame-ok", "next": 250 },
+    { "retryMs": 1000, "event": "frame-failed", "next": 1000 },
+    { "retryMs": 250, "event": "frame-ok", "next": 250 }
+  ]
+}

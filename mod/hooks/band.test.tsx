@@ -1,8 +1,8 @@
 import { expect, mock, test } from 'claude-code/testing'
 
 const FRAME = {
-  kind: 'bar',
-  rows: [
+  ok: true,
+  band: [
     [
       { text: '🍫', color: '#181825', backgroundColor: '#b592e1', href: 'cc-candybar://dispatch/e=x' },
       { text: ' bar', color: '#181825' },
@@ -39,8 +39,8 @@ test('the band draws the session’s pushed frame, its links as Links', async ($
   on('process.spawn', async function* (_$, e) {
     spawned.push(e.argv)
     yield { stream: 'stdout' as const, text: `${JSON.stringify(FRAME)}\n` }
-    // What `frames` says before an exit 1: the reason, one line, its own name first.
-    yield { stream: 'stderr' as const, text: 'cc-candybar frames: daemon speaks protocol 3\ncc-candybar frames: why it stopped\n' }
+    // What `follow` says before an exit 1: the reason, one line, its own name first.
+    yield { stream: 'stderr' as const, text: 'cc-candybar follow: daemon speaks protocol 3\ncc-candybar follow: why it stopped\n' }
     return { value: { code: 1, signal: null } }
   })
 
@@ -48,10 +48,10 @@ test('the band draws the session’s pushed frame, its links as Links', async ($
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
   await clock.advance(1)
 
-  // The child is asked for the session alone: its data is the statusline's.
-  expect(spawned.map(argv => argv.slice(2))).toEqual([
-    ['frames', '--lane', 'band', '--session', 'sid-1', '--format', 'band'],
-  ])
+  // The child is the native client, asked for the session alone: its data is
+  // the statusline's.
+  expect(spawned.map(argv => argv[0]!.endsWith('/bin/cc-candybar-native'))).toEqual([true])
+  expect(spawned.map(argv => argv.slice(1))).toEqual([['follow', '--lane', 'band', '--session', 'sid-1']])
   expect(await ui.find({ type: 'Link' })).toMatchObject({
     props: { href: 'cc-candybar://dispatch/e=x' },
   })
@@ -60,10 +60,10 @@ test('the band draws the session’s pushed frame, its links as Links', async ($
   // row: its last word.
   const failure = await ui.find({ type: 'Text', text: /frames stopped/ })
   expect(failure).toMatchObject({
-    text: 'candybar: frames stopped (exit 1) cc-candybar frames: why it stopped',
+    text: 'candybar: frames stopped (exit 1) cc-candybar follow: why it stopped',
   })
   // Its whole stderr is in the debug log, a line an entry.
-  expect(logged).toContain('cc-candybar frames: daemon speaks protocol 3')
+  expect(logged).toContain('cc-candybar follow: daemon speaks protocol 3')
   expect(logged.filter(line => line.startsWith('candybar-band:'))).toEqual([
     'candybar-band: frames started for sid-1',
     'candybar-band: frames for sid-1 ended (exit 1)',
@@ -71,10 +71,10 @@ test('the band draws the session’s pushed frame, its links as Links', async ($
   await ui.unmount()
 })
 
-// The band's lane switched off in candybar's settings is the `off` line on the
-// child's stdout (`--format band` encodes SWITCHED_OFF so): the band hands the
-// prompt area back to what is beneath it, the debug log says why, and the
-// child goes on, so switching it back on brings the bar back.
+// The band's lane switched off in candybar's settings is the daemon's
+// SWITCHED_OFF refusal on the child's stdout, relayed as it was sent: the band
+// hands the prompt area back to what is beneath it, the debug log says why,
+// and the child goes on, so switching it back on brings the bar back.
 test('the lane switched off hands the band back, and the next bar draws again', { timeoutMs: 15_000 }, async ($, on) => {
   const logged: string[] = []
   const clock = mock.clock(on)
@@ -89,7 +89,7 @@ test('the lane switched off hands the band back, and the next bar draws again', 
   on('process.spawn', async function* () {
     yield { stream: 'stdout' as const, text: `${JSON.stringify(FRAME)}\n` }
     await clock.sleep(250)
-    yield { stream: 'stdout' as const, text: `${JSON.stringify({ kind: 'off', reason: '🧪 band (A) is off' })}\n` }
+    yield { stream: 'stdout' as const, text: `${JSON.stringify({ ok: false, code: 'SWITCHED_OFF', error: '🧪 band (A) is off', daemonV: 3 })}\n` }
     await clock.sleep(250)
     yield { stream: 'stdout' as const, text: `${JSON.stringify(FRAME)}\n` }
     await clock.sleep(60_000)
@@ -174,36 +174,53 @@ test('an end that keeps the session id keeps its child', async ($, on) => {
   expect(spawned).toHaveLength(1)
 })
 
-test('a line the band cannot read ends the child’s stream and says why', async ($, on) => {
-  const reached: string[] = []
-  const clock = mock.clock(on)
-  on('session.start', (_$, e) => ({ cwd: e.cwd }))
-  on('session.id', () => ({ value: 'sid-1' }))
-  on('ui.render', ($, e) => {
-    const { Box } = $.ui.resolve(e)
-    return <Box />
-  })
-  on('process.spawn', async function* () {
-    try {
-      yield { stream: 'stdout' as const, text: 'not a frame\n' }
-      reached.push('next piece')
+// One daemon serves every checkout's mod, so the two can be different builds:
+// a line the band cannot draw — a shape from before the band frame, a run
+// whose field was renamed or retyped, not JSON at all — is said above the last
+// bar it could draw, and the stream goes on, so a line it can answers it.
+for (const [what, line] of [
+  ['a frame from before the band encoding', JSON.stringify({ ok: true, output: 'bar\n' })],
+  ['a run with a field the band does not know', JSON.stringify({ ok: true, band: [[{ text: 'x', fg: '#fff' }]] })],
+  ['a run whose text is not a string', JSON.stringify({ ok: true, band: [[{ text: 7 }]] })],
+  ['a lane-off refusal with no sentence', JSON.stringify({ ok: false, code: 'SWITCHED_OFF' })],
+  ['a line that is not JSON', 'not a frame'],
+] as const) {
+  test(`${what} is said above the band, and the next bar answers it`, { timeoutMs: 15_000 }, async ($, on) => {
+    const logged: string[] = []
+    const clock = mock.clock(on)
+    on('session.start', (_$, e) => ({ cwd: e.cwd }))
+    on('session.id', () => ({ value: 'sid-1' }))
+    on('ui.log', (_$, e) => (logged.push(e.text), { value: undefined }))
+    on('ui.render', ($, e) => {
+      const { Box } = $.ui.resolve(e)
+      return <Box />
+    })
+    on('process.spawn', async function* () {
       yield { stream: 'stdout' as const, text: `${JSON.stringify(FRAME)}\n` }
+      await clock.sleep(250)
+      yield { stream: 'stdout' as const, text: `${line}\n` }
+      await clock.sleep(250)
+      yield { stream: 'stdout' as const, text: `${JSON.stringify(FRAME)}\n` }
+      await clock.sleep(60_000)
       return { value: { code: 0, signal: null } }
-    } finally {
-      reached.push('ended')
-    }
+    })
+
+    await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+    const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    await clock.advance(1)
+    await clock.advance(250)
+    const said = `candybar: a line the band cannot draw (${line.slice(0, 80)}) — the daemon and this mod are from different builds`
+    expect(await ui.find({ type: 'Text', text: said })).toBeDefined()
+    // The last bar it could draw still shows beneath what is wrong.
+    expect(await ui.find({ type: 'Link' })).toBeDefined()
+    expect(logged).toContain(said)
+
+    await clock.advance(250)
+    expect(await ui.find({ type: 'Text', text: /cannot draw/ })).toBeUndefined()
+    expect(await ui.find({ type: 'Link' })).toBeDefined()
+    await ui.unmount()
   })
-
-  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
-  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  await clock.advance(1)
-
-  // Leaving the read loop returned the stream, which is how `stop` ends a
-  // child: nothing is left running unread.
-  expect(reached).toEqual(['ended'])
-  expect(await ui.find({ type: 'Text', text: /frames failed/ })).toBeDefined()
-  await ui.unmount()
-})
+}
 
 // A child still running is work the kit cannot see asleep, so each settle
 // here waits out the kit's bound (~1.5 s an advance, ~0.5 s a find).
@@ -217,7 +234,7 @@ test('what the child says stands above the bar until a frame answers it', { time
   })
   on('process.spawn', async function* () {
     yield { stream: 'stdout' as const, text: `${JSON.stringify(FRAME)}\n` }
-    yield { stream: 'stderr' as const, text: 'cc-candybar frames: stream failed (ECONNREFUSED); reconnecting in 250ms\n' }
+    yield { stream: 'stderr' as const, text: 'cc-candybar follow: stream failed (ECONNREFUSED); reconnecting in 250ms\n' }
     await clock.sleep(250)
     yield { stream: 'stdout' as const, text: `${JSON.stringify(FRAME)}\n` }
     await clock.sleep(60_000)

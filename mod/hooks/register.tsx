@@ -1,6 +1,6 @@
 // Draws the session's candybar in the band above the prompt, from the frames
-// the daemon pushes for it through a `cc-candybar frames` child, as `Text`
-// runs and `Link`s: the menus and their effects move at the daemon's frame
+// the daemon pushes for it through a `cc-candybar-native follow` child, as
+// `Text` runs and `Link`s: the menus and their effects move at the daemon's frame
 // rate rather than the statusline's one a second, and every `cc-candybar://`
 // link is an OSC 8 span the terminal opens, as it opens the statusline's.
 
@@ -13,7 +13,7 @@ import type {
   TextProps,
 } from 'claude-code'
 
-import type { BandFrame, BandRun } from '../types'
+import type { BandBar, BandLine, BandOff, BandRow, BandRun } from '../types'
 
 const bandRef = { plugin: 'candybar-band', key: 'band' } as const
 const bandAtom = atom(bandRef, { frame: null, failure: null })
@@ -73,7 +73,7 @@ export const register: Register = on => {
     const { frame, failure } = await read($, bandAtom)
     // Nothing to draw — no frame yet, the band's lane switched off (🧪 band (A)
     // in candybar's settings menu), an empty bar — hands the band on.
-    const rows = frame?.kind === 'bar' ? frame.rows : []
+    const rows = frame?.ok === true ? frame.band : []
     if (e.props.hasSurvey || (rows.length === 0 && failure === null)) return next(e)
 
     const { Box, Text, Link } = $.ui.resolve(e)
@@ -101,31 +101,74 @@ function drawRun(
   return href === undefined ? styled : <Link key={String(j)} href={href}>{styled}</Link>
 }
 
-// The child runs the checkout this mod sits in: `<repo>/mod` beside
-// `<repo>/dist`, built by `pnpm build`.
+// [LAW:parse-dont-validate] How each field of a run is read, keyed by
+// `BandRun`'s fields: a field added there fails to compile here until the band
+// says how to read it, and a key a run carries that is not here is refused —
+// a renamed field arrives as one, while the field it replaced, optional, is
+// simply absent.
+const RUN_FIELDS = {
+  text: 'string',
+  color: 'string',
+  backgroundColor: 'string',
+  href: 'string',
+  bold: true,
+  dimColor: true,
+  italic: true,
+  underline: true,
+  strikethrough: true,
+  inverse: true,
+} as const satisfies Record<keyof BandRun, 'string' | true>
+
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+  typeof v === 'object' && v !== null && !Array.isArray(v)
+
+function isRun(v: unknown): v is BandRun {
+  if (!isRecord(v) || typeof v.text !== 'string') return false
+  return Object.entries(v).every(([key, value]) => {
+    if (!Object.hasOwn(RUN_FIELDS, key)) return false
+    return RUN_FIELDS[key as keyof BandRun] === 'string' ? typeof value === 'string' : value === true
+  })
+}
+
+const isRow = (v: unknown): v is BandRow => Array.isArray(v) && v.every(isRun)
+
+const isBar = (v: Record<string, unknown>): v is Record<string, unknown> & BandBar =>
+  v.ok === true && Array.isArray(v.band) && v.band.every(isRow)
+
+const isOff = (v: Record<string, unknown>): v is Record<string, unknown> & BandOff =>
+  v.ok === false && v.code === 'SWITCHED_OFF' && typeof v.error === 'string'
+
+// One line of the child's stdout, read whole: a bar, the lane switched off,
+// or — the daemon and this mod being from different builds, one daemon serving
+// every checkout's mod — a line the band says it cannot draw.
+function parseBandLine(text: string): { readonly line: BandLine } | { readonly unreadable: string } {
+  let value: unknown
+  try {
+    value = JSON.parse(text)
+  } catch {
+    value = undefined
+  }
+  if (isRecord(value) && (isBar(value) || isOff(value))) return { line: value }
+  return {
+    unreadable: `candybar: a line the band cannot draw (${Array.from(text).slice(0, 80).join('')}) — the daemon and this mod are from different builds`,
+  }
+}
+
+// The child is the native client of the checkout this mod sits in: `<repo>/mod`
+// beside `<repo>/bin/cc-candybar-native`, built by `just install-rust`.
 function start($: EngineInterface, sessionId: string): Child {
   // A new session's band starts empty: the last frame is another session's,
   // its links that session's.
   void $.state.set(bandRef, { frame: null, failure: null })
   const stream = $.process.spawn({
-    argv: [
-      'node',
-      `${$.plugin.root}/../dist/index.mjs`,
-      'frames',
-      '--lane',
-      'band',
-      '--session',
-      sessionId,
-      '--format',
-      'band',
-    ],
+    argv: [`${$.plugin.root}/../bin/cc-candybar-native`, 'follow', '--lane', 'band', '--session', sessionId],
   })
   $.ui.log(`candybar-band: frames started for ${sessionId}`, { to: 'debug' })
   // [LAW:no-ambient-temporal-coupling] A stopped child's pieces can still be
   // in flight; once `stop` runs, none of them is the session's frame.
   let stopped = false
   void (async () => {
-    let frame: BandFrame | null = null
+    let frame: BandLine | null = null
     // The child's last line on stderr, and each pipe's line not yet ended.
     let said = ''
     const partial = { stdout: '', stderr: '' }
@@ -146,14 +189,22 @@ function start($: EngineInterface, sessionId: string): Child {
           await draw(said)
           continue
         }
-        // Only the newest frame in a piece is worth drawing.
+        // Only the newest line in a piece is worth drawing.
         const newest = lines.at(-1)
         if (newest === undefined) continue
-        const next = JSON.parse(newest) as BandFrame
+        const parsed = parseBandLine(newest)
+        // [LAW:no-silent-failure] A line the band cannot draw stands above the
+        // last bar it could, until a line it can answers it.
+        if ('unreadable' in parsed) {
+          $.ui.log(parsed.unreadable, { to: 'debug' })
+          await draw(parsed.unreadable)
+          continue
+        }
+        const next = parsed.line
         // [LAW:no-silent-failure] A band switched off draws nothing, so the
         // debug log says why it is blank, once each time it goes off.
-        if (next.kind === 'off' && frame?.kind !== 'off')
-          $.ui.log(`candybar-band: lane A is off for ${sessionId}: ${next.reason}`, { to: 'debug' })
+        if (!next.ok && frame?.ok !== false)
+          $.ui.log(`candybar-band: lane A is off for ${sessionId}: ${next.error}`, { to: 'debug' })
         frame = next
         await draw(null)
       }

@@ -1108,7 +1108,7 @@ export class SourceRegistry {
         return result;
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e);
-        // Recorded either way, so `cc-candybar debug` names the failure even
+        // Recorded either way, so `cc-candybar vars` names the failure even
         // when an authored default makes the read succeed.
         this.recordError(name, message);
         // [LAW:no-silent-failure] A derivation that FAILED is not a value. With

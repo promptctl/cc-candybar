@@ -11,7 +11,7 @@ import { runDaemon } from "./daemon/server";
 import { tryRenderViaDaemon } from "./daemon/client";
 import { runDaemonStats } from "./daemon/client-stats";
 import { runDebug } from "./daemon/client-debug";
-import { isDebugWhat } from "./daemon/debug-types";
+import { DEBUG_WHATS } from "./daemon/debug-types";
 import { runSchema } from "./config/cli";
 import { runCheck } from "./check";
 import { runPlugin } from "./plugin-install";
@@ -39,8 +39,88 @@ function showHelpText(): void {
   console.log(HELP_TEXT);
 }
 
+// [LAW:dataflow-not-control-flow] Subcommand dispatch is data: argv[2] names
+// a handler, and each handler owns its lifecycle and exit code. The
+// stdin-driven render takes flags only (`--config`), so a positional argv[2]
+// naming no handler is a mistake, refused rather than read as a render.
+// `lint` is an alias of `check` — one config verdict, one pipeline, one
+// exit-code contract (0/1/2) — and the debug projections join by DEBUG_WHATS,
+// the subcommand name being the DebugWhat. The native client's own subcommands
+// (rust-client/src/main.rs NATIVE_SUBCOMMANDS) never reach here, and
+// scripts/check-protocol.mjs holds the two sets apart.
+type Subcommand = (args: readonly string[]) => Promise<void>;
+const SUBCOMMANDS: Readonly<Record<string, Subcommand>> = {
+  install: async (args) => {
+    await runInstall(args, RUNNING_BUNDLE);
+    process.exit(0);
+  },
+  "install-url-handler": async () => {
+    runInstallUrlHandler(RUNNING_BUNDLE);
+    process.exit(0);
+  },
+  "url-handle": async (args) => {
+    await runUrlHandle(args[0]);
+  },
+  // The daemon owns its own lifecycle.
+  daemon: async () => {
+    runDaemon();
+  },
+  "daemon-stats": async (args) => {
+    await runDaemonStats(args);
+    process.exit(0);
+  },
+  // The stream owns its own lifecycle.
+  frames: async () => {
+    await runFrames(process.argv, RUNNING_BUNDLE);
+  },
+  check: async (args) => {
+    await runCheck(args);
+  },
+  lint: async (args) => {
+    await runCheck(args);
+  },
+  plugin: async (args) => {
+    process.exit(runPlugin(args));
+  },
+  schema: async () => {
+    runSchema();
+  },
+  // [LAW:single-enforcer] The doctor's CLI projection: the SAME check fold
+  // the bar's 🩺 click runs, over this process's own environment (which IS
+  // Claude Code's when run from a Claude Code shell).
+  doctor: async (args) => {
+    await runDoctorCli(args);
+  },
+  // Runs until the pane closes.
+  "bar-pane": async (args) => {
+    process.exit(await runBarPane(args));
+  },
+  ...Object.fromEntries(
+    DEBUG_WHATS.map((what): [string, Subcommand] => [
+      what,
+      async (args) => {
+        await runDebug(what, args);
+        process.exit(0);
+      },
+    ]),
+  ),
+};
+
 async function main(): Promise<void> {
   try {
+    const subcommand = process.argv[2];
+    const named =
+      subcommand !== undefined && !subcommand.startsWith("-")
+        ? subcommand
+        : null;
+    // [LAW:no-silent-failure] Before the help flag, so `<typo> --help` names
+    // the typo rather than printing help that does not mention it.
+    if (named !== null && !Object.hasOwn(SUBCOMMANDS, named)) {
+      console.error(
+        `cc-candybar: unknown subcommand ${JSON.stringify(named)} — see --help`,
+      );
+      process.exit(2);
+    }
     if (hasFlag(NODE_FLAGS.help)) {
       showHelpText();
       process.exit(0);
@@ -53,67 +133,9 @@ async function main(): Promise<void> {
       console.log(`cc-candybar ${PACKAGE_VERSION}`);
       process.exit(0);
     }
-
-    // [LAW:dataflow-not-control-flow] Subcommand dispatch is data: argv[2]
-    // selects the handler. Each handler short-circuits via process.exit().
-    // Default fallthrough = the existing stdin-driven render flow.
-    const subcommand = process.argv[2];
-    if (subcommand === "install") {
-      await runInstall(process.argv.slice(3), RUNNING_BUNDLE);
-      process.exit(0);
-    }
-    if (subcommand === "install-url-handler") {
-      runInstallUrlHandler(RUNNING_BUNDLE);
-      process.exit(0);
-    }
-    if (subcommand === "url-handle") {
-      await runUrlHandle(process.argv[3]);
+    if (named !== null) {
+      await SUBCOMMANDS[named]!(process.argv.slice(3));
       return;
-    }
-    if (subcommand === "daemon") {
-      runDaemon();
-      return; // daemon owns its own lifecycle
-    }
-    if (subcommand === "daemon-stats") {
-      await runDaemonStats(process.argv.slice(3));
-      process.exit(0);
-    }
-    if (subcommand === "frames") {
-      await runFrames(process.argv, RUNNING_BUNDLE);
-      return; // the stream owns its own lifecycle
-    }
-    // [LAW:one-type-per-behavior] `lint` is an alias of `check` — one config
-    // verdict, one pipeline, one exit-code contract (0/1/2). check subsumes the
-    // old lint (same loader, plus register + render coverage).
-    if (subcommand === "check" || subcommand === "lint") {
-      await runCheck(process.argv.slice(3)); // owns its own exit code (0/1/2)
-      return;
-    }
-    if (subcommand === "plugin") {
-      process.exit(runPlugin(process.argv.slice(3)));
-    }
-    if (subcommand === "schema") {
-      runSchema(); // owns its own exit code
-      return;
-    }
-    // [LAW:single-enforcer] The doctor's CLI projection: the SAME check fold
-    // the bar's 🩺 click runs, over this process's own environment (which IS
-    // Claude Code's when run from a Claude Code shell).
-    if (subcommand === "doctor") {
-      await runDoctorCli(process.argv.slice(3)); // owns its own exit code
-      return;
-    }
-    if (subcommand === "bar-pane") {
-      // Runs until the pane closes; owns its own exit code.
-      process.exit(await runBarPane(process.argv.slice(3)));
-    }
-    // [LAW:dataflow-not-control-flow] vars/segments/config are ONE handler
-    // parameterized by `what` — the subcommand name IS the DebugWhat. The guard
-    // is the canonical list (debug-types), so a new debug projection is reachable
-    // here with no second-site edit.
-    if (isDebugWhat(subcommand)) {
-      await runDebug(subcommand, process.argv.slice(3));
-      process.exit(0);
     }
 
     if (process.stdin.isTTY === true) {

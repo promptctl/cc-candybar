@@ -643,7 +643,7 @@ export function prFactOf(pr: PrPayload | undefined): string {
 // be unknown, and absence is preserved rather than defaulted here: `user` when
 // the uid has no passwd entry, `ssh` when the client predates the hint. Both
 // travel as missing keys to the DSL input-fallback chain, which emits the
-// declared default AND records a `last_error` that `cc-candybar debug vars`
+// declared default AND records a `last_error` that `cc-candybar vars`
 // surfaces — so "we don't know" stays distinguishable from "we know it's
 // local", which a `?? false` here would have destroyed.
 export interface HostPayload {
@@ -733,7 +733,7 @@ export interface ContextPayload {
 // (transcript missing, cost block absent, response-time math undefined). The
 // optional fields make "no data for this dimension" distinguishable from
 // "real zero" — the DSL input fallback chain emits the declared `default`
-// for absent fields and records a `last_error` (`debug vars` surfaces it).
+// for absent fields and records a `last_error` (`cc-candybar vars` surfaces it).
 // A coerce-to-zero shim here would erase that distinction.
 export interface MetricsPayload {
   readonly lastResponseTime?: number;

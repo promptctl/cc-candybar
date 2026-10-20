@@ -114,8 +114,92 @@ const TS_LIMITS = "src/daemon/limits.ts";
 const RS_MAIN = "rust-client/src/main.rs";
 const RS_LAUNCH = "rust-client/src/launch.rs";
 const RS_GLYPH = "rust-client/src/error_glyph.rs";
+const TS_LANES = "src/config/lanes.ts";
+const TS_FRAME_FOLLOW = "src/daemon/frame-follow.ts";
+const TS_ENTRY = "src/index.ts";
+const TS_DEBUG_TYPES = "src/daemon/debug-types.ts";
+const RS_FOLLOW = "rust-client/src/follow.rs";
+
+// The names of the native client's own subcommands that Node does NOT also
+// name. Compared against the native list itself, so the row agrees exactly
+// when the two sets share no name: a Node subcommand the native binary shadows
+// is drift, since the binary would answer it and Node never would.
+function nativeNamesNodeLacks() {
+  const native = memberSet(
+    RS_MAIN,
+    /const NATIVE_SUBCOMMANDS: [^=]+= \[[^;]+;/,
+    /\("([a-z][a-z-]*)",/g,
+  )();
+  const node = memberSet(
+    TS_ENTRY,
+    /const SUBCOMMANDS: [^=]+= \{[\s\S]*?\n\};/,
+    /^ {2}"?([a-z][a-z-]*)"?: async/gm,
+  )();
+  const debug = memberSet(
+    TS_DEBUG_TYPES,
+    /export const DEBUG_WHATS = \[[^\]]+\]/,
+    /"([a-z]+)"/g,
+  )();
+  if (native === null || node === null || debug === null) return null;
+  const nodeNames = new Set([...node.split(", "), ...debug.split(", ")]);
+  return native
+    .split(", ")
+    .filter((n) => !nodeNames.has(n))
+    .join(", ");
+}
+
+const errorCodes = memberSet(
+  TS_PROTOCOL,
+  /export type ErrorCode =[^;]+;/,
+  /"([A-Z_]+)"/g,
+);
+const followerCodes = memberSet(
+  RS_FOLLOW,
+  /\/\/ --- the four decisions[\s\S]+?\/\/ --- the follower/,
+  /"([A-Z_]+)"/g,
+);
+
+// The error codes the native follower decides by, less any the daemon's
+// ErrorCode does not name. Compared against the follower's own list, so the
+// row agrees exactly when every code it spells is one the daemon sends: a
+// renamed code would otherwise fall through to its `exit` arm.
+function followerCodesTheDaemonSends() {
+  const follower = followerCodes();
+  const daemon = errorCodes();
+  if (follower === null || daemon === null) return null;
+  const sent = new Set(daemon.split(", "));
+  return follower
+    .split(", ")
+    .filter((c) => sent.has(c))
+    .join(", ");
+}
 
 const CHECKS = [
+  {
+    label: "animation lane names",
+    ts: memberSet(TS_LANES, /export const LANES = \{[\s\S]*?\} as const;/, /^ {2}([a-z]+): \{/gm),
+    rust: memberSet(RS_FOLLOW, /const LANE_NAMES: \[&str; \d+\] = \[[^\]]+\]/, /"([a-z]+)"/g),
+  },
+  {
+    label: "RECONNECT_FIRST_MS",
+    ts: num(TS_FRAME_FOLLOW, /export const RECONNECT_FIRST_MS = ([\d\s*_]+);/),
+    rust: num(RS_FOLLOW, /const RECONNECT_FIRST_MS: u64 = ([\d\s*_]+);/),
+  },
+  {
+    label: "RECONNECT_MAX_MS",
+    ts: num(TS_FRAME_FOLLOW, /export const RECONNECT_MAX_MS = ([\d\s*_]+);/),
+    rust: num(RS_FOLLOW, /const RECONNECT_MAX_MS: u64 = ([\d\s*_]+);/),
+  },
+  {
+    label: "SWITCHED_OFF_RETRY_MS",
+    ts: num(TS_FRAME_FOLLOW, /export const SWITCHED_OFF_RETRY_MS = ([\d\s*_]+);/),
+    rust: num(RS_FOLLOW, /const SWITCHED_OFF_RETRY_MS: u64 = ([\d\s*_]+);/),
+  },
+  {
+    label: "native subcommands Node does not name",
+    ts: nativeNamesNodeLacks,
+    rust: memberSet(RS_MAIN, /const NATIVE_SUBCOMMANDS: [^=]+= \[[^;]+;/, /\("([a-z][a-z-]*)",/g),
+  },
   {
     label: "PROTOCOL_VERSION",
     ts: num(TS_PROTOCOL, /export const PROTOCOL_VERSION = ([\d\s*]+);/),
@@ -158,12 +242,13 @@ const CHECKS = [
   },
   {
     label: "error-code vocabulary",
-    ts: memberSet(
-      TS_PROTOCOL,
-      /export type ErrorCode =[^;]+;/,
-      /"([A-Z_]+)"/g,
-    ),
+    ts: errorCodes,
     rust: memberSet(RS_MAIN, /match code \{[\s\S]+?\n {4}\}/, /"([A-Z_]+)" =>/g),
+  },
+  {
+    label: "error codes the native follower decides by",
+    ts: followerCodesTheDaemonSends,
+    rust: followerCodes,
   },
   // The client-hint wire keys. Unlike the rows above these are field NAMES, not
   // constants — but they drift the same way and break louder: a hint the Rust
