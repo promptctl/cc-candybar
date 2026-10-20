@@ -5,6 +5,8 @@
 import {
   CHECKS,
   checkByName,
+  describeFix,
+  envVarOf,
   runDoctor,
   TMUX_TRUECOLOR_VAR,
   type ConfigFacts,
@@ -13,7 +15,7 @@ import {
   type TmuxFacts,
 } from "../src/doctor/checks";
 import { detectTmuxHint } from "../src/tmux-hint";
-import { statusLineFields } from "../src/doctor/report";
+import { statusLineFields, truecolorEnvFields } from "../src/doctor/report";
 import type { SettingsSource } from "../src/claude-settings";
 import { HEALTHY_FACTS, drew } from "./helpers/doctor-facts";
 
@@ -156,13 +158,26 @@ describe("tmuxTruecolor probe", () => {
       });
     });
 
-    test.each([
-      ["managed", MANAGED],
-      ["project", PROJECT],
-    ] as const)("an empty value in %s settings → NO fix, naming the file", (scope, file) => {
-      expect(chain(source(scope, file, told("")), source("user", SETTINGS_PATH, {}))).toEqual({
+    test("an empty value in managed settings → NO fix, naming the file", () => {
+      expect(chain(source("managed", MANAGED, told("")), source("user", SETTINGS_PATH, {}))).toEqual({
         ok: false,
-        reason: `Claude Code renders the bar in 256 colours inside tmux — the value that counts is in ${file}, which outranks the user file: set ${TMUX_TRUECOLOR_VAR} to "1" there`,
+        reason: `Claude Code renders the bar in 256 colours inside tmux — the value that counts is in managed settings, ${MANAGED}: set ${TMUX_TRUECOLOR_VAR} to "1" there`,
+      });
+    });
+
+    // The shared file is somebody's repository, but the project-local file
+    // over it is the user's, and a value there wins over the shared one.
+    test("an empty value in the shared project file → the fix into project-local", () => {
+      expect(chain(source("project", PROJECT, told("")), source("user", SETTINGS_PATH, {}))).toMatchObject({
+        ok: false,
+        fix: { file: { scope: "project-local", path: LOCAL }, value: "1" },
+      });
+    });
+
+    test("a variable named like an Object.prototype key is unset, not inherited", () => {
+      expect(envVarOf({ kind: "ok", value: [source("user", SETTINGS_PATH, { env: {} })] }, "constructor")).toEqual({
+        kind: "ok",
+        value: { kind: "unset" },
       });
     });
 
@@ -445,6 +460,28 @@ describe("effectRefresh probe", () => {
       statusLineFields(ok(userFile({ statusLine: { command: "x", refreshInterval } })));
     expect(fields(1)).toBe("statusLine=user:1");
     expect(fields("1 s")).toBe(`statusLine=${JSON.stringify('user:"1 s"')}`);
+  });
+
+  test("truecolorEnvFields names the deciding file's scope and raw value", () => {
+    expect(truecolorEnvFields(ok([source("project", "/p/.claude/settings.json", { env: { [TMUX_TRUECOLOR_VAR]: "" } })]))).toBe(
+      `truecolorEnv=${JSON.stringify('project:""')}`,
+    );
+    expect(truecolorEnvFields(ok(userFile({ env: { [TMUX_TRUECOLOR_VAR]: "1" } })))).toBe(
+      `truecolorEnv=${JSON.stringify('user:"1"')}`,
+    );
+    expect(truecolorEnvFields(ok(userFile({})))).toBe("truecolorEnv=unset");
+    expect(truecolorEnvFields({ kind: "failed", reason: "x" })).toBe("truecolorEnv=failed");
+  });
+
+  test("describeFix names the scope of the file a settings fix writes", () => {
+    expect(
+      describeFix({
+        kind: "claude-settings",
+        file: { scope: "project-local", path: "/p/.claude/settings.local.json" },
+        path: ["env", TMUX_TRUECOLOR_VAR],
+        value: "1",
+      }),
+    ).toBe(`claude-settings env.${TMUX_TRUECOLOR_VAR}="1" file="/p/.claude/settings.local.json" scope=project-local`);
   });
 
   // `cc-candybar install` writes the user file only: elsewhere the advice is

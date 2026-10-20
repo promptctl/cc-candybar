@@ -128,6 +128,11 @@ export function claudeManagedSettingsDir(platform: NodeJS.Platform): string {
   }
 }
 
+// The project-local settings file: the user's own, beside the project's
+// shared `.claude/settings.json` and over it.
+export const projectLocalSettingsFile = (projectDir: string): string =>
+  path.join(projectDir, ".claude", "settings.local.json");
+
 // The scopes of Claude Code's settings files, highest precedence first.
 // `--settings`, MDM policy and server-managed settings are scopes too, but
 // none is a file this machine can read, so none is one of these.
@@ -178,7 +183,7 @@ export function readSettingsChain(
     },
     {
       scope: "project-local",
-      path: path.join(at.projectDir, ".claude", "settings.local.json"),
+      path: projectLocalSettingsFile(at.projectDir),
     },
     {
       scope: "project",

@@ -19,6 +19,7 @@ import { DEFAULT_TERMINAL_WIDTH } from "../render/strip.js";
 import type { Outcome } from "../utils/outcome.js";
 import {
   isJsonObject,
+  projectLocalSettingsFile,
   type SettingsChainAt,
   type SettingsScope,
   type SettingsSource,
@@ -217,7 +218,7 @@ export function envVarOf(
     }
 > {
   if (sources.kind === "failed") return sources;
-  const top = sources.value.find((s) => name in s.env);
+  const top = sources.value.find((s) => Object.hasOwn(s.env, name));
   return {
     kind: "ok",
     value:
@@ -231,18 +232,24 @@ export function envVarOf(
   };
 }
 
-// A settings file the doctor may write: the user's own. Managed settings are
-// an administrator's policy, and a project's shared `.claude/settings.json`
+// The scopes the doctor never writes: managed settings are an
+// administrator's policy, and a project's shared `.claude/settings.json`
 // belongs to its repository.
+const UNWRITTEN_SCOPES = [
+  "managed",
+  "project",
+] as const satisfies readonly SettingsScope[];
+
+// A settings file the doctor may write: the user's own.
 export type WritableSettings = SettingsFrom & {
-  readonly scope: Exclude<SettingsScope, "managed" | "project">;
+  readonly scope: Exclude<SettingsScope, (typeof UNWRITTEN_SCOPES)[number]>;
 };
 
 // [LAW:single-enforcer] THE rule for which settings file a fix may name: a
 // `claude-settings` fix carries a `WritableSettings`, and this is the one
 // way to have one from a file a check read.
 export const doctorWrites = (from: SettingsFrom): from is WritableSettings =>
-  from.scope !== "managed" && from.scope !== "project";
+  !(UNWRITTEN_SCOPES as readonly SettingsScope[]).includes(from.scope);
 
 // [LAW:types-are-the-program] Which terminal draws the session's bar, or why
 // the doctor could not tell: a client too old to say, or a tmux server that
@@ -509,7 +516,7 @@ export type Fix =
 export function describeFix(fix: Fix): string {
   switch (fix.kind) {
     case "claude-settings":
-      return `${fix.kind} ${fix.path.join(".")}=${JSON.stringify(fix.value)} file=${JSON.stringify(fix.file.path)}`;
+      return `${fix.kind} ${fix.path.join(".")}=${JSON.stringify(fix.value)} file=${JSON.stringify(fix.file.path)} scope=${fix.file.scope}`;
     case "post-mortems-read":
       return `${fix.kind} through=${fix.through}`;
   }
@@ -632,8 +639,7 @@ const tmuxTruecolor: Check = {
       const told = staged.value;
       // [LAW:one-source-of-truth] The same truthiness Claude Code applies to
       // its env: a non-empty string. Anything else — absent, empty, a
-      // non-string — is "not told", and the fix overwrites it in the file
-      // that holds it, since a value written anywhere lower would lose to it.
+      // non-string — is "not told".
       if (
         told.kind === "set" &&
         typeof told.value === "string" &&
@@ -644,10 +650,20 @@ const tmuxTruecolor: Check = {
           reason: `${TMUX_TRUECOLOR_VAR} is set in ${told.from.path} — restart Claude Code to apply`,
         };
       }
+      // `env` merges key by key, so a value counts written in the file that
+      // holds the variable or any above it, and loses anywhere lower: the fix
+      // writes the lowest of those that is the user's own. Over a project's
+      // shared file that is its project-local one; over managed settings,
+      // none.
       const file: SettingsFrom =
-        told.kind === "set"
-          ? told.from
-          : { scope: "user", path: claudeSettings.at.userFile };
+        told.kind === "unset"
+          ? { scope: "user", path: claudeSettings.at.userFile }
+          : told.from.scope === "project"
+            ? {
+                scope: "project-local",
+                path: projectLocalSettingsFile(claudeSettings.at.projectDir),
+              }
+            : told.from;
       const reason = "Claude Code renders the bar in 256 colours inside tmux";
       return doctorWrites(file)
         ? {
@@ -662,7 +678,7 @@ const tmuxTruecolor: Check = {
           }
         : {
             ok: false,
-            reason: `${reason} — the value that counts is in ${file.path}, which outranks the user file: set ${TMUX_TRUECOLOR_VAR} to "1" there`,
+            reason: `${reason} — the value that counts is in managed settings, ${file.path}: set ${TMUX_TRUECOLOR_VAR} to "1" there`,
           };
     }),
 };

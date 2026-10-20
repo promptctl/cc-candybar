@@ -1364,8 +1364,12 @@ there is nothing to go back to), and the bar's row closes up where the door was.
   opens one of its own and waits up to five seconds for it, naming what is
   missing when it does not come back. `tmux truecolor` passes when Claude Code draws the bar in full
   colour inside tmux; its `[fix]` writes `CLAUDE_CODE_TMUX_TRUECOLOR=1` into
-  the `env` of `~/.claude/settings.json`, which takes effect for Claude Code
-  sessions started afterwards, and the row says so. `UTF-8` passes unless
+  the `env` of the settings file whose value Claude Code would use — your
+  `~/.claude/settings.json` when no file sets it, or the project's
+  `.claude/settings.local.json` over a value in its shared
+  `.claude/settings.json` — which takes effect for Claude Code sessions
+  started afterwards, and the row says so. A value in managed settings gets
+  no `[fix]`: the row names that file instead. `UTF-8` passes unless
   tmux writes to your terminal without UTF-8, which turns every glyph on the
   bar into `_` (attach with `tmux -u`, or start tmux under a UTF-8 locale).
   `terminal width` passes when the statusline client could measure the
