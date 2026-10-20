@@ -63,7 +63,11 @@ import type {
   SubscribeRequest,
 } from "./protocol";
 import { createPayloadProviders } from "./payload-providers";
-import { RenderCache, type DslRenderState } from "./cache/render";
+import {
+  RenderCache,
+  renderCacheBudget,
+  type DslRenderState,
+} from "./cache/render";
 import { WatcherRegistry } from "./cache/watchers";
 import { RuntimeStats } from "./stats";
 import {
@@ -283,6 +287,13 @@ const renderCache = new RenderCache(
     log: dlog,
   },
   {
+    // [LAW:no-ambient-temporal-coupling] The budget as boot established it
+    // (establishLimits, which refuses a malformed override through daemon.log):
+    // a render before that is the boot-order bug establishedLimits names.
+    budgetBytes: () => {
+      establishedLimits();
+      return renderCacheBudget(budgetBytes);
+    },
     observers: {
       // [LAW:no-silent-failure] Every config (re)load's outcome lands in
       // daemon.log beside the "config change detected" line that preceded it

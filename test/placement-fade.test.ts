@@ -16,7 +16,14 @@ import { SessionState } from "../src/daemon/session-state";
 import { SettingsHistory } from "../src/daemon/settings-history";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import {
+  compileDslConfig,
+  compileInputOf,
+  compileKey,
+  declareDslVariables,
+  renderDsl,
+  type CompiledConfig,
+} from "../src/dsl/render";
 import { renderLook } from "../src/render/action";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import type { ValidatedConfig } from "../src/config/dsl-types";
@@ -69,11 +76,17 @@ interface Frame {
 }
 
 // A renderer over one load of `cfg`: every frame it draws is drawn from the
-// same compiled config, as a render cache entry's are until it reloads.
-function renderer(cfg: ValidatedConfig, session = new SessionState()) {
+// same load of the config, as a render cache entry's are until it reloads —
+// over its own compile, or one it shares with another load, as the cache
+// shares one between entries whose configs compile alike.
+function renderer(
+  cfg: ValidatedConfig,
+  session = new SessionState(),
+  compiled: CompiledConfig = compileDslConfig(compileInputOf(cfg)),
+) {
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, session);
-  const compiled = registerDslConfig(cfg, registry, { cwd: "/tmp" });
+  declareDslVariables(cfg, registry, "/tmp");
   const opts = {
     endcaps: "powerline" as const,
     colorCompatibility: "truecolor" as const,
@@ -324,9 +337,34 @@ describe("nothing fades in where the frame is drawn from another source", () => 
     }
   });
 
+  // brandon-unfiled-3248.8yp: the render cache shares one compile between
+  // loads that compile alike, so the identity a frame compares is the load's
+  // config, not the compile.
+  test("a reload over a shared compile still compares against nothing", () => {
+    const loaded = config();
+    const again = config();
+    expect(compileKey(compileInputOf(again))).toBe(compileKey(compileInputOf(loaded)));
+    const shared = compileDslConfig(compileInputOf(loaded));
+    const first = renderer(loaded, new SessionState(), shared);
+    const reloaded = renderer(again, new SessionState(), shared);
+    try {
+      const fx = new SessionEffects<RenderedLine>("s");
+      first.render({ shown: false, when: at(0) }, fx, { transitions: true });
+      reloaded.render({ shown: true, when: at(S) }, fx, { transitions: true });
+      expect(fx.lastFrame()).toMatchObject({ basis: "fresh", fades: [] });
+      // Drawn from the same load again, the frame compares.
+      reloaded.render({ shown: true, when: at(S + 1) }, fx, { transitions: true });
+      expect(fx.lastFrame().basis).toBe("compared");
+    } finally {
+      first.dispose();
+      reloaded.dispose();
+    }
+  });
+
   test("a reload: a frame drawn from another load of the config compares against nothing", () => {
     const first = renderer(ROW);
-    const reloaded = renderer(ROW);
+    // Another load: the loader builds a new config object, as a reload does.
+    const reloaded = renderer(config());
     try {
       const fx = new SessionEffects<RenderedLine>("s");
       first.render({ shown: false, when: at(0) }, fx, { transitions: true });

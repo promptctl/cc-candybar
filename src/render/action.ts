@@ -25,6 +25,7 @@ import { RichText, Style } from "@promptctl/rich-js";
 import type { Palette } from "@promptctl/rich-js";
 import type { FuncMap, Template } from "@promptctl/go-template-js";
 import type { VariableStore } from "../var-system/store.js";
+import type { SourceRegistry } from "../var-system/sources.js";
 import { toString as varToString } from "../var-system/types.js";
 import { buildScope } from "../template-engine/scope.js";
 import { ceilingMoveArgs, type ActionDecl } from "../config/action.js";
@@ -253,11 +254,13 @@ export type CompiledActions = ReadonlyMap<string, CompiledActionDecl>;
 // reads session.id and the current value from the same source the rest of the
 // render does.
 export interface ActionRuntime {
-  // [LAW:types-are-the-program] Always present — registerDslConfig sources it
-  // from the registry it is handed (registry.variableStore), so "no store" is
-  // structurally unrepresentable. The action reads session.id and current
-  // values from the same store the renderer reads.
-  store: VariableStore;
+  // [LAW:no-ambient-temporal-coupling] The store and clocks of the render in
+  // progress, bound by drawDsl for its synchronous walk and unbound on every
+  // exit. One compile serves every render-cache entry whose config compiles
+  // alike (brandon-unfiled-3248.8yp), so the store is the RENDER's, never the
+  // compile's: read through `renderBinding`, which refuses a read with no
+  // render bound rather than answering from whichever entry drew last.
+  bound: RenderBinding | undefined;
   compiled: CompiledActions;
   // [LAW:locality-or-seam] The columns the current render's strip spends on a
   // row's caps (`stripChromeCols`), published per render by renderDsl. The picker
@@ -316,6 +319,54 @@ export function renderLook(runtime: ActionRuntime, reader: string): RenderLook {
     );
   }
   return runtime.look;
+}
+
+/** What a render binds into the compile it draws with. */
+export interface RenderBinding {
+  // [LAW:one-source-of-truth] The store the render reads every variable from —
+  // so an action reads session.id and the current values the bar shows.
+  readonly store: VariableStore;
+  // The render's clocks: the instant it is drawn at and the depth it draws.
+  readonly registry: Pick<SourceRegistry, "now" | "drawnAt">;
+}
+
+/**
+ * The binding of the render `reader` is evaluated in. Every reader runs inside
+ * drawDsl's walk; [LAW:no-silent-failure] a read outside one throws, naming
+ * the reader.
+ */
+export function renderBinding(
+  runtime: ActionRuntime,
+  reader: string,
+): RenderBinding {
+  if (runtime.bound === undefined) {
+    throw new Error(
+      `${reader} ran outside a render: no render bound its store and clocks`,
+    );
+  }
+  return runtime.bound;
+}
+
+/**
+ * Bind a render's store and clocks into the compile it draws with, for as long
+ * as the returned handle lives (`using` at drawDsl's top). Renders are
+ * synchronous, so one is bound at a time: [LAW:no-silent-failure] a second
+ * bind while one is live is a reentrant render, refused rather than allowed
+ * to read the other render's store.
+ */
+export function bindRender(
+  runtime: ActionRuntime,
+  binding: RenderBinding,
+): Disposable {
+  if (runtime.bound !== undefined) {
+    throw new Error("a render bound a compile another render holds");
+  }
+  runtime.bound = binding;
+  return {
+    [Symbol.dispose]: () => {
+      runtime.bound = undefined;
+    },
+  };
 }
 
 /** A segment the layout places, with the palette it renders in. */
@@ -1037,7 +1088,7 @@ export function renderAction(
   if (!declared) {
     throw new Error(`action "${name}" is not declared in this config`);
   }
-  const store = runtime.store;
+  const store = renderBinding(runtime, `action "${name}"`).store;
   // [LAW:dataflow-not-control-flow] DISPLAY selection reads the action the
   // click presents as, while REALIZATION is handed the declaration itself — a
   // `do` realizes as every member, and that belongs to the one fold that owns

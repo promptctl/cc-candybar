@@ -30,6 +30,7 @@ import {
   linkOver,
   readVar,
   realize,
+  renderBinding,
   renderLook,
   type ActionRuntime,
 } from "./action.js";
@@ -116,7 +117,7 @@ export function renderCarousel(
       `carousel references action "${applyName}", which inserts a segment and holds no current value to centre on — a carousel needs a { set, from } or { persist, from } action`,
     );
   }
-  const store = runtime.store;
+  const store = renderBinding(runtime, "carousel").store;
   if (!store.has(apply.stateVar)) {
     throw new Error(
       `carousel references action "${applyName}", whose key "${apply.stateVar}" no variable reads back, so there is no current value to centre on — declare { kind: "state", key: "${apply.stateVar}" } among the variables`,

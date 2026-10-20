@@ -157,7 +157,7 @@ export function presetByName(
 // tree together with where it came from makes that drift unrepresentable rather
 // than merely fixed [FRAMING:representation].
 export function presetRoot(
-  config: DslConfig,
+  config: Pick<DslConfig, "presets" | "root">,
   name: string,
 ): { readonly node: ContainerNode; readonly path: string } {
   // [LAW:dataflow-not-control-flow] One merge for every preset — the floor's

@@ -18,7 +18,14 @@ import type {
   ValidatedConfig,
 } from "../../config/dsl-types.js";
 import { DEFAULT_DSL_CONFIG } from "../../config/default-dsl-config.js";
-import { registerDslConfig, type CompiledConfig } from "../../dsl/render.js";
+import {
+  compileDslConfig,
+  compileInputOf,
+  compileKey,
+  declareDslVariables,
+  type CompileInput,
+  type CompiledConfig,
+} from "../../dsl/render.js";
 import { stateGate } from "../verbs/state-validators.js";
 import { configGate } from "../verbs/config-validators.js";
 import { presetNames, presetRoot } from "../../config/presets.js";
@@ -41,11 +48,27 @@ import { pluginDataVar, pluginNameOf } from "../../config/loader/plugins.js";
 // the resolved base palette. registerDslConfig + renderDsl are the
 // single render path — the cache only holds state across calls.
 //
-// Capacity sized for "many concurrent sessions in many repos". Each entry
-// holds a SourceRegistry (timers, watchers) so the hard cap doubles as a
-// resource ceiling: at 256 active entries, fs watchers and TTL timers are
-// bounded by N × declarations-per-config.
-const MAX_ENTRIES = 256;
+// [LAW:one-source-of-truth] Bounded by bytes, out of the daemon's one memory
+// budget: an entry is a new one per directory a session renders from (every
+// worktree, every `cd`), so a count sized for watchers (it was 256, ~2.4 GB of
+// states) let the RSS backstop trip long before anything was evicted
+// (brandon-unfiled-3248.8yp). The heap a state holds beside its compile, and
+// the heap one compile holds — measured, and held to by
+// test/render-cache-sharing.test.ts, which fails when either is exceeded.
+// Measured 2026-10-20: the compile 8.5–8.9 MB; a rendered entry 1.8 MB over
+// the bundled default and 2.4 MB in a daemon serving a full user config from
+// forty real worktree directories (it was 9.3 MB an entry, every one
+// compiling its own).
+export const ENTRY_BYTES = 3 * 1024 * 1024;
+export const COMPILE_BYTES = 10 * 1024 * 1024;
+
+// The render cache's share of the daemon's RSS limit: a quarter, leaving the
+// rest to V8's own mappings, the code, and the other caches.
+export function renderCacheBudget(rssLimitBytes: number): number {
+  return Math.floor(rssLimitBytes / 4);
+}
+
+const mb = (bytes: number): number => Math.round(bytes / (1024 * 1024));
 
 // [LAW:single-enforcer] These are the cache-and-registry deps — git data
 // (for declareGit subscriptions), session state (for declareState atoms),
@@ -69,6 +92,10 @@ export interface RenderDeps {
 export interface StateDeps {
   readonly gitService?: GitDataProvider;
   readonly sessionState: SessionStateRW;
+  // The compile for a config's compile key. A cache shares one between every
+  // entry whose config compiles alike (RenderCache's table); a one-shot load
+  // has no other entry to share with and compiles its own.
+  readonly compile?: (key: string, input: CompileInput) => CompiledConfig;
 }
 
 // [LAW:no-ambient-temporal-coupling] The cache's outward lifecycle signal. A
@@ -134,6 +161,9 @@ export type ReloadedEntry = Readonly<
 // map — its presence in the keys is the "this segment rendered" signal.
 export interface DslRenderState {
   readonly config: ValidatedConfig;
+  // [LAW:one-source-of-truth] The identity of `compiled` (compileKey of what
+  // it was compiled from): states carrying one key carry one compile.
+  readonly compileKey: string;
   readonly store: VariableStore;
   readonly registry: SourceRegistry;
   readonly compiled: CompiledConfig;
@@ -286,6 +316,12 @@ export interface RenderCacheStats {
   readonly size: number;
   readonly held: number;
   readonly retired: number;
+  // Distinct compiles the cache holds — below `size` exactly when entries
+  // share them.
+  readonly compiles: number;
+  // What the entries the map serves are charged against the budget.
+  readonly accountedBytes: number;
+  readonly budgetBytes: number;
 }
 
 // [LAW:one-source-of-truth] Cache key includes every input that affects DSL
@@ -451,18 +487,21 @@ export function buildRenderState(
     deps.sessionState,
   );
 
+  const input = compileInputOf(config);
+  const key = compileKey(input);
   let compiled: CompiledConfig;
   try {
-    // [LAW:one-source-of-truth] The action runtime reads session.id + current
-    // picker values from registry.variableStore — the same store this entry's
-    // registry declares into — so no store reference is threaded separately.
-    compiled = registerDslConfig(config, registry, { cwd });
+    // [LAW:one-source-of-truth] The compile holds no store: each render binds
+    // its own (drawDsl), so the entry's registry is the store its renders read
+    // — and the compile can be one shared by every entry whose config
+    // compiles alike (brandon-unfiled-3248.8yp).
+    compiled = (deps.compile ?? ((_, i) => compileDslConfig(i)))(key, input);
     // [LAW:dataflow-not-control-flow] Partial-load warnings (variable
     // declaration failures that didn't abort the load) flow through the
     // same warning channel as collision warnings; both visible at once —
     // appended before the validator pass so a derive throw still carries
     // them.
-    warnings.push(...compiled.loadWarnings);
+    warnings.push(...declareDslVariables(config, registry, cwd));
     // [LAW:no-silent-failure] The gates this config's sessions click through
     // are derived from its action table on demand (stateGate / configGate),
     // so nothing is installed here. They are built once now so an action
@@ -483,6 +522,7 @@ export function buildRenderState(
   // from the effective theme (resolveThemeSelection, settled by renderDsl).
   return {
     config,
+    compileKey: key,
     store,
     registry,
     compiled,
@@ -610,19 +650,42 @@ export class RenderCache {
   private readonly entries = new Map<string, CacheEntry>();
   // Every state the map serves or served, until reclaimed.
   private readonly holds = new Map<DslRenderState, StateHold>();
-  private readonly deps: RenderDeps;
+  // [LAW:one-source-of-truth] One compile per compile key, shared by every
+  // state carrying that key, and dropped with the last of them (reclaim).
+  private readonly compiles = new Map<string, CompiledConfig>();
+  private readonly deps: RenderDeps & StateDeps;
   private readonly log: DaemonLogger;
-  private readonly maxEntries: number;
+  // Read when an eviction is decided: the budget is a boot-time fact.
+  private readonly budgetBytes: () => number;
   private readonly observers: RenderCacheObservers;
 
   constructor(
     deps: RenderDeps,
-    opts: { maxEntries?: number; observers?: RenderCacheObservers } = {},
+    opts: { budgetBytes: () => number; observers?: RenderCacheObservers },
   ) {
-    this.deps = deps;
+    this.deps = {
+      ...deps,
+      compile: (key, input) => this.compileOf(key, input),
+    };
     this.log = deps.log ?? quietLogger;
-    this.maxEntries = opts.maxEntries ?? MAX_ENTRIES;
+    this.budgetBytes = opts.budgetBytes;
     this.observers = opts.observers ?? {};
+  }
+
+  // The compile a served state carries for `key`, else a new one — which the
+  // table learns only when a state carrying it is served, so a load that fails
+  // after compiling leaves nothing behind.
+  private compileOf(key: string, input: CompileInput): CompiledConfig {
+    return this.compiles.get(key) ?? compileDslConfig(input);
+  }
+
+  // [LAW:one-source-of-truth] Read off the map the cache serves: an entry's
+  // own heap, plus each compile its entries carry once, however many share it.
+  private accountedBytes(): number {
+    const keys = new Set(
+      [...this.entries.values()].map((e) => e.state.compileKey),
+    );
+    return this.entries.size * ENTRY_BYTES + keys.size * COMPILE_BYTES;
   }
 
   // [LAW:dataflow-not-control-flow] One uniform shape: every entry has the
@@ -674,15 +737,20 @@ export class RenderCache {
     // fact about the MAP, complete at insertion: nothing later (including an
     // observer throwing) can skip it. [LAW:dataflow-not-control-flow]
     this.entries.set(key, entry);
-    if (this.entries.size > this.maxEntries) {
-      const oldest = this.entries.entries().next().value;
-      if (oldest !== undefined) {
-        const [oldestKey, evicted] = oldest;
-        evicted.watcher?.release();
-        this.entries.delete(oldestKey);
-        this.retire(evicted.state, "evict");
-      }
+    // [LAW:dataflow-not-control-flow] Least recently used first, until what
+    // the map serves fits the budget — never the entry being served, which is
+    // the newest.
+    for (const [oldestKey, evicted] of this.entries) {
+      if (evicted === entry || this.accountedBytes() <= this.budgetBytes())
+        break;
+      evicted.watcher?.release();
+      this.entries.delete(oldestKey);
+      this.retire(evicted.state, "evict");
     }
+    this.log(
+      "info",
+      `render-cache entry projectDir=${projectDir} cwd=${cwd} compile=${entry.state.compileKey.slice(0, 12)} entries=${this.entries.size} compiles=${this.compiles.size} accounted=${mb(this.accountedBytes())}/${mb(this.budgetBytes())}MB`,
+    );
     this.refreshWatcher(entry, loaded);
     this.observers.onReload?.(entry);
 
@@ -723,12 +791,27 @@ export class RenderCache {
       if (hold.holders > 0) held++;
       if (hold.retired !== null) retired++;
     }
-    return { size: this.entries.size, held, retired };
+    return {
+      size: this.entries.size,
+      held,
+      retired,
+      compiles: this.compiles.size,
+      accountedBytes: this.accountedBytes(),
+      budgetBytes: this.budgetBytes(),
+    };
   }
 
-  // The cache starts serving `state`: unheld, and not yet retired.
+  // The cache starts serving `state`: unheld, and not yet retired — and the
+  // compile it carries is the table's for its key.
   private serve(state: DslRenderState): void {
     this.holds.set(state, { holders: 0, retired: null });
+    const built = !this.compiles.has(state.compileKey);
+    this.compiles.set(state.compileKey, state.compiled);
+    if (built)
+      this.log(
+        "info",
+        `render-cache compile built key=${state.compileKey.slice(0, 12)} compiles=${this.compiles.size}`,
+      );
   }
 
   private holdOf(state: DslRenderState): StateHold {
@@ -755,6 +838,10 @@ export class RenderCache {
     if (hold.retired === null || hold.holders > 0) return;
     this.holds.delete(state);
     this.log("info", configDisposeLine(hold.retired, state.registry.dispose()));
+    // [LAW:one-source-of-truth] `holds` lists every state not yet reclaimed,
+    // so a compile no state left there carries has no render to draw it.
+    if (![...this.holds.keys()].some((s) => s.compileKey === state.compileKey))
+      this.compiles.delete(state.compileKey);
   }
 
   // Re-read an entry from disk NOW, for a caller that just wrote its file and

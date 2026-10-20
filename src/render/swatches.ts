@@ -26,7 +26,12 @@
 
 import type { Palette, RichText } from "@promptctl/rich-js";
 import type { FuncMap } from "@promptctl/go-template-js";
-import { readVar, renderLook, type ActionRuntime } from "./action.js";
+import {
+  readVar,
+  renderBinding,
+  renderLook,
+  type ActionRuntime,
+} from "./action.js";
 import {
   requireActiveSegment,
   type ActiveSegmentRef,
@@ -100,7 +105,8 @@ export function optionPalette(
   chosen?: string,
 ): Palette {
   const apply = requireSwatchable(runtime, applyName, helper);
-  const option = chosen ?? readVar(runtime.store, apply.stateVar);
+  const option =
+    chosen ?? readVar(renderBinding(runtime, helper).store, apply.stateVar);
   // [LAW:parse-dont-validate] A domain's `paletteOf` answers for its members;
   // an option named in a template, or a value the key held before a reload
   // took its member away, is checked here, where it crosses into it.
@@ -159,7 +165,7 @@ export function swatchFuncs(
         const steps = (): readonly PickerStep[] => {
           const at = ringAround(
             options,
-            readVar(runtime.store, apply.stateVar),
+            readVar(renderBinding(runtime, "swatches").store, apply.stateVar),
           );
           return [
             { glyph: CAROUSEL_PREV, option: options[at(-1)]! },

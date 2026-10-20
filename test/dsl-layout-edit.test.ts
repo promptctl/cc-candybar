@@ -69,7 +69,11 @@ import {
   deriveConfigActionValidators,
   configGate,
 } from "../src/daemon/verbs/config-validators";
-import { RenderCache } from "../src/daemon/cache/render";
+import { rssLimitBytes } from "../src/daemon/limits";
+import {
+  RenderCache,
+  renderCacheBudget,
+} from "../src/daemon/cache/render";
 import type { CacheEntry } from "../src/daemon/cache/render";
 import {
   EDIT_MODE_KEY,
@@ -968,7 +972,10 @@ function makeCache(reloads?: ReloadSignal): {
   const sessionState = new SessionState();
   const cache = new RenderCache(
     { gitService, sessionState, watchers },
-    reloads === undefined ? {} : { observers: reloads.observers },
+    {
+      budgetBytes: () => renderCacheBudget(rssLimitBytes({})),
+      ...(reloads === undefined ? {} : { observers: reloads.observers }),
+    },
   );
   return { cache, sessionState, cleanups };
 }

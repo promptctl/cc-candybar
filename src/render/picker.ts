@@ -32,6 +32,7 @@ import {
   linkOver,
   realize,
   readVar,
+  renderBinding,
   renderLook,
   type ActionRuntime,
   type CompiledActionDecl,
@@ -319,7 +320,7 @@ export function renderPicker(
   // `do` is, and there is no second projection of "what does this option
   // write" to drift from realize's.
   const declared = runtime.compiled.get(applyName)!;
-  const store = runtime.store;
+  const store = renderBinding(runtime, "picker").store;
   const sessionId = readVar(store, "session.id");
   // [LAW:no-defensive-null-guards] layout-op-option carries no `stateVar` —
   // a structural insert is a one-shot trigger, not a persisted single value,

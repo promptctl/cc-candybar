@@ -17,6 +17,7 @@ import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { bindRender } from "../src/render/action";
 import { SessionState } from "../src/daemon/session-state";
 import {
   FOLLOW_BAR,
@@ -120,7 +121,7 @@ function buildRuntime(src: string, sessionState = new SessionState()) {
       verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
     for (const e of effects) VERBS.get(e.verb)!(e.value, ctx);
   };
-  return { config, compiled, sessionState, render, bgOf, click, ctx };
+  return { config, compiled, store, registry, sessionState, render, bgOf, click, ctx };
 }
 
 const hex = (palette: Palette, role: "background"): string =>
@@ -329,15 +330,21 @@ describe("the layout preview while arranging", () => {
   // In the names view each placement's cell is held by its label, and the
   // preview draws the label as the placement it stands for — in that
   // placement's theme: its pin, and its unsaved pick.
+  // The rows the latest render published, read — as `{{ layoutPreview }}`
+  // reads them — with that render's store bound: a compile serves every store
+  // its config is declared into, so a read names whose.
   const previewPalette = (
     rt: ReturnType<typeof buildRuntime>,
     segment: string,
-  ): Palette[] =>
-    rt.compiled.menuRuntime.action
+  ): Palette[] => {
+    const runtime = rt.compiled.menuRuntime.action;
+    using _bound = bindRender(runtime, { store: rt.store, registry: rt.registry });
+    return runtime
       .layout()
       .flat()
       .filter((b) => b.name === segment)
       .map((b) => b.palette);
+  };
 
   test("a pinned placement keeps its theme, and an unsaved pick shows", () => {
     const rt = buildRuntime(TWO);

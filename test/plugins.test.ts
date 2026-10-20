@@ -9,7 +9,16 @@ import path from "node:path";
 import { checkConfig, prepareConfig, type CheckOutcome } from "../src/check";
 import { addableSegmentDomains } from "../src/config/edit-chrome";
 import { stripAnsi } from "./helpers/daemon-e2e";
-import { loadFromDisk, pluginLoadLine, RenderCache } from "../src/daemon/cache/render";
+import { renderDsl } from "../src/dsl/render";
+import { instantOf } from "../src/utils/instant";
+import { rssLimitBytes } from "../src/daemon/limits";
+import {
+  loadFromDisk,
+  pluginLoadLine,
+  RenderCache,
+  renderCacheBudget,
+  type DslRenderState,
+} from "../src/daemon/cache/render";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { pluginRoots } from "../src/config/loader/plugin-folders";
 import { hasCacheField } from "../src/config/dsl-types";
@@ -462,6 +471,64 @@ describe("an installed plugin", () => {
     }
   });
 
+  // brandon-unfiled-3248.8yp: the data path a `{ checkout }` plugin resolves
+  // differs per checkout, so every worktree's config differs — but only in that
+  // variable, which a compile never reads. Every worktree of a repo shares one
+  // compile, and each still renders its own checkout's data.
+  test("worktrees share one compile, and each renders its own checkout's data", async () => {
+    install("data", "lit", CHECKOUT_DEFINITION);
+    fs.mkdirSync(path.join(dir, "main/.git"), { recursive: true });
+    write("main/.claude/worktrees/w/.git", "gitdir: ../../../.git/worktrees/w\n");
+    write("main/.lit/state.json", `{ "id": "main-1" }`);
+    write("main/.claude/worktrees/w/.lit/state.json", `{ "id": "w-2" }`);
+    fs.mkdirSync(path.join(dir, "main/src"), { recursive: true });
+    const p = placing("plugins.lit.ticket");
+    const watchers = new WatcherRegistry({
+      counters: { watchersOpened: 0, watchersClosed: 0, watchersEvicted: 0 },
+      logger: () => {},
+    });
+    const gitService = new GitDataProvider({ sanityIntervalMs: 0, logger: () => {} });
+    let states: DslRenderState[] = [];
+    try {
+      const cache = new RenderCache(
+        { gitService, sessionState: new SessionState(), watchers },
+        { budgetBytes: () => renderCacheBudget(rssLimitBytes({})) },
+      );
+      const main = path.join(dir, "main");
+      const cwds = [main, path.join(main, ".claude/worktrees/w"), path.join(main, "src")];
+      states = cwds.map((cwd) => cache.getOrCreate(main, cwd, p).state);
+      expect(states.map((s) => s.config.variables["plugins.lit.data"])).toMatchObject([
+        { path: path.join(main, ".lit/state.json") },
+        { path: path.join(main, ".claude/worktrees/w/.lit/state.json") },
+        { path: path.join(main, ".lit/state.json") },
+      ]);
+      expect(cache.stats).toMatchObject({ size: 3, compiles: 1 });
+      const drawn = await Promise.all(
+        states.map(async (s) => {
+          expect(await s.registry.settled(5000)).toEqual([]);
+          return stripAnsi(
+            renderDsl(
+              s.config,
+              s.compiled,
+              s.store,
+              s.registry,
+              { session_id: "s", project_dir: main },
+              instantOf(new Date()),
+              { endcaps: "powerline", colorCompatibility: "truecolor", wrap: true, padding: 1, width: 200 },
+            ),
+          );
+        }),
+      );
+      expect(drawn[0]).toContain("#main-1");
+      expect(drawn[1]).toContain("#w-2");
+      expect(drawn[2]).toContain("#main-1");
+    } finally {
+      for (const s of states) s.registry.dispose();
+      watchers.closeAll();
+      gitService.close();
+    }
+  });
+
   test("a working directory in no checkout is its own root", async () => {
     install("data", "lit", CHECKOUT_DEFINITION);
     write("loose/.lit/state.json", `{ "id": "l-3" }`);
@@ -655,7 +722,10 @@ describe("an installed plugin", () => {
       const repo = path.join(dir, "repo");
       fs.mkdirSync(repo);
       const p = write("config.json5", `{ root: { h: ["plugins.lit.status"] } }`);
-      const cache = new RenderCache({ gitService, sessionState: new SessionState(), watchers });
+      const cache = new RenderCache(
+        { gitService, sessionState: new SessionState(), watchers },
+        { budgetBytes: () => renderCacheBudget(rssLimitBytes({})) },
+      );
       const entry = cache.getOrCreate(repo, repo, p);
       expect(entry.lastError).not.toBeNull();
       expect(entry.state.plugins.roots).toContain(path.join(repo, ".cc-candybar", "plugins"));

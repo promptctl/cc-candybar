@@ -203,7 +203,7 @@ interface ChromeArtifacts {
 // and both click gates resolve against this one map, so a name the render
 // draws options from is never one the loader refuses or a gate cannot find.
 export function configOptionDomains(
-  config: DslConfig,
+  config: Pick<DslConfig, "styles" | "presets" | "segments">,
 ): ReadonlyMap<string, ResolvedDomain> {
   return new Map([
     ...perConfigDomainsFor(config),
@@ -219,7 +219,7 @@ export const ADDABLE_DOMAIN = `${EDIT_NS}addable`;
 // click lands (`mintPlacement`, layout-ops.ts). It joins the config's other
 // domains in `configOptionDomains`.
 export function addableSegmentDomains(
-  config: DslConfig,
+  config: Pick<DslConfig, "segments">,
 ): ReadonlyMap<string, ResolvedDomain> {
   // Segment names carry no colour, so this domain declares no `paletteOf` —
   // a `+` picker's options keep their band placement. What it DOES know about

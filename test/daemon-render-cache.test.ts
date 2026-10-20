@@ -23,6 +23,8 @@ import {
   type CacheEntry,
   type Hold,
   type RenderCacheObservers,
+  ENTRY_BYTES,
+  COMPILE_BYTES,
 } from "../src/daemon/cache/render";
 import { GitDataProvider } from "../src/daemon/cache/git";
 import { SessionState } from "../src/daemon/session-state";
@@ -78,7 +80,11 @@ function makeCache(
   const reloads = new ReloadSignal();
   const cache = new RenderCache(
     { gitService, sessionState, watchers, log },
-    { maxEntries: 4, observers: observers ?? reloads.observers },
+    {
+      // Room for four entries over one compile: the fifth evicts the oldest.
+      budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES,
+      observers: observers ?? reloads.observers,
+    },
   );
   return { cache, cleanups, gitService, reloads, watchers };
 }
@@ -787,12 +793,12 @@ describe("RenderCache", () => {
     try {
       // maxEntries=4. /p0 is the oldest, and held.
       const hold = cache.hold("/p0", "/p0", undefined);
-      expect(cache.stats).toEqual({ size: 1, held: 1, retired: 0 });
+      expect(cache.stats).toMatchObject({ size: 1, held: 1, retired: 0 });
       for (let i = 1; i < 5; i++)
         cache.getOrCreate(`/p${i}`, `/p${i}`, undefined);
       // The cap held: /p0 left the map. Its state is retired, not disposed —
       // the render still draws with it, and its store still answers.
-      expect(cache.stats).toEqual({ size: 4, held: 1, retired: 1 });
+      expect(cache.stats).toMatchObject({ size: 4, held: 1, retired: 1 });
       expect(disposals()).toEqual([]);
       expect(hold.state.store.read("session.id")).toBe("");
       // Asking for /p0 again is a new entry with a state of its own — and a
@@ -809,7 +815,7 @@ describe("RenderCache", () => {
           /^config disposed reason=evict released=[1-9]\d* held=1$/,
         ),
       ]);
-      expect(cache.stats).toEqual({ size: 4, held: 0, retired: 0 });
+      expect(cache.stats).toMatchObject({ size: 4, held: 0, retired: 0 });
     } finally {
       for (const fn of cleanups) fn();
     }
@@ -830,14 +836,14 @@ describe("RenderCache", () => {
       expect(hold.entry.state).not.toBe(hold.state);
       expect(cache.getOrCreate("/p0", "/p0", undefined)).toBe(hold.entry);
       expect(disposals()).toEqual([]);
-      expect(cache.stats).toEqual({ size: 1, held: 1, retired: 1 });
+      expect(cache.stats).toMatchObject({ size: 1, held: 1, retired: 1 });
       hold[Symbol.dispose]();
       expect(disposals()).toEqual([
         expect.stringMatching(
           /^config disposed reason=reload released=[1-9]\d* held=1$/,
         ),
       ]);
-      expect(cache.stats).toEqual({ size: 1, held: 0, retired: 0 });
+      expect(cache.stats).toMatchObject({ size: 1, held: 0, retired: 0 });
       // The fresh state is served and torn down like any other.
       cache.reload("/p0", "/p0", undefined);
       expect(disposals()).toHaveLength(2);
@@ -858,7 +864,7 @@ describe("RenderCache", () => {
         cache.hold("/p0", "/p0", undefined),
       ];
       expect(holds[1]!.state).toBe(holds[0]!.state);
-      expect(cache.stats).toEqual({ size: 1, held: 1, retired: 0 });
+      expect(cache.stats).toMatchObject({ size: 1, held: 1, retired: 0 });
       cache.reload("/p0", "/p0", undefined);
       holds[0]![Symbol.dispose]();
       expect(lines.filter((l) => l.startsWith("config disposed "))).toEqual(
@@ -872,7 +878,7 @@ describe("RenderCache", () => {
       expect(() => holds[1]![Symbol.dispose]()).toThrow(
         "render-cache hold released twice",
       );
-      expect(cache.stats).toEqual({ size: 1, held: 0, retired: 0 });
+      expect(cache.stats).toMatchObject({ size: 1, held: 0, retired: 0 });
     } finally {
       for (const fn of cleanups) fn();
     }
