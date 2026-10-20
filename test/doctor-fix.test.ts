@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 // [LAW:verifiable-goals] brandon-doctor-b6a acceptance 2: the fix over a
 // settings.json WITH an existing `env` block and WITHOUT one changes exactly
 // the one key, and every other byte of the user's file survives. The edge is
@@ -443,6 +444,18 @@ describe("gatherFacts", () => {
       } finally {
         fs.chmodSync(locked, 0o644);
       }
+    });
+
+    // A FIFO where a settings file goes would hold the daemon's loop on a
+    // blocking read: it is refused as no regular file, naming it.
+    test("a settings path that is no regular file fails the chain, without blocking", () => {
+      const fifo = path.join(projectDir(), ".claude", "settings.local.json");
+      fs.mkdirSync(path.dirname(fifo), { recursive: true });
+      execFileSync("mkfifo", [fifo]);
+      expect(sourcesOf(configDir("absent"))).toEqual({
+        kind: "failed",
+        reason: `cannot read ${fifo}: not a regular file`,
+      });
     });
 
     // The fix writes the file the statusLine came from, and the re-read is

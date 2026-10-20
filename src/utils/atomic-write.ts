@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import path from "node:path";
 
 // [LAW:single-enforcer] The one tmp+rename for every file a user may be
 // reading while we write it — the config file, the settings history, and Claude
@@ -9,8 +10,8 @@ import fs from "node:fs";
 // A symlinked file is written where it points — a dotfiles-managed
 // settings.json stays a link — since the rename replaces whatever sits at the
 // path it targets.
-export function writeAtomic(path: string, text: string, mode?: number): void {
-  const file = resolvedTarget(path);
+export function writeAtomic(at: string, text: string, mode?: number): void {
+  const file = resolvedTarget(at);
   const tmp = `${file}.tmp`;
   const fileMode = mode ?? fs.statSync(file, { throwIfNoEntry: false })?.mode;
   try {
@@ -26,13 +27,26 @@ export function writeAtomic(path: string, text: string, mode?: number): void {
   }
 }
 
-// The file a path names, through every link; a path naming no file yet is
-// itself.
-function resolvedTarget(path: string): string {
-  try {
-    return fs.realpathSync(path);
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === "ENOENT") return path;
-    throw e;
+// [LAW:single-enforcer] The file a write to `at` lands in: `at` followed
+// through every symbolic link, a dangling one included (its target is the file
+// a first write creates), so whoever removes what a write created removes the
+// same file. Intermediate directory links need no resolving: the tmp sits
+// beside the file, in whichever directory that is.
+export function resolvedTarget(at: string): string {
+  let file = at;
+  for (let hops = 0; hops < MAX_LINK_HOPS; hops++) {
+    let stat: fs.Stats;
+    try {
+      stat = fs.lstatSync(file);
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === "ENOENT") return file;
+      throw e;
+    }
+    if (!stat.isSymbolicLink()) return file;
+    file = path.resolve(path.dirname(file), fs.readlinkSync(file));
   }
+  throw new Error(`${at}: more than ${MAX_LINK_HOPS} symbolic links`);
 }
+
+// Linux's MAXSYMLINKS: past it the kernel calls a path a loop (ELOOP).
+const MAX_LINK_HOPS = 40;

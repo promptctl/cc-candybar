@@ -58,17 +58,35 @@ export function claudeInstalledPluginsPath(configDir: string): string {
 // A settings file's bytes, or null for no file. [LAW:no-silent-failure] Only
 // ENOENT is absence: a file the daemon cannot stat or read (EACCES, ELOOP) is
 // a file Claude Code may still run with, so it throws rather than vanishing
-// from the chain.
+// from the chain. Opened non-blocking and refused unless it is a regular file:
+// a project's `.claude/` is somebody's repository, and a synchronous read of
+// a FIFO there would hold the daemon's loop for good (as readTailSync guards
+// a transcript path).
 function readSettingsFile(settingsPath: string): string | null {
+  let fd: number;
   try {
-    return fs.readFileSync(settingsPath, "utf8");
+    fd = fs.openSync(
+      settingsPath,
+      fs.constants.O_RDONLY | fs.constants.O_NONBLOCK,
+    );
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
-    throw new Error(`cannot read ${settingsPath}: ${messageOf(e)}`, {
-      cause: e,
-    });
+    throw cannotRead(settingsPath, e);
+  }
+  try {
+    if (!fs.fstatSync(fd).isFile()) {
+      throw new Error("not a regular file");
+    }
+    return fs.readFileSync(fd, "utf8");
+  } catch (e) {
+    throw cannotRead(settingsPath, e);
+  } finally {
+    fs.closeSync(fd);
   }
 }
+
+const cannotRead = (settingsPath: string, e: unknown): Error =>
+  new Error(`cannot read ${settingsPath}: ${messageOf(e)}`, { cause: e });
 
 // The settings file's bytes, for an editor that splices it. A missing file is
 // the one absence with a meaning — Claude Code has written nothing yet — so it
@@ -99,9 +117,7 @@ function parseSettings(
     if (/^\s*$/.test(text)) return {};
     parsed = JSON_DIALECT.parse(text);
   } catch (e) {
-    throw new Error(`cannot read ${settingsPath}: ${messageOf(e)}`, {
-      cause: e,
-    });
+    throw cannotRead(settingsPath, e);
   }
   if (!isJsonObject(parsed)) {
     throw new Error(`cannot read ${settingsPath}: not a JSON object`);
@@ -203,7 +219,7 @@ function visibleJsonFiles(dir: string): string[] {
       .sort();
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === "ENOENT") return [];
-    throw new Error(`cannot read ${dir}: ${messageOf(e)}`, { cause: e });
+    throw cannotRead(dir, e);
   }
 }
 
