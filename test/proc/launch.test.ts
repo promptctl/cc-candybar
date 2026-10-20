@@ -12,6 +12,7 @@ import {
 } from "../../src/proc/launch";
 import type { LaunchCategory } from "../../src/proc/launch";
 import type { LaunchStatsHandle } from "../../src/proc/stats-handle";
+import { until } from "../helpers/until";
 
 function makeSpyHandle(): {
   handle: LaunchStatsHandle;
@@ -28,22 +29,6 @@ function makeSpyHandle(): {
     starts,
     ends,
   };
-}
-
-// [LAW:no-ambient-temporal-coupling] A named condition, polled until it holds
-// or loudly failed — never a sleep standing in for it.
-async function until(
-  condition: () => boolean,
-  what: string,
-  budgetMs = 5000,
-): Promise<void> {
-  const deadline = Date.now() + budgetMs;
-  while (!condition()) {
-    if (Date.now() >= deadline) {
-      throw new Error(`${what} did not hold within ${budgetMs}ms`);
-    }
-    await new Promise((r) => setTimeout(r, 5));
-  }
 }
 
 // The signals the launcher sends a child's process group, in the order it
