@@ -1,3 +1,10 @@
+# [1.148.0](https://github.com/promptctl/cc-candybar/compare/v1.147.2...v1.148.0) (2026-10-20)
+
+
+### Features
+
+* **band:** the daemon sends the band's frames, and the mod's child is the Rust client (candybar-animation-wbxz.81o.yaq) ([#381](https://github.com/promptctl/cc-candybar/issues/381)) ([7902b87](https://github.com/promptctl/cc-candybar/commit/7902b87d167d491f447086bd3d188df4bbeba7bd))
+
 ## [1.147.2](https://github.com/promptctl/cc-candybar/compare/v1.147.1...v1.147.2) (2026-10-20)
 
 
