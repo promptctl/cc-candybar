@@ -14,11 +14,14 @@ let bundle: string;
 let exits: number;
 let lines: Array<[LogLevel, string]>;
 
-const watch = (targets = [bundle]) =>
+const watch = (
+  targets = [bundle],
+  stat: (p: string) => { mtimeMs: number } = fs.statSync,
+) =>
   makeBinaryWatch({
     targets,
     intervalMs: 60_000,
-    stat: fs.statSync,
+    stat,
     exit: () => exits++,
     log: (level, msg) => lines.push([level, msg]),
   });
@@ -69,20 +72,43 @@ test("a bundle under a file where its directory was is gone", () => {
   expect(exits).toBe(1);
 });
 
-test("a bundle the daemon cannot read says nothing about the bundle: it warns and runs on", () => {
-  const w = watch();
-  fs.chmodSync(path.join(dir, "dist"), 0o000);
-  try {
-    w.checkNow();
-  } finally {
-    fs.chmodSync(path.join(dir, "dist"), 0o755);
+// A stat that fails other than ENOENT/ENOTDIR, driven through the watch's
+// stat edge: a chmod cannot refuse a stat to root.
+const refusing = (refused: () => boolean) => (p: string) => {
+  if (refused()) {
+    throw Object.assign(new Error(`EACCES: permission denied, stat '${p}'`), {
+      code: "EACCES",
+    });
   }
+  return fs.statSync(p);
+};
+
+test("a bundle the daemon cannot read says nothing about the bundle: it warns and runs on", () => {
+  let refused = false;
+  const w = watch([bundle], refusing(() => refused));
+  refused = true;
+  w.checkNow();
   expect(exits).toBe(0);
-  expect(lines).toHaveLength(1);
-  expect(lines[0]![0]).toBe("warn");
-  expect(lines[0]![1]).toMatch(
-    new RegExp(`^binary stat failed \\(${bundle}\\): EACCES`),
-  );
+  expect(lines).toEqual([
+    [
+      "warn",
+      `binary stat failed (${bundle}): EACCES: permission denied, stat '${bundle}'`,
+    ],
+  ]);
+});
+
+test("a bundle unreadable at boot neither matches nor moves once it reads", () => {
+  let refused = true;
+  const w = watch([bundle], refusing(() => refused));
+  refused = false;
+  w.checkNow();
+  expect(exits).toBe(0);
+  expect(lines).toEqual([
+    [
+      "warn",
+      `binary stat failed (${bundle}): at boot: EACCES: permission denied, stat '${bundle}'`,
+    ],
+  ]);
 });
 
 test("one moved target among several ends the daemon once", () => {

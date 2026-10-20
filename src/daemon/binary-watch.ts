@@ -9,43 +9,37 @@
 // rebuild) and need not wait a minute to notice.
 
 import type { DaemonLogger } from "./log";
-
-// [LAW:types-are-the-program] What one stat says about a target. `gone` is
-// the file (or a directory above it) no longer existing — the bundle the
-// daemon runs is no longer on disk. `unread` is every other failure (EACCES,
-// EIO): it says nothing about the bundle, so it can neither match nor move it.
-export type BundleStamp =
-  | { readonly kind: "present"; readonly mtimeMs: number }
-  | { readonly kind: "gone" }
-  | { readonly kind: "unread"; readonly error: string };
+import { ABSENT, failed, ok, type Outcome } from "../utils/outcome";
 
 /** `fs.statSync`'s shape: the edge the watch reads the disk through. */
 export type BundleStat = (path: string) => { readonly mtimeMs: number };
 
-const GONE_CODES: ReadonlySet<string> = new Set(["ENOENT", "ENOTDIR"]);
-
-export function stampOf(path: string, stat: BundleStat): BundleStamp {
+// [LAW:one-type-per-behavior] A target's stamp is the provider outcome over
+// its mtime: `absent` is the file (or a directory above it) no longer
+// existing — the bundle the daemon runs is no longer on disk; `failed` is
+// every other stat failure (EACCES, EIO), which says nothing about the bundle.
+function mtimeOf(path: string, stat: BundleStat): Outcome<number> {
   try {
-    return { kind: "present", mtimeMs: stat(path).mtimeMs };
+    return ok(stat(path).mtimeMs);
   } catch (e) {
     const code = (e as NodeJS.ErrnoException).code;
-    return code !== undefined && GONE_CODES.has(code)
-      ? { kind: "gone" }
-      : { kind: "unread", error: (e as Error).message };
+    return code === "ENOENT" || code === "ENOTDIR"
+      ? ABSENT
+      : failed((e as Error).message);
   }
 }
 
-function sameStamp(a: BundleStamp, b: BundleStamp): boolean {
-  if (a.kind === "present" && b.kind === "present")
-    return a.mtimeMs === b.mtimeMs;
-  return a.kind === b.kind;
+function sameStamp(a: Outcome<number>, b: Outcome<number>): boolean {
+  return a.kind === "ok" && b.kind === "ok"
+    ? a.value === b.value
+    : a.kind === b.kind;
 }
 
 export interface BinaryWatchOptions {
   readonly targets: readonly string[];
   readonly intervalMs: number;
   readonly stat: BundleStat;
-  /** The daemon's one exit funnel; called once, when a target moved. */
+  /** The daemon's one exit funnel, which owns running only once. */
   readonly exit: () => void;
   readonly log: DaemonLogger;
 }
@@ -58,19 +52,27 @@ export interface BinaryWatch {
 export function makeBinaryWatch(opts: BinaryWatchOptions): BinaryWatch {
   const { targets, intervalMs, stat, exit, log } = opts;
   // The stamps the daemon booted with, taken the same way every sample is.
-  const boot = targets.map((path) => ({ path, stamp: stampOf(path, stat) }));
+  const boot = targets.map((path) => ({ path, stamp: mtimeOf(path, stat) }));
   let timer: NodeJS.Timeout | null = null;
   const sample = (): void => {
     for (const { path, stamp } of boot) {
-      const now = stampOf(path, stat);
-      if (now.kind === "unread") {
-        log("warn", `binary stat failed (${path}): ${now.error}`);
+      const now = mtimeOf(path, stat);
+      // [LAW:types-are-the-program] A stat that failed — now, or at boot —
+      // can neither match the bundle nor move it.
+      const unread =
+        now.kind === "failed"
+          ? now.reason
+          : stamp.kind === "failed"
+            ? `at boot: ${stamp.reason}`
+            : undefined;
+      if (unread !== undefined) {
+        log("warn", `binary stat failed (${path}): ${unread}`);
         continue;
       }
       if (!sameStamp(stamp, now)) {
         log(
           "info",
-          `binary ${now.kind === "gone" ? "gone" : "changed"} (${path}); shutting down`,
+          `binary ${now.kind === "absent" ? "gone" : "changed"} (${path}); shutting down`,
         );
         if (timer) clearInterval(timer);
         exit();
