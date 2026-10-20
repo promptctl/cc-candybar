@@ -877,10 +877,7 @@ export function applyFix(
           ? { through: fix.through }
           : current,
       );
-      return {
-        ...facts,
-        daemon: { ...facts.daemon, read: { kind: "ok", value: read } },
-      };
+      return { ...facts, daemon: { ...facts.daemon, read } };
     }
     default: {
       const _exhaustive: never = fix;

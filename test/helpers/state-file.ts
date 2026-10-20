@@ -9,7 +9,7 @@ export function memoryStateFile<T>(initial: T): StateFile<T> & {
   let value = initial;
   return {
     read: () => ({ kind: "ok", value }),
-    update: (next) => (value = next(value)),
+    update: (next) => ({ kind: "ok", value: (value = next(value)) }),
     value: () => value,
   };
 }

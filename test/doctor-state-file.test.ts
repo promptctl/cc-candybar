@@ -23,7 +23,7 @@ describe("a doctor state file", () => {
 
   test("absent is the empty value; an update is read back by the next reader, its directory made", () => {
     expect(stateFile(file, [], numbers).read()).toEqual({ kind: "ok", value: [] });
-    expect(stateFile(file, [], numbers).update((ns) => [...ns, 1])).toEqual([1]);
+    expect(stateFile(file, [], numbers).update((ns) => [...ns, 1])).toEqual({ kind: "ok", value: [1] });
     // Another process — the CLI, a later daemon — reads the same document.
     expect(stateFile(file, [], numbers).read()).toEqual({ kind: "ok", value: [1] });
   });
@@ -32,7 +32,7 @@ describe("a doctor state file", () => {
     const store = stateFile<readonly number[]>(file, [], numbers);
     store.update(() => [1]);
     fs.utimesSync(file, 0, 0);
-    expect(store.update((ns) => ns)).toEqual([1]);
+    expect(store.update((ns) => ns)).toEqual({ kind: "ok", value: [1] });
     expect(fs.statSync(file).mtimeMs).toBe(0);
   });
 
@@ -61,9 +61,19 @@ describe("a doctor state file", () => {
   test("nothing is filed over a file that does not read", () => {
     fs.mkdirSync(path.dirname(file));
     fs.writeFileSync(file, "junk");
-    expect(() => stateFile(file, [], numbers).update((ns) => [...ns, 1])).toThrow(
-      `doctor: nothing filed over a file that does not read: ${file} is not JSON`,
-    );
+    expect(stateFile(file, [], numbers).update((ns) => [...ns, 1])).toMatchObject({
+      kind: "failed",
+      reason: expect.stringContaining(`${file} is not JSON`),
+    });
     expect(fs.readFileSync(file, "utf8")).toBe("junk");
+  });
+
+  test("a write that fails throws: a fault, never the refusal a file that does not read is", () => {
+    fs.mkdirSync(path.dirname(file), { mode: 0o500 });
+    try {
+      expect(() => stateFile(file, [], numbers).update((ns) => [...ns, 1])).toThrow(/EACCES/);
+    } finally {
+      fs.chmodSync(path.dirname(file), 0o700);
+    }
   });
 });

@@ -340,8 +340,8 @@ export interface DaemonProcess {
   readonly started: string;
 }
 
+// The newest post-mortem the user has filed as read: `null` while none is.
 export interface PostMortemsRead {
-  // `null` while none is filed, as before the first filing.
   readonly through: string | null;
 }
 

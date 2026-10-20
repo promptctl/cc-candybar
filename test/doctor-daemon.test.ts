@@ -327,4 +327,21 @@ describe("the post-mortems-read record", () => {
     expect(applyFix(edge, fix, HEALTHY_FACTS).daemon.read).toEqual({ kind: "ok", value: { through: NEWER } });
     expect(edge.postMortemsRead.read()).toEqual({ kind: "ok", value: { through: NEWER } });
   });
+
+  test("a record that stopped reading before the fix is the fix's answer, and nothing is filed", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-pm-read-"));
+    try {
+      const file = path.join(dir, "read.json");
+      fs.writeFileSync(file, "junk");
+      const edge = { ...({} as DoctorEdge), postMortemsRead: filePostMortemsRead(file) };
+      const fix = { kind: "post-mortems-read", through: NEWER } as const;
+      expect(applyFix(edge, fix, HEALTHY_FACTS).daemon.read).toMatchObject({
+        kind: "failed",
+        reason: expect.stringContaining(`${file} is not JSON`),
+      });
+      expect(fs.readFileSync(file, "utf8")).toBe("junk");
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });

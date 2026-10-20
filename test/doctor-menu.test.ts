@@ -572,7 +572,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
         const mark = () => VERBS.get(VERB_DOCTOR_MARK)!("s1/nerdFont/drawn", ctx);
         expect(mark).toThrow(BadVerbArgs);
         expect(mark).toThrow(
-          `doctor-mark: doctor: nothing filed over a file that does not read: ${file} is not JSON`,
+          `doctor-mark: ${file} is not JSON`,
         );
         expect(fs.readFileSync(file, "utf8")).toBe("junk");
       } finally {

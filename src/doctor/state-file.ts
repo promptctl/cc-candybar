@@ -16,11 +16,11 @@ import type { Asked } from "./checks.js";
 
 export interface StateFile<T> {
   readonly read: () => Asked<T>;
-  // The file with `next` of what it holds, and what it holds now. Throws when
-  // the file cannot be read: nothing is filed over a document whose other
-  // contents would be lost. A `next` that returns what it was given writes
-  // nothing.
-  readonly update: (next: (current: T) => T) => T;
+  // The file with `next` of what it holds, and what it holds now — or, when
+  // the file does not read, that failure, with nothing filed: a document's
+  // other contents are never lost to a filing. A `next` that returns what it
+  // was given writes nothing. Only a write that fails throws.
+  readonly update: (next: (current: T) => T) => Asked<T>;
 }
 
 // `parse` reads the parsed document; its failure reason is told after the
@@ -60,16 +60,12 @@ export function stateFile<T>(
     read,
     update: (next) => {
       const current = read();
-      if (current.kind === "failed") {
-        throw new Error(
-          `doctor: nothing filed over a file that does not read: ${current.reason}`,
-        );
-      }
+      if (current.kind === "failed") return current;
       const value = next(current.value);
       if (value !== current.value) {
         writeAtomic(file, `${JSON.stringify(value, null, 2)}\n`);
       }
-      return value;
+      return { kind: "ok", value };
     },
   };
 }
