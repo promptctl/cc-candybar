@@ -1,3 +1,10 @@
+## [1.148.4](https://github.com/promptctl/cc-candybar/compare/v1.148.3...v1.148.4) (2026-10-20)
+
+
+### Bug Fixes
+
+* **daemon:** a deleted bundle ends the daemon (brandon-unfiled-3248.bsz) ([#389](https://github.com/promptctl/cc-candybar/issues/389)) ([114b20a](https://github.com/promptctl/cc-candybar/commit/114b20a13519acf480741a3abc2b1ccc14a8032d))
+
 ## [1.148.3](https://github.com/promptctl/cc-candybar/compare/v1.148.2...v1.148.3) (2026-10-20)
 
 
