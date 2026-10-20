@@ -97,18 +97,27 @@ test("a bundle the daemon cannot read says nothing about the bundle: it warns an
   ]);
 });
 
-test("a bundle unreadable at boot neither matches nor moves once it reads", () => {
-  let refused = true;
-  const w = watch([bundle], refusing(() => refused));
-  refused = false;
-  w.checkNow();
-  expect(exits).toBe(0);
-  expect(lines).toEqual([
-    [
-      "warn",
-      `binary stat failed (${bundle}): at boot: EACCES: permission denied, stat '${bundle}'`,
-    ],
-  ]);
+test("a bundle unreadable at boot is reported once, when the watch arms, and not watched", () => {
+  jest.useFakeTimers();
+  try {
+    let refused = true;
+    const w = watch([bundle], refusing(() => refused));
+    refused = false;
+    w.arm();
+    const later = new Date(fs.statSync(bundle).mtimeMs + 5_000);
+    fs.utimesSync(bundle, later, later);
+    jest.advanceTimersByTime(3 * 60_000);
+    w.checkNow();
+    expect(exits).toBe(0);
+    expect(lines).toEqual([
+      [
+        "warn",
+        `binary stat failed at boot (${bundle}): EACCES: permission denied, stat '${bundle}'; not watched`,
+      ],
+    ]);
+  } finally {
+    jest.useRealTimers();
+  }
 });
 
 test("one moved target among several ends the daemon once", () => {

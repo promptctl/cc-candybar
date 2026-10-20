@@ -53,20 +53,17 @@ export function makeBinaryWatch(opts: BinaryWatchOptions): BinaryWatch {
   const { targets, intervalMs, stat, exit, log } = opts;
   // The stamps the daemon booted with, taken the same way every sample is.
   const boot = targets.map((path) => ({ path, stamp: mtimeOf(path, stat) }));
+  // [LAW:types-are-the-program] A stat that failed at boot leaves nothing to
+  // compare against: that target is reported once, when the watch arms, and
+  // not watched. A stat failing later says nothing about the bundle either,
+  // so it can neither match nor move the stamp.
+  const watched = boot.filter(({ stamp }) => stamp.kind !== "failed");
   let timer: NodeJS.Timeout | null = null;
   const sample = (): void => {
-    for (const { path, stamp } of boot) {
+    for (const { path, stamp } of watched) {
       const now = mtimeOf(path, stat);
-      // [LAW:types-are-the-program] A stat that failed — now, or at boot —
-      // can neither match the bundle nor move it.
-      const unread =
-        now.kind === "failed"
-          ? now.reason
-          : stamp.kind === "failed"
-            ? `at boot: ${stamp.reason}`
-            : undefined;
-      if (unread !== undefined) {
-        log("warn", `binary stat failed (${path}): ${unread}`);
+      if (now.kind === "failed") {
+        log("warn", `binary stat failed (${path}): ${now.reason}`);
         continue;
       }
       if (!sameStamp(stamp, now)) {
@@ -82,6 +79,14 @@ export function makeBinaryWatch(opts: BinaryWatchOptions): BinaryWatch {
   };
   return {
     arm() {
+      for (const { path, stamp } of boot) {
+        if (stamp.kind === "failed") {
+          log(
+            "warn",
+            `binary stat failed at boot (${path}): ${stamp.reason}; not watched`,
+          );
+        }
+      }
       timer = setInterval(sample, intervalMs);
       timer.unref();
     },

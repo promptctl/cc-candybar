@@ -308,11 +308,14 @@ const RELEASE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 // dist/index.mjs but the bin/cc-candybar shim never changes — and argv[1]
 // beside it (global installs, symlinks).
 const binaryWatch = makeBinaryWatch({
+  // One target per path: run as `node dist/index.mjs`, both name one file.
   targets: [
-    ...(import.meta.url.startsWith("file://")
-      ? [fileURLToPath(import.meta.url)]
-      : []),
-    ...(process.argv[1] ? [process.argv[1]] : []),
+    ...new Set([
+      ...(import.meta.url.startsWith("file://")
+        ? [fileURLToPath(import.meta.url)]
+        : []),
+      ...(process.argv[1] ? [process.argv[1]] : []),
+    ]),
   ],
   intervalMs: BIN_CHECK_INTERVAL_MS,
   stat: fs.statSync,
