@@ -471,10 +471,10 @@ export interface TranscriptRead extends TranscriptSaid {
 
 export interface DoctorFacts {
   readonly tmux: TmuxFacts;
-  // The columns the terminal was measured at (COLUMNS, else the terminal's
-  // own geometry), or null: none was, so the daemon laid the bar out for
-  // DEFAULT_TERMINAL_WIDTH.
-  readonly termCols: number | null;
+  // The columns the bar's client measured its terminal at (COLUMNS, else the
+  // terminal's own geometry), or null: none was, so the daemon laid the bar
+  // out for DEFAULT_TERMINAL_WIDTH. Failed: no render of the session says.
+  readonly termCols: Asked<number | null>;
   readonly terminal: TerminalIdentity;
   // What asked for this run: a click on the bar's 🩺 doctor — a link the
   // terminal drew and the user clicked — or the `cc-candybar doctor` command.
@@ -730,12 +730,14 @@ const termWidth: Check = {
   label: "terminal width",
   takesMark: false,
   probe: ({ termCols }) =>
-    termCols !== null
-      ? { ok: true }
-      : {
-          ok: false,
-          reason: `no terminal width was measured (no COLUMNS, and no terminal to ask — or the daemon refused the width sent, which the bar's red strip names), so the bar is laid out as if the terminal were ${DEFAULT_TERMINAL_WIDTH} columns wide`,
-        },
+    termCols.kind === "failed"
+      ? { ok: false, reason: termCols.reason }
+      : termCols.value !== null
+        ? { ok: true, note: `${termCols.value} columns` }
+        : {
+            ok: false,
+            reason: `no terminal width was measured (no COLUMNS, and no terminal to ask — or the daemon refused the width sent, which the bar's red strip names), so the bar is laid out as if the terminal were ${DEFAULT_TERMINAL_WIDTH} columns wide`,
+          },
 };
 
 const UNUSED: Readonly<Record<DeclKind, string>> = {

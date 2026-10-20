@@ -427,8 +427,8 @@ describe("RenderSightings: each session's latest client", () => {
     sightings.see("s1", renderSaid(client(BUNDLE)), at(105), 105);
     sightings.see("s2", renderSaid(undefined), at(103), 103);
     expect(sightings.list(at(110))).toEqual([
-      { ...renderSaid(client(BUNDLE)), role: "statusline", ago: 5 },
-      { ...renderSaid(null), role: "statusline", ago: 7 },
+      { ...renderSaid(client(BUNDLE)), role: "statusline", sessionId: "s1", ago: 5 },
+      { ...renderSaid(null), role: "statusline", sessionId: "s2", ago: 7 },
     ]);
   });
 
@@ -468,7 +468,7 @@ describe("RenderSightings: each session's latest client", () => {
     }
     const kept = sightings.list(at(1000));
     expect(kept).toHaveLength(SIGHTINGS_KEPT);
-    expect(kept[0]).toEqual({ ...renderSaid(null), role: "statusline", ago: 999 });
+    expect(kept[0]).toEqual({ ...renderSaid(null), role: "statusline", sessionId: "s1", ago: 999 });
   });
 
   // Renders settle out of order: an older request settling after a newer one
@@ -478,7 +478,7 @@ describe("RenderSightings: each session's latest client", () => {
     sightings.see("s1", renderSaid(client(BUNDLE)), at(105), 2);
     sightings.see("s1", renderSaid(client("/old/dist/index.mjs")), at(100), 1);
     expect(sightings.list(at(110))).toEqual([
-      { ...renderSaid(client(BUNDLE)), role: "statusline", ago: 5 },
+      { ...renderSaid(client(BUNDLE)), role: "statusline", sessionId: "s1", ago: 5 },
     ]);
   });
 });

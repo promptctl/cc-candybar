@@ -125,7 +125,7 @@ describe("doctorPlan", () => {
 
   test("every check ok is exit 0, one ✓ line per check", async () => {
     expect(await doctorPlan(EDGE, NO_HANDLER, DAEMON, inDir({}), "/", () => ({ columns: 120 }))).toEqual({
-      stdout: "✓ config\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n✓ session data\n",
+      stdout: "✓ config\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width — 120 columns\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n✓ session data\n",
       stderr: "",
       code: 0,
     });
@@ -142,6 +142,24 @@ describe("doctorPlan", () => {
     expect(
       (await doctorPlan(EDGE, NO_HANDLER, DAEMON, inDir({ COLUMNS: "90" }), "/", () => ({}))).code,
     ).toBe(0);
+  });
+
+  // brandon-doctor-v62x.1z2: in a Claude Code session's shell the row judges
+  // the width that session's own client measured, as the daemon recorded it
+  // (the fixture daemon's session s1 drew at 148) — not this shell's, which
+  // here has no terminal at all.
+  test("in a Claude Code session, terminal width is the session's bar's", async () => {
+    const plan = await doctorPlan(EDGE, NO_HANDLER, DAEMON, inDir({ CLAUDE_CODE_SESSION_ID: "s1" }), "/", () => ({}));
+    expect(plan.stdout).toContain("\n✓ terminal width — 148 columns\n");
+    expect(plan.code).toBe(0);
+  });
+
+  test("a session the daemon has drawn no bar for fails terminal width, naming it", async () => {
+    const plan = await doctorPlan(EDGE, NO_HANDLER, DAEMON, inDir({ CLAUDE_CODE_SESSION_ID: "s2", COLUMNS: "90" }), "/", () => ({}));
+    expect(plan.stdout).toContain(
+      "\n✗ terminal width — the daemon has drawn no bar for session s2 since it started",
+    );
+    expect(plan.code).toBe(1);
   });
 
   test("a measurement that throws is a doctor: line, exit 2, no checks", async () => {
@@ -294,7 +312,7 @@ describe("doctorPlan", () => {
       "✓ config\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n" +
         "✗ tmux truecolor — Claude Code renders the bar in 256 colours inside tmux" +
         ` (fix: click the settings menu (${DOOR_GLYPH} by default) › 🧰 tools › 🩺 doctor, then [fix] on the bar)\n` +
-        "✓ UTF-8\n✓ terminal width\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n✓ session data\n",
+        "✓ UTF-8\n✓ terminal width — 120 columns\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n✓ session data\n",
     );
   });
 
@@ -303,7 +321,7 @@ describe("doctorPlan", () => {
   test("a staged-but-unapplied fix names the settings file it was read from", async () => {
     fs.writeFileSync(settingsPath(), `{ "env": { "${TMUX_TRUECOLOR_VAR}": "1" } }`);
     expect((await doctorPlan(EDGE, NO_HANDLER, DAEMON, inDir(IN_TMUX), "/", () => ({ columns: 120 }))).stdout).toBe(
-      `✓ config\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✗ tmux truecolor — ${TMUX_TRUECOLOR_VAR} is set in ${settingsPath()} — restart Claude Code to apply\n✓ UTF-8\n✓ terminal width\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n✓ session data\n`,
+      `✓ config\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✗ tmux truecolor — ${TMUX_TRUECOLOR_VAR} is set in ${settingsPath()} — restart Claude Code to apply\n✓ UTF-8\n✓ terminal width — 120 columns\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n✓ session data\n`,
     );
   });
 });
@@ -330,7 +348,7 @@ describe("doctorPlan over a real config", () => {
     doctorPlan(REAL, NO_HANDLER, DAEMON, inDir(env), project, () => ({ columns: 120 }));
 
   test("no config file anywhere: the bundled default is correct", async () => {
-    expect((await plan()).stdout).toBe("✓ config\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n✓ session data\n");
+    expect((await plan()).stdout).toBe("✓ config\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width — 120 columns\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n✓ session data\n");
   });
 
   test("a config using everything it declares is ok", async () => {
@@ -340,7 +358,7 @@ describe("doctorPlan over a real config", () => {
          segments: { s: { template: "{{ .v }}" } }, root: { h: ["s"] } }`,
     );
     expect(await plan()).toEqual({
-      stdout: "✓ config\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n✓ session data\n",
+      stdout: "✓ config\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width — 120 columns\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n✓ session data\n",
       stderr: "",
       code: 0,
     });
@@ -363,7 +381,7 @@ describe("doctorPlan over a real config", () => {
         `    helper "h" is never called\n` +
         `    variable "v" is never read\n` +
         `    action "a" is never clicked\n` +
-        "✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n✓ session data\n",
+        "✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width — 120 columns\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n✓ session data\n",
       stderr: "",
       code: 1,
     });
@@ -406,7 +424,7 @@ describe("doctorPlan over a real config", () => {
         )
       )
         .stdout,
-    ).toBe(`✗ config — helper "h" is never called\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n✓ session data\n`);
+    ).toBe(`✗ config — helper "h" is never called\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width — 120 columns\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n✓ session data\n`);
   });
 
   // brandon-effects-2gka.21e, brandon-doctor-v62x.tgp: what the recent bars of
@@ -429,7 +447,7 @@ describe("doctorPlan over a real config", () => {
     );
     expect(await planOver(drawing("moves", dir))).toEqual({
       stdout:
-        "✓ config\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width\n" +
+        "✓ config\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width — 120 columns\n" +
         "✗ effect refresh — the bar moves (an effect, a fade, or an animated segment), but Claude Code redraws it only on events" +
         ` (statusLine from ${settingsPath()})` +
         ` (fix: click the settings menu (${DOOR_GLYPH} by default) › 🧰 tools › 🩺 doctor, then [fix] on the bar)\n` +
@@ -450,7 +468,7 @@ describe("doctorPlan over a real config", () => {
     const named = path.join(dir, "named.json5");
     fs.writeFileSync(named, `{ helpers: { h: "x" } }`);
     expect((await plan({ CC_CANDYBAR_CONFIG: named })).stdout).toBe(
-      `✗ config — helper "h" is never called\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n✓ session data\n`,
+      `✗ config — helper "h" is never called\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width — 120 columns\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n✓ session data\n`,
     );
   });
 
@@ -470,6 +488,7 @@ describe("doctorPlan over a real config", () => {
         CARRIED,
         NAMED,
         STILL,
+        { kind: "ok", value: 148 },
         EMPTY_STORES,
       ),
       urlHandler: { kind: "unsupported" },

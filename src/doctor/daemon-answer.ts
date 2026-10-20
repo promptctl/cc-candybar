@@ -43,6 +43,12 @@ export type FrameSightings = ReadonlyArray<
   Pick<RenderSighting, "role" | "frame" | "claudeConfigDir" | "ago">
 >;
 
+// Whose each recent render was, which client drew it, and the width it
+// measured.
+export type WidthSightings = ReadonlyArray<
+  Pick<RenderSighting, "sessionId" | "role" | "termCols">
+>;
+
 // Each entry of the stats' `clients` as a record of unread fields — a
 // non-object entry has none — for each parser to hold to its own shape.
 function sightingRecords(
@@ -220,6 +226,28 @@ export function parseFrameSightings(
       };
 }
 
+// [LAW:parse-dont-validate] The width half of the same sightings, read on its
+// own so a daemon older than it fails the terminal-width check alone.
+export function parseWidthSightings(
+  stats: StatsSnapshot,
+): Asked<WidthSightings> {
+  const skew = shapeSkew(stats, ["clients"]);
+  if (skew !== null) return { kind: "failed", reason: skew };
+  const sightings = sightingRecords(stats);
+  const wellFormed = sightings.every(
+    (c) =>
+      typeof c.sessionId === "string" &&
+      (SIGHTING_ROLES as readonly unknown[]).includes(c.role) &&
+      (c.termCols === null || typeof c.termCols === "number"),
+  );
+  return wellFormed
+    ? { kind: "ok", value: sightings as WidthSightings }
+    : {
+        kind: "failed",
+        reason: `the running daemon (${stats.version}) reported its renders without whose they were or the width they measured — restart it on this build: ${JSON.stringify(stats.clients)}`,
+      };
+}
+
 // [LAW:parse-dont-validate] One store as the daemon read it: what it holds,
 // re-read by the store's own parser (the wire is another build's word), or
 // why the daemon could not read it.
@@ -266,6 +294,7 @@ export interface DaemonAnswer {
   readonly rateLimits: Asked<RateLimitSightings>;
   readonly transcripts: Asked<TranscriptSightings>;
   readonly frames: Asked<FrameSightings>;
+  readonly widths: Asked<WidthSightings>;
   readonly serving: Asked<ServingDaemon>;
   readonly stores: StoresRead;
 }
@@ -282,6 +311,7 @@ export async function askDaemon(): Promise<DaemonAnswer> {
       rateLimits: failed,
       transcripts: failed,
       frames: failed,
+      widths: failed,
       serving: failed,
       stores: { marks: failed, clicked: failed, postMortemsRead: failed },
     };
@@ -291,6 +321,7 @@ export async function askDaemon(): Promise<DaemonAnswer> {
     rateLimits: parseRateLimitSightings(outcome.value),
     transcripts: parseTranscriptSightings(outcome.value),
     frames: parseFrameSightings(outcome.value),
+    widths: parseWidthSightings(outcome.value),
     serving: parseServingDaemon(outcome.value),
     stores: parseDoctorStores(outcome.value),
   };

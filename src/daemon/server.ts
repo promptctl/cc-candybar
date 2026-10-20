@@ -1200,6 +1200,7 @@ export async function replyTo(
         req.hookData.session_id,
         {
           client: req.hints.client ?? null,
+          termCols: req.hints.termCols ?? null,
           rateLimits: req.rateLimits,
           claudeConfigDir: claudeConfigDir(req.hints.claudeConfigDir),
           transcript: transcriptSaid(req.hookData),

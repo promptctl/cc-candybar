@@ -51,6 +51,8 @@ describe("RuntimeStats.snapshot", () => {
       clients: [
         {
           client: null,
+          sessionId: "s1",
+          termCols: 148,
           rateLimits: "carried",
           claudeConfigDir: "/c",
           transcript: { path: "/c/t.jsonl", answered: true },
@@ -67,6 +69,8 @@ describe("RuntimeStats.snapshot", () => {
     expect(snap.clients).toEqual([
       {
           client: null,
+          sessionId: "s1",
+          termCols: 148,
           rateLimits: "carried",
           claudeConfigDir: "/c",
           transcript: { path: "/c/t.jsonl", answered: true },

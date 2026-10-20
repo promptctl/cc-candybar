@@ -311,6 +311,17 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     ]);
   });
 
+  // brandon-doctor-v62x.1z2: the width is what the session's latest render
+  // said — the record `cc-candybar doctor` reads too — not the persisted hints.
+  test("the width row reads the session's latest render", () => {
+    const rt = buildRuntime(null);
+    rt.clients.see("s1", { ...renderSaid(healthyClient()), termCols: 97 }, instantOf(new Date()), 1);
+    rt.openTools();
+    rt.clickVerb(VERB_DOCTOR_RUN);
+    expect(rt.logs.at(-1)).toMatch(/ termWidth=ok .* cols=97 /);
+    expect(rt.render()).toContain("✓ terminal width");
+  });
+
   test("a post-mortem the user has not read fails the daemon row, and [fix] files it read", () => {
     const report = "/state/cc-candybar/memory-2026-10-19T18-01-12-345Z-77.txt";
     const rt = buildRuntime(null, CLEAN_LOAD, GHOSTTY, memoryStateFile<readonly string[]>([]), { hint: healthyClient() }, {

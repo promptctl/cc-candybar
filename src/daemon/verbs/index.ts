@@ -148,6 +148,7 @@ import {
   clickArrived,
   installFacts,
   gatherFacts,
+  sessionWidth,
   readStores,
   type DoctorEdge,
   type DoctorStores,
@@ -1222,6 +1223,7 @@ function clickFacts(ctx: VerbContext, sid: string): DoctorFacts {
         kind: "ok",
         value: said.map(({ role, frame }) => ({ role, frame })),
       },
+      sessionWidth(sid, said),
       readStores(ctx.doctorStores),
     );
   } catch (e) {

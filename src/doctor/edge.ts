@@ -43,6 +43,7 @@ import { dataNeeds, type DataNeeds } from "./data-needs.js";
 import type {
   FrameSighting,
   RateLimitsSeen,
+  RoledSaid,
   TranscriptSaid,
 } from "../daemon/render-sightings.js";
 import { ok, type Outcome } from "../utils/outcome.js";
@@ -770,6 +771,24 @@ function segmentDataFacts(
   };
 }
 
+// [LAW:single-enforcer] The width one session's statusline client measured,
+// read off that session's latest renders — the click's own, or the sightings
+// `cc-candybar doctor` was answered for the session it runs in. A session
+// this daemon has drawn no statusline for has no width to report: the bar on
+// screen is an earlier daemon's, or none.
+export function sessionWidth(
+  sessionId: string,
+  said: ReadonlyArray<Pick<RoledSaid, "role" | "termCols">>,
+): Asked<number | null> {
+  const statusline = said.find((s) => s.role === "statusline");
+  return statusline === undefined
+    ? {
+        kind: "failed",
+        reason: `the daemon has drawn no bar for session ${sessionId} since it started, so no width its client measured is known — run this again once the bar has redrawn`,
+      }
+    : { kind: "ok", value: statusline.termCols };
+}
+
 // [LAW:single-enforcer] Every fact comes from what the CLIENT saw: its tmux,
 // the Claude Code directory its session runs with, and the origin its config
 // resolves from — never the daemon's own env, which answers for whichever
@@ -782,10 +801,7 @@ function segmentDataFacts(
 // the clicking session, `() => null` for the CLI, which has no session.
 export function gatherFacts(
   edge: DoctorEdge,
-  hints: Pick<
-    ClientHints,
-    "tmux" | "claudeConfigDir" | "terminalEnv" | "ssh" | "termCols"
-  >,
+  hints: Pick<ClientHints, "tmux" | "claudeConfigDir" | "terminalEnv" | "ssh">,
   origin: ConfigOrigin,
   sessionPick: (key: string) => string | null,
   // The daemon that serves the bar, as it reports itself: the click's own
@@ -800,6 +816,11 @@ export function gatherFacts(
   transcripts: Asked<readonly TranscriptSaid[]>,
   // What those renders drew: whether each bar moves.
   frames: Asked<readonly FrameSighting[]>,
+  // [LAW:one-source-of-truth] The width the session's statusline client
+  // measured, as its last render said (RenderSightings) — the click's own
+  // session, or the one `cc-candybar doctor` runs in; outside any session,
+  // the command's own terminal, standing in for the client one would spawn.
+  termCols: Asked<number | null>,
   // What the doctor's stores hold: the click's daemon's own, or the ones
   // `cc-candybar doctor` was answered.
   stores: StoresRead,
@@ -825,7 +846,7 @@ export function gatherFacts(
   ].join("");
   return {
     tmux,
-    termCols: hints.termCols ?? null,
+    termCols,
     terminal,
     // [LAW:types-are-the-program] The measured glyphs parsed into the facts'
     // union: none to draw is the arm with no terminal to read.

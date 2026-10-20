@@ -96,6 +96,7 @@ const factsIn = (
       CARRIED,
       NAMED,
       frames,
+      HEALTHY_FACTS.termCols,
       EMPTY_STORES,
     ),
     urlHandler: { kind: "unsupported" } as const,

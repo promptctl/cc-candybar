@@ -70,6 +70,7 @@ export const NAMED = { kind: "ok", value: [HEALTHY_TRANSCRIPT] } as const;
 // carried the rate-limit windows, from the default Claude Code directory.
 export const renderSaid = (client: ClientHint | null | undefined) => ({
   client: client ?? null,
+  termCols: 148,
   rateLimits: "carried" as const,
   claudeConfigDir: "/claude",
   transcript: HEALTHY_TRANSCRIPT,
@@ -131,6 +132,10 @@ export const healthyDaemonIn = (
       kind: "ok",
       value: [{ role: "statusline", frame: "still", claudeConfigDir, ago: 1 }],
     },
+    widths: {
+      kind: "ok",
+      value: [{ sessionId: "s1", role: "statusline", termCols: 148 }],
+    },
     clients: {
       kind: "ok",
       value: {
@@ -153,7 +158,7 @@ export const HEALTHY_DAEMON = healthyDaemonIn("/claude");
 // test spreads the facts it is about over.
 export const HEALTHY_FACTS: DoctorFacts = {
   tmux: { kind: "outside" },
-  termCols: 120,
+  termCols: { kind: "ok", value: 120 },
   terminal: {
     kind: "seen",
     identified: {

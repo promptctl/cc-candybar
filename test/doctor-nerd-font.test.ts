@@ -511,6 +511,7 @@ describe("gatherFacts: where the Nerd Font facts come from", () => {
       CARRIED,
       NAMED,
       STILL,
+      HEALTHY_FACTS.termCols,
       stores,
     );
   const drawn = (
