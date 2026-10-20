@@ -245,11 +245,32 @@ export type WritableSettings = SettingsFrom & {
   readonly scope: Exclude<SettingsScope, (typeof UNWRITTEN_SCOPES)[number]>;
 };
 
-// [LAW:single-enforcer] THE rule for which settings file a fix may name: a
-// `claude-settings` fix carries a `WritableSettings`, and this is the one
-// way to have one from a file a check read.
+// [LAW:single-enforcer] A `claude-settings` fix carries a `WritableSettings`,
+// so the type is THE rule for which file a fix may name; this narrows a file
+// a check read to one.
 export const doctorWrites = (from: SettingsFrom): from is WritableSettings =>
   !(UNWRITTEN_SCOPES as readonly SettingsScope[]).includes(from.scope);
+
+// [LAW:types-are-the-program] Where a fix to an `env` variable goes, by the
+// scope of the file deciding its value. `env` merges key by key, so a value
+// counts written in that file or any above it and loses anywhere lower: the
+// lowest of those that is the user's own. Over a project's shared file that
+// is its project-local one; over managed settings, none. Keyed by every
+// scope, so a new scope is a compile error here until it is placed.
+const ENV_FIX_FILE: {
+  readonly [S in SettingsScope]: (
+    path: string,
+    at: SettingsChainAt,
+  ) => WritableSettings | null;
+} = {
+  managed: () => null,
+  "project-local": (path) => ({ scope: "project-local", path }),
+  project: (_, at) => ({
+    scope: "project-local",
+    path: projectLocalSettingsFile(at.projectDir),
+  }),
+  user: (path) => ({ scope: "user", path }),
+};
 
 // [LAW:types-are-the-program] Which terminal draws the session's bar, or why
 // the doctor could not tell: a client too old to say, or a tmux server that
@@ -650,36 +671,30 @@ const tmuxTruecolor: Check = {
           reason: `${TMUX_TRUECOLOR_VAR} is set in ${told.from.path} — restart Claude Code to apply`,
         };
       }
-      // `env` merges key by key, so a value counts written in the file that
-      // holds the variable or any above it, and loses anywhere lower: the fix
-      // writes the lowest of those that is the user's own. Over a project's
-      // shared file that is its project-local one; over managed settings,
-      // none.
-      const file: SettingsFrom =
-        told.kind === "unset"
-          ? { scope: "user", path: claudeSettings.at.userFile }
-          : told.from.scope === "project"
-            ? {
-                scope: "project-local",
-                path: projectLocalSettingsFile(claudeSettings.at.projectDir),
-              }
-            : told.from;
       const reason = "Claude Code renders the bar in 256 colours inside tmux";
-      return doctorWrites(file)
+      const fixInto = (file: WritableSettings): Verdict<never> => ({
+        ok: false,
+        reason,
+        fix: {
+          kind: "claude-settings",
+          file,
+          path: ["env", TMUX_TRUECOLOR_VAR],
+          value: "1",
+        },
+      });
+      if (told.kind === "unset") {
+        return fixInto({ scope: "user", path: claudeSettings.at.userFile });
+      }
+      const file = ENV_FIX_FILE[told.from.scope](
+        told.from.path,
+        claudeSettings.at,
+      );
+      return file === null
         ? {
             ok: false,
-            reason,
-            fix: {
-              kind: "claude-settings",
-              file,
-              path: ["env", TMUX_TRUECOLOR_VAR],
-              value: "1",
-            },
+            reason: `${reason} — the value that counts is in managed settings, ${told.from.path}: set ${TMUX_TRUECOLOR_VAR} to "1" there`,
           }
-        : {
-            ok: false,
-            reason: `${reason} — the value that counts is in managed settings, ${file.path}: set ${TMUX_TRUECOLOR_VAR} to "1" there`,
-          };
+        : fixInto(file);
     }),
 };
 
