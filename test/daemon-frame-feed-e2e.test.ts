@@ -23,7 +23,12 @@ import os from "node:os";
 import path from "node:path";
 
 import { CLICK_ERROR_HOLD_S } from "../src/daemon/click-error";
-import { openFrameStream, type StreamEnd } from "../src/daemon/client-frames";
+import {
+  openFrameStream,
+  type FrameStream,
+  type StreamEnd,
+} from "../src/daemon/client-frames";
+import { FEED_PERIODS } from "../src/daemon/frame-feed";
 import { followFrames, SWITCHED_OFF_RETRY_MS } from "../src/daemon/frame-follow";
 import {
   PROTOCOL_VERSION,
@@ -41,6 +46,7 @@ import {
   urlWriting,
 } from "./helpers/daemon-e2e";
 import { sendDaemonRequest } from "./helpers/daemon-wire";
+import { until } from "./helpers/until";
 import {
   effectsUrl,
   VERB_LOAD_CONFIG,
@@ -72,6 +78,9 @@ const CONFIGS = {
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
+// A pushed frame, and when it arrived: ms since framesOf first subscribed.
+type Frame = { readonly at: number; readonly resp: Response };
+
 describe("a subscriber receives a session's frames as the bar moves", () => {
   let sockPath: string;
   let removeTmpDirs: () => void;
@@ -85,26 +94,59 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   ];
 
   // Every frame pushed for `sessionId` while `during` runs, with when each
-  // arrived (ms since the subscription opened). `during` is handed the frames
+  // arrived. `during` is handed the frames
   // received so far, so it can wait for ones the daemon has sent before the
-  // stream closes: closing drops whatever is still in flight.
+  // stream closes (closing drops whatever is still in flight); `elapsed`, the
+  // clock those arrivals are read on; and `waitFor`, the wait for them.
+  // [LAW:no-silent-failure] A daemon too busy to take the subscribe inside its
+  // request budget answers TIMEOUT, and the subscriber opens another, as
+  // afterStreamEnd decides for every real consumer; any other end fails the
+  // test, named. [LAW:no-ambient-temporal-coupling] The stream's end is part
+  // of every condition `during` waits on, so its first wait after the end
+  // throws it, and nothing `during` would do next runs on into the next test.
   async function framesOf(
     sessionId: string,
-    during: (received: ReadonlyArray<unknown>) => Promise<void>,
-  ): Promise<Array<{ at: number; resp: Response }>> {
-    const frames: Array<{ at: number; resp: Response }> = [];
+    during: (feed: {
+      received: ReadonlyArray<Frame>;
+      elapsed: () => number;
+      waitFor: typeof until;
+    }) => Promise<void>,
+  ): Promise<Frame[]> {
+    const frames: Frame[] = [];
     const opened = Date.now();
-    const stream = openFrameStream(
-      sockPath,
-      sessionId,
-      "statusline",
-      (resp) => frames.push({ at: Date.now() - opened, resp }),
-      (end) => {
-        if (end.kind === "failed") throw end.error;
-      },
-    );
-    await during(frames);
-    stream.close();
+    const elapsed = (): number => Date.now() - opened;
+    let ended: Error | null = null;
+    const open = (): FrameStream =>
+      openFrameStream(
+        sockPath,
+        sessionId,
+        "statusline",
+        (resp) => frames.push({ at: elapsed(), resp }),
+        (end) => {
+          if (end.kind === "refused" && end.resp.code === "TIMEOUT")
+            stream = open();
+          else if (end.kind !== "closed-here")
+            ended = new Error(
+              `the stream ended before the test closed it: ${end.kind === "failed" ? end.error.message : JSON.stringify(end)}`,
+            );
+        },
+      );
+    const waitFor: typeof until = (reached, what, budgetMs) =>
+      until(
+        () => {
+          if (ended !== null) throw ended;
+          return reached();
+        },
+        what,
+        budgetMs,
+      );
+    let stream = open();
+    try {
+      await during({ received: frames, elapsed, waitFor });
+    } finally {
+      stream.close();
+    }
+    if (ended !== null) throw ended;
     return frames;
   }
 
@@ -126,7 +168,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       ? resp.band.map((row) => row.map((run) => run.text).join("")).join("\n")
       : resp;
 
-  const outputs = (frames: Array<{ resp: Response }>): string[] =>
+  const outputs = (frames: ReadonlyArray<Frame>): string[] =>
     frames.map(({ resp }) => {
       if (!resp.ok || !("output" in resp))
         throw new Error(`not a frame: ${JSON.stringify(resp)}`);
@@ -168,12 +210,11 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     // count includes has arrived: comparing after close raced the frames still
     // in flight, which closing drops.
     let after = before;
-    const frames = await framesOf("feed-moving", async (received) => {
+    const frames = await framesOf("feed-moving", async ({ received, waitFor }) => {
       await sleep(2000);
       after = await feedStats();
       const sent = after.pushed - before.pushed;
-      const deadline = Date.now() + 5000;
-      while (received.length < sent && Date.now() < deadline) await sleep(20);
+      await waitFor(() => received.length >= sent, "every counted frame arrived");
     });
     const pushed = outputs(frames);
     for (const output of pushed)
@@ -206,25 +247,28 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       {},
       args("toggle"),
     );
-    const frames = await framesOf("feed-click", async () => {
-      // The still bar's next frame falls due a second after the subscription
-      // opened; the click lands well inside that second.
-      await sleep(100);
+    const frames = await framesOf("feed-click", async ({ received, waitFor }) => {
+      // The click lands the moment the bar's first frame is in.
+      await waitFor(() => received.length > 0, "the bar before the click");
       await click(sockPath, urlWriting(shut, "face", "open"));
-      await sleep(400);
+      await waitFor(() => received.length > 1, "the clicked bar");
     });
     expect(outputs(frames).map(stripAnsi)).toEqual([
       expect.stringContaining("door shut"),
       expect.stringContaining("door open"),
     ]);
-    expect(frames[1]!.at).toBeLessThan(800);
+    // [LAW:no-ambient-temporal-coupling] The still bar's next frame falls due
+    // a period after its first STARTED drawing, which is after the
+    // subscription opened, so a frame in before a period from then can only be
+    // the click's.
+    expect(frames[1]!.at).toBeLessThan(FEED_PERIODS.still);
   });
 
   test("a subscriber that arrives before the session's first render receives it", async () => {
-    const frames = await framesOf("feed-early", async () => {
+    const frames = await framesOf("feed-early", async ({ received, waitFor }) => {
       await sleep(200);
       await render(sockPath, "feed-early", projectDir, {}, args("still"));
-      await sleep(300);
+      await waitFor(() => received.length > 0, "the first render's frame");
     });
     expect(outputs(frames).map(stripAnsi)).toEqual([
       expect.stringContaining("a still mark"),
@@ -268,10 +312,18 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   // The lane toggles (candybar-animation-wbxz.81o.azo).
   const subscribeUntilEnd = (sessionId: string, lane: "band" | "pane") => {
     const frames: Response[] = [];
+    let end: StreamEnd | null = null;
     const ended = new Promise<StreamEnd>((resolve) =>
-      openFrameStream(sockPath, sessionId, lane, (resp) => frames.push(resp), resolve),
+      openFrameStream(sockPath, sessionId, lane, (resp) => frames.push(resp), (e) =>
+        resolve((end = e)),
+      ),
     );
-    return { frames, ended };
+    // The frames so far, or the stream's end, thrown, once it has ended.
+    const live = (): ReadonlyArray<Response> => {
+      if (end !== null) throw new Error(`the ${lane} stream ended: ${JSON.stringify(end)}`);
+      return frames;
+    };
+    return { frames, ended, live };
   };
   const setState = (sid: string, key: string, value: string): Promise<void> =>
     click(sockPath, effectsUrl([{ verb: VERB_SET_STATE, args: [sid, key, value] }]));
@@ -331,7 +383,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       kind: "refused",
       resp: { code: "SWITCHED_OFF", error: expect.stringContaining("experimentalPane") },
     });
-    await sleep(300);
+    await until(() => band.live().length > 0, "the switched-on lane's frame");
     expect(band.frames.map(barText)).toEqual([
       expect.stringContaining("an unswitched mark"),
     ]);
@@ -354,13 +406,14 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       exit: (reason) => seen.push(`exit: ${reason}`),
     });
     try {
-      const deadline = (ms: number) => Date.now() + ms;
-      let until = deadline(2000);
-      while (offs === 0 && Date.now() < until) await sleep(20);
+      await until(() => offs > 0, "the lane switched off", 2000);
       expect(offs).toBe(1);
       await setState("feed-follow", "experimentalBand", "true");
-      until = deadline(SWITCHED_OFF_RETRY_MS + 3000);
-      while (seen.length === 0 && Date.now() < until) await sleep(50);
+      await until(
+        () => seen.length > 0,
+        "a frame once the lane is on",
+        SWITCHED_OFF_RETRY_MS + 3000,
+      );
       expect(seen).toEqual([expect.stringContaining("an unswitched mark")]);
     } finally {
       follower.close();
@@ -444,31 +497,45 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     const bad = effectsUrl([
       { verb: VERB_SET_STATE, args: ["feed-click-error", "face", "bogus"] },
     ]);
+    const shows = (text: string): boolean => /bogus/.test(text);
+    // The bar, the bar with the error for the hold, the bar: where the error
+    // first shows, and the first frame after it that no longer does.
+    const hold = (frames: ReadonlyArray<Frame>) => {
+      const shown = outputs(frames).map(stripAnsi);
+      const errorAt = shown.findIndex(shows);
+      const clearAt = shown.findIndex((text, i) => i > errorAt && !shows(text));
+      return { shown, errorAt, clearAt };
+    };
     let inside = "";
-    const frames = await framesOf("feed-click-error", async () => {
-      await sleep(100);
+    let clickedAt = 0;
+    const frames = await framesOf("feed-click-error", async ({ received, elapsed, waitFor }) => {
+      await waitFor(() => received.length > 0, "the bar before the click");
+      clickedAt = elapsed();
       expect((await sendClick(sockPath, bad)).ok).toBe(false);
       inside = await render(sockPath, "feed-click-error", projectDir, {}, args("toggle"));
-      // No statusline request from here on: only time ends the hold. A still
-      // bar's frames come a period apart, each after the last answers, so the
-      // first one past the hold can land a full period and their drift late.
-      await sleep(CLICK_ERROR_HOLD_S * 1000 + 2500);
+      await waitFor(() => hold(received).errorAt > 0, "a frame showing the error");
+      // No statusline request from here on: only time ends the hold, so the
+      // stream stays open until a frame no longer shows it.
+      // How long past the hold the clearing frame comes is the daemon's
+      // scheduling, not the hold, so the wait bets nothing on it; the hold's
+      // end is pinned on owned instants in test/click-error.test.ts.
+      await waitFor(
+        () => hold(received).clearAt > 0,
+        "a frame past the hold",
+        CLICK_ERROR_HOLD_S * 1000 + 10_000,
+      );
     });
-    const shows = (text: string): boolean => /bogus/.test(text);
     expect(shows(stripAnsi(inside))).toBe(true);
-    const outputs = frames.flatMap(({ at, resp }) =>
-      resp.ok && "output" in resp ? [{ at, text: stripAnsi(resp.output) }] : [],
-    );
-    // The frames: the bar, the bar with the error for the hold, the bar.
-    const errorAt = outputs.findIndex(({ text }) => shows(text));
-    const clearAt = outputs.findIndex((f, i) => i > errorAt && !shows(f.text));
-    expect(shows(outputs[0]!.text)).toBe(false);
+    const { shown, errorAt, clearAt } = hold(frames);
+    expect(shows(shown[0]!)).toBe(false);
     expect(errorAt).toBeGreaterThan(0);
     expect(clearAt).toBeGreaterThan(errorAt);
-    // The error frame is pushed a moment after the click, so the gap may fall
-    // short of the hold by that moment, never by a frame.
-    expect(outputs[clearAt]!.at - outputs[errorAt]!.at).toBeGreaterThanOrEqual(
-      CLICK_ERROR_HOLD_S * 1000 - 250,
+    // [LAW:no-ambient-temporal-coupling] Measured from the click's send, not
+    // from the error frame's arrival: the daemon stamps the click after it was
+    // sent, draws the clearing frame at an instant a hold past that stamp, and
+    // it arrives after it is drawn — so no stall on either side can shorten it.
+    expect(frames[clearAt]!.at - clickedAt).toBeGreaterThanOrEqual(
+      CLICK_ERROR_HOLD_S * 1000,
     );
   });
 });

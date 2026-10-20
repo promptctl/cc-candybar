@@ -33,6 +33,7 @@ import {
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { CLICK_ERROR_HOLD_S } from "../src/daemon/click-error";
 import { sendDaemonRequest } from "./helpers/daemon-wire";
+import { until } from "./helpers/until";
 import {
   prepareIsolatedDaemonEnv,
   spawnDaemonWithEnv,
@@ -348,7 +349,7 @@ describe("every render request writes one render event, whatever its outcome", (
 
     await until(
       () => existsSync(path.join(tmuxDir, "asked")),
-      "the render never asked tmux",
+      "the render asked tmux",
     );
     // Held at the gate, the render has written nothing yet — and holds the
     // config state it is drawing with (brandon-unfiled-3248.6rc).
@@ -369,7 +370,7 @@ describe("every render request writes one render event, whatever its outcome", (
     await gate.close();
     await until(
       () => eventsOf("ev-late").length > 0,
-      "the held render never wrote its event",
+      "the held render wrote its event",
     );
 
     const late = only(eventsOf("ev-late"));
@@ -382,18 +383,3 @@ describe("every render request writes one render event, whatever its outcome", (
     });
   });
 });
-
-// Wait for a state the daemon reaches on its own clock, failing loudly at the
-// deadline rather than hanging on it.
-async function until(
-  reached: () => boolean,
-  failure: string,
-  timeoutMs = 5_000,
-): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (!reached()) {
-    if (Date.now() >= deadline)
-      throw new Error(`${failure} within ${timeoutMs}ms`);
-    await new Promise((resolve) => setTimeout(resolve, 20));
-  }
-}
