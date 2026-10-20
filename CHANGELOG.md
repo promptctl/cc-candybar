@@ -1,3 +1,11 @@
+## [1.148.2](https://github.com/promptctl/cc-candybar/compare/v1.148.1...v1.148.2) (2026-10-20)
+
+
+### Bug Fixes
+
+* **doctor:** a home-directory session's settings file is the user's; effect refresh's fix scope documented (brandon-doctor-v62x.49w) ([#384](https://github.com/promptctl/cc-candybar/issues/384)) ([ddc371e](https://github.com/promptctl/cc-candybar/commit/ddc371e7d6164eee8bf574ec4f4c6fe5ca2656ec))
+* **test:** the frame-feed click-error test waits on frames, not on time (candybar-animation-wbxz.81o.dl4) ([#383](https://github.com/promptctl/cc-candybar/issues/383)) ([e38fff8](https://github.com/promptctl/cc-candybar/commit/e38fff8b0d856e7571c26587ce4bddf6bec8d384))
+
 ## [1.148.1](https://github.com/promptctl/cc-candybar/compare/v1.148.0...v1.148.1) (2026-10-20)
 
 
