@@ -28,6 +28,7 @@ import {
   type FrameStream,
   type StreamEnd,
 } from "../src/daemon/client-frames";
+import { FEED_PERIODS } from "../src/daemon/frame-feed";
 import { followFrames, SWITCHED_OFF_RETRY_MS } from "../src/daemon/frame-follow";
 import {
   PROTOCOL_VERSION,
@@ -99,8 +100,8 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   // the clock those arrivals are read on.
   // [LAW:no-silent-failure] A daemon too busy to take the subscribe inside its
   // request budget answers TIMEOUT, and the subscriber opens another, as every
-  // real consumer does (afterStreamEnd); any other end before `during` returns
-  // fails the test, named, ahead of whatever wait it starved.
+  // real consumer does (afterStreamEnd); any other end fails the test the
+  // moment it happens, named, rather than once a wait it starved runs out.
   async function framesOf(
     sessionId: string,
     during: (
@@ -109,9 +110,9 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     ) => Promise<void>,
   ): Promise<Frame[]> {
     const frames: Frame[] = [];
-    const ends: StreamEnd[] = [];
     const opened = Date.now();
     const elapsed = (): number => Date.now() - opened;
+    const early = Promise.withResolvers<never>();
     const open = (): FrameStream =>
       openFrameStream(
         sockPath,
@@ -121,22 +122,20 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
         (end) => {
           if (end.kind === "refused" && end.resp.code === "TIMEOUT")
             stream = open();
-          else if (end.kind !== "closed-here") ends.push(end);
+          else if (end.kind !== "closed-here")
+            early.reject(
+              new Error(
+                `the stream ended before the test closed it: ${end.kind === "failed" ? end.error.message : JSON.stringify(end)}`,
+              ),
+            );
         },
       );
     let stream = open();
-    const failed = await during(frames, elapsed).then(
-      () => null,
-      (error: unknown) => ({ error }),
-    );
-    stream.close();
-    if (ends.length > 0)
-      throw new Error(
-        `the stream ended before the test closed it: ${ends
-          .map((end) => (end.kind === "failed" ? end.error.message : JSON.stringify(end)))
-          .join("; ")}`,
-      );
-    if (failed !== null) throw failed.error;
+    try {
+      await Promise.race([during(frames, elapsed), early.promise]);
+    } finally {
+      stream.close();
+    }
     return frames;
   }
 
@@ -237,12 +236,9 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       {},
       args("toggle"),
     );
-    let clickedAt = 0;
-    const frames = await framesOf("feed-click", async (received, elapsed) => {
-      // The still bar's next frame falls due a second after its first; the
-      // click lands the moment that first frame is in, well inside the second.
+    const frames = await framesOf("feed-click", async (received) => {
+      // The click lands the moment the bar's first frame is in.
       await until(() => received.length > 0, "the bar before the click");
-      clickedAt = elapsed();
       await click(sockPath, urlWriting(shut, "face", "open"));
       await until(() => received.length > 1, "the clicked bar");
     });
@@ -250,14 +246,18 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       expect.stringContaining("door shut"),
       expect.stringContaining("door open"),
     ]);
-    expect(frames[1]!.at - clickedAt).toBeLessThan(800);
+    // [LAW:no-ambient-temporal-coupling] The still bar's next frame falls due
+    // a period after its first STARTED drawing, which is after the
+    // subscription opened, so a frame in before a period from then can only be
+    // the click's.
+    expect(frames[1]!.at).toBeLessThan(FEED_PERIODS.still);
   });
 
   test("a subscriber that arrives before the session's first render receives it", async () => {
-    const frames = await framesOf("feed-early", async () => {
+    const frames = await framesOf("feed-early", async (received) => {
       await sleep(200);
       await render(sockPath, "feed-early", projectDir, {}, args("still"));
-      await sleep(300);
+      await until(() => received.length > 0, "the first render's frame");
     });
     expect(outputs(frames).map(stripAnsi)).toEqual([
       expect.stringContaining("a still mark"),
@@ -364,7 +364,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       kind: "refused",
       resp: { code: "SWITCHED_OFF", error: expect.stringContaining("experimentalPane") },
     });
-    await sleep(300);
+    await until(() => band.frames.length > 0, "the switched-on lane's frame");
     expect(band.frames.map(barText)).toEqual([
       expect.stringContaining("an unswitched mark"),
     ]);
@@ -514,5 +514,5 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     expect(frames[clearAt]!.at - clickedAt).toBeGreaterThanOrEqual(
       CLICK_ERROR_HOLD_S * 1000,
     );
-  }, 30_000);
+  });
 });
