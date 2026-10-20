@@ -456,7 +456,7 @@ function installSuccessMessage(): string {
 }
 
 export async function runInstall(
-  rendererArgs: string[],
+  rendererArgs: readonly string[],
   bundle: string,
 ): Promise<void> {
   const force = rendererArgs.includes("--force");

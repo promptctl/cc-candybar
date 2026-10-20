@@ -43,8 +43,8 @@ Debugging:
 Configuration:
   Layout and segment options are defined in .cc-candybar.json5 (place in your
   project dir, cwd, or ~/.config/cc-candybar/config.json5). Use CC_CANDYBAR_CONFIG
-  to point at a specific file. See the default config for all available options:
-    node dist/index.mjs debug --project-dir . --cwd .
+  to point at a specific file. To see the effective merged config:
+    cc-candybar config
 
   Every bar carries a settings menu, whatever your config says — no config
   needed, and writing your own \`root\` cannot delete it. Click
@@ -80,18 +80,16 @@ Subcommands:
   daemon-stats [--json]    Query the running daemon for runtime stats:
                            uptime, RSS, cache hit rates, watcher count,
                            request totals. Does not spawn a daemon.
-  frames --lane LANE [--session ID | --config PATH] [--format response|band]
+  frames --lane LANE [--config PATH]
                            One session's bar as the daemon pushes it — up to
                            30 frames a second while it moves, at once on a
-                           click — one JSON render response per stdout line.
-                           Without --session, reads Claude Code's statusline
-                           JSON from stdin (one object a line) and sends it as
-                           the session's data (--config then rides with it).
-                           LANE is band, statusline or pane: the experimental
-                           lane this stream serves, which streams only while
-                           its toggle in the settings menu's ⚙ config tab is on.
-                           --format band writes each frame as rows of styled
-                           runs, for the mod in mod/.
+                           click — one JSON message per stdout line. Reads
+                           Claude Code's statusline JSON from stdin (one object
+                           a line) and sends it as the session's data
+                           (--config rides with it). LANE is band, statusline
+                           or pane: the experimental lane this stream serves,
+                           which streams only while its toggle in the settings
+                           menu's ⚙ config tab is on.
   bar-pane PANE            Draw the bar of the Claude Code session in tmux
                            pane PANE (e.g. %3) in this pane, as the daemon
                            pushes it, while this pane is shown. The bar is

@@ -57,15 +57,16 @@ jest.setTimeout(30_000);
 // `moving` wears sparkle, the bundled loop whose bytes change most often from
 // one thirtieth of a second to the next (the others were tuned to move about
 // one just-noticeable step a second). `toggle` is a still bar a click changes.
-// Every config but `off` switches on the band lane these subscribers name.
+// Every config but `off` switches on the statusline lane these subscribers
+// name, whose frames are the render's own bytes, and the band lane.
 const CONFIGS = {
-  moving: `{ globals: { effect: "sparkle", experimentalBand: true }, segments: { a: { template: 'directory ~/code/cc-candybar' }, b: { template: 'branch main' }, c: { template: 'a moving mark' } }, root: { h: ['a', 'b', 'c'] } }`,
-  still: `{ globals: { experimentalBand: true }, segments: { mark: { template: 'a still mark' } }, root: { h: ['mark'] } }`,
+  moving: `{ globals: { effect: "sparkle", experimentalBand: true, experimentalStatusline: true }, segments: { a: { template: 'directory ~/code/cc-candybar' }, b: { template: 'branch main' }, c: { template: 'a moving mark' } }, root: { h: ['a', 'b', 'c'] } }`,
+  still: `{ globals: { experimentalBand: true, experimentalStatusline: true }, segments: { mark: { template: 'a still mark' } }, root: { h: ['mark'] } }`,
   off: `{ segments: { mark: { template: 'an unswitched mark' } }, root: { h: ['mark'] } }`,
   // Moves, and carries a load warning (a duplicate key) the diagnostic strip
   // shows on every frame.
-  warned: `{ globals: { effect: "sparkle", effect: "sparkle", experimentalBand: true }, segments: { mark: { template: 'a warned mark' } }, root: { h: ['mark'] } }`,
-  toggle: `{ globals: { experimentalBand: true }, variables: { face: { kind: "state", key: "face", default: "shut" } }, actions: { flip: { set: "face", cycle: ["shut", "open"] } }, segments: { door: { template: '{{ action "flip" "door shut" "door open" }}' } }, root: { h: ['door'] } }`,
+  warned: `{ globals: { effect: "sparkle", effect: "sparkle", experimentalBand: true, experimentalStatusline: true }, segments: { mark: { template: 'a warned mark' } }, root: { h: ['mark'] } }`,
+  toggle: `{ globals: { experimentalBand: true, experimentalStatusline: true }, variables: { face: { kind: "state", key: "face", default: "shut" } }, actions: { flip: { set: "face", cycle: ["shut", "open"] } }, segments: { door: { template: '{{ action "flip" "door shut" "door open" }}' } }, root: { h: ['door'] } }`,
 };
 
 const sleep = (ms: number): Promise<void> =>
@@ -96,7 +97,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     const stream = openFrameStream(
       sockPath,
       sessionId,
-      "band",
+      "statusline",
       (resp) => frames.push({ at: Date.now() - opened, resp }),
       (end) => {
         if (end.kind === "failed") throw end.error;
@@ -118,6 +119,12 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   };
   const feedStats = async (): Promise<StatsSnapshot["frameFeeds"]> =>
     (await stats()).frameFeeds;
+
+  // A band-lane frame's text: its rows of runs (src/daemon/lane-frames.ts).
+  const barText = (resp: Response): unknown =>
+    resp.ok && "band" in resp
+      ? resp.band.map((row) => row.map((run) => run.text).join("")).join("\n")
+      : resp;
 
   const outputs = (frames: Array<{ resp: Response }>): string[] =>
     frames.map(({ resp }) => {
@@ -325,7 +332,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       resp: { code: "SWITCHED_OFF", error: expect.stringContaining("experimentalPane") },
     });
     await sleep(300);
-    expect(band.frames.map((r) => (r.ok && "output" in r ? stripAnsi(r.output) : r))).toEqual([
+    expect(band.frames.map(barText)).toEqual([
       expect.stringContaining("an unswitched mark"),
     ]);
     // Switching it off wakes the feed, whose next frame ends the stream.
@@ -341,7 +348,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     const seen: string[] = [];
     let offs = 0;
     const follower = followFrames(sockPath, "feed-follow", "band", {
-      frame: (resp) => seen.push(resp.ok && "output" in resp ? stripAnsi(resp.output) : JSON.stringify(resp)),
+      frame: (resp) => seen.push(String(barText(resp))),
       off: () => offs++,
       fault: (reason) => seen.push(`fault: ${reason}`),
       exit: (reason) => seen.push(`exit: ${reason}`),

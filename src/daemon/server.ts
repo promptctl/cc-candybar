@@ -38,6 +38,7 @@ import {
 } from "./fork-bomb-breaker";
 import { dlog } from "./log";
 import { makeUpdateWatch, UPDATE_DISMISSED_KEY } from "./update-notice";
+import { LANE_FRAMES } from "./lane-frames";
 import { REGISTRY_URL } from "../install/currency";
 import { isAbsolute } from "node:path";
 import { explicitConfigPath } from "../utils/user-path";
@@ -955,7 +956,8 @@ function handleConnection(sock: net.Socket): void {
     const write = newestWins(sock);
     const unsubscribe = frameFeeds.subscribe(sessionId, {
       lane,
-      frame: (_resp, json) => write(encodeJsonFrame(json)),
+      frame: (resp, json) =>
+        write(encodeJsonFrame(LANE_FRAMES[lane](resp, json))),
       // A refused subscription is over: its refusal ends the stream, and a
       // frame still waiting for the socket to drain is dropped, as
       // newest-wins drops any frame a newer one replaces.

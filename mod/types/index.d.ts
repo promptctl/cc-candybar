@@ -1,9 +1,12 @@
-// The mod's contract: what `cc-candybar frames` writes to it, one JSON object
-// per line, and the values it keeps in `$.state`.
+// The mod's contract: what its child writes to it, one JSON object per line —
+// each message the daemon sends a band-lane subscriber, relayed as it was sent
+// (`cc-candybar-native follow`, rust-client/src/follow.rs) — and the values it
+// keeps in `$.state`.
 //
-// [LAW:one-source-of-truth] The child (src/band/frames.ts) imports the frame
-// types from here; this file is the one statement of the line the two
-// processes share.
+// [LAW:one-source-of-truth] The daemon's band encoding (src/band/frames.ts)
+// and its wire response type (src/daemon/protocol.ts) import the line's types
+// from here; this file is the one statement of the line the daemon and the mod
+// share.
 
 // A colour as the mod's `Text` takes one: `#rrggbb`, or the name of one of the
 // terminal's own sixteen (`red`, `blackBright`), which its theme draws.
@@ -24,30 +27,39 @@ export interface BandRun {
   readonly href?: string;
 }
 
-// One bar: every row it draws, top to bottom.
+// One row of a bar, left to right.
+export type BandRow = readonly BandRun[];
+
+// One bar: every row it draws, top to bottom. The daemon answers a band-lane
+// subscriber's every frame with one, a render that failed included (its error
+// glyph, drawn as the statusline draws it).
 export interface BandBar {
-  readonly kind: 'bar';
-  readonly rows: readonly (readonly BandRun[])[];
+  readonly ok: true;
+  readonly band: readonly BandRow[];
 }
 
 // The band's lane switched off in candybar's settings (`🧪 band (A)`): the
-// band draws nothing, and `reason` is the daemon's sentence naming the toggle.
+// daemon's own refusal of the subscription, and `error` its sentence naming
+// the toggle. The band draws nothing.
 export interface BandOff {
-  readonly kind: 'off';
-  readonly reason: string;
+  readonly ok: false;
+  readonly code: 'SWITCHED_OFF';
+  readonly error: string;
+  readonly daemonV?: number;
 }
 
 // [LAW:types-are-the-program] One line of the stream: a bar, or the lane
 // switched off. An empty bar is a bar, never mistaken for the lane being off.
-export type BandFrame = BandBar | BandOff;
+export type BandLine = BandBar | BandOff;
 
 declare module 'claude-code' {
   interface PluginState {
     'candybar-band': {
-      // What the band draws: the newest frame, null until the first arrives;
-      // and what is wrong now, above it, null while frames arrive: the
-      // frames child's last word since its last frame, or why it stopped.
-      band: { frame: BandFrame | null; failure: string | null };
+      // What the band draws: the newest line, null until the first arrives;
+      // and what is wrong now, above it, null while lines arrive: the child's
+      // last word since its last line, a line the band cannot draw, or why the
+      // child stopped.
+      band: { frame: BandLine | null; failure: string | null };
     };
   }
 }

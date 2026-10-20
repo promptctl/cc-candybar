@@ -1,8 +1,9 @@
-// The band's encoding of a session's frame stream (`cc-candybar frames
-// --format band`), for the Claude Code mod that draws the bar in the band
-// above the prompt (mod/, epic candybar-animation-wbxz.g69): each pushed
-// render response as the rows of styled runs the mod's `Text` and `Link`
-// take, one JSON object a line.
+// The band lane's encoding of a session's frames, for the Claude Code mod that
+// draws the bar in the band above the prompt (mod/, epic
+// candybar-animation-wbxz.g69): each pushed render response as the rows of
+// styled runs the mod's `Text` and `Link` take. The daemon encodes it for each
+// band-lane subscriber (src/daemon/lane-frames.ts), beside the renderer whose
+// output it encodes, so the mod's child only relays it.
 //
 // [LAW:one-source-of-truth] The daemon stays the only renderer, and the
 // statusline client the only source of the session's data: a frame is the
@@ -12,7 +13,7 @@
 
 import { AnsiDecoder, ColorDepth, Style } from "@promptctl/rich-js";
 import type { ColorSpec, StyleOptions } from "@promptctl/rich-js";
-import type { BandBar, BandFrame, BandRun, RunColor } from "../../mod/types";
+import type { BandBar, BandRun, RunColor } from "../../mod/types";
 import { renderOutcomeOf } from "../daemon/client";
 import type { Response } from "../daemon/protocol";
 import {
@@ -145,33 +146,26 @@ export function bandFrame(ansi: string): BandBar {
     if (at < plain.length) runs.push(bandRun(plain.slice(at), PLAIN));
     return runs;
   });
-  return { kind: "bar", rows };
+  return { ok: true, band: rows };
 }
 
-// One pushed render response as the line the mod reads.
+// One pushed render response as the frame the mod draws.
 // [LAW:no-silent-failure] A bar the band cannot draw is a frame saying why,
 // in the diagnostic strip's colours. The stream goes on, so the next bar it
 // can draw takes its place, as the statusline's next render replaces its
-// error glyph: a config fixed brings the band back.
-// The band's lane switched off (src/config/lanes.ts) is the `off` line, which
-// the band draws as nothing until the toggle is on again.
-export function bandLine(resp: Response): string {
-  if (!resp.ok && resp.code === "SWITCHED_OFF")
-    return JSON.stringify({
-      kind: "off",
-      reason: resp.error,
-    } satisfies BandFrame);
+// error glyph: a config fixed brings the band back. A render that failed is
+// drawn as the statusline draws it, its error glyph — so every frame a band
+// subscriber receives is a bar, and every refusal is the stream's end.
+export function bandResponse(resp: Response): BandBar {
   const ansi = planOutcome(renderOutcomeOf(resp)).output;
   try {
-    return JSON.stringify(bandFrame(ansi));
+    return bandFrame(ansi);
   } catch (error) {
     const why = sanitizeText(
       error instanceof Error ? error.message : String(error),
     );
-    return JSON.stringify(
-      bandFrame(
-        `${DIAGNOSTIC_ERROR_BG}${DIAGNOSTIC_ERROR_FG}⚠ cc-candybar ${why}${ANSI_RESET}\n`,
-      ),
+    return bandFrame(
+      `${DIAGNOSTIC_ERROR_BG}${DIAGNOSTIC_ERROR_FG}⚠ cc-candybar ${why}${ANSI_RESET}\n`,
     );
   }
 }

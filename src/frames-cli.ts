@@ -1,10 +1,10 @@
 // `cc-candybar frames`: one session's bar, as the daemon pushes it, for
-// whatever draws it faster than Claude Code reruns a statusline — a patched
-// Claude Code, a mod, a renderer outside Claude Code (epic
+// whatever draws it faster than Claude Code reruns a statusline (epic
 // candybar-animation-wbxz). Each frame is one line on stdout: the JSON of the
-// response a render request is answered with, `{"ok":true,"output":"…"}`, or
-// why the bar could not be drawn — or, with `--format band`, that response
-// as the band mod's rows of styled runs (src/band/frames.ts).
+// message the daemon sent for the lane — for the statusline and pane lanes the
+// response a render request is answered with, `{"ok":true,"output":"…"}` or
+// why the bar could not be drawn; for the band lane its rows of styled runs
+// (src/daemon/lane-frames.ts).
 //
 // `--lane <band|statusline|pane>` names the animation lane this stream serves
 // (src/config/lanes.ts). While the session's toggle for it is off the daemon
@@ -13,15 +13,12 @@
 // the client asks again on its own (src/daemon/frame-follow.ts), so turning
 // the toggle on resumes the stream. stderr carries only what went wrong.
 //
-// The session is named one of two ways, and that decides what stdin is:
-//   --session <id>   stdin is not read; the frames are drawn from the data the
-//                    session's own statusline client sends.
-//   (otherwise)      stdin carries Claude Code's statusline JSON, one object a
-//                    line, each forwarded to the daemon as a render request
-//                    (this client is then that session's statusline client),
-//                    and its `session_id` names the session — a new one after
-//                    /clear moves the stream to it. stdin closing ends the
-//                    stream.
+// stdin carries Claude Code's statusline JSON, one object a line, each
+// forwarded to the daemon as a render request (this client is then that
+// session's statusline client), and its `session_id` names the session — a new
+// one after /clear moves the stream to it. stdin closing ends the stream. A
+// session's frames drawn from its own statusline client's data, named by id,
+// are the native client's `follow` (rust-client/src/follow.rs).
 //
 // The stream outlives the daemon: one that restarts (a rebuild, the memory
 // backstop) is reconnected, spawning it when none answers, and handed the
@@ -40,20 +37,6 @@ import { detectClientHints } from "./client-hints";
 import { nodeClientHint } from "./client-hint";
 import { newestWins } from "./utils/newest-wins";
 import { LANE_NAMES, parseLane } from "./config/lanes";
-import type { Response } from "./daemon/protocol";
-import { bandLine } from "./band/frames";
-
-// [LAW:one-type-per-behavior] How a frame is written is a value the one
-// stream carries: the render response as the daemon sent it, or the band
-// mod's rows of styled runs.
-const FORMATS = {
-  response: (resp: Response): string => JSON.stringify(resp),
-  band: bandLine,
-} as const;
-
-function isFormat(name: string): name is keyof typeof FORMATS {
-  return Object.hasOwn(FORMATS, name);
-}
 
 // `bundle`: the bundle this process runs, as its entry names it.
 // What a stream last said: nothing yet, a frame or the lane-off refusal on
@@ -88,10 +71,8 @@ export async function runFrames(
   const { values, tokens } = parseArgs({
     args: argv.slice(3),
     options: {
-      session: { type: "string" },
       config: { type: "string" },
       lane: { type: "string" },
-      format: { type: "string", default: "response" },
     },
     strict: true,
     tokens: true,
@@ -108,30 +89,9 @@ export async function runFrames(
   const say = (line: string): void => {
     process.stderr.write(`cc-candybar frames: ${line}\n`);
   };
-  // [LAW:no-silent-failure] --config is a render arg, sent only with the data
-  // this client forwards; under --session it forwards none.
-  // [LAW:parse-dont-validate] The subscribe this client sends is well formed,
-  // so a daemon that answers BAD_REQUEST is one that does not take subscribe.
-  if (values.session === "") {
-    say("--session needs a session id");
-    process.exit(2);
-  }
   const lane = parseLane(values.lane);
   if (lane === null) {
     say(`--lane needs one of ${LANE_NAMES.join(", ")}`);
-    process.exit(2);
-  }
-  if (!isFormat(values.format)) {
-    say(
-      `--format must be one of ${Object.keys(FORMATS).join(", ")}, got ${JSON.stringify(values.format)}`,
-    );
-    process.exit(2);
-  }
-  const encode = FORMATS[values.format];
-  if (values.session !== undefined && values.config !== undefined) {
-    say(
-      "--config has no effect with --session: the session's own statusline client sends its config",
-    );
     process.exit(2);
   }
   // [LAW:no-silent-failure] A reader that went away is the end of the stream,
@@ -141,7 +101,7 @@ export async function runFrames(
   // it, as a subscriber of the daemon does.
   const emit = newestWins(process.stdout);
 
-  let sessionId: string | null = values.session ?? null;
+  let sessionId: string | null = null;
   let lastHook: ClaudeHookData | null = null;
   let follower: FrameFollower | null = null;
   let said: Said = { kind: "none" };
@@ -168,8 +128,10 @@ export async function runFrames(
   const subscribe = (id: string): void => {
     follower?.close();
     follower = followFrames(socketPath(), id, lane, {
-      frame: (resp) => tell({ kind: "frame" }, () => emit(`${encode(resp)}\n`)),
-      off: (resp) => tell({ kind: "off" }, () => emit(`${encode(resp)}\n`)),
+      frame: (resp) =>
+        tell({ kind: "frame" }, () => emit(`${JSON.stringify(resp)}\n`)),
+      off: (resp) =>
+        tell({ kind: "off" }, () => emit(`${JSON.stringify(resp)}\n`)),
       fault: (reason, retryMs) =>
         tell({ kind: "fault", reason }, () =>
           say(`${reason}; reconnecting in ${retryMs}ms`),
@@ -183,10 +145,6 @@ export async function runFrames(
     });
   };
 
-  if (sessionId !== null) {
-    subscribe(sessionId);
-    return;
-  }
   for await (const line of createInterface({ input: process.stdin })) {
     if (line.trim() === "") continue;
     let hook: ClaudeHookData;
