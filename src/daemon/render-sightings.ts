@@ -4,7 +4,8 @@
 // request says which client drew the bar (the install check) and whether
 // Claude Code's hook payload carried the rate-limit windows (the segment-data
 // check, brandon-doctor-v62x.onf), and where the session's transcript is (the
-// session-data check, brandon-doctor-v62x.p4l).
+// session-data check, brandon-doctor-v62x.p4l), and whether the bar it drew
+// moves (the effect-refresh check, brandon-doctor-v62x.tgp).
 //
 // [LAW:no-ambient-temporal-coupling] Held in memory by this daemon process,
 // keyed by session and the client's role, REPLACED by every render: a
@@ -18,6 +19,7 @@
 // for a client nothing runs any more.
 
 import type { ClientHint } from "../client-hint.js";
+import { DRAWN_MOTIONS } from "../render/drawn-motion.js";
 import type { ClaudeHookData } from "../utils/claude.js";
 import type { Instant } from "../utils/instant.js";
 
@@ -73,6 +75,32 @@ export function transcriptSaid(
   };
 }
 
+// [LAW:types-are-the-program] What the session's bar drew, read off the frame
+// itself (`DrawnFrame`, src/dsl/render.ts): whether anything on it changes
+// without new data — an effect, a transition, a template's `frames` — so the
+// doctor asks Claude Code for a redraw a second exactly when the bar needs one
+// (brandon-doctor-v62x.tgp). A render that threw drew nothing.
+// `can-move`: still now, but the config can start motion at any render
+// without a click — a `globals.effect` rule, placements fading as they come
+// and go, a placement wearing its own effect — so it needs the redraw a moving
+// bar does. `drawing`: the request arrived and its render has not settled.
+export const FRAMES_SEEN = [...DRAWN_MOTIONS, "failed", "drawing"] as const;
+export type FrameSeen = (typeof FRAMES_SEEN)[number];
+
+// [LAW:one-source-of-truth] Which client drew a sighting: Claude Code's
+// statusline (native, the Node fallback, or a client too old to report), or
+// a `cc-candybar frames` display, whose motion the daemon's feed pushes.
+export const SIGHTING_ROLES = ["statusline", "frames"] as const;
+export type SightingRole = (typeof SIGHTING_ROLES)[number];
+export const roleOf = (client: ClientHint | null): SightingRole =>
+  client?.kind === "frames" ? "frames" : "statusline";
+
+// What one client drew of a session's bar.
+export interface FrameSighting {
+  readonly role: SightingRole;
+  readonly frame: FrameSeen;
+}
+
 // What one render request said. `client` null: the render's client did not
 // report what it is. `claudeConfigDir`: the Claude Code directory the
 // session runs with, resolved (`claudeConfigDir`, src/claude-settings.ts) —
@@ -82,34 +110,48 @@ export interface RenderSaid {
   readonly rateLimits: RateLimitsSeen;
   readonly claudeConfigDir: string;
   readonly transcript: TranscriptSaid;
+  readonly frame: FrameSeen;
 }
 
-export interface RenderSighting extends RenderSaid {
+// A request's sighting, with the role its client drew in.
+export interface RoledSaid extends RenderSaid {
+  readonly role: SightingRole;
+}
+
+export interface RenderSighting extends RoledSaid {
   // Seconds since the session's last render.
   readonly ago: number;
 }
 
-// [LAW:single-enforcer] The render path is the one writer (`see`, at the
-// instant it serves a render); the doctor the one reader — daemon-stats for
+// [LAW:single-enforcer] The render path is the one writer (`see`, when a
+// request arrives and again when its render settles, both stamped with the
+// instant and order it ARRIVED in); the doctor the one reader — daemon-stats for
 // the CLI (`list`), the click for its own session (`ofSession`).
 export class RenderSightings {
   private readonly seen = new Map<
     string,
     {
       readonly sessionId: string;
-      readonly said: RenderSaid;
+      readonly said: RoledSaid;
       readonly at: Instant;
+      readonly order: number;
     }
   >();
 
-  see(sessionId: string, said: RenderSaid, at: Instant): void {
+  // `order`: the request's arrival order. Renders settle out of order — the
+  // day's first seed, a PR lookup — so a request that settles after a newer
+  // one of the same session and role is not its latest, and is dropped; its
+  // own settling replaces its arrival.
+  see(sessionId: string, said: RenderSaid, at: Instant, order: number): void {
+    const role = roleOf(said.client);
     // JSON, so no session id can spell another sighting's key.
-    const role = said.client?.kind === "frames" ? "frames" : "statusline";
     const key = JSON.stringify([sessionId, role]);
+    const known = this.seen.get(key);
+    if (known !== undefined && known.order > order) return;
     // Re-inserted, so the map's order is the order of last renders and the
     // first key is the sighting longest without one.
     this.seen.delete(key);
-    this.seen.set(key, { sessionId, said, at });
+    this.seen.set(key, { sessionId, said: { ...said, role }, at, order });
     if (this.seen.size > SIGHTINGS_KEPT) {
       this.seen.delete(this.seen.keys().next().value!);
     }
@@ -125,7 +167,7 @@ export class RenderSightings {
   // The latest render in each role that drew one session's bar — none when
   // this process has served it no render (a daemon restarted under a bar
   // already on screen).
-  ofSession(sessionId: string): readonly RenderSaid[] {
+  ofSession(sessionId: string): readonly RoledSaid[] {
     return [...this.seen.values()]
       .filter((s) => s.sessionId === sessionId)
       .map((s) => s.said);

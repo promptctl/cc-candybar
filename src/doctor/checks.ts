@@ -16,11 +16,11 @@
 import { TMUX_ENV, type TmuxHint } from "../tmux-hint.js";
 import type { ClientKind } from "../client-hint.js";
 import { DEFAULT_TERMINAL_WIDTH } from "../render/strip.js";
-import type { LoopName } from "@promptctl/rich-js";
-import { EFFECT_FLOOR, type EffectSelection } from "../themes/policy.js";
 import type { Outcome } from "../utils/outcome.js";
 import {
   SIGHTINGS_KEPT,
+  type FrameSeen,
+  type FrameSighting,
   type RateLimitsSeen,
   type TranscriptSaid,
 } from "../daemon/render-sightings.js";
@@ -335,11 +335,6 @@ export interface TranscriptRead extends TranscriptSaid {
   readonly read: Outcome<TranscriptWindow>;
 }
 
-export interface PlacementEffectFact {
-  readonly placement: string;
-  readonly effect: LoopName;
-}
-
 export interface DoctorFacts {
   readonly tmux: TmuxFacts;
   // The columns the terminal was measured at (COLUMNS, else the terminal's
@@ -365,18 +360,10 @@ export interface DoctorFacts {
   // (`sightingOf`), or why they could not be read
   // (src/doctor/clicked-terminals.ts).
   readonly clicked: Asked<readonly string[]>;
-  // The effect the session's bar wears, resolved as its render resolves it
-  // (session pick over config default over the floor). A rule stays a rule:
-  // only the render can say what it names.
-  readonly effect: EffectSelection;
-  // Each placement of the session's preset that wears a moving effect of its
-  // own (brandon-effects-2gka.bm1) — saved, or the session's unsaved pick —
-  // which moves whatever the bar's effect is.
-  readonly placementEffects: readonly PlacementEffectFact[];
-  // Whether placements fade in and dissolve out (brandon-effects-2gka.631,
-  // .3vt), resolved as the render resolves it: a fade moves over 20 s, a
-  // dissolve over 30 s.
-  readonly transitions: boolean;
+  // What the recent renders drew (brandon-doctor-v62x.tgp): the click's own
+  // session's bars, or every session `cc-candybar doctor` sees in its Claude
+  // Code directory — whose settings file sets the refresh.
+  readonly frames: Asked<readonly FrameSighting[]>;
   // The outside data the session's placed segments read
   // (brandon-doctor-v62x.onf).
   readonly data: SegmentDataFacts;
@@ -1047,35 +1034,65 @@ const links: Check = {
 // effect curve is tuned for.
 export const EFFECT_REFRESH_INTERVAL = 1;
 
+// [LAW:single-enforcer] The frames Claude Code's refresh redraws: the
+// statusline's, never a `cc-candybar frames` display's.
+export const refreshedFrames = (
+  frames: readonly FrameSighting[],
+): readonly FrameSeen[] =>
+  frames.filter((f) => f.role === "statusline").map((f) => f.frame);
+
 // "A bar that moves is redrawn every second" (brandon-effects-2gka.21e).
 // Without `refreshInterval` Claude Code runs the statusline only on events, so
 // an effect's frames land seconds apart and an idle session stops moving.
 // `cc-candybar install` does not write it — a render a second costs every
 // session whether or not anything animates — so the doctor asks for it exactly
-// when anything on the bar moves: the bar's effect, a placement's own, or a
-// placement fading in as it appears. A rule counts: it can turn one on at any
-// render.
+// when a bar Claude Code drew moves, or its config can start motion with no
+// click. A `cc-candybar frames` display is not one: the daemon's feed pushes
+// its frames, whatever Claude Code's refresh.
+// [LAW:one-source-of-truth] Whether it moves is what the drawn frame says
+// (brandon-doctor-v62x.tgp), not what the config asks for: a template's
+// `frames` — the effort gauge at max — moves the bar with no effect on.
 const effectRefresh: Check = {
   name: "effectRefresh",
   label: "effect refresh",
   takesMark: false,
-  probe: ({ effect, placementEffects, transitions, claudeSettings }) => {
-    const moving = [
-      ...(effect.kind !== "decided"
-        ? ["a globals.effect rule can give the bar an effect"]
-        : effect.value === EFFECT_FLOOR
-          ? []
-          : [`the bar wears the ${effect.name} effect`]),
-      ...placementEffects.map(
-        ({ placement, effect }) => `${placement} wears the ${effect} effect`,
-      ),
-      ...(transitions
-        ? ["placements fade in and dissolve out as they come and go"]
-        : []),
-    ];
-    if (moving.length === 0) return { ok: true };
-    const wearing = moving.join(" and ");
+  probe: ({ frames, claudeSettings, askedBy }) => {
     const { path, statusLine } = claudeSettings;
+    // [LAW:one-source-of-truth] Claude Code's own reading: a number of
+    // seconds, no fewer than the minimum, so the minimum itself is the one
+    // value that redraws every second — and once it is set, nothing the bar
+    // draws needs more. Unset runs on events only; anything under the minimum
+    // or not a number is a value the docs give no meaning, so the reason names
+    // it rather than guess, and the fix overwrites it.
+    const interval =
+      statusLine.kind === "present" ? statusLine.refreshInterval : undefined;
+    if (interval === EFFECT_REFRESH_INTERVAL) return { ok: true };
+
+    if (frames.kind === "failed") return { ok: false, reason: frames.reason };
+    const drawn = refreshedFrames(frames.value);
+    const wearing = drawn.includes("moves")
+      ? "the bar moves (an effect, a fade, or an animated segment)"
+      : drawn.includes("can-move")
+        ? "the bar can start moving (a globals.effect rule, placements that fade in and out, or a placement with an effect of its own that is not drawn now)"
+        : null;
+    if (wearing === null) {
+      if (drawn.includes("still")) return { ok: true };
+      const unseen =
+        drawn.length > 0
+          ? drawn.includes("drawing")
+            ? "the bar's latest render has not finished"
+            : "the bar's recent renders failed"
+          : frames.value.length > 0
+            ? "only a `cc-candybar frames` display has drawn this bar, not Claude Code's statusline"
+            : askedBy === "click"
+              ? NO_RENDER_OF_THIS_BAR
+              : `no session of this Claude Code has drawn a statusline for this daemon in the last ${RECENT_CLIENT_S / 60} minutes`;
+      return {
+        ok: false,
+        reason: `${unseen}, so whether it moves is unknown — run the doctor again once the bar has redrawn`,
+      };
+    }
+
     switch (statusLine.kind) {
       case "absent":
         return {
@@ -1088,29 +1105,22 @@ const effectRefresh: Check = {
           reason: `${wearing}, and ${path} sets statusLine to ${JSON.stringify(statusLine.value)}, not a statusLine object — re-run \`cc-candybar install\` to write one`,
         };
       case "present":
-        break;
+        return {
+          ok: false,
+          reason:
+            interval === undefined
+              ? `${wearing}, but Claude Code redraws it only on events`
+              : typeof interval === "number" &&
+                  interval > EFFECT_REFRESH_INTERVAL
+                ? `${wearing}, but Claude Code redraws it only every ${interval} s`
+                : `${wearing}, but statusLine.refreshInterval is ${JSON.stringify(interval)}, not a number of seconds Claude Code accepts (its minimum is ${EFFECT_REFRESH_INTERVAL})`,
+          fix: {
+            kind: "claude-settings",
+            path: ["statusLine", "refreshInterval"],
+            value: EFFECT_REFRESH_INTERVAL,
+          },
+        };
     }
-    // [LAW:one-source-of-truth] Claude Code's own reading: a number of
-    // seconds, no fewer than the minimum, so the minimum itself is the one
-    // value that redraws every second. Unset runs on events only; anything
-    // under the minimum or not a number is a value the docs give no meaning,
-    // so the reason names it rather than guess, and the fix overwrites it.
-    const interval = statusLine.refreshInterval;
-    if (interval === EFFECT_REFRESH_INTERVAL) return { ok: true };
-    return {
-      ok: false,
-      reason:
-        interval === undefined
-          ? `${wearing}, but Claude Code redraws it only on events`
-          : typeof interval === "number" && interval > EFFECT_REFRESH_INTERVAL
-            ? `${wearing}, but Claude Code redraws it only every ${interval} s`
-            : `${wearing}, but statusLine.refreshInterval is ${JSON.stringify(interval)}, not a number of seconds Claude Code accepts (its minimum is ${EFFECT_REFRESH_INTERVAL})`,
-      fix: {
-        kind: "claude-settings",
-        path: ["statusLine", "refreshInterval"],
-        value: EFFECT_REFRESH_INTERVAL,
-      },
-    };
   },
 };
 

@@ -57,7 +57,7 @@ import type { JsonValue } from "../var-system/types.js";
 import type { BuildLineOptions } from "../render/strip.js";
 import {
   DEFAULT_PADDING,
-  renderStripCells,
+  drawStripCells,
   stripChromeCols,
   stripSeamCols,
 } from "../render/strip.js";
@@ -81,12 +81,15 @@ import {
   isExpression,
   SLOT_FLOORS,
   STYLE_FLOOR,
+  EFFECT_FLOOR,
   placementPalette,
   resolveThemeSelection,
   transposedPalette,
   type StyleSelection,
   type ThemeSelection,
 } from "../themes/index.js";
+import { FOLLOW_BAR } from "../themes/policy.js";
+import type { DrawnMotion } from "../render/drawn-motion.js";
 import { buildScope, placementScope } from "../template-engine/scope.js";
 import {
   createCcCandybarEngine,
@@ -895,10 +898,17 @@ function provisionalName<T>(
 // tree, while a placement keeps its id through every synthesis. Edit chrome's
 // own cells are not the author's.
 function placementsUnder(node: CompiledNode): string[] {
-  if (node.kind === "container") return node.children.flatMap(placementsUnder);
+  return segmentsUnder(node)
+    .filter((segment) => !segment.name.startsWith(EDIT_NS))
+    .map((segment) => segment.id);
+}
+
+// Every segment node a layout node holds, its open bodies' included, in order.
+function segmentsUnder(node: CompiledNode): CompiledSegmentNode[] {
+  if (node.kind === "container") return node.children.flatMap(segmentsUnder);
   return [
-    ...(node.name.startsWith(EDIT_NS) ? [] : [node.id]),
-    ...(node.opens === undefined ? [] : placementsUnder(node.opens.body)),
+    node,
+    ...(node.opens === undefined ? [] : segmentsUnder(node.opens.body)),
   ];
 }
 
@@ -969,6 +979,19 @@ export interface RenderObservers {
   // by default; it opens none itself, so a shortfall behind a closed trigger
   // reaches the bar alone.
   readonly onRenderWarning?: (warning: RenderWarning) => void;
+}
+
+// [LAW:types-are-the-program] A drawn frame: its bytes, and its motion
+// (brandon-doctor-v62x.tgp). `moves` is what its cells say (`DrawnRow.moves`),
+// never what the config asked for: a template's `frames` moves the bar as
+// surely as an effect does. `can-move` is a still frame whose config, under
+// the settings in force, can draw motion at a later render — a
+// `globals.effect` rule, placements that fade as they come and go, or a
+// placement wearing its own effect that is not drawn now (hidden by its
+// `when`, or in a closed body) — which no still cell can say.
+export interface DrawnFrame {
+  readonly text: string;
+  readonly motion: DrawnMotion;
 }
 
 // [LAW:types-are-the-program] What a render could not honour, by what failed:
@@ -1066,7 +1089,13 @@ export interface RenderSelection {
   readonly shade?: ShadeName;
 }
 
-export function renderDsl(
+// The bar's bytes alone: `drawDsl`'s text, for a caller that draws one frame
+// and asks nothing of its motion.
+export function renderDsl(...args: Parameters<typeof drawDsl>): string {
+  return drawDsl(...args).text;
+}
+
+export function drawDsl(
   config: ValidatedConfig,
   compiled: CompiledConfig,
   store: VariableStore,
@@ -1078,7 +1107,7 @@ export function renderDsl(
   opts: BuildLineOptions,
   observers?: RenderObservers,
   selection?: RenderSelection,
-): string {
+): DrawnFrame {
   const { perSegmentSink, onSegmentError, onRenderWarning } = observers ?? {};
   const warn = (warning: RenderWarning): void => onRenderWarning?.(warning);
   // The band-floor shortfalls of the bands this render opens, each reported
@@ -1246,14 +1275,15 @@ export function renderDsl(
   // and what each placement this frame draws, so one the last frame — drawn
   // from this config, preset and session state — did not draw fades in, and
   // one it drew that this frame does not dissolves out as it was drawn there.
+  // [LAW:one-source-of-truth] An omitting caller fades as the config
+  // declares, the same true default the decor above honours.
+  const transitions =
+    selection?.transitions ??
+    effectiveTransitions(undefined, null, declared.transitions);
   const motion = (
     selection?.effects ?? new SessionEffects<RenderedLine>("")
   ).motion(effect.value, at, {
-    // [LAW:one-source-of-truth] An omitting caller fades as the config
-    // declares, the same true default the decor above honours.
-    transitions:
-      selection?.transitions ??
-      effectiveTransitions(undefined, null, declared.transitions),
+    transitions,
     source: {
       config: compiled,
       preset,
@@ -1441,7 +1471,7 @@ export function renderDsl(
   };
 
   // [LAW:single-enforcer] The ONE serialization pass: each composed line of cells
-  // runs through the strip joiner exactly once, here. renderStripCells may itself
+  // runs through the strip joiner exactly once, here. drawStripCells may itself
   // emit a "\n"-bearing string (FlexStrip width-overflow wrap); joining the per-
   // line results with "\n" splices those in place — byte-identical to serializing
   // each leaf row independently, since the cells and their order are unchanged.
@@ -1506,14 +1536,29 @@ export function renderDsl(
     // effect its cell demands.
     .map(({ line, row }) => {
       const items = resolveFill(line.cells, opts);
-      return renderStripCells(
+      return drawStripCells(
         items.map((item) => item.owner),
         opts,
         motion.row(row, items),
       );
-    })
-    .join("\n");
+    });
   motion.drawn();
+  // What the config arms under the settings in force, drawn or not: an effect
+  // rule, fades, or a placement of this preset — hidden by its `when` or a
+  // closed body right now — wearing an effect of its own. Asked only of a
+  // frame no row of which moves.
+  const armed = (): boolean =>
+    selectedEffect.kind === "expression" ||
+    transitions ||
+    segmentsUnder(root).some(
+      ({ settings }) =>
+        settings.effect !== FOLLOW_BAR && settings.effect !== EFFECT_FLOOR,
+    );
+  const frameMotion: DrawnMotion = rendered.some((row) => row.moves)
+    ? "moves"
+    : armed()
+      ? "can-move"
+      : "still";
   for (const message of shortfalls) warn({ kind: "band-floor", message });
   // Read after the walk: the payload this render pushed is what a key reads.
   for (const [variable, fault] of registry.cachePolicyFaults())
@@ -1523,5 +1568,8 @@ export function renderDsl(
       error: fault.message,
       message: `variable "${variable}" cannot refresh: ${fault.message}`,
     });
-  return rendered;
+  return {
+    text: rendered.map((row) => row.text).join("\n"),
+    motion: frameMotion,
+  };
 }

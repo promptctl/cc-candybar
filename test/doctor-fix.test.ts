@@ -7,7 +7,7 @@
 // in the Claude Code directory the client's `claudeConfigDir` hint names.
 
 import { memoryMarkBook } from "./helpers/mark-book";
-import { healthyDaemonEdge, healthyDataEdge, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, HEALTHY_FACTS, CARRIED, NAMED } from "./helpers/doctor-facts";
+import { healthyDaemonEdge, healthyDataEdge, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, HEALTHY_FACTS, CARRIED, NAMED, STILL, drew } from "./helpers/doctor-facts";
 import { memoryClickedTerminals } from "./helpers/clicked-terminals";
 import fs from "node:fs";
 import os from "node:os";
@@ -15,14 +15,13 @@ import path from "node:path";
 import {
   checkByName,
   TMUX_TRUECOLOR_VAR,
+  type DoctorFacts,
   type Fix,
 } from "../src/doctor/checks";
 import { applyFix, gatherFacts, type DoctorEdge } from "../src/doctor/edge";
 import type { ClientHints } from "../src/daemon/protocol";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import type { DslConfig } from "../src/config/dsl-types";
-import { placementDraftKey } from "../src/config/edit-chrome";
-import { parseAndValidate } from "./helpers/parse-and-validate";
 
 const FIX: Fix = {
   kind: "claude-settings",
@@ -81,6 +80,7 @@ const factsIn = (
   tmux: ClientHints["tmux"],
   edge: DoctorEdge = NO_TMUX,
   sessionPick: (key: string) => string | null = NO_SESSION,
+  frames: DoctorFacts["frames"] = STILL,
 ) =>
 ({
     ...gatherFacts(
@@ -91,6 +91,7 @@ const factsIn = (
       { kind: "ok", value: HEALTHY_SERVING },
       CARRIED,
       NAMED,
+      frames,
     ),
     urlHandler: { kind: "unsupported" } as const,
     askedBy: "command" as const,
@@ -182,15 +183,9 @@ describe("applyFix (claude-settings, env)", () => {
 });
 
 // brandon-effects-2gka.21e: the effectRefresh fix, end to end over a real file
-// — a bar wearing an effect, a statusLine with no interval.
+// — a bar that moves, a statusLine with no interval.
 describe("applyFix (effectRefresh)", () => {
-  const SHIMMERING = {
-    ...NO_TMUX,
-    loadConfig: loadsConfig({
-      ...DEFAULT_DSL_CONFIG,
-      globals: { ...DEFAULT_DSL_CONFIG.globals, effect: "shimmer" },
-    }),
-  };
+  const MOVING = drew("moves");
   const check = checkByName("effectRefresh")!;
 
   test('inserts "refreshInterval": 1 beside the statusLine keys, every other byte kept, and a re-probe passes', () => {
@@ -203,7 +198,7 @@ describe("applyFix (effectRefresh)", () => {
 }
 `;
     const conf = writeSettings(before);
-    const facts = factsIn(conf, null, SHIMMERING);
+    const facts = factsIn(conf, null, NO_TMUX, NO_SESSION, MOVING);
     const verdict = check.probe(facts);
     expect(verdict.ok).toBe(false);
     if (verdict.ok || verdict.fix === undefined) throw new Error("no fix");
@@ -225,7 +220,7 @@ describe("applyFix (effectRefresh)", () => {
   test("a longer interval is overwritten in place", () => {
     const before = `{ "statusLine": { "type": "command", "command": "x", "refreshInterval": 5 } }\n`;
     const conf = writeSettings(before);
-    const facts = factsIn(conf, null, SHIMMERING);
+    const facts = factsIn(conf, null, NO_TMUX, NO_SESSION, MOVING);
     const verdict = check.probe(facts);
     if (verdict.ok || verdict.fix === undefined) throw new Error("no fix");
     applyFix(NO_TMUX, verdict.fix, facts);
@@ -255,72 +250,6 @@ describe("gatherFacts", () => {
       factsOf(writeSettings(`{ "statusLine": { "command": "x" } }`))
         .claudeSettings.statusLine,
     ).toEqual({ kind: "present", refreshInterval: undefined });
-  });
-
-  // The effect is the render's own resolution: the session's pick over the
-  // config's, a rule kept as a rule.
-  test("the effect is the session's pick over the config default, a rule kept as a rule", () => {
-    const absent = configDir("absent");
-    const configured = (effect: string): DoctorEdge => ({
-      ...NO_TMUX,
-      loadConfig: loadsConfig({
-        ...DEFAULT_DSL_CONFIG,
-        globals: { ...DEFAULT_DSL_CONFIG.globals, effect },
-      }),
-    });
-    expect(factsIn(absent, null).effect).toEqual({
-      kind: "decided",
-      name: "none",
-      value: "none",
-    });
-    expect(factsIn(absent, null, configured("pulse")).effect).toMatchObject({
-      kind: "decided",
-      name: "pulse",
-    });
-    expect(
-      factsIn(absent, null, configured("pulse"), (key) =>
-        key === "effect" ? "none" : null,
-      ).effect,
-    ).toMatchObject({ kind: "decided", name: "none" });
-    const rule = "{{ if .busy }}shimmer{{ else }}none{{ end }}";
-    expect(factsIn(absent, null, configured(rule)).effect).toEqual({
-      kind: "expression",
-      source: rule,
-    });
-  });
-
-  // A placement's own effect, read as the render reads it: the session's
-  // unsaved pick over the file's value, `bar` and `none` moving nothing.
-  test("placement effects are each placement's own, the session's pick over the file's", () => {
-    const absent = configDir("absent");
-    const edge: DoctorEdge = {
-      ...NO_TMUX,
-      loadConfig: loadsConfig(
-        parseAndValidate(
-          "/tmp/proj/.cc-candybar.json5",
-          `{
-            segments: { a: { template: "a" } },
-            root: { h: ["a", { seg: "a", id: "b", settings: { effect: "pulse" } }] },
-          }`,
-        ),
-      ),
-    };
-    const pick =
-      (picks: Record<string, string>) =>
-      (key: string): string | null =>
-        picks[key] ?? null;
-    const draft = (id: string) => placementDraftKey("default", id, "effect");
-    const effectsOf = (picks: Record<string, string>) =>
-      [...factsIn(absent, null, edge, pick(picks)).placementEffects].sort(
-        (x, y) => x.placement.localeCompare(y.placement),
-      );
-    expect(effectsOf({})).toEqual([{ placement: "b", effect: "pulse" }]);
-    expect(effectsOf({ [draft("a")]: "shimmer" })).toEqual([
-      { placement: "a", effect: "shimmer" },
-      { placement: "b", effect: "pulse" },
-    ]);
-    expect(effectsOf({ [draft("b")]: "bar" })).toEqual([]);
-    expect(effectsOf({ [draft("b")]: "none" })).toEqual([]);
   });
 
   test("a missing, blank, or env-less settings file is an empty env", () => {

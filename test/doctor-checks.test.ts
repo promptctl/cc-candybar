@@ -9,13 +9,11 @@ import {
   TMUX_TRUECOLOR_VAR,
   type ConfigFacts,
   type DoctorFacts,
-  type PlacementEffectFact,
   type StatusLineFacts,
   type TmuxFacts,
 } from "../src/doctor/checks";
 import { detectTmuxHint } from "../src/tmux-hint";
-import { HEALTHY_FACTS } from "./helpers/doctor-facts";
-import type { EffectSelection } from "../src/themes/policy";
+import { HEALTHY_FACTS, drew } from "./helpers/doctor-facts";
 
 const HINT = { socket: "/tmp/tmux-501/default", pane: "%3", truecolor: null };
 
@@ -36,23 +34,19 @@ const LOADED: ConfigFacts = {
 };
 
 const SETTINGS_PATH = "/home/u/.claude/settings.json";
-const STILL: EffectSelection = { kind: "decided", name: "none", value: "none" };
+const STILL = drew("still");
 
 const facts = (
   tmux: TmuxFacts,
   env: Record<string, unknown> = {},
   config: ConfigFacts = LOADED,
-  effect: EffectSelection = STILL,
+  frames: DoctorFacts["frames"] = STILL,
   statusLine: StatusLineFacts = { kind: "present", refreshInterval: undefined },
-  placementEffects: readonly PlacementEffectFact[] = [],
-  transitions = false,
 ): DoctorFacts => ({
   ...HEALTHY_FACTS,
   tmux,
   config,
-  effect,
-  placementEffects,
-  transitions,
+  frames,
   claudeSettings: { path: SETTINGS_PATH, env, statusLine },
 });
 
@@ -255,64 +249,62 @@ describe("config probe", () => {
 });
 
 // brandon-effects-2gka.21e: a bar that moves needs Claude Code to redraw it
-// every second.
+// every second — and whether it moves is what its drawn frames said
+// (brandon-doctor-v62x.tgp), so a template's motion counts as an effect does.
 describe("effectRefresh probe", () => {
-  const SHIMMER: EffectSelection = {
-    kind: "decided",
-    name: "shimmer",
-    value: "shimmer",
-  };
-  const RULE: EffectSelection = {
-    kind: "expression",
-    source: '{{ if .busy }}shimmer{{ else }}none{{ end }}',
-  };
+  const MOVES = drew("moves");
+  const MOVING = "the bar moves (an effect, a fade, or an animated segment)";
   const interval = (refreshInterval: unknown): StatusLineFacts => ({
     kind: "present",
     refreshInterval,
   });
-  const effectRefresh = (effect: EffectSelection, statusLine: StatusLineFacts) =>
-    checkByName("effectRefresh")!.probe(
-      facts({ kind: "outside" }, {}, LOADED, effect, statusLine),
-    );
+  const effectRefresh = (
+    frames: DoctorFacts["frames"],
+    statusLine: StatusLineFacts,
+    askedBy: DoctorFacts["askedBy"] = "command",
+  ) =>
+    checkByName("effectRefresh")!.probe({
+      ...facts({ kind: "outside" }, {}, LOADED, frames, statusLine),
+      askedBy,
+    });
   const FIX = {
     kind: "claude-settings",
     path: ["statusLine", "refreshInterval"],
     value: 1,
   };
 
-  test("none with no interval → ok", () => {
+  test("a still bar with no interval → ok", () => {
     expect(effectRefresh(STILL, interval(undefined))).toEqual({ ok: true });
   });
 
-  test("shimmer with no interval → failed WITH the fix", () => {
-    expect(effectRefresh(SHIMMER, interval(undefined))).toEqual({
+  test("a moving bar with no interval → failed WITH the fix", () => {
+    expect(effectRefresh(MOVES, interval(undefined))).toEqual({
       ok: false,
-      reason:
-        "the bar wears the shimmer effect, but Claude Code redraws it only on events",
+      reason: `${MOVING}, but Claude Code redraws it only on events`,
       fix: FIX,
     });
   });
 
-  test("shimmer with 1 → ok", () => {
-    expect(effectRefresh(SHIMMER, interval(1))).toEqual({ ok: true });
+  test("a moving bar with 1 → ok", () => {
+    expect(effectRefresh(MOVES, interval(1))).toEqual({ ok: true });
   });
 
-  test("shimmer with 5 → failed WITH the fix, naming the interval", () => {
-    expect(effectRefresh(SHIMMER, interval(5))).toEqual({
+  test("a moving bar with 5 → failed WITH the fix, naming the interval", () => {
+    expect(effectRefresh(MOVES, interval(5))).toEqual({
       ok: false,
-      reason:
-        "the bar wears the shimmer effect, but Claude Code redraws it only every 5 s",
+      reason: `${MOVING}, but Claude Code redraws it only every 5 s`,
       fix: FIX,
     });
   });
 
-  test("a rule with no interval → failed WITH the fix: it can turn an effect on at any render", () => {
-    expect(effectRefresh(RULE, interval(undefined))).toEqual({
-      ok: false,
-      reason:
-        "a globals.effect rule can give the bar an effect, but Claude Code redraws it only on events",
-      fix: FIX,
-    });
+  // Any bar seen moving needs the redraw, whatever the others drew.
+  test("one moving bar among still ones → failed", () => {
+    expect(
+      effectRefresh(
+        drew("still", "moves", "failed"),
+        interval(undefined),
+      ),
+    ).toMatchObject({ ok: false, fix: FIX });
   });
 
   // Claude Code reads a number of seconds no fewer than 1: anything else is a
@@ -321,9 +313,9 @@ describe("effectRefresh probe", () => {
   test.each([["1"], [0], [0.5], [-1]])(
     "%j is not an interval Claude Code accepts → failed naming it, WITH the fix",
     (value) => {
-      expect(effectRefresh(SHIMMER, interval(value))).toEqual({
+      expect(effectRefresh(MOVES, interval(value))).toEqual({
         ok: false,
-        reason: `the bar wears the shimmer effect, but statusLine.refreshInterval is ${JSON.stringify(value)}, not a number of seconds Claude Code accepts (its minimum is 1)`,
+        reason: `${MOVING}, but statusLine.refreshInterval is ${JSON.stringify(value)}, not a number of seconds Claude Code accepts (its minimum is 1)`,
         fix: FIX,
       });
     },
@@ -332,9 +324,9 @@ describe("effectRefresh probe", () => {
   // A statusLine holding only a refresh interval is one Claude Code cannot
   // run, so with no statusLine in the file there is nothing to add it beside.
   test("no statusLine in the file → failed naming the file, NO fix", () => {
-    expect(effectRefresh(SHIMMER, { kind: "absent" })).toEqual({
+    expect(effectRefresh(MOVES, { kind: "absent" })).toEqual({
       ok: false,
-      reason: `the bar wears the shimmer effect, and ${SETTINGS_PATH} sets no statusLine — set "refreshInterval": 1 beside the statusLine command that runs the bar`,
+      reason: `${MOVING}, and ${SETTINGS_PATH} sets no statusLine — set "refreshInterval": 1 beside the statusLine command that runs the bar`,
     });
   });
 
@@ -342,10 +334,10 @@ describe("effectRefresh probe", () => {
   // one.
   test("a statusLine that is not an object → failed naming it, NO fix", () => {
     expect(
-      effectRefresh(SHIMMER, { kind: "not-an-object", value: "cc-candybar" }),
+      effectRefresh(MOVES, { kind: "not-an-object", value: "cc-candybar" }),
     ).toEqual({
       ok: false,
-      reason: `the bar wears the shimmer effect, and ${SETTINGS_PATH} sets statusLine to "cc-candybar", not a statusLine object — re-run \`cc-candybar install\` to write one`,
+      reason: `${MOVING}, and ${SETTINGS_PATH} sets statusLine to "cc-candybar", not a statusLine object — re-run \`cc-candybar install\` to write one`,
     });
   });
 
@@ -353,64 +345,85 @@ describe("effectRefresh probe", () => {
     expect(effectRefresh(STILL, { kind: "absent" })).toEqual({ ok: true });
   });
 
-  // A placement wearing its own effect moves on a still bar
-  // (brandon-effects-2gka.bm1), so it needs the redraw the bar's would.
-  const withPlacements = (
-    effect: EffectSelection,
-    placementEffects: readonly PlacementEffectFact[],
-  ) =>
-    checkByName("effectRefresh")!.probe(
-      facts(
-        { kind: "outside" },
-        {},
-        LOADED,
-        effect,
+  // No frame seen is no answer: the check says so rather than pass.
+  test("no render seen → failed, unknown", () => {
+    expect(effectRefresh({ kind: "ok", value: [] }, interval(undefined))).toEqual({
+      ok: false,
+      reason:
+        "no session of this Claude Code has drawn a statusline for this daemon in the last 5 minutes, so whether it moves is unknown — run the doctor again once the bar has redrawn",
+    });
+    expect(
+      effectRefresh({ kind: "ok", value: [] }, interval(undefined), "click"),
+    ).toMatchObject({ ok: false, reason: expect.stringContaining("holds no render of this bar") });
+  });
+
+  test("only failed renders → failed, unknown", () => {
+    expect(
+      effectRefresh(drew("failed"), interval(undefined)),
+    ).toEqual({
+      ok: false,
+      reason:
+        "the bar's recent renders failed, so whether it moves is unknown — run the doctor again once the bar has redrawn",
+    });
+  });
+
+  // A still bar whose config can start motion with no click — an effect
+  // rule, fade transitions — needs the redraw before it moves.
+  test("a bar that can start moving with no interval → failed WITH the fix", () => {
+    expect(effectRefresh(drew("can-move"), interval(undefined))).toEqual({
+      ok: false,
+      reason:
+        "the bar can start moving (a globals.effect rule, placements that fade in and out, or a placement with an effect of its own that is not drawn now), but Claude Code redraws it only on events",
+      fix: FIX,
+    });
+  });
+
+  // A `cc-candybar frames` display moves by the daemon's pushes, not by
+  // Claude Code's refresh.
+  test("a moving frames display says nothing about the statusline", () => {
+    expect(
+      effectRefresh(
+        { kind: "ok", value: [{ role: "frames", frame: "moves" }, { role: "statusline", frame: "still" }] },
         interval(undefined),
-        placementEffects,
       ),
-    );
-
-  test("a still bar with a placement wearing pulse → failed naming it, WITH the fix", () => {
-    expect(
-      withPlacements(STILL, [{ placement: "context", effect: "pulse" }]),
-    ).toEqual({
-      ok: false,
-      reason:
-        "context wears the pulse effect, but Claude Code redraws it only on events",
-      fix: FIX,
-    });
+    ).toEqual({ ok: true });
   });
 
-  test("the bar's effect and a placement's are both named", () => {
+  test("only a frames display seen → failed, unknown, naming it", () => {
     expect(
-      withPlacements(SHIMMER, [{ placement: "context", effect: "pulse" }]),
-    ).toMatchObject({
-      ok: false,
-      reason:
-        "the bar wears the shimmer effect and context wears the pulse effect, but Claude Code redraws it only on events",
-    });
-  });
-
-  // A placement fading in moves for 20 s on a still bar
-  // (brandon-effects-2gka.631), so transitions need the redraw too.
-  test("a still bar with transitions on → failed naming them, WITH the fix", () => {
-    expect(
-      checkByName("effectRefresh")!.probe(
-        facts(
-          { kind: "outside" },
-          {},
-          LOADED,
-          STILL,
-          interval(undefined),
-          [],
-          true,
-        ),
+      effectRefresh(
+        { kind: "ok", value: [{ role: "frames", frame: "still" }] },
+        interval(undefined),
+        "click",
       ),
     ).toEqual({
       ok: false,
       reason:
-        "placements fade in and dissolve out as they come and go, but Claude Code redraws it only on events",
-      fix: FIX,
+        "only a `cc-candybar frames` display has drawn this bar, not Claude Code's statusline, so whether it moves is unknown — run the doctor again once the bar has redrawn",
     });
+  });
+
+  // Once the file redraws every second, nothing a bar draws needs more —
+  // whatever the daemon could say about its frames.
+  test.each<[string, DoctorFacts["frames"]]>([
+    ["no render seen", drew()],
+    ["only failed renders", drew("failed")],
+    ["a daemon that could not say", { kind: "failed", reason: "no daemon" }],
+  ])("%s, with an interval of 1 → ok", (_, frames) => {
+    expect(effectRefresh(frames, interval(1))).toEqual({ ok: true });
+  });
+
+  test("a render still drawing → failed, unknown", () => {
+    expect(effectRefresh(drew("drawing"), interval(undefined))).toEqual({
+      ok: false,
+      reason:
+        "the bar's latest render has not finished, so whether it moves is unknown — run the doctor again once the bar has redrawn",
+    });
+  });
+
+  test("a daemon that could not say → failed with its reason", () => {
+    expect(
+      effectRefresh({ kind: "failed", reason: "daemon down" }, interval(undefined)),
+    ).toEqual({ ok: false, reason: "daemon down" });
   });
 });

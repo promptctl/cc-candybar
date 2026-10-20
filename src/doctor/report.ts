@@ -19,6 +19,7 @@ import {
   clientStanding,
   otherDaemons,
   unreadPostMortems,
+  refreshedFrames,
   type Asked,
   type CheckReport,
   type DaemonFacts,
@@ -31,6 +32,11 @@ import {
 } from "./checks.js";
 import { SETTINGS_NS } from "../config/loader/reserved-namespace.js";
 import { mb } from "../daemon/limits.js";
+import {
+  FRAMES_SEEN,
+  type FrameSeen,
+  type FrameSighting,
+} from "../daemon/render-sightings.js";
 
 export const DOCTOR_NS = `${SETTINGS_NS}doctor.`;
 
@@ -169,6 +175,17 @@ export function dataFields(data: SegmentDataFacts): string {
         ? "located"
         : data.memento.fact.located.kind;
   return `data=pr:${pr()},rateLimits:${rateLimits()},memento:${memento}`;
+}
+
+// [LAW:nothing-unseen] What the effect-refresh check reasoned over, as one
+// logfmt field: the frames the recent statusline renders drew, counted per
+// `FRAMES_SEEN` member in its order — moves/can-move/still/failed/drawing
+// (brandon-doctor-v62x.tgp); `failed` when the renders could not be asked.
+export function frameFields(frames: Asked<readonly FrameSighting[]>): string {
+  if (frames.kind === "failed") return "frames=failed";
+  const drawn = refreshedFrames(frames.value);
+  const count = (seen: FrameSeen) => drawn.filter((f) => f === seen).length;
+  return `frames=${FRAMES_SEEN.map(count).join("/")}`;
 }
 
 // [LAW:nothing-unseen] What the session-data check reasoned over, as one

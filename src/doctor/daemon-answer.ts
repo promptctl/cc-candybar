@@ -10,7 +10,9 @@ import type { StatsSnapshot } from "../daemon/stats.js";
 import { describeFailure } from "../daemon/client-transport.js";
 import { sanitizeClient } from "../daemon/protocol.js";
 import {
+  FRAMES_SEEN,
   RATE_LIMITS_SEEN,
+  SIGHTING_ROLES,
   type RenderSighting,
 } from "../daemon/render-sightings.js";
 import type { Asked } from "./checks.js";
@@ -30,6 +32,11 @@ export type RateLimitSightings = ReadonlyArray<
 // Where each recent render's transcript is, and how long ago it rendered.
 export type TranscriptSightings = ReadonlyArray<
   Pick<RenderSighting, "transcript" | "ago">
+>;
+
+// What each recent render drew, and the Claude Code directory it ran with.
+export type FrameSightings = ReadonlyArray<
+  Pick<RenderSighting, "role" | "frame" | "claudeConfigDir" | "ago">
 >;
 
 // Each entry of the stats' `clients` as a record of unread fields — a
@@ -165,12 +172,36 @@ export function parseTranscriptSightings(
       };
 }
 
+// [LAW:parse-dont-validate] The frame half of the same sightings, read on its
+// own so a daemon older than it fails the effect-refresh check alone.
+export function parseFrameSightings(
+  stats: StatsSnapshot,
+): Asked<FrameSightings> {
+  const skew = shapeSkew(stats, ["clients"]);
+  if (skew !== null) return { kind: "failed", reason: skew };
+  const sightings = sightingRecords(stats);
+  const wellFormed = sightings.every(
+    (c) =>
+      typeof c.ago === "number" &&
+      typeof c.claudeConfigDir === "string" &&
+      (SIGHTING_ROLES as readonly unknown[]).includes(c.role) &&
+      (FRAMES_SEEN as readonly unknown[]).includes(c.frame),
+  );
+  return wellFormed
+    ? { kind: "ok", value: sightings as FrameSightings }
+    : {
+        kind: "failed",
+        reason: `the running daemon (${stats.version}) reported its renders without what they drew — restart it on this build: ${JSON.stringify(stats.clients)}`,
+      };
+}
+
 // Each fact the doctor asks the daemon for, parsed on its own: one that does
 // not read fails its own check, never the other's.
 export interface DaemonAnswer {
   readonly clients: Asked<DaemonClients>;
   readonly rateLimits: Asked<RateLimitSightings>;
   readonly transcripts: Asked<TranscriptSightings>;
+  readonly frames: Asked<FrameSightings>;
   readonly serving: Asked<ServingDaemon>;
 }
 
@@ -185,6 +216,7 @@ export async function askDaemon(): Promise<DaemonAnswer> {
       clients: failed,
       rateLimits: failed,
       transcripts: failed,
+      frames: failed,
       serving: failed,
     };
   }
@@ -192,6 +224,7 @@ export async function askDaemon(): Promise<DaemonAnswer> {
     clients: parseDaemonClients(outcome.value),
     rateLimits: parseRateLimitSightings(outcome.value),
     transcripts: parseTranscriptSightings(outcome.value),
+    frames: parseFrameSightings(outcome.value),
     serving: parseServingDaemon(outcome.value),
   };
 }
