@@ -158,7 +158,7 @@ export const HEALTHY_DAEMON = healthyDaemonIn("/claude");
 // test spreads the facts it is about over.
 export const HEALTHY_FACTS: DoctorFacts = {
   tmux: { kind: "outside" },
-  termCols: { kind: "ok", value: 120 },
+  width: { kind: "ok", value: { columns: 120, of: { kind: "command" } } },
   terminal: {
     kind: "seen",
     identified: {

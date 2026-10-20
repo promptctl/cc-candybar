@@ -23,6 +23,7 @@ import {
   RECENT_CLIENT_S,
   runDoctor,
   type Asked,
+  type Width,
   type CheckReport,
   type DoctorFacts,
   type InstallFacts,
@@ -189,9 +190,12 @@ export function widthOf(
   sessionId: string | undefined,
   asked: Asked<WidthSightings>,
   measured: number | null,
-): Asked<number | null> {
+): Asked<Width> {
   if (sessionId === undefined || sessionId === "") {
-    return { kind: "ok", value: measured };
+    return {
+      kind: "ok",
+      value: { columns: measured, of: { kind: "command" } },
+    };
   }
   return asked.kind === "failed"
     ? asked

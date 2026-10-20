@@ -24,6 +24,7 @@ import {
   envVarOf,
   TMUX_TRUECOLOR_VAR,
   type Asked,
+  type Width,
   type CheckReport,
   type DaemonFacts,
   type InstallFacts,
@@ -96,15 +97,18 @@ export function linkFields(
 
 // [LAW:nothing-unseen] What the UTF-8 and terminal-width checks reasoned
 // over, as logfmt fields: the columns measured (`-`: none was, `failed`: no
-// render of the session says), and whether
+// render of the session says) and whose terminal they are, and whether
 // tmux writes UTF-8 to the client attached to the pane's session — the same
 // client `linkFields` reads (`-` where none was seen).
 export function terminalFeatureFields(
   terminal: TerminalIdentity,
-  termCols: Asked<number | null>,
+  width: Asked<Width>,
 ): string {
   const client = terminal.kind === "seen" ? terminal.tmuxClient : null;
-  const cols = termCols.kind === "failed" ? "failed" : (termCols.value ?? "-");
+  const cols =
+    width.kind === "failed"
+      ? "failed widthOf=-"
+      : `${width.value.columns ?? "-"} widthOf=${width.value.of.kind}`;
   return `cols=${cols} clientUtf8=${client === null ? "-" : client.utf8 ? "yes" : "no"}`;
 }
 

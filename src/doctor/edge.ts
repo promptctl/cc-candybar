@@ -55,6 +55,7 @@ import type { DslConfig } from "../config/dsl-types.js";
 import { resolveEffectiveGlobals } from "../daemon/render-payload.js";
 import {
   type Asked,
+  type Width,
   type ClientFact,
   type InstallFacts,
   type ConfigFacts,
@@ -773,20 +774,27 @@ function segmentDataFacts(
 
 // [LAW:single-enforcer] The width one session's statusline client measured,
 // read off that session's latest renders — the click's own, or the sightings
-// `cc-candybar doctor` was answered for the session it runs in. A session
-// this daemon has drawn no statusline for has no width to report: the bar on
-// screen is an earlier daemon's, or none.
+// `cc-candybar doctor` was answered for the session it runs in. The daemon
+// holds no such render when it has drawn the session's statusline none since
+// it started (the bar on screen is an earlier daemon's), when it has dropped
+// it for newer sessions' renders, or when only a `frames` client draws it.
 export function sessionWidth(
   sessionId: string,
   said: ReadonlyArray<Pick<RoledSaid, "role" | "termCols">>,
-): Asked<number | null> {
+): Asked<Width> {
   const statusline = said.find((s) => s.role === "statusline");
   return statusline === undefined
     ? {
         kind: "failed",
-        reason: `the daemon has drawn no bar for session ${sessionId} since it started, so no width its client measured is known — run this again once the bar has redrawn`,
+        reason: `the daemon holds no statusline render of session ${sessionId} — none since it started, or dropped for newer sessions' renders — so no width its client measured is known; run this again once the bar has redrawn`,
       }
-    : { kind: "ok", value: statusline.termCols };
+    : {
+        kind: "ok",
+        value: {
+          columns: statusline.termCols,
+          of: { kind: "session", sessionId },
+        },
+      };
 }
 
 // [LAW:single-enforcer] Every fact comes from what the CLIENT saw: its tmux,
@@ -820,7 +828,7 @@ export function gatherFacts(
   // measured, as its last render said (RenderSightings) — the click's own
   // session, or the one `cc-candybar doctor` runs in; outside any session,
   // the command's own terminal, standing in for the client one would spawn.
-  termCols: Asked<number | null>,
+  width: Asked<Width>,
   // What the doctor's stores hold: the click's daemon's own, or the ones
   // `cc-candybar doctor` was answered.
   stores: StoresRead,
@@ -846,7 +854,7 @@ export function gatherFacts(
   ].join("");
   return {
     tmux,
-    termCols,
+    width,
     terminal,
     // [LAW:types-are-the-program] The measured glyphs parsed into the facts'
     // union: none to draw is the arm with no terminal to read.

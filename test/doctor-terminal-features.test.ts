@@ -81,21 +81,32 @@ describe("utf8 probe", () => {
   });
 });
 
+const inSession = (columns: number | null) =>
+  ({
+    kind: "ok",
+    value: { columns, of: { kind: "session", sessionId: "s1" } },
+  }) as const;
+const here = (columns: number | null) =>
+  ({ kind: "ok", value: { columns, of: { kind: "command" } } }) as const;
+
 describe("termWidth probe", () => {
   const probe = checkByName("termWidth")!.probe;
 
-  test("a client that measured its terminal is ok, naming the width", () => {
+  test("a client that measured its terminal is ok, naming the width and whose it is", () => {
     expect(
-      probe({ ...HEALTHY_FACTS, termCols: { kind: "ok", value: 148 } }),
-    ).toEqual({ ok: true, note: "148 columns" });
+      probe({ ...HEALTHY_FACTS, width: inSession(148) }),
+    ).toEqual({ ok: true, note: "148 columns, as session s1's statusline client measured" });
+    expect(
+      probe({ ...HEALTHY_FACTS, width: here(90) }),
+    ).toEqual({ ok: true, note: "90 columns, as this command's terminal measured" });
   });
 
   test("one that could not fails, naming the width the bar is laid out for", () => {
     expect(
-      probe({ ...HEALTHY_FACTS, termCols: { kind: "ok", value: null } }),
+      probe({ ...HEALTHY_FACTS, width: inSession(null) }),
     ).toEqual({
       ok: false,
-      reason: `no terminal width was measured (no COLUMNS, and no terminal to ask — or the daemon refused the width sent, which the bar's red strip names), so the bar is laid out as if the terminal were ${DEFAULT_TERMINAL_WIDTH} columns wide`,
+      reason: `session s1's statusline client measured no width (no COLUMNS, and no terminal to ask — or the daemon refused the width sent, which the bar's red strip names), so the bar is laid out as if the terminal were ${DEFAULT_TERMINAL_WIDTH} columns wide`,
     });
   });
 
@@ -103,12 +114,11 @@ describe("termWidth probe", () => {
   // measured — the row says why rather than judging a width nobody reported.
   test("a width nobody reported fails with the reason it is unknown", () => {
     expect(
-      probe({ ...HEALTHY_FACTS, termCols: { kind: "failed", reason: "why" } }),
+      probe({ ...HEALTHY_FACTS, width: { kind: "failed", reason: "why" } }),
     ).toEqual({ ok: false, reason: "why" });
   });
 });
 
-const cols = (value: number | null) => ({ kind: "ok", value }) as const;
 
 describe("terminalFeatureFields", () => {
   const seen = (tmuxClient: TmuxClient | null): TerminalIdentity => ({
@@ -118,27 +128,27 @@ describe("terminalFeatureFields", () => {
   });
 
   test("carries the measured columns and tmux's word on UTF-8", () => {
-    expect(terminalFeatureFields(seen(client(true)), cols(148))).toBe(
-      "cols=148 clientUtf8=yes",
+    expect(terminalFeatureFields(seen(client(true)), inSession(148))).toBe(
+      "cols=148 widthOf=session clientUtf8=yes",
     );
-    expect(terminalFeatureFields(seen(client(false)), cols(null))).toBe(
-      "cols=- clientUtf8=no",
+    expect(terminalFeatureFields(seen(client(false)), inSession(null))).toBe(
+      "cols=- widthOf=session clientUtf8=no",
     );
   });
 
   test("`failed` where no render of the session said a width", () => {
     expect(
       terminalFeatureFields(seen(null), { kind: "failed", reason: "x" }),
-    ).toBe("cols=failed clientUtf8=-");
+    ).toBe("cols=failed widthOf=- clientUtf8=-");
   });
 
   test("`-` where no client was seen", () => {
-    expect(terminalFeatureFields(seen(null), cols(80))).toBe("cols=80 clientUtf8=-");
-    expect(terminalFeatureFields({ kind: "unasked", reason: "x" }, cols(80))).toBe(
-      "cols=80 clientUtf8=-",
+    expect(terminalFeatureFields(seen(null), here(80))).toBe("cols=80 widthOf=command clientUtf8=-");
+    expect(terminalFeatureFields({ kind: "unasked", reason: "x" }, here(80))).toBe(
+      "cols=80 widthOf=command clientUtf8=-",
     );
-    expect(terminalFeatureFields({ kind: "unreported" }, cols(80))).toBe(
-      "cols=80 clientUtf8=-",
+    expect(terminalFeatureFields({ kind: "unreported" }, here(80))).toBe(
+      "cols=80 widthOf=command clientUtf8=-",
     );
   });
 });
@@ -155,13 +165,16 @@ describe("widthOf", () => {
   } as const;
 
   test("outside a session, the command's own measurement", () => {
-    expect(widthOf(undefined, sightings, 90)).toEqual({ kind: "ok", value: 90 });
-    expect(widthOf("", sightings, null)).toEqual({ kind: "ok", value: null });
+    expect(widthOf(undefined, sightings, 90)).toEqual(here(90));
+    expect(widthOf("", sightings, null)).toEqual(here(null));
   });
 
   test("in a session, its statusline client's width, whatever the shell measured", () => {
-    expect(widthOf("s1", sightings, 90)).toEqual({ kind: "ok", value: 148 });
-    expect(widthOf("s2", sightings, 90)).toEqual({ kind: "ok", value: null });
+    expect(widthOf("s1", sightings, 90)).toEqual(inSession(148));
+    expect(widthOf("s2", sightings, 90)).toEqual({
+      kind: "ok",
+      value: { columns: null, of: { kind: "session", sessionId: "s2" } },
+    });
   });
 
   test("in a session the daemon did not answer for, that failure", () => {
