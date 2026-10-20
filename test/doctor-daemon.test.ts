@@ -322,20 +322,20 @@ describe("the post-mortems-read record", () => {
   test("the fix files only forward: a newer breach another run filed stays filed", () => {
     const edge = { ...({} as DoctorEdge), ...healthyDaemonEdge() };
     const fix = { kind: "post-mortems-read", through: OLDER } as const;
-    expect(applyFix(edge, fix, HEALTHY_FACTS).daemon.read).toEqual({ kind: "ok", value: { through: OLDER } });
+    expect(applyFix(edge, fix, HEALTHY_FACTS)).toMatchObject({ kind: "ok", value: { daemon: { read: { kind: "ok", value: { through: OLDER } } } } });
     edge.postMortemsRead.update(() => ({ through: NEWER }));
-    expect(applyFix(edge, fix, HEALTHY_FACTS).daemon.read).toEqual({ kind: "ok", value: { through: NEWER } });
+    expect(applyFix(edge, fix, HEALTHY_FACTS)).toMatchObject({ kind: "ok", value: { daemon: { read: { kind: "ok", value: { through: NEWER } } } } });
     expect(edge.postMortemsRead.read()).toEqual({ kind: "ok", value: { through: NEWER } });
   });
 
-  test("a record that stopped reading before the fix is the fix's answer, and nothing is filed", () => {
+  test("a record that stopped reading before the fix refuses it, and nothing is filed", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-pm-read-"));
     try {
       const file = path.join(dir, "read.json");
       fs.writeFileSync(file, "junk");
       const edge = { ...({} as DoctorEdge), postMortemsRead: filePostMortemsRead(file) };
       const fix = { kind: "post-mortems-read", through: NEWER } as const;
-      expect(applyFix(edge, fix, HEALTHY_FACTS).daemon.read).toMatchObject({
+      expect(applyFix(edge, fix, HEALTHY_FACTS)).toMatchObject({
         kind: "failed",
         reason: expect.stringContaining(`${file} is not JSON`),
       });

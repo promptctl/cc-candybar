@@ -847,12 +847,13 @@ export function gatherFacts(
 //
 // Returns the facts with the one this fix changed re-read — the performer of
 // an effect is the one place that knows what it touched, so a post-fix report
-// cannot reuse a stale fact or re-probe an unchanged one.
+// cannot reuse a stale fact or re-probe an unchanged one — or the reason the
+// fix was refused, with nothing written.
 export function applyFix(
   edge: DoctorEdge,
   fix: Fix,
   facts: DoctorFacts,
-): DoctorFacts {
+): Asked<DoctorFacts> {
   switch (fix.kind) {
     case "claude-settings": {
       const settingsPath = fix.file;
@@ -865,8 +866,11 @@ export function applyFix(
       );
       writeAtomic(settingsPath, next);
       return {
-        ...facts,
-        claudeSettings: readSettingsFacts(facts.claudeSettings.at),
+        kind: "ok",
+        value: {
+          ...facts,
+          claudeSettings: readSettingsFacts(facts.claudeSettings.at),
+        },
       };
     }
     case "post-mortems-read": {
@@ -877,7 +881,12 @@ export function applyFix(
           ? { through: fix.through }
           : current,
       );
-      return { ...facts, daemon: { ...facts.daemon, read } };
+      return read.kind === "failed"
+        ? read
+        : {
+            kind: "ok",
+            value: { ...facts, daemon: { ...facts.daemon, read } },
+          };
     }
     default: {
       const _exhaustive: never = fix;

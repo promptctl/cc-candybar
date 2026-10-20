@@ -1304,11 +1304,14 @@ const doctorFix: VerbHandler = (value, ctx) => {
     );
   }
   const after = applyFix(ctx.doctor, verdict.fix, facts);
+  if (after.kind === "failed") {
+    throw new BadVerbArgs(`doctor-fix: ${check.label} — ${after.reason}`);
+  }
   ctx.dlog(
     "info",
     `doctor-fix: ${check.name} → ${describeFix(verdict.fix)} (session=${sid})`,
   );
-  writeReport(ctx, sid, after);
+  writeReport(ctx, sid, after.value);
 };
 
 // Record what the user saw of the glyphs THIS check's fresh verdict shows,

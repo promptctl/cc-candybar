@@ -349,7 +349,6 @@ export interface PostMortemsRead {
 // this bar, as it reports itself (src/daemon/limits.ts `serving`); every
 // daemon process running; and the newest post-mortem the user filed as read
 // (src/doctor/post-mortems-read.ts).
-
 export interface DaemonFacts {
   readonly serving: Asked<ServingDaemon>;
   readonly processes: Asked<readonly DaemonProcess[]>;
