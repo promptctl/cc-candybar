@@ -140,6 +140,7 @@ import {
   installFields,
 } from "../../doctor/report";
 import { withMark } from "../../doctor/mark-book";
+import { withClicked } from "../../doctor/clicked-terminals";
 import { DoctorBusy } from "../../doctor/busy";
 import {
   applyFix,
@@ -1240,7 +1241,8 @@ function clickFacts(ctx: VerbContext, sid: string): DoctorFacts {
 // drew and the user clicked, so it settles for good that this terminal draws
 // links: filed (src/doctor/clicked-terminals.ts) where `cc-candybar doctor` —
 // which cannot click — reads it. Nothing is filed where nothing names the
-// terminal, or over a list that cannot be read (the CLI's links row says why).
+// terminal, or over a list that does not read (the store answers that
+// failure, which the run reports as its own).
 // [LAW:no-silent-failure] The filing rides along with the run it came with,
 // so a write that fails is logged — and the event's `clicked=no` shows
 // nothing was filed — while the run reports over the list as it was read.
@@ -1250,9 +1252,9 @@ function clickedFrom(
 ): DoctorFacts["clicked"] {
   const sighting =
     terminal.kind === "seen" ? sightingOf(terminal.identified) : null;
-  if (sighting === null || clicked.kind === "failed") return clicked;
+  if (sighting === null) return clicked;
   try {
-    ctx.doctor.clicked.record(sighting);
+    return ctx.doctor.clicked.update((list) => withClicked(list, sighting));
   } catch (e) {
     ctx.dlog(
       "warn",
@@ -1260,12 +1262,6 @@ function clickedFrom(
     );
     return clicked;
   }
-  return {
-    kind: "ok",
-    value: clicked.value.includes(sighting)
-      ? clicked.value
-      : [...clicked.value, sighting],
-  };
 }
 
 const doctorRun: VerbHandler = (value, ctx) => {
@@ -1308,11 +1304,14 @@ const doctorFix: VerbHandler = (value, ctx) => {
     );
   }
   const after = applyFix(ctx.doctor, verdict.fix, facts);
+  if (after.kind === "failed") {
+    throw new BadVerbArgs(`doctor-fix: ${check.label} — ${after.reason}`);
+  }
   ctx.dlog(
     "info",
     `doctor-fix: ${check.name} → ${describeFix(verdict.fix)} (session=${sid})`,
   );
-  writeReport(ctx, sid, after);
+  writeReport(ctx, sid, after.value);
 };
 
 // Record what the user saw of the glyphs THIS check's fresh verdict shows,
@@ -1343,19 +1342,20 @@ const doctorMark: VerbHandler = (value, ctx) => {
       `doctor-mark: ${check.label} — ${verdict.ok ? "nothing to mark" : "shows nothing to look at"}`,
     );
   }
-  // A verdict shows a sighting only over a book it could read.
-  if (facts.marks.kind === "failed") {
-    throw new BadVerbArgs(`doctor-mark: ${facts.marks.reason}`);
-  }
   const made = [check.name, verdict.sighting.id, mark as GlyphMark] as const;
-  ctx.doctor.marks.record(...made);
+  // [LAW:single-enforcer] The store refuses to file over a book that does not
+  // read; that refusal is the click's.
+  const marks = ctx.doctor.marks.update((book) => withMark(book, ...made));
+  if (marks.kind === "failed") {
+    throw new BadVerbArgs(`doctor-mark: ${marks.reason}`);
+  }
   ctx.dlog(
     "info",
     `doctor-mark: ${check.name} ${mark} on ${verdict.sighting.id} (session=${sid})`,
   );
   writeReport(ctx, sid, {
     ...facts,
-    marks: { kind: "ok", value: withMark(facts.marks.value, ...made) },
+    marks,
   });
 };
 

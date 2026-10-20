@@ -65,7 +65,7 @@ export function testVerbContext(
         read: () => {
           throw new Error("doctor: no mark book in this test");
         },
-        record: () => {
+        update: () => {
           throw new Error("doctor: no mark book in this test");
         },
       },
@@ -73,7 +73,7 @@ export function testVerbContext(
         read: () => {
           throw new Error("doctor: no clicked terminals in this test");
         },
-        record: () => {
+        update: () => {
           throw new Error("doctor: no clicked terminals in this test");
         },
       },
@@ -99,7 +99,7 @@ export function testVerbContext(
         read: () => {
           throw new Error("doctor: no post-mortem record in this test");
         },
-        record: () => {
+        update: () => {
           throw new Error("doctor: no post-mortem record in this test");
         },
       },

@@ -2,9 +2,6 @@
 // clickable" — the terminal drawing the bar draws OSC 8 links, and inside
 // tmux, tmux passes them through. Pure over fixture facts.
 
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 import {
   checkByName,
   type Asked,
@@ -13,7 +10,7 @@ import {
 } from "../src/doctor/checks";
 import type { Identified, TerminalName } from "../src/doctor/terminal";
 import { linkFields } from "../src/doctor/report";
-import { fileClickedTerminals, parseClickedTerminals } from "../src/doctor/clicked-terminals";
+import { parseClickedTerminals, withClicked } from "../src/doctor/clicked-terminals";
 import { HEALTHY_FACTS } from "./helpers/doctor-facts";
 
 const probe = checkByName("links")!.probe;
@@ -211,33 +208,16 @@ describe("links probe", () => {
 });
 
 describe("the terminals a doctor click came back from", () => {
-  test("text that does not read is a failure naming the file, never an empty list", () => {
-    expect(parseClickedTerminals('["kitty","Hyper"]', "/c.json")).toEqual({ kind: "ok", value: ["kitty", "Hyper"] });
-    expect(parseClickedTerminals("{", "/c.json")).toMatchObject({ kind: "failed", reason: expect.stringMatching(/^\/c\.json is not JSON/) });
-    expect(parseClickedTerminals('{"kitty":1}', "/c.json")).toEqual({
-      kind: "failed",
-      reason: "/c.json is not a list of terminals",
-    });
-    expect(parseClickedTerminals("[1]", "/c.json")).toEqual({ kind: "failed", reason: "/c.json is not a list of terminals" });
+  test("the document reads as a list of terminals, or fails saying so", () => {
+    expect(parseClickedTerminals(["kitty", "Hyper"])).toEqual({ kind: "ok", value: ["kitty", "Hyper"] });
+    expect(parseClickedTerminals({ kitty: 1 })).toEqual({ kind: "failed", reason: "is not a list of terminals" });
+    expect(parseClickedTerminals([1])).toEqual({ kind: "failed", reason: "is not a list of terminals" });
   });
 
-  test("as a file: absent is the empty list, a terminal filed is read back once, and an unreadable list is never written over", () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-clicked-"));
-    try {
-      const file = path.join(dir, "state", "doctor-clicked-terminals.json");
-      expect(fileClickedTerminals(file).read()).toEqual({ kind: "ok", value: [] });
-      fileClickedTerminals(file).record("kitty");
-      const written = fs.statSync(file).mtimeMs;
-      fileClickedTerminals(file).record("kitty");
-      // Another process — the CLI, a later daemon — reads the same list, and
-      // a terminal already filed is not written again.
-      expect(fileClickedTerminals(file).read()).toEqual({ kind: "ok", value: ["kitty"] });
-      expect(fs.statSync(file).mtimeMs).toBe(written);
-      fs.writeFileSync(file, "junk");
-      expect(() => fileClickedTerminals(file).record("Hyper")).toThrow(/the clicked terminals could not be read/);
-      expect(fs.readFileSync(file, "utf8")).toBe("junk");
-    } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
-    }
+  test("a terminal is filed once: filing one already filed is the same list, so nothing is written", () => {
+    const clicked = withClicked([], "kitty");
+    expect(clicked).toEqual(["kitty"]);
+    expect(withClicked(clicked, "kitty")).toBe(clicked);
+    expect(withClicked(clicked, "Hyper")).toEqual(["kitty", "Hyper"]);
   });
 });

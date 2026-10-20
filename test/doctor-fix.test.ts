@@ -7,17 +7,18 @@ import { execFileSync } from "node:child_process";
 // only ever asked when there is a server to ask. The settings file is the one
 // in the Claude Code directory the client's `claudeConfigDir` hint names.
 
-import { memoryMarkBook } from "./helpers/mark-book";
+import { memoryStateFile } from "./helpers/state-file";
 import { healthyDaemonEdge, healthyDataEdge, noManagedSettings, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, HEALTHY_FACTS, CARRIED, NAMED, STILL, drew } from "./helpers/doctor-facts";
-import { memoryClickedTerminals } from "./helpers/clicked-terminals";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
   checkByName,
   TMUX_TRUECOLOR_VAR,
+  type Asked,
   type DoctorFacts,
   type Fix,
+  type MarkBook,
   statusLineOf,
   userEnvOf,
 } from "../src/doctor/checks";
@@ -52,8 +53,8 @@ const NO_TMUX: DoctorEdge = {
   remoteLogin: () => {
     throw new Error("remoteLogin must not run in this case");
   },
-  marks: memoryMarkBook(),
-  clicked: memoryClickedTerminals(),
+  marks: memoryStateFile<MarkBook>({}),
+  clicked: memoryStateFile<readonly string[]>([]),
   fontInUse: () => {
     throw new Error("fontInUse must not run in this case");
   },
@@ -117,6 +118,12 @@ function assertOnlyInserted(before: string, after: string, entry: RegExp): void 
   expect(rest).toBe(before);
 }
 
+// The facts a fix answers with, failing the test on a refused fix.
+function fixed(after: Asked<DoctorFacts>): DoctorFacts {
+  if (after.kind === "failed") throw new Error(`fix refused: ${after.reason}`);
+  return after.value;
+}
+
 describe("applyFix (claude-settings, env)", () => {
   test("with an existing env block: one entry appended, every other byte kept", () => {
     const before = `{
@@ -129,7 +136,7 @@ describe("applyFix (claude-settings, env)", () => {
 }
 `;
     const conf = writeSettings(before);
-    const facts = applyFix(NO_TMUX, fixIn(conf), factsOf(conf));
+    const facts = fixed(applyFix(NO_TMUX, fixIn(conf), factsOf(conf)));
     const after = fs.readFileSync(settingsIn(conf), "utf8");
     expect(JSON.parse(after)).toEqual({
       permissions: { allow: ["Bash(ls:*)"] },
@@ -209,7 +216,7 @@ describe("applyFix (effectRefresh)", () => {
     expect(verdict.ok).toBe(false);
     if (verdict.ok || verdict.fix === undefined) throw new Error("no fix");
 
-    const after = applyFix(NO_TMUX, verdict.fix, facts);
+    const after = fixed(applyFix(NO_TMUX, verdict.fix, facts));
     const text = fs.readFileSync(settingsIn(conf), "utf8");
     expect(JSON.parse(text)).toEqual({
       statusLine: {
@@ -497,7 +504,7 @@ describe("gatherFacts", () => {
       const check = checkByName("effectRefresh")!;
       const verdict = check.probe(facts);
       if (verdict.ok || verdict.fix === undefined) throw new Error("no fix");
-      const after = applyFix(NO_TMUX, verdict.fix, facts);
+      const after = fixed(applyFix(NO_TMUX, verdict.fix, facts));
       expect(JSON.parse(fs.readFileSync(shared, "utf8")).statusLine.refreshInterval).toBe(1);
       expect(JSON.parse(fs.readFileSync(settingsIn(conf), "utf8"))).toEqual(line());
       expect(check.probe(after)).toEqual({

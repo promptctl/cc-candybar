@@ -6,40 +6,28 @@
 // is one file under the daemon's state directory, read by the bar's doctor
 // and by `cc-candybar doctor` alike: a mark made in one session answers in the
 // next, and in the CLI, which has no session to make one in.
-//
-// [LAW:effects-at-boundaries] `parseMarkBook` and `withMark` are pure; the
-// file is read and written only by `fileMarkBook`, which the doctor edge
-// carries (src/doctor/edge.ts).
 
-import fs from "node:fs";
 import path from "node:path";
 import { stateDir } from "../daemon/paths.js";
-import { writeAtomic } from "../utils/atomic-write.js";
 import {
   GLYPH_MARKS,
   type Asked,
   type GlyphMark,
   type MarkBook,
 } from "./checks.js";
+import { stateFile, type StateFile } from "./state-file.js";
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);
 
-// [LAW:parse-dont-validate] The file's text as a MarkBook — check name, then
-// sighting id, then the mark. Only the doctor writes the file, so text that
-// does not read is a failure naming the file, never an empty book; it fails
-// only the check that reads marks, never the doctor's other checks.
-export function parseMarkBook(text: string, file: string): Asked<MarkBook> {
-  const fault = (why: string): Asked<MarkBook> => ({
+// [LAW:parse-dont-validate] The document as a MarkBook — check name, then
+// sighting id, then the mark. A book that does not read fails only the check
+// that reads marks, never the doctor's other checks.
+export function parseMarkBook(doc: unknown): Asked<MarkBook> {
+  const fault = (reason: string): Asked<MarkBook> => ({
     kind: "failed",
-    reason: `${file} ${why}`,
+    reason,
   });
-  let doc: unknown;
-  try {
-    doc = JSON.parse(text);
-  } catch (e) {
-    return fault(`is not JSON: ${(e as Error).message}`);
-  }
   if (!isRecord(doc)) return fault("is not an object");
   for (const [check, sightings] of Object.entries(doc)) {
     if (!isRecord(sightings)) {
@@ -68,43 +56,6 @@ export function withMark(
   return { ...book, [check]: { ...book[check], [sighting]: mark } };
 }
 
-export interface MarkBookStore {
-  readonly read: () => Asked<MarkBook>;
-  // Throws when the book cannot be read: a mark is never filed over a book
-  // whose other marks would be lost.
-  readonly record: (check: string, sighting: string, mark: GlyphMark) => void;
-}
-
-// The book as a file: absent is the empty book, anything else must read.
-export function fileMarkBook(
+export const fileMarkBook = (
   file: string = path.join(stateDir(), "doctor-marks.json"),
-): MarkBookStore {
-  const read = (): Asked<MarkBook> => {
-    let text: string;
-    try {
-      text = fs.readFileSync(file, "utf8");
-    } catch (e) {
-      if ((e as NodeJS.ErrnoException).code === "ENOENT") {
-        return { kind: "ok", value: {} };
-      }
-      return { kind: "failed", reason: `${file}: ${(e as Error).message}` };
-    }
-    return parseMarkBook(text, file);
-  };
-  return {
-    read,
-    record: (check, sighting, mark) => {
-      const book = read();
-      if (book.kind === "failed") {
-        throw new Error(
-          `doctor: the mark book could not be read: ${book.reason}`,
-        );
-      }
-      fs.mkdirSync(path.dirname(file), { recursive: true });
-      writeAtomic(
-        file,
-        `${JSON.stringify(withMark(book.value, check, sighting, mark), null, 2)}\n`,
-      );
-    },
-  };
-}
+): StateFile<MarkBook> => stateFile(file, {}, parseMarkBook);

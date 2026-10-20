@@ -62,6 +62,8 @@ import {
   type DataNeed,
   type FontInUse,
   type ForgeLogin,
+  type MarkBook,
+  type PostMortemsRead,
   type SegmentDataFacts,
   type TerminalFacts,
   type TerminalIdentity,
@@ -88,16 +90,11 @@ import type { ClientHint } from "../client-hint.js";
 import { sourceCheckoutOf } from "../daemon/build-currency.js";
 import { crateDigest } from "../source-digest.js";
 import { shipsNative } from "../install/platforms.js";
-import { fileMarkBook, type MarkBookStore } from "./mark-book.js";
-import {
-  fileClickedTerminals,
-  type ClickedTerminalsStore,
-} from "./clicked-terminals.js";
-import {
-  filePostMortemsRead,
-  type PostMortemsReadStore,
-} from "./post-mortems-read.js";
-import type { ServingDaemon } from "../daemon/limits.js";
+import { fileMarkBook } from "./mark-book.js";
+import { fileClickedTerminals } from "./clicked-terminals.js";
+import { filePostMortemsRead } from "./post-mortems-read.js";
+import type { StateFile } from "./state-file.js";
+import { laterIdentity, type ServingDaemon } from "../daemon/limits.js";
 
 // [LAW:effects-at-boundaries] The install check's reads of the machine: a
 // path resolved through every link, the checkout a bundle was built in, a
@@ -182,10 +179,10 @@ export interface DoctorEdge {
   readonly probeTmux: (hint: TmuxHint) => Asked<TmuxClient | null>;
   // The marks the user has made on what the doctor showed them, kept for
   // good (src/doctor/mark-book.ts).
-  readonly marks: MarkBookStore;
+  readonly marks: StateFile<MarkBook>;
   // The terminals a doctor click has come back from, kept for good
   // (src/doctor/clicked-terminals.ts).
-  readonly clicked: ClickedTerminalsStore;
+  readonly clicked: StateFile<readonly string[]>;
   // Whether a process came in through a remote login (sshd, mosh-server) —
   // asked of the tmux client attached to the session's pane.
   readonly remoteLogin: (pid: number) => Asked<boolean>;
@@ -214,7 +211,7 @@ export interface DoctorEdge {
   readonly daemons: () => Asked<readonly DaemonProcess[]>;
   // The newest post-mortem the user filed as read
   // (src/doctor/post-mortems-read.ts).
-  readonly postMortemsRead: PostMortemsReadStore;
+  readonly postMortemsRead: StateFile<PostMortemsRead>;
   // Whether the forge CLI the checkout's remote names is installed and logged
   // in to its host — null when it names no forge (`forgeLogin`).
   readonly forge: (cwd: string) => Asked<ForgeLogin | null>;
@@ -850,12 +847,13 @@ export function gatherFacts(
 //
 // Returns the facts with the one this fix changed re-read — the performer of
 // an effect is the one place that knows what it touched, so a post-fix report
-// cannot reuse a stale fact or re-probe an unchanged one.
+// cannot reuse a stale fact or re-probe an unchanged one — or the reason the
+// fix was refused, with nothing written.
 export function applyFix(
   edge: DoctorEdge,
   fix: Fix,
   facts: DoctorFacts,
-): DoctorFacts {
+): Asked<DoctorFacts> {
   switch (fix.kind) {
     case "claude-settings": {
       const settingsPath = fix.file;
@@ -868,16 +866,27 @@ export function applyFix(
       );
       writeAtomic(settingsPath, next);
       return {
-        ...facts,
-        claudeSettings: readSettingsFacts(facts.claudeSettings.at),
+        kind: "ok",
+        value: {
+          ...facts,
+          claudeSettings: readSettingsFacts(facts.claudeSettings.at),
+        },
       };
     }
     case "post-mortems-read": {
-      edge.postMortemsRead.record(fix.through);
-      return {
-        ...facts,
-        daemon: { ...facts.daemon, read: edge.postMortemsRead.read() },
-      };
+      // Filing only ever moves forward: a fix computed before another run
+      // filed a newer breach leaves that one filed.
+      const read = edge.postMortemsRead.update((current) =>
+        current.through === null || laterIdentity(fix.through, current.through)
+          ? { through: fix.through }
+          : current,
+      );
+      return read.kind === "failed"
+        ? read
+        : {
+            kind: "ok",
+            value: { ...facts, daemon: { ...facts.daemon, read } },
+          };
     }
     default: {
       const _exhaustive: never = fix;

@@ -12,9 +12,8 @@ import {
   BUNDLED_GLYPHS_LOGGED,
   BUNDLED_GLYPHS_NAMED,
 } from "./helpers/bundled-glyphs";
-import { memoryMarkBook } from "./helpers/mark-book";
-import { memoryClickedTerminals } from "./helpers/clicked-terminals";
-import { checkByName, type UrlHandlerFacts } from "../src/doctor/checks";
+import { memoryStateFile } from "./helpers/state-file";
+import { checkByName, type MarkBook, type UrlHandlerFacts } from "../src/doctor/checks";
 import {
   ProbeArrivals,
   probeUrlHandler,
@@ -423,8 +422,8 @@ describe("the daemon's side of the round trip", () => {
         remoteLogin: () => {
           throw new Error("remoteLogin must not run in this case");
         },
-        marks: memoryMarkBook(),
-        clicked: memoryClickedTerminals(),
+        marks: memoryStateFile<MarkBook>({}),
+        clicked: memoryStateFile<readonly string[]>([]),
         fontInUse: () => {
           throw new Error("fontInUse must not run in this case");
         },

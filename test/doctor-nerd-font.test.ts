@@ -34,9 +34,8 @@ import type { Asked } from "../src/doctor/checks";
 import {
   nerdFontFields,
 } from "../src/doctor/report";
-import { fileMarkBook, parseMarkBook, withMark } from "../src/doctor/mark-book";
-import { memoryMarkBook } from "./helpers/mark-book";
-import { memoryClickedTerminals } from "./helpers/clicked-terminals";
+import { parseMarkBook, withMark } from "../src/doctor/mark-book";
+import { memoryStateFile } from "./helpers/state-file";
 import { HEALTHY_FACTS, healthyDaemonEdge, healthyDataEdge, noManagedSettings, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, CARRIED, NAMED, STILL } from "./helpers/doctor-facts";
 import fs from "node:fs";
 import os from "node:os";
@@ -280,47 +279,20 @@ describe("the mark book", () => {
     expect(withMark(once, "nerdFont", ID, "drawn")).toEqual({ nerdFont: { [ID]: "drawn" } });
   });
 
-  test("text that does not read is a failure naming the file, never an empty book", () => {
-    expect(parseMarkBook(JSON.stringify({ nerdFont: { [ID]: "drawn" } }), "/b.json")).toEqual({
+  test("a document that is not a mark book fails saying how", () => {
+    expect(parseMarkBook({ nerdFont: { [ID]: "drawn" } })).toEqual({
       kind: "ok",
       value: { nerdFont: { [ID]: "drawn" } },
     });
-    const reason = (text: string) => {
-      const r = parseMarkBook(text, "/b.json");
+    const reason = (doc: unknown) => {
+      const r = parseMarkBook(doc);
       return r.kind === "failed" ? r.reason : "read";
     };
-    expect(reason("{")).toMatch(/^\/b\.json is not JSON/);
-    expect(reason("[]")).toBe("/b.json is not an object");
-    expect(reason('{"nerdFont":3}')).toBe(
-      '/b.json holds "nerdFont" as something other than its sightings',
-    );
-    expect(reason('{"nerdFont":{"x":"maybe"}}')).toBe(
-      '/b.json marks "x" "maybe", not drawn or boxes',
-    );
+    expect(reason([])).toBe("is not an object");
+    expect(reason({ nerdFont: 3 })).toBe('holds "nerdFont" as something other than its sightings');
+    expect(reason({ nerdFont: { x: "maybe" } })).toBe('marks "x" "maybe", not drawn or boxes');
   });
 
-  test("as a file: absent is the empty book, a mark made is read back by the next reader", () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-marks-"));
-    try {
-      const file = path.join(dir, "state", "doctor-marks.json");
-      expect(fileMarkBook(file).read()).toEqual({ kind: "ok", value: {} });
-      fileMarkBook(file).record("nerdFont", ID, "drawn");
-      // Another process — the CLI, a later daemon — reads the same answer.
-      expect(fileMarkBook(file).read()).toEqual({
-        kind: "ok",
-        value: { nerdFont: { [ID]: "drawn" } },
-      });
-      fs.writeFileSync(file, "junk");
-      expect(fileMarkBook(file).read()).toMatchObject({ kind: "failed" });
-      // A mark is never filed over a book whose other marks would be lost.
-      expect(() => fileMarkBook(file).record("nerdFont", ID, "boxes")).toThrow(
-        /the mark book could not be read/,
-      );
-      expect(fs.readFileSync(file, "utf8")).toBe("junk");
-    } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
-    }
-  });
 });
 
 describe("the doctor event's Nerd Font fields", () => {
@@ -511,8 +483,8 @@ describe("gatherFacts: where the Nerd Font facts come from", () => {
         return COVERED;
       },
       loadConfig: () => ({ layers: [], error: null, warning: null, unused: [], config }),
-      marks: memoryMarkBook(book),
-      clicked: memoryClickedTerminals(),
+      marks: memoryStateFile(book),
+      clicked: memoryStateFile<readonly string[]>([]),
     };
     return { e, asked, pids };
   };

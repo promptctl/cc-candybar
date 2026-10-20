@@ -340,6 +340,11 @@ export interface DaemonProcess {
   readonly started: string;
 }
 
+// The newest post-mortem the user has filed as read: `null` while none is.
+export interface PostMortemsRead {
+  readonly through: string | null;
+}
+
 // The daemon row's facts (brandon-doctor-v62x.5mq): the daemon that serves
 // this bar, as it reports itself (src/daemon/limits.ts `serving`); every
 // daemon process running; and the newest post-mortem the user filed as read
@@ -347,7 +352,7 @@ export interface DaemonProcess {
 export interface DaemonFacts {
   readonly serving: Asked<ServingDaemon>;
   readonly processes: Asked<readonly DaemonProcess[]>;
-  readonly read: Asked<string | null>;
+  readonly read: Asked<PostMortemsRead>;
 }
 
 // [LAW:types-are-the-program] One outside source of segment data
@@ -913,11 +918,13 @@ const install: Check = {
 // counts them (src/doctor/report.ts).
 export function unreadPostMortems(
   { postMortems }: ServingDaemon,
-  read: Asked<string | null>,
+  read: Asked<PostMortemsRead>,
 ): readonly PostMortem[] {
   return postMortems.kind === "ok" && read.kind === "ok"
     ? postMortems.value.filter(
-        (m) => read.value === null || laterIdentity(m.identity, read.value),
+        (m) =>
+          read.value.through === null ||
+          laterIdentity(m.identity, read.value.through),
       )
     : [];
 }
