@@ -55,15 +55,22 @@ import { pluginDataVar, pluginNameOf } from "../../config/loader/plugins.js";
 // (brandon-unfiled-3248.8yp). The heap a state holds beside its compile, and
 // the heap one compile holds — measured, and held to by
 // test/render-cache-sharing.test.ts, which fails when either is exceeded.
-// Measured 2026-10-20: the compile 8.5–8.9 MB; a rendered entry 1.8 MB over
-// the bundled default and 2.4 MB in a daemon serving a full user config from
-// forty real worktree directories (it was 9.3 MB an entry, every one
-// compiling its own).
+// Measured 2026-10-20 over the bundled default: a rendered entry 1.8 MB (2.4
+// MB in a daemon serving a full user config from forty real worktree
+// directories); a compile 7.1 MB, counted as an evicted builder leaves it —
+// its own heap and the part of that builder's config it still reaches. It was
+// 9.3 MB an entry, every one compiling its own.
 export const ENTRY_BYTES = 3 * 1024 * 1024;
 export const COMPILE_BYTES = 10 * 1024 * 1024;
 
 // The render cache's share of the daemon's RSS limit: a quarter, leaving the
-// rest to V8's own mappings, the code, and the other caches.
+// rest to V8's own mappings, the code, the other caches, and the heap's growth
+// room. At the default 512 MB that is ~39 entries on one compile, against a
+// working set of 19 directories in the production daemon's first 2.3 hours
+// (2026-10-20). A larger share buys entries with RSS: rendering 100 worktree
+// directories, RSS ended at 329 / 390 / 424 MB under a quarter / three
+// eighths / half — the larger two past the 75% line `approachingLimit` warns
+// at.
 export function renderCacheBudget(rssLimitBytes: number): number {
   return Math.floor(rssLimitBytes / 4);
 }
@@ -810,10 +817,17 @@ export class RenderCache {
   // The cache starts serving `state`: unheld, and not yet retired — and the
   // compile it carries is the table's for its key.
   private serve(state: DslRenderState): void {
+    const held = this.compiles.get(state.compileKey);
+    // [LAW:no-silent-failure] compileOf hands a build the table's compile for
+    // its key, so a second compile under one key is a cache bug: overwriting
+    // it would leave the first alive and uncounted.
+    if (held !== undefined && held !== state.compiled)
+      throw new Error(
+        `render cache: a second compile for key ${state.compileKey.slice(0, 12)}`,
+      );
     this.holds.set(state, { holders: 0, retired: null });
-    const built = !this.compiles.has(state.compileKey);
     this.compiles.set(state.compileKey, state.compiled);
-    if (built)
+    if (held === undefined)
       this.log(
         "info",
         `render-cache compile built key=${state.compileKey.slice(0, 12)} compiles=${this.compiles.size}`,

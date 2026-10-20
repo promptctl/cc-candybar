@@ -16,7 +16,10 @@ import {
   compileInputOf,
   declareDslVariables,
   renderDsl,
+  type CompiledConfig,
 } from "../src/dsl/render";
+import type { ValidatedConfig } from "../src/config/dsl-types";
+import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
 import { instantOf } from "../src/utils/instant";
@@ -82,6 +85,31 @@ const render = (state: ReturnType<RenderCache["getOrCreate"]>["state"]): string 
       { endcaps: "powerline", colorCompatibility: "truecolor", wrap: true, padding: 1, width: 200 },
     ),
   );
+
+// Draw one frame of `compiled` from a store and registry of its own, as a
+// render-cache entry would, then dispose the registry; the store is returned
+// so a caller can watch whether anything still holds it.
+const drawAlone = (config: ValidatedConfig, compiled: CompiledConfig): VariableStore => {
+  const store = new VariableStore();
+  const registry = new SourceRegistry(store, "", undefined, new SessionState());
+  declareDslVariables(config, registry, dir);
+  renderDsl(
+    config,
+    compiled,
+    store,
+    registry,
+    { session_id: "s", project_dir: dir },
+    instantOf(new Date()),
+    { endcaps: "powerline", colorCompatibility: "truecolor", wrap: true, padding: 1, width: 200 },
+  );
+  registry.dispose();
+  return store;
+};
+
+const exposeGc = (): (() => void) => {
+  v8.setFlagsFromString("--expose_gc");
+  return vm.runInNewContext("gc") as () => void;
+};
 
 // One action over session key `k`, and a carousel centred on what reads it
 // back; `reader` names the state variable over `k`, `value` its default.
@@ -236,27 +264,10 @@ test("a compile's store and clocks are the render's: read outside one, it refuse
 // laid under. Kept, an evicted entry's store would stay on the heap for as
 // long as any other entry carried the compile, charged to no one.
 test("a compile keeps nothing of a render once it returns", async () => {
-  v8.setFlagsFromString("--expose_gc");
-  const gc = vm.runInNewContext("gc") as () => void;
+  const gc = exposeGc();
   const config = parseAndValidate("<test>", carouselConfig("mode", "alpha"));
   const compiled = compileDslConfig(compileInputOf(config));
-  const drawOnce = (): WeakRef<VariableStore> => {
-    const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", undefined, new SessionState());
-    declareDslVariables(config, registry, dir);
-    renderDsl(
-      config,
-      compiled,
-      store,
-      registry,
-      { session_id: "s", project_dir: dir },
-      instantOf(new Date()),
-      { endcaps: "powerline", colorCompatibility: "truecolor", wrap: true, padding: 1, width: 200 },
-    );
-    registry.dispose();
-    return new WeakRef(store);
-  };
-  const drawn = drawOnce();
+  const drawn = new WeakRef(drawAlone(config, compiled));
   // A WeakRef holds its target until the job that made it ends.
   await new Promise((resolve) => setImmediate(resolve));
   gc();
@@ -270,13 +281,32 @@ test("a compile keeps nothing of a render once it returns", async () => {
 // change that grows either fails here rather than quietly over-filling the
 // budget. The bundled default, as `test/setup.ts` leaves the XDG config empty.
 test("an entry and a compile hold no more than the cache charges for them", () => {
-  v8.setFlagsFromString("--expose_gc");
-  const gc = vm.runInNewContext("gc") as () => void;
+  const gc = exposeGc();
   const heapUsed = (): number => {
     gc();
     gc();
     return process.memoryUsage().heapUsed;
   };
+  // A compile outlives the entry that built it whenever another entry shares
+  // it, so it is charged for everything it holds then: its own heap, and
+  // whatever of its builder's config it still reaches — measured after it has
+  // drawn, with that config, store and registry all dropped. The bundled
+  // default; the first compile in a process also pays the process's one-time
+  // allocations, which are no compile's, so a second is measured.
+  const orphan = (): CompiledConfig => {
+    const config = parseAndValidate("<test>", "{}", undefined, DEFAULT_DSL_CONFIG);
+    const compiled = compileDslConfig(compileInputOf(config));
+    drawAlone(config, compiled);
+    return compiled;
+  };
+  const held: Array<CompiledConfig | undefined> = [orphan()];
+  const beforeCompile = heapUsed();
+  held.push(orphan());
+  const compileBytes = heapUsed() - beforeCompile;
+  expect(held).toHaveLength(2);
+  held.length = 0;
+  expect(compileBytes).toBeLessThan(COMPILE_BYTES);
+
   const { cache } = makeCache(64 * COMPILE_BYTES);
   // Rendered once, as every entry the daemon holds has been: a render fills
   // the store and the per-segment sink the entry keeps.
@@ -287,14 +317,11 @@ test("an entry and a compile hold no more than the cache charges for them", () =
     render(state);
     return state;
   };
-  const keep = [];
+  const keep = [entry(0)];
   const before = heapUsed();
-  keep.push(entry(0));
-  const first = heapUsed() - before;
   const N = 6;
   for (let i = 1; i <= N; i++) keep.push(entry(i));
-  const perEntry = (heapUsed() - before - first) / N;
+  const perEntry = (heapUsed() - before) / N;
   expect(cache.stats.compiles).toBe(1);
   expect(perEntry).toBeLessThan(ENTRY_BYTES);
-  expect(first - perEntry).toBeLessThan(COMPILE_BYTES);
 });
