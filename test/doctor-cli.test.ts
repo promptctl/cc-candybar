@@ -4,10 +4,9 @@
 
 import { BUNDLED_GLYPHS } from "./helpers/bundled-glyphs";
 import { healthyDaemonEdge, healthyDataEdge, noManagedSettings, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, healthyDaemonIn, HEALTHY_FACTS, CARRIED, NAMED, STILL } from "./helpers/doctor-facts";
-import { glyphSighting } from "../src/doctor/checks";
+import { glyphSighting, type MarkBook } from "../src/doctor/checks";
 import { withMark } from "../src/doctor/mark-book";
-import { memoryMarkBook } from "./helpers/mark-book";
-import { memoryClickedTerminals } from "./helpers/clicked-terminals";
+import { memoryStateFile } from "./helpers/state-file";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -58,8 +57,8 @@ const EDGE: DoctorEdge = {
   remoteLogin: () => {
     throw new Error("remoteLogin must not run in this case");
   },
-  marks: memoryMarkBook(),
-  clicked: memoryClickedTerminals(),
+  marks: memoryStateFile<MarkBook>({}),
+  clicked: memoryStateFile<readonly string[]>([]),
   fontInUse: () => {
     throw new Error("fontInUse must not run in this case");
   },
@@ -192,7 +191,7 @@ describe("doctorPlan", () => {
     const unsettled = await doctorPlan(EDGE, NO_HANDLER, DAEMON, kitty, "/", () => ({ columns: 120 }));
     expect(unsettled.stdout).toMatch(/\n✗ links — kitty draws links \(OSC 8\) since 0\.19\.0, and did not say which release this is — click 🩺 doctor/);
     const settled = await doctorPlan(
-      { ...EDGE, clicked: memoryClickedTerminals(["kitty"]) },
+      { ...EDGE, clicked: memoryStateFile<readonly string[]>(["kitty"]) },
       NO_HANDLER,
       DAEMON,
       kitty,
@@ -229,7 +228,7 @@ describe("doctorPlan", () => {
   test("a ✓ the bar's doctor filed in the mark book settles the check here too", async () => {
     const id = glyphSighting({ glyphs: BUNDLED_GLYPHS, terminal: { kind: "unknown", called: "Hyper" } })!.id;
     const plan = await doctorPlan(
-      { ...EDGE, marks: memoryMarkBook(withMark({}, "nerdFont", id, "drawn")) },
+      { ...EDGE, marks: memoryStateFile(withMark({}, "nerdFont", id, "drawn")) },
       NO_HANDLER,
       DAEMON,
       inDir({ TERM_PROGRAM: "Hyper" }),

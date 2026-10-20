@@ -15,8 +15,7 @@ import {
   BUNDLED_GLYPHS_NAMED,
 } from "./helpers/bundled-glyphs";
 import { DoctorBusy } from "../src/doctor/busy";
-import { memoryMarkBook } from "./helpers/mark-book";
-import { memoryClickedTerminals } from "./helpers/clicked-terminals";
+import { memoryStateFile } from "./helpers/state-file";
 import fs from "node:fs";
 import { POWERLINE } from "./helpers/powerline";
 import os from "node:os";
@@ -46,7 +45,7 @@ import {
 } from "../src/click/wire";
 import { VERBS, SESSION_CLIENT_HINTS_KEY, BadVerbArgs } from "../src/daemon/verbs";
 import type { VerbContext } from "../src/daemon/verbs";
-import { TMUX_TRUECOLOR_VAR } from "../src/doctor/checks";
+import { TMUX_TRUECOLOR_VAR, type MarkBook } from "../src/doctor/checks";
 import type { ConfigLoad, DoctorEdge } from "../src/doctor/edge";
 import type { TmuxHint } from "../src/tmux-hint";
 import type { TerminalEnvHint } from "../src/terminal-hint";
@@ -109,7 +108,7 @@ function buildRuntime(
   tmux: TmuxHint | null,
   load: LoadOutcome = CLEAN_LOAD,
   terminal: TerminalFixture = GHOSTTY,
-  clicked: ReturnType<typeof memoryClickedTerminals> = memoryClickedTerminals(),
+  clicked: ReturnType<typeof memoryStateFile<readonly string[]>> = memoryStateFile<readonly string[]>([]),
   // The `client` hint the session's last render carried, as the daemon's
   // sightings hold it; none is a client too old to report one.
   client: { readonly hint?: ClientHint } = { hint: healthyClient() },
@@ -169,7 +168,7 @@ function buildRuntime(
     remoteLogin: () => {
       throw new Error("remoteLogin must not run in this case");
     },
-    marks: memoryMarkBook(),
+    marks: memoryStateFile<MarkBook>({}),
     clicked,
     fontInUse: terminal.fontInUse,
     loadConfig: () => ({ ...load, config }),
@@ -301,12 +300,12 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
       fontInUse: GHOSTTY.fontInUse,
     });
     rt.openTools();
-    expect(rt.clicked.list()).toEqual([]);
+    expect(rt.clicked.value()).toEqual([]);
     rt.clickVerb(VERB_DOCTOR_RUN);
     const out = rt.render();
     expect(out).toContain("✓ links");
     expect(out).toContain("✗ Nerd Font — the doctor cannot read Terminal 455.1's font");
-    expect(rt.clicked.list()).toEqual(["Terminal"]);
+    expect(rt.clicked.value()).toEqual(["Terminal"]);
     expect(rt.logs.filter((line) => line.startsWith("doctor:"))).toEqual([
       `doctor: config=ok install=ok daemon=ok urlHandler=ok links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=failed(1) segmentData=ok sessionData=ok glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=apple-terminal@455.1 font=- mark=- tmuxLinks=- clicked=yes cols=148 clientUtf8=- clients=native/same/- daemons=1 others=- rss=120/512 postMortems=0/0 data=pr:-,rateLimits:-,memento:- transcripts=1/0/0 unparsed=0 frames=0/0/1/0/0 statusLine=absent (session=s1)`,
     ]);
@@ -314,7 +313,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
 
   test("a post-mortem the user has not read fails the daemon row, and [fix] files it read", () => {
     const report = "/state/cc-candybar/memory-2026-10-19T18-01-12-345Z-77.txt";
-    const rt = buildRuntime(null, CLEAN_LOAD, GHOSTTY, memoryClickedTerminals(), { hint: healthyClient() }, {
+    const rt = buildRuntime(null, CLEAN_LOAD, GHOSTTY, memoryStateFile<readonly string[]>([]), { hint: healthyClient() }, {
       ...HEALTHY_SERVING,
       postMortems: {
         kind: "ok",
@@ -338,7 +337,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
   // brandon-doctor-v62x.tfb: the click judges the client that drew the bar
   // it came from — one too old to say what it is is the install's failure.
   test("a bar drawn by a client too old to say what it is fails the install row", () => {
-    const rt = buildRuntime(null, CLEAN_LOAD, GHOSTTY, memoryClickedTerminals(), {});
+    const rt = buildRuntime(null, CLEAN_LOAD, GHOSTTY, memoryStateFile<readonly string[]>([]), {});
     rt.openTools();
     rt.clickVerb(VERB_DOCTOR_RUN);
     expect(rt.render()).toContain(
@@ -353,8 +352,8 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
   // is logged, and the doctor still reports.
   test("a clicked-terminals list that cannot be written does not stop the run, and says so in the log", () => {
     const unwritable = {
-      ...memoryClickedTerminals(),
-      record: () => {
+      ...memoryStateFile<readonly string[]>([]),
+      update: () => {
         throw new Error("EROFS: read-only file system");
       },
     };

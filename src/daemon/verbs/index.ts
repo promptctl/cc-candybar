@@ -140,6 +140,7 @@ import {
   installFields,
 } from "../../doctor/report";
 import { withMark } from "../../doctor/mark-book";
+import { withClicked } from "../../doctor/clicked-terminals";
 import { DoctorBusy } from "../../doctor/busy";
 import {
   applyFix,
@@ -1252,7 +1253,10 @@ function clickedFrom(
     terminal.kind === "seen" ? sightingOf(terminal.identified) : null;
   if (sighting === null || clicked.kind === "failed") return clicked;
   try {
-    ctx.doctor.clicked.record(sighting);
+    return {
+      kind: "ok",
+      value: ctx.doctor.clicked.update((list) => withClicked(list, sighting)),
+    };
   } catch (e) {
     ctx.dlog(
       "warn",
@@ -1260,12 +1264,6 @@ function clickedFrom(
     );
     return clicked;
   }
-  return {
-    kind: "ok",
-    value: clicked.value.includes(sighting)
-      ? clicked.value
-      : [...clicked.value, sighting],
-  };
 }
 
 const doctorRun: VerbHandler = (value, ctx) => {
@@ -1348,14 +1346,14 @@ const doctorMark: VerbHandler = (value, ctx) => {
     throw new BadVerbArgs(`doctor-mark: ${facts.marks.reason}`);
   }
   const made = [check.name, verdict.sighting.id, mark as GlyphMark] as const;
-  ctx.doctor.marks.record(...made);
+  const marks = ctx.doctor.marks.update((book) => withMark(book, ...made));
   ctx.dlog(
     "info",
     `doctor-mark: ${check.name} ${mark} on ${verdict.sighting.id} (session=${sid})`,
   );
   writeReport(ctx, sid, {
     ...facts,
-    marks: { kind: "ok", value: withMark(facts.marks.value, ...made) },
+    marks: { kind: "ok", value: marks },
   });
 };
 

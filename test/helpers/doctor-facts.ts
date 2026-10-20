@@ -1,9 +1,9 @@
-import type { DaemonProcess, DoctorFacts } from "../../src/doctor/checks";
+import type { DaemonProcess, DoctorFacts, PostMortemsRead } from "../../src/doctor/checks";
 import type { FrameSeen } from "../../src/daemon/render-sightings";
 import type { DoctorEdge, InstallEdge } from "../../src/doctor/edge";
 import type { DaemonAnswer } from "../../src/doctor/daemon-answer";
 import type { ServingDaemon } from "../../src/daemon/limits";
-import type { PostMortemsReadStore } from "../../src/doctor/post-mortems-read";
+import { memoryStateFile } from "./state-file";
 import type { ClientHint } from "../../src/client-hint";
 
 // One published install: the daemon's bundle and the native client beside it.
@@ -42,26 +42,13 @@ export const HEALTHY_PROCESS: DaemonProcess = {
   started: "Mon Oct 19 17:59:51 2026",
 };
 
-// The read record as memory, starting from `initial`.
-export function memoryPostMortemsRead(
-  initial: string | null = null,
-): PostMortemsReadStore {
-  let through = initial;
-  return {
-    read: () => ({ kind: "ok", value: through }),
-    record: (identity) => {
-      through = identity;
-    },
-  };
-}
-
 // The edge's reads of that daemon: the one process, nothing filed read.
 export const healthyDaemonEdge = (): Pick<
   DoctorEdge,
   "daemons" | "postMortemsRead"
 > => ({
   daemons: () => ({ kind: "ok", value: [HEALTHY_PROCESS] }),
-  postMortemsRead: memoryPostMortemsRead(),
+  postMortemsRead: memoryStateFile<PostMortemsRead>({ through: null }),
 });
 
 // A session's transcript after Claude Code has answered in it.
@@ -204,7 +191,7 @@ export const HEALTHY_FACTS: DoctorFacts = {
   daemon: {
     serving: { kind: "ok", value: HEALTHY_SERVING },
     processes: { kind: "ok", value: [HEALTHY_PROCESS] },
-    read: { kind: "ok", value: null },
+    read: { kind: "ok", value: { through: null } },
   },
   nerdFont: { kind: "none" },
   marks: { kind: "ok", value: {} },

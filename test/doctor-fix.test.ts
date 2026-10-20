@@ -7,9 +7,8 @@ import { execFileSync } from "node:child_process";
 // only ever asked when there is a server to ask. The settings file is the one
 // in the Claude Code directory the client's `claudeConfigDir` hint names.
 
-import { memoryMarkBook } from "./helpers/mark-book";
+import { memoryStateFile } from "./helpers/state-file";
 import { healthyDaemonEdge, healthyDataEdge, noManagedSettings, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, HEALTHY_FACTS, CARRIED, NAMED, STILL, drew } from "./helpers/doctor-facts";
-import { memoryClickedTerminals } from "./helpers/clicked-terminals";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -18,6 +17,7 @@ import {
   TMUX_TRUECOLOR_VAR,
   type DoctorFacts,
   type Fix,
+  type MarkBook,
   statusLineOf,
   userEnvOf,
 } from "../src/doctor/checks";
@@ -52,8 +52,8 @@ const NO_TMUX: DoctorEdge = {
   remoteLogin: () => {
     throw new Error("remoteLogin must not run in this case");
   },
-  marks: memoryMarkBook(),
-  clicked: memoryClickedTerminals(),
+  marks: memoryStateFile<MarkBook>({}),
+  clicked: memoryStateFile<readonly string[]>([]),
   fontInUse: () => {
     throw new Error("fontInUse must not run in this case");
   },

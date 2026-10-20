@@ -8,7 +8,7 @@ import path from "node:path";
 import { checkByName, unreadPostMortems, type DaemonFacts, type Verdict } from "../src/doctor/checks";
 import { daemonProcesses, ownsEntry } from "../src/doctor/edge";
 import { parseServingDaemon } from "../src/doctor/daemon-answer";
-import { filePostMortemsRead } from "../src/doctor/post-mortems-read";
+import { parsePostMortemsRead } from "../src/doctor/post-mortems-read";
 import { RuntimeStats } from "../src/daemon/stats";
 import { postMortemsOf } from "../src/daemon/limits";
 import { HEALTHY_FACTS, HEALTHY_PROCESS, HEALTHY_SERVING } from "./helpers/doctor-facts";
@@ -59,12 +59,12 @@ describe("the daemon probe", () => {
   });
 
   test("only post-mortems newer than the one filed read are reported", () => {
-    expect(verdictOf({ ...withPostMortems, read: { kind: "ok", value: OLDER } })).toMatchObject({
+    expect(verdictOf({ ...withPostMortems, read: { kind: "ok", value: { through: OLDER } } })).toMatchObject({
       ok: false,
       more: [],
       fix: { kind: "post-mortems-read", through: NEWER },
     });
-    expect(verdictOf({ ...withPostMortems, read: { kind: "ok", value: NEWER } })).toEqual({ ok: true });
+    expect(verdictOf({ ...withPostMortems, read: { kind: "ok", value: { through: NEWER } } })).toEqual({ ok: true });
   });
 
   test("past three quarters of the budget fails, naming both numbers; at it does not", () => {
@@ -133,8 +133,8 @@ describe("the daemon probe", () => {
       "/s/memory-2026-10-19T18-01-12-345Z-1000.txt",
     ]);
     const serving = { ...HEALTHY_SERVING, postMortems: { kind: "ok", value: listed } } as const;
-    expect(unreadPostMortems(serving, { kind: "ok", value: null })).toHaveLength(2);
-    expect(unreadPostMortems(serving, { kind: "ok", value: listed[0]!.identity })).toEqual([]);
+    expect(unreadPostMortems(serving, { kind: "ok", value: { through: null } })).toHaveLength(2);
+    expect(unreadPostMortems(serving, { kind: "ok", value: { through: listed[0]!.identity } })).toEqual([]);
   });
 
   test("no daemon answering keeps every other fact that could not be read", () => {
@@ -302,21 +302,9 @@ describe("parseServingDaemon", () => {
 });
 
 describe("the post-mortems-read record", () => {
-  let dir: string;
-  beforeEach(() => {
-    dir = fs.mkdtempSync(path.join(os.tmpdir(), "pmr-"));
-  });
-  afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
-
-  test("absent is none read; a filing reads back; text that does not read names the file", () => {
-    const file = path.join(dir, "state", "read.json");
-    const store = filePostMortemsRead(file);
-    expect(store.read()).toEqual({ kind: "ok", value: null });
-    store.record(NEWER);
-    expect(store.read()).toEqual({ kind: "ok", value: NEWER });
-    fs.writeFileSync(file, "{");
-    expect(store.read()).toMatchObject({ kind: "failed", reason: expect.stringContaining(`${file} is not JSON`) });
-    fs.writeFileSync(file, `{"through": 3}`);
-    expect(store.read()).toEqual({ kind: "failed", reason: `${file} names no post-mortem read` });
+  test("the document reads as the identity filed read, or fails saying so", () => {
+    expect(parsePostMortemsRead({ through: NEWER })).toEqual({ kind: "ok", value: { through: NEWER } });
+    expect(parsePostMortemsRead({ through: 3 })).toEqual({ kind: "failed", reason: "names no post-mortem read" });
+    expect(parsePostMortemsRead(null)).toEqual({ kind: "failed", reason: "names no post-mortem read" });
   });
 });
