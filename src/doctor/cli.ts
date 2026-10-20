@@ -74,7 +74,7 @@ const MARK_HINT = `mark them ✓ shapes or ✗ boxes in the bar's doctor, and th
 // then what it asks the user to look at.
 function reportLine({ check, verdict }: CheckReport): string {
   return verdict.ok
-    ? `✓ ${check.label}\n`
+    ? `✓ ${check.label}${verdict.note === undefined ? "" : ` — ${verdict.note}`}\n`
     : `✗ ${check.label} — ${verdict.reason}${verdict.fix === undefined ? "" : FIX_HINT}\n` +
         (verdict.more ?? []).map((problem) => `    ${problem}\n`).join("") +
         (verdict.sighting === undefined

@@ -1,6 +1,7 @@
 import { inspect } from "node:util";
 
 import type { LogLevel } from "./log";
+import { valueOf } from "../utils/logfmt.js";
 
 // How one render request ended. A render the daemon refused and a render that
 // threw are outcomes of the same unit of work as one that drew a bar, so the
@@ -40,13 +41,6 @@ function detailOf(outcome: RenderOutcome): RenderFacts {
       return [["error", inspect(outcome.error)]];
   }
 }
-
-// logfmt: a value is written bare only when it cannot be misread as more than
-// one field; any other value is a JSON string. A value is often what a client
-// said (a session id), so no value can open a field or a line of its own.
-const BARE = /^[^\s"=\\]+$/;
-const valueOf = (value: string): string =>
-  BARE.test(value) ? value : JSON.stringify(value);
 
 // [LAW:nothing-unseen] The one render event: every render request writes this
 // line once, whatever its outcome, so the renders that fail are described by

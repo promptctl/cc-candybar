@@ -27,8 +27,7 @@
 import { BadVerbArgs } from "./verb-error";
 import fs from "node:fs";
 import JSON5 from "json5";
-import { writeAtomic } from "../utils/atomic-write.js";
-import path from "node:path";
+import { resolvedTarget, writeAtomic } from "../utils/atomic-write.js";
 import {
   DEFAULT_DSL_CONFIG,
   RAW_DEFAULT_DSL_CONFIG,
@@ -174,10 +173,9 @@ export function writeConfigText(
 ): void {
   try {
     if (text === null) {
-      fs.rmSync(file, { force: true });
+      fs.rmSync(resolvedTarget(file), { force: true });
       return;
     }
-    fs.mkdirSync(path.dirname(file), { recursive: true });
     writeAtomic(file, text);
   } catch (e) {
     const message = `config write failed (${file}): ${(e as Error).message}`;

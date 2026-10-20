@@ -37,7 +37,7 @@ import {
 import { fileMarkBook, parseMarkBook, withMark } from "../src/doctor/mark-book";
 import { memoryMarkBook } from "./helpers/mark-book";
 import { memoryClickedTerminals } from "./helpers/clicked-terminals";
-import { HEALTHY_FACTS, healthyDaemonEdge, healthyDataEdge, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, CARRIED, NAMED, STILL } from "./helpers/doctor-facts";
+import { HEALTHY_FACTS, healthyDaemonEdge, healthyDataEdge, noManagedSettings, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, CARRIED, NAMED, STILL } from "./helpers/doctor-facts";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -500,6 +500,7 @@ describe("gatherFacts: where the Nerd Font facts come from", () => {
       install: HEALTHY_INSTALL_EDGE,
       ...healthyDaemonEdge(),
       ...healthyDataEdge(),
+      ...noManagedSettings(),
       probeTmux: client,
       remoteLogin: (pid) => {
         pids.push(pid);

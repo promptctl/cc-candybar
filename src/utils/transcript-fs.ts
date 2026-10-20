@@ -308,16 +308,22 @@ export function readTailSync(
 ): Outcome<{ buf: Buffer; fromStart: boolean }> {
   let fd: number;
   try {
-    // Non-blocking: the path is the client's word, and a synchronous open of
-    // a FIFO with no writer would hold the daemon's loop for good. The read
-    // is bounded by fstat's size, so a pipe or device reads nothing.
+    // [LAW:single-enforcer] THE read of a path someone else controls (a
+    // client's transcript, a project's `.claude/` settings): non-blocking,
+    // since a synchronous open of a FIFO with no writer would hold the
+    // daemon's loop for good, and refused unless it is a regular file, which
+    // a pipe or a directory is not. No file can sit under a component that is
+    // not a directory, so ENOTDIR is absence beside ENOENT.
     fd = openSync(path, constants.O_RDONLY | constants.O_NONBLOCK);
   } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === "ENOENT") return ABSENT;
+    const { code } = e as NodeJS.ErrnoException;
+    if (code === "ENOENT" || code === "ENOTDIR") return ABSENT;
     return failed(e instanceof Error ? e.message : String(e));
   }
   try {
-    const { size } = fstatSync(fd);
+    const stat = fstatSync(fd);
+    if (!stat.isFile()) return failed("not a regular file");
+    const { size } = stat;
     const start = Math.max(0, size - maxBytes);
     const buf = Buffer.alloc(size - start);
     let off = 0;

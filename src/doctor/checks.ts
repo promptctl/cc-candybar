@@ -18,6 +18,11 @@ import type { ClientKind } from "../client-hint.js";
 import { DEFAULT_TERMINAL_WIDTH } from "../render/strip.js";
 import type { Outcome } from "../utils/outcome.js";
 import {
+  isJsonObject,
+  type SettingsChainAt,
+  type SettingsSource,
+} from "../claude-settings.js";
+import {
   SIGHTINGS_KEPT,
   type FrameSeen,
   type FrameSighting,
@@ -131,17 +136,82 @@ export type UrlHandlerFacts =
       readonly opener: Asked<HandlerApp | null>;
     };
 
-// [LAW:types-are-the-program] The `statusLine` entry of the settings file.
-// Absent is its own arm, not an empty object: a fix may only add a key beside
-// a command that is already there, because a `statusLine` holding nothing but
-// a refresh interval is one Claude Code cannot run. `refreshInterval` is raw —
-// whatever the file holds; a probe decides what it means. A `statusLine` that
-// is not an object is a fact too, read by the one check it concerns, never a
-// throw that would take every other verdict with it.
+// [LAW:types-are-the-program] The `statusLine` Claude Code runs, as the
+// settings chain resolves it, and the file it comes from. Absent is its own
+// arm, not an empty object: a fix may only add a key beside a command that is
+// already there, because a `statusLine` holding nothing but a refresh interval
+// is one Claude Code cannot run — and it names the files that were read, since
+// the statusLine then comes from a scope no file holds. `refreshInterval` is
+// raw — whatever the file holds; a probe decides what it means. A `statusLine`
+// that is not an object is a fact too, read by the one check it concerns, and
+// so is a chain that could not be read: never a throw that would take every
+// other verdict with it.
 export type StatusLineFacts =
-  | { readonly kind: "absent" }
-  | { readonly kind: "not-an-object"; readonly value: unknown }
-  | { readonly kind: "present"; readonly refreshInterval: unknown };
+  | { readonly kind: "unread"; readonly reason: string }
+  | { readonly kind: "absent"; readonly read: readonly string[] }
+  | {
+      readonly kind: "not-an-object";
+      readonly value: unknown;
+      readonly from: SettingsFrom;
+    }
+  | {
+      readonly kind: "present";
+      readonly refreshInterval: unknown;
+      readonly from: SettingsFrom;
+    };
+
+export type SettingsFrom = Pick<SettingsSource, "scope" | "path">;
+
+// [LAW:one-source-of-truth] "Claude Code uses the value from the highest level
+// that sets it" (code.claude.com/docs/en/settings), read over the one chain
+// `readSettingsChain` lists: the first scope holding a file that sets
+// `statusLine` wins it whole. Inside that scope its files merge as Claude Code
+// merges managed drop-ins — a nested block key by key, a later file's single
+// value replacing an earlier one — so the run of objects from the highest
+// file down, stopping at a file whose `statusLine` is not one (the object
+// above replaces it), is the statusLine; `refreshInterval` comes from the
+// highest of them that sets it. Whether Claude Code also merges a statusLine's
+// keys ACROSS scopes is undocumented and unverified: read as not merged, a
+// wrong guess fails the check where it might pass, never the reverse.
+export function statusLineOf(
+  sources: Asked<readonly SettingsSource[]>,
+): StatusLineFacts {
+  if (sources.kind === "failed") {
+    return { kind: "unread", reason: sources.reason };
+  }
+  const lines = sources.value.flatMap(({ scope, path, settings }) =>
+    "statusLine" in settings
+      ? [{ from: { scope, path }, line: settings.statusLine }]
+      : [],
+  );
+  const top = lines[0];
+  if (top === undefined) {
+    return { kind: "absent", read: sources.value.map((s) => s.path) };
+  }
+  if (!isJsonObject(top.line)) {
+    return { kind: "not-an-object", value: top.line, from: top.from };
+  }
+  for (const { from, line } of lines) {
+    if (from.scope !== top.from.scope || !isJsonObject(line)) break;
+    if ("refreshInterval" in line) {
+      return { kind: "present", refreshInterval: line.refreshInterval, from };
+    }
+  }
+  return { kind: "present", refreshInterval: undefined, from: top.from };
+}
+
+// The `env` the session's user settings file holds — the one file
+// tmuxTruecolor's fix writes, and so far the one it reads.
+export function userEnvOf(
+  sources: Asked<readonly SettingsSource[]>,
+): Asked<Readonly<Record<string, unknown>>> {
+  return sources.kind === "failed"
+    ? sources
+    : {
+        kind: "ok",
+        value: sources.value.find((s) => s.scope === "user")?.env ?? {},
+      };
+}
 
 // [LAW:types-are-the-program] Which terminal draws the session's bar, or why
 // the doctor could not tell: a client too old to say, or a tmux server that
@@ -371,26 +441,29 @@ export interface DoctorFacts {
   // .p4l): the click's own session's, or every session `cc-candybar doctor`
   // sees.
   readonly transcripts: Asked<readonly TranscriptRead[]>;
-  // The session's Claude Code settings file and the entries read from it — a
-  // second, daemon-observable fact beside the client-observed env, so a
-  // verdict can say the truthful thing after a fix has landed but Claude Code
-  // has not restarted, naming the file it landed in.
+  // The session's Claude Code settings files, highest precedence first
+  // (`readSettingsChain`), and where they were read — a daemon-observable fact
+  // beside the client-observed env, so a verdict can say the truthful thing
+  // after a fix has landed but Claude Code has not restarted, naming the file
+  // it landed in. A chain that could not be read fails the rows that read it,
+  // never the run.
   readonly claudeSettings: {
-    readonly path: string;
-    readonly env: Readonly<Record<string, unknown>>;
-    readonly statusLine: StatusLineFacts;
+    readonly at: SettingsChainAt;
+    readonly sources: Asked<readonly SettingsSource[]>;
   };
 }
 
 // [LAW:types-are-the-program] A fix is a DESCRIPTION of an edit the edge
 // performs, discriminated by kind so a second repair shape is one more arm
 // here and one more case at the edge, never a callback smuggled in a verdict.
-// `claude-settings` sets one value at one key path in the session's Claude
-// Code settings file; `post-mortems-read` files every post-mortem up to
+// `claude-settings` sets one value at one key path in one of the session's
+// Claude Code settings files — the one its check read the value from;
+// `post-mortems-read` files every post-mortem up to
 // `through` as read (src/doctor/post-mortems-read.ts).
 export type Fix =
   | {
       readonly kind: "claude-settings";
+      readonly file: string;
       readonly path: readonly [string, ...string[]];
       readonly value: string | number;
     }
@@ -400,7 +473,7 @@ export type Fix =
 export function describeFix(fix: Fix): string {
   switch (fix.kind) {
     case "claude-settings":
-      return `${fix.kind} ${fix.path.join(".")}=${JSON.stringify(fix.value)}`;
+      return `${fix.kind} ${fix.path.join(".")}=${JSON.stringify(fix.value)} file=${JSON.stringify(fix.file)}`;
     case "post-mortems-read":
       return `${fix.kind} through=${fix.through}`;
   }
@@ -424,7 +497,8 @@ export interface Sighting {
 // `S` is `never` for a check that takes no mark, so its verdict cannot carry
 // a sighting nobody could answer.
 export type Verdict<S extends Sighting = Sighting> =
-  | { readonly ok: true }
+  // `note`: what a pass rests on, where the user would otherwise wonder.
+  | { readonly ok: true; readonly note?: string }
   | {
       readonly ok: false;
       readonly reason: string;
@@ -517,14 +591,17 @@ const tmuxTruecolor: Check = {
       // Claude Code to be told about.
       if (!client.features.includes("RGB")) return { ok: true };
       if (hint.truecolor !== null) return { ok: true };
+      const env = userEnvOf(claudeSettings.sources);
+      if (env.kind === "failed") return { ok: false, reason: env.reason };
+      const { userFile } = claudeSettings.at;
       // [LAW:one-source-of-truth] The same truthiness Claude Code applies to
       // its env: a non-empty string. Anything else in settings.json — absent,
       // empty, a non-string — is "not told", and the fix overwrites it.
-      const staged = claudeSettings.env[TMUX_TRUECOLOR_VAR];
+      const staged = env.value[TMUX_TRUECOLOR_VAR];
       if (typeof staged === "string" && staged !== "") {
         return {
           ok: false,
-          reason: `${TMUX_TRUECOLOR_VAR} is set in ${claudeSettings.path} — restart Claude Code to apply`,
+          reason: `${TMUX_TRUECOLOR_VAR} is set in ${userFile} — restart Claude Code to apply`,
         };
       }
       return {
@@ -532,6 +609,7 @@ const tmuxTruecolor: Check = {
         reason: "Claude Code renders the bar in 256 colours inside tmux",
         fix: {
           kind: "claude-settings",
+          file: userFile,
           path: ["env", TMUX_TRUECOLOR_VAR],
           value: "1",
         },
@@ -1057,16 +1135,22 @@ const effectRefresh: Check = {
   label: "effect refresh",
   takesMark: false,
   probe: ({ frames, claudeSettings, askedBy }) => {
-    const { path, statusLine } = claudeSettings;
+    const statusLine = statusLineOf(claudeSettings.sources);
     // [LAW:one-source-of-truth] Claude Code's own reading: a number of
     // seconds, no fewer than the minimum, so the minimum itself is the one
     // value that redraws every second — and once it is set, nothing the bar
     // draws needs more. Unset runs on events only; anything under the minimum
     // or not a number is a value the docs give no meaning, so the reason names
     // it rather than guess, and the fix overwrites it.
-    const interval =
-      statusLine.kind === "present" ? statusLine.refreshInterval : undefined;
-    if (interval === EFFECT_REFRESH_INTERVAL) return { ok: true };
+    if (
+      statusLine.kind === "present" &&
+      statusLine.refreshInterval === EFFECT_REFRESH_INTERVAL
+    ) {
+      return {
+        ok: true,
+        note: `statusLine.refreshInterval is ${EFFECT_REFRESH_INTERVAL} in ${statusLine.from.path}`,
+      };
+    }
 
     if (frames.kind === "failed") return { ok: false, reason: frames.reason };
     const drawn = refreshedFrames(frames.value);
@@ -1094,32 +1178,54 @@ const effectRefresh: Check = {
     }
 
     switch (statusLine.kind) {
+      case "unread":
+        return {
+          ok: false,
+          reason: `${wearing}, and Claude Code's settings could not be read: ${statusLine.reason}`,
+        };
       case "absent":
         return {
           ok: false,
-          reason: `${wearing}, and ${path} sets no statusLine — set "refreshInterval": ${EFFECT_REFRESH_INTERVAL} beside the statusLine command that runs the bar`,
+          reason: `${wearing}, and no settings file Claude Code reads here sets a statusLine (read: ${statusLine.read.join(", ") || "none"}) — the one that runs the bar comes from --settings, MDM or server-managed settings, which the doctor cannot read; set "refreshInterval": ${EFFECT_REFRESH_INTERVAL} beside its command there`,
         };
       case "not-an-object":
         return {
           ok: false,
-          reason: `${wearing}, and ${path} sets statusLine to ${JSON.stringify(statusLine.value)}, not a statusLine object — re-run \`cc-candybar install\` to write one`,
+          // `cc-candybar install` writes the user file only, so only there
+          // does re-running it replace the line.
+          reason: `${wearing}, and ${statusLine.from.path} sets statusLine to ${JSON.stringify(statusLine.value)}, not a statusLine object — ${statusLine.from.scope === "user" ? "re-run `cc-candybar install` to write one" : "replace it there with the statusLine object that runs cc-candybar"}`,
         };
-      case "present":
-        return {
-          ok: false,
-          reason:
-            interval === undefined
-              ? `${wearing}, but Claude Code redraws it only on events`
-              : typeof interval === "number" &&
-                  interval > EFFECT_REFRESH_INTERVAL
-                ? `${wearing}, but Claude Code redraws it only every ${interval} s`
-                : `${wearing}, but statusLine.refreshInterval is ${JSON.stringify(interval)}, not a number of seconds Claude Code accepts (its minimum is ${EFFECT_REFRESH_INTERVAL})`,
-          fix: {
-            kind: "claude-settings",
-            path: ["statusLine", "refreshInterval"],
-            value: EFFECT_REFRESH_INTERVAL,
-          },
-        };
+      case "present": {
+        const { from, refreshInterval: interval } = statusLine;
+        const redraws =
+          interval === undefined
+            ? `${wearing}, but Claude Code redraws it only on events`
+            : typeof interval === "number" && interval > EFFECT_REFRESH_INTERVAL
+              ? `${wearing}, but Claude Code redraws it only every ${interval} s`
+              : `${wearing}, but statusLine.refreshInterval is ${JSON.stringify(interval)}, not a number of seconds Claude Code accepts (its minimum is ${EFFECT_REFRESH_INTERVAL})`;
+        // [LAW:single-enforcer] The doctor writes only a file that is the
+        // user's own: managed settings are an administrator's policy, and
+        // `.claude/settings.json` is checked into somebody's repository. Nor
+        // can it write the line into a file it owns instead: under the
+        // scope-wins-whole reading above, a statusLine holding only an
+        // interval would outrank the one holding the command. So for those
+        // two the reason says where the line goes.
+        return from.scope === "managed" || from.scope === "project"
+          ? {
+              ok: false,
+              reason: `${redraws} — its statusLine is in ${from.scope === "managed" ? "managed settings" : "the project's checked-in settings"}, ${from.path}: set "refreshInterval": ${EFFECT_REFRESH_INTERVAL} there`,
+            }
+          : {
+              ok: false,
+              reason: `${redraws} (statusLine from ${from.path})`,
+              fix: {
+                kind: "claude-settings",
+                file: from.path,
+                path: ["statusLine", "refreshInterval"],
+                value: EFFECT_REFRESH_INTERVAL,
+              },
+            };
+      }
     }
   },
 };

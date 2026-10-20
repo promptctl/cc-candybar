@@ -947,7 +947,7 @@ function declareDoctorRows(artifacts: MenuArtifacts): void {
     artifacts.segments[doctorRowSeg(c.name)] = {
       when: `{{ ne .${keys.verdict} "${VERDICT_UNRUN}" }}`,
       template:
-        `{{ if eq .${keys.verdict} "${VERDICT_OK}" }}✓ ${c.label}` +
+        `{{ if eq .${keys.verdict} "${VERDICT_OK}" }}✓ ${c.label}{{ if ne .${keys.reason} "" }} — {{ .${keys.reason} }}{{ end }}` +
         `{{ else }}✗ ${c.label} — {{ .${keys.reason} }}` +
         `{{ if eq .${keys.fixable} "${BOOLEAN_TRUE}" }} {{ action "${fix}" "[fix]" }}{{ end }}` +
         (markCells === ""

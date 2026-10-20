@@ -3,7 +3,7 @@
 // settings file, a clean setup, and a failed check carrying a fix.
 
 import { BUNDLED_GLYPHS } from "./helpers/bundled-glyphs";
-import { healthyDaemonEdge, healthyDataEdge, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, healthyDaemonIn, HEALTHY_FACTS, CARRIED, NAMED, STILL } from "./helpers/doctor-facts";
+import { healthyDaemonEdge, healthyDataEdge, noManagedSettings, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, healthyDaemonIn, HEALTHY_FACTS, CARRIED, NAMED, STILL } from "./helpers/doctor-facts";
 import { glyphSighting } from "../src/doctor/checks";
 import { withMark } from "../src/doctor/mark-book";
 import { memoryMarkBook } from "./helpers/mark-book";
@@ -41,6 +41,7 @@ const EDGE: DoctorEdge = {
   install: HEALTHY_INSTALL_EDGE,
   ...healthyDaemonEdge(),
   ...healthyDataEdge(),
+  ...noManagedSettings(),
   probeTmux: () => ({
     kind: "ok",
     // A terminal that ships its own Nerd Font symbols and draws links, which
@@ -97,41 +98,27 @@ const inDir = (env: Record<string, string>) => ({
 });
 
 describe("doctorPlan", () => {
-  test("an unreadable settings.json is exit 2 naming the file, nothing on stdout", async () => {
+  // brandon-doctor-v62x.49w: a settings file that does not read fails the
+  // rows that read the settings chain, naming it — every other row still runs.
+  test("an unreadable settings.json fails the settings rows naming the file, and the rest still run", async () => {
     fs.writeFileSync(settingsPath(), '{ "env": [1] }');
-    expect(await doctorPlan(EDGE, NO_HANDLER, DAEMON, inDir(IN_TMUX), "/", () => ({ columns: 120 }))).toEqual({
-      stdout: "",
-      stderr: `doctor: cannot read ${settingsPath()}: \`env\` is not an object\n`,
-      code: 2,
-    });
-  });
-
-  // A run that cannot report opens no link: on macOS the probe would be the
-  // refusing edge's first call.
-  test("an unreadable settings.json is reported before any link is opened", async () => {
-    fs.writeFileSync(settingsPath(), '{ "env": [1] }');
-    const plan = await doctorPlan(
-      EDGE,
-      { ...NO_HANDLER, platform: "darwin", sockets: { own: "/a", handler: "/a" } },
-      DAEMON,
-      inDir(IN_TMUX),
-      "/",
-      () => ({ columns: 120 }),
+    const plan = await doctorPlan(EDGE, NO_HANDLER, DAEMON, inDir(IN_TMUX), "/", () => ({ columns: 120 }));
+    expect(plan.code).toBe(1);
+    expect(plan.stderr).toBe("");
+    expect(plan.stdout).toContain(
+      `✗ tmux truecolor — cannot read ${settingsPath()}: \`env\` is not an object\n`,
     );
-    expect(plan.stderr).toBe(
-      `doctor: cannot read ${settingsPath()}: \`env\` is not an object\n`,
-    );
+    expect(plan.stdout).toContain("✓ config\n");
+    expect(plan.stdout).toContain("✓ session data\n");
   });
 
   // Claude Code parses settings.json strictly; a file it would refuse is not
   // readable, whatever a looser parser makes of it.
-  test("a settings.json that is JSON5 but not JSON is exit 2 naming the file", async () => {
+  test("a settings.json that is JSON5 but not JSON fails the settings rows naming the file", async () => {
     fs.writeFileSync(settingsPath(), '{ "env": { "A": "1", }, }');
     const plan = await doctorPlan(EDGE, NO_HANDLER, DAEMON, inDir(IN_TMUX), "/", () => ({ columns: 120 }));
-    expect(plan.stdout).toBe("");
-    expect(plan.code).toBe(2);
-    expect(plan.stderr).toMatch(/\n$/);
-    expect(plan.stderr.startsWith(`doctor: cannot read ${settingsPath()}: `)).toBe(true);
+    expect(plan.code).toBe(1);
+    expect(plan.stdout).toContain(`✗ tmux truecolor — cannot read ${settingsPath()}: `);
   });
 
   test("every check ok is exit 0, one ✓ line per check", async () => {
@@ -397,6 +384,7 @@ describe("doctorPlan over a real config", () => {
       stdout:
         "✓ config\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width\n" +
         "✗ effect refresh — the bar moves (an effect, a fade, or an animated segment), but Claude Code redraws it only on events" +
+        ` (statusLine from ${settingsPath()})` +
         ` (fix: click the settings menu (${DOOR_GLYPH} by default) › 🧰 tools › 🩺 doctor, then [fix] on the bar)\n` +
         "✓ Nerd Font\n✓ segment data\n✓ session data\n",
       stderr: "",

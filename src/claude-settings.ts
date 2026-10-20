@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { JSON_DIALECT } from "./config/json5-edit.js";
+import { readTailSync } from "./utils/transcript-fs.js";
 
 // [LAW:one-source-of-truth] The variable that moves Claude Code's
 // configuration directory. Mirrored by the Rust client
@@ -38,8 +39,9 @@ export function claudeConfigDir(detected: string | undefined): string {
 // [LAW:one-source-of-truth] THE location of Claude Code's user settings file
 // in a configuration directory. Two writers touch it, both splicing through
 // one editor so neither drops the other's keys — `cc-candybar install` (the
-// statusLine command) and the doctor's claude-settings fixes (`env`,
-// `statusLine.refreshInterval`; src/doctor/edge.ts) — and one more reader, the auto-compact window the bar
+// statusLine command) and the doctor's claude-settings fixes (`env`; and
+// `statusLine.refreshInterval` when this file is where the statusLine comes
+// from, `readSettingsChain`) — and one more reader, the auto-compact window the bar
 // shows (src/segments/autocompact.ts), which Claude Code's own `/autocompact`
 // writes here. They must all mean the file Claude Code reads, so the path is
 // spelled once and imported by each.
@@ -54,13 +56,30 @@ export function claudeInstalledPluginsPath(configDir: string): string {
   return path.join(configDir, "plugins", "installed_plugins.json");
 }
 
+// A settings file's bytes, or null for no file. [LAW:no-silent-failure] Only
+// a missing file is absence: one the daemon cannot read (EACCES, ELOOP, a
+// FIFO) is a file Claude Code may still run with, so it throws rather than
+// vanishing from the chain.
+function readSettingsFile(settingsPath: string): string | null {
+  const read = readTailSync(settingsPath, Number.MAX_SAFE_INTEGER);
+  switch (read.kind) {
+    case "absent":
+      return null;
+    case "failed":
+      throw new Error(`cannot read ${settingsPath}: ${read.reason}`);
+    case "ok":
+      return read.value.buf.toString("utf8");
+  }
+}
+
+const cannotRead = (settingsPath: string, e: unknown): Error =>
+  new Error(`cannot read ${settingsPath}: ${messageOf(e)}`, { cause: e });
+
 // The settings file's bytes, for an editor that splices it. A missing file is
 // the one absence with a meaning — Claude Code has written nothing yet — so it
 // reads as the empty document.
 export function readClaudeSettingsText(settingsPath: string): string {
-  return fs.existsSync(settingsPath)
-    ? fs.readFileSync(settingsPath, "utf8")
-    : "";
+  return readSettingsFile(settingsPath) ?? "";
 }
 
 // [LAW:one-source-of-truth] The ONE reading of Claude Code's settings as a
@@ -73,20 +92,122 @@ export function readClaudeSettingsText(settingsPath: string): string {
 export function readClaudeSettings(
   settingsPath: string,
 ): Readonly<Record<string, unknown>> {
+  return parseSettings(settingsPath, readClaudeSettingsText(settingsPath));
+}
+
+function parseSettings(
+  settingsPath: string,
+  text: string,
+): Readonly<Record<string, unknown>> {
   let parsed: unknown;
   try {
-    const text = readClaudeSettingsText(settingsPath);
     if (/^\s*$/.test(text)) return {};
     parsed = JSON_DIALECT.parse(text);
   } catch (e) {
-    throw new Error(`cannot read ${settingsPath}: ${messageOf(e)}`, {
-      cause: e,
-    });
+    throw cannotRead(settingsPath, e);
   }
   if (!isJsonObject(parsed)) {
     throw new Error(`cannot read ${settingsPath}: not a JSON object`);
   }
   return parsed;
+}
+
+// Where an administrator's managed settings live (code.claude.com/docs/en/
+// managed-settings) — fixed system paths, which CLAUDE_CONFIG_DIR does not
+// move.
+export function claudeManagedSettingsDir(platform: NodeJS.Platform): string {
+  switch (platform) {
+    case "darwin":
+      return "/Library/Application Support/ClaudeCode";
+    case "win32":
+      return "C:\\Program Files\\ClaudeCode";
+    default:
+      return "/etc/claude-code";
+  }
+}
+
+// The scopes of Claude Code's settings files, highest precedence first.
+// `--settings`, MDM policy and server-managed settings are scopes too, but
+// none is a file this machine can read, so none is one of these.
+export type SettingsScope = "managed" | "project-local" | "project" | "user";
+
+// Where a session's settings chain is read: the managed directory, the
+// session's primary working directory (Claude Code reads both project files
+// there), and its user settings file.
+export interface SettingsChainAt {
+  readonly managedDir: string;
+  readonly projectDir: string;
+  readonly userFile: string;
+}
+
+export interface SettingsSource {
+  readonly scope: SettingsScope;
+  readonly path: string;
+  readonly settings: Readonly<Record<string, unknown>>;
+  // The file's `env`, read as Claude Code merges it: an object, `{}` when
+  // the file sets none.
+  readonly env: Readonly<Record<string, unknown>>;
+}
+
+// [LAW:one-source-of-truth] THE order Claude Code reads its settings files
+// in, as one list every key's reading folds over — highest precedence first,
+// so "the highest level that sets it" is the first source that does. Within
+// the managed scope, `managed-settings.json` merges first and then every
+// visible `*.json` in `managed-settings.d/` in alphabetical order, each
+// later file over the earlier: highest-first is that order reversed. A file
+// that does not exist is not a source; one that does not read throws naming
+// it, as `readClaudeSettings` does, and so does an `env` that is not an object
+// (Claude Code merges `env` key by key, so a non-object `env` is no env it
+// can run with).
+export function readSettingsChain(
+  at: SettingsChainAt,
+): readonly SettingsSource[] {
+  const dropIns = path.join(at.managedDir, "managed-settings.d");
+  const located: ReadonlyArray<{ scope: SettingsScope; path: string }> = [
+    ...visibleJsonFiles(dropIns)
+      .reverse()
+      .map((name) => ({
+        scope: "managed" as const,
+        path: path.join(dropIns, name),
+      })),
+    {
+      scope: "managed",
+      path: path.join(at.managedDir, "managed-settings.json"),
+    },
+    {
+      scope: "project-local",
+      path: path.join(at.projectDir, ".claude", "settings.local.json"),
+    },
+    {
+      scope: "project",
+      path: path.join(at.projectDir, ".claude", "settings.json"),
+    },
+    { scope: "user", path: at.userFile },
+  ];
+  return located.flatMap((l) => {
+    const text = readSettingsFile(l.path);
+    if (text === null) return [];
+    const settings = parseSettings(l.path, text);
+    const { env = {} } = settings;
+    if (!isJsonObject(env)) {
+      throw new Error(`cannot read ${l.path}: \`env\` is not an object`);
+    }
+    return [{ ...l, settings, env }];
+  });
+}
+
+// A directory's `*.json` entries that are not hidden, in alphabetical order;
+// a directory that does not exist has none.
+function visibleJsonFiles(dir: string): string[] {
+  try {
+    return fs
+      .readdirSync(dir)
+      .filter((name) => !name.startsWith(".") && name.endsWith(".json"))
+      .sort();
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw cannotRead(dir, e);
+  }
 }
 
 // A JSON object — the shape the document and each of its sections (`env`,
