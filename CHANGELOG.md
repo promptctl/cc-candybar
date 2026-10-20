@@ -1,3 +1,10 @@
+## [1.147.2](https://github.com/promptctl/cc-candybar/compare/v1.147.1...v1.147.2) (2026-10-20)
+
+
+### Bug Fixes
+
+* **doctor:** effect refresh reads motion off the drawn frame (brandon-doctor-v62x.tgp) ([#380](https://github.com/promptctl/cc-candybar/issues/380)) ([881fad3](https://github.com/promptctl/cc-candybar/commit/881fad3052e6c731a106bf24dcd36fc118404c5a))
+
 ## [1.147.1](https://github.com/promptctl/cc-candybar/compare/v1.147.0...v1.147.1) (2026-10-19)
 
 
