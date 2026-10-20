@@ -3,7 +3,7 @@
 // settings file, a clean setup, and a failed check carrying a fix.
 
 import { BUNDLED_GLYPHS } from "./helpers/bundled-glyphs";
-import { EMPTY_STORES, healthyDaemonEdge, healthyDataEdge, noManagedSettings, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, healthyDaemonIn, HEALTHY_FACTS, CARRIED, NAMED, STILL } from "./helpers/doctor-facts";
+import { EMPTY_STORES, healthyDaemonEdge, healthyDataEdge, noManagedSettings, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, healthyDaemonIn, HEALTHY_FACTS, CARRIED, NAMED, STILL, reportedFrame } from "./helpers/doctor-facts";
 import { glyphSighting } from "../src/doctor/checks";
 import { withMark } from "../src/doctor/mark-book";
 import fs from "node:fs";
@@ -427,14 +427,16 @@ describe("doctorPlan over a real config", () => {
     ).toBe(`✗ config — helper "h" is never called\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width — 120 columns, as this command's terminal measured\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n✓ session data\n`);
   });
 
-  // brandon-effects-2gka.21e, brandon-doctor-v62x.tgp: what the recent bars of
-  // this Claude Code directory drew decides whether the bar moves, and the
-  // settings file in this shell's CLAUDE_CONFIG_DIR decides the cadence.
+  // brandon-effects-2gka.21e, brandon-doctor-v62x.tgp, .5at: what the recent
+  // bars of this Claude Code directory drew decides whether the bar moves,
+  // and how often their renders arrived whether Claude Code redraws it — the
+  // settings file in this shell's CLAUDE_CONFIG_DIR says why, and takes the
+  // fix. A bar rendered every 5 s is redrawn too rarely.
   const drawing = (frame: FrameSeen, claudeConfigDir: string) => async () => ({
     ...(await DAEMON()),
     frames: {
       kind: "ok" as const,
-      value: [{ role: "statusline" as const, frame, claudeConfigDir, ago: 1 }],
+      value: [reportedFrame(frame, claudeConfigDir, 5)],
     },
   });
   const planOver = (daemon: () => Promise<DaemonAnswer>) =>
@@ -448,7 +450,7 @@ describe("doctorPlan over a real config", () => {
     expect(await planOver(drawing("moves", dir))).toEqual({
       stdout:
         "✓ config\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width — 120 columns, as this command's terminal measured\n" +
-        "✗ effect refresh — the bar moves (an effect, a fade, or an animated segment), but Claude Code redraws it only on events" +
+        "✗ effect refresh — the bar moves (an effect, a fade, or an animated segment), but Claude Code redrew it in only 12 of the last 60 seconds: its statusLine sets no refreshInterval, so Claude Code redraws it only on events" +
         ` (statusLine from ${settingsPath()})` +
         ` (fix: click the settings menu (${DOOR_GLYPH} by default) › 🧰 tools › 🩺 doctor, then [fix] on the bar)\n` +
         "✓ Nerd Font\n✓ segment data\n✓ session data\n",

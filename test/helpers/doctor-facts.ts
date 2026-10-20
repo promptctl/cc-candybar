@@ -1,5 +1,6 @@
 import type { DaemonProcess, DoctorFacts, MarkBook, PostMortemsRead } from "../../src/doctor/checks";
 import type { FrameSeen } from "../../src/daemon/render-sightings";
+import type { Redraws } from "../../src/doctor/redraws";
 import { readStores, type DoctorEdge, type DoctorStores, type InstallEdge, type StoresRead } from "../../src/doctor/edge";
 import type { DaemonAnswer } from "../../src/doctor/daemon-answer";
 import type { ServingDaemon } from "../../src/daemon/limits";
@@ -77,11 +78,24 @@ export const renderSaid = (client: ClientHint | null | undefined) => ({
   frame: "still" as const,
 });
 
-// The frames a session's statusline renders drew.
-export const drew = (...frames: FrameSeen[]): DoctorFacts["frames"] => ({
+// A bar Claude Code redraws on events alone (src/doctor/redraws.ts): a
+// second in five of the window held a render.
+export const ON_EVENTS: Redraws = { kind: "seen", seconds: 12 };
+// A bar Claude Code redraws every second, a daemon stall or two aside.
+export const EVERY_SECOND: Redraws = { kind: "seen", seconds: 58 };
+
+// The frames a session's statusline renders drew, redrawn as `redraws` says.
+export const drewAt = (
+  redraws: Redraws,
+  ...frames: FrameSeen[]
+): DoctorFacts["frames"] => ({
   kind: "ok",
-  value: frames.map((frame) => ({ role: "statusline", frame })),
+  value: frames.map((frame) => ({ role: "statusline", frame, redraws })),
 });
+
+// The frames a session's statusline renders drew, redrawn on events alone.
+export const drew = (...frames: FrameSeen[]): DoctorFacts["frames"] =>
+  drewAt(ON_EVENTS, ...frames);
 
 // A bar whose frame holds still, as a session's renders drew it.
 export const STILL = drew("still");
@@ -113,6 +127,25 @@ export const healthyDataEdge = (): Pick<
   memento: () => ({ kind: "ok", value: "/plugins/memento" }),
 });
 
+// One session's statusline frame as daemon-stats reports it: session `s1`,
+// drawn a second ago, watched for two minutes, and rendered every `interval`
+// seconds in them.
+export const reportedFrame = (
+  frame: FrameSeen,
+  claudeConfigDir: string,
+  interval = 1,
+) => ({
+  role: "statusline" as const,
+  frame,
+  claudeConfigDir,
+  ago: 1,
+  sessionId: "s1",
+  since: 120,
+  redrawn: Array.from({ length: 119 }, (_, i) => i + 1).filter(
+    (age) => (age - 1) % interval === 0,
+  ),
+});
+
 // That daemon, as `cc-candybar doctor` asks it: one session drawn a second
 // ago by the native client beside it, whose payload carried the rate-limit
 // windows — a session running with `claudeConfigDir`.
@@ -130,7 +163,7 @@ export const healthyDaemonIn = (
     },
     frames: {
       kind: "ok",
-      value: [{ role: "statusline", frame: "still", claudeConfigDir, ago: 1 }],
+      value: [reportedFrame("still", claudeConfigDir)],
     },
     widths: {
       kind: "ok",

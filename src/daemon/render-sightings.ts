@@ -5,7 +5,9 @@
 // Claude Code's hook payload carried the rate-limit windows (the segment-data
 // check, brandon-doctor-v62x.onf), and where the session's transcript is (the
 // session-data check, brandon-doctor-v62x.p4l), and whether the bar it drew
-// moves (the effect-refresh check, brandon-doctor-v62x.tgp).
+// moves (the effect-refresh check, brandon-doctor-v62x.tgp) — and, across
+// requests, the seconds they arrived in: how often Claude Code redraws it
+// (brandon-doctor-v62x.5at).
 //
 // [LAW:no-ambient-temporal-coupling] Held in memory by this daemon process,
 // keyed by session and the client's role, REPLACED by every render: a
@@ -20,6 +22,7 @@
 
 import type { ClientHint } from "../client-hint.js";
 import { DRAWN_MOTIONS } from "../render/drawn-motion.js";
+import { REDRAW_WINDOW_S, type Redraws } from "../doctor/redraws.js";
 import type { ClaudeHookData } from "../utils/claude.js";
 import type { Instant } from "../utils/instant.js";
 
@@ -95,10 +98,11 @@ export type SightingRole = (typeof SIGHTING_ROLES)[number];
 export const roleOf = (client: ClientHint | null): SightingRole =>
   client?.kind === "frames" ? "frames" : "statusline";
 
-// What one client drew of a session's bar.
+// What one client drew of a session's bar, and how often it was redrawn.
 export interface FrameSighting {
   readonly role: SightingRole;
   readonly frame: FrameSeen;
+  readonly redraws: Redraws;
 }
 
 // What one render request said. `client` null: the render's client did not
@@ -127,6 +131,12 @@ export interface RenderSighting extends RoledSaid {
   readonly sessionId: string;
   // Seconds since the session's last render.
   readonly ago: number;
+  // Seconds since this daemon began the record — its first render in this
+  // role, or the first since the record was dropped for newer sessions'.
+  readonly since: number;
+  // The whole seconds, counted back from now, in which a render request
+  // arrived — within REDRAW_WINDOW_S of the latest (src/doctor/redraws.ts).
+  readonly redrawn: readonly number[];
 }
 
 // [LAW:single-enforcer] The render path is the one writer (`see`, when a
@@ -141,6 +151,9 @@ export class RenderSightings {
       readonly said: RoledSaid;
       readonly at: Instant;
       readonly order: number;
+      readonly since: Instant;
+      // Whole epoch seconds.
+      readonly redrawn: ReadonlySet<number>;
     }
   >();
 
@@ -154,29 +167,48 @@ export class RenderSightings {
     const key = JSON.stringify([sessionId, role]);
     const known = this.seen.get(key);
     if (known !== undefined && known.order > order) return;
+    // [LAW:one-source-of-truth] A request's settling repeats its arrival's
+    // order and instant, so the second it arrived in is counted once. The
+    // window bounds the set: the second the check reads furthest back is
+    // REDRAW_WINDOW_S before the newest arrival.
+    const second = Math.floor(at);
+    const redrawn = new Set(
+      [...(known?.redrawn ?? []), second].filter(
+        (s) => s > second - REDRAW_WINDOW_S,
+      ),
+    );
     // Re-inserted, so the map's order is the order of last renders and the
     // first key is the sighting longest without one.
     this.seen.delete(key);
-    this.seen.set(key, { sessionId, said: { ...said, role }, at, order });
+    this.seen.set(key, {
+      sessionId,
+      said: { ...said, role },
+      at,
+      order,
+      since: known?.since ?? at,
+      redrawn,
+    });
     if (this.seen.size > SIGHTINGS_KEPT) {
       this.seen.delete(this.seen.keys().next().value!);
     }
   }
 
   list(now: Instant): readonly RenderSighting[] {
-    return [...this.seen.values()].map(({ sessionId, said, at }) => ({
-      ...said,
-      sessionId,
-      ago: now - at,
-    }));
+    return [...this.seen.values()].map(
+      ({ sessionId, said, at, since, redrawn }) => ({
+        ...said,
+        sessionId,
+        ago: now - at,
+        since: now - since,
+        redrawn: [...redrawn].map((s) => Math.floor(now) - s),
+      }),
+    );
   }
 
   // The latest render in each role that drew one session's bar — none when
   // this process has served it no render (a daemon restarted under a bar
   // already on screen).
-  ofSession(sessionId: string): readonly RoledSaid[] {
-    return [...this.seen.values()]
-      .filter((s) => s.sessionId === sessionId)
-      .map((s) => s.said);
+  ofSession(sessionId: string, now: Instant): readonly RenderSighting[] {
+    return this.list(now).filter((s) => s.sessionId === sessionId);
   }
 }
