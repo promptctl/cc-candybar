@@ -96,23 +96,26 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   // Every frame pushed for `sessionId` while `during` runs, with when each
   // arrived (ms since the subscription opened). `during` is handed the frames
   // received so far, so it can wait for ones the daemon has sent before the
-  // stream closes (closing drops whatever is still in flight), and `elapsed`,
-  // the clock those arrivals are read on.
+  // stream closes (closing drops whatever is still in flight); `elapsed`, the
+  // clock those arrivals are read on; and `waitFor`, the wait for them.
   // [LAW:no-silent-failure] A daemon too busy to take the subscribe inside its
-  // request budget answers TIMEOUT, and the subscriber opens another, as every
-  // real consumer does (afterStreamEnd); any other end fails the test the
-  // moment it happens, named, rather than once a wait it starved runs out.
+  // request budget answers TIMEOUT, and the subscriber opens another, as
+  // afterStreamEnd decides for every real consumer; any other end fails the
+  // test, named. [LAW:no-ambient-temporal-coupling] The stream's end is part
+  // of every condition `during` waits on, so its first wait after the end
+  // throws it, and nothing `during` would do next runs on into the next test.
   async function framesOf(
     sessionId: string,
-    during: (
-      received: ReadonlyArray<Frame>,
-      elapsed: () => number,
-    ) => Promise<void>,
+    during: (feed: {
+      received: ReadonlyArray<Frame>;
+      elapsed: () => number;
+      waitFor: typeof until;
+    }) => Promise<void>,
   ): Promise<Frame[]> {
     const frames: Frame[] = [];
     const opened = Date.now();
     const elapsed = (): number => Date.now() - opened;
-    const early = Promise.withResolvers<never>();
+    let ended: Error | null = null;
     const open = (): FrameStream =>
       openFrameStream(
         sockPath,
@@ -123,19 +126,27 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
           if (end.kind === "refused" && end.resp.code === "TIMEOUT")
             stream = open();
           else if (end.kind !== "closed-here")
-            early.reject(
-              new Error(
-                `the stream ended before the test closed it: ${end.kind === "failed" ? end.error.message : JSON.stringify(end)}`,
-              ),
+            ended = new Error(
+              `the stream ended before the test closed it: ${end.kind === "failed" ? end.error.message : JSON.stringify(end)}`,
             );
         },
       );
+    const waitFor: typeof until = (reached, what, budgetMs) =>
+      until(
+        () => {
+          if (ended !== null) throw ended;
+          return reached();
+        },
+        what,
+        budgetMs,
+      );
     let stream = open();
     try {
-      await Promise.race([during(frames, elapsed), early.promise]);
+      await during({ received: frames, elapsed, waitFor });
     } finally {
       stream.close();
     }
+    if (ended !== null) throw ended;
     return frames;
   }
 
@@ -199,11 +210,11 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     // count includes has arrived: comparing after close raced the frames still
     // in flight, which closing drops.
     let after = before;
-    const frames = await framesOf("feed-moving", async (received) => {
+    const frames = await framesOf("feed-moving", async ({ received, waitFor }) => {
       await sleep(2000);
       after = await feedStats();
       const sent = after.pushed - before.pushed;
-      await until(() => received.length >= sent, "every counted frame arrived");
+      await waitFor(() => received.length >= sent, "every counted frame arrived");
     });
     const pushed = outputs(frames);
     for (const output of pushed)
@@ -236,11 +247,11 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       {},
       args("toggle"),
     );
-    const frames = await framesOf("feed-click", async (received) => {
+    const frames = await framesOf("feed-click", async ({ received, waitFor }) => {
       // The click lands the moment the bar's first frame is in.
-      await until(() => received.length > 0, "the bar before the click");
+      await waitFor(() => received.length > 0, "the bar before the click");
       await click(sockPath, urlWriting(shut, "face", "open"));
-      await until(() => received.length > 1, "the clicked bar");
+      await waitFor(() => received.length > 1, "the clicked bar");
     });
     expect(outputs(frames).map(stripAnsi)).toEqual([
       expect.stringContaining("door shut"),
@@ -254,10 +265,10 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   });
 
   test("a subscriber that arrives before the session's first render receives it", async () => {
-    const frames = await framesOf("feed-early", async (received) => {
+    const frames = await framesOf("feed-early", async ({ received, waitFor }) => {
       await sleep(200);
       await render(sockPath, "feed-early", projectDir, {}, args("still"));
-      await until(() => received.length > 0, "the first render's frame");
+      await waitFor(() => received.length > 0, "the first render's frame");
     });
     expect(outputs(frames).map(stripAnsi)).toEqual([
       expect.stringContaining("a still mark"),
@@ -489,14 +500,14 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     };
     let inside = "";
     let clickedAt = 0;
-    const frames = await framesOf("feed-click-error", async (received, elapsed) => {
-      await until(() => received.length > 0, "the bar before the click");
+    const frames = await framesOf("feed-click-error", async ({ received, elapsed, waitFor }) => {
+      await waitFor(() => received.length > 0, "the bar before the click");
       clickedAt = elapsed();
       expect((await sendClick(sockPath, bad)).ok).toBe(false);
       inside = await render(sockPath, "feed-click-error", projectDir, {}, args("toggle"));
       // No statusline request from here on: only time ends the hold, so the
       // stream stays open until a frame no longer shows it.
-      await until(
+      await waitFor(
         () => hold(received).clearAt > 0,
         "a frame past the hold",
         CLICK_ERROR_HOLD_S * 1000 + 10_000,
