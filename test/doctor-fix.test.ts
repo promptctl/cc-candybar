@@ -396,8 +396,8 @@ describe("gatherFacts", () => {
     });
 
     // A session in the home directory names the user file as its project
-    // file too: it is read once, as the user's, so the fix may write it.
-    // A symlink spelling of one directory is the same file.
+    // file too: it is kept once, as the user's, so the fix may write it —
+    // whichever spelling, a symlink included, names the config directory.
     test.each([
       ["the same path", () => path.join(projectDir(), ".claude")],
       ["a symlink to it", () => {
@@ -406,7 +406,7 @@ describe("gatherFacts", () => {
         fs.symlinkSync(path.join(projectDir(), ".claude"), link);
         return link;
       }],
-    ])("the user file is never a project file when the project is home (%s)", (_, confOf) => {
+    ])("a project whose .claude is the config dir reads its settings as the user's (%s)", (_, confOf) => {
       const conf = confOf();
       put(settingsIn(path.join(projectDir(), ".claude")), line());
       const sources = sourcesOf(conf);

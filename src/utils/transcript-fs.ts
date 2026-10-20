@@ -305,7 +305,7 @@ export async function readTail(
 export function readTailSync(
   path: string,
   maxBytes: number,
-): Outcome<{ buf: Buffer; fromStart: boolean }> {
+): Outcome<{ buf: Buffer; fromStart: boolean; file: string }> {
   let fd: number;
   try {
     // [LAW:single-enforcer] THE read of a path someone else controls (a
@@ -321,9 +321,11 @@ export function readTailSync(
     return failed(e instanceof Error ? e.message : String(e));
   }
   try {
-    const stat = fstatSync(fd);
+    // bigint: a 64-bit file id survives whole, so `file` names exactly the
+    // file these bytes came from (two spellings of one path read alike).
+    const stat = fstatSync(fd, { bigint: true });
     if (!stat.isFile()) return failed("not a regular file");
-    const { size } = stat;
+    const size = Number(stat.size);
     const start = Math.max(0, size - maxBytes);
     const buf = Buffer.alloc(size - start);
     let off = 0;
@@ -332,7 +334,11 @@ export function readTailSync(
       if (n === 0) break;
       off += n;
     }
-    return ok({ buf: buf.subarray(0, off), fromStart: start === 0 });
+    return ok({
+      buf: buf.subarray(0, off),
+      fromStart: start === 0,
+      file: `${stat.dev}:${stat.ino}`,
+    });
   } catch (e) {
     return failed(e instanceof Error ? e.message : String(e));
   } finally {
