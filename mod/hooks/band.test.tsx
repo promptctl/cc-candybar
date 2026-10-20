@@ -163,9 +163,11 @@ test('a child the band stopped ended as asked, which is no failure', async ($, o
   // A still bar: the child draws one frame, then writes nothing until the
   // band stops it. (Claude Code 2.1.299 settles a stopped stream's `result`
   // with nothing, which this harness refuses a hook to return.)
+  let killed = false
   on('process.spawn', async function* (_$, _e, next) {
     yield { stream: 'stdout' as const, text: `${JSON.stringify(FRAME)}\n` }
     await new Promise<void>(stopped => next.signal.addEventListener('abort', () => stopped(), { once: true }))
+    killed = true
     return { value: { code: null, signal: 'SIGTERM' } }
   })
 
@@ -177,6 +179,7 @@ test('a child the band stopped ended as asked, which is no failure', async ($, o
 
   const sid1 = logged.filter(line => line.includes('sid-1'))
   expect(sid1).toEqual(['candybar-band: frames started for sid-1', 'candybar-band: frames for sid-1 stopped'])
+  expect(killed).toBe(true)
 })
 
 test('an end that keeps the session id keeps its child', async ($, on) => {

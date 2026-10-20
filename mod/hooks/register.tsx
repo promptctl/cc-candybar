@@ -208,8 +208,9 @@ function start($: EngineInterface, sessionId: string): Child {
         frame = next
         await draw(null)
       }
-      // A child the band stopped ended as asked, and left no end to read: its
-      // stream's `result` settles with nothing (Claude Code 2.1.299).
+      // A child the band stopped ended as asked, and its stream's `result` is
+      // no end of the child's: the engine's contract rejects it for a stream
+      // closed early, and Claude Code 2.1.299 settles it with nothing.
       if (stopped) return
       const { code, signal } = await stream.result
       const how = signal ?? `exit ${code}`
