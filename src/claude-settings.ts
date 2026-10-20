@@ -184,7 +184,14 @@ export function readSettingsChain(
     },
     { scope: "user", path: at.userFile },
   ];
-  return located.flatMap((l) => {
+  // [LAW:one-source-of-truth] A file has one scope. A session whose project
+  // is the home directory names the user file as its project file too; it is
+  // read once, as the user's own, which is the scope the doctor may write.
+  const userFile = path.resolve(at.userFile);
+  const scoped = located.filter(
+    (l) => l.scope === "user" || path.resolve(l.path) !== userFile,
+  );
+  return scoped.flatMap((l) => {
     const text = readSettingsFile(l.path);
     if (text === null) return [];
     const settings = parseSettings(l.path, text);

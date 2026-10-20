@@ -1204,16 +1204,17 @@ const effectRefresh: Check = {
               ? `${wearing}, but Claude Code redraws it only every ${interval} s`
               : `${wearing}, but statusLine.refreshInterval is ${JSON.stringify(interval)}, not a number of seconds Claude Code accepts (its minimum is ${EFFECT_REFRESH_INTERVAL})`;
         // [LAW:single-enforcer] The doctor writes only a file that is the
-        // user's own: managed settings are an administrator's policy, and
-        // `.claude/settings.json` is checked into somebody's repository. Nor
-        // can it write the line into a file it owns instead: under the
-        // scope-wins-whole reading above, a statusLine holding only an
-        // interval would outrank the one holding the command. So for those
-        // two the reason says where the line goes.
+        // user's own: managed settings are an administrator's policy, and a
+        // project's shared `.claude/settings.json` belongs to its repository.
+        // Nor can it put the interval alone in a file it may write: under the
+        // scope-wins-whole reading above (unverified), managed settings
+        // outrank every such file, and a project-local statusLine holding only
+        // an interval would outrank the project's, which holds the command. So
+        // for those two the reason says where the line goes.
         return from.scope === "managed" || from.scope === "project"
           ? {
               ok: false,
-              reason: `${redraws} — its statusLine is in ${from.scope === "managed" ? "managed settings" : "the project's checked-in settings"}, ${from.path}: set "refreshInterval": ${EFFECT_REFRESH_INTERVAL} there`,
+              reason: `${redraws} — its statusLine is in ${from.scope === "managed" ? "managed settings" : "the project's shared settings"}, ${from.path}: set "refreshInterval": ${EFFECT_REFRESH_INTERVAL} there`,
             }
           : {
               ok: false,

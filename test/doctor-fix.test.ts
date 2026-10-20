@@ -395,6 +395,15 @@ describe("gatherFacts", () => {
       expect(lineOf(conf)).toMatchObject({ refreshInterval: 1, from: { scope: "project-local", path: local } });
     });
 
+    // A session in the home directory names the user file as its project
+    // file too: it is read once, as the user's, so the fix may write it.
+    test("the user file is never a project file, even when the project is home", () => {
+      const conf = writeSettings(JSON.stringify(line()), path.join("proj", ".claude"));
+      const sources = sourcesOf(conf);
+      if (sources.kind !== "ok") throw new Error(sources.reason);
+      expect(sources.value.map((s) => [s.scope, s.path])).toEqual([["user", settingsIn(conf)]]);
+    });
+
     // The scope that sets statusLine wins it whole: a lower scope's
     // interval is not merged in (undocumented — the reading that can only
     // fail where it might pass).

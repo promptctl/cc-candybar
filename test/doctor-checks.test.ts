@@ -442,7 +442,7 @@ describe("effectRefresh probe", () => {
   });
 
   // A project-local statusLine outranks the user file, so the fix writes
-  // there; the checked-in project file is somebody's repository, so it gets
+  // there; the shared project file is somebody's repository, so it gets
   // the reason and no fix, as managed settings do.
   test("a project-local statusLine wins: the fix targets that file", () => {
     const local = "/p/.claude/settings.local.json";
@@ -463,7 +463,7 @@ describe("effectRefresh probe", () => {
     });
   });
 
-  test("a checked-in project statusLine wins, and gets NO fix", () => {
+  test("a shared project statusLine wins, and gets NO fix", () => {
     const project = "/p/.claude/settings.json";
     expect(
       effectRefresh(
@@ -472,7 +472,7 @@ describe("effectRefresh probe", () => {
       ),
     ).toEqual({
       ok: false,
-      reason: `${MOVING}, but Claude Code redraws it only on events — its statusLine is in the project's checked-in settings, ${project}: set "refreshInterval": 1 there`,
+      reason: `${MOVING}, but Claude Code redraws it only on events — its statusLine is in the project's shared settings, ${project}: set "refreshInterval": 1 there`,
     });
   });
 
