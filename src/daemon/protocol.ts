@@ -39,6 +39,10 @@ export interface RenderRequest {
   v: number;
   kind: "render";
   hookData: ClaudeHookData;
+  // The client's own path, then the flags the statusline command gave it —
+  // the native binary's, the Node script's, never the node interpreter's.
+  // Anything after the path that is not `--config <file>` is refused on the
+  // strip (parseRenderArgs, server.ts).
   args: string[];
   cwd: string;
   // ─── Client hints ────────────────────────────────────────────────────────
@@ -213,6 +217,43 @@ export function refusedHintsError(
         .join(
           ", ",
         )} — is the statusline client older than the daemon? Reinstall it (\`cc-candybar install\`, or \`just install-rust\` in a checkout).`;
+}
+
+// An argument in a render request's argv that the render does not act on: a
+// flag it does not know, `--config` with no file after it
+// (brandon-unfiled-3248.8bz: `parseArgs` without `strict` reads a bare
+// `--config` as `true`, which was rendered as no override with no word why),
+// or a positional word (only flags reach a render: a positional first word is
+// a subcommand, which never gets here).
+export interface RefusedArg {
+  readonly arg: string;
+  readonly why: "unknown" | "no-value" | "positional";
+}
+
+// [LAW:types-are-the-program] One line per kind of refusal, keyed by the
+// union, so a new kind does not compile until it is said.
+const REFUSAL_LINES: Readonly<
+  Record<RefusedArg["why"], (args: string) => string>
+> = {
+  unknown: (args) => `Unknown flags: ${args}`,
+  // Only the last `--config` can lack a file, and it wins, so an earlier one
+  // that named a file is not applied either.
+  "no-value": (arg) => `${arg} names no file — the bar renders with no ${arg}`,
+  positional: (args) => `Unexpected arguments: ${args}`,
+};
+
+// The red strip's lines for the refused arguments, null when every argument
+// was taken. Either way the bar renders without them.
+export function refusedArgsError(
+  refused: readonly RefusedArg[],
+): string | null {
+  const lines = (
+    Object.keys(REFUSAL_LINES) as Array<RefusedArg["why"]>
+  ).flatMap((why) => {
+    const args = refused.filter((r) => r.why === why).map((r) => r.arg);
+    return args.length === 0 ? [] : [REFUSAL_LINES[why](args.join(", "))];
+  });
+  return lines.length === 0 ? null : lines.join("\n");
 }
 
 // [LAW:no-defensive-null-guards] exception: trust boundary, same shape as
