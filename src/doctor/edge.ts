@@ -881,7 +881,7 @@ export function applyFix(
 ): Asked<DoctorFacts> {
   switch (fix.kind) {
     case "claude-settings": {
-      const settingsPath = fix.file;
+      const settingsPath = fix.file.path;
       const text = readClaudeSettingsText(settingsPath);
       const next = setValue(
         text,

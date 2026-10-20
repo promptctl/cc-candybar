@@ -36,6 +36,7 @@ const LOADED: ConfigFacts = {
 };
 
 const SETTINGS_PATH = "/home/u/.claude/settings.json";
+const USER = { scope: "user", path: SETTINGS_PATH } as const;
 const STILL = drew("still");
 
 // One settings file of the chain, as `readSettingsChain` returns it.
@@ -96,7 +97,7 @@ describe("tmuxTruecolor probe", () => {
     if (v.ok) return;
     expect(v.fix).toEqual({
       kind: "claude-settings",
-      file: SETTINGS_PATH,
+      file: USER,
       path: ["env", TMUX_TRUECOLOR_VAR],
       value: "1",
     });
@@ -124,6 +125,60 @@ describe("tmuxTruecolor probe", () => {
       expect(v.fix).toBeDefined();
     },
   );
+
+  // Claude Code merges `env` key by key down its settings chain, so the value
+  // that counts is the highest file's, and a fix goes where it would win.
+  describe("over the settings chain", () => {
+    const MANAGED = "/managed/managed-settings.d/10-dotfiles.json";
+    const LOCAL = "/p/.claude/settings.local.json";
+    const PROJECT = "/p/.claude/settings.json";
+    const chain = (...sources: SettingsSource[]) =>
+      probe(facts(inside(["RGB"]), {}, LOADED, STILL, { kind: "ok", value: sources }));
+    const told = (value: unknown) => ({ env: { [TMUX_TRUECOLOR_VAR]: value } });
+
+    test("set in a managed drop-in → restart, naming the drop-in, NO fix", () => {
+      expect(
+        chain(source("managed", MANAGED, told("1")), source("user", SETTINGS_PATH, {})),
+      ).toEqual({
+        ok: false,
+        reason: `${TMUX_TRUECOLOR_VAR} is set in ${MANAGED} — restart Claude Code to apply`,
+      });
+    });
+
+    test("a project-local empty value outranks the user's: the fix targets it", () => {
+      const v = chain(
+        source("project-local", LOCAL, told("")),
+        source("user", SETTINGS_PATH, told("1")),
+      );
+      expect(v).toMatchObject({
+        ok: false,
+        fix: { file: { scope: "project-local", path: LOCAL }, value: "1" },
+      });
+    });
+
+    test.each([
+      ["managed", MANAGED],
+      ["project", PROJECT],
+    ] as const)("an empty value in %s settings → NO fix, naming the file", (scope, file) => {
+      expect(chain(source(scope, file, told("")), source("user", SETTINGS_PATH, {}))).toEqual({
+        ok: false,
+        reason: `Claude Code renders the bar in 256 colours inside tmux — the value that counts is in ${file}, which outranks the user file: set ${TMUX_TRUECOLOR_VAR} to "1" there`,
+      });
+    });
+
+    test("unset anywhere → the fix into the user file, even when it is absent", () => {
+      expect(chain(source("managed", MANAGED, { model: "opus" }))).toMatchObject({
+        ok: false,
+        fix: { file: USER },
+      });
+    });
+
+    test("a chain that does not read → failed with its reason, NO fix", () => {
+      expect(
+        probe(facts(inside(["RGB"]), {}, LOADED, STILL, { kind: "failed", reason: "cannot read x" })),
+      ).toEqual({ ok: false, reason: "cannot read x" });
+    });
+  });
 
   test("tmux query failed → failed with that reason, no fix", () => {
     const v = probe(
@@ -303,7 +358,7 @@ describe("effectRefresh probe", () => {
   const FROM = ` (statusLine from ${SETTINGS_PATH})`;
   const FIX = {
     kind: "claude-settings",
-    file: SETTINGS_PATH,
+    file: USER,
     path: ["statusLine", "refreshInterval"],
     value: 1,
   };
@@ -459,7 +514,7 @@ describe("effectRefresh probe", () => {
     ).toEqual({
       ok: false,
       reason: `${MOVING}, but Claude Code redraws it only on events (statusLine from ${local})`,
-      fix: { ...FIX, file: local },
+      fix: { ...FIX, file: { scope: "project-local", path: local } },
     });
   });
 
