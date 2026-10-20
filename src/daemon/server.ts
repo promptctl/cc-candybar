@@ -1334,9 +1334,8 @@ export async function replyTo(
 // parser emit a token entry for every flag (known or unknown) without
 // throwing on unknown ones, and without mis-classifying their values as
 // positionals. Not strict, `--config` takes whatever follows it as its
-// value, so only the last token can be a bare `--config` — and being last it
-// wins `values.config` as `true`, which `explicitConfigPath` reads as no
-// override: the bar renders without it, as without an unknown flag.
+// value, so only the last token can be a bare `--config`, and being last it
+// is the one that wins.
 function parseRenderArgs(
   args: string[],
   cwd: string,
@@ -1344,26 +1343,29 @@ function parseRenderArgs(
   configFile: string | undefined;
   refusedFlags: readonly RefusedFlag[];
 } {
-  const { values, tokens } = parseArgs({
+  const { tokens } = parseArgs({
     args: args.slice(1), // skip binary path
     options: { config: { type: "string" } },
     strict: false,
     tokens: true,
     allowPositionals: true,
   });
-  const refused = (tokens ?? []).flatMap((t): RefusedFlag[] =>
-    t.kind !== "option"
-      ? []
-      : t.name !== "config"
-        ? [{ flag: t.rawName, why: "unknown" }]
-        : t.value === undefined
-          ? [{ flag: t.rawName, why: "no-value" }]
-          : [],
+  const options = (tokens ?? []).filter(
+    (t): t is Extract<typeof t, { kind: "option" }> => t.kind === "option",
+  );
+  // [LAW:one-source-of-truth] The last `--config` decides both the path and
+  // whether it is refused, so the two cannot disagree.
+  const config = options.filter((t) => t.name === "config").at(-1);
+  const unknown = new Set(
+    options.filter((t) => t.name !== "config").map((t) => t.rawName),
   );
   return {
-    configFile: explicitConfigPath(cwd, values.config),
+    configFile: explicitConfigPath(cwd, config?.value),
     refusedFlags: [
-      ...new Map(refused.map((r) => [`${r.flag}:${r.why}`, r])).values(),
+      ...[...unknown].map((flag): RefusedFlag => ({ flag, why: "unknown" })),
+      ...(config !== undefined && config.value === undefined
+        ? [{ flag: config.rawName, why: "no-value" } as const]
+        : []),
     ],
   };
 }

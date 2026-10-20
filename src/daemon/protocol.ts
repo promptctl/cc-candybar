@@ -236,7 +236,11 @@ export function refusedFlagsError(
       : []),
     ...refused
       .filter((r) => r.why === "no-value")
-      .map((r) => `${r.flag} names no file — the bar renders without it`),
+      // Only the last `--config` can lack a file, and it wins, so an earlier
+      // one that named a file is not applied either.
+      .map(
+        (r) => `${r.flag} names no file — the bar renders with no ${r.flag}`,
+      ),
   ];
   return lines.length === 0 ? null : lines.join("\n");
 }

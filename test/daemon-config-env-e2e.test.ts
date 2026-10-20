@@ -191,7 +191,7 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
   // the flag takes whatever follows it) was read as no override, silently,
   // even when an earlier `--config` named a file. It is refused on the strip
   // and on the render event, like an unknown flag, and the bar renders
-  // without it.
+  // with no --config.
   test("a bare --config is refused on the bar and the render event, not silently dropped", async () => {
     const bare = stripAnsi(
       await render(sockPath, "cfg-flag-bare", projectDir, {}, [
@@ -200,7 +200,7 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
       ]),
     );
     expect(bare).toContain(
-      "--config names no file — the bar renders without it",
+      "--config names no file — the bar renders with no --config",
     );
 
     const lastBare = stripAnsi(
@@ -209,7 +209,9 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
         "--config",
       ]),
     );
-    expect(lastBare).toContain("--config names no file");
+    expect(lastBare).toContain(
+      "--config names no file — the bar renders with no --config",
+    );
     expect(lastBare).not.toContain("OVERRIDE-WINS");
 
     const unknown = stripAnsi(
