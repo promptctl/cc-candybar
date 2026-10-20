@@ -7,8 +7,6 @@
 // and by `cc-candybar doctor` alike: a mark made in one session answers in the
 // next, and in the CLI, which has no session to make one in.
 
-import path from "node:path";
-import { stateDir } from "../daemon/paths.js";
 import {
   GLYPH_MARKS,
   type Asked,
@@ -56,6 +54,5 @@ export function withMark(
   return { ...book, [check]: { ...book[check], [sighting]: mark } };
 }
 
-export const fileMarkBook = (
-  file: string = path.join(stateDir(), "doctor-marks.json"),
-): StateFile<MarkBook> => stateFile(file, {}, parseMarkBook);
+export const fileMarkBook = (dir: Asked<string>): StateFile<MarkBook> =>
+  stateFile(dir, "doctor-marks.json", {}, parseMarkBook);

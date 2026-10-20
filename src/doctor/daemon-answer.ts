@@ -195,6 +195,20 @@ export function parseFrameSightings(
       };
 }
 
+// [LAW:parse-dont-validate] The daemon's state directory — where its doctor
+// files the stores the CLI reads (src/doctor/state-file.ts) — or why it is
+// not known: a daemon older than the field reads as that skew.
+export function parseStateDir(stats: StatsSnapshot): Asked<string> {
+  const skew = shapeSkew(stats, ["stateDir"]);
+  if (skew !== null) return { kind: "failed", reason: skew };
+  return typeof stats.stateDir === "string" && stats.stateDir !== ""
+    ? { kind: "ok", value: stats.stateDir }
+    : {
+        kind: "failed",
+        reason: `the running daemon (${stats.version}) reported its state directory as ${JSON.stringify(stats.stateDir)}`,
+      };
+}
+
 // Each fact the doctor asks the daemon for, parsed on its own: one that does
 // not read fails its own check, never the other's.
 export interface DaemonAnswer {
@@ -203,6 +217,7 @@ export interface DaemonAnswer {
   readonly transcripts: Asked<TranscriptSightings>;
   readonly frames: Asked<FrameSightings>;
   readonly serving: Asked<ServingDaemon>;
+  readonly stateDir: Asked<string>;
 }
 
 export async function askDaemon(): Promise<DaemonAnswer> {
@@ -218,6 +233,7 @@ export async function askDaemon(): Promise<DaemonAnswer> {
       transcripts: failed,
       frames: failed,
       serving: failed,
+      stateDir: failed,
     };
   }
   return {
@@ -226,5 +242,6 @@ export async function askDaemon(): Promise<DaemonAnswer> {
     transcripts: parseTranscriptSightings(outcome.value),
     frames: parseFrameSightings(outcome.value),
     serving: parseServingDaemon(outcome.value),
+    stateDir: parseStateDir(outcome.value),
   };
 }

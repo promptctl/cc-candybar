@@ -430,8 +430,11 @@ function probeTmux(hint: TmuxHint): Asked<TmuxClient | null> {
   return parseTmuxClient(run.stdout);
 }
 
+// `stateDir` is the daemon's state directory, where the doctor's stores live
+// — the daemon's own, or the CLI's answer from it.
 export function productionEdge(
   loadConfig: DoctorEdge["loadConfig"],
+  stateDir: Asked<string>,
 ): DoctorEdge {
   return {
     probeTmux,
@@ -441,11 +444,11 @@ export function productionEdge(
     managedSettingsDir:
       process.env.CC_CANDYBAR_CLAUDE_MANAGED_DIR ??
       claudeManagedSettingsDir(process.platform),
-    marks: fileMarkBook(),
-    clicked: fileClickedTerminals(),
+    marks: fileMarkBook(stateDir),
+    clicked: fileClickedTerminals(stateDir),
     install: productionInstallEdge,
     daemons,
-    postMortemsRead: filePostMortemsRead(),
+    postMortemsRead: filePostMortemsRead(stateDir),
     forge: forgeLogin,
     memento: locateMemento,
     transcript: readTranscriptWindow,

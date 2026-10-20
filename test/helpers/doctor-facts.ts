@@ -138,6 +138,7 @@ export const healthyDaemonIn = (
       },
     },
     serving: { kind: "ok", value: HEALTHY_SERVING },
+    stateDir: { kind: "ok", value: "/daemon-state" },
   });
 
 export const HEALTHY_DAEMON = healthyDaemonIn("/claude");

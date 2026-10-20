@@ -7,7 +7,7 @@ import os from "node:os";
 import path from "node:path";
 import { checkByName, unreadPostMortems, type DaemonFacts, type Verdict } from "../src/doctor/checks";
 import { applyFix, daemonProcesses, ownsEntry, type DoctorEdge } from "../src/doctor/edge";
-import { parseServingDaemon } from "../src/doctor/daemon-answer";
+import { parseServingDaemon, parseStateDir } from "../src/doctor/daemon-answer";
 import { filePostMortemsRead, parsePostMortemsRead } from "../src/doctor/post-mortems-read";
 import { RuntimeStats } from "../src/daemon/stats";
 import { postMortemsOf } from "../src/daemon/limits";
@@ -266,6 +266,23 @@ describe("ownsEntry", () => {
   });
 });
 
+describe("parseStateDir", () => {
+  const stats = RuntimeStats.referenceSnapshot();
+
+  test("the daemon's state directory, or why it is not known", () => {
+    expect(parseStateDir({ ...stats, stateDir: "/state/cc-candybar" })).toEqual({
+      kind: "ok",
+      value: "/state/cc-candybar",
+    });
+    const { stateDir: _, ...older } = stats;
+    expect(parseStateDir(older as typeof stats)).toMatchObject({ kind: "failed" });
+    expect(parseStateDir({ ...stats, stateDir: "" })).toEqual({
+      kind: "failed",
+      reason: `the running daemon (${stats.version}) reported its state directory as ""`,
+    });
+  });
+});
+
 describe("parseServingDaemon", () => {
   const stats = RuntimeStats.referenceSnapshot();
 
@@ -311,7 +328,7 @@ describe("the post-mortems-read record", () => {
   test("every value the store can file reads back, none filed included", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-pm-read-"));
     try {
-      const store = filePostMortemsRead(path.join(dir, "read.json"));
+      const store = filePostMortemsRead({ kind: "ok", value: dir });
       store.update(() => ({ through: null }));
       expect(store.read()).toEqual({ kind: "ok", value: { through: null } });
     } finally {
@@ -331,9 +348,9 @@ describe("the post-mortems-read record", () => {
   test("a record that stopped reading before the fix refuses it, and nothing is filed", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-pm-read-"));
     try {
-      const file = path.join(dir, "read.json");
+      const file = path.join(dir, "doctor-post-mortems-read.json");
       fs.writeFileSync(file, "junk");
-      const edge = { ...({} as DoctorEdge), postMortemsRead: filePostMortemsRead(file) };
+      const edge = { ...({} as DoctorEdge), postMortemsRead: filePostMortemsRead({ kind: "ok", value: dir }) };
       const fix = { kind: "post-mortems-read", through: NEWER } as const;
       expect(applyFix(edge, fix, HEALTHY_FACTS)).toMatchObject({
         kind: "failed",

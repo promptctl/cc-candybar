@@ -8,8 +8,6 @@
 // doctor files a terminal here, and `cc-candybar doctor`, which cannot click,
 // reads it.
 
-import path from "node:path";
-import { stateDir } from "../daemon/paths.js";
 import type { Asked } from "./checks.js";
 import { stateFile, type StateFile } from "./state-file.js";
 
@@ -31,5 +29,6 @@ export const withClicked = (
   clicked.includes(sighting) ? clicked : [...clicked, sighting];
 
 export const fileClickedTerminals = (
-  file: string = path.join(stateDir(), "doctor-clicked-terminals.json"),
-): StateFile<readonly string[]> => stateFile(file, [], parseClickedTerminals);
+  dir: Asked<string>,
+): StateFile<readonly string[]> =>
+  stateFile(dir, "doctor-clicked-terminals.json", [], parseClickedTerminals);

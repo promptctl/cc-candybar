@@ -120,6 +120,11 @@ export interface StatsSnapshot {
   // This daemon as `cc-candybar doctor` judges it: its memory against its
   // budget and its post-mortems (src/daemon/limits.ts `serving`).
   daemon: ServingDaemon;
+  // This daemon's state directory (`stateDir()`, from the env of whichever
+  // shell spawned it) — where the bar's doctor files its marks, the
+  // terminals clicked from and the post-mortems read, so `cc-candybar doctor`
+  // reads them there rather than under its own shell's.
+  stateDir: string;
 }
 
 export class RuntimeStats {
@@ -274,6 +279,7 @@ export class RuntimeStats {
         rssLimit: 0,
         postMortems: { kind: "ok", value: [] },
       },
+      stateDir: "/",
     });
   }
 
@@ -290,6 +296,7 @@ export class RuntimeStats {
     clients: readonly RenderSighting[];
     bundle: string;
     daemon: ServingDaemon;
+    stateDir: string;
   }): StatsSnapshot {
     const mem = process.memoryUsage();
     return {
@@ -328,6 +335,7 @@ export class RuntimeStats {
       clients: extras.clients,
       bundle: extras.bundle,
       daemon: extras.daemon,
+      stateDir: extras.stateDir,
     };
   }
 }

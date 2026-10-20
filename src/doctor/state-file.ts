@@ -11,6 +11,7 @@
 // (src/doctor/edge.ts).
 
 import fs from "node:fs";
+import path from "node:path";
 import { writeAtomic } from "../utils/atomic-write.js";
 import type { Asked } from "./checks.js";
 
@@ -23,11 +24,27 @@ export interface StateFile<T> {
   readonly update: (next: (current: T) => T) => Asked<T>;
 }
 
+// The store named `name` under the daemon's state directory — or, when the
+// directory is not known (`cc-candybar doctor` with no daemon to ask), a
+// store that reads as that failure and files nothing.
+// [LAW:one-source-of-truth] The directory is always given: a store under the
+// caller's own `stateDir()` would be another process's guess at the daemon's.
+export function stateFile<T>(
+  dir: Asked<string>,
+  name: string,
+  empty: T,
+  parse: (doc: unknown) => Asked<T>,
+): StateFile<T> {
+  return dir.kind === "ok"
+    ? fileStore(path.join(dir.value, name), empty, parse)
+    : { read: () => dir, update: () => dir };
+}
+
 // `parse` reads the parsed document; its failure reason is told after the
 // file's name ("<file> is not a list of terminals"). Only the doctor writes
 // these files, so text that does not read is that failure, never the empty
 // value.
-export function stateFile<T>(
+function fileStore<T>(
   file: string,
   empty: T,
   parse: (doc: unknown) => Asked<T>,

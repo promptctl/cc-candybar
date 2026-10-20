@@ -566,7 +566,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
         // before the filing: the real store's refusal is the click's.
         const marks: DoctorEdge["marks"] = {
           read: () => ({ kind: "ok", value: {} }),
-          update: fileMarkBook(file).update,
+          update: fileMarkBook({ kind: "ok", value: dir }).update,
         };
         const ctx = { ...rt.ctx, doctor: { ...rt.ctx.doctor, marks } };
         const mark = () => VERBS.get(VERB_DOCTOR_MARK)!("s1/nerdFont/drawn", ctx);
