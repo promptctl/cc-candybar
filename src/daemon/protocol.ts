@@ -215,6 +215,32 @@ export function refusedHintsError(
         )} — is the statusline client older than the daemon? Reinstall it (\`cc-candybar install\`, or \`just install-rust\` in a checkout).`;
 }
 
+// A flag in a render request's argv that the render does not act on: one it
+// does not know, or `--config` with no file after it (brandon-unfiled-3248.8bz:
+// `parseArgs` without `strict` reads a bare `--config` as `true`, which was
+// rendered as no override with no word why).
+export interface RefusedFlag {
+  readonly flag: string;
+  readonly why: "unknown" | "no-value";
+}
+
+// The red strip's lines for the refused flags, null when every flag was
+// taken. Either way the bar renders without them.
+export function refusedFlagsError(
+  refused: readonly RefusedFlag[],
+): string | null {
+  const unknown = refused.filter((r) => r.why === "unknown");
+  const lines = [
+    ...(unknown.length > 0
+      ? [`Unknown flags: ${unknown.map((r) => r.flag).join(", ")}`]
+      : []),
+    ...refused
+      .filter((r) => r.why === "no-value")
+      .map((r) => `${r.flag} names no file — the bar renders without it`),
+  ];
+  return lines.length === 0 ? null : lines.join("\n");
+}
+
 // [LAW:no-defensive-null-guards] exception: trust boundary, same shape as
 // sanitizeTmux. Only the variables of MEMENTO_ENV_VARS are read, each an
 // absolute path as both clients send it; one that is anything else makes the

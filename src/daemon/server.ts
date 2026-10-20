@@ -50,11 +50,13 @@ import {
   makeFrameReader,
   parseClientHints,
   refusedHints,
+  refusedFlagsError,
   refusedHintsError,
   sanitizeClientVersion,
 } from "./protocol";
 import type {
   ClientHints,
+  RefusedFlag,
   RenderRequest,
   Request,
   Response,
@@ -1322,22 +1324,25 @@ export async function replyTo(
 
 // [LAW:single-enforcer][LAW:no-silent-failure] Parse render-path args with
 // the standard util at the trust boundary. `--config <path>` is the sole
-// valid render flag; every other flag is surfaced as a render-time
-// diagnostic icon (caller composes it alongside config errors). The
-// `--config` value crosses `explicitConfigPath` against the CLIENT's cwd (the
-// request's, brandon-config-nuq6), the rule the client applies to its
+// valid render flag; every other flag, and a `--config` with no path after
+// it, is a refused flag the caller shows on the strip and the render event.
+// The `--config` value crosses `explicitConfigPath` against the CLIENT's cwd
+// (the request's, brandon-config-nuq6), the rule the client applies to its
 // `configEnv` hint: empty is no override, `~` is expanded once, here.
 //
 // `tokens: true, strict: false, allowPositionals: true` together let the
 // parser emit a token entry for every flag (known or unknown) without
 // throwing on unknown ones, and without mis-classifying their values as
-// positionals.
+// positionals. Not strict, `--config` takes whatever follows it as its
+// value, so only the last token can be a bare `--config` — and being last it
+// wins `values.config` as `true`, which `explicitConfigPath` reads as no
+// override: the bar renders without it, as without an unknown flag.
 function parseRenderArgs(
   args: string[],
   cwd: string,
 ): {
   configFile: string | undefined;
-  unknownFlagsError: string | null;
+  refusedFlags: readonly RefusedFlag[];
 } {
   const { values, tokens } = parseArgs({
     args: args.slice(1), // skip binary path
@@ -1346,20 +1351,20 @@ function parseRenderArgs(
     tokens: true,
     allowPositionals: true,
   });
-  const unknown = [
-    ...new Set(
-      (tokens ?? [])
-        .filter(
-          (t): t is Extract<typeof t, { kind: "option" }> =>
-            t.kind === "option" && t.name !== "config",
-        )
-        .map((t) => `--${t.name}`),
-    ),
-  ];
+  const refused = (tokens ?? []).flatMap((t): RefusedFlag[] =>
+    t.kind !== "option"
+      ? []
+      : t.name !== "config"
+        ? [{ flag: t.rawName, why: "unknown" }]
+        : t.value === undefined
+          ? [{ flag: t.rawName, why: "no-value" }]
+          : [],
+  );
   return {
     configFile: explicitConfigPath(cwd, values.config),
-    unknownFlagsError:
-      unknown.length > 0 ? `Unknown flags: ${unknown.join(", ")}` : null,
+    refusedFlags: [
+      ...new Map(refused.map((r) => [`${r.flag}:${r.why}`, r])).values(),
+    ],
   };
 }
 
@@ -1594,7 +1599,7 @@ function lanesOf(req: CheckedRenderRequest): LaneSwitches {
 // required field with its declared type, its cwd is absolute, `hints` is its
 // client hints, parsed, and its args are parsed into `requested` — the config
 // inputs it named, its explicit path the `--config` flag over the client's
-// `CC_CANDYBAR_CONFIG` hint — and `unknownFlagsError`, and `rateLimits` is
+// `CC_CANDYBAR_CONFIG` hint — and `refusedFlags`, and `rateLimits` is
 // what its hookData says of the rate-limit windows. Raw `req.*` hint
 // fields and `req.args` are not read past the checkpoint. Only
 // checkRenderRequest makes one.
@@ -1603,7 +1608,7 @@ type CheckedRenderRequest = RenderRequest & {
   readonly hints: ClientHints;
   readonly rateLimits: RateLimitsSeen;
   readonly requested: RenderOrigin;
-  readonly unknownFlagsError: string | null;
+  readonly refusedFlags: readonly RefusedFlag[];
   readonly [CHECKED]: true;
 };
 
@@ -1666,7 +1671,7 @@ function checkRenderRequest(
   // [LAW:dataflow-not-control-flow] The *request's* cwd, not the daemon's
   // process.cwd(), so config resolution depends only on request data — the
   // daemon's own working directory must not influence output.
-  const { configFile, unknownFlagsError } = parseRenderArgs(req.args, req.cwd);
+  const { configFile, refusedFlags } = parseRenderArgs(req.args, req.cwd);
   return {
     ok: true,
     req: {
@@ -1678,7 +1683,7 @@ function checkRenderRequest(
         cwd: req.cwd,
         configFile: configFile ?? hints.configEnv ?? null,
       },
-      unknownFlagsError,
+      refusedFlags,
     } as CheckedRenderRequest,
   };
 }
@@ -1712,7 +1717,6 @@ async function renderChecked(
     sid: req.hookData.session_id,
     at: at.toFixed(3),
   });
-  const { unknownFlagsError } = req;
   const sessionId = req.hookData.session_id;
   // [LAW:parse-dont-validate] The ONE checkpoint for everything the client
   // observed and the daemon cannot. Raw `req.*` hint fields are not read
@@ -1734,6 +1738,8 @@ async function renderChecked(
     termCols: String(hints.termCols ?? "?"),
     termRows: String(hints.termRows ?? "?"),
     refused: refused.map((r) => r.hint).join(",") || "-",
+    badFlags:
+      req.refusedFlags.map((r) => `${r.flag}:${r.why}`).join(",") || "-",
     // Which program drew this bar (src/client-hint.ts); `unreported` for a
     // client too old to say.
     client: hints.client?.kind ?? "unreported",
@@ -1862,7 +1868,7 @@ async function renderChecked(
       : null;
   const clickError = clickShown?.text ?? null;
   const combinedError = [
-    unknownFlagsError,
+    refusedFlagsError(req.refusedFlags),
     hintsError,
     entry.lastError,
     clickError,

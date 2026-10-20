@@ -187,6 +187,60 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
     expect(pickOverBoth).not.toContain("Config file not found");
   });
 
+  // brandon-unfiled-3248.8bz: a bare `--config` (only ever the last token —
+  // the flag takes whatever follows it) was read as no override, silently,
+  // even when an earlier `--config` named a file. It is refused on the strip
+  // and on the render event, like an unknown flag, and the bar renders
+  // without it.
+  test("a bare --config is refused on the bar and the render event, not silently dropped", async () => {
+    const bare = stripAnsi(
+      await render(sockPath, "cfg-flag-bare", projectDir, {}, [
+        "cc-candybar",
+        "--config",
+      ]),
+    );
+    expect(bare).toContain(
+      "--config names no file — the bar renders without it",
+    );
+
+    const lastBare = stripAnsi(
+      await render(sockPath, "cfg-flag-last-bare", projectDir, {}, [
+        ...configFlag(override),
+        "--config",
+      ]),
+    );
+    expect(lastBare).toContain("--config names no file");
+    expect(lastBare).not.toContain("OVERRIDE-WINS");
+
+    const unknown = stripAnsi(
+      await render(sockPath, "cfg-flag-unknown", projectDir, {}, [
+        ...configFlag(override),
+        "--bogus",
+        "--bogus",
+      ]),
+    );
+    expect(unknown).toContain("Unknown flags: --bogus");
+    expect(unknown).not.toContain("names no file");
+    expect(unknown).toContain("OVERRIDE-WINS");
+
+    await render(
+      sockPath,
+      "cfg-flag-clean",
+      projectDir,
+      {},
+      configFlag(override),
+    );
+    const badFlagsOf = (sid: string) =>
+      readFileSync(logPath(env), "utf8")
+        .split("\n")
+        .filter((l) => l.includes(`render sid=${sid} `))
+        .map((l) => l.match(/ badFlags=(\S+) /)?.[1]);
+    expect(badFlagsOf("cfg-flag-bare")).toEqual(["--config:no-value"]);
+    expect(badFlagsOf("cfg-flag-last-bare")).toEqual(["--config:no-value"]);
+    expect(badFlagsOf("cfg-flag-unknown")).toEqual(["--bogus:unknown"]);
+    expect(badFlagsOf("cfg-flag-clean")).toEqual(["-"]);
+  });
+
   // brandon-config-nuq6: `--config` arrives as the client's raw argv, so a
   // relative path is resolved against the cwd the client reported, never the
   // daemon's own.
