@@ -78,7 +78,7 @@ const CONFIGS = {
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
-// A pushed frame, and when it arrived: ms since its subscription opened.
+// A pushed frame, and when it arrived: ms since framesOf first subscribed.
 type Frame = { readonly at: number; readonly resp: Response };
 
 describe("a subscriber receives a session's frames as the bar moves", () => {
@@ -94,7 +94,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   ];
 
   // Every frame pushed for `sessionId` while `during` runs, with when each
-  // arrived (ms since the subscription opened). `during` is handed the frames
+  // arrived. `during` is handed the frames
   // received so far, so it can wait for ones the daemon has sent before the
   // stream closes (closing drops whatever is still in flight); `elapsed`, the
   // clock those arrivals are read on; and `waitFor`, the wait for them.
@@ -312,10 +312,18 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   // The lane toggles (candybar-animation-wbxz.81o.azo).
   const subscribeUntilEnd = (sessionId: string, lane: "band" | "pane") => {
     const frames: Response[] = [];
+    let end: StreamEnd | null = null;
     const ended = new Promise<StreamEnd>((resolve) =>
-      openFrameStream(sockPath, sessionId, lane, (resp) => frames.push(resp), resolve),
+      openFrameStream(sockPath, sessionId, lane, (resp) => frames.push(resp), (e) =>
+        resolve((end = e)),
+      ),
     );
-    return { frames, ended };
+    // The frames so far, or the stream's end, thrown, once it has ended.
+    const live = (): ReadonlyArray<Response> => {
+      if (end !== null) throw new Error(`the ${lane} stream ended: ${JSON.stringify(end)}`);
+      return frames;
+    };
+    return { frames, ended, live };
   };
   const setState = (sid: string, key: string, value: string): Promise<void> =>
     click(sockPath, effectsUrl([{ verb: VERB_SET_STATE, args: [sid, key, value] }]));
@@ -375,7 +383,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       kind: "refused",
       resp: { code: "SWITCHED_OFF", error: expect.stringContaining("experimentalPane") },
     });
-    await until(() => band.frames.length > 0, "the switched-on lane's frame");
+    await until(() => band.live().length > 0, "the switched-on lane's frame");
     expect(band.frames.map(barText)).toEqual([
       expect.stringContaining("an unswitched mark"),
     ]);
@@ -498,6 +506,10 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       const clearAt = shown.findIndex((text, i) => i > errorAt && !shows(text));
       return { shown, errorAt, clearAt };
     };
+    // A still bar's frames come a period apart, so the first frame past the
+    // hold lands within a period of it; the second period is slack for the
+    // click's round trip and a frame's drift and draw.
+    const clearsBy = CLICK_ERROR_HOLD_S * 1000 + 2 * FEED_PERIODS.still;
     let inside = "";
     let clickedAt = 0;
     const frames = await framesOf("feed-click-error", async ({ received, elapsed, waitFor }) => {
@@ -505,19 +517,19 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       clickedAt = elapsed();
       expect((await sendClick(sockPath, bad)).ok).toBe(false);
       inside = await render(sockPath, "feed-click-error", projectDir, {}, args("toggle"));
+      await waitFor(() => hold(received).errorAt > 0, "a frame showing the error");
       // No statusline request from here on: only time ends the hold, so the
       // stream stays open until a frame no longer shows it.
-      await waitFor(
-        () => hold(received).clearAt > 0,
-        "a frame past the hold",
-        CLICK_ERROR_HOLD_S * 1000 + 10_000,
-      );
+      await waitFor(() => hold(received).clearAt > 0, "a frame past the hold", clearsBy);
     });
     expect(shows(stripAnsi(inside))).toBe(true);
     const { shown, errorAt, clearAt } = hold(frames);
     expect(shows(shown[0]!)).toBe(false);
     expect(errorAt).toBeGreaterThan(0);
     expect(clearAt).toBeGreaterThan(errorAt);
+    // The error is pushed with the answer to the request right after the
+    // click, not a period later.
+    expect(frames[errorAt]!.at - clickedAt).toBeLessThan(FEED_PERIODS.still);
     // [LAW:no-ambient-temporal-coupling] Measured from the click's send, not
     // from the error frame's arrival: the daemon stamps the click after it was
     // sent, draws the clearing frame at an instant a hold past that stamp, and
@@ -525,5 +537,6 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     expect(frames[clearAt]!.at - clickedAt).toBeGreaterThanOrEqual(
       CLICK_ERROR_HOLD_S * 1000,
     );
+    expect(frames[clearAt]!.at - clickedAt).toBeLessThan(clearsBy);
   });
 });
