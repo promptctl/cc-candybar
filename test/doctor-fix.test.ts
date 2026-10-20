@@ -18,7 +18,7 @@ import {
   type DoctorFacts,
   type Fix,
   statusLineOf,
-  userEnvOf,
+  envVarOf,
 } from "../src/doctor/checks";
 import { applyFix, gatherFacts, type DoctorEdge } from "../src/doctor/edge";
 import type { ClientHints } from "../src/daemon/protocol";
@@ -28,7 +28,7 @@ import type { DslConfig } from "../src/config/dsl-types";
 // The tmuxTruecolor fix, into the user settings file of `conf`.
 const fixIn = (conf: string): Fix => ({
   kind: "claude-settings",
-  file: path.join(conf, "settings.json"),
+  file: { scope: "user", path: path.join(conf, "settings.json") },
   path: ["env", TMUX_TRUECOLOR_VAR],
   value: "1",
 });
@@ -144,11 +144,10 @@ describe("applyFix (claude-settings, env)", () => {
       },
       model: "opus",
     });
-    expect(userEnvOf(facts.claudeSettings.sources)).toEqual({ kind: "ok", value: {
-      DISABLE_AUTOUPDATER: "1",
-      FORCE_COLOR: "3",
-      [TMUX_TRUECOLOR_VAR]: "1",
-    } });
+    expect(envVarOf(facts.claudeSettings.sources, TMUX_TRUECOLOR_VAR)).toEqual({
+      kind: "ok",
+      value: { kind: "set", value: "1", from: { scope: "user", path: settingsIn(conf) } },
+    });
     assertOnlyInserted(
       before,
       after,
@@ -253,9 +252,9 @@ describe("gatherFacts", () => {
     const conf = writeSettings(
       `{ "env": { "FORCE_COLOR": "3" }, "statusLine": { "command": "x", "refreshInterval": 5 }, "model": "opus" }`,
     );
-    expect(userEnvOf(sourcesOf(conf))).toEqual({
+    expect(envVarOf(sourcesOf(conf), "FORCE_COLOR")).toEqual({
       kind: "ok",
-      value: { FORCE_COLOR: "3" },
+      value: { kind: "set", value: "3", from: { scope: "user", path: settingsIn(conf) } },
     });
     expect(lineOf(conf)).toEqual({
       kind: "present",
@@ -276,11 +275,12 @@ describe("gatherFacts", () => {
     });
   });
 
-  test("a missing, blank, or env-less settings file is an empty env", () => {
-    const empty = { kind: "ok", value: {} };
-    expect(userEnvOf(sourcesOf(configDir("absent")))).toEqual(empty);
-    expect(userEnvOf(sourcesOf(writeSettings(" \n", "blank")))).toEqual(empty);
-    expect(userEnvOf(sourcesOf(writeSettings(`{ "model": "opus" }`)))).toEqual(empty);
+  test("a missing, blank, or env-less settings file leaves every variable unset", () => {
+    const unset = { kind: "ok", value: { kind: "unset" } };
+    const varOf = (conf: string) => envVarOf(sourcesOf(conf), TMUX_TRUECOLOR_VAR);
+    expect(varOf(configDir("absent"))).toEqual(unset);
+    expect(varOf(writeSettings(" \n", "blank"))).toEqual(unset);
+    expect(varOf(writeSettings(`{ "model": "opus" }`))).toEqual(unset);
   });
 
   // [LAW:no-silent-failure] Unparseable is a failure naming the file, never
@@ -418,7 +418,22 @@ describe("gatherFacts", () => {
       expect(sources.value.map((s) => [s.scope, s.path])).toEqual([["user", settingsIn(conf)]]);
       const facts = factsIn(conf, null, NO_TMUX, NO_SESSION, drew("moves"));
       const verdict = checkByName("effectRefresh")!.probe(facts);
-      expect(verdict).toMatchObject({ ok: false, fix: { file: settingsIn(conf) } });
+      expect(verdict).toMatchObject({ ok: false, fix: { file: { scope: "user", path: settingsIn(conf) } } });
+    });
+
+    // The ticket's repro: the variable set in a managed drop-in, read through
+    // the real chain reader, is the highest file's, so the check names it.
+    test("a managed drop-in's env outranks the user file's, key by key", () => {
+      const conf = writeSettings(JSON.stringify({ env: { [TMUX_TRUECOLOR_VAR]: "", FORCE_COLOR: "3" } }));
+      const managed = put(dropIn("10-dotfiles.json"), { env: { [TMUX_TRUECOLOR_VAR]: "1" } });
+      const sources = sourcesOf(conf, MANAGED());
+      expect(envVarOf(sources, TMUX_TRUECOLOR_VAR)).toEqual({
+        kind: "ok",
+        value: { kind: "set", value: "1", from: { scope: "managed", path: managed } },
+      });
+      expect(envVarOf(sources, "FORCE_COLOR")).toMatchObject({
+        value: { from: { scope: "user" } },
+      });
     });
 
     // The scope that sets statusLine wins it whole: a lower scope's

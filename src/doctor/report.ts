@@ -21,6 +21,8 @@ import {
   unreadPostMortems,
   refreshedFrames,
   statusLineOf,
+  envVarOf,
+  TMUX_TRUECOLOR_VAR,
   type Asked,
   type CheckReport,
   type DaemonFacts,
@@ -210,6 +212,19 @@ export function statusLineFields(
       // must not open a field of its own.
       return `statusLine=${valueOf(`${line.from.scope}:${line.refreshInterval === undefined ? "-" : JSON.stringify(line.refreshInterval)}`)}`;
   }
+}
+
+// [LAW:nothing-unseen] Which settings file holds the truecolor variable
+// Claude Code runs with, as one logfmt field: its scope and the raw value,
+// `unset` when no file sets it, or `failed` when the chain could not be read.
+export function truecolorEnvFields(
+  sources: Asked<readonly SettingsSource[]>,
+): string {
+  const told = envVarOf(sources, TMUX_TRUECOLOR_VAR);
+  if (told.kind === "failed") return "truecolorEnv=failed";
+  return told.value.kind === "unset"
+    ? "truecolorEnv=unset"
+    : `truecolorEnv=${valueOf(`${told.value.from.scope}:${JSON.stringify(told.value.value)}`)}`;
 }
 
 // [LAW:nothing-unseen] What the session-data check reasoned over, as one

@@ -5,6 +5,8 @@
 import {
   CHECKS,
   checkByName,
+  describeFix,
+  envVarOf,
   runDoctor,
   TMUX_TRUECOLOR_VAR,
   type ConfigFacts,
@@ -13,7 +15,7 @@ import {
   type TmuxFacts,
 } from "../src/doctor/checks";
 import { detectTmuxHint } from "../src/tmux-hint";
-import { statusLineFields } from "../src/doctor/report";
+import { statusLineFields, truecolorEnvFields } from "../src/doctor/report";
 import type { SettingsSource } from "../src/claude-settings";
 import { HEALTHY_FACTS, drew } from "./helpers/doctor-facts";
 
@@ -36,6 +38,7 @@ const LOADED: ConfigFacts = {
 };
 
 const SETTINGS_PATH = "/home/u/.claude/settings.json";
+const USER = { scope: "user", path: SETTINGS_PATH } as const;
 const STILL = drew("still");
 
 // One settings file of the chain, as `readSettingsChain` returns it.
@@ -96,7 +99,7 @@ describe("tmuxTruecolor probe", () => {
     if (v.ok) return;
     expect(v.fix).toEqual({
       kind: "claude-settings",
-      file: SETTINGS_PATH,
+      file: USER,
       path: ["env", TMUX_TRUECOLOR_VAR],
       value: "1",
     });
@@ -124,6 +127,73 @@ describe("tmuxTruecolor probe", () => {
       expect(v.fix).toBeDefined();
     },
   );
+
+  // Claude Code merges `env` key by key down its settings chain, so the value
+  // that counts is the highest file's, and a fix goes where it would win.
+  describe("over the settings chain", () => {
+    const MANAGED = "/managed/managed-settings.d/10-dotfiles.json";
+    const LOCAL = "/p/.claude/settings.local.json";
+    const PROJECT = "/p/.claude/settings.json";
+    const chain = (...sources: SettingsSource[]) =>
+      probe(facts(inside(["RGB"]), {}, LOADED, STILL, { kind: "ok", value: sources }));
+    const told = (value: unknown) => ({ env: { [TMUX_TRUECOLOR_VAR]: value } });
+
+    test("set in a managed drop-in → restart, naming the drop-in, NO fix", () => {
+      expect(
+        chain(source("managed", MANAGED, told("1")), source("user", SETTINGS_PATH, {})),
+      ).toEqual({
+        ok: false,
+        reason: `${TMUX_TRUECOLOR_VAR} is set in ${MANAGED} — restart Claude Code to apply`,
+      });
+    });
+
+    test("a project-local empty value outranks the user's: the fix targets it", () => {
+      const v = chain(
+        source("project-local", LOCAL, told("")),
+        source("user", SETTINGS_PATH, told("1")),
+      );
+      expect(v).toMatchObject({
+        ok: false,
+        fix: { file: { scope: "project-local", path: LOCAL }, value: "1" },
+      });
+    });
+
+    test("an empty value in managed settings → NO fix, naming the file", () => {
+      expect(chain(source("managed", MANAGED, told("")), source("user", SETTINGS_PATH, {}))).toEqual({
+        ok: false,
+        reason: `Claude Code renders the bar in 256 colours inside tmux — the value that counts is in managed settings, ${MANAGED}: set ${TMUX_TRUECOLOR_VAR} to "1" there`,
+      });
+    });
+
+    // The shared file is somebody's repository, but the project-local file
+    // over it is the user's, and a value there wins over the shared one.
+    test("an empty value in the shared project file → the fix into project-local", () => {
+      expect(chain(source("project", PROJECT, told("")), source("user", SETTINGS_PATH, {}))).toMatchObject({
+        ok: false,
+        fix: { file: { scope: "project-local", path: LOCAL }, value: "1" },
+      });
+    });
+
+    test("a variable named like an Object.prototype key is unset, not inherited", () => {
+      expect(envVarOf({ kind: "ok", value: [source("user", SETTINGS_PATH, { env: {} })] }, "constructor")).toEqual({
+        kind: "ok",
+        value: { kind: "unset" },
+      });
+    });
+
+    test("unset anywhere → the fix into the user file, even when it is absent", () => {
+      expect(chain(source("managed", MANAGED, { model: "opus" }))).toMatchObject({
+        ok: false,
+        fix: { file: USER },
+      });
+    });
+
+    test("a chain that does not read → failed with its reason, NO fix", () => {
+      expect(
+        probe(facts(inside(["RGB"]), {}, LOADED, STILL, { kind: "failed", reason: "cannot read x" })),
+      ).toEqual({ ok: false, reason: "cannot read x" });
+    });
+  });
 
   test("tmux query failed → failed with that reason, no fix", () => {
     const v = probe(
@@ -303,7 +373,7 @@ describe("effectRefresh probe", () => {
   const FROM = ` (statusLine from ${SETTINGS_PATH})`;
   const FIX = {
     kind: "claude-settings",
-    file: SETTINGS_PATH,
+    file: USER,
     path: ["statusLine", "refreshInterval"],
     value: 1,
   };
@@ -392,6 +462,28 @@ describe("effectRefresh probe", () => {
     expect(fields("1 s")).toBe(`statusLine=${JSON.stringify('user:"1 s"')}`);
   });
 
+  test("truecolorEnvFields names the deciding file's scope and raw value", () => {
+    expect(truecolorEnvFields(ok([source("project", "/p/.claude/settings.json", { env: { [TMUX_TRUECOLOR_VAR]: "" } })]))).toBe(
+      `truecolorEnv=${JSON.stringify('project:""')}`,
+    );
+    expect(truecolorEnvFields(ok(userFile({ env: { [TMUX_TRUECOLOR_VAR]: "1" } })))).toBe(
+      `truecolorEnv=${JSON.stringify('user:"1"')}`,
+    );
+    expect(truecolorEnvFields(ok(userFile({})))).toBe("truecolorEnv=unset");
+    expect(truecolorEnvFields({ kind: "failed", reason: "x" })).toBe("truecolorEnv=failed");
+  });
+
+  test("describeFix names the scope of the file a settings fix writes", () => {
+    expect(
+      describeFix({
+        kind: "claude-settings",
+        file: { scope: "project-local", path: "/p/.claude/settings.local.json" },
+        path: ["env", TMUX_TRUECOLOR_VAR],
+        value: "1",
+      }),
+    ).toBe(`claude-settings env.${TMUX_TRUECOLOR_VAR}="1" file="/p/.claude/settings.local.json" scope=project-local`);
+  });
+
   // `cc-candybar install` writes the user file only: elsewhere the advice is
   // to replace the line where it is.
   test("a non-object statusLine outside the user file is replaced where it is", () => {
@@ -459,7 +551,7 @@ describe("effectRefresh probe", () => {
     ).toEqual({
       ok: false,
       reason: `${MOVING}, but Claude Code redraws it only on events (statusLine from ${local})`,
-      fix: { ...FIX, file: local },
+      fix: { ...FIX, file: { scope: "project-local", path: local } },
     });
   });
 

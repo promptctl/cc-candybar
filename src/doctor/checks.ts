@@ -19,7 +19,9 @@ import { DEFAULT_TERMINAL_WIDTH } from "../render/strip.js";
 import type { Outcome } from "../utils/outcome.js";
 import {
   isJsonObject,
+  projectLocalSettingsFile,
   type SettingsChainAt,
+  type SettingsScope,
   type SettingsSource,
 } from "../claude-settings.js";
 import {
@@ -200,18 +202,75 @@ export function statusLineOf(
   return { kind: "present", refreshInterval: undefined, from: top.from };
 }
 
-// The `env` the session's user settings file holds — the one file
-// tmuxTruecolor's fix writes, and so far the one it reads.
-export function userEnvOf(
+// [LAW:one-source-of-truth] Claude Code merges `env` key by key across its
+// settings files, so a variable's value is the one the highest file holding
+// that key sets — read over the one chain `readSettingsChain` lists, as
+// `statusLineOf` reads `statusLine`.
+export function envVarOf(
   sources: Asked<readonly SettingsSource[]>,
-): Asked<Readonly<Record<string, unknown>>> {
-  return sources.kind === "failed"
-    ? sources
-    : {
-        kind: "ok",
-        value: sources.value.find((s) => s.scope === "user")?.env ?? {},
-      };
+  name: string,
+): Asked<
+  | { readonly kind: "unset" }
+  | {
+      readonly kind: "set";
+      readonly value: unknown;
+      readonly from: SettingsFrom;
+    }
+> {
+  if (sources.kind === "failed") return sources;
+  const top = sources.value.find((s) => Object.hasOwn(s.env, name));
+  return {
+    kind: "ok",
+    value:
+      top === undefined
+        ? { kind: "unset" }
+        : {
+            kind: "set",
+            value: top.env[name],
+            from: { scope: top.scope, path: top.path },
+          },
+  };
 }
+
+// The scopes the doctor never writes: managed settings are an
+// administrator's policy, and a project's shared `.claude/settings.json`
+// belongs to its repository.
+const UNWRITTEN_SCOPES = [
+  "managed",
+  "project",
+] as const satisfies readonly SettingsScope[];
+
+// A settings file the doctor may write: the user's own.
+export type WritableSettings = SettingsFrom & {
+  readonly scope: Exclude<SettingsScope, (typeof UNWRITTEN_SCOPES)[number]>;
+};
+
+// [LAW:single-enforcer] A `claude-settings` fix carries a `WritableSettings`,
+// so the type is THE rule for which file a fix may name; this narrows a file
+// a check read to one.
+export const doctorWrites = (from: SettingsFrom): from is WritableSettings =>
+  !(UNWRITTEN_SCOPES as readonly SettingsScope[]).includes(from.scope);
+
+// [LAW:types-are-the-program] Where a fix to an `env` variable goes, by the
+// scope of the file deciding its value. `env` merges key by key, so a value
+// counts written in that file or any above it and loses anywhere lower: the
+// lowest of those that is the user's own. Over a project's shared file that
+// is its project-local one; over managed settings, none. Keyed by every
+// scope, so a new scope is a compile error here until it is placed.
+const ENV_FIX_FILE: {
+  readonly [S in SettingsScope]: (
+    path: string,
+    at: SettingsChainAt,
+  ) => WritableSettings | null;
+} = {
+  managed: () => null,
+  "project-local": (path) => ({ scope: "project-local", path }),
+  project: (_, at) => ({
+    scope: "project-local",
+    path: projectLocalSettingsFile(at.projectDir),
+  }),
+  user: (path) => ({ scope: "user", path }),
+};
 
 // [LAW:types-are-the-program] Which terminal draws the session's bar, or why
 // the doctor could not tell: a client too old to say, or a tmux server that
@@ -468,7 +527,7 @@ export interface DoctorFacts {
 export type Fix =
   | {
       readonly kind: "claude-settings";
-      readonly file: string;
+      readonly file: WritableSettings;
       readonly path: readonly [string, ...string[]];
       readonly value: string | number;
     }
@@ -478,7 +537,7 @@ export type Fix =
 export function describeFix(fix: Fix): string {
   switch (fix.kind) {
     case "claude-settings":
-      return `${fix.kind} ${fix.path.join(".")}=${JSON.stringify(fix.value)} file=${JSON.stringify(fix.file)}`;
+      return `${fix.kind} ${fix.path.join(".")}=${JSON.stringify(fix.value)} file=${JSON.stringify(fix.file.path)} scope=${fix.file.scope}`;
     case "post-mortems-read":
       return `${fix.kind} through=${fix.through}`;
   }
@@ -596,29 +655,46 @@ const tmuxTruecolor: Check = {
       // Claude Code to be told about.
       if (!client.features.includes("RGB")) return { ok: true };
       if (hint.truecolor !== null) return { ok: true };
-      const env = userEnvOf(claudeSettings.sources);
-      if (env.kind === "failed") return { ok: false, reason: env.reason };
-      const { userFile } = claudeSettings.at;
+      const staged = envVarOf(claudeSettings.sources, TMUX_TRUECOLOR_VAR);
+      if (staged.kind === "failed") return { ok: false, reason: staged.reason };
+      const told = staged.value;
       // [LAW:one-source-of-truth] The same truthiness Claude Code applies to
-      // its env: a non-empty string. Anything else in settings.json — absent,
-      // empty, a non-string — is "not told", and the fix overwrites it.
-      const staged = env.value[TMUX_TRUECOLOR_VAR];
-      if (typeof staged === "string" && staged !== "") {
+      // its env: a non-empty string. Anything else — absent, empty, a
+      // non-string — is "not told".
+      if (
+        told.kind === "set" &&
+        typeof told.value === "string" &&
+        told.value !== ""
+      ) {
         return {
           ok: false,
-          reason: `${TMUX_TRUECOLOR_VAR} is set in ${userFile} — restart Claude Code to apply`,
+          reason: `${TMUX_TRUECOLOR_VAR} is set in ${told.from.path} — restart Claude Code to apply`,
         };
       }
-      return {
+      const reason = "Claude Code renders the bar in 256 colours inside tmux";
+      const fixInto = (file: WritableSettings): Verdict<never> => ({
         ok: false,
-        reason: "Claude Code renders the bar in 256 colours inside tmux",
+        reason,
         fix: {
           kind: "claude-settings",
-          file: userFile,
+          file,
           path: ["env", TMUX_TRUECOLOR_VAR],
           value: "1",
         },
-      };
+      });
+      if (told.kind === "unset") {
+        return fixInto({ scope: "user", path: claudeSettings.at.userFile });
+      }
+      const file = ENV_FIX_FILE[told.from.scope](
+        told.from.path,
+        claudeSettings.at,
+      );
+      return file === null
+        ? {
+            ok: false,
+            reason: `${reason} — the value that counts is in managed settings, ${told.from.path}: set ${TMUX_TRUECOLOR_VAR} to "1" there`,
+          }
+        : fixInto(file);
     }),
 };
 
@@ -1211,27 +1287,26 @@ const effectRefresh: Check = {
               ? `${wearing}, but Claude Code redraws it only every ${interval} s`
               : `${wearing}, but statusLine.refreshInterval is ${JSON.stringify(interval)}, not a number of seconds Claude Code accepts (its minimum is ${EFFECT_REFRESH_INTERVAL})`;
         // [LAW:single-enforcer] The doctor writes only a file that is the
-        // user's own: managed settings are an administrator's policy, and a
-        // project's shared `.claude/settings.json` belongs to its repository.
-        // Nor can it put the interval alone in a file it may write: under the
-        // scope-wins-whole reading above (unverified), managed settings
-        // outrank every such file, and a project-local statusLine holding only
-        // an interval would outrank the project's, which holds the command. So
-        // for those two the reason says where the line goes.
-        return from.scope === "managed" || from.scope === "project"
+        // user's own (`doctorWrites`). Nor can it put the interval alone in a
+        // file it may write: under the scope-wins-whole reading above
+        // (unverified), managed settings outrank every such file, and a
+        // project-local statusLine holding only an interval would outrank the
+        // project's, which holds the command. So for those two the reason says
+        // where the line goes.
+        return doctorWrites(from)
           ? {
-              ok: false,
-              reason: `${redraws} — its statusLine is in ${from.scope === "managed" ? "managed settings" : "the project's shared settings"}, ${from.path}: set "refreshInterval": ${EFFECT_REFRESH_INTERVAL} there`,
-            }
-          : {
               ok: false,
               reason: `${redraws} (statusLine from ${from.path})`,
               fix: {
                 kind: "claude-settings",
-                file: from.path,
+                file: from,
                 path: ["statusLine", "refreshInterval"],
                 value: EFFECT_REFRESH_INTERVAL,
               },
+            }
+          : {
+              ok: false,
+              reason: `${redraws} — its statusLine is in ${from.scope === "managed" ? "managed settings" : "the project's shared settings"}, ${from.path}: set "refreshInterval": ${EFFECT_REFRESH_INTERVAL} there`,
             };
       }
     }
