@@ -23,6 +23,7 @@ import {
   RECENT_CLIENT_S,
   runDoctor,
   type Asked,
+  type Width,
   type CheckReport,
   type DoctorFacts,
   type InstallFacts,
@@ -34,11 +35,13 @@ import {
   type FrameSightings,
   type RateLimitSightings,
   type TranscriptSightings,
+  type WidthSightings,
 } from "./daemon-answer.js";
 import {
   gatherFacts,
   installFacts,
   productionEdge,
+  sessionWidth,
   type ConfigLoad,
   type InstallEdge,
   type ConfigOrigin,
@@ -177,6 +180,31 @@ export function framesOf(
       };
 }
 
+// [LAW:one-source-of-truth] The width the terminal-width row judges. Run in a
+// Claude Code session's shell (Claude Code sets CLAUDE_CODE_SESSION_ID
+// there), it is the width that session's own statusline client measured, as
+// the daemon recorded it — the fact the 🩺 click reads — never this shell's,
+// which may have no terminal at all. Outside any session there is no client
+// to read, so the command's own measurement stands in for one started here.
+export function widthOf(
+  sessionId: string | undefined,
+  asked: Asked<WidthSightings>,
+  measured: number | null,
+): Asked<Width> {
+  if (sessionId === undefined || sessionId === "") {
+    return {
+      kind: "ok",
+      value: { columns: measured, of: { kind: "command" } },
+    };
+  }
+  return asked.kind === "failed"
+    ? asked
+    : sessionWidth(
+        sessionId,
+        asked.value.filter((s) => s.sessionId === sessionId),
+      );
+}
+
 // [LAW:effects-at-boundaries] The whole CLI as data: facts in, (streams,
 // exit code) out. `runDoctorCli` performs it; a test reads it.
 export async function doctorPlan(
@@ -220,6 +248,11 @@ export async function doctorPlan(
       rateLimitsOf(answer.rateLimits, claudeConfigDir(hints.claudeConfigDir)),
       transcriptsOf(answer.transcripts),
       framesOf(answer.frames, claudeConfigDir(hints.claudeConfigDir)),
+      widthOf(
+        env.CLAUDE_CODE_SESSION_ID,
+        answer.widths,
+        hints.termCols ?? null,
+      ),
       // [LAW:one-source-of-truth] The stores as the daemon that files them
       // read them, never under this shell's own XDG_STATE_HOME.
       answer.stores,

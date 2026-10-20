@@ -105,8 +105,11 @@ export interface FrameSighting {
 // report what it is. `claudeConfigDir`: the Claude Code directory the
 // session runs with, resolved (`claudeConfigDir`, src/claude-settings.ts) —
 // the rate-limit windows are that directory's account's, not the machine's.
+// `termCols`: the width the client measured, as the checkpoint admitted it —
+// null when it could not measure, or the daemon refused what it sent.
 export interface RenderSaid {
   readonly client: ClientHint | null;
+  readonly termCols: number | null;
   readonly rateLimits: RateLimitsSeen;
   readonly claudeConfigDir: string;
   readonly transcript: TranscriptSaid;
@@ -119,6 +122,9 @@ export interface RoledSaid extends RenderSaid {
 }
 
 export interface RenderSighting extends RoledSaid {
+  // Whose render it was: `cc-candybar doctor` run in a Claude Code session's
+  // shell finds that session's own sighting by it.
+  readonly sessionId: string;
   // Seconds since the session's last render.
   readonly ago: number;
 }
@@ -158,8 +164,9 @@ export class RenderSightings {
   }
 
   list(now: Instant): readonly RenderSighting[] {
-    return [...this.seen.values()].map(({ said, at }) => ({
+    return [...this.seen.values()].map(({ sessionId, said, at }) => ({
       ...said,
+      sessionId,
       ago: now - at,
     }));
   }

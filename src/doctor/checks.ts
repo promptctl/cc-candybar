@@ -469,12 +469,27 @@ export interface TranscriptRead extends TranscriptSaid {
   readonly read: Outcome<TranscriptWindow>;
 }
 
+// The columns a terminal was measured at (COLUMNS, else the terminal's own
+// geometry), or null: none was, so the daemon lays the bar out for
+// DEFAULT_TERMINAL_WIDTH — and whose terminal it was: a session's statusline
+// client, as its last render said, or the one `cc-candybar doctor` runs in,
+// standing in for a client started there.
+export interface Width {
+  readonly columns: number | null;
+  readonly of:
+    | { readonly kind: "session"; readonly sessionId: string }
+    | { readonly kind: "command" };
+}
+
+const whoseWidth = (of: Width["of"]): string =>
+  of.kind === "session"
+    ? `session ${of.sessionId}'s statusline client`
+    : "this command's terminal";
+
 export interface DoctorFacts {
   readonly tmux: TmuxFacts;
-  // The columns the terminal was measured at (COLUMNS, else the terminal's
-  // own geometry), or null: none was, so the daemon laid the bar out for
-  // DEFAULT_TERMINAL_WIDTH.
-  readonly termCols: number | null;
+  // Failed: no render of the session says.
+  readonly width: Asked<Width>;
   readonly terminal: TerminalIdentity;
   // What asked for this run: a click on the bar's 🩺 doctor — a link the
   // terminal drew and the user clicked — or the `cc-candybar doctor` command.
@@ -729,13 +744,18 @@ const termWidth: Check = {
   name: "termWidth",
   label: "terminal width",
   takesMark: false,
-  probe: ({ termCols }) =>
-    termCols !== null
-      ? { ok: true }
-      : {
-          ok: false,
-          reason: `no terminal width was measured (no COLUMNS, and no terminal to ask — or the daemon refused the width sent, which the bar's red strip names), so the bar is laid out as if the terminal were ${DEFAULT_TERMINAL_WIDTH} columns wide`,
-        },
+  probe: ({ width }) =>
+    width.kind === "failed"
+      ? { ok: false, reason: width.reason }
+      : width.value.columns !== null
+        ? {
+            ok: true,
+            note: `${width.value.columns} columns, as ${whoseWidth(width.value.of)} measured`,
+          }
+        : {
+            ok: false,
+            reason: `${whoseWidth(width.value.of)} measured no width (no COLUMNS, and no terminal to ask — or the daemon refused the width sent, which the bar's red strip names), so the bar is laid out as if the terminal were ${DEFAULT_TERMINAL_WIDTH} columns wide`,
+          },
 };
 
 const UNUSED: Readonly<Record<DeclKind, string>> = {

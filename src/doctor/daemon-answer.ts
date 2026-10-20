@@ -43,15 +43,19 @@ export type FrameSightings = ReadonlyArray<
   Pick<RenderSighting, "role" | "frame" | "claudeConfigDir" | "ago">
 >;
 
+// Whose each recent render was, which client drew it, and the width it
+// measured.
+export type WidthSightings = ReadonlyArray<
+  Pick<RenderSighting, "sessionId" | "role" | "termCols">
+>;
+
+type SightingRecord = Partial<Record<keyof RenderSighting, unknown>>;
+
 // Each entry of the stats' `clients` as a record of unread fields — a
 // non-object entry has none — for each parser to hold to its own shape.
-function sightingRecords(
-  stats: StatsSnapshot,
-): Array<Partial<Record<keyof RenderSighting, unknown>>> {
+function sightingRecords(stats: StatsSnapshot): SightingRecord[] {
   return (stats.clients as unknown[]).map((c) =>
-    typeof c === "object" && c !== null
-      ? (c as Partial<Record<keyof RenderSighting, unknown>>)
-      : {},
+    typeof c === "object" && c !== null ? (c as SightingRecord) : {},
   );
 }
 
@@ -147,78 +151,86 @@ export function parseServingDaemon(stats: StatsSnapshot): Asked<ServingDaemon> {
       };
 }
 
-// [LAW:parse-dont-validate] The rate-limit half of the same sightings, read
-// on its own so a daemon older than it fails the segment-data check alone and
-// leaves the install check its clients.
-export function parseRateLimitSightings(
+// [LAW:parse-dont-validate] [LAW:one-type-per-behavior] One half of the
+// sightings, read on its own so a daemon older than it fails only the check
+// that reads it: every sighting is the `E` that `holds` proves it is, or the
+// answer names, as `lacking`, what the daemon reported its renders without.
+function sightingHalf<E extends SightingRecord>(
   stats: StatsSnapshot,
-): Asked<RateLimitSightings> {
+  holds: (c: SightingRecord) => c is E,
+  lacking: string,
+): Asked<readonly E[]> {
   const skew = shapeSkew(stats, ["clients"]);
   if (skew !== null) return { kind: "failed", reason: skew };
   const sightings = sightingRecords(stats);
-  const wellFormed = sightings.every(
-    (c) =>
+  return sightings.every(holds)
+    ? { kind: "ok", value: sightings }
+    : {
+        kind: "failed",
+        reason: `the running daemon (${stats.version}) reported its renders without ${lacking} — restart it on this build: ${JSON.stringify(stats.clients)}`,
+      };
+}
+
+const isRole = (c: SightingRecord): boolean =>
+  (SIGHTING_ROLES as readonly unknown[]).includes(c.role);
+
+// The rate-limit half: the segment-data check's, leaving the install check
+// its clients.
+export const parseRateLimitSightings = (
+  stats: StatsSnapshot,
+): Asked<RateLimitSightings> =>
+  sightingHalf(
+    stats,
+    (c): c is RateLimitSightings[number] =>
       typeof c.ago === "number" &&
       typeof c.claudeConfigDir === "string" &&
       (RATE_LIMITS_SEEN as readonly unknown[]).includes(c.rateLimits),
+    "the rate-limit windows they carried",
   );
-  return wellFormed
-    ? {
-        kind: "ok",
-        value: sightings as RateLimitSightings,
-      }
-    : {
-        kind: "failed",
-        reason: `the running daemon (${stats.version}) reported its renders without the rate-limit windows they carried — restart it on this build: ${JSON.stringify(stats.clients)}`,
-      };
-}
 
-// [LAW:parse-dont-validate] The transcript half of the same sightings, read
-// on its own so a daemon older than it fails the session-data check alone.
-export function parseTranscriptSightings(
+// The transcript half: the session-data check's.
+export const parseTranscriptSightings = (
   stats: StatsSnapshot,
-): Asked<TranscriptSightings> {
-  const skew = shapeSkew(stats, ["clients"]);
-  if (skew !== null) return { kind: "failed", reason: skew };
-  const sightings = sightingRecords(stats);
-  const wellFormed = sightings.every((c) => {
-    const t = c.transcript as Partial<Record<string, unknown>> | undefined;
-    return (
-      typeof c.ago === "number" &&
-      typeof t?.path === "string" &&
-      typeof t.answered === "boolean"
-    );
-  });
-  return wellFormed
-    ? { kind: "ok", value: sightings as TranscriptSightings }
-    : {
-        kind: "failed",
-        reason: `the running daemon (${stats.version}) reported its renders without their transcripts — restart it on this build: ${JSON.stringify(stats.clients)}`,
-      };
-}
+): Asked<TranscriptSightings> =>
+  sightingHalf(
+    stats,
+    (c): c is TranscriptSightings[number] => {
+      const t = c.transcript as Partial<Record<string, unknown>> | undefined;
+      return (
+        typeof c.ago === "number" &&
+        typeof t?.path === "string" &&
+        typeof t.answered === "boolean"
+      );
+    },
+    "their transcripts",
+  );
 
-// [LAW:parse-dont-validate] The frame half of the same sightings, read on its
-// own so a daemon older than it fails the effect-refresh check alone.
-export function parseFrameSightings(
+// The frame half: the effect-refresh check's.
+export const parseFrameSightings = (
   stats: StatsSnapshot,
-): Asked<FrameSightings> {
-  const skew = shapeSkew(stats, ["clients"]);
-  if (skew !== null) return { kind: "failed", reason: skew };
-  const sightings = sightingRecords(stats);
-  const wellFormed = sightings.every(
-    (c) =>
+): Asked<FrameSightings> =>
+  sightingHalf(
+    stats,
+    (c): c is FrameSightings[number] =>
       typeof c.ago === "number" &&
       typeof c.claudeConfigDir === "string" &&
-      (SIGHTING_ROLES as readonly unknown[]).includes(c.role) &&
+      isRole(c) &&
       (FRAMES_SEEN as readonly unknown[]).includes(c.frame),
+    "what they drew",
   );
-  return wellFormed
-    ? { kind: "ok", value: sightings as FrameSightings }
-    : {
-        kind: "failed",
-        reason: `the running daemon (${stats.version}) reported its renders without what they drew — restart it on this build: ${JSON.stringify(stats.clients)}`,
-      };
-}
+
+// The width half: the terminal-width check's.
+export const parseWidthSightings = (
+  stats: StatsSnapshot,
+): Asked<WidthSightings> =>
+  sightingHalf(
+    stats,
+    (c): c is WidthSightings[number] =>
+      typeof c.sessionId === "string" &&
+      isRole(c) &&
+      (c.termCols === null || typeof c.termCols === "number"),
+    "whose they were or the width they measured",
+  );
 
 // [LAW:parse-dont-validate] One store as the daemon read it: what it holds,
 // re-read by the store's own parser (the wire is another build's word), or
@@ -266,6 +278,7 @@ export interface DaemonAnswer {
   readonly rateLimits: Asked<RateLimitSightings>;
   readonly transcripts: Asked<TranscriptSightings>;
   readonly frames: Asked<FrameSightings>;
+  readonly widths: Asked<WidthSightings>;
   readonly serving: Asked<ServingDaemon>;
   readonly stores: StoresRead;
 }
@@ -282,6 +295,7 @@ export async function askDaemon(): Promise<DaemonAnswer> {
       rateLimits: failed,
       transcripts: failed,
       frames: failed,
+      widths: failed,
       serving: failed,
       stores: { marks: failed, clicked: failed, postMortemsRead: failed },
     };
@@ -291,6 +305,7 @@ export async function askDaemon(): Promise<DaemonAnswer> {
     rateLimits: parseRateLimitSightings(outcome.value),
     transcripts: parseTranscriptSightings(outcome.value),
     frames: parseFrameSightings(outcome.value),
+    widths: parseWidthSightings(outcome.value),
     serving: parseServingDaemon(outcome.value),
     stores: parseDoctorStores(outcome.value),
   };
