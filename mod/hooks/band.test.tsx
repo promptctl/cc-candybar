@@ -152,6 +152,33 @@ for (const reason of ['clear', 'resume'] as const) {
   })
 }
 
+test('a child the band stopped ended as asked, which is no failure', async ($, on) => {
+  const logged: string[] = []
+  const clock = mock.clock(on)
+  let id = 'sid-1'
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  on('session.end', (_$, e) => ({ sessionId: e.sessionId }))
+  on('session.id', () => ({ value: id }))
+  on('ui.log', (_$, e) => (logged.push(e.text), { value: undefined }))
+  // A still bar: the child draws one frame, then writes nothing until the
+  // band stops it. (Claude Code 2.1.299 settles a stopped stream's `result`
+  // with nothing, which this harness refuses a hook to return.)
+  on('process.spawn', async function* (_$, _e, next) {
+    yield { stream: 'stdout' as const, text: `${JSON.stringify(FRAME)}\n` }
+    await new Promise<void>(stopped => next.signal.addEventListener('abort', () => stopped(), { once: true }))
+    return { value: { code: null, signal: 'SIGTERM' } }
+  })
+
+  await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
+  await clock.advance(1)
+  id = 'sid-2'
+  await $.session.end({ reason: 'clear', sessionId: 'sid-1', resume: { id: 'sid-1' } })
+  await clock.advance(1)
+
+  const sid1 = logged.filter(line => line.includes('sid-1'))
+  expect(sid1).toEqual(['candybar-band: frames started for sid-1', 'candybar-band: frames for sid-1 stopped'])
+})
+
 test('an end that keeps the session id keeps its child', async ($, on) => {
   const spawned: (readonly string[])[] = []
   const clock = mock.clock(on)

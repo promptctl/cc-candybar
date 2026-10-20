@@ -208,6 +208,9 @@ function start($: EngineInterface, sessionId: string): Child {
         frame = next
         await draw(null)
       }
+      // A child the band stopped ended as asked, and left no end to read: its
+      // stream's `result` settles with nothing (Claude Code 2.1.299).
+      if (stopped) return
       const { code, signal } = await stream.result
       const how = signal ?? `exit ${code}`
       $.ui.log(`candybar-band: frames for ${sessionId} ended (${how})`, { to: 'debug' })
@@ -227,6 +230,7 @@ function start($: EngineInterface, sessionId: string): Child {
     stop: () => {
       stopped = true
       $.ui.log(`candybar-band: frames for ${sessionId} stopped`, { to: 'debug' })
+      // Kills the child (SIGTERM), silent or not: a /clear leaves no follower.
       void stream.return(undefined as never)
     },
   }
