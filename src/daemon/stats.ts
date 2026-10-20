@@ -7,6 +7,7 @@ import type { RenderCacheStats } from "./cache/render";
 import type { ProbeArrival } from "../doctor/handler-probe";
 import type { RenderSighting } from "./render-sightings";
 import type { ServingDaemon } from "./limits";
+import type { StoresRead } from "../doctor/edge";
 import type { LaunchCategory } from "../proc/launch";
 import type { LaunchStatsHandle } from "../proc/stats-handle";
 import { PROTOCOL_VERSION } from "./protocol";
@@ -120,11 +121,11 @@ export interface StatsSnapshot {
   // This daemon as `cc-candybar doctor` judges it: its memory against its
   // budget and its post-mortems (src/daemon/limits.ts `serving`).
   daemon: ServingDaemon;
-  // This daemon's state directory (`stateDir()`, from the env of whichever
-  // shell spawned it) — where the bar's doctor files its marks, the
-  // terminals clicked from and the post-mortems read, so `cc-candybar doctor`
-  // reads them there rather than under its own shell's.
-  stateDir: string;
+  // What the doctor's stores hold, read by the daemon that files them
+  // (src/doctor/edge.ts `DoctorStores`): `cc-candybar doctor` reads the
+  // marks, the terminals clicked from and the post-mortems read here, never
+  // under its own shell's state directory.
+  doctorStores: StoresRead;
 }
 
 export class RuntimeStats {
@@ -279,7 +280,11 @@ export class RuntimeStats {
         rssLimit: 0,
         postMortems: { kind: "ok", value: [] },
       },
-      stateDir: "/",
+      doctorStores: {
+        marks: { kind: "ok", value: {} },
+        clicked: { kind: "ok", value: [] },
+        postMortemsRead: { kind: "ok", value: { through: null } },
+      },
     });
   }
 
@@ -296,7 +301,7 @@ export class RuntimeStats {
     clients: readonly RenderSighting[];
     bundle: string;
     daemon: ServingDaemon;
-    stateDir: string;
+    doctorStores: StoresRead;
   }): StatsSnapshot {
     const mem = process.memoryUsage();
     return {
@@ -335,7 +340,7 @@ export class RuntimeStats {
       clients: extras.clients,
       bundle: extras.bundle,
       daemon: extras.daemon,
-      stateDir: extras.stateDir,
+      doctorStores: extras.doctorStores,
     };
   }
 }

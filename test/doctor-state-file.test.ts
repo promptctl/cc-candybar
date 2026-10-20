@@ -21,7 +21,7 @@ describe("a doctor state file", () => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-state-file-"));
     file = path.join(dir, "state", NAME);
   });
-  const at = (): Asked<string> => ({ kind: "ok", value: path.dirname(file) });
+  const at = (): string => path.dirname(file);
   afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
 
   test("absent is the empty value; an update is read back by the next reader, its directory made", () => {
@@ -69,15 +69,6 @@ describe("a doctor state file", () => {
       reason: expect.stringContaining(`${file} is not JSON`),
     });
     expect(fs.readFileSync(file, "utf8")).toBe("junk");
-  });
-
-  // `cc-candybar doctor` with no daemon to name its state directory.
-  test("a store under an unknown directory reads and refuses as that failure, writing nothing", () => {
-    const unknown = { kind: "failed", reason: "no daemon answered" } as const;
-    const store = stateFile<readonly number[]>(unknown, NAME, [], numbers);
-    expect(store.read()).toEqual(unknown);
-    expect(store.update((ns) => [...ns, 1])).toEqual(unknown);
-    expect(fs.existsSync(path.dirname(file))).toBe(false);
   });
 
   test("a write that fails throws: a fault, never the refusal a file that does not read is", () => {

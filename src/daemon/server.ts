@@ -96,7 +96,7 @@ import {
 } from "./verbs";
 import { settingCounts } from "./setting-drafts";
 import { validateHookData } from "../utils/schema-validator.js";
-import { productionEdge } from "../doctor/edge";
+import { fileStores, productionEdge, readStores } from "../doctor/edge";
 import { ProbeArrivals } from "../doctor/handler-probe";
 import {
   RenderSightings,
@@ -183,10 +183,10 @@ const renderSightings = new RenderSightings();
 // build watch and the update notice read it — what daemon-stats and the
 // doctor's click name the install by.
 const DAEMON_BUNDLE = fileURLToPath(import.meta.url);
-// [LAW:one-source-of-truth] The state directory this daemon files the
-// doctor's stores under — what its click writes and, through daemon-stats,
-// what `cc-candybar doctor` reads.
-const DAEMON_STATE_DIR = stateDir();
+// [LAW:one-source-of-truth] The doctor's stores, under this daemon's state
+// directory: its click files them, and daemon-stats answers what they hold
+// to `cc-candybar doctor`.
+const DOCTOR_STORES = fileStores(stateDir());
 // [LAW:single-enforcer] Route all child_process spawns through src/proc/launch.
 // Installing the metering handle here makes subprocess counts visible in
 // daemon-stats.
@@ -1166,7 +1166,7 @@ export async function replyTo(
         clients: renderSightings.list(instantOf(new Date())),
         bundle: DAEMON_BUNDLE,
         daemon: establishedLimits().serving(),
-        stateDir: DAEMON_STATE_DIR,
+        doctorStores: readStores(DOCTOR_STORES),
       }),
     });
   }
@@ -1419,25 +1419,23 @@ const verbCtx = {
   // [LAW:no-ambient-temporal-coupling] Reloaded first, as a save does: a
   // doctor click is a verdict on the files as they are now, not on
   // whether the fs watcher has caught up with an edit made a moment ago.
-  doctor: productionEdge(
-    (origin) => {
-      const at = [
-        origin.projectDir,
-        origin.cwd,
-        origin.configFile ?? undefined,
-      ] as const;
-      renderCache.reload(...at);
-      const entry = renderCache.getOrCreate(...at);
-      return {
-        layers: entry.configLayers,
-        error: entry.lastError,
-        warning: entry.lastWarning,
-        unused: entry.state.unused,
-        config: entry.state.config,
-      };
-    },
-    { kind: "ok", value: DAEMON_STATE_DIR },
-  ),
+  doctor: productionEdge((origin) => {
+    const at = [
+      origin.projectDir,
+      origin.cwd,
+      origin.configFile ?? undefined,
+    ] as const;
+    renderCache.reload(...at);
+    const entry = renderCache.getOrCreate(...at);
+    return {
+      layers: entry.configLayers,
+      error: entry.lastError,
+      warning: entry.lastWarning,
+      unused: entry.state.unused,
+      config: entry.state.config,
+    };
+  }),
+  doctorStores: DOCTOR_STORES,
   probes: handlerProbes,
   clients: renderSightings,
   bundle: DAEMON_BUNDLE,

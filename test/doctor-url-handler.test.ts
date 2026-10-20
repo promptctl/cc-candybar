@@ -12,8 +12,7 @@ import {
   BUNDLED_GLYPHS_LOGGED,
   BUNDLED_GLYPHS_NAMED,
 } from "./helpers/bundled-glyphs";
-import { memoryStateFile } from "./helpers/state-file";
-import { checkByName, type MarkBook, type UrlHandlerFacts } from "../src/doctor/checks";
+import { checkByName, type UrlHandlerFacts } from "../src/doctor/checks";
 import {
   ProbeArrivals,
   probeUrlHandler,
@@ -35,7 +34,7 @@ import {
 import { PACKAGE_VERSION } from "../src/version";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { recordRender, testVerbContext } from "./helpers/click";
-import { HEALTHY_FACTS, healthyDaemonEdge, healthyDataEdge, noManagedSettings, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, healthyClient, renderSaid } from "./helpers/doctor-facts";
+import { emptyStores, HEALTHY_FACTS, healthyDaemonEdge, healthyDataEdge, noManagedSettings, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, healthyClient, renderSaid } from "./helpers/doctor-facts";
 
 const probe = checkByName("urlHandler")!.probe;
 const verdict = (urlHandler: UrlHandlerFacts) =>
@@ -410,6 +409,7 @@ describe("the daemon's side of the round trip", () => {
       probes,
       clients,
       dlog: (_level, message) => logs.push(message),
+      doctorStores: emptyStores(),
       doctor: {
         install: HEALTHY_INSTALL_EDGE,
         ...healthyDaemonEdge(),
@@ -422,8 +422,6 @@ describe("the daemon's side of the round trip", () => {
         remoteLogin: () => {
           throw new Error("remoteLogin must not run in this case");
         },
-        marks: memoryStateFile<MarkBook>({}),
-        clicked: memoryStateFile<readonly string[]>([]),
         fontInUse: () => {
           throw new Error("fontInUse must not run in this case");
         },

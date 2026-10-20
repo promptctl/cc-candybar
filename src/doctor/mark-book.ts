@@ -4,7 +4,7 @@
 // font it was read to draw with, and the glyphs shown (Sighting.id) — which is
 // a fact about the machine, not about the session that showed it. So the book
 // is one file under the daemon's state directory, read by the bar's doctor
-// and by `cc-candybar doctor` alike: a mark made in one session answers in the
+// and, in the daemon's answer, by `cc-candybar doctor` alike: a mark made in one session answers in the
 // next, and in the CLI, which has no session to make one in.
 
 import {
@@ -54,5 +54,5 @@ export function withMark(
   return { ...book, [check]: { ...book[check], [sighting]: mark } };
 }
 
-export const fileMarkBook = (dir: Asked<string>): StateFile<MarkBook> =>
+export const fileMarkBook = (dir: string): StateFile<MarkBook> =>
   stateFile(dir, "doctor-marks.json", {}, parseMarkBook);

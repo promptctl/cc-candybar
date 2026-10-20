@@ -6,12 +6,12 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { checkByName, unreadPostMortems, type DaemonFacts, type Verdict } from "../src/doctor/checks";
-import { applyFix, daemonProcesses, ownsEntry, type DoctorEdge } from "../src/doctor/edge";
-import { parseServingDaemon, parseStateDir } from "../src/doctor/daemon-answer";
+import { applyFix, daemonProcesses, ownsEntry } from "../src/doctor/edge";
+import { parseDoctorStores, parseServingDaemon } from "../src/doctor/daemon-answer";
 import { filePostMortemsRead, parsePostMortemsRead } from "../src/doctor/post-mortems-read";
 import { RuntimeStats } from "../src/daemon/stats";
 import { postMortemsOf } from "../src/daemon/limits";
-import { HEALTHY_FACTS, HEALTHY_PROCESS, HEALTHY_SERVING, healthyDaemonEdge } from "./helpers/doctor-facts";
+import { EMPTY_STORES, HEALTHY_FACTS, HEALTHY_PROCESS, HEALTHY_SERVING, emptyStores } from "./helpers/doctor-facts";
 
 const MB = 1024 * 1024;
 const NEWER = "2026-10-19T18-01-12-345Z-77";
@@ -137,7 +137,7 @@ describe("the daemon probe", () => {
     expect(unreadPostMortems(serving, { kind: "ok", value: { through: listed[0]!.identity } })).toEqual([]);
   });
 
-  test("no daemon answering keeps every other fact that could not be read", () => {
+  test("no daemon answering keeps the process table's failure; which were read decides nothing with none listed", () => {
     expect(
       verdictOf({
         serving: { kind: "failed", reason: "connect ENOENT /tmp/s" },
@@ -147,11 +147,9 @@ describe("the daemon probe", () => {
     ).toEqual({
       ok: false,
       reason: "connect ENOENT /tmp/s",
-      more: [
-        "which post-mortems were read could not be read: /s/read.json is not JSON",
-        "the process table could not be read: ps failed (timeout)",
-      ],
+      more: ["the process table could not be read: ps failed (timeout)"],
     });
+    expect(verdictOf({ read: { kind: "failed", reason: "/s/read.json is not JSON" } })).toEqual({ ok: true });
   });
 
   test("a list that cannot be read is its own problem, and no post-mortem is judged — or fixed — without the record", () => {
@@ -266,19 +264,36 @@ describe("ownsEntry", () => {
   });
 });
 
-describe("parseStateDir", () => {
+describe("parseDoctorStores", () => {
   const stats = RuntimeStats.referenceSnapshot();
+  const stores = (doctorStores: unknown) =>
+    parseDoctorStores({ ...stats, doctorStores: doctorStores as typeof stats.doctorStores });
 
-  test("the daemon's state directory, or why it is not known", () => {
-    expect(parseStateDir({ ...stats, stateDir: "/state/cc-candybar" })).toEqual({
-      kind: "ok",
-      value: "/state/cc-candybar",
+  test("what the daemon read of each store, or why it could not", () => {
+    const read = { kind: "ok", value: { through: NEWER } } as const;
+    const unread = { kind: "failed", reason: "/s/doctor-marks.json is not JSON" } as const;
+    expect(stores({ ...EMPTY_STORES, marks: unread, postMortemsRead: read })).toEqual({
+      ...EMPTY_STORES,
+      marks: unread,
+      postMortemsRead: read,
     });
-    const { stateDir: _, ...older } = stats;
-    expect(parseStateDir(older as typeof stats)).toMatchObject({ kind: "failed" });
-    expect(parseStateDir({ ...stats, stateDir: "" })).toEqual({
+  });
+
+  test("a daemon from before the field is the build skew in every store; a misshapen store is named", () => {
+    const { doctorStores: _, ...older } = stats;
+    const skewed = parseDoctorStores(older as typeof stats);
+    expect(skewed.marks).toMatchObject({ kind: "failed" });
+    expect(skewed.clicked).toEqual(skewed.marks);
+    expect(skewed.postMortemsRead).toEqual(skewed.marks);
+    const odd = { kind: "ok", value: [3] };
+    expect(stores({ ...EMPTY_STORES, clicked: odd }).clicked).toEqual({
       kind: "failed",
-      reason: `the running daemon (${stats.version}) reported its state directory as ""`,
+      reason: `the running daemon (${stats.version}) reported its clicked as ${JSON.stringify(odd)}, which is not a list of terminals`,
+    });
+    const unshaped = { kind: "maybe", value: {} };
+    expect(stores({ ...EMPTY_STORES, marks: unshaped }).marks).toEqual({
+      kind: "failed",
+      reason: `the running daemon (${stats.version}) reported its marks as ${JSON.stringify(unshaped)}, which is not a store's answer`,
     });
   });
 });
@@ -328,7 +343,7 @@ describe("the post-mortems-read record", () => {
   test("every value the store can file reads back, none filed included", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-pm-read-"));
     try {
-      const store = filePostMortemsRead({ kind: "ok", value: dir });
+      const store = filePostMortemsRead(dir);
       store.update(() => ({ through: null }));
       expect(store.read()).toEqual({ kind: "ok", value: { through: null } });
     } finally {
@@ -337,12 +352,12 @@ describe("the post-mortems-read record", () => {
   });
 
   test("the fix files only forward: a newer breach another run filed stays filed", () => {
-    const edge = { ...({} as DoctorEdge), ...healthyDaemonEdge() };
+    const stores = emptyStores();
     const fix = { kind: "post-mortems-read", through: OLDER } as const;
-    expect(applyFix(edge, fix, HEALTHY_FACTS)).toMatchObject({ kind: "ok", value: { daemon: { read: { kind: "ok", value: { through: OLDER } } } } });
-    edge.postMortemsRead.update(() => ({ through: NEWER }));
-    expect(applyFix(edge, fix, HEALTHY_FACTS)).toMatchObject({ kind: "ok", value: { daemon: { read: { kind: "ok", value: { through: NEWER } } } } });
-    expect(edge.postMortemsRead.read()).toEqual({ kind: "ok", value: { through: NEWER } });
+    expect(applyFix(stores, fix, HEALTHY_FACTS)).toMatchObject({ kind: "ok", value: { daemon: { read: { kind: "ok", value: { through: OLDER } } } } });
+    stores.postMortemsRead.update(() => ({ through: NEWER }));
+    expect(applyFix(stores, fix, HEALTHY_FACTS)).toMatchObject({ kind: "ok", value: { daemon: { read: { kind: "ok", value: { through: NEWER } } } } });
+    expect(stores.postMortemsRead.read()).toEqual({ kind: "ok", value: { through: NEWER } });
   });
 
   test("a record that stopped reading before the fix refuses it, and nothing is filed", () => {
@@ -350,9 +365,9 @@ describe("the post-mortems-read record", () => {
     try {
       const file = path.join(dir, "doctor-post-mortems-read.json");
       fs.writeFileSync(file, "junk");
-      const edge = { ...({} as DoctorEdge), postMortemsRead: filePostMortemsRead({ kind: "ok", value: dir }) };
+      const stores = { ...emptyStores(), postMortemsRead: filePostMortemsRead(dir) };
       const fix = { kind: "post-mortems-read", through: NEWER } as const;
-      expect(applyFix(edge, fix, HEALTHY_FACTS)).toMatchObject({
+      expect(applyFix(stores, fix, HEALTHY_FACTS)).toMatchObject({
         kind: "failed",
         reason: expect.stringContaining(`${file} is not JSON`),
       });

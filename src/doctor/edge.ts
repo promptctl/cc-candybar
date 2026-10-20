@@ -5,7 +5,8 @@
 // this module. The tmux query and the config load sit behind the `DoctorEdge`
 // record the daemon and the CLI both construct with `productionEdge()` and a
 // test fakes; the settings file is the one the session's client hints name,
-// so a test points it with a hint.
+// so a test points it with a hint. The doctor's stores are `DoctorStores`,
+// which only the daemon holds: the CLI reads them in its answer.
 // checks.ts never sees an effect; this file never decides a verdict.
 
 import fs from "node:fs";
@@ -173,16 +174,43 @@ export function installFacts(
   };
 }
 
-export interface DoctorEdge {
-  // tmux's own word on the attached client's terminal, asked of THE server
-  // the hint names — `-S socket` and `-t pane` are why the hint carries them.
-  readonly probeTmux: (hint: TmuxHint) => Asked<TmuxClient | null>;
+// The documents the doctor keeps under the daemon's state directory
+// (src/doctor/state-file.ts). [LAW:one-source-of-truth] The daemon is their
+// one owner: its click files them, and `cc-candybar doctor` reads what they
+// hold in the daemon's own answer (`StoresRead`, src/doctor/daemon-answer.ts).
+export interface DoctorStores {
   // The marks the user has made on what the doctor showed them, kept for
   // good (src/doctor/mark-book.ts).
   readonly marks: StateFile<MarkBook>;
   // The terminals a doctor click has come back from, kept for good
   // (src/doctor/clicked-terminals.ts).
   readonly clicked: StateFile<readonly string[]>;
+  // The newest post-mortem the user filed as read
+  // (src/doctor/post-mortems-read.ts).
+  readonly postMortemsRead: StateFile<PostMortemsRead>;
+}
+
+// What each store holds, or why it could not be read.
+export type StoresRead = {
+  readonly [K in keyof DoctorStores]: ReturnType<DoctorStores[K]["read"]>;
+};
+
+export const fileStores = (dir: string): DoctorStores => ({
+  marks: fileMarkBook(dir),
+  clicked: fileClickedTerminals(dir),
+  postMortemsRead: filePostMortemsRead(dir),
+});
+
+export const readStores = (stores: DoctorStores): StoresRead => ({
+  marks: stores.marks.read(),
+  clicked: stores.clicked.read(),
+  postMortemsRead: stores.postMortemsRead.read(),
+});
+
+export interface DoctorEdge {
+  // tmux's own word on the attached client's terminal, asked of THE server
+  // the hint names — `-S socket` and `-t pane` are why the hint carries them.
+  readonly probeTmux: (hint: TmuxHint) => Asked<TmuxClient | null>;
   // Whether a process came in through a remote login (sshd, mosh-server) —
   // asked of the tmux client attached to the session's pane.
   readonly remoteLogin: (pid: number) => Asked<boolean>;
@@ -209,9 +237,6 @@ export interface DoctorEdge {
   readonly install: InstallEdge;
   // Every cc-candybar daemon process this user runs (`daemonProcesses`).
   readonly daemons: () => Asked<readonly DaemonProcess[]>;
-  // The newest post-mortem the user filed as read
-  // (src/doctor/post-mortems-read.ts).
-  readonly postMortemsRead: StateFile<PostMortemsRead>;
   // Whether the forge CLI the checkout's remote names is installed and logged
   // in to its host — null when it names no forge (`forgeLogin`).
   readonly forge: (cwd: string) => Asked<ForgeLogin | null>;
@@ -430,11 +455,8 @@ function probeTmux(hint: TmuxHint): Asked<TmuxClient | null> {
   return parseTmuxClient(run.stdout);
 }
 
-// `stateDir` is the daemon's state directory, where the doctor's stores live
-// — the daemon's own, or the CLI's answer from it.
 export function productionEdge(
   loadConfig: DoctorEdge["loadConfig"],
-  stateDir: Asked<string>,
 ): DoctorEdge {
   return {
     probeTmux,
@@ -444,11 +466,8 @@ export function productionEdge(
     managedSettingsDir:
       process.env.CC_CANDYBAR_CLAUDE_MANAGED_DIR ??
       claudeManagedSettingsDir(process.platform),
-    marks: fileMarkBook(stateDir),
-    clicked: fileClickedTerminals(stateDir),
     install: productionInstallEdge,
     daemons,
-    postMortemsRead: filePostMortemsRead(stateDir),
     forge: forgeLogin,
     memento: locateMemento,
     transcript: readTranscriptWindow,
@@ -781,6 +800,9 @@ export function gatherFacts(
   transcripts: Asked<readonly TranscriptSaid[]>,
   // What those renders drew: whether each bar moves.
   frames: Asked<readonly FrameSighting[]>,
+  // What the doctor's stores hold: the click's daemon's own, or the ones
+  // `cc-candybar doctor` was answered.
+  stores: StoresRead,
 ): Omit<DoctorFacts, "urlHandler" | "askedBy" | "install"> {
   const load = edge.loadConfig(origin);
   // [LAW:one-source-of-truth] The render's own resolution, so the doctor and
@@ -815,12 +837,12 @@ export function gatherFacts(
             glyphs,
             terminal: terminalFacts(edge, terminal, hints, glyphs),
           },
-    marks: edge.marks.read(),
-    clicked: edge.clicked.read(),
+    marks: stores.marks,
+    clicked: stores.clicked,
     daemon: {
       serving,
       processes: edge.daemons(),
-      read: edge.postMortemsRead.read(),
+      read: stores.postMortemsRead,
     },
     config: configFacts(load),
     frames,
@@ -853,7 +875,7 @@ export function gatherFacts(
 // cannot reuse a stale fact or re-probe an unchanged one — or the reason the
 // fix was refused, with nothing written.
 export function applyFix(
-  edge: DoctorEdge,
+  stores: DoctorStores,
   fix: Fix,
   facts: DoctorFacts,
 ): Asked<DoctorFacts> {
@@ -879,7 +901,7 @@ export function applyFix(
     case "post-mortems-read": {
       // Filing only ever moves forward: a fix computed before another run
       // filed a newer breach leaves that one filed.
-      const read = edge.postMortemsRead.update((current) =>
+      const read = stores.postMortemsRead.update((current) =>
         current.through === null || laterIdentity(fix.through, current.through)
           ? { through: fix.through }
           : current,

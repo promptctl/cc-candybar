@@ -7,8 +7,7 @@ import { execFileSync } from "node:child_process";
 // only ever asked when there is a server to ask. The settings file is the one
 // in the Claude Code directory the client's `claudeConfigDir` hint names.
 
-import { memoryStateFile } from "./helpers/state-file";
-import { healthyDaemonEdge, healthyDataEdge, noManagedSettings, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, HEALTHY_FACTS, CARRIED, NAMED, STILL, drew } from "./helpers/doctor-facts";
+import { EMPTY_STORES, emptyStores, healthyDaemonEdge, healthyDataEdge, noManagedSettings, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, HEALTHY_FACTS, CARRIED, NAMED, STILL, drew } from "./helpers/doctor-facts";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -18,7 +17,6 @@ import {
   type Asked,
   type DoctorFacts,
   type Fix,
-  type MarkBook,
   statusLineOf,
   userEnvOf,
 } from "../src/doctor/checks";
@@ -53,8 +51,6 @@ const NO_TMUX: DoctorEdge = {
   remoteLogin: () => {
     throw new Error("remoteLogin must not run in this case");
   },
-  marks: memoryStateFile<MarkBook>({}),
-  clicked: memoryStateFile<readonly string[]>([]),
   fontInUse: () => {
     throw new Error("fontInUse must not run in this case");
   },
@@ -100,6 +96,7 @@ const factsIn = (
       CARRIED,
       NAMED,
       frames,
+      EMPTY_STORES,
     ),
     urlHandler: { kind: "unsupported" } as const,
     askedBy: "command" as const,
@@ -136,7 +133,7 @@ describe("applyFix (claude-settings, env)", () => {
 }
 `;
     const conf = writeSettings(before);
-    const facts = fixed(applyFix(NO_TMUX, fixIn(conf), factsOf(conf)));
+    const facts = fixed(applyFix(emptyStores(), fixIn(conf), factsOf(conf)));
     const after = fs.readFileSync(settingsIn(conf), "utf8");
     expect(JSON.parse(after)).toEqual({
       permissions: { allow: ["Bash(ls:*)"] },
@@ -165,7 +162,7 @@ describe("applyFix (claude-settings, env)", () => {
 }
 `;
     const conf = writeSettings(before);
-    applyFix(NO_TMUX, fixIn(conf), factsOf(conf));
+    applyFix(emptyStores(), fixIn(conf), factsOf(conf));
     const after = fs.readFileSync(settingsIn(conf), "utf8");
     expect(JSON.parse(after)).toEqual({
       model: "opus",
@@ -181,14 +178,14 @@ describe("applyFix (claude-settings, env)", () => {
   test("a stale value is overwritten in place, not duplicated", () => {
     const before = `{ "env": { "${TMUX_TRUECOLOR_VAR}": "" } }\n`;
     const conf = writeSettings(before);
-    applyFix(NO_TMUX, fixIn(conf), factsOf(conf));
+    applyFix(emptyStores(), fixIn(conf), factsOf(conf));
     const after = fs.readFileSync(settingsIn(conf), "utf8");
     expect(after).toBe(`{ "env": { "${TMUX_TRUECOLOR_VAR}": "1" } }\n`);
   });
 
   test("no settings file: the file (and its directory) is created", () => {
     const conf = configDir(path.join("nested", "claude"));
-    applyFix(NO_TMUX, fixIn(conf), factsOf(conf));
+    applyFix(emptyStores(), fixIn(conf), factsOf(conf));
     expect(JSON.parse(fs.readFileSync(settingsIn(conf), "utf8"))).toEqual({
       env: { [TMUX_TRUECOLOR_VAR]: "1" },
     });
@@ -216,7 +213,7 @@ describe("applyFix (effectRefresh)", () => {
     expect(verdict.ok).toBe(false);
     if (verdict.ok || verdict.fix === undefined) throw new Error("no fix");
 
-    const after = fixed(applyFix(NO_TMUX, verdict.fix, facts));
+    const after = fixed(applyFix(emptyStores(), verdict.fix, facts));
     const text = fs.readFileSync(settingsIn(conf), "utf8");
     expect(JSON.parse(text)).toEqual({
       statusLine: {
@@ -239,7 +236,7 @@ describe("applyFix (effectRefresh)", () => {
     const facts = factsIn(conf, null, NO_TMUX, NO_SESSION, MOVING);
     const verdict = check.probe(facts);
     if (verdict.ok || verdict.fix === undefined) throw new Error("no fix");
-    applyFix(NO_TMUX, verdict.fix, facts);
+    applyFix(emptyStores(), verdict.fix, facts);
     expect(fs.readFileSync(settingsIn(conf), "utf8")).toBe(
       before.replace('"refreshInterval": 5', '"refreshInterval": 1'),
     );
@@ -331,7 +328,7 @@ describe("gatherFacts", () => {
     const facts = factsIn(conf, null, NO_TMUX, NO_SESSION, drew("moves"));
     const verdict = checkByName("effectRefresh")!.probe(facts);
     if (verdict.ok || verdict.fix === undefined) throw new Error("no fix");
-    applyFix(NO_TMUX, verdict.fix, facts);
+    applyFix(emptyStores(), verdict.fix, facts);
     expect(fs.lstatSync(settingsIn(conf)).isSymbolicLink()).toBe(true);
     expect(JSON.parse(fs.readFileSync(target, "utf8")).statusLine.refreshInterval).toBe(1);
   });
@@ -504,7 +501,7 @@ describe("gatherFacts", () => {
       const check = checkByName("effectRefresh")!;
       const verdict = check.probe(facts);
       if (verdict.ok || verdict.fix === undefined) throw new Error("no fix");
-      const after = fixed(applyFix(NO_TMUX, verdict.fix, facts));
+      const after = fixed(applyFix(emptyStores(), verdict.fix, facts));
       expect(JSON.parse(fs.readFileSync(shared, "utf8")).statusLine.refreshInterval).toBe(1);
       expect(JSON.parse(fs.readFileSync(settingsIn(conf), "utf8"))).toEqual(line());
       expect(check.probe(after)).toEqual({
@@ -532,8 +529,6 @@ describe("gatherFacts", () => {
         };
       },
       remoteLogin: NO_TMUX.remoteLogin,
-      marks: NO_TMUX.marks,
-      clicked: NO_TMUX.clicked,
       fontInUse: NO_TMUX.fontInUse,
       loadConfig: NO_TMUX.loadConfig,
     };

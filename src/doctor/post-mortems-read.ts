@@ -18,9 +18,7 @@ export function parsePostMortemsRead(doc: unknown): Asked<PostMortemsRead> {
     : { kind: "failed", reason: "names no post-mortem read" };
 }
 
-export const filePostMortemsRead = (
-  dir: Asked<string>,
-): StateFile<PostMortemsRead> =>
+export const filePostMortemsRead = (dir: string): StateFile<PostMortemsRead> =>
   stateFile(
     dir,
     "doctor-post-mortems-read.json",

@@ -1,6 +1,6 @@
-import type { DaemonProcess, DoctorFacts, PostMortemsRead } from "../../src/doctor/checks";
+import type { DaemonProcess, DoctorFacts, MarkBook, PostMortemsRead } from "../../src/doctor/checks";
 import type { FrameSeen } from "../../src/daemon/render-sightings";
-import type { DoctorEdge, InstallEdge } from "../../src/doctor/edge";
+import { readStores, type DoctorEdge, type DoctorStores, type InstallEdge, type StoresRead } from "../../src/doctor/edge";
 import type { DaemonAnswer } from "../../src/doctor/daemon-answer";
 import type { ServingDaemon } from "../../src/daemon/limits";
 import { memoryStateFile } from "./state-file";
@@ -42,14 +42,20 @@ export const HEALTHY_PROCESS: DaemonProcess = {
   started: "Mon Oct 19 17:59:51 2026",
 };
 
-// The edge's reads of that daemon: the one process, nothing filed read.
-export const healthyDaemonEdge = (): Pick<
-  DoctorEdge,
-  "daemons" | "postMortemsRead"
-> => ({
+// The edge's reads of that daemon: the one process.
+export const healthyDaemonEdge = (): Pick<DoctorEdge, "daemons"> => ({
   daemons: () => ({ kind: "ok", value: [HEALTHY_PROCESS] }),
+});
+
+// The doctor's stores on a machine it has never filed anything on.
+export const emptyStores = (): DoctorStores => ({
+  marks: memoryStateFile<MarkBook>({}),
+  clicked: memoryStateFile<readonly string[]>([]),
   postMortemsRead: memoryStateFile<PostMortemsRead>({ through: null }),
 });
+
+// What those stores hold, read.
+export const EMPTY_STORES: StoresRead = readStores(emptyStores());
 
 // A session's transcript after Claude Code has answered in it.
 export const HEALTHY_TRANSCRIPT = {
@@ -138,7 +144,7 @@ export const healthyDaemonIn = (
       },
     },
     serving: { kind: "ok", value: HEALTHY_SERVING },
-    stateDir: { kind: "ok", value: "/daemon-state" },
+    stores: EMPTY_STORES,
   });
 
 export const HEALTHY_DAEMON = healthyDaemonIn("/claude");

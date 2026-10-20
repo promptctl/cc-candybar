@@ -3,12 +3,9 @@
 // settings file, a clean setup, and a failed check carrying a fix.
 
 import { BUNDLED_GLYPHS } from "./helpers/bundled-glyphs";
-import { healthyDaemonEdge, healthyDataEdge, noManagedSettings, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, healthyDaemonIn, HEALTHY_FACTS, CARRIED, NAMED, STILL } from "./helpers/doctor-facts";
-import { glyphSighting, type MarkBook } from "../src/doctor/checks";
+import { EMPTY_STORES, healthyDaemonEdge, healthyDataEdge, noManagedSettings, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, healthyDaemonIn, HEALTHY_FACTS, CARRIED, NAMED, STILL } from "./helpers/doctor-facts";
+import { glyphSighting } from "../src/doctor/checks";
 import { withMark } from "../src/doctor/mark-book";
-import { filePostMortemsRead } from "../src/doctor/post-mortems-read";
-import type { Asked } from "../src/doctor/checks";
-import { memoryStateFile } from "./helpers/state-file";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -17,7 +14,7 @@ import { doctorReportKeys, doctorReportPairs } from "../src/doctor/report";
 import { runDoctor } from "../src/doctor/checks";
 import { gatherFacts } from "../src/doctor/edge";
 import { DOOR_GLYPH } from "../src/config/disclosure";
-import type { DoctorEdge } from "../src/doctor/edge";
+import type { DoctorEdge, StoresRead } from "../src/doctor/edge";
 import type { HandlerProbeEdge } from "../src/doctor/handler-probe";
 import { TMUX_TRUECOLOR_VAR } from "../src/doctor/checks";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
@@ -27,6 +24,12 @@ import type { FrameSeen } from "../src/daemon/render-sightings";
 // The daemon a healthy bar answers from: its session runs with the Claude
 // Code directory this test's command reports (CLAUDE_CONFIG_DIR, `inDir`).
 const DAEMON = () => healthyDaemonIn(dir)();
+// That daemon, answering what the doctor's stores hold.
+const daemonHolding =
+  (stores: Partial<StoresRead>) => async (): Promise<DaemonAnswer> => ({
+    ...(await DAEMON()),
+    stores: { ...EMPTY_STORES, ...stores },
+  });
 
 const IN_TMUX = { TMUX: "/tmp/tmux-501/default,123,0", TMUX_PANE: "%1" };
 
@@ -59,8 +62,6 @@ const EDGE: DoctorEdge = {
   remoteLogin: () => {
     throw new Error("remoteLogin must not run in this case");
   },
-  marks: memoryStateFile<MarkBook>({}),
-  clicked: memoryStateFile<readonly string[]>([]),
   fontInUse: () => {
     throw new Error("fontInUse must not run in this case");
   },
@@ -103,7 +104,7 @@ describe("doctorPlan", () => {
   // rows that read the settings chain, naming it — every other row still runs.
   test("an unreadable settings.json fails the settings rows naming the file, and the rest still run", async () => {
     fs.writeFileSync(settingsPath(), '{ "env": [1] }');
-    const plan = await doctorPlan(() => EDGE, NO_HANDLER, DAEMON, inDir(IN_TMUX), "/", () => ({ columns: 120 }));
+    const plan = await doctorPlan(EDGE, NO_HANDLER, DAEMON, inDir(IN_TMUX), "/", () => ({ columns: 120 }));
     expect(plan.code).toBe(1);
     expect(plan.stderr).toBe("");
     expect(plan.stdout).toContain(
@@ -117,13 +118,13 @@ describe("doctorPlan", () => {
   // readable, whatever a looser parser makes of it.
   test("a settings.json that is JSON5 but not JSON fails the settings rows naming the file", async () => {
     fs.writeFileSync(settingsPath(), '{ "env": { "A": "1", }, }');
-    const plan = await doctorPlan(() => EDGE, NO_HANDLER, DAEMON, inDir(IN_TMUX), "/", () => ({ columns: 120 }));
+    const plan = await doctorPlan(EDGE, NO_HANDLER, DAEMON, inDir(IN_TMUX), "/", () => ({ columns: 120 }));
     expect(plan.code).toBe(1);
     expect(plan.stdout).toContain(`✗ tmux truecolor — cannot read ${settingsPath()}: `);
   });
 
   test("every check ok is exit 0, one ✓ line per check", async () => {
-    expect(await doctorPlan(() => EDGE, NO_HANDLER, DAEMON, inDir({}), "/", () => ({ columns: 120 }))).toEqual({
+    expect(await doctorPlan(EDGE, NO_HANDLER, DAEMON, inDir({}), "/", () => ({ columns: 120 }))).toEqual({
       stdout: "✓ config\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n✓ session data\n",
       stderr: "",
       code: 0,
@@ -133,18 +134,18 @@ describe("doctorPlan", () => {
   // brandon-doctor-v62x.1ku: the command measures the terminal it runs in —
   // COLUMNS, else the terminal's own geometry.
   test("a terminal the command cannot measure fails terminal width, exit 1", async () => {
-    const plan = await doctorPlan(() => EDGE, NO_HANDLER, DAEMON, inDir({}), "/", () => ({}));
+    const plan = await doctorPlan(EDGE, NO_HANDLER, DAEMON, inDir({}), "/", () => ({}));
     expect(plan.code).toBe(1);
     expect(plan.stdout).toContain(
       "\n✗ terminal width — no terminal width was measured",
     );
     expect(
-      (await doctorPlan(() => EDGE, NO_HANDLER, DAEMON, inDir({ COLUMNS: "90" }), "/", () => ({}))).code,
+      (await doctorPlan(EDGE, NO_HANDLER, DAEMON, inDir({ COLUMNS: "90" }), "/", () => ({}))).code,
     ).toBe(0);
   });
 
   test("a measurement that throws is a doctor: line, exit 2, no checks", async () => {
-    const plan = await doctorPlan(() => EDGE, NO_HANDLER, DAEMON, inDir({}), "/", () => {
+    const plan = await doctorPlan(EDGE, NO_HANDLER, DAEMON, inDir({}), "/", () => {
       throw new Error("EBADF: bad file descriptor");
     });
     expect(plan).toEqual({
@@ -168,7 +169,7 @@ describe("doctorPlan", () => {
         };
       },
     };
-    const plan = await doctorPlan(() => edge, NO_HANDLER, DAEMON, inDir(IN_TMUX), "/", () => ({ columns: 120 }));
+    const plan = await doctorPlan(edge, NO_HANDLER, DAEMON, inDir(IN_TMUX), "/", () => ({ columns: 120 }));
     expect(plan.stdout).toContain(
       '\n✗ links — tmux does not pass links through to Ghostty — add `set -as terminal-features ",xterm-ghostty:hyperlinks"` to tmux.conf, then detach and reattach (tmux 3.4 or later)\n',
     );
@@ -176,7 +177,7 @@ describe("doctorPlan", () => {
 
   test("outside tmux the terminal's own name decides links", async () => {
     const plan = await doctorPlan(
-      () => EDGE,
+      EDGE,
       NO_HANDLER, DAEMON,
       inDir({ TERM_PROGRAM: "Apple_Terminal", TERM_PROGRAM_VERSION: "455.1" }),
       "/",
@@ -190,12 +191,12 @@ describe("doctorPlan", () => {
   // doctor, clicked in kitty, files the proof this command reads.
   test("a terminal whose release went unsaid is settled by a doctor click remembered for it", async () => {
     const kitty = inDir({ TERM_PROGRAM: "", TERM: "xterm-kitty" });
-    const unsettled = await doctorPlan(() => EDGE, NO_HANDLER, DAEMON, kitty, "/", () => ({ columns: 120 }));
+    const unsettled = await doctorPlan(EDGE, NO_HANDLER, DAEMON, kitty, "/", () => ({ columns: 120 }));
     expect(unsettled.stdout).toMatch(/\n✗ links — kitty draws links \(OSC 8\) since 0\.19\.0, and did not say which release this is — click 🩺 doctor/);
     const settled = await doctorPlan(
-      () => ({ ...EDGE, clicked: memoryStateFile<readonly string[]>(["kitty"]) }),
+      EDGE,
       NO_HANDLER,
-      DAEMON,
+      daemonHolding({ clicked: { kind: "ok", value: ["kitty"] } }),
       kitty,
       "/",
       () => ({ columns: 120 }),
@@ -207,7 +208,7 @@ describe("doctorPlan", () => {
   // where one is made — and reads the marks made there.
   test("a check that shows glyphs to look at prints them, and where to mark them", async () => {
     const plan = await doctorPlan(
-      () => EDGE,
+      EDGE,
       NO_HANDLER, DAEMON,
       inDir({ TERM_PROGRAM: "Hyper" }),
       "/",
@@ -230,9 +231,9 @@ describe("doctorPlan", () => {
   test("a ✓ the bar's doctor filed in the mark book settles the check here too", async () => {
     const id = glyphSighting({ glyphs: BUNDLED_GLYPHS, terminal: { kind: "unknown", called: "Hyper" } })!.id;
     const plan = await doctorPlan(
-      () => ({ ...EDGE, marks: memoryStateFile(withMark({}, "nerdFont", id, "drawn")) }),
+      EDGE,
       NO_HANDLER,
-      DAEMON,
+      daemonHolding({ marks: { kind: "ok", value: withMark({}, "nerdFont", id, "drawn") } }),
       inDir({ TERM_PROGRAM: "Hyper" }),
       "/",
       () => ({ columns: 120 }),
@@ -242,15 +243,11 @@ describe("doctorPlan", () => {
 
   // brandon-doctor-v62x.bmf: the bar's doctor files its stores under the
   // DAEMON's state directory, from whichever shell spawned it; this command
-  // reads them there, as the daemon's answer names it, never under its own.
-  test("the doctor's stores are read under the state directory the daemon names", async () => {
+  // reads what they hold in the daemon's answer, never a file of its own.
+  test("the doctor's stores are the daemon's answer", async () => {
     const breach = "2026-10-19T18-01-12-345Z-77";
-    const daemonState = path.join(dir, "daemon-state");
-    fs.mkdirSync(daemonState);
-    filePostMortemsRead({ kind: "ok", value: daemonState }).update(() => ({ through: breach }));
-    const named: Asked<string>[] = [];
-    const daemonAt = (stateDir: Asked<string>) => async (): Promise<DaemonAnswer> => ({
-      ...(await DAEMON()),
+    const breached = (postMortemsRead: StoresRead["postMortemsRead"]) => async (): Promise<DaemonAnswer> => ({
+      ...(await daemonHolding({ postMortemsRead })()),
       serving: {
         kind: "ok",
         value: {
@@ -258,30 +255,38 @@ describe("doctorPlan", () => {
           postMortems: { kind: "ok", value: [{ identity: breach, artifacts: { memoryReport: "/m.txt" } }] },
         },
       },
-      stateDir,
     });
-    const plan = (stateDir: Asked<string>) =>
-      doctorPlan(
-        (at) => {
-          named.push(at);
-          return { ...EDGE, postMortemsRead: filePostMortemsRead(at) };
-        },
-        NO_HANDLER,
-        daemonAt(stateDir),
-        inDir({ ...IN_TMUX, XDG_STATE_HOME: path.join(dir, "shell-state") }),
-        "/",
-        () => ({ columns: 120 }),
-      );
-    expect((await plan({ kind: "ok", value: daemonState })).stdout).toContain("\n✓ daemon\n");
-    expect(named).toEqual([{ kind: "ok", value: daemonState }]);
-    // No directory to read under: the record is unknown, never the shell's.
-    expect((await plan({ kind: "failed", reason: "no daemon answered" })).stdout).toContain(
-      "\n✗ daemon — which post-mortems were read could not be read: no daemon answered\n",
+    const plan = (daemon: () => Promise<DaemonAnswer>) =>
+      doctorPlan(EDGE, NO_HANDLER, daemon, inDir(IN_TMUX), "/", () => ({ columns: 120 }));
+    expect((await plan(breached({ kind: "ok", value: { through: breach } }))).stdout).toContain("\n✓ daemon\n");
+    expect((await plan(breached({ kind: "failed", reason: "EACCES" }))).stdout).toContain(
+      "\n✗ daemon — which post-mortems were read could not be read: EACCES\n",
     );
   });
 
+  // With no daemon to answer, the stores are unknown: the daemon row says so
+  // once, and a check whose own facts settle it needs no store.
+  test("no daemon: one reason on the daemon row, and a terminal that ships its glyphs still passes", async () => {
+    const reason = "could not connect to the daemon";
+    const failed = { kind: "failed", reason } as const;
+    const plan = await doctorPlan(
+      EDGE,
+      NO_HANDLER,
+      async () => ({
+        ...(await DAEMON()),
+        serving: failed,
+        stores: { marks: failed, clicked: failed, postMortemsRead: failed },
+      }),
+      inDir(IN_TMUX),
+      "/",
+      () => ({ columns: 120 }),
+    );
+    expect(plan.stdout).toContain(`\n✗ daemon — ${reason} — daemon 4100 running\n✓ URL handler\n`);
+    expect(plan.stdout).toContain("\n✓ Nerd Font\n");
+  });
+
   test("a failed check is exit 1, its reason and the fix hint on the line", async () => {
-    const plan = await doctorPlan(() => EDGE, NO_HANDLER, DAEMON, inDir(IN_TMUX), "/", () => ({ columns: 120 }));
+    const plan = await doctorPlan(EDGE, NO_HANDLER, DAEMON, inDir(IN_TMUX), "/", () => ({ columns: 120 }));
     expect(plan.code).toBe(1);
     expect(plan.stderr).toBe("");
     expect(plan.stdout).toBe(
@@ -296,7 +301,7 @@ describe("doctorPlan", () => {
   // CLAUDE_CONFIG_DIR, not ~/.claude's.
   test("a staged-but-unapplied fix names the settings file it was read from", async () => {
     fs.writeFileSync(settingsPath(), `{ "env": { "${TMUX_TRUECOLOR_VAR}": "1" } }`);
-    expect((await doctorPlan(() => EDGE, NO_HANDLER, DAEMON, inDir(IN_TMUX), "/", () => ({ columns: 120 }))).stdout).toBe(
+    expect((await doctorPlan(EDGE, NO_HANDLER, DAEMON, inDir(IN_TMUX), "/", () => ({ columns: 120 }))).stdout).toBe(
       `✓ config\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✗ tmux truecolor — ${TMUX_TRUECOLOR_VAR} is set in ${settingsPath()} — restart Claude Code to apply\n✓ UTF-8\n✓ terminal width\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n✓ session data\n`,
     );
   });
@@ -321,7 +326,7 @@ describe("doctorPlan over a real config", () => {
   });
   const projectConfig = (): string => path.join(project, ".cc-candybar.json5");
   const plan = (env: Record<string, string> = {}) =>
-    doctorPlan(() => REAL, NO_HANDLER, DAEMON, inDir(env), project, () => ({ columns: 120 }));
+    doctorPlan(REAL, NO_HANDLER, DAEMON, inDir(env), project, () => ({ columns: 120 }));
 
   test("no config file anywhere: the bundled default is correct", async () => {
     expect((await plan()).stdout).toBe("✓ config\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n✓ session data\n");
@@ -392,7 +397,7 @@ describe("doctorPlan over a real config", () => {
     expect(
       (
         await doctorPlan(
-          () => REAL,
+          REAL,
           NO_HANDLER, DAEMON,
           inDir({ CC_CANDYBAR_CONFIG: hinted }),
           project, () => ({ columns: 120 }),
@@ -414,7 +419,7 @@ describe("doctorPlan over a real config", () => {
     },
   });
   const planOver = (daemon: () => Promise<DaemonAnswer>) =>
-    doctorPlan(() => REAL, NO_HANDLER, daemon, inDir({}), project, () => ({ columns: 120 }));
+    doctorPlan(REAL, NO_HANDLER, daemon, inDir({}), project, () => ({ columns: 120 }));
 
   test("a bar seen moving under a statusLine with no interval fails effect refresh, with the fix hint", async () => {
     fs.writeFileSync(
@@ -464,6 +469,7 @@ describe("doctorPlan over a real config", () => {
         CARRIED,
         NAMED,
         STILL,
+        EMPTY_STORES,
       ),
       urlHandler: { kind: "unsupported" },
       askedBy: "command",

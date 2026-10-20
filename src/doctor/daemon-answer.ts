@@ -17,6 +17,10 @@ import {
 } from "../daemon/render-sightings.js";
 import type { Asked } from "./checks.js";
 import type { PostMortem, ServingDaemon } from "../daemon/limits.js";
+import type { StoresRead } from "./edge.js";
+import { parseMarkBook } from "./mark-book.js";
+import { parseClickedTerminals } from "./clicked-terminals.js";
+import { parsePostMortemsRead } from "./post-mortems-read.js";
 
 export interface DaemonClients {
   readonly bundle: string;
@@ -195,18 +199,51 @@ export function parseFrameSightings(
       };
 }
 
-// [LAW:parse-dont-validate] The daemon's state directory — where its doctor
-// files the stores the CLI reads (src/doctor/state-file.ts) — or why it is
-// not known: a daemon older than the field reads as that skew.
-export function parseStateDir(stats: StatsSnapshot): Asked<string> {
-  const skew = shapeSkew(stats, ["stateDir"]);
-  if (skew !== null) return { kind: "failed", reason: skew };
-  return typeof stats.stateDir === "string" && stats.stateDir !== ""
-    ? { kind: "ok", value: stats.stateDir }
+// [LAW:parse-dont-validate] One store as the daemon read it: what it holds,
+// re-read by the store's own parser (the wire is another build's word), or
+// why the daemon could not read it.
+function answeredStore<T>(
+  stats: StatsSnapshot,
+  name: keyof StoresRead,
+  parse: (doc: unknown) => Asked<T>,
+): Asked<T> {
+  const wire = (
+    stats.doctorStores as Partial<Record<keyof StoresRead, unknown>> | null
+  )?.[name] as
+    | { kind?: unknown; value?: unknown; reason?: unknown }
+    | undefined;
+  if (wire?.kind === "failed" && typeof wire.reason === "string") {
+    return { kind: "failed", reason: wire.reason };
+  }
+  const parsed: Asked<T> =
+    wire?.kind === "ok"
+      ? parse(wire.value)
+      : { kind: "failed", reason: "is not a store's answer" };
+  return parsed.kind === "ok"
+    ? parsed
     : {
         kind: "failed",
-        reason: `the running daemon (${stats.version}) reported its state directory as ${JSON.stringify(stats.stateDir)}`,
+        reason: `the running daemon (${stats.version}) reported its ${name} as ${JSON.stringify(wire)}, which ${parsed.reason}`,
       };
+}
+
+// What the doctor's stores hold, as the daemon that owns them read them — a
+// daemon older than the field reads as that skew in every store.
+export function parseDoctorStores(stats: StatsSnapshot): StoresRead {
+  const skew = shapeSkew(stats, ["doctorStores"]);
+  if (skew !== null) {
+    const failed = { kind: "failed", reason: skew } as const;
+    return { marks: failed, clicked: failed, postMortemsRead: failed };
+  }
+  return {
+    marks: answeredStore(stats, "marks", parseMarkBook),
+    clicked: answeredStore(stats, "clicked", parseClickedTerminals),
+    postMortemsRead: answeredStore(
+      stats,
+      "postMortemsRead",
+      parsePostMortemsRead,
+    ),
+  };
 }
 
 // Each fact the doctor asks the daemon for, parsed on its own: one that does
@@ -217,7 +254,7 @@ export interface DaemonAnswer {
   readonly transcripts: Asked<TranscriptSightings>;
   readonly frames: Asked<FrameSightings>;
   readonly serving: Asked<ServingDaemon>;
-  readonly stateDir: Asked<string>;
+  readonly stores: StoresRead;
 }
 
 export async function askDaemon(): Promise<DaemonAnswer> {
@@ -233,7 +270,7 @@ export async function askDaemon(): Promise<DaemonAnswer> {
       transcripts: failed,
       frames: failed,
       serving: failed,
-      stateDir: failed,
+      stores: { marks: failed, clicked: failed, postMortemsRead: failed },
     };
   }
   return {
@@ -242,6 +279,6 @@ export async function askDaemon(): Promise<DaemonAnswer> {
     transcripts: parseTranscriptSightings(outcome.value),
     frames: parseFrameSightings(outcome.value),
     serving: parseServingDaemon(outcome.value),
-    stateDir: parseStateDir(outcome.value),
+    stores: parseDoctorStores(outcome.value),
   };
 }

@@ -7,7 +7,7 @@
 
 import { RenderSightings } from "../src/daemon/render-sightings";
 import type { ServingDaemon } from "../src/daemon/limits";
-import { healthyDaemonEdge, healthyDataEdge, noManagedSettings, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, healthyClient, renderSaid } from "./helpers/doctor-facts";
+import { emptyStores, healthyDaemonEdge, healthyDataEdge, noManagedSettings, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, healthyClient, renderSaid } from "./helpers/doctor-facts";
 import type { ClientHint } from "../src/client-hint";
 import {
   BUNDLED_GLYPHS,
@@ -46,8 +46,8 @@ import {
 } from "../src/click/wire";
 import { VERBS, SESSION_CLIENT_HINTS_KEY, BadVerbArgs } from "../src/daemon/verbs";
 import type { VerbContext } from "../src/daemon/verbs";
-import { TMUX_TRUECOLOR_VAR, type MarkBook } from "../src/doctor/checks";
-import type { ConfigLoad, DoctorEdge } from "../src/doctor/edge";
+import { TMUX_TRUECOLOR_VAR } from "../src/doctor/checks";
+import type { ConfigLoad, DoctorEdge, DoctorStores } from "../src/doctor/edge";
 import type { TmuxHint } from "../src/tmux-hint";
 import type { TerminalEnvHint } from "../src/terminal-hint";
 import { linkUrls, stripAnsi } from "./helpers/ansi";
@@ -169,8 +169,6 @@ function buildRuntime(
     remoteLogin: () => {
       throw new Error("remoteLogin must not run in this case");
     },
-    marks: memoryStateFile<MarkBook>({}),
-    clicked,
     fontInUse: terminal.fontInUse,
     loadConfig: () => ({ ...load, config }),
   };
@@ -178,6 +176,7 @@ function buildRuntime(
   const ctx: VerbContext = {
     ...testVerbContext(sessionState, undefined, config),
     doctor,
+    doctorStores: { ...emptyStores(), clicked },
     clients,
     serving: () => serving,
     dlog: (level, message) => logs.push(level === "warn" ? `warn: ${message}` : message),
@@ -564,11 +563,11 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
         fs.writeFileSync(file, "junk");
         // The book read when the click gathered its facts, and the file broke
         // before the filing: the real store's refusal is the click's.
-        const marks: DoctorEdge["marks"] = {
+        const marks: DoctorStores["marks"] = {
           read: () => ({ kind: "ok", value: {} }),
-          update: fileMarkBook({ kind: "ok", value: dir }).update,
+          update: fileMarkBook(dir).update,
         };
-        const ctx = { ...rt.ctx, doctor: { ...rt.ctx.doctor, marks } };
+        const ctx = { ...rt.ctx, doctorStores: { ...rt.ctx.doctorStores, marks } };
         const mark = () => VERBS.get(VERB_DOCTOR_MARK)!("s1/nerdFont/drawn", ctx);
         expect(mark).toThrow(BadVerbArgs);
         expect(mark).toThrow(

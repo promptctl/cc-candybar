@@ -180,10 +180,7 @@ export function framesOf(
 // [LAW:effects-at-boundaries] The whole CLI as data: facts in, (streams,
 // exit code) out. `runDoctorCli` performs it; a test reads it.
 export async function doctorPlan(
-  // [LAW:one-source-of-truth] The edge over the daemon's state directory, as
-  // its answer names it: the doctor's stores are where the daemon files
-  // them, never under this shell's own XDG_STATE_HOME.
-  edgeAt: (stateDir: Asked<string>) => DoctorEdge,
+  edge: DoctorEdge,
   handler: HandlerProbeEdge,
   daemon: () => Promise<DaemonAnswer>,
   env: Readonly<Record<string, string | undefined>>,
@@ -197,7 +194,6 @@ export async function doctorPlan(
   let facts: DoctorFacts;
   try {
     const answer = await daemon();
-    const edge = edgeAt(answer.stateDir);
     // [LAW:one-source-of-truth] The hints a statusline client started here
     // would report, by the client's own detection — over the terminal the
     // command runs in, standing in for the stream Claude Code would hand
@@ -224,6 +220,9 @@ export async function doctorPlan(
       rateLimitsOf(answer.rateLimits, claudeConfigDir(hints.claudeConfigDir)),
       transcriptsOf(answer.transcripts),
       framesOf(answer.frames, claudeConfigDir(hints.claudeConfigDir)),
+      // [LAW:one-source-of-truth] The stores as the daemon that files them
+      // read them, never under this shell's own XDG_STATE_HOME.
+      answer.stores,
     );
     // Last: the probe opens a link and waits, which a run that cannot report
     // has no reason to do.
@@ -278,7 +277,7 @@ export async function runDoctorCli(args: readonly string[]): Promise<never> {
   }
   const cwd = process.cwd();
   const plan = await doctorPlan(
-    (stateDir) => productionEdge(loadConfigOnce, stateDir),
+    productionEdge(loadConfigOnce),
     productionHandlerProbeEdge(),
     askDaemon,
     process.env,
