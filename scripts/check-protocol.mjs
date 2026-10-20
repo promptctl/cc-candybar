@@ -12,9 +12,9 @@
 // [LAW:one-source-of-truth] The mirror is legal only because this file
 // proves synchronization. Adding a new mirrored constant without adding a
 // row to CHECKS reopens the drift hole — add both in the same commit.
-// Escalation path (recorded in ticket brandon-protocol-d55): if the mirrored
-// set outgrows a handful, replace mirror+check with a wire-spec data file
-// both runtimes embed.
+// What belongs here: a fact either runtime can spell as a literal an anchor
+// reads. A fact only behaviour can state is a fixture both test suites read
+// instead (test/fixtures/frame-follow-cases.json, jest and `cargo test`).
 
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -86,6 +86,31 @@ function memberSet(relPath, blockRegex, memberRegex) {
   };
 }
 
+// Set of code points spelled as inclusive `0x…, 0x…` range pairs within the
+// slice matched by blockRegex, canonicalized as merged, sorted spans: the two
+// sides agree iff they cover the same code points, however each splits or
+// cases its ranges. An inverted pair covers nothing in either runtime's fold,
+// so it contributes nothing here either.
+function codeRanges(relPath, blockRegex) {
+  return () => {
+    const block = read(relPath).match(blockRegex);
+    if (!block) return null;
+    const pairs = [...block[0].matchAll(/0x([0-9a-fA-F]+)\s*,\s*0x([0-9a-fA-F]+)/g)]
+      .map((m) => [parseInt(m[1], 16), parseInt(m[2], 16)])
+      .filter(([lo, hi]) => lo <= hi)
+      .sort((a, b) => a[0] - b[0]);
+    if (pairs.length === 0) return null;
+    const spans = [];
+    for (const [lo, hi] of pairs) {
+      const last = spans.at(-1);
+      if (last && lo <= last[1] + 1) last[1] = Math.max(last[1], hi);
+      else spans.push([lo, hi]);
+    }
+    const u = (n) => `U+${n.toString(16).toUpperCase().padStart(4, "0")}`;
+    return spans.map(([lo, hi]) => `${u(lo)}-${u(hi)}`).join(", ");
+  };
+}
+
 // Structural marker: every pattern must appear; the canonical value is the
 // shared description, so both sides agree iff both still use the primitive.
 function markers(relPath, patterns, description) {
@@ -106,6 +131,7 @@ const TS_TERMINAL_HINT = "src/terminal-hint.ts";
 const TS_CLIENT_HINT = "src/client-hint.ts";
 const TS_CLAUDE_SETTINGS = "src/claude-settings.ts";
 const TS_GLYPH = "src/render/error-glyph.ts";
+const TS_DIAG_TEXT = "src/render/diagnostic-text.ts";
 const TS_STYLE = "src/render/diagnostic-style.ts";
 const TS_PATHS = "src/daemon/paths.ts";
 const TS_ACQUIRE = "src/daemon/acquire.ts";
@@ -435,6 +461,34 @@ const CHECKS = [
     label: "glyph PREFIX",
     ts: lit(TS_GLYPH, /const PREFIX = "((?:[^"\\]|\\.)*)";/),
     rust: lit(RS_GLYPH, /const PREFIX: &str = "((?:[^"\\]|\\.)*)";/),
+  },
+  // The code points the diagnostic sanitizer turns into spaces. The tables
+  // alone would not do: a term beside the fold, in the predicate or at its one
+  // use, changes the set with the tables still equal — so the second row
+  // anchors both whole, and any added term breaks the anchor.
+  {
+    label: "diagnostic sanitizer code points",
+    ts: codeRanges(TS_DIAG_TEXT, /export const NEUTRALIZED_RANGES = \[[\s\S]*?\] as const;/),
+    rust: codeRanges(RS_GLYPH, /const NEUTRALIZED_RANGES: &\[\(u32, u32\)\] = &\[[\s\S]*?\];/),
+  },
+  {
+    label: "diagnostic sanitizer predicate",
+    ts: markers(
+      TS_DIAG_TEXT,
+      [
+        /export function isControlChar\(code: number\): boolean \{\n {2}return NEUTRALIZED_RANGES\.some\(\(\[lo, hi\]\) => code >= lo && code <= hi\);\n\}/,
+        /sanitized \+= isControlChar\(ch\.codePointAt\(0\) \?\? 0\) \? " " : ch;/,
+      ],
+      "the fold over NEUTRALIZED_RANGES, mapped to a space",
+    ),
+    rust: markers(
+      RS_GLYPH,
+      [
+        /fn neutralized\(ch: char\) -> bool \{\n {4}NEUTRALIZED_RANGES\.iter\(\)\.any\(\|&\(lo, hi\)\| \(lo\.\.=hi\)\.contains\(&u32::from\(ch\)\)\)\n\}/,
+        /let ch = if neutralized\(raw\) \{ ' ' \} else \{ raw \};/,
+      ],
+      "the fold over NEUTRALIZED_RANGES, mapped to a space",
+    ),
   },
   {
     label: "glyph MAX_MESSAGE_LEN",

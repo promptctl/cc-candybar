@@ -17,9 +17,9 @@
 const ELLIPSIS = "…";
 
 // [LAW:dataflow-not-control-flow] Every code point flows through the same
-// predicate. No special-case branches per kind of control; the Unicode Cc
-// class is the single discriminator that decides "this byte/code point
-// could hijack the envelope and must be neutralized."
+// predicate, a fold over one table of ranges. No special-case branches per
+// kind of control; the table is the single discriminator that decides "this
+// code point could hijack the envelope and must be neutralized."
 //
 // Why the C1 range matters (0x80..0x9F):
 //   ESC (U+001B) is the obvious ANSI-escape entry point, but some
@@ -36,18 +36,24 @@ const ELLIPSIS = "…";
 // reverses the rest of the line. These are the ranges rich-js's Text strips
 // from every segment's text (brandon-unfiled-3248.qum).
 //
-// Mirrors rust-client/src/error_glyph.rs's `neutralized()`: `is_control()`
-// (the same Unicode Cc set) plus the same two ranges, so the TS and Rust
-// runtimes neutralize the same code points. The Rust side also mirrors the
-// collapse-whitespace-runs + trim pass below, so the two runtimes produce
-// byte-identical output — both suites pin the same fixtures.
+// [LAW:one-source-of-truth] Mirrored by rust-client/src/error_glyph.rs's
+// `NEUTRALIZED_RANGES` and `neutralized()`. scripts/check-protocol.mjs holds
+// the two tables to one set of code points and both predicates (and their
+// one use) to the bare fold, so an edit to either runtime alone fails
+// `pnpm check:protocol`. The Rust side also mirrors the collapse-whitespace-
+// runs + trim pass below, so the two runtimes produce byte-identical output.
+//
+// Inclusive ranges: C0 (U+0000..U+001F), DEL and C1 (U+007F..U+009F) — the
+// Unicode Cc class — then the two bidi/format ranges above.
+export const NEUTRALIZED_RANGES = [
+  [0x00, 0x1f],
+  [0x7f, 0x9f],
+  [0x202a, 0x202e],
+  [0x2066, 0x206f],
+] as const;
+
 export function isControlChar(code: number): boolean {
-  return (
-    code < 0x20 ||
-    (code >= 0x7f && code <= 0x9f) ||
-    (code >= 0x202a && code <= 0x202e) ||
-    (code >= 0x2066 && code <= 0x206f)
-  );
+  return NEUTRALIZED_RANGES.some(([lo, hi]) => code >= lo && code <= hi);
 }
 
 // Sanitize control characters (→ single space) and collapse whitespace runs

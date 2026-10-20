@@ -60,10 +60,10 @@ fn describe(cause: &PermanentCause) -> String {
 // 8-bit CSI at U+009B, and other Cc-class characters that terminals
 // interpret as escape introducers). With BAD_REQUEST messages echoing
 // caller-supplied data (e.g. an unknown click verb), that vector is
-// reachable without a malicious daemon. `char::is_control()` matches the
-// entire Unicode Cc set (C0: 0x00..=0x1F, DEL: 0x7F, C1: 0x80..=0x9F),
-// closing both bypass classes — including the 8-bit CSI which
-// `is_ascii_control()` would have missed.
+// reachable without a malicious daemon. `NEUTRALIZED_RANGES` holds the
+// entire Unicode Cc set (C0: 0x00..=0x1F, DEL and C1: 0x7F..=0x9F),
+// closing both bypass classes — including the 8-bit CSI an ASCII-only
+// range would have missed.
 //
 // Beyond Cc, `neutralized` takes the format controls that hold state past
 // the text: the bidi embeddings and overrides with their closer
@@ -72,19 +72,28 @@ fn describe(cause: &PermanentCause) -> String {
 // the line.
 //
 // [LAW:one-type-per-behavior] Matches the TS source at
-// src/render/diagnostic-text.ts `sanitizeAndTruncate` byte-for-byte: its
-// `isControlChar` predicate covers the exact same code-point set as
-// `neutralized()` (Unicode Cc plus those two ranges), and the same collapse-whitespace-runs +
-// trim pass runs between sanitization and truncation, so a multi-control
-// input (e.g. "\r\n") yields identical output in both runtimes.
+// src/render/diagnostic-text.ts `sanitizeAndTruncate` byte-for-byte: the
+// same collapse-whitespace-runs + trim pass runs between sanitization and
+// truncation, so a multi-control input (e.g. "\r\n") yields identical output
+// in both runtimes. [LAW:one-source-of-truth] The table and the predicate
+// mirror its `NEUTRALIZED_RANGES` and `isControlChar`; scripts/check-protocol.mjs
+// holds the tables to one set of code points and both predicates (and their
+// one use) to the bare fold, so an edit to either runtime alone fails it.
 //
 // The collapse predicate adds U+FEFF to `char::is_whitespace()`: the TS
 // side collapses on JS `\s`, which is Unicode White_Space minus U+0085
 // (NEL — Cc, already sanitized to a space on both sides before collapse)
 // plus U+FEFF (ZWNBSP). With that one addition the two predicates agree on
 // every post-sanitize code point.
+const NEUTRALIZED_RANGES: &[(u32, u32)] = &[
+    (0x00, 0x1F),
+    (0x7F, 0x9F),
+    (0x202A, 0x202E),
+    (0x2066, 0x206F),
+];
+
 fn neutralized(ch: char) -> bool {
-    ch.is_control() || matches!(ch, '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{206F}')
+    NEUTRALIZED_RANGES.iter().any(|&(lo, hi)| (lo..=hi).contains(&u32::from(ch)))
 }
 
 fn truncate(s: &str) -> String {
@@ -195,9 +204,10 @@ mod tests {
         // OPEN/TAIL envelope intact.
         assert!(g.starts_with(OPEN), "OPEN envelope broken: {g:?}");
         assert!(g.ends_with(TAIL), "TAIL envelope broken: {g:?}");
-        // No raw control characters in the body — Unicode Cc class is
-        // covered by `is_control()` (C0 + DEL + C1). Strip the envelope
-        // first because OPEN/TAIL legitimately contain ESC.
+        // No raw control characters in the body. std's `is_control()` (the
+        // Unicode Cc class: C0 + DEL + C1) is the oracle here, independent of
+        // `NEUTRALIZED_RANGES`. Strip the envelope first because OPEN/TAIL
+        // legitimately contain ESC.
         let body = &g[OPEN.len()..g.len() - TAIL.len()];
         for ch in body.chars() {
             assert!(
