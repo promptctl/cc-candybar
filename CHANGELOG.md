@@ -1,3 +1,10 @@
+## [1.148.5](https://github.com/promptctl/cc-candybar/compare/v1.148.4...v1.148.5) (2026-10-20)
+
+
+### Bug Fixes
+
+* **config:** a bare --config is refused on the bar, not silently dropped (brandon-unfiled-3248.8bz) ([#390](https://github.com/promptctl/cc-candybar/issues/390)) ([08c75cb](https://github.com/promptctl/cc-candybar/commit/08c75cb9578e88cfa512fe507c793776a9719ffa))
+
 ## [1.148.4](https://github.com/promptctl/cc-candybar/compare/v1.148.3...v1.148.4) (2026-10-20)
 
 
