@@ -32,6 +32,13 @@ function read(relPath) {
   return sources.get(relPath);
 }
 
+// Source with its comments removed, so no extractor reads a commented-out or
+// quoted-in-prose copy of what it anchors. A comment opens at a line start or
+// after whitespace; `//` after a non-space (`cc-candybar://`) is string text.
+function uncommented(text) {
+  return text.replace(/(^|\s)(?:\/\*[\s\S]*?\*\/|\/\/[^\n]*)/g, "$1");
+}
+
 // --- extractors -----------------------------------------------------------
 // Each extractor returns the canonical string for one side, or null when the
 // anchor is missing. [LAW:no-silent-failure] null is a loud failure below —
@@ -100,7 +107,7 @@ function codeRanges(relPath, blockRegex) {
   return () => {
     const block = read(relPath).match(blockRegex);
     if (!block) return null;
-    const body = block[1].replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, "");
+    const body = uncommented(block[1]);
     if (body.replace(RANGE_PAIR, "").replace(/[\s,]/g, "") !== "") return null;
     const value = (s) => Number(s.replace(/_/g, ""));
     const pairs = [...body.matchAll(RANGE_PAIR)]
@@ -118,11 +125,14 @@ function codeRanges(relPath, blockRegex) {
   };
 }
 
-// Structural marker: every pattern must appear; the canonical value is the
-// shared description, so both sides agree iff both still use the primitive.
+// Structural marker: every pattern must appear in code, not in a comment; the
+// canonical value is the shared description, so both sides agree iff both
+// still use the primitive.
 function markers(relPath, patterns, description) {
-  return () =>
-    patterns.every((p) => p.test(read(relPath))) ? description : null;
+  return () => {
+    const code = uncommented(read(relPath));
+    return patterns.every((p) => p.test(code)) ? description : null;
+  };
 }
 
 // --- the mirrored set -----------------------------------------------------
@@ -472,7 +482,7 @@ const CHECKS = [
   // The code points the diagnostic sanitizer turns into spaces. The tables
   // alone would not do: a term beside the fold, in the predicate or at its one
   // use, changes the set with the tables still equal — so the second row
-  // anchors both whole (whitespace aside), and any added term breaks it.
+  // anchors both whole (whitespace aside): a term added to either breaks it.
   {
     label: "diagnostic sanitizer code points",
     ts: codeRanges(TS_DIAG_TEXT, /const NEUTRALIZED_RANGES = \[([\s\S]*?)\] as const;/),
