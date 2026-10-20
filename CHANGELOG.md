@@ -1,3 +1,10 @@
+## [1.148.3](https://github.com/promptctl/cc-candybar/compare/v1.148.2...v1.148.3) (2026-10-20)
+
+
+### Bug Fixes
+
+* **mod:** a child the band stopped ends with no failure logged (candybar-animation-wbxz.81o.2jn) ([#386](https://github.com/promptctl/cc-candybar/issues/386)) ([bb3ab4c](https://github.com/promptctl/cc-candybar/commit/bb3ab4c28266e3d160df6050acba81d2de963835))
+
 ## [1.148.2](https://github.com/promptctl/cc-candybar/compare/v1.148.1...v1.148.2) (2026-10-20)
 
 
