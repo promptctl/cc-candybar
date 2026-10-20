@@ -1,3 +1,10 @@
+## [1.148.8](https://github.com/promptctl/cc-candybar/compare/v1.148.7...v1.148.8) (2026-10-20)
+
+
+### Bug Fixes
+
+* **doctor:** cc-candybar doctor judges the session's own terminal width (brandon-doctor-v62x.1z2) ([#393](https://github.com/promptctl/cc-candybar/issues/393)) ([f810f85](https://github.com/promptctl/cc-candybar/commit/f810f85cbbc88d7d91cad617a9edc3c49bd722ee))
+
 ## [1.148.7](https://github.com/promptctl/cc-candybar/compare/v1.148.6...v1.148.7) (2026-10-20)
 
 
