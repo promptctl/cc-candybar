@@ -978,10 +978,9 @@ const daemon: Check = {
             `the daemon's post-mortems could not be listed: ${postMortems.reason}`,
           ]
         : []),
-      // Which were read decides nothing while there are none to judge.
+      // Which were read decides nothing only while none are listed.
       ...(read.kind === "failed" &&
-      postMortems.kind === "ok" &&
-      postMortems.value.length > 0
+      !(postMortems.kind === "ok" && postMortems.value.length === 0)
         ? [`which post-mortems were read could not be read: ${read.reason}`]
         : []),
       ...unreadable,
@@ -1321,7 +1320,7 @@ const nerdFont: Check = {
     // no mark the book would refuse to file — and nowhere else: a terminal
     // whose own facts pass needs no mark.
     const failed = (reason: string): Verdict =>
-      marks.kind === "failed"
+      marks.kind === "failed" && sighting !== undefined
         ? {
             ok: false,
             reason,

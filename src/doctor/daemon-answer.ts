@@ -102,24 +102,45 @@ const isPostMortem = (m: unknown): m is PostMortem => {
 // [LAW:parse-dont-validate] The daemon's report of itself becomes a
 // ServingDaemon here or a failure naming why — an older daemon carries no
 // `daemon` field (shapeSkew), and anything else misshapen is named whole.
+// [LAW:parse-dont-validate] An `Asked<T>` as another build spelled it: its
+// failure kept in the daemon's own words, its value re-read by `parse` — or
+// `misshapen`, with why, for the caller to name the answer it sat in.
+function askedOnWire<T>(
+  wire: unknown,
+  parse: (value: unknown) => Asked<T>,
+): Asked<T> | { readonly kind: "misshapen"; readonly reason: string } {
+  const w = wire as {
+    kind?: unknown;
+    value?: unknown;
+    reason?: unknown;
+  } | null;
+  if (w?.kind === "failed" && typeof w.reason === "string") {
+    return { kind: "failed", reason: w.reason };
+  }
+  if (w?.kind !== "ok")
+    return { kind: "misshapen", reason: "is not an answer" };
+  const parsed = parse(w.value);
+  return parsed.kind === "ok"
+    ? parsed
+    : { kind: "misshapen", reason: parsed.reason };
+}
+
 export function parseServingDaemon(stats: StatsSnapshot): Asked<ServingDaemon> {
   const skew = shapeSkew(stats, ["daemon"]);
   if (skew !== null) return { kind: "failed", reason: skew };
   const d = stats.daemon as Partial<ServingDaemon> | null;
-  const postMortems = d?.postMortems as
-    | { kind?: unknown; value?: unknown; reason?: unknown }
-    | undefined;
+  const postMortems = askedOnWire(d?.postMortems, (v) =>
+    Array.isArray(v) && v.every(isPostMortem)
+      ? { kind: "ok", value: v }
+      : { kind: "failed", reason: "is not a list of post-mortems" },
+  );
   const wellFormed =
     typeof d?.pid === "number" &&
     typeof d.rss === "number" &&
     typeof d.rssLimit === "number" &&
-    ((postMortems?.kind === "ok" &&
-      Array.isArray(postMortems.value) &&
-      postMortems.value.every(isPostMortem)) ||
-      (postMortems?.kind === "failed" &&
-        typeof postMortems.reason === "string"));
+    postMortems.kind !== "misshapen";
   return wellFormed
-    ? { kind: "ok", value: d as ServingDaemon }
+    ? { kind: "ok", value: { ...(d as ServingDaemon), postMortems } }
     : {
         kind: "failed",
         reason: `the running daemon (${stats.version}) reported itself as ${JSON.stringify(stats.daemon)}`,
@@ -209,22 +230,14 @@ function answeredStore<T>(
 ): Asked<T> {
   const wire = (
     stats.doctorStores as Partial<Record<keyof StoresRead, unknown>> | null
-  )?.[name] as
-    | { kind?: unknown; value?: unknown; reason?: unknown }
-    | undefined;
-  if (wire?.kind === "failed" && typeof wire.reason === "string") {
-    return { kind: "failed", reason: wire.reason };
-  }
-  const parsed: Asked<T> =
-    wire?.kind === "ok"
-      ? parse(wire.value)
-      : { kind: "failed", reason: "is not a store's answer" };
-  return parsed.kind === "ok"
-    ? parsed
-    : {
+  )?.[name];
+  const answered = askedOnWire(wire, parse);
+  return answered.kind === "misshapen"
+    ? {
         kind: "failed",
-        reason: `the running daemon (${stats.version}) reported its ${name} as ${JSON.stringify(wire)}, which ${parsed.reason}`,
-      };
+        reason: `the running daemon (${stats.version}) reported its ${name} as ${JSON.stringify(wire)}, which ${answered.reason}`,
+      }
+    : answered;
 }
 
 // What the doctor's stores hold, as the daemon that owns them read them — a

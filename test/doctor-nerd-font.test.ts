@@ -220,6 +220,11 @@ describe("nerdFont probe", () => {
       reason: 'iTerm2 3.7.2 draws with Menlo-Regular (iTerm2 profile "Default"), which has no U+E0B0 U+E0B1 — set a Nerd Font as its font',
       more: ["the mark book could not be read: /s/doctor-marks.json is not JSON"],
     });
+    // Nothing names the terminal, so no mark could settle it, and no book is told.
+    expect(probe(facts({ kind: "glyphs", glyphs: GLYPHS, terminal: { kind: "unreported" } }, null, broken))).toEqual({
+      ok: false,
+      reason: "the client reported no terminal — re-run `cc-candybar install` to stage a current client",
+    });
     const ghostty: TerminalFacts = { kind: "bundling", name: "ghostty", version: null };
     expect(probe(facts({ kind: "glyphs", glyphs: GLYPHS, terminal: ghostty }, null, broken))).toEqual({ ok: true });
     expect(checkByName("config")!.probe(f)).toEqual({ ok: true });

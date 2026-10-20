@@ -179,6 +179,20 @@ describe("the daemon probe", () => {
       reason: "which post-mortems were read could not be read: /r.json is not JSON",
       more: [],
     });
+    // A list that could not be read may hold breaches, so the record still counts.
+    expect(
+      verdictOf({
+        serving: {
+          kind: "ok",
+          value: { ...HEALTHY_SERVING, postMortems: { kind: "failed", reason: "EACCES /state" } },
+        },
+        read: { kind: "failed", reason: "/r.json is not JSON" },
+      }),
+    ).toEqual({
+      ok: false,
+      reason: "the daemon's post-mortems could not be listed: EACCES /state",
+      more: ["which post-mortems were read could not be read: /r.json is not JSON"],
+    });
   });
 });
 
@@ -293,7 +307,7 @@ describe("parseDoctorStores", () => {
     const unshaped = { kind: "maybe", value: {} };
     expect(stores({ ...EMPTY_STORES, marks: unshaped }).marks).toEqual({
       kind: "failed",
-      reason: `the running daemon (${stats.version}) reported its marks as ${JSON.stringify(unshaped)}, which is not a store's answer`,
+      reason: `the running daemon (${stats.version}) reported its marks as ${JSON.stringify(unshaped)}, which is not an answer`,
     });
   });
 });

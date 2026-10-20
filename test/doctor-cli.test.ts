@@ -264,9 +264,9 @@ describe("doctorPlan", () => {
     );
   });
 
-  // With no daemon to answer, the stores are unknown: the daemon row says so
-  // once, and a check whose own facts settle it needs no store.
-  test("no daemon: one reason on the daemon row, and a terminal that ships its glyphs still passes", async () => {
+  // With no daemon to answer, the stores are unknown: a check whose own facts
+  // settle it needs no store, and the daemon row says why once.
+  test("no daemon: the daemon row says why once, and checks the stores cannot settle still pass", async () => {
     const reason = "could not connect to the daemon";
     const failed = { kind: "failed", reason } as const;
     const plan = await doctorPlan(
@@ -282,6 +282,7 @@ describe("doctorPlan", () => {
       () => ({ columns: 120 }),
     );
     expect(plan.stdout).toContain(`\n✗ daemon — ${reason} — daemon 4100 running\n✓ URL handler\n`);
+    expect(plan.stdout).toContain("\n✓ links\n");
     expect(plan.stdout).toContain("\n✓ Nerd Font\n");
   });
 

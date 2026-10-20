@@ -81,30 +81,30 @@ export function testVerbContext(
       },
     },
     doctorStores: {
-        marks: {
-          read: () => {
-            throw new Error("doctor: no mark book in this test");
-          },
-          update: () => {
-            throw new Error("doctor: no mark book in this test");
-          },
+      marks: {
+        read: () => {
+          throw new Error("doctor: no mark book in this test");
         },
-        clicked: {
-          read: () => {
-            throw new Error("doctor: no clicked terminals in this test");
-          },
-          update: () => {
-            throw new Error("doctor: no clicked terminals in this test");
-          },
+        update: () => {
+          throw new Error("doctor: no mark book in this test");
         },
-        postMortemsRead: {
-          read: () => {
-            throw new Error("doctor: no post-mortem record in this test");
-          },
-          update: () => {
-            throw new Error("doctor: no post-mortem record in this test");
-          },
+      },
+      clicked: {
+        read: () => {
+          throw new Error("doctor: no clicked terminals in this test");
         },
+        update: () => {
+          throw new Error("doctor: no clicked terminals in this test");
+        },
+      },
+      postMortemsRead: {
+        read: () => {
+          throw new Error("doctor: no post-mortem record in this test");
+        },
+        update: () => {
+          throw new Error("doctor: no post-mortem record in this test");
+        },
+      },
     },
     // A click from the handler this build would stage, and nowhere of the
     // daemon's for a probe to land: a test that reads arrivals hands in its own.
