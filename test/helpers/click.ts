@@ -5,7 +5,7 @@
 
 import { HEALTHY_BUNDLE } from "./doctor-facts";
 import { NavigationHistory } from "../../src/daemon/navigation-history";
-import { HEALTHY_INSTALL_EDGE, HEALTHY_SERVING } from "./doctor-facts";
+import { HEALTHY_INSTALL_EDGE, HEALTHY_SERVING, noManagedSettings } from "./doctor-facts";
 import { parseHandlerUrl } from "../../src/install/index";
 import {
   VERBS,
@@ -54,6 +54,7 @@ export function testVerbContext(
     // hands in its own fake edge; reaching this one is a test bug.
     doctor: {
       install: HEALTHY_INSTALL_EDGE,
+      ...noManagedSettings(),
       probeTmux: () => {
         throw new Error("doctor: no tmux edge in this test");
       },

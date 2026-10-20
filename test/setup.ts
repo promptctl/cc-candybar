@@ -60,6 +60,15 @@ process.env.CLAUDE_CONFIG_DIR = path.join(
   `cc-candybar-jest-claude-${crypto.randomUUID()}`,
 );
 
+// [LAW:single-enforcer] No test doctor reads the host's managed Claude Code
+// settings (`DoctorEdge.managedSettingsDir`, src/doctor/edge.ts): a machine
+// whose policy sets a statusLine would otherwise pass or fail effect refresh
+// for every test daemon. A directory that does not exist holds no policy.
+process.env.CC_CANDYBAR_CLAUDE_MANAGED_DIR = path.join(
+  os.tmpdir(),
+  `cc-candybar-jest-managed-${crypto.randomUUID()}`,
+);
+
 // [LAW:single-enforcer] No test load finds the host's installed cc-candybar
 // plugins (src/config/loader/plugin-folders.ts): both data locations name a
 // directory that does not exist. A test installing a plugin points them at

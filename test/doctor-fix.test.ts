@@ -7,7 +7,7 @@
 // in the Claude Code directory the client's `claudeConfigDir` hint names.
 
 import { memoryMarkBook } from "./helpers/mark-book";
-import { healthyDaemonEdge, healthyDataEdge, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, HEALTHY_FACTS, CARRIED, NAMED, STILL, drew } from "./helpers/doctor-facts";
+import { healthyDaemonEdge, healthyDataEdge, noManagedSettings, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, HEALTHY_FACTS, CARRIED, NAMED, STILL, drew } from "./helpers/doctor-facts";
 import { memoryClickedTerminals } from "./helpers/clicked-terminals";
 import fs from "node:fs";
 import os from "node:os";
@@ -17,17 +17,21 @@ import {
   TMUX_TRUECOLOR_VAR,
   type DoctorFacts,
   type Fix,
+  statusLineOf,
+  userEnvOf,
 } from "../src/doctor/checks";
 import { applyFix, gatherFacts, type DoctorEdge } from "../src/doctor/edge";
 import type { ClientHints } from "../src/daemon/protocol";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import type { DslConfig } from "../src/config/dsl-types";
 
-const FIX: Fix = {
+// The tmuxTruecolor fix, into the user settings file of `conf`.
+const fixIn = (conf: string): Fix => ({
   kind: "claude-settings",
+  file: path.join(conf, "settings.json"),
   path: ["env", TMUX_TRUECOLOR_VAR],
   value: "1",
-};
+});
 const HINT = { socket: "/tmp/tmux-501/default", pane: "%3", truecolor: null };
 const loadsConfig = (config: DslConfig): DoctorEdge["loadConfig"] => () => ({
   layers: [],
@@ -40,6 +44,7 @@ const NO_TMUX: DoctorEdge = {
   install: HEALTHY_INSTALL_EDGE,
   ...healthyDaemonEdge(),
   ...healthyDataEdge(),
+  ...noManagedSettings(),
   probeTmux: () => {
     throw new Error("probeTmux must not run in this case");
   },
@@ -54,7 +59,6 @@ const NO_TMUX: DoctorEdge = {
   loadConfig: loadsConfig(DEFAULT_DSL_CONFIG),
 };
 const NO_SESSION = (): string | null => null;
-const ORIGIN = { projectDir: "/tmp/proj", cwd: "/tmp/proj", configFile: null };
 
 let dir: string;
 beforeEach(() => {
@@ -67,6 +71,8 @@ afterEach(() => {
 // A Claude Code configuration directory under the temp dir, and its file.
 const configDir = (name = "claude"): string => path.join(dir, name);
 const settingsIn = (conf: string): string => path.join(conf, "settings.json");
+// The session's project, whose .claude/ settings outrank the user file.
+const projectDir = (): string => path.join(dir, "proj");
 
 function writeSettings(text: string, name = "claude"): string {
   const conf = configDir(name);
@@ -86,7 +92,7 @@ const factsIn = (
     ...gatherFacts(
       edge,
       { tmux, claudeConfigDir: conf },
-      ORIGIN,
+      { projectDir: projectDir(), cwd: projectDir(), configFile: null },
       sessionPick,
       { kind: "ok", value: HEALTHY_SERVING },
       CARRIED,
@@ -122,7 +128,7 @@ describe("applyFix (claude-settings, env)", () => {
 }
 `;
     const conf = writeSettings(before);
-    const facts = applyFix(NO_TMUX, FIX, factsOf(conf));
+    const facts = applyFix(NO_TMUX, fixIn(conf), factsOf(conf));
     const after = fs.readFileSync(settingsIn(conf), "utf8");
     expect(JSON.parse(after)).toEqual({
       permissions: { allow: ["Bash(ls:*)"] },
@@ -133,12 +139,11 @@ describe("applyFix (claude-settings, env)", () => {
       },
       model: "opus",
     });
-    expect(facts.claudeSettings.path).toBe(settingsIn(conf));
-    expect(facts.claudeSettings.env).toEqual({
+    expect(userEnvOf(facts.claudeSettings.sources)).toEqual({ kind: "ok", value: {
       DISABLE_AUTOUPDATER: "1",
       FORCE_COLOR: "3",
       [TMUX_TRUECOLOR_VAR]: "1",
-    });
+    } });
     assertOnlyInserted(
       before,
       after,
@@ -152,7 +157,7 @@ describe("applyFix (claude-settings, env)", () => {
 }
 `;
     const conf = writeSettings(before);
-    applyFix(NO_TMUX, FIX, factsOf(conf));
+    applyFix(NO_TMUX, fixIn(conf), factsOf(conf));
     const after = fs.readFileSync(settingsIn(conf), "utf8");
     expect(JSON.parse(after)).toEqual({
       model: "opus",
@@ -168,14 +173,14 @@ describe("applyFix (claude-settings, env)", () => {
   test("a stale value is overwritten in place, not duplicated", () => {
     const before = `{ "env": { "${TMUX_TRUECOLOR_VAR}": "" } }\n`;
     const conf = writeSettings(before);
-    applyFix(NO_TMUX, FIX, factsOf(conf));
+    applyFix(NO_TMUX, fixIn(conf), factsOf(conf));
     const after = fs.readFileSync(settingsIn(conf), "utf8");
     expect(after).toBe(`{ "env": { "${TMUX_TRUECOLOR_VAR}": "1" } }\n`);
   });
 
   test("no settings file: the file (and its directory) is created", () => {
     const conf = configDir(path.join("nested", "claude"));
-    applyFix(NO_TMUX, FIX, factsOf(conf));
+    applyFix(NO_TMUX, fixIn(conf), factsOf(conf));
     expect(JSON.parse(fs.readFileSync(settingsIn(conf), "utf8"))).toEqual({
       env: { [TMUX_TRUECOLOR_VAR]: "1" },
     });
@@ -214,7 +219,10 @@ describe("applyFix (effectRefresh)", () => {
       model: "opus",
     });
     assertOnlyInserted(before, text, /,\s*"refreshInterval": 1/);
-    expect(check.probe(after)).toEqual({ ok: true });
+    expect(check.probe(after)).toEqual({
+      ok: true,
+      note: `statusLine.refreshInterval is 1 in ${settingsIn(conf)}`,
+    });
   });
 
   test("a longer interval is overwritten in place", () => {
@@ -231,56 +239,199 @@ describe("applyFix (effectRefresh)", () => {
 });
 
 describe("gatherFacts", () => {
+  const sourcesOf = (conf: string, edge: DoctorEdge = NO_TMUX) =>
+    factsIn(conf, null, edge).claudeSettings.sources;
+  const lineOf = (conf: string, edge: DoctorEdge = NO_TMUX) =>
+    statusLineOf(sourcesOf(conf, edge));
+
   test("reads the env block and the statusLine entry of settings.json", () => {
     const conf = writeSettings(
       `{ "env": { "FORCE_COLOR": "3" }, "statusLine": { "command": "x", "refreshInterval": 5 }, "model": "opus" }`,
     );
-    expect(factsOf(conf).claudeSettings).toEqual({
-      path: settingsIn(conf),
-      env: { FORCE_COLOR: "3" },
-      statusLine: { kind: "present", refreshInterval: 5 },
+    expect(userEnvOf(sourcesOf(conf))).toEqual({
+      kind: "ok",
+      value: { FORCE_COLOR: "3" },
+    });
+    expect(lineOf(conf)).toEqual({
+      kind: "present",
+      refreshInterval: 5,
+      from: { scope: "user", path: settingsIn(conf) },
     });
   });
 
-  test("a file with no statusLine says so; one with no interval carries none", () => {
-    expect(factsOf(configDir("absent")).claudeSettings.statusLine).toEqual({
-      kind: "absent",
+  test("no file sets a statusLine: absent, naming the files read; one with no interval carries none", () => {
+    expect(lineOf(configDir("absent"))).toEqual({ kind: "absent", read: [] });
+    const model = writeSettings(`{ "model": "opus" }`, "model");
+    expect(lineOf(model)).toEqual({ kind: "absent", read: [settingsIn(model)] });
+    const conf = writeSettings(`{ "statusLine": { "command": "x" } }`);
+    expect(lineOf(conf)).toEqual({
+      kind: "present",
+      refreshInterval: undefined,
+      from: { scope: "user", path: settingsIn(conf) },
     });
-    expect(
-      factsOf(writeSettings(`{ "statusLine": { "command": "x" } }`))
-        .claudeSettings.statusLine,
-    ).toEqual({ kind: "present", refreshInterval: undefined });
   });
 
   test("a missing, blank, or env-less settings file is an empty env", () => {
-    expect(factsOf(configDir("absent")).claudeSettings.env).toEqual({});
-    expect(factsOf(writeSettings(" \n", "blank")).claudeSettings.env).toEqual({});
-    expect(factsOf(writeSettings(`{ "model": "opus" }`)).claudeSettings.env).toEqual({});
+    const empty = { kind: "ok", value: {} };
+    expect(userEnvOf(sourcesOf(configDir("absent")))).toEqual(empty);
+    expect(userEnvOf(sourcesOf(writeSettings(" \n", "blank")))).toEqual(empty);
+    expect(userEnvOf(sourcesOf(writeSettings(`{ "model": "opus" }`)))).toEqual(empty);
   });
 
-  // [LAW:no-silent-failure] Unparseable is thrown, never read as empty — the
-  // fix would otherwise splice into a file it cannot parse either.
-  test("an unparseable settings file throws", () => {
+  // [LAW:no-silent-failure] Unparseable is a failure naming the file, never
+  // read as empty — the fix would otherwise splice into a file it cannot
+  // parse either — and it fails the rows that read settings, not the run.
+  test("an unparseable settings file is a failed chain naming it", () => {
     const conf = writeSettings(`{ "env": `);
-    expect(() => factsOf(conf)).toThrow(`cannot read ${settingsIn(conf)}`);
-    const notObject = writeSettings(`[1, 2]`, "array");
-    expect(() => factsOf(notObject)).toThrow(/not a JSON object/);
-    const badEnv = writeSettings(`{ "env": "yes" }`, "badenv");
-    expect(() => factsOf(badEnv)).toThrow(/`env` is not an object/);
+    expect(sourcesOf(conf)).toEqual({
+      kind: "failed",
+      reason: expect.stringContaining(`cannot read ${settingsIn(conf)}`),
+    });
+    expect(sourcesOf(writeSettings(`[1, 2]`, "array"))).toMatchObject({
+      reason: expect.stringMatching(/not a JSON object/),
+    });
+    expect(sourcesOf(writeSettings(`{ "env": "yes" }`, "badenv"))).toMatchObject({
+      reason: expect.stringMatching(/`env` is not an object/),
+    });
   });
 
   // A statusLine that is not an object concerns one check, so it is a fact
   // that check reads — every other verdict still runs.
   test.each([[`"x"`, "x"], ["null", null]])(
-    "a statusLine of %s is its own arm, not a throw",
+    "a statusLine of %s is its own arm, not a failure",
     (text, value) => {
       const conf = writeSettings(`{ "statusLine": ${text} }`, "badline");
-      expect(factsOf(conf).claudeSettings.statusLine).toEqual({
+      expect(lineOf(conf)).toEqual({
         kind: "not-an-object",
         value,
+        from: { scope: "user", path: settingsIn(conf) },
       });
     },
   );
+
+  // brandon-doctor-v62x.49w — Claude Code's order: managed (its drop-ins over
+  // managed-settings.json, alphabetically later over earlier, hidden and
+  // non-.json files skipped) > project-local > project > user.
+  describe("the settings chain", () => {
+    const managedDir = (): string => path.join(dir, "managed");
+    const MANAGED: () => DoctorEdge = () => ({ ...NO_TMUX, managedSettingsDir: managedDir() });
+    const put = (file: string, json: unknown): string => {
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, JSON.stringify(json));
+      return file;
+    };
+    const dropIn = (name: string) => path.join(managedDir(), "managed-settings.d", name);
+    const line = (refreshInterval?: number) => ({
+      statusLine: { command: "cc-candybar", ...(refreshInterval === undefined ? {} : { refreshInterval }) },
+    });
+
+    test("lists every file in precedence order, highest first", () => {
+      const conf = writeSettings(JSON.stringify(line(5)));
+      const files = [
+        put(dropIn("20-b.json"), {}),
+        put(dropIn("10-a.json"), {}),
+        put(path.join(managedDir(), "managed-settings.json"), {}),
+        put(path.join(projectDir(), ".claude", "settings.local.json"), {}),
+        put(path.join(projectDir(), ".claude", "settings.json"), {}),
+        settingsIn(conf),
+      ];
+      put(dropIn(".hidden.json"), line(9));
+      put(dropIn("notes.txt"), line(9));
+      const sources = sourcesOf(conf, MANAGED());
+      if (sources.kind !== "ok") throw new Error(sources.reason);
+      expect(sources.value.map((s) => [s.scope, s.path])).toEqual([
+        ["managed", files[0]],
+        ["managed", files[1]],
+        ["managed", files[2]],
+        ["project-local", files[3]],
+        ["project", files[4]],
+        ["user", files[5]],
+      ]);
+    });
+
+    test("a managed drop-in's statusLine outranks the user file's", () => {
+      const conf = writeSettings(JSON.stringify(line(5)));
+      const managed = put(dropIn("10-dotfiles.json"), line(1));
+      expect(lineOf(conf, MANAGED())).toEqual({
+        kind: "present",
+        refreshInterval: 1,
+        from: { scope: "managed", path: managed },
+      });
+    });
+
+    test("managed files merge key by key: the later drop-in's interval wins, and names its file", () => {
+      put(path.join(managedDir(), "managed-settings.json"), line(1));
+      put(dropIn("10-a.json"), { statusLine: { command: "cc-candybar" } });
+      const later = put(dropIn("20-b.json"), { statusLine: { refreshInterval: 3 } });
+      expect(lineOf(configDir("absent"), MANAGED())).toEqual({
+        kind: "present",
+        refreshInterval: 3,
+        from: { scope: "managed", path: later },
+      });
+    });
+
+    test("project-local outranks project, which outranks the user file", () => {
+      const conf = writeSettings(JSON.stringify(line(9)));
+      const shared = put(path.join(projectDir(), ".claude", "settings.json"), line(5));
+      expect(lineOf(conf)).toMatchObject({ refreshInterval: 5, from: { scope: "project", path: shared } });
+      const local = put(path.join(projectDir(), ".claude", "settings.local.json"), line(1));
+      expect(lineOf(conf)).toMatchObject({ refreshInterval: 1, from: { scope: "project-local", path: local } });
+    });
+
+    // The scope that sets statusLine wins it whole: a lower scope's
+    // interval is not merged in (undocumented — the reading that can only
+    // fail where it might pass).
+    test("a higher scope's statusLine is not merged with a lower one's", () => {
+      const conf = writeSettings(JSON.stringify(line(1)));
+      const managed = put(dropIn("10-dotfiles.json"), line());
+      expect(lineOf(conf, MANAGED())).toEqual({
+        kind: "present",
+        refreshInterval: undefined,
+        from: { scope: "managed", path: managed },
+      });
+    });
+
+    test("an unparseable managed file fails the chain, naming it", () => {
+      const bad = dropIn("10-bad.json");
+      fs.mkdirSync(path.dirname(bad), { recursive: true });
+      fs.writeFileSync(bad, "{");
+      expect(sourcesOf(configDir("absent"), MANAGED())).toEqual({
+        kind: "failed",
+        reason: expect.stringContaining(`cannot read ${bad}`),
+      });
+    });
+
+    // A managed statusLine is the policy's to change: the fix is withheld,
+    // and the managed file is never written.
+    test("a managed winner offers no fix, and the file is left as it is", () => {
+      const managed = put(dropIn("10-dotfiles.json"), line());
+      const before = fs.readFileSync(managed, "utf8");
+      const verdict = checkByName("effectRefresh")!.probe(
+        factsIn(configDir("absent"), null, MANAGED(), NO_SESSION, drew("moves")),
+      );
+      expect(verdict).toMatchObject({ ok: false, reason: expect.stringContaining(`managed settings, ${managed}`) });
+      expect(verdict.ok === false && verdict.fix).toBeUndefined();
+      expect(fs.readFileSync(managed, "utf8")).toBe(before);
+    });
+
+    // The fix writes the file the statusLine came from, and the re-read is
+    // the whole chain's.
+    test("a project winner's fix lands in the project file, and the re-probe passes", () => {
+      const conf = writeSettings(JSON.stringify(line()));
+      const shared = put(path.join(projectDir(), ".claude", "settings.json"), line());
+      const facts = factsIn(conf, null, NO_TMUX, NO_SESSION, drew("moves"));
+      const check = checkByName("effectRefresh")!;
+      const verdict = check.probe(facts);
+      if (verdict.ok || verdict.fix === undefined) throw new Error("no fix");
+      const after = applyFix(NO_TMUX, verdict.fix, facts);
+      expect(JSON.parse(fs.readFileSync(shared, "utf8")).statusLine.refreshInterval).toBe(1);
+      expect(JSON.parse(fs.readFileSync(settingsIn(conf), "utf8"))).toEqual(line());
+      expect(check.probe(after)).toEqual({
+        ok: true,
+        note: `statusLine.refreshInterval is 1 in ${shared}`,
+      });
+    });
+  });
 
   test("the three hint states map to the three TmuxFacts arms; tmux is asked only inside", () => {
     const absent = configDir("absent");
@@ -291,6 +442,7 @@ describe("gatherFacts", () => {
       install: HEALTHY_INSTALL_EDGE,
       ...healthyDaemonEdge(),
       ...healthyDataEdge(),
+      ...noManagedSettings(),
       probeTmux: (hint) => {
         asked.push(hint);
         return {

@@ -20,6 +20,7 @@ import {
   otherDaemons,
   unreadPostMortems,
   refreshedFrames,
+  statusLineOf,
   type Asked,
   type CheckReport,
   type DaemonFacts,
@@ -30,6 +31,7 @@ import {
   type TranscriptRead,
   type TerminalIdentity,
 } from "./checks.js";
+import type { SettingsSource } from "../claude-settings.js";
 import { SETTINGS_NS } from "../config/loader/reserved-namespace.js";
 import { mb } from "../daemon/limits.js";
 import {
@@ -188,6 +190,25 @@ export function frameFields(frames: Asked<readonly FrameSighting[]>): string {
   return `frames=${FRAMES_SEEN.map(count).join("/")}`;
 }
 
+// [LAW:nothing-unseen] Which settings file the statusLine Claude Code runs
+// comes from, as one logfmt field: its scope and the refresh interval it
+// holds (`-` for none), `absent` when no file sets one, `not-an-object`, or
+// `failed` when the chain could not be read.
+export function statusLineFields(
+  sources: Asked<readonly SettingsSource[]>,
+): string {
+  const line = statusLineOf(sources);
+  switch (line.kind) {
+    case "unread":
+      return "statusLine=failed";
+    case "absent":
+    case "not-an-object":
+      return `statusLine=${line.kind}`;
+    case "present":
+      return `statusLine=${line.from.scope}:${line.refreshInterval === undefined ? "-" : JSON.stringify(line.refreshInterval)}`;
+  }
+}
+
 // [LAW:nothing-unseen] What the session-data check reasoned over, as one
 // logfmt field: the transcripts read, absent (no file — a finding only once
 // Claude Code has answered) and unreadable, then the lines that were not JSON
@@ -270,7 +291,7 @@ export function doctorReportPairs(
     return verdict.ok
       ? [
           { key: keys.verdict, value: VERDICT_OK },
-          { key: keys.reason, value: "" },
+          { key: keys.reason, value: verdict.note ?? "" },
           { key: keys.fixable, value: BOOLEAN_FALSE },
           { key: keys.sighting, value: "" },
         ]

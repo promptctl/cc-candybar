@@ -13,10 +13,11 @@ import os from "node:os";
 import path from "node:path";
 import {
   claudeConfigDir,
+  claudeManagedSettingsDir,
   claudeSettingsPath,
-  isJsonObject,
-  readClaudeSettings,
   readClaudeSettingsText,
+  readSettingsChain,
+  type SettingsChainAt,
 } from "../claude-settings.js";
 import { JSON_DIALECT, setValue } from "../config/json5-edit.js";
 import { writeAtomic } from "../utils/atomic-write.js";
@@ -203,6 +204,11 @@ export interface DoctorEdge {
   // (so the doctor and the bar's strip report one load), the CLI runs one
   // load of its own. Both are the one `loadFromDisk`.
   readonly loadConfig: (origin: ConfigOrigin) => ConfigLoad;
+  // The directory Claude Code's managed settings live in
+  // (`claudeManagedSettingsDir`) — a policy every session on the machine
+  // reads, so the daemon's own environment may move it, which test/setup.ts
+  // does so no test reads the host's policy.
+  readonly managedSettingsDir: string;
   readonly install: InstallEdge;
   // Every cc-candybar daemon process this user runs (`daemonProcesses`).
   readonly daemons: () => Asked<readonly DaemonProcess[]>;
@@ -435,6 +441,9 @@ export function productionEdge(
     remoteLogin,
     fontInUse,
     loadConfig,
+    managedSettingsDir:
+      process.env.CC_CANDYBAR_CLAUDE_MANAGED_DIR ??
+      claudeManagedSettingsDir(process.platform),
     marks: fileMarkBook(),
     clicked: fileClickedTerminals(),
     install: productionInstallEdge,
@@ -608,28 +617,22 @@ function configFacts(load: ConfigLoad): ConfigFacts {
       };
 }
 
-// [LAW:no-silent-failure] The one reading of the settings document
-// (readClaudeSettings: missing or blank is empty, anything unparseable throws
-// naming the file — never read as empty, because the fix would then splice
-// into a file it cannot parse either), and its `env` held to the same rule.
-// `statusLine` is parsed into its own three arms instead (StatusLineFacts).
-function readClaudeSettingsFacts(
-  settingsPath: string,
-): DoctorFacts["claudeSettings"] {
-  const { env, statusLine } = readClaudeSettings(settingsPath);
-  if (env !== undefined && !isJsonObject(env)) {
-    throw new Error(`cannot read ${settingsPath}: \`env\` is not an object`);
+// [LAW:no-silent-failure] The settings chain, read once: a file that does
+// not read (`readSettingsChain` throws naming it) fails the rows that read
+// the chain, never the whole run — a broken settings.json committed in some
+// project concerns two checks, not every one.
+function readSettingsFacts(at: SettingsChainAt): DoctorFacts["claudeSettings"] {
+  try {
+    return { at, sources: { kind: "ok", value: readSettingsChain(at) } };
+  } catch (e) {
+    return {
+      at,
+      sources: {
+        kind: "failed",
+        reason: e instanceof Error ? e.message : String(e),
+      },
+    };
   }
-  return {
-    path: settingsPath,
-    env: env ?? {},
-    statusLine:
-      statusLine === undefined
-        ? { kind: "absent" }
-        : isJsonObject(statusLine)
-          ? { kind: "present", refreshInterval: statusLine.refreshInterval }
-          : { kind: "not-an-object", value: statusLine },
-  };
 }
 
 // [LAW:dataflow-not-control-flow] The three wire states of the recorded hint
@@ -839,9 +842,11 @@ export function gatherFacts(
       rateLimits,
     ),
     transcripts: transcriptReads(edge, transcripts),
-    claudeSettings: readClaudeSettingsFacts(
-      claudeSettingsPath(claudeConfigDir(hints.claudeConfigDir)),
-    ),
+    claudeSettings: readSettingsFacts({
+      managedDir: edge.managedSettingsDir,
+      projectDir: origin.projectDir,
+      userFile: claudeSettingsPath(claudeConfigDir(hints.claudeConfigDir)),
+    }),
   };
 }
 
@@ -861,9 +866,9 @@ export function applyFix(
   fix: Fix,
   facts: DoctorFacts,
 ): DoctorFacts {
-  const settingsPath = facts.claudeSettings.path;
   switch (fix.kind) {
     case "claude-settings": {
+      const settingsPath = fix.file;
       const text = readClaudeSettingsText(settingsPath);
       const next = setValue(
         text,
@@ -875,7 +880,7 @@ export function applyFix(
       writeAtomic(settingsPath, next);
       return {
         ...facts,
-        claudeSettings: readClaudeSettingsFacts(settingsPath),
+        claudeSettings: readSettingsFacts(facts.claudeSettings.at),
       };
     }
     case "post-mortems-read": {

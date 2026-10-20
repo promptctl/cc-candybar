@@ -9,10 +9,11 @@ import {
   TMUX_TRUECOLOR_VAR,
   type ConfigFacts,
   type DoctorFacts,
-  type StatusLineFacts,
+  type Asked,
   type TmuxFacts,
 } from "../src/doctor/checks";
 import { detectTmuxHint } from "../src/tmux-hint";
+import type { SettingsSource } from "../src/claude-settings";
 import { HEALTHY_FACTS, drew } from "./helpers/doctor-facts";
 
 const HINT = { socket: "/tmp/tmux-501/default", pane: "%3", truecolor: null };
@@ -36,18 +37,41 @@ const LOADED: ConfigFacts = {
 const SETTINGS_PATH = "/home/u/.claude/settings.json";
 const STILL = drew("still");
 
+// One settings file of the chain, as `readSettingsChain` returns it.
+const source = (
+  scope: SettingsSource["scope"],
+  path: string,
+  settings: Record<string, unknown>,
+): SettingsSource => ({
+  scope,
+  path,
+  settings,
+  env: (settings.env ?? {}) as Record<string, unknown>,
+});
+
+// The user settings file alone, holding `settings`.
+const userFile = (settings: Record<string, unknown>): SettingsSource[] => [
+  source("user", SETTINGS_PATH, settings),
+];
+
 const facts = (
   tmux: TmuxFacts,
   env: Record<string, unknown> = {},
   config: ConfigFacts = LOADED,
   frames: DoctorFacts["frames"] = STILL,
-  statusLine: StatusLineFacts = { kind: "present", refreshInterval: undefined },
+  sources: Asked<readonly SettingsSource[]> = {
+    kind: "ok",
+    value: userFile({ env, statusLine: { command: "cc-candybar" } }),
+  },
 ): DoctorFacts => ({
   ...HEALTHY_FACTS,
   tmux,
   config,
   frames,
-  claudeSettings: { path: SETTINGS_PATH, env, statusLine },
+  claudeSettings: {
+    at: { managedDir: "/managed", projectDir: "/p", userFile: SETTINGS_PATH },
+    sources,
+  },
 });
 
 const probe = checkByName("tmuxTruecolor")!.probe;
@@ -71,6 +95,7 @@ describe("tmuxTruecolor probe", () => {
     if (v.ok) return;
     expect(v.fix).toEqual({
       kind: "claude-settings",
+      file: SETTINGS_PATH,
       path: ["env", TMUX_TRUECOLOR_VAR],
       value: "1",
     });
@@ -254,45 +279,57 @@ describe("config probe", () => {
 describe("effectRefresh probe", () => {
   const MOVES = drew("moves");
   const MOVING = "the bar moves (an effect, a fade, or an animated segment)";
-  const interval = (refreshInterval: unknown): StatusLineFacts => ({
-    kind: "present",
-    refreshInterval,
-  });
+  const ok = (value: readonly SettingsSource[]) => ({ kind: "ok", value }) as const;
+  // The user file's statusLine, with `refreshInterval` when one is given.
+  const interval = (...refreshInterval: [] | [unknown]) =>
+    ok(
+      userFile({
+        statusLine: {
+          command: "cc-candybar",
+          ...(refreshInterval.length === 0 ? {} : { refreshInterval: refreshInterval[0] }),
+        },
+      }),
+    );
   const effectRefresh = (
     frames: DoctorFacts["frames"],
-    statusLine: StatusLineFacts,
+    sources: Asked<readonly SettingsSource[]>,
     askedBy: DoctorFacts["askedBy"] = "command",
   ) =>
     checkByName("effectRefresh")!.probe({
-      ...facts({ kind: "outside" }, {}, LOADED, frames, statusLine),
+      ...facts({ kind: "outside" }, {}, LOADED, frames, sources),
       askedBy,
     });
+  const FROM = ` (statusLine from ${SETTINGS_PATH})`;
   const FIX = {
     kind: "claude-settings",
+    file: SETTINGS_PATH,
     path: ["statusLine", "refreshInterval"],
     value: 1,
   };
 
   test("a still bar with no interval → ok", () => {
-    expect(effectRefresh(STILL, interval(undefined))).toEqual({ ok: true });
+    expect(effectRefresh(STILL, interval())).toEqual({ ok: true });
   });
 
   test("a moving bar with no interval → failed WITH the fix", () => {
-    expect(effectRefresh(MOVES, interval(undefined))).toEqual({
+    expect(effectRefresh(MOVES, interval())).toEqual({
       ok: false,
-      reason: `${MOVING}, but Claude Code redraws it only on events`,
+      reason: `${MOVING}, but Claude Code redraws it only on events${FROM}`,
       fix: FIX,
     });
   });
 
-  test("a moving bar with 1 → ok", () => {
-    expect(effectRefresh(MOVES, interval(1))).toEqual({ ok: true });
+  test("a moving bar with 1 → ok, naming the file it is set in", () => {
+    expect(effectRefresh(MOVES, interval(1))).toEqual({
+      ok: true,
+      note: `statusLine.refreshInterval is 1 in ${SETTINGS_PATH}`,
+    });
   });
 
   test("a moving bar with 5 → failed WITH the fix, naming the interval", () => {
     expect(effectRefresh(MOVES, interval(5))).toEqual({
       ok: false,
-      reason: `${MOVING}, but Claude Code redraws it only every 5 s`,
+      reason: `${MOVING}, but Claude Code redraws it only every 5 s${FROM}`,
       fix: FIX,
     });
   });
@@ -302,7 +339,7 @@ describe("effectRefresh probe", () => {
     expect(
       effectRefresh(
         drew("still", "moves", "failed"),
-        interval(undefined),
+        interval(),
       ),
     ).toMatchObject({ ok: false, fix: FIX });
   });
@@ -315,18 +352,22 @@ describe("effectRefresh probe", () => {
     (value) => {
       expect(effectRefresh(MOVES, interval(value))).toEqual({
         ok: false,
-        reason: `${MOVING}, but statusLine.refreshInterval is ${JSON.stringify(value)}, not a number of seconds Claude Code accepts (its minimum is 1)`,
+        reason: `${MOVING}, but statusLine.refreshInterval is ${JSON.stringify(value)}, not a number of seconds Claude Code accepts (its minimum is 1)${FROM}`,
         fix: FIX,
       });
     },
   );
 
   // A statusLine holding only a refresh interval is one Claude Code cannot
-  // run, so with no statusLine in the file there is nothing to add it beside.
-  test("no statusLine in the file → failed naming the file, NO fix", () => {
-    expect(effectRefresh(MOVES, { kind: "absent" })).toEqual({
+  // run, so with no statusLine in any file there is nothing to add it beside —
+  // and the bar is drawn, so its statusLine is in a scope no file holds.
+  test("no statusLine in any file → failed naming the files read, NO fix", () => {
+    expect(effectRefresh(MOVES, ok(userFile({})))).toEqual({
       ok: false,
-      reason: `${MOVING}, and ${SETTINGS_PATH} sets no statusLine — set "refreshInterval": 1 beside the statusLine command that runs the bar`,
+      reason: `${MOVING}, and no settings file Claude Code reads here sets a statusLine (read: ${SETTINGS_PATH}) — the one that runs the bar comes from --settings, MDM or server-managed settings, which the doctor cannot read; set "refreshInterval": 1 beside its command there`,
+    });
+    expect(effectRefresh(MOVES, ok([]))).toMatchObject({
+      reason: expect.stringContaining("(read: none)"),
     });
   });
 
@@ -334,32 +375,99 @@ describe("effectRefresh probe", () => {
   // one.
   test("a statusLine that is not an object → failed naming it, NO fix", () => {
     expect(
-      effectRefresh(MOVES, { kind: "not-an-object", value: "cc-candybar" }),
+      effectRefresh(MOVES, ok(userFile({ statusLine: "cc-candybar" }))),
     ).toEqual({
       ok: false,
       reason: `${MOVING}, and ${SETTINGS_PATH} sets statusLine to "cc-candybar", not a statusLine object — re-run \`cc-candybar install\` to write one`,
     });
   });
 
+  // The statusLine Claude Code runs is the highest scope's (brandon-doctor-
+  // v62x.49w): a managed one outranks the user file, and is a policy the
+  // doctor never writes — the reason says where the line goes instead.
+  test("a managed statusLine wins over the user file, and gets NO fix", () => {
+    const managed = "/managed/managed-settings.d/10-dotfiles.json";
+    const chain = (managedLine: Record<string, unknown>) =>
+      ok([
+        source("managed", managed, { statusLine: managedLine }),
+        source("user", SETTINGS_PATH, {
+          statusLine: { command: "other", refreshInterval: 1 },
+        }),
+      ]);
+    expect(
+      effectRefresh(MOVES, chain({ command: "cc-candybar", refreshInterval: 1 })),
+    ).toEqual({ ok: true, note: `statusLine.refreshInterval is 1 in ${managed}` });
+    expect(effectRefresh(MOVES, chain({ command: "cc-candybar" }))).toEqual({
+      ok: false,
+      reason: `${MOVING}, but Claude Code redraws it only on events — its statusLine is in managed settings, ${managed}: set "refreshInterval": 1 there`,
+    });
+  });
+
+  // Inside one scope, files merge key by key: the interval may come from a
+  // lower managed file than the command — and that file is the one named.
+  test("managed files merge: the interval's own file is the one named", () => {
+    const high = "/managed/managed-settings.d/20-b.json";
+    const low = "/managed/managed-settings.json";
+    expect(
+      effectRefresh(
+        MOVES,
+        ok([
+          source("managed", high, { statusLine: { command: "cc-candybar" } }),
+          source("managed", low, { statusLine: { refreshInterval: 1 } }),
+        ]),
+      ),
+    ).toEqual({ ok: true, note: `statusLine.refreshInterval is 1 in ${low}` });
+  });
+
+  // A project's statusLine outranks the user file, so the fix writes there.
+  test("a project statusLine wins: the fix targets the project file", () => {
+    const project = "/p/.claude/settings.json";
+    expect(
+      effectRefresh(
+        MOVES,
+        ok([
+          source("project", project, { statusLine: { command: "cc-candybar" } }),
+          source("user", SETTINGS_PATH, {
+            statusLine: { command: "cc-candybar", refreshInterval: 1 },
+          }),
+        ]),
+      ),
+    ).toEqual({
+      ok: false,
+      reason: `${MOVING}, but Claude Code redraws it only on events (statusLine from ${project})`,
+      fix: { ...FIX, file: project },
+    });
+  });
+
+  // A chain that does not read fails the rows that read it, naming why.
+  test("an unreadable chain → failed with its reason, NO fix", () => {
+    expect(
+      effectRefresh(MOVES, { kind: "failed", reason: "cannot read /p/.claude/settings.json: x" }),
+    ).toEqual({
+      ok: false,
+      reason: `${MOVING}, and Claude Code's settings could not be read: cannot read /p/.claude/settings.json: x`,
+    });
+  });
+
   test("a still bar needs no statusLine here at all", () => {
-    expect(effectRefresh(STILL, { kind: "absent" })).toEqual({ ok: true });
+    expect(effectRefresh(STILL, ok([]))).toEqual({ ok: true });
   });
 
   // No frame seen is no answer: the check says so rather than pass.
   test("no render seen → failed, unknown", () => {
-    expect(effectRefresh({ kind: "ok", value: [] }, interval(undefined))).toEqual({
+    expect(effectRefresh({ kind: "ok", value: [] }, interval())).toEqual({
       ok: false,
       reason:
         "no session of this Claude Code has drawn a statusline for this daemon in the last 5 minutes, so whether it moves is unknown — run the doctor again once the bar has redrawn",
     });
     expect(
-      effectRefresh({ kind: "ok", value: [] }, interval(undefined), "click"),
+      effectRefresh({ kind: "ok", value: [] }, interval(), "click"),
     ).toMatchObject({ ok: false, reason: expect.stringContaining("holds no render of this bar") });
   });
 
   test("only failed renders → failed, unknown", () => {
     expect(
-      effectRefresh(drew("failed"), interval(undefined)),
+      effectRefresh(drew("failed"), interval()),
     ).toEqual({
       ok: false,
       reason:
@@ -370,10 +478,10 @@ describe("effectRefresh probe", () => {
   // A still bar whose config can start motion with no click — an effect
   // rule, fade transitions — needs the redraw before it moves.
   test("a bar that can start moving with no interval → failed WITH the fix", () => {
-    expect(effectRefresh(drew("can-move"), interval(undefined))).toEqual({
+    expect(effectRefresh(drew("can-move"), interval())).toEqual({
       ok: false,
       reason:
-        "the bar can start moving (a globals.effect rule, placements that fade in and out, or a placement with an effect of its own that is not drawn now), but Claude Code redraws it only on events",
+        `the bar can start moving (a globals.effect rule, placements that fade in and out, or a placement with an effect of its own that is not drawn now), but Claude Code redraws it only on events${FROM}`,
       fix: FIX,
     });
   });
@@ -384,7 +492,7 @@ describe("effectRefresh probe", () => {
     expect(
       effectRefresh(
         { kind: "ok", value: [{ role: "frames", frame: "moves" }, { role: "statusline", frame: "still" }] },
-        interval(undefined),
+        interval(),
       ),
     ).toEqual({ ok: true });
   });
@@ -393,7 +501,7 @@ describe("effectRefresh probe", () => {
     expect(
       effectRefresh(
         { kind: "ok", value: [{ role: "frames", frame: "still" }] },
-        interval(undefined),
+        interval(),
         "click",
       ),
     ).toEqual({
@@ -410,11 +518,14 @@ describe("effectRefresh probe", () => {
     ["only failed renders", drew("failed")],
     ["a daemon that could not say", { kind: "failed", reason: "no daemon" }],
   ])("%s, with an interval of 1 → ok", (_, frames) => {
-    expect(effectRefresh(frames, interval(1))).toEqual({ ok: true });
+    expect(effectRefresh(frames, interval(1))).toEqual({
+      ok: true,
+      note: `statusLine.refreshInterval is 1 in ${SETTINGS_PATH}`,
+    });
   });
 
   test("a render still drawing → failed, unknown", () => {
-    expect(effectRefresh(drew("drawing"), interval(undefined))).toEqual({
+    expect(effectRefresh(drew("drawing"), interval())).toEqual({
       ok: false,
       reason:
         "the bar's latest render has not finished, so whether it moves is unknown — run the doctor again once the bar has redrawn",
@@ -423,7 +534,7 @@ describe("effectRefresh probe", () => {
 
   test("a daemon that could not say → failed with its reason", () => {
     expect(
-      effectRefresh({ kind: "failed", reason: "daemon down" }, interval(undefined)),
+      effectRefresh({ kind: "failed", reason: "daemon down" }, interval()),
     ).toEqual({ ok: false, reason: "daemon down" });
   });
 });
