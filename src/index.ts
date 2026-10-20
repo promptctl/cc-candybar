@@ -187,7 +187,9 @@ echo '{"session_id":"test-session","workspace":{"project_dir":"/path/to/project"
     // request.
     const outcome = await tryRenderViaDaemon(
       hookData,
-      process.argv,
+      // The wire's `args` shape (RenderRequest): the client's path, then its
+      // flags — so not the node binary in front of them.
+      process.argv.slice(1),
       process.cwd(),
       {
         ...detectClientHints(process.env, process.cwd(), process.stderr),

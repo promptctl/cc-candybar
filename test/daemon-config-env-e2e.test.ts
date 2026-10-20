@@ -346,5 +346,30 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
     expect(bar).toContain("OVERRIDE-WINS");
     expect(bar).not.toContain("Invalid config");
     expect(bar).not.toContain("Config file not found");
+    expect(bar).not.toContain("Unexpected arguments");
+  });
+
+  // brandon-unfiled-3248.8bz: the real client's argv is `[node, script,
+  // ...flags]`; it sends the daemon the script and its flags, the shape the
+  // native client sends (its binary and its flags), so the script is not
+  // refused as a stray word and `--config` reaches the daemon.
+  test("the real client relays --config with nothing refused", async () => {
+    const sid = "cfg-flag-real-client";
+    await render(sockPath, sid, projectDir, {}, configFlag(override));
+    const client = spawnSync(
+      process.execPath,
+      [path.join(process.cwd(), "dist", "index.mjs"), "--config", override],
+      {
+        cwd: projectDir,
+        env,
+        input: JSON.stringify(hookData(sid, projectDir)),
+        encoding: "utf8",
+        timeout: 10_000,
+      },
+    );
+    expect(client.status).toBe(0);
+    const bar = stripAnsi(client.stdout);
+    expect(bar).toContain("OVERRIDE-WINS");
+    expect(bar).not.toContain("Unexpected arguments");
   });
 });

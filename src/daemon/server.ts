@@ -1351,26 +1351,36 @@ function parseRenderArgs(
     tokens: true,
     allowPositionals: true,
   });
-  const options = (tokens ?? []).filter(
-    (t): t is Extract<typeof t, { kind: "option" }> => t.kind === "option",
-  );
   // [LAW:one-source-of-truth] The last `--config` decides both the path and
   // whether it is refused, so the two cannot disagree.
-  const config = options.filter((t) => t.name === "config").at(-1);
-  const unknown = new Set(
-    options.filter((t) => t.name !== "config").map((t) => t.rawName),
-  );
+  const config = (tokens ?? [])
+    .filter(
+      (t): t is Extract<typeof t, { kind: "option" }> =>
+        t.kind === "option" && t.name === "config",
+    )
+    .at(-1);
+  const refused = (tokens ?? []).flatMap((t): RefusedArg[] => {
+    switch (t.kind) {
+      case "option":
+        return t.name !== "config"
+          ? [{ arg: t.rawName, why: "unknown" }]
+          : t === config && t.value === undefined
+            ? [{ arg: t.rawName, why: "no-value" }]
+            : [];
+      case "positional":
+        return [{ arg: t.value, why: "positional" }];
+      // `--` only ends the flags; the words after it are positionals.
+      case "option-terminator":
+        return [];
+    }
+  });
   return {
     configFile: explicitConfigPath(cwd, config?.value),
-    refusedArgs: [
-      ...[...unknown].map((arg): RefusedArg => ({ arg, why: "unknown" })),
-      ...(config !== undefined && config.value === undefined
-        ? [{ arg: config.rawName, why: "no-value" } as const]
-        : []),
-      ...(tokens ?? []).flatMap((t): RefusedArg[] =>
-        t.kind === "positional" ? [{ arg: t.value, why: "positional" }] : [],
-      ),
-    ],
+    // In argv order, each refusal once.
+    refusedArgs: refused.filter(
+      (r, i) =>
+        refused.findIndex((o) => o.arg === r.arg && o.why === r.why) === i,
+    ),
   };
 }
 

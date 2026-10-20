@@ -39,6 +39,10 @@ export interface RenderRequest {
   v: number;
   kind: "render";
   hookData: ClaudeHookData;
+  // The client's own path, then the flags the statusline command gave it —
+  // the native binary's, the Node script's, never the node interpreter's.
+  // Anything after the path that is not `--config <file>` is refused on the
+  // strip (parseRenderArgs, server.ts).
   args: string[];
   cwd: string;
   // ─── Client hints ────────────────────────────────────────────────────────
