@@ -173,6 +173,7 @@ function start($: EngineInterface, sessionId: string): Child {
     let said = ''
     const partial = { stdout: '', stderr: '' }
     const draw = (failure: string | null) => $.state.set(bandRef, { frame, failure })
+    let ended: { readonly log: string; readonly says: string }
     try {
       for await (const { stream: pipe, text } of stream) {
         if (stopped) break
@@ -208,18 +209,19 @@ function start($: EngineInterface, sessionId: string): Child {
         frame = next
         await draw(null)
       }
-      // A child the band stopped ended as asked, and its stream's `result` is
-      // no end of the child's: the engine's contract rejects it for a stream
-      // closed early, and Claude Code 2.1.299 settles it with nothing.
-      if (stopped) return
       const { code, signal } = await stream.result
       const how = signal ?? `exit ${code}`
-      $.ui.log(`candybar-band: frames for ${sessionId} ended (${how})`, { to: 'debug' })
-      if (!stopped) await draw(`candybar: frames stopped (${how}) ${said}`)
+      ended = { log: `ended (${how})`, says: `frames stopped (${how}) ${said}` }
     } catch (error) {
-      $.ui.log(`candybar-band: frames for ${sessionId} failed: ${String(error)}`, { to: 'debug' })
-      if (!stopped) await draw(`candybar: frames failed: ${String(error)}`)
+      ended = { log: `failed: ${String(error)}`, says: `frames failed: ${String(error)}` }
     }
+    // [LAW:no-ambient-temporal-coupling] A child the band stopped ended as
+    // asked, whenever the stop landed, and its stream's `result` is no end of
+    // the child's: the engine's contract rejects it for a stream closed early,
+    // and Claude Code 2.1.299 settles it with nothing.
+    if (stopped) return
+    $.ui.log(`candybar-band: frames for ${sessionId} ${ended.log}`, { to: 'debug' })
+    await draw(`candybar: ${ended.says}`)
   })().catch(error => {
     // [LAW:no-silent-failure] The band could not even say why its child
     // ended: the engine refused the write, as it does once a reload has
@@ -232,7 +234,10 @@ function start($: EngineInterface, sessionId: string): Child {
       stopped = true
       $.ui.log(`candybar-band: frames for ${sessionId} stopped`, { to: 'debug' })
       // Kills the child (SIGTERM), silent or not: a /clear leaves no follower.
-      void stream.return(undefined as never)
+      // [LAW:no-silent-failure] A close that failed may have left one.
+      stream
+        .return(undefined as never)
+        .catch(error => $.ui.log(`candybar-band: frames for ${sessionId} could not be stopped: ${String(error)}`, { to: 'debug' }))
     },
   }
 }
