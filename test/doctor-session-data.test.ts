@@ -96,7 +96,7 @@ describe("readTranscriptWindow", () => {
   test("a path that cannot be read as a file fails with the reason", () => {
     const outcome = readTranscriptWindow(dir);
     expect(outcome.kind).toBe("failed");
-    expect(outcome.kind === "failed" && outcome.reason).toMatch(/EISDIR/);
+    expect(outcome.kind === "failed" && outcome.reason).toBe("not a regular file");
   });
 
   test("a file reads whole", () => {
@@ -118,12 +118,14 @@ describe("readTranscriptWindow", () => {
     );
   });
 
-  test("a FIFO at the path does not block the read", () => {
+  // A pipe is no transcript: the read neither blocks nor reports one empty.
+  test("a FIFO at the path does not block the read, and is no file", () => {
     const fifo = path.join(dir, "pipe.jsonl");
     execFileSync("mkfifo", [fifo]);
-    expect(readTranscriptWindow(fifo)).toEqual(
-      window({ lines: 0, unparsed: 0, whole: true }),
-    );
+    expect(readTranscriptWindow(fifo)).toEqual({
+      kind: "failed",
+      reason: "not a regular file",
+    });
   });
 
   test("a file past the window reads only its last window", () => {

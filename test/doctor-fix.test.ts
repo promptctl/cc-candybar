@@ -458,6 +458,14 @@ describe("gatherFacts", () => {
       });
     });
 
+    // No file can sit under a component that is not a directory: a project
+    // whose `.claude` is a file has no project settings, as for Claude Code.
+    test("a project whose .claude is a file contributes no source", () => {
+      fs.mkdirSync(projectDir(), { recursive: true });
+      fs.writeFileSync(path.join(projectDir(), ".claude"), "");
+      expect(sourcesOf(configDir("absent"))).toEqual({ kind: "ok", value: [] });
+    });
+
     // The fix writes the file the statusLine came from, and the re-read is
     // the whole chain's.
     test("a project-local winner's fix lands in that file, and the re-probe passes", () => {

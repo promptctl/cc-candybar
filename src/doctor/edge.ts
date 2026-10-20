@@ -866,7 +866,6 @@ export function applyFix(
         JSON.stringify(fix.value),
         JSON_DIALECT,
       );
-      fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
       writeAtomic(settingsPath, next);
       return {
         ...facts,

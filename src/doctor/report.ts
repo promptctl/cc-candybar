@@ -34,6 +34,7 @@ import {
 import type { SettingsSource } from "../claude-settings.js";
 import { SETTINGS_NS } from "../config/loader/reserved-namespace.js";
 import { mb } from "../daemon/limits.js";
+import { valueOf } from "../utils/logfmt.js";
 import {
   FRAMES_SEEN,
   type FrameSeen,
@@ -205,7 +206,9 @@ export function statusLineFields(
     case "not-an-object":
       return `statusLine=${line.kind}`;
     case "present":
-      return `statusLine=${line.from.scope}:${line.refreshInterval === undefined ? "-" : JSON.stringify(line.refreshInterval)}`;
+      // The interval is the file's raw value — a string with a space in it
+      // must not open a field of its own.
+      return `statusLine=${valueOf(`${line.from.scope}:${line.refreshInterval === undefined ? "-" : JSON.stringify(line.refreshInterval)}`)}`;
   }
 }
 

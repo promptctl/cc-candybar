@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { JSON_DIALECT } from "./config/json5-edit.js";
+import { readTailSync } from "./utils/transcript-fs.js";
 
 // [LAW:one-source-of-truth] The variable that moves Claude Code's
 // configuration directory. Mirrored by the Rust client
@@ -56,32 +57,18 @@ export function claudeInstalledPluginsPath(configDir: string): string {
 }
 
 // A settings file's bytes, or null for no file. [LAW:no-silent-failure] Only
-// ENOENT is absence: a file the daemon cannot stat or read (EACCES, ELOOP) is
-// a file Claude Code may still run with, so it throws rather than vanishing
-// from the chain. Opened non-blocking and refused unless it is a regular file:
-// a project's `.claude/` is somebody's repository, and a synchronous read of
-// a FIFO there would hold the daemon's loop for good (as readTailSync guards
-// a transcript path).
+// a missing file is absence: one the daemon cannot read (EACCES, ELOOP, a
+// FIFO) is a file Claude Code may still run with, so it throws rather than
+// vanishing from the chain.
 function readSettingsFile(settingsPath: string): string | null {
-  let fd: number;
-  try {
-    fd = fs.openSync(
-      settingsPath,
-      fs.constants.O_RDONLY | fs.constants.O_NONBLOCK,
-    );
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
-    throw cannotRead(settingsPath, e);
-  }
-  try {
-    if (!fs.fstatSync(fd).isFile()) {
-      throw new Error("not a regular file");
-    }
-    return fs.readFileSync(fd, "utf8");
-  } catch (e) {
-    throw cannotRead(settingsPath, e);
-  } finally {
-    fs.closeSync(fd);
+  const read = readTailSync(settingsPath, Number.MAX_SAFE_INTEGER);
+  switch (read.kind) {
+    case "absent":
+      return null;
+    case "failed":
+      throw new Error(`cannot read ${settingsPath}: ${read.reason}`);
+    case "ok":
+      return read.value.buf.toString("utf8");
   }
 }
 

@@ -9,9 +9,11 @@ import path from "node:path";
 // whatever the user gave it) and a first-ever file takes the process umask.
 // A symlinked file is written where it points — a dotfiles-managed
 // settings.json stays a link — since the rename replaces whatever sits at the
-// path it targets.
+// path it targets; the directory it is written in is created when missing, as
+// a link's target directory may be (a dotfiles tree not yet populated).
 export function writeAtomic(at: string, text: string, mode?: number): void {
   const file = resolvedTarget(at);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
   const tmp = `${file}.tmp`;
   const fileMode = mode ?? fs.statSync(file, { throwIfNoEntry: false })?.mode;
   try {
@@ -30,8 +32,9 @@ export function writeAtomic(at: string, text: string, mode?: number): void {
 // [LAW:single-enforcer] The file a write to `at` lands in: `at` followed
 // through every symbolic link, a dangling one included (its target is the file
 // a first write creates), so whoever removes what a write created removes the
-// same file. Intermediate directory links need no resolving: the tmp sits
-// beside the file, in whichever directory that is.
+// same file. A linked directory on the way needs resolving only where a
+// relative link is read against it; the tmp sits beside the file, in
+// whichever directory that is.
 export function resolvedTarget(at: string): string {
   let file = at;
   for (let hops = 0; hops < MAX_LINK_HOPS; hops++) {
@@ -43,7 +46,12 @@ export function resolvedTarget(at: string): string {
       throw e;
     }
     if (!stat.isSymbolicLink()) return file;
-    file = path.resolve(path.dirname(file), fs.readlinkSync(file));
+    // The kernel reads a relative link against the directory the link really
+    // sits in, which a linked parent moves.
+    file = path.resolve(
+      fs.realpathSync(path.dirname(file)),
+      fs.readlinkSync(file),
+    );
   }
   throw new Error(`${at}: more than ${MAX_LINK_HOPS} symbolic links`);
 }

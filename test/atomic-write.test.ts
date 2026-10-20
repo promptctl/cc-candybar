@@ -31,7 +31,34 @@ describe("writeAtomic through symbolic links", () => {
     writeAtomic(link, "first");
     expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
     expect(fs.readFileSync(target, "utf8")).toBe("first");
-    expect(resolvedTarget(link)).toBe(target);
+    expect(resolvedTarget(link)).toBe(path.join(fs.realpathSync(dir), "later.json"));
+  });
+
+  // A dangling link into a directory not created yet (a dotfiles tree not
+  // yet populated): the write creates the directory and the file.
+  test("a dangling link into a missing directory: both are created", () => {
+    const link = path.join(dir, "link.json");
+    const target = path.join(dir, "dotfiles", "nested", "settings.json");
+    fs.symlinkSync(target, link);
+    writeAtomic(link, "first");
+    expect(fs.readFileSync(target, "utf8")).toBe("first");
+    expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
+  });
+
+  // The kernel reads a relative link against the directory it really sits
+  // in: under a linked parent, `..` climbs from the parent's target.
+  test("a relative link under a linked directory resolves as the kernel does", () => {
+    const real = path.join(dir, "dotfiles", "claude");
+    fs.mkdirSync(real, { recursive: true });
+    fs.mkdirSync(path.join(dir, "dotfiles", "shared"));
+    const target = path.join(dir, "dotfiles", "shared", "settings.json");
+    fs.writeFileSync(target, "old");
+    fs.symlinkSync("../shared/settings.json", path.join(real, "settings.json"));
+    fs.symlinkSync(real, path.join(dir, "home-claude"));
+    const link = path.join(dir, "home-claude", "settings.json");
+    expect(resolvedTarget(link)).toBe(fs.realpathSync(target));
+    writeAtomic(link, "new");
+    expect(fs.readFileSync(target, "utf8")).toBe("new");
   });
 
   test("a chain of links resolves to its last target; a loop throws", () => {

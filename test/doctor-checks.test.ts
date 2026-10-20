@@ -13,6 +13,7 @@ import {
   type TmuxFacts,
 } from "../src/doctor/checks";
 import { detectTmuxHint } from "../src/tmux-hint";
+import { statusLineFields } from "../src/doctor/report";
 import type { SettingsSource } from "../src/claude-settings";
 import { HEALTHY_FACTS, drew } from "./helpers/doctor-facts";
 
@@ -379,6 +380,27 @@ describe("effectRefresh probe", () => {
     ).toEqual({
       ok: false,
       reason: `${MOVING}, and ${SETTINGS_PATH} sets statusLine to "cc-candybar", not a statusLine object — re-run \`cc-candybar install\` to write one`,
+    });
+  });
+
+  // The interval is the file's raw value: one with a space in it stays one
+  // logfmt field.
+  test("statusLineFields quotes a raw interval that would split the field", () => {
+    const fields = (refreshInterval: unknown) =>
+      statusLineFields(ok(userFile({ statusLine: { command: "x", refreshInterval } })));
+    expect(fields(1)).toBe("statusLine=user:1");
+    expect(fields("1 s")).toBe(`statusLine=${JSON.stringify('user:"1 s"')}`);
+  });
+
+  // `cc-candybar install` writes the user file only: elsewhere the advice is
+  // to replace the line where it is.
+  test("a non-object statusLine outside the user file is replaced where it is", () => {
+    const local = "/p/.claude/settings.local.json";
+    expect(
+      effectRefresh(MOVES, ok([source("project-local", local, { statusLine: "cc-candybar" })])),
+    ).toEqual({
+      ok: false,
+      reason: `${MOVING}, and ${local} sets statusLine to "cc-candybar", not a statusLine object — replace it there with the statusLine object that runs cc-candybar`,
     });
   });
 

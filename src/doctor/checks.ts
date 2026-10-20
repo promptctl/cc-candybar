@@ -1191,7 +1191,9 @@ const effectRefresh: Check = {
       case "not-an-object":
         return {
           ok: false,
-          reason: `${wearing}, and ${statusLine.from.path} sets statusLine to ${JSON.stringify(statusLine.value)}, not a statusLine object — re-run \`cc-candybar install\` to write one`,
+          // `cc-candybar install` writes the user file only, so only there
+          // does re-running it replace the line.
+          reason: `${wearing}, and ${statusLine.from.path} sets statusLine to ${JSON.stringify(statusLine.value)}, not a statusLine object — ${statusLine.from.scope === "user" ? "re-run `cc-candybar install` to write one" : "replace it there with the statusLine object that runs cc-candybar"}`,
         };
       case "present": {
         const { from, refreshInterval: interval } = statusLine;
