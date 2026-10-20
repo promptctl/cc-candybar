@@ -786,7 +786,7 @@ export function sessionWidth(
   return statusline === undefined
     ? {
         kind: "failed",
-        reason: `the daemon holds no statusline render of session ${sessionId} — none since it started, or dropped for newer sessions' renders — so no width its client measured is known; run this again once the bar has redrawn`,
+        reason: `the daemon holds no statusline render of session ${sessionId} — none since it started, or dropped for newer sessions' renders, or only a frames display draws it, which reports no width — so no width a statusline client measured is known; run this again once the statusline has redrawn`,
       }
     : {
         kind: "ok",

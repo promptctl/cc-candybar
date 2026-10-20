@@ -153,18 +153,18 @@ export function parseServingDaemon(stats: StatsSnapshot): Asked<ServingDaemon> {
 
 // [LAW:parse-dont-validate] [LAW:one-type-per-behavior] One half of the
 // sightings, read on its own so a daemon older than it fails only the check
-// that reads it: every sighting holds the fields `holds` checks, or the
+// that reads it: every sighting is the `E` that `holds` proves it is, or the
 // answer names, as `lacking`, what the daemon reported its renders without.
-function sightingHalf<T>(
+function sightingHalf<E extends SightingRecord>(
   stats: StatsSnapshot,
-  holds: (c: SightingRecord) => boolean,
+  holds: (c: SightingRecord) => c is E,
   lacking: string,
-): Asked<T> {
+): Asked<readonly E[]> {
   const skew = shapeSkew(stats, ["clients"]);
   if (skew !== null) return { kind: "failed", reason: skew };
   const sightings = sightingRecords(stats);
   return sightings.every(holds)
-    ? { kind: "ok", value: sightings as T }
+    ? { kind: "ok", value: sightings }
     : {
         kind: "failed",
         reason: `the running daemon (${stats.version}) reported its renders without ${lacking} — restart it on this build: ${JSON.stringify(stats.clients)}`,
@@ -181,7 +181,7 @@ export const parseRateLimitSightings = (
 ): Asked<RateLimitSightings> =>
   sightingHalf(
     stats,
-    (c) =>
+    (c): c is RateLimitSightings[number] =>
       typeof c.ago === "number" &&
       typeof c.claudeConfigDir === "string" &&
       (RATE_LIMITS_SEEN as readonly unknown[]).includes(c.rateLimits),
@@ -194,7 +194,7 @@ export const parseTranscriptSightings = (
 ): Asked<TranscriptSightings> =>
   sightingHalf(
     stats,
-    (c) => {
+    (c): c is TranscriptSightings[number] => {
       const t = c.transcript as Partial<Record<string, unknown>> | undefined;
       return (
         typeof c.ago === "number" &&
@@ -211,7 +211,7 @@ export const parseFrameSightings = (
 ): Asked<FrameSightings> =>
   sightingHalf(
     stats,
-    (c) =>
+    (c): c is FrameSightings[number] =>
       typeof c.ago === "number" &&
       typeof c.claudeConfigDir === "string" &&
       isRole(c) &&
@@ -225,7 +225,7 @@ export const parseWidthSightings = (
 ): Asked<WidthSightings> =>
   sightingHalf(
     stats,
-    (c) =>
+    (c): c is WidthSightings[number] =>
       typeof c.sessionId === "string" &&
       isRole(c) &&
       (c.termCols === null || typeof c.termCols === "number"),
