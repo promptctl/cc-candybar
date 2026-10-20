@@ -6,12 +6,12 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { checkByName, unreadPostMortems, type DaemonFacts, type Verdict } from "../src/doctor/checks";
-import { daemonProcesses, ownsEntry } from "../src/doctor/edge";
+import { applyFix, daemonProcesses, ownsEntry, type DoctorEdge } from "../src/doctor/edge";
 import { parseServingDaemon } from "../src/doctor/daemon-answer";
-import { parsePostMortemsRead } from "../src/doctor/post-mortems-read";
+import { filePostMortemsRead, parsePostMortemsRead } from "../src/doctor/post-mortems-read";
 import { RuntimeStats } from "../src/daemon/stats";
 import { postMortemsOf } from "../src/daemon/limits";
-import { HEALTHY_FACTS, HEALTHY_PROCESS, HEALTHY_SERVING } from "./helpers/doctor-facts";
+import { HEALTHY_FACTS, HEALTHY_PROCESS, HEALTHY_SERVING, healthyDaemonEdge } from "./helpers/doctor-facts";
 
 const MB = 1024 * 1024;
 const NEWER = "2026-10-19T18-01-12-345Z-77";
@@ -306,5 +306,25 @@ describe("the post-mortems-read record", () => {
     expect(parsePostMortemsRead({ through: NEWER })).toEqual({ kind: "ok", value: { through: NEWER } });
     expect(parsePostMortemsRead({ through: 3 })).toEqual({ kind: "failed", reason: "names no post-mortem read" });
     expect(parsePostMortemsRead(null)).toEqual({ kind: "failed", reason: "names no post-mortem read" });
+  });
+
+  test("every value the store can file reads back, none filed included", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-pm-read-"));
+    try {
+      const store = filePostMortemsRead(path.join(dir, "read.json"));
+      store.update(() => ({ through: null }));
+      expect(store.read()).toEqual({ kind: "ok", value: { through: null } });
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("the fix files only forward: a newer breach another run filed stays filed", () => {
+    const edge = { ...({} as DoctorEdge), ...healthyDaemonEdge() };
+    const fix = { kind: "post-mortems-read", through: OLDER } as const;
+    expect(applyFix(edge, fix, HEALTHY_FACTS).daemon.read).toEqual({ kind: "ok", value: { through: OLDER } });
+    edge.postMortemsRead.update(() => ({ through: NEWER }));
+    expect(applyFix(edge, fix, HEALTHY_FACTS).daemon.read).toEqual({ kind: "ok", value: { through: NEWER } });
+    expect(edge.postMortemsRead.read()).toEqual({ kind: "ok", value: { through: NEWER } });
   });
 });

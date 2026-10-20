@@ -94,7 +94,7 @@ import { fileMarkBook } from "./mark-book.js";
 import { fileClickedTerminals } from "./clicked-terminals.js";
 import { filePostMortemsRead } from "./post-mortems-read.js";
 import type { StateFile } from "./state-file.js";
-import type { ServingDaemon } from "../daemon/limits.js";
+import { laterIdentity, type ServingDaemon } from "../daemon/limits.js";
 
 // [LAW:effects-at-boundaries] The install check's reads of the machine: a
 // path resolved through every link, the checkout a bundle was built in, a
@@ -870,9 +870,13 @@ export function applyFix(
       };
     }
     case "post-mortems-read": {
-      const read = edge.postMortemsRead.update(() => ({
-        through: fix.through,
-      }));
+      // Filing only ever moves forward: a fix computed before another run
+      // filed a newer breach leaves that one filed.
+      const read = edge.postMortemsRead.update((current) =>
+        current.through === null || laterIdentity(fix.through, current.through)
+          ? { through: fix.through }
+          : current,
+      );
       return {
         ...facts,
         daemon: { ...facts.daemon, read: { kind: "ok", value: read } },

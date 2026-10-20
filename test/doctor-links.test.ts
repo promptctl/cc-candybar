@@ -2,9 +2,6 @@
 // clickable" — the terminal drawing the bar draws OSC 8 links, and inside
 // tmux, tmux passes them through. Pure over fixture facts.
 
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 import {
   checkByName,
   type Asked,

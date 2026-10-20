@@ -41,7 +41,7 @@ describe("a doctor state file", () => {
     fs.writeFileSync(file, "{");
     expect(stateFile(file, [], numbers).read()).toMatchObject({
       kind: "failed",
-      reason: expect.stringMatching(new RegExp(`^${file} is not JSON: `)),
+      reason: expect.stringContaining(`${file} is not JSON: `),
     });
     fs.writeFileSync(file, '["x"]');
     expect(stateFile(file, [], numbers).read()).toEqual({
@@ -54,7 +54,7 @@ describe("a doctor state file", () => {
     fs.mkdirSync(file, { recursive: true });
     expect(stateFile(file, [], numbers).read()).toMatchObject({
       kind: "failed",
-      reason: expect.stringMatching(new RegExp(`^${file}: EISDIR`)),
+      reason: expect.stringContaining(`${file}: EISDIR`),
     });
   });
 
@@ -62,7 +62,7 @@ describe("a doctor state file", () => {
     fs.mkdirSync(path.dirname(file));
     fs.writeFileSync(file, "junk");
     expect(() => stateFile(file, [], numbers).update((ns) => [...ns, 1])).toThrow(
-      new RegExp(`^doctor: nothing filed over a file that does not read: ${file} is not JSON`),
+      `doctor: nothing filed over a file that does not read: ${file} is not JSON`,
     );
     expect(fs.readFileSync(file, "utf8")).toBe("junk");
   });

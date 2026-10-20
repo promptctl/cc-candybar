@@ -340,14 +340,15 @@ export interface DaemonProcess {
   readonly started: string;
 }
 
-// The daemon row's facts (brandon-doctor-v62x.5mq): the daemon that serves
-// this bar, as it reports itself (src/daemon/limits.ts `serving`); every
-// daemon process running; and the newest post-mortem the user filed as read
-// (src/doctor/post-mortems-read.ts).
 export interface PostMortemsRead {
   // `null` while none is filed, as before the first filing.
   readonly through: string | null;
 }
+
+// The daemon row's facts (brandon-doctor-v62x.5mq): the daemon that serves
+// this bar, as it reports itself (src/daemon/limits.ts `serving`); every
+// daemon process running; and the newest post-mortem the user filed as read
+// (src/doctor/post-mortems-read.ts).
 
 export interface DaemonFacts {
   readonly serving: Asked<ServingDaemon>;

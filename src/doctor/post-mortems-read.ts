@@ -11,10 +11,11 @@ import { stateDir } from "../daemon/paths.js";
 import type { Asked, PostMortemsRead } from "./checks.js";
 import { stateFile, type StateFile } from "./state-file.js";
 
-// [LAW:parse-dont-validate] The document as the identity filed read.
+// [LAW:parse-dont-validate] The document as the identity filed read: every
+// value the store can file reads back, `null` included.
 export function parsePostMortemsRead(doc: unknown): Asked<PostMortemsRead> {
   const through = (doc as { through?: unknown } | null)?.through;
-  return typeof through === "string"
+  return typeof through === "string" || through === null
     ? { kind: "ok", value: { through } }
     : { kind: "failed", reason: "names no post-mortem read" };
 }

@@ -125,6 +125,7 @@ import {
   runDoctor,
   type DoctorFacts,
   type GlyphMark,
+  type MarkBook,
 } from "../../doctor/checks";
 import { sightingOf } from "../../doctor/terminal";
 import {
@@ -1241,9 +1242,10 @@ function clickFacts(ctx: VerbContext, sid: string): DoctorFacts {
 // drew and the user clicked, so it settles for good that this terminal draws
 // links: filed (src/doctor/clicked-terminals.ts) where `cc-candybar doctor` —
 // which cannot click — reads it. Nothing is filed where nothing names the
-// terminal, or over a list that cannot be read (the CLI's links row says why).
+// terminal, or over a list that cannot be read (the store refuses it; the
+// CLI's links row says why).
 // [LAW:no-silent-failure] The filing rides along with the run it came with,
-// so a write that fails is logged — and the event's `clicked=no` shows
+// so a filing that fails is logged — and the event's `clicked=no` shows
 // nothing was filed — while the run reports over the list as it was read.
 function clickedFrom(
   ctx: VerbContext,
@@ -1251,7 +1253,7 @@ function clickedFrom(
 ): DoctorFacts["clicked"] {
   const sighting =
     terminal.kind === "seen" ? sightingOf(terminal.identified) : null;
-  if (sighting === null || clicked.kind === "failed") return clicked;
+  if (sighting === null) return clicked;
   try {
     return {
       kind: "ok",
@@ -1341,12 +1343,17 @@ const doctorMark: VerbHandler = (value, ctx) => {
       `doctor-mark: ${check.label} — ${verdict.ok ? "nothing to mark" : "shows nothing to look at"}`,
     );
   }
-  // A verdict shows a sighting only over a book it could read.
-  if (facts.marks.kind === "failed") {
-    throw new BadVerbArgs(`doctor-mark: ${facts.marks.reason}`);
-  }
   const made = [check.name, verdict.sighting.id, mark as GlyphMark] as const;
-  const marks = ctx.doctor.marks.update((book) => withMark(book, ...made));
+  // [LAW:single-enforcer] The store refuses to file over a book that does not
+  // read; that refusal is the click's.
+  let marks: MarkBook;
+  try {
+    marks = ctx.doctor.marks.update((book) => withMark(book, ...made));
+  } catch (e) {
+    throw new BadVerbArgs(
+      `doctor-mark: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
   ctx.dlog(
     "info",
     `doctor-mark: ${check.name} ${mark} on ${verdict.sighting.id} (session=${sid})`,

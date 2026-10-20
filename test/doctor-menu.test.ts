@@ -16,6 +16,7 @@ import {
 } from "./helpers/bundled-glyphs";
 import { DoctorBusy } from "../src/doctor/busy";
 import { memoryStateFile } from "./helpers/state-file";
+import { fileMarkBook } from "../src/doctor/mark-book";
 import fs from "node:fs";
 import { POWERLINE } from "./helpers/powerline";
 import os from "node:os";
@@ -551,6 +552,32 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
       expect(() =>
         VERBS.get(VERB_DOCTOR_MARK)!("s1/nerdFont/perhaps", rt.ctx),
       ).toThrow(/the mark is "perhaps"/);
+    });
+
+    test("a mark book that stops reading before the mark is filed refuses the click and keeps the file", () => {
+      const rt = buildRuntime(null, CLEAN_LOAD, ITERM_MENLO);
+      rt.openTools();
+      rt.clickVerb(VERB_DOCTOR_RUN);
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-marks-"));
+      try {
+        const file = path.join(dir, "doctor-marks.json");
+        fs.writeFileSync(file, "junk");
+        // The book read when the click gathered its facts, and the file broke
+        // before the filing: the real store's refusal is the click's.
+        const marks: DoctorEdge["marks"] = {
+          read: () => ({ kind: "ok", value: {} }),
+          update: fileMarkBook(file).update,
+        };
+        const ctx = { ...rt.ctx, doctor: { ...rt.ctx.doctor, marks } };
+        const mark = () => VERBS.get(VERB_DOCTOR_MARK)!("s1/nerdFont/drawn", ctx);
+        expect(mark).toThrow(BadVerbArgs);
+        expect(mark).toThrow(
+          `doctor-mark: doctor: nothing filed over a file that does not read: ${file} is not JSON`,
+        );
+        expect(fs.readFileSync(file, "utf8")).toBe("junk");
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
     });
 
     test("a probe the rate limit refused refuses the click, and the report stands", () => {
