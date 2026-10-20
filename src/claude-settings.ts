@@ -56,11 +56,13 @@ export function claudeInstalledPluginsPath(configDir: string): string {
   return path.join(configDir, "plugins", "installed_plugins.json");
 }
 
-// A settings file's bytes, or null for no file. [LAW:no-silent-failure] Only
-// a missing file is absence: one the daemon cannot read (EACCES, ELOOP, a
-// FIFO) is a file Claude Code may still run with, so it throws rather than
-// vanishing from the chain.
-function readSettingsFile(settingsPath: string): string | null {
+// A settings file's bytes and the file they came from, or null for no file.
+// [LAW:no-silent-failure] Only a missing file is absence: one the daemon
+// cannot read (EACCES, ELOOP, a FIFO) is a file Claude Code may still run
+// with, so it throws rather than vanishing from the chain.
+function readSettingsFile(
+  settingsPath: string,
+): { text: string; file: string } | null {
   const read = readTailSync(settingsPath, Number.MAX_SAFE_INTEGER);
   switch (read.kind) {
     case "absent":
@@ -68,7 +70,7 @@ function readSettingsFile(settingsPath: string): string | null {
     case "failed":
       throw new Error(`cannot read ${settingsPath}: ${read.reason}`);
     case "ok":
-      return read.value.buf.toString("utf8");
+      return { text: read.value.buf.toString("utf8"), file: read.value.file };
   }
 }
 
@@ -79,7 +81,7 @@ const cannotRead = (settingsPath: string, e: unknown): Error =>
 // the one absence with a meaning — Claude Code has written nothing yet — so it
 // reads as the empty document.
 export function readClaudeSettingsText(settingsPath: string): string {
-  return readSettingsFile(settingsPath) ?? "";
+  return readSettingsFile(settingsPath)?.text ?? "";
 }
 
 // [LAW:one-source-of-truth] The ONE reading of Claude Code's settings as a
@@ -184,16 +186,27 @@ export function readSettingsChain(
     },
     { scope: "user", path: at.userFile },
   ];
-  return located.flatMap((l) => {
-    const text = readSettingsFile(l.path);
-    if (text === null) return [];
-    const settings = parseSettings(l.path, text);
+  const read = located.flatMap((l) => {
+    const file = readSettingsFile(l.path);
+    if (file === null) return [];
+    const settings = parseSettings(l.path, file.text);
     const { env = {} } = settings;
     if (!isJsonObject(env)) {
       throw new Error(`cannot read ${l.path}: \`env\` is not an object`);
     }
-    return [{ ...l, settings, env }];
+    return [{ source: { ...l, settings, env }, file: file.file }];
   });
+  // [LAW:one-source-of-truth] A file has one scope. A project whose
+  // `.claude` is the user's config directory (a session in the home
+  // directory, or a CLAUDE_CONFIG_DIR naming the project's `.claude`) names
+  // the user file as its project file too. The doctor keeps it once, as the
+  // user's own, the scope it may write; its position is the same either way,
+  // since no scope ranks between project and user. The file is the one the
+  // read opened, so a symlinked spelling of one path is the same file.
+  const user = read.find((r) => r.source.scope === "user");
+  return read
+    .filter((r) => r.source.scope !== "project" || r.file !== user?.file)
+    .map((r) => r.source);
 }
 
 // A directory's `*.json` entries that are not hidden, in alphabetical order;

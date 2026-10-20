@@ -395,6 +395,28 @@ describe("gatherFacts", () => {
       expect(lineOf(conf)).toMatchObject({ refreshInterval: 1, from: { scope: "project-local", path: local } });
     });
 
+    // A session in the home directory names the user file as its project
+    // file too: it is kept once, as the user's, so the fix may write it —
+    // whichever spelling, a symlink included, names the config directory.
+    test.each([
+      ["the same path", () => path.join(projectDir(), ".claude")],
+      ["a symlink to it", () => {
+        fs.mkdirSync(path.join(projectDir(), ".claude"), { recursive: true });
+        const link = path.join(dir, "home-link");
+        fs.symlinkSync(path.join(projectDir(), ".claude"), link);
+        return link;
+      }],
+    ])("a project whose .claude is the config dir reads its settings as the user's (%s)", (_, confOf) => {
+      const conf = confOf();
+      put(settingsIn(path.join(projectDir(), ".claude")), line());
+      const sources = sourcesOf(conf);
+      if (sources.kind !== "ok") throw new Error(sources.reason);
+      expect(sources.value.map((s) => [s.scope, s.path])).toEqual([["user", settingsIn(conf)]]);
+      const facts = factsIn(conf, null, NO_TMUX, NO_SESSION, drew("moves"));
+      const verdict = checkByName("effectRefresh")!.probe(facts);
+      expect(verdict).toMatchObject({ ok: false, fix: { file: settingsIn(conf) } });
+    });
+
     // The scope that sets statusLine wins it whole: a lower scope's
     // interval is not merged in (undocumented — the reading that can only
     // fail where it might pass).
