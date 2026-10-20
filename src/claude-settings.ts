@@ -184,14 +184,7 @@ export function readSettingsChain(
     },
     { scope: "user", path: at.userFile },
   ];
-  // [LAW:one-source-of-truth] A file has one scope. A session whose project
-  // is the home directory names the user file as its project file too; it is
-  // read once, as the user's own, which is the scope the doctor may write.
-  const userFile = path.resolve(at.userFile);
-  const scoped = located.filter(
-    (l) => l.scope === "user" || path.resolve(l.path) !== userFile,
-  );
-  return scoped.flatMap((l) => {
+  const sources = located.flatMap((l) => {
     const text = readSettingsFile(l.path);
     if (text === null) return [];
     const settings = parseSettings(l.path, text);
@@ -201,6 +194,30 @@ export function readSettingsChain(
     }
     return [{ ...l, settings, env }];
   });
+  // [LAW:one-source-of-truth] A file has one scope. A session whose project
+  // is the home directory (or whose CLAUDE_CONFIG_DIR is its project's
+  // `.claude`) names the user file as its project file too. The doctor keeps
+  // it once, as the user's own, the scope it may write; its position is the
+  // same either way, since no scope ranks between project and user. The file
+  // is matched by identity, so a symlink or a case-folded spelling of one
+  // path is the same file.
+  const userFiles = sources
+    .filter((s) => s.scope === "user")
+    .map((s) => identityOf(s.path));
+  return sources.filter(
+    (s) => s.scope !== "project" || !userFiles.includes(identityOf(s.path)),
+  );
+}
+
+// The file a path names, as the filesystem knows it — asked only of a file
+// just read.
+function identityOf(file: string): string {
+  try {
+    const { dev, ino } = fs.statSync(file);
+    return `${dev}:${ino}`;
+  } catch (e) {
+    throw cannotRead(file, e);
+  }
 }
 
 // A directory's `*.json` entries that are not hidden, in alphabetical order;

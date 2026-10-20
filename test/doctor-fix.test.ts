@@ -397,11 +397,24 @@ describe("gatherFacts", () => {
 
     // A session in the home directory names the user file as its project
     // file too: it is read once, as the user's, so the fix may write it.
-    test("the user file is never a project file, even when the project is home", () => {
-      const conf = writeSettings(JSON.stringify(line()), path.join("proj", ".claude"));
+    // A symlink spelling of one directory is the same file.
+    test.each([
+      ["the same path", () => path.join(projectDir(), ".claude")],
+      ["a symlink to it", () => {
+        fs.mkdirSync(path.join(projectDir(), ".claude"), { recursive: true });
+        const link = path.join(dir, "home-link");
+        fs.symlinkSync(path.join(projectDir(), ".claude"), link);
+        return link;
+      }],
+    ])("the user file is never a project file when the project is home (%s)", (_, confOf) => {
+      const conf = confOf();
+      put(settingsIn(path.join(projectDir(), ".claude")), line());
       const sources = sourcesOf(conf);
       if (sources.kind !== "ok") throw new Error(sources.reason);
       expect(sources.value.map((s) => [s.scope, s.path])).toEqual([["user", settingsIn(conf)]]);
+      const facts = factsIn(conf, null, NO_TMUX, NO_SESSION, drew("moves"));
+      const verdict = checkByName("effectRefresh")!.probe(facts);
+      expect(verdict).toMatchObject({ ok: false, fix: { file: settingsIn(conf) } });
     });
 
     // The scope that sets statusLine wins it whole: a lower scope's
