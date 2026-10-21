@@ -151,7 +151,7 @@ describe("segment data row", () => {
     expect(
       segmentData.probe({
         ...withData({ rateLimits: rateNeed({ kind: "ok", value: [] }) }),
-        askedBy: "click",
+        sighted: { kind: "clicked", sessionId: "s1" },
       }),
     ).toMatchObject({
       ok: false,
@@ -261,24 +261,32 @@ describe("what a hook payload says of the rate-limit windows", () => {
 });
 
 describe("the command's rate-limit sightings", () => {
+  const sightings = {
+    kind: "ok",
+    value: [
+      { rateLimits: "carried", claudeConfigDir: "/a", sessionId: "s1", ago: 1 },
+      { rateLimits: "missing", claudeConfigDir: "/zai", sessionId: "s2", ago: 1 },
+      { rateLimits: "missing", claudeConfigDir: "/a", sessionId: "s3", ago: 100000 },
+    ],
+  } as const;
+
   test("only recent renders of sessions in its own Claude Code directory", () => {
+    expect(rateLimitsOf({ kind: "recent" }, sightings, "/a")).toEqual({
+      kind: "ok",
+      value: ["carried"],
+    });
+  });
+
+  // Run in a session's shell, its own renders alone, however long ago
+  // (brandon-doctor-v62x.y5d).
+  test("in a session, that session's renders alone", () => {
     expect(
-      rateLimitsOf(
-        {
-          kind: "ok",
-          value: [
-            { rateLimits: "carried", claudeConfigDir: "/a", ago: 1 },
-            { rateLimits: "missing", claudeConfigDir: "/zai", ago: 1 },
-            { rateLimits: "missing", claudeConfigDir: "/a", ago: 100000 },
-          ],
-        },
-        "/a",
-      ),
-    ).toEqual({ kind: "ok", value: ["carried"] });
+      rateLimitsOf({ kind: "shell", sessionId: "s3" }, sightings, "/a"),
+    ).toEqual({ kind: "ok", value: ["missing"] });
   });
 
   test("a daemon that could not be asked stays failed", () => {
-    expect(rateLimitsOf({ kind: "failed", reason: "down" }, "/a")).toEqual({
+    expect(rateLimitsOf({ kind: "recent" }, { kind: "failed", reason: "down" }, "/a")).toEqual({
       kind: "failed",
       reason: "down",
     });
@@ -298,6 +306,7 @@ describe("the command's rate-limit sightings", () => {
             client: null,
             rateLimits: "unanswered",
             claudeConfigDir: "/a",
+            sessionId: "s1",
             ago: 3,
           },
         ]),
@@ -309,6 +318,7 @@ describe("the command's rate-limit sightings", () => {
           client: null,
           rateLimits: "unanswered",
           claudeConfigDir: "/a",
+          sessionId: "s1",
           ago: 3,
         },
       ],

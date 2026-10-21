@@ -11,6 +11,7 @@ import {
 import { terminalFeatureFields } from "../src/doctor/report";
 import { parseWidthSightings } from "../src/doctor/daemon-answer";
 import { widthOf } from "../src/doctor/cli";
+import { scopeOf } from "../src/doctor/sightings";
 import type { StatsSnapshot } from "../src/daemon/stats";
 import { DEFAULT_TERMINAL_WIDTH } from "../src/render/strip";
 import { HEALTHY_FACTS } from "./helpers/doctor-facts";
@@ -158,31 +159,31 @@ describe("widthOf", () => {
   const sightings = {
     kind: "ok",
     value: [
-      { sessionId: "s1", role: "frames", termCols: 60 },
-      { sessionId: "s1", role: "statusline", termCols: 148 },
-      { sessionId: "s2", role: "statusline", termCols: null },
+      { sessionId: "s1", ago: 1, role: "frames", termCols: 60 },
+      { sessionId: "s1", ago: 1, role: "statusline", termCols: 148 },
+      { sessionId: "s2", ago: 1, role: "statusline", termCols: null },
     ],
   } as const;
 
   test("outside a session, the command's own measurement", () => {
-    expect(widthOf(undefined, sightings, 90)).toEqual(here(90));
-    expect(widthOf("", sightings, null)).toEqual(here(null));
+    expect(widthOf(scopeOf(undefined), sightings, 90)).toEqual(here(90));
+    expect(widthOf(scopeOf(""), sightings, null)).toEqual(here(null));
   });
 
   test("in a session, its statusline client's width, whatever the shell measured", () => {
-    expect(widthOf("s1", sightings, 90)).toEqual(inSession(148));
-    expect(widthOf("s2", sightings, 90)).toEqual({
+    expect(widthOf(scopeOf("s1"), sightings, 90)).toEqual(inSession(148));
+    expect(widthOf(scopeOf("s2"), sightings, 90)).toEqual({
       kind: "ok",
       value: { columns: null, of: { kind: "session", sessionId: "s2" } },
     });
   });
 
   test("in a session the daemon did not answer for, that failure", () => {
-    expect(widthOf("s1", { kind: "failed", reason: "no daemon" }, 90)).toEqual({
+    expect(widthOf(scopeOf("s1"), { kind: "failed", reason: "no daemon" }, 90)).toEqual({
       kind: "failed",
       reason: "no daemon",
     });
-    expect(widthOf("s3", sightings, 90)).toMatchObject({ kind: "failed" });
+    expect(widthOf(scopeOf("s3"), sightings, 90)).toMatchObject({ kind: "failed" });
   });
 });
 
@@ -191,7 +192,7 @@ describe("parseWidthSightings", () => {
     ({ version: "9.9.9", clients }) as unknown as StatsSnapshot;
 
   test("reads whose each render was and the width it measured", () => {
-    const value = [{ sessionId: "s1", role: "statusline", termCols: null }];
+    const value = [{ sessionId: "s1", ago: 1, role: "statusline", termCols: null }];
     expect(parseWidthSightings(stats(value))).toEqual({ kind: "ok", value });
   });
 

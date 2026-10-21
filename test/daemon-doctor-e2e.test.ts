@@ -239,7 +239,7 @@ test("the clients the daemon saw render are the install check's facts", async ()
       );
       const stats = (resp as { stats: StatsSnapshot }).stats;
       const asked = parseDaemonClients(stats);
-      const install = installOf(productionInstallEdge, asked);
+      const install = installOf(productionInstallEdge, { kind: "recent" }, asked);
       return checkByName("install")!.probe({ install } as never);
     };
 
@@ -310,6 +310,7 @@ test("the rate-limit windows each render carried are the segment-data row's fact
         5000,
       );
       return rateLimitsOf(
+        { kind: "recent" },
         parseRateLimitSightings((resp as { stats: StatsSnapshot }).stats),
         ownDir,
       );

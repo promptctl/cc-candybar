@@ -1,5 +1,7 @@
-import type { DaemonProcess, DoctorFacts, MarkBook, PostMortemsRead } from "../../src/doctor/checks";
-import type { FrameSeen } from "../../src/daemon/render-sightings";
+import type { Asked, DaemonProcess, DoctorFacts, MarkBook, PostMortemsRead } from "../../src/doctor/checks";
+import type { FrameSeen, FrameSighting } from "../../src/daemon/render-sightings";
+import type { SettingsSource } from "../../src/claude-settings";
+import type { SightedBar } from "../../src/doctor/sightings";
 import type { Redraws } from "../../src/doctor/redraws";
 import { readStores, type DoctorEdge, type DoctorStores, type InstallEdge, type StoresRead } from "../../src/doctor/edge";
 import type { DaemonAnswer } from "../../src/doctor/daemon-answer";
@@ -73,12 +75,17 @@ export const HEALTHY_TRANSCRIPT = {
 export const NAMED = { kind: "ok", value: [HEALTHY_TRANSCRIPT] } as const;
 
 // What a render request said, by the client that sent it: a payload that
-// carried the rate-limit windows, from the default Claude Code directory.
-export const renderSaid = (client: ClientHint | null | undefined) => ({
+// carried the rate-limit windows, from a session of `projectDir` running with
+// the Claude Code directory `claudeConfigDir`.
+export const renderSaid = (
+  client: ClientHint | null | undefined,
+  { projectDir = "/p", claudeConfigDir = "/claude" } = {},
+) => ({
   client: client ?? null,
   termCols: 148,
   rateLimits: "carried" as const,
-  claudeConfigDir: "/claude",
+  claudeConfigDir,
+  projectDir,
   transcript: HEALTHY_TRANSCRIPT,
   frame: "still" as const,
 });
@@ -89,18 +96,45 @@ export const ON_EVENTS: Redraws = { kind: "seen", seconds: 12 };
 // A bar Claude Code redraws every second, a daemon stall or two aside.
 export const EVERY_SECOND: Redraws = { kind: "seen", seconds: 58 };
 
-// The frames a session's statusline renders drew, redrawn as `redraws` says.
+// The bars a session's statusline renders drew, redrawn as `redraws` says.
 export const drewAt = (
   redraws: Redraws,
   ...frames: FrameSeen[]
-): DoctorFacts["frames"] => ({
-  kind: "ok",
-  value: frames.map((frame) => ({ role: "statusline", frame, redraws })),
+): readonly FrameSighting[] =>
+  frames.map((frame) => ({ role: "statusline", frame, redraws }));
+
+// The bars a session's statusline renders drew, redrawn on events alone.
+export const drew = (...frames: FrameSeen[]): readonly FrameSighting[] =>
+  drewAt(ON_EVENTS, ...frames);
+
+// The location every fact-level test's own settings chain is read at.
+export const ORIGIN_AT = {
+  managedDir: "/managed",
+  projectDir: "/p",
+  userFile: "/s.json",
+} as const;
+
+// A run whose bars all read their settings at the run's own location: the
+// one chain, holding `sources` and `bars`, and nothing elsewhere.
+export const onOrigin = (
+  bars: readonly FrameSighting[],
+  sources: Asked<readonly SettingsSource[]> = { kind: "ok", value: [] },
+  at: DoctorFacts["claudeSettings"]["origin"]["at"] = ORIGIN_AT,
+): Pick<DoctorFacts, "frames" | "claudeSettings"> => ({
+  frames: { kind: "read" },
+  claudeSettings: { origin: { at, sources, bars }, elsewhere: [] },
 });
 
-// The frames a session's statusline renders drew, redrawn on events alone.
-export const drew = (...frames: FrameSeen[]): DoctorFacts["frames"] =>
-  drewAt(ON_EVENTS, ...frames);
+// Bars as the daemon reports them to `gatherFacts`: each session's settings
+// read in `projectDir`, under the Claude Code directory `claudeConfigDir`.
+export const sightedIn = (
+  projectDir: string,
+  claudeConfigDir: string,
+  bars: readonly FrameSighting[],
+): Asked<readonly SightedBar[]> => ({
+  kind: "ok",
+  value: bars.map((bar) => ({ ...bar, projectDir, claudeConfigDir })),
+});
 
 // A bar whose frame holds still, as a session's renders drew it.
 export const STILL = drew("still");
@@ -132,19 +166,22 @@ export const healthyDataEdge = (): Pick<
   memento: () => ({ kind: "ok", value: "/plugins/memento" }),
 });
 
-// One session's statusline frame as daemon-stats reports it: session `s1`,
-// drawn a second ago, watched for two minutes, and rendered every `interval`
-// seconds in them.
+// One session's statusline frame as daemon-stats reports it: session
+// `sessionId` of the project `projectDir`, drawn a second ago, watched for two
+// minutes, and rendered every `interval` seconds in them.
 export const reportedFrame = (
   frame: FrameSeen,
   claudeConfigDir: string,
   interval = 1,
+  projectDir = "/p",
+  sessionId = "s1",
 ) => ({
   role: "statusline" as const,
   frame,
   claudeConfigDir,
+  projectDir,
   ago: 1,
-  sessionId: "s1",
+  sessionId,
   since: 120,
   redrawn: Array.from({ length: 119 }, (_, i) => i + 1).filter(
     (age) => (age - 1) % interval === 0,
@@ -160,11 +197,11 @@ export const healthyDaemonIn = (
   Promise.resolve({
     rateLimits: {
       kind: "ok",
-      value: [{ rateLimits: "carried", claudeConfigDir, ago: 1 }],
+      value: [{ rateLimits: "carried", claudeConfigDir, sessionId: "s1", ago: 1 }],
     },
     transcripts: {
       kind: "ok",
-      value: [{ transcript: HEALTHY_TRANSCRIPT, ago: 1 }],
+      value: [{ transcript: HEALTHY_TRANSCRIPT, sessionId: "s1", ago: 1 }],
     },
     frames: {
       kind: "ok",
@@ -172,7 +209,7 @@ export const healthyDaemonIn = (
     },
     widths: {
       kind: "ok",
-      value: [{ sessionId: "s1", role: "statusline", termCols: 148 }],
+      value: [{ sessionId: "s1", ago: 1, role: "statusline", termCols: 148 }],
     },
     clients: {
       kind: "ok",
@@ -181,6 +218,7 @@ export const healthyDaemonIn = (
         clients: [
           {
             client: { kind: "native", bundle: HEALTHY_BUNDLE, source: null },
+            sessionId: "s1",
             ago: 1,
           },
         ],
@@ -205,9 +243,9 @@ export const HEALTHY_FACTS: DoctorFacts = {
     },
     tmuxClient: null,
   },
-  askedBy: "command",
   config: { kind: "loaded", layers: [], warnings: [], unused: [] },
-  frames: STILL,
+  sighted: { kind: "recent" },
+  ...onOrigin(STILL),
   data: {
     pullRequests: { kind: "unneeded" },
     rateLimits: { kind: "unneeded" },
@@ -246,8 +284,4 @@ export const HEALTHY_FACTS: DoctorFacts = {
   nerdFont: { kind: "none" },
   marks: { kind: "ok", value: {} },
   clicked: { kind: "ok", value: [] },
-  claudeSettings: {
-    at: { managedDir: "/managed", projectDir: "/p", userFile: "/s.json" },
-    sources: { kind: "ok", value: [] },
-  },
 };

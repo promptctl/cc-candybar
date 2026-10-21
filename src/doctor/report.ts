@@ -27,6 +27,7 @@ import {
   type Width,
   type CheckReport,
   type DaemonFacts,
+  type DoctorFacts,
   type InstallFacts,
   type MarkBook,
   type NerdFontFacts,
@@ -38,11 +39,7 @@ import type { SettingsSource } from "../claude-settings.js";
 import { SETTINGS_NS } from "../config/loader/reserved-namespace.js";
 import { mb, measureOf } from "../daemon/limits.js";
 import { valueOf } from "../utils/logfmt.js";
-import {
-  FRAMES_SEEN,
-  type FrameSeen,
-  type FrameSighting,
-} from "../daemon/render-sightings.js";
+import { FRAMES_SEEN, type FrameSeen } from "../daemon/render-sightings.js";
 
 export const DOCTOR_NS = `${SETTINGS_NS}doctor.`;
 
@@ -192,42 +189,47 @@ export function dataFields(data: SegmentDataFacts): string {
   return `data=pr:${pr()},rateLimits:${rateLimits()},memento:${memento}`;
 }
 
-// [LAW:nothing-unseen] What the effect-refresh check reasoned over, as two
-// logfmt fields: the frames the recent statusline renders drew, counted per
+// [LAW:nothing-unseen] What the effect-refresh check reasoned over, as three
+// logfmt fields: the frames the statusline renders drew, counted per
 // `FRAMES_SEEN` member in its order — moves/can-move/still/failed/drawing
 // (brandon-doctor-v62x.tgp); `failed` when the renders could not be asked.
 // Then how often each was redrawn (brandon-doctor-v62x.5at): the seconds of
 // the window that held an arrival, or `unseen(<seconds watched>)` — `-` for
-// no statusline render.
-export function frameFields(frames: Asked<readonly FrameSighting[]>): string {
-  if (frames.kind === "failed") return "frames=failed redrawn=failed";
-  const drawn = refreshedFrames(frames.value);
+// no statusline render. Then each settings chain read, the run's own first
+// (brandon-doctor-v62x.y5d): the scope its statusLine comes from and the
+// refresh interval it holds (`-` for none), `absent` when no file sets one,
+// `not-an-object`, or `failed` when the chain could not be read.
+export function frameFields(
+  frames: DoctorFacts["frames"],
+  { origin, elsewhere }: DoctorFacts["claudeSettings"],
+): string {
+  const chains = [origin, ...elsewhere];
+  const lines = chains.map(({ sources }) => statusLineValue(sources)).join(",");
+  if (frames.kind === "failed") {
+    return `frames=failed redrawn=failed chains=${valueOf(lines)}`;
+  }
+  const drawn = refreshedFrames(chains.flatMap((c) => c.bars));
   const count = (seen: FrameSeen) =>
     drawn.filter((f) => f.frame === seen).length;
   const redrawn = drawn.map(({ redraws }) =>
     redraws.kind === "seen" ? `${redraws.seconds}` : `unseen(${redraws.over})`,
   );
-  return `frames=${FRAMES_SEEN.map(count).join("/")} redrawn=${redrawn.join(",") || "-"}`;
+  return `frames=${FRAMES_SEEN.map(count).join("/")} redrawn=${redrawn.join(",") || "-"} chains=${valueOf(lines)}`;
 }
 
-// [LAW:nothing-unseen] Which settings file the statusLine Claude Code runs
-// comes from, as one logfmt field: its scope and the refresh interval it
-// holds (`-` for none), `absent` when no file sets one, `not-an-object`, or
-// `failed` when the chain could not be read.
-export function statusLineFields(
-  sources: Asked<readonly SettingsSource[]>,
-): string {
+// One chain's statusLine, as the `chains=` field spells it. The interval is
+// the file's raw value, quoted with the whole field by `valueOf`, so a string
+// with a space in it cannot open a field of its own.
+function statusLineValue(sources: Asked<readonly SettingsSource[]>): string {
   const line = statusLineOf(sources);
   switch (line.kind) {
     case "unread":
-      return "statusLine=failed";
+      return "failed";
     case "absent":
     case "not-an-object":
-      return `statusLine=${line.kind}`;
+      return line.kind;
     case "present":
-      // The interval is the file's raw value — a string with a space in it
-      // must not open a field of its own.
-      return `statusLine=${valueOf(`${line.from.scope}:${line.refreshInterval === undefined ? "-" : JSON.stringify(line.refreshInterval)}`)}`;
+      return `${line.from.scope}:${line.refreshInterval === undefined ? "-" : JSON.stringify(line.refreshInterval)}`;
   }
 }
 

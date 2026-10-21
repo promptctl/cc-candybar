@@ -41,7 +41,6 @@ import { gitRootOf } from "../utils/git-root.js";
 import { locateMemento } from "../memento/edge.js";
 import { dataNeeds, type DataNeeds } from "./data-needs.js";
 import type {
-  FrameSighting,
   RateLimitsSeen,
   RoledSaid,
   TranscriptSaid,
@@ -68,6 +67,7 @@ import {
   type MarkBook,
   type PostMortemsRead,
   type SegmentDataFacts,
+  type SettingsChain,
   type TerminalFacts,
   type TerminalIdentity,
   TRANSCRIPT_WINDOW_BYTES,
@@ -98,6 +98,7 @@ import { fileClickedTerminals } from "./clicked-terminals.js";
 import { filePostMortemsRead } from "./post-mortems-read.js";
 import type { StateFile } from "./state-file.js";
 import { laterIdentity, type ServingDaemon } from "../daemon/limits.js";
+import type { SightedBar, SightingScope } from "./sightings.js";
 
 // [LAW:effects-at-boundaries] The install check's reads of the machine: a
 // path resolved through every link, the checkout a bundle was built in, a
@@ -638,12 +639,53 @@ function configFacts(load: ConfigLoad): ConfigFacts {
       };
 }
 
-// [LAW:no-silent-failure] The settings chain, read once: a file that does
-// not read (`readSettingsChain` throws naming it) fails the rows that read
-// the chain, never the whole run — a broken settings.json committed in some
-// project concerns two checks, not every one.
-function readSettingsFacts(at: SettingsChainAt): DoctorFacts["claudeSettings"] {
-  return { at, sources: asked(() => readSettingsChain(at)) };
+// [LAW:no-silent-failure] A settings chain, read: a file that does not read
+// (`readSettingsChain` throws naming it) fails the rows that read the chain,
+// never the whole run — a broken settings.json committed in some project
+// concerns two checks, not every one.
+const readSettings = (at: SettingsChainAt): SettingsChain["sources"] =>
+  asked(() => readSettingsChain(at));
+
+// [LAW:one-source-of-truth] The settings chains a run reads, each location
+// once: the run's own, and each other one a bar's session reads its settings
+// at — its project's files, and its Claude Code directory's user file — with
+// every bar placed in the chain that redraws it (brandon-doctor-v62x.y5d).
+function settingsChains(
+  originAt: SettingsChainAt,
+  bars: readonly SightedBar[],
+): DoctorFacts["claudeSettings"] {
+  const keyOf = (at: SettingsChainAt): string =>
+    JSON.stringify([at.managedDir, at.projectDir, at.userFile]);
+  const originKey = keyOf(originAt);
+  const atOrigin: SightedBar[] = [];
+  const others = new Map<string, { at: SettingsChainAt; bars: SightedBar[] }>();
+  for (const bar of bars) {
+    const at = {
+      managedDir: originAt.managedDir,
+      projectDir: bar.projectDir,
+      userFile: claudeSettingsPath(bar.claudeConfigDir),
+    };
+    const key = keyOf(at);
+    if (key === originKey) {
+      atOrigin.push(bar);
+    } else {
+      const chain = others.get(key) ?? { at, bars: [] };
+      chain.bars.push(bar);
+      others.set(key, chain);
+    }
+  }
+  const chain = (
+    at: SettingsChainAt,
+    its: readonly SightedBar[],
+  ): SettingsChain => ({
+    at,
+    sources: readSettings(at),
+    bars: its.map(({ role, frame, redraws }) => ({ role, frame, redraws })),
+  });
+  return {
+    origin: chain(originAt, atOrigin),
+    elsewhere: [...others.values()].map(({ at, bars: its }) => chain(at, its)),
+  };
 }
 
 // [LAW:dataflow-not-control-flow] The three wire states of the recorded hint
@@ -802,8 +844,7 @@ export function sessionWidth(
 // resolves from — never the daemon's own env, which answers for whichever
 // session spawned it. The URL handler's facts are not gathered here: the
 // daemon has them in the click it is handling, the CLI has to send a link and
-// wait (src/doctor/handler-probe.ts), and each adds them to these — and what
-// asked for the run, which only the caller knows.
+// wait (src/doctor/handler-probe.ts), and each adds them to these.
 //
 // `sessionPick` reads the session's own picks — the daemon's SessionState for
 // the clicking session, `() => null` for the CLI, which has no session.
@@ -822,8 +863,11 @@ export function gatherFacts(
   // The transcripts those renders named: the click's own session's, or every
   // session `cc-candybar doctor` sees.
   transcripts: Asked<readonly TranscriptSaid[]>,
-  // What those renders drew: whether each bar moves.
-  frames: Asked<readonly FrameSighting[]>,
+  // Whose bars those renders are (src/doctor/sightings.ts).
+  sighted: SightingScope,
+  // What those renders drew — whether each bar moves — and where each one's
+  // session reads its settings.
+  bars: Asked<readonly SightedBar[]>,
   // [LAW:one-source-of-truth] The width the session's statusline client
   // measured, as its last render said (RenderSightings) — the click's own
   // session, or the one `cc-candybar doctor` runs in; outside any session,
@@ -832,7 +876,7 @@ export function gatherFacts(
   // What the doctor's stores hold: the click's daemon's own, or the ones
   // `cc-candybar doctor` was answered.
   stores: StoresRead,
-): Omit<DoctorFacts, "urlHandler" | "askedBy" | "install"> {
+): Omit<DoctorFacts, "urlHandler" | "install"> {
   const load = edge.loadConfig(origin);
   // [LAW:one-source-of-truth] The render's own resolution, so the doctor and
   // the bar cannot disagree about which preset is placed, or which joiner
@@ -874,7 +918,8 @@ export function gatherFacts(
       read: stores.postMortemsRead,
     },
     config: configFacts(load),
-    frames,
+    sighted,
+    frames: bars.kind === "failed" ? bars : { kind: "read" },
     data: segmentDataFacts(
       edge,
       dataNeeds(load.config, globals.preset),
@@ -883,11 +928,14 @@ export function gatherFacts(
       rateLimits,
     ),
     transcripts: transcriptReads(edge, transcripts),
-    claudeSettings: readSettingsFacts({
-      managedDir: edge.managedSettingsDir,
-      projectDir: origin.projectDir,
-      userFile: claudeSettingsPath(claudeConfigDir(hints.claudeConfigDir)),
-    }),
+    claudeSettings: settingsChains(
+      {
+        managedDir: edge.managedSettingsDir,
+        projectDir: origin.projectDir,
+        userFile: claudeSettingsPath(claudeConfigDir(hints.claudeConfigDir)),
+      },
+      bars.kind === "ok" ? bars.value : [],
+    ),
   };
 }
 
@@ -919,11 +967,23 @@ export function applyFix(
         JSON_DIALECT,
       );
       writeAtomic(settingsPath, next);
+      // Every chain is re-read, each keeping its bars: the file written may
+      // sit in any of them (a user file is in every chain of its Claude Code
+      // directory), and a re-read of a few small files costs less than
+      // deciding which.
+      const reread = (chain: SettingsChain): SettingsChain => ({
+        ...chain,
+        sources: readSettings(chain.at),
+      });
+      const { origin, elsewhere } = facts.claudeSettings;
       return {
         kind: "ok",
         value: {
           ...facts,
-          claudeSettings: readSettingsFacts(facts.claudeSettings.at),
+          claudeSettings: {
+            origin: reread(origin),
+            elsewhere: elsewhere.map(reread),
+          },
         },
       };
     }

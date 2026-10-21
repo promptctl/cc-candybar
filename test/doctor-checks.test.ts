@@ -15,9 +15,11 @@ import {
   type TmuxFacts,
 } from "../src/doctor/checks";
 import { detectTmuxHint } from "../src/tmux-hint";
-import { statusLineFields, truecolorEnvFields } from "../src/doctor/report";
+import { frameFields, truecolorEnvFields } from "../src/doctor/report";
 import type { SettingsSource } from "../src/claude-settings";
-import { HEALTHY_FACTS, drew, drewAt, EVERY_SECOND, ON_EVENTS } from "./helpers/doctor-facts";
+import type { FrameSighting } from "../src/daemon/render-sightings";
+import type { SightingScope } from "../src/doctor/sightings";
+import { HEALTHY_FACTS, drew, drewAt, onOrigin, EVERY_SECOND, ON_EVENTS } from "./helpers/doctor-facts";
 import { REDRAWN_SECONDS, type Redraws } from "../src/doctor/redraws";
 
 const HINT = { socket: "/tmp/tmux-501/default", pane: "%3", truecolor: null };
@@ -41,6 +43,10 @@ const LOADED: ConfigFacts = {
 const SETTINGS_PATH = "/home/u/.claude/settings.json";
 const USER = { scope: "user", path: SETTINGS_PATH } as const;
 const STILL = drew("still");
+// Where the run's own settings chain is read.
+const AT = { managedDir: "/managed", projectDir: "/p", userFile: SETTINGS_PATH } as const;
+// A run judging the bar of the session it is asked from.
+const SESSION: SightingScope = { kind: "clicked", sessionId: "s1" };
 
 // One settings file of the chain, as `readSettingsChain` returns it.
 const source = (
@@ -63,7 +69,7 @@ const facts = (
   tmux: TmuxFacts,
   env: Record<string, unknown> = {},
   config: ConfigFacts = LOADED,
-  frames: DoctorFacts["frames"] = STILL,
+  bars: readonly FrameSighting[] = STILL,
   sources: Asked<readonly SettingsSource[]> = {
     kind: "ok",
     value: userFile({ env, statusLine: { command: "cc-candybar" } }),
@@ -72,11 +78,7 @@ const facts = (
   ...HEALTHY_FACTS,
   tmux,
   config,
-  frames,
-  claudeSettings: {
-    at: { managedDir: "/managed", projectDir: "/p", userFile: SETTINGS_PATH },
-    sources,
-  },
+  ...onOrigin(bars, sources, AT),
 });
 
 const probe = checkByName("tmuxTruecolor")!.probe;
@@ -373,14 +375,16 @@ describe("effectRefresh probe", () => {
         },
       }),
     );
+  // `bars` read at the run's own location, or a daemon that could not say.
   const effectRefresh = (
-    frames: DoctorFacts["frames"],
+    bars: readonly FrameSighting[] | { kind: "failed"; reason: string },
     sources: Asked<readonly SettingsSource[]>,
-    askedBy: DoctorFacts["askedBy"] = "command",
+    sighted: SightingScope = { kind: "recent" },
   ) =>
     checkByName("effectRefresh")!.probe({
-      ...facts({ kind: "outside" }, {}, LOADED, frames, sources),
-      askedBy,
+      ...facts({ kind: "outside" }, {}, LOADED, "kind" in bars ? [] : bars, sources),
+      ...("kind" in bars ? { frames: bars } : {}),
+      sighted,
     });
   const FROM = ` (statusLine from ${SETTINGS_PATH})`;
   const FIX = {
@@ -459,10 +463,8 @@ describe("effectRefresh probe", () => {
   // Every moving bar is judged: the slowest decides, so one redrawn every
   // second hides neither a slow one nor one not yet seen.
   test("several moving bars: the slowest decides", () => {
-    const bars = (...redraws: Redraws[]): DoctorFacts["frames"] => ({
-      kind: "ok",
-      value: redraws.map((r) => ({ role: "statusline", frame: "moves", redraws: r })),
-    });
+    const bars = (...redraws: Redraws[]): readonly FrameSighting[] =>
+      redraws.map((r) => ({ role: "statusline", frame: "moves", redraws: r }));
     const unseen: Redraws = { kind: "unseen", over: 30 };
     expect(effectRefresh(bars(EVERY_SECOND, ON_EVENTS), interval(1))).toEqual({
       ok: false,
@@ -483,13 +485,10 @@ describe("effectRefresh probe", () => {
 
   // The row says what the bar whose rate decides it wears, not another's.
   test("the slowest bar's frame names what is moving", () => {
-    const frames: DoctorFacts["frames"] = {
-      kind: "ok",
-      value: [
-        { role: "statusline", frame: "moves", redraws: EVERY_SECOND },
-        { role: "statusline", frame: "can-move", redraws: ON_EVENTS },
-      ],
-    };
+    const frames: readonly FrameSighting[] = [
+      { role: "statusline", frame: "moves", redraws: EVERY_SECOND },
+      { role: "statusline", frame: "can-move", redraws: ON_EVENTS },
+    ];
     expect(effectRefresh(frames, interval(1))).toMatchObject({
       reason: expect.stringMatching(/^the bar can start moving .*, but Claude Code redrew it in only 12 of/),
     });
@@ -558,11 +557,16 @@ describe("effectRefresh probe", () => {
 
   // The interval is the file's raw value: one with a space in it stays one
   // logfmt field.
-  test("statusLineFields quotes a raw interval that would split the field", () => {
-    const fields = (refreshInterval: unknown) =>
-      statusLineFields(ok(userFile({ statusLine: { command: "x", refreshInterval } })));
-    expect(fields(1)).toBe("statusLine=user:1");
-    expect(fields("1 s")).toBe(`statusLine=${JSON.stringify('user:"1 s"')}`);
+  test("frameFields' chains quotes a raw interval that would split the field", () => {
+    const fields = (refreshInterval: unknown) => {
+      const { frames, claudeSettings } = onOrigin(
+        STILL,
+        ok(userFile({ statusLine: { command: "x", refreshInterval } })),
+      );
+      return frameFields(frames, claudeSettings);
+    };
+    expect(fields(1)).toBe("frames=0/0/1/0/0 redrawn=12 chains=user:1");
+    expect(fields("1 s")).toBe(`frames=0/0/1/0/0 redrawn=12 chains=${JSON.stringify('user:"1 s"')}`);
   });
 
   test("truecolorEnvFields names the deciding file's scope and raw value", () => {
@@ -693,13 +697,13 @@ describe("effectRefresh probe", () => {
 
   // No frame seen is no answer: the check says so rather than pass.
   test("no render seen → failed, unknown", () => {
-    expect(effectRefresh({ kind: "ok", value: [] }, interval())).toEqual({
+    expect(effectRefresh([], interval())).toEqual({
       ok: false,
       reason:
-        "no session of this Claude Code has drawn a statusline for this daemon in the last 5 minutes, so whether it moves is unknown — run the doctor again once the bar has redrawn",
+        "no session has drawn a statusline for this daemon in the last 5 minutes, so whether it moves is unknown — run the doctor again once the bar has redrawn",
     });
     expect(
-      effectRefresh({ kind: "ok", value: [] }, interval(), "click"),
+      effectRefresh([], interval(), SESSION),
     ).toMatchObject({ ok: false, reason: expect.stringContaining("holds no render of this bar") });
   });
 
@@ -729,13 +733,10 @@ describe("effectRefresh probe", () => {
   test("a moving frames display says nothing about the statusline", () => {
     expect(
       effectRefresh(
-        {
-          kind: "ok",
-          value: [
-            { role: "frames", frame: "moves", redraws: ON_EVENTS },
-            { role: "statusline", frame: "still", redraws: ON_EVENTS },
-          ],
-        },
+        [
+          { role: "frames", frame: "moves", redraws: ON_EVENTS },
+          { role: "statusline", frame: "still", redraws: ON_EVENTS },
+        ],
         interval(),
       ),
     ).toEqual({ ok: true });
@@ -744,9 +745,9 @@ describe("effectRefresh probe", () => {
   test("only a frames display seen → failed, unknown, naming it", () => {
     expect(
       effectRefresh(
-        { kind: "ok", value: [{ role: "frames", frame: "still", redraws: ON_EVENTS }] },
+        [{ role: "frames", frame: "still", redraws: ON_EVENTS }],
         interval(),
-        "click",
+        SESSION,
       ),
     ).toEqual({
       ok: false,
@@ -757,7 +758,7 @@ describe("effectRefresh probe", () => {
 
   // A file saying 1 passes nothing on its own: what the bar drew, and how
   // often, is the answer it cannot give.
-  test.each<[string, DoctorFacts["frames"]]>([
+  test.each<[string, readonly FrameSighting[] | { kind: "failed"; reason: string }]>([
     ["no render seen", drew()],
     ["only failed renders", drew("failed")],
     ["a daemon that could not say", { kind: "failed", reason: "no daemon" }],
@@ -770,6 +771,67 @@ describe("effectRefresh probe", () => {
       ok: false,
       reason:
         "the bar's latest render has not finished, so whether it moves is unknown — run the doctor again once the bar has redrawn",
+    });
+  });
+
+  // brandon-doctor-v62x.y5d: every chain the run read judges the bars it
+  // redraws, so a bar is never judged by another session's settings.
+  describe("several settings chains", () => {
+    const OTHER = "/other/.claude/settings.local.json";
+    const otherChain = (
+      bars: readonly FrameSighting[],
+      refreshInterval?: number,
+    ) => ({
+      at: { managedDir: "/managed", projectDir: "/other", userFile: SETTINGS_PATH },
+      sources: ok([
+        source("project-local", OTHER, {
+          statusLine: {
+            command: "cc-candybar",
+            ...(refreshInterval === undefined ? {} : { refreshInterval }),
+          },
+        }),
+      ]),
+      bars,
+    });
+    const chains = (
+      origin: readonly FrameSighting[],
+      originSources: Asked<readonly SettingsSource[]>,
+      ...elsewhere: ReturnType<typeof otherChain>[]
+    ) =>
+      checkByName("effectRefresh")!.probe({
+        ...facts({ kind: "outside" }, {}, LOADED, origin, originSources),
+        claudeSettings: {
+          origin: { at: AT, sources: originSources, bars: origin },
+          elsewhere,
+        },
+      });
+
+    test("a bar elsewhere is judged by its own chain: its 1 passes though the run's own sets none", () => {
+      expect(
+        chains([], interval(), otherChain(drewAt(EVERY_SECOND, "moves"), 1)),
+      ).toEqual({ ok: true, note: "Claude Code redrew the bar in 58 of the last 60 seconds" });
+    });
+
+    test("a bar elsewhere whose own chain sets no interval fails, its fix in that chain's file", () => {
+      expect(chains(STILL, interval(1), otherChain(MOVES))).toEqual({
+        ok: false,
+        reason: `${MOVING}, but its statusLine sets no refreshInterval, so Claude Code redraws it only on events (statusLine from ${OTHER})`,
+        fix: { ...FIX, file: { scope: "project-local", path: OTHER } },
+      });
+    });
+
+    // The slowest chain's failure leads; the others' follow as `more`.
+    test("two chains failing: the slowest leads, the other follows", () => {
+      expect(
+        chains(MOVES, interval(), otherChain(drewAt({ kind: "seen", seconds: 30 }, "moves"))),
+      ).toEqual({
+        ok: false,
+        reason: `${MOVING}, but its statusLine sets no refreshInterval, so Claude Code redraws it only on events${FROM}`,
+        more: [
+          `${MOVING}, but its statusLine sets no refreshInterval, so Claude Code redraws it only on events (statusLine from ${OTHER})`,
+        ],
+        fix: FIX,
+      });
     });
   });
 

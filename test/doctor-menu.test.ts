@@ -105,6 +105,11 @@ const GHOSTTY: TerminalFixture = {
   },
 };
 
+// Where session s1 renders from (test/helpers/click.ts records its origin)
+// and the Claude Code directory it runs with: the location its bar's settings
+// chain is read at, the click's own.
+const sessionAt = () => ({ projectDir: "/tmp/proj", claudeConfigDir: dir });
+
 function buildRuntime(
   tmux: TmuxHint | null,
   load: LoadOutcome = CLEAN_LOAD,
@@ -135,7 +140,7 @@ function buildRuntime(
     }),
   );
   const clients = new RenderSightings();
-  clients.see("s1", renderSaid(client.hint), instantOf(new Date()), 0);
+  clients.see("s1", renderSaid(client.hint, sessionAt()), instantOf(new Date()), 0);
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
@@ -287,7 +292,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     expect(out).toContain("✓ tmux truecolor");
     expect(rt.urlOfVerb(VERB_DOCTOR_FIX)).toBeUndefined();
     expect(rt.logs.filter((line) => line.startsWith("doctor:"))).toEqual([
-      `doctor: config=failed(2) install=ok daemon=ok urlHandler=ok links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=ok segmentData=ok sessionData=ok glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=ghostty@- font=- mark=- tmuxLinks=- clicked=yes cols=148 widthOf=session clientUtf8=- clients=native/same/- daemons=1 others=- memory=phys_footprint:120/512 postMortems=0/0 data=pr:-,rateLimits:-,memento:- transcripts=1/0/0 unparsed=0 frames=0/0/1/0/0 redrawn=unseen(0) statusLine=absent truecolorEnv=unset (session=s1)`,
+      `doctor: config=failed(2) install=ok daemon=ok urlHandler=ok links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=ok segmentData=ok sessionData=ok glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=ghostty@- font=- mark=- tmuxLinks=- clicked=yes cols=148 widthOf=session clientUtf8=- clients=native/same/- daemons=1 others=- memory=phys_footprint:120/512 postMortems=0/0 data=pr:-,rateLimits:-,memento:- transcripts=1/0/0 unparsed=0 frames=0/0/1/0/0 redrawn=unseen(0) chains=absent truecolorEnv=unset (session=s1)`,
     ]);
   });
 
@@ -307,7 +312,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     expect(out).toContain("✗ Nerd Font — the doctor cannot read Terminal 455.1's font");
     expect(rt.clicked.value()).toEqual(["Terminal"]);
     expect(rt.logs.filter((line) => line.startsWith("doctor:"))).toEqual([
-      `doctor: config=ok install=ok daemon=ok urlHandler=ok links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=failed(1) segmentData=ok sessionData=ok glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=apple-terminal@455.1 font=- mark=- tmuxLinks=- clicked=yes cols=148 widthOf=session clientUtf8=- clients=native/same/- daemons=1 others=- memory=phys_footprint:120/512 postMortems=0/0 data=pr:-,rateLimits:-,memento:- transcripts=1/0/0 unparsed=0 frames=0/0/1/0/0 redrawn=unseen(0) statusLine=absent truecolorEnv=unset (session=s1)`,
+      `doctor: config=ok install=ok daemon=ok urlHandler=ok links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=failed(1) segmentData=ok sessionData=ok glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=apple-terminal@455.1 font=- mark=- tmuxLinks=- clicked=yes cols=148 widthOf=session clientUtf8=- clients=native/same/- daemons=1 others=- memory=phys_footprint:120/512 postMortems=0/0 data=pr:-,rateLimits:-,memento:- transcripts=1/0/0 unparsed=0 frames=0/0/1/0/0 redrawn=unseen(0) chains=absent truecolorEnv=unset (session=s1)`,
     ]);
   });
 
@@ -315,7 +320,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
   // said — the record `cc-candybar doctor` reads too — not the persisted hints.
   test("the width row reads the session's latest render", () => {
     const rt = buildRuntime(null);
-    rt.clients.see("s1", { ...renderSaid(healthyClient()), termCols: 97 }, instantOf(new Date()), 1);
+    rt.clients.see("s1", { ...renderSaid(healthyClient(), sessionAt()), termCols: 97 }, instantOf(new Date()), 1);
     rt.openTools();
     rt.clickVerb(VERB_DOCTOR_RUN);
     expect(rt.logs.at(-1)).toMatch(/ termWidth=ok .* cols=97 widthOf=session /);
@@ -336,13 +341,13 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     const failed = rt.render();
     expect(failed).toContain("✗ daemon");
     expect(failed).toContain(`ran out of memory and restarted (2026-10-19T18-01-12-345Z-77) — post-mortem: ${report}`);
-    expect(rt.logs.at(-1)).toMatch(/ daemon=failed\(1\) .* daemons=1 others=- memory=phys_footprint:120\/512 postMortems=1\/1 data=\S+ transcripts=1\/0\/0 unparsed=0 frames=0\/0\/1\/0\/0 redrawn=unseen\(0\) statusLine=absent truecolorEnv=unset \(session=s1\)$/);
+    expect(rt.logs.at(-1)).toMatch(/ daemon=failed\(1\) .* daemons=1 others=- memory=phys_footprint:120\/512 postMortems=1\/1 data=\S+ transcripts=1\/0\/0 unparsed=0 frames=0\/0\/1\/0\/0 redrawn=unseen\(0\) chains=absent truecolorEnv=unset \(session=s1\)$/);
     rt.clickVerb(VERB_DOCTOR_FIX);
     expect(rt.logs).toContain(
       "doctor-fix: daemon → post-mortems-read through=2026-10-19T18-01-12-345Z-77 (session=s1)",
     );
     expect(rt.render()).toContain("✓ daemon");
-    expect(rt.logs.at(-1)).toMatch(/ daemon=ok .* postMortems=0\/1 data=\S+ transcripts=1\/0\/0 unparsed=0 frames=0\/0\/1\/0\/0 redrawn=unseen\(0\) statusLine=absent truecolorEnv=unset \(session=s1\)$/);
+    expect(rt.logs.at(-1)).toMatch(/ daemon=ok .* postMortems=0\/1 data=\S+ transcripts=1\/0\/0 unparsed=0 frames=0\/0\/1\/0\/0 redrawn=unseen\(0\) chains=absent truecolorEnv=unset \(session=s1\)$/);
   });
 
   // brandon-doctor-v62x.tfb: the click judges the client that drew the bar
@@ -355,7 +360,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
       "✗ install — the bar is drawn by a statusline client too old to say what it is",
     );
     expect(rt.logs.find((line) => line.startsWith("doctor:"))).toMatch(
-      / install=failed\(1\) .* clients=unreported\/-\/- daemons=1 others=- memory=phys_footprint:120\/512 postMortems=0\/0 data=\S+ transcripts=1\/0\/0 unparsed=0 frames=0\/0\/1\/0\/0 redrawn=unseen\(0\) statusLine=absent truecolorEnv=unset \(session=s1\)$/,
+      / install=failed\(1\) .* clients=unreported\/-\/- daemons=1 others=- memory=phys_footprint:120\/512 postMortems=0\/0 data=\S+ transcripts=1\/0\/0 unparsed=0 frames=0\/0\/1\/0\/0 redrawn=unseen\(0\) chains=absent truecolorEnv=unset \(session=s1\)$/,
     );
   });
 
@@ -375,7 +380,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     expect(rt.logs).toContain(
       'warn: doctor: clicked terminal not filed for "Ghostty": EROFS: read-only file system',
     );
-    expect(rt.logs.find((line) => line.startsWith("doctor:"))).toMatch(/ clicked=no cols=148 widthOf=session clientUtf8=- clients=native\/same\/- daemons=1 others=- memory=phys_footprint:120\/512 postMortems=0\/0 data=\S+ transcripts=1\/0\/0 unparsed=0 frames=0\/0\/1\/0\/0 redrawn=unseen\(0\) statusLine=absent truecolorEnv=unset \(session=s1\)$/);
+    expect(rt.logs.find((line) => line.startsWith("doctor:"))).toMatch(/ clicked=no cols=148 widthOf=session clientUtf8=- clients=native\/same\/- daemons=1 others=- memory=phys_footprint:120\/512 postMortems=0\/0 data=\S+ transcripts=1\/0\/0 unparsed=0 frames=0\/0\/1\/0\/0 redrawn=unseen\(0\) chains=absent truecolorEnv=unset \(session=s1\)$/);
   });
 
   test("in tmux with RGB and the var unset: failed row with [fix]; the fix lands and the row says restart", () => {
@@ -456,7 +461,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
         jest.setSystemTime(Date.now() + interval * 1000);
         rt.clients.see(
           "s1",
-          { ...renderSaid(healthyClient()), frame: "moves" },
+          { ...renderSaid(healthyClient(), sessionAt()), frame: "moves" },
           instantOf(new Date()),
           ++order,
         );
@@ -472,7 +477,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     // The event names the scope the statusLine was read from, and the rate
     // seen.
     expect(rt.logs.find((line) => line.startsWith("doctor:"))).toMatch(
-      / frames=1\/0\/0\/0\/0 redrawn=12 statusLine=user:- truecolorEnv=unset \(session=s1\)$/,
+      / frames=1\/0\/0\/0\/0 redrawn=12 chains=user:- truecolorEnv=unset \(session=s1\)$/,
     );
 
     rt.clickVerb(VERB_DOCTOR_FIX);
@@ -549,7 +554,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
         [{ name: "iterm2", version: "3.7.2" }, ITERM_MENLO.env, BUNDLED_GLYPHS],
       ]);
       expect(rt.logs.filter((l) => l.startsWith("doctor:"))).toEqual([
-        `doctor: config=ok install=ok daemon=ok urlHandler=ok links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=failed(1) segmentData=ok sessionData=ok glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=iterm2@3.7.2 font="Menlo-Regular":lacks${[...BUNDLED_GLYPHS].length} mark=- tmuxLinks=- clicked=yes cols=148 widthOf=session clientUtf8=- clients=native/same/- daemons=1 others=- memory=phys_footprint:120/512 postMortems=0/0 data=pr:-,rateLimits:-,memento:- transcripts=1/0/0 unparsed=0 frames=0/0/1/0/0 redrawn=unseen(0) statusLine=absent truecolorEnv=unset (session=s1)`,
+        `doctor: config=ok install=ok daemon=ok urlHandler=ok links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=failed(1) segmentData=ok sessionData=ok glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=iterm2@3.7.2 font="Menlo-Regular":lacks${[...BUNDLED_GLYPHS].length} mark=- tmuxLinks=- clicked=yes cols=148 widthOf=session clientUtf8=- clients=native/same/- daemons=1 others=- memory=phys_footprint:120/512 postMortems=0/0 data=pr:-,rateLimits:-,memento:- transcripts=1/0/0 unparsed=0 frames=0/0/1/0/0 redrawn=unseen(0) chains=absent truecolorEnv=unset (session=s1)`,
       ]);
     });
 
@@ -567,7 +572,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
       expect(rt.logs).toContain(
         `doctor-mark: nerdFont drawn on iTerm2 with Menlo-Regular (iTerm2 profile "Default")|${BUNDLED_GLYPHS_NAMED} (session=s1)`,
       );
-      expect(rt.logs.at(-1)).toMatch(/nerdFont=ok .* mark=drawn tmuxLinks=- clicked=yes cols=148 widthOf=session clientUtf8=- clients=native\/same\/- daemons=1 others=- memory=phys_footprint:120\/512 postMortems=0\/0 data=\S+ transcripts=1\/0\/0 unparsed=0 frames=0\/0\/1\/0\/0 redrawn=unseen\(0\) statusLine=absent truecolorEnv=unset \(session=s1\)$/);
+      expect(rt.logs.at(-1)).toMatch(/nerdFont=ok .* mark=drawn tmuxLinks=- clicked=yes cols=148 widthOf=session clientUtf8=- clients=native\/same\/- daemons=1 others=- memory=phys_footprint:120\/512 postMortems=0\/0 data=\S+ transcripts=1\/0\/0 unparsed=0 frames=0\/0\/1\/0\/0 redrawn=unseen\(0\) chains=absent truecolorEnv=unset \(session=s1\)$/);
     });
 
     test("marking ✗ keeps the row failed, says boxes, and leaves ✓ to mark later", () => {

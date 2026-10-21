@@ -111,11 +111,15 @@ export interface FrameSighting {
 // the rate-limit windows are that directory's account's, not the machine's.
 // `termCols`: the width the client measured, as the checkpoint admitted it —
 // null when it could not measure, or the daemon refused what it sent.
+// `projectDir`: the session's project (`workspace.project_dir`), where Claude
+// Code reads the project's settings files — with `claudeConfigDir`, which of
+// them redraw the bar (brandon-doctor-v62x.y5d).
 export interface RenderSaid {
   readonly client: ClientHint | null;
   readonly termCols: number | null;
   readonly rateLimits: RateLimitsSeen;
   readonly claudeConfigDir: string;
+  readonly projectDir: string;
   readonly transcript: TranscriptSaid;
   readonly frame: FrameSeen;
 }

@@ -27,8 +27,8 @@ const sessionData = checkByName("sessionData")!;
 
 const probe = (
   transcripts: DoctorFacts["transcripts"],
-  askedBy: DoctorFacts["askedBy"] = "command",
-) => sessionData.probe({ ...HEALTHY_FACTS, transcripts, askedBy });
+  sighted: DoctorFacts["sighted"] = { kind: "recent" },
+) => sessionData.probe({ ...HEALTHY_FACTS, transcripts, sighted });
 
 const read = (
   answered: boolean,
@@ -201,13 +201,13 @@ describe("the session data row", () => {
 
   test("no render to name a transcript fails, worded for what asked", () => {
     const none = { kind: "ok", value: [] } as const;
-    expect(probe(none, "click")).toMatchObject({
+    expect(probe(none, { kind: "clicked", sessionId: "s1" })).toMatchObject({
       ok: false,
       reason: expect.stringMatching(
         /^this daemon holds no render of this bar .*so which transcript it reads is unknown/,
       ),
     });
-    expect(probe(none, "command")).toMatchObject({
+    expect(probe(none, { kind: "recent" })).toMatchObject({
       ok: false,
       reason: expect.stringMatching(
         /^no session has drawn a bar for this daemon in the last 5 minutes/,
@@ -274,11 +274,16 @@ describe("the CLI's transcripts", () => {
   test("only the sessions that drew a bar recently are judged", () => {
     const parsed = parseTranscriptSightings(
       stats([
-        { transcript: t, ago: 1 },
-        { transcript: { path: "/old.jsonl", answered: true }, ago: RECENT_CLIENT_S + 1 },
+        { transcript: t, sessionId: "s1", ago: 1 },
+        { transcript: { path: "/old.jsonl", answered: true }, sessionId: "s2", ago: RECENT_CLIENT_S + 1 },
       ]),
     );
-    expect(transcriptsOf(parsed)).toEqual({ kind: "ok", value: [t] });
+    expect(transcriptsOf({ kind: "recent" }, parsed)).toEqual({ kind: "ok", value: [t] });
+    // In a session's shell, that session's alone, however long ago.
+    expect(transcriptsOf({ kind: "shell", sessionId: "s2" }, parsed)).toEqual({
+      kind: "ok",
+      value: [{ path: "/old.jsonl", answered: true }],
+    });
   });
 });
 

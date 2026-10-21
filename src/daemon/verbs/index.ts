@@ -132,7 +132,6 @@ import {
   dataFields,
   transcriptFields,
   frameFields,
-  statusLineFields,
   truecolorEnvFields,
   doctorReportPairs,
   linkFields,
@@ -143,7 +142,7 @@ import {
 import { withMark } from "../../doctor/mark-book";
 import { withClicked } from "../../doctor/clicked-terminals";
 import { DoctorBusy } from "../../doctor/busy";
-import { redrawsOf } from "../../doctor/redraws";
+import { barsOf } from "../../doctor/sightings";
 import {
   applyFix,
   clickArrived,
@@ -1198,7 +1197,7 @@ function writeReport(ctx: VerbContext, sid: string, facts: DoctorFacts): void {
   ctx.sessionState.setBatch(sid, doctorReportPairs(reports));
   ctx.dlog(
     "info",
-    `doctor: ${reports.map((r) => `${r.check.name}=${r.verdict.ok ? "ok" : `failed(${1 + (r.verdict.more?.length ?? 0)})`}`).join(" ")} ${nerdFontFields(facts.nerdFont, facts.marks)} ${linkFields(facts.terminal, facts.clicked)} ${terminalFeatureFields(facts.terminal, facts.width)} ${installFields(facts.install)} ${daemonFields(facts.daemon)} ${dataFields(facts.data)} ${transcriptFields(facts.transcripts)} ${frameFields(facts.frames)} ${statusLineFields(facts.claudeSettings.sources)} ${truecolorEnvFields(facts.claudeSettings.sources)} (session=${sid})`,
+    `doctor: ${reports.map((r) => `${r.check.name}=${r.verdict.ok ? "ok" : `failed(${1 + (r.verdict.more?.length ?? 0)})`}`).join(" ")} ${nerdFontFields(facts.nerdFont, facts.marks)} ${linkFields(facts.terminal, facts.clicked)} ${terminalFeatureFields(facts.terminal, facts.width)} ${installFields(facts.install)} ${daemonFields(facts.daemon)} ${dataFields(facts.data)} ${transcriptFields(facts.transcripts)} ${frameFields(facts.frames, facts.claudeSettings)} ${truecolorEnvFields(facts.claudeSettings.origin.sources)} (session=${sid})`,
   );
 }
 
@@ -1208,7 +1207,9 @@ function writeReport(ctx: VerbContext, sid: string, facts: DoctorFacts): void {
 // the doctor did not see.
 function clickFacts(ctx: VerbContext, sid: string): DoctorFacts {
   // The session's own renders, read once: whatever its Claude Code sends, it
-  // sends to this session.
+  // sends to this session. The click proves its bar is on screen, so each
+  // window ends now (`barsOf`).
+  const scope = { kind: "clicked", sessionId: sid } as const;
   const said = ctx.clients.ofSession(sid, instantOf(new Date()));
   let gathered: ReturnType<typeof gatherFacts>;
   try {
@@ -1220,16 +1221,8 @@ function clickFacts(ctx: VerbContext, sid: string): DoctorFacts {
       { kind: "ok", value: ctx.serving() },
       { kind: "ok", value: said.map((s) => s.rateLimits) },
       { kind: "ok", value: said.map((s) => s.transcript) },
-      // The click proves this bar is on screen, so the silence since its
-      // last render counts against its redraw rate: the window ends now.
-      {
-        kind: "ok",
-        value: said.map(({ role, frame, redrawn, since }) => ({
-          role,
-          frame,
-          redraws: redrawsOf(redrawn, since, 0),
-        })),
-      },
+      scope,
+      { kind: "ok", value: barsOf(scope, said) },
       sessionWidth(sid, said),
       readStores(ctx.doctorStores),
     );
@@ -1247,7 +1240,6 @@ function clickFacts(ctx: VerbContext, sid: string): DoctorFacts {
       ctx.bundle,
       said.map((s) => s.client),
     ),
-    askedBy: "click",
     clicked: clickedFrom(ctx, gathered),
   };
 }
