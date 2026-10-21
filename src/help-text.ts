@@ -5,6 +5,12 @@ import { NODE_FLAGS } from "./cli-flags";
 import { SUBMENUS, TAB_LABEL, settingMenuPath } from "./config/menu-places";
 import { LANES } from "./config/lanes";
 
+// Where the lanes' toggles are, each place once: one place while they sit
+// together, every place if the menu's map ever parts them.
+const LANE_PLACES = [
+  ...new Set(Object.values(LANES).map((l) => settingMenuPath(l.setting))),
+].join(" or ");
+
 // [LAW:effects-at-boundaries] Pure data, no I/O — index.ts owns the console.log
 // effect. Kept as its own module so the text is importable (and testable) without
 // pulling in index.ts's top-level `main()` call.
@@ -51,7 +57,7 @@ Configuration:
   Every bar carries a settings menu, whatever your config says — no config
   needed, and writing your own \`root\` cannot delete it. Click
   it on the bar (${DOOR_GLYPH} by default; globals.menuGlyph changes it) for
-  preset switching and five tabs: ${TAB_LABEL.session} (quick actions and commands),
+  preset switching and its tabs: ${TAB_LABEL.session} (quick actions and commands),
   ${TAB_LABEL.look} (theme/style/variation/shade/endcaps), ${TAB_LABEL.layout} (new preset, edit mode,
   wrap, padding), ${TAB_LABEL.config} (update notice, ${SUBMENUS.toggles.trigger}) and
   ${TAB_LABEL.tools}. A change applies to this session at once; 💾 save appears while
@@ -91,7 +97,7 @@ Subcommands:
                            (--config rides with it). LANE is band, statusline
                            or pane: the experimental lane this stream serves,
                            which streams only while its toggle in the settings
-                           menu's ${settingMenuPath(LANES.band.setting)} is on.
+                           menu's ${LANE_PLACES} is on.
   bar-pane PANE            Draw the bar of the Claude Code session in tmux
                            pane PANE (e.g. %3) in this pane, as the daemon
                            pushes it, while this pane is shown. The bar is

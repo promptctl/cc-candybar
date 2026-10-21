@@ -347,7 +347,7 @@ The control a setting gets, chosen from its domain. The same generator serves th
 
 Every control writes a session draft. In the settings menu, a control also has a `↺` while resetting it would change something (a draft, or a value the config file holds at a layer the reset clears), which resets that setting at every layer (`reset-config`); its tab is marked `•` while any control in it shows one. The drawings here show every `↺`.
 
-- **Authored as:** `settingControl` in `src/config/setting-control.ts`. Which tab a global setting appears in is the `PLACE` table in `src/config/settings-menu.ts`.
+- **Authored as:** `settingControl` in `src/config/setting-control.ts`. Which tab a global setting appears in is the `PLACE` table in `src/config/menu-places.ts`.
 
 ## The settings menu
 
