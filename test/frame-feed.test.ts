@@ -579,7 +579,7 @@ describe("feedsOf", () => {
     expect(feeds.feedsOf("s")).toEqual(UNFOLLOWED_FEEDS);
   });
 
-  test("a lane is credited only with the frames pushed since its first subscriber joined", async () => {
+  test("a lane is credited only with the frames sent since its first subscriber joined", async () => {
     const { feeds, note } = harness({ motion: "moving" });
     note("s", "bar");
     const closeA = feeds.subscribe("s", sub(() => {}, "statusline"));
@@ -590,7 +590,23 @@ describe("feedsOf", () => {
     closeA();
     closeB();
     expect(now.statusline.fps).toBe(MOVING);
-    expect(now.pane.fps).toBe(100 / PERIODS.moving);
+    // The bar as it stood, handed over on joining, then each one pushed since.
+    expect(now.pane.fps).toBe(1 + 100 / PERIODS.moving);
+  });
+
+  test("a lane whose answer stands still is credited with no frames while the bar moves", async () => {
+    const { feeds, note, state } = harness({ motion: "moving" });
+    state.handoff = "the bar is drawn in the band";
+    note("s", "bar");
+    const closeBand = feeds.subscribe("s", sub(() => {}, "band"));
+    const closeLine = feeds.subscribe("s", sub(() => {}, "statusline"));
+    await pass(1100);
+    const now = feeds.feedsOf("s");
+    closeBand();
+    closeLine();
+    expect(now.band.fps).toBe(MOVING);
+    // The handoff line, sent once on joining and never again.
+    expect(now.statusline.fps).toBe(0);
   });
 
   test("a pane off screen is drawn at the still rate, and says so", async () => {

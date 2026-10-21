@@ -120,7 +120,7 @@ type Phase =
 interface Feed {
   readonly sessionId: string;
   // Each subscriber, with what it has been sent.
-  readonly sinks: Map<Subscriber, Sink>;
+  readonly sinks: Map<Subscriber, Following>;
   readonly unwatch: () => void;
   phase: Phase;
   // The last frame pushed, as serialized, so an unchanged frame is never
@@ -146,7 +146,7 @@ interface Feed {
 // What one subscriber has been sent: the bytes of the last frame, so a lane
 // whose answer a frame left as it was is not sent it again, and when each
 // frame of the last RATE_WINDOW_MS went to it, oldest first.
-interface Sink {
+interface Following {
   bytes: string | null;
   readonly sentAt: number[];
 }
@@ -166,7 +166,7 @@ export function feedsFact(feeds: LaneFeeds): string {
 
 // Forget the sends older than the rate window, so a subscriber holds at most
 // one window's worth however long it follows.
-function trimRate(sink: Sink, now: number): void {
+function trimRate(sink: Following, now: number): void {
   const kept = sink.sentAt.findIndex((at) => at > now - RATE_WINDOW_MS);
   sink.sentAt.splice(0, kept === -1 ? sink.sentAt.length : kept);
 }
@@ -292,7 +292,7 @@ export class FrameFeeds<Req> {
       return () => {};
     }
     const feed = this.feeds.get(sessionId) ?? this.open(sessionId);
-    const sink: Sink = { bytes: null, sentAt: [] };
+    const sink: Following = { bytes: null, sentAt: [] };
     feed.sinks.set(sub, sink);
     this.send(feed, sub, sink);
     this.deps.log(
@@ -553,7 +553,7 @@ export class FrameFeeds<Req> {
   }
 
   // The last frame's answer for `sub`'s lane, unless it was sent that already.
-  private send(feed: Feed, sub: Subscriber, sink: Sink): void {
+  private send(feed: Feed, sub: Subscriber, sink: Following): void {
     if (feed.last === null) return;
     const { resp, bytes } = answerOf(feed.last.answers, sub.lane);
     if (sink.bytes === bytes) return;
