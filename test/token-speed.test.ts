@@ -30,7 +30,6 @@ import {
 import { type EffectiveGlobals } from "../src/config/effective-globals";
 import type { ClientHints } from "../src/daemon/protocol";
 import { SessionUsageStore } from "../src/daemon/cache/session-usage-store";
-import { clearParseCache } from "../src/utils/claude";
 import type { ClaudeHookData } from "../src/utils/claude";
 import { ABSENT, ok } from "../src/utils/outcome";
 import {
@@ -97,7 +96,6 @@ describe("SessionUsageStore.observeSpeed — prior-sample retention", () => {
   let dir: string;
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), "cc-candybar-speed-"));
-    clearParseCache();
   });
   afterEach(() => rmSync(dir, { recursive: true, force: true }));
 

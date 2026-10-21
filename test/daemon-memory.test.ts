@@ -5,8 +5,9 @@
 //
 // WHAT THE LEAK IS (verified via heap snapshots — see ticket 5qh)
 // --------------------------------------------------------------
-// The transcript-scanning provider path (`loadEntriesFromProjects`) fans out an
-// UNBOUNDED `Promise.all` over every transcript file on every cache-miss render.
+// The transcript-scanning provider path (`loadEntriesFromProjects`, since
+// removed) fanned out an UNBOUNDED `Promise.all` over every transcript file on
+// every cache-miss render.
 // At the OOM trigger ~3046 `FSReqPromise` were held DIRECTLY by libuv's pending-
 // request table — i.e. that many fs syscalls in flight at once. The JS heap was
 // 36 MB while RSS was 250 MB; the gap is native libuv request + read buffers.
@@ -25,7 +26,7 @@
 // WHAT KEEPS THIS GREEN
 // ---------------------
 // gn4.2 landed the bound: a single-owner concurrency gate (src/utils/
-// transcript-fs.ts) routes every transcript readdir/stat/readFile through one
+// transcript-fs.ts) routes every transcript readdir/stat/read through one
 // limiter, so peak in-flight is capped by a constant no matter how many renders
 // fan out. Removing that gate (or routing fs around it) re-admits the unbounded
 // fan-out and this assertion fails at thousands-in-flight — that is the
@@ -53,7 +54,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { loadEntriesFromProjects, clearParseCache } from "../src/utils/claude";
+import { findProjectPaths, foldAppended } from "../src/utils/claude";
 
 // Synthetic transcript tree: K project dirs × J .jsonl files. Sized so one
 // render alone fans out to hundreds of concurrent fs ops (K readdirs + J stats
@@ -131,18 +132,38 @@ function makeFsObserver() {
   return { hook, peak: () => peak };
 }
 
-// Drive `renderConcurrency` overlapping renders to completion and return the
-// peak number of transcript fs ops in flight at any instant during the burst.
+// Every transcript file of the synthetic tree.
+const allFiles = (): string[] =>
+  Array.from({ length: PROJECTS }, (_, p) =>
+    Array.from({ length: FILES_PER_PROJECT }, (_, f) =>
+      join(root, "projects", `proj-${p}`, `sess-${f}.jsonl`),
+    ),
+  ).flat();
+
+// One burst: the project walk, and a cold fold of every transcript at once —
+// the reader every fold goes through (brandon-unfiled-3248.bfnj). With the
+// gate removed, `renderConcurrency` overlapping bursts put ~1024 reads in
+// flight at once.
+function burst(renderConcurrency: number): Promise<unknown> {
+  return Promise.all(
+    Array.from({ length: renderConcurrency }, () =>
+      Promise.all([
+        findProjectPaths([root]),
+        ...allFiles().map((f) =>
+          foldAppended(f, undefined, 0, (n, entries) => n + entries.length),
+        ),
+      ]),
+    ),
+  );
+}
+
+// Drive `renderConcurrency` overlapping bursts to completion and return the
+// peak number of transcript fs ops in flight at any instant during them.
 async function measurePeakInFlight(renderConcurrency: number): Promise<number> {
-  clearParseCache();
   const obs = makeFsObserver();
   obs.hook.enable();
   try {
-    await Promise.all(
-      Array.from({ length: renderConcurrency }, () =>
-        loadEntriesFromProjects([root], undefined, undefined, true),
-      ),
-    );
+    await burst(renderConcurrency);
   } finally {
     obs.hook.disable();
   }
@@ -153,7 +174,7 @@ describe("daemon transcript-fs concurrency", () => {
   // [LAW:single-enforcer] PINNED REGRESSION GATE. Bounded by a documented
   // constant regardless of render rate. gn4.2 landed the single-owner gate
   // (src/utils/transcript-fs.ts) that routes every transcript readdir/stat/
-  // readFile through one limiter, so peak in-flight is now bounded by its cap.
+  // read through one limiter, so peak in-flight is now bounded by its cap.
   test(
     "peak in-flight transcript fs ops stays under the ceiling",
     async () => {
@@ -182,22 +203,17 @@ describe("heap-analysis scripts", () => {
   let after: string;
 
   beforeAll(async () => {
-    clearParseCache();
     before = join(root, "before.heapsnapshot");
     after = join(root, "after.heapsnapshot");
     writeHeapSnapshot(before);
     // Launch the burst, let the fan-out dispatch for a couple of event-loop
     // turns, then snapshot WHILE ops are pending (the FSReqPromise are gone
     // once it drains). Drain afterward so nothing bleeds into other tests.
-    const burst = Promise.all(
-      Array.from({ length: RENDER_CONCURRENCY }, () =>
-        loadEntriesFromProjects([root], undefined, undefined, true),
-      ),
-    );
+    const inFlight = burst(RENDER_CONCURRENCY);
     await new Promise((r) => setImmediate(r));
     await new Promise((r) => setImmediate(r));
     writeHeapSnapshot(after);
-    await burst;
+    await inFlight;
   });
 
   test("heap-analyze diff reports FSReqPromise growth between snapshots", () => {

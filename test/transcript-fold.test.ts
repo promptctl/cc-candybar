@@ -17,7 +17,8 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 import { TranscriptFold } from "../src/utils/transcript-fold";
-import { clearParseCache, type ParsedEntry } from "../src/utils/claude";
+import type { ParsedEntry } from "../src/utils/claude";
+import { FOLD_WINDOW_BYTES } from "../src/utils/transcript-fs";
 
 let dir: string;
 let tick = 0;
@@ -32,7 +33,7 @@ const line = (text: string): string =>
 // Every fold here counts entries: the smallest projection that makes "how much
 // was folded, and from where" visible without reading any internal state.
 const counting = (max?: number) =>
-  new TranscriptFold<number>(0, (n: number, _e: ParsedEntry) => n + 1, max);
+  new TranscriptFold<number>(0, (n: number, _e: ParsedEntry) => n + 1, undefined, max);
 
 // The fold reads only when the mtime moved, so a test that rewrites a file in the
 // same millisecond must say so explicitly.
@@ -59,7 +60,6 @@ const valueOf = async (
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "fold-"));
   tick = 0;
-  clearParseCache();
 });
 
 test("only the appended bytes are folded onto the prior value", async () => {
@@ -125,4 +125,25 @@ test("the fast path re-orders for eviction, so a read keeps a session alive", as
   rmSync(paths[1]!);
   expect(await valueOf(fold, "x", paths[0]!)).toBe(2);
   expect(await valueOf(fold, "y", paths[1]!)).toBe(0);
+});
+
+// brandon-unfiled-3248.bfnj: the fold reads one window at a time, and a line
+// longer than the window is read whole and logged through the fold's sink.
+test("a multi-window transcript folds every entry, and a widened line is logged", async () => {
+  const path = join(dir, "big.jsonl");
+  const pad = "x".repeat(1000);
+  const lines = Array.from({ length: 3000 }, (_, i) => line(`${i} ${pad}`));
+  lines.splice(1500, 0, line("y".repeat(Math.floor(FOLD_WINDOW_BYTES * 2.5))));
+  write(path, ...lines);
+  const logged: string[] = [];
+  const fold = new TranscriptFold<number>(
+    0,
+    (n: number, _e: ParsedEntry) => n + 1,
+    (_level, msg) => logged.push(msg),
+  );
+
+  expect(await valueOf(fold, "s", path)).toBe(3001);
+  expect(logged).toEqual([
+    expect.stringMatching(/^transcript read widened path=".*big\.jsonl" offset=\d+ bytes=\d+ doublings=2$/),
+  ]);
 });

@@ -10,6 +10,7 @@ import type { ClaudeHookData, ParsedEntry, UserEntry } from "../utils/claude";
 // The fold machinery itself moved out when the activity provider became its
 // second instance (brandon-activity-ue7): what is left here is the projection.
 import { TranscriptFold } from "../utils/transcript-fold";
+import type { DaemonLogger } from "../daemon/log";
 import { debug } from "../utils/logger";
 import { ABSENT, failed, ok, type Outcome } from "../utils/outcome";
 
@@ -95,7 +96,11 @@ function lastResponseTime(entries: readonly ParsedEntry[]): number | null {
 }
 
 export class MetricsProvider {
-  private readonly fold = new TranscriptFold<MetricsState>(EMPTY, step);
+  private readonly fold: TranscriptFold<MetricsState>;
+
+  constructor(opts: { logger?: DaemonLogger } = {}) {
+    this.fold = new TranscriptFold<MetricsState>(EMPTY, step, opts.logger);
+  }
 
   // [LAW:no-silent-failure] A hook payload with no cost block is `absent`
   // (old clients); a transcript parse error is `failed`, carried to the

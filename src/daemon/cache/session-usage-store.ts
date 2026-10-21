@@ -10,10 +10,11 @@ import {
   getClaudePaths,
   findProjectPaths,
   findAgentTranscripts,
-  readAppendedEntries,
+  foldAppended,
+  widenedLines,
   type ClaudeHookData,
+  type Folded,
   type ParsedEntry,
-  type TranscriptCursor,
 } from "../../utils/claude";
 // [LAW:single-enforcer] The once-per-day seed's directory walk shares the same
 // in-flight-I/O budget (gn4.2) as every other transcript scan.
@@ -120,7 +121,7 @@ interface SessionRecord {
   // [LAW:one-source-of-truth] `files` is canonical (main transcript + agent
   // sidechains, each its own incremental FileFold); `sessionInfo`/`days` are
   // derived from mergeFolds and re-synced on every ingest — the single writer.
-  files: Map<string, FileFold>;
+  files: Map<string, Folded<FileFold>>;
   sessionInfo: SessionInfo;
   days: Map<string, DayUsage>;
   transcriptStamp: string;
@@ -213,45 +214,46 @@ function emptyBreakdown(): TokenBreakdown {
 }
 
 // [LAW:one-source-of-truth] The incremental fold of ONE append-only transcript
-// file (a session's main transcript or one agent sidechain). `cursor` marks the
-// bytes already folded; the sums run over every usage-bearing entry seen so far.
+// file (a session's main transcript or one agent sidechain): the sums over
+// every usage-bearing entry seen so far. The cursor marking the bytes folded
+// is the `Folded` pair's, never a field of its own here.
 // The session aggregate is the MERGE of its files' folds (mergeFolds), so a file
 // rewritten by /compact re-folds in isolation without disturbing the others.
 interface FileFold {
-  cursor: TranscriptCursor;
   entries: number; // usage-bearing entries folded (0 ⇒ empty session, all-null)
   cost: number;
   breakdown: TokenBreakdown;
   days: Map<string, DayUsage>; // keys >= seed cutoff only (pruned on fold)
 }
 
-// [LAW:effects-at-boundaries] Pure fold of NEW entries onto a prior file fold.
-// Returns a FRESH FileFold (prior is never mutated) so two concurrent refolds
-// sharing one prior snapshot can't corrupt each other. `reset` (file rewritten)
-// discards the prior sums and folds `entries` — the whole new file — from zero.
+const EMPTY_FILE_FOLD: FileFold = {
+  entries: 0,
+  cost: 0,
+  breakdown: emptyBreakdown(),
+  days: new Map(),
+};
+
+// [LAW:effects-at-boundaries] The fold step: NEW entries onto a file fold.
+// Returns a FRESH FileFold (the state is never mutated) so two concurrent
+// refolds sharing one prior snapshot can't corrupt each other. A rewritten
+// file is foldAppended's to start over from EMPTY_FILE_FOLD.
 //
 // [LAW:one-source-of-truth] Session cost and day cost use the SAME priced value:
 // an entry lacking costUSD is priced once (PricingService) and that figure feeds
-// BOTH the session total and its day bucket. This matches the old path exactly —
-// it mutated entry.costUSD to the priced cost before bucketByDay read it — so
-// `today` is not silently under-counted for un-costed entries.
+// BOTH the session total and its day bucket, so `today` is not silently
+// under-counted for un-costed entries.
 async function foldFile(
-  prior: FileFold | undefined,
-  reset: boolean,
+  state: FileFold,
   entries: readonly ParsedEntry[],
-  cursor: TranscriptCursor,
 ): Promise<FileFold> {
   // dayKey strings sort lexically == chronologically, so "keep recent" is a
   // string comparison against yesterday's key.
   const keep = dayKey(new Date(seedCutoffMs()));
-  const base = prior && !reset ? prior : undefined;
-  let count = base?.entries ?? 0;
-  let cost = base?.cost ?? 0;
-  const breakdown = base ? { ...base.breakdown } : emptyBreakdown();
+  let count = state.entries;
+  let cost = state.cost;
+  const breakdown = { ...state.breakdown };
   const days = new Map<string, DayUsage>();
-  if (base) {
-    for (const [k, v] of base.days) if (k >= keep) days.set(k, { ...v });
-  }
+  for (const [k, v] of state.days) if (k >= keep) days.set(k, { ...v });
   for (const entry of entries) {
     const u = entry.message?.usage;
     if (!u) continue;
@@ -277,14 +279,14 @@ async function foldFile(
     d.cacheRead += u.cache_read_input_tokens || 0;
     days.set(key, d);
   }
-  return { cursor, entries: count, cost, breakdown, days };
+  return { entries: count, cost, breakdown, days };
 }
 
 // [LAW:effects-at-boundaries] Pure merge of a session's file folds into the
 // derived record shape the read path serves. `entries === 0` across all files is
 // the empty session (all-null SessionInfo, whose fields the payload drops) — the
 // same distinction the old `entries.length === 0` arm carried.
-function mergeFolds(files: ReadonlyMap<string, FileFold>): {
+function mergeFolds(files: ReadonlyMap<string, Folded<FileFold>>): {
   sessionInfo: SessionInfo;
   days: Map<string, DayUsage>;
 } {
@@ -292,7 +294,7 @@ function mergeFolds(files: ReadonlyMap<string, FileFold>): {
   let cost = 0;
   const bd = emptyBreakdown();
   const days = new Map<string, DayUsage>();
-  for (const f of files.values()) {
+  for (const { value: f } of files.values()) {
     count += f.entries;
     cost += f.cost;
     bd.input += f.breakdown.input;
@@ -626,7 +628,7 @@ export class SessionUsageStore {
     let refolded: {
       prior: SessionRecord | undefined;
       outcome: Outcome<{
-        files: Map<string, FileFold>;
+        files: Map<string, Folded<FileFold>>;
         sessionInfo: SessionInfo;
         days: Map<string, DayUsage>;
         mainStamp: string;
@@ -696,7 +698,7 @@ export class SessionUsageStore {
     prior: SessionRecord | undefined,
   ): Promise<
     Outcome<{
-      files: Map<string, FileFold>;
+      files: Map<string, Folded<FileFold>>;
       sessionInfo: SessionInfo;
       days: Map<string, DayUsage>;
       mainStamp: string;
@@ -707,16 +709,22 @@ export class SessionUsageStore {
     // out of `newFiles`, so a rewritten/renamed file cannot linger in the merge.
     // Pass the prior file set so already-verified agent sidechains skip their
     // first-line re-read — per-render agent discovery is O(new sidechains).
-    const agentPaths = await findAgentTranscripts(
+    const agents = await findAgentTranscripts(
       sessionId,
       dirname(transcriptPath),
       prior === undefined ? undefined : new Set(prior.files.keys()),
     );
-    const newFiles = new Map<string, FileFold>();
+    for (const line of widenedLines(agents.reads)) this.log("info", line);
+    const newFiles = new Map<string, Folded<FileFold>>();
     let mainStamp = "";
-    for (const filePath of [transcriptPath, ...agentPaths]) {
+    for (const filePath of [transcriptPath, ...agents.paths]) {
       const priorFold = prior?.files.get(filePath);
-      const read = await readAppendedEntries(filePath, priorFold?.cursor);
+      const read = await foldAppended(
+        filePath,
+        priorFold,
+        EMPTY_FILE_FOLD,
+        foldFile,
+      );
       if (read.kind === "failed") return read;
       if (read.kind === "absent") {
         // The file has no bytes yet (fresh main) or vanished (removed agent
@@ -726,9 +734,10 @@ export class SessionUsageStore {
         if (priorFold) newFiles.set(filePath, priorFold);
         continue;
       }
-      const { entries, cursor, reset } = read.value;
-      newFiles.set(filePath, await foldFile(priorFold, reset, entries, cursor));
-      if (filePath === transcriptPath) mainStamp = cursor.stamp;
+      const { folded, reads } = read.value;
+      for (const line of widenedLines(reads)) this.log("info", line);
+      newFiles.set(filePath, folded);
+      if (filePath === transcriptPath) mainStamp = folded.cursor.stamp;
     }
     return ok({ files: newFiles, ...mergeFolds(newFiles), mainStamp });
   }

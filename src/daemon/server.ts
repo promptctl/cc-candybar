@@ -96,6 +96,7 @@ import {
 } from "./verbs";
 import { settingCounts } from "./setting-drafts";
 import { validateHookData } from "../utils/schema-validator.js";
+import { transcriptReads } from "../utils/transcript-fs.js";
 import { fileStores, productionEdge, readStores } from "../doctor/edge";
 import { ProbeArrivals } from "../doctor/handler-probe";
 import {
@@ -1153,6 +1154,7 @@ export async function replyTo(
       stats: stats.snapshot({
         gitCache: gitService.getStats(),
         usageCache: usageStore.getStats(),
+        transcriptReads: transcriptReads(),
         renderCache: renderCache.stats,
         effectCache: effectSessions.getStats(),
         sessionState: {

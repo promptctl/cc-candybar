@@ -24,7 +24,6 @@ import { ABSENT, ok } from "../src/utils/outcome";
 import { FLOOR_EFFECT, FLOOR_STYLE } from "./helpers/floor-style";
 import { entryActivity } from "../src/utils/transcript-activity";
 import {
-  clearParseCache,
   userEntryOf,
   type ClaudeHookData,
 } from "../src/utils/claude";
@@ -176,7 +175,6 @@ async function activityOf(...lines: string[]) {
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "activity-"));
   clock = 0;
-  clearParseCache();
 });
 
 // ─── the per-entry projection ────────────────────────────────────────────────

@@ -177,6 +177,12 @@ export function formatStats(s: StatsSnapshot): string {
   );
   lines.push(`  sweeps        ${s.usageCache.sweeps}`);
   lines.push(``);
+  lines.push(`transcriptReads`);
+  lines.push(`  reads         ${s.transcriptReads.reads}`);
+  lines.push(`  bytes         ${fmtBytes(s.transcriptReads.bytes)}`);
+  lines.push(`  widened       ${s.transcriptReads.widened}`);
+  lines.push(`  largest read  ${fmtBytes(s.transcriptReads.largestRead)}`);
+  lines.push(``);
   lines.push(`renderCache`);
   lines.push(`  size          ${s.renderCache.size}`);
   lines.push(`  held          ${s.renderCache.held}`);

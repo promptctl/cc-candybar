@@ -35,6 +35,7 @@ describe("RuntimeStats.snapshot", () => {
         watchers: 2,
       },
       usageCache: { size: 10, hits: 50, misses: 5, sweeps: 1 },
+      transcriptReads: { reads: 0, bytes: 0, widened: 0, largestRead: 0 },
       renderCache: {
         size: 3,
         held: 1,
@@ -196,6 +197,7 @@ describe("formatStats", () => {
         watchers: 5,
       },
       usageCache: { size: 3, hits: 40, misses: 10, sweeps: 0 },
+      transcriptReads: { reads: 0, bytes: 0, widened: 0, largestRead: 0 },
       renderCache: {
         size: 4,
         held: 0,
@@ -251,6 +253,7 @@ describe("formatStats", () => {
       requests: { total: 0, errored: 0, timedOut: 0, inFlight: 0 },
       gitCache: { size: 0, hits: 0, misses: 0, invalidations: 0, watchers: 0 },
       usageCache: { size: 0, hits: 0, misses: 0, sweeps: 0 },
+      transcriptReads: { reads: 0, bytes: 0, widened: 0, largestRead: 0 },
       renderCache: {
         size: 0,
         held: 0,

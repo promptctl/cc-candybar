@@ -10,7 +10,6 @@ import {
 import { join } from "path";
 import { tmpdir } from "os";
 import type { ClaudeHookData } from "../src/utils/claude";
-import { clearParseCache } from "../src/utils/claude";
 
 describe("Metrics Provider", () => {
   let tempDir: string;
@@ -46,7 +45,6 @@ describe("Metrics Provider", () => {
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), "metrics-test-"));
     metricsProvider = new MetricsProvider();
-    clearParseCache();
   });
 
   afterEach(() => {

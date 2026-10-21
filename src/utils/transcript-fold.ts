@@ -3,7 +3,7 @@
 // Two providers maintain a running projection of a session's transcript that
 // must be O(bytes appended since the last render), not O(transcript): the
 // metrics message count and the activity record (brandon-activity-ue7). Both
-// need the same four non-obvious policies — the mtime fast path, the LRU-capped
+// need the same four non-obvious policies — the stamp fast path, the LRU-capped
 // session map, the `reset` arm that re-folds from empty when a /compact rewrote
 // the file, and "a missing transcript is a real empty fold, not a failure" —
 // and two independently-written copies of those four WOULD drift, the reset arm
@@ -21,11 +21,13 @@
 // guarding it.
 
 import {
-  readAppendedEntries,
+  foldAppended,
+  widenedLines,
+  type Folded,
   type ParsedEntry,
-  type TranscriptCursor,
 } from "./claude";
 import { statStamp } from "./transcript-fs";
+import { quietLogger, type DaemonLogger } from "../daemon/log";
 
 // [LAW:types-are-the-program] Never `absent`: a session with no transcript yet
 // is a real empty fold, so the caller has exactly two arms.
@@ -37,19 +39,15 @@ export type FoldOutcome<S> =
 // map must not grow without bound. LRU by insertion order, evicting past the cap.
 const MAX_SESSIONS = 256;
 
-interface Retained<S> {
-  readonly cursor: TranscriptCursor;
-  readonly value: S;
-}
-
 export class TranscriptFold<S> {
   // [LAW:no-shared-mutable-globals] Single owner, hard cap, LRU eviction. One
   // instance per projection per daemon.
-  private readonly states = new Map<string, Retained<S>>();
+  private readonly states = new Map<string, Folded<S>>();
 
   constructor(
     private readonly empty: S,
     private readonly step: (state: S, entry: ParsedEntry) => S,
+    private readonly log: DaemonLogger = quietLogger,
     private readonly maxSessions: number = MAX_SESSIONS,
   ) {}
 
@@ -68,7 +66,12 @@ export class TranscriptFold<S> {
       return { kind: "ok", value: prior.value };
     }
 
-    const read = await readAppendedEntries(transcriptPath, prior?.cursor);
+    const read = await foldAppended(
+      transcriptPath,
+      prior,
+      this.empty,
+      (state, entries) => entries.reduce(this.step, state),
+    );
     if (read.kind === "failed") return read;
     if (read.kind === "absent") {
       // No transcript yet (a fresh session). Keep whatever we had and cache NO
@@ -76,23 +79,18 @@ export class TranscriptFold<S> {
       return { kind: "ok", value: prior?.value ?? this.empty };
     }
 
-    const { entries, cursor, reset } = read.value;
-    // [LAW:one-source-of-truth] `reset` is the single signal that the prior fold
-    // is no longer a prefix of this file (a rename-based /compact, a truncation),
-    // and the appended bytes then start at offset 0 — so the fold starts over.
-    let value = reset || prior === undefined ? this.empty : prior.value;
-    for (const entry of entries) value = this.step(value, entry);
-
-    this.touch(sessionId, { cursor, value });
+    const { folded, reads } = read.value;
+    for (const line of widenedLines(reads)) this.log("info", line);
+    this.touch(sessionId, folded);
     while (this.states.size > this.maxSessions) {
       const oldest = this.states.keys().next().value;
       if (oldest === undefined) break;
       this.states.delete(oldest);
     }
-    return { kind: "ok", value };
+    return { kind: "ok", value: folded.value };
   }
 
-  private touch(sessionId: string, state: Retained<S>): void {
+  private touch(sessionId: string, state: Folded<S>): void {
     this.states.delete(sessionId);
     this.states.set(sessionId, state);
   }

@@ -23,6 +23,7 @@
 import type { ClaudeHookData, ParsedEntry } from "../utils/claude";
 import type { ToolCall, TodoItem } from "../utils/transcript-activity";
 import { TranscriptFold } from "../utils/transcript-fold";
+import type { DaemonLogger } from "../daemon/log";
 import { failed, ok, type Outcome } from "../utils/outcome";
 
 export type { TodoItem } from "../utils/transcript-activity";
@@ -144,7 +145,11 @@ function report(state: ActivityState): ActivityInfo {
 }
 
 export class ActivityProvider {
-  private readonly fold = new TranscriptFold<ActivityState>(EMPTY, step);
+  private readonly fold: TranscriptFold<ActivityState>;
+
+  constructor(opts: { logger?: DaemonLogger } = {}) {
+    this.fold = new TranscriptFold<ActivityState>(EMPTY, step, opts.logger);
+  }
 
   // [LAW:no-silent-failure] A transcript read error is `failed`, carried to the
   // payload boundary that logs it. There is no `absent` arm: a session with no
