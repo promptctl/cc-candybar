@@ -45,7 +45,7 @@ import { slashLine } from "../claude-input/slash-line.js";
 import { draftShown, turnRunning } from "../claude-input/prompt-screen.js";
 import { relaunchArgs } from "./claude-relaunch.js";
 import { sourceCheckoutOf } from "./build-currency.js";
-import { attachLauncherOf } from "../attach-launcher.js";
+import { attachLauncherOf, moduleGraphReaderOf } from "../attach-launcher.js";
 import { BadVerbArgs } from "./verb-error.js";
 
 // The band mod, as the checkout's marketplace (`.claude-plugin/
@@ -103,6 +103,15 @@ export interface LaneEdge {
   // Write a script only this user can read; answers its path.
   readonly writeScript: (name: string, text: string) => string;
   readonly removeScript: (file: string) => void;
+  // Whether `executable` embeds a module graph the attach launcher can run,
+  // as the launcher's own reader (`reader`, run by `node`) answers it.
+  readonly moduleGraph: (
+    node: string,
+    reader: string,
+    executable: string,
+  ) => Promise<
+    { readonly ok: true } | { readonly ok: false; readonly reason: string }
+  >;
   // Resolves true once `pid` has exited, false if it is still running after
   // `withinMs`.
   readonly exited: (pid: number, withinMs: number) => Promise<boolean>;
@@ -285,7 +294,7 @@ async function installBand(
 async function restartUnderAttach(
   session: LaneSession,
   tmux: TmuxHint,
-  launcher: readonly string[],
+  launcher: readonly [node: string, script: string],
   edge: LaneEdge,
 ): Promise<string> {
   const claude = await edge.paneClaude(tmux);
@@ -316,6 +325,20 @@ async function restartUnderAttach(
   const relaunch = relaunchArgs(claude.argv, session.sessionId);
   if (relaunch.kind === "refused") {
     throw new Error(`${relaunch.reason} — restart it with that flag removed`);
+  }
+  // [LAW:no-silent-failure] The launcher runs the module graph a Bun-compiled
+  // Claude Code embeds; one installed from npm runs under node, embeds none,
+  // and once exited could not be started again under the launcher.
+  const [node, launcherScript] = launcher;
+  const graph = await edge.moduleGraph(
+    node,
+    moduleGraphReaderOf(launcherScript),
+    claude.executable,
+  );
+  if (!graph.ok) {
+    throw new Error(
+      `Claude Code in ${tmux.pane} runs ${claude.executable}, which the attach launcher cannot start (${graph.reason}) — ${LANES.statusline.label} needs the native Claude Code install (\`claude install\`), so it was left running`,
+    );
   }
   const script = edge.writeScript(
     `relaunch-${session.sessionId}.sh`,
@@ -366,8 +389,10 @@ async function restartUnderAttach(
 // moved the switch — the menu's toggle, its ↺, ↶ undo, a preset picked — so no
 // control carries the setup itself (review of brandon-menus-sjhy.amf). Every
 // render reports the switches it drew by and the revision of the session's own
-// state; a lane whose switch differs from the session's previous report is
-// brought in line, off the render, when the session's state moved with it.
+// setting moves (SettingsHistory.revision — a reset that only deletes the
+// file's value moves it, a render rewriting the session's client hints does
+// not); a lane whose switch differs from the session's previous report is
+// brought in line, off the render, when the session's own moves moved with it.
 // A switch moved only by the config file — another session's save, a hand
 // edit — changes what every session reading that file renders by, and setting
 // up a lane in each of them would restart every idle Claude Code on the
@@ -394,7 +419,8 @@ export class LaneSetups {
     },
   ) {}
 
-  // The switches a render of `session` drew by, at `revision` of its state.
+  // The switches a render of `session` drew by, at `revision` of its own
+  // setting moves.
   observe(
     session: LaneSession,
     switches: LaneSwitches,

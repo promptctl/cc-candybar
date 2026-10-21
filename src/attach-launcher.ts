@@ -14,3 +14,9 @@ export const ATTACH_DIR = "cc-extra";
 export function attachLauncherOf(bundle: string): string {
   return path.join(path.dirname(bundle), ATTACH_DIR, "src", "bun-attach.js");
 }
+
+// cc-extra's reader of the module graph a Bun-compiled Claude Code embeds,
+// beside `launcher`: the launcher's own self-check, run as a CLI.
+export function moduleGraphReaderOf(launcher: string): string {
+  return path.join(path.dirname(launcher), "bun-graph.js");
+}

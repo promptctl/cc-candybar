@@ -46,6 +46,30 @@ function ran(what: string, result: LaunchResult): string {
   throw new Error(`${what} failed (${detail})`);
 }
 
+// [LAW:parse-dont-validate] The module graph reader's refusal: one JSON line,
+// `{ ok: false, reason, detail? }` (vendor/cc-extra/src/bun-graph.js), read
+// to its reason — or null when its output is not that line.
+export function refusalOf(stdout: string): string | null {
+  try {
+    const said = JSON.parse(stdout) as unknown;
+    if (
+      typeof said === "object" &&
+      said !== null &&
+      "ok" in said &&
+      said.ok === false &&
+      "reason" in said &&
+      typeof said.reason === "string"
+    ) {
+      return "detail" in said && typeof said.detail === "string"
+        ? `${said.reason}: ${said.detail}`
+        : said.reason;
+    }
+  } catch {
+    // Not JSON: the reader failed before it could answer.
+  }
+  return null;
+}
+
 // [LAW:effects-at-boundaries] Pure over tmux's `list-panes -a` in
 // `PANE_TAGS_FORMAT`: the bar panes tagged as drawing `pane`'s bar.
 const PANE_TAGS_FORMAT = `#{pane_id} #{${BAR_PANE_OPTION}}`;
@@ -270,6 +294,23 @@ export function productionLaneEdge(
         await sleep(FOLLOW_POLL_MS);
       }
       return true;
+    },
+    // In a child: the reader holds the whole binary (~200 MB) in memory.
+    moduleGraph: async (node, reader, executable) => {
+      const result = await launch({
+        bin: node,
+        args: [reader, executable],
+        timeoutMs: 20_000,
+        category: "lane.process",
+      });
+      const refused =
+        !result.ok && result.reason === "non-zero"
+          ? refusalOf(result.stdout)
+          : null;
+      if (refused !== null) return { ok: false, reason: refused };
+      // Anything else is the reader failing, not answering.
+      ran(`reading ${executable}'s module graph`, result);
+      return { ok: true };
     },
     exited: async (pid, withinMs) => {
       const until = Date.now() + withinMs;

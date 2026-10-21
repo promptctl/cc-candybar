@@ -171,16 +171,6 @@ export function collectDiagnostics(
   return first === undefined ? null : { channels: [first, ...rest] };
 }
 
-// `below`'s channels under `above`'s, in that order.
-export function withChannels(
-  above: Diagnostics | null,
-  below: Diagnostics,
-): Diagnostics {
-  if (above === null) return below;
-  const [first, ...rest] = above.channels;
-  return { channels: [first, ...rest, ...below.channels] };
-}
-
 // A plain message as a channel: every visible line one span, every span the
 // click that copies the whole message. Blank lines are dropped; a message
 // with no visible line contributes no channel.
@@ -232,7 +222,7 @@ export function composeWithDiagnostics(
 ): string {
   if (diagnostics === null) return body;
   const opts = stripOptions(geometry);
-  const rows = diagnostics.channels.flatMap((ch) => channelRows(ch, opts));
+  const rows = rowsOf(diagnostics, opts);
   const trailed =
     links.failedConfigFile !== null || rows.length > geometry.rowCap;
   const shown = rows.slice(0, geometry.rowCap - Number(trailed));
@@ -243,6 +233,21 @@ export function composeWithDiagnostics(
   // No body → the strip alone (renderDsl produced nothing). Body present →
   // the strip sits above it on its own rows.
   return body ? `${strip}\n${body}` : strip;
+}
+
+// Every row `diagnostics` draws, uncapped and with no trailer: a line drawn in
+// the strip's style that is not the strip — the statusline's handoff line,
+// which takes the body's place (src/daemon/lane-handoff.ts) — so the cap that
+// bounds the strip above it never reaches it.
+export function diagnosticRows(
+  diagnostics: Diagnostics,
+  geometry: DiagnosticGeometry,
+): string {
+  return rowsOf(diagnostics, stripOptions(geometry)).join("\n");
+}
+
+function rowsOf(diagnostics: Diagnostics, opts: BuildLineOptions): string[] {
+  return diagnostics.channels.flatMap((ch) => channelRows(ch, opts));
 }
 
 // The strip's own fixed shape: a plain joiner with NO separator (each word

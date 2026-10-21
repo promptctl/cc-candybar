@@ -24,6 +24,7 @@ import {
 import { relaunchArgs } from "../src/daemon/claude-relaunch";
 import {
   claudeEnv,
+  refusalOf,
   runsAttached,
   taggedBarPanes,
 } from "../src/daemon/lane-edge";
@@ -89,6 +90,10 @@ function fakeEdge(over: Partial<LaneEdge> = {}): { edge: LaneEdge; did: string[]
       return file;
     },
     removeScript: (file) => void did.push(`remove ${file}`),
+    moduleGraph: async (node, reader, executable) => {
+      did.push(`graph ${node} ${reader} ${executable}`);
+      return { ok: true };
+    },
     exited: async () => true,
     typeShellLine: (_hint, line) => void did.push(`shell ${line}`),
     followed: async (sessionId, lane) => {
@@ -213,6 +218,7 @@ describe("lane B, statusline", () => {
     expect(did).toEqual([]);
     await expect(finished(out)).resolves.toContain("its statusline follows lane B");
     expect(did).toEqual([
+      "graph /usr/bin/node /opt/candybar/dist/cc-extra/src/bun-graph.js /u/.local/share/claude/versions/2.1.299",
       `script /run/relaunch-${SID}.sh:\n${relaunchScript(
         "/work/tree",
         [
@@ -375,6 +381,33 @@ describe("lane B, statusline", () => {
       finished(LANE_SETUP.statusline.on(session(), HOST, edge)),
     ).rejects.toThrow(/first process of pane %7/);
     expect(did).toEqual([]);
+  });
+
+  // An npm install runs `node …/cli.js`: no module graph for the launcher to
+  // run, so exiting it would leave the pane at its shell.
+  test("a Claude Code the launcher cannot start is refused before /exit is typed", async () => {
+    const { edge, did } = fakeEdge({
+      moduleGraph: async () => ({
+        ok: false,
+        reason: "no-bun-module-graph-trailer",
+      }),
+    });
+    await expect(
+      finished(LANE_SETUP.statusline.on(session(), HOST, edge)),
+    ).rejects.toThrow(
+      /runs \/u\/\.local\/share\/claude\/versions\/2\.1\.299, which the attach launcher cannot start \(no-bun-module-graph-trailer\) — .*native Claude Code install .*left running/,
+    );
+    expect(did).toEqual([]);
+  });
+
+  test.each([
+    ['{"ok":false,"reason":"no-bun-module-graph-trailer"}\n', "no-bun-module-graph-trailer"],
+    ['{"ok":false,"reason":"binary-unreadable","detail":"EACCES"}', "binary-unreadable: EACCES"],
+    ["", null],
+    ["Error: Cannot find module", null],
+    ['{"ok":true}', null],
+  ])("the module graph reader's output %j refuses with %p", (stdout, reason) => {
+    expect(refusalOf(stdout)).toBe(reason);
   });
 
   test("a flag cc-candybar cannot carry refuses the restart before /exit is typed", async () => {

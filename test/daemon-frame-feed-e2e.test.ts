@@ -74,6 +74,9 @@ const CONFIGS = {
   // The band lane alone, which draws the bar elsewhere: its own file, since
   // the statusline's reset button rewrites the file it names.
   handoff: `{ globals: { experimentalBand: true }, segments: { mark: { template: 'a handed-off mark' } }, root: { h: ['mark'] } }`,
+  // The band lane switched off, which a test switches on by rewriting the file
+  // as another session's save would.
+  fileLane: `{ segments: { mark: { template: 'a file-switched mark' } }, root: { h: ['mark'] } }`,
   // Moves, and carries a load warning (a duplicate key) the diagnostic strip
   // shows on every frame.
   warned: `{ globals: { effect: "sparkle", effect: "sparkle", experimentalBand: true, experimentalStatusline: true }, segments: { mark: { template: 'a warned mark' } }, root: { h: ['mark'] } }`,
@@ -332,6 +335,16 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     };
     return { frames, ended, live };
   };
+  // The daemon log's lines for `sid`: its render events, and how each of its
+  // lane setups ended (src/daemon/lane-setup.ts).
+  const renderEvents = (sid: string): string[] =>
+    readFileSync(daemonLog, "utf8")
+      .split("\n")
+      .filter((l) => l.includes(` render sid=${sid} `));
+  const laneLines = (sid: string): string[] =>
+    readFileSync(daemonLog, "utf8")
+      .split("\n")
+      .filter((l) => l.includes(" lane: ") && l.includes(`(session=${sid})`));
   const setState = (sid: string, key: string, value: string): Promise<void> =>
     click(sockPath, effectsUrl([{ verb: VERB_SET_STATE, args: [sid, key, value] }]));
 
@@ -342,10 +355,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     const sid = "feed-handoff";
     // [LAW:nothing-unseen] Each render's event says whether the statusline
     // handed off, and to which lanes.
-    const events = (): string[] =>
-      readFileSync(daemonLog, "utf8")
-        .split("\n")
-        .filter((l) => l.includes(` render sid=${sid} `));
+    const events = (): string[] => renderEvents(sid);
     // The switch alone draws nothing: with no band following the session, the
     // statusline keeps the bar.
     expect(
@@ -376,6 +386,38 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     ).toContain("a handed-off mark");
     // And the band's stream is refused now its lane is off.
     expect(await band.ended).toMatchObject({ kind: "refused" });
+    // The reset deleted the file's value and released no pick — the session
+    // held none — and the lane's setup still followed it off (a bar pane the
+    // pane lane opened closes the same way).
+    await until(
+      () => laneLines(sid).some((l) => l.includes("lane: band off")),
+      "the lane's off setup",
+    );
+  });
+
+  // What a lane runs follows the session's own moves of its switch. Another
+  // session's save to a file both read moves this session's switch too, and
+  // its next render — which rewrites what its client reported — starts
+  // nothing: setting up a lane there would restart every idle Claude Code
+  // reading that file for one session's save.
+  test("a switch moved only by the file starts no lane setup, until the session moves it itself", async () => {
+    const sid = "feed-file-lane";
+    const file = path.join(projectDir, "fileLane.json5");
+    await render(sockPath, sid, projectDir, { termCols: 80 }, args("fileLane"));
+    writeFileSync(file, CONFIGS.fileLane.replace("{ segments", "{ globals: { experimentalBand: true }, segments"));
+    // Renders, each with hints its last did not report, until the daemon has
+    // reloaded the file and one draws by its switch.
+    for (let cols = 81; !renderEvents(sid).some((l) => l.includes(" lanes=band ")); cols++) {
+      if (cols > 400) throw new Error("no render drew by the file's switch");
+      await render(sockPath, sid, projectDir, { termCols: cols }, args("fileLane"));
+    }
+    await render(sockPath, sid, projectDir, { termCols: 20 }, args("fileLane"));
+    // The session moves the switch itself: its setup runs, and it is the
+    // only one this session's log holds.
+    await setState(sid, "experimentalBand", "false");
+    await render(sockPath, sid, projectDir, { termCols: 21 }, args("fileLane"));
+    await until(() => laneLines(sid).length > 0, "the session's own move's setup");
+    expect(laneLines(sid)).toEqual([expect.stringContaining("lane: band off")]);
   });
 
   // Only the body is handed off: what the strip says above it stays.
@@ -394,6 +436,13 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     );
     expect(lines.slice(0, -1).join("\n")).toContain('duplicate key "effect"');
     expect(lines.join("\n")).not.toContain("a warned mark");
+    // A strip over its row cap is cut to it; the handoff line, in the body's
+    // place, is not.
+    const capped = stripAnsi(
+      await render(sockPath, sid, projectDir, { termRows: 2, termCols: 50 }, args("warned")),
+    );
+    expect(capped).toMatch(/more\s+rows/);
+    expect(capped.replace(/\s+/g, " ")).toContain(HANDOFF_BUTTON);
   });
 
   // A subscribe naming no lane is a client from before the toggles, told to
