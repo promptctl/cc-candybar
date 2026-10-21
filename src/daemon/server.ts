@@ -1611,14 +1611,16 @@ async function renderFrame(req: CheckedRenderRequest): Promise<FeedFrame> {
       dumpTextOf(drawn),
     );
     const sessionId = req.hookData.session_id;
+    const output = composeBar(drawn, link);
     return {
-      resp: { ok: true, output: composeBar(drawn, link) },
+      resp: { ok: true, output },
       statusline: {
         ok: true,
         output: statuslineOf(
           sessionId,
           drawn,
           link,
+          output,
           handedOffTo(lanes, frameFeeds.following(sessionId)),
         ),
       },
@@ -2167,7 +2169,7 @@ async function answerRequest(
   const output = composeBar(drawn, link);
   const sessionId = req.hookData.session_id;
   const elsewhere = handedOffTo(lanes, frameFeeds.following(sessionId));
-  const statusline = statuslineOf(sessionId, drawn, link, elsewhere);
+  const statusline = statuslineOf(sessionId, drawn, link, output, elsewhere);
   // A `frames` display draws the bar itself; Claude Code's statusline hands
   // it to the lanes drawing it elsewhere.
   const toStatusline = roleOf(req.hints.client ?? null) === "statusline";
@@ -2184,8 +2186,9 @@ async function answerRequest(
   };
 }
 
-// What Claude Code's statusline shows of `drawn`: the bar, or — while lanes
-// draw it `elsewhere` — the handoff line in the body's place.
+// What Claude Code's statusline shows of `drawn`: the bar (`output`, as
+// composed), or — while lanes draw it `elsewhere` — the handoff line in the
+// body's place.
 // [LAW:no-silent-failure] Only the body is handed off: the strip above it — a
 // load error, the update notice, a click's failure — stays, and the line is
 // the body, so the strip's row cap never drops it.
@@ -2193,11 +2196,12 @@ function statuslineOf(
   sessionId: string,
   drawn: DrawnBar,
   link: FullTextLink,
+  output: string,
   elsewhere: readonly Lane[],
 ): string {
   const [first, ...rest] = elsewhere;
   return first === undefined
-    ? composeBar(drawn, link)
+    ? output
     : composeBar(
         {
           ...drawn,

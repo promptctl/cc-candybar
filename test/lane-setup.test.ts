@@ -62,6 +62,7 @@ function fakeEdge(over: Partial<LaneEdge> = {}): { edge: LaneEdge; did: string[]
     pid: 4242,
     executable: "/u/.local/share/claude/versions/2.1.299",
     argv: ["claude", "--dangerously-skip-permissions", "--worktree"],
+    env: ["PATH=/usr/bin", "CC_CANDYBAR_CONFIG=/u/alt config.json5"],
     cwd: "/work/tree",
     fromShell: true,
     attached: false,
@@ -229,7 +230,7 @@ describe("lane B, statusline", () => {
           "--resume",
           SID,
         ],
-        undefined,
+        ["PATH=/usr/bin", "CC_CANDYBAR_CONFIG=/u/alt config.json5"],
       )}`,
       "type /exit",
       `shell sh /run/relaunch-${SID}.sh`,
@@ -355,6 +356,7 @@ describe("lane B, statusline", () => {
         pid: 1,
         executable: "/bin/claude",
         argv: ["cc-attach"],
+        env: [],
         cwd: "/",
         fromShell: true,
         attached: true,
@@ -372,6 +374,7 @@ describe("lane B, statusline", () => {
         pid: 1,
         executable: "/bin/claude",
         argv: ["claude"],
+        env: [],
         cwd: "/",
         fromShell: false,
         attached: false,
@@ -416,6 +419,7 @@ describe("lane B, statusline", () => {
         pid: 1,
         executable: "/bin/claude",
         argv: ["claude", "--brand-new-flag", "x"],
+        env: [],
         cwd: "/",
         fromShell: true,
         attached: false,
@@ -442,27 +446,29 @@ describe("lane B, statusline", () => {
 });
 
 describe("the restart script", () => {
-  test("runs its argv, every word quoted, after leaving the shell's PATH out of it", () => {
+  test("runs its argv, every word quoted where the shell would read it otherwise, under the environment Claude Code was started with", () => {
     const script = relaunchScript(
       "/it's/here",
       ["/usr/bin/node", "/opt/l.js", "/bin/claude", "--model", "a b"],
-      undefined,
+      ["CC_CANDYBAR_CONFIG=/u/alt config.json5", "BASH_FUNC_f%%=() {  :\n}", "EMPTY="],
     );
     expect(script.split("\n")).toEqual([
       `cd -- '/it'\\''s/here' || exit 1`,
       "unset CLAUDE_CONFIG_DIR",
-      "exec '/usr/bin/node' '/opt/l.js' '/bin/claude' '--model' 'a b'",
+      "export CC_CANDYBAR_CONFIG='/u/alt config.json5'",
+      "export EMPTY=''",
+      "exec /usr/bin/node /opt/l.js /bin/claude --model 'a b'",
       "",
     ]);
   });
 
-  test("runs under sh, in Claude Code's directory, under the session's Claude Code directory", () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lane-script-"));
+  test("runs under sh, in Claude Code's directory, under Claude Code's own Claude Code directory", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lane script "));
     const record = path.join(dir, "ran");
     const launcher = path.join(dir, "launcher");
     fs.writeFileSync(
       launcher,
-      `#!/bin/sh\npwd > ${record}\necho "$CLAUDE_CONFIG_DIR" >> ${record}\nprintf '%s\\n' "$@" >> ${record}\n`,
+      `#!/bin/sh\npwd > '${record}'\necho "$CLAUDE_CONFIG_DIR" >> '${record}'\necho "$CC_CANDYBAR_CONFIG" >> '${record}'\nprintf '%s\\n' "$@" >> '${record}'\n`,
       { mode: 0o755 },
     );
     const self = path.join(dir, "r.sh");
@@ -471,19 +477,21 @@ describe("the restart script", () => {
       relaunchScript(
         dir,
         [launcher, "/bin/claude", "--model", "a b", "--resume", SID],
-        "/u/.claude.zai",
+        ["CLAUDE_CONFIG_DIR=/u/.claude.zai", "CC_CANDYBAR_CONFIG=/u/alt.json5"],
       ),
     );
-    const { status } = spawnSync("/bin/sh", [self], {
-      // The pane's shell may export a directory of its own; the session's
+    const { status, stderr } = spawnSync("/bin/sh", [self], {
+      // The pane's shell may export a directory of its own; Claude Code's
       // wins. And nothing is looked up on its PATH.
       env: { PATH: "/nonexistent", CLAUDE_CONFIG_DIR: "/u/.claude" },
       encoding: "utf8",
     });
+    expect(stderr).toBe("");
     expect(status).toBe(0);
     expect(fs.readFileSync(record, "utf8").split("\n")).toEqual([
       dir,
       "/u/.claude.zai",
+      "/u/alt.json5",
       "/bin/claude",
       "--model",
       "a b",
@@ -577,8 +585,12 @@ describe("LaneSetups", () => {
       now: () => instantOf(new Date(0)),
       defer: (run) => void deferred.push(run),
     });
-    // Run what the renders deferred, as the daemon's next turn does.
-    const settle = () => deferred.splice(0).forEach((run) => run());
+    // Run what the renders deferred, as the daemon's next turn does, and the
+    // setups queued behind them.
+    const settle = async (): Promise<void> => {
+      deferred.splice(0).forEach((run) => run());
+      await new Promise((r) => setImmediate(r));
+    };
     return { setups, state, logs, settle };
   };
   const switches = (on: Partial<LaneSwitches>): LaneSwitches => ({
@@ -588,24 +600,24 @@ describe("LaneSetups", () => {
     ...on,
   });
 
-  test("a session's first render is where it starts: nothing is set up", () => {
+  test("a session's first render is where it starts: nothing is set up", async () => {
     const { edge, did } = fakeEdge();
     const { setups, logs, settle } = owner(edge);
-    setups.observe(session(), switches({ pane: true }), 1);
-    settle();
+    setups.observe(session(), switches({ pane: true }), 0);
+    await settle();
     expect(did).toEqual([]);
     expect(logs).toEqual([]);
   });
 
   // Whatever moved the switch — the toggle, ↺, ↶ undo, a preset, a hand edit
   // — reaches the setup the same way: a render that draws by it.
-  test("a switch that moves between renders sets its lane up after the render, and only its lane", () => {
+  test("a switch that moves between renders sets its lane up after the render, and only its lane", async () => {
     const { edge, did } = fakeEdge();
     const { setups, logs, settle } = owner(edge);
     setups.observe(session(), switches({}), 1);
     setups.observe(session(), switches({ pane: true }), 2);
     expect(did).toEqual([]);
-    settle();
+    await settle();
     expect(did).toEqual([
       `open under %7: /usr/bin/node /opt/candybar/dist/index.mjs bar-pane %7 {"CC_CANDYBAR_SOCKET":"/tmp/cc-candybar-1/socket"}`,
     ]);
@@ -614,34 +626,67 @@ describe("LaneSetups", () => {
     ]);
     // Renders that draw by the same switches set nothing up again.
     setups.observe(session(), switches({ pane: true }), 3);
-    settle();
+    await settle();
     expect(did).toHaveLength(1);
   });
 
   // Another session's save, or a hand edit, moves the switch in every session
   // reading the file; setting each of them up would restart every idle Claude
   // Code on the machine for one session's save.
-  test("a switch moved only by the config file sets nothing up; the session's own next move does", () => {
+  test("a switch moved only by the config file sets nothing up; the session's own next move does", async () => {
     const { edge, did } = fakeEdge();
     const { setups, settle } = owner(edge);
     setups.observe(session(), switches({}), 4);
     setups.observe(session(), switches({ pane: true }), 4);
-    settle();
+    await settle();
     expect(did).toEqual([]);
     setups.observe(session(), switches({}), 4);
     setups.observe(session(), switches({ pane: true }), 5);
-    settle();
+    await settle();
     expect(did).toEqual([
       `open under %7: /usr/bin/node /opt/candybar/dist/index.mjs bar-pane %7 {"CC_CANDYBAR_SOCKET":"/tmp/cc-candybar-1/socket"}`,
     ]);
   });
 
-  test("a switch turned off brings the lane down", () => {
+  // A daemon restarted under a bar the old one drew: the toggle is clicked
+  // before this daemon has rendered the session.
+  test("a session first seen after it moved a setting here sets up the lanes switched on", async () => {
+    const { edge, did } = fakeEdge();
+    const { setups, settle } = owner(edge);
+    setups.observe(session(), switches({ pane: true }), 3);
+    await settle();
+    expect(did).toEqual([
+      `open under %7: /usr/bin/node /opt/candybar/dist/index.mjs bar-pane %7 {"CC_CANDYBAR_SOCKET":"/tmp/cc-candybar-1/socket"}`,
+    ]);
+  });
+
+  // Toggled on, off and on again inside one restart: a second restart of the
+  // pane would type into the first.
+  test("one session's setups run one at a time, each after the last has finished", async () => {
+    let exit!: (gone: boolean) => void;
+    const { edge, did } = fakeEdge({
+      exited: () => new Promise((r) => (exit = r)),
+    });
+    const { setups, settle } = owner(edge);
+    setups.observe(session(), switches({}), 0);
+    setups.observe(session(), switches({ statusline: true }), 1);
+    setups.observe(session(), switches({}), 2);
+    setups.observe(session(), switches({ statusline: true }), 3);
+    await settle();
+    // The first restart waits for Claude Code to exit; nothing else has run.
+    expect(did.filter((d) => d.startsWith("type"))).toEqual(["type /exit"]);
+    exit(true);
+    await new Promise((r) => setTimeout(r, 20));
+    // Off, then on: the second restart starts only after the first ended.
+    expect(did.filter((d) => d.startsWith("type"))).toEqual(["type /exit", "type /exit"]);
+  });
+
+  test("a switch turned off brings the lane down", async () => {
     const { edge, did } = fakeEdge({ barPanes: () => ["%9"] });
     const { setups, settle } = owner(edge);
     setups.observe(session(), switches({ pane: true }), 1);
     setups.observe(session(), switches({}), 2);
-    settle();
+    await settle();
     expect(did).toEqual(["close %9"]);
   });
 
@@ -651,13 +696,13 @@ describe("LaneSetups", () => {
     return expected.get(SID, "click.error");
   };
 
-  test("a setup refused at once is logged and held on the bar like a click's failure", () => {
+  test("a setup refused at once is logged and held on the bar like a click's failure", async () => {
     const { edge, did } = fakeEdge();
     const { setups, state, logs, settle } = owner(edge);
     const noTmux = session({ tmux: null });
     setups.observe(noTmux, switches({}), 1);
     setups.observe(noTmux, switches({ pane: true }), 2);
-    settle();
+    await settle();
     expect(did).toEqual([]);
     expect(logs).toEqual([
       expect.stringMatching(/^warn lane: pane on: .*not running inside tmux/),
@@ -681,7 +726,7 @@ describe("LaneSetups", () => {
     const { setups, state, logs, settle } = owner(edge);
     setups.observe(session(), switches({}), 1);
     setups.observe(session(), switches({ statusline: true }), 2);
-    settle();
+    await settle();
     await waiting;
     expect(logs).toEqual([
       `info lane: statusline on — restarting Claude Code in %7 under the attach launcher (session=${SID})`,

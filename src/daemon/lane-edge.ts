@@ -20,6 +20,7 @@ import {
   productionClaudeInputEdge,
 } from "../claude-input/edge.js";
 import { lineage, processTable } from "../proc/process-table.js";
+import { pidAlive } from "./parent-watchdog.js";
 import {
   BAR_PANE_OPTION,
   type LaneEdge,
@@ -104,8 +105,11 @@ export function runsAttached(
 // The executable a process runs and the exact argv it was started with —
 // `ps` joins argv with spaces, which a value holding a space would make
 // ambiguous. Linux keeps both in /proc; macOS answers them through sysctl's
-// KERN_PROCARGS2 (argc, then the executable path, padding, then argv, each
-// NUL-terminated), read here with python3's ctypes since node has no sysctl.
+// KERN_PROCARGS2 (argc, then the executable path, padding, then argv, then
+// the environment it was started with, each NUL-terminated; an empty string
+// ends the environment, and the loader's own `key=value` strings follow it),
+// read here with python3's ctypes since node has no sysctl. Linux keeps the
+// environment in /proc too.
 const PROCARGS2 = [
   "import ctypes, json, struct, sys",
   "libc = ctypes.CDLL(None)",
@@ -120,12 +124,15 @@ const PROCARGS2 = [
   "end = rest.index(b'\\0')",
   "exe = rest[:end].decode('utf-8', 'surrogateescape')",
   "rest = rest[end:].lstrip(b'\\0')",
-  "print(json.dumps({'executable': exe, 'argv': [a.decode('utf-8', 'surrogateescape') for a in rest.split(b'\\0')[:argc]]}))",
+  "words = [w.decode('utf-8', 'surrogateescape') for w in rest.split(b'\\0')]",
+  "end = words.index('', argc) if '' in words[argc:] else len(words)",
+  "print(json.dumps({'executable': exe, 'argv': words[:argc], 'env': words[argc:end]}))",
 ].join("\n");
 
 interface ProcessImage {
   readonly executable: string;
   readonly argv: string[];
+  readonly env: string[];
 }
 
 async function imageOf(pid: number): Promise<ProcessImage> {
@@ -133,6 +140,9 @@ async function imageOf(pid: number): Promise<ProcessImage> {
     return {
       executable: await fs.promises.readlink(`/proc/${pid}/exe`),
       argv: (await fs.promises.readFile(`/proc/${pid}/cmdline`, "utf8"))
+        .split("\0")
+        .slice(0, -1),
+      env: (await fs.promises.readFile(`/proc/${pid}/environ`, "utf8"))
         .split("\0")
         .slice(0, -1),
     };
@@ -193,21 +203,12 @@ async function paneClaude(hint: TmuxHint): Promise<PaneClaude> {
     // release it runs.
     executable: await fs.promises.realpath(image.executable),
     argv: image.argv,
+    env: image.env,
     cwd,
     fromShell: String(pid) !== panePid,
     attached: runsAttached(table, pid, Number(panePid)),
   };
 }
-
-const alive = (pid: number): boolean => {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (e) {
-    // EPERM: it runs, as someone else.
-    return (e as NodeJS.ErrnoException).code === "EPERM";
-  }
-};
 
 // The `claude` CLI's environment for a session: the daemon's, under the
 // Claude Code directory the session's client reported — an absent hint is the
@@ -314,7 +315,7 @@ export function productionLaneEdge(
     },
     exited: async (pid, withinMs) => {
       const until = Date.now() + withinMs;
-      while (alive(pid)) {
+      while (pidAlive(pid)) {
         if (Date.now() > until) return false;
         await sleep(EXIT_POLL_MS);
       }

@@ -47,6 +47,7 @@ import { relaunchArgs } from "./claude-relaunch.js";
 import { sourceCheckoutOf } from "./build-currency.js";
 import { attachLauncherOf, moduleGraphReaderOf } from "../attach-launcher.js";
 import { BadVerbArgs } from "./verb-error.js";
+import { shellWord } from "../shell-word.js";
 
 // The band mod, as the checkout's marketplace (`.claude-plugin/
 // marketplace.json`) names it.
@@ -70,11 +71,14 @@ const EXIT = slashLine("/exit");
 // executable it runs (what a restart runs again, with no PATH between),
 // whether the pane's own first process is a shell it was started from (so a
 // restart has somewhere to run), whether it already runs under the attach
-// launcher, and the directory it runs in.
+// launcher, the environment it was started with, and the directory it runs
+// in.
 export interface PaneClaude {
   readonly pid: number;
   readonly executable: string;
   readonly argv: readonly string[];
+  // The environment it was started with, `NAME=value` each.
+  readonly env: readonly string[];
   readonly cwd: string;
   readonly fromShell: boolean;
   readonly attached: boolean;
@@ -345,7 +349,7 @@ async function restartUnderAttach(
     relaunchScript(
       claude.cwd,
       [...launcher, claude.executable, ...relaunch.args],
-      session.hints.claudeConfigDir,
+      claude.env,
     ),
   );
   // [LAW:effects-at-boundaries] The script's whole life is this restart: it
@@ -362,7 +366,7 @@ async function restartUnderAttach(
         `Claude Code in ${tmux.pane} did not exit within ${EXIT_PATIENCE_MS / 1000} s of /exit, so it was not restarted under the attach launcher`,
       );
     }
-    edge.typeShellLine(tmux, `sh ${script}`);
+    edge.typeShellLine(tmux, `sh ${shellWord(script)}`);
     // [LAW:no-silent-failure] Typed is not restarted: the restart happened
     // when the session's statusline, under the launcher, subscribes to lane
     // B. The launcher starts nothing in place of an attach it could not make
@@ -384,6 +388,16 @@ async function restartUnderAttach(
   return `restarted Claude Code in ${tmux.pane} under the attach launcher, resuming ${session.sessionId}, and its statusline follows lane B`;
 }
 
+// How many sessions' last reports LaneSetups keeps.
+const MAX_SESSIONS_SEEN = 1024;
+// A session this daemon has not seen: no lane running, no setting moved.
+const UNSEEN = {
+  switches: Object.fromEntries(
+    LANE_NAMES.map((lane) => [lane, false]),
+  ) as LaneSwitches,
+  revision: 0,
+};
+
 // [LAW:single-enforcer] The one owner of lane setup. What a lane runs follows
 // its switch as the session's renders resolve it, whatever in the session
 // moved the switch — the menu's toggle, its ↺, ↶ undo, a preset picked — so no
@@ -396,15 +410,23 @@ async function restartUnderAttach(
 // A switch moved only by the config file — another session's save, a hand
 // edit — changes what every session reading that file renders by, and setting
 // up a lane in each of them would restart every idle Claude Code on the
-// machine for one session's save: such a session's lane runs from its own next
-// move of the switch. A session's first report is where it starts, so a daemon
-// restart re-runs no setup. How each setup ends is logged, and a failure is
-// held on the bar as a click's failure is (src/daemon/click-error.ts).
+// machine for one session's save: such a session's lanes are brought in line
+// with its switches at its own next setting move, whichever setting it moves.
+// A session this daemon has not seen runs no lane as far as it knows, at
+// revision 0: its first report sets up the lanes switched on only when it has
+// already moved a setting here (a toggle clicked on a bar the daemon before a
+// restart drew), so a daemon restart re-runs no setup of its own accord. One
+// session's setups run one at a time, each after the last has finished — two
+// restarts of one pane would type over each other. How each setup ends is
+// logged, and a failure is held on the bar as a click's failure is
+// (src/daemon/click-error.ts).
 export class LaneSetups {
   private readonly seen = new Map<
     string,
     { readonly switches: LaneSwitches; readonly revision: number }
   >();
+  // Each session's setups still to run, while one runs.
+  private readonly queued = new Map<string, Array<() => Promise<void>>>();
 
   constructor(
     private readonly deps: {
@@ -426,17 +448,46 @@ export class LaneSetups {
     switches: LaneSwitches,
     revision: number,
   ): void {
-    const before = this.seen.get(session.sessionId);
+    const before = this.seen.get(session.sessionId) ?? UNSEEN;
+    // [LAW:carrying-cost] Bounded like the daemon's other per-session
+    // memories: least recently rendered forgotten first.
+    this.seen.delete(session.sessionId);
     this.seen.set(session.sessionId, { switches, revision });
-    if (before === undefined || before.revision === revision) return;
+    for (const [oldest] of this.seen) {
+      if (this.seen.size <= MAX_SESSIONS_SEEN) break;
+      this.seen.delete(oldest);
+    }
+    if (before.revision === revision) return;
     for (const lane of LANE_NAMES) {
       if (before.switches[lane] === switches[lane]) continue;
       const on = switches[lane];
-      this.deps.defer(() => this.sync(session, lane, on));
+      this.deps.defer(() =>
+        this.enqueue(session.sessionId, () => this.sync(session, lane, on)),
+      );
     }
   }
 
-  private sync(session: LaneSession, lane: Lane, on: boolean): void {
+  // [LAW:no-ambient-temporal-coupling] Runs `setup` now when none of the
+  // session's runs, else after the ones queued before it.
+  private enqueue(sessionId: string, setup: () => Promise<void>): void {
+    const queue = this.queued.get(sessionId);
+    if (queue !== undefined) {
+      queue.push(setup);
+      return;
+    }
+    const waiting: Array<() => Promise<void>> = [];
+    this.queued.set(sessionId, waiting);
+    const run = (next: () => Promise<void>): void =>
+      void next().then(() => {
+        const after = waiting.shift();
+        if (after === undefined) this.queued.delete(sessionId);
+        else run(after);
+      });
+    run(setup);
+  }
+
+  // Resolves once the setup has finished, however it ended.
+  private sync(session: LaneSession, lane: Lane, on: boolean): Promise<void> {
     const where = `(session=${session.sessionId})`;
     const failed = (error: unknown): void => {
       const text = `lane: ${lane} ${on ? "on" : "off"}: ${error instanceof Error ? error.message : String(error)}`;
@@ -452,45 +503,54 @@ export class LaneSetups {
       );
     } catch (error) {
       failed(error);
-      return;
+      return Promise.resolve();
     }
     this.deps.log(
       "info",
       `lane: ${lane} ${on ? "on" : "off"} — ${outcome.said} ${where}`,
     );
     if (outcome.kind === "underway") {
-      outcome.finished.then(
+      return outcome.finished.then(
         (finished) =>
           this.deps.log("info", `lane: ${lane} ${finished} ${where}`),
         failed,
       );
     }
+    return Promise.resolve();
   }
 }
 
-// POSIX single quotes: everything literal, a quote spelled `'\''`.
-const shQuote = (s: string): string => `'${s.replaceAll("'", `'\\''`)}'`;
+// A variable `sh` can export: one whose name is an identifier. The others an
+// environment can carry (bash's exported functions, `BASH_FUNC_f%%`) are its
+// own, and the shell a pane runs re-exports them itself.
+const EXPORTABLE = /^[A-Za-z_][A-Za-z0-9_]*=/;
 
 // [LAW:effects-at-boundaries] The script a shell runs to start the session
 // again: `argv`, every word an absolute path or an argument, and nothing else
 // the shell would look up — `cd`, `unset`, `export` and `exec` are its own.
 // It is typed as `sh <script>`, a line every shell reads alike, so no quoting
 // has to survive the user's shell (fish quotes differently from sh). It runs
-// `argv` in the directory Claude Code ran in, under the Claude Code directory
-// the session's client reported (an absent hint is the default directory,
-// whatever the pane's shell exports — src/daemon/protocol.ts), so `--resume`
-// looks where the session lives.
+// `argv` in the directory Claude Code ran in, under the environment Claude
+// Code was started with (`env`, `NAME=value` each) — the variables it was
+// started with set as they were (a `CC_CANDYBAR_CONFIG`, a model), and its
+// Claude Code directory unset when it had none, so `--resume` looks where the
+// session lives whatever the pane's shell exports.
 export function relaunchScript(
   cwd: string,
   argv: readonly string[],
-  claudeConfigDir: string | undefined,
+  env: readonly string[],
 ): string {
+  const exported = env.filter((v) => EXPORTABLE.test(v));
   return [
-    `cd -- ${shQuote(cwd)} || exit 1`,
-    claudeConfigDir === undefined
-      ? "unset CLAUDE_CONFIG_DIR"
-      : `CLAUDE_CONFIG_DIR=${shQuote(claudeConfigDir)}; export CLAUDE_CONFIG_DIR`,
-    `exec ${argv.map(shQuote).join(" ")}`,
+    `cd -- ${shellWord(cwd)} || exit 1`,
+    ...(exported.some((v) => v.startsWith("CLAUDE_CONFIG_DIR="))
+      ? []
+      : ["unset CLAUDE_CONFIG_DIR"]),
+    ...exported.map((v) => {
+      const eq = v.indexOf("=");
+      return `export ${v.slice(0, eq)}=${shellWord(v.slice(eq + 1))}`;
+    }),
+    `exec ${argv.map(shellWord).join(" ")}`,
     "",
   ].join("\n");
 }
