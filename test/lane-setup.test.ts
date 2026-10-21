@@ -271,7 +271,7 @@ describe("lane B, statusline", () => {
     await expect(
       finished(LANE_SETUP.statusline.on(session(), HOST, edge)),
     ).rejects.toThrow(
-      "Claude Code in %7 was left running: no `node` on PATH to run the attach launcher Claude Code was started with",
+      "Claude Code in %7 was left running, under the PATH it was started with: no `node` on PATH to run the attach launcher",
     );
     expect(did.some((d) => d.startsWith("terminate"))).toBe(false);
   });

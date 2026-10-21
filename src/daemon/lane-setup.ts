@@ -432,7 +432,7 @@ async function restartUnderAttach(
   const node = edge.launcherNode(searched);
   if (node.kind === "refused") {
     throw new Error(
-      `Claude Code in ${tmux.pane} was left running: ${node.why} Claude Code was started with`,
+      `Claude Code in ${tmux.pane} was left running, under the PATH it was started with: ${node.why}`,
     );
   }
   // The line names `claude` when the shell would find this same release by
