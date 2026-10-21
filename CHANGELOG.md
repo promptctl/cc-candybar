@@ -1,3 +1,9 @@
+## [1.149.0](https://github.com/promptctl/cc-candybar/compare/v1.148.9...v1.149.0) (2026-10-21)
+
+### Features
+
+* **menu:** the animation-lane toggles live in a 🧪 toggles menu under ⚙ config ([#396](https://github.com/promptctl/cc-candybar/issues/396)) ([de5d65d](https://github.com/promptctl/cc-candybar/commit/de5d65d1f72758ebcc275c6140124e00214dc061))
+
 ## [1.148.9](https://github.com/promptctl/cc-candybar/compare/v1.148.8...v1.148.9) (2026-10-21)
 
 ### Bug Fixes
