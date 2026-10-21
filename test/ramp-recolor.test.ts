@@ -12,6 +12,7 @@
 // (resolveStyleSelection), the clicks driven through the real
 // wire (effectsUrl → clickUrl → VERBS). No parallel rig.
 
+import { selectionFor } from "./helpers/selection";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -81,17 +82,6 @@ function buildRuntime() {
   recordRender(sessionState, SID);
 
   const render = (payload: { pct: number; stop: string }): string => {
-    const theme = resolveThemeSelection(
-      undefined,
-      sessionState.get(SID, "theme"),
-      config.globals.palette,
-    );
-    const look = resolveStyleSelection(
-      undefined,
-      sessionState.get(SID, "style"),
-      config.globals.style,
-      config.styles,
-    );
     return renderDsl(
       config,
       compiled,
@@ -101,7 +91,7 @@ function buildRuntime() {
       instantOf(new Date()),
       OPTS,
       undefined,
-      { theme, style: look },
+      selectionFor(config, {}, (key) => sessionState.get(SID, key)),
     );
   };
   const click = (key: "theme" | "style", value: string): void =>

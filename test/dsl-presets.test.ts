@@ -14,6 +14,7 @@
 // checkConfig for the verdict, and the same effectivePresetName/presetGlobals
 // the daemon calls. No parallel rig.
 
+import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -32,12 +33,7 @@ import {
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { rootNode } from "../src/config/root";
 import { deriveActionValidators } from "../src/daemon/verbs/state-validators";
-import {
-  PRESET_FLOOR,
-  effectivePresetName,
-  presetGlobals,
-  presetRoot,
-} from "../src/config/presets";
+import { PRESET_FLOOR, presetGlobals, presetRoot } from "../src/config/presets";
 import { checkConfig } from "../src/check";
 import { instantOf } from "../src/utils/instant";
 
@@ -305,26 +301,20 @@ describe("preset selection — the arrangement the bar renders", () => {
     // the click below resolves this config and passes through its real gate.
     recordRender(sessionState, SID);
     // The daemon's exact order: resolve the preset, take ITS globals, render.
-    const resolve = (): { preset: string; padding: number } => {
-      const preset = effectivePresetName(
-        sessionState.get(SID, "preset"),
-        config.globals.preset,
-        config.presets,
-      );
-      return { preset, padding: presetGlobals(config, preset).padding ?? 1 };
-    };
+    const resolve = () =>
+      resolveEffectiveGlobals(config, (key) => sessionState.get(SID, key), () => false);
     const render = (): string => {
-      const { preset, padding } = resolve();
+      const effective = resolve();
       return renderDsl(
         config,
         compiled,
         store,
         registry,
-        { session_id: SID, preset: { effective: preset } },
+        { session_id: SID, preset: { effective: effective.preset } },
         instantOf(new Date()),
-        { ...OPTS, padding },
+        { ...OPTS, padding: effective.padding },
         undefined,
-        { preset },
+        effective,
       );
     };
     const dispose = (): void => {

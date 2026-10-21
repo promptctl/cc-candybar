@@ -18,12 +18,7 @@ import {
   type RenderWarning,
 } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
-import {
-  EFFECT_FLOOR,
-  resolveStyleSelection,
-  STYLE_FLOOR,
-  THEME_FLOOR,
-} from "../src/themes";
+import { EFFECT_FLOOR, STYLE_FLOOR, THEME_FLOOR } from "../src/themes";
 import { instantOf } from "../src/utils/instant";
 
 const OPTS = {
@@ -72,14 +67,6 @@ function runtime(source: string) {
         instantOf(new Date()),
         OPTS,
         { onRenderWarning: (w) => warnings.push(w) },
-        {
-          style: resolveStyleSelection(
-            undefined,
-            null,
-            config.globals.style,
-            config.styles,
-          ),
-        },
       ),
     );
   return { render, warnings, dispose: () => registry.dispose() };

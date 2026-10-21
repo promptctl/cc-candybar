@@ -55,11 +55,11 @@ import {
   BOOLEAN_TRUE,
   listResolvablePaletteNames,
 } from "../themes/policy.js";
+import { type SettingCounts } from "./render-payload.js";
 import {
   resolveEffectiveGlobals,
   type EffectiveGlobals,
-  type SettingCounts,
-} from "./render-payload.js";
+} from "../config/effective-globals.js";
 
 export interface SettingDraft extends SettingProjection {
   // What the session renders the setting as — the value a save writes.

@@ -20,7 +20,7 @@
 import process from "node:process";
 
 import { resolveUserPath } from "../utils/user-path.js";
-import { resolveEffectiveGlobals } from "../daemon/render-payload.js";
+import { resolveEffectiveGlobals } from "../config/effective-globals.js";
 import { prepareConfig, renderEffective } from "../check.js";
 import { listResolvablePaletteNames } from "../themes/policy.js";
 import { instantOf } from "../utils/instant.js";

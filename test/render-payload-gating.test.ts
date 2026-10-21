@@ -11,9 +11,9 @@ import {
 import type { ClientHints } from "../src/daemon/protocol";
 import { resolveThemeSelection } from "../src/themes/palette-resolvers.js";
 import type {
-  EffectiveGlobals,
   RenderPayloadDeps,
 } from "../src/daemon/render-payload";
+import { type EffectiveGlobals } from "../src/config/effective-globals";
 import type { DslConfig, Root } from "../src/config/dsl-types";
 import { ABSENT } from "../src/utils/outcome";
 import { FLOOR_EFFECT, FLOOR_STYLE } from "./helpers/floor-style";

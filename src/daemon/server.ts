@@ -126,11 +126,12 @@ import {
   buildRenderPayload,
   renderOptionsOf,
   prFactOf,
-  renderSelectionOf,
-  resolveEffectiveGlobals,
-  type EffectiveGlobals,
   type RenderPayloadDeps,
 } from "./render-payload.js";
+import {
+  resolveEffectiveGlobals,
+  type EffectiveGlobals,
+} from "../config/effective-globals.js";
 import { EffectSessions, type PassageFrame } from "../render/effect.js";
 import { FEED_PERIODS, FrameFeeds, type FeedFrame } from "./frame-feed.js";
 import {
@@ -1891,7 +1892,7 @@ async function renderChecked(
     // and name together, so renderDsl publishes the `theme.effective` the
     // bar was actually painted from. No separate basePalette argument: one
     // would be a second clock free to disagree with that name.
-    { ...renderSelectionOf(effective), effects },
+    { ...effective, effects },
   );
   // [LAW:one-source-of-truth] The click error dispatch held for this session,
   // shown by every render inside its hold, and past it by a request until an

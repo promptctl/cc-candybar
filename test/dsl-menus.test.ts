@@ -24,6 +24,7 @@
 //   5. Old spellings (positional page/bools/key) and malformed option dicts are
 //      LOAD errors naming the new form — never silently reinterpreted.
 
+import { picked, selectionFor } from "./helpers/selection";
 import { ColorDepth } from "@promptctl/rich-js";
 import { ownLinks } from "./helpers/ambient-chrome";
 import {
@@ -44,7 +45,6 @@ import {
   stateGate,
 } from "../src/daemon/verbs/state-validators";
 import { ConfigError } from "../src/config/dsl-loader";
-import { decideStyleName } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { testVerbContext, effectsOf, recordRender } from "./helpers/click";
 import { parseHandlerUrl } from "../src/install/index";
@@ -189,14 +189,10 @@ function buildRuntime(src: string, sessionId = "s1", look?: string) {
       instantOf(new Date()),
       opts(),
       { perSegmentSink: sink },
-      // The style is resolved by the CALLER (the daemon does it over staged/
-      // session/globals) and handed in; renderDsl reads no globals.style of its
-      // own, so a fixture declaring one renders at the floor unless it arrives
-      // here. [LAW:no-silent-failure] naming an undeclared style would collapse
-      // to the floor, so tests that depend on a style assert its effect.
-      look === undefined
-        ? undefined
-        : { style: decideStyleName(look, config.styles) },
+      // `look` is the session's style pick, resolved as the daemon resolves it.
+      // [LAW:no-silent-failure] naming an undeclared style would collapse to the
+      // floor, so tests that depend on a style assert its effect.
+      selectionFor(config, {}, picked(look === undefined ? {} : { style: look })),
     );
   recordRender(sessionState, sessionId);
   const ctx: VerbContext = testVerbContext(sessionState, undefined, config);
@@ -1425,8 +1421,10 @@ describe("a picker over a colour-valued domain paints what picking would apply",
   const LKEY = "menus.lookpicker.applyStyle";
 
   test("every theme option is its name in the list's own text, beside that theme's swatch", () => {
+    // The session picks the identity style, so the bar draws the base palette
+    // its expectations are computed from (the fixture's globals name `dim`).
     const { render, sink, palette, clickToggle } =
-      buildRuntime(BOTH_PICKERS_SRC);
+      buildRuntime(BOTH_PICKERS_SRC, "s1", "none");
     render();
     clickToggle(render(), TKEY, "applyTheme");
     render();
@@ -1517,7 +1515,7 @@ describe("a picker over a colour-valued domain paints what picking would apply",
     // style, so "the already-styled palette" below is a palette that differs from
     // the base. Without this the next two expectations are vacuous — which is
     // exactly how they first shipped, passing while the style never arrived.
-    const floor = buildRuntime(BOTH_PICKERS_SRC);
+    const floor = buildRuntime(BOTH_PICKERS_SRC, "s1", "none");
     floor.render();
     floor.clickToggle(floor.render(), LKEY, "applyStyle");
     floor.render();
@@ -1587,6 +1585,8 @@ describe("a picker over a colour-valued domain paints what picking would apply",
         "{ set: 'theme', from: 'themes' }",
         `{ set: 'word', from: ${JSON.stringify(WORDS)} }`,
       ),
+      "s1",
+      "none",
     );
     render();
     clickToggle(render(), TKEY, "applyTheme");

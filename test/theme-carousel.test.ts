@@ -15,6 +15,7 @@
 //      (and under that style): the closed cells' tints, the open state and its
 //      plane, the alerts.
 
+import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import { ColorDepth, getThemePalette, transposePalette } from "@promptctl/rich-js";
 import { RichText as RichTextValue } from "@promptctl/rich-js";
@@ -25,17 +26,11 @@ import { SessionState } from "../src/daemon/session-state";
 import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
-import {
-  effectiveShade,
-  effectiveVariation,
-  DEFAULT_COLOR_COMPATIBILITY,
-  listResolvablePaletteNames,
-} from "../src/themes/policy";
+import { listResolvablePaletteNames } from "../src/themes/policy";
 import type {
   ColorCompatibility,
   Endcaps,
 } from "../src/themes/policy";
-import { resolveThemeSelection } from "../src/themes/palette-resolvers";
 import { VERBS } from "../src/daemon/verbs";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import { parseHandlerUrl } from "../src/install/index";
@@ -61,7 +56,7 @@ import { randomOther, SWATCHES_RANDOM } from "../src/render/swatches";
 import { EDIT_MODE_KEY, EDIT_MODE_ARRANGE } from "../src/config/loader/edit-mode";
 import { EDIT_NS } from "../src/config/loader/reserved-namespace";
 import { EDIT_LIVE_KEY } from "../src/config/edit-chrome";
-import { effectivePresetName, presetNames } from "../src/config/presets";
+import { presetNames } from "../src/config/presets";
 import type { ValidatedConfig } from "../src/config/dsl-types";
 import { instantOf } from "../src/utils/instant";
 
@@ -102,25 +97,12 @@ function rig(
   const sink = new Map<string, readonly RichText[]>();
   let last = "";
   const render = (): string => {
-    const styleName = sessionState.get(SID, "style");
-    const styleKey = styleName == null ? undefined : config.styles[styleName];
-    const preset = effectivePresetName(
-      sessionState.get(SID, "preset"),
-      config.globals.preset,
-      config.presets,
+    const effective = resolveEffectiveGlobals(
+      config,
+      (key) => sessionState.get(SID, key),
+      () => false,
     );
-    const depth =
-      config.globals.colorCompatibility ?? DEFAULT_COLOR_COMPATIBILITY;
-    const variation = effectiveVariation(
-      undefined,
-      sessionState.get(SID, "variation"),
-      config.globals.variation,
-    );
-    const shade = effectiveShade(
-      undefined,
-      sessionState.get(SID, "shade"),
-      config.globals.shade,
-    );
+    const depth = effective.colorCompatibility;
     last = renderDsl(
       config,
       compiled,
@@ -134,29 +116,17 @@ function rig(
         workspace: { current_dir: "/tmp", project_dir: "/tmp", added_dirs: [] },
         term: { cols: width },
         endcaps: { effective: sessionState.get(SID, "endcaps") ?? style },
-        preset: { effective: preset },
+        preset: { effective: effective.preset },
         autoWrap: { effective: true },
         padding: { effective: padding },
         colorCompatibility: { effective: depth },
-        variation: { effective: variation },
-        shade: { effective: shade },
+        variation: { effective: effective.variation },
+        shade: { effective: effective.shade },
       },
       instantOf(new Date()),
       opts(width, padding, style, depth),
       { perSegmentSink: sink },
-      {
-        theme: resolveThemeSelection(
-          undefined,
-          sessionState.get(SID, "theme"),
-          config.globals.palette,
-        ),
-        preset,
-        variation,
-        shade,
-        ...(styleKey !== undefined && {
-          style: { kind: "decided" as const, name: styleName!, value: styleKey },
-        }),
-      },
+      effective,
     );
     return last;
   };

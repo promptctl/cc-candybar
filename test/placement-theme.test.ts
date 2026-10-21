@@ -11,6 +11,7 @@
 //     colour of the palette picking them would put on the placement, all on
 //     one ground, and save writes the pick into the placement.
 
+import { selectionFor } from "./helpers/selection";
 import { configurePlacement } from "./helpers/configure";
 import type { Palette, RichText } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -99,7 +100,7 @@ function buildRuntime(src: string, sessionState = new SessionState()) {
         width: 200,
       },
       { perSegmentSink: sink },
-      { theme: decided(barTheme) },
+      selectionFor(config, { theme: decided(barTheme) }),
     );
   };
   // The background a placement's cell wears, read by its id.

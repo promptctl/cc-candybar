@@ -51,7 +51,7 @@ import { readTailSync } from "../utils/transcript-fs.js";
 import type { TmuxHint } from "../tmux-hint.js";
 import type { UnusedDecl } from "../config/unused.js";
 import type { DslConfig } from "../config/dsl-types.js";
-import { resolveEffectiveGlobals } from "../daemon/render-payload.js";
+import { resolveEffectiveGlobals } from "../config/effective-globals.js";
 import {
   type Asked,
   type Width,

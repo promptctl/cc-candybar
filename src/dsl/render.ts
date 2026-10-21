@@ -16,7 +16,6 @@ import type { ColorDepth, RichText, Palette } from "@promptctl/rich-js";
 import { Defines, type Engine, type Template } from "@promptctl/go-template-js";
 import type { Instant } from "../utils/instant.js";
 import type {
-  DslConfig,
   ValidatedConfig,
   VariableDecl,
   CacheDecl,
@@ -34,15 +33,10 @@ import {
   stateVarDecls,
 } from "../config/dsl-types.js";
 import {
-  themeDefaultsOf,
-  underThemeDefault,
-} from "../config/theme-defaults.js";
-import {
-  PRESET_FLOOR,
-  presetGlobals,
-  presetNames,
-  presetRoot,
-} from "../config/presets.js";
+  resolveEffectiveGlobals,
+  type EffectiveGlobals,
+} from "../config/effective-globals.js";
+import { PRESET_FLOOR, presetNames, presetRoot } from "../config/presets.js";
 import { configOptionDomains, arrangedSegment } from "../config/edit-chrome.js";
 import { EDIT_NS } from "../config/loader/reserved-namespace.js";
 import type { VariableStore } from "../var-system/store.js";
@@ -66,26 +60,17 @@ import {
   decideEffectName,
   decideStyleName,
   decideThemeName,
-  resolveEffectSelection,
   ruleFloorMessage,
-  type EffectSelection,
   type Selection,
   EXPRESSION_SLOTS,
   type ExpressionSlot,
   finishSelection,
   drawnDepth,
-  effectiveShade,
-  effectiveTransitions,
-  effectiveVariation,
   isExpression,
   SLOT_FLOORS,
-  STYLE_FLOOR,
   EFFECT_FLOOR,
   placementPalette,
-  resolveThemeSelection,
   transposedPalette,
-  type StyleSelection,
-  type ThemeSelection,
 } from "../themes/index.js";
 import { FOLLOW_BAR } from "../themes/policy.js";
 import type { DrawnMotion } from "../render/drawn-motion.js";
@@ -131,8 +116,6 @@ import {
   type AddressStep,
   type Band,
   type Decor,
-  type ShadeName,
-  type VariationName,
   type Region,
 } from "../themes/decor.js";
 // [LAW:one-way-deps] The node-type registry sits below this driver: it owns the
@@ -423,34 +406,6 @@ function compileHelpers(
  * ref's meaning depend on which segment is rendering instead of on the ref
  * string alone.
  */
-// [LAW:one-source-of-truth] The decor a globals block declares — what a caller
-// that resolved no session renders: the same folds, minus the rungs only a
-// session could supply — under whichever names a caller did resolve. The
-// config-default rung is the declared theme's default under the globals
-// (src/config/theme-defaults.ts) — the fold resolveEffectiveGlobals makes — so
-// a compile-only render draws the shade and variation the daemon would. Its
-// style is RenderSelection's identity, theme default or not: an omitting
-// caller renders the unadapted config.
-const declaredDecor = (
-  config: DslConfig,
-  globals: Globals,
-  theme: ThemeSelection,
-  variation?: VariationName,
-  shade?: ShadeName,
-): Decor => {
-  const defaults = underThemeDefault(
-    globals,
-    themeDefaultsOf(theme, config.themeDefaults),
-  );
-  return {
-    variation:
-      VARIATIONS[
-        variation ?? effectiveVariation(undefined, null, defaults.variation)
-      ],
-    shade: SHADES[shade ?? effectiveShade(undefined, null, defaults.shade)],
-  };
-};
-
 export function registerDslConfig(
   config: ValidatedConfig,
   registry: SourceRegistry,
@@ -1119,59 +1074,29 @@ export type RenderWarning =
 // [LAW:locality-or-seam] The per-render RESOLUTION the caller performs and hands
 // down — the values that are neither config (compiled once) nor payload (input
 // data), but the session's live choices resolved against the config: which
-// theme-adaptation, which preset. Bundled as ONE named bag for exactly the
-// reason RenderObservers is: `style` arrived as a positional tail, `preset` would
-// have been a second one, and the next resolution a third — each a signature
-// every caller re-counts. A new per-render choice is now one field here.
-//
-// Both fields default to their domain's own identity element, so an omitting
-// caller (a compile-only test, the demo) renders the unadapted config — a true
-// default, not a fallback [LAW:no-silent-failure].
-export interface RenderSelection {
-  // The style, resolved by the caller as far as it CAN be: `resolveStyleSelection`
-  // over staged/session/globals, exactly how basePalette is resolved upstream.
-  // A `decided` arm is the whole answer; an `expression` arm is the one rung only
-  // a render can settle, because it reads this render's values — the fold
-  // deliberately splits here and nowhere else (brandon-looks-pe6). The base
-  // palette is transposed by the result ONCE per render.
-  readonly style?: StyleSelection;
-  // The looping effect, resolved by the caller as far as it CAN be — the
-  // style's twin (`resolveEffectSelection`), finished here under a rule.
-  readonly effect?: EffectSelection;
+// theme, style, effect, preset, variation and shade, and whether placements
+// fade. Bundled as ONE named bag for exactly the reason RenderObservers is.
+// [LAW:one-source-of-truth] Each field IS the field `resolveEffectiveGlobals`
+// resolves (see EffectiveGlobals for how): a Pick, not a restatement, so the
+// selection cannot hold a field the resolution does not, and every one is
+// required — a caller hands over the whole resolution or none of it.
+export type RenderSelection = Pick<
+  EffectiveGlobals,
+  | "theme"
+  | "style"
+  | "effect"
+  | "preset"
+  | "variation"
+  | "shade"
+  | "transitions"
+> & {
   // The session's effect memory: when its effect came into force (the effect's
   // own t = 0), the effects already made for its rows, and what each placement
   // its last frame drew. The daemon hands each session its own; an omitting
   // caller draws with a fresh one, so its render is the effect's calm first
   // frame and nothing in it fades in or dissolves out.
   readonly effects?: SessionEffects<RenderedLine>;
-  // Whether a placement the last frame did not draw fades in, and one it drew
-  // and this frame does not dissolves out: the resolved `transitions` setting
-  // (effectiveTransitions over staged/session/globals).
-  readonly transitions?: boolean;
-  // The theme, resolved by the caller as far as it CAN be: `resolveThemeSelection`
-  // over staged/session/globals (brandon-themes-dzl). Its decided arm carries the
-  // base PALETTE beside the name, which is why renderDsl takes no `basePalette`
-  // argument any more: renderDsl is the one producer of `theme.effective` (under a
-  // rule nobody upstream knows the answer), so a palette arriving separately from
-  // the name it is labelled with would be a second clock free to say gruvbox while
-  // the label said nord.
-  readonly theme?: ThemeSelection;
-  // The resolved preset NAME: effectivePresetName over SessionState/globals,
-  // collapsed to the floor if stale. Selects which of `compiled.roots` this
-  // render walks. The name (not the fragment) crosses this seam because the
-  // fragment's two halves land in two different places — the root here, the
-  // globals in `opts`/the payload — and one name keeps them from disagreeing.
-  readonly preset?: string;
-  // The resolved VARIATION name: effectiveVariation over staged/session/
-  // globals (brandon-theme-picker-bgw.7g6). Which theme role each row of the
-  // closed bar wears; the walk roots the bar region at it, so every closed
-  // cell's tint is read under this one value.
-  readonly variation?: VariationName;
-  // The resolved SHADE name: effectiveShade over staged/session/globals
-  // (candybar-theme-colours-6fq5.e5n). Which of its role's shades each cell of
-  // the closed bar wears; it roots the bar region beside the variation.
-  readonly shade?: ShadeName;
-}
+};
 
 // The bar's bytes alone: `drawDsl`'s text, for a caller that draws one frame
 // and asks nothing of its motion.
@@ -1190,7 +1115,15 @@ export function drawDsl(
   at: Instant,
   opts: BuildLineOptions,
   observers?: RenderObservers,
-  selection?: RenderSelection,
+  // [LAW:one-source-of-truth] An omitting caller renders as a session that has
+  // never clicked: the daemon's own resolution with no picks, so a config
+  // declaring globals.preset or globals.style renders here as the bar does.
+  // Whether the file authors the preset's root is no part of the selection.
+  selection: RenderSelection = resolveEffectiveGlobals(
+    config,
+    () => null,
+    () => false,
+  ),
 ): DrawnFrame {
   const { perSegmentSink, onSegmentError, onRenderWarning } = observers ?? {};
   const warn = (warning: RenderWarning): void => onRenderWarning?.(warning);
@@ -1220,42 +1153,17 @@ export function drawDsl(
   };
   // eslint-disable-next-line @typescript-eslint/no-unused-vars -- held for its disposal
   using _bound = bindRender(compiled.menuRuntime.action, binding);
-  const { preset = PRESET_FLOOR } = selection ?? {};
-  // [LAW:one-source-of-truth] What an omitting caller falls back to is the
-  // config default as the daemon reads it: the ACTIVE preset's globals over the
-  // config's (`presetGlobals`, the one merge `resolveEffectiveGlobals` uses), so
-  // the bar's colours and its layout come from the same preset.
-  const declared = presetGlobals(config, preset);
-  // [LAW:one-source-of-truth] The floor honours a config that declares its own
-  // `none` — `styles` merges BY NAME, so the identity adaptation is whatever this
-  // config says it is, not a constant this file repeats.
-  const selectedStyle =
-    selection?.style ?? decideStyleName(STYLE_FLOOR, config.styles);
-  // [LAW:one-source-of-truth] The theme's twin, resolved the same way one rung up
-  // (brandon-themes-dzl). An omitting caller gets the same fold minus the two
-  // rungs only it could know — so it renders what the CONFIG declares, which is a
-  // true default rather than a fallback [LAW:no-silent-failure]: a compile-only
-  // caller that never resolved SessionState still honours `globals.palette`, rule
-  // included, exactly as it honours every other authored global. Substituting the
-  // floor here would silently repaint every such render.
-  const selectedTheme =
-    selection?.theme ??
-    resolveThemeSelection(undefined, null, declared.palette);
-  // [LAW:one-source-of-truth] An omitting caller renders the decor the CONFIG
-  // declares — the same true default the theme above honours, its default look
-  // included.
-  const decor = declaredDecor(
-    config,
-    declared,
-    selectedTheme,
-    selection?.variation,
-    selection?.shade,
-  );
-  // [LAW:one-source-of-truth] The effect's twin of the same true default: an
-  // omitting caller wears the effect the config declares, rule included.
-  const selectedEffect =
-    selection?.effect ??
-    resolveEffectSelection(undefined, null, declared.effect);
+  const {
+    preset,
+    theme: selectedTheme,
+    style: selectedStyle,
+    effect: selectedEffect,
+    transitions,
+  } = selection;
+  const decor: Decor = {
+    variation: VARIATIONS[selection.variation],
+    shade: SHADES[selection.shade],
+  };
   // [LAW:one-source-of-truth] Inject the usable width as `term.cols` from the
   // SAME opts.width the strip wraps to (below) and a row fits to (published as
   // RenderBinding.width), so a template reads the exact wrap width — never a
@@ -1361,13 +1269,8 @@ export function drawDsl(
   // and what each placement this frame draws, so one the last frame — drawn
   // from this config, preset and session state — did not draw fades in, and
   // one it drew that this frame does not dissolves out as it was drawn there.
-  // [LAW:one-source-of-truth] An omitting caller fades as the config
-  // declares, the same true default the decor above honours.
-  const transitions =
-    selection?.transitions ??
-    effectiveTransitions(undefined, null, declared.transitions);
   const motion = (
-    selection?.effects ?? new SessionEffects<RenderedLine>("")
+    selection.effects ?? new SessionEffects<RenderedLine>("")
   ).motion(effect.value, at, {
     transitions,
     source: {

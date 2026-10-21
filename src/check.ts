@@ -56,11 +56,12 @@ import { effectivePresetName, presetNames } from "./config/presets.js";
 import {
   effectiveInputs,
   renderOptionsOf,
-  renderSelectionOf,
-  resolveEffectiveGlobals,
-  type EffectiveGlobals,
   type RenderPayload,
 } from "./daemon/render-payload.js";
+import {
+  resolveEffectiveGlobals,
+  type EffectiveGlobals,
+} from "./config/effective-globals.js";
 
 // [LAW:no-ambient-temporal-coupling] A fixed width keeps the verdict a function
 // of the config alone, not of whichever terminal invoked the check. Templates
@@ -487,7 +488,7 @@ export function renderEffective(
         failures.set(`segment "${placementId}"`, message),
       onRenderWarning: warned,
     },
-    renderSelectionOf(effective),
+    effective,
   );
   return { rendered, failures, advisories };
 }

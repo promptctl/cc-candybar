@@ -2,6 +2,7 @@
 // off the cells it drew, so a template's `frames` moves the bar exactly as an
 // effect does, and a bar with neither is still.
 
+import { picked, selectionFor } from "./helpers/selection";
 import { SessionState } from "../src/daemon/session-state";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -11,7 +12,6 @@ import {
 } from "../src/dsl/render";
 import type { DrawnMotion } from "../src/render/drawn-motion";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { decideEffectName } from "../src/themes";
 import type { Instant } from "../src/utils/instant";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 
@@ -23,7 +23,7 @@ function motionOf(
   template: string,
   globals = "{}",
   root = '{ h: ["cell"] }',
-  selection: Parameters<typeof drawDsl>[8] = undefined,
+  picks: Readonly<Record<string, string>> = {},
 ): DrawnMotion {
   const config = parseAndValidate(
     "<test>",
@@ -50,7 +50,7 @@ function motionOf(
         width: 160,
       },
       undefined,
-      selection,
+      selectionFor(config, {}, picked(picks)),
     ).motion;
   } finally {
     registry.dispose();
@@ -87,9 +87,7 @@ describe("a drawn frame says whether it moves", () => {
   // A session's pick of `none` is a decision: the rule it outranks arms nothing.
   test("a session's pick of no effect over an effect rule is still", () => {
     expect(
-      motionOf("still", `{ effect: '{{ "pulse" }}' }`, undefined, {
-        effect: decideEffectName("none"),
-      }),
+      motionOf("still", `{ effect: '{{ "pulse" }}' }`, undefined, { effect: "none" }),
     ).toBe("still");
   });
 
