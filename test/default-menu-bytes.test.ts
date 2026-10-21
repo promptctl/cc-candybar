@@ -208,6 +208,20 @@ describe("every {{ menu }} the bundled default renders", () => {
     expect(out).toMatchSnapshot("closed");
   });
 
+  // brandon-menus-sjhy.5zy: ⚙ config's 🧪 toggles opens onto the three lane
+  // toggles, each a session draft like every control in the menu.
+  test("the config menu with 🧪 toggles open: exact bytes", () => {
+    const rig = openConfigMenu();
+    rig.clickLabel(rig.render(), "🧪 toggles");
+    const out = rig.render();
+    for (const label of ["🧪 band (A)", "🧪 statusline (B)", "🧪 tmux pane (C)"]) {
+      expect(stripAnsi(out)).toContain(`☐ ${label}`);
+    }
+    expect(out).toMatchSnapshot("toggles open");
+    rig.clickLabel(out, "🧪 band (A)");
+    expect(rig.sessionState.get(SID, "experimentalBand")).toBe("true");
+  });
+
   // [LAW:verifiable-goals] The affordance the ticket is about. These bytes
   // began as the "before" — every `+` rendered `+▸`, a `+` the template wrote
   // beside an arrow the `{{ menu }}` runtime appended — and they are the only

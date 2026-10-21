@@ -863,6 +863,21 @@ describe("the drift marker", () => {
     }
   });
 
+  // brandon-menus-sjhy.5zy: a control inside a submenu still marks its tab,
+  // with the submenu closed.
+  test("a lane toggle's draft marks ⚙ config while 🧪 toggles is closed", () => {
+    const r = open(TWO_SEGMENT_ROOT);
+    try {
+      r.sessionState.set(SID, "experimentalPane", "true");
+      expect(markedTabs(r)).toEqual(["config"]);
+      showTab(r, "config");
+      expect(plain(r.render())).toContain("🧪 toggles");
+      expect(plain(r.render())).not.toContain("tmux pane (C)");
+    } finally {
+      r.dispose();
+    }
+  });
+
   test("a value the file holds is marked with no draft", () => {
     const r = open(CUSTOMIZED);
     try {

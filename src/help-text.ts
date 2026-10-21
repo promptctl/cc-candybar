@@ -2,6 +2,8 @@ import { DOOR_GLYPH } from "./config/disclosure";
 import { HELP_GLYPH_CLOSED } from "./config/help";
 import { ADD_GLYPH, CONFIGURE_GLYPH, REMOVE_GLYPH } from "./config/edit-glyphs";
 import { NODE_FLAGS } from "./cli-flags";
+import { SUBMENUS, TAB_LABEL, settingMenuPath } from "./config/menu-places";
+import { LANES } from "./config/lanes";
 
 // [LAW:effects-at-boundaries] Pure data, no I/O — index.ts owns the console.log
 // effect. Kept as its own module so the text is importable (and testable) without
@@ -49,10 +51,10 @@ Configuration:
   Every bar carries a settings menu, whatever your config says — no config
   needed, and writing your own \`root\` cannot delete it. Click
   it on the bar (${DOOR_GLYPH} by default; globals.menuGlyph changes it) for
-  preset switching and five tabs: ⚡ session (quick actions and commands),
-  🎨 look (theme/style/variation/shade/endcaps), 📐 layout (new preset, edit mode,
-  wrap, padding), ⚙ config (update notice) and
-  🧰 tools. A change applies to this session at once; 💾 save appears while
+  preset switching and five tabs: ${TAB_LABEL.session} (quick actions and commands),
+  ${TAB_LABEL.look} (theme/style/variation/shade/endcaps), ${TAB_LABEL.layout} (new preset, edit mode,
+  wrap, padding), ${TAB_LABEL.config} (update notice, ${SUBMENUS.toggles.trigger}) and
+  ${TAB_LABEL.tools}. A change applies to this session at once; 💾 save appears while
   you have unsaved changes and writes them to your config file.
   The 🧰 tools tab holds 🩺 doctor: click it to check your setup, and click a
   failed row's [fix] to repair it (the same checks \`cc-candybar doctor\` runs).
@@ -89,14 +91,14 @@ Subcommands:
                            (--config rides with it). LANE is band, statusline
                            or pane: the experimental lane this stream serves,
                            which streams only while its toggle in the settings
-                           menu's ⚙ config tab is on.
+                           menu's ${settingMenuPath(LANES.band.setting)} is on.
   bar-pane PANE            Draw the bar of the Claude Code session in tmux
                            pane PANE (e.g. %3) in this pane, as the daemon
                            pushes it, while this pane is shown. The bar is
                            drawn at PANE's width, so split PANE with -v for a
                            pane under it that fits. Experimental:
-                           runs while 🧪 tmux pane (C) is on in the settings
-                           menu's ⚙ config tab.
+                           runs while ${LANES.pane.label} is on in the settings
+                           menu's ${settingMenuPath(LANES.pane.setting)}.
 
 Config tooling:
   doctor [file]            Check your setup the way the bar's 🩺 doctor does —
