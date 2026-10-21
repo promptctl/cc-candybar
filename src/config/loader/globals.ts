@@ -1,7 +1,7 @@
 // [LAW:types-are-the-program] The globals schema: a fixed set of string fields
 // plus a validated palette name, declared as DATA and interpreted by the record
-// engine. This file changes when a global default field is added or removed —
-// add a key to GLOBALS_FIELDS and Globals; the engine does the rest.
+// engine. A field is added or removed as a row of GLOBAL_FIELDS
+// (src/config/globals-fields.ts); this file derives its schema from the rows.
 
 import type { Globals, ThemeDefault } from "../dsl-types.js";
 import {
@@ -57,7 +57,7 @@ export function settingControlDomain(field: ControlledField): ControlDomain {
 // preset's own fragment that second authority is also cyclic; for edit mode's
 // it would let a style-only fragment restage the whole layout, which edit chrome
 // already owns. Same species of bespoke, migration-pointing rejection as
-// colorCompatibility's "auto" above, and for the same reason: an author who
+// colorCompatibility's "auto" (globals-fields.ts), and for the same reason: an author who
 // writes it deserves to be told WHY, not handed a bare unknown-key message.
 //
 // [LAW:one-type-per-behavior] Both fragments reject the field identically and
@@ -364,7 +364,7 @@ export function listGlobalsFieldNames(): readonly string[] {
 // prevent). A numeric field is one whose row ranges integers.
 const NUMERIC_GLOBALS_FLOORS: ReadonlyMap<string, number> = new Map(
   Object.entries(GLOBAL_FIELDS).flatMap(([field, row]) =>
-    row.kind === "session" && typeof row.floor === "number"
+    "floor" in row && typeof row.floor === "number"
       ? [[field, row.floor] as const]
       : [],
   ),

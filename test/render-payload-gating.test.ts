@@ -9,7 +9,6 @@ import {
   buildNeededPrefixes,
 } from "../src/daemon/render-payload";
 import type { ClientHints } from "../src/daemon/protocol";
-import { resolveThemeSelection } from "../src/themes/palette-resolvers.js";
 import type {
   RenderPayloadDeps,
 } from "../src/daemon/render-payload";
@@ -17,7 +16,6 @@ import { type EffectiveGlobals } from "../src/config/effective-globals";
 import { globalsFor } from "./helpers/selection";
 import type { DslConfig, Root } from "../src/config/dsl-types";
 import { ABSENT } from "../src/utils/outcome";
-import { FLOOR_EFFECT, FLOOR_STYLE } from "./helpers/floor-style";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { listResolvablePaletteNames } from "../src/themes/policy";

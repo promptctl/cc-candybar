@@ -6,7 +6,6 @@
 
 import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
 import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
-import { resolveThemeSelection } from "../src/themes/palette-resolvers.js";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -22,7 +21,6 @@ import { VALUED_FIELDS } from "../src/config/globals-fields";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import type { GitInfo, GitInfoOptions, PrState } from "../src/segments/git";
 import { ABSENT, failed, ok, type Outcome } from "../src/utils/outcome";
-import { FLOOR_EFFECT, FLOOR_STYLE } from "./helpers/floor-style";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
 import { instantOf } from "../src/utils/instant";
 

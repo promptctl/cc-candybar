@@ -176,7 +176,7 @@ export function resolveEffectiveGlobals(
       sessionPick("effect"),
       globals.effect,
     ),
-    // The separator has no SessionState half, so its chain is `staged ??
+    // [LAW:one-source-of-truth] The separator has no SessionState half, so its chain is `staged ??
     // config` — the same `??`, minus the rungs it does not have.
     separator: staged.default_separator ?? globals.default_separator,
   };

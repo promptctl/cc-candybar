@@ -1865,10 +1865,9 @@ async function renderChecked(
     sessionState.get(req.hookData.session_id, key);
   const effective: EffectiveGlobals = sessionGlobals(sessionId, state);
   // Which animation lanes this session's settings switch on.
+  const lanes = laneSwitches(effective);
   noteFacts(facts, {
-    lanes:
-      LANE_NAMES.filter((lane) => laneSwitches(effective)[lane]).join(",") ||
-      "-",
+    lanes: LANE_NAMES.filter((lane) => lanes[lane]).join(",") || "-",
   });
   // [LAW:dataflow-not-control-flow] What a lane runs follows the switch every
   // render draws by, as the session's own setting moves moved it

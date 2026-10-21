@@ -357,7 +357,8 @@ export const GLOBAL_FIELDS = {
   ),
   // The config default for the PRESET — a named fragment from `presets:`
   // whose globals and root the session renders. Membership in the merged
-  // `presets` map is cross-ref's. A preset's own globals may NOT carry it: a
+  // `presets` map is cross-ref's. [LAW:one-source-of-truth] A preset's own
+  // globals may NOT carry it: a
   // preset selecting a preset is a second, cyclic authority over which is
   // active. Its control sits on the door's first line, one click away:
   // switching arrangement is what people open the menu for.
@@ -439,17 +440,10 @@ export const GLOBAL_FIELDS = {
   // control (brandon-menu-ia-q30.5y4).
   colorCompatibility: {
     kind: "config",
+    ...enumValues(COLOR_COMPATIBILITIES, "colorCompatibilities"),
+    // Its own spec only for the migration-pointing "auto" refusal above.
     spec: colorCompatibilitySpec,
-    domain: { from: COLOR_COMPATIBILITIES },
     floor: "truecolor",
-    parse: (raw: string): ColorCompatibility | null =>
-      (COLOR_COMPATIBILITIES as readonly string[]).includes(raw)
-        ? (raw as ColorCompatibility)
-        : null,
-    optionDomain: {
-      name: "colorCompatibilities",
-      members: COLOR_COMPATIBILITIES,
-    },
   } satisfies ConfigRow<ColorCompatibility>,
   // The text segments render when their value is empty.
   default_empty_value: text(optionalStringSpec()),

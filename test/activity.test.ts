@@ -11,7 +11,6 @@ import {
   utimesSync,
 } from "node:fs";
 import { join } from "node:path";
-import { resolveThemeSelection } from "../src/themes/palette-resolvers.js";
 import { tmpdir } from "node:os";
 
 import { ActivityProvider, type ActivityInfo } from "../src/segments/activity";
@@ -22,7 +21,6 @@ import type {
 import { type EffectiveGlobals } from "../src/config/effective-globals";
 import { globalsFor } from "./helpers/selection";
 import { ABSENT, ok } from "../src/utils/outcome";
-import { FLOOR_EFFECT, FLOOR_STYLE } from "./helpers/floor-style";
 import { entryActivity } from "../src/utils/transcript-activity";
 import {
   userEntryOf,

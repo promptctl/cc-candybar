@@ -23,12 +23,10 @@ import {
 import { type EffectiveGlobals } from "../src/config/effective-globals";
 import { globalsFor } from "./helpers/selection";
 import type { ClientHints } from "../src/daemon/protocol";
-import { resolveThemeSelection } from "../src/themes/palette-resolvers";
 import { VERB_SLASH } from "../src/click/wire";
 import { ABSENT, ok } from "../src/utils/outcome";
 import { effectsOf } from "./helpers/click";
 import { linkUrls, stripAnsi } from "./helpers/ansi";
-import { FLOOR_EFFECT, FLOOR_STYLE } from "./helpers/floor-style";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
 import { instantOf } from "../src/utils/instant";
 

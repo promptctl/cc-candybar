@@ -17,7 +17,6 @@ import {
 import { type EffectiveGlobals } from "../src/config/effective-globals";
 import { globalsFor } from "./helpers/selection";
 import type { ClientHints } from "../src/daemon/protocol";
-import { resolveThemeSelection } from "../src/themes/palette-resolvers.js";
 import { ABSENT, ok } from "../src/utils/outcome";
 import {
   mergeWithDefault,
@@ -30,7 +29,6 @@ import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
-import { FLOOR_EFFECT, FLOOR_STYLE } from "./helpers/floor-style";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
 import { instantOf } from "../src/utils/instant";
 
