@@ -151,75 +151,90 @@ export const stat = gated(fsStat);
 export const FOLD_WINDOW_BYTES = 512 * 1024;
 
 // [LAW:nothing-unseen] What every forward read has cost since the daemon
-// started: `reads` gated reads, `bytes` read off disk (a widened read's
-// re-reads included), `widened` doublings past the window, and the largest
-// single buffer one read allocated. daemon-stats reports it as
-// `transcriptReads`.
+// started: `reads` gated reads, `bytes` read off disk (a long line's scan and
+// whole re-read included), `longLines` lines longer than the window read
+// whole, and the longest of them — the one buffer a read allocates beyond the
+// slots' windows. daemon-stats reports it as `transcriptReads`.
 export interface TranscriptReads {
   readonly reads: number;
   readonly bytes: number;
-  readonly widened: number;
-  readonly largestRead: number;
+  readonly longLines: number;
+  readonly largestLine: number;
 }
 
 // [LAW:no-shared-mutable-globals] One owner: readAppended is the only writer,
 // inside its gate slot, so every forward read is counted — a fold's and the
 // first-line check of a sidechain alike. Read through transcriptReads().
-const totals = { reads: 0, bytes: 0, widened: 0, largestRead: 0 };
+const totals = { reads: 0, bytes: 0, longLines: 0, largestLine: 0 };
 
 export function transcriptReads(): TranscriptReads {
   return { ...totals };
 }
 
-// The whole lines one forward read returned: `buf` runs from `start` through
-// the last newline the read reached (empty when it reached none before EOF —
-// a partial trailing line waits for its newline). `buf` may be a view of the
-// caller's scratch buffer, so it is read before the next read into it. `size`/`stamp`/`ino` are the
-// stat this read took. `widened` is how many times the window doubled to
-// reach a newline; `bytesRead` what it read off disk, re-reads included;
-// `largestRead` the largest buffer it allocated.
-export interface AppendedLines {
-  readonly buf: Buffer;
+// What one forward read made of the whole lines it reached: `lines` is the
+// caller's `decode` of them (of nothing when it reached no newline before its
+// end — a partial trailing line waits for its newline), `bytes` their length,
+// so `start + bytes` is the next read's offset. `atEnd` says the read reached
+// its end — the cap, or EOF — so a further read would find no whole line.
+// `size`/`stamp`/`ino` are the stat this read took. `longLine` is the length
+// of a line longer than the window that was read whole, 0 for none.
+export interface AppendedLines<T> {
+  readonly lines: T;
   readonly start: number;
+  readonly bytes: number;
+  readonly atEnd: boolean;
   readonly size: number;
   readonly stamp: string;
   readonly ino: number;
   readonly reset: boolean;
-  readonly widened: number;
-  readonly bytesRead: number;
-  readonly largestRead: number;
+  readonly longLine: number;
 }
+
+// [LAW:no-shared-mutable-globals] The window buffers, owned by the gate's
+// slots: a read takes one as it enters its slot and gives it back as it
+// leaves, so there are never more than TRANSCRIPT_FS_CONCURRENCY of them
+// (4 MiB) however many folds are queued, and a fold allocates no window
+// buffer per window or per file for the garbage collector to find
+// (brandon-unfiled-3248.bfnj).
+const windows: Buffer[] = [];
 
 // [LAW:single-enforcer] The forward complement of readTail, through the SAME
 // gate: the whole lines of an append-only file from `prior.offset` (the file
-// start when `prior` is undefined), at most one `scratch` buffer of them unless
-// one line is longer. Reading into the caller's buffer, which it reuses window
-// after window, keeps a fold from leaving a window-sized buffer behind per
-// window for the garbage collector to find (brandon-unfiled-3248.bfnj). One open→stat→read→close per gate slot, exactly like readTail. A
-// transcript scanner that maintains a byte cursor MUST use this, not raw
-// node:fs, or it reintroduces the unbounded-fs state the gate forbids.
+// start when `prior` is undefined) up to `until` (EOF when undefined), at most
+// one window of them unless one line is longer. One open→stat→read→close per
+// gate slot, exactly like readTail. A transcript scanner that maintains a
+// byte cursor MUST use this, not raw node:fs, or it reintroduces the
+// unbounded-fs state the gate forbids.
 //
-// [LAW:single-enforcer] Widening lives here and nowhere else: a full window
-// holding no newline is one line longer than the window, so the read doubles
-// and re-reads from the same start until it reaches a newline or EOF. A line
-// of any length comes back whole, and every caller gets complete lines only.
-// Cutting at a newline also cuts on a UTF-8 boundary (0x0A is never a
-// continuation byte).
+// [LAW:types-are-the-program] The window is the slot's, so its bytes never
+// leave the slot: `decode` turns them into the caller's value inside it,
+// before the next read reuses the buffer. `decode` must not keep the buffer.
+//
+// [LAW:single-enforcer] A line longer than the window is handled here and
+// nowhere else: a full window holding no newline scans on, window by window,
+// for the newline that ends the line, then reads the line whole into a buffer
+// of exactly its length — so every caller gets complete lines only, and a
+// partial line still being written (no newline before the end) allocates
+// nothing and reports no long line. Cutting at a newline also cuts on a UTF-8
+// boundary (0x0A is never a continuation byte).
 //
 // [LAW:one-source-of-truth] `reset` is the single signal that the caller's
 // cursor is no longer a prefix of this file — a truncation or /compact
 // rewrite — so the caller discards its prior fold and re-folds from the
-// returned bytes, which then start at offset 0.
+// returned bytes, which then start at offset 0. `until` belongs to the file
+// the cursor was a prefix of, so a reset read ignores it.
 //
 // [LAW:no-silent-failure] ENOENT (fresh session, no transcript yet) is `absent`;
 // any other error is `failed`, carrying its reason to the boundary that logs.
-export async function readAppended(
+export async function readAppended<T>(
   path: string,
   prior: { offset: number; ino: number } | undefined,
-  scratch: Buffer,
-): Promise<Outcome<AppendedLines>> {
+  until: number | undefined,
+  decode: (wholeLines: Buffer) => T,
+): Promise<Outcome<AppendedLines<T>>> {
   return gate.run(async () => {
     let fh: FileHandle | null = null;
+    const window = windows.pop() ?? Buffer.allocUnsafe(FOLD_WINDOW_BYTES);
     try {
       fh = await fsOpen(path, "r");
       const st = await fh.stat();
@@ -233,44 +248,53 @@ export async function readAppended(
       const reset =
         prior !== undefined && (ino !== prior.ino || size < prior.offset);
       const start = reset || prior === undefined ? 0 : prior.offset;
-      let window = scratch;
-      let widened = 0;
+      const end = reset || until === undefined ? size : Math.min(size, until);
       let bytesRead = 0;
-      let largestRead = 0;
-      let buf: Buffer;
-      for (;;) {
-        const read = await readInto(
+      // The window's bytes, then — when they hold no newline — the scan for
+      // the one that ends the line. A short read (the file shrank under us)
+      // ends the read as EOF does.
+      const first = await readInto(fh, window.subarray(0, end - start), start);
+      bytesRead += first.length;
+      let lastNl = first.lastIndexOf(0x0a);
+      let reached = start + first.length;
+      let shortRead = first.length < Math.min(window.length, end - start);
+      while (lastNl < 0 && reached < end && !shortRead) {
+        const next = await readInto(
           fh,
-          window.subarray(0, Math.min(window.length, size - start)),
-          start,
+          window.subarray(0, end - reached),
+          reached,
         );
-        bytesRead += read.length;
-        largestRead = Math.max(largestRead, read.length);
-        const lastNl = read.lastIndexOf(0x0a);
-        // A short read (the file shrank under us) is EOF as well.
-        const atEof =
-          start + read.length >= size || read.length < window.length;
-        if (lastNl >= 0 || atEof) {
-          buf = read.subarray(0, lastNl + 1);
-          break;
-        }
-        window = Buffer.allocUnsafe(window.length * 2);
-        widened++;
+        bytesRead += next.length;
+        const nl = next.indexOf(0x0a);
+        if (nl >= 0) lastNl = reached - start + nl;
+        shortRead = next.length < Math.min(window.length, end - reached);
+        reached += next.length;
       }
+      const bytes = lastNl + 1;
+      const longLine = bytes > window.length ? bytes : 0;
+      // A long line is read once more, whole, now that its length is known.
+      const wholeLines =
+        longLine > 0
+          ? await readInto(fh, Buffer.allocUnsafe(bytes), start)
+          : first.subarray(0, bytes);
+      bytesRead += longLine > 0 ? wholeLines.length : 0;
       totals.reads++;
       totals.bytes += bytesRead;
-      totals.widened += widened;
-      totals.largestRead = Math.max(totals.largestRead, largestRead);
+      totals.longLines += longLine > 0 ? 1 : 0;
+      totals.largestLine = Math.max(totals.largestLine, longLine);
       return ok({
-        buf,
+        lines: decode(wholeLines),
         start,
+        bytes: wholeLines.length,
+        // A long line was found by its newline alone, so lines after it may
+        // still be unread; otherwise the read saw everything up to its end.
+        atEnd:
+          longLine > 0 ? start + bytes >= end : reached >= end || shortRead,
         size,
         stamp,
         ino,
         reset,
-        widened,
-        bytesRead,
-        largestRead,
+        longLine,
       });
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code === "ENOENT") return ABSENT;
@@ -278,6 +302,7 @@ export async function readAppended(
         `readAppended ${path}: ${e instanceof Error ? e.message : String(e)}`,
       );
     } finally {
+      windows.push(window);
       // [LAW:no-silent-failure] A close() rejection must NOT override the typed
       // Outcome the try returned — callers await this and read `.kind`, so a raw
       // rejection would escape every failed-guard. A failed close after a good

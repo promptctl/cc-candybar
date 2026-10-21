@@ -126,32 +126,53 @@ describe("foldAppended — the windowed fold", () => {
       paddedLine(i / 1000, 1024),
     );
     writeFileSync(t, lines.join(""));
+    const bytes = Buffer.byteLength(lines.join(""));
     const before = transcriptReads();
 
-    const { folded, reads } = await foldOf(t);
+    const { folded, longLines } = await foldOf(t);
 
     expect(costs(folded.value)).toEqual(lines.map((_, i) => i / 1000));
-    expect(folded.cursor.offset).toBe(Buffer.byteLength(lines.join("")));
-    expect(reads.windows).toBeGreaterThanOrEqual(5);
-    expect(reads.largestRead).toBeLessThanOrEqual(FOLD_WINDOW_BYTES);
-    expect(reads.widenings).toEqual([]);
-    // Every window is a counted gated read.
-    expect(transcriptReads().reads - before.reads).toBe(reads.windows);
+    expect(folded.cursor.offset).toBe(bytes);
+    expect(longLines).toEqual([]);
+    // One gated read per window, each consuming all but a partial line of
+    // it, and none past the end.
+    const reads = transcriptReads().reads - before.reads;
+    expect(reads).toBeGreaterThanOrEqual(Math.ceil(bytes / FOLD_WINDOW_BYTES));
+    expect(reads).toBeLessThanOrEqual(Math.ceil(bytes / (FOLD_WINDOW_BYTES - 1024)));
+    expect(transcriptReads().longLines).toBe(before.longLines);
   });
 
-  test("a line longer than the window is folded whole, and the widening is reported", async () => {
+  test("a line longer than the window is folded whole, and reported as a long line", async () => {
     const t = join(dir, "long.jsonl");
+    const first = line(new Date(), 0.01);
     const long = paddedLine(0.02, Math.floor(FOLD_WINDOW_BYTES * 2.5));
-    writeFileSync(t, line(new Date(), 0.01) + long + line(new Date(), 0.03));
+    writeFileSync(t, first + long + line(new Date(), 0.03));
     const before = transcriptReads();
 
-    const { folded, reads } = await foldOf(t);
+    const { folded, longLines } = await foldOf(t);
 
     expect(costs(folded.value)).toEqual([0.01, 0.02, 0.03]);
-    expect(reads.widenings).toEqual([
-      expect.objectContaining({ path: t, doublings: 2 }),
+    expect(longLines).toEqual([
+      { path: t, offset: Buffer.byteLength(first), bytes: Buffer.byteLength(long) },
     ]);
-    expect(transcriptReads().widened - before.widened).toBe(2);
+    expect(transcriptReads().longLines - before.longLines).toBe(1);
+    expect(transcriptReads().largestLine).toBeGreaterThanOrEqual(
+      Buffer.byteLength(long),
+    );
+  });
+
+  test("a long line still being written allocates nothing and reports no long line", async () => {
+    const t = join(dir, "writing.jsonl");
+    const complete = line(new Date(), 0.01);
+    writeFileSync(t, complete + "{" + "x".repeat(FOLD_WINDOW_BYTES * 3));
+    const before = transcriptReads();
+
+    const { folded, longLines } = await foldOf(t);
+
+    expect(costs(folded.value)).toEqual([0.01]);
+    expect(folded.cursor.offset).toBe(Buffer.byteLength(complete));
+    expect(longLines).toEqual([]);
+    expect(transcriptReads().longLines).toBe(before.longLines);
   });
 
   test("a partial trailing line (no newline yet) waits for its newline, and the fold returns", async () => {
@@ -159,14 +180,36 @@ describe("foldAppended — the windowed fold", () => {
     const complete = line(new Date(), 0.01);
     const partial = '{"timestamp":"2024-01-01T00:00:00.000Z","costUSD":0.02';
     writeFileSync(t, complete + partial);
+    const before = transcriptReads();
 
     const first = await foldOf(t);
     expect(costs(first.folded.value)).toEqual([0.01]);
     expect(first.folded.cursor.offset).toBe(Buffer.byteLength(complete));
+    // One read: the window that reached the end leaves nothing to re-read.
+    expect(transcriptReads().reads - before.reads).toBe(1);
 
     appendFileSync(t, ',"message":{"usage":{"input_tokens":1,"output_tokens":1}}}\n');
     const second = await foldOf(t, first.folded, (_s, entries) => entries);
     expect(costs(second.folded.value)).toEqual([0.02]);
+  });
+
+  test("a file growing during a fold is folded to the size its stamp names, the rest next time", async () => {
+    const t = join(dir, "growing.jsonl");
+    const lines = Array.from({ length: 2200 }, (_, i) => paddedLine(i / 1000, 1024));
+    writeFileSync(t, lines.join(""));
+    const stampAtStart = statStamp(t);
+    let windows = 0;
+
+    const first = await foldOf(t, undefined, (state, entries) => {
+      if (windows++ === 0) appendFileSync(t, line(new Date(), 9));
+      return [...state, ...entries];
+    });
+
+    expect(costs(first.folded.value)).toEqual(lines.map((_, i) => i / 1000));
+    expect(first.folded.cursor.offset).toBe(Buffer.byteLength(lines.join("")));
+    expect(first.folded.cursor.stamp).toBe(stampAtStart);
+    const second = await foldOf(t, first.folded, (_s, entries) => entries);
+    expect(costs(second.folded.value)).toEqual([9]);
   });
 
   test("a rewritten (shrunk) file starts the fold over from the start", async () => {

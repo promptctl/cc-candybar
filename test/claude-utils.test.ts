@@ -4,7 +4,7 @@ import { tmpdir } from "os";
 import {
   findAgentTranscripts,
   userEntryOf,
-  widenedLines,
+  longLineLog,
   type UserEntry,
 } from "../src/utils/claude";
 import { FOLD_WINDOW_BYTES } from "../src/utils/transcript-fs";
@@ -93,22 +93,21 @@ describe("findAgentTranscripts", () => {
   });
 
   // brandon-unfiled-3248.bfnj: the first line is read through the windowed
-  // reader, which widens past the window for a longer line and says so.
-  it("reads a first line longer than the fold window whole, and reports the widening", async () => {
+  // reader, which reads a line longer than the window whole and says so.
+  it("reads a first line longer than the fold window whole, and reports the long line", async () => {
     const sessionId = "abc123";
     const subagentsDir = makeSubagentsDir(sessionId);
     const pad = "x".repeat(Math.floor(FOLD_WINDOW_BYTES * 2.5));
     const agentFile = join(subagentsDir, "agent-long.jsonl");
     writeFileSync(agentFile, JSON.stringify({ sessionId, pad }) + "\n");
 
-    const { paths, reads } = await findAgentTranscripts(sessionId, tempDir);
+    const { paths, longLines } = await findAgentTranscripts(sessionId, tempDir);
 
     expect(paths).toEqual([agentFile]);
-    expect(reads.widenings).toEqual([
-      expect.objectContaining({ path: agentFile, offset: 0, doublings: 2 }),
-    ]);
-    expect(widenedLines(reads)).toEqual([
-      expect.stringMatching(/^transcript read widened path=".*agent-long\.jsonl" offset=0 bytes=\d+ doublings=2$/),
+    const bytes = Buffer.byteLength(JSON.stringify({ sessionId, pad }) + "\n");
+    expect(longLines).toEqual([{ path: agentFile, offset: 0, bytes }]);
+    expect(longLineLog(longLines)).toEqual([
+      `transcript long line path=${JSON.stringify(agentFile)} offset=0 bytes=${bytes}`,
     ]);
   });
 });

@@ -172,7 +172,7 @@ describe("SessionUsageStore — session projection", () => {
   // spanning several windows sums like a whole-file read, and a line longer
   // than the window — in the main transcript or a sidechain's first line — is
   // read whole and logged.
-  test("a multi-window session sums every entry, and each widened read is logged", async () => {
+  test("a multi-window session sums every entry, and each long line read is logged", async () => {
     const t = join(dir, "W.jsonl");
     const now = new Date();
     const pad = "x".repeat(1024);
@@ -205,9 +205,9 @@ describe("SessionUsageStore — session projection", () => {
       const info = await store.getUsageInfo("W", hook("W", t));
       if (info.kind !== "ok") throw new Error("expected ok");
       expect(info.value.session.cost).toBeCloseTo(1500 * 0.001 + 0.5 + 0.25, 5);
-      const widened = lines.filter((l) => l.startsWith("transcript read widened"));
+      const long = lines.filter((l) => l.startsWith("transcript long line"));
       // The sidechain's first-line check, its fold, and the main transcript's.
-      expect(widened).toEqual([
+      expect(long).toEqual([
         expect.stringContaining("agent-1.jsonl"),
         expect.stringContaining("W.jsonl"),
         expect.stringContaining("agent-1.jsonl"),

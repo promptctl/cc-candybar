@@ -12,7 +12,7 @@
 import { GitDataProvider } from "./cache/git";
 import { SessionUsageStore } from "./cache/session-usage-store";
 import type { WatcherRegistry } from "./cache/watchers";
-import type { DaemonLogger } from "./log";
+import type { DaemonLogger } from "../utils/logger";
 import type { RenderPayloadDeps } from "./render-payload";
 import { ContextProvider } from "../segments/context.js";
 import { MetricsProvider } from "../segments/metrics.js";

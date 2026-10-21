@@ -22,12 +22,12 @@
 
 import {
   foldAppended,
-  widenedLines,
+  longLineLog,
   type Folded,
   type ParsedEntry,
 } from "./claude";
 import { statStamp } from "./transcript-fs";
-import { quietLogger, type DaemonLogger } from "../daemon/log";
+import { quietLogger, type DaemonLogger } from "./logger";
 
 // [LAW:types-are-the-program] Never `absent`: a session with no transcript yet
 // is a real empty fold, so the caller has exactly two arms.
@@ -79,8 +79,8 @@ export class TranscriptFold<S> {
       return { kind: "ok", value: prior?.value ?? this.empty };
     }
 
-    const { folded, reads } = read.value;
-    for (const line of widenedLines(reads)) this.log("info", line);
+    const { folded, longLines } = read.value;
+    for (const line of longLineLog(longLines)) this.log("info", line);
     this.touch(sessionId, folded);
     while (this.states.size > this.maxSessions) {
       const oldest = this.states.keys().next().value;

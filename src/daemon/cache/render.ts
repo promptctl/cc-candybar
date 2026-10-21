@@ -41,7 +41,7 @@ import type {
   WatcherHandle,
   WatchTargets,
 } from "./watchers.js";
-import { quietLogger, type DaemonLogger } from "../log.js";
+import { quietLogger, type DaemonLogger } from "../../utils/logger.js";
 import { pluginDataVar, pluginNameOf } from "../../config/loader/plugins.js";
 
 // [LAW:one-source-of-truth] Each cache entry owns the live DSL state for a

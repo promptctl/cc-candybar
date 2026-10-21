@@ -129,7 +129,7 @@ test("the fast path re-orders for eviction, so a read keeps a session alive", as
 
 // brandon-unfiled-3248.bfnj: the fold reads one window at a time, and a line
 // longer than the window is read whole and logged through the fold's sink.
-test("a multi-window transcript folds every entry, and a widened line is logged", async () => {
+test("a multi-window transcript folds every entry, and a long line is logged", async () => {
   const path = join(dir, "big.jsonl");
   const pad = "x".repeat(1000);
   const lines = Array.from({ length: 3000 }, (_, i) => line(`${i} ${pad}`));
@@ -144,6 +144,6 @@ test("a multi-window transcript folds every entry, and a widened line is logged"
 
   expect(await valueOf(fold, "s", path)).toBe(3001);
   expect(logged).toEqual([
-    expect.stringMatching(/^transcript read widened path=".*big\.jsonl" offset=\d+ bytes=\d+ doublings=2$/),
+    expect.stringMatching(/^transcript long line path=".*big\.jsonl" offset=\d+ bytes=\d+$/),
   ]);
 });

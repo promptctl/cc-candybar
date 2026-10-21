@@ -50,7 +50,7 @@ import {
   type BuildCurrency,
   type SourceStamp,
 } from "./build-currency";
-import type { LogLevel } from "./log";
+import type { LogLevel } from "../utils/logger";
 import { BadVerbArgs } from "./verb-error";
 import { registerConfigValidator } from "./verbs/config-validators";
 import { registerStateValidator } from "./verbs/state-validators";

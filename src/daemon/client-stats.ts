@@ -180,8 +180,8 @@ export function formatStats(s: StatsSnapshot): string {
   lines.push(`transcriptReads`);
   lines.push(`  reads         ${s.transcriptReads.reads}`);
   lines.push(`  bytes         ${fmtBytes(s.transcriptReads.bytes)}`);
-  lines.push(`  widened       ${s.transcriptReads.widened}`);
-  lines.push(`  largest read  ${fmtBytes(s.transcriptReads.largestRead)}`);
+  lines.push(`  long lines    ${s.transcriptReads.longLines}`);
+  lines.push(`  largest line  ${fmtBytes(s.transcriptReads.largestLine)}`);
   lines.push(``);
   lines.push(`renderCache`);
   lines.push(`  size          ${s.renderCache.size}`);

@@ -78,7 +78,7 @@ import {
   type ConfigPath,
   type PersistTarget,
 } from "../config/loader/persist-target.js";
-import type { DaemonLogger } from "./log.js";
+import type { DaemonLogger } from "../utils/logger.js";
 import { BUNDLED_PRESETS, isBundledPreset } from "./bundled-presets.js";
 import { ident } from "../config/ident.js";
 

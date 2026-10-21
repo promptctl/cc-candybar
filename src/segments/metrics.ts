@@ -10,7 +10,7 @@ import type { ClaudeHookData, ParsedEntry, UserEntry } from "../utils/claude";
 // The fold machinery itself moved out when the activity provider became its
 // second instance (brandon-activity-ue7): what is left here is the projection.
 import { TranscriptFold } from "../utils/transcript-fold";
-import type { DaemonLogger } from "../daemon/log";
+import type { DaemonLogger } from "../utils/logger";
 import { debug } from "../utils/logger";
 import { ABSENT, failed, ok, type Outcome } from "../utils/outcome";
 

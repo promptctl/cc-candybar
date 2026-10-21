@@ -31,7 +31,7 @@ import { detectClientHints } from "../client-hints.js";
 import { ConfigError } from "../config/loader/diagnostics.js";
 import { buildRenderState } from "../daemon/cache/render.js";
 import { WatcherRegistry } from "../daemon/cache/watchers.js";
-import type { DaemonLogger } from "../daemon/log.js";
+import type { DaemonLogger } from "../utils/logger.js";
 import { createPayloadProviders } from "../daemon/payload-providers.js";
 import { parseClientHints } from "../daemon/protocol.js";
 import {

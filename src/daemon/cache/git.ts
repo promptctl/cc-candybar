@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { GitService, type GitInfo, type PullRequest } from "../../segments/git";
 import { ABSENT, ok, type Outcome } from "../../utils/outcome";
-import { quietLogger } from "../log";
+import { quietLogger } from "../../utils/logger";
 import { WatcherRegistry, type WatcherHandle } from "./watchers";
 import { TrailingEdge } from "../../utils/trailing-edge";
 

@@ -40,7 +40,7 @@ import {
 } from "../segments/git.js";
 import { ABSENT, failed, type Outcome } from "../utils/outcome.js";
 import { cacheExpiresAt } from "../segments/cache.js";
-import type { DaemonLogger } from "./log.js";
+import type { DaemonLogger } from "../utils/logger.js";
 import { isBundledPreset } from "./bundled-presets.js";
 import type {
   SessionUsageStore,

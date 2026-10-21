@@ -3,7 +3,7 @@ import type { ParsedEntry, ClaudeHookData } from "../utils/claude";
 import { debug } from "../utils/logger";
 import { ABSENT, failed, ok, type Outcome } from "../utils/outcome";
 import { TranscriptFold } from "../utils/transcript-fold";
-import type { DaemonLogger } from "../daemon/log";
+import type { DaemonLogger } from "../utils/logger";
 
 export interface ContextInfo {
   totalTokens: number;

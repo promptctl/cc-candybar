@@ -8,6 +8,7 @@
 // millisecond. The fold's step only counts entries, so what is measured is the
 // read itself.
 import { foldAppended } from "../src/utils/claude.ts";
+import { transcriptReads } from "../src/utils/transcript-fs.ts";
 
 const [file, n = "1"] = process.argv.slice(2);
 if (file === undefined) {
@@ -18,6 +19,7 @@ const concurrency = Number(n);
 const MB = (bytes: number) => (bytes / 2 ** 20).toFixed(1);
 
 globalThis.gc?.();
+const readsBefore = transcriptReads();
 const before = process.memoryUsage();
 const peak = { rss: before.rss, heap: before.heapUsed, ext: before.external };
 const sampler = setInterval(() => {
@@ -40,10 +42,11 @@ if (first.kind !== "ok") {
   console.error(`fold ${first.kind}${first.kind === "failed" ? `: ${first.reason}` : ""}`);
   process.exit(1);
 }
-const { folded, reads } = first.value;
+const { folded } = first.value;
+const reads = transcriptReads();
 console.log(
   [
-    `folds=${concurrency} entries=${folded.value} windows=${reads.windows} bytes=${MB(reads.bytes)}MB largestRead=${MB(reads.largestRead)}MB widened=${reads.widenings.length}`,
+    `folds=${concurrency} entries=${folded.value} reads=${reads.reads - readsBefore.reads} bytes=${MB(reads.bytes - readsBefore.bytes)}MB longLines=${reads.longLines - readsBefore.longLines} largestLine=${MB(reads.largestLine)}MB`,
     `rss +${MB(peak.rss - before.rss)}MB peak, +${MB(after.rss - before.rss)}MB after`,
     `heap +${MB(peak.heap - before.heapUsed)}MB peak, external +${MB(peak.ext - before.external)}MB peak`,
   ].join("\n"),

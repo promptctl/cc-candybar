@@ -2,7 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import v8 from "node:v8";
 import { daemonDir } from "./paths";
-import { dlog, type DaemonLogger } from "./log";
+import { dlog } from "./log";
+import { type DaemonLogger } from "../utils/logger";
 import {
   chargeProbe,
   memoryReport,

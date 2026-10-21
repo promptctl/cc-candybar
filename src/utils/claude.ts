@@ -2,12 +2,7 @@ import { existsSync } from "node:fs";
 // [LAW:single-enforcer] readdir and the forward read come from the gated
 // transcript-fs owner, not node:fs/promises — the in-flight-I/O bound lives at
 // one seam.
-import {
-  FOLD_WINDOW_BYTES,
-  readAppended,
-  readdir,
-  type AppendedLines,
-} from "./transcript-fs";
+import { readAppended, readdir, type AppendedLines } from "./transcript-fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { debug } from "./logger";
@@ -153,10 +148,9 @@ export async function findAgentTranscripts(
   // set) reads a first line only for NEWLY-appeared sidechains. The readdir
   // still runs (cheap).
   verified?: ReadonlySet<string>,
-): Promise<{ paths: string[]; reads: FoldReads }> {
+): Promise<{ paths: string[]; longLines: readonly LongLine[] }> {
   const paths: string[] = [];
-  let reads = NO_READS;
-  const scratch = Buffer.allocUnsafe(FOLD_WINDOW_BYTES);
+  let longLines: readonly LongLine[] = [];
 
   const subagentsDir = join(projectPath, sessionId, "subagents");
 
@@ -172,16 +166,18 @@ export async function findAgentTranscripts(
         paths.push(filePath);
         continue;
       }
-      // The first line only: one forward read from the file start, which
-      // stops at a newline (widening past the window for a longer line).
-      const read = await readAppended(filePath, undefined, scratch);
+      // The first line only: one forward read from the file start, decoding
+      // only the bytes before its first newline (a file with no complete line
+      // yet is read again next time).
+      const read = await readAppended(filePath, undefined, undefined, (b) =>
+        b.subarray(0, Math.max(0, b.indexOf(0x0a))).toString("utf-8"),
+      );
       if (read.kind !== "ok") {
         debug(`Failed to check agent file ${filePath}`);
         continue;
       }
-      reads = withRead(reads, filePath, read.value);
-      const firstLine = read.value.buf.toString("utf-8").split("\n")[0] ?? "";
-      const line = jsonLine(firstLine);
+      longLines = longLinesWith(longLines, filePath, read.value);
+      const line = jsonLine(read.value.lines);
       if (line.kind === "object" && line.value.sessionId === sessionId) {
         paths.push(filePath);
       }
@@ -190,7 +186,7 @@ export async function findAgentTranscripts(
     debug(`Failed to read subagents directory ${subagentsDir}:`, error);
   }
 
-  return { paths, reads };
+  return { paths, longLines };
 }
 
 // [LAW:types-are-the-program] exception: kept as type-aliases (not
@@ -412,63 +408,31 @@ export interface TranscriptCursor {
   readonly ino: number;
 }
 
-// What one fold read: `windows` gated reads, `bytes` off disk, the largest
-// buffer one read allocated, and every read that had to widen past the
-// window to reach a newline — a line longer than FOLD_WINDOW_BYTES.
-export interface FoldReads {
-  readonly windows: number;
-  readonly bytes: number;
-  readonly largestRead: number;
-  readonly widenings: readonly Widening[];
-}
-
-export interface Widening {
+// A line longer than FOLD_WINDOW_BYTES that a read took whole: the one thing
+// that can still make a read hold more than a window.
+export interface LongLine {
   readonly path: string;
   readonly offset: number;
   readonly bytes: number;
-  readonly doublings: number;
 }
 
-export const NO_READS: FoldReads = {
-  windows: 0,
-  bytes: 0,
-  largestRead: 0,
-  widenings: [],
-};
-
-function withRead(
-  reads: FoldReads,
+function longLinesWith(
+  longLines: readonly LongLine[],
   path: string,
-  read: AppendedLines,
-): FoldReads {
-  return {
-    windows: reads.windows + 1,
-    bytes: reads.bytes + read.bytesRead,
-    largestRead: Math.max(reads.largestRead, read.largestRead),
-    widenings:
-      read.widened === 0
-        ? reads.widenings
-        : [
-            ...reads.widenings,
-            {
-              path,
-              offset: read.start,
-              bytes: read.buf.length,
-              doublings: read.widened,
-            },
-          ],
-  };
+  read: AppendedLines<unknown>,
+): readonly LongLine[] {
+  return read.longLine === 0
+    ? longLines
+    : [...longLines, { path, offset: read.start, bytes: read.longLine }];
 }
 
-// [LAW:nothing-unseen] The daemon.log line each widened read earns, for the
-// caller to write through its own sink — a line longer than the window is
-// read whole, and a run of them is the one thing that can still make a fold
-// hold more than a window.
+// [LAW:nothing-unseen] The daemon.log line each long line earns, for the
+// caller to write through its own sink.
 // [LAW:effects-at-boundaries] Pure: the caller owns the log effect.
-export function widenedLines(reads: FoldReads): string[] {
-  return reads.widenings.map(
-    (w) =>
-      `transcript read widened path=${JSON.stringify(w.path)} offset=${w.offset} bytes=${w.bytes} doublings=${w.doublings}`,
+export function longLineLog(longLines: readonly LongLine[]): string[] {
+  return longLines.map(
+    (l) =>
+      `transcript long line path=${JSON.stringify(l.path)} offset=${l.offset} bytes=${l.bytes}`,
   );
 }
 
@@ -488,51 +452,46 @@ export interface Folded<S> {
 // holds one window, never the file (brandon-unfiled-3248.bfnj). A cold fold
 // is the same path from offset 0; a warm one costs O(bytes appended).
 //
-// The fold ends at the size the first window's stat saw, so a file growing
-// faster than it is read cannot hold it here; the rest is the next fold's. It
-// also ends at a window that consumes nothing — EOF, or a partial trailing
-// line, which waits for its newline. The cursor's `stamp` is that first stat's
-// (or a reset read's): a later window's stat may show a longer file, and its
-// stamp would let the caller's stat fast path skip the unread tail for good.
+// The fold ends at the size the first window's stat saw — every later read
+// is capped there — so a file growing faster than it is read cannot hold it
+// here, and the cursor carries exactly the stamp of the bytes it folded; the
+// rest is the next fold's. A partial trailing line waits for its newline.
 //
 // A window that reports `reset` (a /compact rewrite, a truncation) starts the
-// fold over from `empty`. Absent and failed pass straight through.
+// fold over from `empty`, capped at its own stat. Absent and failed pass
+// straight through.
 export async function foldAppended<S>(
   filePath: string,
   prior: Folded<S> | undefined,
   empty: S,
   step: (state: S, entries: readonly ParsedEntry[]) => S | Promise<S>,
-): Promise<Outcome<{ folded: Folded<S>; reads: FoldReads }>> {
-  let reads = NO_READS;
+): Promise<Outcome<{ folded: Folded<S>; longLines: readonly LongLine[] }>> {
+  let longLines: readonly LongLine[] = [];
   let cursor = prior?.cursor;
   let value = prior?.value ?? empty;
   let end: { size: number; stamp: string } | undefined;
-  // One window's buffer, read into window after window.
-  const scratch = Buffer.allocUnsafe(FOLD_WINDOW_BYTES);
   for (;;) {
     const read = await readAppended(
       filePath,
       cursor === undefined
         ? undefined
         : { offset: cursor.offset, ino: cursor.ino },
-      scratch,
+      end?.size,
+      (wholeLines) => parseJsonlLines(wholeLines.toString("utf-8")),
     );
     if (read.kind !== "ok") return read;
     const window = read.value;
-    reads = withRead(reads, filePath, window);
+    longLines = longLinesWith(longLines, filePath, window);
     if (window.reset) value = empty;
     if (end === undefined || window.reset) {
       end = { size: window.size, stamp: window.stamp };
     }
-    // Decoded before the next read reuses the scratch buffer.
-    value = await step(value, parseJsonlLines(window.buf.toString("utf-8")));
+    value = await step(value, window.lines);
     cursor = {
-      offset: window.start + window.buf.length,
+      offset: window.start + window.bytes,
       stamp: end.stamp,
       ino: window.ino,
     };
-    if (window.buf.length === 0 || cursor.offset >= end.size) {
-      return ok({ folded: { cursor, value }, reads });
-    }
+    if (window.atEnd) return ok({ folded: { cursor, value }, longLines });
   }
 }

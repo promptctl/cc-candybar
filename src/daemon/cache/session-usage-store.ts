@@ -11,7 +11,7 @@ import {
   findProjectPaths,
   findAgentTranscripts,
   foldAppended,
-  widenedLines,
+  longLineLog,
   type ClaudeHookData,
   type Folded,
   type ParsedEntry,
@@ -26,7 +26,7 @@ import {
 } from "../../utils/transcript-fs";
 import { SingleFlight } from "../../utils/single-flight";
 import { ABSENT, failed, ok, type Outcome } from "../../utils/outcome";
-import { quietLogger, type DaemonLogger } from "../log";
+import { quietLogger, type DaemonLogger } from "../../utils/logger";
 import { dateOf, type Instant } from "../../utils/instant";
 
 // [LAW:one-source-of-truth] The daemon's single owner of per-session usage.
@@ -714,7 +714,7 @@ export class SessionUsageStore {
       dirname(transcriptPath),
       prior === undefined ? undefined : new Set(prior.files.keys()),
     );
-    for (const line of widenedLines(agents.reads)) this.log("info", line);
+    for (const line of longLineLog(agents.longLines)) this.log("info", line);
     const newFiles = new Map<string, Folded<FileFold>>();
     let mainStamp = "";
     for (const filePath of [transcriptPath, ...agents.paths]) {
@@ -734,8 +734,8 @@ export class SessionUsageStore {
         if (priorFold) newFiles.set(filePath, priorFold);
         continue;
       }
-      const { folded, reads } = read.value;
-      for (const line of widenedLines(reads)) this.log("info", line);
+      const { folded, longLines } = read.value;
+      for (const line of longLineLog(longLines)) this.log("info", line);
       newFiles.set(filePath, folded);
       if (filePath === transcriptPath) mainStamp = folded.cursor.stamp;
     }

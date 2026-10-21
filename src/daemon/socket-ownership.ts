@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import { type DaemonLogger } from "./log";
+import { type DaemonLogger } from "../utils/logger";
 import { type LeaseRead } from "./socket-lease";
 
 // ─── Socket ownership self-check ─────────────────────────────────────────────

@@ -23,7 +23,7 @@
 import type { ClaudeHookData, ParsedEntry } from "../utils/claude";
 import type { ToolCall, TodoItem } from "../utils/transcript-activity";
 import { TranscriptFold } from "../utils/transcript-fold";
-import type { DaemonLogger } from "../daemon/log";
+import type { DaemonLogger } from "../utils/logger";
 import { failed, ok, type Outcome } from "../utils/outcome";
 
 export type { TodoItem } from "../utils/transcript-activity";

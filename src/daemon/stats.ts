@@ -257,7 +257,7 @@ export class RuntimeStats {
     return new RuntimeStats().snapshot({
       gitCache: { size: 0, hits: 0, misses: 0, invalidations: 0, watchers: 0 },
       usageCache: { size: 0, hits: 0, misses: 0, sweeps: 0 },
-      transcriptReads: { reads: 0, bytes: 0, widened: 0, largestRead: 0 },
+      transcriptReads: { reads: 0, bytes: 0, longLines: 0, largestLine: 0 },
       renderCache: {
         size: 0,
         held: 0,
