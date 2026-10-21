@@ -36,7 +36,7 @@ import {
 } from "./checks.js";
 import type { SettingsSource } from "../claude-settings.js";
 import { SETTINGS_NS } from "../config/loader/reserved-namespace.js";
-import { mb } from "../daemon/limits.js";
+import { mb, measureOf } from "../daemon/limits.js";
 import { valueOf } from "../utils/logfmt.js";
 import {
   FRAMES_SEEN,
@@ -158,7 +158,7 @@ export function daemonFields({
   const held =
     memory.kind === "unmeasured"
       ? "unmeasured"
-      : `${memory.charge.kind === "charged" ? memory.charge.measure : "rss-stand-in"}:${mb(memory.charge.bytes)}`;
+      : `${measureOf(memory.charge)}:${mb(memory.charge.bytes)}`;
   return `${running} memory=${held}/${mb(limit)} postMortems=${told}`;
 }
 

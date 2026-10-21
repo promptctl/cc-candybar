@@ -79,8 +79,8 @@ describe("platformProbes", () => {
   // because that string is what a human re-runs by hand from the report.
   test("darwin prefers footprint, then vmmap, both naming the pid", () => {
     expect(platformProbes("darwin", 4242).map((p) => p.name)).toEqual([
-      "footprint -p 4242",
-      "vmmap --summary 4242",
+      "/usr/bin/footprint -p 4242",
+      "/usr/bin/vmmap --summary 4242",
     ]);
   });
 

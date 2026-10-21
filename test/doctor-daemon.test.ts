@@ -87,16 +87,31 @@ describe("the daemon probe", () => {
     });
   });
 
-  test("RSS standing in for the charge is judged, and says why it stands in", () => {
-    const memory: ServingDaemon["memory"] = {
-      kind: "measured",
-      charge: { kind: "stand-in", bytes: 450 * MB, unread: "footprint timeout" },
-      rss: 450 * MB,
-      heapTotal: 100 * MB,
-    };
-    expect(verdictOf({ serving: { kind: "ok", value: { ...HEALTHY_SERVING, memory } } })).toMatchObject({
+  test("RSS standing in for the charge is a finding however far under the limit, and is judged too", () => {
+    const standIn = (bytes: number) =>
+      verdictOf({
+        serving: {
+          kind: "ok",
+          value: {
+            ...HEALTHY_SERVING,
+            memory: {
+              kind: "measured",
+              charge: { kind: "stand-in", bytes, unread: "footprint timeout" },
+              rss: bytes,
+              heapTotal: 100 * MB,
+            },
+          },
+        },
+      });
+    const unread =
+      "the daemon could not read what macOS charges it (footprint timeout), so its memory limit judges RSS, which counts pages macOS has reclaimed";
+    expect(standIn(100 * MB)).toEqual({ ok: false, reason: unread, more: [] });
+    expect(standIn(450 * MB)).toEqual({
       ok: false,
-      reason: "the daemon holds rss 450 MB (standing in: footprint timeout) of its 512 MB limit — at the limit it records a post-mortem and restarts",
+      reason: unread,
+      more: [
+        "the daemon holds rss 450 MB (standing in: footprint timeout) of its 512 MB limit — at the limit it records a post-mortem and restarts",
+      ],
     });
   });
 
@@ -120,9 +135,9 @@ describe("the daemon probe", () => {
     expect(verdict).toEqual({
       ok: false,
       reason:
-        "daemon 4200 (started Sun Oct 18 09:00:00 2026 UTC, 300 MB) runs beside the one serving the bar (4100) — `kill 4200`",
+        "daemon 4200 (started Sun Oct 18 09:00:00 2026 UTC, rss 300 MB) runs beside the one serving the bar (4100) — `kill 4200`",
       more: [
-        "daemon 4300 (started Mon Oct 19 18:20:01 2026 UTC, 90 MB, child of 999) runs beside the one serving the bar (4100) — `kill 4300`",
+        "daemon 4300 (started Mon Oct 19 18:20:01 2026 UTC, rss 90 MB, child of 999) runs beside the one serving the bar (4100) — `kill 4300`",
       ],
     });
   });

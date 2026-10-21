@@ -239,8 +239,19 @@ export function makeLimits(deps: LimitsDeps): LimitsHandle {
   // [LAW:one-source-of-truth] The one reading: the breach verdict, the restart
   // forecast and the doctor's daemon row all read it, never one of their own.
   let latest: MemoryReading = { kind: "unmeasured" };
+  // [LAW:no-ambient-temporal-coupling] The reading in flight, shared: a
+  // second caller while one is out waits on the same reading rather than
+  // taking its own, so a breach is judged — and recorded — once.
+  let inFlight: Promise<boolean> | null = null;
 
-  async function check(): Promise<boolean> {
+  function check(): Promise<boolean> {
+    inFlight ??= measure().finally(() => {
+      inFlight = null;
+    });
+    return inFlight;
+  }
+
+  async function measure(): Promise<boolean> {
     if (triggered) return true;
     const { rss, heapTotal } = deps.memoryBytes();
     const charge = await deps.memoryCharge(rss);
@@ -357,17 +368,22 @@ export function chargeWords(charge: MemoryCharge): string {
     : `rss ${mb(charge.bytes)} MB (standing in: ${charge.unread})`;
 }
 
+// [LAW:one-source-of-truth] The one token naming what a charge measured: the
+// per-check log line and the doctor's event both say it this way.
+export function measureOf(charge: MemoryCharge): string {
+  return charge.kind === "charged" ? charge.measure : "rss-stand-in";
+}
+
 // The per-check log line's fields, logfmt.
 function readingFields(
   { charge, rss, heapTotal }: Extract<MemoryReading, { kind: "measured" }>,
   limit: number,
 ): string {
-  const measure = charge.kind === "charged" ? charge.measure : "rss-stand-in";
   const unread =
     charge.kind === "stand-in"
       ? ` unread=${JSON.stringify(charge.unread)}`
       : "";
-  return `measure=${measure} charge=${mb(charge.bytes)}MB rss=${mb(rss)}MB heap=${mb(heapTotal)}MB limit=${mb(limit)}MB${unread}`;
+  return `measure=${measureOf(charge)} charge=${mb(charge.bytes)}MB rss=${mb(rss)}MB heap=${mb(heapTotal)}MB limit=${mb(limit)}MB${unread}`;
 }
 
 // [LAW:no-silent-failure] The death path's one shape for "do this, and if it

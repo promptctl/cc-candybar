@@ -62,6 +62,11 @@ export function memoryReport(probes: readonly MemoryProbe[]): string {
 // preference order, not a branch inside the reader: `memoryReport` folds whatever
 // it is handed, so a better probe — or a platform this does not know yet — is a
 // row here and nothing else anywhere.
+// macOS's own tools by their paths: the detached daemon's PATH is whichever
+// shell spawned it, and a stranger first on it would answer in their place.
+const FOOTPRINT = "/usr/bin/footprint";
+const VMMAP = "/usr/bin/vmmap";
+
 export function platformProbes(
   platform: NodeJS.Platform,
   pid: number,
@@ -70,9 +75,9 @@ export function platformProbes(
     return [
       // The whole-process category table: V8's mappings, the MALLOC_* regions
       // with their reclaimable share, and page tables, each with a size.
-      commandProbe("footprint", ["-p", String(pid)]),
+      commandProbe(FOOTPRINT, ["-p", String(pid)]),
       // Same mappings, coarser, but present on hosts where `footprint` is not.
-      commandProbe("vmmap", ["--summary", String(pid)]),
+      commandProbe(VMMAP, ["--summary", String(pid)]),
     ];
   }
   if (platform === "linux") {
@@ -127,7 +132,7 @@ export function chargeProbe(
   return platform === "darwin"
     ? footprintCharge(pid, (args) =>
         launch({
-          bin: "footprint",
+          bin: FOOTPRINT,
           args,
           timeoutMs: PROBE_TIMEOUT_MS,
           category: "limits.charge",

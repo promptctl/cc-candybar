@@ -73,8 +73,8 @@ export const COMPILE_BYTES = 10 * 1024 * 1024;
 // directories, RSS ended at 329 / 390 / 424 MB under a quarter / three
 // eighths / half — the larger two past the 75% line `approachingLimit` warns
 // at.
-export function renderCacheBudget(rssLimitBytes: number): number {
-  return Math.floor(rssLimitBytes / 4);
+export function renderCacheBudget(memoryLimitBytes: number): number {
+  return Math.floor(memoryLimitBytes / 4);
 }
 
 // The count ceiling beside the byte budget: every entry holds a

@@ -124,6 +124,29 @@ describe("limits.check", () => {
     expect(rec.snapshotsWritten).toHaveLength(1);
   });
 
+  test("callers overlapping one slow reading share it, so a breach is recorded once", async () => {
+    const rec = newRec();
+    rec.fakeRss = 250 * 1024 * 1024;
+    let answer: (c: MemoryCharge) => void = () => {};
+    let probes = 0;
+    const limits = makeLimits(
+      makeDeps(rec, {
+        limitBytes: 200 * 1024 * 1024,
+        memoryCharge: () => {
+          probes++;
+          return new Promise((resolve) => (answer = resolve));
+        },
+      }),
+    );
+    const both = Promise.all([limits.check(), limits.check()]);
+    answer({ kind: "charged", measure: "phys_footprint", bytes: rec.fakeRss });
+    expect(await both).toEqual([true, true]);
+    expect(probes).toBe(1);
+    expect(rec.shutdownCalls).toEqual([0]);
+    expect(rec.snapshotsWritten).toHaveLength(1);
+    expect(rec.reportsWritten).toHaveLength(1);
+  });
+
   test("snapshot filename is written under the injected dir, not the real daemonDir", async () => {
     const rec = newRec();
     rec.fakeRss = 250 * 1024 * 1024;

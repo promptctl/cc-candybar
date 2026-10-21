@@ -623,7 +623,7 @@ function onListening(sockPath: string): void {
     // question a silent SIGABRT crash-loop leaves open is "which cap was live".
     `daemon up: pid=${process.pid} v=${PROTOCOL_VERSION} sock=${sockPath} ` +
       `heapCap=${mb(v8.getHeapStatistics().heap_size_limit)}MB ` +
-      `rssLimit=${mb(budgetBytes)}MB`,
+      `memoryLimit=${mb(budgetBytes)}MB`,
   );
   // [LAW:single-enforcer] This bind is the one process-wide fact that answers
   // "did an outage just end" — see resetSpawnBackoff's doc comment in
