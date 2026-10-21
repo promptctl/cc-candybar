@@ -1,3 +1,9 @@
+## [1.149.5](https://github.com/promptctl/cc-candybar/compare/v1.149.4...v1.149.5) (2026-10-21)
+
+### Bug Fixes
+
+* **daemon:** a transcript fold reads one window at a time, not the whole file ([#400](https://github.com/promptctl/cc-candybar/issues/400)) ([df72746](https://github.com/promptctl/cc-candybar/commit/df727460f094737f2de66021ca4f4e871610669b))
+
 ## [1.149.4](https://github.com/promptctl/cc-candybar/compare/v1.149.3...v1.149.4) (2026-10-21)
 
 ### Bug Fixes
