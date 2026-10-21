@@ -149,21 +149,35 @@ export function sessionArgs(start: SessionStart): readonly string[] {
 const isFlag = (token: string): boolean =>
   token.startsWith("-") && token !== "-";
 
-// The arguments that carry a worktree to the restart: none when the session
-// runs where it was started (`startDir`) or in a worktree it was started
-// inside, else `--worktree <name>` for the worktree Claude Code made that it
-// runs in (`cwd`).
+// Where a restart starts Claude Code, and the arguments that carry its
+// worktree there: where it was started (`startDir`, null when that could not
+// be read) when it runs in no worktree Claude Code made or in one it was
+// started inside, else `--worktree <name>` for the worktree it runs in (`cwd`)
+// — run from where it was started, or from the worktree's repository when it
+// was started in another worktree (`--worktree` makes its worktree under the
+// git top of the directory it runs in, so from another worktree it would make
+// a new one inside that worktree) or where it was started is not known.
 // [LAW:one-source-of-truth] The directory a session runs in alone says
 // whether it runs in a worktree — `--worktree` at the start and a worktree
 // entered mid-session both move it, and leaving the worktree moves it back.
-export function worktreeArgs(startDir: string, cwd: string): readonly string[] {
+export function startPlace(
+  startDir: string | null,
+  cwd: string,
+): { readonly dir: string; readonly args: readonly string[] } {
   const tree = worktreeOf(cwd);
-  return tree === null ||
-    startDir === tree.top ||
-    startDir.startsWith(tree.top + path.sep)
-    ? []
-    : ["--worktree", tree.name];
+  if (tree === null) return { dir: startDir ?? cwd, args: [] };
+  if (startDir !== null && within(startDir, tree.top)) {
+    return { dir: startDir, args: [] };
+  }
+  return {
+    dir:
+      startDir === null || worktreeOf(startDir) !== null ? tree.repo : startDir,
+    args: ["--worktree", tree.name],
+  };
 }
+
+const within = (dir: string, top: string): boolean =>
+  dir === top || dir.startsWith(top + path.sep);
 
 // [LAW:types-are-the-program] The arguments a restart carries, or why it
 // cannot carry them.
@@ -217,17 +231,19 @@ export function relaunchArgs(argv: readonly string[]): CarriedArgs {
   return { kind: "args", args: kept };
 }
 
-// The worktree Claude Code made that `dir` lies in — its name and its top
-// directory — or null when it lies in none: Claude Code makes a worktree at
+// The worktree Claude Code made that `dir` lies in — its name, its top
+// directory and the repository holding it — or null when it lies in none: Claude Code makes a worktree at
 // `<repo>/.claude/worktrees/<name>` with each `/` of the name spelled `+`,
 // and refuses a `+` in a name, so the directory's name reads back as the one
 // name that reaches it (measured on
 // 2.1.289: `--worktree feat/x.y` makes `feat+x.y`, `--worktree feat+x.y` is
 // refused). `dir` may be below the worktree's top; the innermost worktree
 // holding it is the one it runs in.
-function worktreeOf(
-  dir: string,
-): { readonly name: string; readonly top: string } | null {
+function worktreeOf(dir: string): {
+  readonly name: string;
+  readonly top: string;
+  readonly repo: string;
+} | null {
   const parts = dir.split(path.sep);
   const at = parts.findLastIndex(
     (p, i) =>
@@ -238,6 +254,7 @@ function worktreeOf(
     : {
         name: parts[at + 1]!.replaceAll("+", "/"),
         top: parts.slice(0, at + 2).join(path.sep),
+        repo: parts.slice(0, at - 1).join(path.sep) || path.sep,
       };
 }
 

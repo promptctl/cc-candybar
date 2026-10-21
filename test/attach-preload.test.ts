@@ -13,11 +13,11 @@ import {
 import { stableAttachPreload } from "../src/install";
 import {
   bunWords,
-  executableOn,
   planExec,
   withoutPreload,
   type PreloadFacts,
 } from "../src/attach-preload";
+import { executableOn } from "../src/path-search";
 
 const DIST = "/opt/cc candybar/dist";
 const SELF = attachPreloadOf(path.join(DIST, "index.mjs"));

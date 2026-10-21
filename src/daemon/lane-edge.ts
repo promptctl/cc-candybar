@@ -21,7 +21,7 @@ import {
 import { lineage, processTable } from "../proc/process-table.js";
 import { pidAlive } from "./parent-watchdog.js";
 import { presence } from "../utils/presence.js";
-import { executableOn } from "../attach-preload.js";
+import { executableOn, regularFileWith } from "../path-search.js";
 import {
   BAR_PANE_OPTION,
   type LaneEdge,
@@ -224,16 +224,6 @@ export function claudeEnv(
     : { ...env, CLAUDE_CONFIG_DIR: claudeConfigDir };
 }
 
-// A regular file this user may run, as a shell's PATH search takes one.
-function isExecutable(file: string): boolean {
-  try {
-    fs.accessSync(file, fs.constants.X_OK);
-    return fs.statSync(file).isFile();
-  } catch {
-    return false;
-  }
-}
-
 // How often the wait for a lane's subscriber looks again.
 const FOLLOW_POLL_MS = 200;
 
@@ -300,10 +290,18 @@ export function productionLaneEdge(
         "#{pane_current_path}",
       ]);
       if (display.kind !== "ok") throw new Error(display.reason);
-      return display.stdout.trimEnd();
+      // tmux prints an empty path when it cannot read the foreground job's
+      // directory.
+      const dir = display.stdout.trimEnd();
+      if (dir === "") {
+        throw new Error(`tmux read no directory for pane ${hint.pane}`);
+      }
+      return dir;
     },
     onPath: (name, pathVariable) => {
-      const file = executableOn(name, pathVariable, isExecutable);
+      const file = executableOn(name, pathVariable, (f) =>
+        regularFileWith(f, fs.constants.X_OK),
+      );
       return file === null ? null : fs.realpathSync(file);
     },
     followed: async (sessionId, lane, withinMs) => {

@@ -52,7 +52,7 @@ import {
 import {
   relaunchArgs,
   sessionArgs,
-  worktreeArgs,
+  startPlace,
   type SessionStart,
 } from "./claude-relaunch.js";
 import type { Answered } from "./render-sightings.js";
@@ -63,7 +63,6 @@ import {
   attachLauncherOf,
   moduleGraphReaderOf,
 } from "../attach-launcher.js";
-import { CLAUDE_CONFIG_DIR_ENV } from "../claude-settings.js";
 import { BadVerbArgs } from "./verb-error.js";
 
 // The band mod, as the checkout's marketplace (`.claude-plugin/
@@ -330,6 +329,28 @@ interface Attach {
   readonly preload: string;
 }
 
+// What names a variable the restart line sets as Claude Code was started
+// with it: those that configure Claude Code (its directory, which `--resume`
+// looks the session up under, its model, its API) and those this bar and
+// memento read off the session's client (`CC_CANDYBAR_CONFIG`, memento's
+// config home). The rest of the environment is the shell's own, which the
+// shell the line is typed into still exports — and carrying it whole would
+// write a shell's every export into its history.
+const CARRIED_ENV = /^(CLAUDE|ANTHROPIC|CC_CANDYBAR|MEMENTO)_/;
+
+// Of `env` (`NAME=value` each), the variables the restart line sets.
+function carriedEnv(
+  env: readonly string[],
+): ReadonlyArray<readonly [string, string]> {
+  return env.flatMap((v) => {
+    const at = v.indexOf("=");
+    const name = v.slice(0, at);
+    return at > 0 && CARRIED_ENV.test(name)
+      ? [[name, v.slice(at + 1)] as const]
+      : [];
+  });
+}
+
 // The value `env` (`NAME=value` each) gives `name`.
 function valueIn(env: readonly string[], name: string): string | undefined {
   return env.find((v) => v.startsWith(`${name}=`))?.slice(name.length + 1);
@@ -403,20 +424,16 @@ async function restartUnderAttach(
     edge.onPath("claude", valueIn(claude.env, "PATH")) === claude.executable
       ? "claude"
       : claude.executable;
-  // Of the environment Claude Code was started with, only its Claude Code
-  // directory is carried: `--resume` looks the session up there. The rest is
-  // the shell's own, which the shell the line is typed into still exports.
-  const configDir = valueIn(claude.env, CLAUDE_CONFIG_DIR_ENV);
+  const env = carriedEnv(claude.env);
   const lineIn = (
-    dir: string | undefined,
-    args: readonly string[],
+    place: { readonly dir: string; readonly args: readonly string[] },
     start: SessionStart,
   ): string =>
     attachCommandLine(attach.preload, {
-      dir,
-      env: configDir === undefined ? [] : [[CLAUDE_CONFIG_DIR_ENV, configDir]],
+      dir: place.dir,
+      env,
       program,
-      args: [...args, ...carried.args, ...sessionArgs(start)],
+      args: [...place.args, ...carried.args, ...sessionArgs(start)],
     });
   // SIGTERM, not `/exit`: Claude Code exits on it as on `/exit`, printing
   // its resume line, but `/exit` in a session started with `--worktree`
@@ -455,11 +472,11 @@ async function restartUnderAttach(
     startDir = await edge.paneDir(tmux);
   } catch (e) {
     throw stranded(
-      `the directory it was started in could not be read (${(e as Error).message}) — from there`,
-      lineIn(undefined, [], chosen),
+      `the directory it was started in could not be read (${(e as Error).message})`,
+      lineIn(startPlace(null, claude.cwd), chosen),
     );
   }
-  const line = lineIn(startDir, worktreeArgs(startDir, claude.cwd), chosen);
+  const line = lineIn(startPlace(startDir, claude.cwd), chosen);
   if (start.kind === "unchecked") {
     throw stranded(
       `whether session ${session.sessionId} has a conversation could not be seen (${start.error})`,

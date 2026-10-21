@@ -26,6 +26,7 @@
 
 import path from "node:path";
 import { attachLauncherOf, PRELOAD_VARIABLE } from "./attach-launcher.js";
+import { executableOn } from "./path-search.js";
 
 export type ExecPlan =
   | {
@@ -90,24 +91,6 @@ export function withoutPreload(
     kept.push(w.raw);
   }
   return kept.length === 0 ? null : kept.join(" ");
-}
-
-// The first executable named `name` on `pathVariable`, as a shell typing
-// `name` would find it — the launcher's own `#!/usr/bin/env node` finds
-// `node` so, and only the shell `claude` was typed into knows which node this
-// user runs. Only absolute entries: a relative one would resolve against
-// whatever directory the session was started in.
-export function executableOn(
-  name: string,
-  pathVariable: string | undefined,
-  isExecutable: (file: string) => boolean,
-): string | null {
-  for (const dir of (pathVariable ?? "").split(path.delimiter)) {
-    if (!path.isAbsolute(dir)) continue;
-    const file = path.join(dir, name);
-    if (isExecutable(file)) return file;
-  }
-  return null;
 }
 
 export interface PreloadFacts {

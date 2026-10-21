@@ -23,7 +23,7 @@ import {
 import {
   relaunchArgs,
   sessionArgs,
-  worktreeArgs,
+  startPlace,
 } from "../src/daemon/claude-relaunch";
 import { attachCommandLine } from "../src/attach-launcher";
 import {
@@ -70,7 +70,7 @@ function fakeEdge(over: Partial<LaneEdge> = {}): { edge: LaneEdge; did: string[]
     pid: 4242,
     executable: "/u/.local/share/claude/versions/2.1.299",
     argv: ["claude", "--dangerously-skip-permissions", "--worktree"],
-    env: ["PATH=/usr/bin", "PWD=/work", "CC_CANDYBAR_CONFIG=/u/alt config.json5"],
+    env: ["PATH=/usr/bin", "PWD=/work", "EDITOR=vi"],
     cwd: "/work/.claude/worktrees/feat+tree",
     fromShell: true,
     attached: false,
@@ -266,19 +266,27 @@ describe("lane B, statusline", () => {
   });
 
   // `--resume` looks a session up under the Claude Code directory it ran
-  // with; nothing else Claude Code was started with is carried.
-  test("of Claude Code's environment, only its Claude Code directory rides the line", async () => {
+  // with, and a config or model set on the command it was started by comes
+  // back with it; the shell's own exports stay the shell's.
+  test("of Claude Code's environment, what configures Claude Code and the bar rides the line", async () => {
     const { edge: base } = fakeEdge();
     const claude = await base.paneClaude(TMUX);
     const { edge, did } = fakeEdge({
       paneClaude: async () => ({
         ...claude,
-        env: [...claude.env, "CLAUDE_CONFIG_DIR=/u/.claude zai"],
+        env: [
+          ...claude.env,
+          "CLAUDE_CONFIG_DIR=/u/.claude zai",
+          "CC_CANDYBAR_CONFIG=/u/lab.json5",
+          "ANTHROPIC_MODEL=haiku",
+          "MEMENTO_CONFIG_HOME=/u/m",
+          "CLAUDECODE=1",
+        ],
       }),
     });
     await finished(LANE_SETUP.statusline.on(session(), HOST, edge));
     expect(did).toContain(
-      `shell cd /work && CLAUDE_CONFIG_DIR='/u/.claude zai' BUN_OPTIONS='--preload /opt/candybar/dist/attach-preload.cjs' claude --worktree feat/tree --dangerously-skip-permissions --resume ${SID}`,
+      `shell cd /work && CLAUDE_CONFIG_DIR='/u/.claude zai' CC_CANDYBAR_CONFIG=/u/lab.json5 ANTHROPIC_MODEL=haiku MEMENTO_CONFIG_HOME=/u/m BUN_OPTIONS='--preload /opt/candybar/dist/attach-preload.cjs' claude --worktree feat/tree --dangerously-skip-permissions --resume ${SID}`,
     );
   });
 
@@ -303,7 +311,7 @@ describe("lane B, statusline", () => {
     await expect(
       finished(LANE_SETUP.statusline.on(session(), HOST, edge)),
     ).rejects.toThrow(
-      `exited, but the directory it was started in could not be read (no such pane) — from there, so it was not started again — start it with \`BUN_OPTIONS='--preload /opt/candybar/dist/attach-preload.cjs' claude --dangerously-skip-permissions --resume ${SID}\``,
+      `exited, but the directory it was started in could not be read (no such pane), so it was not started again — start it with \`cd /work && BUN_OPTIONS='--preload /opt/candybar/dist/attach-preload.cjs' claude --worktree feat/tree --dangerously-skip-permissions --resume ${SID}\``,
     );
     expect(did.some((d) => d.startsWith("shell"))).toBe(false);
   });
@@ -676,25 +684,31 @@ describe("relaunchArgs", () => {
   });
 });
 
-describe("worktreeArgs", () => {
+describe("startPlace", () => {
   // Claude Code makes `--worktree feat/x` at `<repo>/.claude/worktrees/feat+x`
   // and runs there; naming it again from where it was started goes back in —
   // whether the session was started with `--worktree` or entered it later.
   test.each([
-    ["/src", "/src", []],
-    ["/src", "/src/.claude/worktrees/tidy-sunset", ["--worktree", "tidy-sunset"]],
-    ["/src", "/src/.claude/worktrees/feat+x.y", ["--worktree", "feat/x.y"]],
-    ["/src/sub", "/src/.claude/worktrees/fix/sub/dir", ["--worktree", "fix"]],
-    ["/", "/.claude/worktrees/top", ["--worktree", "top"]],
+    ["/src", "/src", "/src", []],
+    ["/src", "/src/.claude/worktrees/tidy-sunset", "/src", ["--worktree", "tidy-sunset"]],
+    ["/src", "/src/.claude/worktrees/feat+x.y", "/src", ["--worktree", "feat/x.y"]],
+    ["/src/sub", "/src/.claude/worktrees/fix/sub/dir", "/src/sub", ["--worktree", "fix"]],
+    ["/", "/.claude/worktrees/top", "/", ["--worktree", "top"]],
     // Started inside the worktree: it starts there again as it is.
-    ["/src/.claude/worktrees/fix", "/src/.claude/worktrees/fix", []],
-    ["/src/.claude/worktrees/fix/sub", "/src/.claude/worktrees/fix/other", []],
-    // A sibling whose name extends the worktree's is not inside it.
-    ["/src/.claude/worktrees/fix2", "/src/.claude/worktrees/fix", ["--worktree", "fix"]],
+    ["/src/.claude/worktrees/fix", "/src/.claude/worktrees/fix", "/src/.claude/worktrees/fix", []],
+    ["/src/.claude/worktrees/fix/sub", "/src/.claude/worktrees/fix/other", "/src/.claude/worktrees/fix/sub", []],
+    // Started in another worktree — a sibling whose name extends this one's
+    // included: `--worktree` from there would make one inside it.
+    ["/src/.claude/worktrees/fix2", "/src/.claude/worktrees/fix", "/src", ["--worktree", "fix"]],
+    ["/src/.claude/worktrees/a/sub", "/src/.claude/worktrees/b", "/src", ["--worktree", "b"]],
     // A directory named like a worktree holder but holding none is no worktree.
-    ["/src", "/src/.claude/worktrees", []],
-  ])("started in %s, running in %s, carries %j", (startDir, cwd, args) => {
-    expect(worktreeArgs(startDir, cwd)).toEqual(args);
+    ["/src", "/src/.claude/worktrees", "/src", []],
+    // Where it was started not known: the worktree's repository, else where
+    // it runs.
+    [null, "/src/.claude/worktrees/fix/sub", "/src", ["--worktree", "fix"]],
+    [null, "/src/sub", "/src/sub", []],
+  ])("started in %s, running in %s, starts in %s with %j", (startDir, cwd, dir, args) => {
+    expect(startPlace(startDir, cwd)).toEqual({ dir, args });
   });
 });
 

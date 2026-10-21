@@ -7,6 +7,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { planExec } from "./attach-preload.js";
+import { regularFileWith } from "./path-search.js";
 
 interface Ffi {
   readonly dlopen: (
@@ -20,15 +21,6 @@ interface Ffi {
 const ERRNO_NAMES = new Map(
   Object.entries(os.constants.errno).map(([name, n]) => [n, name]),
 );
-
-const runs = (file: string, mode: number): boolean => {
-  try {
-    fs.accessSync(file, mode);
-    return fs.statSync(file).isFile();
-  } catch {
-    return false;
-  }
-};
 
 function refuse(why: string): never {
   process.stderr.write(
@@ -101,8 +93,8 @@ const plan = planExec({
   executable: fs.realpathSync(process.execPath),
   argv: process.argv,
   env: process.env,
-  exists: (file) => runs(file, fs.constants.R_OK),
-  isExecutable: (file) => runs(file, fs.constants.X_OK),
+  exists: (file) => regularFileWith(file, fs.constants.R_OK),
+  isExecutable: (file) => regularFileWith(file, fs.constants.X_OK),
   canonical,
 });
 if (plan.kind === "refused") refuse(plan.why);
