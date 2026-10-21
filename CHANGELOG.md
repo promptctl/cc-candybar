@@ -1,3 +1,9 @@
+## [1.150.0](https://github.com/promptctl/cc-candybar/compare/v1.149.5...v1.150.0) (2026-10-21)
+
+### Features
+
+* **menu:** each lane toggle explains its lane and starts what it runs ([#399](https://github.com/promptctl/cc-candybar/issues/399)) ([f09bdf8](https://github.com/promptctl/cc-candybar/commit/f09bdf8dad369a555a068ae1154a71ef62bf9553))
+
 ## [1.149.5](https://github.com/promptctl/cc-candybar/compare/v1.149.4...v1.149.5) (2026-10-21)
 
 ### Bug Fixes
