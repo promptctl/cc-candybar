@@ -1,4 +1,9 @@
-import { ATTACH_DIR, ATTACH_PRELOAD } from "../attach-launcher.js";
+import {
+  ATTACH_DIR,
+  ATTACH_PRELOAD,
+  attachPreloadOf,
+} from "../attach-launcher.js";
+import { sourceCheckoutOf } from "../daemon/build-currency.js";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -82,6 +87,18 @@ function stagedBinPath(dir: string = supportDir()): string {
 
 function stagedDistPath(dir: string = supportDir()): string {
   return path.join(dir, "dist", "index.mjs");
+}
+
+// The attach preload a user can keep typing across upgrades: a checkout's
+// own build, else the staged runtime's — never a package manager's store
+// path, which an upgrade removes.
+export function stableAttachPreload(runningBundle: string): string {
+  const checkout = sourceCheckoutOf(runningBundle);
+  return attachPreloadOf(
+    checkout === null
+      ? stagedDistPath()
+      : path.join(checkout, "dist", "index.mjs"),
+  );
 }
 
 function appleScriptSource(nodePath: string, scriptPath: string): string {

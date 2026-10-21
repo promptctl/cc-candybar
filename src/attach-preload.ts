@@ -38,50 +38,60 @@ export type ExecPlan =
     }
   | { readonly kind: "refused"; readonly why: string };
 
-// Bun's reading of BUN_OPTIONS: words split on unescaped whitespace, a
-// backslash taking the next character as it is (measured: `--preload
-// /a\ b/x.js` loads `/a b/x.js`; quotes are not read, and `--preload=` keeps
-// the backslash).
-export function bunWords(options: string): string[] {
-  const words: string[] = [];
-  let word: string | null = null;
-  for (let i = 0; i < options.length; i++) {
-    const c = options[i]!;
-    if (c === "\\" && i + 1 < options.length) {
-      word = (word ?? "") + options[++i];
-    } else if (/\s/.test(c)) {
-      if (word !== null) words.push(word);
-      word = null;
-    } else {
-      word = (word ?? "") + c;
-    }
-  }
-  if (word !== null) words.push(word);
-  return words;
+// One word of BUN_OPTIONS as Bun reads it (`text`: words split on unescaped
+// whitespace, a backslash taking the next character as it is — measured:
+// `--preload /a\ b/x.js` loads `/a b/x.js`; quotes are not read) beside the
+// bytes it was read from (`raw`: `--preload=` keeps the backslash, measured,
+// so that form's value is its raw bytes).
+export interface BunWord {
+  readonly text: string;
+  readonly raw: string;
 }
 
-const escapedWord = (w: string): string => w.replace(/[\\\s]/g, "\\$&");
+export function bunWords(options: string): BunWord[] {
+  const words: BunWord[] = [];
+  let text: string | null = null;
+  let from = 0;
+  for (let i = 0; i < options.length; i++) {
+    const c = options[i]!;
+    if (/\s/.test(c)) {
+      if (text !== null) words.push({ text, raw: options.slice(from, i) });
+      text = null;
+      continue;
+    }
+    if (text === null) from = i;
+    text =
+      (text ?? "") + (c === "\\" && i + 1 < options.length ? options[++i] : c);
+  }
+  if (text !== null) words.push({ text, raw: options.slice(from) });
+  return words;
+}
 
 // BUN_OPTIONS with this preload taken out, or null when nothing else is
 // left. Taken out before anything starts: every Bun process the session
 // starts — the Bash tool's `bun`, a hook, a nested `claude` — would inherit it
-// and run this preload again.
-export function withoutPreload(options: string, self: string): string | null {
+// and run this preload again. Every other word keeps the bytes it was typed
+// with: only Bun knows what it makes of them.
+export function withoutPreload(
+  options: string,
+  isSelf: (file: string) => boolean,
+): string | null {
   const words = bunWords(options);
   const kept: string[] = [];
   for (let i = 0; i < words.length; i++) {
     const w = words[i]!;
-    if ((w === "--preload" || w === "-r") && i + 1 < words.length) {
-      if (path.resolve(words[i + 1]!) === self) {
+    const next = words[i + 1];
+    if ((w.text === "--preload" || w.text === "-r") && next !== undefined) {
+      if (isSelf(next.text)) {
         i++;
         continue;
       }
-    } else if (w.startsWith("--preload=")) {
-      if (path.resolve(w.slice("--preload=".length)) === self) continue;
+    } else if (w.raw.startsWith("--preload=")) {
+      if (isSelf(w.raw.slice("--preload=".length))) continue;
     }
-    kept.push(w);
+    kept.push(w.raw);
   }
-  return kept.length === 0 ? null : kept.map(escapedWord).join(" ");
+  return kept.length === 0 ? null : kept.join(" ");
 }
 
 // The first `node` on `pathVariable`, as the launcher's own `#!/usr/bin/env
@@ -112,9 +122,24 @@ export interface PreloadFacts {
   // run.
   readonly exists: (file: string) => boolean;
   readonly isExecutable: (file: string) => boolean;
+  // A path with its links resolved (itself, absolute, when it names nothing):
+  // the one identity a typed path and a loaded one share — `/tmp` is
+  // `/private/tmp` on macOS, and Bun hands this file over resolved.
+  readonly canonical: (file: string) => string;
 }
 
+// A Bun-compiled executable runs its entry from Bun's embedded filesystem
+// (measured on Claude Code 2.1.289: `/$bunfs/root/cli`); `bun` itself runs a
+// file on disk.
+const COMPILED_ENTRY = "/$bunfs/";
+
 export function planExec(facts: PreloadFacts): ExecPlan {
+  if (!(facts.argv[1] ?? "").startsWith(COMPILED_ENTRY)) {
+    return {
+      kind: "refused",
+      why: `${facts.executable} is not a Bun-compiled Claude Code — put ${PRELOAD_VARIABLE} with this preload before \`claude\` alone, never export it`,
+    };
+  }
   const launcher = attachLauncherOf(facts.self);
   if (!facts.exists(launcher)) {
     return {
@@ -129,11 +154,21 @@ export function planExec(facts: PreloadFacts): ExecPlan {
       why: "no `node` on PATH to run the attach launcher",
     };
   }
+  // Bun puts a `node` that is Bun first on PATH (`bun run`, and a machine
+  // with no Node); the launcher must run under Node.
+  if (path.basename(facts.canonical(node)) === "bun") {
+    return {
+      kind: "refused",
+      why: `the \`node\` on PATH (${node}) is Bun; the attach launcher runs under Node`,
+    };
+  }
+  const self = facts.canonical(facts.self);
+  const isSelf = (file: string): boolean => facts.canonical(file) === self;
   const env: string[] = [];
   for (const [name, value] of Object.entries(facts.env)) {
     if (value === undefined) continue;
     if (name === PRELOAD_VARIABLE) {
-      const left = withoutPreload(value, facts.self);
+      const left = withoutPreload(value, isSelf);
       if (left !== null) env.push(`${name}=${left}`);
       continue;
     }

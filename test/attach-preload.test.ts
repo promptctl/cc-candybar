@@ -10,6 +10,7 @@ import {
   attachLauncherOf,
   attachPreloadOf,
 } from "../src/attach-launcher";
+import { stableAttachPreload } from "../src/install";
 import {
   bunWords,
   nodeOn,
@@ -33,6 +34,7 @@ const facts = (over: Partial<PreloadFacts> = {}): PreloadFacts => ({
   },
   exists: (f) => f === attachLauncherOf(SELF),
   isExecutable: (f) => f === "/usr/local/bin/node" || f === "relative/bin/node",
+  canonical: (f) => path.resolve(f),
   ...over,
 });
 
@@ -72,8 +74,54 @@ describe("the attach preload", () => {
     // `--preload=` keeps a backslash (measured), so Bun reads it only for a
     // path with no space.
     const plain = "/opt/cc-candybar/dist/attach-preload.cjs";
-    expect(withoutPreload(`--preload=${plain}`, plain)).toBeNull();
-    expect(withoutPreload(`-r ${SELF.replace(/ /g, "\\ ")}`, SELF)).toBeNull();
+    const is = (self: string) => (f: string) => f === self;
+    expect(withoutPreload(`--preload=${plain}`, is(plain))).toBeNull();
+    expect(withoutPreload(`-r ${SELF.replace(/ /g, "\\ ")}`, is(SELF))).toBeNull();
+  });
+
+  test("every other word reaches the session with the bytes it was typed with", () => {
+    // `--preload=` keeps its backslash, so rewriting the word would name
+    // another file.
+    expect(
+      withoutPreload(`--preload=/x\\y.js  -r /a\\ b.js --preload ${SELF.replace(/ /g, "\\ ")}`, (f) => f === SELF),
+    ).toBe("--preload=/x\\y.js -r /a\\ b.js");
+  });
+
+  test("knows itself through a link, as Bun hands it over resolved", () => {
+    const typed = "/tmp/cc/dist/attach-preload.cjs";
+    const loaded = "/private/tmp/cc/dist/attach-preload.cjs";
+    const plan = planExec(
+      facts({
+        self: loaded,
+        exists: (f) => f === attachLauncherOf(loaded),
+        canonical: (f) => f.replace(/^\/tmp\//, "/private/tmp/"),
+        env: { PATH: "/usr/local/bin", BUN_OPTIONS: `--preload ${typed}` },
+      }),
+    );
+    expect(plan.kind === "exec" && plan.env).toEqual(["PATH=/usr/local/bin"]);
+  });
+
+  test("starts nothing in place of a process that is not a Bun-compiled Claude Code", () => {
+    // An exported BUN_OPTIONS reaches `bun install` too.
+    expect(
+      planExec(facts({ executable: "/u/.bun/bin/bun", argv: ["/u/.bun/bin/bun", "install"] })),
+    ).toEqual({
+      kind: "refused",
+      why: expect.stringContaining("/u/.bun/bin/bun is not a Bun-compiled Claude Code"),
+    });
+  });
+
+  test("refuses a `node` on PATH that is Bun", () => {
+    expect(
+      planExec(
+        facts({
+          canonical: (f) => (f === "/usr/local/bin/node" ? "/u/.bun/bin/bun" : f),
+        }),
+      ),
+    ).toEqual({
+      kind: "refused",
+      why: "the `node` on PATH (/usr/local/bin/node) is Bun; the attach launcher runs under Node",
+    });
   });
 
   test("refuses, saying why, when there is no launcher beside it or no node on PATH", () => {
@@ -94,10 +142,10 @@ describe("the attach preload", () => {
 
   test("reads BUN_OPTIONS as Bun does: whitespace splits, a backslash keeps the next character", () => {
     expect(bunWords("  --preload /a\\ b/x.js\t-r  /c\\\\d ")).toEqual([
-      "--preload",
-      "/a b/x.js",
-      "-r",
-      "/c\\d",
+      { text: "--preload", raw: "--preload" },
+      { text: "/a b/x.js", raw: "/a\\ b/x.js" },
+      { text: "-r", raw: "-r" },
+      { text: "/c\\d", raw: "/c\\\\d" },
     ]);
   });
 
@@ -115,10 +163,22 @@ describe("the attach preload", () => {
         ["-c", `${assignment} sh -c 'printf %s "$BUN_OPTIONS"'`],
         { encoding: "utf8" },
       );
-      expect(bunWords(value)).toEqual(["--preload", preload]);
+      expect(bunWords(value).map((w) => w.text)).toEqual(["--preload", preload]);
     }
     expect(attachCommandLine("/Users/u/code/cc-candybar/dist/attach-preload.cjs")).toBe(
       "BUN_OPTIONS='--preload /Users/u/code/cc-candybar/dist/attach-preload.cjs' claude",
     );
+  });
+
+  test("the line --help prints names a preload that outlives an upgrade", () => {
+    const root = path.resolve(__dirname, "..");
+    // A checkout's own build…
+    expect(stableAttachPreload(path.join(root, "src", "index.ts"))).toBe(
+      path.join(root, "dist", "attach-preload.cjs"),
+    );
+    // …else the staged runtime, never the package's store path.
+    const store = "/u/pnpm/global/.pnpm/@promptctl+cc-candybar@1.0.0/node_modules/@promptctl/cc-candybar/dist/index.mjs";
+    expect(stableAttachPreload(store)).not.toContain("@1.0.0");
+    expect(stableAttachPreload(store).endsWith(path.join("dist", "attach-preload.cjs"))).toBe(true);
   });
 });
