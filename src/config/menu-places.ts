@@ -4,9 +4,14 @@
 // refusal — names the control's place from it, so moving a control moves
 // every sentence that points at it.
 //
-// [LAW:one-way-deps] A leaf: it imports only a type, so the CLI text and the
-// lanes can read it without importing the menu that imports them.
-import type { SettingName } from "./setting-projections.js";
+// [LAW:one-way-deps] It imports only the settings table, so the CLI text and
+// the lane gate can read it without importing the menu that imports them.
+import {
+  SETTINGS,
+  perSetting,
+  type SettingName,
+} from "./setting-projections.js";
+import { LANES, type Lane } from "./lanes.js";
 
 // The tabs the door opens onto, in strip order.
 export const TABS = [
@@ -32,37 +37,36 @@ export const TAB_LABEL = Object.fromEntries(
 // choose it. The toggles menu (Brandon: "Put the three feature toggles we
 // added into the menu, as a toggles menu under config") holds the switches
 // for experimental features.
-export const SUBMENUS = {
+// [LAW:types-are-the-program] The submenu names are spelled as a type of their
+// own, before the table: a setting's row names its place, so the places must
+// not be computed from a table whose type reads the settings.
+export type SubmenuName = "gear" | "toggles";
+export const SUBMENUS: Readonly<
+  Record<
+    SubmenuName,
+    { readonly beside: SettingName; readonly trigger: string }
+  >
+> = {
   gear: { beside: "theme", trigger: "⚙" },
   toggles: { beside: "updateNotice", trigger: "🧪 toggles" },
-} as const satisfies Readonly<
-  Record<string, { readonly beside: SettingName; readonly trigger: string }>
->;
-export type SubmenuName = keyof typeof SUBMENUS;
+};
 export const SUBMENU_NAMES = Object.keys(SUBMENUS) as readonly SubmenuName[];
 
-// [LAW:types-are-the-program] Where each setting's control renders — the
-// door's first line, exactly one tab, or inside a submenu — as a record keyed
-// by every setting, so a new setting is a compile error until it is given a
-// place. Switching arrangement is what people open this menu for, so the
-// preset control sits on the door's first line, one click from the door.
+// Where a setting's control renders — the door's first line, exactly one
+// tab, or inside a submenu. Each setting's row declares it
+// (src/config/globals-fields.ts).
 export type Place = "door" | TabName | SubmenuName;
-export const PLACE = {
-  preset: "door",
-  theme: "look",
-  style: "gear",
-  effect: "look",
-  variation: "gear",
-  shade: "gear",
-  endcaps: "look",
-  transitions: "look",
-  autoWrap: "layout",
-  padding: "layout",
-  updateNotice: "config",
-  experimentalBand: "toggles",
-  experimentalStatusline: "toggles",
-  experimentalPane: "toggles",
-} as const satisfies Readonly<Record<SettingName, Place>>;
+export const PLACE: Readonly<Record<SettingName, Place>> = perSetting(
+  (name) => SETTINGS[name].place,
+);
+
+// [LAW:types-are-the-program] The rows that can hang under a picker's list of
+// options, each showing what the option in force does to the bar: the
+// arrangement drawn block by block (`layout`), the open state and plane of the
+// look (`palette`), and, on a preset the user made, the click that deletes it
+// (`presetDelete`). A setting's row names the ones it shows; the menu draws
+// each.
+export type PreviewName = "layout" | "palette" | "presetDelete";
 
 export const isSubmenu = (place: Place): place is SubmenuName =>
   Object.hasOwn(SUBMENUS, place);
@@ -84,3 +88,7 @@ const placePath = (place: Place): string =>
 // Where a setting's control is in the settings menu — `⚙ config › 🧪 toggles`.
 export const settingMenuPath = (name: SettingName): string =>
   placePath(PLACE[name]);
+
+// Why a subscriber of `lane` is refused, naming the switch that admits it.
+export const laneOffReason = (lane: Lane): string =>
+  `${LANES[lane].label} is off — turn it on in the settings menu's ${settingMenuPath(LANES[lane].setting)}, or set globals.${LANES[lane].setting}: true`;

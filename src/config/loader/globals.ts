@@ -3,252 +3,51 @@
 // engine. This file changes when a global default field is added or removed —
 // add a key to GLOBALS_FIELDS and Globals; the engine does the rest.
 
+import type { Globals, ThemeDefault } from "../dsl-types.js";
 import {
+  GLOBAL_FIELDS,
   THEME_DEFAULT_FIELDS,
-  type Globals,
-  type ThemeDefault,
-} from "../dsl-types.js";
-import {
-  COLOR_COMPATIBILITIES,
-  DEFAULT_PADDING,
-  EFFECT_NAMES,
-  PADDING_RANGE,
-  VARIATION_NAMES,
-  SHADE_NAMES,
-  ENDCAPS_SHAPES,
-  isExpression,
-  retiredThemeNote,
-  type ColorCompatibility,
-} from "../../themes/policy.js";
+  type ControlledField,
+  type GlobalField,
+} from "../globals-fields.js";
+import { isExpression, retiredThemeNote } from "../../themes/policy.js";
 import {
   describeType,
   isPlainObject,
-  optionalBooleanSpec,
-  optionalEnum,
-  optionalEnumSpec,
-  optionalIntSpec,
-  optionalStringField,
-  optionalStringSpec,
   record,
   recordJson,
   type FieldSpec,
   type FieldSpecMap,
   type JsonNode,
   type RecordSchema,
-  validatePaletteName,
   type ValidateCtx,
 } from "./validate-core.js";
 import { findKeyLine } from "./diagnostics.js";
-import { DISCLOSURE_GLYPH_CLOSE, DOOR_CLOSE_GLYPH } from "../disclosure.js";
 import type { ControlDomain } from "../setting-control.js";
 
-// [LAW:types-are-the-program] Closed enum like `endcaps`, plus one
-// migration-pointing rejection: "auto" was the LEGACY default, so migrating
-// configs will carry it — but the daemon runs detached, so rich-js env
-// detection would downsample against the daemon's terminal, not the client's.
-// Rather than ship that silent lie [LAW:no-silent-failure], "auto" is outside
-// the ColorCompatibility domain and gets an error that says why (same species
-// as the removed-layout migration errors in layout.ts). The json emit and the
-// membership check derive from the same COLOR_COMPATIBILITIES literal.
-const colorCompatibilitySpec: FieldSpec<ColorCompatibility> = {
-  required: false,
-  json: { enum: [...COLOR_COMPATIBILITIES] },
-  parse: (ctx, path, field, raw) => {
-    if (raw[field] === "auto") {
-      ctx.issues.push({
-        path: `${path}.${field}`,
-        message:
-          `${path}.${field}: "auto" is not supported — the render daemon runs detached, ` +
-          `so terminal detection would read the daemon's environment, not your terminal's. ` +
-          `Pick an explicit depth: ${COLOR_COMPATIBILITIES.join(", ")}`,
-        line: findKeyLine(ctx.source, [...path.split("."), field]),
-      });
-      return undefined;
-    }
-    return optionalEnum(ctx, path, raw, field, COLOR_COMPATIBILITIES);
-  },
-};
-
-// [LAW:types-are-the-program] `globals.palette` admits a NAME or a RULE
-// (brandon-themes-dzl). A template there names no theme — it names how to choose
-// one per render — so there is nothing for the name check to check; its own
-// well-formedness is checked where every other template's is (parsed eagerly by
-// registerDslConfig, so a malformed one is still a LOAD error), and its result
-// gets the forgiveness `decideThemeName` owns.
-//
-// [LAW:one-type-per-behavior] A spec of its own rather than a flag on the shared
-// `paletteSpec`, because the two slots genuinely differ in behaviour now: a
-// segment's `palette:` is the default of its placements' `theme` setting, whose
-// domain holds theme NAMES, so a rule there must stay a load error. Both reach the
-// one `validatePaletteName`, so the name policy itself cannot drift.
-//
-// [LAW:dataflow-not-control-flow] The exemption reads the SAME `isExpression`
-// the eager parse and the render's fold read, so the loader cannot accept a shape
-// the render declines to evaluate, nor reject one it would have settled.
-const paletteOrRuleSpec: FieldSpec<string> = {
-  required: false,
-  // Shape-only, exactly as `paletteSpec`'s schema facet is: the allowed names are
-  // resolved at load from installed palettes, and a rule is a string too.
-  json: { type: "string" },
-  parse: (ctx, path, field, raw) => {
-    const v = optionalStringField(ctx, path, raw, field);
-    return isExpression(v) ? v : validatePaletteName(ctx, path, raw);
-  },
-};
-
-// [LAW:types-are-the-program] `globals.effect` admits a NAME of the closed effect
-// domain or a RULE, `globals.palette`'s two shapes over an enum: a name is checked
-// by membership here, a rule is parsed eagerly by registerDslConfig and its result
-// gets the forgiveness `decideEffectName` owns.
-const effectOrRuleSpec: FieldSpec<string> = {
-  required: false,
-  json: {
-    anyOf: [{ enum: [...EFFECT_NAMES] }, { type: "string", pattern: "\\{\\{" }],
-  },
-  parse: (ctx, path, field, raw) => {
-    const v = raw[field];
-    return typeof v === "string" && isExpression(v)
-      ? v
-      : optionalEnum(ctx, path, raw, field, EFFECT_NAMES);
-  },
-};
-
-const MENU_GLYPH = /^[^\r\n]*\S[^\r\n]*$/u;
-const CLOSE_GLYPH = new RegExp(
-  `^(?:${DOOR_CLOSE_GLYPH}|${DISCLOSURE_GLYPH_CLOSE})[\\uFE0E\\uFE0F]?$`,
-  "u",
-);
-
-const menuGlyphSpec: FieldSpec<string> = {
-  required: false,
-  json: {
-    type: "string",
-    pattern: MENU_GLYPH.source,
-    not: { pattern: CLOSE_GLYPH.source },
-  },
-  parse: (ctx, path, field, raw) => {
-    const v = optionalStringField(ctx, path, raw, field);
-    if (v === undefined || (MENU_GLYPH.test(v) && !CLOSE_GLYPH.test(v)))
-      return v;
-    ctx.issues.push({
-      path: `${path}.${field}`,
-      message: `${path}.${field}: must be one line of visible text other than a close glyph ("${DOOR_CLOSE_GLYPH}", "${DISCLOSURE_GLYPH_CLOSE}") — the settings menu needs a glyph to click`,
-      line: findKeyLine(ctx.source, [...path.split("."), field]),
-    });
-    return undefined;
-  },
-};
-
-// [LAW:types-are-the-program] One globals field, declared once: how the loader
-// reads it, and the domain a control changing it from the bar ranges
-// (brandon-settings-coverage-g4p.zoj) — or `text`, a field no control shape
-// fits. The helpers below build both halves from ONE literal, so the members a
-// control offers are the members the loader accepts [LAW:one-source-of-truth].
-interface GlobalDecl<T> {
-  readonly spec: FieldSpec<T>;
-  readonly domain: ControlDomain | "text";
-}
-
-function enumGlobal<T extends string>(allowed: readonly T[]): GlobalDecl<T> {
-  return { spec: optionalEnumSpec(allowed), domain: { from: allowed } };
-}
-
-function boolGlobal(): GlobalDecl<boolean> {
-  return { spec: optionalBooleanSpec(), domain: "bool" };
-}
-
-function textGlobal(spec: FieldSpec<string>): GlobalDecl<string> {
-  return { spec, domain: "text" };
-}
-
-// [LAW:one-source-of-truth] THE globals field table, declared once. Both the
-// top-level `globals:` schema and the preset-scoped one below are built from
-// this map, so a field added here is automatically settable from a preset —
-// there is no second list to remember to grow — and the settings menu's
-// control for it ranges the domain declared beside it.
-const GLOBALS: {
-  readonly [K in keyof Globals]-?: GlobalDecl<NonNullable<Globals[K]>>;
-} = {
-  default_empty_value: textGlobal(optionalStringSpec()),
-  default_separator: textGlobal(optionalStringSpec()),
-  palette: { spec: paletteOrRuleSpec, domain: { themes: "themes" } },
-  // [LAW:types-are-the-program] The config-default STYLE name. Unlike the
-  // registry-static palette set, the style domain is per-config (the merged
-  // `styles` block), so membership is a cross-ref check on the MERGED config —
-  // a user's globals.style may name a default-provided style. That check also
-  // EXEMPTS a template in this slot (brandon-looks-pe6: a style chosen by data
-  // names the rule, not a style), which is a second reason the shape rule here is
-  // the right one: `string` already admits both, so neither the spec nor the
-  // emitted schema needed a new arm. Shape-only here,
-  // exactly the shape/meaning split paletteSpec's schema facet keeps.
-  style: { spec: optionalStringSpec(), domain: { from: "styles" } },
-  // The looping effect the whole bar wears — a name of the catalogue's closed
-  // domain, or a rule (see effectOrRuleSpec).
-  effect: { spec: effectOrRuleSpec, domain: { from: EFFECT_NAMES } },
-  // [LAW:types-are-the-program] The config-default PRESET name — same
-  // per-config-domain shape as `style` (membership is a post-merge cross-ref
-  // check, since a user's globals.preset may name a default-provided preset).
-  preset: { spec: optionalStringSpec(), domain: { from: "presets" } },
-  // [LAW:types-are-the-program] The endcaps shape is a CLOSED enum (the powerline
-  // shapes the joiner can render), unlike the open-ended palette NAME — so it
-  // validates by membership and emits a JSON-Schema `enum`.
-  endcaps: enumGlobal(ENDCAPS_SHAPES),
-  // [LAW:types-are-the-program] Closed enum like `endcaps`: the named bar
-  // variations — which theme role each row of the closed bar wears.
-  variation: enumGlobal(VARIATION_NAMES),
-  // [LAW:types-are-the-program] Closed enum like `variation`: the positions of
-  // the shade dial — which of its role's shades each cell of the closed bar
-  // wears.
-  shade: enumGlobal(SHADE_NAMES),
-  autoWrap: boolGlobal(),
-  // Intra-cell spaces per side. Bounded above so a config value can never
-  // drive an unbounded `" ".repeat` allocation in the daemon
-  // [LAW:no-silent-failure] — an absurd value is a loud load error, not a
-  // silently-huge render.
-  // [LAW:one-source-of-truth] The bound comes from PADDING_RANGE, the same
-  // literal the session-half parse admits values from — so the file, the
-  // click, and the session pick cannot end up honouring three different ranges.
-  padding: {
-    spec: optionalIntSpec(PADDING_RANGE),
-    domain: { ...PADDING_RANGE, step: 1 },
-  },
-  updateNotice: boolGlobal(),
-  transitions: boolGlobal(),
-  // The animation lanes' toggles (LANES, src/config/lanes.ts).
-  experimentalBand: boolGlobal(),
-  experimentalStatusline: boolGlobal(),
-  experimentalPane: boolGlobal(),
-  // Closed enum with a bespoke "auto" rejection — see colorCompatibilitySpec.
-  colorCompatibility: {
-    spec: colorCompatibilitySpec,
-    domain: { from: COLOR_COMPATIBILITIES },
-  },
-  menuGlyph: textGlobal(menuGlyphSpec),
-};
-
+// [LAW:one-source-of-truth] THE globals field specs, read off the globals
+// rows (src/config/globals-fields.ts). Both the top-level `globals:` schema and
+// the preset-scoped one below are built from this map, so a field added there
+// is automatically settable from a preset — there is no second list to
+// remember to grow.
 const GLOBALS_FIELDS = Object.fromEntries(
-  Object.entries(GLOBALS).map(([field, decl]) => [field, decl.spec]),
+  Object.entries(GLOBAL_FIELDS).map(([field, row]) => [field, row.spec]),
 ) as FieldSpecMap<Globals>;
 
-// The domain a control changing `field` from the bar ranges, as declared
-// beside the field's spec — `text` for a field no control shape fits.
+// The domain a control changing `field` from the bar ranges, as its row
+// declares it beside the field's spec — `text` for a field no control shape
+// fits.
 export function globalsControlDomain(
-  field: keyof Globals,
+  field: GlobalField,
 ): ControlDomain | "text" {
-  return GLOBALS[field].domain;
+  const row = GLOBAL_FIELDS[field];
+  return row.kind === "text" ? "text" : row.domain;
 }
 
-// [LAW:no-silent-failure] The domain of a setting the bar controls. A
-// SETTINGS row naming a free-text field is a programming error, refused here —
-// the one place the settings menu and the loader's action check both read it.
-export function settingControlDomain(field: keyof Globals): ControlDomain {
-  const domain = globalsControlDomain(field);
-  if (domain === "text") {
-    throw new Error(
-      `globals.${field} is free text, which no control can change — list it in UNCONTROLLED_GLOBALS instead of SETTINGS`,
-    );
-  }
-  return domain;
+// The domain of a setting the bar controls. Every controlled row declares
+// one, so this cannot be asked of a field no control shape fits.
+export function settingControlDomain(field: ControlledField): ControlDomain {
+  return GLOBAL_FIELDS[field].domain;
 }
 
 // [LAW:one-source-of-truth] A globals FRAGMENT — a delta layered over the
@@ -560,26 +359,16 @@ export function listGlobalsFieldNames(): readonly string[] {
 }
 
 // [LAW:types-are-the-program] Every NUMERIC globals field with the value that
-// renders when a config declares none, typed TOTAL over those fields — so
-// adding a numeric globals field without a floor is a COMPILE error, not a
-// silent seed-from-`min` (the bug this table exists to prevent, recurring for
-// the new field). It lives here rather than beside DEFAULT_PADDING in
-// themes/policy.ts because it must name `Globals`, and policy.ts is the leaf
-// dsl-types imports FROM — a table that needs both belongs on this side of
-// that edge [LAW:one-way-deps].
-// The direction matters: `NonNullable<Globals[K]> extends number` asks "is this
-// field's type a number", which is what the totality claim needs. The mirror
-// (`number extends …`) happens to agree for a field declared as plain `number`
-// — the two are symmetric there — but silently drops a field typed as a
-// literal union (`zoom?: 1 | 2 | 3`), which is a perfectly ordinary way to
-// declare a bounded numeric setting and exactly the case this guard exists for.
-type NumericGlobalsField = {
-  [K in keyof Globals]-?: NonNullable<Globals[K]> extends number ? K : never;
-}[keyof Globals];
-
-const NUMERIC_GLOBALS_FLOORS: Readonly<Record<NumericGlobalsField, number>> = {
-  padding: DEFAULT_PADDING,
-};
+// renders when a config declares none — its row's floor — so a numeric field
+// never silently seeds a stepper from `min` (the bug this table exists to
+// prevent). A numeric field is one whose row ranges integers.
+const NUMERIC_GLOBALS_FLOORS: ReadonlyMap<string, number> = new Map(
+  Object.entries(GLOBAL_FIELDS).flatMap(([field, row]) =>
+    row.kind === "session" && typeof row.floor === "number"
+      ? [[field, row.floor] as const]
+      : [],
+  ),
+);
 
 // [LAW:single-enforcer] THE seed for a bounded stepper over a globals field:
 // the value `globals` holds, or the field's floor when it holds none. Callers
@@ -590,7 +379,7 @@ export function numericGlobalsSeeds(
   globals: Globals,
 ): ReadonlyMap<string, number> {
   const seeds = new Map<string, number>();
-  for (const [field, floor] of Object.entries(NUMERIC_GLOBALS_FLOORS)) {
+  for (const [field, floor] of NUMERIC_GLOBALS_FLOORS) {
     const declared = globals[field as keyof Globals];
     seeds.set(field, typeof declared === "number" ? declared : floor);
   }

@@ -3,7 +3,7 @@
 // click changes the clicking session's bar and nobody else's.
 //
 // The resolution lives in the daemon's per-render globals pass
-// (effectiveAutoWrap/effectivePadding -> BuildLineOptions), OUTSIDE renderDsl —
+// (resolveEffectiveGlobals -> BuildLineOptions), OUTSIDE renderDsl —
 // the exact twin of how an endcaps click reshapes (see dsl-endcaps-picker-reshape).
 // This test replicates that resolution as src/daemon/server.ts performs it and
 // drives the real click wire, so what it proves is the loop a user runs, not a
@@ -16,24 +16,19 @@ import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { testVerbContext, clickUrl, recordRender } from "./helpers/click";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
-import {
-  effectiveAutoWrap,
-  resolveStyleSelection,
-  effectivePadding,
-  effectiveEndcaps,
-  effectiveShade,
-  effectiveVariation,
-} from "../src/themes";
+import { resolveStyleSelection } from "../src/themes";
 import { effectivePresetName } from "../src/config/presets";
-import type { DslConfig, PresetDecl } from "../src/config/dsl-types";
+import type { DslConfig, Globals, PresetDecl } from "../src/config/dsl-types";
 import type { ThemeKey } from "@promptctl/rich-js";
+import { PADDING_RANGE } from "../src/themes/policy";
+import { floorOf } from "../src/config/globals-fields";
 import {
-  PADDING_RANGE,
-  DEFAULT_PADDING,
-  DEFAULT_WRAP,
-} from "../src/themes/policy";
+  EDIT_MODE_ARRANGE,
+  EDIT_MODE_KEY,
+} from "../src/config/loader/edit-mode";
 import { stripAnsi } from "./helpers/ansi";
-import { resolveEffectiveGlobals } from "../src/config/effective-globals";
+import type { EffectiveGlobals } from "../src/config/effective-globals";
+import { globalsFor } from "./helpers/selection";
 import { instantOf } from "../src/utils/instant";
 
 const BASE_THEME = "textual-dark";
@@ -61,6 +56,25 @@ const src = (padding: number): string => `{
 
 const CONFIG_PADDING = 2;
 
+// The globals a session renders a config with: `globals` the config file's,
+// `picks` the session's, `staged` edit mode's fragment (in force while the
+// session is arranging) — read through the one resolution the daemon uses.
+function resolved(
+  globals: Globals,
+  picks: Readonly<Record<string, string>> = {},
+  staged?: Globals,
+): EffectiveGlobals {
+  const config = parseAndValidate(
+    "<resolved>",
+    JSON.stringify({ globals, ...(staged && { editGlobals: staged }) }),
+    ALLOWED,
+  );
+  const session: Record<string, string> = staged
+    ? { ...picks, [EDIT_MODE_KEY]: EDIT_MODE_ARRANGE }
+    : { ...picks };
+  return globalsFor(config, (key) => session[key] ?? null);
+}
+
 function buildRuntime(padding: number = CONFIG_PADDING) {
   const config = parseAndValidate("<session-globals>", src(padding), ALLOWED);
   const sessionState = new SessionState();
@@ -70,6 +84,8 @@ function buildRuntime(padding: number = CONFIG_PADDING) {
   // [LAW:one-source-of-truth] Resolve both fields per render exactly as
   // server.ts does — the session's clicked value over the config default over
   // the floor. Freezing either would pass here while the real daemon moved.
+  const globals = (sid: string): EffectiveGlobals =>
+    globalsFor(config, (key) => sessionState.get(sid, key));
   const render = (sid: string, width: number): string =>
     renderDsl(
       config,
@@ -81,16 +97,8 @@ function buildRuntime(padding: number = CONFIG_PADDING) {
       {
         endcaps: "powerline" as const,
         colorCompatibility: "truecolor" as const,
-        wrap: effectiveAutoWrap(
-          undefined,
-          sessionState.get(sid, "autoWrap"),
-          config.globals.autoWrap,
-        ),
-        padding: effectivePadding(
-          undefined,
-          sessionState.get(sid, "padding"),
-          config.globals.padding,
-        ),
+        wrap: globals(sid).autoWrap,
+        padding: globals(sid).padding,
         width,
       },
     );
@@ -169,7 +177,7 @@ describe("a padding click changes one session's bar", () => {
       // this asserts the middle rung of the precedence chain, not just "some
       // default".
       expect(config.globals.padding).toBe(CONFIG_PADDING);
-      expect(config.globals.padding).not.toBe(DEFAULT_PADDING);
+      expect(config.globals.padding).not.toBe(floorOf("padding"));
     } finally {
       dispose();
     }
@@ -210,7 +218,7 @@ describe("a session value outside the domain is not a session value", () => {
     ["padded digits", " 3 "],
     ["not a number", "wide"],
   ])("padding %s falls through to the config default", (_label, raw) => {
-    expect(effectivePadding(undefined, raw, CONFIG_PADDING)).toBe(
+    expect(resolved({ padding: CONFIG_PADDING }, { padding: raw }).padding).toBe(
       CONFIG_PADDING,
     );
   });
@@ -219,19 +227,21 @@ describe("a session value outside the domain is not a session value", () => {
     ["both ends of the range are admitted", PADDING_RANGE.min],
     ["and the top", PADDING_RANGE.max],
   ])("%s", (_label, value) => {
-    expect(effectivePadding(undefined, String(value), CONFIG_PADDING)).toBe(
-      value,
-    );
+    expect(
+      resolved({ padding: CONFIG_PADDING }, { padding: String(value) }).padding,
+    ).toBe(value);
   });
 
-  // `configured` is FALSE throughout, which is the whole point: `DEFAULT_WRAP`
-  // is true, and so is what any mis-parse of these strings would produce, so a
+  // `configured` is FALSE throughout, which is the whole point: the autoWrap
+  // floor is true, and so is what any mis-parse of these strings would produce, so a
   // table run against a `true` config default cannot tell "correctly fell
   // through" from "wrongly parsed `yes` as true" — it passes either way.
   it.each([["yes"], ["1"], [""], ["TRUE"], ["on"], ["False"]])(
     "autoWrap %s falls through to the config default",
     (raw) => {
-      expect(effectiveAutoWrap(undefined, raw, false)).toBe(false);
+      expect(resolved({ autoWrap: false }, { autoWrap: raw }).autoWrap).toBe(
+        false,
+      );
     },
   );
 
@@ -242,16 +252,15 @@ describe("a session value outside the domain is not a session value", () => {
     // The other half of the same guard: the two real members must beat a
     // config default that disagrees, or "falls through" would be trivially
     // satisfied by a parse that never returns anything.
-    expect(effectiveAutoWrap(undefined, raw, !expected)).toBe(expected);
+    expect(resolved({ autoWrap: !expected }, { autoWrap: raw }).autoWrap).toBe(
+      expected,
+    );
   });
 
   it("with no config default either, both land on their floor", () => {
-    expect(effectivePadding(undefined, "nonsense", undefined)).toBe(
-      DEFAULT_PADDING,
-    );
-    expect(effectiveAutoWrap(undefined, "nonsense", undefined)).toBe(
-      DEFAULT_WRAP,
-    );
+    const stale = resolved({}, { padding: "nonsense", autoWrap: "nonsense" });
+    expect(stale.padding).toBe(floorOf("padding"));
+    expect(stale.autoWrap).toBe(floorOf("autoWrap"));
   });
 });
 
@@ -284,26 +293,38 @@ describe("a stale session pick falls to the config default, not the floor", () =
   const PRESETS: Record<string, PresetDecl> = { default: {}, compact: {} };
 
   it("variation: the session pick over the configured one, a stale pick falling through", () => {
-    expect(effectiveVariation(undefined, "mono", "duo")).toBe("mono");
-    expect(effectiveVariation(undefined, "accent-primary", "duo")).toBe("duo");
-    expect(effectiveVariation(undefined, "accent-primary", undefined)).toBe(
+    expect(resolved({ variation: "duo" }, { variation: "mono" }).variation).toBe(
+      "mono",
+    );
+    expect(
+      resolved({ variation: "duo" }, { variation: "accent-primary" }).variation,
+    ).toBe("duo");
+    expect(resolved({}, { variation: "accent-primary" }).variation).toBe(
       "accent",
     );
-    expect(effectiveVariation("mono", "duo", undefined)).toBe("mono");
+    expect(
+      resolved({}, { variation: "duo" }, { variation: "mono" }).variation,
+    ).toBe("mono");
   });
 
   it("shade: the session pick over the configured one, a stale pick falling through", () => {
-    expect(effectiveShade(undefined, "muted", "deepest")).toBe("muted");
-    expect(effectiveShade(undefined, "darkest", "deepest")).toBe("deepest");
-    expect(effectiveShade(undefined, "darkest", undefined)).toBe("middle");
-    expect(effectiveShade("brighter", "muted", undefined)).toBe("brighter");
+    expect(resolved({ shade: "deepest" }, { shade: "muted" }).shade).toBe(
+      "muted",
+    );
+    expect(resolved({ shade: "deepest" }, { shade: "darkest" }).shade).toBe(
+      "deepest",
+    );
+    expect(resolved({}, { shade: "darkest" }).shade).toBe("middle");
+    expect(resolved({}, { shade: "muted" }, { shade: "brighter" }).shade).toBe(
+      "brighter",
+    );
   });
 
   it("strip style: a removed vocabulary member yields the configured style", () => {
-    expect(effectiveEndcaps(undefined, "no-such-style", "capsule")).toBe(
-      "capsule",
-    );
-    expect(effectiveEndcaps(undefined, "no-such-style", undefined)).toBe(
+    expect(
+      resolved({ endcaps: "capsule" }, { endcaps: "no-such-style" }).endcaps,
+    ).toBe("capsule");
+    expect(resolved({}, { endcaps: "no-such-style" }).endcaps).toBe(
       "powerline",
     );
   });
@@ -370,12 +391,9 @@ describe("colour depth has no session half", () => {
     const picks: Record<string, string> = {
       colorCompatibility: "none",
     };
-    const effective = resolveEffectiveGlobals(
-      config,
-      (key) => picks[key] ?? null,
-      () => false,
-    );
-    expect(effective.colorCompatibility).toBe("256");
+    expect(
+      globalsFor(config, (key) => picks[key] ?? null).colorCompatibility,
+    ).toBe("256");
   });
 
   it.each(["colorCompatibility"])(

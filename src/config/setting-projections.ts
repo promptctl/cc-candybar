@@ -3,158 +3,83 @@
 // that write it: the SessionState key a pick (`set`) writes and the config field
 // a save (src/daemon/setting-drafts.ts) or a `persist` writes.
 //
-// [LAW:one-source-of-truth] THE table. The settings menu mints its controls'
-// keys from these rows (src/config/settings-menu.ts) and the render derives its
-// read-back maps from them (src/render/action.ts), so a setting's triple is
-// spelled here and nowhere else — a control cannot write a key whose current
+// [LAW:one-source-of-truth] A PROJECTION of the globals rows
+// (src/config/globals-fields.ts), never a table of its own: every row the bar
+// controls is one setting here. The settings menu mints its controls' keys from
+// it (src/config/settings-menu.ts) and the render derives its read-back maps
+// from it (src/render/action.ts), so a control cannot write a key whose current
 // value the render does not know how to read back, and a save cannot write a
 // field other than the one the pick it saves stands for.
 // [LAW:one-way-deps] It lives under config/ and imports only config/'s own
-// types: config/ sits below render/, which already imports from here, so both
+// modules: config/ sits below render/, which already imports from here, so both
 // sides depend downhill.
 
-import type { Globals } from "./dsl-types.js";
-import { LANES, laneEffectiveVar, type Lane } from "./lanes.js";
+import {
+  CONTROLLED_FIELDS,
+  GLOBAL_FIELDS,
+  VALUED_FIELDS,
+  type Control,
+  type ControlledField,
+  type GlobalField,
+  type SettingName,
+} from "./globals-fields.js";
+
+export type { SettingName } from "./globals-fields.js";
 
 // A globals field the render publishes an `.effective` projection of.
 export interface ConfigProjection {
   // The globals field a durable `persist` writes.
-  readonly configKey: keyof Globals;
+  readonly configKey: GlobalField;
   // The input variable holding the value the bar is rendering with, whichever
   // rung (staged, session, config, floor) produced it.
   readonly effectiveVar: string;
 }
 
-// A projection a session can pick, so it has a control on the bar.
-export interface SettingProjection extends ConfigProjection {
-  // The SessionState key a `set` writes. It differs from `configKey` where
-  // history made them differ (`palette` is `theme` in the session), which is
-  // why each row spells both rather than deriving one from the other.
-  readonly sessionKey: string;
-  // What the setting's control is called on the bar — a glyph where the
-  // control shows its value beside it, a word where it does not.
-  readonly label: string;
+// A projection a session can pick, so it has a control on the bar: its row's
+// label, place and previews beside the keys.
+export interface SettingProjection extends ConfigProjection, Control {
+  readonly configKey: ControlledField;
+  // The SessionState key a `set` writes — the setting's name.
+  readonly sessionKey: SettingName;
 }
 
-// A lane's toggle (src/config/lanes.ts): its globals field is also its session
-// key, and it reads back through the payload's `lanes.<lane>.effective`.
-const laneSetting = <L extends Lane>(lane: L) =>
-  ({
-    configKey: LANES[lane].setting,
-    sessionKey: LANES[lane].setting,
-    effectiveVar: laneEffectiveVar(lane),
-    label: LANES[lane].label,
-  }) as const;
+// [LAW:one-source-of-truth] The one spelling of a published value's input
+// variable: every `.effective` the payload carries is under the name its
+// session key (or, for a config-only value, its field) has.
+const effectiveVarOf = (name: string): string => `${name}.effective`;
 
-export const SETTINGS = {
-  theme: {
-    configKey: "palette",
-    sessionKey: "theme",
-    effectiveVar: "theme.effective",
-    label: "🎨 theme",
-  },
-  // `preset` is a projection like the rest: the preset carousel sits on the
-  // settings menu's always-visible first row, where "which arrangement am I
-  // in" is the whole question the control answers.
-  preset: {
-    configKey: "preset",
-    sessionKey: "preset",
-    effectiveVar: "preset.effective",
-    label: "▦",
-  },
-  style: {
-    configKey: "style",
-    sessionKey: "style",
-    effectiveVar: "style.effective",
-    label: "◐",
-  },
-  effect: {
-    configKey: "effect",
-    sessionKey: "effect",
-    effectiveVar: "effect.effective",
-    label: "✨",
-  },
-  endcaps: {
-    configKey: "endcaps",
-    sessionKey: "endcaps",
-    effectiveVar: "endcaps.effective",
-    label: "✦",
-  },
-  variation: {
-    configKey: "variation",
-    sessionKey: "variation",
-    effectiveVar: "variation.effective",
-    label: "🎼",
-  },
-  shade: {
-    configKey: "shade",
-    sessionKey: "shade",
-    effectiveVar: "shade.effective",
-    label: "🔆",
-  },
-  transitions: {
-    configKey: "transitions",
-    sessionKey: "transitions",
-    effectiveVar: "transitions.effective",
-    label: "fade in/out",
-  },
-  autoWrap: {
-    configKey: "autoWrap",
-    sessionKey: "autoWrap",
-    effectiveVar: "autoWrap.effective",
-    label: "wrap",
-  },
-  padding: {
-    configKey: "padding",
-    sessionKey: "padding",
-    effectiveVar: "padding.effective",
-    label: "padding",
-  },
-  updateNotice: {
-    configKey: "updateNotice",
-    sessionKey: "updateNotice",
-    effectiveVar: "updateNotice.effective",
-    label: "update notice",
-  },
-  experimentalBand: laneSetting("band"),
-  experimentalStatusline: laneSetting("statusline"),
-  experimentalPane: laneSetting("pane"),
-} as const satisfies Record<string, SettingProjection>;
+const nameOf = (field: ControlledField): SettingName => {
+  const row = GLOBAL_FIELDS[field];
+  return (row.kind === "selection" ? row.sessionKey : field) as SettingName;
+};
+
+export const SETTINGS: Readonly<Record<SettingName, SettingProjection>> =
+  Object.fromEntries(
+    CONTROLLED_FIELDS.map((field) => {
+      const name = nameOf(field);
+      return [
+        name,
+        {
+          configKey: field,
+          sessionKey: name,
+          effectiveVar: effectiveVarOf(name),
+          ...GLOBAL_FIELDS[field].control,
+        },
+      ];
+    }),
+  ) as Record<SettingName, SettingProjection>;
+
+export const SETTING_NAMES = Object.keys(SETTINGS) as readonly SettingName[];
 
 export const SETTING_PROJECTIONS: readonly SettingProjection[] =
   Object.values(SETTINGS);
 
-// [LAW:types-are-the-program] Every globals field with no row above, and why
-// the bar offers no control for it (brandon-settings-coverage-g4p.zoj, the
-// list Brandon confirmed). Keyed by exactly the fields SETTINGS leaves out, so
-// a new globals field is a compile error until it has a row — and with it a
-// control generated from its declared domain — or a reason here.
-type ControlledField = (typeof SETTINGS)[keyof typeof SETTINGS]["configKey"];
-
-export const UNCONTROLLED_GLOBALS: Readonly<
-  Record<Exclude<keyof Globals, ControlledField>, string>
-> = {
-  default_empty_value: "free text: no control shape fits it",
-  default_separator: "free text: no control shape fits it",
-  menuGlyph: "free text: no control shape fits it",
-  colorCompatibility:
-    "set in the config file: Brandon cut the control (brandon-menu-ia-q30.5y4)",
-};
-
 // The projections no session picks: the config file is their only writer
-// (brandon-menu-ia-q30.5y4), by hand or through an authored `persist`. Each is
-// an uncontrolled global, so a field here has no control by construction.
-type UncontrolledField = keyof typeof UNCONTROLLED_GLOBALS;
-const CONFIG_ONLY_PROJECTIONS: ReadonlyArray<
-  ConfigProjection & {
-    readonly configKey: UncontrolledField;
-  }
-> = [
-  {
-    configKey: "colorCompatibility",
-    effectiveVar: "colorCompatibility.effective",
-  },
-];
+// (brandon-menu-ia-q30.5y4), by hand or through an authored `persist`.
+const CONFIG_ONLY_PROJECTIONS: readonly ConfigProjection[] =
+  VALUED_FIELDS.filter((field) => GLOBAL_FIELDS[field].kind === "config").map(
+    (field) => ({ configKey: field, effectiveVar: effectiveVarOf(field) }),
+  );
 
 // [LAW:no-silent-failure] The keys an authored `set` is refused on: a session
 // write there would render nothing, since no rung reads it.
@@ -184,8 +109,6 @@ export const CONFIG_KEY_TO_EFFECTIVE_VAR: ReadonlyMap<string, string> = new Map(
 export const SESSION_KEY_TO_EFFECTIVE_VAR: ReadonlyMap<string, string> =
   new Map(SETTING_PROJECTIONS.map((p) => [p.sessionKey, p.effectiveVar]));
 
-export type SettingName = keyof typeof SETTINGS;
-
 // [LAW:types-are-the-program] A record total over SETTINGS, one value per
 // setting: the one place the totality `Object.fromEntries` cannot see is
 // asserted, so every caller's record is checked as total by construction.
@@ -193,14 +116,11 @@ export function perSetting<T>(
   value: (name: SettingName) => T,
 ): Readonly<Record<SettingName, T>> {
   return Object.fromEntries(
-    (Object.keys(SETTINGS) as SettingName[]).map((name) => [name, value(name)]),
+    SETTING_NAMES.map((name) => [name, value(name)]),
   ) as Record<SettingName, T>;
 }
 
 // The setting whose SessionState key a step click names.
 export const SESSION_KEY_TO_SETTING: ReadonlyMap<string, SettingName> = new Map(
-  (Object.keys(SETTINGS) as SettingName[]).map((name) => [
-    SETTINGS[name].sessionKey,
-    name,
-  ]),
+  SETTING_NAMES.map((name) => [SETTINGS[name].sessionKey, name]),
 );

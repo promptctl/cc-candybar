@@ -14,6 +14,7 @@ import type {
   RenderPayloadDeps,
 } from "../src/daemon/render-payload";
 import { type EffectiveGlobals } from "../src/config/effective-globals";
+import { globalsFor } from "./helpers/selection";
 import type { DslConfig, Root } from "../src/config/dsl-types";
 import { ABSENT } from "../src/utils/outcome";
 import { FLOOR_EFFECT, FLOOR_STYLE } from "./helpers/floor-style";
@@ -112,23 +113,7 @@ function buildMockDeps(): { deps: RenderPayloadDeps; counts: CallCounts } {
 // (the shape an old client produces), so `host.ssh` stays absent throughout.
 const NO_HINTS: ClientHints = {};
 
-const EFFECTIVE_GLOBALS: EffectiveGlobals = {
-  theme: resolveThemeSelection(undefined, null, "textual-dark"),
-  style: FLOOR_STYLE,
-  effect: FLOOR_EFFECT,
-  preset: "default",
-  presetCustomized: false,
-  endcaps: "powerline",
-  variation: "accent",
-  shade: "middle",
-  colorCompatibility: "truecolor",
-  autoWrap: true,
-  padding: 1,
-  updateNotice: true,
-  transitions: false,
-  lanes: { band: false, statusline: false, pane: false },
-  separator: undefined,
-};
+const EFFECTIVE_GLOBALS: EffectiveGlobals = globalsFor(DEFAULT_DSL_CONFIG);
 
 const HOOK_DATA = {
   hook_event_name: "Status",

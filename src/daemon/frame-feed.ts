@@ -12,12 +12,8 @@
 
 import { inspect } from "node:util";
 import { PROTOCOL_VERSION, type Response } from "./protocol";
-import {
-  LANES,
-  laneOffReason,
-  type Lane,
-  type LaneSwitches,
-} from "../config/lanes";
+import { LANES, type Lane, type LaneSwitches } from "../config/lanes";
+import { laneOffReason } from "../config/menu-places";
 
 // What one render drew: the response its subscribers receive (the one a
 // render request is answered with), the instant it was drawn at (ms since the

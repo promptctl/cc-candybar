@@ -12,8 +12,6 @@
 // derive from these rows or are keyed by them, so deleting a lane's row makes
 // the compiler name everything left behind.
 
-import { settingMenuPath } from "./menu-places.js";
-
 // `elsewhere` is where a lane draws the bar when that is not the statusline:
 // while it is on, the statusline hands off to it (src/daemon/lane-handoff.ts).
 // Lane B draws the statusline itself, so it hands off nowhere.
@@ -43,9 +41,6 @@ export const LANE_NAMES = Object.keys(LANES) as readonly Lane[];
 // Which lanes a session's settings switch on.
 export type LaneSwitches = Readonly<Record<Lane, boolean>>;
 
-// Every lane is off until a config or a session turns it on.
-export const LANE_FLOOR = false;
-
 // [LAW:types-are-the-program] A record total over LANES, one value per lane:
 // the one place the totality `Object.fromEntries` cannot see is asserted.
 export function perLane<T>(
@@ -62,12 +57,3 @@ export function parseLane(raw: unknown): Lane | null {
     ? (raw as Lane)
     : null;
 }
-
-// The input variable a lane's toggle reads back through: the value the bar
-// rendered with, whichever rung produced it.
-export const laneEffectiveVar = (lane: Lane): `lanes.${Lane}.effective` =>
-  `lanes.${lane}.effective`;
-
-// Why a subscriber of `lane` is refused, naming the switch that admits it.
-export const laneOffReason = (lane: Lane): string =>
-  `${LANES[lane].label} is off — turn it on in the settings menu's ${settingMenuPath(LANES[lane].setting)}, or set globals.${LANES[lane].setting}: true`;

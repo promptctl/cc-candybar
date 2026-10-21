@@ -22,7 +22,7 @@ import {
   transposePalette,
 } from "@promptctl/rich-js";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { DEFAULT_SHADE, DEFAULT_VARIATION } from "../src/themes/policy";
+import { floorOf } from "../src/config/globals-fields";
 import {
   BAND_FLOORS,
   BAND_RECESSION,
@@ -87,7 +87,7 @@ const DRACULA = getThemePalette("dracula");
 // a row alternation is visible, at the default shade. Every property below is
 // about placement, which no variation or shade changes; the per-variation and
 // per-shade facts have their own describes.
-const TWO_STEP: Decor = { variation: VARIATIONS["duo"], shade: SHADES[DEFAULT_SHADE] };
+const TWO_STEP: Decor = { variation: VARIATIONS["duo"], shade: SHADES[floorOf("shade")] };
 const decorWith = (variation: Variation): Decor => ({ ...TWO_STEP, variation });
 const VARIATION_NAMES = Object.keys(VARIATIONS) as VariationName[];
 const SHADE_NAMES = Object.keys(SHADES) as ShadeName[];
@@ -145,7 +145,7 @@ describe("the shade dial", () => {
   });
 
   test("rests on middle: one darkening, the role itself, one lightening", () => {
-    expect(DEFAULT_SHADE).toBe("middle");
+    expect(floorOf("shade")).toBe("middle");
     expect([...SHADES.middle.tones].sort()).toEqual(["base", "darken-1", "lighten-1"].sort());
   });
 
@@ -941,7 +941,7 @@ const DEPTHS = [0, 1, 2, 3] as const;
 // The ground the band facts below are stated on where one suffices: a trigger
 // in the default bar's first row, at the default shade.
 const FIRST_ROW: Ground = rowGround(
-  { variation: VARIATIONS[DEFAULT_VARIATION], shade: SHADES[DEFAULT_SHADE] },
+  { variation: VARIATIONS[floorOf("variation")], shade: SHADES[floorOf("shade")] },
   [row(0, 2), cell(0, 5)],
 );
 
@@ -1397,7 +1397,7 @@ describe("no floor is measured where nothing is drawn in colour", () => {
     // textual-dark's first row under `alt`, turning from its navy to its
     // orange: no colour stands 2.2:1 off both.
     const textualDark = getThemePalette("textual-dark")!;
-    const ground = rowGround({ variation: VARIATIONS.alt, shade: SHADES[DEFAULT_SHADE] }, [row(0, 2), cell(0, 5)]);
+    const ground = rowGround({ variation: VARIATIONS.alt, shade: SHADES[floorOf("shade")] }, [row(0, 2), cell(0, 5)]);
     const disclosure: Disclosure = { hue: OPEN_HUE, depth: 0, ground };
     expect(bandFor(textualDark, disclosure, ColorDepth.TRUECOLOR).shortfalls).not.toEqual([]);
     expect(bandFor(textualDark, disclosure, ColorDepth.DEFAULT).shortfalls).toEqual([]);

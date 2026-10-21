@@ -20,16 +20,14 @@ import type { ActionDecl } from "./action.js";
 // a compile error here, never silent drift. Type-only: no runtime rich-js
 // dependency enters the config layer.
 import type { ThemeKey } from "@promptctl/rich-js";
-import type { ColorCompatibility, Endcaps } from "../themes/policy.js";
-import type {
-  Axis,
-  DistributionName,
-  ShadeName,
-  VariationName,
-} from "../themes/decor.js";
+import type { Axis, DistributionName } from "../themes/decor.js";
 import type { JsonValue } from "../var-system/types.js";
 import type { SegmentGroup } from "./segment-groups.js";
-import type { LaneSetting } from "./lanes.js";
+import type {
+  GlobalFieldRows,
+  GlobalsOf,
+  ThemeDefaultField,
+} from "./globals-fields.js";
 import {
   FOLLOW_BAR,
   isPlacementThemeName,
@@ -382,21 +380,9 @@ export interface PresetDecl {
   readonly globals?: Globals;
 }
 
-// [LAW:one-source-of-truth] The globals a theme may carry a default for — the
-// three "look" settings that decide which of the theme's own colours each cell
-// wears (candybar-theme-colours-6fq5.ix8). Spelled once: the loader's schema,
-// the resolution's rung, the save that writes an entry and the release of the
-// picks it saves all range this list, so a field added here is a theme default
-// everywhere at once.
-export const THEME_DEFAULT_FIELDS = [
-  "shade",
-  "variation",
-  "style",
-] as const satisfies ReadonlyArray<keyof Globals>;
-export type ThemeDefaultField = (typeof THEME_DEFAULT_FIELDS)[number];
-
 // [LAW:types-are-the-program] One theme's default look: a globals fragment
-// over exactly THEME_DEFAULT_FIELDS, names only. It sits one rung BELOW the
+// over exactly the rows marked `themeDefault` (THEME_DEFAULT_FIELDS,
+// src/config/globals-fields.ts), names only. It sits one rung BELOW the
 // config's own globals in the precedence chain (src/config/theme-defaults.ts),
 // so a theme's default never outranks what a user's file says; it only fills
 // what the file leaves unsaid.
@@ -521,114 +507,10 @@ export type ValidatedConfig = DslConfig & {
   readonly [__validated]: true;
 };
 
-// Whether each animation lane may subscribe to a session's frames (LANES,
-// src/config/lanes.ts). Default false. A session's pick over each —
-// `resolveEffectiveGlobals` resolves them into `EffectiveGlobals.lanes`.
-type LaneGlobals = { readonly [K in LaneSetting]?: boolean };
-
-export interface Globals extends LaneGlobals {
-  readonly default_empty_value?: string;
-  readonly default_separator?: string;
-  // [LAW:one-source-of-truth] A palette NAME, not a resolved Palette: DslConfig
-  // is the JSON-shape mirror, so the name is the authoritative datum and the
-  // renderer owns name→Palette resolution. The config default for the base
-  // theme; the daemon resolves the live base per render as
-  // `sessionState.theme ?? globals.palette ?? default`, and a placement's
-  // `theme` setting other than `bar` ignores it.
-  readonly palette?: string;
-
-  // [LAW:one-type-per-behavior] The config default for the STYLE (a named
-  // theme-adaptation from the `styles` block) — the exact twin of `palette` one
-  // dimension over: the daemon resolves the live style per render as
-  // `sessionState.style ?? globals.style ?? "none"` (effectiveStyleName), so a
-  // style click recolors the bar live and a config can set a default adaptation
-  // without an edit-per-session. Membership in the merged `styles` map is
-  // validated post-merge (cross-ref) — a user's globals.style may name a
-  // default-provided style.
-  readonly style?: string;
-
-  // [LAW:one-type-per-behavior] The config default for the looping EFFECT the
-  // whole bar wears (brandon-effects-2gka.d2i): `none` or a rich-js catalogue
-  // loop name (EFFECT_NAMES), or a rule rendering one — `style`'s shape over a
-  // registry-static domain, so the loader checks a name by membership.
-  readonly effect?: string;
-
-  // [LAW:one-type-per-behavior] The config default for the PRESET (a named
-  // config fragment from the `presets` block) — the same twin-of-`palette`
-  // shape as `style` one dimension over: the daemon resolves the live preset per
-  // render as `sessionState.preset ?? globals.preset ?? "default"`
-  // (effectivePresetName), so a preset click restages the bar live and a config
-  // can pick a default arrangement without an edit-per-session. Membership in
-  // the merged `presets` map is validated post-merge (cross-ref) — a user's
-  // globals.preset may name a default-provided preset.
-  //
-  // [LAW:one-source-of-truth] A preset's own `globals` may NOT carry this field
-  // (the loader rejects it): a preset selecting a preset is a second authority
-  // over which preset is active, and a cyclic one.
-  readonly preset?: string;
-
-  // [LAW:one-type-per-behavior] The config default for the powerline cap/
-  // separator SHAPE — the exact twin of `palette` one dimension over: the
-  // daemon resolves the live endcaps per render as
-  // `sessionState.endcaps ?? globals.endcaps ?? "powerline"` (effectiveEndcaps),
-  // so an endcaps click reshapes the bar live and a config can set the default
-  // shape without an edit-per-session.
-  readonly endcaps?: Endcaps;
-
-  // The legacy display.autoWrap knob: whether FlexStrip soft-wraps a root
-  // row that exceeds the usable width. Default true (current behavior);
-  // false renders each row as one unbounded line, overflow off-screen.
-  // The config default; a session pick (the settings menu) overrides it for
-  // that session — `effectiveAutoWrap` resolves both into renderOpts.wrap.
-  readonly autoWrap?: boolean;
-
-  // The legacy display.padding knob: spaces synthesized INSIDE each segment
-  // cell per side (intra-cell, within the bg fill — not rich-js FlexStrip's
-  // inter-item gap). Default 1 (current behavior). Templates author content;
-  // this chrome is applied structurally at the cell-formation seam.
-  // The config default under a session pick — `effectivePadding` resolves
-  // both into renderOpts.padding.
-  readonly padding?: number;
-
-  // Which theme role each ROW of the closed bar wears, in order — a named
-  // entry of VARIATIONS (src/themes/decor.ts). Default "accent".
-  // The config default under a session pick — `effectiveVariation` resolves
-  // both into the render's selection.
-  readonly variation?: VariationName;
-
-  // Which of its role's shades each CELL of the closed bar wears — a named
-  // position of the shade dial, SHADES (src/themes/decor.ts): a window of the
-  // role's darkenings and lightenings, or its muted form. Default "middle".
-  // The config default under a session pick — `effectiveShade` resolves both
-  // into the render's selection.
-  readonly shade?: ShadeName;
-
-  readonly menuGlyph?: string;
-
-  // Whether the daemon renders its update notice — the row saying a newer
-  // source tree (a checkout) or a newer published release (an install) exists
-  // than the code rendering the bar (src/daemon/update-notice.ts). Default
-  // true. The notice's own `[disable]` click writes `false` here, so this is
-  // the one durable "never show it" switch; a per-session, per-version
-  // dismissal lives in SessionState instead.
-  // A session's pick over this — `effectiveUpdateNotice` resolves both.
-  readonly updateNotice?: boolean;
-
-  // Whether a placement that appears mid-session fades in over 20 s
-  // (brandon-effects-2gka.631) instead of popping in, and one that leaves
-  // dissolves out over 30 s (brandon-effects-2gka.3vt) instead of vanishing.
-  // Default false. A session's pick over this — `effectiveTransitions`
-  // resolves both.
-  readonly transitions?: boolean;
-
-  // The legacy display.colorCompatibility knob: the color depth rich-js
-  // downsamples output to. Default "truecolor" (current behavior — NOT the
-  // legacy "auto" default, which would change rendering for existing users).
-  // The type excludes "auto" entirely: the daemon is detached, so env
-  // detection would read the wrong terminal — see COLOR_COMPATIBILITIES.
-  // Set only in the config file: it has no session pick.
-  readonly colorCompatibility?: ColorCompatibility;
-}
+// [LAW:one-source-of-truth] The `globals:` block a config authors, derived
+// from the globals rows (src/config/globals-fields.ts): every field optional,
+// typed by its row's spec, and documented there beside its floor and control.
+export type Globals = GlobalsOf<GlobalFieldRows>;
 
 // [LAW:one-type-per-behavior] One discriminated union covers every source
 // kind. Adding a new kind = code change here + matching runtime support in
