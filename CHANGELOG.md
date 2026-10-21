@@ -1,3 +1,9 @@
+## [1.149.2](https://github.com/promptctl/cc-candybar/compare/v1.149.1...v1.149.2) (2026-10-21)
+
+### Bug Fixes
+
+* **daemon:** the memory backstop judges what macOS charges, not RSS ([#397](https://github.com/promptctl/cc-candybar/issues/397)) ([e50cedb](https://github.com/promptctl/cc-candybar/commit/e50cedb24070fbf15956fbe88a6539b041b7e104)), closes [#391](https://github.com/promptctl/cc-candybar/issues/391)
+
 ## [1.149.1](https://github.com/promptctl/cc-candybar/compare/v1.149.0...v1.149.1) (2026-10-21)
 
 ### Bug Fixes
