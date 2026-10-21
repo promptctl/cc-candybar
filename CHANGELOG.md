@@ -1,3 +1,9 @@
+## [1.149.3](https://github.com/promptctl/cc-candybar/compare/v1.149.2...v1.149.3) (2026-10-21)
+
+### Bug Fixes
+
+* **doctor:** judge each bar's effect refresh against its own session's settings chain ([#398](https://github.com/promptctl/cc-candybar/issues/398)) ([fec6ce5](https://github.com/promptctl/cc-candybar/commit/fec6ce5e28cb7f3545fa4017fc07beb9f8232a84))
+
 ## [1.149.2](https://github.com/promptctl/cc-candybar/compare/v1.149.1...v1.149.2) (2026-10-21)
 
 ### Bug Fixes
