@@ -8,7 +8,7 @@
 // for the moment the daemon itself changed the bundle (the update notice's
 // rebuild) and need not wait a minute to notice.
 
-import type { DaemonLogger } from "./log";
+import type { DaemonLogger } from "../utils/logger";
 import { ABSENT, failed, ok, type Outcome } from "../utils/outcome";
 
 /** `fs.statSync`'s shape: the edge the watch reads the disk through. */

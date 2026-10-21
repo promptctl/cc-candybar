@@ -2,6 +2,7 @@
 // watchers each receive a tiny handle they're allowed to bump, but the
 // canonical object lives here. Stats are read-only after serialization.
 
+import type { TranscriptReads } from "../utils/transcript-fs";
 import type { FeedStats } from "./frame-feed";
 import type { RenderCacheStats } from "./cache/render";
 import type { ProbeArrival } from "../doctor/handler-probe";
@@ -72,6 +73,11 @@ export interface StatsSnapshot {
     misses: number;
     sweeps: number;
   };
+  // [LAW:nothing-unseen] Every forward transcript read since start: gated
+  // reads, bytes off disk, lines longer than the fold window read whole and
+  // the longest of them — what bounds a fold's memory beyond its window
+  // (brandon-unfiled-3248.bfnj).
+  transcriptReads: TranscriptReads;
   // Config states: entries the map serves, those a render is drawing with
   // now, and those retired (evicted or reloaded over) whose teardown waits
   // on one. `retired` climbing while `size` holds is a render that never
@@ -251,6 +257,7 @@ export class RuntimeStats {
     return new RuntimeStats().snapshot({
       gitCache: { size: 0, hits: 0, misses: 0, invalidations: 0, watchers: 0 },
       usageCache: { size: 0, hits: 0, misses: 0, sweeps: 0 },
+      transcriptReads: { reads: 0, bytes: 0, longLines: 0, largestLine: 0 },
       renderCache: {
         size: 0,
         held: 0,
@@ -291,6 +298,7 @@ export class RuntimeStats {
   snapshot(extras: {
     gitCache: StatsSnapshot["gitCache"];
     usageCache: StatsSnapshot["usageCache"];
+    transcriptReads: TranscriptReads;
     renderCache: StatsSnapshot["renderCache"];
     effectCache: StatsSnapshot["effectCache"];
     sessionState: StatsSnapshot["sessionState"];
@@ -324,6 +332,7 @@ export class RuntimeStats {
       },
       gitCache: extras.gitCache,
       usageCache: extras.usageCache,
+      transcriptReads: extras.transcriptReads,
       renderCache: extras.renderCache,
       effectCache: extras.effectCache,
       sessionState: extras.sessionState,

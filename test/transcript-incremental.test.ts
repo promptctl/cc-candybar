@@ -1,8 +1,9 @@
 // [LAW:verifiable-goals] The incremental append-fold (brandon-daemon-perf-bb9):
 // an active session's transcript grows every render, and the store must fold ONLY
 // the appended bytes rather than re-parse the whole file. These tests pin two
-// contracts: (1) the reader yields exactly the new complete lines since a cursor,
-// waiting on a partial trailing line and resetting on a rewrite; (2) the store's
+// contracts: (1) the fold sees exactly the new complete lines since a cursor,
+// one window at a time (brandon-unfiled-3248.bfnj), waiting on a partial
+// trailing line and resetting on a rewrite; (2) the store's
 // incremental fold is OBSERVATIONALLY EQUAL to a from-scratch read of the final
 // file — the optimization changes cost, never output.
 
@@ -19,10 +20,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
-  readAppendedEntries,
-  clearParseCache,
-  type TranscriptCursor,
+  foldAppended,
+  type Folded,
+  type ParsedEntry,
 } from "../src/utils/claude";
+import {
+  FOLD_WINDOW_BYTES,
+  readAppended,
+  statStamp,
+  transcriptReads,
+} from "../src/utils/transcript-fs";
 import { SessionUsageStore } from "../src/daemon/cache/session-usage-store";
 import type { ClaudeHookData } from "../src/utils/claude";
 import { instantOf } from "../src/utils/instant";
@@ -61,7 +68,37 @@ function touch(path: string): void {
   utimesSync(path, clock, clock);
 }
 
-describe("readAppendedEntries — the incremental reader primitive", () => {
+// The step these tests fold with: every entry, in order. Whatever a real step
+// computes, it computes over this sequence, so a fold that sees each line once
+// and in order folds every step alike.
+const collect = (
+  state: readonly ParsedEntry[],
+  entries: readonly ParsedEntry[],
+): readonly ParsedEntry[] => [...state, ...entries];
+const NONE: readonly ParsedEntry[] = [];
+
+async function foldOf(
+  path: string,
+  prior?: Folded<readonly ParsedEntry[]>,
+  step = collect,
+) {
+  const r = await foldAppended(path, prior, NONE, step);
+  if (r.kind !== "ok") throw new Error(`expected ok, got ${r.kind}`);
+  return r.value;
+}
+
+const costs = (entries: readonly ParsedEntry[]) =>
+  entries.map((e) => Number(e.costUSD!.toFixed(5)));
+
+// One usage line padded to about `bytes`, so a file spans a known number of
+// windows.
+function paddedLine(cost: number, bytes: number): string {
+  const base = JSON.parse(line(new Date(), cost)) as Record<string, unknown>;
+  const pad = "x".repeat(Math.max(0, bytes - JSON.stringify(base).length - 10));
+  return JSON.stringify({ ...base, pad }) + "\n";
+}
+
+describe("foldAppended — the windowed fold", () => {
   let dir: string;
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), "cc-candybar-inc-"));
@@ -69,104 +106,210 @@ describe("readAppendedEntries — the incremental reader primitive", () => {
   });
   afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
-  test("first read yields all complete lines; a later read yields ONLY the appended ones", async () => {
+  test("a first fold sees every complete line; a later one ONLY the appended ones", async () => {
     const t = join(dir, "A.jsonl");
     writeFileSync(t, line(new Date(), 0.01) + line(new Date(), 0.02));
 
-    const first = await readAppendedEntries(t, undefined);
-    expect(first.kind).toBe("ok");
-    if (first.kind !== "ok") return;
-    expect(first.value.entries).toHaveLength(2);
-    expect(first.value.reset).toBe(false);
+    const first = await foldOf(t);
+    expect(costs(first.folded.value)).toEqual([0.01, 0.02]);
 
     appendFileSync(t, line(new Date(), 0.03));
-    const second = await readAppendedEntries(t, first.value.cursor);
-    expect(second.kind).toBe("ok");
-    if (second.kind !== "ok") return;
+    const second = await foldOf(t, first.folded, (_s, entries) => entries);
     // Only the one appended entry — not a re-read of the first two.
-    expect(second.value.entries).toHaveLength(1);
-    expect(second.value.entries[0]!.costUSD).toBeCloseTo(0.03, 5);
+    expect(costs(second.folded.value)).toEqual([0.03]);
   });
 
-  test("a partial trailing line (no newline yet) is NOT consumed until its newline lands", async () => {
+  // brandon-unfiled-3248.bfnj: a cold fold of a large transcript holds one
+  // window, not the file, and sees exactly the lines a whole-file read would.
+  test("a file of several windows folds window by window to every line, in order", async () => {
+    const t = join(dir, "big.jsonl");
+    const lines = Array.from({ length: 5500 }, (_, i) =>
+      paddedLine(i / 1000, 1024),
+    );
+    writeFileSync(t, lines.join(""));
+    const bytes = Buffer.byteLength(lines.join(""));
+    const before = transcriptReads();
+
+    const { folded, longLines } = await foldOf(t);
+
+    expect(costs(folded.value)).toEqual(lines.map((_, i) => i / 1000));
+    expect(folded.cursor.offset).toBe(bytes);
+    expect(longLines).toEqual([]);
+    // One gated read per window, each consuming all but a partial line of
+    // it, and none past the end.
+    const reads = transcriptReads().reads - before.reads;
+    expect(reads).toBeGreaterThanOrEqual(Math.ceil(bytes / FOLD_WINDOW_BYTES));
+    expect(reads).toBeLessThanOrEqual(Math.ceil(bytes / (FOLD_WINDOW_BYTES - 1024)));
+    expect(transcriptReads().longLines).toBe(before.longLines);
+  });
+
+  test("a line longer than the window is folded whole, and reported as a long line", async () => {
+    const t = join(dir, "long.jsonl");
+    const first = line(new Date(), 0.01);
+    const long = paddedLine(0.02, Math.floor(FOLD_WINDOW_BYTES * 2.5));
+    writeFileSync(t, first + long + line(new Date(), 0.03));
+    const before = transcriptReads();
+
+    const { folded, longLines } = await foldOf(t);
+
+    expect(costs(folded.value)).toEqual([0.01, 0.02, 0.03]);
+    expect(longLines).toEqual([
+      { path: t, offset: Buffer.byteLength(first), bytes: Buffer.byteLength(long) },
+    ]);
+    expect(transcriptReads().longLines - before.longLines).toBe(1);
+    expect(transcriptReads().largestLine).toBeGreaterThanOrEqual(
+      Buffer.byteLength(long),
+    );
+  });
+
+  test("a long line still being written allocates nothing and reports no long line", async () => {
+    const t = join(dir, "writing.jsonl");
+    const complete = line(new Date(), 0.01);
+    writeFileSync(t, complete + "{" + "x".repeat(FOLD_WINDOW_BYTES * 3));
+    const before = transcriptReads();
+
+    const { folded, longLines } = await foldOf(t);
+
+    expect(costs(folded.value)).toEqual([0.01]);
+    expect(folded.cursor.offset).toBe(Buffer.byteLength(complete));
+    expect(longLines).toEqual([]);
+    expect(transcriptReads().longLines).toBe(before.longLines);
+  });
+
+  test("a partial trailing line (no newline yet) waits for its newline, and the fold returns", async () => {
     const t = join(dir, "A.jsonl");
     const complete = line(new Date(), 0.01);
-    // Write one complete line + a half-written second line (no \n).
     const partial = '{"timestamp":"2024-01-01T00:00:00.000Z","costUSD":0.02';
     writeFileSync(t, complete + partial);
+    const before = transcriptReads();
 
-    const first = await readAppendedEntries(t, undefined);
-    if (first.kind !== "ok") throw new Error("expected ok");
-    expect(first.value.entries).toHaveLength(1); // partial line waits
-    const afterComplete = first.value.cursor.offset;
-    expect(afterComplete).toBe(Buffer.byteLength(complete)); // cursor at the newline
+    const first = await foldOf(t);
+    expect(costs(first.folded.value)).toEqual([0.01]);
+    expect(first.folded.cursor.offset).toBe(Buffer.byteLength(complete));
+    // One read: the window that reached the end leaves nothing to re-read.
+    expect(transcriptReads().reads - before.reads).toBe(1);
 
-    // The writer finishes the second line.
     appendFileSync(t, ',"message":{"usage":{"input_tokens":1,"output_tokens":1}}}\n');
-    const second = await readAppendedEntries(t, first.value.cursor);
-    if (second.kind !== "ok") throw new Error("expected ok");
-    expect(second.value.entries).toHaveLength(1); // the now-complete line, once
-    expect(second.value.entries[0]!.costUSD).toBeCloseTo(0.02, 5);
+    const second = await foldOf(t, first.folded, (_s, entries) => entries);
+    expect(costs(second.folded.value)).toEqual([0.02]);
   });
 
-  test("a rewritten (shrunk) file signals reset and re-reads from the start", async () => {
+  test("a rewritten (shrunk) file starts the fold over from the start", async () => {
     const t = join(dir, "A.jsonl");
     writeFileSync(t, line(new Date(), 0.01) + line(new Date(), 0.02) + line(new Date(), 0.03));
-    const first = await readAppendedEntries(t, undefined);
-    if (first.kind !== "ok") throw new Error("expected ok");
-    expect(first.value.entries).toHaveLength(3);
+    const first = await foldOf(t);
 
-    // /compact rewrites the transcript smaller than our cursor. Capture the
-    // exact bytes written so the offset assertion pins the real content length,
-    // not an incidentally-equal-length regenerated line.
     const compacted = line(new Date(), 0.09);
     writeFileSync(t, compacted);
-    const after = await readAppendedEntries(t, first.value.cursor);
-    if (after.kind !== "ok") throw new Error("expected ok");
-    expect(after.value.reset).toBe(true);
-    expect(after.value.entries).toHaveLength(1); // the whole new file
-    expect(after.value.cursor.offset).toBe(Buffer.byteLength(compacted));
+    const after = await foldOf(t, first.folded);
+    expect(costs(after.folded.value)).toEqual([0.09]);
+    expect(after.folded.cursor.offset).toBe(Buffer.byteLength(compacted));
   });
 
-  test("an inode change (rename-based rewrite) signals reset even when size >= cursor", async () => {
+  test("an inode change (rename-based rewrite) starts over even when size >= cursor", async () => {
     const t = join(dir, "A.jsonl");
     writeFileSync(t, line(new Date(), 0.01) + line(new Date(), 0.02));
-    const first = await readAppendedEntries(t, undefined);
-    if (first.kind !== "ok") throw new Error("expected ok");
-    const priorOffset = first.value.cursor.offset;
+    const first = await foldOf(t);
 
-    // Atomic rewrite: write a DIFFERENT file (>= the old size, so a size-only
-    // check would miss it) and rename it over the path → new inode, same-or-
-    // larger size, different content. Only the inode signal catches this.
     const other = join(dir, "A.new.jsonl");
     const rewritten =
       line(new Date(), 0.03) + line(new Date(), 0.04) + line(new Date(), 0.05);
     writeFileSync(other, rewritten);
-    expect(Buffer.byteLength(rewritten)).toBeGreaterThanOrEqual(priorOffset);
+    expect(Buffer.byteLength(rewritten)).toBeGreaterThanOrEqual(
+      first.folded.cursor.offset,
+    );
     renameSync(other, t);
 
-    const after = await readAppendedEntries(t, first.value.cursor);
-    if (after.kind !== "ok") throw new Error("expected ok");
-    expect(after.value.reset).toBe(true);
-    expect(after.value.entries).toHaveLength(3); // the whole new file, not a suffix
+    const after = await foldOf(t, first.folded);
+    expect(costs(after.folded.value)).toEqual([0.03, 0.04, 0.05]);
+  });
+
+  test("a rewrite between two windows starts the fold over from empty", async () => {
+    const t = join(dir, "mid.jsonl");
+    // Led by a long line, so the discarded pass read one.
+    writeFileSync(
+      t,
+      paddedLine(0.01, Math.floor(FOLD_WINDOW_BYTES * 1.5)) +
+        Array.from({ length: 2200 }, (_, i) => paddedLine(i / 1000, 1024)).join(""),
+    );
+    const replaced = line(new Date(), 0.5) + line(new Date(), 0.6);
+    let windows = 0;
+    // The first window's step swaps the file under the path, as a rename-based
+    // /compact would land mid-fold.
+    const { folded, longLines } = await foldOf(t, undefined, (state, entries) => {
+      if (windows++ === 0) {
+        writeFileSync(join(dir, "mid.new.jsonl"), replaced);
+        renameSync(join(dir, "mid.new.jsonl"), t);
+      }
+      return collect(state, entries);
+    });
+
+    expect(costs(folded.value)).toEqual([0.5, 0.6]);
+    expect(folded.cursor.offset).toBe(Buffer.byteLength(replaced));
+    // The long line belonged to the file the reset discarded.
+    expect(longLines).toEqual([]);
+  });
+
+  test("a read disposed twice gives its window back once", async () => {
+    const t = join(dir, "A.jsonl");
+    writeFileSync(t, line(new Date(), 0.01));
+    const read = await readAppended(t, undefined, undefined);
+    if (read.kind !== "ok") throw new Error("expected ok");
+    read.value[Symbol.dispose]();
+    read.value[Symbol.dispose]();
+
+    // Two reads in flight at once never share a window.
+    const [a, b] = await Promise.all([
+      readAppended(t, undefined, undefined),
+      readAppended(t, undefined, undefined),
+    ]);
+    if (a.kind !== "ok" || b.kind !== "ok") throw new Error("expected ok");
+    expect(a.value.lines.buffer).not.toBe(b.value.lines.buffer);
+    a.value[Symbol.dispose]();
+    b.value[Symbol.dispose]();
+  });
+
+  // Every read of a fold is capped at the size its first stat saw, so a file
+  // growing faster than it is read cannot hold it, and the cursor's stamp
+  // names exactly the bytes folded. The next fold reads on from the cursor:
+  // every line is folded once, none twice.
+  test("growth during a fold ends it, with the first stat's stamp, and the next fold reads on", async () => {
+    const t = join(dir, "grow.jsonl");
+    const lines = Array.from({ length: 2200 }, (_, i) => paddedLine(i / 1000, 1024));
+    writeFileSync(t, lines.join(""));
+    const firstStamp = statStamp(t);
+    let windows = 0;
+    const { folded } = await foldOf(t, undefined, (state, entries) => {
+      if (windows++ < 6) appendFileSync(t, line(new Date(), 9));
+      return collect(state, entries);
+    });
+
+    expect(folded.cursor.stamp).toBe(firstStamp);
+    expect(folded.cursor.offset).toBe(Buffer.byteLength(lines.join("")));
+    expect(costs(folded.value)).toEqual(lines.map((_, i) => i / 1000));
+    const next = await foldOf(t, folded, (_s, entries) => entries);
+    expect(costs(next.folded.value)).toEqual(
+      Array.from({ length: Math.min(windows, 6) }, () => 9),
+    );
   });
 
   test("absent file (fresh session) is the absent outcome, not an error", async () => {
-    const res = await readAppendedEntries(join(dir, "missing.jsonl"), undefined);
+    const res = await foldAppended(join(dir, "missing.jsonl"), undefined, NONE, collect);
     expect(res.kind).toBe("absent");
   });
 
-  test("a prior cursor on an unchanged file yields zero new entries", async () => {
+  test("an unreadable path is failed, with its reason", async () => {
+    const res = await foldAppended(dir, undefined, NONE, collect);
+    expect(res.kind).toBe("failed");
+  });
+
+  test("a prior cursor on an unchanged file folds nothing new", async () => {
     const t = join(dir, "A.jsonl");
     writeFileSync(t, line(new Date(), 0.01) + line(new Date(), 0.02));
-    const first = await readAppendedEntries(t, undefined);
-    if (first.kind !== "ok") throw new Error("expected ok");
-    // Nothing appended → the same cursor reads nothing, no reset.
-    const again = await readAppendedEntries(t, first.value.cursor);
-    if (again.kind !== "ok") throw new Error("expected ok");
-    expect(again.value.entries).toHaveLength(0);
-    expect(again.value.reset).toBe(false);
-    expect(again.value.cursor.offset).toBe(first.value.cursor.offset);
+    const first = await foldOf(t);
+    const again = await foldOf(t, first.folded, (_s, entries) => entries);
+    expect(again.folded.value).toEqual([]);
+    expect(again.folded.cursor.offset).toBe(first.folded.cursor.offset);
   });
 });
 
@@ -174,7 +317,6 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
   let dir: string;
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), "cc-candybar-inc-store-"));
-    clearParseCache();
     seq = 0;
   });
   afterEach(() => rmSync(dir, { recursive: true, force: true }));

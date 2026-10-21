@@ -4,8 +4,10 @@ import { tmpdir } from "os";
 import {
   findAgentTranscripts,
   userEntryOf,
+  longLineLog,
   type UserEntry,
 } from "../src/utils/claude";
+import { FOLD_WINDOW_BYTES } from "../src/utils/transcript-fs";
 
 describe("findAgentTranscripts", () => {
   let tempDir: string;
@@ -35,7 +37,7 @@ describe("findAgentTranscripts", () => {
     const subagentsDir = makeSubagentsDir(sessionId);
     const agentFile = writeAgentFile(subagentsDir, "agent-a1b2c3.jsonl", sessionId);
 
-    const result = await findAgentTranscripts(sessionId, tempDir);
+    const { paths: result } = await findAgentTranscripts(sessionId, tempDir);
 
     expect(result).toHaveLength(1);
     expect(result[0]!.replace(/\\/g, "/")).toBe(agentFile.replace(/\\/g, "/"));
@@ -45,13 +47,13 @@ describe("findAgentTranscripts", () => {
     const sessionId = "abc123";
     mkdirSync(join(tempDir, sessionId)); // session dir exists, but no subagents/ inside
 
-    const result = await findAgentTranscripts(sessionId, tempDir);
+    const { paths: result } = await findAgentTranscripts(sessionId, tempDir);
 
     expect(result).toEqual([]);
   });
 
   it("returns [] when session directory does not exist at all", async () => {
-    const result = await findAgentTranscripts("no-such-session", tempDir);
+    const { paths: result } = await findAgentTranscripts("no-such-session", tempDir);
 
     expect(result).toEqual([]);
   });
@@ -62,7 +64,7 @@ describe("findAgentTranscripts", () => {
     writeAgentFile(subagentsDir, "agent-aaa.jsonl", sessionId);
     writeAgentFile(subagentsDir, "agent-bbb.jsonl", sessionId);
 
-    const result = await findAgentTranscripts(sessionId, tempDir);
+    const { paths: result } = await findAgentTranscripts(sessionId, tempDir);
 
     expect(result).toHaveLength(2);
   });
@@ -72,7 +74,7 @@ describe("findAgentTranscripts", () => {
     const subagentsDir = makeSubagentsDir(sessionId);
     writeAgentFile(subagentsDir, "agent-x1y2z3.jsonl", "other-session");
 
-    const result = await findAgentTranscripts(sessionId, tempDir);
+    const { paths: result } = await findAgentTranscripts(sessionId, tempDir);
 
     expect(result).toEqual([]);
   });
@@ -84,10 +86,29 @@ describe("findAgentTranscripts", () => {
     writeFileSync(join(subagentsDir, "agent-ignored.txt"), JSON.stringify({ sessionId }) + "\n");
     writeFileSync(join(subagentsDir, "other.jsonl"), JSON.stringify({ sessionId }) + "\n");
 
-    const result = await findAgentTranscripts(sessionId, tempDir);
+    const { paths: result } = await findAgentTranscripts(sessionId, tempDir);
 
     expect(result).toHaveLength(1);
     expect(result[0]).toContain("agent-valid.jsonl");
+  });
+
+  // brandon-unfiled-3248.bfnj: the first line is read through the windowed
+  // reader, which reads a line longer than the window whole and says so.
+  it("reads a first line longer than the fold window whole, and reports the long line", async () => {
+    const sessionId = "abc123";
+    const subagentsDir = makeSubagentsDir(sessionId);
+    const pad = "x".repeat(Math.floor(FOLD_WINDOW_BYTES * 2.5));
+    const agentFile = join(subagentsDir, "agent-long.jsonl");
+    writeFileSync(agentFile, JSON.stringify({ sessionId, pad }) + "\n");
+
+    const { paths, longLines } = await findAgentTranscripts(sessionId, tempDir);
+
+    expect(paths).toEqual([agentFile]);
+    const bytes = Buffer.byteLength(JSON.stringify({ sessionId, pad }) + "\n");
+    expect(longLines).toEqual([{ path: agentFile, offset: 0, bytes }]);
+    expect(longLineLog(longLines)).toEqual([
+      `transcript long line path=${JSON.stringify(agentFile)} offset=0 bytes=${bytes}`,
+    ]);
   });
 });
 

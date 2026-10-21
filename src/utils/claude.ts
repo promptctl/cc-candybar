@@ -1,10 +1,15 @@
-import { existsSync, createReadStream } from "node:fs";
-// [LAW:single-enforcer] readdir/readFile/stat come from the gated transcript-fs
-// owner, not node:fs/promises — the in-flight-I/O bound lives at one seam.
-import { readdir, readFile, readAppended, stat } from "./transcript-fs";
+import { existsSync } from "node:fs";
+// [LAW:single-enforcer] readdir and the forward read come from the gated
+// transcript-fs owner, not node:fs/promises — the in-flight-I/O bound lives at
+// one seam.
+import {
+  decodeLines,
+  readAppended,
+  readdir,
+  type WholeLines,
+} from "./transcript-fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import { createInterface } from "node:readline";
 import { debug } from "./logger";
 import { ok, type Outcome } from "./outcome";
 import {
@@ -144,12 +149,13 @@ export async function findAgentTranscripts(
   projectPath: string,
   // [LAW:one-source-of-truth] Agent-file session identity is IMMUTABLE — a file
   // that belonged to this session never changes owner. Paths in `verified` skip
-  // the first-line readFile, so an incremental refold (which passes its prior
-  // file set) pays the O(file) verification only for NEWLY-appeared sidechains,
-  // not every sidechain every render. The readdir still runs (cheap).
+  // the first-line read, so an incremental refold (which passes its prior file
+  // set) reads a first line only for NEWLY-appeared sidechains. The readdir
+  // still runs (cheap).
   verified?: ReadonlySet<string>,
-): Promise<string[]> {
-  const agentFiles: string[] = [];
+): Promise<{ paths: string[]; longLines: readonly LongLine[] }> {
+  const paths: string[] = [];
+  let longLines: readonly LongLine[] = [];
 
   const subagentsDir = join(projectPath, sessionId, "subagents");
 
@@ -162,92 +168,32 @@ export async function findAgentTranscripts(
     for (const fileName of agentFileNames) {
       const filePath = join(subagentsDir, fileName);
       if (verified?.has(filePath)) {
-        agentFiles.push(filePath);
+        paths.push(filePath);
         continue;
       }
-      try {
-        const content = await readFile(filePath, "utf-8");
-        const firstLine = content.split("\n")[0];
-        if (firstLine) {
-          const parsed = JSON.parse(firstLine);
-          if (parsed.sessionId === sessionId) {
-            agentFiles.push(filePath);
-          }
-        }
-      } catch {
+      // The first line only: one forward read from the file start, decoding
+      // only the bytes before its first newline (a file with no complete line
+      // yet is read again next time).
+      const read = await readAppended(filePath, undefined, undefined);
+      if (read.kind !== "ok") {
         debug(`Failed to check agent file ${filePath}`);
+        continue;
+      }
+      longLines = longLinesWith(longLines, filePath, read.value);
+      const line = jsonLine(
+        decodeLines(read.value, (b) =>
+          b.subarray(0, Math.max(0, b.indexOf(0x0a))).toString("utf-8"),
+        ),
+      );
+      if (line.kind === "object" && line.value.sessionId === sessionId) {
+        paths.push(filePath);
       }
     }
   } catch (error) {
     debug(`Failed to read subagents directory ${subagentsDir}:`, error);
   }
 
-  return agentFiles;
-}
-
-export async function getEarliestTimestamp(
-  filePath: string,
-): Promise<Date | null> {
-  try {
-    const content = await readFile(filePath, "utf-8");
-    const lines = content.trim().split("\n");
-
-    let earliestDate: Date | null = null;
-    for (const line of lines) {
-      if (!line.trim()) continue;
-
-      try {
-        const json = JSON.parse(line);
-        if (json.timestamp && typeof json.timestamp === "string") {
-          const date = new Date(json.timestamp);
-          if (!isNaN(date.getTime())) {
-            if (earliestDate === null || date < earliestDate) {
-              earliestDate = date;
-            }
-          }
-        }
-      } catch {
-        continue;
-      }
-    }
-    return earliestDate;
-  } catch (error) {
-    debug(`Failed to get earliest timestamp for ${filePath}:`, error);
-    return null;
-  }
-}
-
-export async function sortFilesByTimestamp(
-  files: string[],
-  oldestFirst = true,
-): Promise<string[]> {
-  const filesWithTimestamps = await Promise.all(
-    files.map(async (file) => ({
-      file,
-      timestamp: await getEarliestTimestamp(file),
-    })),
-  );
-
-  return filesWithTimestamps
-    .sort((a, b) => {
-      if (a.timestamp === null && b.timestamp === null) return 0;
-      if (a.timestamp === null) return 1;
-      if (b.timestamp === null) return -1;
-      const sortOrder = oldestFirst ? 1 : -1;
-      return sortOrder * (a.timestamp.getTime() - b.timestamp.getTime());
-    })
-    .map((item) => item.file);
-}
-
-export async function getFileModificationDate(
-  filePath: string,
-): Promise<Date | null> {
-  try {
-    const stats = await stat(filePath);
-    return stats.mtime;
-  } catch {
-    return null;
-  }
+  return { paths, longLines };
 }
 
 // [LAW:types-are-the-program] exception: kept as type-aliases (not
@@ -363,101 +309,6 @@ function firstBlockType(msg: Record<string, unknown> | undefined): unknown {
     : undefined;
 }
 
-export function createUniqueHash(entry: ParsedEntry): string | null {
-  // Both message.id paths are now equivalent (makeEntry syncs them), but
-  // raw.message.id is kept as the canonical source to preserve call-site
-  // compatibility with callers that pass a PrunedRaw directly.
-  const messageId = entry.message?.id ?? entry.raw.message?.id;
-  const requestId = entry.raw.requestId;
-
-  if (!messageId || !requestId) {
-    return null;
-  }
-
-  return `${messageId}:${requestId}`;
-}
-
-const STREAMING_THRESHOLD_BYTES = 1024 * 1024;
-
-// [LAW:no-shared-mutable-globals] Bounded LRU — single owner, hard cap, documented invariants.
-// Key: filePath. Value: last-seen mtime+size for freshness check plus parsed entries.
-// Files larger than PARSE_CACHE_SKIP_BYTES are streamed and not retained (too expensive).
-const PARSE_CACHE_MAX = 16;
-const PARSE_CACHE_SKIP_BYTES = 5 * 1024 * 1024;
-
-interface ParseCacheEntry {
-  mtime: number;
-  size: number;
-  entries: ParsedEntry[];
-}
-
-const parseCache = new Map<string, ParseCacheEntry>();
-
-export function clearParseCache(): void {
-  parseCache.clear();
-}
-
-export async function parseJsonlFile(filePath: string): Promise<ParsedEntry[]> {
-  try {
-    const stats = await stat(filePath);
-    const fileSizeBytes = stats.size;
-
-    const cached = parseCache.get(filePath);
-    if (
-      cached &&
-      cached.mtime === stats.mtimeMs &&
-      cached.size === fileSizeBytes
-    ) {
-      debug(`[parse-cache] hit ${filePath}`);
-      // LRU: move to most-recently-used end via delete+reinsert
-      parseCache.delete(filePath);
-      parseCache.set(filePath, cached);
-      return cached.entries;
-    }
-
-    let entries: ParsedEntry[];
-    if (fileSizeBytes > STREAMING_THRESHOLD_BYTES) {
-      debug(
-        `Using streaming parser for large file ${filePath} (${Math.round(fileSizeBytes / 1024)}KB)`,
-      );
-      entries = await parseJsonlFileStreaming(filePath);
-    } else {
-      entries = await parseJsonlFileInMemory(filePath);
-    }
-
-    debug(`Parsed ${entries.length} entries from ${filePath}`);
-
-    // Large files are already streamed — retaining parsed entries pins memory. Skip cache.
-    if (fileSizeBytes > PARSE_CACHE_SKIP_BYTES) {
-      return entries;
-    }
-
-    // Evict stale entry for this path (mtime changed) before measuring capacity.
-    parseCache.delete(filePath);
-    // Evict LRU entry if at cap.
-    if (parseCache.size >= PARSE_CACHE_MAX) {
-      parseCache.delete(parseCache.keys().next().value!);
-    }
-    parseCache.set(filePath, {
-      mtime: stats.mtimeMs,
-      size: fileSizeBytes,
-      entries,
-    });
-    return entries;
-  } catch (error) {
-    // [LAW:no-silent-failure] A transcript that doesn't exist yet is the
-    // domain's genuine "no entries" (new session pre-first-write) — every
-    // other read error propagates so the consuming provider classifies it
-    // as a failed outcome and the payload boundary logs it. The old
-    // catch-all-to-[] dressed EACCES/EIO as an empty session.
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      debug(`Transcript not present yet: ${filePath}`);
-      return [];
-    }
-    throw error;
-  }
-}
-
 // Build a ParsedEntry from a full parsed JSONL line, retaining only the
 // fields actually used downstream. The full parsed object (which includes
 // message.content arrays with complete LLM response text) is discarded so
@@ -541,9 +392,8 @@ function entryOf(line: string): ParsedEntry | null {
   }
 }
 
-// [LAW:one-source-of-truth] The one line→entry loop over text in hand. Both
-// the whole-file parse and the incremental append reader go through here, so
-// a projected field can never diverge between the two.
+// [LAW:one-source-of-truth] The one line→entry loop over text in hand: every
+// window foldAppended reads goes through here.
 function parseJsonlLines(text: string): ParsedEntry[] {
   const entries: ParsedEntry[] = [];
   for (const line of text.split("\n")) {
@@ -551,13 +401,6 @@ function parseJsonlLines(text: string): ParsedEntry[] {
     if (entry) entries.push(entry);
   }
   return entries;
-}
-
-async function parseJsonlFileInMemory(
-  filePath: string,
-): Promise<ParsedEntry[]> {
-  const content = await readFile(filePath, "utf-8");
-  return parseJsonlLines(content);
 }
 
 // A byte cursor into an append-only transcript: the offset consumed through the
@@ -572,194 +415,99 @@ export interface TranscriptCursor {
   readonly ino: number;
 }
 
-// [LAW:dataflow-not-control-flow][LAW:one-source-of-truth] Read only the entries
-// appended to an append-only transcript since `prior`. The returned `entries`
-// are TRANSIENT — the caller folds them into its own compact aggregate and drops
-// them, so this reader (unlike the retained parseCache) pins no O(file) memory:
-// its cost is O(bytes appended since last render), which is the whole point.
-//
-// A partial trailing line (a render observing the file mid-write, before its
-// newline) is NOT consumed: the cursor advances only through the last complete
-// line, so the partial line is re-read intact once its newline lands. Cutting at
-// a newline also guarantees clean UTF-8 boundaries (0x0A is never a continuation
-// byte), so no multibyte codepoint is split across reads.
-//
-// `reset` (from readAppended) means the file shrank/was rewritten (a /compact):
-// `entries` then cover the whole new file from offset 0 and the caller discards
-// its prior fold for this file. Absent/failed pass straight through.
-export async function readAppendedEntries(
-  filePath: string,
-  prior: TranscriptCursor | undefined,
-): Promise<
-  Outcome<{ entries: ParsedEntry[]; cursor: TranscriptCursor; reset: boolean }>
-> {
-  const r = await readAppended(
-    filePath,
-    prior === undefined ? undefined : { offset: prior.offset, ino: prior.ino },
+// A line longer than FOLD_WINDOW_BYTES that a read took whole: the one thing
+// that can still make a read hold more than a window.
+export interface LongLine {
+  readonly path: string;
+  readonly offset: number;
+  readonly bytes: number;
+}
+
+function longLinesWith(
+  longLines: readonly LongLine[],
+  path: string,
+  read: WholeLines,
+): readonly LongLine[] {
+  return read.longLine === 0
+    ? longLines
+    : [...longLines, { path, offset: read.start, bytes: read.longLine }];
+}
+
+// [LAW:nothing-unseen] The daemon.log line each long line earns, for the
+// caller to write through its own sink.
+// [LAW:effects-at-boundaries] Pure: the caller owns the log effect.
+export function longLineLog(longLines: readonly LongLine[]): string[] {
+  return longLines.map(
+    (l) =>
+      `transcript long line path=${JSON.stringify(l.path)} offset=${l.offset} bytes=${l.bytes}`,
   );
-  if (r.kind !== "ok") return r;
-  const { buf, start, stamp, ino, reset } = r.value;
-  // Consume only through the last newline; a trailing partial line waits.
-  const lastNl = buf.lastIndexOf(0x0a);
-  if (lastNl < 0) {
-    return ok({ entries: [], cursor: { offset: start, stamp, ino }, reset });
-  }
-  const entries = parseJsonlLines(
-    buf.subarray(0, lastNl + 1).toString("utf-8"),
-  );
-  return ok({
-    entries,
-    cursor: { offset: start + lastNl + 1, stamp, ino },
-    reset,
-  });
 }
 
-async function parseJsonlFileStreaming(
+// A fold of one transcript as its consumer keeps it: the value, and the
+// cursor through the bytes that value has folded. [LAW:one-source-of-truth]
+// The one pair every consumer stores, so a cursor and the fold it marks
+// cannot be kept apart.
+export interface Folded<S> {
+  readonly cursor: TranscriptCursor;
+  readonly value: S;
+}
+
+// [LAW:dataflow-not-control-flow][LAW:one-source-of-truth] Fold the entries
+// appended to an append-only transcript since `prior` into `prior.value` (into
+// `empty` when there is no prior), one window at a time: each window's
+// entries are folded by `step` and dropped before the next is read, so a fold
+// holds one window, never the file (brandon-unfiled-3248.bfnj). A cold fold
+// is the same path from offset 0; a warm one costs O(bytes appended).
+//
+// The fold ends at the size the first window's stat saw — every later read
+// is capped there — so a file growing faster than it is read cannot hold it
+// here, and the cursor carries exactly the stamp of the bytes it folded; the
+// rest is the next fold's. A partial trailing line waits for its newline.
+//
+// A window that reports `reset` (a /compact rewrite, a truncation) starts the
+// fold over from `empty`, capped at its own stat. Absent and failed pass
+// straight through.
+export async function foldAppended<S>(
   filePath: string,
-): Promise<ParsedEntry[]> {
-  return new Promise((resolve, reject) => {
-    const entries: ParsedEntry[] = [];
-    const fileStream = createReadStream(filePath, { encoding: "utf8" });
-    const rl = createInterface({
-      input: fileStream,
-      crlfDelay: Infinity,
-    });
-
-    rl.on("line", (line) => {
-      const entry = entryOf(line);
-      if (entry) entries.push(entry);
-    });
-
-    rl.on("close", () => {
-      resolve(entries);
-    });
-
-    rl.on("error", (error) => {
-      debug(`Streaming parser error for ${filePath}:`, error);
-      reject(error);
-    });
-
-    fileStream.on("error", (error) => {
-      debug(`File stream error for ${filePath}:`, error);
-      reject(error);
-    });
-  });
-}
-
-interface FileStat {
-  filePath: string;
-  mtime: Date;
-}
-
-async function statFile(filePath: string): Promise<FileStat | null> {
-  try {
-    const mtime = await getFileModificationDate(filePath);
-    return mtime ? { filePath, mtime } : null;
-  } catch {
-    return null;
-  }
-}
-
-async function collectProjectFiles(
-  projectPath: string,
-  fileFilter?: (filePath: string, modTime: Date) => boolean,
-): Promise<FileStat[]> {
-  try {
-    const entries = await readdir(projectPath, { withFileTypes: true });
-
-    const sessionFiles = entries
-      .filter((e) => !e.isDirectory() && e.name.endsWith(".jsonl"))
-      .map((e) => statFile(join(projectPath, e.name)));
-
-    const subagentFiles = entries
-      .filter((e) => e.isDirectory())
-      .map(async (e) => {
-        const subagentsDir = join(projectPath, e.name, "subagents");
-        try {
-          const files = await readdir(subagentsDir);
-          return files
-            .filter((f) => f.startsWith("agent-") && f.endsWith(".jsonl"))
-            .map((f) => statFile(join(subagentsDir, f)));
-        } catch {
-          return [];
-        }
-      });
-
-    const [sessionResults, subagentResults] = await Promise.all([
-      Promise.all(sessionFiles),
-      Promise.all(subagentFiles).then((nested) => Promise.all(nested.flat())),
-    ]);
-
-    return [...sessionResults, ...subagentResults].filter(
-      (s): s is FileStat =>
-        s !== null && (!fileFilter || fileFilter(s.filePath, s.mtime)),
+  prior: Folded<S> | undefined,
+  empty: S,
+  step: (state: S, entries: readonly ParsedEntry[]) => S | Promise<S>,
+): Promise<Outcome<{ folded: Folded<S>; longLines: readonly LongLine[] }>> {
+  let longLines: readonly LongLine[] = [];
+  let cursor = prior?.cursor;
+  let value = prior?.value ?? empty;
+  let end: { size: number; stamp: string } | undefined;
+  for (;;) {
+    const read = await readAppended(
+      filePath,
+      cursor === undefined
+        ? undefined
+        : { offset: cursor.offset, ino: cursor.ino },
+      end?.size,
     );
-  } catch (dirError) {
-    debug(`Failed to read project directory ${projectPath}:`, dirError);
-    return [];
-  }
-}
-
-/**
- * Loads entries from Claude projects with deterministic deduplication.
- * @param claudePaths The Claude Code directories to search (getClaudePaths)
- * @param timeFilter Optional filter to apply based on timestamp
- * @param fileFilter Optional filter to apply based on file path and modification time
- * @param sortFiles Whether to sort files by modification time
- * @returns Deduplicated entries sorted by timestamp
- * @note Sorts entries by timestamp before deduplication to ensure consistent
- *       duplicate selection. Otherwise, parallel file loading causes race conditions
- *       where different duplicates are kept on each run, leading to flickering values.
- */
-export async function loadEntriesFromProjects(
-  claudePaths: string[],
-  timeFilter?: (entry: ParsedEntry) => boolean,
-  fileFilter?: (filePath: string, modTime: Date) => boolean,
-  sortFiles = false,
-): Promise<ParsedEntry[]> {
-  const projectPaths = await findProjectPaths(claudePaths);
-  const processedHashes = new Set<string>();
-
-  const allFilesPromises = projectPaths.map((projectPath) =>
-    collectProjectFiles(projectPath, fileFilter),
-  );
-
-  const allFileResults = await Promise.all(allFilesPromises);
-  const allFilesWithMtime = allFileResults
-    .flat()
-    .filter((file): file is { filePath: string; mtime: Date } => file !== null);
-
-  if (sortFiles) {
-    allFilesWithMtime.sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
-  }
-
-  const allFiles = allFilesWithMtime.map((file) => file.filePath);
-
-  const entries: ParsedEntry[] = [];
-
-  const filePromises = allFiles.map(async (filePath) => {
-    const fileEntries = await parseJsonlFile(filePath);
-    return fileEntries.filter((entry) => !timeFilter || timeFilter(entry));
-  });
-
-  const fileResults = await Promise.all(filePromises);
-  for (const fileEntries of fileResults) {
-    entries.push(...fileEntries);
-  }
-
-  entries.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
-
-  const deduplicatedEntries: ParsedEntry[] = [];
-  for (const entry of entries) {
-    const uniqueHash = createUniqueHash(entry);
-    if (uniqueHash && processedHashes.has(uniqueHash)) {
-      continue;
+    if (read.kind !== "ok") return read;
+    const window = read.value;
+    // A reset discards what was folded, the long lines read for it included.
+    if (window.reset) value = empty;
+    longLines = longLinesWith(window.reset ? [] : longLines, filePath, window);
+    if (end === undefined || window.reset) {
+      end = { size: window.size, stamp: window.stamp };
     }
-    if (uniqueHash) {
-      processedHashes.add(uniqueHash);
-    }
-    deduplicatedEntries.push(entry);
+    const next = window.start + window.lines.length;
+    // Decoded, and the window given back, before `step` can await — and
+    // passed straight in, never named: a name holds this window's entries in
+    // the fold's frame across the next read's I/O wait, where they are
+    // promoted to the old generation (eight concurrent cold folds of a 29 MB
+    // transcript: +120 MB RSS against +30 MB).
+    value = await step(
+      value,
+      decodeLines(window, (b) => parseJsonlLines(b.toString("utf-8"))),
+    );
+    cursor = {
+      offset: next,
+      stamp: end.stamp,
+      ino: window.ino,
+    };
+    if (window.atEnd) return ok({ folded: { cursor, value }, longLines });
   }
-
-  return deduplicatedEntries;
 }

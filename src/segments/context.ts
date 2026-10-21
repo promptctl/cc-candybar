@@ -1,8 +1,9 @@
 import type { ParsedEntry, ClaudeHookData } from "../utils/claude";
 
 import { debug } from "../utils/logger";
-import { parseJsonlFile } from "../utils/claude";
 import { ABSENT, failed, ok, type Outcome } from "../utils/outcome";
+import { TranscriptFold } from "../utils/transcript-fold";
+import type { DaemonLogger } from "../utils/logger";
 
 export interface ContextInfo {
   totalTokens: number;
@@ -27,7 +28,32 @@ interface ContextUsageThresholds {
 // it is not a per-model table and must not grow into one.
 const DEFAULT_CONTEXT_WINDOW = 200000;
 
+// [LAW:types-are-the-program] What the transcript says the context holds: the
+// tokens of the newest main-chain entry carrying usage, or undefined while no
+// such entry has been seen (the fallback then has nothing to report).
+type ContextState = number | undefined;
+
+// The newest usage-bearing, non-sidechain entry replaces what came before.
+function step(state: ContextState, entry: ParsedEntry): ContextState {
+  const usage = entry.message?.usage;
+  if (!usage?.input_tokens || entry.isSidechain === true) return state;
+  return (
+    usage.input_tokens +
+    (usage.cache_read_input_tokens || 0) +
+    (usage.cache_creation_input_tokens || 0)
+  );
+}
+
 export class ContextProvider {
+  // [LAW:one-source-of-truth] The context fallback is a fold like metrics and
+  // activity: one number per session, kept incrementally, rather than every
+  // entry of the transcript re-parsed to find the last one.
+  private readonly fold: TranscriptFold<ContextState>;
+
+  constructor(opts: { logger?: DaemonLogger } = {}) {
+    this.fold = new TranscriptFold<ContextState>(undefined, step, opts.logger);
+  }
+
   private readonly thresholds: ContextUsageThresholds = {
     LOW: 50,
     MEDIUM: 80,
@@ -100,68 +126,34 @@ export class ContextProvider {
   }
 
   /**
-   * Calculate context tokens by parsing the transcript file (fallback).
-   * Used for older Claude Code versions that don't provide context_window.
+   * Calculate context tokens from the transcript (fallback), for older Claude
+   * Code versions that don't provide context_window.
    *
    * [LAW:no-silent-failure] An unreadable transcript is `failed` (the payload
    * boundary logs it); a transcript with no usable usage entry is `absent`.
-   * The old catch-to-null collapsed both into "no data".
    */
   async calculateContextTokensFromTranscript(
+    sessionId: string,
     transcriptPath: string,
     contextLimit: number,
   ): Promise<Outcome<ContextInfo>> {
-    try {
-      debug(`Calculating context tokens from transcript: ${transcriptPath}`);
-
-      const parsedEntries = await parseJsonlFile(transcriptPath);
-
-      if (parsedEntries.length === 0) {
-        debug("No entries in transcript");
-        return ABSENT;
-      }
-
-      let mostRecentEntry: ParsedEntry | null = null;
-
-      for (let i = parsedEntries.length - 1; i >= 0; i--) {
-        const entry = parsedEntries[i];
-        if (!entry) continue;
-
-        if (!entry.message?.usage?.input_tokens) continue;
-        if (entry.isSidechain === true) continue;
-
-        mostRecentEntry = entry;
-        debug(
-          `Context segment: Found most recent entry at ${entry.timestamp.toISOString()}, stopping search`,
-        );
-        break;
-      }
-
-      if (mostRecentEntry?.message?.usage) {
-        const usage = mostRecentEntry.message.usage;
-        const totalTokens =
-          (usage.input_tokens || 0) +
-          (usage.cache_read_input_tokens || 0) +
-          (usage.cache_creation_input_tokens || 0);
-
-        debug(
-          `Most recent main chain context: ${totalTokens} tokens (limit: ${contextLimit})`,
-        );
-
-        return ok({
-          totalTokens,
-          maxTokens: contextLimit,
-          ...this.ratioPercentages(totalTokens, contextLimit),
-        });
-      }
-
+    const read = await this.fold.read(sessionId, transcriptPath);
+    if (read.kind === "failed") {
+      return failed(`context transcript: ${read.reason}`);
+    }
+    const totalTokens = read.value;
+    if (totalTokens === undefined) {
       debug("No main chain entries with usage data found");
       return ABSENT;
-    } catch (error) {
-      return failed(
-        `context transcript: ${error instanceof Error ? error.message : String(error)}`,
-      );
     }
+    debug(
+      `Most recent main chain context: ${totalTokens} tokens (limit: ${contextLimit})`,
+    );
+    return ok({
+      totalTokens,
+      maxTokens: contextLimit,
+      ...this.ratioPercentages(totalTokens, contextLimit),
+    });
   }
 
   /**
@@ -183,6 +175,7 @@ export class ContextProvider {
       hookData.context_window?.context_window_size ?? DEFAULT_CONTEXT_WINDOW;
 
     return this.calculateContextTokensFromTranscript(
+      hookData.session_id,
       hookData.transcript_path,
       contextLimit,
     );

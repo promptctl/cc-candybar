@@ -28,7 +28,7 @@ import {
   PLACEMENT_DRAFT_NS,
 } from "../config/loader/edit-mode";
 import { readConfigText, writeConfigText } from "./config-file-store";
-import type { DaemonLogger } from "./log";
+import type { DaemonLogger } from "../utils/logger";
 import { recordingView, type SessionStateRW } from "./session-state";
 import { BadVerbArgs } from "./verb-error";
 import { writeAtomic } from "../utils/atomic-write.js";

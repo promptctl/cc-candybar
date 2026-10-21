@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { quietLogger, type DaemonLogger } from "./log";
+import { quietLogger, type DaemonLogger } from "../utils/logger";
 import type { SessionSnapshot, SessionStorage } from "./session-state";
 
 // [LAW:no-silent-failure] Corrupt/missing file → empty state is the *defined*

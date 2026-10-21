@@ -1,6 +1,6 @@
 import { inspect } from "node:util";
 
-import type { LogLevel } from "./log";
+import type { LogLevel } from "../utils/logger";
 import { valueOf } from "../utils/logfmt.js";
 
 // How one render request ended. A render the daemon refused and a render that

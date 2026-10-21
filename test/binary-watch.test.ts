@@ -7,7 +7,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { makeBinaryWatch } from "../src/daemon/binary-watch";
-import type { LogLevel } from "../src/daemon/log";
+import type { LogLevel } from "../src/utils/logger";
 
 let dir: string;
 let bundle: string;

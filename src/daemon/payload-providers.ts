@@ -12,7 +12,7 @@
 import { GitDataProvider } from "./cache/git";
 import { SessionUsageStore } from "./cache/session-usage-store";
 import type { WatcherRegistry } from "./cache/watchers";
-import type { DaemonLogger } from "./log";
+import type { DaemonLogger } from "../utils/logger";
 import type { RenderPayloadDeps } from "./render-payload";
 import { ContextProvider } from "../segments/context.js";
 import { MetricsProvider } from "../segments/metrics.js";
@@ -39,9 +39,9 @@ export function createPayloadProviders(opts: {
       logger: opts.logger,
     }),
     usageStore: new SessionUsageStore({ logger: opts.logger }),
-    contextProvider: new ContextProvider(),
-    metricsProvider: new MetricsProvider(),
-    activityProvider: new ActivityProvider(),
+    contextProvider: new ContextProvider({ logger: opts.logger }),
+    metricsProvider: new MetricsProvider({ logger: opts.logger }),
+    activityProvider: new ActivityProvider({ logger: opts.logger }),
     tmuxService: new TmuxService(),
     mementoProvider: new MementoProvider(productionMementoEdge()),
     autoCompact: readAutoCompactWindow,

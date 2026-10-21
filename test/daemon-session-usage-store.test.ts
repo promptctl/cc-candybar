@@ -28,10 +28,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { SessionUsageStore } from "../src/daemon/cache/session-usage-store";
-import { clearParseCache } from "../src/utils/claude";
 import type { ClaudeHookData } from "../src/utils/claude";
 import { instantOf } from "../src/utils/instant";
 import { ABSENT } from "../src/utils/outcome";
+import { FOLD_WINDOW_BYTES } from "../src/utils/transcript-fs";
 
 // Count cumulative FSREQPROMISE inits (libuv fs requests) over `body`.
 async function countFsOps(body: () => Promise<unknown>): Promise<number> {
@@ -80,7 +80,6 @@ describe("SessionUsageStore — session projection", () => {
   let dir: string;
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), "cc-candybar-store-"));
-    clearParseCache();
   });
   afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
@@ -164,6 +163,55 @@ describe("SessionUsageStore — session projection", () => {
       if (info.kind !== "ok") return;
       expect(info.value.session.cost).toBeNull();
       expect(store.getStats()).toMatchObject({ size: 0, misses: 0, hits: 0 });
+    } finally {
+      store.close();
+    }
+  });
+
+  // brandon-unfiled-3248.bfnj: a fold reads window by window, so a session
+  // spanning several windows sums like a whole-file read, and a line longer
+  // than the window — in the main transcript or a sidechain's first line — is
+  // read whole and logged.
+  test("a multi-window session sums every entry, and each long line read is logged", async () => {
+    const t = join(dir, "W.jsonl");
+    const now = new Date();
+    const pad = "x".repeat(1024);
+    const many = Array.from({ length: 1500 }, (_, i) => {
+      const parsed = JSON.parse(usageLine(`w${i}`, now, 0.001)) as Record<string, unknown>;
+      return JSON.stringify({ ...parsed, pad }) + "\n";
+    });
+    const long = JSON.stringify({
+      ...(JSON.parse(usageLine("long", now, 0.5)) as Record<string, unknown>),
+      pad: "y".repeat(Math.floor(FOLD_WINDOW_BYTES * 2.5)),
+    }) + "\n";
+    writeFileSync(t, many.join("") + long);
+    const subagents = join(dir, "W", "subagents");
+    mkdirSync(subagents, { recursive: true });
+    const agent = join(subagents, "agent-1.jsonl");
+    writeFileSync(
+      agent,
+      JSON.stringify({
+        ...(JSON.parse(usageLine("agent", now, 0.25)) as Record<string, unknown>),
+        sessionId: "W",
+        pad: "z".repeat(Math.floor(FOLD_WINDOW_BYTES * 1.5)),
+      }) + "\n",
+    );
+    const lines: string[] = [];
+    const store = new SessionUsageStore({
+      sweepIntervalMs: 0,
+      logger: (_level, msg) => lines.push(msg),
+    });
+    try {
+      const info = await store.getUsageInfo("W", hook("W", t));
+      if (info.kind !== "ok") throw new Error("expected ok");
+      expect(info.value.session.cost).toBeCloseTo(1500 * 0.001 + 0.5 + 0.25, 5);
+      const long = lines.filter((l) => l.startsWith("transcript long line"));
+      // The sidechain's first-line check, its fold, and the main transcript's.
+      expect(long).toEqual([
+        expect.stringContaining("agent-1.jsonl"),
+        expect.stringContaining("W.jsonl"),
+        expect.stringContaining("agent-1.jsonl"),
+      ]);
     } finally {
       store.close();
     }
@@ -311,13 +359,11 @@ describe("SessionUsageStore — session projection", () => {
     const store = new SessionUsageStore({ sweepIntervalMs: 0 });
     try {
       const hd = hook("A", t);
-      clearParseCache();
       const oneParse = await countFsOps(() => store.getUsageInfo("A", hd));
 
-      // Fresh store + cold parse cache: K concurrent first-reads coalesce onto
+      // Fresh store: K concurrent first-reads coalesce onto
       // one flight, so cumulative fs ops stay near a single parse, not K×.
       const store2 = new SessionUsageStore({ sweepIntervalMs: 0 });
-      clearParseCache();
       const kConcurrent = await countFsOps(() =>
         Promise.all(
           Array.from({ length: 8 }, () => store2.getUsageInfo("A", hd)),
@@ -367,7 +413,6 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
   // points that at an empty one), and `today` is the rendering session's own
   // directory, whichever other directories have been seen.
   test("a second session's directory is seeded on first sight and keeps its own sum", async () => {
-    clearParseCache();
     const other = mkdtempSync(join(tmpdir(), "cc-candybar-store-other-"));
     const store = new SessionUsageStore({ sweepIntervalMs: 0 });
     try {
@@ -404,7 +449,6 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
   });
 
   test("seed aggregates today cost across every session", async () => {
-    clearParseCache();
     const store = new SessionUsageStore({ sweepIntervalMs: 0 });
     try {
       const info = await store.getTodayInfo(hook("sess-0-0", activePath), root, instantOf(new Date()));
@@ -423,7 +467,6 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
   // brandon-usage-store-x2e0: the store once capped its records at 256, and a
   // seed ingesting more sessions evicted the oldest out of `today` unseen.
   test("today sums every session the seed ingests, however many", async () => {
-    clearParseCache();
     const many = mkdtempSync(join(tmpdir(), "cc-candybar-store-many-"));
     const store = new SessionUsageStore({ sweepIntervalMs: 0 });
     try {
@@ -453,7 +496,6 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
   // — the latter appending inside the mtime tick of the seed's read, as on a
   // coarse-timestamp filesystem, so only its size says it moved.
   test("today counts never-rendering sessions' work by the next rescan", async () => {
-    clearParseCache();
     const tree = mkdtempSync(join(tmpdir(), "cc-candybar-store-rescan-"));
     const RESCAN_MS = 60_000;
     const lines: string[] = [];
@@ -516,7 +558,6 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
   // A scan that throws drops its memo, so the next render seeds afresh and
   // awaits it rather than summing over a tree nothing is rescanning.
   test("a failed rescan is logged and the next render seeds afresh", async () => {
-    clearParseCache();
     const tree = mkdtempSync(join(tmpdir(), "cc-candybar-store-rescan-fail-"));
     const lines: string[] = [];
     let failNextRescan = true;
@@ -559,7 +600,6 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
   });
 
   test("after the seed, N renders with an unchanged session do ZERO transcript fs work", async () => {
-    clearParseCache();
     const store = new SessionUsageStore({ sweepIntervalMs: 0 });
     try {
       const hd = hook("sess-0-0", activePath);
@@ -579,7 +619,6 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
   });
 
   test("a changed session re-parses only itself, not the tree", async () => {
-    clearParseCache();
     const store = new SessionUsageStore({ sweepIntervalMs: 0 });
     try {
       const hd = hook("sess-0-0", activePath);
@@ -588,7 +627,6 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
       // Advance only the active session's mtime, then render once.
       const future = Math.floor(Date.now() / 1000) + 3600;
       utimesSync(activePath, future, future);
-      clearParseCache();
       const reparseOps = await countFsOps(() => store.getTodayInfo(hd, root, instantOf(new Date())));
 
       // One session's re-parse is a tiny fraction of a whole-tree scan, and the

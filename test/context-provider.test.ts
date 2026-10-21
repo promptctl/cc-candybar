@@ -3,7 +3,7 @@
 // guessed from the model name. These lock that in, including the 1M-context
 // variants where a hardcoded 200k would report wildly wrong "left" percentages.
 
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { appendFileSync, mkdtempSync, writeFileSync, rmSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -128,5 +128,69 @@ describe("ContextProvider window-size sourcing", () => {
     if (outcome.kind !== "ok") return;
     expect(outcome.value.maxTokens).toBe(1_000_000);
     rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+// The transcript fallback is a fold (brandon-unfiled-3248.bfnj): the newest
+// main-chain usage entry, kept per session and extended by what is appended.
+describe("ContextProvider transcript fallback", () => {
+  const entry = (tokens: number, extra: Record<string, unknown> = {}) =>
+    JSON.stringify({
+      timestamp: "2026-05-31T00:00:00.000Z",
+      message: {
+        usage: {
+          input_tokens: tokens,
+          cache_read_input_tokens: 10,
+          cache_creation_input_tokens: 5,
+        },
+      },
+      ...extra,
+    }) + "\n";
+  const noWindow = (transcript: string, session = "fb") =>
+    baseHook({ session_id: session, transcript_path: transcript });
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "cc-ctx-fb-"));
+  });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  it("reads the newest main-chain usage entry, skipping sidechains", async () => {
+    const t = join(dir, "t.jsonl");
+    writeFileSync(t, entry(1000) + entry(2000) + entry(9999, { isSidechain: true }));
+    const outcome = await new ContextProvider().getContextInfo(noWindow(t));
+    expect(outcome).toEqual({
+      kind: "ok",
+      value: {
+        totalTokens: 2015,
+        maxTokens: 200_000,
+        percentage: 1,
+        contextLeftPercentage: 99,
+      },
+    });
+  });
+
+  it("is absent for a transcript with no usage-bearing entry", async () => {
+    const t = join(dir, "t.jsonl");
+    writeFileSync(t, JSON.stringify({ timestamp: "2026-05-31T00:00:00.000Z", type: "user" }) + "\n");
+    const outcome = await new ContextProvider().getContextInfo(noWindow(t));
+    expect(outcome.kind).toBe("absent");
+  });
+
+  it("follows an append through the incremental fold", async () => {
+    const t = join(dir, "t.jsonl");
+    writeFileSync(t, entry(1000));
+    const provider = new ContextProvider();
+    const first = await provider.getContextInfo(noWindow(t));
+    expect(first.kind === "ok" && first.value.totalTokens).toBe(1015);
+
+    appendFileSync(t, entry(50_000));
+    utimesSync(t, Date.now() / 1000 + 5, Date.now() / 1000 + 5);
+    const second = await provider.getContextInfo(noWindow(t));
+    expect(second.kind === "ok" && second.value.totalTokens).toBe(50_015);
+  });
+
+  it("is failed when the transcript cannot be read", async () => {
+    const outcome = await new ContextProvider().getContextInfo(noWindow(dir));
+    expect(outcome.kind).toBe("failed");
   });
 });

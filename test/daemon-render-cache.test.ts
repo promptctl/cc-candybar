@@ -30,7 +30,7 @@ import { GitDataProvider } from "../src/daemon/cache/git";
 import { SessionState } from "../src/daemon/session-state";
 import { stateGate } from "../src/daemon/verbs/state-validators";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
-import type { DaemonLogger } from "../src/daemon/log";
+import type { DaemonLogger } from "../src/utils/logger";
 import { ReloadSignal } from "./helpers/reload-signal";
 import { walkNodes, type LayoutNode } from "../src/config/dsl-types";
 import { rootNode, rootOf } from "../src/config/root";
