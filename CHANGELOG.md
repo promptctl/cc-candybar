@@ -1,3 +1,9 @@
+## [1.149.1](https://github.com/promptctl/cc-candybar/compare/v1.149.0...v1.149.1) (2026-10-21)
+
+### Bug Fixes
+
+* **doctor:** effect refresh judges the redraw rate from render arrivals (brandon-doctor-v62x.5at) ([a3c4bda](https://github.com/promptctl/cc-candybar/commit/a3c4bda5a9cd891c2484204eaf9e5cc7e9136a49))
+
 ## [1.149.0](https://github.com/promptctl/cc-candybar/compare/v1.148.9...v1.149.0) (2026-10-21)
 
 ### Features
