@@ -383,12 +383,16 @@ interface MenuControl extends SettingProjection {
 
 // [LAW:nothing-unseen] While a lane is on, its toggle says what its frames are
 // doing: with nobody following the session on that lane, that none is; else a
-// spinner turning a glyph every frame the feed draws at its moving rate — so it
-// turns smoothly exactly when frames arrive that fast, where a bar polled once a
-// second shows it stepping — then the frames pushed in the last second, and
-// that the pane is judged off screen when it is (it is then drawn at one a
-// second). The bundled effects move about one visible step a second, so a
-// pushed bar and a polled one look alike without it.
+// spinner turning a glyph every frame the feed draws at its moving rate, then
+// the frames the daemon pushed in the last second, and that the pane is judged
+// off screen when it is (it is then drawn at one a second). The spinner is the
+// motion: it makes every frame new, so the number is the rate the daemon can
+// push this lane while something moves, not whether an effect animates. The
+// number is what left the daemon; whether those frames arrive is the spinner,
+// drawn by the follower: smooth when they do, stepping when a follower falls
+// behind (its socket keeps only the newest frame) or the bar is polled. The
+// bundled effects move about one visible step a second, so a pushed bar and a
+// polled one look alike without it.
 const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 const laneReadout = (lane: Lane): string => {
   const feed = (field: "subscribers" | "fps" | "shown") =>

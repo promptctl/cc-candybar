@@ -24,6 +24,8 @@ export default [
         __SOURCE_DIGEST__: "readonly",
         URL: "readonly",
         fetch: "readonly",
+        // A monotonic clock, global in Node and the browser page alike.
+        performance: "readonly",
         AbortSignal: "readonly",
         AbortController: "readonly",
         Response: "readonly",

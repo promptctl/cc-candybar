@@ -18,7 +18,19 @@ import {
   laneEffectiveVar,
   laneFeedVar,
   UNFOLLOWED,
+  type LaneFeed,
 } from "./lanes.js";
+
+// [LAW:types-are-the-program] The input type of every LaneFeed field, so a
+// field added to LaneFeed is a compile error here until it is declared.
+const LANE_FEED_TYPES = {
+  subscribers: "number",
+  fps: "number",
+  shown: "boolean",
+} as const satisfies Record<keyof LaneFeed, "number" | "boolean">;
+const LANE_FEED_FIELDS = Object.keys(LANE_FEED_TYPES) as ReadonlyArray<
+  keyof LaneFeed
+>;
 
 // `term.cols`'s default below: the width a template reads when no render
 // injected one.
@@ -166,30 +178,20 @@ export const PAYLOAD_INPUTS: Readonly<Record<string, VariableDecl>> = {
       },
     ]),
   ),
-  // Each lane's feed of this session's frames (RenderPayload.feeds).
+  // Each lane's feed of this session's frames (RenderPayload.feeds), one input
+  // per field of LANE_FEED_TYPES.
   ...Object.fromEntries(
     LANE_NAMES.flatMap((lane) =>
-      (["subscribers", "fps"] as const).map((field) => [
+      LANE_FEED_FIELDS.map((field) => [
         laneFeedVar(lane, field),
         {
           kind: "input",
           path: laneFeedVar(lane, field),
-          type: "number",
+          type: LANE_FEED_TYPES[field],
           default: UNFOLLOWED[field],
         },
       ]),
     ),
-  ),
-  ...Object.fromEntries(
-    LANE_NAMES.map((lane) => [
-      laneFeedVar(lane, "shown"),
-      {
-        kind: "input",
-        path: laneFeedVar(lane, "shown"),
-        type: "boolean",
-        default: UNFOLLOWED.shown,
-      },
-    ]),
   ),
 
   // [LAW:one-source-of-truth] The usable terminal width for THIS render —

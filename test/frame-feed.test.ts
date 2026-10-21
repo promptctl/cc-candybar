@@ -542,7 +542,14 @@ test("newestWhere finds the session of the newest request it matches, and counts
   expect(feeds.getStats()).toMatchObject({ lookups: 4, found: 3 });
 });
 
+// On a faked clock, so each lane's frame count is exact.
 describe("feedsOf", () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+  const pass = (ms: number): Promise<void> => jest.advanceTimersByTimeAsync(ms);
+  // Frames a second a bar is pushed at, moving on a screen and otherwise.
+  const MOVING = 1000 / PERIODS.moving;
+
   test("a session nobody follows is unfollowed on every lane", () => {
     const { feeds, note } = harness({ motion: "moving" });
     note("s", "bar");
@@ -556,19 +563,15 @@ describe("feedsOf", () => {
     const closeA = feeds.subscribe("s", sub(() => {}, "statusline"));
     const closeB = feeds.subscribe("s", sub(() => {}, "statusline"));
     const closeC = feeds.subscribe("s", sub(() => {}, "pane"));
-    await sleep(1100);
+    await pass(1100);
     const now = feeds.feedsOf("s");
     expect(now.band).toEqual(UNFOLLOWED);
-    expect(now.statusline.subscribers).toBe(2);
-    expect(now.pane.subscribers).toBe(1);
-    // 50 frames a second at a 20 ms period; a loaded box pushes fewer, and the
-    // window holds only the last second's, never the 1.1 s since subscribing.
-    expect(now.statusline.fps).toBeGreaterThanOrEqual(15);
-    expect(now.statusline.fps).toBeLessThanOrEqual(51);
-    expect(now.pane.fps).toBe(now.statusline.fps);
-    expect(now.statusline.shown).toBe(true);
+    // The window holds only the last second's frames, never the 1.1 s since
+    // subscribing.
+    expect(now.statusline).toEqual({ subscribers: 2, fps: MOVING, shown: true });
+    expect(now.pane).toEqual({ subscribers: 1, fps: MOVING, shown: true });
     expect(feedsFact(now)).toBe(
-      `statusline:2sub/${now.statusline.fps}fps/shown,pane:1sub/${now.pane.fps}fps/shown`,
+      `statusline:2sub/${MOVING}fps/shown,pane:1sub/${MOVING}fps/shown`,
     );
     closeA();
     closeB();
@@ -576,18 +579,31 @@ describe("feedsOf", () => {
     expect(feeds.feedsOf("s")).toEqual(UNFOLLOWED_FEEDS);
   });
 
+  test("a lane is credited only with the frames pushed since its first subscriber joined", async () => {
+    const { feeds, note } = harness({ motion: "moving" });
+    note("s", "bar");
+    const closeA = feeds.subscribe("s", sub(() => {}, "statusline"));
+    await pass(1000);
+    const closeB = feeds.subscribe("s", sub(() => {}, "pane"));
+    await pass(100);
+    const now = feeds.feedsOf("s");
+    closeA();
+    closeB();
+    expect(now.statusline.fps).toBe(MOVING);
+    expect(now.pane.fps).toBe(100 / PERIODS.moving);
+  });
+
   test("a pane off screen is drawn at the still rate, and says so", async () => {
     const { feeds, note } = harness({ motion: "unseen" });
     note("s", "bar");
     const close = feeds.subscribe("s", sub(() => {}, "statusline"));
-    await sleep(1100);
+    await pass(1100);
     const { statusline } = feeds.feedsOf("s");
     close();
-    expect(statusline.shown).toBe(false);
-    // The still period is 400 ms: at most three frames in a second.
-    expect(statusline.fps).toBeLessThanOrEqual(3);
+    // Pushed at 400 and 800 ms, a still period apart, inside the window.
+    expect(statusline).toEqual({ subscribers: 1, fps: 2, shown: false });
     expect(feedsFact({ ...UNFOLLOWED_FEEDS, statusline })).toBe(
-      `statusline:1sub/${statusline.fps}fps/offscreen`,
+      "statusline:1sub/2fps/offscreen",
     );
   });
 });

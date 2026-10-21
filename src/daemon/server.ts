@@ -271,7 +271,7 @@ const frameFeeds: FrameFeeds<CheckedRenderRequest> = new FrameFeeds({
   shown: (req) => paneVisibility.shown(req.hints.tmux),
   watching: () => paneVisibility.follow(),
   periods: FEED_PERIODS,
-  now: () => Date.now(),
+  now: () => performance.now(),
   log: dlog,
 });
 // Which watched sessions' panes are on a screen, asked of their tmux servers

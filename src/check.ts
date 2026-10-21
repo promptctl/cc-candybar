@@ -22,7 +22,6 @@
 // bounded settle for shell/file sources' first run, which the daemon's first
 // cold render does not (its next render shows what check showed).
 
-import { MOVING_FPS, perLane } from "./config/lanes.js";
 import fs from "node:fs";
 import process from "node:process";
 import {
@@ -181,9 +180,6 @@ export function checkPayload(
     // template checked.
     history: { undo: 1, redo: 1, sinceEdit: 1 },
     navigation: { back: 1 },
-    // A lane followed by a subscriber off screen, so every part of a lane
-    // toggle's readout renders and gets its template checked.
-    feeds: perLane(() => ({ subscribers: 1, fps: MOVING_FPS, shown: false })),
     unsaved: 1,
     resettable: perSetting(() => true) satisfies RenderPayload["resettable"],
     // A look that differs from the theme's default, so the 🎨 look tab's
