@@ -226,7 +226,9 @@ export const parseFrameSightings = (
       typeof c.claudeConfigDir === "string" &&
       typeof c.sessionId === "string" &&
       typeof c.since === "number" &&
+      // A record holds its latest render's second, so a list is never empty.
       Array.isArray(c.redrawn) &&
+      c.redrawn.length > 0 &&
       c.redrawn.every(Number.isInteger) &&
       isRole(c) &&
       (FRAMES_SEEN as readonly unknown[]).includes(c.frame),

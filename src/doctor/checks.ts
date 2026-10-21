@@ -1233,10 +1233,10 @@ export const refreshedFrames = (
 // (brandon-doctor-v62x.tgp), not what the config asks for: a template's
 // `frames` — the effort gauge at max — moves the bar with no effect on. And
 // whether Claude Code redraws it is what the render requests' arrivals say
-// (brandon-doctor-v62x.5at, src/doctor/redraws.ts), not the settings files:
+// (brandon-doctor-v62x.5at, src/doctor/redraws.ts), not a file saying 1:
 // a statusLine from --settings, MDM or server-managed settings outranks every
-// file the doctor reads. The files only say why a bar is redrawn too rarely,
-// and where the interval goes.
+// file the doctor reads. A file asking for less still fails the row, since
+// events can fill the arrivals and the fix is right whoever outranks it.
 const effectRefresh: Check = {
   name: "effectRefresh",
   label: "effect refresh",
@@ -1266,14 +1266,66 @@ const effectRefresh: Check = {
       };
     }
 
-    const wearing = moving.some((f) => f.frame === "moves")
-      ? "the bar moves (an effect, a fade, or an animated segment)"
-      : "the bar can start moving (a globals.effect rule, placements that fade in and out, or a placement with an effect of its own that is not drawn now)";
-    const redraws = slowestOf([first.redraws, ...rest.map((f) => f.redraws)]);
+    // The bar whose redraw rate decides the row, and what it wears.
+    const decider = slowestOf([first, ...rest]);
+    const wearing =
+      decider.frame === "moves"
+        ? "the bar moves (an effect, a fade, or an animated segment)"
+        : "the bar can start moving (a globals.effect rule, placements that fade in and out, or a placement with an effect of its own that is not drawn now)";
+    const statusLine = statusLineOf(claudeSettings.sources);
+
+    // [LAW:one-source-of-truth] Claude Code's own reading: a number of
+    // seconds, no fewer than the minimum, so the minimum itself is the one
+    // value that redraws every second. A statusLine the doctor reads asking
+    // for anything else is wrong whatever the arrivals say: event-driven
+    // redraws in a busy turn can fill a window's seconds, so a count can show
+    // a bar redrawn too rarely but never one redrawn by a timer. And setting
+    // the minimum there is right even when something the doctor cannot read
+    // outranks the file. Unset runs on events only; anything under the
+    // minimum or not a number is a value the docs give no meaning, so the
+    // reason names it rather than guess, and the fix overwrites it.
+    if (
+      statusLine.kind === "present" &&
+      statusLine.refreshInterval !== EFFECT_REFRESH_INTERVAL
+    ) {
+      const { from, refreshInterval: interval } = statusLine;
+      const why =
+        interval === undefined
+          ? "its statusLine sets no refreshInterval, so Claude Code redraws it only on events"
+          : typeof interval === "number" && interval > EFFECT_REFRESH_INTERVAL
+            ? `its statusLine redraws it only every ${interval} s`
+            : `its statusLine.refreshInterval is ${JSON.stringify(interval)}, not a number of seconds Claude Code accepts (its minimum is ${EFFECT_REFRESH_INTERVAL})`;
+      // [LAW:single-enforcer] The doctor writes only a file that is the
+      // user's own (`doctorWrites`). Nor can it put the interval alone in a
+      // file it may write: under the scope-wins-whole reading above
+      // (unverified), managed settings outrank every such file, and a
+      // project-local statusLine holding only an interval would outrank the
+      // project's, which holds the command. So for those two the reason says
+      // where the line goes.
+      return doctorWrites(from)
+        ? {
+            ok: false,
+            reason: `${wearing}, but ${why} (statusLine from ${from.path})`,
+            fix: {
+              kind: "claude-settings",
+              file: from,
+              path: ["statusLine", "refreshInterval"],
+              value: EFFECT_REFRESH_INTERVAL,
+            },
+          }
+        : {
+            ok: false,
+            reason: `${wearing}, but ${why} — its statusLine is in ${from.scope === "managed" ? "managed settings" : "the project's shared settings"}, ${from.path}: set "refreshInterval": ${EFFECT_REFRESH_INTERVAL} there`,
+          };
+    }
+
+    // Past here no file the doctor reads asks for less than every second, so
+    // the arrivals decide.
+    const { redraws } = decider;
     if (redraws.kind === "unseen") {
       return {
         ok: false,
-        reason: `${wearing}, and this daemon has watched Claude Code redraw it for only ${redraws.over} of the ${REDRAW_WINDOW_S} seconds its redraw rate is judged over, so whether it is redrawn every second is unknown — run the doctor again in a minute`,
+        reason: `${wearing}, and this daemon has watched Claude Code redraw it for only ${redraws.over} of the ${REDRAW_WINDOW_S} seconds its redraw rate is judged over, so whether it is redrawn every second is unknown — run the doctor again once the bar has been on screen for a minute`,
       };
     }
     if (redrawnEverySecond(redraws)) {
@@ -1285,7 +1337,6 @@ const effectRefresh: Check = {
 
     const slow = `${wearing}, but Claude Code redrew it in only ${redraws.seconds} of the last ${REDRAW_WINDOW_S} seconds`;
     const elsewhere = `a statusLine from --settings, MDM or server-managed settings, which the doctor cannot read, runs the bar; set "refreshInterval": ${EFFECT_REFRESH_INTERVAL} beside its command there`;
-    const statusLine = statusLineOf(claudeSettings.sources);
     switch (statusLine.kind) {
       case "unread":
         return {
@@ -1304,53 +1355,15 @@ const effectRefresh: Check = {
           // does re-running it replace the line.
           reason: `${slow}, and ${statusLine.from.path} sets statusLine to ${JSON.stringify(statusLine.value)}, not a statusLine object — ${statusLine.from.scope === "user" ? "re-run `cc-candybar install` to write one" : "replace it there with the statusLine object that runs cc-candybar"}`,
         };
-      case "present": {
-        const { from, refreshInterval: interval } = statusLine;
-        // [LAW:one-source-of-truth] Claude Code's own reading: a number of
-        // seconds, no fewer than the minimum, so the minimum itself is the
-        // one value that redraws every second. A file holding it while the
-        // bar was redrawn too rarely is outranked — or was set within the
-        // window, as by the doctor's own fix, and the rate seen is from
-        // before it took effect. Either way no file the doctor may write
-        // would change it.
-        if (interval === EFFECT_REFRESH_INTERVAL) {
-          return {
-            ok: false,
-            reason: `${slow}, though ${from.path} sets statusLine.refreshInterval to ${EFFECT_REFRESH_INTERVAL} — set within the last minute, it shows once Claude Code has redrawn the bar for one (restart Claude Code if it does not); otherwise ${elsewhere}`,
-          };
-        }
-        // Unset runs on events only; anything under the minimum or not a
-        // number is a value the docs give no meaning, so the reason names it
-        // rather than guess, and the fix overwrites it.
-        const why =
-          interval === undefined
-            ? "its statusLine sets no refreshInterval, so Claude Code redraws it only on events"
-            : typeof interval === "number" && interval > EFFECT_REFRESH_INTERVAL
-              ? `its statusLine redraws it only every ${interval} s`
-              : `its statusLine.refreshInterval is ${JSON.stringify(interval)}, not a number of seconds Claude Code accepts (its minimum is ${EFFECT_REFRESH_INTERVAL})`;
-        // [LAW:single-enforcer] The doctor writes only a file that is the
-        // user's own (`doctorWrites`). Nor can it put the interval alone in a
-        // file it may write: under the scope-wins-whole reading above
-        // (unverified), managed settings outrank every such file, and a
-        // project-local statusLine holding only an interval would outrank the
-        // project's, which holds the command. So for those two the reason says
-        // where the line goes.
-        return doctorWrites(from)
-          ? {
-              ok: false,
-              reason: `${slow}: ${why} (statusLine from ${from.path})`,
-              fix: {
-                kind: "claude-settings",
-                file: from,
-                path: ["statusLine", "refreshInterval"],
-                value: EFFECT_REFRESH_INTERVAL,
-              },
-            }
-          : {
-              ok: false,
-              reason: `${slow}: ${why} — its statusLine is in ${from.scope === "managed" ? "managed settings" : "the project's shared settings"}, ${from.path}: set "refreshInterval": ${EFFECT_REFRESH_INTERVAL} there`,
-            };
-      }
+      case "present":
+        // The file holds the minimum while the bar was redrawn too rarely:
+        // outranked, or set within the window, as by the doctor's own fix,
+        // and the rate seen is from before it took effect. Either way no
+        // file the doctor may write would change it.
+        return {
+          ok: false,
+          reason: `${slow}, though ${statusLine.from.path} sets statusLine.refreshInterval to ${EFFECT_REFRESH_INTERVAL} — set within the last minute, it shows once Claude Code has redrawn the bar for one (restart Claude Code if it does not); otherwise ${elsewhere}`,
+        };
     }
   },
 };

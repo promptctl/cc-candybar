@@ -58,12 +58,12 @@ const urgency = (redraws: Redraws): readonly [number, number] =>
     ? [1, redraws.over]
     : [redrawnEverySecond(redraws) ? 2 : 0, redraws.seconds];
 
-// The reading of several bars that decides the check: the slowest, so one bar
+// The bar of several whose reading decides the check: the slowest, so one bar
 // redrawn too rarely is not hidden by another redrawn every second.
-export const slowestOf = (
-  readings: readonly [Redraws, ...Redraws[]],
-): Redraws =>
-  readings.reduce((worst, r) => {
-    const [a, b] = [urgency(r), urgency(worst)];
-    return a[0] < b[0] || (a[0] === b[0] && a[1] < b[1]) ? r : worst;
+export const slowestOf = <T extends { readonly redraws: Redraws }>(
+  bars: readonly [T, ...T[]],
+): T =>
+  bars.reduce((worst, bar) => {
+    const [a, b] = [urgency(bar.redraws), urgency(worst.redraws)];
+    return a[0] < b[0] || (a[0] === b[0] && a[1] < b[1]) ? bar : worst;
   });

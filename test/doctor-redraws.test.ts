@@ -7,6 +7,7 @@ import {
   redrawsOf,
   slowestOf,
 } from "../src/doctor/redraws";
+import type { Redraws } from "../src/doctor/redraws";
 import { framesOf } from "../src/doctor/cli";
 import { parseFrameSightings } from "../src/doctor/daemon-answer";
 import type { StatsSnapshot } from "../src/daemon/stats";
@@ -47,12 +48,12 @@ describe("redrawsOf", () => {
 });
 
 describe("slowestOf", () => {
-  test("below the floor before unseen before redrawn; fewest seconds first within each", () => {
-    const every = { kind: "seen", seconds: 58 } as const;
-    const almost = { kind: "seen", seconds: 50 } as const;
-    const slow = { kind: "seen", seconds: 12 } as const;
-    const slower = { kind: "seen", seconds: 3 } as const;
-    const unseen = { kind: "unseen", over: 30 } as const;
+  test("the bar below the floor before one unseen before one redrawn; fewest seconds first within each", () => {
+    const every: { readonly redraws: Redraws } = { redraws: { kind: "seen", seconds: 58 } };
+    const almost: { readonly redraws: Redraws } = { redraws: { kind: "seen", seconds: 50 } };
+    const slow: { readonly redraws: Redraws } = { redraws: { kind: "seen", seconds: 12 } };
+    const slower: { readonly redraws: Redraws } = { redraws: { kind: "seen", seconds: 3 } };
+    const unseen: { readonly redraws: Redraws } = { redraws: { kind: "unseen", over: 30 } };
     expect(slowestOf([every, slow, unseen])).toBe(slow);
     expect(slowestOf([slow, slower])).toBe(slower);
     expect(slowestOf([every, unseen])).toBe(unseen);
@@ -107,6 +108,7 @@ describe("parseFrameSightings", () => {
   test.each([
     ["no redraw record", { ...good, redrawn: undefined }],
     ["a fractional second", { ...good, redrawn: [1.5] }],
+    ["no second at all", { ...good, redrawn: [] }],
     ["no record start", { ...good, since: undefined }],
     ["no session", { ...good, sessionId: undefined }],
   ])("%s → failed, naming the daemon's build", (_, client) => {

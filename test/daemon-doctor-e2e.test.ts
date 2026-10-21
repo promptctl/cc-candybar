@@ -426,7 +426,7 @@ test("a bar whose only motion is a template's fails effect refresh", async () =>
     expect(run).toBeDefined();
     await click(sockPath, run!);
     expect(flat(await draw())).toContain(
-      "✗ effect refresh — the bar moves (an effect, a fade, or an animated segment), and this daemon has watched Claude Code redraw it for only 0 of the 60 seconds",
+      "✗ effect refresh — the bar moves (an effect, a fade, or an animated segment), but its statusLine sets no refreshInterval",
     );
 
     writeFileSync(projectConfig, barOf("still"));

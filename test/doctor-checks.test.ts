@@ -397,14 +397,14 @@ describe("effectRefresh probe", () => {
   test("a moving bar with no interval → failed WITH the fix", () => {
     expect(effectRefresh(MOVES, interval())).toEqual({
       ok: false,
-      reason: `${SLOW}: its statusLine sets no refreshInterval, so Claude Code redraws it only on events${FROM}`,
+      reason: `${MOVING}, but its statusLine sets no refreshInterval, so Claude Code redraws it only on events${FROM}`,
       fix: FIX,
     });
   });
 
-  // The territory, not the map: a bar redrawn every second passes whatever
-  // the files say, its note saying what was seen.
-  test.each([["no interval", interval()], ["1", interval(1)], ["no statusLine", ok([])]])(
+  // The territory, not a file saying 1: a bar redrawn every second passes
+  // when no file the doctor reads asks for less, its note saying what was seen.
+  test.each([["1", interval(1)], ["no statusLine", ok([])]])(
     "a moving bar redrawn every second, %s in the files → ok, naming the rate seen",
     (_, sources) => {
       expect(effectRefresh(drewAt(EVERY_SECOND, "moves"), sources)).toEqual({
@@ -413,6 +413,17 @@ describe("effectRefresh probe", () => {
       });
     },
   );
+
+  // Events in a busy turn can fill the window's seconds, so a file asking for
+  // less fails whatever the arrivals say — and its fix is right even if
+  // something the doctor cannot read outranks it.
+  test("a moving bar redrawn every second with no interval in the file → failed WITH the fix", () => {
+    expect(effectRefresh(drewAt(EVERY_SECOND, "moves"), interval())).toEqual({
+      ok: false,
+      reason: `${MOVING}, but its statusLine sets no refreshInterval, so Claude Code redraws it only on events${FROM}`,
+      fix: FIX,
+    });
+  });
 
   // The false pass this ticket closed: a file saying 1 is outranked when the
   // bar is redrawn too rarely, and no file the doctor writes would win.
@@ -426,21 +437,21 @@ describe("effectRefresh probe", () => {
   // The floor is REDRAWN_SECONDS of the window: just under it fails.
   test("redrawn in one second fewer than the floor → failed", () => {
     expect(
-      effectRefresh(drewAt({ kind: "seen", seconds: REDRAWN_SECONDS - 1 }, "moves"), interval()),
-    ).toMatchObject({ ok: false, fix: FIX });
+      effectRefresh(drewAt({ kind: "seen", seconds: REDRAWN_SECONDS - 1 }, "moves"), interval(1)),
+    ).toMatchObject({ ok: false, reason: expect.stringContaining(`only ${REDRAWN_SECONDS - 1} of the last 60`) });
     expect(
-      effectRefresh(drewAt({ kind: "seen", seconds: REDRAWN_SECONDS }, "moves"), interval()),
+      effectRefresh(drewAt({ kind: "seen", seconds: REDRAWN_SECONDS }, "moves"), interval(1)),
     ).toMatchObject({ ok: true });
   });
 
   // Not watched for a whole window yet — a session just started, a daemon
-  // just restarted — is unknown, whatever the files say.
-  test.each([["no interval", interval()], ["1", interval(1)]])(
+  // just restarted — is unknown when no file asks for less.
+  test.each([["1", interval(1)], ["no statusLine", ok([])]])(
     "a moving bar not yet watched a whole window, %s in the files → failed, unknown",
     (_, sources) => {
       expect(effectRefresh(drewAt({ kind: "unseen", over: 20 }, "moves"), sources)).toEqual({
         ok: false,
-        reason: `${MOVING}, and this daemon has watched Claude Code redraw it for only 20 of the 60 seconds its redraw rate is judged over, so whether it is redrawn every second is unknown — run the doctor again in a minute`,
+        reason: `${MOVING}, and this daemon has watched Claude Code redraw it for only 20 of the 60 seconds its redraw rate is judged over, so whether it is redrawn every second is unknown — run the doctor again once the bar has been on screen for a minute`,
       });
     },
   );
@@ -453,15 +464,35 @@ describe("effectRefresh probe", () => {
       value: redraws.map((r) => ({ role: "statusline", frame: "moves", redraws: r })),
     });
     const unseen: Redraws = { kind: "unseen", over: 30 };
-    expect(effectRefresh(bars(EVERY_SECOND, ON_EVENTS), interval())).toMatchObject({ ok: false, fix: FIX });
-    expect(effectRefresh(bars(EVERY_SECOND, unseen), interval())).toMatchObject({
+    expect(effectRefresh(bars(EVERY_SECOND, ON_EVENTS), interval(1))).toEqual({
+      ok: false,
+      reason: SETS_ONE(SETTINGS_PATH),
+    });
+    expect(effectRefresh(bars(EVERY_SECOND, unseen), interval(1))).toMatchObject({
       ok: false,
       reason: expect.stringContaining("only 30 of the 60 seconds"),
     });
-    expect(effectRefresh(bars(unseen, ON_EVENTS), interval())).toMatchObject({ ok: false, fix: FIX });
+    expect(effectRefresh(bars(unseen, ON_EVENTS), interval(1))).toEqual({
+      ok: false,
+      reason: SETS_ONE(SETTINGS_PATH),
+    });
     expect(
-      effectRefresh(bars(EVERY_SECOND, { kind: "seen", seconds: 50 }), interval()),
+      effectRefresh(bars(EVERY_SECOND, { kind: "seen", seconds: 50 }), interval(1)),
     ).toEqual({ ok: true, note: "Claude Code redrew the bar in 50 of the last 60 seconds" });
+  });
+
+  // The row says what the bar whose rate decides it wears, not another's.
+  test("the slowest bar's frame names what is moving", () => {
+    const frames: DoctorFacts["frames"] = {
+      kind: "ok",
+      value: [
+        { role: "statusline", frame: "moves", redraws: EVERY_SECOND },
+        { role: "statusline", frame: "can-move", redraws: ON_EVENTS },
+      ],
+    };
+    expect(effectRefresh(frames, interval(1))).toMatchObject({
+      reason: expect.stringMatching(/^the bar can start moving .*, but Claude Code redrew it in only 12 of/),
+    });
   });
 
   // A still bar's redraw rate does not matter.
@@ -472,7 +503,7 @@ describe("effectRefresh probe", () => {
   test("a moving bar with 5 → failed WITH the fix, naming the interval", () => {
     expect(effectRefresh(MOVES, interval(5))).toEqual({
       ok: false,
-      reason: `${SLOW}: its statusLine redraws it only every 5 s${FROM}`,
+      reason: `${MOVING}, but its statusLine redraws it only every 5 s${FROM}`,
       fix: FIX,
     });
   });
@@ -495,7 +526,7 @@ describe("effectRefresh probe", () => {
     (value) => {
       expect(effectRefresh(MOVES, interval(value))).toEqual({
         ok: false,
-        reason: `${SLOW}: its statusLine.refreshInterval is ${JSON.stringify(value)}, not a number of seconds Claude Code accepts (its minimum is 1)${FROM}`,
+        reason: `${MOVING}, but its statusLine.refreshInterval is ${JSON.stringify(value)}, not a number of seconds Claude Code accepts (its minimum is 1)${FROM}`,
         fix: FIX,
       });
     },
@@ -588,7 +619,7 @@ describe("effectRefresh probe", () => {
     });
     expect(effectRefresh(MOVES, chain({ command: "cc-candybar" }))).toEqual({
       ok: false,
-      reason: `${SLOW}: its statusLine sets no refreshInterval, so Claude Code redraws it only on events — its statusLine is in managed settings, ${managed}: set "refreshInterval": 1 there`,
+      reason: `${MOVING}, but its statusLine sets no refreshInterval, so Claude Code redraws it only on events — its statusLine is in managed settings, ${managed}: set "refreshInterval": 1 there`,
     });
   });
 
@@ -628,7 +659,7 @@ describe("effectRefresh probe", () => {
       ),
     ).toEqual({
       ok: false,
-      reason: `${SLOW}: its statusLine sets no refreshInterval, so Claude Code redraws it only on events (statusLine from ${local})`,
+      reason: `${MOVING}, but its statusLine sets no refreshInterval, so Claude Code redraws it only on events (statusLine from ${local})`,
       fix: { ...FIX, file: { scope: "project-local", path: local } },
     });
   });
@@ -642,7 +673,7 @@ describe("effectRefresh probe", () => {
       ),
     ).toEqual({
       ok: false,
-      reason: `${SLOW}: its statusLine sets no refreshInterval, so Claude Code redraws it only on events — its statusLine is in the project's shared settings, ${project}: set "refreshInterval": 1 there`,
+      reason: `${MOVING}, but its statusLine sets no refreshInterval, so Claude Code redraws it only on events — its statusLine is in the project's shared settings, ${project}: set "refreshInterval": 1 there`,
     });
   });
 
@@ -688,7 +719,7 @@ describe("effectRefresh probe", () => {
     expect(effectRefresh(drew("can-move"), interval())).toEqual({
       ok: false,
       reason:
-        `the bar can start moving (a globals.effect rule, placements that fade in and out, or a placement with an effect of its own that is not drawn now), but Claude Code redrew it in only 12 of the last 60 seconds: its statusLine sets no refreshInterval, so Claude Code redraws it only on events${FROM}`,
+        `the bar can start moving (a globals.effect rule, placements that fade in and out, or a placement with an effect of its own that is not drawn now), but its statusLine sets no refreshInterval, so Claude Code redraws it only on events${FROM}`,
       fix: FIX,
     });
   });

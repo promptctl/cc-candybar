@@ -193,14 +193,15 @@ export function dataFields(data: SegmentDataFacts): string {
 // `FRAMES_SEEN` member in its order — moves/can-move/still/failed/drawing
 // (brandon-doctor-v62x.tgp); `failed` when the renders could not be asked.
 // Then how often each was redrawn (brandon-doctor-v62x.5at): the seconds of
-// the window that held an arrival, or `unseen` — `-` for no statusline render.
+// the window that held an arrival, or `unseen(<seconds watched>)` — `-` for
+// no statusline render.
 export function frameFields(frames: Asked<readonly FrameSighting[]>): string {
   if (frames.kind === "failed") return "frames=failed redrawn=failed";
   const drawn = refreshedFrames(frames.value);
   const count = (seen: FrameSeen) =>
     drawn.filter((f) => f.frame === seen).length;
   const redrawn = drawn.map(({ redraws }) =>
-    redraws.kind === "seen" ? `${redraws.seconds}` : "unseen",
+    redraws.kind === "seen" ? `${redraws.seconds}` : `unseen(${redraws.over})`,
   );
   return `frames=${FRAMES_SEEN.map(count).join("/")} redrawn=${redrawn.join(",") || "-"}`;
 }
