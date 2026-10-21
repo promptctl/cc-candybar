@@ -31,6 +31,8 @@ import {
 const SHELL_BUFFER = "cc-candybar-lane";
 // How often the wait for an exit looks again.
 const EXIT_POLL_MS = 100;
+// How long a shell has to take its terminal back once Claude Code exited.
+const SHELL_PATIENCE_MS = 2000;
 
 function tmux(hint: TmuxHint, args: string[], stdinInput?: string): string {
   const run = runTmux(hint, "lane.tmux", args, stdinInput);
@@ -281,22 +283,45 @@ export function productionLaneEdge(
     fileExists: (file) => fs.existsSync(file),
     presence,
     paneClaude,
+    // [LAW:no-ambient-temporal-coupling] The pane's directory is the
+    // shell's once the shell holds its terminal again: until it has reaped
+    // Claude Code and taken the foreground back, tmux reads the directory of
+    // the job that held it, or none.
     paneDir: async (hint) => {
-      const display = await runTmuxAsync(hint, "lane.tmux", [
-        "display",
-        "-p",
-        "-t",
-        hint.pane,
-        "#{pane_current_path}",
-      ]);
-      if (display.kind !== "ok") throw new Error(display.reason);
-      // tmux prints an empty path when it cannot read the foreground job's
-      // directory.
-      const dir = display.stdout.trimEnd();
-      if (dir === "") {
-        throw new Error(`tmux read no directory for pane ${hint.pane}`);
+      const until = Date.now() + SHELL_PATIENCE_MS;
+      for (;;) {
+        const display = await runTmuxAsync(hint, "lane.tmux", [
+          "display",
+          "-p",
+          "-t",
+          hint.pane,
+          "#{pane_pid}\t#{pane_current_path}",
+        ]);
+        if (display.kind !== "ok") throw new Error(display.reason);
+        const [panePid = "", dir = ""] = display.stdout.trimEnd().split("\t");
+        const foreground = (
+          await ps(`asking pane ${hint.pane}'s foreground job`, [
+            "-o",
+            "tpgid=",
+            "-p",
+            panePid,
+          ])
+        ).trim();
+        if (foreground === panePid) {
+          // tmux prints an empty path when it cannot read the shell's
+          // directory.
+          if (dir === "") {
+            throw new Error(`tmux read no directory for pane ${hint.pane}`);
+          }
+          return dir;
+        }
+        if (Date.now() > until) {
+          throw new Error(
+            `the shell in pane ${hint.pane} did not take its terminal back within ${SHELL_PATIENCE_MS / 1000} s`,
+          );
+        }
+        await sleep(EXIT_POLL_MS);
       }
-      return dir;
     },
     onPath: (name, pathVariable) => {
       const file = executableOn(name, pathVariable, (f) =>

@@ -266,9 +266,10 @@ describe("lane B, statusline", () => {
   });
 
   // `--resume` looks a session up under the Claude Code directory it ran
-  // with, and a config or model set on the command it was started by comes
-  // back with it; the shell's own exports stay the shell's.
-  test("of Claude Code's environment, what configures Claude Code and the bar rides the line", async () => {
+  // with, and a config set on the command it was started by decides whether
+  // lane B is on; the rest stays the shell's, and no credential reaches the
+  // shell's history.
+  test("of Claude Code's environment, what the bar reads off its client rides the line", async () => {
     const { edge: base } = fakeEdge();
     const claude = await base.paneClaude(TMUX);
     const { edge, did } = fakeEdge({
@@ -278,15 +279,17 @@ describe("lane B, statusline", () => {
           ...claude.env,
           "CLAUDE_CONFIG_DIR=/u/.claude zai",
           "CC_CANDYBAR_CONFIG=/u/lab.json5",
-          "ANTHROPIC_MODEL=haiku",
+          "ANTHROPIC_API_KEY=sk-secret",
+          "CLAUDE_CODE_OAUTH_TOKEN=oauth-secret",
           "MEMENTO_CONFIG_HOME=/u/m",
           "CLAUDECODE=1",
         ],
       }),
     });
     await finished(LANE_SETUP.statusline.on(session(), HOST, edge));
+    expect(did.join("\n")).not.toContain("secret");
     expect(did).toContain(
-      `shell cd /work && CLAUDE_CONFIG_DIR='/u/.claude zai' CC_CANDYBAR_CONFIG=/u/lab.json5 ANTHROPIC_MODEL=haiku MEMENTO_CONFIG_HOME=/u/m BUN_OPTIONS='--preload /opt/candybar/dist/attach-preload.cjs' claude --worktree feat/tree --dangerously-skip-permissions --resume ${SID}`,
+      `shell cd /work && CLAUDE_CONFIG_DIR='/u/.claude zai' CC_CANDYBAR_CONFIG=/u/lab.json5 MEMENTO_CONFIG_HOME=/u/m BUN_OPTIONS='--preload /opt/candybar/dist/attach-preload.cjs' claude --worktree feat/tree --dangerously-skip-permissions --resume ${SID}`,
     );
   });
 

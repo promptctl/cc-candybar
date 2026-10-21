@@ -24,6 +24,9 @@
 // it (src/daemon/click-error.ts).
 
 import path from "node:path";
+import { CLAUDE_CONFIG_DIR_ENV } from "../claude-settings.js";
+import { CONFIG_ENV } from "../config-hint.js";
+import { MEMENTO_ENV_VARS } from "../memento-hint.js";
 import {
   LANES,
   LANE_NAMES,
@@ -329,14 +332,18 @@ interface Attach {
   readonly preload: string;
 }
 
-// What names a variable the restart line sets as Claude Code was started
-// with it: those that configure Claude Code (its directory, which `--resume`
-// looks the session up under, its model, its API) and those this bar and
-// memento read off the session's client (`CC_CANDYBAR_CONFIG`, memento's
-// config home). The rest of the environment is the shell's own, which the
-// shell the line is typed into still exports — and carrying it whole would
-// write a shell's every export into its history.
-const CARRIED_ENV = /^(CLAUDE|ANTHROPIC|CC_CANDYBAR|MEMENTO)_/;
+// [LAW:one-source-of-truth] The variables the restart line sets as Claude
+// Code was started with them: the ones the bar reads off a session's client
+// — its Claude Code directory, which `--resume` also looks the session up
+// under, its cc-candybar config, which decides whether lane B is on, and
+// memento's config home. The rest of the environment is the shell's own,
+// which the shell the line is typed into still exports, and the line lands
+// in the shell's history, where a credential must never be written.
+const CARRIED_ENV: ReadonlySet<string> = new Set([
+  CLAUDE_CONFIG_DIR_ENV,
+  CONFIG_ENV,
+  ...MEMENTO_ENV_VARS,
+]);
 
 // Of `env` (`NAME=value` each), the variables the restart line sets.
 function carriedEnv(
@@ -345,7 +352,7 @@ function carriedEnv(
   return env.flatMap((v) => {
     const at = v.indexOf("=");
     const name = v.slice(0, at);
-    return at > 0 && CARRIED_ENV.test(name)
+    return at > 0 && CARRIED_ENV.has(name)
       ? [[name, v.slice(at + 1)] as const]
       : [];
   });
