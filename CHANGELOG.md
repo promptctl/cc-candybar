@@ -1,3 +1,9 @@
+## [1.152.1](https://github.com/promptctl/cc-candybar/compare/v1.152.0...v1.152.1) (2026-10-21)
+
+### Bug Fixes
+
+* **lanes:** lane B restarts a --worktree session back into its worktree ([#406](https://github.com/promptctl/cc-candybar/issues/406)) ([f70a41c](https://github.com/promptctl/cc-candybar/commit/f70a41cee91b1dfbe949ebe823ae39c6f3c0603c))
+
 ## [1.152.0](https://github.com/promptctl/cc-candybar/compare/v1.151.0...v1.152.0) (2026-10-21)
 
 ### Features
