@@ -487,8 +487,9 @@ export async function foldAppended<S>(
     );
     if (read.kind !== "ok") return read;
     const window = read.value;
-    longLines = longLinesWith(longLines, filePath, window);
+    // A reset discards what was folded, the long lines read for it included.
     if (window.reset) value = empty;
+    longLines = longLinesWith(window.reset ? [] : longLines, filePath, window);
     if (end === undefined || window.reset) {
       end = { size: window.size, stamp: window.stamp };
     }

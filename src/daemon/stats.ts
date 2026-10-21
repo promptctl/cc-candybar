@@ -74,9 +74,9 @@ export interface StatsSnapshot {
     sweeps: number;
   };
   // [LAW:nothing-unseen] Every forward transcript read since start: gated
-  // reads, bytes off disk, doublings past the fold window for a line longer
-  // than it, and the largest buffer one read allocated — what bounds a fold's
-  // memory (brandon-unfiled-3248.bfnj).
+  // reads, bytes off disk, lines longer than the fold window read whole and
+  // the longest of them — what bounds a fold's memory beyond its window
+  // (brandon-unfiled-3248.bfnj).
   transcriptReads: TranscriptReads;
   // Config states: entries the map serves, those a render is drawing with
   // now, and those retired (evicted or reloaded over) whose teardown waits

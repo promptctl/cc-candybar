@@ -194,11 +194,16 @@ export type AppendedLines = WholeLines & Disposable;
 
 // [LAW:no-shared-mutable-globals] The window buffers: a read takes one as it
 // enters its gate slot and lends it to its caller, who gives it back as soon
-// as the lines are decoded (`decodeLines`). So there are never many more than
-// TRANSCRIPT_FS_CONCURRENCY of them (4 MiB) however many folds are queued, a
-// queued fold holds none, and a fold allocates no window buffer per window or
-// per file for the garbage collector to find (brandon-unfiled-3248.bfnj).
+// as the lines are decoded (`decodeLines`). A queued fold holds none, a fold
+// allocates no window buffer per window or per file for the garbage collector
+// to find, and at most TRANSCRIPT_FS_CONCURRENCY are kept (4 MiB): a burst can
+// lend a few more — a woken waiter takes one before the reader it followed
+// has decoded — and those the collector takes back (brandon-unfiled-3248.bfnj).
 const windows: Buffer[] = [];
+
+function giveBack(window: Buffer): void {
+  if (windows.length < TRANSCRIPT_FS_CONCURRENCY) windows.push(window);
+}
 
 // [LAW:single-enforcer] The forward complement of readTail, through the SAME
 // gate: the whole lines of an append-only file from `prior.offset` (the file
@@ -240,13 +245,17 @@ export async function readAppended(
     const window = windows.pop() ?? Buffer.allocUnsafe(FOLD_WINDOW_BYTES);
     const read = await readWholeLines(path, prior, until, window);
     if (read.kind !== "ok") {
-      windows.push(window);
+      giveBack(window);
       return read;
     }
+    // Given back once however often it is disposed: a window in the pool
+    // twice would be filled by two reads at once.
+    let lent: Buffer | undefined = window;
     return ok({
       ...read.value,
       [Symbol.dispose]: () => {
-        windows.push(window);
+        if (lent !== undefined) giveBack(lent);
+        lent = undefined;
       },
     });
   });
@@ -316,16 +325,22 @@ async function readWholeLines(
         ? await readInto(fh, Buffer.allocUnsafe(bytes), start)
         : first.subarray(0, bytes);
     bytesRead += longLine > 0 ? wholeLines.length : 0;
+    // A long line's re-read that comes back short (the file shrank between
+    // the scan and the read) is EOF, as a short read is everywhere here, and
+    // its fragment is no line.
+    const complete = wholeLines.length === bytes;
     totals.reads++;
     totals.bytes += bytesRead;
     totals.longLines += longLine > 0 ? 1 : 0;
     totals.largestLine = Math.max(totals.largestLine, longLine);
     return ok({
-      lines: wholeLines,
+      lines: complete ? wholeLines : wholeLines.subarray(0, 0),
       start,
       // A long line was found by its newline alone, so lines after it may
       // still be unread; otherwise the read saw everything up to its end.
-      atEnd: longLine > 0 ? start + bytes >= end : reached >= end || shortRead,
+      atEnd:
+        !complete ||
+        (longLine > 0 ? start + bytes >= end : reached >= end || shortRead),
       size,
       stamp,
       ino,
