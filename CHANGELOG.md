@@ -1,3 +1,9 @@
+## [1.153.0](https://github.com/promptctl/cc-candybar/compare/v1.152.2...v1.153.0) (2026-10-21)
+
+### Features
+
+* **lanes:** lane B starts from one variable and `claude` ([#408](https://github.com/promptctl/cc-candybar/issues/408)) ([e339398](https://github.com/promptctl/cc-candybar/commit/e339398a9ace9eab2bf10065ace0de1432d59102))
+
 ## [1.152.2](https://github.com/promptctl/cc-candybar/compare/v1.152.1...v1.152.2) (2026-10-21)
 
 ### Bug Fixes
