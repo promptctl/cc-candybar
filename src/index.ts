@@ -18,6 +18,8 @@ import { runPlugin } from "./plugin-install";
 import { obtainDaemonKick } from "./daemon/acquire";
 import { planOutcome } from "./render/outcome-plan";
 import { HELP_TEXT } from "./help-text";
+import { attachCommandLine, attachPreloadOf } from "./attach-launcher";
+import { LANES } from "./config/lanes";
 import { NODE_FLAGS } from "./cli-flags";
 import { PACKAGE_VERSION } from "./version";
 import { detectClientHints } from "./client-hints";
@@ -37,6 +39,10 @@ const hasFlag = (flags: readonly string[]): boolean =>
 
 function showHelpText(): void {
   console.log(HELP_TEXT);
+  // The one line of help that names this install: where its preload sits.
+  console.log(
+    `Starting Claude Code on ${LANES.statusline.label} yourself (a Bun-compiled Claude Code):\n  ${attachCommandLine(attachPreloadOf(RUNNING_BUNDLE))}\n`,
+  );
 }
 
 // [LAW:dataflow-not-control-flow] Subcommand dispatch is data: argv[2] names
