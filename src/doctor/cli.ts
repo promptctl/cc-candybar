@@ -18,6 +18,7 @@ import process from "node:process";
 import { WriteStream } from "node:tty";
 import type { CliPlan } from "../check.js";
 import { DOOR_GLYPH } from "../config/disclosure.js";
+import { redrawsOf } from "./redraws.js";
 import { detectClientHints } from "../client-hints.js";
 import {
   RECENT_CLIENT_S,
@@ -163,10 +164,14 @@ export function transcriptsOf(
 
 // What the recent renders of sessions running with this Claude Code
 // directory drew — the refresh that would redraw them is that directory's
-// settings file's, so a session of another says nothing about it.
+// settings file's, so a session of another says nothing about it. `onScreen`:
+// the session whose bar is known to be drawn now — the one this command runs
+// in — so the silence since its last render counts against its redraw rate;
+// any other session's window ends at its last render (src/doctor/redraws.ts).
 export function framesOf(
   asked: Asked<FrameSightings>,
   configDir: string,
+  onScreen: string | undefined,
 ): Asked<readonly FrameSighting[]> {
   return asked.kind === "failed"
     ? asked
@@ -176,7 +181,16 @@ export function framesOf(
           .filter(
             (s) => s.ago <= RECENT_CLIENT_S && s.claudeConfigDir === configDir,
           )
-          .map(({ role, frame }) => ({ role, frame })),
+          .map(({ role, frame, sessionId, since, redrawn }) => ({
+            role,
+            frame,
+            // A record holds its latest render's second, so `min` is defined.
+            redraws: redrawsOf(
+              redrawn,
+              since,
+              sessionId === onScreen ? 0 : Math.min(...redrawn),
+            ),
+          })),
       };
 }
 
@@ -247,7 +261,11 @@ export async function doctorPlan(
       answer.serving,
       rateLimitsOf(answer.rateLimits, claudeConfigDir(hints.claudeConfigDir)),
       transcriptsOf(answer.transcripts),
-      framesOf(answer.frames, claudeConfigDir(hints.claudeConfigDir)),
+      framesOf(
+        answer.frames,
+        claudeConfigDir(hints.claudeConfigDir),
+        env.CLAUDE_CODE_SESSION_ID,
+      ),
       widthOf(
         env.CLAUDE_CODE_SESSION_ID,
         answer.widths,

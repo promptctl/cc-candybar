@@ -287,7 +287,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     expect(out).toContain("✓ tmux truecolor");
     expect(rt.urlOfVerb(VERB_DOCTOR_FIX)).toBeUndefined();
     expect(rt.logs.filter((line) => line.startsWith("doctor:"))).toEqual([
-      `doctor: config=failed(2) install=ok daemon=ok urlHandler=ok links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=ok segmentData=ok sessionData=ok glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=ghostty@- font=- mark=- tmuxLinks=- clicked=yes cols=148 widthOf=session clientUtf8=- clients=native/same/- daemons=1 others=- rss=120/512 postMortems=0/0 data=pr:-,rateLimits:-,memento:- transcripts=1/0/0 unparsed=0 frames=0/0/1/0/0 statusLine=absent truecolorEnv=unset (session=s1)`,
+      `doctor: config=failed(2) install=ok daemon=ok urlHandler=ok links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=ok segmentData=ok sessionData=ok glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=ghostty@- font=- mark=- tmuxLinks=- clicked=yes cols=148 widthOf=session clientUtf8=- clients=native/same/- daemons=1 others=- rss=120/512 postMortems=0/0 data=pr:-,rateLimits:-,memento:- transcripts=1/0/0 unparsed=0 frames=0/0/1/0/0 redrawn=unseen(0) statusLine=absent truecolorEnv=unset (session=s1)`,
     ]);
   });
 
@@ -307,7 +307,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     expect(out).toContain("✗ Nerd Font — the doctor cannot read Terminal 455.1's font");
     expect(rt.clicked.value()).toEqual(["Terminal"]);
     expect(rt.logs.filter((line) => line.startsWith("doctor:"))).toEqual([
-      `doctor: config=ok install=ok daemon=ok urlHandler=ok links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=failed(1) segmentData=ok sessionData=ok glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=apple-terminal@455.1 font=- mark=- tmuxLinks=- clicked=yes cols=148 widthOf=session clientUtf8=- clients=native/same/- daemons=1 others=- rss=120/512 postMortems=0/0 data=pr:-,rateLimits:-,memento:- transcripts=1/0/0 unparsed=0 frames=0/0/1/0/0 statusLine=absent truecolorEnv=unset (session=s1)`,
+      `doctor: config=ok install=ok daemon=ok urlHandler=ok links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=failed(1) segmentData=ok sessionData=ok glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=apple-terminal@455.1 font=- mark=- tmuxLinks=- clicked=yes cols=148 widthOf=session clientUtf8=- clients=native/same/- daemons=1 others=- rss=120/512 postMortems=0/0 data=pr:-,rateLimits:-,memento:- transcripts=1/0/0 unparsed=0 frames=0/0/1/0/0 redrawn=unseen(0) statusLine=absent truecolorEnv=unset (session=s1)`,
     ]);
   });
 
@@ -336,13 +336,13 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     const failed = rt.render();
     expect(failed).toContain("✗ daemon");
     expect(failed).toContain(`ran out of memory and restarted (2026-10-19T18-01-12-345Z-77) — post-mortem: ${report}`);
-    expect(rt.logs.at(-1)).toMatch(/ daemon=failed\(1\) .* daemons=1 others=- rss=120\/512 postMortems=1\/1 data=\S+ transcripts=1\/0\/0 unparsed=0 frames=0\/0\/1\/0\/0 statusLine=absent truecolorEnv=unset \(session=s1\)$/);
+    expect(rt.logs.at(-1)).toMatch(/ daemon=failed\(1\) .* daemons=1 others=- rss=120\/512 postMortems=1\/1 data=\S+ transcripts=1\/0\/0 unparsed=0 frames=0\/0\/1\/0\/0 redrawn=unseen\(0\) statusLine=absent truecolorEnv=unset \(session=s1\)$/);
     rt.clickVerb(VERB_DOCTOR_FIX);
     expect(rt.logs).toContain(
       "doctor-fix: daemon → post-mortems-read through=2026-10-19T18-01-12-345Z-77 (session=s1)",
     );
     expect(rt.render()).toContain("✓ daemon");
-    expect(rt.logs.at(-1)).toMatch(/ daemon=ok .* postMortems=0\/1 data=\S+ transcripts=1\/0\/0 unparsed=0 frames=0\/0\/1\/0\/0 statusLine=absent truecolorEnv=unset \(session=s1\)$/);
+    expect(rt.logs.at(-1)).toMatch(/ daemon=ok .* postMortems=0\/1 data=\S+ transcripts=1\/0\/0 unparsed=0 frames=0\/0\/1\/0\/0 redrawn=unseen\(0\) statusLine=absent truecolorEnv=unset \(session=s1\)$/);
   });
 
   // brandon-doctor-v62x.tfb: the click judges the client that drew the bar
@@ -355,7 +355,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
       "✗ install — the bar is drawn by a statusline client too old to say what it is",
     );
     expect(rt.logs.find((line) => line.startsWith("doctor:"))).toMatch(
-      / install=failed\(1\) .* clients=unreported\/-\/- daemons=1 others=- rss=120\/512 postMortems=0\/0 data=\S+ transcripts=1\/0\/0 unparsed=0 frames=0\/0\/1\/0\/0 statusLine=absent truecolorEnv=unset \(session=s1\)$/,
+      / install=failed\(1\) .* clients=unreported\/-\/- daemons=1 others=- rss=120\/512 postMortems=0\/0 data=\S+ transcripts=1\/0\/0 unparsed=0 frames=0\/0\/1\/0\/0 redrawn=unseen\(0\) statusLine=absent truecolorEnv=unset \(session=s1\)$/,
     );
   });
 
@@ -375,7 +375,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     expect(rt.logs).toContain(
       'warn: doctor: clicked terminal not filed for "Ghostty": EROFS: read-only file system',
     );
-    expect(rt.logs.find((line) => line.startsWith("doctor:"))).toMatch(/ clicked=no cols=148 widthOf=session clientUtf8=- clients=native\/same\/- daemons=1 others=- rss=120\/512 postMortems=0\/0 data=\S+ transcripts=1\/0\/0 unparsed=0 frames=0\/0\/1\/0\/0 statusLine=absent truecolorEnv=unset \(session=s1\)$/);
+    expect(rt.logs.find((line) => line.startsWith("doctor:"))).toMatch(/ clicked=no cols=148 widthOf=session clientUtf8=- clients=native\/same\/- daemons=1 others=- rss=120\/512 postMortems=0\/0 data=\S+ transcripts=1\/0\/0 unparsed=0 frames=0\/0\/1\/0\/0 redrawn=unseen\(0\) statusLine=absent truecolorEnv=unset \(session=s1\)$/);
   });
 
   test("in tmux with RGB and the var unset: failed row with [fix]; the fix lands and the row says restart", () => {
@@ -433,41 +433,71 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
   // brandon-effects-2gka.21e, brandon-doctor-v62x.tgp: the session's bar drew
   // a moving frame under a statusLine with no interval — the row fails with
   // [fix], and the fix lands the interval beside the statusLine's keys.
-  test("a session whose bar moves, no refresh interval: failed row with [fix]; the fix lands and the row passes", () => {
+  test("a session whose bar moves, no refresh interval: failed row with [fix]; the fix lands, and the row passes once Claude Code redraws every second", () => {
+    // Only the clock is faked: the renders below arrive as time passes.
+    jest.useFakeTimers({
+      doNotFake: [
+        "hrtime", "nextTick", "performance", "queueMicrotask", "requestAnimationFrame",
+        "cancelAnimationFrame", "requestIdleCallback", "cancelIdleCallback", "setImmediate",
+        "clearImmediate", "setInterval", "clearInterval", "setTimeout", "clearTimeout",
+      ],
+    });
+    try {
     const rt = buildRuntime(null);
     fs.writeFileSync(
       rt.settingsPath,
       `{\n  "statusLine": { "type": "command", "command": "cc-candybar" }\n}\n`,
     );
-    rt.clients.see(
-      "s1",
-      { ...renderSaid(healthyClient()), frame: "moves" },
-      instantOf(new Date()),
-      1,
-    );
+    // Claude Code's renders of the moving bar, every `interval` seconds for
+    // the next `over` seconds.
+    let order = 0;
+    const renders = (interval: number, over: number) => {
+      for (let t = interval; t <= over; t += interval) {
+        jest.setSystemTime(Date.now() + interval * 1000);
+        rt.clients.see(
+          "s1",
+          { ...renderSaid(healthyClient()), frame: "moves" },
+          instantOf(new Date()),
+          ++order,
+        );
+      }
+    };
+    renders(5, 120);
     rt.openTools();
     rt.clickVerb(VERB_DOCTOR_RUN);
     expect(rt.render()).toContain(
-      `✗ effect refresh — the bar moves (an effect, a fade, or an animated segment), but Claude Code redraws it only on events (statusLine from ${rt.settingsPath}) [fix]`,
+      `✗ effect refresh — the bar moves (an effect, a fade, or an animated segment), but its statusLine sets no refreshInterval, so Claude Code redraws it only on events (statusLine from ${rt.settingsPath}) [fix]`,
     );
 
-    // The event names the scope the statusLine was read from.
+    // The event names the scope the statusLine was read from, and the rate
+    // seen.
     expect(rt.logs.find((line) => line.startsWith("doctor:"))).toMatch(
-      / statusLine=user:- truecolorEnv=unset \(session=s1\)$/,
+      / frames=1\/0\/0\/0\/0 redrawn=12 statusLine=user:- truecolorEnv=unset \(session=s1\)$/,
     );
 
     rt.clickVerb(VERB_DOCTOR_FIX);
     expect(JSON.parse(fs.readFileSync(rt.settingsPath, "utf8"))).toEqual({
       statusLine: { type: "command", command: "cc-candybar", refreshInterval: 1 },
     });
-    // A pass names the file the interval is set in.
+    // The rate seen is from before the fix: the row names the file and
+    // offers no second fix.
     expect(rt.render()).toContain(
-      `✓ effect refresh — statusLine.refreshInterval is 1 in ${rt.settingsPath}`,
+      `though ${rt.settingsPath} sets statusLine.refreshInterval to 1 — set within the last minute, it shows once Claude Code has redrawn the bar for one`,
     );
     expect(rt.urlOfVerb(VERB_DOCTOR_FIX)).toBeUndefined();
     expect(rt.logs).toContain(
       `doctor-fix: effectRefresh → claude-settings statusLine.refreshInterval=1 file=${JSON.stringify(rt.settingsPath)} scope=user (session=s1)`,
     );
+
+    // A minute later Claude Code has redrawn it every second.
+    renders(1, 60);
+    rt.clickVerb(VERB_DOCTOR_RUN);
+    expect(rt.render()).toContain(
+      "✓ effect refresh — Claude Code redrew the bar in 60 of the last 60 seconds",
+    );
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   test("not in tmux: the check is ok", () => {
@@ -519,7 +549,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
         [{ name: "iterm2", version: "3.7.2" }, ITERM_MENLO.env, BUNDLED_GLYPHS],
       ]);
       expect(rt.logs.filter((l) => l.startsWith("doctor:"))).toEqual([
-        `doctor: config=ok install=ok daemon=ok urlHandler=ok links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=failed(1) segmentData=ok sessionData=ok glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=iterm2@3.7.2 font="Menlo-Regular":lacks${[...BUNDLED_GLYPHS].length} mark=- tmuxLinks=- clicked=yes cols=148 widthOf=session clientUtf8=- clients=native/same/- daemons=1 others=- rss=120/512 postMortems=0/0 data=pr:-,rateLimits:-,memento:- transcripts=1/0/0 unparsed=0 frames=0/0/1/0/0 statusLine=absent truecolorEnv=unset (session=s1)`,
+        `doctor: config=ok install=ok daemon=ok urlHandler=ok links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=failed(1) segmentData=ok sessionData=ok glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=iterm2@3.7.2 font="Menlo-Regular":lacks${[...BUNDLED_GLYPHS].length} mark=- tmuxLinks=- clicked=yes cols=148 widthOf=session clientUtf8=- clients=native/same/- daemons=1 others=- rss=120/512 postMortems=0/0 data=pr:-,rateLimits:-,memento:- transcripts=1/0/0 unparsed=0 frames=0/0/1/0/0 redrawn=unseen(0) statusLine=absent truecolorEnv=unset (session=s1)`,
       ]);
     });
 
@@ -537,7 +567,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
       expect(rt.logs).toContain(
         `doctor-mark: nerdFont drawn on iTerm2 with Menlo-Regular (iTerm2 profile "Default")|${BUNDLED_GLYPHS_NAMED} (session=s1)`,
       );
-      expect(rt.logs.at(-1)).toMatch(/nerdFont=ok .* mark=drawn tmuxLinks=- clicked=yes cols=148 widthOf=session clientUtf8=- clients=native\/same\/- daemons=1 others=- rss=120\/512 postMortems=0\/0 data=\S+ transcripts=1\/0\/0 unparsed=0 frames=0\/0\/1\/0\/0 statusLine=absent truecolorEnv=unset \(session=s1\)$/);
+      expect(rt.logs.at(-1)).toMatch(/nerdFont=ok .* mark=drawn tmuxLinks=- clicked=yes cols=148 widthOf=session clientUtf8=- clients=native\/same\/- daemons=1 others=- rss=120\/512 postMortems=0\/0 data=\S+ transcripts=1\/0\/0 unparsed=0 frames=0\/0\/1\/0\/0 redrawn=unseen\(0\) statusLine=absent truecolorEnv=unset \(session=s1\)$/);
     });
 
     test("marking ✗ keeps the row failed, says boxes, and leaves ✓ to mark later", () => {

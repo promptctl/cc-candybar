@@ -143,6 +143,7 @@ import {
 import { withMark } from "../../doctor/mark-book";
 import { withClicked } from "../../doctor/clicked-terminals";
 import { DoctorBusy } from "../../doctor/busy";
+import { redrawsOf } from "../../doctor/redraws";
 import {
   applyFix,
   clickArrived,
@@ -1208,7 +1209,7 @@ function writeReport(ctx: VerbContext, sid: string, facts: DoctorFacts): void {
 function clickFacts(ctx: VerbContext, sid: string): DoctorFacts {
   // The session's own renders, read once: whatever its Claude Code sends, it
   // sends to this session.
-  const said = ctx.clients.ofSession(sid);
+  const said = ctx.clients.ofSession(sid, instantOf(new Date()));
   let gathered: ReturnType<typeof gatherFacts>;
   try {
     gathered = gatherFacts(
@@ -1219,9 +1220,15 @@ function clickFacts(ctx: VerbContext, sid: string): DoctorFacts {
       { kind: "ok", value: ctx.serving() },
       { kind: "ok", value: said.map((s) => s.rateLimits) },
       { kind: "ok", value: said.map((s) => s.transcript) },
+      // The click proves this bar is on screen, so the silence since its
+      // last render counts against its redraw rate: the window ends now.
       {
         kind: "ok",
-        value: said.map(({ role, frame }) => ({ role, frame })),
+        value: said.map(({ role, frame, redrawn, since }) => ({
+          role,
+          frame,
+          redraws: redrawsOf(redrawn, since, 0),
+        })),
       },
       sessionWidth(sid, said),
       readStores(ctx.doctorStores),

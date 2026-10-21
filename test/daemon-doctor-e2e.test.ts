@@ -389,8 +389,10 @@ test("the session data row reads the transcript the session's render named", asy
 
 // brandon-doctor-v62x.tgp: the effect-refresh row reads what the session's
 // bar drew, through a real daemon. A bar whose only motion is a template's
-// `frames` — no effect, no transitions — fails under a statusLine with no
-// interval, and the same bar drawn still passes; each render event says which.
+// `frames` — no effect, no transitions — is one whose redraw rate the row
+// judges (unknown here: a session rendered once has no minute of arrivals,
+// brandon-doctor-v62x.5at), and the same bar drawn still passes; each render
+// event says which.
 test("a bar whose only motion is a template's fails effect refresh", async () => {
   const { env, sockPath, removeTmpDirs } = prepareIsolatedDaemonEnv(
     "cc-candybar-doctor-e2e",
@@ -424,7 +426,7 @@ test("a bar whose only motion is a template's fails effect refresh", async () =>
     expect(run).toBeDefined();
     await click(sockPath, run!);
     expect(flat(await draw())).toContain(
-      "✗ effect refresh — the bar moves (an effect, a fade, or an animated segment), but Claude Code redraws it only on events",
+      "✗ effect refresh — the bar moves (an effect, a fade, or an animated segment), but its statusLine sets no refreshInterval",
     );
 
     writeFileSync(projectConfig, barOf("still"));

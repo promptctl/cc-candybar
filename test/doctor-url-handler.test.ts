@@ -477,7 +477,9 @@ describe("the daemon's side of the round trip", () => {
   function doctorRow(clientVersion: string | null) {
     const d = daemon(clientVersion);
     recordRender(d.sessionState, "s1");
-    d.sessionState.set("s1", SESSION_CLIENT_HINTS_KEY, JSON.stringify({ tmux: null, terminalEnv: { TERM_PROGRAM: "ghostty" }, termCols: 148 }));
+    // The session's own Claude Code directory (test/setup.ts's empty one):
+    // with none, the doctor reads ~/.claude, the host's real settings.
+    d.sessionState.set("s1", SESSION_CLIENT_HINTS_KEY, JSON.stringify({ tmux: null, claudeConfigDir: process.env.CLAUDE_CONFIG_DIR, terminalEnv: { TERM_PROGRAM: "ghostty" }, termCols: 148 }));
     d.click(VERB_DOCTOR_RUN, "s1");
     const keys = doctorReportKeys("urlHandler");
     return {
@@ -491,7 +493,7 @@ describe("the daemon's side of the round trip", () => {
     const row = doctorRow(PACKAGE_VERSION);
     expect(row.verdict).toBe("ok");
     expect(row.logs).toEqual([
-      `doctor: config=ok install=ok daemon=ok urlHandler=ok links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=ok segmentData=ok sessionData=ok glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=ghostty@- font=- mark=- tmuxLinks=- clicked=yes cols=148 widthOf=session clientUtf8=- clients=native/same/- daemons=1 others=- rss=120/512 postMortems=0/0 data=pr:-,rateLimits:1/0/0,memento:located transcripts=1/0/0 unparsed=0 frames=0/0/1/0/0 statusLine=absent truecolorEnv=unset (session=s1)`,
+      `doctor: config=ok install=ok daemon=ok urlHandler=ok links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=ok segmentData=ok sessionData=ok glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=ghostty@- font=- mark=- tmuxLinks=- clicked=yes cols=148 widthOf=session clientUtf8=- clients=native/same/- daemons=1 others=- rss=120/512 postMortems=0/0 data=pr:-,rateLimits:1/0/0,memento:located transcripts=1/0/0 unparsed=0 frames=0/0/1/0/0 redrawn=unseen(0) statusLine=absent truecolorEnv=unset (session=s1)`,
     ]);
   });
 
@@ -502,7 +504,7 @@ describe("the daemon's side of the round trip", () => {
       `the URL handler runs cc-candybar 0.0.1; the bar runs ${PACKAGE_VERSION} — re-run \`cc-candybar install\``,
     );
     expect(row.logs).toEqual([
-      `doctor: config=ok install=ok daemon=ok urlHandler=failed(1) links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=ok segmentData=ok sessionData=ok glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=ghostty@- font=- mark=- tmuxLinks=- clicked=yes cols=148 widthOf=session clientUtf8=- clients=native/same/- daemons=1 others=- rss=120/512 postMortems=0/0 data=pr:-,rateLimits:1/0/0,memento:located transcripts=1/0/0 unparsed=0 frames=0/0/1/0/0 statusLine=absent truecolorEnv=unset (session=s1)`,
+      `doctor: config=ok install=ok daemon=ok urlHandler=failed(1) links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=ok segmentData=ok sessionData=ok glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=ghostty@- font=- mark=- tmuxLinks=- clicked=yes cols=148 widthOf=session clientUtf8=- clients=native/same/- daemons=1 others=- rss=120/512 postMortems=0/0 data=pr:-,rateLimits:1/0/0,memento:located transcripts=1/0/0 unparsed=0 frames=0/0/1/0/0 redrawn=unseen(0) statusLine=absent truecolorEnv=unset (session=s1)`,
     ]);
   });
 
