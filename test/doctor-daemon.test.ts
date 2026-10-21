@@ -386,7 +386,11 @@ describe("parseServingDaemon", () => {
     // A build from before the charge reported RSS under its own name.
     const { memory: _m, limit: _l, ...rest } = HEALTHY_SERVING;
     const rssEra = { ...rest, rss: 1, rssLimit: 2 };
-    expect(parseServingDaemon({ ...stats, daemon: rssEra as never })).toMatchObject({ kind: "failed" });
+    // It is told as the build skew it is, not as a misshapen answer.
+    const rssEraRead = parseServingDaemon({ ...stats, daemon: rssEra as never });
+    expect(rssEraRead.kind === "failed" && rssEraRead.reason).toContain(
+      "reports no daemon.memory, daemon.limit; it is another build",
+    );
     // RSS standing in must say why; without its reason it is misshapen.
     const reasonless = {
       ...HEALTHY_SERVING,
