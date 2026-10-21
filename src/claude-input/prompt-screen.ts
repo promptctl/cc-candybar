@@ -41,17 +41,44 @@ const RULE = /^─{20,}/;
 const PROMPT = /^❯(\s|$)/;
 const STASHED = /›\s*stashed$/;
 
-export function promptState(snapshot: PaneSnapshot): PromptState {
-  if (snapshot.inMode) return { kind: "in-mode" };
+// [LAW:one-source-of-truth] The input box as the screen draws it: the row
+// above its top rule (the hint row), and its prompt row under that rule — or
+// null where no box is drawn.
+function inputBox(
+  snapshot: PaneSnapshot,
+): { readonly hint: string; readonly prompt: string } | null {
   const lines = snapshot.screen.map((l) => l.trimEnd());
   const rules = lines.flatMap((l, i) => (RULE.test(l) ? [i] : []));
   const top = rules.at(-2);
-  if (top === undefined || !PROMPT.test(lines[top + 1] ?? "")) {
-    return { kind: "no-prompt" };
-  }
-  return STASHED.test(lines[top - 1] ?? "")
-    ? { kind: "stashed" }
-    : { kind: "ready" };
+  if (top === undefined || !PROMPT.test(lines[top + 1] ?? "")) return null;
+  return { hint: lines[top - 1] ?? "", prompt: lines[top + 1]! };
+}
+
+export function promptState(snapshot: PaneSnapshot): PromptState {
+  if (snapshot.inMode) return { kind: "in-mode" };
+  const box = inputBox(snapshot);
+  if (box === null) return { kind: "no-prompt" };
+  return STASHED.test(box.hint) ? { kind: "stashed" } : { kind: "ready" };
+}
+
+// Whether the input box holds a draft: text after the `❯` on its first row.
+// An empty box draws `❯` and the cursor alone (a no-break space, which `\s`
+// matches). A screen with no input box holds no draft this can see.
+export function draftShown(snapshot: PaneSnapshot): boolean {
+  return /^❯\s*\S/u.test(inputBox(snapshot)?.prompt ?? "");
+}
+
+// The spinner row Claude Code draws while a turn runs, in column 0 above its
+// input box — a glyph, a verb ending in `…`, then the time it has run.
+// Measured on 2.1.289: `✽ Processing… (26s · ↓ 2.0k tokens · thought for 15s)`.
+const TURN_RUNNING = /^\S+\s+\S[^…]*…\s+\((\d+[hms]\s*)+/u;
+
+// Whether the pane shows a turn in progress. A command typed mid-turn queues
+// until the turn ends (above), which a command that ends the session — the
+// restart under cc-attach types `/exit` — must not do: it would exit after
+// whoever waits on it has given up.
+export function turnRunning(snapshot: PaneSnapshot): boolean {
+  return snapshot.screen.some((line) => TURN_RUNNING.test(line));
 }
 
 export const REFUSALS: Record<Exclude<PromptState["kind"], "ready">, string> = {

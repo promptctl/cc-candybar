@@ -12,7 +12,12 @@
 
 import { inspect } from "node:util";
 import { PROTOCOL_VERSION, type Response } from "./protocol";
-import { laneOffReason, type Lane, type LaneSwitches } from "../config/lanes";
+import {
+  LANES,
+  laneOffReason,
+  type Lane,
+  type LaneSwitches,
+} from "../config/lanes";
 
 // What one render drew: the response its subscribers receive (the one a
 // render request is answered with), the instant it was drawn at (ms since the
@@ -20,8 +25,12 @@ import { laneOffReason, type Lane, type LaneSwitches } from "../config/lanes";
 // render event describing it, logged when that failure is first pushed.
 // [LAW:decomposition] A frame says only what was drawn. Whether anyone can see
 // it is the feed's question, asked when it schedules the next.
+// A frame's two answers: the bar, which a lane drawing it elsewhere draws,
+// and what Claude Code's statusline shows — the bar, or the handoff line in
+// its place while a lane draws it elsewhere (src/daemon/lane-handoff.ts).
 export interface FeedFrame {
   readonly resp: Response;
+  readonly statusline: Response;
   readonly drawnAt: number;
   readonly moves: boolean;
   readonly failure: LogLine | null;
@@ -44,8 +53,8 @@ export interface FeedPeriods {
 // one a second the rate Claude Code itself reaches.
 export const FEED_PERIODS: FeedPeriods = { moving: 1000 / 30, still: 1000 };
 
-// A subscriber: each frame's response, and its JSON as the feed serialized it
-// once for every subscriber.
+// A subscriber: its lane's answer to each frame, and its JSON as the feed
+// serialized it once for every subscriber of that lane.
 export type Sink = (resp: Response, json: string) => void;
 
 export type Refusal = Extract<Response, { ok: false }>;
@@ -99,13 +108,15 @@ interface Feed {
   readonly sinks: Set<Subscriber>;
   readonly unwatch: () => void;
   phase: Phase;
-  // The last frame pushed, as sent, so an unchanged frame is never sent twice
-  // and a new subscriber gets the bar at once.
+  // The last frame pushed, as serialized, so an unchanged frame is never
+  // pushed twice and a new subscriber gets the bar at once.
   last: {
-    readonly resp: Response;
-    readonly bytes: string;
+    readonly answers: Answers;
     readonly drawnAt: number;
   } | null;
+  // The bytes each subscriber was last sent: a lane whose answer this frame
+  // left as it was is not sent it again.
+  readonly sent: Map<Subscriber, string>;
   readonly since: number;
   drawn: number;
   noted: number;
@@ -119,6 +130,24 @@ interface Feed {
   drawMs: number;
   summarizedAt: number;
 }
+
+interface Sent {
+  readonly resp: Response;
+  readonly bytes: string;
+}
+interface Answers {
+  readonly bar: Sent;
+  readonly statusline: Sent;
+}
+const sentOf = (resp: Response): Sent => ({
+  resp,
+  bytes: JSON.stringify(resp),
+});
+
+// [LAW:one-source-of-truth] A lane drawing the bar elsewhere draws the bar;
+// the one drawing it in the statusline draws what the statusline shows.
+const answerOf = (answers: Answers, lane: Lane): Sent =>
+  LANES[lane].elsewhere === null ? answers.statusline : answers.bar;
 
 // How often a long-lived feed writes its summary to the log.
 const SUMMARY_EVERY_MS = 60_000;
@@ -224,12 +253,19 @@ export class FrameFeeds<Req> {
     }
     const feed = this.feeds.get(sessionId) ?? this.open(sessionId);
     feed.sinks.add(sub);
-    if (feed.last !== null) sub.frame(feed.last.resp, feed.last.bytes);
+    this.send(feed, sub);
     this.deps.log(
       "info",
       `feed sid=${JSON.stringify(sessionId)} subscribed lane=${sub.lane} subscribers=${feed.sinks.size} data=${this.requests.has(sessionId) ? "Y" : "N"}`,
     );
     return () => this.unsubscribe(feed, sub);
+  }
+
+  // The lanes whose subscribers follow the session's frames now.
+  following(sessionId: string): ReadonlySet<Lane> {
+    return new Set(
+      [...(this.feeds.get(sessionId)?.sinks ?? [])].map((s) => s.lane),
+    );
   }
 
   // Draw the session's next frame now, if anyone is watching it.
@@ -299,6 +335,7 @@ export class FrameFeeds<Req> {
       unwatch: this.deps.watch(sessionId, () => this.wake(sessionId)),
       phase: { kind: "waiting" },
       last: null,
+      sent: new Map(),
       since: now,
       drawn: 0,
       noted: 0,
@@ -319,6 +356,7 @@ export class FrameFeeds<Req> {
   }
 
   private unsubscribe(feed: Feed, sub: Subscriber): void {
+    feed.sent.delete(sub);
     if (!feed.sinks.delete(sub) || feed.sinks.size > 0) return;
     if (feed.phase.kind === "due") clearTimeout(feed.phase.timer);
     feed.unwatch();
@@ -431,10 +469,16 @@ export class FrameFeeds<Req> {
       }
     }
     if (feed.sinks.size === 0) return;
-    const { resp } = frame;
-    const bytes = JSON.stringify(resp);
-    if (feed.last?.bytes === bytes) return;
-    feed.last = { resp, bytes, drawnAt: frame.drawnAt };
+    const answers = {
+      bar: sentOf(frame.resp),
+      statusline: sentOf(frame.statusline),
+    };
+    if (
+      feed.last?.answers.bar.bytes === answers.bar.bytes &&
+      feed.last.answers.statusline.bytes === answers.statusline.bytes
+    )
+      return;
+    feed.last = { answers, drawnAt: frame.drawnAt };
     this.pushed++;
     feed.pushed++;
     // [LAW:nothing-unseen] A failing frame's render event is logged when that
@@ -442,7 +486,16 @@ export class FrameFeeds<Req> {
     // same bytes, which are not pushed again, and the summary counts it.
     if (frame.failure !== null)
       this.deps.log(frame.failure.level, frame.failure.line);
-    for (const sub of feed.sinks) sub.frame(resp, bytes);
+    for (const sub of feed.sinks) this.send(feed, sub);
+  }
+
+  // The last frame's answer for `sub`'s lane, unless it was sent that already.
+  private send(feed: Feed, sub: Subscriber): void {
+    if (feed.last === null) return;
+    const { resp, bytes } = answerOf(feed.last.answers, sub.lane);
+    if (feed.sent.get(sub) === bytes) return;
+    feed.sent.set(sub, bytes);
+    sub.frame(resp, bytes);
   }
 
   // A subscription its lane's toggle refuses, told why.

@@ -42,21 +42,18 @@ function harness(opts: { motion: Motion; renderMs?: number; fails?: boolean }) {
     gateThrows: false,
     // Added to the feed's clock, to reach the once-a-minute summary.
     skewMs: 0,
+    // What Claude Code's statusline shows in the bar's place while a lane
+    // draws it elsewhere; null while it shows the bar.
+    handoff: null as string | null,
   };
   const frameOf = (req: string): FeedFrame =>
     opts.fails === true
-      ? {
-          resp: { ok: false, error: `${req} threw`, code: "RENDER_FAILED" },
-          drawnAt: Date.now(),
-          moves: false,
-          failure: { level: "error", line: `frame ${req} threw` },
-        }
-      : {
-          resp: { ok: true, output: `${req}#${state.motion === "still" ? state.n : ++state.n}` },
-          drawnAt: Date.now(),
-          moves: state.motion !== "still",
-          failure: null,
-        };
+      ? failedFrame(req)
+      : barFrame(
+          `${req}#${state.motion === "still" ? state.n : ++state.n}`,
+          state.motion !== "still",
+          state.handoff,
+        );
   const changes = new Map<string, () => void>();
   const log: string[] = [];
   const feeds = new FrameFeeds<string>({
@@ -87,6 +84,33 @@ function harness(opts: { motion: Motion; renderMs?: number; fails?: boolean }) {
   return { feeds, note, state, changes, log };
 }
 
+// A frame drawing `output`, whose statusline shows `handoff` in its place, if
+// any.
+function barFrame(
+  output: string,
+  moves: boolean,
+  handoff: string | null = null,
+): FeedFrame {
+  return {
+    resp: { ok: true, output },
+    statusline: { ok: true, output: handoff ?? output },
+    drawnAt: Date.now(),
+    moves,
+    failure: null,
+  };
+}
+
+function failedFrame(req: string): FeedFrame {
+  const resp: Response = { ok: false, error: `${req} threw`, code: "RENDER_FAILED" };
+  return {
+    resp,
+    statusline: resp,
+    drawnAt: Date.now(),
+    moves: false,
+    failure: { level: "error", line: `frame ${req} threw` },
+  };
+}
+
 // A subscriber of `lane` whose frames go to `frame` and whose refusal, if
 // any, to `refused`.
 const sub = (
@@ -97,6 +121,36 @@ const sub = (
 
 const outputOf = (resp: Response): string =>
   resp.ok && "output" in resp ? resp.output : JSON.stringify(resp);
+
+// brandon-menus-sjhy.amf — Brandon: "When we're showing the bar in either the
+// mod or the tmux pane, we should NOT show the original bar except a single
+// line". The statusline lane draws in Claude Code's statusline, so while
+// another lane draws the bar it is sent the handoff line, once, however the
+// bar moves.
+test("while a lane draws the bar elsewhere, the statusline lane is sent the handoff line once, and the band the moving bar", async () => {
+  const { feeds, note, state } = harness({ motion: "moving" });
+  state.handoff = "the bar is drawn in the band";
+  note("s", "bar");
+  const band: string[] = [];
+  const statusline: string[] = [];
+  const closeBand = feeds.subscribe("s", sub((r) => band.push(outputOf(r))));
+  const closeLine = feeds.subscribe(
+    "s",
+    sub((r) => statusline.push(outputOf(r)), "statusline"),
+  );
+  await sleep(200);
+  state.handoff = null;
+  await sleep(100);
+  closeBand();
+  closeLine();
+  expect(band.length).toBeGreaterThan(3);
+  expect(band.every((b) => b.startsWith("bar#"))).toBe(true);
+  // The handoff line, then the moving bar once nothing draws it elsewhere.
+  expect(statusline[0]).toBe("the bar is drawn in the band");
+  expect(statusline.filter((l) => l === "the bar is drawn in the band")).toHaveLength(1);
+  expect(statusline.length).toBeGreaterThan(2);
+  expect(statusline.slice(1).every((l) => l.startsWith("bar#"))).toBe(true);
+});
 
 test("a moving bar is drawn a moving period apart, every new frame pushed", async () => {
   const { feeds, note } = harness({ motion: "moving" });
@@ -270,10 +324,8 @@ test("an answer drawn at an earlier instant than the frame already out is drawn 
   expect(got).toEqual(["bar#0"]);
   const renders = state.renders;
   feeds.note("s", "newer", ++state.order, {
-    resp: { ok: true, output: "drawn before the frame out" },
+    ...barFrame("drawn before the frame out", false),
     drawnAt: Date.now() - 60_000,
-    moves: false,
-    failure: null,
   });
   await sleep(20);
   close();
@@ -286,12 +338,7 @@ test("a moving answer noted while a still frame is drawn sets the pace of the ne
   note("s", "bar");
   const close = feeds.subscribe("s", sub(() => {}));
   await sleep(5);
-  feeds.note("s", "moving", ++state.order, {
-    resp: { ok: true, output: "moving#1" },
-    drawnAt: Date.now(),
-    moves: true,
-    failure: null,
-  });
+  feeds.note("s", "moving", ++state.order, barFrame("moving#1", true));
   // The still frame finishes at 30 ms; the next is due a moving period (20 ms)
   // after the noted one, not a still period (400 ms) after the still one.
   await sleep(150);

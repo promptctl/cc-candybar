@@ -34,7 +34,11 @@ import {
   renderOptionsOf,
 } from "../src/daemon/render-payload";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
-import { VERBS, type VerbContext } from "../src/daemon/verbs";
+import {
+  SESSION_CLIENT_HINTS_KEY,
+  VERBS,
+  type VerbContext,
+} from "../src/daemon/verbs";
 import {
   fileHeldSettings,
   settingCounts,
@@ -48,6 +52,8 @@ import { parseAndValidate } from "./helpers/parse-and-validate";
 import type { ValidatedConfig } from "../src/config/dsl-types";
 import { linkUrls, links } from "./helpers/ansi";
 import { instantOf } from "../src/utils/instant";
+import { LANES, LANE_NAMES, type Lane } from "../src/config/lanes";
+import { LANE_HELP } from "../src/help-text";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = "settings-ui-aok-3";
@@ -91,6 +97,8 @@ function rig(
   durable?.write(source);
   if (durable === undefined) recordRender(sessionState, SID);
   else durable.seedOrigin(sessionState, SID);
+  // What a render records of the session's client: here, not in tmux.
+  sessionState.set(SID, SESSION_CLIENT_HINTS_KEY, JSON.stringify({ tmux: null }));
   // Everything the daemon's cache entry holds for one config — rebuilt whole
   // on a reload, the old registry disposed once the new one is built.
   const load = (text: string) => {
@@ -1452,4 +1460,67 @@ describe("the themeDefault action", () => {
       ),
     ).toThrow(message);
   });
+});
+
+// brandon-menus-sjhy.amf — Brandon: "Each toggle should explain what it does.
+// Each toggle also needs to do all of the work needed to turn its lane on, not
+// just part of it."
+describe("the animation lanes' toggles", () => {
+  // The settings menu open on ⚙ config with 🧪 toggles open.
+  const openToggles = () => {
+    const r = rig(TWO_SEGMENT_ROOT);
+    r.click(writesTo(r.render(), "candybar.menu")[0]!);
+    showTab(r, "config");
+    const url = urlsOf(r.render()).find((u) =>
+      effectsOf(u).some(
+        (e) => e.args[1] === PICKERS_KEY && e.args[2] === "toggles",
+      ),
+    );
+    if (url === undefined) throw new Error("no link opens 🧪 toggles");
+    r.click(url);
+    return { r };
+  };
+
+  // What the lane runs follows the switch the session renders by, whatever
+  // moved it (test/lane-setup.test.ts, "LaneSetups"), so the toggle is its
+  // setting's write and nothing else.
+  test.each(LANE_NAMES)(
+    "%s: the toggle's click is its switch's write alone",
+    (lane) => {
+      const { r } = openToggles();
+      try {
+        const [url, ...others] = writesTo(r.render(), LANES[lane].setting);
+        expect(others).toEqual([]);
+        expect(effectsOf(url!).map((e) => [e.verb, ...e.args])).toEqual([
+          ["set-state", SID, LANES[lane].setting, "true"],
+        ]);
+        r.click(url!);
+        expect(plain(r.render())).toContain(`☑ ${LANES[lane].label}`);
+      } finally {
+        r.dispose();
+      }
+    },
+  );
+
+  test.each(LANE_NAMES)(
+    "%s: the (?) beside the toggle says what the lane does",
+    (lane) => {
+      const { r } = openToggles();
+      try {
+        for (const line of LANE_HELP[lane])
+          expect(plain(r.render())).not.toContain(line);
+        const key = `candybar.help.${LANES[lane].setting}`;
+        const url = urlsOf(r.render()).find((u) => {
+          const effects = effectsOf(u);
+          return effects.length === 1 && effects[0]!.args[1] === key;
+        });
+        if (url === undefined) throw new Error(`no (?) writes ${key}`);
+        r.click(url);
+        for (const line of LANE_HELP[lane])
+          expect(plain(r.render())).toContain(line);
+      } finally {
+        r.dispose();
+      }
+    },
+  );
 });

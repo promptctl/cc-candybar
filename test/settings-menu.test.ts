@@ -1119,12 +1119,18 @@ describe("every settings control has a setting projection", () => {
   // A picker also mints the machinery of its list of options under its apply
   // name — the toggle that opens it, its page cursor, the click doing both —
   // which writes navigation, not a setting.
-  const LIST_MACHINERY = /\.(toggle|page|page\.first|open)$/;
+  const LIST_MACHINERY = /\.(toggle|page|page\.first|open|write)$/;
   const controls = Object.entries(config.actions).filter(
     ([name]) => name.startsWith("candybar.apply.") && !LIST_MACHINERY.test(name),
   );
+  // A `do` presents as its head (a lane toggle's write, its setup riding
+  // behind it), so a control's key is its head's.
   const sessionKey = (a: ActionDecl): string =>
-    "set" in a ? a.set : `(not a set: ${JSON.stringify(a)})`;
+    "set" in a
+      ? a.set
+      : "do" in a
+        ? sessionKey(config.actions[a.do[0]]!)
+        : `(not a set: ${JSON.stringify(a)})`;
 
   test("the menu mints a control for every setting in the table", () => {
     expect(new Set(controls.map(([, a]) => sessionKey(a)))).toEqual(

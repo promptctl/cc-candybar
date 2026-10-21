@@ -52,4 +52,8 @@ export default defineConfig({
 	noExternal: [/./],
 	define,
 	plugins: [sourceDigestPlugin()],
+	// The attach launcher lane B restarts Claude Code under
+	// (scripts/vendor-cc-extra.mjs), beside the bundle that runs it: an
+	// install stages dist/cc-extra with dist/index.mjs.
+	copy: [{ from: 'vendor/cc-extra', to: 'dist', flatten: false }],
 });

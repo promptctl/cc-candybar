@@ -42,7 +42,7 @@ import { makeUpdateWatch, UPDATE_DISMISSED_KEY } from "./update-notice";
 import { makeBinaryWatch } from "./binary-watch";
 import { LANE_FRAMES } from "./lane-frames";
 import { REGISTRY_URL } from "../install/currency";
-import { isAbsolute } from "node:path";
+import { dirname, isAbsolute } from "node:path";
 import { explicitConfigPath } from "../utils/user-path";
 import {
   PROTOCOL_VERSION,
@@ -102,6 +102,7 @@ import { ProbeArrivals } from "../doctor/handler-probe";
 import {
   RenderSightings,
   rateLimitsSeen,
+  roleOf,
   transcriptSaid,
   type FrameSeen,
   type RateLimitsSeen,
@@ -158,8 +159,12 @@ import { reaction } from "mobx";
 import { setImmediate } from "node:timers";
 import type { RenderedLine } from "../dsl/node-registry.js";
 import { productionClaudeInputEdge } from "../claude-input/edge.js";
+import { LaneSetups } from "./lane-setup.js";
+import { productionLaneEdge } from "./lane-edge.js";
+import { handedOffTo, laneHandoff } from "./lane-handoff.js";
 import {
   collectDiagnostics,
+  diagnosticRows,
   composeWithDiagnostics,
   diagnosticRowCap,
   formatDiagnosticDump,
@@ -227,6 +232,24 @@ const navigationHistory = new NavigationHistory();
 // Each session's effect memory — when its effect came into force — held in
 // daemon memory only: a restarted daemon starts every session's effect again.
 const effectSessions = new EffectSessions<RenderedLine>();
+// [LAW:single-enforcer] The one owner of what turning an animation lane on or
+// off takes (src/daemon/lane-setup.ts), told the switches every render draws by.
+const laneSetups = new LaneSetups({
+  edge: productionLaneEdge(dirname(socketPath()), (sessionId) =>
+    frameFeeds.following(sessionId),
+  ),
+  // A bar pane runs this bundle under the node running it now, with the
+  // flags it runs with (tsx's loader, under the test harness).
+  host: {
+    bundle: DAEMON_BUNDLE,
+    node: [process.execPath, ...process.execArgv],
+    socket: socketPath(),
+  },
+  state: sessionState,
+  log: dlog,
+  now: () => instantOf(new Date()),
+  defer: (run) => void setImmediate(run),
+});
 // Each subscribed session's frames, drawn from its latest render request
 // (candybar-animation-wbxz.jmm.usl). A change to the session's own state — a
 // click — draws its next frame at once.
@@ -1221,7 +1244,7 @@ export async function replyTo(
     } = !checked.ok
       ? refusedRender(checked.problems)
       : await answerRequest(checked.req, order, at, facts).then(
-          ({ output, motion, clickShown }) => {
+          ({ output, statusline, answer, motion, clickShown }) => {
             sighted(checked.req, motion);
             const resp = { ok: true, output } as const;
             // [LAW:one-source-of-truth] A request the render took is the
@@ -1231,11 +1254,17 @@ export async function replyTo(
               checked.req.hookData.session_id,
               checked.req,
               order,
-              { resp, drawnAt: t0, moves: motion === "moves", failure: null },
+              {
+                resp,
+                statusline: { ok: true, output: statusline },
+                drawnAt: t0,
+                moves: motion === "moves",
+                failure: null,
+              },
             );
             return {
               outcome: { kind: "ok" } as const,
-              resp,
+              resp: { ok: true, output: answer } as const,
               // [LAW:single-enforcer] An answer carrying the click error that
               // reaches its client is the one that delivered it
               // (src/daemon/click-error.ts).
@@ -1568,7 +1597,7 @@ async function renderFrame(req: CheckedRenderRequest): Promise<FeedFrame> {
   const started = new Date();
   const facts: RenderFacts = [];
   try {
-    const { drawn, motion } = await renderChecked(
+    const { drawn, motion, lanes } = await renderChecked(
       req,
       instantOf(started),
       facts,
@@ -1577,12 +1606,24 @@ async function renderFrame(req: CheckedRenderRequest): Promise<FeedFrame> {
     // [LAW:effects-at-boundaries] A frame only draws: the dump is the
     // session's requests' to write, and the frame links it only when it holds
     // this frame's text.
-    const output = composeBar(
-      drawn,
-      diagnosticDump.linkFor(req.hookData.session_id, dumpTextOf(drawn)),
+    const link = diagnosticDump.linkFor(
+      req.hookData.session_id,
+      dumpTextOf(drawn),
     );
+    const sessionId = req.hookData.session_id;
+    const output = composeBar(drawn, link);
     return {
       resp: { ok: true, output },
+      statusline: {
+        ok: true,
+        output: statuslineOf(
+          sessionId,
+          drawn,
+          link,
+          output,
+          handedOffTo(lanes, frameFeeds.following(sessionId)),
+        ),
+      },
       drawnAt: started.getTime(),
       moves: motion === "moves",
       failure: null,
@@ -1594,8 +1635,10 @@ async function renderFrame(req: CheckedRenderRequest): Promise<FeedFrame> {
       outcome,
       Date.now() - started.getTime(),
     );
+    const failed = renderFailed(error);
     return {
-      resp: renderFailed(error),
+      resp: failed,
+      statusline: failed,
       drawnAt: started.getTime(),
       moves: false,
       failure: { level, line: `frame ${line}` },
@@ -1751,6 +1794,8 @@ async function renderChecked(
   drawn: DrawnBar;
   motion: DrawnMotion;
   clickShown: ClickErrorRecord | null;
+  // Which animation lanes the session's settings switch on, as drawn.
+  lanes: LaneSwitches;
 }> {
   noteFacts(facts, {
     sid: req.hookData.session_id,
@@ -1824,6 +1869,14 @@ async function renderChecked(
   noteFacts(facts, {
     lanes: LANE_NAMES.filter((lane) => effective.lanes[lane]).join(",") || "-",
   });
+  // [LAW:dataflow-not-control-flow] What a lane runs follows the switch every
+  // render draws by, as the session's own setting moves moved it
+  // (src/daemon/lane-setup.ts).
+  laneSetups.observe(
+    { sessionId, hints, origin, transcript: req.hookData.transcript_path },
+    effective.lanes,
+    settingsHistory.revision(sessionId),
+  );
   const payload = await buildRenderPayload(
     req.hookData,
     at,
@@ -2004,6 +2057,7 @@ async function renderChecked(
     },
     motion: frame.motion,
     clickShown,
+    lanes: effective.lanes,
   };
 }
 
@@ -2083,12 +2137,20 @@ async function answerRequest(
   at: Instant,
   facts: RenderFacts,
 ): Promise<{
+  // The session's bar: what its frames are, and what a client drawing the
+  // bar itself is answered with.
   output: string;
+  // What Claude Code's statusline shows: the bar, or the handoff line in its
+  // place while a lane draws it elsewhere.
+  statusline: string;
+  // What this request's client is answered with: the statusline's answer to
+  // Claude Code's statusline, the bar to a client drawing it itself.
+  answer: string;
   motion: DrawnMotion;
   clickShown: ClickErrorRecord | null;
 }> {
   recordRequest(req);
-  const { drawn, motion, clickShown } = await renderChecked(
+  const { drawn, motion, clickShown, lanes } = await renderChecked(
     req,
     at,
     facts,
@@ -2104,5 +2166,50 @@ async function answerRequest(
   noteFacts(facts, {
     dumpFailed: failure === null ? "-" : JSON.stringify(failure),
   });
-  return { output: composeBar(drawn, link), motion, clickShown };
+  const output = composeBar(drawn, link);
+  const sessionId = req.hookData.session_id;
+  const elsewhere = handedOffTo(lanes, frameFeeds.following(sessionId));
+  const statusline = statuslineOf(sessionId, drawn, link, output, elsewhere);
+  // A `frames` display draws the bar itself; Claude Code's statusline hands
+  // it to the lanes drawing it elsewhere.
+  const toStatusline = roleOf(req.hints.client ?? null) === "statusline";
+  // [LAW:nothing-unseen] Which lanes the statusline handed the bar to.
+  noteFacts(facts, {
+    handoff: (toStatusline ? elsewhere : []).join(",") || "-",
+  });
+  return {
+    output,
+    statusline,
+    answer: toStatusline ? statusline : output,
+    motion,
+    clickShown,
+  };
+}
+
+// What Claude Code's statusline shows of `drawn`: the bar (`output`, as
+// composed), or — while lanes draw it `elsewhere` — the handoff line in the
+// body's place.
+// [LAW:no-silent-failure] Only the body is handed off: the strip above it — a
+// load error, the update notice, a click's failure — stays, and the line is
+// the body, so the strip's row cap never drops it.
+function statuslineOf(
+  sessionId: string,
+  drawn: DrawnBar,
+  link: FullTextLink,
+  output: string,
+  elsewhere: readonly Lane[],
+): string {
+  const [first, ...rest] = elsewhere;
+  return first === undefined
+    ? output
+    : composeBar(
+        {
+          ...drawn,
+          body: diagnosticRows(
+            laneHandoff(sessionId, [first, ...rest]),
+            drawn.geometry,
+          ),
+        },
+        link,
+      );
 }

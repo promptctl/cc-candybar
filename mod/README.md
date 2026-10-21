@@ -9,7 +9,11 @@ reaches the daemon as a statusline click does.
 Run it from a checkout built (`pnpm build`, which the daemon runs from) with the
 native client staged (`just install-rust`); the
 mod starts `<checkout>/bin/cc-candybar-native follow --lane band --session <id>`,
-the checkout it sits in:
+the checkout it sits in. Turning on `🧪 band (A)` installs it: the daemon adds
+the checkout as a plugin marketplace (`.claude-plugin/marketplace.json` names
+the mod `candybar-band`), installs `candybar-band@cc-candybar` — read in
+place from `<checkout>/mod`, never copied — and types `/reload-plugins` into
+the session. By hand, for one session:
 
 ```sh
 claude --plugin-dir <checkout>/mod

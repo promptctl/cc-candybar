@@ -71,6 +71,15 @@ export const UPDATE_SEVERITY: DiagnosticSeverity = {
   colors: DIAGNOSTIC_WARNING_COLORS,
 };
 
+// The statusline handing the bar off to an animation lane that draws it
+// elsewhere (src/daemon/lane-handoff.ts): advisory, and its glyph is the
+// lanes' own.
+export const HANDOFF_SEVERITY: DiagnosticSeverity = {
+  heading: "LANES",
+  glyph: "🧪",
+  colors: DIAGNOSTIC_WARNING_COLORS,
+};
+
 // [LAW:parse-dont-validate] A run of words sharing one click. The text is
 // sanitized at construction — `diagnosticSpan` is the only constructor — so
 // every span the composer meets is already safe to emit, whatever produced
@@ -213,7 +222,7 @@ export function composeWithDiagnostics(
 ): string {
   if (diagnostics === null) return body;
   const opts = stripOptions(geometry);
-  const rows = diagnostics.channels.flatMap((ch) => channelRows(ch, opts));
+  const rows = rowsOf(diagnostics, opts);
   const trailed =
     links.failedConfigFile !== null || rows.length > geometry.rowCap;
   const shown = rows.slice(0, geometry.rowCap - Number(trailed));
@@ -224,6 +233,21 @@ export function composeWithDiagnostics(
   // No body → the strip alone (renderDsl produced nothing). Body present →
   // the strip sits above it on its own rows.
   return body ? `${strip}\n${body}` : strip;
+}
+
+// Every row `diagnostics` draws, uncapped and with no trailer: a line drawn in
+// the strip's style that is not the strip — the statusline's handoff line,
+// which takes the body's place (src/daemon/lane-handoff.ts) — so the cap that
+// bounds the strip above it never reaches it.
+export function diagnosticRows(
+  diagnostics: Diagnostics,
+  geometry: DiagnosticGeometry,
+): string {
+  return rowsOf(diagnostics, stripOptions(geometry)).join("\n");
+}
+
+function rowsOf(diagnostics: Diagnostics, opts: BuildLineOptions): string[] {
+  return diagnostics.channels.flatMap((ch) => channelRows(ch, opts));
 }
 
 // The strip's own fixed shape: a plain joiner with NO separator (each word
