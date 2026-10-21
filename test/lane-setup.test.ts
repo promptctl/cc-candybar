@@ -176,6 +176,25 @@ describe("lane C, pane", () => {
   });
 });
 
+describe("lane C, tmux status line", () => {
+  test("on and off run nothing: the daemon draws the status line by the switch", () => {
+    const { edge, did } = fakeEdge();
+    expect(LANE_SETUP.tmuxStatus.on(session(), HOST, edge)).toEqual({
+      kind: "done",
+      said: "the daemon draws %7's bar in its status line",
+    });
+    expect(LANE_SETUP.tmuxStatus.off(session(), HOST, edge).kind).toBe("done");
+    expect(did).toEqual([]);
+  });
+
+  test("on in a session outside tmux is refused, saying why", () => {
+    const { edge } = fakeEdge();
+    expect(() => LANE_SETUP.tmuxStatus.on(session({ tmux: null }), HOST, edge)).toThrow(
+      /not running inside tmux/,
+    );
+  });
+});
+
 // The part of a setup that outlives its click.
 function finished(out: LaneOutcome): Promise<string> {
   if (out.kind !== "underway") throw new Error(`expected underway: ${out.said}`);
@@ -805,6 +824,7 @@ describe("LaneSetups", () => {
     band: false,
     statusline: false,
     pane: false,
+    tmuxStatus: false,
     ...on,
   });
 

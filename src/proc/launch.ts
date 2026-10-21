@@ -137,6 +137,12 @@ export const LAUNCH_CATEGORIES = [
   "lane.tmux",
   "lane.claude",
   "lane.process",
+  // The tmux status line lane (src/daemon/tmux-status.ts): the daemon's own
+  // writes of a shown bar into its tmux status line, one per frame pushed
+  // while the pane is the one a status line shows, and the reads and writes
+  // that lay the status line out and put it back. Paced by the frames, so no
+  // rate limit.
+  "tmux-status",
 ] as const;
 
 export type LaunchCategory = (typeof LAUNCH_CATEGORIES)[number];

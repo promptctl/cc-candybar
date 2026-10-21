@@ -54,6 +54,10 @@ export const LANE_HELP: Readonly<Record<Lane, readonly string[]>> = {
     "animates the bar in a tmux pane under this session's",
     "on: opens that pane · off: closes it",
   ],
+  tmuxStatus: [
+    "animates the bar in the tmux status line, while this session's pane is the one it shows",
+    "on: the daemon draws it there · off: puts the status line back as it was",
+  ],
 };
 
 export const HELP_TEXT = `
@@ -117,8 +121,9 @@ Subcommands:
                            click — one JSON message per stdout line. Reads
                            Claude Code's statusline JSON from stdin (one object
                            a line) and sends it as the session's data
-                           (--config rides with it). LANE is band, statusline
-                           or pane: the experimental lane this stream serves,
+                           (--config rides with it). LANE is one of
+                           ${LANE_NAMES.join(", ")}:
+                           the experimental lane this stream serves,
                            which streams only while its toggle in the settings
                            menu's ${LANE_PLACES} is on.
   bar-pane PANE            Draw the bar of the Claude Code session in tmux

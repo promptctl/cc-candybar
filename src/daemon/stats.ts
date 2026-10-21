@@ -2,6 +2,7 @@
 // watchers each receive a tiny handle they're allowed to bump, but the
 // canonical object lives here. Stats are read-only after serialization.
 
+import type { TmuxStatusStats } from "./tmux-status.js";
 import type { TranscriptReads } from "../utils/transcript-fs";
 import type { FeedStats } from "./frame-feed";
 import type { RenderCacheStats } from "./cache/render";
@@ -101,6 +102,9 @@ export interface StatsSnapshot {
   // Subscribed sessions, their subscribers, and the frames drawn for them and
   // pushed (a drawn frame identical to the last is not pushed).
   frameFeeds: FeedStats;
+  // The tmux status line lane's writes (src/daemon/tmux-status.ts): sessions
+  // it draws, status lines it has laid out, tmux invocations, failed ones.
+  tmuxStatus: TmuxStatusStats;
   watchers: {
     active: number;
     opened: number;
@@ -277,6 +281,7 @@ export class RuntimeStats {
         lookups: 0,
         found: 0,
       },
+      tmuxStatus: { sessions: 0, layouts: 0, writes: 0, failedWrites: 0 },
       watchersActive: 0,
       handlerProbes: [],
       clients: [],
@@ -303,6 +308,7 @@ export class RuntimeStats {
     effectCache: StatsSnapshot["effectCache"];
     sessionState: StatsSnapshot["sessionState"];
     frameFeeds: FeedStats;
+    tmuxStatus: TmuxStatusStats;
     watchersActive: number;
     nextRestartReason?: string | null;
     handlerProbes: readonly ProbeArrival[];
@@ -337,6 +343,7 @@ export class RuntimeStats {
       effectCache: extras.effectCache,
       sessionState: extras.sessionState,
       frameFeeds: extras.frameFeeds,
+      tmuxStatus: extras.tmuxStatus,
       watchers: {
         active: extras.watchersActive,
         opened: this.watchersOpened,

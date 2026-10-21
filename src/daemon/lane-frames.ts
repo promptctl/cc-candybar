@@ -2,7 +2,8 @@
 // candybar-animation-wbxz.81o). The band mod (A) draws rows of styled runs,
 // which the daemon encodes beside the renderer that drew the bar, so the mod's
 // child is a relay; the statusline (B) and the tmux pane (C) draw the ANSI the
-// render produced, so their frames go as the feed serialized them.
+// render produced, so their frames go as the feed serialized them; the tmux
+// status line (C) draws tmux formats (src/tmux-status/frames.ts).
 //
 // [LAW:one-type-per-behavior] The lane already names what its subscriber
 // draws, so the encoding is a value keyed by it, not a field of the subscribe.
@@ -11,6 +12,7 @@
 
 import type { BandOff } from "../../mod/types";
 import { bandResponse } from "../band/frames";
+import { tmuxStatusResponse } from "../tmux-status/frames";
 import type { Lane } from "../config/lanes";
 import type { Response } from "./protocol";
 
@@ -22,6 +24,8 @@ export const LANE_FRAMES: Readonly<Record<Lane, LaneFrame>> = {
   band: (resp) => JSON.stringify(bandResponse(resp)),
   statusline: (_resp, json) => json,
   pane: (_resp, json) => json,
+  tmuxStatus: (resp) =>
+    JSON.stringify({ ok: true, tmuxStatus: tmuxStatusResponse(resp) }),
 };
 
 // [LAW:types-are-the-program] The band's lane-off line is the daemon's own

@@ -14,6 +14,7 @@
 // membership in it.
 
 import { TMUX_ENV, type TmuxHint } from "../tmux-hint.js";
+import { LANE_NAMES } from "../config/lanes.js";
 import type { ClientKind } from "../client-hint.js";
 import { DEFAULT_TERMINAL_WIDTH } from "../render/strip.js";
 import type { Outcome } from "../utils/outcome.js";
@@ -937,7 +938,7 @@ export function clientStanding(
 // through the native client `just install-rust` stages beside it.
 function remedy(daemon: DaemonInstall, client: ClientKind): string {
   if (client === "frames")
-    return `run \`node ${daemon.bundle} frames --lane <band|statusline|pane>\``;
+    return `run \`node ${daemon.bundle} frames --lane <${LANE_NAMES.join("|")}>\``;
   return daemon.checkout === null
     ? REINSTALL
     : `run \`just install-rust\` and point the statusLine command at ${daemon.checkout.root}/bin/cc-candybar-native`;

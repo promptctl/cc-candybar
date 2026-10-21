@@ -150,6 +150,13 @@ export const VERB_CEILING = "ceiling";
 // be one a `slash` action in the session's config declares.
 export const VERB_SLASH = "slash";
 
+// A click on one of the ranges the daemon draws in a tmux status line (lane
+// C, src/daemon/tmux-status.ts), as the server's MouseDown1Status binding
+// sends it. Args: `[socket, pane number, range]` — the daemon looks the range
+// up in the frame it drew there and runs the link it marks, so no link rides
+// the URL. Not a leaf verb: the link's own verb is the click's.
+export const VERB_TMUX_STATUS_CLICK = "tmux-status-click";
+
 // [LAW:types-are-the-program] An effect to EMIT: a verb plus its raw (unencoded)
 // positional args. The wire owns all encoding — callers never percent-encode.
 // set-state's args are `[sessionId, key, value, …]`; copy/open carry one arg.

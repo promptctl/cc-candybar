@@ -9,6 +9,7 @@ import { TERMINAL_ENV_VARS, type TerminalEnvHint } from "../terminal-hint";
 import { CLIENT_KINDS, type ClientHint, type ClientKind } from "../client-hint";
 import type { Lane } from "../config/lanes";
 import type { BandBar } from "../../mod/types";
+import type { TmuxStatusBar } from "../tmux-status/frames";
 
 // [LAW:types-are-the-program] PROTOCOL_VERSION encodes one thing:
 // "old-client × new-daemon (or vice versa) cannot communicate." It moves on
@@ -418,6 +419,9 @@ export type Response =
   // A band-lane subscriber's frame: the bar as the band mod's rows of styled
   // runs (src/daemon/lane-frames.ts), declared by the mod (mod/types).
   | BandBar
+  // A tmux-status-lane subscriber's frame: the bar as a tmux status line's
+  // rows and the links of their ranges (src/tmux-status/frames.ts).
+  | { ok: true; tmuxStatus: TmuxStatusBar }
   // [LAW:types-are-the-program] `daemonV` is the daemon's own
   // PROTOCOL_VERSION, echoed on every error response so the client can render
   // a meaningful diagnostic on VERSION_MISMATCH without parsing the human
