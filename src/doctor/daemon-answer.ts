@@ -16,7 +16,11 @@ import {
   type RenderSighting,
 } from "../daemon/render-sightings.js";
 import type { Asked } from "./checks.js";
-import type { PostMortem, ServingDaemon } from "../daemon/limits.js";
+import type {
+  MemoryReading,
+  PostMortem,
+  ServingDaemon,
+} from "../daemon/limits.js";
 import type { StoresRead } from "./edge.js";
 import { parseMarkBook } from "./mark-book.js";
 import { parseClickedTerminals } from "./clicked-terminals.js";
@@ -113,6 +117,29 @@ const isPostMortem = (m: unknown): m is PostMortem => {
   );
 };
 
+// A reading as the daemon spelled it: none yet, or a charge — the platform's
+// own measure, or RSS standing in with why — beside the RSS and heap it was
+// read with.
+const isMemoryReading = (m: unknown): m is MemoryReading => {
+  const r = (m ?? {}) as {
+    kind?: unknown;
+    charge?: Partial<Record<"kind" | "measure" | "bytes" | "unread", unknown>>;
+    rss?: unknown;
+    heapTotal?: unknown;
+  };
+  if (r.kind === "unmeasured") return true;
+  const c = r.charge;
+  return (
+    r.kind === "measured" &&
+    typeof r.rss === "number" &&
+    typeof r.heapTotal === "number" &&
+    typeof c?.bytes === "number" &&
+    ((c.kind === "charged" &&
+      (c.measure === "phys_footprint" || c.measure === "rss")) ||
+      (c.kind === "stand-in" && typeof c.unread === "string"))
+  );
+};
+
 // [LAW:parse-dont-validate] The daemon's report of itself becomes a
 // ServingDaemon here or a failure naming why — an older daemon carries no
 // `daemon` field (shapeSkew), and anything else misshapen is named whole.
@@ -150,8 +177,8 @@ export function parseServingDaemon(stats: StatsSnapshot): Asked<ServingDaemon> {
   );
   const wellFormed =
     typeof d?.pid === "number" &&
-    typeof d.rss === "number" &&
-    typeof d.rssLimit === "number" &&
+    isMemoryReading(d.memory) &&
+    typeof d.limit === "number" &&
     postMortems.kind !== "misshapen";
   return wellFormed
     ? { kind: "ok", value: { ...(d as ServingDaemon), postMortems } }

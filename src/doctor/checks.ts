@@ -34,6 +34,7 @@ import type { DeclKind, UnusedDecl } from "../config/unused.js";
 import { REDRAW_WINDOW_S, redrawnEverySecond, slowestOf } from "./redraws.js";
 import {
   approachingLimit,
+  chargeWords,
   laterIdentity,
   mb,
   type PostMortem,
@@ -1062,7 +1063,7 @@ const daemon: Check = {
           : "";
       return problemsVerdict([`${serving.reason}${running}`, ...unreadable]);
     }
-    const { pid, rss, rssLimit, postMortems } = serving.value;
+    const { pid, memory, limit, postMortems } = serving.value;
     const unread = unreadPostMortems(serving.value, read);
     const verdict = problemsVerdict([
       ...unread.map(
@@ -1082,14 +1083,29 @@ const daemon: Check = {
       ...unreadable,
       ...others.map(
         (p) =>
-          `daemon ${p.pid} (started ${p.started}, ${mb(p.rss)} MB${p.ppid === 1 ? "" : `, child of ${p.ppid}`}) runs beside the one serving the bar (${pid}) — \`kill ${p.pid}\``,
+          `daemon ${p.pid} (started ${p.started}, rss ${mb(p.rss)} MB${p.ppid === 1 ? "" : `, child of ${p.ppid}`}) runs beside the one serving the bar (${pid}) — \`kill ${p.pid}\``,
       ),
-      ...(approachingLimit(rss, rssLimit)
+      // [LAW:no-silent-failure] RSS standing in for the platform's charge is
+      // the limit judging what macOS has already reclaimed — the very
+      // misjudgment the charge exists to end — so it is a finding, near the
+      // limit or not.
+      ...(memory.kind === "measured" && memory.charge.kind === "stand-in"
         ? [
-            `the daemon holds ${mb(rss)} MB of its ${mb(rssLimit)} MB limit — at the limit it records a post-mortem and restarts`,
+            `the daemon could not read what macOS charges it (${memory.charge.unread}), so its memory limit judges RSS, which counts pages macOS has reclaimed`,
+          ]
+        : []),
+      ...(memory.kind === "measured" &&
+      approachingLimit(memory.charge.bytes, limit)
+        ? [
+            `the daemon holds ${chargeWords(memory.charge)} of its ${mb(limit)} MB limit — at the limit it records a post-mortem and restarts`,
           ]
         : []),
     ]);
+    // [LAW:no-silent-failure] A pass that judged no memory says so, rather
+    // than reading like one that judged it and found it well under.
+    if (verdict.ok && memory.kind === "unmeasured") {
+      return { ok: true, note: "the daemon has not measured its memory yet" };
+    }
     const newest = unread[0];
     return verdict.ok || newest === undefined
       ? verdict

@@ -72,7 +72,7 @@ Two sides, one in each library.
 The RSS budget returns to 512 MB (`DEFAULT_RSS_LIMIT_MB` in `src/daemon/limits.ts` and `rust-client/src/launch.rs`, and the README). The heap cap the spawner passes is 2× that, and the daemon logs both at boot:
 
 ```
-daemon up: … heapCap=1120MB rssLimit=512MB
+daemon up: … heapCap=1120MB memoryLimit=512MB
 ```
 
 V8 reports its heap_size_limit including the young-generation reserve, hence 1120 rather than 1024.
@@ -97,4 +97,4 @@ Live production daemon, same machine, same ~20 sessions, `usageCache.size` = 0 i
 
 In process: follow the recipe in `test/dsl-helpers-shared.test.ts`. Expose gc with `v8.setFlagsFromString`, invoke it with `vm.runInNewContext("gc")`, do one warm-up registration, double-gc, register N configs, double-gc again, divide the delta by N.
 
-Live: `node dist/index.mjs daemon-stats --json` reports `rssBytes`, `heapUsedBytes`, `usageCache.size` and `renderCache.size`. `grep "daemon up" ~/.local/state/cc-candybar/daemon.log | tail -1` shows the budget and cap the running daemon booted with. For a heap snapshot, send the daemon SIGUSR1 and connect a script to the inspector websocket; the RSS backstop also writes one automatically on breach and keeps the newest 3 under `~/.local/state/cc-candybar/`.
+Live: `node dist/index.mjs daemon-stats --json` reports `rssBytes`, `heapUsedBytes`, `usageCache.size` and `renderCache.size`. `grep "daemon up" ~/.local/state/cc-candybar/daemon.log | tail -1` shows the budget and cap the running daemon booted with. For a heap snapshot, send the daemon SIGUSR1 and connect a script to the inspector websocket; the memory backstop also writes one automatically on breach and keeps the newest 3 under `~/.local/state/cc-candybar/`.

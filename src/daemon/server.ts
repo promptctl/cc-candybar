@@ -75,7 +75,7 @@ import {
   makeLimits,
   mb,
   realLimitsDeps,
-  rssLimitBytes,
+  memoryLimitBytes,
   type LimitsHandle,
 } from "./limits";
 import { armParentWatchdog, anchorFromEnv, pidAlive } from "./parent-watchdog";
@@ -458,7 +458,7 @@ export function runDaemon(): void {
     new FileSessionStorage(sessionStatePath(), 500, dlog),
   );
   settingsHistory.useStorage(fileHistoryStorage(settingsHistoryPath(), dlog));
-  // [LAW:single-enforcer] Same death funnel as the signals and the RSS backstop:
+  // [LAW:single-enforcer] Same death funnel as the signals and the memory backstop:
   // the watchdog calls shutdown(0), it never exits on its own. A production
   // daemon has no spawner to outlive (env unset) and arms an inert handle; only
   // a test-spawned daemon is anchored, so this is invisible to the real daemon.
@@ -495,7 +495,7 @@ function bindOrAttachAndExit(
   // a ONE-TIME 'listening' listener. A first listen that fails EADDRINUSE never
   // fires 'listening', so its callback stays pending; the reclaim retry adds a
   // second. Without clearing the stale one, a successful rebind fires BOTH and
-  // onListening runs twice — double-arming the RSS backstop + watchers. Clear
+  // onListening runs twice — double-arming the memory backstop + watchers. Clear
   // pending 'listening' listeners so exactly one onListening fires per bind.
   server.removeAllListeners("listening");
   server.once("error", (err) => {
@@ -623,7 +623,7 @@ function onListening(sockPath: string): void {
     // question a silent SIGABRT crash-loop leaves open is "which cap was live".
     `daemon up: pid=${process.pid} v=${PROTOCOL_VERSION} sock=${sockPath} ` +
       `heapCap=${mb(v8.getHeapStatistics().heap_size_limit)}MB ` +
-      `rssLimit=${mb(budgetBytes)}MB`,
+      `memoryLimit=${mb(budgetBytes)}MB`,
   );
   // [LAW:single-enforcer] This bind is the one process-wide fact that answers
   // "did an outage just end" — see resetSpawnBackoff's doc comment in
@@ -649,7 +649,7 @@ function onListening(sockPath: string): void {
 // path over time" (brandon-daemon-lifecycle-2b3.2). Each interval it re-reads
 // BOTH representations a displacer can touch — the path's kernel identity (still
 // the inode we bound?) and the lease (still names our pid?) — and drains through
-// the SAME shutdown funnel as signals, the RSS backstop, and the watchdog on
+// the SAME shutdown funnel as signals, the memory backstop, and the watchdog on
 // either mismatch. The lease arm closes the capture race (RESIDUAL 2): a thief
 // that stole our socket inside the bind→listening tick, which the inode arm
 // cannot see because we captured the thief's inode, is caught the moment the
@@ -680,10 +680,10 @@ function establishedLimits(): LimitsHandle {
 // arms them (onListening), so the page answers the doctor's `serving` with no
 // timer counting its memory.
 export function establishLimits(env: NodeJS.ProcessEnv): void {
-  budgetBytes = rssLimitBytes(env);
+  budgetBytes = memoryLimitBytes(env);
   limits = makeLimits(
     realLimitsDeps(stats.startedAt.getTime(), (code) => shutdown(code), {
-      rssLimitBytes: budgetBytes,
+      limitBytes: budgetBytes,
     }),
   );
 }

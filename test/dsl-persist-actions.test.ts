@@ -47,7 +47,7 @@ import {
 import { persistValueText, writeValues } from "../src/daemon/config-file-store";
 import { isGlobalsField } from "../src/config/loader/globals";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
-import { rssLimitBytes } from "../src/daemon/limits";
+import { memoryLimitBytes } from "../src/daemon/limits";
 import {
   RenderCache,
   renderCacheBudget,
@@ -839,7 +839,7 @@ function makeCache(): {
   const reloads = new ReloadSignal();
   const cache = new RenderCache(
     { gitService, sessionState, watchers },
-    { budgetBytes: () => renderCacheBudget(rssLimitBytes({})), observers: reloads.observers },
+    { budgetBytes: () => renderCacheBudget(memoryLimitBytes({})), observers: reloads.observers },
   );
   return { cache, sessionState, cleanups, reloads };
 }

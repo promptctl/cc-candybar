@@ -659,7 +659,7 @@ function sleep(ms: number): Promise<void> {
 //
 // [LAW:one-source-of-truth] The V8 old-space cap is derived from the daemon's
 // RSS budget (limits.ts: heapCapMb), never a literal here — the cap must sit
-// ABOVE the RSS backstop so the graceful path fires first, and only one owner
+// ABOVE the memory backstop so the graceful path fires first, and only one owner
 // of the budget can keep that order true. The Rust client derives the same
 // value the same way (rust-client/src/launch.rs).
 //

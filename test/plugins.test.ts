@@ -11,7 +11,7 @@ import { addableSegmentDomains } from "../src/config/edit-chrome";
 import { stripAnsi } from "./helpers/daemon-e2e";
 import { renderDsl } from "../src/dsl/render";
 import { instantOf } from "../src/utils/instant";
-import { rssLimitBytes } from "../src/daemon/limits";
+import { memoryLimitBytes } from "../src/daemon/limits";
 import {
   loadFromDisk,
   pluginLoadLine,
@@ -492,7 +492,7 @@ describe("an installed plugin", () => {
     try {
       const cache = new RenderCache(
         { gitService, sessionState: new SessionState(), watchers },
-        { budgetBytes: () => renderCacheBudget(rssLimitBytes({})) },
+        { budgetBytes: () => renderCacheBudget(memoryLimitBytes({})) },
       );
       const main = path.join(dir, "main");
       const cwds = [main, path.join(main, ".claude/worktrees/w"), path.join(main, "src")];
@@ -724,7 +724,7 @@ describe("an installed plugin", () => {
       const p = write("config.json5", `{ root: { h: ["plugins.lit.status"] } }`);
       const cache = new RenderCache(
         { gitService, sessionState: new SessionState(), watchers },
-        { budgetBytes: () => renderCacheBudget(rssLimitBytes({})) },
+        { budgetBytes: () => renderCacheBudget(memoryLimitBytes({})) },
       );
       const entry = cache.getOrCreate(repo, repo, p);
       expect(entry.lastError).not.toBeNull();

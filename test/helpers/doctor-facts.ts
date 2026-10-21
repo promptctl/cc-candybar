@@ -31,8 +31,13 @@ export const HEALTHY_INSTALL_EDGE: InstallEdge = {
 // Its one daemon: well under its budget, never out of memory.
 export const HEALTHY_SERVING: ServingDaemon = {
   pid: 4100,
-  rss: 120 * 1024 * 1024,
-  rssLimit: 512 * 1024 * 1024,
+  memory: {
+    kind: "measured",
+    charge: { kind: "charged", measure: "phys_footprint", bytes: 120 * 1024 * 1024 },
+    rss: 160 * 1024 * 1024,
+    heapTotal: 90 * 1024 * 1024,
+  },
+  limit: 512 * 1024 * 1024,
   postMortems: { kind: "ok", value: [] },
 };
 

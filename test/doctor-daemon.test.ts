@@ -10,7 +10,7 @@ import { applyFix, daemonProcesses, ownsEntry } from "../src/doctor/edge";
 import { parseDoctorStores, parseServingDaemon } from "../src/doctor/daemon-answer";
 import { filePostMortemsRead, parsePostMortemsRead } from "../src/doctor/post-mortems-read";
 import { RuntimeStats } from "../src/daemon/stats";
-import { postMortemsOf } from "../src/daemon/limits";
+import { postMortemsOf, type ServingDaemon } from "../src/daemon/limits";
 import { EMPTY_STORES, HEALTHY_FACTS, HEALTHY_PROCESS, HEALTHY_SERVING, emptyStores } from "./helpers/doctor-facts";
 
 const MB = 1024 * 1024;
@@ -67,16 +67,58 @@ describe("the daemon probe", () => {
     expect(verdictOf({ ...withPostMortems, read: { kind: "ok", value: { through: NEWER } } })).toEqual({ ok: true });
   });
 
-  test("past three quarters of the budget fails, naming both numbers; at it does not", () => {
-    const at = (rss: number) =>
-      verdictOf({ serving: { kind: "ok", value: { ...HEALTHY_SERVING, rss } } });
+  // The charge as the platform measures it, RSS beside it well over.
+  const charged = (bytes: number): ServingDaemon["memory"] => ({
+    kind: "measured",
+    charge: { kind: "charged", measure: "phys_footprint", bytes },
+    rss: 600 * MB,
+    heapTotal: 100 * MB,
+  });
+
+  test("past three quarters of the budget by the charge fails, naming the measure; at it does not", () => {
+    const at = (bytes: number) =>
+      verdictOf({ serving: { kind: "ok", value: { ...HEALTHY_SERVING, memory: charged(bytes) } } });
     expect(at(384 * MB)).toEqual({ ok: true });
     expect(at(400 * MB)).toEqual({
       ok: false,
       reason:
-        "the daemon holds 400 MB of its 512 MB limit — at the limit it records a post-mortem and restarts",
+        "the daemon holds phys_footprint 400 MB of its 512 MB limit — at the limit it records a post-mortem and restarts",
       more: [],
     });
+  });
+
+  test("RSS standing in for the charge is a finding however far under the limit, and is judged too", () => {
+    const standIn = (bytes: number) =>
+      verdictOf({
+        serving: {
+          kind: "ok",
+          value: {
+            ...HEALTHY_SERVING,
+            memory: {
+              kind: "measured",
+              charge: { kind: "stand-in", bytes, unread: "footprint timeout" },
+              rss: bytes,
+              heapTotal: 100 * MB,
+            },
+          },
+        },
+      });
+    const unread =
+      "the daemon could not read what macOS charges it (footprint timeout), so its memory limit judges RSS, which counts pages macOS has reclaimed";
+    expect(standIn(100 * MB)).toEqual({ ok: false, reason: unread, more: [] });
+    expect(standIn(450 * MB)).toEqual({
+      ok: false,
+      reason: unread,
+      more: [
+        "the daemon holds rss 450 MB (standing in: footprint timeout) of its 512 MB limit — at the limit it records a post-mortem and restarts",
+      ],
+    });
+  });
+
+  test("a daemon that has not measured its memory passes saying so", () => {
+    expect(
+      verdictOf({ serving: { kind: "ok", value: { ...HEALTHY_SERVING, memory: { kind: "unmeasured" } } } }),
+    ).toEqual({ ok: true, note: "the daemon has not measured its memory yet" });
   });
 
   test("every daemon beside the serving one is named, its parent too when one lives", () => {
@@ -93,9 +135,9 @@ describe("the daemon probe", () => {
     expect(verdict).toEqual({
       ok: false,
       reason:
-        "daemon 4200 (started Sun Oct 18 09:00:00 2026 UTC, 300 MB) runs beside the one serving the bar (4100) — `kill 4200`",
+        "daemon 4200 (started Sun Oct 18 09:00:00 2026 UTC, rss 300 MB) runs beside the one serving the bar (4100) — `kill 4200`",
       more: [
-        "daemon 4300 (started Mon Oct 19 18:20:01 2026 UTC, 90 MB, child of 999) runs beside the one serving the bar (4100) — `kill 4300`",
+        "daemon 4300 (started Mon Oct 19 18:20:01 2026 UTC, rss 90 MB, child of 999) runs beside the one serving the bar (4100) — `kill 4300`",
       ],
     });
   });
@@ -104,11 +146,11 @@ describe("the daemon probe", () => {
     const verdict = verdictOf({
       serving: {
         kind: "ok",
-        value: { ...withPostMortems.serving.value, rss: 500 * MB },
+        value: { ...withPostMortems.serving.value, memory: charged(500 * MB) },
       },
     });
     expect(verdict).toMatchObject({ ok: false, fix: { kind: "post-mortems-read", through: NEWER } });
-    expect(verdict.ok === false && verdict.more?.at(-1)).toMatch(/^the daemon holds 500 MB/);
+    expect(verdict.ok === false && verdict.more?.at(-1)).toMatch(/^the daemon holds phys_footprint 500 MB/);
   });
 
   test("no daemon answering is the failure, naming any daemon running, never as a stray", () => {
@@ -339,6 +381,22 @@ describe("parseServingDaemon", () => {
     const skewed = parseServingDaemon(older as typeof stats);
     expect(skewed).toMatchObject({ kind: "failed" });
     expect(skewed.kind === "failed" && skewed.reason).toContain("reports no daemon");
+    const unmeasured = { ...HEALTHY_SERVING, memory: { kind: "unmeasured" as const } };
+    expect(parseServingDaemon({ ...stats, daemon: unmeasured })).toEqual({ kind: "ok", value: unmeasured });
+    // A build from before the charge reported RSS under its own name.
+    const { memory: _m, limit: _l, ...rest } = HEALTHY_SERVING;
+    const rssEra = { ...rest, rss: 1, rssLimit: 2 };
+    // It is told as the build skew it is, not as a misshapen answer.
+    const rssEraRead = parseServingDaemon({ ...stats, daemon: rssEra as never });
+    expect(rssEraRead.kind === "failed" && rssEraRead.reason).toContain(
+      "reports no daemon.memory, daemon.limit; it is another build",
+    );
+    // RSS standing in must say why; without its reason it is misshapen.
+    const reasonless = {
+      ...HEALTHY_SERVING,
+      memory: { kind: "measured", charge: { kind: "stand-in", bytes: 1 }, rss: 1, heapTotal: 1 },
+    };
+    expect(parseServingDaemon({ ...stats, daemon: reasonless as never })).toMatchObject({ kind: "failed" });
     const odd = { ...HEALTHY_SERVING, postMortems: { kind: "ok", value: [{ identity: 3 }] } };
     expect(parseServingDaemon({ ...stats, daemon: odd as never })).toEqual({
       kind: "failed",

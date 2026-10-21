@@ -14,7 +14,7 @@ import process from "node:process";
 // [LAW:dataflow-not-control-flow] The watchdog runs the same poll every tick;
 // whether it ever trips lives in the anchor VALUE (a pid to outlive, or
 // nobody), derived once from the environment — never in a branch wrapped around
-// the spawn path. Like the RSS backstop in `limits.ts`, it calls `onOrphaned`
+// the spawn path. Like the memory backstop in `limits.ts`, it calls `onOrphaned`
 // (the lifecycle `shutdown`) rather than exiting itself, so every daemon-death
 // path funnels through the one enforcer.
 

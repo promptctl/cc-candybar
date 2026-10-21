@@ -36,7 +36,7 @@ import {
 } from "./checks.js";
 import type { SettingsSource } from "../claude-settings.js";
 import { SETTINGS_NS } from "../config/loader/reserved-namespace.js";
-import { mb } from "../daemon/limits.js";
+import { mb, measureOf } from "../daemon/limits.js";
 import { valueOf } from "../utils/logfmt.js";
 import {
   FRAMES_SEEN,
@@ -148,14 +148,18 @@ export function daemonFields({
             .join(",") || "-"
         }`;
   if (serving.kind === "failed") {
-    return `${running} rss=unasked postMortems=unasked`;
+    return `${running} memory=unasked postMortems=unasked`;
   }
-  const { rss, rssLimit, postMortems } = serving.value;
+  const { memory, limit, postMortems } = serving.value;
   const told =
     postMortems.kind === "failed" || read.kind === "failed"
       ? "unread"
       : `${unreadPostMortems(serving.value, read).length}/${postMortems.value.length}`;
-  return `${running} rss=${mb(rss)}/${mb(rssLimit)} postMortems=${told}`;
+  const held =
+    memory.kind === "unmeasured"
+      ? "unmeasured"
+      : `${measureOf(memory.charge)}:${mb(memory.charge.bytes)}`;
+  return `${running} memory=${held}/${mb(limit)} postMortems=${told}`;
 }
 
 // [LAW:nothing-unseen] What the segment-data check reasoned over, as one

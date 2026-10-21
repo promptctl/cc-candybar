@@ -3,23 +3,35 @@ import path from "node:path";
 import v8 from "node:v8";
 import { daemonDir } from "./paths";
 import { dlog, type DaemonLogger } from "./log";
-import { memoryReport, platformProbes } from "./memory-report";
+import {
+  chargeProbe,
+  memoryReport,
+  platformProbes,
+  type ChargeProbe,
+  type MemoryCharge,
+} from "./memory-report";
 
 // [LAW:single-enforcer] One module owns "when does the daemon plan to die".
-// Only the RSS trigger remains — idle and age limits were removed because they
-// interrupted active sessions. The RSS limit is a true anomaly backstop; normal
+// Only the memory trigger remains — idle and age limits were removed because they
+// interrupted active sessions. The memory limit is a true anomaly backstop; normal
 // operation should never approach it now that transcript parsing is pruned.
 //
 // How much of the budget is even reachable by eviction was measured rather than
-// assumed (brandon-daemon-limits-inw): on the live daemon roughly 50 MB of RSS is
+// assumed (brandon-daemon-limits-inw): on the live daemon roughly 50 MB of memory is
 // clean file-backed code plus kernel page tables that no cache can release, so a
 // 512 MB budget is about 460 MB of controllable memory. The same measurement is
-// why a breach records more than a heap snapshot — see checkRss.
+// why a breach records more than a heap snapshot — see check.
+//
+// The limit is on what the PLATFORM charges the process (MemoryCharge,
+// memory-report.ts): phys_footprint on macOS, RSS on Linux. macOS RSS counts
+// the pages malloc has freed and marked reusable, so judged on it the backstop
+// killed daemons holding 342 and 386 MB of a 512 MB budget
+// (brandon-unfiled-3248.2j3m).
 //
 // [LAW:one-source-of-truth] The daemon's memory budget is ONE number, read from
 // ONE place. Two limits derive from it and their ORDER is the whole point:
 //
-//   RSS backstop (this module)   — graceful: heap snapshot, logged shutdown,
+//   memory backstop (this module) — graceful: heap snapshot, logged shutdown,
 //                                  clean restart on the next tick.
 //   V8 old-space cap (spawners)  — hard: V8 aborts with SIGABRT below every JS
 //                                  handler, so no log line, no snapshot, and
@@ -37,7 +49,10 @@ import { memoryReport, platformProbes } from "./memory-report";
 // spawners derive the cap through heapCapMb below. The Rust client mirrors
 // RSS_LIMIT_ENV, DEFAULT_RSS_LIMIT_MB, and HEAP_CAP_OVER_RSS as literals
 // (rust-client/src/launch.rs); scripts/check-protocol.mjs fails the build on
-// drift.
+// drift. Those three keep "RSS" in their names although the limit is now on the
+// platform's charge: users set the variable, and the Rust client and
+// check-protocol name the constants, so renaming them for wording alone would
+// break that contract for no change in meaning.
 export const RSS_LIMIT_ENV = "CC_CANDYBAR_RSS_LIMIT_MB";
 export const DEFAULT_RSS_LIMIT_MB = 512;
 export const HEAP_CAP_OVER_RSS = 2;
@@ -52,7 +67,7 @@ export const HEAP_CAP_OVER_RSS = 2;
 // so the spawner and the daemon it spawns accept and reject the same values
 // (rust-client/src/launch.rs heap_cap_mb). A grammar that differed by so much
 // as a leading `+` would let a client spawn a daemon that refuses to boot.
-export function rssLimitMb(env: NodeJS.ProcessEnv): number {
+export function memoryLimitMb(env: NodeJS.ProcessEnv): number {
   const raw = env[RSS_LIMIT_ENV];
   if (raw === undefined) return DEFAULT_RSS_LIMIT_MB;
   const mb = /^\d+$/.test(raw) ? Number(raw) : NaN;
@@ -66,7 +81,7 @@ export function rssLimitMb(env: NodeJS.ProcessEnv): number {
 
 // The `--max-old-space-size` value a spawner hands node for the daemon.
 export function heapCapMb(env: NodeJS.ProcessEnv): number {
-  return rssLimitMb(env) * HEAP_CAP_OVER_RSS;
+  return memoryLimitMb(env) * HEAP_CAP_OVER_RSS;
 }
 
 const BYTES_PER_MB = 1024 * 1024;
@@ -75,9 +90,9 @@ const BYTES_PER_MB = 1024 * 1024;
 // sentence about the daemon's memory says them.
 export const mb = (bytes: number): number => Math.round(bytes / BYTES_PER_MB);
 
-// The budget in the unit `process.memoryUsage().rss` reports.
-export function rssLimitBytes(env: NodeJS.ProcessEnv): number {
-  return rssLimitMb(env) * BYTES_PER_MB;
+// The budget in bytes, the unit every MemoryCharge is read in.
+export function memoryLimitBytes(env: NodeJS.ProcessEnv): number {
+  return memoryLimitMb(env) * BYTES_PER_MB;
 }
 
 const DEFAULT_CHECK_INTERVAL = 60 * 1000;
@@ -114,13 +129,26 @@ export interface PostMortem {
   readonly artifacts: Readonly<Partial<Record<BreachArtifact, string>>>;
 }
 
+// [LAW:types-are-the-program] The backstop's latest reading, or none yet:
+// `unmeasured` until the first probe answers — the instant before a daemon's
+// first check, and for good in the browser page, which never arms its limits.
+// Never a construction-time number passed off as a reading.
+export type MemoryReading =
+  | { readonly kind: "unmeasured" }
+  | {
+      readonly kind: "measured";
+      readonly charge: MemoryCharge;
+      readonly rss: number;
+      readonly heapTotal: number;
+    };
+
 // The daemon as the doctor judges it (brandon-doctor-v62x.5mq): which process
 // it is, how much of its budget it holds, and the post-mortems its directory
 // keeps — or why they could not be listed.
 export interface ServingDaemon {
   readonly pid: number;
-  readonly rss: number;
-  readonly rssLimit: number;
+  readonly memory: MemoryReading;
+  readonly limit: number;
   readonly postMortems:
     | { readonly kind: "ok"; readonly value: readonly PostMortem[] }
     | { readonly kind: "failed"; readonly reason: string };
@@ -128,8 +156,8 @@ export interface ServingDaemon {
 
 // [LAW:single-enforcer] THE judgment of "near the limit": the restart
 // forecast in daemon-stats and the doctor's daemon row both ask it.
-export function approachingLimit(rss: number, limit: number): boolean {
-  return rss > limit * 0.75;
+export function approachingLimit(bytes: number, limit: number): boolean {
+  return bytes > limit * 0.75;
 }
 
 function artifactFile(
@@ -151,10 +179,10 @@ function breachArtifactOf(base: string): BreachArtifact | null {
   return null;
 }
 
-// What the backstop measures, in the units process.memoryUsage() reports. RSS is
-// what the kernel bills and therefore what the limit is on; heapTotal is the part
-// V8 admits to, and the gap between them is the whole reason this module writes
-// an attribution artifact rather than only a heap snapshot.
+// What process.memoryUsage() reports, beside every charge: RSS (the charge
+// itself on Linux, the stand-in on macOS) and heapTotal, the part V8 admits to
+// — the gap between the charge and the heap is the whole reason this module
+// writes an attribution artifact rather than only a heap snapshot.
 export interface MemorySizes {
   readonly rss: number;
   readonly heapTotal: number;
@@ -164,7 +192,7 @@ export interface LimitsDeps {
   now: () => number;
   // [LAW:locality-or-seam] The snapshot directory, the log sink, and the
   // writer's identity are injected, not reached for ambiently. Without these,
-  // unit tests of checkRss compute filenames against the real daemonDir() and
+  // unit tests of check compute filenames against the real daemonDir() and
   // emit real dlog lines into the user's production daemon.log — the seam must
   // cover every dependency or it isn't a seam.
   pid: number;
@@ -176,6 +204,8 @@ export interface LimitsDeps {
   // to say how much of it is V8, which is the difference between "a cache to
   // fix" and "something a heap snapshot cannot show you".
   memoryBytes: () => MemorySizes;
+  // What the platform charges this process (memory-report.ts chargeProbe).
+  memoryCharge: ChargeProbe;
   // The platform's own attribution of this process's resident memory, as text.
   // Total by contract (src/daemon/memory-report.ts): it reports which probe
   // could not answer rather than throwing, because the caller is already dying.
@@ -187,12 +217,14 @@ export interface LimitsDeps {
   removeFile: (filePath: string) => void;
   shutdown: (code: number) => void;
   startedAtMs: number;
-  rssLimitBytes?: number;
+  limitBytes?: number;
   snapshotsKeep?: number;
 }
 
 export interface LimitsHandle {
-  checkRss(): boolean;
+  // Takes a reading and breaches on it; resolves true once the daemon is
+  // shutting down of memory.
+  check(): Promise<boolean>;
   describeNextRestart(): string | null;
   // [LAW:one-source-of-truth] The one producer of `ServingDaemon`, from one
   // memory reading: daemon-stats carries it, a doctor click calls it.
@@ -201,18 +233,38 @@ export interface LimitsHandle {
 }
 
 export function makeLimits(deps: LimitsDeps): LimitsHandle {
-  const rssLimit = deps.rssLimitBytes ?? DEFAULT_RSS_LIMIT_MB * BYTES_PER_MB;
+  const limit = deps.limitBytes ?? DEFAULT_RSS_LIMIT_MB * BYTES_PER_MB;
   const keep = deps.snapshotsKeep ?? HEAP_SNAPSHOT_KEEP;
   let triggered = false;
+  // [LAW:one-source-of-truth] The one reading: the breach verdict, the restart
+  // forecast and the doctor's daemon row all read it, never one of their own.
+  let latest: MemoryReading = { kind: "unmeasured" };
+  // [LAW:no-ambient-temporal-coupling] The reading in flight, shared: a
+  // second caller while one is out waits on the same reading rather than
+  // taking its own, so a breach is judged — and recorded — once.
+  let inFlight: Promise<boolean> | null = null;
 
-  function checkRss(): boolean {
+  function check(): Promise<boolean> {
+    inFlight ??= measure().finally(() => {
+      inFlight = null;
+    });
+    return inFlight;
+  }
+
+  async function measure(): Promise<boolean> {
     if (triggered) return true;
     const { rss, heapTotal } = deps.memoryBytes();
-    if (rss <= rssLimit) return false;
+    const charge = await deps.memoryCharge(rss);
+    const reading = { kind: "measured", charge, rss, heapTotal } as const;
+    latest = reading;
+    // [LAW:nothing-unseen] One line per reading, whatever it says: the history
+    // a breach is read against, which no cache count can reconstruct.
+    deps.log("info", `memory ${readingFields(reading, limit)}`);
+    if (charge.bytes <= limit) return false;
     triggered = true;
     deps.log(
       "warn",
-      `RSS ${rss} > limit ${rssLimit} (v8 heap ${heapTotal}); recording memory then shutting down`,
+      `${chargeWords(charge)} > limit ${mb(limit)} MB (rss ${mb(rss)} MB, v8 heap ${mb(heapTotal)} MB); recording memory then shutting down`,
     );
     // [LAW:types-are-the-program] Uniqueness is by construction (the writer's
     // pid), not by trusting the clock to be real and sub-ms-distinct. Two
@@ -259,40 +311,79 @@ export function makeLimits(deps: LimitsDeps): LimitsHandle {
   }
 
   function describeNextRestart(): string | null {
-    const { rss, heapTotal } = deps.memoryBytes();
-    if (approachingLimit(rss, rssLimit)) {
-      // The heap share is the actionable half of the sentence: growth inside V8
-      // is a cache to fix, growth outside it is not, and the reader cannot tell
-      // which from an RSS number alone.
-      return `rss ${rss} approaching limit ${rssLimit} (v8 heap ${heapTotal})`;
-    }
-    return null;
+    // The heap share is the actionable half of the sentence: growth inside V8
+    // is a cache to fix, growth outside it is not, and the reader cannot tell
+    // which from the charge alone.
+    return latest.kind === "measured" &&
+      approachingLimit(latest.charge.bytes, limit)
+      ? `${chargeWords(latest.charge)} approaching limit ${mb(limit)} MB (v8 heap ${mb(latest.heapTotal)} MB)`
+      : null;
   }
 
   function serving(): ServingDaemon {
-    const { rss } = deps.memoryBytes();
     let postMortems: ServingDaemon["postMortems"];
     try {
       postMortems = { kind: "ok", value: postMortemsOf(deps.listArtifacts()) };
     } catch (e) {
       postMortems = { kind: "failed", reason: (e as Error).message };
     }
-    return { pid: deps.pid, rss, rssLimit, postMortems };
+    return { pid: deps.pid, memory: latest, limit, postMortems };
   }
 
+  // [LAW:no-ambient-temporal-coupling] A reading at once, then each next one
+  // scheduled only once the last has answered: a probe slower than the
+  // interval delays the next instead of overlapping it.
   function arm(intervalMs: number = DEFAULT_CHECK_INTERVAL): {
     disarm(): void;
   } {
-    const timer = setInterval(() => {
-      checkRss();
-    }, intervalMs);
-    timer.unref();
+    let timer: NodeJS.Timeout | undefined;
+    let armed = true;
+    const tick = async (): Promise<void> => {
+      try {
+        if (await check()) return;
+      } catch (e) {
+        deps.log("warn", `memory check failed: ${(e as Error).message}`);
+      }
+      if (!armed) return;
+      timer = setTimeout(() => void tick(), intervalMs);
+      timer.unref();
+    };
+    void tick();
     return {
-      disarm: () => clearInterval(timer),
+      disarm: () => {
+        armed = false;
+        clearTimeout(timer);
+      },
     };
   }
 
-  return { checkRss, describeNextRestart, serving, arm };
+  return { check, describeNextRestart, serving, arm };
+}
+
+// [LAW:one-source-of-truth] The one spelling of a charge in a sentence: the
+// breach line, the restart forecast and the doctor's row all say it this way.
+export function chargeWords(charge: MemoryCharge): string {
+  return charge.kind === "charged"
+    ? `${charge.measure} ${mb(charge.bytes)} MB`
+    : `rss ${mb(charge.bytes)} MB (standing in: ${charge.unread})`;
+}
+
+// [LAW:one-source-of-truth] The one token naming what a charge measured: the
+// per-check log line and the doctor's event both say it this way.
+export function measureOf(charge: MemoryCharge): string {
+  return charge.kind === "charged" ? charge.measure : "rss-stand-in";
+}
+
+// The per-check log line's fields, logfmt.
+function readingFields(
+  { charge, rss, heapTotal }: Extract<MemoryReading, { kind: "measured" }>,
+  limit: number,
+): string {
+  const unread =
+    charge.kind === "stand-in"
+      ? ` unread=${JSON.stringify(charge.unread)}`
+      : "";
+  return `measure=${measureOf(charge)} charge=${mb(charge.bytes)}MB rss=${mb(rss)}MB heap=${mb(heapTotal)}MB limit=${mb(limit)}MB${unread}`;
 }
 
 // [LAW:no-silent-failure] The death path's one shape for "do this, and if it
@@ -359,6 +450,7 @@ export function realLimitsDeps(
       const mem = process.memoryUsage();
       return { rss: mem.rss, heapTotal: mem.heapTotal };
     },
+    memoryCharge: chargeProbe(process.platform, process.pid),
     captureMemoryReport: () =>
       memoryReport(platformProbes(process.platform, process.pid)),
     // 0600 like the heap snapshot v8 writes beside it: the pair shares an

@@ -53,7 +53,7 @@ import { pluginDataVar, pluginNameOf } from "../../config/loader/plugins.js";
 // [LAW:one-source-of-truth] Bounded by bytes, out of the daemon's one memory
 // budget: an entry is a new one per directory a session renders from (every
 // worktree, every `cd`), so a count sized for watchers (it was 256, ~2.4 GB of
-// states) let the RSS backstop trip long before anything was evicted
+// states) let the memory backstop trip long before anything was evicted
 // (brandon-unfiled-3248.8yp). The heap a state holds beside its compile, and
 // the heap one compile holds — measured, and held to by
 // test/render-cache-sharing.test.ts, which fails when either is exceeded.
@@ -65,7 +65,7 @@ import { pluginDataVar, pluginNameOf } from "../../config/loader/plugins.js";
 export const ENTRY_BYTES = 3 * 1024 * 1024;
 export const COMPILE_BYTES = 10 * 1024 * 1024;
 
-// The render cache's share of the daemon's RSS limit: a quarter, leaving the
+// The render cache's share of the daemon's memory limit: a quarter, leaving the
 // rest to V8's own mappings, the code, the other caches, and the heap's growth
 // room. At the default 512 MB that is ~39 entries on one compile, against a
 // working set of 19 directories in the production daemon's first 2.3 hours
@@ -73,13 +73,13 @@ export const COMPILE_BYTES = 10 * 1024 * 1024;
 // directories, RSS ended at 329 / 390 / 424 MB under a quarter / three
 // eighths / half — the larger two past the 75% line `approachingLimit` warns
 // at.
-export function renderCacheBudget(rssLimitBytes: number): number {
-  return Math.floor(rssLimitBytes / 4);
+export function renderCacheBudget(memoryLimitBytes: number): number {
+  return Math.floor(memoryLimitBytes / 4);
 }
 
 // The count ceiling beside the byte budget: every entry holds a
 // SourceRegistry (fs watchers, TTL timers, git subscriptions) and a config
-// watcher, a resource the byte budget does not see. At the default RSS limit
+// watcher, a resource the byte budget does not see. At the default memory limit
 // the bytes bind long before this; it is what bounds watchers when
 // CC_CANDYBAR_RSS_LIMIT_MB is raised.
 export const MAX_ENTRIES = 256;
