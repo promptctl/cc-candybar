@@ -16,7 +16,9 @@
 // (`@cc-candybar-status-prior`, `@cc-candybar-status-wrote`,
 // `@cc-candybar-binding-prior`), so a daemon that died without restoring
 // leaves them for the next one, which puts them back on its first answer from
-// that server.
+// that server. Each record names the daemon that wrote it — its socket — and
+// a daemon takes over only its own: one on another socket (a dev or test
+// daemon) on the same tmux server leaves what the other draws alone.
 //
 // [LAW:no-ambient-temporal-coupling] A tmux call costs ~20 ms of spawn
 // (measured, macOS), so while the daemon runs every call is asynchronous and
@@ -31,7 +33,11 @@ import type { TmuxRun } from "../proc/tmux.js";
 import type { TmuxHint } from "../tmux-hint.js";
 import type { StatusLines } from "./pane-visibility.js";
 import type { Subscriber } from "./frame-feed.js";
-import { decodeSegments } from "../click/wire.js";
+import {
+  decodeSegments,
+  encodeSegments,
+  VERB_TMUX_STATUS_CLICK,
+} from "../click/wire.js";
 import {
   RANGE_PREFIX,
   tmuxStatusResponse,
@@ -79,8 +85,10 @@ export type Formats = Readonly<Record<number, string>>;
 // daemon laid it out — its `status`, and its own `status-format` (null where
 // it set neither, and read the global ones) — and the whole `status-format`
 // the daemon wrote over it: the rows below the bar's copied from the array it
-// read, the bar's own rows after them.
+// read, the bar's own rows after them. `owner` is the socket of the daemon
+// that laid it out.
 export interface Prior {
+  readonly owner: string;
   readonly base: number;
   readonly status: string | null;
   readonly formats: Formats | null;
@@ -213,8 +221,40 @@ const INSTALL_QUERIES = (session: string): Command[] => [
   show(session, WROTE_OPTION),
 ];
 
+// [LAW:parse-dont-validate] What a daemon left in a session's options (its
+// `@cc-candybar-status-prior` and `-wrote`, non-empty): this daemon's layout,
+// with the height it last wrote, or a reason to leave the session alone — a
+// record that does not read, or one another daemon wrote.
+export type LeftBehind =
+  | { readonly kind: "ours"; readonly prior: Prior; readonly status: number }
+  | { readonly kind: "theirs"; readonly why: string };
+
+export function leftBehind(
+  prior: string,
+  wrote: string,
+  owner: string,
+): LeftBehind {
+  let parsed: Prior;
+  let status: number;
+  try {
+    parsed = JSON.parse(prior) as Prior;
+    status = wrote === "" ? parsed.base : statusRows(wrote);
+  } catch (error) {
+    return {
+      kind: "theirs",
+      why: `${PRIOR_OPTION} does not read (${String(error)})`,
+    };
+  }
+  return parsed.owner === owner
+    ? { kind: "ours", prior: parsed, status }
+    : {
+        kind: "theirs",
+        why: `the daemon at ${JSON.stringify(parsed.owner)} draws it`,
+      };
+}
+
 export type Install =
-  | { readonly kind: "adopt"; readonly prior: Prior; readonly status: number }
+  | LeftBehind
   | {
       readonly kind: "lay-out";
       readonly prior: Prior;
@@ -224,19 +264,13 @@ export type Install =
 export function installPlan(
   session: string,
   answers: readonly string[],
+  owner: string,
 ): Install {
   const [statusWordNow = "", ...rest] = answers;
   const own = ownOf(rest.slice(0, 2 + MAX_STATUS_ROWS));
   const globals = rest.slice(2 + MAX_STATUS_ROWS, 2 + 2 * MAX_STATUS_ROWS);
   const [prior = "", wrote = ""] = rest.slice(2 + 2 * MAX_STATUS_ROWS);
-  if (prior !== "") {
-    const parsed = JSON.parse(prior) as Prior;
-    return {
-      kind: "adopt",
-      prior: parsed,
-      status: wrote === "" ? parsed.base : statusRows(wrote),
-    };
-  }
+  if (prior !== "") return leftBehind(prior, wrote, owner);
   const base = statusRows(statusWordNow);
   const above: Record<number, string> = {};
   for (let i = 0; i < base; i++) {
@@ -253,6 +287,7 @@ export function installPlan(
     ),
   };
   const laid: Prior = {
+    owner,
     base,
     status: own.status,
     formats: own.formats,
@@ -325,18 +360,66 @@ export function restorePlan(
 // a whole table's listing pads the key's column with spaces.
 const BOUND =
   /^bind-key\s+(?:-r\s+)?(?:-N\s+(?:"(?:[^"\\]|\\.)*"|\S+)\s+)?-T\s+root\s+MouseDown1Status\s+(.+)$/m;
-// The root table (never empty, so `list-keys` of it answers) and what a daemon
-// before this one left.
-const BINDING_QUERIES: Command[] = [
-  ["list-keys", "-T", "root"],
-  showGlobal(BINDING_OPTION),
-];
+// The root table (never empty, so `list-keys` of it answers).
+const ROOT_KEYS: Command[] = [["list-keys", "-T", "root"]];
+
 // The line binding MouseDown1Status in the root table, and what it runs.
-export function boundOf(
-  listKeys: string,
-): { readonly line: string; readonly command: string } | null {
+export interface Bound {
+  readonly line: string;
+  readonly command: string;
+}
+export function boundOf(listKeys: string): Bound | null {
   const found = BOUND.exec(listKeys);
   return found === null ? null : { line: found[0], command: found[1]! };
+}
+
+// [LAW:one-source-of-truth] The link a status-line click runs, as this module
+// writes it into the binding and reads it back in `linkAt`: tmux expands the
+// pane (its `%` stripped, which a URL would read as an escape) and the range,
+// shell-quoted, before the shell runs the line.
+const CLICK_URL = `cc-candybar://${VERB_TMUX_STATUS_CLICK}/`;
+const clickUrl = (socket: string): string =>
+  `${CLICK_URL}${encodeSegments([socket])}/#{s/%//:pane_id}/#{q:mouse_status_range}`;
+
+// A binding a cc-candybar daemon wrote — this one or any other — told by the
+// click it runs, which `list-keys` prints as it was bound whatever the
+// padding before it.
+const isClickBinding = (bound: Bound | null): boolean =>
+  bound?.command.includes(CLICK_URL) ?? false;
+
+// What `@cc-candybar-binding-prior` holds: the daemon that bound the click,
+// and the binding it replaced.
+interface BindingRecord {
+  readonly owner: string;
+  readonly prior: Bound | null;
+}
+
+// [LAW:one-source-of-truth] Compare-and-restore, as for a layout: the binding
+// goes back to `prior` only while it is still a cc-candybar one.
+function bindingRestorePlan(
+  prior: Bound | null,
+  listKeys: string,
+): {
+  readonly steps: ReadonlyArray<{ command: Command; stdin?: string }>;
+  readonly said: string;
+} {
+  const forget = {
+    command: ["set-option", "-g", "-q", "-u", BINDING_OPTION],
+  };
+  if (!isClickBinding(boundOf(listKeys)))
+    return {
+      steps: [forget],
+      said: "left MouseDown1Status as it is: bound again since",
+    };
+  return {
+    steps: [
+      prior === null
+        ? { command: ["unbind-key", ...CLICK_KEY] }
+        : { command: ["source-file", "-"], stdin: `${prior.line}\n` },
+      forget,
+    ],
+    said: `restored MouseDown1Status to ${prior === null ? "unbound" : JSON.stringify(prior.line)}`,
+  };
 }
 
 export interface TmuxStatusEdge {
@@ -356,9 +439,11 @@ export interface TmuxStatusDeps {
   // The session whose statusline last rendered from `pane`, as the daemon
   // holds it — a /clear or a new Claude Code in the pane takes it over.
   readonly sessionInPane: (socket: string, pane: string) => string | null;
-  // The shell line a click on one of the daemon's ranges runs on the server at
-  // `socket`, with tmux's `#{…}` for the pane and the range in it.
-  readonly clickLine: (socket: string) => string;
+  // The shell words that deliver a `cc-candybar://` URL, the last argument, to
+  // this daemon — what a click on one of its ranges runs.
+  readonly handler: string;
+  // This daemon's socket: what it writes into tmux is marked with it.
+  readonly owner: string;
   // [LAW:effects-at-boundaries] Subscribing runs after the render that asked
   // for it has returned.
   readonly defer: (run: () => void) => void;
@@ -382,23 +467,22 @@ interface Layout {
 }
 
 // [LAW:types-are-the-program] The server's click binding as the daemon knows
-// it: not its own; its own, with what it replaced; or left alone — someone
-// else's since, or one this lane could not keep.
+// it: not its own; one a daemon on this socket left, to bind again as this
+// process; its own, with what it replaced; or left alone — another daemon's.
 type Binding =
   | { readonly kind: "none" }
-  | {
-      readonly kind: "ours";
-      readonly prior: string | null;
-      readonly ours: string;
-    }
+  | { readonly kind: "adopted"; readonly prior: Bound | null }
+  | { readonly kind: "ours"; readonly prior: Bound | null }
   | { readonly kind: "left"; readonly why: string };
 
 interface Server {
   view: StatusLines | null;
   adopted: boolean;
   readonly layouts: Map<string, Layout>;
+  // Sessions laid out by something other than this daemon, and why, left
+  // alone until no held pane is in them.
+  readonly left: Map<string, string>;
   binding: Binding;
-  checkBinding: boolean;
   // [LAW:no-ambient-temporal-coupling] The reconcile running now, if any, and
   // whether something changed while it ran — one more runs after it, never a
   // second beside it.
@@ -480,6 +564,7 @@ export class TmuxStatusLines {
           if (this.held.get(sessionId) === entry)
             this.release(entry, `refused: ${resp.error}`);
         },
+        drawing: () => this.draws(entry),
       });
     });
   }
@@ -500,8 +585,20 @@ export class TmuxStatusLines {
           this.release(held, `pane taken by sid=${JSON.stringify(newest)}`);
       }
     }
-    if (server.binding.kind === "ours") server.checkBinding = true;
     this.reconcile(socket);
+  }
+
+  // Whether `held`'s bar is in a status line now: a session this daemon laid
+  // out, whose status line shows `held`'s pane. Another held pane in the same
+  // tmux session draws nowhere but its own statusline.
+  private draws(held: Held): boolean {
+    const server = this.servers.get(held.socket);
+    const session = server?.view?.sessionOf.get(held.pane);
+    return (
+      session !== undefined &&
+      server!.layouts.has(session) &&
+      server!.view!.shownBy.get(session) === held.pane
+    );
   }
 
   // [LAW:single-enforcer] The daemon's shutdown: everything put back, now —
@@ -521,10 +618,10 @@ export class TmuxStatusLines {
       }
       const binding = server.binding;
       server.binding = { kind: "none" };
-      if (binding.kind === "ours") {
-        const answers = this.askSync(socket, BINDING_QUERIES);
+      if (binding.kind === "ours" || binding.kind === "adopted") {
+        const answers = this.askSync(socket, ROOT_KEYS);
         if (answers === null) continue;
-        this.writeBindingRestoreSync(socket, binding, answers[0] ?? "");
+        this.writeBindingRestoreSync(socket, binding.prior, answers[0] ?? "");
       }
     }
   }
@@ -580,8 +677,8 @@ export class TmuxStatusLines {
       view: null,
       adopted: false,
       layouts: new Map(),
+      left: new Map(),
       binding: { kind: "none" },
-      checkBinding: false,
       running: null,
       again: false,
       lastFailure: null,
@@ -647,15 +744,18 @@ export class TmuxStatusLines {
     }
     for (const session of new Set([
       ...server.layouts.keys(),
+      ...server.left.keys(),
       ...panesIn.keys(),
     ])) {
       if (this.closed) return;
       const panes = panesIn.get(session) ?? [];
       const known = server.layouts.get(session);
       if (panes.length === 0) {
+        server.left.delete(session);
         if (known !== undefined) await this.restore(socket, server, session);
         continue;
       }
+      if (server.left.has(session)) continue;
       const layout = known ?? (await this.install(socket, server, session));
       if (layout === null) continue;
       const shown = panes.find((h) => h.pane === view.shownBy.get(session));
@@ -664,17 +764,13 @@ export class TmuxStatusLines {
       await this.draw(socket, session, layout, rows);
     }
     if (this.closed) return;
-    if (server.checkBinding) {
-      server.checkBinding = false;
-      await this.checkBinding(socket, server);
-    }
     if (server.layouts.size > 0) await this.installBinding(socket, server);
     else await this.restoreBinding(socket, server);
   }
 
-  // The first answer from a server: the layouts and the binding a daemon
-  // before this one left there are taken over, so the reconcile that follows
-  // keeps or restores them like its own.
+  // The first answer from a server: the layouts and the binding a daemon on
+  // this socket left there are taken over, so the reconcile that follows
+  // keeps or restores them like its own; what another daemon draws is left.
   private async adopt(socket: string, server: Server): Promise<void> {
     const run = await this.run(socket, [
       "list-sessions",
@@ -683,38 +779,53 @@ export class TmuxStatusLines {
     ]);
     if (run.kind === "ok") {
       for (const line of run.stdout.split("\n")) {
-        const [session, prior, wrote] = line.split("\t");
+        const [session, prior, wrote = ""] = line.split("\t");
         if (session === undefined || prior === undefined || prior === "")
           continue;
-        try {
-          const parsed = JSON.parse(prior) as Prior;
+        const found = leftBehind(prior, wrote, this.deps.owner);
+        if (found.kind === "ours")
           server.layouts.set(session, {
-            prior: parsed,
+            prior: found.prior,
             rows: [],
-            status: wrote ? statusRows(wrote) : parsed.base,
+            status: found.status,
           });
-        } catch (error) {
-          this.deps.log(
-            "warn",
-            `tmux-status: socket=${JSON.stringify(socket)} session ${session}'s ${PRIOR_OPTION} does not read (${String(error)}), left as it is`,
-          );
-        }
+        else this.leave(socket, server, session, found.why);
       }
     }
     const answers = await this.ask(socket, [showGlobal(BINDING_OPTION)]);
     const saved = answers?.[0] ?? "";
     if (saved !== "") {
-      const { prior, ours } = JSON.parse(saved) as {
-        prior: string | null;
-        ours: string;
-      };
-      server.binding = { kind: "ours", prior, ours };
+      try {
+        const record = JSON.parse(saved) as BindingRecord;
+        if (record.owner === this.deps.owner)
+          server.binding = { kind: "adopted", prior: record.prior };
+      } catch (error) {
+        this.deps.log(
+          "warn",
+          `tmux-status: socket=${JSON.stringify(socket)} ${BINDING_OPTION} does not read (${String(error)}), left as it is`,
+        );
+      }
     }
-    if (server.layouts.size > 0 || server.binding.kind === "ours")
+    if (server.layouts.size > 0 || server.binding.kind === "adopted")
       this.deps.log(
         "info",
         `tmux-status: socket=${JSON.stringify(socket)} took over layouts=${[...server.layouts.keys()].join(",") || "-"} binding=${server.binding.kind}`,
       );
+  }
+
+  // A tmux session this daemon does not draw while what is laid out there is
+  // not its own — said once, when it is first met.
+  private leave(
+    socket: string,
+    server: Server,
+    session: string,
+    why: string,
+  ): void {
+    server.left.set(session, why);
+    this.deps.log(
+      "warn",
+      `tmux-status: socket=${JSON.stringify(socket)} session ${session} left as it is: ${why}`,
+    );
   }
 
   private async install(
@@ -723,20 +834,26 @@ export class TmuxStatusLines {
     session: string,
   ): Promise<Layout | null> {
     const answers = await this.ask(socket, INSTALL_QUERIES(session));
-    if (answers === null) return null;
-    const plan = installPlan(session, answers);
+    // [LAW:no-ambient-temporal-coupling] A shutdown during the ask has
+    // restored everything it knew of; a layout begun now would outlive it.
+    if (answers === null || this.closed) return null;
+    const plan = installPlan(session, answers, this.deps.owner);
+    if (plan.kind === "theirs") {
+      this.leave(socket, server, session, plan.why);
+      return null;
+    }
     // Known before it is written, so a shutdown while the write is in flight
     // still puts it back.
     const layout: Layout = {
       prior: plan.prior,
       rows: [],
-      status: plan.kind === "adopt" ? plan.status : plan.prior.base,
+      status: plan.kind === "ours" ? plan.status : plan.prior.base,
     };
     server.layouts.set(session, layout);
     if (plan.kind === "lay-out") await this.write(socket, plan.commands);
     this.deps.log(
       "info",
-      `tmux-status: socket=${JSON.stringify(socket)} ${plan.kind === "adopt" ? "took over" : "laid out"} session ${session} base=${plan.prior.base} own=${[plan.prior.status === null ? [] : ["status"], plan.prior.formats === null ? [] : ["status-format"]].flat().join(",") || "-"}`,
+      `tmux-status: socket=${JSON.stringify(socket)} ${plan.kind === "ours" ? "took over" : "laid out"} session ${session} base=${plan.prior.base} own=${[plan.prior.status === null ? [] : ["status"], plan.prior.formats === null ? [] : ["status-format"]].flat().join(",") || "-"}`,
     );
     return layout;
   }
@@ -760,19 +877,23 @@ export class TmuxStatusLines {
         ["set-option", "-t", session, WROTE_OPTION, word],
       );
     }
+    // What tmux holds is what a write it took left there: a failed one leaves
+    // the layout as it was, so the next reconcile writes it again.
+    const took =
+      commands.length === 0 ||
+      (await this.write(socket, [
+        [
+          "if-shell",
+          "-F",
+          "-t",
+          session,
+          `#{${PRIOR_OPTION}}`,
+          commandText(commands),
+        ],
+      ]));
+    if (!took) return;
     layout.rows = rows;
     layout.status = status;
-    if (commands.length === 0) return;
-    await this.write(socket, [
-      [
-        "if-shell",
-        "-F",
-        "-t",
-        session,
-        `#{${PRIOR_OPTION}}`,
-        commandText(commands),
-      ],
-    ]);
   }
 
   private async restore(
@@ -801,27 +922,23 @@ export class TmuxStatusLines {
     );
   }
 
+  // The server's click binding made this process's: bound over whatever the
+  // user had (or, for one a daemon on this socket left, over what IT
+  // replaced), with the record of what it replaced written in the same tmux
+  // call — so tmux never holds the binding without it. Another daemon's
+  // binding is left alone.
   private async installBinding(socket: string, server: Server): Promise<void> {
-    if (server.binding.kind !== "none") return;
-    const answers = await this.ask(socket, BINDING_QUERIES);
-    if (answers === null) return;
+    const binding = server.binding;
+    if (binding.kind === "ours" || binding.kind === "left") return;
+    const answers = await this.ask(socket, ROOT_KEYS);
+    // [LAW:no-ambient-temporal-coupling] As for a layout: nothing is bound
+    // after the shutdown's restore.
+    if (answers === null || this.closed) return;
     const bound = boundOf(answers[0] ?? "");
-    const command = [
-      "bind-key",
-      ...CLICK_KEY,
-      "if-shell",
-      "-F",
-      `#{m:${RANGE_PREFIX}*,#{mouse_status_range}}`,
-      `run-shell -b ${tmuxQuoted(this.deps.clickLine(socket))}`,
-      ...(bound === null ? [] : [bound.command]),
-    ];
-    await this.write(socket, [command]);
-    const after = await this.ask(socket, BINDING_QUERIES);
-    const ours = boundOf(after?.[0] ?? "")?.line;
-    if (ours === undefined) {
+    if (binding.kind === "none" && isClickBinding(bound)) {
       server.binding = {
         kind: "left",
-        why: "MouseDown1Status reads back as no binding after it was bound — status-line clicks are off",
+        why: "another cc-candybar daemon's status-line clicks are bound to MouseDown1Status; left as it is, so this daemon's are off",
       };
       this.deps.log(
         "warn",
@@ -829,44 +946,47 @@ export class TmuxStatusLines {
       );
       return;
     }
-    const prior = bound?.line ?? null;
-    server.binding = { kind: "ours", prior, ours };
-    await this.write(socket, [
-      ["set-option", "-g", BINDING_OPTION, JSON.stringify({ prior, ours })],
+    // An adopted record holds while its binding is still bound; one the user
+    // replaced since is theirs, and what this bind replaces.
+    const prior =
+      binding.kind === "adopted" && isClickBinding(bound)
+        ? binding.prior
+        : bound;
+    const record: BindingRecord = { owner: this.deps.owner, prior };
+    // Known before it is written, so a shutdown while the write is in flight
+    // still puts it back.
+    server.binding = { kind: "ours", prior };
+    const took = await this.write(socket, [
+      [
+        "bind-key",
+        ...CLICK_KEY,
+        "if-shell",
+        "-F",
+        `#{m:${RANGE_PREFIX}*,#{mouse_status_range}}`,
+        `run-shell -b ${tmuxQuoted(`${this.deps.handler} ${clickUrl(socket)}`)}`,
+        ...(prior === null ? [] : [prior.command]),
+      ],
+      ["set-option", "-g", BINDING_OPTION, JSON.stringify(record)],
     ]);
+    // A bind tmux refused leaves nothing to put back; the next reconcile
+    // binds again.
+    if (!took) {
+      server.binding = binding;
+      return;
+    }
     this.deps.log(
       "info",
-      `tmux-status: socket=${JSON.stringify(socket)} bound MouseDown1Status (was ${prior === null ? "unbound" : JSON.stringify(prior)})`,
-    );
-  }
-
-  private async checkBinding(socket: string, server: Server): Promise<void> {
-    const binding = server.binding;
-    if (binding.kind !== "ours") return;
-    const answers = await this.ask(socket, BINDING_QUERIES);
-    if (answers === null) return;
-    const line = boundOf(answers[0] ?? "")?.line ?? null;
-    if (line === binding.ours) return;
-    server.binding = {
-      kind: "left",
-      why: `MouseDown1Status was bound again since (${JSON.stringify(line)}); left as it is, so status-line clicks are off`,
-    };
-    await this.write(socket, [
-      ["set-option", "-g", "-q", "-u", BINDING_OPTION],
-    ]);
-    this.deps.log(
-      "warn",
-      `tmux-status: socket=${JSON.stringify(socket)} ${server.binding.why}`,
+      `tmux-status: socket=${JSON.stringify(socket)} bound MouseDown1Status (was ${prior === null ? "unbound" : JSON.stringify(prior.line)})`,
     );
   }
 
   private async restoreBinding(socket: string, server: Server): Promise<void> {
     const binding = server.binding;
     server.binding = { kind: "none" };
-    if (binding.kind !== "ours") return;
-    const answers = await this.ask(socket, BINDING_QUERIES);
+    if (binding.kind !== "ours" && binding.kind !== "adopted") return;
+    const answers = await this.ask(socket, ROOT_KEYS);
     if (answers === null) return;
-    const plan = this.bindingRestorePlan(binding, answers[0] ?? "");
+    const plan = bindingRestorePlan(binding.prior, answers[0] ?? "");
     for (const step of plan.steps)
       await this.write(socket, [step.command], step.stdin);
     this.deps.log(
@@ -877,44 +997,16 @@ export class TmuxStatusLines {
 
   private writeBindingRestoreSync(
     socket: string,
-    binding: Extract<Binding, { kind: "ours" }>,
+    prior: Bound | null,
     listKeys: string,
   ): void {
-    const plan = this.bindingRestorePlan(binding, listKeys);
+    const plan = bindingRestorePlan(prior, listKeys);
     for (const step of plan.steps)
       this.writeSync(socket, [step.command], step.stdin);
     this.deps.log(
       "info",
       `tmux-status: socket=${JSON.stringify(socket)} ${plan.said}`,
     );
-  }
-
-  // [LAW:one-source-of-truth] Compare-and-restore, as for a layout: the
-  // binding goes back only while it is still the daemon's.
-  private bindingRestorePlan(
-    binding: Extract<Binding, { kind: "ours" }>,
-    listKeys: string,
-  ): {
-    readonly steps: ReadonlyArray<{ command: Command; stdin?: string }>;
-    readonly said: string;
-  } {
-    const forget = {
-      command: ["set-option", "-g", "-q", "-u", BINDING_OPTION],
-    };
-    if (boundOf(listKeys)?.line !== binding.ours)
-      return {
-        steps: [forget],
-        said: "left MouseDown1Status as it is: bound again since",
-      };
-    return {
-      steps: [
-        binding.prior === null
-          ? { command: ["unbind-key", ...CLICK_KEY] }
-          : { command: ["source-file", "-"], stdin: `${binding.prior}\n` },
-        forget,
-      ],
-      said: `restored MouseDown1Status to ${binding.prior === null ? "unbound" : JSON.stringify(binding.prior)}`,
-    };
   }
 
   // ─── tmux, counted ───────────────────────────────────────────────────────
@@ -959,14 +1051,15 @@ export class TmuxStatusLines {
     return run.kind === "ok" ? answersOf(run.stdout, queries.length) : null;
   }
 
+  // Whether tmux took the write.
   private async write(
     socket: string,
     commands: readonly Command[],
     stdin?: string,
-  ): Promise<void> {
-    if (commands.length === 0) return;
+  ): Promise<boolean> {
+    if (commands.length === 0) return true;
     this.writes++;
-    await this.run(socket, chain(commands), stdin);
+    return (await this.run(socket, chain(commands), stdin)).kind === "ok";
   }
 
   private writeSync(

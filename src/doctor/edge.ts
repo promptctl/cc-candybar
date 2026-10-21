@@ -99,11 +99,7 @@ import { fileClickedTerminals } from "./clicked-terminals.js";
 import { filePostMortemsRead } from "./post-mortems-read.js";
 import type { StateFile } from "./state-file.js";
 import { laterIdentity, type ServingDaemon } from "../daemon/limits.js";
-import type {
-  ClickArrival,
-  SightedBar,
-  SightingScope,
-} from "./sightings.js";
+import type { ClickArrival, SightedBar, SightingScope } from "./sightings.js";
 
 // [LAW:effects-at-boundaries] The install check's reads of the machine: a
 // path resolved through every link, the checkout a bundle was built in, a
@@ -782,7 +778,11 @@ function terminalFacts(
 export function clickArrived(arrival: ClickArrival): UrlHandlerFacts {
   switch (arrival.via) {
     case "link":
-      return { kind: "arrived", handler: arrival.handler, bar: PACKAGE_VERSION };
+      return {
+        kind: "arrived",
+        handler: arrival.handler,
+        bar: PACKAGE_VERSION,
+      };
     case "tmux-status":
       return {
         kind: "unprobed",

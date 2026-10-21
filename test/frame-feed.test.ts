@@ -124,7 +124,7 @@ const sub = (
   frame: (resp: Response) => unknown,
   lane: Lane = "band",
   refused: (resp: Refusal) => unknown = () => {},
-): Subscriber => ({ lane, frame, refused });
+): Subscriber => ({ lane, frame, refused, drawing: () => true });
 
 const outputOf = (resp: Response): string =>
   resp.ok && "output" in resp ? resp.output : JSON.stringify(resp);
@@ -157,6 +157,22 @@ test("while a lane draws the bar elsewhere, the statusline lane is sent the hand
   expect(statusline.filter((l) => l === "the bar is drawn in the band")).toHaveLength(1);
   expect(statusline.length).toBeGreaterThan(2);
   expect(statusline.slice(1).every((l) => l.startsWith("bar#"))).toBe(true);
+});
+
+// Review of PR #405: the daemon's own tmux status line subscriber follows
+// every session it holds, but draws only the one its status line shows.
+test("a lane follows a session only while one of its subscribers draws it", () => {
+  const { feeds, note } = harness({ motion: "still" });
+  note("s", "bar");
+  let drawing = false;
+  const close = feeds.subscribe("s", {
+    ...sub(() => {}, "tmuxStatus"),
+    drawing: () => drawing,
+  });
+  expect(feeds.following("s").has("tmuxStatus")).toBe(false);
+  drawing = true;
+  expect(feeds.following("s").has("tmuxStatus")).toBe(true);
+  close();
 });
 
 test("a moving bar is drawn a moving period apart, every new frame pushed", async () => {

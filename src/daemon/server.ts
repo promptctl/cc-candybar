@@ -164,7 +164,7 @@ import {
 } from "./pane-visibility.js";
 import { runTmux, runTmuxAsync } from "../proc/tmux.js";
 import { TmuxStatusLines } from "./tmux-status.js";
-import { encodeSegments, VERB_TMUX_STATUS_CLICK } from "../click/wire.js";
+import { VERB_TMUX_STATUS_CLICK } from "../click/wire.js";
 import { parseHandlerUrl } from "../install/index.js";
 import { shellWord } from "../shell-word.js";
 import { reaction } from "mobx";
@@ -282,15 +282,12 @@ const tmuxStatusLines: TmuxStatusLines = new TmuxStatusLines({
         tmux.socket === socket &&
         tmux.pane === pane,
     ),
-  // tmux expands the pane (its `%` stripped, which a URL would read as an
-  // escape) and the range, shell-quoted, before the shell runs the line.
-  clickLine: (socket) =>
-    [
-      `CC_CANDYBAR_SOCKET=${shellWord(socketPath())}`,
-      ...[...DAEMON_NODE, DAEMON_BUNDLE].map(shellWord),
-      "url-handle",
-      `cc-candybar://${VERB_TMUX_STATUS_CLICK}/${encodeSegments([socket])}/#{s/%//:pane_id}/#{q:mouse_status_range}`,
-    ].join(" "),
+  handler: [
+    `CC_CANDYBAR_SOCKET=${shellWord(socketPath())}`,
+    ...[...DAEMON_NODE, DAEMON_BUNDLE].map(shellWord),
+    "url-handle",
+  ].join(" "),
+  owner: socketPath(),
   defer: (run) => void setImmediate(run),
   log: dlog,
 });
@@ -1018,6 +1015,7 @@ function handleConnection(sock: net.Socket): void {
       // frame still waiting for the socket to drain is dropped, as
       // newest-wins drops any frame a newer one replaces.
       refused: (resp) => sock.end(encodeFrame(resp)),
+      drawing: () => true,
     });
     // Answered only once the subscription stands: a subscribe that threw is
     // the connection's `handler threw`, answered RENDER_FAILED and ended,
@@ -1346,11 +1344,10 @@ export async function replyTo(
 
   if (req.kind === "click") {
     return stay(
-      handleClick(
-        req.verb,
-        req.value,
-        { via: "link", handler: sanitizeClientVersion(req.clientVersion) },
-      ),
+      handleClick(req.verb, req.value, {
+        via: "link",
+        handler: sanitizeClientVersion(req.clientVersion),
+      }),
     );
   }
 

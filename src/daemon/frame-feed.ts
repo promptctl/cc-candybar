@@ -71,13 +71,16 @@ export type Sink = (resp: Response, json: string) => void;
 
 export type Refusal = Extract<Response, { ok: false }>;
 
-// One subscription: the lane it serves, where its frames go, and where its
+// One subscription: the lane it serves, where its frames go, where its
 // refusal goes — the last thing it receives, since a refused subscription is
-// over.
+// over — and whether it draws the bar where its lane puts it now. A client's
+// subscription draws whatever it is sent; the daemon's own tmux status line
+// draws a session only while that status line shows the session's pane.
 export interface Subscriber {
   readonly lane: Lane;
   readonly frame: Sink;
   readonly refused: (resp: Refusal) => void;
+  readonly drawing: () => boolean;
 }
 
 export interface FeedDeps<Req> {
@@ -288,12 +291,12 @@ export class FrameFeeds<Req> {
     return () => this.unsubscribe(feed, sub);
   }
 
-  // The lanes whose subscribers follow the session's frames now.
+  // The lanes whose subscribers follow the session's frames and draw them now.
   following(sessionId: string): ReadonlySet<Lane> {
     return new Set(
-      [...(this.feeds.get(sessionId)?.followers.keys() ?? [])].map(
-        (s) => s.lane,
-      ),
+      [...(this.feeds.get(sessionId)?.followers.keys() ?? [])]
+        .filter((s) => s.drawing())
+        .map((s) => s.lane),
     );
   }
 
