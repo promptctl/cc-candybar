@@ -1,3 +1,4 @@
+import { ATTACH_DIR } from "../attach-launcher.js";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -75,12 +76,12 @@ function supportDir(): string {
   return path.join(xdgData, "cc-candybar");
 }
 
-function stagedBinPath(): string {
-  return path.join(supportDir(), "bin", "cc-candybar");
+function stagedBinPath(dir: string = supportDir()): string {
+  return path.join(dir, "bin", "cc-candybar");
 }
 
-function stagedDistPath(): string {
-  return path.join(supportDir(), "dist", "index.mjs");
+function stagedDistPath(dir: string = supportDir()): string {
+  return path.join(dir, "dist", "index.mjs");
 }
 
 function appleScriptSource(nodePath: string, scriptPath: string): string {
@@ -160,6 +161,14 @@ function stageFile(source: string, dest: string): void {
   fs.copyFileSync(source, dest);
 }
 
+// A directory staged whole: the previous stage's files are removed first, so
+// none of them outlives the launcher it belonged to.
+function stageDir(source: string, dest: string): void {
+  if (path.resolve(source) === path.resolve(dest)) return;
+  fs.rmSync(dest, { recursive: true, force: true });
+  fs.cpSync(source, dest, { recursive: true });
+}
+
 // [LAW:one-source-of-truth] The staged file is the authority on what got
 // staged. resolveRenderEntry's kind describes the *source lookup*, and on a
 // re-run from the staged runtime that lookup resolves the identity path
@@ -194,10 +203,17 @@ export interface StagedRuntime {
 }
 
 // Stage the full runtime at the stable path: dist/index.mjs (daemon + CLI
-// bundle) and bin/cc-candybar (render entry) as adjacent files. Adjacency IS
+// bundle), dist/cc-extra (the attach launcher) and bin/cc-candybar (render
+// entry) as adjacent files. Adjacency IS
 // the contract — every entry flavor locates the bundle via ../dist/index.mjs.
-// `sourceDist` is the bundle this process runs, as its entry names it.
-export function runStageRuntime(sourceDist: string): StagedRuntime {
+// `sourceDist` is the bundle this process runs, as its entry names it; `dir`
+// is where it is staged — the user's stable path, unless a test names its
+// own (`os.homedir()` reads the process's real HOME, which a test's env does
+// not reach).
+export function runStageRuntime(
+  sourceDist: string,
+  dir: string = supportDir(),
+): StagedRuntime {
   if (!fs.existsSync(sourceDist)) {
     throw new Error(
       `install: bundled dist not found at ${sourceDist}. Reinstall the package.`,
@@ -211,27 +227,37 @@ export function runStageRuntime(sourceDist: string): StagedRuntime {
     );
   }
 
-  fs.mkdirSync(path.dirname(stagedDistPath()), { recursive: true });
-  fs.mkdirSync(path.dirname(stagedBinPath()), { recursive: true });
-  stageFile(sourceDist, stagedDistPath());
-  stageFile(entry.sourcePath, stagedBinPath());
-  fs.chmodSync(stagedBinPath(), 0o755);
+  const attach = path.join(path.dirname(sourceDist), ATTACH_DIR);
+  if (!fs.existsSync(attach)) {
+    throw new Error(
+      `install: the attach launcher was not found at ${attach}. Reinstall the package.`,
+    );
+  }
+
+  const distPath = stagedDistPath(dir);
+  const binPath = stagedBinPath(dir);
+  fs.mkdirSync(path.dirname(distPath), { recursive: true });
+  fs.mkdirSync(path.dirname(binPath), { recursive: true });
+  stageFile(sourceDist, distPath);
+  stageDir(attach, path.join(path.dirname(distPath), ATTACH_DIR));
+  stageFile(entry.sourcePath, binPath);
+  fs.chmodSync(binPath, 0o755);
 
   // The pre-1.21 layout kept a second copy of the bundle as url-handler.mjs;
   // dist/index.mjs is the one staged bundle now. Remove the stale copy so it
   // can't drift. [LAW:one-source-of-truth]
-  fs.rmSync(path.join(supportDir(), "url-handler.mjs"), { force: true });
+  fs.rmSync(path.join(dir, "url-handler.mjs"), { force: true });
 
-  const stagedKind = stagedEntryKind(stagedBinPath());
+  const stagedKind = stagedEntryKind(binPath);
   process.stdout.write(
-    `Staged cc-candybar v${PACKAGE_VERSION} runtime at ${supportDir()}\n` +
+    `Staged cc-candybar v${PACKAGE_VERSION} runtime at ${dir}\n` +
       (stagedKind === "native"
         ? `  render entry: native binary (${process.platform}-${process.arch})\n`
         : `  render entry: node shim (no native binary for ${process.platform}-${process.arch}; renders are correct but pay node startup)\n`),
   );
   return {
-    binPath: stagedBinPath(),
-    distPath: stagedDistPath(),
+    binPath,
+    distPath,
     entryKind: stagedKind,
   };
 }

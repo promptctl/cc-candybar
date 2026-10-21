@@ -42,7 +42,6 @@ import { CONFIG_KEY_TO_EFFECTIVE_VAR } from "../config/setting-projections.js";
 import { encodeLayoutOp, type LayoutOp } from "../config/layout-ops.js";
 import type { Decor } from "../themes/decor.js";
 import type { GlyphMark } from "../doctor/checks.js";
-import type { Lane } from "../config/lanes.js";
 import {
   effectsUrl,
   VERB_APPLY_LAYOUT_OP,
@@ -66,7 +65,6 @@ import {
   VERB_DOCTOR_MARK,
   VERB_CEILING,
   VERB_SLASH,
-  VERB_LANE,
   type Effect,
 } from "../click/wire.js";
 
@@ -238,8 +236,6 @@ export type CompiledActionDecl =
   | { readonly kind: "ceiling"; readonly args: readonly string[] }
   // The declared slash command, compiled in from the declaration.
   | { readonly kind: "slash"; readonly line: string }
-  // The lane whose setup the click brings in line with its switch.
-  | { readonly kind: "lane"; readonly lane: Lane }
   // [LAW:composability] Several compiled actions fired by one click. `head` is
   // the one the region presents as — its display rule, its current-state mark,
   // and the value a template binds — and `rest` ride along behind it.
@@ -581,7 +577,6 @@ function compileAction(
     };
   }
   if ("slash" in action) return { kind: "slash", line: action.slash };
-  if ("lane" in action) return { kind: "lane", lane: action.lane };
   if ("undo" in action) return { kind: "undo" };
   if ("redo" in action) return { kind: "redo" };
   if ("back" in action) return { kind: "back" };
@@ -659,7 +654,6 @@ export function bindsTemplateValue(c: CompiledActionDecl): boolean {
     case "doctor-mark":
     case "ceiling":
     case "slash":
-    case "lane":
     case "do":
       return false;
   }
@@ -989,13 +983,6 @@ export function realize(
     case "slash":
       return {
         effects: [{ verb: VERB_SLASH, args: [sessionId, c.line] }],
-        active: false,
-      };
-    // Never "active": the lane's switch is the toggle beside it, and this
-    // only brings what the lane runs in line with it.
-    case "lane":
-      return {
-        effects: [{ verb: VERB_LANE, args: [sessionId, c.lane] }],
         active: false,
       };
     // [LAW:one-source-of-truth] The op is fixed at compile time (see

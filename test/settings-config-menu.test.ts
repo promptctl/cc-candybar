@@ -81,7 +81,6 @@ function rig(
   source: string,
   durable?: DurableConfig,
   width: number = Number.POSITIVE_INFINITY,
-  lanes?: VerbContext["lanes"],
 ): {
   readonly config: ValidatedConfig;
   sessionState: SessionState;
@@ -124,9 +123,6 @@ function rig(
   const ctx: VerbContext = {
     ...testVerbContext(sessionState, durable?.historyFor(sessionState)),
     dlog: (_level, msg) => logs.push(msg),
-    // A lane's setup is asked for and answers nothing, unless a test hands in
-    // its own.
-    lanes: lanes ?? { sync: () => "" },
     configFor: () => entry.config,
     reloadConfig: () => {
       reloads.push({
@@ -1470,33 +1466,9 @@ describe("the themeDefault action", () => {
 // Each toggle also needs to do all of the work needed to turn its lane on, not
 // just part of it."
 describe("the animation lanes' toggles", () => {
-  // The settings menu open on ⚙ config with 🧪 toggles open; `synced` records
-  // each lane setup the daemon is asked for, with the switch the session held
-  // when it was asked.
+  // The settings menu open on ⚙ config with 🧪 toggles open.
   const openToggles = () => {
-    const synced: {
-      lane: Lane;
-      session: string;
-      pane: string | undefined;
-      switched: string | null;
-    }[] = [];
-    const r = rig(TWO_SEGMENT_ROOT, undefined, Number.POSITIVE_INFINITY, {
-      sync: (session, lane) => {
-        synced.push({
-          lane,
-          session: session.sessionId,
-          pane: session.hints.tmux?.pane,
-          switched: r.sessionState.get(SID, LANES[lane].setting),
-        });
-        return "";
-      },
-    });
-    // What a render records of the session's client: the pane it runs in.
-    r.sessionState.set(
-      SID,
-      SESSION_CLIENT_HINTS_KEY,
-      JSON.stringify({ tmux: { socket: "/tmp/t", pane: "%1", truecolor: null } }),
-    );
+    const r = rig(TWO_SEGMENT_ROOT);
     r.click(writesTo(r.render(), "candybar.menu")[0]!);
     showTab(r, "config");
     const url = urlsOf(r.render()).find((u) =>
@@ -1506,65 +1478,29 @@ describe("the animation lanes' toggles", () => {
     );
     if (url === undefined) throw new Error("no link opens 🧪 toggles");
     r.click(url);
-    return { r, synced };
+    return { r };
   };
 
+  // What the lane runs follows the switch the session renders by, whatever
+  // moved it (test/lane-setup.test.ts, "LaneSetups"), so the toggle is its
+  // setting's write and nothing else.
   test.each(LANE_NAMES)(
-    "%s: the toggle's click writes the switch, then has the daemon set the lane up",
+    "%s: the toggle's click is its switch's write alone",
     (lane) => {
-      const { r, synced } = openToggles();
+      const { r } = openToggles();
       try {
         const [url, ...others] = writesTo(r.render(), LANES[lane].setting);
         expect(others).toEqual([]);
         expect(effectsOf(url!).map((e) => [e.verb, ...e.args])).toEqual([
           ["set-state", SID, LANES[lane].setting, "true"],
-          ["lane", SID, lane],
         ]);
         r.click(url!);
-        // Asked after the write landed, so the setup reads the lane as on.
-        expect(synced).toEqual([
-          { lane, session: SID, pane: "%1", switched: "true" },
-        ]);
         expect(plain(r.render())).toContain(`☑ ${LANES[lane].label}`);
       } finally {
         r.dispose();
       }
     },
   );
-
-  test("a reset that turns a lane off sets the lane up too: its ↺, and ⟲ reset all", () => {
-    const { r } = openToggles();
-    try {
-      r.sessionState.set(SID, LANES.pane.setting, "true");
-      const reset = urlsOf(r.render()).find((u) =>
-        effectsOf(u).some(
-          (e) => e.verb === "reset-config" && e.args[1] === LANES.pane.setting,
-        ),
-      );
-      expect(effectsOf(reset!).map((e) => [e.verb, ...e.args])).toEqual([
-        ["reset-config", SID, LANES.pane.setting],
-        ["lane", SID, "pane"],
-      ]);
-      const arm = urlsOf(r.render()).find((u) =>
-        effectsOf(u).some(
-          (e) => e.args[1] === "candybar.resetAll.armed" && e.args[2] === "armed",
-        ),
-      );
-      r.click(arm!);
-      const all = urlsOf(r.render()).find((u) =>
-        effectsOf(u).some((e) => e.verb === "reset-config"),
-      );
-      const effects = effectsOf(all!);
-      const lastReset = effects.map((e) => e.verb).lastIndexOf("reset-config");
-      expect(
-        effects
-          .slice(lastReset + 1)
-          .map((e) => [e.verb, ...e.args]),
-      ).toEqual(LANE_NAMES.map((lane) => ["lane", SID, lane]));
-    } finally {
-      r.dispose();
-    }
-  });
 
   test.each(LANE_NAMES)(
     "%s: the (?) beside the toggle says what the lane does",

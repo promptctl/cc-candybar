@@ -129,12 +129,6 @@ export function testVerbContext(
         throw new Error("slash: no claude-input edge in this test");
       },
     },
-    // And for the lanes: a test that drives a lane click hands in its own.
-    lanes: {
-      sync: () => {
-        throw new Error("lane: no lane setup in this test");
-      },
-    },
     // The config the session renders with: a test whose click reads it (a
     // save, a step from an unset key) hands it in; reaching the lookup
     // without one is a test bug.

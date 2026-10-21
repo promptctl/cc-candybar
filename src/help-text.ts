@@ -46,8 +46,8 @@ export const LANE_HELP: Readonly<Record<Lane, readonly string[]>> = {
     "on: installs the candybar-band mod from this checkout and types /reload-plugins",
   ],
   statusline: [
-    "animates the statusline itself, through cc-extra's cc-attach",
-    "on: exits this Claude Code and starts it again under cc-attach, resuming this session",
+    "animates the statusline itself, through the attach launcher shipped with cc-candybar",
+    "on: exits this Claude Code and starts it again under that launcher, resuming this session",
   ],
   pane: [
     "animates the bar in a tmux pane under this session's",

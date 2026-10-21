@@ -138,12 +138,6 @@ export const VERB_DOCTOR_MARK = "doctor-mark";
 // A link `cc-candybar doctor` opens to learn whether the URL handler delivers
 // it. Arg: the nonce the CLI will look for among the daemon's arrivals.
 export const VERB_DOCTOR_PROBE = "doctor-probe";
-// [LAW:effects-at-boundaries] Bring an animation lane's setup in line with
-// its switch for the clicked session (src/daemon/lane-setup.ts): what turning
-// the lane on or off takes beyond the daemon's own gate. Args:
-// `[sessionId, lane]` — whether the lane is on is read at click time from the
-// session, after the toggle's write, never carried by the URL.
-export const VERB_LANE = "lane";
 
 // [LAW:effects-at-boundaries] Move the memento plugin's context ceiling for a
 // session. Args: `[sessionId, "set", to]` or `[sessionId, "clear"]`. The move

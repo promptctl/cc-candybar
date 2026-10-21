@@ -106,41 +106,48 @@ function read(hint: TmuxHint): PaneSnapshot {
   return { inMode: mode !== "0", screen };
 }
 
-// ctrl+s stashes a draft (a no-op on an empty input) and Claude Code restores
-// it after the submit. The line goes in as a BRACKETED paste: sent as keys, a
-// long line reads as a paste and swallows the Enter after it as a newline;
-// the paste's end marker makes the Enter a keystroke whatever the timing.
-// The line reaches the buffer over stdin, never as an argument: tmux reads an
+// [LAW:one-source-of-truth] The one way a line is typed into a pane: it goes
+// in as a BRACKETED paste then Enter, in one tmux call. Sent as keys, a long
+// line reads as a paste and swallows the Enter after it as a newline; the
+// paste's end marker makes the Enter a keystroke whatever the timing. The
+// line reaches the buffer over stdin, never as an argument: tmux reads an
 // argument ending in `;` as a command separator and drops it, so
 // `/compact keep the api;` would be typed without its last character.
+// `before` are keys sent ahead of the paste.
+export function pasteLineArgs(
+  pane: string,
+  buffer: string,
+  before: readonly string[],
+): string[] {
+  return [
+    "load-buffer",
+    "-b",
+    buffer,
+    "-",
+    THEN,
+    ...(before.length === 0 ? [] : ["send-keys", "-t", pane, ...before, THEN]),
+    "paste-buffer",
+    "-p",
+    "-d",
+    "-b",
+    buffer,
+    "-t",
+    pane,
+    THEN,
+    "send-keys",
+    "-t",
+    pane,
+    "Enter",
+  ];
+}
+
+// ctrl+s stashes a draft (a no-op on an empty input) and Claude Code restores
+// it after the submit.
 function type(hint: TmuxHint, line: SlashLine): Typed {
   const run = tmux(
     hint,
     "claude-input.type",
-    [
-      "load-buffer",
-      "-b",
-      BUFFER,
-      "-",
-      THEN,
-      "send-keys",
-      "-t",
-      hint.pane,
-      "C-s",
-      THEN,
-      "paste-buffer",
-      "-p",
-      "-d",
-      "-b",
-      BUFFER,
-      "-t",
-      hint.pane,
-      THEN,
-      "send-keys",
-      "-t",
-      hint.pane,
-      "Enter",
-    ],
+    pasteLineArgs(hint.pane, BUFFER, ["C-s"]),
     line,
   );
   return run.kind === "ok"

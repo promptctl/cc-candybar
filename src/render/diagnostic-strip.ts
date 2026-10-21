@@ -171,6 +171,16 @@ export function collectDiagnostics(
   return first === undefined ? null : { channels: [first, ...rest] };
 }
 
+// `below`'s channels under `above`'s, in that order.
+export function withChannels(
+  above: Diagnostics | null,
+  below: Diagnostics,
+): Diagnostics {
+  if (above === null) return below;
+  const [first, ...rest] = above.channels;
+  return { channels: [first, ...rest, ...below.channels] };
+}
+
 // A plain message as a channel: every visible line one span, every span the
 // click that copies the whole message. Blank lines are dropped; a message
 // with no visible line contributes no channel.

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// Guard: every wire-affecting constant the Rust client mirrors from the TS
-// source must agree. The wire contract is one source of truth
+// Guard: every wire-affecting constant the Rust client — or the vendored
+// statusline push lane B runs (vendor/cc-extra) — mirrors from the TS source
+// must agree. The wire contract is one source of truth
 // (src/daemon/protocol.ts, src/daemon/client.ts, src/render/error-glyph.ts,
 // src/render/diagnostic-style.ts, src/render/diagnostic-text.ts);
 // the Rust binary embeds each value as a literal const because mirroring is
@@ -135,6 +136,9 @@ const RS_LAUNCH = "rust-client/src/launch.rs";
 const RS_GLYPH = "rust-client/src/error_glyph.rs";
 const TS_LANES = "src/config/lanes.ts";
 const TS_FRAME_FOLLOW = "src/daemon/frame-follow.ts";
+// cc-extra's statusline push, vendored (scripts/vendor-cc-extra.mjs): lane B's
+// subscriber, the third runtime speaking the wire contract.
+const JS_PUSH = "vendor/cc-extra/src/statusline-push.js";
 const TS_ENTRY = "src/index.ts";
 const TS_DEBUG_TYPES = "src/daemon/debug-types.ts";
 const RS_FOLLOW = "rust-client/src/follow.rs";
@@ -193,7 +197,34 @@ function followerCodesTheDaemonSends() {
     .join(", ");
 }
 
+// [LAW:one-source-of-truth] A row's mirror is the Rust client (`rust`) or
+// the vendored statusline push (`push`); the runner diffs either against TS.
 const CHECKS = [
+  {
+    label: "lane B's name, as the statusline push subscribes",
+    ts: lit(TS_LANES, /^ {2}(statusline): \{/m),
+    push: lit(JS_PUSH, /^const LANE = '([a-z]+)';/m),
+  },
+  {
+    label: "PROTOCOL_VERSION, as the statusline push speaks it",
+    ts: num(TS_PROTOCOL, /export const PROTOCOL_VERSION = ([\d\s*]+);/),
+    push: num(JS_PUSH, /^const PROTOCOL_VERSION = ([\d\s*]+);/m),
+  },
+  {
+    label: "MAX_FRAME_BYTES, as the statusline push reads frames",
+    ts: num(TS_PROTOCOL, /export const MAX_FRAME_BYTES = ([\d\s*]+);/),
+    push: num(JS_PUSH, /^const MAX_FRAME_BYTES = ([\d\s*]+);/m),
+  },
+  {
+    label: "FRAME_HEADER_BYTES, as the statusline push reads frames",
+    ts: num(TS_PROTOCOL, /export const FRAME_HEADER_BYTES = ([\d\s*]+);/),
+    push: num(JS_PUSH, /^const HEADER_BYTES = ([\d\s*]+);/m),
+  },
+  {
+    label: "SWITCHED_OFF_RETRY_MS, as the statusline push waits",
+    ts: num(TS_FRAME_FOLLOW, /export const SWITCHED_OFF_RETRY_MS = ([\d\s*_]+);/),
+    push: num(JS_PUSH, /^const SWITCHED_OFF_RETRY_MS = ([\d\s*_]+);/m),
+  },
   {
     label: "animation lane names",
     ts: memberSet(TS_LANES, /export const LANES = \{[\s\S]*?\} as const;/, /^ {2}([a-z]+): \{/gm),
@@ -558,28 +589,30 @@ const CHECKS = [
 // --- runner ----------------------------------------------------------------
 
 const failures = [];
-for (const { label, ts, rust } of CHECKS) {
-  const tsValue = ts();
-  const rustValue = rust();
-  if (tsValue === null || rustValue === null) {
-    const missing = [tsValue === null && "TS", rustValue === null && "Rust"]
+for (const row of CHECKS) {
+  const [mirrorName, mirror] =
+    "rust" in row ? ["Rust", row.rust] : ["statusline push", row.push];
+  const tsValue = row.ts();
+  const mirrorValue = mirror();
+  if (tsValue === null || mirrorValue === null) {
+    const missing = [tsValue === null && "TS", mirrorValue === null && mirrorName]
       .filter(Boolean)
       .join(" and ");
-    failures.push(`${label}: anchor not found in ${missing} source`);
+    failures.push(`${row.label}: anchor not found in ${missing} source`);
     continue;
   }
-  if (tsValue !== rustValue) {
-    failures.push(`${label}: TS=${tsValue} vs Rust=${rustValue}`);
+  if (tsValue !== mirrorValue) {
+    failures.push(`${row.label}: TS=${tsValue} vs ${mirrorName}=${mirrorValue}`);
   }
 }
 
 if (failures.length > 0) {
-  console.error("check-protocol: TS↔Rust mirror drift detected:");
+  console.error("check-protocol: wire-contract mirror drift detected:");
   for (const f of failures) console.error(`  - ${f}`);
   console.error("Update both runtimes in lockstep when changing the wire contract.");
   process.exit(1);
 }
 
 console.log(
-  `check-protocol: ${CHECKS.length} mirrored constants verified (TS and Rust agree).`,
+  `check-protocol: ${CHECKS.length} mirrored constants verified (TS, Rust and the statusline push agree).`,
 );

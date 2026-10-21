@@ -14,14 +14,18 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { launch, type LaunchResult } from "../proc/launch.js";
 import { runTmux, runTmuxAsync } from "../proc/tmux.js";
 import type { TmuxHint } from "../tmux-hint.js";
-import { productionClaudeInputEdge } from "../claude-input/edge.js";
+import type { Lane } from "../config/lanes.js";
+import {
+  pasteLineArgs,
+  productionClaudeInputEdge,
+} from "../claude-input/edge.js";
+import { lineage, processTable } from "../proc/process-table.js";
 import {
   BAR_PANE_OPTION,
   type LaneEdge,
   type PaneClaude,
 } from "./lane-setup.js";
 
-const THEN = ";";
 const SHELL_BUFFER = "cc-candybar-lane";
 // How often the wait for an exit looks again.
 const EXIT_POLL_MS = 100;
@@ -53,40 +57,31 @@ export function taggedBarPanes(listPanes: string, pane: string): string[] {
     .map(([id]) => id!);
 }
 
-// The words a cc-extra attach launcher runs under (`bin/cc-attach`, which runs
-// `src/bun-attach.js`).
+// The words a cc-extra attach launcher runs under: the one shipped beside the
+// bundle (src/attach-launcher.ts) runs `bun-attach.js`, and cc-extra's own
+// `bin/cc-attach` runs it too.
 const ATTACH = /(^|\/)(cc-attach|bun-attach\.js)(\s|$)/;
 
 // [LAW:effects-at-boundaries] Pure over `ps -A -o pid=,ppid=,args=`: whether
-// `pid`, or a process it descends from below the pane's own first process,
-// is a cc-extra attach launcher.
+// `pid`, or a process it descends from up to and including the pane's own
+// first process, is a cc-extra attach launcher.
 export function runsAttached(
   table: string,
   pid: number,
   panePid: number,
 ): boolean {
-  const procs = new Map<number, { ppid: number; args: string }>();
-  for (const line of table.split("\n")) {
-    const m = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(line);
-    if (m !== null)
-      procs.set(Number(m[1]), { ppid: Number(m[2]), args: m[3]! });
-  }
-  const seen = new Set<number>();
-  for (let p = pid; p !== panePid && !seen.has(p); ) {
-    seen.add(p);
-    const proc = procs.get(p);
-    if (proc === undefined) return false;
-    if (proc.args.split(" ").some((word) => ATTACH.test(word))) return true;
-    p = proc.ppid;
+  for (const p of lineage(processTable(table), pid)) {
+    if (p.command.split(" ").some((word) => ATTACH.test(word))) return true;
+    if (p.pid === panePid) return false;
   }
   return false;
 }
 
-// The exact argv a process was started with — `ps` joins it with spaces,
-// which a value holding a space would make ambiguous. Linux keeps it in
-// /proc; macOS answers it through sysctl's KERN_PROCARGS2 (argc, then the
-// executable path, padding, then argv, each NUL-terminated), read here with
-// python3's ctypes since node has no sysctl.
+// The executable a process runs and the exact argv it was started with —
+// `ps` joins argv with spaces, which a value holding a space would make
+// ambiguous. Linux keeps both in /proc; macOS answers them through sysctl's
+// KERN_PROCARGS2 (argc, then the executable path, padding, then argv, each
+// NUL-terminated), read here with python3's ctypes since node has no sysctl.
 const PROCARGS2 = [
   "import ctypes, json, struct, sys",
   "libc = ctypes.CDLL(None)",
@@ -98,15 +93,25 @@ const PROCARGS2 = [
   "raw = buf.raw[:size.value]",
   "argc = struct.unpack_from('i', raw)[0]",
   "rest = raw[4:]",
-  "rest = rest[rest.index(b'\\0'):].lstrip(b'\\0')",
-  "print(json.dumps([a.decode('utf-8', 'surrogateescape') for a in rest.split(b'\\0')[:argc]]))",
+  "end = rest.index(b'\\0')",
+  "exe = rest[:end].decode('utf-8', 'surrogateescape')",
+  "rest = rest[end:].lstrip(b'\\0')",
+  "print(json.dumps({'executable': exe, 'argv': [a.decode('utf-8', 'surrogateescape') for a in rest.split(b'\\0')[:argc]]}))",
 ].join("\n");
 
-async function argvOf(pid: number): Promise<string[]> {
+interface ProcessImage {
+  readonly executable: string;
+  readonly argv: string[];
+}
+
+async function imageOf(pid: number): Promise<ProcessImage> {
   if (process.platform === "linux") {
-    return (await fs.promises.readFile(`/proc/${pid}/cmdline`, "utf8"))
-      .split("\0")
-      .slice(0, -1);
+    return {
+      executable: await fs.promises.readlink(`/proc/${pid}/exe`),
+      argv: (await fs.promises.readFile(`/proc/${pid}/cmdline`, "utf8"))
+        .split("\0")
+        .slice(0, -1),
+    };
   }
   const out = ran(
     `reading process ${pid}'s arguments`,
@@ -117,7 +122,7 @@ async function argvOf(pid: number): Promise<string[]> {
       category: "lane.process",
     }),
   );
-  return JSON.parse(out) as string[];
+  return JSON.parse(out) as ProcessImage;
 }
 
 // One `ps` over the process table, off the daemon's loop.
@@ -156,9 +161,14 @@ async function paneClaude(hint: TmuxHint): Promise<PaneClaude> {
     ).trim(),
   );
   const table = await ps("listing processes", ["-A", "-o", "pid=,ppid=,args="]);
+  const image = await imageOf(pid);
   return {
     pid,
-    argv: await argvOf(pid),
+    // The installed binary itself, as cc-extra's own `bin/cc-attach` hands it
+    // to the launcher (`readlink -f`): `~/.local/bin/claude` is a link to the
+    // release it runs.
+    executable: await fs.promises.realpath(image.executable),
+    argv: image.argv,
     cwd,
     fromShell: String(pid) !== panePid,
     attached: runsAttached(table, pid, Number(panePid)),
@@ -175,7 +185,28 @@ const alive = (pid: number): boolean => {
   }
 };
 
-export function productionLaneEdge(scriptDir: string): LaneEdge {
+// The `claude` CLI's environment for a session: the daemon's, under the
+// Claude Code directory the session's client reported — an absent hint is the
+// default directory, never the CLAUDE_CONFIG_DIR of whichever shell spawned
+// this detached daemon (src/daemon/protocol.ts).
+export function claudeEnv(
+  claudeConfigDir: string | undefined,
+): NodeJS.ProcessEnv {
+  const { CLAUDE_CONFIG_DIR: _daemons, ...env } = process.env;
+  return claudeConfigDir === undefined
+    ? env
+    : { ...env, CLAUDE_CONFIG_DIR: claudeConfigDir };
+}
+
+// How often the wait for a lane's subscriber looks again.
+const FOLLOW_POLL_MS = 200;
+
+// `following` is the daemon's FrameFeeds' answer: the lanes whose subscribers
+// follow a session's frames now.
+export function productionLaneEdge(
+  scriptDir: string,
+  following: (sessionId: string) => ReadonlySet<Lane>,
+): LaneEdge {
   return {
     claudeInput: productionClaudeInputEdge(),
     barPanes: (hint) =>
@@ -217,10 +248,7 @@ export function productionLaneEdge(scriptDir: string): LaneEdge {
         await launch({
           bin: "claude",
           args: [...args],
-          env:
-            claudeConfigDir === undefined
-              ? process.env
-              : { ...process.env, CLAUDE_CONFIG_DIR: claudeConfigDir },
+          env: claudeEnv(claudeConfigDir),
           timeoutMs: 30_000,
           category: "lane.claude",
         }),
@@ -231,8 +259,17 @@ export function productionLaneEdge(scriptDir: string): LaneEdge {
     // the daemon checks before it binds — src/daemon/paths.ts).
     writeScript: (name, text) => {
       const file = path.join(scriptDir, name);
-      fs.writeFileSync(file, text(file), { mode: 0o700 });
+      fs.writeFileSync(file, text, { mode: 0o700 });
       return file;
+    },
+    removeScript: (file) => fs.rmSync(file, { force: true }),
+    followed: async (sessionId, lane, withinMs) => {
+      const until = Date.now() + withinMs;
+      while (!following(sessionId).has(lane)) {
+        if (Date.now() > until) return false;
+        await sleep(FOLLOW_POLL_MS);
+      }
+      return true;
     },
     exited: async (pid, withinMs) => {
       const until = Date.now() + withinMs;
@@ -242,31 +279,9 @@ export function productionLaneEdge(scriptDir: string): LaneEdge {
       }
       return true;
     },
-    // A bracketed paste then Enter, as a slash command is typed, but with no
-    // ctrl+s first: in a shell that stops the terminal's output.
+    // Typed as a slash command is, but with no ctrl+s first: in a shell that
+    // stops the terminal's output.
     typeShellLine: (hint, line) =>
-      void tmux(
-        hint,
-        [
-          "load-buffer",
-          "-b",
-          SHELL_BUFFER,
-          "-",
-          THEN,
-          "paste-buffer",
-          "-p",
-          "-d",
-          "-b",
-          SHELL_BUFFER,
-          "-t",
-          hint.pane,
-          THEN,
-          "send-keys",
-          "-t",
-          hint.pane,
-          "Enter",
-        ],
-        line,
-      ),
+      void tmux(hint, pasteLineArgs(hint.pane, SHELL_BUFFER, []), line),
   };
 }

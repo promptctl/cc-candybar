@@ -12,6 +12,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { lineage, processTable } from "../proc/process-table.js";
 import {
   claudeConfigDir,
   claudeManagedSettingsDir,
@@ -330,24 +331,14 @@ export function descendsFromRemoteLogin(
   table: string,
   pid: number,
 ): Asked<boolean> {
-  const procs = new Map<number, { ppid: number; name: string }>();
-  for (const line of table.split("\n")) {
-    const m = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(line);
-    if (m === null) continue;
-    const command = m[3]!.trim();
-    procs.set(Number(m[1]), {
-      ppid: Number(m[2]),
-      name: command.slice(command.lastIndexOf("/") + 1),
-    });
-  }
+  const procs = processTable(table);
   if (!procs.has(pid)) {
     return { kind: "failed", reason: `process ${pid} is not running` };
   }
-  const seen = new Set<number>();
-  for (let p = procs.get(pid); p !== undefined; p = procs.get(p.ppid)) {
-    if (REMOTE_LOGIN.test(p.name)) return { kind: "ok", value: true };
-    if (seen.has(p.ppid)) break;
-    seen.add(p.ppid);
+  for (const p of lineage(procs, pid)) {
+    if (REMOTE_LOGIN.test(p.command.slice(p.command.lastIndexOf("/") + 1))) {
+      return { kind: "ok", value: true };
+    }
   }
   return { kind: "ok", value: false };
 }

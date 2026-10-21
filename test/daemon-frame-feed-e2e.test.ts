@@ -340,23 +340,31 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   // single line that contains a button to reset those settings".
   test("while the band draws the bar, Claude Code's statusline is one line whose button brings the bar back", async () => {
     const sid = "feed-handoff";
-    const handedOff = await render(sockPath, sid, projectDir, {}, args("handoff"));
-    expect(stripAnsi(handedOff).trim().split("\n")).toEqual([
-      `🧪 the bar is drawn in the band above the prompt ${HANDOFF_BUTTON}`,
-    ]);
-    // [LAW:nothing-unseen] The render event says the statusline handed off.
+    // [LAW:nothing-unseen] Each render's event says whether the statusline
+    // handed off, and to which lanes.
     const events = (): string[] =>
       readFileSync(daemonLog, "utf8")
         .split("\n")
         .filter((l) => l.includes(` render sid=${sid} `));
-    await until(() => events().length > 0, "the handoff render's event");
-    expect(events()).toEqual([expect.stringMatching(/ handoff=band /)]);
-    // The band itself draws the whole bar.
+    // The switch alone draws nothing: with no band following the session, the
+    // statusline keeps the bar.
+    expect(
+      stripAnsi(await render(sockPath, sid, projectDir, {}, args("handoff"))),
+    ).toContain("a handed-off mark");
+    await until(() => events().length > 0, "the first render's event");
+    expect(events()).toEqual([expect.stringMatching(/ handoff=- /)]);
+    // The band draws the whole bar.
     const band = subscribeUntilEnd(sid, "band");
     await until(() => band.live().length > 0, "the band's frame");
     expect(barText(band.frames[0]!)).toEqual(
       expect.stringContaining("a handed-off mark"),
     );
+    const handedOff = await render(sockPath, sid, projectDir, {}, args("handoff"));
+    expect(stripAnsi(handedOff).trim().split("\n")).toEqual([
+      `🧪 the bar is drawn in the band above the prompt ${HANDOFF_BUTTON}`,
+    ]);
+    await until(() => events().length > 1, "the handoff render's event");
+    expect(events()[1]).toMatch(/ handoff=band /);
     const button = links(handedOff).find((l) => l.text.includes("⟲"));
     await click(sockPath, button!.url);
     // The reset took the lane's setting out of the file it was in.
@@ -368,6 +376,24 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     ).toContain("a handed-off mark");
     // And the band's stream is refused now its lane is off.
     expect(await band.ended).toMatchObject({ kind: "refused" });
+  });
+
+  // Only the body is handed off: what the strip says above it stays.
+  test("a handed-off statusline still carries the strip: a load warning stays above the handoff line", async () => {
+    const sid = "feed-handoff-warned";
+    await render(sockPath, sid, projectDir, {}, args("warned"));
+    const band = subscribeUntilEnd(sid, "band");
+    await until(() => band.live().length > 0, "the band's frame");
+    const lines = stripAnsi(
+      await render(sockPath, sid, projectDir, {}, args("warned")),
+    )
+      .trim()
+      .split("\n");
+    expect(lines.at(-1)).toBe(
+      `🧪 the bar is drawn in the band above the prompt ${HANDOFF_BUTTON}`,
+    );
+    expect(lines.slice(0, -1).join("\n")).toContain('duplicate key "effect"');
+    expect(lines.join("\n")).not.toContain("a warned mark");
   });
 
   // A subscribe naming no lane is a client from before the toggles, told to

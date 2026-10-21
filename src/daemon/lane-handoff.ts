@@ -15,22 +15,23 @@ import {
   type Lane,
   type LaneSwitches,
 } from "../config/lanes.js";
-import {
-  effectsUrl,
-  VERB_COPY,
-  VERB_LANE,
-  VERB_RESET_CONFIG,
-} from "../click/wire.js";
+import { effectsUrl, VERB_COPY, VERB_RESET_CONFIG } from "../click/wire.js";
 import {
   diagnosticSpan,
   HANDOFF_SEVERITY,
   type Diagnostics,
 } from "../render/diagnostic-strip.js";
 
-// The lanes the session's switches turn on that draw the bar elsewhere.
-export function lanesDrawingElsewhere(lanes: LaneSwitches): Lane[] {
+// The lanes the statusline hands the bar to: switched on, drawing it
+// elsewhere, and followed by a subscriber now — a switch alone draws nothing,
+// and a lane whose setup failed or has yet to start leaves the bar here.
+export function handedOffTo(
+  lanes: LaneSwitches,
+  following: ReadonlySet<Lane>,
+): Lane[] {
   return LANE_NAMES.filter(
-    (lane) => lanes[lane] && LANES[lane].elsewhere !== null,
+    (lane) =>
+      lanes[lane] && LANES[lane].elsewhere !== null && following.has(lane),
   );
 }
 
@@ -38,8 +39,8 @@ export const HANDOFF_BUTTON = "[⟲ draw it here]";
 
 // The handoff line for `lanes` (non-empty): the sentence, which copies itself
 // like every diagnostic line, then the button. The button resets each lane's
-// setting at every layer (the settings menu's ↺ for it) and then brings what
-// the lane runs in line, so a pane it opened closes.
+// setting at every layer (the settings menu's ↺ for it); what the lane runs
+// follows the switch (src/daemon/lane-setup.ts), so a pane it opened closes.
 export function laneHandoff(
   sessionId: string,
   lanes: readonly [Lane, ...Lane[]],
@@ -51,7 +52,6 @@ export function laneHandoff(
       verb: VERB_RESET_CONFIG,
       args: [sessionId, ...lanes.map((lane) => LANES[lane].setting)],
     },
-    ...lanes.map((lane) => ({ verb: VERB_LANE, args: [sessionId, lane] })),
   ]);
   return {
     channels: [

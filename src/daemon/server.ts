@@ -161,9 +161,10 @@ import type { RenderedLine } from "../dsl/node-registry.js";
 import { productionClaudeInputEdge } from "../claude-input/edge.js";
 import { LaneSetups } from "./lane-setup.js";
 import { productionLaneEdge } from "./lane-edge.js";
-import { laneHandoff, lanesDrawingElsewhere } from "./lane-handoff.js";
+import { handedOffTo, laneHandoff } from "./lane-handoff.js";
 import {
   collectDiagnostics,
+  withChannels,
   composeWithDiagnostics,
   diagnosticRowCap,
   formatDiagnosticDump,
@@ -231,6 +232,24 @@ const navigationHistory = new NavigationHistory();
 // Each session's effect memory — when its effect came into force — held in
 // daemon memory only: a restarted daemon starts every session's effect again.
 const effectSessions = new EffectSessions<RenderedLine>();
+// [LAW:single-enforcer] The one owner of what turning an animation lane on or
+// off takes (src/daemon/lane-setup.ts), told the switches every render draws by.
+const laneSetups = new LaneSetups({
+  edge: productionLaneEdge(dirname(socketPath()), (sessionId) =>
+    frameFeeds.following(sessionId),
+  ),
+  // A bar pane runs this bundle under the node running it now, with the
+  // flags it runs with (tsx's loader, under the test harness).
+  host: {
+    bundle: DAEMON_BUNDLE,
+    node: [process.execPath, ...process.execArgv],
+    socket: socketPath(),
+  },
+  state: sessionState,
+  log: dlog,
+  now: () => instantOf(new Date()),
+  defer: (run) => void setImmediate(run),
+});
 // Each subscribed session's frames, drawn from its latest render request
 // (candybar-animation-wbxz.jmm.usl). A change to the session's own state — a
 // click — draws its next frame at once.
@@ -1242,9 +1261,9 @@ export async function replyTo(
               resp: { ok: true, output: answer } as const,
               // [LAW:single-enforcer] An answer carrying the click error that
               // reaches its client is the one that delivered it
-              // (src/daemon/click-error.ts); a handoff line carries none.
+              // (src/daemon/click-error.ts).
               delivered:
-                clickShown === null || answer !== output
+                clickShown === null
                   ? NOTHING_DELIVERED
                   : () =>
                       answeredClickError(
@@ -1467,20 +1486,6 @@ const verbCtx = {
       origin.cwd,
       origin.configFile ?? undefined,
     ),
-  lanes: new LaneSetups({
-    edge: productionLaneEdge(dirname(socketPath())),
-    // A bar pane runs this bundle under the node running it now, with the
-    // flags it runs with (tsx's loader, under the test harness).
-    host: {
-      bundle: DAEMON_BUNDLE,
-      node: [process.execPath, ...process.execArgv],
-      socket: socketPath(),
-    },
-    switches: ({ sessionId, origin }) => lanesAt(sessionId, origin),
-    state: sessionState,
-    log: dlog,
-    now: () => instantOf(new Date()),
-  }),
 };
 
 /**
@@ -1643,15 +1648,7 @@ function sessionGlobals(
 // its session's picks.
 function lanesOf(req: CheckedRenderRequest): LaneSwitches {
   const sessionId = req.hookData.session_id;
-  return lanesAt(
-    sessionId,
-    sessionRenderOrigin(req.requested, sessionState, sessionId),
-  );
-}
-
-// The lanes a session's settings switch on, under the config the render
-// cache holds for `origin`.
-function lanesAt(sessionId: string, origin: RenderOrigin): LaneSwitches {
+  const origin = sessionRenderOrigin(req.requested, sessionState, sessionId);
   using hold = renderCache.hold(
     origin.projectDir,
     origin.cwd,
@@ -1777,6 +1774,8 @@ async function renderChecked(
   drawn: DrawnBar;
   motion: DrawnMotion;
   clickShown: ClickErrorRecord | null;
+  // Which animation lanes the session's settings switch on, as drawn.
+  lanes: LaneSwitches;
 }> {
   noteFacts(facts, {
     sid: req.hookData.session_id,
@@ -1850,6 +1849,14 @@ async function renderChecked(
   noteFacts(facts, {
     lanes: LANE_NAMES.filter((lane) => effective.lanes[lane]).join(",") || "-",
   });
+  // [LAW:dataflow-not-control-flow] What a lane runs follows the switch every
+  // render draws by, as the session's own state moved it
+  // (src/daemon/lane-setup.ts).
+  laneSetups.observe(
+    { sessionId, hints, origin, transcript: req.hookData.transcript_path },
+    effective.lanes,
+    sessionState.revision(sessionId),
+  );
   const payload = await buildRenderPayload(
     req.hookData,
     at,
@@ -2030,6 +2037,7 @@ async function renderChecked(
     },
     motion: frame.motion,
     clickShown,
+    lanes: effective.lanes,
   };
 }
 
@@ -2119,7 +2127,7 @@ async function answerRequest(
   clickShown: ClickErrorRecord | null;
 }> {
   recordRequest(req);
-  const { drawn, motion, clickShown } = await renderChecked(
+  const { drawn, motion, clickShown, lanes } = await renderChecked(
     req,
     at,
     facts,
@@ -2141,20 +2149,24 @@ async function answerRequest(
   // it to the lanes drawing it elsewhere.
   const elsewhere =
     roleOf(req.hints.client ?? null) === "statusline"
-      ? lanesDrawingElsewhere(lanesOf(req))
+      ? handedOffTo(lanes, frameFeeds.following(sessionId))
       : [];
   const [first, ...rest] = elsewhere;
   // [LAW:nothing-unseen] Which lanes the statusline handed the bar to.
   noteFacts(facts, { handoff: elsewhere.join(",") || "-" });
+  // [LAW:no-silent-failure] Only the body is handed off: the strip above it
+  // — a load error, the update notice, a click's failure — stays.
   const answer =
     first === undefined
       ? output
       : composeBar(
           {
+            ...drawn,
             body: "",
-            diagnostics: laneHandoff(sessionId, [first, ...rest]),
-            failedConfigFile: null,
-            geometry: drawn.geometry,
+            diagnostics: withChannels(
+              drawn.diagnostics,
+              laneHandoff(sessionId, [first, ...rest]),
+            ),
           },
           link,
         );

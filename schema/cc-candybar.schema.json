@@ -1173,22 +1173,6 @@
           {
             "type": "object",
             "properties": {
-              "lane": {
-                "enum": [
-                  "band",
-                  "statusline",
-                  "pane"
-                ]
-              }
-            },
-            "required": [
-              "lane"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
               "do": {
                 "type": "array",
                 "items": {

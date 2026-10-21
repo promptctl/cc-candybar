@@ -340,17 +340,12 @@ const anyResettable = (names: readonly string[]): string =>
 // do all of the work needed to turn its lane on, not just part of it." A
 // lane's switch only lets its subscriber's frames through; the subscriber
 // itself — a mod, Claude Code under cc-attach, a tmux pane — is started by
-// the `lane` action (src/daemon/lane-setup.ts), which every click on the
-// toggle fires after its write. Beside the toggle, a `(?)` says what the lane
-// is and what turning it on does, from the help corpus `--help` prints.
+// the daemon when the switch the session renders by moves
+// (src/daemon/lane-setup.ts), so the toggle is a plain setting. Beside it, a
+// `(?)` says what the lane is and what turning it on does, from the help
+// corpus `--help` prints.
 const laneSettings = LANE_NAMES.map(
   (lane) => [LANES[lane].setting, lane] as const,
-);
-
-// [LAW:types-are-the-program] What a control's click does after its write,
-// for the settings whose writes alone do not do what turning them on means.
-const FOLLOWS: Partial<Record<SettingName, ActionDecl>> = Object.fromEntries(
-  laneSettings.map(([setting, lane]) => [setting, { lane }]),
 );
 
 // The `(?)` laid after a control, and the artifacts it declares.
@@ -370,34 +365,6 @@ const HELP: Partial<Record<SettingName, LayoutNode>> = Object.fromEntries(
     ),
   ]),
 );
-
-// [LAW:composability] A control whose click also fires `follow`: its write
-// becomes the head of a `do` under the name its template binds, so what the
-// toggle shows and writes is unchanged and the follower rides behind it.
-function followedBy(
-  control: Affordance,
-  apply: string,
-  follower: string,
-  follow: ActionDecl,
-): Affordance {
-  const write = control.actions[apply];
-  if (write === undefined || control.kind !== "inline") {
-    throw new Error(
-      `settings menu: only a control whose click is its "${apply}" action can be followed`,
-    );
-  }
-  return {
-    ...control,
-    actions: {
-      ...control.actions,
-      [`${apply}.write`]: write,
-      [follower]: follow,
-      [apply]: { do: [`${apply}.write`, follower] },
-    },
-  };
-}
-// The action a setting's control fires after its write.
-const controlFollow = (name: string): string => `${SETTINGS_NS}follow.${name}`;
 
 // One control of the menu: its setting's row of SETTINGS and what the
 // generator made of that setting's declared domain.
@@ -420,18 +387,13 @@ const CONTROLS: readonly MenuControl[] = (
 ).map((name) => {
   const row: SettingProjection = SETTINGS[name];
   const domain = settingControlDomain(row.configKey);
-  const generated = settingControl(
+  const control = settingControl(
     { label: row.label, domain },
     row.sessionKey,
     row.effectiveVar,
     controlApply(name),
     accordionOf(PLACE[name]),
   );
-  const follow = FOLLOWS[name];
-  const control =
-    follow === undefined
-      ? generated
-      : followedBy(generated, controlApply(name), controlFollow(name), follow);
   return { ...row, name, control, beneath: BENEATH[name] ?? [] };
 });
 
@@ -472,18 +434,10 @@ export const SETTINGS_WRITTEN_KEYS: ReadonlySet<string> = new Set(
   CONTROLS.flatMap((c) => [c.sessionKey, c.configKey]),
 );
 
-// A reset changes the setting as surely as its control does, so a control's
-// follower rides behind its reset too: a reset that turns a lane off closes
-// what the lane runs.
-const followed = CONTROLS.filter((c) => FOLLOWS[c.name] !== undefined);
-const resetThen = (name: string): string => `${controlReset(name)}.then`;
 const RESET_ALL = confirmStep(
   RESET_ALL_SEG,
   { arm: "⟲", confirm: "⟲ reset all?" },
-  [
-    ...CONTROLS.map((c) => controlReset(c.name)),
-    ...followed.map((c) => controlFollow(c.name)),
-  ],
+  CONTROLS.map((c) => controlReset(c.name)),
 );
 
 // ─── The save cell ──────────────────────────────────────────────────────────
@@ -1041,12 +995,7 @@ function declareSettingControls(artifacts: MenuArtifacts): void {
       type: "boolean",
       default: false,
     };
-    const resetClick =
-      FOLLOWS[c.name] === undefined ? reset : resetThen(c.name);
-    if (resetClick !== reset) {
-      artifacts.actions[resetClick] = { do: [reset, controlFollow(c.name)] };
-    }
-    const resetCell = `{{ if .${controlResettable(c.name)} }} {{ action "${resetClick}" "↺" }}{{ end }}`;
+    const resetCell = `{{ if .${controlResettable(c.name)} }} {{ action "${reset}" "↺" }}{{ end }}`;
     Object.assign(artifacts.variables, c.control.variables);
     artifacts.segments[controlSeg(c.name)] = {
       template: `${c.control.template}${resetCell}`,

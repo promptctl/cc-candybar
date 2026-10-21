@@ -6,12 +6,14 @@
 //   A, band       — the candybar-band mod (`<checkout>/mod`), loaded by Claude
 //                   Code: installed from the checkout's own marketplace, read
 //                   in place, then `/reload-plugins` loads it into the session.
-//   B, statusline — Claude Code started under cc-extra's `bin/cc-attach`, whose
-//                   `statusline-push` seam feeds the statusline the daemon's
-//                   frames. It attaches only at process start (cc-extra's
-//                   SEAMS.md: JSC gives debug hooks only to code compiled while
-//                   a debugger is attached), so the session's Claude Code is
-//                   exited and started again under it, resuming the session.
+//   B, statusline — Claude Code started under cc-extra's attach launcher,
+//                   which ships beside the bundle (src/attach-launcher.ts) and
+//                   whose `statusline-push` seam feeds the statusline the
+//                   daemon's frames. It attaches only at process start
+//                   (cc-extra's SEAMS.md: JSC gives debug hooks only to code
+//                   compiled while a debugger is attached), so the session's
+//                   Claude Code is exited and started again under it, resuming
+//                   the session.
 //   C, pane       — `cc-candybar bar-pane <pane>`, in a tmux pane split under
 //                   the session's.
 //
@@ -22,7 +24,12 @@
 // it (src/daemon/click-error.ts).
 
 import path from "node:path";
-import { LANES, type Lane, type LaneSwitches } from "../config/lanes.js";
+import {
+  LANES,
+  LANE_NAMES,
+  type Lane,
+  type LaneSwitches,
+} from "../config/lanes.js";
 import { holdClickError } from "./click-error.js";
 import type { SessionStateRW } from "./session-state.js";
 import type { Instant } from "../utils/instant.js";
@@ -35,9 +42,10 @@ import {
   type ClaudeInputEdge,
 } from "../claude-input/edge.js";
 import { slashLine } from "../claude-input/slash-line.js";
-import { turnRunning } from "../claude-input/prompt-screen.js";
+import { draftShown, turnRunning } from "../claude-input/prompt-screen.js";
 import { relaunchArgs } from "./claude-relaunch.js";
 import { sourceCheckoutOf } from "./build-currency.js";
+import { attachLauncherOf } from "../attach-launcher.js";
 import { BadVerbArgs } from "./verb-error.js";
 
 // The band mod, as the checkout's marketplace (`.claude-plugin/
@@ -49,18 +57,23 @@ const BAND_CLIENT = path.join("bin", "cc-candybar-native");
 // bar it draws: how the daemon finds its bar panes again to close them.
 export const BAR_PANE_OPTION = "@cc-candybar-bar-pane";
 // How long the session's Claude Code has to exit after `/exit` before the
-// restart under cc-attach is given up on.
+// restart under the attach launcher is given up on.
 export const EXIT_PATIENCE_MS = 15_000;
+// How long the restarted Claude Code has to resume its session and have its
+// statusline, under the attach launcher, subscribe to lane B (measured ~6 s).
+export const ATTACH_PATIENCE_MS = 30_000;
 
 const RELOAD_PLUGINS = slashLine("/reload-plugins");
 const EXIT = slashLine("/exit");
 
-// The Claude Code a session's pane shows: the pane's foreground process,
+// The Claude Code a session's pane shows: the pane's foreground process, the
+// executable it runs (what a restart runs again, with no PATH between),
 // whether the pane's own first process is a shell it was started from (so a
-// restart has somewhere to run), whether it already runs under cc-attach, and
-// the directory it runs in.
+// restart has somewhere to run), whether it already runs under the attach
+// launcher, and the directory it runs in.
 export interface PaneClaude {
   readonly pid: number;
+  readonly executable: string;
   readonly argv: readonly string[];
   readonly cwd: string;
   readonly fromShell: boolean;
@@ -87,21 +100,26 @@ export interface LaneEdge {
   ) => Promise<void>;
   readonly fileExists: (file: string) => boolean;
   readonly paneClaude: (tmux: TmuxHint) => Promise<PaneClaude>;
-  // Write a script only this user can read, its text written knowing its own
-  // path; answers that path.
-  readonly writeScript: (
-    name: string,
-    text: (self: string) => string,
-  ) => string;
+  // Write a script only this user can read; answers its path.
+  readonly writeScript: (name: string, text: string) => string;
+  readonly removeScript: (file: string) => void;
   // Resolves true once `pid` has exited, false if it is still running after
   // `withinMs`.
   readonly exited: (pid: number, withinMs: number) => Promise<boolean>;
   // Type `line` into the pane's shell and run it.
   readonly typeShellLine: (tmux: TmuxHint, line: string) => void;
+  // Resolves true once a subscriber of `lane` follows `sessionId`'s frames,
+  // false if none does within `withinMs`.
+  readonly followed: (
+    sessionId: string,
+    lane: Lane,
+    withinMs: number,
+  ) => Promise<boolean>;
 }
 
 // This daemon: the bundle it runs, how node runs it, and its socket — what a
-// bar pane runs to follow this daemon's frames.
+// bar pane runs to follow this daemon's frames, and what the attach launcher
+// beside the bundle runs under.
 export interface LaneHost {
   readonly bundle: string;
   readonly node: readonly string[];
@@ -113,6 +131,9 @@ export interface LaneSession {
   readonly hints: ClientHints;
   // The inputs its last render resolved its config from.
   readonly origin: RenderOrigin;
+  // Its conversation, as Claude Code names it in the statusline JSON: a
+  // session resumes from it, and has none until its first message.
+  readonly transcript: string;
 }
 
 // [LAW:types-are-the-program] What a lane's setup came to: finished in the
@@ -170,12 +191,30 @@ export const LANE_SETUP: Readonly<Record<Lane, { on: Plan; off: Plan }>> = {
       done("nothing to stop: the band mod draws nothing while the lane is off"),
   },
   statusline: {
-    on: (session, _host, edge) => {
+    on: (session, host, edge) => {
       const tmux = paneOf(session);
+      const launcher = attachLauncherOf(host.bundle);
+      if (!edge.fileExists(launcher)) {
+        throw new BadVerbArgs(
+          `${LANES.statusline.label} restarts Claude Code under the attach launcher, which is not at ${launcher} beside this daemon's bundle — rebuild (\`pnpm build\`) or reinstall cc-candybar`,
+        );
+      }
+      // [LAW:no-silent-failure] `--resume` of a session with no transcript
+      // finds no conversation, and the pane is left at its shell.
+      if (!edge.fileExists(session.transcript)) {
+        throw new BadVerbArgs(
+          `this session has no conversation to resume yet — send a first message, then turn ${LANES.statusline.label} off and on again`,
+        );
+      }
       return {
         kind: "underway",
-        said: `restarting Claude Code in ${tmux.pane} under cc-attach`,
-        finished: restartUnderAttach(session, tmux, edge),
+        said: `restarting Claude Code in ${tmux.pane} under the attach launcher`,
+        finished: restartUnderAttach(
+          session,
+          tmux,
+          [host.node[0]!, launcher],
+          edge,
+        ),
       };
     },
     // Lane off, the attached statusline is refused frames and shows its
@@ -239,100 +278,167 @@ async function installBand(
   return `installed ${BAND_PLUGIN} from ${checkout} and typed /reload-plugins into ${typed.pane}`;
 }
 
-// Exit the pane's Claude Code and start it again under cc-attach, resuming the
-// session — off the daemon's loop: reading the process table and waiting for
-// the exit outlast a click.
+// Exit the pane's Claude Code and start it again under the attach launcher
+// (`launcher`: node and the launcher's script), resuming the session — off the
+// daemon's loop: reading the process table and waiting for the exit outlast a
+// click.
 async function restartUnderAttach(
   session: LaneSession,
   tmux: TmuxHint,
+  launcher: readonly string[],
   edge: LaneEdge,
 ): Promise<string> {
   const claude = await edge.paneClaude(tmux);
   if (claude.attached) {
-    return `left Claude Code in ${tmux.pane} running: it already runs under cc-attach`;
+    return `left Claude Code in ${tmux.pane} running: it already runs under the attach launcher`;
   }
   // [LAW:no-silent-failure] `/exit` typed mid-turn queues until the turn
   // ends, long after the wait below gives up — and then the session exits
   // with nothing to start it again.
   if (turnRunning(edge.claudeInput.read(tmux))) {
     throw new Error(
-      `Claude Code in ${tmux.pane} is in the middle of a turn, and restarting it under cc-attach would end that turn — once it is idle, turn ${LANES.statusline.label} off and on again`,
+      `Claude Code in ${tmux.pane} is in the middle of a turn, and restarting it under the attach launcher would end that turn — once it is idle, turn ${LANES.statusline.label} off and on again`,
+    );
+  }
+  // [LAW:no-silent-failure] `/exit` is typed as every command is, its draft
+  // stashed first, and a stash lives only as long as the Claude Code holding
+  // it: the restart would end it with the draft.
+  if (draftShown(edge.claudeInput.read(tmux))) {
+    throw new Error(
+      `the prompt in ${tmux.pane} holds a draft, which restarting Claude Code under the attach launcher would lose — send or clear it, then turn ${LANES.statusline.label} off and on again`,
     );
   }
   if (!claude.fromShell) {
     throw new Error(
-      `Claude Code is the first process of pane ${tmux.pane}, so nothing would be left in the pane to start it again under cc-attach — start Claude Code from a shell in the pane`,
+      `Claude Code is the first process of pane ${tmux.pane}, so nothing would be left in the pane to start it again under the attach launcher — start Claude Code from a shell in the pane`,
     );
   }
   const relaunch = relaunchArgs(claude.argv, session.sessionId);
   if (relaunch.kind === "refused") {
-    throw new Error(`${relaunch.reason} — start it under cc-attach yourself`);
+    throw new Error(`${relaunch.reason} — restart it with that flag removed`);
   }
-  const script = edge.writeScript(`relaunch-${session.sessionId}.sh`, (self) =>
-    relaunchScript(self, claude.cwd, relaunch.args),
+  const script = edge.writeScript(
+    `relaunch-${session.sessionId}.sh`,
+    relaunchScript(
+      claude.cwd,
+      [...launcher, claude.executable, ...relaunch.args],
+      session.hints.claudeConfigDir,
+    ),
   );
-  const typed = typeSlash(edge.claudeInput, tmux, EXIT);
-  if (typed.kind === "refused") {
-    throw new Error(
-      `Claude Code was not restarted under cc-attach: /exit was not typed: ${typed.reason}`,
-    );
+  // [LAW:effects-at-boundaries] The script's whole life is this restart: it
+  // is gone once the restart is decided, however that went.
+  try {
+    const typed = typeSlash(edge.claudeInput, tmux, EXIT);
+    if (typed.kind === "refused") {
+      throw new Error(
+        `Claude Code was not restarted under the attach launcher: /exit was not typed: ${typed.reason}`,
+      );
+    }
+    if (!(await edge.exited(claude.pid, EXIT_PATIENCE_MS))) {
+      throw new Error(
+        `Claude Code in ${tmux.pane} did not exit within ${EXIT_PATIENCE_MS / 1000} s of /exit, so it was not restarted under the attach launcher`,
+      );
+    }
+    edge.typeShellLine(tmux, `sh ${script}`);
+    // [LAW:no-silent-failure] Typed is not restarted: the restart happened
+    // when the session's statusline, under the launcher, subscribes to lane
+    // B. The launcher starts nothing in place of an attach it could not make
+    // and says why in the pane.
+    if (
+      !(await edge.followed(
+        session.sessionId,
+        "statusline",
+        ATTACH_PATIENCE_MS,
+      ))
+    ) {
+      throw new Error(
+        `Claude Code in ${tmux.pane} did not come back attached within ${ATTACH_PATIENCE_MS / 1000} s of its restart — the pane says why`,
+      );
+    }
+  } finally {
+    edge.removeScript(script);
   }
-  if (!(await edge.exited(claude.pid, EXIT_PATIENCE_MS))) {
-    throw new Error(
-      `Claude Code in ${tmux.pane} did not exit within ${EXIT_PATIENCE_MS / 1000} s of /exit, so it was not restarted under cc-attach`,
-    );
-  }
-  edge.typeShellLine(tmux, `sh ${script}`);
-  return `restarted Claude Code in ${tmux.pane} under cc-attach, resuming ${session.sessionId}`;
+  return `restarted Claude Code in ${tmux.pane} under the attach launcher, resuming ${session.sessionId}, and its statusline follows lane B`;
 }
 
-// [LAW:single-enforcer] The one owner of lane setup: the click's verb asks it
-// to bring a lane in line with the session's switch, and it alone hears how a
-// setup that outlives the click ends — logged, and a failure held on the bar
-// as a click's failure is (src/daemon/click-error.ts).
+// [LAW:single-enforcer] The one owner of lane setup. What a lane runs follows
+// its switch as the session's renders resolve it, whatever in the session
+// moved the switch — the menu's toggle, its ↺, ↶ undo, a preset picked — so no
+// control carries the setup itself (review of brandon-menus-sjhy.amf). Every
+// render reports the switches it drew by and the revision of the session's own
+// state; a lane whose switch differs from the session's previous report is
+// brought in line, off the render, when the session's state moved with it.
+// A switch moved only by the config file — another session's save, a hand
+// edit — changes what every session reading that file renders by, and setting
+// up a lane in each of them would restart every idle Claude Code on the
+// machine for one session's save: such a session's lane runs from its own next
+// move of the switch. A session's first report is where it starts, so a daemon
+// restart re-runs no setup. How each setup ends is logged, and a failure is
+// held on the bar as a click's failure is (src/daemon/click-error.ts).
 export class LaneSetups {
+  private readonly seen = new Map<
+    string,
+    { readonly switches: LaneSwitches; readonly revision: number }
+  >();
+
   constructor(
     private readonly deps: {
       readonly edge: LaneEdge;
       readonly host: LaneHost;
-      // Whether each lane is on for the session, as its next render resolves
-      // it — the toggle's write included.
-      readonly switches: (session: LaneSession) => LaneSwitches;
       readonly state: SessionStateRW;
       readonly log: (level: "info" | "warn", msg: string) => void;
       readonly now: () => Instant;
+      // [LAW:effects-at-boundaries] Runs a setup after the render that saw
+      // its switch move has returned: a render writes no session state.
+      readonly defer: (run: () => void) => void;
     },
   ) {}
 
-  sync(session: LaneSession, lane: Lane): string {
-    const on = this.deps.switches(session)[lane];
-    const outcome = LANE_SETUP[lane][on ? "on" : "off"](
-      session,
-      this.deps.host,
-      this.deps.edge,
+  // The switches a render of `session` drew by, at `revision` of its state.
+  observe(
+    session: LaneSession,
+    switches: LaneSwitches,
+    revision: number,
+  ): void {
+    const before = this.seen.get(session.sessionId);
+    this.seen.set(session.sessionId, { switches, revision });
+    if (before === undefined || before.revision === revision) return;
+    for (const lane of LANE_NAMES) {
+      if (before.switches[lane] === switches[lane]) continue;
+      const on = switches[lane];
+      this.deps.defer(() => this.sync(session, lane, on));
+    }
+  }
+
+  private sync(session: LaneSession, lane: Lane, on: boolean): void {
+    const where = `(session=${session.sessionId})`;
+    const failed = (error: unknown): void => {
+      const text = `lane: ${lane} ${on ? "on" : "off"}: ${error instanceof Error ? error.message : String(error)}`;
+      this.deps.log("warn", `${text} ${where}`);
+      holdClickError(this.deps.state, session.sessionId, text, this.deps.now());
+    };
+    let outcome: LaneOutcome;
+    try {
+      outcome = LANE_SETUP[lane][on ? "on" : "off"](
+        session,
+        this.deps.host,
+        this.deps.edge,
+      );
+    } catch (error) {
+      failed(error);
+      return;
+    }
+    this.deps.log(
+      "info",
+      `lane: ${lane} ${on ? "on" : "off"} — ${outcome.said} ${where}`,
     );
-    const said = `lane: ${lane} ${on ? "on" : "off"} — ${outcome.said} (session=${session.sessionId})`;
-    this.deps.log("info", said);
     if (outcome.kind === "underway") {
       outcome.finished.then(
         (finished) =>
-          this.deps.log(
-            "info",
-            `lane: ${lane} ${finished} (session=${session.sessionId})`,
-          ),
-        (error: unknown) => {
-          const text = `lane: ${error instanceof Error ? error.message : String(error)}`;
-          this.deps.log("warn", `${text} (session=${session.sessionId})`);
-          holdClickError(
-            this.deps.state,
-            session.sessionId,
-            text,
-            this.deps.now(),
-          );
-        },
+          this.deps.log("info", `lane: ${lane} ${finished} ${where}`),
+        failed,
       );
     }
-    return said;
   }
 }
 
@@ -340,24 +446,25 @@ export class LaneSetups {
 const shQuote = (s: string): string => `'${s.replaceAll("'", `'\\''`)}'`;
 
 // [LAW:effects-at-boundaries] The script a shell runs to start the session
-// again under cc-attach. It is typed as `sh <script>`, a line every shell
-// reads alike, so no quoting has to survive the user's shell (fish quotes
-// differently from sh). It removes itself first, resumes the session in the
-// directory Claude Code ran in, and — where cc-attach is not on PATH — says
-// so and resumes it in stock Claude Code, so the session is never left
-// stopped.
+// again: `argv`, every word an absolute path or an argument, and nothing else
+// the shell would look up — `cd`, `unset`, `export` and `exec` are its own.
+// It is typed as `sh <script>`, a line every shell reads alike, so no quoting
+// has to survive the user's shell (fish quotes differently from sh). It runs
+// `argv` in the directory Claude Code ran in, under the Claude Code directory
+// the session's client reported (an absent hint is the default directory,
+// whatever the pane's shell exports — src/daemon/protocol.ts), so `--resume`
+// looks where the session lives.
 export function relaunchScript(
-  self: string,
   cwd: string,
-  args: readonly string[],
+  argv: readonly string[],
+  claudeConfigDir: string | undefined,
 ): string {
-  const argv = args.map(shQuote).join(" ");
   return [
-    `rm -f -- ${shQuote(self)}`,
     `cd -- ${shQuote(cwd)} || exit 1`,
-    `if command -v cc-attach >/dev/null 2>&1; then exec cc-attach ${argv}; fi`,
-    `echo ${shQuote(`cc-candybar: ${LANES.statusline.label} needs cc-extra's bin/cc-attach on PATH — resuming this session in stock Claude Code`)} >&2`,
-    `exec claude ${argv}`,
+    claudeConfigDir === undefined
+      ? "unset CLAUDE_CONFIG_DIR"
+      : `CLAUDE_CONFIG_DIR=${shQuote(claudeConfigDir)}; export CLAUDE_CONFIG_DIR`,
+    `exec ${argv.map(shQuote).join(" ")}`,
     "",
   ].join("\n");
 }

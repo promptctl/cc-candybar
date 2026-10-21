@@ -232,6 +232,13 @@ export class FrameFeeds<Req> {
     return () => this.unsubscribe(feed, sub);
   }
 
+  // The lanes whose subscribers follow the session's frames now.
+  following(sessionId: string): ReadonlySet<Lane> {
+    return new Set(
+      [...(this.feeds.get(sessionId)?.sinks ?? [])].map((s) => s.lane),
+    );
+  }
+
   // Draw the session's next frame now, if anyone is watching it.
   wake(sessionId: string): void {
     const feed = this.feeds.get(sessionId);
