@@ -313,7 +313,17 @@ export function productionLaneEdge(
       ran(`reading ${executable}'s module graph`, result);
       return { ok: true };
     },
-    terminate: (pid) => void process.kill(pid, "SIGTERM"),
+    // [LAW:no-silent-failure] A kill the OS refuses says which process it was
+    // sent to, not a bare `kill ESRCH`.
+    terminate: (pid) => {
+      try {
+        process.kill(pid, "SIGTERM");
+      } catch (err) {
+        throw new Error(
+          `Claude Code (pid ${pid}) could not be sent SIGTERM: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    },
     exited: async (pid, withinMs) => {
       const until = Date.now() + withinMs;
       while (pidAlive(pid)) {

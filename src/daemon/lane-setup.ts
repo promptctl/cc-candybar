@@ -42,7 +42,13 @@ import {
   type ClaudeInputEdge,
 } from "../claude-input/edge.js";
 import { slashLine } from "../claude-input/slash-line.js";
-import { draftShown, turnRunning } from "../claude-input/prompt-screen.js";
+import {
+  draftShown,
+  promptState,
+  turnRunning,
+  type PaneSnapshot,
+  type PromptState,
+} from "../claude-input/prompt-screen.js";
 import { relaunchOf } from "./claude-relaunch.js";
 import { sourceCheckoutOf } from "./build-currency.js";
 import { attachLauncherOf, moduleGraphReaderOf } from "../attach-launcher.js";
@@ -306,20 +312,6 @@ async function restartUnderAttach(
   if (claude.attached) {
     return `left Claude Code in ${tmux.pane} running: it already runs under the attach launcher`;
   }
-  // [LAW:no-silent-failure] The restart ends Claude Code, and a turn in
-  // progress with it.
-  if (turnRunning(edge.claudeInput.read(tmux))) {
-    throw new Error(
-      `Claude Code in ${tmux.pane} is in the middle of a turn, and restarting it under the attach launcher would end that turn — once it is idle, turn ${LANES.statusline.label} off and on again`,
-    );
-  }
-  // [LAW:no-silent-failure] A draft lives only as long as the Claude Code
-  // holding it: the restart would end it with the draft.
-  if (draftShown(edge.claudeInput.read(tmux))) {
-    throw new Error(
-      `the prompt in ${tmux.pane} holds a draft, which restarting Claude Code under the attach launcher would lose — send or clear it, then turn ${LANES.statusline.label} off and on again`,
-    );
-  }
   if (!claude.fromShell) {
     throw new Error(
       `Claude Code is the first process of pane ${tmux.pane}, so nothing would be left in the pane to start it again under the attach launcher — start Claude Code from a shell in the pane`,
@@ -354,6 +346,22 @@ async function restartUnderAttach(
   // [LAW:effects-at-boundaries] The script's whole life is this restart: it
   // is gone once the restart is decided, however that went.
   try {
+    // [LAW:no-ambient-temporal-coupling] Whether ending Claude Code loses
+    // anything is judged on the pane as it is at the kill, not as it was
+    // before the module-graph read above (seconds, on a large binary): the
+    // user may have started a turn or a draft meanwhile, or left Claude Code.
+    const now = await edge.paneClaude(tmux);
+    if (now.pid !== claude.pid) {
+      throw new Error(
+        `Claude Code in ${tmux.pane} is no longer the process the restart read (pid ${claude.pid}), so it was not restarted under the attach launcher`,
+      );
+    }
+    const loses = endingLoses(edge.claudeInput.read(tmux));
+    if (loses !== null) {
+      throw new Error(
+        `Claude Code in ${tmux.pane} was left running: ${loses} — then turn ${LANES.statusline.label} off and on again`,
+      );
+    }
     // SIGTERM, not `/exit`: Claude Code exits on it as on `/exit`, printing
     // its resume line, but `/exit` in a session started with `--worktree`
     // removes the worktree when it holds no changes (the script would then
@@ -386,6 +394,31 @@ async function restartUnderAttach(
     edge.removeScript(script);
   }
   return `restarted Claude Code in ${tmux.pane} under the attach launcher from ${relaunch.dir}, resuming ${session.sessionId}, and its statusline follows lane B`;
+}
+
+// [LAW:single-enforcer] What ending the Claude Code a pane shows would lose,
+// or null when nothing: the one judgement the restart makes before its kill.
+// A stash, a turn in progress, and a draft die with the process; a dialog
+// (a permission prompt waiting on a tool call) and a pane in copy mode are
+// screens no judgement here can read past.
+const UNREADABLE: Record<Exclude<PromptState["kind"], "ready">, string> = {
+  "in-mode": "its pane is in tmux copy mode — leave it (q)",
+  stashed:
+    "it holds a stashed prompt (ctrl+s), which ending it would lose — restore or send it",
+  "no-prompt":
+    "it is not at its prompt (a dialog or picker is open) — close it",
+};
+
+function endingLoses(snapshot: PaneSnapshot): string | null {
+  const state = promptState(snapshot);
+  if (state.kind !== "ready") return UNREADABLE[state.kind];
+  if (turnRunning(snapshot)) {
+    return "it is in the middle of a turn, which ending it would end — wait until it is idle";
+  }
+  if (draftShown(snapshot)) {
+    return "its prompt holds a draft, which ending it would lose — send or clear it";
+  }
+  return null;
 }
 
 // How many sessions' last reports LaneSetups keeps.
@@ -530,7 +563,7 @@ const EXPORTABLE = /^[A-Za-z_][A-Za-z0-9_]*=/;
 // the shell would look up — `cd`, `unset`, `export` and `exec` are its own.
 // It is typed as `sh <script>`, a line every shell reads alike, so no quoting
 // has to survive the user's shell (fish quotes differently from sh). It runs
-// `argv` in the directory Claude Code ran in, under the environment Claude
+// `argv` in `cwd` (the relaunch's directory), under the environment Claude
 // Code was started with (`env`, `NAME=value` each) — the variables it was
 // started with set as they were (a `CC_CANDYBAR_CONFIG`, a model), and its
 // Claude Code directory unset when it had none, so `--resume` looks where the

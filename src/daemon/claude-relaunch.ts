@@ -1,9 +1,11 @@
-// How a running Claude Code is started again on the same session: from the
-// directory it was started in, with the arguments it was started with, less
-// the ones that choose or create a session, plus `--resume <session id>` — so
-// the conversation, its id, and every session pick the bar holds for that id
-// carry over. It is the line Claude Code prints itself when it exits
-// (`claude --worktree <name> --resume <id>`, measured on 2.1.289).
+// How a running Claude Code is started again on the same session, in the
+// directory it runs in: with the arguments it was started with, less the ones
+// that choose or create a session, plus `--resume <session id>` — so the
+// conversation, its id, and every session pick the bar holds for that id
+// carry over. A session running in a worktree Claude Code made is started
+// from that worktree's repository with `--worktree <name>`, the line Claude
+// Code prints itself when it exits (`claude --worktree <name> --resume <id>`,
+// measured on 2.1.289).
 //
 // [LAW:parse-dont-validate] The argv a process was started with is untrusted
 // shape: it is read the way Claude Code's own option parser (commander) reads
@@ -22,22 +24,18 @@ import path from "node:path";
 // to the next that does.
 type Arity = "none" | "one" | "optional" | "variadic";
 
-// [LAW:types-are-the-program] What a restart carries of a flag: the flag as
-// it was given; nothing, for one that chooses, creates, or detaches a session
-// (or makes the run a one-shot), since the restart chooses the session itself
-// with `--resume`; or the worktree the flag made — `--worktree` started the
-// session in a worktree (the one it named, or one Claude Code named), and
-// naming that worktree again puts the restart back in it.
-type Carry = "as-given" | "dropped" | "the-worktree";
-
+// A flag that is carried to the new start, or dropped from it because it
+// chooses, creates, or detaches a session (or makes the run a one-shot): the
+// relaunch chooses the session itself, with `--resume`. `--worktree` is
+// dropped too: the worktree a session runs in is read off the directory it
+// runs in, which a worktree entered mid-session moves as well.
 interface FlagRule {
   readonly arity: Arity;
-  readonly carry: Carry;
+  readonly keep: boolean;
 }
 
-const keep = (arity: Arity): FlagRule => ({ arity, carry: "as-given" });
-const drop = (arity: Arity): FlagRule => ({ arity, carry: "dropped" });
-const worktree = (arity: Arity): FlagRule => ({ arity, carry: "the-worktree" });
+const keep = (arity: Arity): FlagRule => ({ arity, keep: true });
+const drop = (arity: Arity): FlagRule => ({ arity, keep: false });
 
 // [LAW:one-source-of-truth] Every option `claude --help` lists on 2.1.289,
 // each spelling a row.
@@ -118,8 +116,8 @@ const FLAGS: Readonly<Record<string, FlagRule>> = {
   "--verbose": keep("none"),
   "-v": drop("none"),
   "--version": drop("none"),
-  "-w": worktree("optional"),
-  "--worktree": worktree("optional"),
+  "-w": drop("optional"),
+  "--worktree": drop("optional"),
 };
 
 // [LAW:types-are-the-program] A restart: the directory to start in and the
@@ -133,49 +131,42 @@ export type Relaunch =
   | { readonly kind: "refused"; readonly reason: string };
 
 // The process a restart starts again, as read off it: the argv it was started
-// with (`argv[0]` the program), the environment it was started with
-// (`NAME=value` each), and the directory it runs in.
+// with (`argv[0]` the program) and the directory it runs in.
 export interface StartedProcess {
   readonly argv: readonly string[];
-  readonly env: readonly string[];
   readonly cwd: string;
 }
 
 const isFlag = (token: string): boolean =>
   token.startsWith("-") && token !== "-";
 
-// How `claude` is started again on `sessionId`. The directory is the one it
-// was STARTED in — its environment's `PWD`, which the shell exported and
-// Claude Code never moves — not the one it runs in: `--worktree` moves Claude
-// Code into the worktree it makes, and is carried as that worktree's name
-// (the directory it runs in), so Claude Code, started again where it was,
-// goes back into the same worktree. For a session started with no
-// `--worktree` the two directories are one.
+// How `claude` is started again on `sessionId`, in the directory it runs in.
+// [LAW:one-source-of-truth] That directory alone says whether the session
+// runs in a worktree — `--worktree` at the start and a worktree entered
+// mid-session both move it, and leaving the worktree moves it back — so a
+// worktree is carried as `--worktree <name>`, started from the repository
+// that holds it, and anything else starts where it runs.
 export function relaunchOf(
   claude: StartedProcess,
   sessionId: string,
 ): Relaunch {
-  const pwd = claude.env.find((v) => v.startsWith("PWD="));
-  if (pwd === undefined) {
-    return {
-      kind: "refused",
-      reason:
-        "Claude Code's environment names no PWD, so the directory it was started in is unknown",
-    };
-  }
-  const args = relaunchArgs(claude.argv, claude.cwd, sessionId);
-  return args.kind === "refused"
-    ? args
-    : { kind: "relaunch", dir: pwd.slice("PWD=".length), args: args.args };
+  const args = relaunchArgs(claude.argv, sessionId);
+  if (args.kind === "refused") return args;
+  const tree = worktreeOf(claude.cwd);
+  return tree === null
+    ? { kind: "relaunch", dir: claude.cwd, args: args.args }
+    : {
+        kind: "relaunch",
+        dir: tree.repo,
+        args: ["--worktree", tree.name, ...args.args],
+      };
 }
 
 // The arguments that start Claude Code again on `sessionId`, from the argv it
-// was started with (`argv[0]` the program) and the directory it runs in.
-// Positional words are the prompt the session opened with, which already ran,
+// was started with (`argv[0]` the program). Positional words are the prompt the session opened with, which already ran,
 // so they are dropped with the session-choosing flags.
 function relaunchArgs(
   argv: readonly string[],
-  cwd: string,
   sessionId: string,
 ):
   | { readonly kind: "args"; readonly args: readonly string[] }
@@ -216,40 +207,32 @@ function relaunchArgs(
       };
     }
     i += taken.length;
-    switch (rule.carry) {
-      case "as-given":
-        kept.push(token, ...taken);
-        break;
-      case "the-worktree": {
-        const tree = worktreeNameOf(cwd);
-        if (tree === null) {
-          return {
-            kind: "refused",
-            reason: `Claude Code was started with ${name} but runs in ${cwd}, which is not a worktree it made (<repo>/.claude/worktrees/<name>)`,
-          };
-        }
-        kept.push("--worktree", tree);
-        break;
-      }
-      case "dropped":
-        break;
-    }
+    if (rule.keep) kept.push(token, ...taken);
   }
   return { kind: "args", args: [...kept, "--resume", sessionId] };
 }
 
-// The name `claude --worktree <name>` gives the worktree in `dir`, or null
-// when `dir` is not one: Claude Code makes a worktree at
-// `<repo>/.claude/worktrees/<name>` with each `/` of the name spelled `+`,
-// and refuses a `+` in a name, so the directory's name reads back as the one
-// name that reaches it (measured on 2.1.289: `--worktree feat/x.y` makes
-// `feat+x.y`, `--worktree feat+x.y` is refused).
-function worktreeNameOf(dir: string): string | null {
-  const parent = path.dirname(dir);
-  return path.basename(parent) === "worktrees" &&
-    path.basename(path.dirname(parent)) === ".claude"
-    ? path.basename(dir).replaceAll("+", "/")
-    : null;
+// The worktree Claude Code made that `dir` lies in, or null when it lies in
+// none: Claude Code makes a worktree at `<repo>/.claude/worktrees/<name>` with
+// each `/` of the name spelled `+`, and refuses a `+` in a name, so the
+// directory's name reads back as the one name that reaches it (measured on
+// 2.1.289: `--worktree feat/x.y` makes `feat+x.y`, `--worktree feat+x.y` is
+// refused). `dir` may be below the worktree's top; the innermost worktree
+// holding it is the one it runs in.
+function worktreeOf(
+  dir: string,
+): { readonly repo: string; readonly name: string } | null {
+  const parts = dir.split(path.sep);
+  const at = parts.findLastIndex(
+    (p, i) =>
+      p === "worktrees" && parts[i - 1] === ".claude" && i + 1 < parts.length,
+  );
+  return at === -1
+    ? null
+    : {
+        repo: parts.slice(0, at - 1).join(path.sep) || path.sep,
+        name: parts[at + 1]!.replaceAll("+", "/"),
+      };
 }
 
 function takeWhile<T>(xs: readonly T[], ok: (x: T) => boolean): T[] {
