@@ -26,7 +26,7 @@ A body drops below its trigger or rises above the whole bar (`placement: "drop" 
 | `⚡ session` | `⎘ id`, `⎘ resume`, `↗ proj`, `↗ log`, `↗ repo`, `↗ config` (shown only when a config file exists); a second row of `/compact /clear /model` (xta.qhj) and the autocompact control (xta.e3p) |
 | `🎨 look` | The theme picker and its `⚙` (style, variation, shade), then effect, endcaps and fade in/out (below) |
 | `📐 layout` | `+ preset` (bwi.o6u), `✎ arrange` (today's `✎ edit`, see Edit mode), `wrap: on/off`, `◀ padding ▶`. "this is just temporary until we figure out what to do it with"; padding "is probably also useless" |
-| `⚙ config` | "all config options": the controls generated from the config schema (brandon-settings-coverage-g4p.zoj) that no other tab holds. `PLACE` in `settings-menu.ts` names each setting's tab, keyed by every `SETTINGS` row, so a control lands in exactly one |
+| `⚙ config` | "all config options": the controls generated from the config schema (brandon-settings-coverage-g4p.zoj) that no other tab holds: `☑ update notice`, then `🧪 toggles`, a submenu holding the animation lanes' toggles (`🧪 band (A)`, `🧪 statusline (B)`, `🧪 tmux pane (C)`). `PLACE` in `src/config/menu-places.ts` names each setting's tab or submenu, keyed by every `SETTINGS` row, so a control lands in exactly one place |
 | `🧰 tools` | `🩺 doctor` and its check rows (below) |
 
 `📐` replaces `▦` on the layout tab because `▦` is the preset control's glyph.

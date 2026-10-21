@@ -12,6 +12,8 @@
 // derive from these rows or are keyed by them, so deleting a lane's row makes
 // the compiler name everything left behind.
 
+import { settingMenuPath } from "./menu-places.js";
+
 export const LANES = {
   band: { setting: "experimentalBand", label: "🧪 band (A)" },
   statusline: { setting: "experimentalStatusline", label: "🧪 statusline (B)" },
@@ -53,4 +55,4 @@ export const laneEffectiveVar = (lane: Lane): `lanes.${Lane}.effective` =>
 
 // Why a subscriber of `lane` is refused, naming the switch that admits it.
 export const laneOffReason = (lane: Lane): string =>
-  `${LANES[lane].label} is off — turn it on in the settings menu's ⚙ config tab, or set globals.${LANES[lane].setting}: true`;
+  `${LANES[lane].label} is off — turn it on in the settings menu's ${settingMenuPath(LANES[lane].setting)}, or set globals.${LANES[lane].setting}: true`;

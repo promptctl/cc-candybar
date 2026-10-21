@@ -21,7 +21,7 @@ as one JSON line (`mod/types/index.d.ts`): the daemon encodes the band's frames
 as rows of styled runs, which the mod draws as `Text` runs and `Link`s. The
 child relays them, at about 2 MB RSS. The band shows nothing until the session's
 statusline has rendered once, and nothing while lane A's toggle is off: turn on
-`🧪 band (A)` in the settings menu's `⚙ config` tab (a draft until `💾 save`),
+`🧪 band (A)` in the settings menu's `⚙ config › 🧪 toggles` (a draft until `💾 save`),
 or set `globals.experimentalBand: true` in the config file. A line the band
 cannot draw — the daemon from a different build than the mod — is said above
 the band.

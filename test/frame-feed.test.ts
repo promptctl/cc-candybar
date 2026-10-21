@@ -375,7 +375,8 @@ describe("a subscription's lane", () => {
       expect.objectContaining({
         ok: false,
         code: "SWITCHED_OFF",
-        error: expect.stringContaining("globals.experimentalBand"),
+        error:
+          "🧪 band (A) is off — turn it on in the settings menu's ⚙ config › 🧪 toggles, or set globals.experimentalBand: true",
       }),
     ]);
     expect(frames).toEqual([]);

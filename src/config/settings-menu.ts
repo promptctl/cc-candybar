@@ -82,6 +82,17 @@ import {
   type SettingProjection,
 } from "./setting-projections.js";
 import { synthesisInputs } from "./synthesis-inputs.js";
+import {
+  PLACE,
+  SUBMENUS,
+  SUBMENU_NAMES,
+  TABS,
+  isSubmenu,
+  tabOf,
+  type Place,
+  type SubmenuName,
+  type TabName,
+} from "./menu-places.js";
 import { BOOLEAN_TRUE } from "../themes/policy.js";
 import { settingControlDomain } from "./loader/globals.js";
 import { settingControl, type Affordance } from "./setting-control.js";
@@ -120,15 +131,6 @@ const seg = (name: string): LayoutNode => ({ kind: "segment", name });
 // open trigger. The door's click folds it back to the first tab (doorFolds),
 // so the menu always reopens at its top level.
 const TAB_KEY = `${SETTINGS_NS}tab`;
-const TABS = [
-  { member: "session", label: "⚡ session" },
-  { member: "look", label: "🎨 look" },
-  // `📐`, because `▦` is the preset control's glyph.
-  { member: "layout", label: "📐 layout" },
-  { member: "config", label: "⚙ config" },
-  { member: "tools", label: "🧰 tools" },
-] as const;
-type TabName = (typeof TABS)[number]["member"];
 // The tab a fresh session opens the menu on.
 const FIRST_TAB: TabName = "session";
 const tabSeg = (tab: TabName): string => `${TAB_KEY}.${tab}`;
@@ -260,26 +262,26 @@ const MARK_GLYPH: Readonly<Record<GlyphMark, string>> = {
 // `{{ menu }}` an author gives the same shared key joins this accordion.
 const PICKER_KEY = sharedMenuStateKey(`${SETTINGS_NS}pickers`);
 
-// ─── The theme configuration (brandon-theme-swatch-8v9r) ────────────────────
+// ─── Submenus (brandon-theme-swatch-8v9r, brandon-menus-sjhy.5zy) ─────────
 //
-// The theme picker is `[Theme ▀▀▀] [⚙]`, and the gear opens "the theme
-// configuration menu … bright/dim, etc, and the primary/secondary, etc": the
-// style, the variation and the shade, the settings that adapt the theme
-// rather than choose it. The gear is one more member of the controls'
-// accordion, so opening it closes the theme's swatches and the reverse — one
-// panel under the row at a time — and the lists of the controls inside it
-// share an accordion of their own: a key nested under a body holding it
-// would close the body that shows it.
-const GEAR_SEG = `${SETTINGS_NS}gear`;
-const GEAR_MEMBER = "gear";
-const GEAR_TOGGLE = `${GEAR_SEG}.toggle`;
-const GEAR_GLYPH = "⚙";
-const GEAR_REF: DisclosureRef = {
-  variable: PICKER_KEY,
-  key: PICKER_KEY,
-  member: GEAR_MEMBER,
+// A submenu (SUBMENUS, menu-places.ts) is a member of the accordion the
+// control it is laid beside sits on, so opening it closes the lists beside it
+// and the reverse — one panel under the row at a time — and the lists of the
+// controls inside it share an accordion of their own: a key nested under a
+// body holding it would close the body that shows it.
+const submenuSeg = (name: SubmenuName): string => `${SETTINGS_NS}${name}`;
+const submenuToggle = (name: SubmenuName): string =>
+  `${submenuSeg(name)}.toggle`;
+// The accordion every list and submenu laid in `place` joins.
+const accordionOf = (place: Place): string =>
+  isSubmenu(place)
+    ? sharedMenuStateKey(`${SETTINGS_NS}${place}Pickers`)
+    : PICKER_KEY;
+// A submenu is a member of the accordion the control it is laid beside sits on.
+const submenuRef = (name: SubmenuName): DisclosureRef => {
+  const key = accordionOf(PLACE[SUBMENUS[name].beside]);
+  return { variable: key, key, member: name };
 };
-const GEAR_PICKER_KEY = sharedMenuStateKey(`${SETTINGS_NS}gearPickers`);
 
 // A style chooses how the bar's palette is adapted, and `{{ themePreview }}`
 // samples exactly the palette the bar is drawn in. (The theme picker carries
@@ -337,34 +339,6 @@ interface MenuControl extends SettingProjection {
   readonly beneath: readonly SegmentDecl[];
 }
 
-// [LAW:types-are-the-program] Where each setting's control renders — the
-// door's first line, exactly one tab, or behind the theme picker's gear — as a
-// record keyed by every setting, so a new setting is a compile error until it
-// is given a place. Switching arrangement is what people open this menu for,
-// so the preset control sits on the door's first line, one click from the
-// door.
-type Place = "door" | TabName | "gear";
-const PLACE = {
-  preset: "door",
-  theme: "look",
-  style: "gear",
-  effect: "look",
-  variation: "gear",
-  shade: "gear",
-  endcaps: "look",
-  transitions: "look",
-  autoWrap: "layout",
-  padding: "layout",
-  updateNotice: "config",
-  experimentalBand: "config",
-  experimentalStatusline: "config",
-  experimentalPane: "config",
-} as const satisfies Readonly<Record<SettingName, Place>>;
-// The gear sits beside the theme control, so what is behind it is in the
-// theme control's tab.
-const tabOf = (place: Place): "door" | TabName =>
-  place === "gear" ? PLACE.theme : place;
-
 // [LAW:one-source-of-truth] Every setting the menu offers, generated
 // (brandon-settings-coverage-g4p.zoj): one control per row of SETTINGS, its
 // shape — a toggle, a stepper, a picker — decided by the domain the loader
@@ -383,35 +357,33 @@ const CONTROLS: readonly MenuControl[] = (
     row.sessionKey,
     row.effectiveVar,
     controlApply(name),
-    PLACE[name] === "gear" ? GEAR_PICKER_KEY : PICKER_KEY,
+    accordionOf(PLACE[name]),
   );
   return { ...row, name, control, beneath: BENEATH[name] ?? [] };
 });
 
 const controlsIn = (place: Place): readonly MenuControl[] =>
   CONTROLS.filter((c) => PLACE[c.name] === place);
-// What a tab holds, the controls behind a gear in it included.
+// What a tab holds, the controls inside its submenus included.
 const controlsUnder = (tab: "door" | TabName): readonly MenuControl[] =>
   CONTROLS.filter((c) => tabOf(PLACE[c.name]) === tab);
-// [LAW:types-are-the-program] What sits right after a control in its row —
-// the theme picker's gear, opening the controls behind it — keyed by setting,
-// so the gear is laid where the control it configures is.
-const BESIDE: Partial<Record<SettingName, readonly LayoutNode[]>> = {
-  theme: [
-    disclosureNode(
-      GEAR_SEG,
-      GEAR_REF,
-      {
-        kind: "container",
-        direction: "horizontal",
-        children: controlsIn("gear").map(controlNode),
-      },
-      "drop",
+// The submenus laid right after a setting's control.
+const submenusBeside = (name: SettingName): SubmenuName[] =>
+  SUBMENU_NAMES.filter((s) => SUBMENUS[s].beside === name);
+// The controls in `place`, each followed by the submenus laid beside it, whose
+// bodies are laid the same way.
+const controlsAt = (place: Place): LayoutNode[] =>
+  controlsIn(place).flatMap((c) => [
+    controlNode(c),
+    ...submenusBeside(c.name).map((s) =>
+      disclosureNode(
+        submenuSeg(s),
+        submenuRef(s),
+        { kind: "container", direction: "horizontal", children: controlsAt(s) },
+        "drop",
+      ),
     ),
-  ],
-};
-const controlsAt = (place: "door" | TabName): LayoutNode[] =>
-  controlsIn(place).flatMap((c) => [controlNode(c), ...(BESIDE[c.name] ?? [])]);
+  ]);
 
 // [LAW:one-source-of-truth] Every PLAIN key the settings menu writes — the
 // session key every control picks and the config field its save and ↺ write.
@@ -1002,15 +974,18 @@ function declareSettingControls(artifacts: MenuArtifacts): void {
     }
   }
   Object.assign(artifacts.actions, RESET_ALL.actions);
-  // The theme picker's gear: one static glyph, open or closed — the open
+  // Each submenu's trigger: one static label, open or closed — the open
   // trigger wears its band's state colour, as every disclosure trigger does.
-  artifacts.actions[GEAR_TOGGLE] = disclosureCycleAction(
-    PICKER_KEY,
-    GEAR_MEMBER,
-  );
-  artifacts.segments[GEAR_SEG] = {
-    template: `{{ action "${GEAR_TOGGLE}" "${GEAR_GLYPH}" }}`,
-  };
+  for (const name of SUBMENU_NAMES) {
+    const ref = submenuRef(name);
+    artifacts.actions[submenuToggle(name)] = disclosureCycleAction(
+      ref.key,
+      ref.member,
+    );
+    artifacts.segments[submenuSeg(name)] = {
+      template: `{{ action "${submenuToggle(name)}" ${templateLiteral(SUBMENUS[name].trigger)} }}`,
+    };
+  }
 }
 
 // [LAW:one-source-of-truth] Edit mode's state and switch, ensured rather than
