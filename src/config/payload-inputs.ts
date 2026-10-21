@@ -12,7 +12,14 @@
 
 import type { VariableDecl } from "./dsl-types.js";
 import { SESSION_ID_VAR_NAME } from "../var-system/sources.js";
-import { LANE_NAMES, laneFeedVar, UNFOLLOWED, type LaneFeed } from "./lanes.js";
+import {
+  ANSWERING,
+  drawingVar,
+  LANE_NAMES,
+  laneFeedVar,
+  UNFOLLOWED,
+  type LaneFeed,
+} from "./lanes.js";
 import { CONFIG_KEY_TO_EFFECTIVE_VAR } from "./setting-projections.js";
 import {
   GLOBAL_FIELDS,
@@ -121,6 +128,19 @@ export const PAYLOAD_INPUTS: Readonly<Record<string, VariableDecl>> = {
       ]),
     ),
   ),
+  // Who this render is drawn for (Drawing): the daemon sets it beside the
+  // payload, and a caller rendering without one draws as a request does.
+  [drawingVar("by")]: {
+    kind: "input",
+    path: drawingVar("by"),
+    default: ANSWERING.by,
+  },
+  [drawingVar("fps")]: {
+    kind: "input",
+    path: drawingVar("fps"),
+    type: "number",
+    default: 0,
+  },
 
   // [LAW:one-source-of-truth] The usable terminal width for THIS render —
   // the exact post-reserve cell count FlexStrip wraps to. renderDsl injects

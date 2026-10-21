@@ -60,6 +60,19 @@ export interface LaneFeed {
 }
 export type LaneFeeds = Readonly<Record<Lane, LaneFeed>>;
 
+// [LAW:types-are-the-program] Who a render is drawn for: a client's render
+// request, answered to that client alone, or the frame feed, whose frames are
+// pushed to every lane's subscribers — with that feed's pace, the frames a
+// second it draws at, which only a fed bar has. Set beside the payload as
+// `drawing`, read through `drawing.by` and `drawing.fps`.
+export type Drawing =
+  | { readonly by: "request" }
+  | { readonly by: "feed"; readonly fps: number };
+export const ANSWERING: Drawing = { by: "request" };
+export const DRAWING_VAR = "drawing";
+export const drawingVar = (field: "by" | "fps"): `drawing.${typeof field}` =>
+  `${DRAWING_VAR}.${field}`;
+
 // A session no lane follows.
 export const UNFOLLOWED: LaneFeed = { subscribers: 0, fps: 0, shown: true };
 

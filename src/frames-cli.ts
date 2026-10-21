@@ -110,8 +110,9 @@ export async function runFrames(
     said = next;
   };
 
-  // The session's data, to the daemon. Its reply is the bar the stream
-  // carries, so only a failure is said here.
+  // The session's data, to the daemon, whose feed draws the stream's next
+  // frame from it. The reply is drawn for a request, never a frame, so it is
+  // discarded and only a failure is said here.
   const forward = async (hook: ClaudeHookData): Promise<void> => {
     // The terminal as it is now: a resize between two statusline ticks is in
     // the next one.

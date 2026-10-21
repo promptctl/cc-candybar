@@ -25,10 +25,11 @@ import {
 } from "../config/lanes";
 import { laneOffReason } from "../config/menu-places";
 
-// What one render drew: the response its subscribers receive (the one a
-// render request is answered with), the instant it was drawn at (ms since the
-// epoch), whether the bar it drew moves, and — for a render that threw — the
-// render event describing it, logged when that failure is first pushed.
+// What one frame of the feed drew: the response its subscribers receive,
+// whether the bar it drew moves, and — for a render that threw — the render
+// event describing it, logged when that failure is first pushed. It is drawn
+// for the feed (`drawing.by` "feed"), so it shows the feed's pace where a
+// render request's answer shows none.
 // [LAW:decomposition] A frame says only what was drawn. Whether anyone can see
 // it is the feed's question, asked when it schedules the next.
 // A frame's two answers: the bar, which a lane drawing it elsewhere draws,
@@ -37,7 +38,6 @@ import { laneOffReason } from "../config/menu-places";
 export interface FeedFrame {
   readonly resp: Response;
   readonly statusline: Response;
-  readonly drawnAt: number;
   readonly moves: boolean;
   readonly failure: LogLine | null;
 }
@@ -81,7 +81,13 @@ export interface Subscriber {
 }
 
 export interface FeedDeps<Req> {
-  render(req: Req): Promise<FeedFrame>;
+  // Draws a frame of the session `req` is from. `fps` is the feed's pace, the
+  // frames a second it draws this bar at, which the frame shows.
+  // [LAW:one-source-of-truth] The pace the feed set, not a count of frames
+  // (`feedsOf` counts pushes): a frame showing a count changes whenever the
+  // count does — an extra draw for a click, the frame's own push — and is
+  // pushed for it, so a still bar would never be still.
+  render(req: Req, fps: number): Promise<FeedFrame>;
   // Which animation lanes the settings of the session `req` is from switch on
   // now — its config under its session's picks, never a copy taken when a
   // frame was drawn, so a toggle turned on is honoured at the next subscribe.
@@ -106,16 +112,11 @@ export interface FeedDeps<Req> {
 // [LAW:no-ambient-temporal-coupling] Where a feed's frame clock stands, as
 // state: no request to draw from yet; the next frame due at a timer; or a frame
 // being drawn, with whether a change arrived while it was (`again`: draw the
-// next one as soon as this one is out) and the noted frame that superseded it
-// (`superseded`: the frame the next one is due from, when it was noted).
+// next one as soon as this one is out).
 type Phase =
   | { readonly kind: "waiting" }
   | { readonly kind: "due"; readonly timer: ReturnType<typeof setTimeout> }
-  | {
-      kind: "drawing";
-      again: boolean;
-      superseded: { readonly frame: FeedFrame; readonly at: number } | null;
-    };
+  | { kind: "drawing"; again: boolean };
 
 interface Feed {
   readonly sessionId: string;
@@ -133,7 +134,6 @@ interface Feed {
   // pushed twice and a new subscriber gets the bar at once.
   last: {
     readonly answers: Answers;
-    readonly drawnAt: number;
   } | null;
   readonly since: number;
   drawn: number;
@@ -145,6 +145,8 @@ interface Feed {
   unseen: number;
   failed: number;
   pushed: number;
+  // The frames a second the feed draws at, as it last set the next frame.
+  pace: number;
   drawMs: number;
   summarizedAt: number;
 }
@@ -187,6 +189,13 @@ const sentOf = (resp: Response): Sent => ({
 // the one drawing it in the statusline draws what the statusline shows.
 const answerOf = (answers: Answers, lane: Lane): Sent =>
   LANES[lane].elsewhere === null ? answers.statusline : answers.bar;
+
+// [LAW:one-source-of-truth] The frames a second a feed draws at: the period it
+// set, never a time it measured. The pace is drawn into the frame, so a
+// measured one (a render's duration) would move with each render and make
+// frames whose bar did not change differ, defeating the dedupe; how many
+// frames a lane was actually sent is feedsOf's count.
+const paceOf = (period: number): number => Math.round(1000 / period);
 
 // How often a long-lived feed writes its summary to the log.
 const SUMMARY_EVERY_MS = 60_000;
@@ -235,14 +244,10 @@ export class FrameFeeds<Req> {
 
   constructor(private readonly deps: FeedDeps<Req>) {}
 
-  // A valid render request the daemon received `order`-th, and `frame`: the
-  // bar it was answered with. The latest request a session sent is the one its
-  // frames are drawn from; one that arrived before it — a slow render finishing
-  // late — is not the session's data, and its frame would step the bar back.
-  // [LAW:one-source-of-truth] The answer IS the request's frame at this
-  // instant, so it is pushed as one, and the next frame falls due a period
-  // after it rather than being drawn again at once.
-  note(sessionId: string, req: Req, order: number, frame: FeedFrame): void {
+  // A valid render request the daemon received `order`-th. The latest request
+  // a session sent is the one its frames are drawn from; one that arrived
+  // before it — a slow render finishing late — is not the session's data.
+  note(sessionId: string, req: Req, order: number): void {
     const held = this.requests.get(sessionId);
     if (held !== undefined && held.order > order) return;
     this.requests.delete(sessionId);
@@ -253,30 +258,12 @@ export class FrameFeeds<Req> {
     }
     const feed = this.feeds.get(sessionId);
     if (feed === undefined) return;
-    // An answer drawn at an earlier instant than a frame already out would
-    // step the bar back in time: the newer data is drawn afresh instead.
-    if (feed.last !== null && frame.drawnAt < feed.last.drawnAt) {
-      this.wake(sessionId);
-      return;
-    }
     feed.noted++;
-    this.countFailure(feed, frame);
-    this.push(feed, frame);
-    if (this.feeds.get(sessionId) !== feed) return;
-    const now = this.deps.now();
-    switch (feed.phase.kind) {
-      case "drawing":
-        // The frame being drawn is of the request this one replaced: it is
-        // not pushed, and its draw schedules the next from this one.
-        feed.phase.superseded = { frame, at: now };
-        return;
-      case "due":
-        clearTimeout(feed.phase.timer);
-        break;
-      case "waiting":
-        break;
-    }
-    this.schedule(feed, frame, now, now);
+    // [LAW:one-source-of-truth] Every frame a subscriber receives is one the
+    // feed drew, as a frame (`drawing.by` is "feed", and the bar shows the
+    // feed's pace): the request's own answer is its client's alone, so the new data
+    // is drawn at once instead of being pushed.
+    this.wake(sessionId);
   }
 
   // [LAW:single-enforcer] The one gate on the lanes: a subscription whose
@@ -406,6 +393,10 @@ export class FrameFeeds<Req> {
       unseen: 0,
       failed: 0,
       pushed: 0,
+      // Not yet set: the first frame is drawn at once, before any period is
+      // chosen, and shows the still pace; a moving bar's next frame, one
+      // moving period later, shows the moving pace.
+      pace: paceOf(this.deps.periods.still),
       drawMs: 0,
       summarizedAt: now,
     };
@@ -457,12 +448,12 @@ export class FrameFeeds<Req> {
       return;
     }
     const { req } = noted;
-    const phase: Phase = { kind: "drawing", again: false, superseded: null };
+    const phase: Phase = { kind: "drawing", again: false };
     feed.phase = phase;
     const started = this.deps.now();
     // The render adapter answers a failed render with its error frame; a throw
     // out of it is a fault in the adapter, `draw`'s to report.
-    const frame = await this.deps.render(req);
+    const frame = await this.deps.render(req, feed.pace);
     const finished = this.deps.now();
     this.drawn++;
     feed.drawn++;
@@ -471,20 +462,15 @@ export class FrameFeeds<Req> {
     // its clock.
     if (this.feeds.get(feed.sessionId) !== feed) return;
     this.countFailure(feed, frame);
-    // A request noted while this frame was drawn was pushed as its own frame;
-    // this one, of the data before it, would step the bar back.
-    if (this.requests.get(feed.sessionId) === noted) {
-      this.push(feed, frame);
-      if (this.feeds.get(feed.sessionId) !== feed) return;
-    }
+    this.push(feed, frame);
+    if (this.feeds.get(feed.sessionId) !== feed) return;
     if (finished - feed.summarizedAt >= SUMMARY_EVERY_MS)
       this.summarize(feed, "running");
     if (phase.again) {
       void this.draw(feed);
       return;
     }
-    const basis = phase.superseded ?? { frame, at: started };
-    this.schedule(feed, basis.frame, basis.at, finished);
+    this.schedule(feed, frame, started, finished);
   }
 
   // [LAW:no-ambient-temporal-coupling] The next frame is due a period after
@@ -504,6 +490,7 @@ export class FrameFeeds<Req> {
     if (seen) feed.moving++;
     if (moves && !seen) feed.unseen++;
     const period = seen ? this.deps.periods.moving : this.deps.periods.still;
+    feed.pace = paceOf(period);
     feed.phase = {
       kind: "due",
       timer: setTimeout(
@@ -544,7 +531,7 @@ export class FrameFeeds<Req> {
     )
       return;
     const before = feed.last?.answers ?? null;
-    feed.last = { answers, drawnAt: frame.drawnAt };
+    feed.last = { answers };
     this.pushed++;
     feed.pushed++;
     // [LAW:nothing-unseen] A failing frame's render event is logged when that
@@ -593,7 +580,7 @@ export class FrameFeeds<Req> {
     const now = this.deps.now();
     this.deps.log(
       "info",
-      `feed sid=${JSON.stringify(feed.sessionId)} ${state} subscribers=${feed.followers.size} lanes=${[...feed.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round((now - feed.since) / 1000)}s drawn=${feed.drawn} noted=${feed.noted} moving=${feed.moving} unseen=${feed.unseen} failed=${feed.failed} pushed=${feed.pushed} meanDraw=${feed.drawn === 0 ? "-" : (feed.drawMs / feed.drawn).toFixed(2)}ms`,
+      `feed sid=${JSON.stringify(feed.sessionId)} ${state} subscribers=${feed.followers.size} lanes=${[...feed.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round((now - feed.since) / 1000)}s drawn=${feed.drawn} noted=${feed.noted} moving=${feed.moving} unseen=${feed.unseen} failed=${feed.failed} pushed=${feed.pushed} pace=${feed.pace}fps meanDraw=${feed.drawn === 0 ? "-" : (feed.drawMs / feed.drawn).toFixed(2)}ms`,
     );
     feed.summarizedAt = now;
   }

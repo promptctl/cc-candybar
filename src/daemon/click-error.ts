@@ -15,6 +15,7 @@
 
 import type { SessionStateReader, SessionStateRW } from "./session-state.js";
 import type { Instant } from "../utils/instant.js";
+import type { Drawing } from "../config/lanes.js";
 
 const KEY = "click.error";
 
@@ -29,10 +30,6 @@ export interface ClickErrorRecord {
   // Whether a request's answer has carried it to its client.
   readonly answered: boolean;
 }
-
-// The render asking: a request answers a client, a frame a feed draws does
-// not, so only a request is owed the errors past the hold.
-export type ClickErrorRender = "frame" | "request";
 
 // What one render makes of the session's click error: `held` inside the hold,
 // `owed` past it to a request while no answer has carried it.
@@ -88,7 +85,9 @@ export function clickErrorAt(
   state: SessionStateReader,
   sessionId: string,
   at: Instant,
-  render: ClickErrorRender,
+  // A request answers a client, a frame a feed draws does not, so only a
+  // request is owed the errors past the hold.
+  render: Drawing["by"],
 ): ClickErrorHold {
   const last = lastClickError(state, sessionId);
   if (last === null) return { kind: "none" };

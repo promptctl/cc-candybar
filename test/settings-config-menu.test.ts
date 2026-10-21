@@ -57,10 +57,12 @@ import {
   LANE_NAMES,
   MOVING_FPS,
   UNFOLLOWED_FEEDS,
+  type Drawing,
   type Lane,
   type LaneFeeds,
 } from "../src/config/lanes";
 import { LANE_HELP } from "../src/help-text";
+import { DOOR_GLYPH } from "../src/config/disclosure";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = "settings-ui-aok-3";
@@ -96,7 +98,7 @@ function rig(
   // moment it ran — so a test can pin how many reloads a click cost and that
   // the picks were still held while the file reloaded.
   reloads: { text: string; picks: Record<string, string | null> }[];
-  render: (feeds?: LaneFeeds, at?: Instant) => string;
+  render: (feeds?: LaneFeeds, at?: Instant, drawing?: Drawing) => string;
   click: (url: string) => void;
   dispose: () => void;
 } {
@@ -150,7 +152,11 @@ function rig(
     sessionState,
     logs,
     reloads,
-    render: (feeds = UNFOLLOWED_FEEDS, at = instantOf(new Date())) => {
+    render: (
+      feeds = UNFOLLOWED_FEEDS,
+      at = instantOf(new Date()),
+      drawing: Drawing = { by: "request" },
+    ) => {
       const { config, compiled, store, registry } = entry;
       // [LAW:one-source-of-truth] The daemon's own projection (server.ts): one
       // `resolveEffectiveGlobals` over the session's picks feeds the payload's
@@ -188,6 +194,8 @@ function rig(
             redo: durable?.history(SID).future.length ?? 0,
           },
           feeds,
+          // What the daemon sets beside the payload (server.ts).
+          drawing,
         },
         at,
         renderOptionsOf(effective, width),
@@ -1608,6 +1616,34 @@ describe("a lane toggle's readout", () => {
       expect(lineOf(r.render(following({ fps: 1, shown: false })))).toMatch(
         / 1 fps · off screen/u,
       );
+    } finally {
+      r.dispose();
+    }
+  });
+});
+
+// [LAW:verifiable-goals] candybar-animation-wbxz.829: a bar the feed draws
+// shows the pace the feed draws it at (not a count of pushes, which is the
+// lane toggle's), beside the door; a bar answering
+// Claude Code's request shows none.
+describe("the frame rate on a fed bar", () => {
+  const doorLine = (rendered: string): string => plain(rendered).split("\n")[0]!;
+
+  test("a frame the feed drew shows the rate the feed draws at, after the door", () => {
+    const r = rig(TWO_SEGMENT_ROOT);
+    try {
+      expect(doorLine(r.render(undefined, undefined, { by: "feed", fps: MOVING_FPS }))).toMatch(
+        new RegExp(`${DOOR_GLYPH} ${MOVING_FPS} fps `, "u"),
+      );
+    } finally {
+      r.dispose();
+    }
+  });
+
+  test("a request's answer shows no rate", () => {
+    const r = rig(TWO_SEGMENT_ROOT);
+    try {
+      expect(doorLine(r.render())).not.toMatch(/fps/u);
     } finally {
       r.dispose();
     }

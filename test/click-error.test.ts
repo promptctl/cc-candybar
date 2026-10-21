@@ -22,12 +22,12 @@ test("a click's errors show at every instant before the hold ends, and to no fra
   const state = new SessionState();
   holdClickError(state, SID, "set-state: refused", at(100));
   const held = { kind: "held", error };
-  for (const render of ["frame", "request"] as const) {
+  for (const render of ["feed", "request"] as const) {
     expect(clickErrorAt(state, SID, at(99.9), render)).toEqual(held);
     expect(clickErrorAt(state, SID, at(100), render)).toEqual(held);
     expect(clickErrorAt(state, SID, at(END - 0.001), render)).toEqual(held);
   }
-  expect(clickErrorAt(state, SID, at(END), "frame")).toEqual({ kind: "over" });
+  expect(clickErrorAt(state, SID, at(END), "feed")).toEqual({ kind: "over" });
 });
 
 test("past the hold, a request is owed them until an answer has carried them", () => {
@@ -61,7 +61,7 @@ test("reading a click's errors writes nothing, so a later render inside the hold
   const revision = state.revision(SID);
   clickErrorAt(state, SID, at(END + 1), "request");
   expect(state.revision(SID)).toBe(revision);
-  expect(clickErrorAt(state, SID, at(101), "frame").kind).toBe("held");
+  expect(clickErrorAt(state, SID, at(101), "feed").kind).toBe("held");
 });
 
 test("a session with no click error, or a value an older daemon wrote, holds none", () => {
