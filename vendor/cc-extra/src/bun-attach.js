@@ -142,10 +142,13 @@ const describeEnding = ({ code, signal, error }) => (error ? `could not start: $
 // What the released run is, asked of it every `everyMs` after release, one question in flight at a
 // time: `{ runs: 'tui' }` at the first answer that stdin is raw, `{ runs: 'one-shot' }` at the first
 // answer that it is not once `withinMs` has passed, `{ runs: 'closed' }` when the inspector went away
-// first (the run ended, or the connection did), or `{ runs: 'unanswered', why }` when a question itself
-// failed. A close resolves before the rejection it causes reaches here, so a rejection that does is the
-// question failing. [LAW:no-ambient-temporal-coupling] the verdict waits on the fact it is about, and
-// the deadline only bounds that wait; it never decides while an answer could still say otherwise.
+// first (the run ended, or the connection did), or `{ runs: 'unanswered', why }` when the first answer
+// after the deadline is a question that failed. A failure before then is asked again: one of a hundred
+// questions failing while the run mounts says nothing about whether it will mount. A close resolves
+// before the rejection it causes reaches here, so a rejection that does is the question failing.
+// [LAW:no-ambient-temporal-coupling] the verdict waits on the fact it is about: the deadline ends the
+// ASKING, and the question in flight is always waited for, never decided over while it could still say
+// otherwise — so a run that never answers at all is waited on for as long as it is connected.
 // `session` is anything with the session's `send` and `on`; `delay(ms, fn)` is a cancellable timer. A
 // pure seam, so the suite drives it with neither an inspector nor a clock. [LAW:effects-at-boundaries]
 function askWhatRuns(session, { everyMs, withinMs }, delay) {
@@ -161,14 +164,18 @@ function askWhatRuns(session, { everyMs, withinMs }, delay) {
       cancelDeadline();
       resolve(verdict);
     };
-    const answered = (r) => {
-      if (r.wasThrown) return settle({ runs: 'unanswered', why: r.result.description ?? JSON.stringify(r.result.value) });
-      if (r.result.value === true) return settle({ runs: 'tui' });
-      if (expired) return settle({ runs: 'one-shot' });
+    // `why` is the failure of the question just answered, null when it answered not raw.
+    const notYet = (why) => {
+      if (expired) return settle(why === null ? { runs: 'one-shot' } : { runs: 'unanswered', why });
       if (!settled) cancelNext = delay(everyMs, ask);
     };
+    const answered = (r) => {
+      if (r.wasThrown) return notYet(r.result.description ?? JSON.stringify(r.result.value));
+      if (r.result.value === true) return settle({ runs: 'tui' });
+      return notYet(null);
+    };
     const ask = () => session.send('Runtime.evaluate', { expression: TUI_IS_UP, returnByValue: true })
-      .then(answered, (e) => settle({ runs: 'unanswered', why: e.message }));
+      .then(answered, (e) => notYet(e.message));
     cancelNext = delay(everyMs, ask);
     session.on('close', () => settle({ runs: 'closed' }));
   });
