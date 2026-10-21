@@ -64,7 +64,7 @@ describe("RuntimeStats.snapshot", () => {
         },
       ],
       bundle: "/opt/cc/dist/index.mjs",
-      daemon: { pid: 1234, rss: 0, rssLimit: 1, postMortems: { kind: "ok", value: [] } },
+      daemon: { pid: 1234, memory: { kind: "unmeasured" }, limit: 1, postMortems: { kind: "ok", value: [] } },
       doctorStores: EMPTY_STORES,
     });
     expect(snap.handlerProbes).toEqual([{ nonce: "n", handler: "1.2.3" }]);
@@ -218,7 +218,7 @@ describe("formatStats", () => {
       handlerProbes: [],
       clients: [],
       bundle: "/",
-      daemon: { pid: 1234, rss: 0, rssLimit: 1, postMortems: { kind: "ok", value: [] } },
+      daemon: { pid: 1234, memory: { kind: "unmeasured" }, limit: 1, postMortems: { kind: "ok", value: [] } },
       doctorStores: EMPTY_STORES,
     });
     expect(out).toContain("pid           1234");
@@ -273,7 +273,7 @@ describe("formatStats", () => {
       handlerProbes: [],
       clients: [],
       bundle: "/",
-      daemon: { pid: 1234, rss: 0, rssLimit: 1, postMortems: { kind: "ok", value: [] } },
+      daemon: { pid: 1234, memory: { kind: "unmeasured" }, limit: 1, postMortems: { kind: "ok", value: [] } },
       doctorStores: EMPTY_STORES,
     });
     expect(out).toContain("hit rate      n/a");

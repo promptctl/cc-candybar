@@ -12,10 +12,14 @@
 import os from "node:os";
 
 import {
+  chargeProbe,
+  footprintCharge,
   memoryReport,
+  physFootprintOf,
   platformProbes,
   type MemoryProbe,
 } from "../src/daemon/memory-report";
+import type { LaunchResult } from "../src/proc/launch";
 
 const answering = (name: string, text: string): MemoryProbe => ({
   name,
@@ -111,3 +115,61 @@ const REAL = os.platform() === "darwin" || os.platform() === "linux";
   },
   15000,
 );
+
+// brandon-unfiled-3248.2j3m: the charge the memory backstop judges.
+describe("the memory charge", () => {
+  const FOOTPRINT = [
+    "======================================================================",
+    "node [91378]: 64-bit    Footprint: 224904552 B (16384 bytes per page)",
+    "======================================================================",
+    "",
+    "Auxiliary data:",
+    "    phys_footprint: 224953704 B",
+    "    phys_footprint_peak: 432772224 B",
+  ].join("\n");
+  const ran = (stdout: string): LaunchResult => ({ ok: true, stdout, stderr: "", exitCode: 0 });
+
+  test("footprint's byte output is read off its phys_footprint line, never the peak", () => {
+    expect(physFootprintOf(FOOTPRINT)).toBe(224953704);
+    expect(physFootprintOf("phys_footprint_peak: 9 B")).toBeNull();
+    expect(physFootprintOf("phys_footprint: 216 MB")).toBeNull();
+  });
+
+  test("footprint answering is the charge; asked for exact bytes", async () => {
+    const asked: string[][] = [];
+    const probe = footprintCharge(77, async (args) => {
+      asked.push(args);
+      return ran(FOOTPRINT);
+    });
+    expect(await probe(1)).toEqual({ kind: "charged", measure: "phys_footprint", bytes: 224953704 });
+    expect(asked).toEqual([["-p", "77", "--noCategories", "-f", "bytes"]]);
+  });
+
+  test("footprint failing or unreadable leaves RSS standing in, saying why", async () => {
+    const failed = footprintCharge(77, async () => ({
+      ok: false,
+      reason: "timeout",
+      stdout: "",
+      stderr: "footprint: hung\n",
+      exitCode: null,
+      signal: "SIGTERM",
+    }));
+    expect(await failed(5)).toEqual({ kind: "stand-in", bytes: 5, unread: "footprint timeout (footprint: hung)" });
+    const garbled = footprintCharge(77, async () => ran("nothing here"));
+    expect(await garbled(5)).toEqual({
+      kind: "stand-in",
+      bytes: 5,
+      unread: "footprint printed no phys_footprint line",
+    });
+  });
+
+  test("off macOS, RSS is the charge", async () => {
+    expect(await chargeProbe("linux", 1)(42)).toEqual({ kind: "charged", measure: "rss", bytes: 42 });
+  });
+
+  (os.platform() === "darwin" ? test : test.skip)("on this Mac, footprint answers for this process", async () => {
+    const charge = await chargeProbe("darwin", process.pid)(process.memoryUsage().rss);
+    expect(charge).toMatchObject({ kind: "charged", measure: "phys_footprint" });
+    expect(charge.bytes).toBeGreaterThan(0);
+  });
+});

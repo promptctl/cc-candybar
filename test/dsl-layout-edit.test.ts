@@ -69,7 +69,7 @@ import {
   deriveConfigActionValidators,
   configGate,
 } from "../src/daemon/verbs/config-validators";
-import { rssLimitBytes } from "../src/daemon/limits";
+import { memoryLimitBytes } from "../src/daemon/limits";
 import {
   RenderCache,
   renderCacheBudget,
@@ -973,7 +973,7 @@ function makeCache(reloads?: ReloadSignal): {
   const cache = new RenderCache(
     { gitService, sessionState, watchers },
     {
-      budgetBytes: () => renderCacheBudget(rssLimitBytes({})),
+      budgetBytes: () => renderCacheBudget(memoryLimitBytes({})),
       ...(reloads === undefined ? {} : { observers: reloads.observers }),
     },
   );

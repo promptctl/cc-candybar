@@ -8,7 +8,7 @@ import { type LeaseRead } from "./socket-lease";
 // invariant every daemon component assumes and none enforced. The socket-theft
 // storm (brandon-daemon-lifecycle-2b3) proved it false: a daemon whose socket
 // was unlinked + rebound by a reclaimer kept running forever (no idle shutdown,
-// no watchdog in production, RSS backstop only), holding ~400MB each — 28
+// no watchdog in production, memory backstop only), holding ~400MB each — 28
 // daemons bound in one hour with ZERO voluntary exits. This module is that
 // invariant's single enforcer: a displaced daemon exits within one check
 // interval, making ANY displacement self-healing regardless of which bug caused

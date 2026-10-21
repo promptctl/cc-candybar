@@ -15,7 +15,7 @@
 
 import fs from "node:fs";
 
-import { launchSync } from "../proc/launch.js";
+import { launch, launchSync, type LaunchResult } from "../proc/launch.js";
 
 // [LAW:parse-dont-validate] A probe either produced text or could not, and the
 // reason travels with the failure — it is what the post-mortem reads when no
@@ -86,6 +86,93 @@ export function platformProbes(
     ];
   }
   return [];
+}
+
+// [FRAMING:representation] What the platform charges a process for its
+// memory — the number the budget is on. RSS is that charge on Linux, but not on
+// macOS: there resident memory still counts the pages malloc has freed and
+// marked reusable, which the kernel reclaims whenever it needs them, while the
+// charge is `phys_footprint` (what Activity Monitor and jetsam read). Measured
+// on the live daemon 2026-10-21 (brandon-unfiled-3248.2j3m): RSS 335 MB against
+// a 218 MB footprint, and two backstop breaches at a 342 and a 386 MB
+// footprint, under a 512 MB limit.
+export type ChargeMeasure = "phys_footprint" | "rss";
+
+// [LAW:types-are-the-program] `charged` is the platform's own measure;
+// `stand-in` is RSS judged in its place, carrying why the platform's measure
+// could not be read — so a footprint reading never carries a reason, and an
+// RSS reading on Linux never claims a probe failed.
+export type MemoryCharge =
+  | {
+      readonly kind: "charged";
+      readonly measure: ChargeMeasure;
+      readonly bytes: number;
+    }
+  | {
+      readonly kind: "stand-in";
+      readonly bytes: number;
+      readonly unread: string;
+    };
+
+// Reads the charge, given the RSS read at the same moment (the charge itself
+// where the platform charges RSS, and the stand-in where its probe fails).
+export type ChargeProbe = (rss: number) => Promise<MemoryCharge>;
+
+// [LAW:dataflow-not-control-flow] The platform is the discriminator, chosen
+// once: the backstop asks the probe it was handed, never which platform runs.
+export function chargeProbe(
+  platform: NodeJS.Platform,
+  pid: number,
+): ChargeProbe {
+  return platform === "darwin"
+    ? footprintCharge(pid, (args) =>
+        launch({
+          bin: "footprint",
+          args,
+          timeoutMs: PROBE_TIMEOUT_MS,
+          category: "limits.charge",
+        }),
+      )
+    : async (rss) => ({ kind: "charged", measure: "rss", bytes: rss });
+}
+
+// `footprint --noCategories -f bytes` prints its auxiliary data as exact byte
+// counts; the charge is the `phys_footprint:` line.
+export function footprintCharge(
+  pid: number,
+  run: (args: string[]) => Promise<LaunchResult>,
+): ChargeProbe {
+  return async (rss) => {
+    const result = await run([
+      "-p",
+      String(pid),
+      "--noCategories",
+      "-f",
+      "bytes",
+    ]);
+    if (!result.ok) {
+      return {
+        kind: "stand-in",
+        bytes: rss,
+        unread: `footprint ${result.reason}${
+          result.error !== undefined ? `: ${result.error}` : ""
+        }${firstLine(result.stderr)}`,
+      };
+    }
+    const bytes = physFootprintOf(result.stdout);
+    return bytes === null
+      ? {
+          kind: "stand-in",
+          bytes: rss,
+          unread: "footprint printed no phys_footprint line",
+        }
+      : { kind: "charged", measure: "phys_footprint", bytes };
+  };
+}
+
+export function physFootprintOf(text: string): number | null {
+  const m = /^\s*phys_footprint:\s+(\d+) B\s*$/m.exec(text);
+  return m === null ? null : Number(m[1]);
 }
 
 function commandProbe(bin: string, args: readonly string[]): MemoryProbe {

@@ -276,8 +276,8 @@ export class RuntimeStats {
       bundle: "/",
       daemon: {
         pid: 0,
-        rss: 0,
-        rssLimit: 0,
+        memory: { kind: "unmeasured" },
+        limit: 0,
         postMortems: { kind: "ok", value: [] },
       },
       doctorStores: {

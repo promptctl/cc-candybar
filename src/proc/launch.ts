@@ -107,9 +107,13 @@ export const LAUNCH_CATEGORIES = [
   // (process-fingerprint.ts). Spawned only at daemon start + EADDRINUSE
   // arbitration — never per render — so it needs no rate limit.
   "process-fingerprint",
-  // The RSS backstop's post-mortem memory attribution (memory-report.ts):
+  // The memory backstop's post-mortem memory attribution (memory-report.ts):
   // `footprint`/`vmmap` on the death path, once per breach, never per render.
   "limits.memory-report",
+  // The memory backstop's reading of what macOS charges the daemon
+  // (`footprint --noCategories`, memory-report.ts chargeProbe): one a minute,
+  // each scheduled only once the last has answered, so no rate limit.
+  "limits.charge",
   // The update notice's act (`pnpm build` in a checkout, `pnpm dlx … install`
   // over a published install). One click, one long-running child; the
   // notice's own running/failed state serialises clicks, so no rate limit.

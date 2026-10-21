@@ -148,14 +148,18 @@ export function daemonFields({
             .join(",") || "-"
         }`;
   if (serving.kind === "failed") {
-    return `${running} rss=unasked postMortems=unasked`;
+    return `${running} memory=unasked postMortems=unasked`;
   }
-  const { rss, rssLimit, postMortems } = serving.value;
+  const { memory, limit, postMortems } = serving.value;
   const told =
     postMortems.kind === "failed" || read.kind === "failed"
       ? "unread"
       : `${unreadPostMortems(serving.value, read).length}/${postMortems.value.length}`;
-  return `${running} rss=${mb(rss)}/${mb(rssLimit)} postMortems=${told}`;
+  const held =
+    memory.kind === "unmeasured"
+      ? "unmeasured"
+      : `${memory.charge.kind === "charged" ? memory.charge.measure : "rss-stand-in"}:${mb(memory.charge.bytes)}`;
+  return `${running} memory=${held}/${mb(limit)} postMortems=${told}`;
 }
 
 // [LAW:nothing-unseen] What the segment-data check reasoned over, as one
