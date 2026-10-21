@@ -1209,7 +1209,7 @@ function clickFacts(ctx: VerbContext, sid: string): DoctorFacts {
   // The session's own renders, read once: whatever its Claude Code sends, it
   // sends to this session. The click proves its bar is on screen, so each
   // window ends now (`barsOf`).
-  const scope = { kind: "session", sessionId: sid } as const;
+  const scope = { kind: "clicked", sessionId: sid } as const;
   const said = ctx.clients.ofSession(sid, instantOf(new Date()));
   let gathered: ReturnType<typeof gatherFacts>;
   try {
@@ -1240,7 +1240,6 @@ function clickFacts(ctx: VerbContext, sid: string): DoctorFacts {
       ctx.bundle,
       said.map((s) => s.client),
     ),
-    askedBy: "click",
     clicked: clickedFrom(ctx, gathered),
   };
 }

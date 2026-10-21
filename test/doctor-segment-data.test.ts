@@ -151,7 +151,7 @@ describe("segment data row", () => {
     expect(
       segmentData.probe({
         ...withData({ rateLimits: rateNeed({ kind: "ok", value: [] }) }),
-        sighted: { kind: "session", sessionId: "s1" },
+        sighted: { kind: "clicked", sessionId: "s1" },
       }),
     ).toMatchObject({
       ok: false,
@@ -281,7 +281,7 @@ describe("the command's rate-limit sightings", () => {
   // (brandon-doctor-v62x.y5d).
   test("in a session, that session's renders alone", () => {
     expect(
-      rateLimitsOf({ kind: "session", sessionId: "s3" }, sightings, "/a"),
+      rateLimitsOf({ kind: "shell", sessionId: "s3" }, sightings, "/a"),
     ).toEqual({ kind: "ok", value: ["missing"] });
   });
 

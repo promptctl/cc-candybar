@@ -271,7 +271,7 @@ export const parseFrameSightings = (
       c.redrawn.every(Number.isInteger) &&
       isRole(c) &&
       (FRAMES_SEEN as readonly unknown[]).includes(c.frame),
-    "what they drew and when",
+    "what they drew, when, and from which project",
   );
 
 // The width half: the terminal-width check's.

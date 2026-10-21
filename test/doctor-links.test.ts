@@ -40,7 +40,16 @@ const verdict = (
   terminal: TerminalIdentity,
   askedBy: "click" | "command" = "command",
   clicked: Asked<readonly string[]> = clickedIn(),
-) => probe({ ...HEALTHY_FACTS, terminal, askedBy, clicked });
+) =>
+  probe({
+    ...HEALTHY_FACTS,
+    terminal,
+    sighted:
+      askedBy === "click"
+        ? { kind: "clicked", sessionId: "s1" }
+        : { kind: "recent" },
+    clicked,
+  });
 
 const PROVE =
   "click 🩺 doctor in the bar's settings menu: if it runs, links work, and the doctor remembers it for this terminal";

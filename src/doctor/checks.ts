@@ -498,9 +498,6 @@ export interface DoctorFacts {
   // Failed: no render of the session says.
   readonly width: Asked<Width>;
   readonly terminal: TerminalIdentity;
-  // What asked for this run: a click on the bar's 🩺 doctor — a link the
-  // terminal drew and the user clicked — or the `cc-candybar doctor` command.
-  readonly askedBy: "click" | "command";
   readonly config: ConfigFacts;
   readonly urlHandler: UrlHandlerFacts;
   // The clients that drew the bar and the install the daemon runs from: the
@@ -516,9 +513,10 @@ export interface DoctorFacts {
   // (`sightingOf`), or why they could not be read
   // (src/doctor/clicked-terminals.ts).
   readonly clicked: Asked<readonly string[]>;
-  // Whose bars the sightings below are (src/doctor/sightings.ts): one
-  // session's — the click's, or the one `cc-candybar doctor` runs in — or
-  // every session that drew one recently.
+  // Whose bars the sightings below are, and so what asked for this run
+  // (src/doctor/sightings.ts): a click on the bar's 🩺 doctor, the
+  // `cc-candybar doctor` command in a session's shell, or the command
+  // anywhere else, judging every session that drew a bar recently.
   readonly sighted: SightingScope;
   // Whether the daemon answered what the bars drew (brandon-doctor-v62x.tgp);
   // the bars themselves sit in `claudeSettings`, beside the settings chain
@@ -998,8 +996,16 @@ function installProblems(
 // between what it names and what runs.
 // [LAW:one-source-of-truth] Why a run judging one session's bar finds no
 // sighting of it — the install, effect-refresh, segment-data and session-data
-// checks all say it.
-const NO_RENDER_OF_THIS_BAR = `this daemon holds no render of this bar (it restarted since the bar was drawn, or has served ${SIGHTINGS_KEPT} newer sessions)`;
+// checks all say it. A click proves the bar was drawn, so only the daemon can
+// have lost it; a shell proves only that its session is alive.
+const noRenderOf = (
+  sighted: Exclude<SightingScope, { kind: "recent" }>,
+): string => {
+  const lost = `restarted since the bar was drawn, or has served ${SIGHTINGS_KEPT} newer sessions`;
+  return sighted.kind === "clicked"
+    ? `this daemon holds no render of this bar (it ${lost})`
+    : `this daemon holds no render of session ${sighted.sessionId}'s bar (its statusLine does not run cc-candybar — a \`claude -p\` session draws none — or the daemon ${lost}; unset CLAUDE_CODE_SESSION_ID to judge every bar drawn recently)`;
+};
 
 const install: Check = {
   name: "install",
@@ -1017,8 +1023,8 @@ const install: Check = {
       return {
         ok: false,
         reason:
-          sighted.kind === "session"
-            ? `${NO_RENDER_OF_THIS_BAR}, so which client draws it is unknown — run the doctor again once the bar has redrawn`
+          sighted.kind !== "recent"
+            ? `${noRenderOf(sighted)}, so which client draws it is unknown — run the doctor again once the bar has redrawn`
             : `no statusline client has drawn a bar for this daemon in the last ${RECENT_CLIENT_S / 60} minutes — run the doctor again once the bar has redrawn; if it never does, the statusLine command does not run cc-candybar`,
       };
     }
@@ -1228,8 +1234,8 @@ const links: Check = {
   name: "links",
   label: "links",
   takesMark: false,
-  probe: ({ askedBy, terminal, clicked }) => {
-    if (askedBy === "click") return { ok: true };
+  probe: ({ sighted, terminal, clicked }) => {
+    if (sighted.kind === "clicked") return { ok: true };
     switch (terminal.kind) {
       case "unreported":
         return {
@@ -1310,8 +1316,8 @@ const effectRefresh: Check = {
             : "the bar's recent renders failed"
           : all.length > 0
             ? "only a `cc-candybar frames` display has drawn this bar, not Claude Code's statusline"
-            : sighted.kind === "session"
-              ? NO_RENDER_OF_THIS_BAR
+            : sighted.kind !== "recent"
+              ? noRenderOf(sighted)
               : `no session has drawn a statusline for this daemon in the last ${RECENT_CLIENT_S / 60} minutes`;
       return {
         ok: false,
@@ -1625,8 +1631,8 @@ function rateLimitProblems(
   if (fact.kind === "failed") return [`${named(segments)}: ${fact.reason}`];
   if (fact.value.length === 0) {
     return [
-      sighted.kind === "session"
-        ? `${named(segments)}: ${NO_RENDER_OF_THIS_BAR}, so whether Claude Code sends rate_limits is unseen — run the doctor again once the bar has redrawn`
+      sighted.kind !== "recent"
+        ? `${named(segments)}: ${noRenderOf(sighted)}, so whether Claude Code sends rate_limits is unseen — run the doctor again once the bar has redrawn`
         : `${named(segments)}: no session of this Claude Code has drawn a bar for this daemon in the last ${RECENT_CLIENT_S / 60} minutes, so whether it sends rate_limits is unseen — run the doctor again once the bar has redrawn`,
     ];
   }
@@ -1715,8 +1721,8 @@ const sessionData: Check = {
       return {
         ok: false,
         reason:
-          sighted.kind === "session"
-            ? `${NO_RENDER_OF_THIS_BAR}, so which transcript it reads is unknown — run the doctor again once the bar has redrawn`
+          sighted.kind !== "recent"
+            ? `${noRenderOf(sighted)}, so which transcript it reads is unknown — run the doctor again once the bar has redrawn`
             : `no session has drawn a bar for this daemon in the last ${RECENT_CLIENT_S / 60} minutes, so no transcript was named — run the doctor again once the bar has redrawn`,
       };
     }

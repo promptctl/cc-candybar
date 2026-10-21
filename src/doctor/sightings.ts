@@ -15,12 +15,16 @@ import type {
 import { RECENT_CLIENT_S } from "./checks.js";
 import { redrawsOf } from "./redraws.js";
 
-// [LAW:types-are-the-program] `session`: one session's bar, known to be on
-// screen — however long it has been idle, since a click, or a shell inside
-// that session, is the proof. `recent`: every session that drew a bar within
-// RECENT_CLIENT_S, since a session that stopped looks like one idle.
+// [LAW:types-are-the-program] One session's bar, however long it has been
+// idle — `clicked`: a click on its 🩺, a link the terminal drew and the user
+// clicked, so the bar is cc-candybar's and on screen; `shell`: a shell inside
+// the session, which is alive, but proves nothing of its bar (a `claude -p`
+// session draws none, and a statusLine may run something else). `recent`:
+// every session that drew a bar within RECENT_CLIENT_S, since a session that
+// stopped looks like one idle.
 export type SightingScope =
-  | { readonly kind: "session"; readonly sessionId: string }
+  | { readonly kind: "clicked"; readonly sessionId: string }
+  | { readonly kind: "shell"; readonly sessionId: string }
   | { readonly kind: "recent" };
 
 // The command's scope: the session it runs in, if it runs in one. Claude
@@ -28,7 +32,7 @@ export type SightingScope =
 export const scopeOf = (sessionId: string | undefined): SightingScope =>
   sessionId === undefined || sessionId === ""
     ? { kind: "recent" }
-    : { kind: "session", sessionId };
+    : { kind: "shell", sessionId };
 
 type Sighted = Pick<RenderSighting, "sessionId" | "ago">;
 
@@ -37,10 +41,26 @@ export const inScope = <S extends Sighted>(
   sightings: readonly S[],
 ): readonly S[] =>
   sightings.filter((s) =>
-    scope.kind === "session"
-      ? s.sessionId === scope.sessionId
-      : s.ago <= RECENT_CLIENT_S,
+    scope.kind === "recent"
+      ? s.ago <= RECENT_CLIENT_S
+      : s.sessionId === scope.sessionId,
   );
+
+// [LAW:one-source-of-truth] The project the run's own Claude Code reads its
+// settings from and the daemon renders it with: a session's as its render
+// recorded it — a shell's cwd may be any directory under it — else the
+// command's directory, standing in for a session started there.
+export const ownProject = (
+  scope: SightingScope,
+  sightings: ReadonlyArray<
+    Pick<RenderSighting, "sessionId" | "ago" | "projectDir">
+  >,
+  cwd: string,
+): string => {
+  if (scope.kind === "recent") return cwd;
+  const [own] = inScope(scope, sightings);
+  return own === undefined ? cwd : own.projectDir;
+};
 
 // One bar a sighting drew, how often Claude Code redrew it, and where the
 // settings that redraw it are read: the session's project, and the Claude
@@ -80,7 +100,7 @@ export const barsOf = (
       redraws: redrawsOf(
         redrawn,
         since,
-        scope.kind === "session" ? 0 : Math.min(...redrawn),
+        scope.kind === "recent" ? Math.min(...redrawn) : 0,
       ),
     }),
   );

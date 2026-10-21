@@ -217,11 +217,28 @@ describe("install probe", () => {
       value: { daemon: PUBLISHED, nativeShipped: true, clients: [] },
     };
     expect(
-      checkByName("install")!.probe({ ...HEALTHY_FACTS, install, sighted: { kind: "session", sessionId: "s1" } }),
+      checkByName("install")!.probe({ ...HEALTHY_FACTS, install, sighted: { kind: "clicked", sessionId: "s1" } }),
     ).toEqual({
       ok: false,
       reason:
         "this daemon holds no render of this bar (it restarted since the bar was drawn, or has served 64 newer sessions), so which client draws it is unknown — run the doctor again once the bar has redrawn",
+    });
+  });
+
+  // A shell proves its session is alive, not that it draws a cc-candybar bar:
+  // a `claude -p` session draws none, so the row names that cause first and
+  // how to judge the bars on screen instead.
+  test("a session's shell with no render names its statusLine before a restart", () => {
+    const install = {
+      kind: "ok",
+      value: { daemon: PUBLISHED, nativeShipped: true, clients: [] },
+    } as const;
+    expect(
+      checkByName("install")!.probe({ ...HEALTHY_FACTS, install, sighted: { kind: "shell", sessionId: "s1" } }),
+    ).toEqual({
+      ok: false,
+      reason:
+        "this daemon holds no render of session s1's bar (its statusLine does not run cc-candybar — a `claude -p` session draws none — or the daemon restarted since the bar was drawn, or has served 64 newer sessions; unset CLAUDE_CODE_SESSION_ID to judge every bar drawn recently), so which client draws it is unknown — run the doctor again once the bar has redrawn",
     });
   });
 

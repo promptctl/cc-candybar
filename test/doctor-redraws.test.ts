@@ -80,7 +80,7 @@ describe("framesOf: where each session's window ends", () => {
   // bar, each window ending at its last render. Each bar keeps where its
   // session reads its settings (brandon-doctor-v62x.y5d).
   test("the session this command runs in alone, ending now; outside one, every bar at its last render", () => {
-    expect(framesOf({ kind: "session", sessionId: "s1" }, asked)).toEqual({
+    expect(framesOf({ kind: "shell", sessionId: "s1" }, asked)).toEqual({
       kind: "ok",
       value: [
         {
@@ -129,7 +129,7 @@ describe("parseFrameSightings", () => {
   ])("%s → failed, naming the daemon's build", (_, client) => {
     expect(parseFrameSightings(stats(client))).toMatchObject({
       kind: "failed",
-      reason: expect.stringContaining("what they drew and when"),
+      reason: expect.stringContaining("what they drew, when, and from which project"),
     });
   });
 });

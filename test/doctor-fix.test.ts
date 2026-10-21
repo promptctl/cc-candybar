@@ -104,7 +104,6 @@ const factsIn = (
       EMPTY_STORES,
     ),
     urlHandler: { kind: "unsupported" } as const,
-    askedBy: "command" as const,
     install: HEALTHY_FACTS.install,
   });
 // Outside tmux: the settings half alone.
@@ -287,7 +286,6 @@ describe("gatherFacts: a settings chain per location", () => {
       EMPTY_STORES,
     ),
     urlHandler: { kind: "unsupported" } as const,
-    askedBy: "command" as const,
     install: HEALTHY_FACTS.install,
   });
 

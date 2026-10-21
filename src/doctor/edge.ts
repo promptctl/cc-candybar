@@ -844,8 +844,7 @@ export function sessionWidth(
 // resolves from — never the daemon's own env, which answers for whichever
 // session spawned it. The URL handler's facts are not gathered here: the
 // daemon has them in the click it is handling, the CLI has to send a link and
-// wait (src/doctor/handler-probe.ts), and each adds them to these — and what
-// asked for the run, which only the caller knows.
+// wait (src/doctor/handler-probe.ts), and each adds them to these.
 //
 // `sessionPick` reads the session's own picks — the daemon's SessionState for
 // the clicking session, `() => null` for the CLI, which has no session.
@@ -877,7 +876,7 @@ export function gatherFacts(
   // What the doctor's stores hold: the click's daemon's own, or the ones
   // `cc-candybar doctor` was answered.
   stores: StoresRead,
-): Omit<DoctorFacts, "urlHandler" | "askedBy" | "install"> {
+): Omit<DoctorFacts, "urlHandler" | "install"> {
   const load = edge.loadConfig(origin);
   // [LAW:one-source-of-truth] The render's own resolution, so the doctor and
   // the bar cannot disagree about which preset is placed, or which joiner

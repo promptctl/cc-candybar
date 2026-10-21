@@ -243,7 +243,6 @@ export const HEALTHY_FACTS: DoctorFacts = {
     },
     tmuxClient: null,
   },
-  askedBy: "command",
   config: { kind: "loaded", layers: [], warnings: [], unused: [] },
   sighted: { kind: "recent" },
   ...onOrigin(STILL),

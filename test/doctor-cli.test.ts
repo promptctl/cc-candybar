@@ -13,6 +13,7 @@ import { doctorPlan, loadConfigOnce } from "../src/doctor/cli";
 import { doctorReportKeys, doctorReportPairs } from "../src/doctor/report";
 import { runDoctor } from "../src/doctor/checks";
 import { gatherFacts } from "../src/doctor/edge";
+import { ownProject } from "../src/doctor/sightings";
 import { DOOR_GLYPH } from "../src/config/disclosure";
 import type { DoctorEdge, StoresRead } from "../src/doctor/edge";
 import type { HandlerProbeEdge } from "../src/doctor/handler-probe";
@@ -504,6 +505,15 @@ describe("doctorPlan over a real config", () => {
     // Run in a session's shell, the command judges that session's bar alone,
     // its window ending now — the second since its last render, a second
     // ago, held none, so 59.
+    // The project a shell's session reads its settings from is the one its
+    // render recorded, whichever directory under it the shell has cd'd into.
+    test("run in a session, its own chain is the session's project's, not the shell's cwd", () => {
+      const said = [s1(), s2()];
+      expect(ownProject({ kind: "shell", sessionId: "s1" }, said, path.join(other, "sub"))).toBe(other);
+      expect(ownProject({ kind: "shell", sessionId: "s9" }, said, "/here")).toBe("/here");
+      expect(ownProject({ kind: "recent" }, said, "/here")).toBe("/here");
+    });
+
     test("run in session s1, s2's bar is not judged", async () => {
       const out = await doctorPlan(
         REAL,
@@ -546,7 +556,6 @@ describe("doctorPlan over a real config", () => {
         EMPTY_STORES,
       ),
       urlHandler: { kind: "unsupported" },
-      askedBy: "command",
       install: HEALTHY_FACTS.install,
     });
     const pairs = new Map(

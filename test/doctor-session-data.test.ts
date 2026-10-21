@@ -201,7 +201,7 @@ describe("the session data row", () => {
 
   test("no render to name a transcript fails, worded for what asked", () => {
     const none = { kind: "ok", value: [] } as const;
-    expect(probe(none, { kind: "session", sessionId: "s1" })).toMatchObject({
+    expect(probe(none, { kind: "clicked", sessionId: "s1" })).toMatchObject({
       ok: false,
       reason: expect.stringMatching(
         /^this daemon holds no render of this bar .*so which transcript it reads is unknown/,
@@ -280,7 +280,7 @@ describe("the CLI's transcripts", () => {
     );
     expect(transcriptsOf({ kind: "recent" }, parsed)).toEqual({ kind: "ok", value: [t] });
     // In a session's shell, that session's alone, however long ago.
-    expect(transcriptsOf({ kind: "session", sessionId: "s2" }, parsed)).toEqual({
+    expect(transcriptsOf({ kind: "shell", sessionId: "s2" }, parsed)).toEqual({
       kind: "ok",
       value: [{ path: "/old.jsonl", answered: true }],
     });

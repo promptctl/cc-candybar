@@ -21,6 +21,7 @@ import { DOOR_GLYPH } from "../config/disclosure.js";
 import {
   barsOf,
   inScope,
+  ownProject,
   scopeOf,
   type SightedBar,
   type SightingScope,
@@ -226,11 +227,15 @@ export async function doctorPlan(
       edge,
       hints,
       // The config the daemon would load for a session started here: this
-      // directory, under the file named on the command line (a statusline
-      // command's own `--config`), else the override the statusline client
-      // would report.
+      // directory, in the session's own project when the run is in one,
+      // under the file named on the command line (a statusline command's own
+      // `--config`), else the override the statusline client would report.
       {
-        projectDir: cwd,
+        projectDir: ownProject(
+          scope,
+          answer.frames.kind === "ok" ? answer.frames.value : [],
+          cwd,
+        ),
         cwd,
         configFile:
           explicitConfigPath(cwd, configFile) ??
@@ -259,7 +264,6 @@ export async function doctorPlan(
       ...gathered,
       urlHandler: await probeUrlHandler(handler),
       install: installOf(edge.install, scope, answer.clients),
-      askedBy: "command",
     };
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
