@@ -7,7 +7,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { DEFINITION_FILE, type DroppedPlugin } from "./plugins.js";
-import type { Unchecked } from "./discovery.js";
+import type { Unchecked } from "../../utils/presence.js";
 
 /**
  * The plugin roots, lowest precedence first: each `$XDG_DATA_DIRS` entry

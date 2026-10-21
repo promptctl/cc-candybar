@@ -21,7 +21,7 @@ import {
   type LaneSession,
   type PaneClaude,
 } from "../src/daemon/lane-setup";
-import { relaunchOf } from "../src/daemon/claude-relaunch";
+import { relaunchOf, sessionArgs } from "../src/daemon/claude-relaunch";
 import {
   claudeEnv,
   refusalOf,
@@ -48,11 +48,15 @@ function checkout(): { root: string; bundle: string } {
   return { root, bundle: path.join(root, "dist", "index.mjs") };
 }
 
-const session = (hints: LaneSession["hints"] = { tmux: TMUX }): LaneSession => ({
+const session = (
+  hints: LaneSession["hints"] = { tmux: TMUX },
+  answered: LaneSession["answered"] = "yes",
+): LaneSession => ({
   sessionId: SID,
   hints,
   origin: { projectDir: "/p", cwd: "/p", configFile: null },
   transcript: "/u/.claude/projects/-p/session.jsonl",
+  answered,
 });
 
 // Every effect recorded, in the order it ran.
@@ -84,6 +88,7 @@ function fakeEdge(over: Partial<LaneEdge> = {}): { edge: LaneEdge; did: string[]
     claude: async (args, dir) =>
       void did.push(`claude ${args.join(" ")} [${dir ?? "-"}]`),
     fileExists: () => true,
+    presence: () => "present",
     paneClaude: async () => claude,
     writeScript: (name, text) => {
       const file = `/run/${name}`;
@@ -221,6 +226,8 @@ describe("lane B, statusline", () => {
     await expect(finished(out)).resolves.toContain("its statusline follows lane B");
     expect(did).toEqual([
       "graph /usr/bin/node /opt/candybar/dist/cc-extra/src/bun-graph.js /u/.local/share/claude/versions/2.1.299",
+      // A signal, never `/exit`: `/exit` removes or asks about the worktree.
+      "terminate 4242",
       `script /run/relaunch-${SID}.sh:\n${relaunchScript(
         "/work",
         [
@@ -235,8 +242,6 @@ describe("lane B, statusline", () => {
         ],
         ["PATH=/usr/bin", "PWD=/work", "CC_CANDYBAR_CONFIG=/u/alt config.json5"],
       )}`,
-      // A signal, never `/exit`: `/exit` removes or asks about the worktree.
-      "terminate 4242",
       `shell sh /run/relaunch-${SID}.sh`,
       `followed ${SID} statusline`,
       `remove /run/relaunch-${SID}.sh`,
@@ -255,12 +260,12 @@ describe("lane B, statusline", () => {
     expect(did.at(-1)).toBe(`remove /run/relaunch-${SID}.sh`);
   });
 
-  test("a restart refused after its script is written still removes it", async () => {
+  test("a Claude Code that does not exit has no script written for it", async () => {
     const { edge, did } = fakeEdge({ exited: async () => false });
     await expect(
       finished(LANE_SETUP.statusline.on(session(), HOST, edge)),
     ).rejects.toThrow(/did not exit within/);
-    expect(did.at(-1)).toBe(`remove /run/relaunch-${SID}.sh`);
+    expect(did.at(-1)).toBe("terminate 4242");
   });
 
   test("a build with no launcher beside its bundle is refused before anything in the pane is touched", () => {
@@ -273,16 +278,101 @@ describe("lane B, statusline", () => {
     expect(did).toEqual([]);
   });
 
-  // Claude Code writes a session's transcript with its first message; resuming
-  // one with none finds no conversation and leaves the pane at its shell.
-  test("a session with no conversation yet is refused before Claude Code is ended", () => {
+  // Claude Code writes a session's transcript with its first message, and
+  // `--resume` of one with none finds no conversation: such a session starts
+  // afresh under its own id (`--session-id`), so lane B's wait for its
+  // subscriber, which names that id, is answered by the restart.
+  test("a session with no conversation yet starts afresh on the same id, and its statusline follows lane B", async () => {
+    const { edge, did } = fakeEdge({ presence: () => "absent" });
+    await expect(
+      finished(LANE_SETUP.statusline.on(session({ tmux: TMUX }, "no"), HOST, edge)),
+    ).resolves.toContain(`starting ${SID} afresh, since it had no conversation yet`);
+    const script = did.find((d) => d.startsWith("script "))!;
+    expect(script).toContain(`--session-id ${SID}`);
+    expect(script).not.toContain("--resume");
+    expect(did.slice(-3)).toEqual([
+      `shell sh /run/relaunch-${SID}.sh`,
+      `followed ${SID} statusline`,
+      `remove /run/relaunch-${SID}.sh`,
+    ]);
+  });
+
+  // A first message sent up to the kill writes the transcript; the session is
+  // then resumed, never started afresh on an id Claude Code would refuse as
+  // in use. Nothing writes it once Claude Code has exited.
+  test("whether a session has a conversation is read once Claude Code has exited", async () => {
+    let written = false;
     const { edge, did } = fakeEdge({
-      fileExists: (file) => !file.endsWith(".jsonl"),
+      presence: () => (written ? "present" : "absent"),
+      terminate: (pid) => {
+        did.push(`terminate ${pid}`);
+        written = true;
+      },
     });
-    expect(() => LANE_SETUP.statusline.on(session(), HOST, edge)).toThrow(
-      /no conversation to resume yet — send a first message/,
+    await expect(
+      finished(LANE_SETUP.statusline.on(session({ tmux: TMUX }, "no"), HOST, edge)),
+    ).resolves.toContain(`resuming ${SID}`);
+    const script = did.findIndex((d) => d.startsWith("script "));
+    expect(did[script]).toContain(`--resume ${SID}`);
+    expect(script).toBeGreaterThan(did.indexOf("terminate 4242"));
+  });
+
+  // Claude Code answered in the session, so it has a conversation, but keeps
+  // no transcript of it (persistence off): a fresh start would throw it away.
+  test.each([
+    ["yes", /has a conversation but no transcript to resume it from/],
+    ["unknown", /does not say whether session .* has a conversation/],
+  ] as const)(
+    "a session answered %j with no transcript is left running",
+    async (answered, reason) => {
+      const { edge, did } = fakeEdge({ presence: () => "absent" });
+      await expect(
+        finished(LANE_SETUP.statusline.on(session({ tmux: TMUX }, answered), HOST, edge)),
+      ).rejects.toThrow(reason);
+      expect(did.some((d) => d.startsWith("terminate"))).toBe(false);
+    },
+  );
+
+  // A stat that fails for another reason than absence says nothing of the
+  // conversation: before the kill, Claude Code is left running; after it,
+  // nothing is started on a guess.
+  test("a transcript stat could not see past is refused before the kill", async () => {
+    const { edge, did } = fakeEdge({
+      presence: (file) => ({ path: file, error: "EACCES" }),
+    });
+    await expect(
+      finished(LANE_SETUP.statusline.on(session(), HOST, edge)),
+    ).rejects.toThrow(/was left running: whether session .* could not be seen \(EACCES\)/);
+    expect(did.some((d) => d.startsWith("terminate"))).toBe(false);
+  });
+
+  test("a transcript stat could not see past once Claude Code exited starts nothing", async () => {
+    let ended = false;
+    const { edge, did } = fakeEdge({
+      presence: (file) => (ended ? { path: file, error: "ELOOP" } : "present"),
+      terminate: () => {
+        ended = true;
+      },
+    });
+    await expect(
+      finished(LANE_SETUP.statusline.on(session(), HOST, edge)),
+    ).rejects.toThrow(new RegExp(`exited, but .* \\(ELOOP\\).*claude .*--resume ${SID}`));
+    expect(did.some((d) => d.startsWith("script ") || d.startsWith("shell"))).toBe(false);
+  });
+
+  test("a script that cannot be written once Claude Code exited names the line that starts it again", async () => {
+    const { edge, did } = fakeEdge({
+      presence: () => "absent",
+      writeScript: () => {
+        throw new Error("ENOSPC");
+      },
+    });
+    await expect(
+      finished(LANE_SETUP.statusline.on(session({ tmux: TMUX }, "no"), HOST, edge)),
+    ).rejects.toThrow(
+      `exited, but its restart script could not be written (ENOSPC), so it was not started again — start it with \`cd /work && claude --worktree feat/tree --dangerously-skip-permissions --session-id ${SID}\``,
     );
-    expect(did).toEqual([]);
+    expect(did.some((d) => d.startsWith("shell"))).toBe(false);
   });
 
   test("a Claude Code that does not exit is not started again, and the wait says why", async () => {
@@ -312,8 +402,8 @@ describe("lane B, statusline", () => {
     await expect(
       finished(LANE_SETUP.statusline.on(session(), HOST, edge)),
     ).rejects.toThrow(/in the middle of a turn/);
-    expect(did.some((d) => d.startsWith("terminate"))).toBe(false);
-    expect(did.at(-1)).toBe(`remove /run/relaunch-${SID}.sh`);
+    // Refused at the kill, before any script is written.
+    expect(did.some((d) => /^(script|terminate)/.test(d))).toBe(false);
   });
 
   // A stash and a pending dialog die with the process; copy mode is a screen
@@ -536,10 +626,10 @@ describe("relaunchOf", () => {
     // outside it.
     [["claude", "--worktree", "gone"], []],
   ])("%j starts again where it runs as %j and the session", (argv, kept) => {
-    expect(relaunchOf(started(argv), SID)).toEqual({
+    expect(relaunchOf(started(argv))).toEqual({
       kind: "relaunch",
       dir: "/src",
-      args: [...kept, "--resume", SID],
+      args: kept,
     });
   });
 
@@ -555,24 +645,29 @@ describe("relaunchOf", () => {
     [["claude"], "/src/.claude/worktrees/fix/sub/dir", "/src", "fix"],
     [["claude"], "/.claude/worktrees/top", "/", "top"],
   ])("%j, running in %s, starts again from %s in worktree %j", (argv, cwd, dir, name) => {
-    expect(relaunchOf(started(argv, cwd), SID)).toEqual({
+    expect(relaunchOf(started(argv, cwd))).toEqual({
       kind: "relaunch",
       dir,
       args: [
         "--worktree",
         name,
         ...(argv.includes("--model") ? ["--model", "opus"] : []),
-        "--resume",
-        SID,
       ],
     });
   });
 
+  // `--resume` of a session with no transcript finds no conversation; a fresh
+  // start on the same id keeps the id the session's picks are held under.
+  test("a session is resumed, or with no conversation yet started afresh, on the same id", () => {
+    expect(sessionArgs({ kind: "resume", sessionId: SID })).toEqual(["--resume", SID]);
+    expect(sessionArgs({ kind: "fresh", sessionId: SID })).toEqual(["--session-id", SID]);
+  });
+
   test("a directory named like a worktree holder but holding none is no worktree", () => {
-    expect(relaunchOf(started(["claude"], "/src/.claude/worktrees"), SID)).toEqual({
+    expect(relaunchOf(started(["claude"], "/src/.claude/worktrees"))).toEqual({
       kind: "relaunch",
       dir: "/src/.claude/worktrees",
-      args: ["--resume", SID],
+      args: [],
     });
   });
 
@@ -580,7 +675,7 @@ describe("relaunchOf", () => {
     [started(["claude", "--mystery"]), /--mystery/],
     [started(["claude", "--model"]), /--model and no value/],
   ])("%j is refused", (claude, reason) => {
-    const out = relaunchOf(claude, SID);
+    const out = relaunchOf(claude);
     expect(out.kind).toBe("refused");
     expect(out.kind === "refused" && out.reason).toMatch(reason);
   });

@@ -6,6 +6,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { presence, type Unchecked } from "../../utils/presence.js";
 
 // [LAW:one-source-of-truth] The set of accepted extensions lives here once.
 // Both .json5 and .json are accepted: JSON ⊂ JSON5, so the same parser
@@ -13,27 +14,6 @@ import path from "node:path";
 // load-bearing: .json5 wins over .json at the same location (documented
 // format > compatibility tail).
 const CONFIG_EXTENSIONS = ["json5", "json"] as const;
-
-// [LAW:types-are-the-program] One stat, carried as the fact it found rather
-// than collapsed to a boolean: `fs.existsSync` answers false to EVERY stat
-// failure, so a file behind an unsearchable directory resolved as "not found"
-// — a permissions problem reported as a wrong path. Only ENOENT is `absent`;
-// any other failure is an `Unchecked` location stat could not see past, which
-// the resolution carries as data — no consumer guesses whether a file is there.
-export interface Unchecked {
-  readonly path: string;
-  readonly error: string;
-}
-type Presence = "present" | "absent" | Unchecked;
-function presence(path: string): Presence {
-  try {
-    return fs.statSync(path, { throwIfNoEntry: false }) === undefined
-      ? "absent"
-      : "present";
-  } catch (e) {
-    return { path, error: (e as Error).message };
-  }
-}
 
 /**
  * The full ordered list of candidate paths the DSL config could live at,

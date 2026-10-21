@@ -104,6 +104,7 @@ import {
   rateLimitsSeen,
   roleOf,
   transcriptSaid,
+  answeredOf,
   type FrameSeen,
   type RateLimitsSeen,
 } from "./render-sightings";
@@ -1872,7 +1873,13 @@ async function renderChecked(
   // render draws by, as the session's own setting moves moved it
   // (src/daemon/lane-setup.ts).
   laneSetups.observe(
-    { sessionId, hints, origin, transcript: req.hookData.transcript_path },
+    {
+      sessionId,
+      hints,
+      origin,
+      transcript: req.hookData.transcript_path,
+      answered: answeredOf(req.hookData),
+    },
     lanes,
     settingsHistory.revision(sessionId),
   );

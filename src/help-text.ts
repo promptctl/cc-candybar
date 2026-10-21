@@ -47,7 +47,7 @@ export const LANE_HELP: Readonly<Record<Lane, readonly string[]>> = {
   ],
   statusline: [
     "animates the statusline itself, through the attach launcher shipped with cc-candybar",
-    "on: exits this Claude Code and starts it again under that launcher, resuming this session",
+    "on: exits this Claude Code and starts it again under that launcher, on this session",
   ],
   pane: [
     "animates the bar in a tmux pane under this session's",

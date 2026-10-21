@@ -33,9 +33,9 @@ export const SIGHTINGS_KEPT = 64;
 // whether it has answered: `current_usage` is null before the first response
 // and right after a /compact. A payload without the field — a Claude Code
 // before 2.0.70, or before `context_window` — says nothing either way.
-type Answered = "yes" | "no" | "unknown";
+export type Answered = "yes" | "no" | "unknown";
 
-function answeredOf(
+export function answeredOf(
   hookData: Pick<ClaudeHookData, "context_window">,
 ): Answered {
   const usage = hookData.context_window?.current_usage;

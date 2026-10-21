@@ -21,6 +21,7 @@ import {
 } from "../claude-input/edge.js";
 import { lineage, processTable } from "../proc/process-table.js";
 import { pidAlive } from "./parent-watchdog.js";
+import { presence } from "../utils/presence.js";
 import {
   BAR_PANE_OPTION,
   type LaneEdge,
@@ -279,6 +280,7 @@ export function productionLaneEdge(
         }),
       ),
     fileExists: (file) => fs.existsSync(file),
+    presence,
     paneClaude,
     // The daemon's own socket directory: this user's alone (mode 0700, which
     // the daemon checks before it binds — src/daemon/paths.ts).
