@@ -402,10 +402,11 @@ const laneReadout = (lane: Lane): string => {
 // [LAW:nothing-unseen] On a frame the feed drew, the door says how fast the
 // feed draws this bar: the moving rate while it moves where someone can see
 // it, one a second while it is still or unseen. A bar Claude Code polls is
-// answered by a request, which shows none.
+// answered by a request, which shows none. The pace is padded to the widest
+// it can be, MOVING_FPS, so a bar starting or stopping moves no cell after it.
 const FRAME_RATE =
   `{{ if eq .${drawingVar("by")} "${"feed" satisfies Drawing["by"]}" }} ` +
-  `{{ .${drawingVar("fps")} }} fps{{ end }}`;
+  `{{ printf "%${String(MOVING_FPS).length}d" (int .${drawingVar("fps")}) }} fps{{ end }}`;
 
 // What a control shows after itself: a lane's toggle its readout.
 const TRAIL: Partial<Record<SettingName, string>> = Object.fromEntries(

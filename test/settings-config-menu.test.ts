@@ -1640,6 +1640,18 @@ describe("the frame rate on a fed bar", () => {
     }
   });
 
+  test("the still pace takes the moving pace's width, so nothing after the door moves", () => {
+    const r = rig(TWO_SEGMENT_ROOT);
+    try {
+      const still = doorLine(r.render(undefined, undefined, { by: "feed", fps: 1 }));
+      const moving = doorLine(r.render(undefined, undefined, { by: "feed", fps: MOVING_FPS }));
+      expect(still).toMatch(new RegExp(`${DOOR_GLYPH} {${String(MOVING_FPS).length}}1 fps `, "u"));
+      expect(still.length).toBe(moving.length);
+    } finally {
+      r.dispose();
+    }
+  });
+
   test("a request's answer shows no rate", () => {
     const r = rig(TWO_SEGMENT_ROOT);
     try {
