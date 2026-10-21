@@ -35,7 +35,7 @@
     "check:protocol": "node scripts/check-protocol.mjs",
     "gen:schema": "tsx scripts/gen-schema.ts",
     "check:schema": "tsx scripts/check-schema.ts",
-    "prepublishOnly": "npm run lint && npm run typecheck && npm run check:protocol && npm run check:schema && npm run build"
+    "prepublishOnly": "node scripts/major-guard.mjs \"$npm_package_version\" && npm run lint && npm run typecheck && npm run check:protocol && npm run check:schema && npm run build"
   },
   "keywords": [
     "claude",
@@ -74,6 +74,7 @@
     "@promptctl/go-template-js": "^0.10.0",
     "@promptctl/rich-js": "^0.24.1",
     "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/commit-analyzer": "^13.0.1",
     "@semantic-release/exec": "^7.0.3",
     "@semantic-release/git": "^10.0.1",
     "@types/jest": "^30.0.0",
@@ -82,6 +83,7 @@
     "@typescript-eslint/parser": "^8.39.0",
     "ajv": "^8.20.0",
     "buffer": "6.0.3",
+    "conventional-changelog-conventionalcommits": "^9.3.1",
     "esbuild": "0.28.2",
     "eslint": "^9.33.0",
     "eslint-config-prettier": "^10.1.8",
@@ -104,7 +106,7 @@
   "optionalDependencies": {
     "@promptctl/cc-candybar-darwin-arm64": "1.148.8",
     "@promptctl/cc-candybar-darwin-x64": "1.148.8",
-    "@promptctl/cc-candybar-linux-x64": "1.148.8",
-    "@promptctl/cc-candybar-linux-arm64": "1.148.8"
+    "@promptctl/cc-candybar-linux-arm64": "1.148.8",
+    "@promptctl/cc-candybar-linux-x64": "1.148.8"
   }
 }
