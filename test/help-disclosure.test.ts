@@ -29,7 +29,8 @@ import { EDIT_MODE_KEY, EDIT_MODE_ARRANGE } from "../src/config/loader/edit-mode
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { HELP_GLYPH_CLOSED } from "../src/config/help";
 import { DISCLOSURE_CLOSED, DISCLOSURE_GLYPH_CLOSE } from "../src/config/disclosure";
-import { EDIT_MODE_HELP, HELP_TEXT } from "../src/help-text";
+import { EDIT_MODE_HELP, HELP_TEXT, LANE_HELP } from "../src/help-text";
+import { LANE_NAMES } from "../src/config/lanes";
 import {
   testVerbContext,
   clickUrl,
@@ -135,9 +136,12 @@ function buildRuntime(src: string = TWO_SEGMENT_ROOT) {
   // "open". A helper that only found one of those would silently stop being
   // able to close what it opened.
   const toggleHelp = (out: string): void => {
-    const url = linkUrls(out).find((u) =>
-      effectsOf(u).some((e) => helpKeys.has(e.args[1] ?? "")),
-    );
+    // A (?)'s own click writes its key and nothing else; the door's click
+    // also writes every help key, folding them closed.
+    const url = linkUrls(out).find((u) => {
+      const effects = effectsOf(u);
+      return effects.length === 1 && helpKeys.has(effects[0]!.args[1] ?? "");
+    });
     if (!url)
       throw new Error(
         "no (?) affordance rendered; effects were " +
@@ -192,13 +196,19 @@ describe("in-bar help IS src/help-text.ts, not a second copy", () => {
     for (const line of EDIT_MODE_HELP) {
       expect(helpTemplates).toContain(line);
     }
+    for (const line of Object.values(LANE_HELP).flat()) {
+      expect(helpTemplates).toContain(line);
+    }
     // And nothing else does — no segment carries prose the corpus never saw.
-    const corpus = new Set<string>(EDIT_MODE_HELP);
+    const corpus = new Set<string>([
+      ...EDIT_MODE_HELP,
+      ...Object.values(LANE_HELP).flat(),
+    ]);
     for (const t of helpTemplates) expect(corpus.has(t)).toBe(true);
   });
 
   test("--help prints the same values the bar renders", () => {
-    for (const line of EDIT_MODE_HELP) {
+    for (const line of [...EDIT_MODE_HELP, ...Object.values(LANE_HELP).flat()]) {
       expect(HELP_TEXT).toContain(line);
     }
   });
@@ -256,8 +266,8 @@ describe("the (?) is an ordinary declaration", () => {
     const helpNames = Object.entries(config.segments)
       .filter(([, seg]) => seg.template.includes(HELP_GLYPH_CLOSED))
       .map(([name]) => name);
-    expect(helpNames).toHaveLength(1);
-    expect(helpNames.every((n) => n.startsWith("edit."))).toBe(true);
+    // Edit mode's, and one beside each animation lane's toggle.
+    expect(helpNames).toHaveLength(1 + LANE_NAMES.length);
 
     for (const name of helpNames) {
       expect(config.variables[name]).toMatchObject({ kind: "state" });
@@ -279,7 +289,7 @@ describe("the (?) is an ordinary declaration", () => {
     const helpGates = deriveActionValidators(config).filter(({ key }) =>
       helpKeys.includes(key),
     );
-    expect(helpGates).toHaveLength(1);
+    expect(helpGates).toHaveLength(1 + LANE_NAMES.length);
     for (const { spec } of helpGates) {
       // The ordinary binary-cycle allow-list every disclosure toggle derives —
       // no bespoke spec kind reaches the wire gate.

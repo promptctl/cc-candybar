@@ -21,6 +21,15 @@
       "keywords": ["powerline", "statusline", "claude-code", "themes"],
       "category": "statusline",
       "tags": ["statusline", "powerline", "customization"]
+    },
+    {
+      "name": "candybar-band",
+      "source": "./mod",
+      "description": "Draws the session's candybar, menus and effects, animated in the band above the prompt: lane A, read in place from a built checkout.",
+      "version": "0.1.0",
+      "author": {
+        "name": "promptctl"
+      }
     }
   ]
 }

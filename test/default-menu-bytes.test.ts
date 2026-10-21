@@ -43,7 +43,8 @@ import {
 import { recordRender, testVerbContext, effectsOf } from "./helpers/click";
 import { parseHandlerUrl } from "../src/install/index";
 import { parseEffects, VERB_DISPATCH, VERB_SET_STATE } from "../src/click/wire";
-import { VERBS } from "../src/daemon/verbs";
+import { SESSION_CLIENT_HINTS_KEY, VERBS } from "../src/daemon/verbs";
+import type { Lane } from "../src/config/lanes";
 import type { VerbContext } from "../src/daemon/verbs";
 import type { DslConfig } from "../src/config/dsl-types";
 import { links as rawLinks, stripAnsi, type Link } from "./helpers/ansi";
@@ -132,7 +133,22 @@ function buildRuntime(root: string) {
   // passed a textual-dark palette beside a config declaring tokyo-night, and the
   // snapshot pinned a bar production never renders.
   recordRender(sessionState, SID);
-  const ctx: VerbContext = testVerbContext(sessionState, undefined, config);
+  sessionState.set(
+    SID,
+    SESSION_CLIENT_HINTS_KEY,
+    JSON.stringify({ tmux: { socket: "/tmp/t", pane: "%1", truecolor: null } }),
+  );
+  // The lanes a click asked the daemon to set up.
+  const laneSyncs: Lane[] = [];
+  const ctx: VerbContext = {
+    ...testVerbContext(sessionState, undefined, config),
+    lanes: {
+      sync: (_session, lane) => {
+        laneSyncs.push(lane);
+        return "";
+      },
+    },
+  };
   const render = (): string =>
     renderDsl(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), OPTS);
   const click = (url: string): void => {
@@ -153,7 +169,7 @@ function buildRuntime(root: string) {
     if (!link) throw new Error(`no clickable region labelled "${label}"`);
     click(link.url);
   };
-  return { config, sessionState, render, click, clickLabel };
+  return { config, sessionState, render, click, clickLabel, laneSyncs };
 }
 
 // [LAW:single-enforcer] "Hosts a menu" is decided by the same authority the
@@ -220,6 +236,8 @@ describe("every {{ menu }} the bundled default renders", () => {
     expect(out).toMatchSnapshot("toggles open");
     rig.clickLabel(out, "🧪 band (A)");
     expect(rig.sessionState.get(SID, "experimentalBand")).toBe("true");
+    // brandon-menus-sjhy.amf: and has the daemon start what the lane runs.
+    expect(rig.laneSyncs).toEqual(["band"]);
   });
 
   // [LAW:verifiable-goals] The affordance the ticket is about. These bytes

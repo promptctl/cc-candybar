@@ -129,6 +129,14 @@ export const LAUNCH_CATEGORIES = [
   // session's pane sits, twice a second, and the pane's height when the frame's
   // changes. Never in the daemon.
   "bar-pane.tmux",
+  // What a lane's toggle starts (src/daemon/lane-edge.ts), on the click: the
+  // bar pane's tmux calls and the typing of the restart into a shell; the
+  // `claude plugin` commands that install the band mod; and the process table
+  // a restart under cc-attach reads the session's Claude Code from. Clicks a
+  // person makes, each one a handful of spawns, so no rate limit.
+  "lane.tmux",
+  "lane.claude",
+  "lane.process",
 ] as const;
 
 export type LaunchCategory = (typeof LAUNCH_CATEGORIES)[number];

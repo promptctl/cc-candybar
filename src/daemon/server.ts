@@ -42,7 +42,7 @@ import { makeUpdateWatch, UPDATE_DISMISSED_KEY } from "./update-notice";
 import { makeBinaryWatch } from "./binary-watch";
 import { LANE_FRAMES } from "./lane-frames";
 import { REGISTRY_URL } from "../install/currency";
-import { isAbsolute } from "node:path";
+import { dirname, isAbsolute } from "node:path";
 import { explicitConfigPath } from "../utils/user-path";
 import {
   PROTOCOL_VERSION,
@@ -158,6 +158,8 @@ import { reaction } from "mobx";
 import { setImmediate } from "node:timers";
 import type { RenderedLine } from "../dsl/node-registry.js";
 import { productionClaudeInputEdge } from "../claude-input/edge.js";
+import { LaneSetups } from "./lane-setup.js";
+import { productionLaneEdge } from "./lane-edge.js";
 import {
   collectDiagnostics,
   composeWithDiagnostics,
@@ -1463,6 +1465,20 @@ const verbCtx = {
       origin.cwd,
       origin.configFile ?? undefined,
     ),
+  lanes: new LaneSetups({
+    edge: productionLaneEdge(dirname(socketPath())),
+    // A bar pane runs this bundle under the node running it now, with the
+    // flags it runs with (tsx's loader, under the test harness).
+    host: {
+      bundle: DAEMON_BUNDLE,
+      node: [process.execPath, ...process.execArgv],
+      socket: socketPath(),
+    },
+    switches: ({ sessionId, origin }) => lanesAt(sessionId, origin),
+    state: sessionState,
+    log: dlog,
+    now: () => instantOf(new Date()),
+  }),
 };
 
 /**
@@ -1625,7 +1641,15 @@ function sessionGlobals(
 // its session's picks.
 function lanesOf(req: CheckedRenderRequest): LaneSwitches {
   const sessionId = req.hookData.session_id;
-  const origin = sessionRenderOrigin(req.requested, sessionState, sessionId);
+  return lanesAt(
+    sessionId,
+    sessionRenderOrigin(req.requested, sessionState, sessionId),
+  );
+}
+
+// The lanes a session's settings switch on, under the config the render
+// cache holds for `origin`.
+function lanesAt(sessionId: string, origin: RenderOrigin): LaneSwitches {
   using hold = renderCache.hold(
     origin.projectDir,
     origin.cwd,

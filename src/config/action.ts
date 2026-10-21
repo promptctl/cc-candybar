@@ -33,6 +33,7 @@
 import type { OptionDomain } from "./option-domain.js";
 import type { SlashLine } from "../claude-input/slash-line.js";
 import type { GlyphMark } from "../doctor/checks.js";
+import type { Lane } from "./lanes.js";
 export type { OptionDomain } from "./option-domain.js";
 
 // [LAW:types-are-the-program] The top-level discriminator of an ActionDecl — the
@@ -75,6 +76,7 @@ export const ACTION_KEYS = [
   "doctor",
   "ceiling",
   "slash",
+  "lane",
   "do",
 ] as const;
 export type ActionKey = (typeof ACTION_KEYS)[number];
@@ -138,7 +140,12 @@ export type ActionKey = (typeof ACTION_KEYS)[number];
 //   slash               — type the declared slash command into this
 //                         session's Claude Code prompt -> no gate: the verb
 //                         honours only lines the config declares
-//   do                  — fire several declared actions in one click: the
+//   lane                — bring the named animation lane's setup in line
+//                         with its switch for this session (open or close its
+//                         bar pane, install the band mod, restart Claude Code
+//                         under cc-attach) -> no gate: the switch is read at
+//                         click time, never carried
+//   do                — fire several declared actions in one click: the
 //                         first is the click's face (its display rule and
 //                         current-state mark are the region's), the rest ride
 //                         along -> no gate of its own: every member is a
@@ -269,6 +276,12 @@ export type ActionDecl =
   // proved at load, and a click is honoured only as a line some declared
   // `slash` action holds, so a URL cannot make up what gets typed.
   | { readonly slash: SlashLine }
+  // [LAW:effects-at-boundaries] Bring an animation lane's setup in line with
+  // its switch for the clicked session (src/daemon/lane-setup.ts) — the tmux
+  // pane C draws in, the band mod A loads. The daemon reads the switch at
+  // click time, so the declaration names only the lane; a lane toggle fires it
+  // after its own write.
+  | { readonly lane: Lane }
   // [LAW:composability] One click, several effects, built from actions that
   // already exist rather than from a new write vocabulary: entering edit mode
   // and closing the menu it was entered from is `edit.toggle` and a close,

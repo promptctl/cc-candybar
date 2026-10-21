@@ -21,6 +21,8 @@
 import { launchSync } from "../../proc/launch";
 import type { SessionStateReader, SessionStateRW } from "../session-state";
 import { holdClickError } from "../click-error";
+import type { LaneSetups } from "../lane-setup";
+import { LANE_NAMES, parseLane } from "../../config/lanes";
 import { instantOf } from "../../utils/instant";
 import { stateGate, stateKeySeed } from "./state-validators";
 import { configGate, configKeySeed } from "./config-validators";
@@ -107,6 +109,7 @@ import {
   VERB_DOCTOR_PROBE,
   VERB_CEILING,
   VERB_SLASH,
+  VERB_LANE,
 } from "../../click/wire";
 import {
   ceilingMoveArgs,
@@ -205,6 +208,9 @@ export interface VerbContext {
   // Reload that config from disk now, so the next render reads what a click
   // just wrote rather than waiting on the file watcher.
   readonly reloadConfig: (origin: RenderOrigin) => void;
+  // [LAW:single-enforcer] The one owner of what turning an animation lane on
+  // or off takes (src/daemon/lane-setup.ts).
+  readonly lanes: Pick<LaneSetups, "sync">;
 }
 
 // What a handler runs with: the daemon's context, with `sessionState` the
@@ -1447,6 +1453,31 @@ const slash: VerbHandler = (value, ctx) => {
   ctx.dlog("info", `slash: typed ${line} into ${result.pane} (session=${sid})`);
 };
 
+// ─── Animation lanes (brandon-menus-sjhy.amf) ───────────────────────────────
+
+// [LAW:effects-at-boundaries] Bring a lane's setup in line with the switch
+// the session renders with — a lane toggle fires this after its own write, so
+// the switch it reads is the one the click just set. The URL names only the
+// lane; whether it is on is the session's, read at click time.
+const lane: VerbHandler = (value, ctx) => {
+  const [sessionId = "", raw = ""] = decodeWire(() => decodeSegments(value));
+  const sid = requireSessionId(sessionId);
+  const named = parseLane(raw);
+  if (named === null) {
+    throw new BadVerbArgs(
+      `lane: expected one of ${LANE_NAMES.join(", ")}, got ${JSON.stringify(raw)}`,
+    );
+  }
+  ctx.lanes.sync(
+    {
+      sessionId: sid,
+      hints: sessionHints(ctx, sid),
+      origin: sessionOrigin(ctx, sid),
+    },
+    named,
+  );
+};
+
 // ─── Registry ───────────────────────────────────────────────────────────────
 
 // [LAW:one-source-of-truth] The LEAF verbs — every click effect that does real
@@ -1527,6 +1558,7 @@ const LEAF_VERBS = new Map<string, VerbHandler>([
   [VERB_DOCTOR_PROBE, doctorProbe],
   [VERB_CEILING, ceiling],
   [VERB_SLASH, slash],
+  [VERB_LANE, lane],
 ]);
 
 // [LAW:one-source-of-truth] The verbs whose handler splits its value into
@@ -1551,6 +1583,7 @@ export const SEGMENTED_VERBS: ReadonlySet<string> = new Set([
   VERB_DOCTOR_MARK,
   VERB_CEILING,
   VERB_SLASH,
+  VERB_LANE,
 ]);
 
 // [LAW:one-source-of-truth] The verbs whose FIRST wire segment is the session
@@ -1579,6 +1612,7 @@ const SESSION_FIRST_VERBS: ReadonlySet<string> = new Set([
   VERB_DOCTOR_MARK,
   VERB_CEILING,
   VERB_SLASH,
+  VERB_LANE,
 ]);
 
 // [LAW:dataflow-not-control-flow] One click is an ordered list of effects; the

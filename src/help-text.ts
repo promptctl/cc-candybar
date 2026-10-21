@@ -3,7 +3,7 @@ import { HELP_GLYPH_CLOSED } from "./config/help";
 import { ADD_GLYPH, CONFIGURE_GLYPH, REMOVE_GLYPH } from "./config/edit-glyphs";
 import { NODE_FLAGS } from "./cli-flags";
 import { SUBMENUS, TAB_LABEL, settingMenuPath } from "./config/menu-places";
-import { LANES } from "./config/lanes";
+import { LANES, LANE_NAMES, type Lane } from "./config/lanes";
 
 // Where the lanes' toggles are, each place once: one place while they sit
 // together, every place if the menu's map ever parts them.
@@ -36,6 +36,25 @@ export const EDIT_MODE_HELP = [
   "↺ resets layout",
 ] as const;
 
+// What each animation lane is and what turning its toggle on does — the
+// `(?)` beside each lane's toggle in the settings menu, and `--help`'s
+// "Animation lanes". Each lane draws the bar faster than Claude Code reruns
+// its statusline (once a second at best), from frames the daemon pushes.
+export const LANE_HELP: Readonly<Record<Lane, readonly string[]>> = {
+  band: [
+    "animates the bar in the band above the prompt, through a Claude Code mod",
+    "on: installs the candybar-band mod from this checkout and types /reload-plugins",
+  ],
+  statusline: [
+    "animates the statusline itself, through cc-extra's cc-attach",
+    "on: exits this Claude Code and starts it again under cc-attach, resuming this session",
+  ],
+  pane: [
+    "animates the bar in a tmux pane under this session's",
+    "on: opens that pane · off: closes it",
+  ],
+};
+
 export const HELP_TEXT = `
 cc-candybar - Beautiful powerline statusline for Claude Code
 
@@ -67,6 +86,9 @@ Configuration:
 
   Anywhere the bar shows ${HELP_GLYPH_CLOSED}, clicking it reveals these same instructions
   in place. In edit mode: ${EDIT_MODE_HELP.join(", ")}.
+
+Animation lanes (experimental; toggles in the settings menu's ${LANE_PLACES}):
+${LANE_NAMES.map((lane) => `  ${LANES[lane].label}\n${LANE_HELP[lane].map((line) => `    ${line}`).join("\n")}`).join("\n")}
 
 Subcommands:
   install                  One-shot setup: stages the runtime (native render

@@ -96,6 +96,9 @@ import {
 import { BOOLEAN_TRUE } from "../themes/policy.js";
 import { settingControlDomain } from "./loader/globals.js";
 import { settingControl, type Affordance } from "./setting-control.js";
+import { declareHelp, type HelpArtifacts } from "./help.js";
+import { LANES, LANE_NAMES } from "./lanes.js";
+import { LANE_HELP } from "../help-text.js";
 
 // [LAW:one-source-of-truth] THE anchor: one string that is simultaneously the
 // segment name an author places in `root` to choose the menu's position, the
@@ -331,6 +334,71 @@ const anyResettable = (names: readonly string[]): string =>
     ? "false"
     : `(or ${names.map((n) => `.${controlResettable(n)}`).join(" ")})`;
 
+// ─── The animation lanes' toggles (brandon-menus-sjhy.amf) ────────────────
+//
+// Brandon: "Each toggle should explain what it does. Each toggle also needs to
+// do all of the work needed to turn its lane on, not just part of it." A
+// lane's switch only lets its subscriber's frames through; the subscriber
+// itself — a mod, Claude Code under cc-attach, a tmux pane — is started by
+// the `lane` action (src/daemon/lane-setup.ts), which every click on the
+// toggle fires after its write. Beside the toggle, a `(?)` says what the lane
+// is and what turning it on does, from the help corpus `--help` prints.
+const laneSettings = LANE_NAMES.map(
+  (lane) => [LANES[lane].setting, lane] as const,
+);
+
+// [LAW:types-are-the-program] What a control's click does after its write,
+// for the settings whose writes alone do not do what turning them on means.
+const FOLLOWS: Partial<Record<SettingName, ActionDecl>> = Object.fromEntries(
+  laneSettings.map(([setting, lane]) => [setting, { lane }]),
+);
+
+// The `(?)` laid after a control, and the artifacts it declares.
+const HELP_ARTIFACTS: HelpArtifacts = {
+  variables: {},
+  actions: {},
+  segments: {},
+};
+const HELP: Partial<Record<SettingName, LayoutNode>> = Object.fromEntries(
+  laneSettings.map(([setting, lane]) => [
+    setting,
+    declareHelp(
+      `${SETTINGS_NS}help.${setting}`,
+      LANE_HELP[lane],
+      [],
+      HELP_ARTIFACTS,
+    ),
+  ]),
+);
+
+// [LAW:composability] A control whose click also fires `follow`: its write
+// becomes the head of a `do` under the name its template binds, so what the
+// toggle shows and writes is unchanged and the follower rides behind it.
+function followedBy(
+  control: Affordance,
+  apply: string,
+  follower: string,
+  follow: ActionDecl,
+): Affordance {
+  const write = control.actions[apply];
+  if (write === undefined || control.kind !== "inline") {
+    throw new Error(
+      `settings menu: only a control whose click is its "${apply}" action can be followed`,
+    );
+  }
+  return {
+    ...control,
+    actions: {
+      ...control.actions,
+      [`${apply}.write`]: write,
+      [follower]: follow,
+      [apply]: { do: [`${apply}.write`, follower] },
+    },
+  };
+}
+// The action a setting's control fires after its write.
+const controlFollow = (name: string): string => `${SETTINGS_NS}follow.${name}`;
+
 // One control of the menu: its setting's row of SETTINGS and what the
 // generator made of that setting's declared domain.
 interface MenuControl extends SettingProjection {
@@ -352,13 +420,18 @@ const CONTROLS: readonly MenuControl[] = (
 ).map((name) => {
   const row: SettingProjection = SETTINGS[name];
   const domain = settingControlDomain(row.configKey);
-  const control = settingControl(
+  const generated = settingControl(
     { label: row.label, domain },
     row.sessionKey,
     row.effectiveVar,
     controlApply(name),
     accordionOf(PLACE[name]),
   );
+  const follow = FOLLOWS[name];
+  const control =
+    follow === undefined
+      ? generated
+      : followedBy(generated, controlApply(name), controlFollow(name), follow);
   return { ...row, name, control, beneath: BENEATH[name] ?? [] };
 });
 
@@ -375,6 +448,7 @@ const submenusBeside = (name: SettingName): SubmenuName[] =>
 const controlsAt = (place: Place): LayoutNode[] =>
   controlsIn(place).flatMap((c) => [
     controlNode(c),
+    ...[HELP[c.name]].filter((h) => h !== undefined),
     ...submenusBeside(c.name).map((s) =>
       disclosureNode(
         submenuSeg(s),
@@ -974,6 +1048,9 @@ function declareSettingControls(artifacts: MenuArtifacts): void {
     }
   }
   Object.assign(artifacts.actions, RESET_ALL.actions);
+  Object.assign(artifacts.variables, HELP_ARTIFACTS.variables);
+  Object.assign(artifacts.actions, HELP_ARTIFACTS.actions);
+  Object.assign(artifacts.segments, HELP_ARTIFACTS.segments);
   // Each submenu's trigger: one static label, open or closed — the open
   // trigger wears its band's state colour, as every disclosure trigger does.
   for (const name of SUBMENU_NAMES) {

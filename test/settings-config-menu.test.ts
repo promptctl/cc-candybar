@@ -34,7 +34,11 @@ import {
   renderOptionsOf,
 } from "../src/daemon/render-payload";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
-import { VERBS, type VerbContext } from "../src/daemon/verbs";
+import {
+  SESSION_CLIENT_HINTS_KEY,
+  VERBS,
+  type VerbContext,
+} from "../src/daemon/verbs";
 import {
   fileHeldSettings,
   settingCounts,
@@ -48,6 +52,8 @@ import { parseAndValidate } from "./helpers/parse-and-validate";
 import type { ValidatedConfig } from "../src/config/dsl-types";
 import { linkUrls, links } from "./helpers/ansi";
 import { instantOf } from "../src/utils/instant";
+import { LANES, LANE_NAMES, type Lane } from "../src/config/lanes";
+import { LANE_HELP } from "../src/help-text";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = "settings-ui-aok-3";
@@ -75,6 +81,7 @@ function rig(
   source: string,
   durable?: DurableConfig,
   width: number = Number.POSITIVE_INFINITY,
+  lanes?: VerbContext["lanes"],
 ): {
   readonly config: ValidatedConfig;
   sessionState: SessionState;
@@ -115,6 +122,7 @@ function rig(
   const ctx: VerbContext = {
     ...testVerbContext(sessionState, durable?.historyFor(sessionState)),
     dlog: (_level, msg) => logs.push(msg),
+    ...(lanes === undefined ? {} : { lanes }),
     configFor: () => entry.config,
     reloadConfig: () => {
       reloads.push({
@@ -1452,4 +1460,93 @@ describe("the themeDefault action", () => {
       ),
     ).toThrow(message);
   });
+});
+
+// brandon-menus-sjhy.amf — Brandon: "Each toggle should explain what it does.
+// Each toggle also needs to do all of the work needed to turn its lane on, not
+// just part of it."
+describe("the animation lanes' toggles", () => {
+  // The settings menu open on ⚙ config with 🧪 toggles open; `synced` records
+  // each lane setup the daemon is asked for, with the switch the session held
+  // when it was asked.
+  const openToggles = () => {
+    const synced: {
+      lane: Lane;
+      session: string;
+      pane: string | undefined;
+      switched: string | null;
+    }[] = [];
+    const r = rig(TWO_SEGMENT_ROOT, undefined, Number.POSITIVE_INFINITY, {
+      sync: (session, lane) => {
+        synced.push({
+          lane,
+          session: session.sessionId,
+          pane: session.hints.tmux?.pane,
+          switched: r.sessionState.get(SID, LANES[lane].setting),
+        });
+        return "";
+      },
+    });
+    // What a render records of the session's client: the pane it runs in.
+    r.sessionState.set(
+      SID,
+      SESSION_CLIENT_HINTS_KEY,
+      JSON.stringify({ tmux: { socket: "/tmp/t", pane: "%1", truecolor: null } }),
+    );
+    r.click(writesTo(r.render(), "candybar.menu")[0]!);
+    showTab(r, "config");
+    const url = urlsOf(r.render()).find((u) =>
+      effectsOf(u).some(
+        (e) => e.args[1] === PICKERS_KEY && e.args[2] === "toggles",
+      ),
+    );
+    if (url === undefined) throw new Error("no link opens 🧪 toggles");
+    r.click(url);
+    return { r, synced };
+  };
+
+  test.each(LANE_NAMES)(
+    "%s: the toggle's click writes the switch, then has the daemon set the lane up",
+    (lane) => {
+      const { r, synced } = openToggles();
+      try {
+        const [url, ...others] = writesTo(r.render(), LANES[lane].setting);
+        expect(others).toEqual([]);
+        expect(effectsOf(url!).map((e) => [e.verb, ...e.args])).toEqual([
+          ["set-state", SID, LANES[lane].setting, "true"],
+          ["lane", SID, lane],
+        ]);
+        r.click(url!);
+        // Asked after the write landed, so the setup reads the lane as on.
+        expect(synced).toEqual([
+          { lane, session: SID, pane: "%1", switched: "true" },
+        ]);
+        expect(plain(r.render())).toContain(`☑ ${LANES[lane].label}`);
+      } finally {
+        r.dispose();
+      }
+    },
+  );
+
+  test.each(LANE_NAMES)(
+    "%s: the (?) beside the toggle says what the lane does",
+    (lane) => {
+      const { r } = openToggles();
+      try {
+        for (const line of LANE_HELP[lane])
+          expect(plain(r.render())).not.toContain(line);
+        const key = `candybar.help.${LANES[lane].setting}`;
+        const url = urlsOf(r.render()).find((u) => {
+          const effects = effectsOf(u);
+          return effects.length === 1 && effects[0]!.args[1] === key;
+        });
+        if (url === undefined) throw new Error(`no (?) writes ${key}`);
+        r.click(url);
+        for (const line of LANE_HELP[lane])
+          expect(plain(r.render())).toContain(line);
+      } finally {
+        r.dispose();
+      }
+    },
+  );
 });

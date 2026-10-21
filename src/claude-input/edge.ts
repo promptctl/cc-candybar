@@ -31,11 +31,14 @@ export type TypeResult =
   | { readonly kind: "typed"; readonly pane: string }
   | { readonly kind: "refused"; readonly reason: string };
 
-export function typeSlash(
-  edge: ClaudeInputEdge,
+// [LAW:parse-dont-validate] The pane a session's client reported, or why the
+// bar has none to act in: the one reading of the tmux hint's three states for
+// everything the daemon does in a session's pane.
+export function tmuxPaneOf(
   tmux: ClientHints["tmux"],
-  line: SlashLine,
-): TypeResult {
+):
+  | { readonly kind: "pane"; readonly hint: TmuxHint }
+  | { readonly kind: "refused"; readonly reason: string } {
   if (tmux === undefined) {
     return {
       kind: "refused",
@@ -47,9 +50,20 @@ export function typeSlash(
     return {
       kind: "refused",
       reason:
-        "this Claude Code is not running inside tmux — the bar can only type into a tmux pane",
+        "this Claude Code is not running inside tmux — the bar can only act in a tmux pane",
     };
   }
+  return { kind: "pane", hint: tmux };
+}
+
+export function typeSlash(
+  edge: ClaudeInputEdge,
+  hint: ClientHints["tmux"],
+  line: SlashLine,
+): TypeResult {
+  const pane = tmuxPaneOf(hint);
+  if (pane.kind === "refused") return pane;
+  const tmux = pane.hint;
   const state = promptState(edge.read(tmux));
   if (state.kind !== "ready") {
     return { kind: "refused", reason: REFUSALS[state.kind] };

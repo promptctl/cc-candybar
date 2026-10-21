@@ -36,6 +36,7 @@ import {
   parseSlashLine,
   SLASH_LINE_PATTERN,
 } from "../../claude-input/slash-line.js";
+import { LANE_NAMES, parseLane } from "../lanes.js";
 import {
   describeType,
   describeValue,
@@ -161,6 +162,7 @@ const ACTION_ARMS: Record<ActionKey, ArmParse<ActionDecl>> = {
   doctor: doctorArm,
   ceiling: ceilingArm,
   slash: slashArm,
+  lane: laneArm,
   do: doArm,
 };
 
@@ -197,6 +199,7 @@ function actionDeclJson(): JsonNode {
       ...doctorArmJson(),
       ...CEILING_ARM_JSON,
       SLASH_ARM_JSON,
+      LANE_ARM_JSON,
       DO_ARM_JSON,
     ],
   };
@@ -541,6 +544,42 @@ function slashArm(
   }
   return { slash: parsed.line };
 }
+
+// [LAW:parse-dont-validate] `lane` names one of LANES, the lane whose setup
+// the click brings in line with its switch; the loader is where a name
+// becomes a Lane. `function`, not a const arrow, so ACTION_ARMS can reference
+// it.
+function laneArm(
+  ctx: ValidateCtx,
+  path: string,
+  raw: Record<string, unknown>,
+): ActionDecl | null {
+  for (const k of Object.keys(raw)) {
+    if (k !== "lane")
+      issue(
+        ctx,
+        `${path}.${k}`,
+        `Unknown key "${k}" on a lane action. Expected only: lane`,
+      );
+  }
+  const lane = parseLane(raw.lane);
+  if (lane === null) {
+    issue(
+      ctx,
+      `${path}.lane`,
+      `lane must be one of ${LANE_NAMES.map((l) => `"${l}"`).join(", ")}, got ${describeValue(raw.lane)}`,
+    );
+    return null;
+  }
+  return { lane };
+}
+
+const LANE_ARM_JSON: JsonNode = {
+  type: "object",
+  properties: { lane: { enum: [...LANE_NAMES] } },
+  required: ["lane"],
+  additionalProperties: false,
+};
 
 const SLASH_ARM_JSON: JsonNode = {
   type: "object",
