@@ -157,20 +157,25 @@ const SESSION_FLAG: Readonly<Record<SessionStart["kind"], string>> = {
   fresh: "--session-id",
 };
 
+// The arguments that choose the session a relaunch starts on, after its
+// `args`: decided apart from them, since whether the session has a
+// conversation is known for certain only once Claude Code has exited.
+export function sessionArgs(start: SessionStart): readonly string[] {
+  return [SESSION_FLAG[start.kind], start.sessionId];
+}
+
 const isFlag = (token: string): boolean =>
   token.startsWith("-") && token !== "-";
 
-// How `claude` is started again on `start`, in the directory it runs in.
+// How `claude` is started again, in the directory it runs in, less the
+// session it starts on (`sessionArgs`).
 // [LAW:one-source-of-truth] That directory alone says whether the session
 // runs in a worktree — `--worktree` at the start and a worktree entered
 // mid-session both move it, and leaving the worktree moves it back — so a
 // worktree is carried as `--worktree <name>`, started from the repository
 // that holds it, and anything else starts where it runs.
-export function relaunchOf(
-  claude: StartedProcess,
-  start: SessionStart,
-): Relaunch {
-  const args = relaunchArgs(claude.argv, start);
+export function relaunchOf(claude: StartedProcess): Relaunch {
+  const args = relaunchArgs(claude.argv);
   if (args.kind === "refused") return args;
   const tree = worktreeOf(claude.cwd);
   return tree === null
@@ -182,12 +187,11 @@ export function relaunchOf(
       };
 }
 
-// The arguments that start Claude Code again on `start`, from the argv it
+// The arguments that start Claude Code again, from the argv it
 // was started with (`argv[0]` the program). Positional words are the prompt the session opened with, which already ran,
 // so they are dropped with the session-choosing flags.
 function relaunchArgs(
   argv: readonly string[],
-  start: SessionStart,
 ):
   | { readonly kind: "args"; readonly args: readonly string[] }
   | { readonly kind: "refused"; readonly reason: string } {
@@ -229,10 +233,7 @@ function relaunchArgs(
     i += taken.length;
     if (rule.keep) kept.push(token, ...taken);
   }
-  return {
-    kind: "args",
-    args: [...kept, SESSION_FLAG[start.kind], start.sessionId],
-  };
+  return { kind: "args", args: kept };
 }
 
 // The worktree Claude Code made that `dir` lies in, or null when it lies in

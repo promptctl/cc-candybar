@@ -49,7 +49,13 @@ import {
   type PaneSnapshot,
   type PromptState,
 } from "../claude-input/prompt-screen.js";
-import { relaunchOf, type SessionStart } from "./claude-relaunch.js";
+import {
+  relaunchOf,
+  sessionArgs,
+  type SessionStart,
+} from "./claude-relaunch.js";
+import type { Answered } from "./render-sightings.js";
+import type { Presence } from "../utils/presence.js";
 import { sourceCheckoutOf } from "./build-currency.js";
 import { attachLauncherOf, moduleGraphReaderOf } from "../attach-launcher.js";
 import { BadVerbArgs } from "./verb-error.js";
@@ -108,6 +114,7 @@ export interface LaneEdge {
     claudeConfigDir: string | undefined,
   ) => Promise<void>;
   readonly fileExists: (file: string) => boolean;
+  readonly presence: (file: string) => Presence;
   readonly paneClaude: (tmux: TmuxHint) => Promise<PaneClaude>;
   // Write a script only this user can read; answers its path.
   readonly writeScript: (name: string, text: string) => string;
@@ -154,6 +161,10 @@ export interface LaneSession {
   // Its conversation, as Claude Code names it in the statusline JSON: a
   // session resumes from it, and has none until its first message.
   readonly transcript: string;
+  // Whether Claude Code has answered in it, by the one mark it leaves
+  // (`answeredOf`): a session it has answered in has a conversation, whether
+  // or not a transcript of it is on disk.
+  readonly answered: Answered;
 }
 
 // [LAW:types-are-the-program] What a lane's setup came to: finished in the
@@ -327,10 +338,7 @@ async function restartUnderAttach(
   // [LAW:no-ambient-temporal-coupling] Whether ending Claude Code loses
   // anything is judged on the pane as it is at the kill, not as it was before
   // the module-graph read above (seconds, on a large binary): the user may
-  // have started a turn or a draft meanwhile, or left Claude Code. So is
-  // whether the session has a conversation to resume: a first message sent
-  // meanwhile writes its transcript, and a fresh start on its id would then
-  // be refused as in use.
+  // have started a turn or a draft meanwhile, or left Claude Code.
   const now = await edge.paneClaude(tmux);
   if (now.pid !== claude.pid) {
     throw new Error(
@@ -343,31 +351,52 @@ async function restartUnderAttach(
       `Claude Code in ${tmux.pane} was left running: ${loses} — then turn ${LANES.statusline.label} off and on again`,
     );
   }
-  const start: SessionStart = {
-    kind: edge.fileExists(session.transcript) ? "resume" : "fresh",
-    sessionId: session.sessionId,
-  };
-  const relaunch = relaunchOf(claude, start);
+  const unrestartable = conversationLost(
+    session,
+    edge.presence(session.transcript),
+  );
+  if (unrestartable !== null) {
+    throw new Error(
+      `Claude Code in ${tmux.pane} was left running: ${unrestartable}`,
+    );
+  }
+  const relaunch = relaunchOf(claude);
   if (relaunch.kind === "refused") {
     throw new Error(`${relaunch.reason} — restart it with that flag removed`);
+  }
+  // SIGTERM, not `/exit`: Claude Code exits on it as on `/exit`, printing
+  // its resume line, but `/exit` in a session started with `--worktree`
+  // removes the worktree when it holds no changes (the script would then
+  // start in a directory that is gone) and asks whether to keep it when it
+  // does (the restart would wait on that dialog). SIGTERM leaves the
+  // worktree as it is (measured on 2.1.289).
+  edge.terminate(claude.pid);
+  if (!(await edge.exited(claude.pid, EXIT_PATIENCE_MS))) {
+    throw new Error(
+      `Claude Code in ${tmux.pane} did not exit within ${EXIT_PATIENCE_MS / 1000} s of SIGTERM, so it was not restarted under the attach launcher`,
+    );
+  }
+  // [LAW:no-ambient-temporal-coupling] Whether the session has a conversation
+  // to resume is read once Claude Code has exited, when nothing is left to
+  // write its transcript: a first message sent up to the kill writes it, and
+  // a fresh start on its id would then be refused as in use.
+  const start = sessionStartOf(session, edge.presence(session.transcript));
+  if (start.kind === "unchecked") {
+    throw new Error(
+      `Claude Code in ${tmux.pane} exited, but whether session ${session.sessionId} has a conversation could not be seen (${start.error}), so it was not started again — start it with \`claude --resume ${session.sessionId}\``,
+    );
   }
   const script = edge.writeScript(
     `relaunch-${session.sessionId}.sh`,
     relaunchScript(
       relaunch.dir,
-      [...launcher, claude.executable, ...relaunch.args],
+      [...launcher, claude.executable, ...relaunch.args, ...sessionArgs(start)],
       claude.env,
     ),
   );
   // [LAW:effects-at-boundaries] The script's whole life is this restart: it
   // is gone once the restart is decided, however that went.
   try {
-    edge.terminate(claude.pid);
-    if (!(await edge.exited(claude.pid, EXIT_PATIENCE_MS))) {
-      throw new Error(
-        `Claude Code in ${tmux.pane} did not exit within ${EXIT_PATIENCE_MS / 1000} s of SIGTERM, so it was not restarted under the attach launcher`,
-      );
-    }
     edge.typeShellLine(tmux, `sh ${shellWord(script)}`);
     // [LAW:no-silent-failure] Typed is not restarted: the restart happened
     // when the session's statusline, under the launcher, subscribes to lane
@@ -388,6 +417,40 @@ async function restartUnderAttach(
     edge.removeScript(script);
   }
   return `restarted Claude Code in ${tmux.pane} under the attach launcher from ${relaunch.dir}, ${STARTED[start.kind](session.sessionId)}, and its statusline follows lane B`;
+}
+
+// [LAW:no-silent-failure] What a restart would lose of the session's
+// conversation, or null when nothing, judged before the kill: a transcript
+// stat could not see, or a conversation Claude Code has answered in (or
+// does not say whether it has) with no transcript to resume it from — its
+// persistence switched off — which a fresh start would throw away.
+function conversationLost(
+  session: LaneSession,
+  transcript: Presence,
+): string | null {
+  if (typeof transcript === "object") {
+    return `whether session ${session.sessionId} has a conversation could not be seen (${transcript.error})`;
+  }
+  if (transcript === "present" || session.answered === "no") return null;
+  return session.answered === "yes"
+    ? `session ${session.sessionId} has a conversation but no transcript to resume it from (is session persistence off?), so a restart would lose it`
+    : `this Claude Code does not say whether session ${session.sessionId} has a conversation, and it has no transcript to resume one from`;
+}
+
+// The session the restart starts on, read once Claude Code has exited: its
+// conversation resumed when its transcript is there, else a fresh start on
+// its id.
+function sessionStartOf(
+  session: LaneSession,
+  transcript: Presence,
+): SessionStart | { readonly kind: "unchecked"; readonly error: string } {
+  if (typeof transcript === "object") {
+    return { kind: "unchecked", error: transcript.error };
+  }
+  return {
+    kind: transcript === "present" ? "resume" : "fresh",
+    sessionId: session.sessionId,
+  };
 }
 
 // How the restart's report names the session it started on.

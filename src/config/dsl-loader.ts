@@ -110,11 +110,8 @@ export {
   durableConfig,
   detectConfigCollisions,
 } from "./loader/discovery.js";
-export type {
-  ConfigHome,
-  ConfigResolution,
-  Unchecked,
-} from "./loader/discovery.js";
+export type { ConfigHome, ConfigResolution } from "./loader/discovery.js";
+export type { Unchecked } from "../utils/presence.js";
 export { mergeWithDefault } from "./loader/merge.js";
 export { inheritableSegmentNames } from "./loader/segments.js";
 export { templateReads } from "./loader/refs.js";
