@@ -1874,7 +1874,7 @@ async function renderChecked(
   // (src/daemon/lane-setup.ts).
   laneSetups.observe(
     { sessionId, hints, origin, transcript: req.hookData.transcript_path },
-    laneSwitches(effective),
+    lanes,
     settingsHistory.revision(sessionId),
   );
   const payload = await buildRenderPayload(
@@ -2057,7 +2057,7 @@ async function renderChecked(
     },
     motion: frame.motion,
     clickShown,
-    lanes: laneSwitches(effective),
+    lanes,
   };
 }
 
