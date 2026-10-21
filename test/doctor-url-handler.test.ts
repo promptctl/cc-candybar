@@ -20,6 +20,7 @@ import {
   type HandlerProbeEdge,
 } from "../src/doctor/handler-probe";
 import { clickArrived } from "../src/doctor/edge";
+import type { ClickArrival } from "../src/doctor/sightings";
 import { VERB_DOCTOR_PROBE, VERB_DOCTOR_RUN } from "../src/click/wire";
 import { BadVerbArgs, VERBS, type VerbContext } from "../src/daemon/verbs";
 import { SESSION_CLIENT_HINTS_KEY } from "../src/daemon/verbs";
@@ -396,7 +397,13 @@ describe("handlerCommand", () => {
 // ─── The daemon's side ───────────────────────────────────────────────────────
 
 describe("the daemon's side of the round trip", () => {
-  function daemon(clientVersion: string | null) {
+  // A click the URL handler of version `handler` delivered.
+  const link = (handler: string | null): ClickArrival => ({
+    via: "link",
+    handler,
+  });
+
+  function daemon(arrival: ClickArrival) {
     const sessionState = new SessionState();
     const probes = new ProbeArrivals();
     // The client the session's last render carried, as the daemon saw it.
@@ -416,7 +423,7 @@ describe("the daemon's side of the round trip", () => {
     const logs: string[] = [];
     const ctx: VerbContext = {
       ...testVerbContext(sessionState),
-      clientVersion,
+      arrival,
       probes,
       clients,
       dlog: (_level, message) => logs.push(message),
@@ -451,7 +458,7 @@ describe("the daemon's side of the round trip", () => {
   }
 
   test("a probe link records its nonce and the handler that delivered it", () => {
-    const d = daemon("1.2.3");
+    const d = daemon(link("1.2.3"));
     d.click(VERB_DOCTOR_PROBE, NONCE);
     expect(d.probes.list()).toEqual([{ nonce: NONCE, handler: "1.2.3" }]);
     expect(d.logs).toEqual([
@@ -460,7 +467,7 @@ describe("the daemon's side of the round trip", () => {
   });
 
   test("a probe from a handler that reports no version is recorded as such", () => {
-    const d = daemon(null);
+    const d = daemon(link(null));
     d.click(VERB_DOCTOR_PROBE, NONCE);
     expect(d.probes.list()).toEqual([{ nonce: NONCE, handler: null }]);
     expect(d.logs).toEqual([
@@ -469,7 +476,7 @@ describe("the daemon's side of the round trip", () => {
   });
 
   test("a value that is not a probe nonce is refused and records nothing", () => {
-    const d = daemon("1.2.3");
+    const d = daemon(link("1.2.3"));
     expect(() => d.click(VERB_DOCTOR_PROBE, "../../etc")).toThrow(BadVerbArgs);
     expect(d.probes.list()).toEqual([]);
   });
@@ -485,8 +492,8 @@ describe("the daemon's side of the round trip", () => {
   });
 
   // In the bar, the doctor's own click is the link that came back.
-  function doctorRow(clientVersion: string | null) {
-    const d = daemon(clientVersion);
+  function doctorRow(arrival: ClickArrival) {
+    const d = daemon(arrival);
     recordRender(d.sessionState, "s1");
     // The session's own Claude Code directory (test/setup.ts's empty one):
     // with none, the doctor reads ~/.claude, the host's real settings.
@@ -501,7 +508,7 @@ describe("the daemon's side of the round trip", () => {
   }
 
   test("a doctor click delivered by this version's handler: the row is ok", () => {
-    const row = doctorRow(PACKAGE_VERSION);
+    const row = doctorRow(link(PACKAGE_VERSION));
     expect(row.verdict).toBe("ok");
     expect(row.logs).toEqual([
       `doctor: config=ok install=ok daemon=ok urlHandler=ok links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=ok segmentData=ok sessionData=ok glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=ghostty@- font=- mark=- tmuxLinks=- clicked=yes cols=148 widthOf=session clientUtf8=- clients=native/same/- daemons=1 others=- memory=phys_footprint:120/512 postMortems=0/0 data=pr:-,rateLimits:1/0/0,memento:located transcripts=1/0/0 unparsed=0 frames=0/0/1/0/0 redrawn=unseen(0) chains=absent truecolorEnv=unset (session=s1)`,
@@ -509,7 +516,7 @@ describe("the daemon's side of the round trip", () => {
   });
 
   test("a doctor click delivered by an older handler: the row names both versions", () => {
-    const row = doctorRow("0.0.1");
+    const row = doctorRow(link("0.0.1"));
     expect(row.verdict).toBe("failed");
     expect(row.reason).toBe(
       `the URL handler runs cc-candybar 0.0.1; the bar runs ${PACKAGE_VERSION} — re-run \`cc-candybar install\``,
@@ -519,8 +526,24 @@ describe("the daemon's side of the round trip", () => {
     ]);
   });
 
+  // Review of PR #405: tmux runs a status-line click itself, so it proves
+  // neither the handler nor that the terminal draws links.
+  test("a doctor click from the tmux status line proves neither the handler nor links, and files no terminal", () => {
+    const row = doctorRow({ via: "tmux-status" });
+    expect(row.verdict).toBe("failed");
+    expect(row.reason).toContain("asked from the tmux status line");
+    expect(row.logs).toHaveLength(1);
+    expect(row.logs[0]).toContain(" clicked=no ");
+  });
+
+  test("a probe cannot arrive from the tmux status line", () => {
+    const d = daemon({ via: "tmux-status" });
+    expect(() => d.click(VERB_DOCTOR_PROBE, NONCE)).toThrow(BadVerbArgs);
+    expect(d.probes.list()).toEqual([]);
+  });
+
   test("a click's handler version is this daemon's own beside it", () => {
-    expect(clickArrived(null)).toEqual({
+    expect(clickArrived({ via: "link", handler: null })).toEqual({
       kind: "arrived",
       handler: null,
       bar: PACKAGE_VERSION,

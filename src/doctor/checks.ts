@@ -1230,13 +1230,16 @@ function linkProblems(
 // through. A click on the bar's 🩺 doctor is such a link, drawn and clicked,
 // so a run it asked for is its own proof — and the click files its terminal
 // (src/doctor/clicked-terminals.ts), where the command, which reasons from
-// what tmux and the terminal say about themselves, reads it.
+// what tmux and the terminal say about themselves, reads it. A click on the
+// tmux status line's 🩺 is tmux's own, no link, so it reasons as the command
+// does.
 const links: Check = {
   name: "links",
   label: "links",
   takesMark: false,
   probe: ({ sighted, terminal, clicked }) => {
-    if (sighted.kind === "clicked") return { ok: true };
+    if (sighted.kind === "clicked" && sighted.via === "link")
+      return { ok: true };
     switch (terminal.kind) {
       case "unreported":
         return {

@@ -15,15 +15,27 @@ import type {
 import { RECENT_CLIENT_S } from "./checks.js";
 import { redrawsOf } from "./redraws.js";
 
+// How a doctor click reached the daemon: a link the terminal drew, delivered
+// by the URL handler (its version, or null from one too old to report it), or
+// a range of the tmux status line, which tmux's own binding runs — proof that
+// the bar is on screen, and of nothing about links or the handler.
+export type ClickArrival =
+  | { readonly via: "link"; readonly handler: string | null }
+  | { readonly via: "tmux-status" };
+
 // [LAW:types-are-the-program] One session's bar, however long it has been
-// idle — `clicked`: a click on its 🩺, a link the terminal drew and the user
-// clicked, so the bar is cc-candybar's and on screen; `shell`: a shell inside
-// the session, which is alive, but proves nothing of its bar (a `claude -p`
-// session draws none, and a statusLine may run something else). `recent`:
-// every session that drew a bar within RECENT_CLIENT_S, since a session that
-// stopped looks like one idle.
+// idle — `clicked`: a click on its 🩺, so the bar is cc-candybar's and on
+// screen, arrived `via` a link or the tmux status line; `shell`: a shell
+// inside the session, which is alive, but proves nothing of its bar (a
+// `claude -p` session draws none, and a statusLine may run something else).
+// `recent`: every session that drew a bar within RECENT_CLIENT_S, since a
+// session that stopped looks like one idle.
 export type SightingScope =
-  | { readonly kind: "clicked"; readonly sessionId: string }
+  | {
+      readonly kind: "clicked";
+      readonly sessionId: string;
+      readonly via: ClickArrival["via"];
+    }
   | { readonly kind: "shell"; readonly sessionId: string }
   | { readonly kind: "recent" };
 

@@ -151,7 +151,7 @@ describe("segment data row", () => {
     expect(
       segmentData.probe({
         ...withData({ rateLimits: rateNeed({ kind: "ok", value: [] }) }),
-        sighted: { kind: "clicked", sessionId: "s1" },
+        sighted: { kind: "clicked", sessionId: "s1", via: "link" },
       }),
     ).toMatchObject({
       ok: false,

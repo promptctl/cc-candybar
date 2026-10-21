@@ -100,6 +100,7 @@ import { validateHookData } from "../utils/schema-validator.js";
 import { transcriptReads } from "../utils/transcript-fs.js";
 import { fileStores, productionEdge, readStores } from "../doctor/edge";
 import { ProbeArrivals } from "../doctor/handler-probe";
+import type { ClickArrival } from "../doctor/sightings";
 import {
   RenderSightings,
   rateLimitsSeen,
@@ -1348,7 +1349,7 @@ export async function replyTo(
       handleClick(
         req.verb,
         req.value,
-        sanitizeClientVersion(req.clientVersion),
+        { via: "link", handler: sanitizeClientVersion(req.clientVersion) },
       ),
     );
   }
@@ -1598,10 +1599,9 @@ const payloadDeps: Omit<RenderPayloadDeps, "navigation"> = {
 function handleClick(
   verb: string,
   value: string,
-  clientVersion: string | null,
+  arrival: ClickArrival,
 ): Response {
-  if (verb === VERB_TMUX_STATUS_CLICK)
-    return statusLineClick(value, clientVersion);
+  if (verb === VERB_TMUX_STATUS_CLICK) return statusLineClick(value);
   const handler = VERBS.get(verb);
   if (!handler) {
     return {
@@ -1612,7 +1612,7 @@ function handleClick(
     };
   }
   try {
-    handler(value, { ...verbCtx, clientVersion });
+    handler(value, { ...verbCtx, arrival });
     return { ok: true, output: "" };
   } catch (e) {
     const code = e instanceof BadVerbArgs ? "BAD_REQUEST" : "RENDER_FAILED";
@@ -1627,11 +1627,9 @@ function handleClick(
 
 // A click in a tmux status line: the link the daemon's frame marks that range
 // with, run as a click on it in the bar would run — a `cc-candybar://` link
-// through its own verb, any other through the platform's opener.
-function statusLineClick(
-  value: string,
-  clientVersion: string | null,
-): Response {
+// through its own verb, any other through the platform's opener. Its verb
+// is told the click came through tmux, not the URL handler.
+function statusLineClick(value: string): Response {
   const refused = (error: string): Response => ({
     ok: false,
     error,
@@ -1647,7 +1645,7 @@ function statusLineClick(
     // that did would be a click that only ever clicks another.
     if (parsed.verb === VERB_TMUX_STATUS_CLICK)
       return refused("a status-line link names another status-line click");
-    return handleClick(parsed.verb, parsed.value, clientVersion);
+    return handleClick(parsed.verb, parsed.value, { via: "tmux-status" });
   }
   const opened = launchSync({
     bin: process.platform === "darwin" ? "/usr/bin/open" : "xdg-open",

@@ -217,7 +217,7 @@ describe("install probe", () => {
       value: { daemon: PUBLISHED, nativeShipped: true, clients: [] },
     };
     expect(
-      checkByName("install")!.probe({ ...HEALTHY_FACTS, install, sighted: { kind: "clicked", sessionId: "s1" } }),
+      checkByName("install")!.probe({ ...HEALTHY_FACTS, install, sighted: { kind: "clicked", sessionId: "s1", via: "link" } }),
     ).toEqual({
       ok: false,
       reason:
