@@ -47,12 +47,12 @@ import { durableConfig, type ConfigHome } from "../../config/loader/discovery";
 import {
   placementId,
   settingSpelling,
-  THEME_DEFAULT_FIELDS,
   walkNodes,
   type DslConfig,
   type Globals,
   type SegmentNode,
 } from "../../config/dsl-types";
+import { THEME_DEFAULT_FIELDS } from "../../config/globals-fields";
 import {
   configureMember,
   EDIT_CONFIGURE_KEY,

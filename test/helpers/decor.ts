@@ -1,6 +1,6 @@
 // The decor a test renders the closed bar under, by name — the values the
 // render itself resolves a selection's names to (render.ts `drawDsl`'s decor).
-import { DEFAULT_SHADE, DEFAULT_VARIATION } from "../../src/themes/policy";
+import { floorOf } from "../../src/config/globals-fields";
 import {
   SHADES,
   VARIATIONS,
@@ -10,8 +10,8 @@ import {
 } from "../../src/themes/decor";
 
 export const decorOf = (
-  variation: VariationName = DEFAULT_VARIATION,
-  shade: ShadeName = DEFAULT_SHADE,
+  variation: VariationName = floorOf("variation"),
+  shade: ShadeName = floorOf("shade"),
 ): Decor => ({ variation: VARIATIONS[variation], shade: SHADES[shade] });
 
 /** The decor a bar wears when nothing picks one: the defaults of both settings. */

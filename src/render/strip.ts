@@ -88,17 +88,6 @@ export type { ColorCompatibility, Endcaps };
 // applyClaudeCodeReserve from src/utils/terminal-width).
 export const DEFAULT_TERMINAL_WIDTH = 120;
 
-// [LAW:one-source-of-truth] The display globals' defaults live in
-// themes/policy.ts beside their resolvers (and padding's range), because the
-// config loader needs them too and config must not import render
-// [LAW:one-way-deps]. Re-exported here on the same terms as the types above, so
-// render-layer consumers keep importing them from the strip module.
-export {
-  DEFAULT_WRAP,
-  DEFAULT_PADDING,
-  DEFAULT_COLOR_COMPATIBILITY,
-} from "../themes/policy.js";
-
 export interface BuildLineOptions {
   endcaps: Endcaps;
   // [LAW:types-are-the-program] Narrower than rich-js's colour-system names on

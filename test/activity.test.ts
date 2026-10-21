@@ -12,7 +12,6 @@ import {
   utimesSync,
 } from "node:fs";
 import { join } from "node:path";
-import { resolveThemeSelection } from "../src/themes/palette-resolvers.js";
 import { tmpdir } from "node:os";
 
 import { ActivityProvider, type ActivityInfo } from "../src/segments/activity";
@@ -21,14 +20,14 @@ import type {
   RenderPayloadDeps,
 } from "../src/daemon/render-payload";
 import { type EffectiveGlobals } from "../src/config/effective-globals";
+import { globalsFor } from "./helpers/selection";
 import { ABSENT, ok } from "../src/utils/outcome";
-import { FLOOR_EFFECT, FLOOR_STYLE } from "./helpers/floor-style";
 import { entryActivity } from "../src/utils/transcript-activity";
 import {
   userEntryOf,
   type ClaudeHookData,
 } from "../src/utils/claude";
-import { RAW_DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
+import { RAW_DEFAULT_DSL_CONFIG, DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { narrowToSegment } from "./helpers/narrow-to-segment";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
@@ -116,23 +115,7 @@ const todoWrite = (
   todos: Array<{ content: string; status: string; activeForm?: string }>,
 ): string => toolUse({ id, name: "TodoWrite", input: { todos } });
 
-const EFFECTIVE_GLOBALS: EffectiveGlobals = {
-  theme: resolveThemeSelection(undefined, null, "textual-dark"),
-  style: FLOOR_STYLE,
-  effect: FLOOR_EFFECT,
-  preset: "default",
-  presetCustomized: false,
-  endcaps: "powerline",
-  variation: "accent",
-  shade: "middle",
-  colorCompatibility: "truecolor",
-  autoWrap: true,
-  padding: 1,
-  updateNotice: true,
-  transitions: false,
-  lanes: { band: false, statusline: false, pane: false },
-  separator: undefined,
-};
+const EFFECTIVE_GLOBALS: EffectiveGlobals = globalsFor(DEFAULT_DSL_CONFIG);
 
 let dir: string;
 let seq = 0;

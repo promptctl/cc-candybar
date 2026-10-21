@@ -1270,9 +1270,9 @@ const THEMED_SAVED = `{
   globals: { palette: 'nord' },
   themeDefaults: {
     nord: {
-      shade: "deepest",
-      variation: "duo",
       style: "dim",
+      variation: "duo",
+      shade: "deepest",
     },
     dracula: { shade: 'brightest' },
   },
@@ -1356,7 +1356,7 @@ describe("a theme's default look, set from the bar", () => {
     expect(out).not.toContain("⤓ default");
     expect(out).not.toContain("💾 save");
     expect(r.logs).toContainEqual(
-      `save-theme-default: nord shade=deepest variation=duo style=dim → ${durable.configPath} (session=${SID})`,
+      `save-theme-default: nord style=dim variation=duo shade=deepest → ${durable.configPath} (session=${SID})`,
     );
   });
 

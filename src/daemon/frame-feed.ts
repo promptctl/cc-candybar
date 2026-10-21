@@ -15,7 +15,6 @@ import { PROTOCOL_VERSION, type Response } from "./protocol";
 import {
   LANE_NAMES,
   LANES,
-  laneOffReason,
   MOVING_FPS,
   perLane,
   UNFOLLOWED,
@@ -24,6 +23,7 @@ import {
   type LaneFeeds,
   type LaneSwitches,
 } from "../config/lanes";
+import { laneOffReason } from "../config/menu-places";
 
 // What one render drew: the response its subscribers receive (the one a
 // render request is answered with), the instant it was drawn at (ms since the

@@ -22,13 +22,12 @@ import {
   type RenderPayloadDeps,
 } from "../src/daemon/render-payload";
 import { type EffectiveGlobals } from "../src/config/effective-globals";
+import { globalsFor } from "./helpers/selection";
 import type { ClientHints } from "../src/daemon/protocol";
-import { resolveThemeSelection } from "../src/themes/palette-resolvers";
 import { VERB_SLASH } from "../src/click/wire";
 import { ABSENT, ok } from "../src/utils/outcome";
 import { effectsOf } from "./helpers/click";
 import { linkUrls, stripAnsi } from "./helpers/ansi";
-import { FLOOR_EFFECT, FLOOR_STYLE } from "./helpers/floor-style";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
 import { instantOf } from "../src/utils/instant";
 
@@ -40,23 +39,7 @@ const OPTS = {
   padding: 0,
   width: Number.POSITIVE_INFINITY,
 };
-const EFFECTIVE: EffectiveGlobals = {
-  theme: resolveThemeSelection(undefined, null, "textual-dark"),
-  style: FLOOR_STYLE,
-  effect: FLOOR_EFFECT,
-  preset: "default",
-  presetCustomized: false,
-  endcaps: "powerline",
-  variation: "accent",
-  shade: "middle",
-  colorCompatibility: "truecolor",
-  autoWrap: true,
-  padding: 0,
-  updateNotice: true,
-  transitions: false,
-  lanes: { band: false, statusline: false, pane: false },
-  separator: undefined,
-};
+const EFFECTIVE: EffectiveGlobals = globalsFor(DEFAULT_DSL_CONFIG);
 const HOOK_DATA = {
   hook_event_name: "Status",
   session_id: SID,

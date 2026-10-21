@@ -12,14 +12,37 @@
 
 import type { VariableDecl } from "./dsl-types.js";
 import { SESSION_ID_VAR_NAME } from "../var-system/sources.js";
+import { LANE_NAMES, laneFeedVar, UNFOLLOWED, type LaneFeed } from "./lanes.js";
+import { CONFIG_KEY_TO_EFFECTIVE_VAR } from "./setting-projections.js";
 import {
-  LANE_FLOOR,
-  LANE_NAMES,
-  laneEffectiveVar,
-  laneFeedVar,
-  UNFOLLOWED,
-  type LaneFeed,
-} from "./lanes.js";
+  GLOBAL_FIELDS,
+  wireKindOf,
+  type GlobalField,
+} from "./globals-fields.js";
+
+// The input declaration for one published `.effective` value: its row's
+// primitive, defaulting to the row's floor ("" for a name, which has none of
+// its own until the render settles it).
+function effectiveInput(
+  field: GlobalField,
+  effectiveVar: string,
+): VariableDecl {
+  const row = GLOBAL_FIELDS[field];
+  const kind = wireKindOf(field);
+  const floor =
+    row.kind === "session" || row.kind === "config" ? row.floor : "";
+  return kind === "string"
+    ? { kind: "input", path: effectiveVar, default: "" }
+    : { kind: "input", path: effectiveVar, type: kind, default: floor };
+}
+
+const EFFECTIVE_INPUTS: Readonly<Record<string, VariableDecl>> =
+  Object.fromEntries(
+    [...CONFIG_KEY_TO_EFFECTIVE_VAR].map(([field, effectiveVar]) => [
+      effectiveVar,
+      effectiveInput(field as GlobalField, effectiveVar),
+    ]),
+  );
 
 // [LAW:types-are-the-program] The input type of every LaneFeed field, so a
 // field added to LaneFeed is a compile error here until it is declared.
@@ -56,47 +79,13 @@ export const PAYLOAD_INPUTS: Readonly<Record<string, VariableDecl>> = {
   // tray's `⎘ resume` and `↗ config`; "" is "none", which hides the glyph.
   resume_command: { kind: "input", path: "resumeCommand", default: "" },
   config_path: { kind: "input", path: "configPath", default: "" },
-  // [LAW:one-source-of-truth] The daemon-resolved effective theme name —
-  // the name renderDsl settles from resolveThemeSelection, the SAME name the
-  // rendered palette is built from. A theme-picker config's trigger reads
-  // `{{ .theme.effective }}` to show the active theme, so the label and the
-  // colors trace to one resolution and cannot drift — no per-config restating
-  // of the initial theme (which JSON5, being inert data, cannot derive). The
-  // daemon always provides it; the "" default is the unreachable-absence floor.
-  "theme.effective": {
-    kind: "input",
-    path: "theme.effective",
-    default: "",
-  },
-  // [LAW:one-type-per-behavior] The effective STYLE name, the exact twin of
-  // theme.effective one dimension over — effectiveStyleName(sessionState.style,
-  // globals.style, styles), the SAME name whose ThemeKey adapts the rendered
-  // palette. A style-picker trigger reads `{{ .style.effective }}` for its
-  // label; the label and the colors trace to one resolution.
-  "style.effective": {
-    kind: "input",
-    path: "style.effective",
-    default: "",
-  },
-  // The effective EFFECT name, style's twin — published by renderDsl, the one
-  // place a `globals.effect` rule is settled, so the `✨` control's label and
-  // the motion the bar wears trace to one resolution.
-  "effect.effective": {
-    kind: "input",
-    path: "effect.effective",
-    default: "",
-  },
-  // [LAW:one-type-per-behavior] The effective PRESET name, theme/style's twin
-  // one level up — effectivePresetName(sessionState.preset, globals.preset,
-  // presets), the SAME name that selected the layout this render walked and
-  // the globals it rendered with. A preset-picker trigger reads
-  // `{{ .preset.effective }}` for its label, so the label and the arrangement
-  // trace to one resolution.
-  "preset.effective": {
-    kind: "input",
-    path: "preset.effective",
-    default: "",
-  },
+  // [LAW:one-source-of-truth] The value every setting and config-only global
+  // renders with, whichever rung produced it — the theme, style and effect as
+  // renderDsl settles them, every other one as the daemon resolved it. A
+  // trigger's label and a picker's current-selection mark read it back, so
+  // the label and the bar trace to one resolution. The daemon always provides
+  // each; the default is the unreachable-absence floor.
+  ...EFFECTIVE_INPUTS,
   // [LAW:one-source-of-truth] brandon-layout-edit-2gc.5 — does the config
   // file author the active preset's root, resolved alongside preset.effective
   // (RenderPayload.preset.customized). edit-chrome.ts's synthesized "↺ …
@@ -117,67 +106,6 @@ export const PAYLOAD_INPUTS: Readonly<Record<string, VariableDecl>> = {
     type: "boolean",
     default: true,
   },
-  // [LAW:one-type-per-behavior] endcaps/colorCompatibility/autoWrap/
-  // padding are theme/style's twins over the remaining persistable globals
-  // (candybar-config-engine-71o.3) — the SAME values BuildLineOptions
-  // renders with, each read back through this projection so a `persist`
-  // action over the field shows a "current selection" highlight and a
-  // trigger label can display the active value without restating it.
-  "endcaps.effective": {
-    kind: "input",
-    path: "endcaps.effective",
-    default: "",
-  },
-  "variation.effective": {
-    kind: "input",
-    path: "variation.effective",
-    default: "",
-  },
-  "shade.effective": {
-    kind: "input",
-    path: "shade.effective",
-    default: "",
-  },
-  "colorCompatibility.effective": {
-    kind: "input",
-    path: "colorCompatibility.effective",
-    default: "",
-  },
-  "transitions.effective": {
-    kind: "input",
-    path: "transitions.effective",
-    type: "boolean",
-    default: false,
-  },
-  "autoWrap.effective": {
-    kind: "input",
-    path: "autoWrap.effective",
-    type: "boolean",
-    default: true,
-  },
-  "padding.effective": {
-    kind: "input",
-    path: "padding.effective",
-    type: "number",
-    default: 1,
-  },
-  "updateNotice.effective": {
-    kind: "input",
-    path: "updateNotice.effective",
-    type: "boolean",
-    default: true,
-  },
-  ...Object.fromEntries(
-    LANE_NAMES.map((lane) => [
-      laneEffectiveVar(lane),
-      {
-        kind: "input",
-        path: laneEffectiveVar(lane),
-        type: "boolean",
-        default: LANE_FLOOR,
-      },
-    ]),
-  ),
   // Each lane's feed of this session's frames (RenderPayload.feeds), one input
   // per field of LANE_FEED_TYPES.
   ...Object.fromEntries(

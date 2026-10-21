@@ -13,12 +13,8 @@
 // theme with no entry contributes the empty fragment, and every field
 // resolves by the same expression either way.
 
-import {
-  THEME_DEFAULT_FIELDS,
-  type DslConfig,
-  type Globals,
-  type ThemeDefault,
-} from "./dsl-types.js";
+import type { DslConfig, Globals, ThemeDefault } from "./dsl-types.js";
+import { THEME_DEFAULT_FIELDS } from "./globals-fields.js";
 import type { Selection } from "../themes/policy.js";
 
 // The identity fragment: a theme that declares no default changes nothing.

@@ -663,7 +663,7 @@ describe("persist action click → the config file", () => {
     expect(effect.verb).toBe("step-config");
     // [LAW:one-source-of-truth] An unset stepper steps from the value the bar
     // RENDERS with no write at all — this config declares no `globals.padding`,
-    // so that is the field's floor (DEFAULT_PADDING = 1), not `min`.
+    // so that is the field's floor (GLOBAL_FIELDS.padding.floor = 1), not `min`.
     // candybar-settings-ui-aok.3: stepping from `min` is what made the first ◀
     // on a bar reading `padding 1` wrap to 16.
     click(urls[2]!); // unset seeds from the floor (1) + by (1) = 2

@@ -4,7 +4,7 @@
 // spine and the real derived write gates:
 //
 //   - every globals field is either controlled or opted out, never both
-//     (the compile-time half is UNCONTROLLED_GLOBALS' key type);
+//     (its row's kind says which: src/config/globals-fields.ts);
 //   - every controlled field's control writes its session key through a gate
 //     that admits exactly the domain the loader declares for the field;
 //   - a global the menu has never seen — a throwaway enum — gets a working
@@ -18,10 +18,8 @@ import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { stateGate } from "../src/daemon/verbs/state-validators";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import {
-  SETTINGS,
-  UNCONTROLLED_GLOBALS,
-} from "../src/config/setting-projections";
+import { SETTINGS } from "../src/config/setting-projections";
+import { GLOBAL_FIELDS } from "../src/config/globals-fields";
 import {
   globalsControlDomain,
   globalsJson,
@@ -65,7 +63,12 @@ const writersOf = (config: DslConfig, key: string): ActionDecl[] =>
 
 describe("every globals field is controlled or opted out", () => {
   const controlled = Object.values(SETTINGS).map((row) => row.configKey);
-  const optedOut = Object.keys(UNCONTROLLED_GLOBALS);
+  // A `text` row is free text no control fits; a `config` row is set in the
+  // config file alone (Brandon cut colorCompatibility's control,
+  // brandon-menu-ia-q30.5y4).
+  const optedOut = Object.entries(GLOBAL_FIELDS)
+    .filter(([, row]) => row.kind === "text" || row.kind === "config")
+    .map(([field]) => field);
 
   test("the two lists partition the globals fields", () => {
     expect([...controlled, ...optedOut].sort()).toEqual(

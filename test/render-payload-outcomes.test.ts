@@ -7,7 +7,6 @@
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
 import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
-import { resolveThemeSelection } from "../src/themes/palette-resolvers.js";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -18,9 +17,11 @@ import type {
   RenderPayloadDeps,
 } from "../src/daemon/render-payload";
 import { type EffectiveGlobals } from "../src/config/effective-globals";
+import { globalsFor } from "./helpers/selection";
+import { VALUED_FIELDS } from "../src/config/globals-fields";
+import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import type { GitInfo, GitInfoOptions, PrState } from "../src/segments/git";
 import { ABSENT, failed, ok, type Outcome } from "../src/utils/outcome";
-import { FLOOR_EFFECT, FLOOR_STYLE } from "./helpers/floor-style";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
 import { instantOf } from "../src/utils/instant";
 
@@ -57,23 +58,7 @@ function depsWith(
 const NO_HINTS: ClientHints = {};
 const TMUX_PANE = { socket: "/tmp/tmux.sock", pane: "%7", truecolor: null };
 
-const EFFECTIVE_GLOBALS: EffectiveGlobals = {
-  theme: resolveThemeSelection(undefined, null, "textual-dark"),
-  style: FLOOR_STYLE,
-  effect: FLOOR_EFFECT,
-  preset: "default",
-  presetCustomized: false,
-  endcaps: "powerline",
-  variation: "accent",
-  shade: "middle",
-  colorCompatibility: "truecolor",
-  autoWrap: true,
-  padding: 1,
-  updateNotice: true,
-  transitions: false,
-  lanes: { band: false, statusline: false, pane: false },
-  separator: undefined,
-};
+const EFFECTIVE_GLOBALS: EffectiveGlobals = globalsFor(DEFAULT_DSL_CONFIG);
 
 const GIT_PATHS = new Set([
   "git.branch",
@@ -484,11 +469,10 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
 // with no `wants` gate — unlike theme/style, which renderDsl produces).
 describe("buildRenderPayload — effective globals projection", () => {
   test("every template-facing EffectiveGlobals field lands under its own *.effective payload key, unconditionally; the two renderDsl-produced fields have none", async () => {
+    // The bundled default's globals with every kind of valued field moved
+    // off its floor: a word, a flag, an integer, a config-only depth, a lane.
     const effective: EffectiveGlobals = {
-      theme: resolveThemeSelection(undefined, null, "nord"),
-      style: FLOOR_STYLE,
-      effect: FLOOR_EFFECT,
-      preset: "default",
+      ...globalsFor(DEFAULT_DSL_CONFIG),
       presetCustomized: true,
       endcaps: "capsule",
       variation: "mono",
@@ -496,10 +480,7 @@ describe("buildRenderPayload — effective globals projection", () => {
       colorCompatibility: "256",
       autoWrap: false,
       padding: 3,
-      updateNotice: true,
-      transitions: false,
-      lanes: { band: false, statusline: false, pane: false },
-      separator: undefined,
+      experimentalPane: true,
     };
     const logs: LogEntry[] = [];
     const payload = await buildRenderPayload(
@@ -519,17 +500,18 @@ describe("buildRenderPayload — effective globals projection", () => {
     // left unmentioned, so re-adding a second producer fails here.
     expect("theme" in payload).toBe(false);
     expect("style" in payload).toBe(false);
+    expect("effect" in payload).toBe(false);
     expect(payload.preset).toEqual({
       effective: "default",
       customized: true,
       bundled: true,
     });
+    for (const field of VALUED_FIELDS) {
+      expect(payload[field]).toEqual({ effective: effective[field] });
+    }
     expect(payload.endcaps).toEqual({ effective: "capsule" });
-    expect(payload.variation).toEqual({ effective: "mono" });
-    expect(payload.shade).toEqual({ effective: "muted" });
-    expect(payload.colorCompatibility).toEqual({ effective: "256" });
-    expect(payload.autoWrap).toEqual({ effective: false });
     expect(payload.padding).toEqual({ effective: 3 });
+    expect(payload.experimentalPane).toEqual({ effective: true });
     // `updateNotice` gates the notice channel AND labels its settings-menu
     // toggle; `separator` only feeds the joiner, and no template reads it.
     expect(payload.updateNotice).toEqual({ effective: true });

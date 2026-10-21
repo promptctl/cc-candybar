@@ -17,7 +17,6 @@
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
 import os from "node:os";
-import { resolveThemeSelection } from "../src/themes/palette-resolvers.js";
 
 import {
   buildRenderPayload,
@@ -27,35 +26,19 @@ import type {
   RenderPayloadDeps,
 } from "../src/daemon/render-payload";
 import { type EffectiveGlobals } from "../src/config/effective-globals";
+import { globalsFor } from "./helpers/selection";
 import type { ClientHints } from "../src/daemon/protocol";
 import { ABSENT } from "../src/utils/outcome";
-import { RAW_DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
+import { RAW_DEFAULT_DSL_CONFIG, DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
-import { FLOOR_EFFECT, FLOOR_STYLE } from "./helpers/floor-style";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
 import { instantOf } from "../src/utils/instant";
 
-const EFFECTIVE_GLOBALS: EffectiveGlobals = {
-  theme: resolveThemeSelection(undefined, null, "textual-dark"),
-  style: FLOOR_STYLE,
-  effect: FLOOR_EFFECT,
-  preset: "default",
-  presetCustomized: false,
-  endcaps: "powerline",
-  variation: "accent",
-  shade: "middle",
-  colorCompatibility: "truecolor",
-  autoWrap: true,
-  padding: 1,
-  updateNotice: true,
-  transitions: false,
-  lanes: { band: false, statusline: false, pane: false },
-  separator: undefined,
-};
+const EFFECTIVE_GLOBALS: EffectiveGlobals = globalsFor(DEFAULT_DSL_CONFIG);
 
 const DEPS = {
   gitProvider: { getGitInfo: async () => ABSENT },
