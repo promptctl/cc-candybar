@@ -19,7 +19,8 @@
 // one as its chunk parses (MEASURED: `breakpointResolved` at the predicted line and column).
 // [LAW:no-ambient-temporal-coupling] the order is this sequence's, and two waits in it are on a clock,
 // each with one owner: the socket's appearance, which has a deadline, and the question asked of the
-// released process (WHY IT STAYS CONNECTED), which is asked once, at ASK_AFTER_MS.
+// released process (WHY IT STAYS CONNECTED), which is asked again and again until it is a TUI or
+// ASK_WITHIN_MS has passed.
 //
 // WHY A UNIX SOCKET. The inspector runs arbitrary code in the session. On TCP it is reachable by every
 // process on the machine; a socket in a directory only this user can enter is reachable by this user.
@@ -33,7 +34,8 @@
 // (MEASURED: `/exit` ended it, exit 0). The run it lets go is a one-shot: the inspector holds a process
 // that ends by draining its loop (`--version`) for as long as it is connected, and that process gives
 // no sign it is done (MEASURED: `beforeExit` never fires while it is held). Which of the two a run is,
-// the process is ASKED, ASK_AFTER_MS after release: a TUI has stdin in raw mode by then.
+// the process is ASKED, every ASK_EVERY_MS after release: a TUI puts stdin in raw mode as it mounts,
+// and the first answer that it has is the verdict.
 //
 // FAILURE. Every step before release happens while the binary is held at entry, where nothing the user
 // asked for has run, so a failure there is answered by killing the held process and exiting non-zero,
@@ -66,10 +68,15 @@ const SOCKET_DEADLINE_MS = 5000;
 // `--version` not raw, exiting as soon as it was let go — the asking does not hold it).
 const TUI_IS_UP = 'process.stdin.isTTY === true && process.stdin.isRaw === true';
 
-// When after release the process is asked TUI_IS_UP: about fifteen times the measured time to raw
-// mode, and the wait an interactive one-shot like `--version` pays before it is let go. A TUI that
-// mounts slower than this is taken for a one-shot and runs without the push; the log says which.
-const ASK_AFTER_MS = 2000;
+// How often after release the process is asked TUI_IS_UP, and for how long. A TUI is attached the
+// moment it answers raw, so the deadline is paid only by a run that never does — an interactive
+// one-shot like `--version`, held that long before it is let go. Asking once, at 2s, took a TUI that
+// mounted later for a one-shot: `--resume` restarts on 2.1.289 reached raw mode 2.0-3.3s after release,
+// and 2 of 11 ran without the push. A real session (more plugins, a longer transcript) mounts slower
+// still, so the deadline is three times the slowest measured mount. A TUI slower than that is taken for
+// a one-shot and runs without the push; the log says which, and when the answer came.
+const ASK_EVERY_MS = 100;
+const ASK_WITHIN_MS = 10000;
 const SOCKET_NAME = 'inspector.sock';
 
 // Per user, never the shared temp dir: on Linux that is /tmp, where another user could plant the log
@@ -132,20 +139,45 @@ function socketAppears(dir, name, deadlineMs, exited) {
 
 const describeEnding = ({ code, signal, error }) => (error ? `could not start: ${error}` : `exited ${signal || code}`);
 
-// What the released run is, asked of it `askAfterMs` after release: `{ runs: 'tui' }`, `{ runs:
-// 'one-shot' }`, `{ runs: 'closed' }` when the inspector went away first (the run ended, or the
-// connection did), or `{ runs: 'unanswered', why }` when the question itself failed. A close resolves
+// What the released run is, asked of it every `everyMs` after release, one question in flight at a
+// time: `{ runs: 'tui' }` at the first answer that stdin is raw, `{ runs: 'one-shot' }` at the first
+// answer that it is not once `withinMs` has passed, `{ runs: 'closed' }` when the inspector went away
+// first (the run ended, or the connection did), or `{ runs: 'unanswered', why }` when the first answer
+// after the deadline is a question that failed. A failure before then is asked again: one of a hundred
+// questions failing while the run mounts says nothing about whether it will mount. A close resolves
 // before the rejection it causes reaches here, so a rejection that does is the question failing.
+// [LAW:no-ambient-temporal-coupling] the verdict waits on the fact it is about: the deadline ends the
+// ASKING, and the question in flight is always waited for, never decided over while it could still say
+// otherwise — so a run that never answers at all is waited on for as long as it is connected.
 // `session` is anything with the session's `send` and `on`; `delay(ms, fn)` is a cancellable timer. A
 // pure seam, so the suite drives it with neither an inspector nor a clock. [LAW:effects-at-boundaries]
-function askWhatRuns(session, askAfterMs, delay) {
+function askWhatRuns(session, { everyMs, withinMs }, delay) {
   return new Promise((resolve) => {
-    const answered = (r) => (r.wasThrown
-      ? { runs: 'unanswered', why: r.result.description ?? JSON.stringify(r.result.value) }
-      : { runs: r.result.value === true ? 'tui' : 'one-shot' });
-    const cancel = delay(askAfterMs, () => session.send('Runtime.evaluate', { expression: TUI_IS_UP, returnByValue: true })
-      .then((r) => resolve(answered(r)), (e) => resolve({ runs: 'unanswered', why: e.message })));
-    session.on('close', () => { cancel(); resolve({ runs: 'closed' }); });
+    let settled = false;
+    let expired = false;
+    let cancelNext = () => {};
+    const cancelDeadline = delay(withinMs, () => { expired = true; });
+    const settle = (verdict) => {
+      if (settled) return;
+      settled = true;
+      cancelNext();
+      cancelDeadline();
+      resolve(verdict);
+    };
+    // `why` is the failure of the question just answered, null when it answered not raw.
+    const notYet = (why) => {
+      if (expired) return settle(why === null ? { runs: 'one-shot' } : { runs: 'unanswered', why });
+      if (!settled) cancelNext = delay(everyMs, ask);
+    };
+    const answered = (r) => {
+      if (r.wasThrown) return notYet(r.result.description ?? JSON.stringify(r.result.value));
+      if (r.result.value === true) return settle({ runs: 'tui' });
+      return notYet(null);
+    };
+    const ask = () => session.send('Runtime.evaluate', { expression: TUI_IS_UP, returnByValue: true })
+      .then(answered, (e) => notYet(e.message));
+    cancelNext = delay(everyMs, ask);
+    session.on('close', () => settle({ runs: 'closed' }));
   });
 }
 
@@ -197,7 +229,7 @@ async function attachAndRun(binary, args, io = {}) {
   // Only a TUI has a status line to drive. A headless, piped or print-mode run (`-p`, at a terminal or
   // not) is a one-shot that would pay the wait below for nothing and wants to stay exactly as fast as
   // it shipped. [LAW:one-source-of-truth] whether a run renders a TUI is launch.js's one parse of it; an
-  // interactive `--version` still reads as a TUI there, and is let go at ASK_AFTER_MS.
+  // interactive `--version` still reads as a TUI there, and is let go at ASK_WITHIN_MS.
   if (!rendersTui(args, io.terminal ?? attachedToTerminal())) return runStock(binary, args, 'not a TUI: no status line to drive', { stderr });
 
   const graph = readGraphFromFile(binary);
@@ -261,8 +293,9 @@ async function attachAndRun(binary, args, io = {}) {
   // Only a run that answered 'tui' keeps the launcher connected for the session (see WHY IT STAYS
   // CONNECTED). Anything else is let go, because staying is what holds a one-shot, and a question that
   // could not be answered is said why.
-  const { runs, why } = await askWhatRuns(session, ASK_AFTER_MS, (ms, fn) => { const t = setTimeout(fn, ms); return () => clearTimeout(t); });
-  log(`after release: ${runs}${why ? ` (${why})` : ''}`);
+  const releasedAt = Date.now();
+  const { runs, why } = await askWhatRuns(session, { everyMs: ASK_EVERY_MS, withinMs: ASK_WITHIN_MS }, (ms, fn) => { const t = setTimeout(fn, ms); return () => clearTimeout(t); });
+  log(`after release: ${runs} at ${Date.now() - releasedAt}ms${why ? ` (${why})` : ''}`);
   if (runs !== 'tui') session.close();
   if (runs === 'unanswered') troubles.add(`could not ask the session whether it is a TUI, so it ran without the push: ${why}`);
 
@@ -278,7 +311,7 @@ async function attachAndRun(binary, args, io = {}) {
   return exitStatus(code, signal);
 }
 
-module.exports = { SOCKET_DEADLINE_MS, ASK_AFTER_MS, TUI_IS_UP, LOG_PATH, inspectedEnv, attachCalls, readSample, socketAppears, askWhatRuns, attachAndRun };
+module.exports = { SOCKET_DEADLINE_MS, ASK_EVERY_MS, ASK_WITHIN_MS, TUI_IS_UP, LOG_PATH, inspectedEnv, attachCalls, readSample, socketAppears, askWhatRuns, attachAndRun };
 
 if (require.main === module) (async function main() {
   const [binary, ...args] = process.argv.slice(2);
