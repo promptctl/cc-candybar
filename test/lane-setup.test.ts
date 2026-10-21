@@ -14,14 +14,18 @@ import {
   EXIT_PATIENCE_MS,
   LANE_SETUP,
   LaneSetups,
-  relaunchScript,
   type LaneEdge,
   type LaneHost,
   type LaneOutcome,
   type LaneSession,
   type PaneClaude,
 } from "../src/daemon/lane-setup";
-import { relaunchOf, sessionArgs } from "../src/daemon/claude-relaunch";
+import {
+  relaunchArgs,
+  sessionArgs,
+  startPlace,
+} from "../src/daemon/claude-relaunch";
+import { attachCommandLine } from "../src/attach-launcher";
 import {
   claudeEnv,
   refusalOf,
@@ -66,8 +70,9 @@ function fakeEdge(over: Partial<LaneEdge> = {}): { edge: LaneEdge; did: string[]
     pid: 4242,
     executable: "/u/.local/share/claude/versions/2.1.299",
     argv: ["claude", "--dangerously-skip-permissions", "--worktree"],
-    env: ["PATH=/usr/bin", "PWD=/work", "CC_CANDYBAR_CONFIG=/u/alt config.json5"],
+    env: ["PATH=/usr/bin", "PWD=/work", "EDITOR=vi"],
     cwd: "/work/.claude/worktrees/feat+tree",
+    parent: 4100,
     fromShell: true,
     attached: false,
   };
@@ -90,12 +95,15 @@ function fakeEdge(over: Partial<LaneEdge> = {}): { edge: LaneEdge; did: string[]
     fileExists: () => true,
     presence: () => "present",
     paneClaude: async () => claude,
-    writeScript: (name, text) => {
-      const file = `/run/${name}`;
-      did.push(`script ${file}:\n${text}`);
-      return file;
+    // The shell Claude Code was started from sits in the repository whose
+    // worktree it runs in.
+    paneDir: async (_hint, shell) => {
+      did.push(`dir of ${shell}`);
+      return "/work";
     },
-    removeScript: (file) => void did.push(`remove ${file}`),
+    launcherNode: () => ({ kind: "node", file: "/usr/bin/node" }),
+    // `claude` on its PATH is the release it runs.
+    onPath: () => claude.executable,
     moduleGraph: async (node, reader, executable) => {
       did.push(`graph ${node} ${reader} ${executable}`);
       return { ok: true };
@@ -116,7 +124,12 @@ const HOST: LaneHost = {
   bundle: "/opt/candybar/dist/index.mjs",
   node: ["/usr/bin/node"],
   socket: "/tmp/cc-candybar-1/socket",
+  preload: "/opt/candybar/dist/attach-preload.cjs",
 };
+
+// The line the restart types for the fake edge's Claude Code, on `start`.
+const RESTART_LINE = (start = `--resume ${SID}`): string =>
+  `cd /work && BUN_OPTIONS='--preload /opt/candybar/dist/attach-preload.cjs' claude --worktree feat/tree --dangerously-skip-permissions ${start}`;
 
 describe("lane C, pane", () => {
   test("on opens a bar pane under the session's pane, following this daemon", () => {
@@ -218,49 +231,116 @@ describe("lane A, band", () => {
 });
 
 describe("lane B, statusline", () => {
-  test("on ends Claude Code, then starts the binary it ran again under the launcher beside the bundle, back in its worktree, on the same session", async () => {
+  test("on ends Claude Code, then types one line into its shell that starts it again under the launcher, back in its worktree, on the same session", async () => {
     const { edge, did } = fakeEdge();
     const out = LANE_SETUP.statusline.on(session(), HOST, edge);
     // The click itself does nothing in the pane.
     expect(did).toEqual([]);
-    await expect(finished(out)).resolves.toContain("its statusline follows lane B");
+    // The line is the restart's report, which LaneSetups logs.
+    await expect(finished(out)).resolves.toBe(
+      `restarted Claude Code in %7 under the attach launcher with \`${RESTART_LINE()}\`, resuming ${SID}, and its statusline follows lane B`,
+    );
     expect(did).toEqual([
       "graph /usr/bin/node /opt/candybar/dist/cc-extra/src/bun-graph.js /u/.local/share/claude/versions/2.1.299",
       // A signal, never `/exit`: `/exit` removes or asks about the worktree.
       "terminate 4242",
-      `script /run/relaunch-${SID}.sh:\n${relaunchScript(
-        "/work",
-        [
-          "/usr/bin/node",
-          "/opt/candybar/dist/cc-extra/src/bun-attach.js",
-          "/u/.local/share/claude/versions/2.1.299",
-          "--worktree",
-          "feat/tree",
-          "--dangerously-skip-permissions",
-          "--resume",
-          SID,
-        ],
-        ["PATH=/usr/bin", "PWD=/work", "CC_CANDYBAR_CONFIG=/u/alt config.json5"],
-      )}`,
-      `shell sh /run/relaunch-${SID}.sh`,
+      // Its shell's directory, once that shell holds the terminal again.
+      "dir of 4100",
+      `shell ${RESTART_LINE()}`,
       `followed ${SID} statusline`,
-      `remove /run/relaunch-${SID}.sh`,
     ]);
   });
 
   // The launcher starts nothing in place of an attach it could not make, so a
   // restart is confirmed only by the statusline following lane B again.
-  test("a restart whose statusline never follows lane B again is a failure, and the script is still removed", async () => {
-    const { edge, did } = fakeEdge({ followed: async () => false });
+  test("a restart whose statusline never follows lane B again is a failure naming the line", async () => {
+    const { edge } = fakeEdge({ followed: async () => false });
     await expect(
       finished(LANE_SETUP.statusline.on(session(), HOST, edge)),
     ).rejects.toThrow(
-      `did not come back attached within ${ATTACH_PATIENCE_MS / 1000} s of its restart — the pane says why`,
+      `did not come back attached within ${ATTACH_PATIENCE_MS / 1000} s of \`${RESTART_LINE()}\` — the pane says why`,
     );
-    expect(did.at(-1)).toBe(`remove /run/relaunch-${SID}.sh`);
   });
 
-  test("a Claude Code that does not exit has no script written for it", async () => {
+  // The preload starts the launcher under the node the line's shell finds,
+  // so a node it would refuse ends nothing.
+  test("a PATH with no node the launcher can run under leaves Claude Code running", async () => {
+    const { edge, did } = fakeEdge({
+      launcherNode: () => ({ kind: "refused", why: "no `node` on PATH to run the attach launcher" }),
+    });
+    await expect(
+      finished(LANE_SETUP.statusline.on(session(), HOST, edge)),
+    ).rejects.toThrow(
+      "Claude Code in %7 was left running, under the PATH it was started with: no `node` on PATH to run the attach launcher",
+    );
+    expect(did.some((d) => d.startsWith("terminate"))).toBe(false);
+  });
+
+  // Claude Code's auto-update removes the release a path names; `claude`
+  // reruns from history after it.
+  test("a release the shell would not find as `claude` is named by its path", async () => {
+    const { edge, did } = fakeEdge({ onPath: () => "/usr/local/bin/claude-other" });
+    await finished(LANE_SETUP.statusline.on(session(), HOST, edge));
+    expect(did).toContain(
+      `shell cd /work && BUN_OPTIONS='--preload /opt/candybar/dist/attach-preload.cjs' /u/.local/share/claude/versions/2.1.299 --worktree feat/tree --dangerously-skip-permissions --resume ${SID}`,
+    );
+  });
+
+  // `--resume` looks a session up under the Claude Code directory it ran
+  // with, and a config set on the command it was started by decides whether
+  // lane B is on; the rest stays the shell's, and no credential reaches the
+  // shell's history.
+  test("of Claude Code's environment, what the bar reads off its client rides the line", async () => {
+    const { edge: base } = fakeEdge();
+    const claude = await base.paneClaude(TMUX);
+    const { edge, did } = fakeEdge({
+      paneClaude: async () => ({
+        ...claude,
+        env: [
+          ...claude.env,
+          "CLAUDE_CONFIG_DIR=/u/.claude zai",
+          "CC_CANDYBAR_CONFIG=/u/lab.json5",
+          "ANTHROPIC_API_KEY=sk-secret",
+          "CLAUDE_CODE_OAUTH_TOKEN=oauth-secret",
+          "MEMENTO_CONFIG_HOME=/u/m",
+          "CLAUDECODE=1",
+        ],
+      }),
+    });
+    await finished(LANE_SETUP.statusline.on(session(), HOST, edge));
+    expect(did.join("\n")).not.toContain("secret");
+    expect(did).toContain(
+      `shell cd /work && CLAUDE_CONFIG_DIR='/u/.claude zai' CC_CANDYBAR_CONFIG=/u/lab.json5 MEMENTO_CONFIG_HOME=/u/m BUN_OPTIONS='--preload /opt/candybar/dist/attach-preload.cjs' claude --worktree feat/tree --dangerously-skip-permissions --resume ${SID}`,
+    );
+  });
+
+  // A relative path among its flags resolves against where Claude Code was
+  // started, which is where the line starts it again.
+  test("a session started inside its worktree starts there again, with no --worktree", async () => {
+    const { edge, did } = fakeEdge({
+      paneDir: async () => "/work/.claude/worktrees/feat+tree/sub",
+    });
+    await finished(LANE_SETUP.statusline.on(session(), HOST, edge));
+    expect(did).toContain(
+      `shell cd /work/.claude/worktrees/feat+tree/sub && BUN_OPTIONS='--preload /opt/candybar/dist/attach-preload.cjs' claude --dangerously-skip-permissions --resume ${SID}`,
+    );
+  });
+
+  test("a pane whose directory cannot be read once Claude Code exited types nothing, and names the line", async () => {
+    const { edge, did } = fakeEdge({
+      paneDir: async () => {
+        throw new Error("no such pane");
+      },
+    });
+    await expect(
+      finished(LANE_SETUP.statusline.on(session(), HOST, edge)),
+    ).rejects.toThrow(
+      `exited, but the directory it was started in could not be read (no such pane), so it was not started again — start it with \`cd /work && BUN_OPTIONS='--preload /opt/candybar/dist/attach-preload.cjs' claude --worktree feat/tree --dangerously-skip-permissions --resume ${SID}\``,
+    );
+    expect(did.some((d) => d.startsWith("shell"))).toBe(false);
+  });
+
+  test("a Claude Code that does not exit has no line typed for it", async () => {
     const { edge, did } = fakeEdge({ exited: async () => false });
     await expect(
       finished(LANE_SETUP.statusline.on(session(), HOST, edge)),
@@ -268,12 +348,15 @@ describe("lane B, statusline", () => {
     expect(did.at(-1)).toBe("terminate 4242");
   });
 
-  test("a build with no launcher beside its bundle is refused before anything in the pane is touched", () => {
+  test.each([
+    ["attach-preload.cjs", "/opt/candybar/dist/attach-preload.cjs"],
+    ["bun-attach.js", "/opt/candybar/dist/cc-extra/src/bun-attach.js"],
+  ])("a build with no %s is refused before anything in the pane is touched", (missing, file) => {
     const { edge, did } = fakeEdge({
-      fileExists: (file) => !file.endsWith("bun-attach.js"),
+      fileExists: (f) => !f.endsWith(missing),
     });
     expect(() => LANE_SETUP.statusline.on(session(), HOST, edge)).toThrow(
-      /attach launcher, which is not at \/opt\/candybar\/dist\/cc-extra\/src\/bun-attach\.js/,
+      `${file} is not there — run \`cc-candybar install\``,
     );
     expect(did).toEqual([]);
   });
@@ -287,13 +370,9 @@ describe("lane B, statusline", () => {
     await expect(
       finished(LANE_SETUP.statusline.on(session({ tmux: TMUX }, "no"), HOST, edge)),
     ).resolves.toContain(`starting ${SID} afresh, since it had no conversation yet`);
-    const script = did.find((d) => d.startsWith("script "))!;
-    expect(script).toContain(`--session-id ${SID}`);
-    expect(script).not.toContain("--resume");
-    expect(did.slice(-3)).toEqual([
-      `shell sh /run/relaunch-${SID}.sh`,
+    expect(did.slice(-2)).toEqual([
+      `shell ${RESTART_LINE(`--session-id ${SID}`)}`,
       `followed ${SID} statusline`,
-      `remove /run/relaunch-${SID}.sh`,
     ]);
   });
 
@@ -312,9 +391,9 @@ describe("lane B, statusline", () => {
     await expect(
       finished(LANE_SETUP.statusline.on(session({ tmux: TMUX }, "no"), HOST, edge)),
     ).resolves.toContain(`resuming ${SID}`);
-    const script = did.findIndex((d) => d.startsWith("script "));
-    expect(did[script]).toContain(`--resume ${SID}`);
-    expect(script).toBeGreaterThan(did.indexOf("terminate 4242"));
+    expect(did.indexOf(`shell ${RESTART_LINE()}`)).toBeGreaterThan(
+      did.indexOf("terminate 4242"),
+    );
   });
 
   // Claude Code answered in the session, so it has a conversation, but keeps
@@ -356,23 +435,22 @@ describe("lane B, statusline", () => {
     });
     await expect(
       finished(LANE_SETUP.statusline.on(session(), HOST, edge)),
-    ).rejects.toThrow(new RegExp(`exited, but .* \\(ELOOP\\).*claude .*--resume ${SID}`));
-    expect(did.some((d) => d.startsWith("script ") || d.startsWith("shell"))).toBe(false);
+    ).rejects.toThrow(`(ELOOP), so it was not started again — start it with \`${RESTART_LINE()}\``);
+    expect(did.some((d) => d.startsWith("shell"))).toBe(false);
   });
 
-  test("a script that cannot be written once Claude Code exited names the line that starts it again", async () => {
-    const { edge, did } = fakeEdge({
+  test("a line that cannot be typed once Claude Code exited is named for the user to type", async () => {
+    const { edge } = fakeEdge({
       presence: () => "absent",
-      writeScript: () => {
-        throw new Error("ENOSPC");
+      typeShellLine: () => {
+        throw new Error("server exited");
       },
     });
     await expect(
       finished(LANE_SETUP.statusline.on(session({ tmux: TMUX }, "no"), HOST, edge)),
     ).rejects.toThrow(
-      `exited, but its restart script could not be written (ENOSPC), so it was not started again — start it with \`cd /work && claude --worktree feat/tree --dangerously-skip-permissions --session-id ${SID}\``,
+      `exited, but the line could not be typed into its pane (server exited), so it was not started again — start it with \`${RESTART_LINE(`--session-id ${SID}`)}\``,
     );
-    expect(did.some((d) => d.startsWith("shell"))).toBe(false);
   });
 
   test("a Claude Code that does not exit is not started again, and the wait says why", async () => {
@@ -402,8 +480,8 @@ describe("lane B, statusline", () => {
     await expect(
       finished(LANE_SETUP.statusline.on(session(), HOST, edge)),
     ).rejects.toThrow(/in the middle of a turn/);
-    // Refused at the kill, before any script is written.
-    expect(did.some((d) => /^(script|terminate)/.test(d))).toBe(false);
+    // Refused at the kill, before anything is typed.
+    expect(did.some((d) => /^(shell|terminate)/.test(d))).toBe(false);
   });
 
   // A stash and a pending dialog die with the process; copy mode is a screen
@@ -465,6 +543,7 @@ describe("lane B, statusline", () => {
         argv: ["cc-attach"],
         env: [],
         cwd: "/",
+        parent: 4100,
         fromShell: true,
         attached: true,
       }),
@@ -483,6 +562,7 @@ describe("lane B, statusline", () => {
         argv: ["claude"],
         env: [],
         cwd: "/",
+        parent: 4100,
         fromShell: false,
         attached: false,
       }),
@@ -528,6 +608,7 @@ describe("lane B, statusline", () => {
         argv: ["claude", "--brand-new-flag", "x"],
         env: [],
         cwd: "/",
+        parent: 4100,
         fromShell: true,
         attached: false,
       }),
@@ -552,56 +633,42 @@ describe("lane B, statusline", () => {
   });
 });
 
-describe("the restart script", () => {
-  test("runs its argv, every word quoted where the shell would read it otherwise, under the environment Claude Code was started with", () => {
-    const script = relaunchScript(
-      "/it's/here",
-      ["/usr/bin/node", "/opt/l.js", "/bin/claude", "--model", "a b"],
-      ["CC_CANDYBAR_CONFIG=/u/alt config.json5", "BASH_FUNC_f%%=() {  :\n}", "EMPTY="],
-    );
-    expect(script.split("\n")).toEqual([
-      `cd -- '/it'\\''s/here' || exit 1`,
-      "unset CLAUDE_CONFIG_DIR",
-      "export CC_CANDYBAR_CONFIG='/u/alt config.json5'",
-      "export EMPTY=''",
-      "exec /usr/bin/node /opt/l.js /bin/claude --model 'a b'",
-      "",
-    ]);
-  });
+// [LAW:behavior-not-structure] The line is typed into whatever shell the
+// pane runs, and kept in its history: every shell installed here runs it.
+const SHELLS = ["/bin/sh", "/opt/homebrew/bin/zsh", "/opt/homebrew/bin/bash", "/opt/homebrew/bin/fish"]
+  .filter((shell) => fs.existsSync(shell));
 
-  test("runs under sh, in Claude Code's directory, under Claude Code's own Claude Code directory", () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lane script "));
+describe("the line a restart types", () => {
+  test.each(SHELLS)("runs under %s: in its directory, with its variables, as `claude` on PATH", (shell) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lane line's "));
+    const bin = path.join(dir, "bin");
+    fs.mkdirSync(bin);
     const record = path.join(dir, "ran");
-    const launcher = path.join(dir, "launcher");
     fs.writeFileSync(
-      launcher,
-      `#!/bin/sh\npwd > '${record}'\necho "$CLAUDE_CONFIG_DIR" >> '${record}'\necho "$CC_CANDYBAR_CONFIG" >> '${record}'\nprintf '%s\\n' "$@" >> '${record}'\n`,
+      path.join(bin, "claude"),
+      `#!/bin/sh\npwd -P > "$RECORD"\nprintf '%s\\n' "$CLAUDE_CONFIG_DIR" "$BUN_OPTIONS" "$@" >> "$RECORD"\n`,
       { mode: 0o755 },
     );
-    const self = path.join(dir, "r.sh");
-    fs.writeFileSync(
-      self,
-      relaunchScript(
-        dir,
-        [launcher, "/bin/claude", "--model", "a b", "--resume", SID],
-        ["CLAUDE_CONFIG_DIR=/u/.claude.zai", "CC_CANDYBAR_CONFIG=/u/alt.json5"],
-      ),
-    );
-    const { status, stderr } = spawnSync("/bin/sh", [self], {
-      // The pane's shell may export a directory of its own; Claude Code's
-      // wins. And nothing is looked up on its PATH.
-      env: { PATH: "/nonexistent", CLAUDE_CONFIG_DIR: "/u/.claude" },
+    const start = path.join(dir, "start here");
+    fs.mkdirSync(start);
+    const line = attachCommandLine("/a dir/attach-preload.cjs", {
+      dir: start,
+      env: [["CLAUDE_CONFIG_DIR", "/u/.claude $zai"]],
+      program: "claude",
+      args: ["--model", "it's a b", "--resume", SID],
+    });
+    const { status, stderr } = spawnSync(shell, ["-c", line], {
+      env: { PATH: `${bin}:/usr/bin:/bin`, RECORD: record, HOME: dir },
       encoding: "utf8",
     });
     expect(stderr).toBe("");
     expect(status).toBe(0);
     expect(fs.readFileSync(record, "utf8").split("\n")).toEqual([
-      dir,
-      "/u/.claude.zai",
-      "/u/alt.json5",
-      "/bin/claude",
+      fs.realpathSync(start),
+      "/u/.claude $zai",
+      "--preload /a\\ dir/attach-preload.cjs",
       "--model",
-      "a b",
+      "it's a b",
       "--resume",
       SID,
       "",
@@ -609,9 +676,7 @@ describe("the restart script", () => {
   });
 });
 
-describe("relaunchOf", () => {
-  const started = (argv: string[], cwd = "/src") => ({ argv, cwd });
-
+describe("relaunchArgs", () => {
   test.each([
     [["claude"], []],
     [["claude", "--dangerously-skip-permissions"], ["--dangerously-skip-permissions"]],
@@ -622,38 +687,20 @@ describe("relaunchOf", () => {
     [["claude", "fix the bug", "--effort", "high"], ["--effort", "high"]],
     [["claude", "--", "--not-a-flag"], []],
     [["claude", "--append-system-prompt", "-be terse"], ["--append-system-prompt", "-be terse"]],
-    // A session started in a worktree that has left it runs, and restarts,
-    // outside it.
+    // The worktree is read off the directory the session runs in.
     [["claude", "--worktree", "gone"], []],
-  ])("%j starts again where it runs as %j and the session", (argv, kept) => {
-    expect(relaunchOf(started(argv))).toEqual({
-      kind: "relaunch",
-      dir: "/src",
-      args: kept,
-    });
+    [["claude", "-w", "fix", "--model", "opus"], ["--model", "opus"]],
+  ])("%j carries %j", (argv, kept) => {
+    expect(relaunchArgs(argv)).toEqual({ kind: "args", args: kept });
   });
 
-  // Claude Code makes `--worktree feat/x` at `<repo>/.claude/worktrees/feat+x`
-  // and runs there; naming it again, from its repository, goes back in —
-  // whether the session was started with `--worktree` or entered it later.
   test.each([
-    [["claude", "--worktree"], "/src/.claude/worktrees/tidy-sunset", "/src", "tidy-sunset"],
-    [["claude", "--worktree", "feat/x.y", "--model", "opus"], "/src/.claude/worktrees/feat+x.y", "/src", "feat/x.y"],
-    [["claude", "-w", "fix"], "/src/.claude/worktrees/fix", "/src", "fix"],
-    [["claude", "--worktree=fix"], "/src/.claude/worktrees/fix", "/src", "fix"],
-    [["claude", "--model", "opus"], "/other/.claude/worktrees/entered", "/other", "entered"],
-    [["claude"], "/src/.claude/worktrees/fix/sub/dir", "/src", "fix"],
-    [["claude"], "/.claude/worktrees/top", "/", "top"],
-  ])("%j, running in %s, starts again from %s in worktree %j", (argv, cwd, dir, name) => {
-    expect(relaunchOf(started(argv, cwd))).toEqual({
-      kind: "relaunch",
-      dir,
-      args: [
-        "--worktree",
-        name,
-        ...(argv.includes("--model") ? ["--model", "opus"] : []),
-      ],
-    });
+    [["claude", "--mystery"], /--mystery/],
+    [["claude", "--model"], /--model and no value/],
+  ])("%j is refused", (argv, reason) => {
+    const out = relaunchArgs(argv);
+    expect(out.kind).toBe("refused");
+    expect(out.kind === "refused" && out.reason).toMatch(reason);
   });
 
   // `--resume` of a session with no transcript finds no conversation; a fresh
@@ -662,22 +709,33 @@ describe("relaunchOf", () => {
     expect(sessionArgs({ kind: "resume", sessionId: SID })).toEqual(["--resume", SID]);
     expect(sessionArgs({ kind: "fresh", sessionId: SID })).toEqual(["--session-id", SID]);
   });
+});
 
-  test("a directory named like a worktree holder but holding none is no worktree", () => {
-    expect(relaunchOf(started(["claude"], "/src/.claude/worktrees"))).toEqual({
-      kind: "relaunch",
-      dir: "/src/.claude/worktrees",
-      args: [],
-    });
-  });
-
+describe("startPlace", () => {
+  // Claude Code makes `--worktree feat/x` at `<repo>/.claude/worktrees/feat+x`
+  // and runs there; naming it again from where it was started goes back in —
+  // whether the session was started with `--worktree` or entered it later.
   test.each([
-    [started(["claude", "--mystery"]), /--mystery/],
-    [started(["claude", "--model"]), /--model and no value/],
-  ])("%j is refused", (claude, reason) => {
-    const out = relaunchOf(claude);
-    expect(out.kind).toBe("refused");
-    expect(out.kind === "refused" && out.reason).toMatch(reason);
+    ["/src", "/src", "/src", []],
+    ["/src", "/src/.claude/worktrees/tidy-sunset", "/src", ["--worktree", "tidy-sunset"]],
+    ["/src", "/src/.claude/worktrees/feat+x.y", "/src", ["--worktree", "feat/x.y"]],
+    ["/src/sub", "/src/.claude/worktrees/fix/sub/dir", "/src/sub", ["--worktree", "fix"]],
+    ["/", "/.claude/worktrees/top", "/", ["--worktree", "top"]],
+    // Started inside the worktree: it starts there again as it is.
+    ["/src/.claude/worktrees/fix", "/src/.claude/worktrees/fix", "/src/.claude/worktrees/fix", []],
+    ["/src/.claude/worktrees/fix/sub", "/src/.claude/worktrees/fix/other", "/src/.claude/worktrees/fix/sub", []],
+    // Started in another worktree — a sibling whose name extends this one's
+    // included: `--worktree` from there would make one inside it.
+    ["/src/.claude/worktrees/fix2", "/src/.claude/worktrees/fix", "/src", ["--worktree", "fix"]],
+    ["/src/.claude/worktrees/a/sub", "/src/.claude/worktrees/b", "/src", ["--worktree", "b"]],
+    // A directory named like a worktree holder but holding none is no worktree.
+    ["/src", "/src/.claude/worktrees", "/src", []],
+    // Where it was started not known: the worktree's repository, else where
+    // it runs.
+    [null, "/src/.claude/worktrees/fix/sub", "/src", ["--worktree", "fix"]],
+    [null, "/src/sub", "/src/sub", []],
+  ])("started in %s, running in %s, starts in %s with %j", (startDir, cwd, dir, args) => {
+    expect(startPlace(startDir, cwd)).toEqual({ dir, args });
   });
 });
 

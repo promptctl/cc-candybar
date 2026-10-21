@@ -51,7 +51,7 @@ function showHelpText(): void {
     ? ""
     : "  (nothing is there yet: run `cc-candybar install` first — in a checkout, `pnpm build`)\n";
   console.log(
-    `Starting Claude Code on ${LANES.statusline.label} yourself (a Bun-compiled Claude Code):\n  ${attachCommandLine(preload)}\n${missing}`,
+    `Starting Claude Code on ${LANES.statusline.label} yourself (a Bun-compiled Claude Code):\n  ${attachCommandLine(preload, { dir: undefined, env: [], program: "claude", args: [] })}\n${missing}`,
   );
 }
 

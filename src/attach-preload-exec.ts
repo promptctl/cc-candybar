@@ -5,8 +5,8 @@
 
 import fs from "node:fs";
 import os from "node:os";
-import path from "node:path";
 import { planExec } from "./attach-preload.js";
+import { canonical, regularFileWith } from "./path-search.js";
 
 interface Ffi {
   readonly dlopen: (
@@ -20,15 +20,6 @@ interface Ffi {
 const ERRNO_NAMES = new Map(
   Object.entries(os.constants.errno).map(([name, n]) => [n, name]),
 );
-
-const runs = (file: string, mode: number): boolean => {
-  try {
-    fs.accessSync(file, mode);
-    return fs.statSync(file).isFile();
-  } catch {
-    return false;
-  }
-};
 
 function refuse(why: string): never {
   process.stderr.write(
@@ -86,23 +77,13 @@ function execve(
   return `execve ${file} failed: ${ERRNO_NAMES.get(errno) ?? `errno ${errno}`}`;
 }
 
-const canonical = (file: string): string => {
-  try {
-    return fs.realpathSync(file);
-  } catch {
-    // Names nothing on disk: then it is not this file, and its own spelling
-    // is its identity.
-    return path.resolve(file);
-  }
-};
-
 const plan = planExec({
   self: __filename,
   executable: fs.realpathSync(process.execPath),
   argv: process.argv,
   env: process.env,
-  exists: (file) => runs(file, fs.constants.R_OK),
-  isExecutable: (file) => runs(file, fs.constants.X_OK),
+  exists: (file) => regularFileWith(file, fs.constants.R_OK),
+  isExecutable: (file) => regularFileWith(file, fs.constants.X_OK),
   canonical,
 });
 if (plan.kind === "refused") refuse(plan.why);

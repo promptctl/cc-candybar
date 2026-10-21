@@ -1,5 +1,5 @@
 import { CLAUDE_CONFIG_DIR_ENV } from "./claude-settings.js";
-import { shellWord } from "./shell-word.js";
+import { claudeCommandLine } from "./claude-command-line.js";
 
 // [LAW:one-source-of-truth] The shell command that resumes a session, built
 // from the facts Claude Code's `--resume` depends on: it looks the session up
@@ -18,12 +18,14 @@ export function resumeCommand(
   sessionId: string,
   configDir: string | undefined,
 ): string {
-  const env =
-    configDir === undefined
-      ? ""
-      : `${CLAUDE_CONFIG_DIR_ENV}=${shellWord(configDir)} `;
-  const addDirs = workspace.added_dirs
-    .map((dir) => ` --add-dir ${shellWord(dir)}`)
-    .join("");
-  return `cd ${shellWord(workspace.project_dir)} && ${env}claude --resume ${shellWord(sessionId)}${addDirs}`;
+  return claudeCommandLine({
+    dir: workspace.project_dir,
+    env: configDir === undefined ? [] : [[CLAUDE_CONFIG_DIR_ENV, configDir]],
+    program: "claude",
+    args: [
+      "--resume",
+      sessionId,
+      ...workspace.added_dirs.flatMap((dir) => ["--add-dir", dir]),
+    ],
+  });
 }

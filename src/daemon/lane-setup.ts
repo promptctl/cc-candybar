@@ -24,6 +24,9 @@
 // it (src/daemon/click-error.ts).
 
 import path from "node:path";
+import { CLAUDE_CONFIG_DIR_ENV } from "../claude-settings.js";
+import { CONFIG_ENV } from "../config-hint.js";
+import { MEMENTO_ENV_VARS } from "../memento-hint.js";
 import {
   LANES,
   LANE_NAMES,
@@ -50,16 +53,21 @@ import {
   type PromptState,
 } from "../claude-input/prompt-screen.js";
 import {
-  relaunchOf,
+  relaunchArgs,
   sessionArgs,
+  startPlace,
   type SessionStart,
 } from "./claude-relaunch.js";
 import type { Answered } from "./render-sightings.js";
 import type { Presence } from "../utils/presence.js";
 import { sourceCheckoutOf } from "./build-currency.js";
-import { attachLauncherOf, moduleGraphReaderOf } from "../attach-launcher.js";
+import {
+  attachCommandLine,
+  attachLauncherOf,
+  moduleGraphReaderOf,
+} from "../attach-launcher.js";
+import type { LauncherNode } from "../attach-preload.js";
 import { BadVerbArgs } from "./verb-error.js";
-import { shellWord } from "../shell-word.js";
 
 // The band mod, as the checkout's marketplace (`.claude-plugin/
 // marketplace.json`) names it.
@@ -91,6 +99,9 @@ export interface PaneClaude {
   // The environment it was started with, `NAME=value` each.
   readonly env: readonly string[];
   readonly cwd: string;
+  // The process that started it: the shell the restart line is typed into
+  // when `fromShell`.
+  readonly parent: number;
   readonly fromShell: boolean;
   readonly attached: boolean;
 }
@@ -116,9 +127,19 @@ export interface LaneEdge {
   readonly fileExists: (file: string) => boolean;
   readonly presence: (file: string) => Presence;
   readonly paneClaude: (tmux: TmuxHint) => Promise<PaneClaude>;
-  // Write a script only this user can read; answers its path.
-  readonly writeScript: (name: string, text: string) => string;
-  readonly removeScript: (file: string) => void;
+  // The directory of the pane's shell `shell` once it holds the pane's
+  // terminal again: when the Claude Code it started has exited, the
+  // directory Claude Code was started in.
+  readonly paneDir: (tmux: TmuxHint, shell: number) => Promise<string>;
+  // The node the attach launcher would run under, started with
+  // `pathVariable` (`launcherNode`, src/attach-preload.ts).
+  readonly launcherNode: (pathVariable: string | undefined) => LauncherNode;
+  // The first executable named `name` on `pathVariable`, links resolved, or
+  // null when there is none.
+  readonly onPath: (
+    name: string,
+    pathVariable: string | undefined,
+  ) => string | null;
   // Whether `executable` embeds a module graph the attach launcher can run,
   // as the launcher's own reader (`reader`, run by `node`) answers it.
   readonly moduleGraph: (
@@ -133,7 +154,8 @@ export interface LaneEdge {
   // Resolves true once `pid` has exited, false if it is still running after
   // `withinMs`.
   readonly exited: (pid: number, withinMs: number) => Promise<boolean>;
-  // Type `line` into the pane's shell and run it.
+  // Type `line` into the pane's shell and run it, as the user would: it
+  // lands in the shell's history.
   readonly typeShellLine: (tmux: TmuxHint, line: string) => void;
   // Resolves true once a subscriber of `lane` follows `sessionId`'s frames,
   // false if none does within `withinMs`.
@@ -145,12 +167,15 @@ export interface LaneEdge {
 }
 
 // This daemon: the bundle it runs, how node runs it, and its socket — what a
-// bar pane runs to follow this daemon's frames, and what the attach launcher
-// beside the bundle runs under.
+// bar pane runs to follow this daemon's frames — and the attach preload a
+// restart starts Claude Code with, the one `--help` names
+// (`stableAttachPreload`, src/install/index.ts), so the line a restart types
+// still runs from the shell's history after an upgrade.
 export interface LaneHost {
   readonly bundle: string;
   readonly node: readonly string[];
   readonly socket: string;
+  readonly preload: string;
 }
 
 export interface LaneSession {
@@ -224,10 +249,14 @@ export const LANE_SETUP: Readonly<Record<Lane, { on: Plan; off: Plan }>> = {
   statusline: {
     on: (session, host, edge) => {
       const tmux = paneOf(session);
-      const launcher = attachLauncherOf(host.bundle);
-      if (!edge.fileExists(launcher)) {
+      // The preload starts the launcher beside itself (src/attach-preload.ts).
+      const launcher = attachLauncherOf(host.preload);
+      const missing = [host.preload, launcher].find(
+        (file) => !edge.fileExists(file),
+      );
+      if (missing !== undefined) {
         throw new BadVerbArgs(
-          `${LANES.statusline.label} restarts Claude Code under the attach launcher, which is not at ${launcher} beside this daemon's bundle — rebuild (\`pnpm build\`) or reinstall cc-candybar`,
+          `${LANES.statusline.label} restarts Claude Code under the attach launcher, and ${missing} is not there — run \`cc-candybar install\` (in a checkout, \`pnpm build\`)`,
         );
       }
       return {
@@ -236,7 +265,7 @@ export const LANE_SETUP: Readonly<Record<Lane, { on: Plan; off: Plan }>> = {
         finished: restartUnderAttach(
           session,
           tmux,
-          [host.node[0]!, launcher],
+          { node: host.node[0]!, launcher, preload: host.preload },
           edge,
         ),
       };
@@ -302,14 +331,47 @@ async function installBand(
   return `installed ${BAND_PLUGIN} from ${checkout} and typed /reload-plugins into ${typed.pane}`;
 }
 
-// Exit the pane's Claude Code and start it again under the attach launcher
-// (`launcher`: node and the launcher's script), on the same session — off the
-// daemon's loop: reading the process table and waiting for the exit outlast a
-// click.
+// The attach launcher a restart starts Claude Code under: the preload the
+// typed line names, the launcher it starts, and the node that reads the
+// launcher's module graph check.
+interface Attach {
+  readonly node: string;
+  readonly launcher: string;
+  readonly preload: string;
+}
+
+// [LAW:one-source-of-truth] The variables the restart line sets as Claude
+// Code was started with them: the ones the bar reads off a session's client
+// — its Claude Code directory, which `--resume` also looks the session up
+// under, its cc-candybar config, which decides whether lane B is on, and
+// memento's config home. The rest of the environment is the shell's own,
+// which the shell the line is typed into still exports, and the line lands
+// in the shell's history, where a credential must never be written.
+const CARRIED_ENV: ReadonlySet<string> = new Set([
+  CLAUDE_CONFIG_DIR_ENV,
+  CONFIG_ENV,
+  ...MEMENTO_ENV_VARS,
+]);
+
+// [LAW:parse-dont-validate] An environment as a process image carries it,
+// `NAME=value` each, read once into its variables.
+function environmentOf(env: readonly string[]): ReadonlyMap<string, string> {
+  return new Map(
+    env.flatMap((v) => {
+      const at = v.indexOf("=");
+      return at > 0 ? [[v.slice(0, at), v.slice(at + 1)] as const] : [];
+    }),
+  );
+}
+
+// Exit the pane's Claude Code and start it again under the attach launcher,
+// on the same session, by typing one line into the pane's shell — the line a
+// user reruns from the shell's history — off the daemon's loop: reading the
+// process table and waiting for the exit outlast a click.
 async function restartUnderAttach(
   session: LaneSession,
   tmux: TmuxHint,
-  launcher: readonly [node: string, script: string],
+  attach: Attach,
   edge: LaneEdge,
 ): Promise<string> {
   const claude = await edge.paneClaude(tmux);
@@ -324,10 +386,9 @@ async function restartUnderAttach(
   // [LAW:no-silent-failure] The launcher runs the module graph a Bun-compiled
   // Claude Code embeds; one installed from npm runs under node, embeds none,
   // and once exited could not be started again under the launcher.
-  const [node, launcherScript] = launcher;
   const graph = await edge.moduleGraph(
-    node,
-    moduleGraphReaderOf(launcherScript),
+    attach.node,
+    moduleGraphReaderOf(attach.launcher),
     claude.executable,
   );
   if (!graph.ok) {
@@ -360,13 +421,41 @@ async function restartUnderAttach(
       `Claude Code in ${tmux.pane} was left running: ${unrestartable}`,
     );
   }
-  const relaunch = relaunchOf(claude);
-  if (relaunch.kind === "refused") {
-    throw new Error(`${relaunch.reason} — restart it with that flag removed`);
+  const carried = relaunchArgs(claude.argv);
+  if (carried.kind === "refused") {
+    throw new Error(`${carried.reason} — restart it with that flag removed`);
   }
+  const started = environmentOf(claude.env);
+  const searched = started.get("PATH");
+  // [LAW:no-silent-failure] The preload starts the launcher under the node
+  // the line's shell finds; one it would refuse is refused before the kill.
+  const node = edge.launcherNode(searched);
+  if (node.kind === "refused") {
+    throw new Error(
+      `Claude Code in ${tmux.pane} was left running, under the PATH it was started with: ${node.why}`,
+    );
+  }
+  // The line names `claude` when the shell would find this same release by
+  // that word: the release's own path is removed by Claude Code's next
+  // update, and a rerun from history would then find nothing there.
+  const program =
+    edge.onPath("claude", searched) === claude.executable
+      ? "claude"
+      : claude.executable;
+  const env = [...started].filter(([name]) => CARRIED_ENV.has(name));
+  const lineIn = (
+    place: { readonly dir: string; readonly args: readonly string[] },
+    start: SessionStart,
+  ): string =>
+    attachCommandLine(attach.preload, {
+      dir: place.dir,
+      env,
+      program,
+      args: [...place.args, ...carried.args, ...sessionArgs(start)],
+    });
   // SIGTERM, not `/exit`: Claude Code exits on it as on `/exit`, printing
   // its resume line, but `/exit` in a session started with `--worktree`
-  // removes the worktree when it holds no changes (the script would then
+  // removes the worktree when it holds no changes (the line would then
   // start in a directory that is gone) and asks whether to keep it when it
   // does (the restart would wait on that dialog). SIGTERM leaves the
   // worktree as it is (measured on 2.1.289).
@@ -376,68 +465,62 @@ async function restartUnderAttach(
       `Claude Code in ${tmux.pane} did not exit within ${EXIT_PATIENCE_MS / 1000} s of SIGTERM, so it was not restarted under the attach launcher`,
     );
   }
-  // [LAW:no-ambient-temporal-coupling] Whether the session has a conversation
-  // to resume is read once Claude Code has exited, when nothing is left to
-  // write its transcript: a first message sent up to the kill writes it, and
-  // a fresh start on its id would then be refused as in use.
+  // [LAW:no-ambient-temporal-coupling] The line is composed once Claude Code
+  // has exited. Whether the session has a conversation to resume is read when
+  // nothing is left to write its transcript: a first message sent up to the
+  // kill writes it, and a fresh start on its id would then be refused as in
+  // use. And the pane's shell is its foreground again, so the pane's
+  // directory is the shell's — where Claude Code was started, which a
+  // relative path among its flags resolves against (measured: tmux's
+  // `pane_current_path` is the foreground job's directory).
   // [LAW:no-silent-failure] Past the kill, a restart that stops leaves the
   // pane at its shell: what stopped it is said with the line that starts
-  // Claude Code again on the session, as it ran.
-  const stranded = (why: string, chosen: readonly string[]): Error =>
+  // Claude Code again on the session.
+  const stranded = (why: string, line: string): Error =>
     new Error(
-      `Claude Code in ${tmux.pane} exited, but ${why}, so it was not started again — start it with \`cd ${shellWord(relaunch.dir)} && claude ${[...relaunch.args, ...chosen].map(shellWord).join(" ")}\``,
+      `Claude Code in ${tmux.pane} exited, but ${why}, so it was not started again — start it with \`${line}\``,
     );
   const start = sessionStartOf(session, edge.presence(session.transcript));
+  const chosen: SessionStart =
+    start.kind === "unchecked"
+      ? { kind: "resume", sessionId: session.sessionId }
+      : start;
+  let startDir: string;
+  try {
+    startDir = await edge.paneDir(tmux, claude.parent);
+  } catch (e) {
+    throw stranded(
+      `the directory it was started in could not be read (${(e as Error).message})`,
+      lineIn(startPlace(null, claude.cwd), chosen),
+    );
+  }
+  const line = lineIn(startPlace(startDir, claude.cwd), chosen);
   if (start.kind === "unchecked") {
     throw stranded(
       `whether session ${session.sessionId} has a conversation could not be seen (${start.error})`,
-      sessionArgs({ kind: "resume", sessionId: session.sessionId }),
+      line,
     );
   }
-  let script: string;
   try {
-    script = edge.writeScript(
-      `relaunch-${session.sessionId}.sh`,
-      relaunchScript(
-        relaunch.dir,
-        [
-          ...launcher,
-          claude.executable,
-          ...relaunch.args,
-          ...sessionArgs(start),
-        ],
-        claude.env,
-      ),
-    );
+    edge.typeShellLine(tmux, line);
   } catch (e) {
     throw stranded(
-      `its restart script could not be written (${(e as Error).message})`,
-      sessionArgs(start),
+      `the line could not be typed into its pane (${(e as Error).message})`,
+      line,
     );
   }
-  // [LAW:effects-at-boundaries] The script's whole life is this restart: it
-  // is gone once the restart is decided, however that went.
-  try {
-    edge.typeShellLine(tmux, `sh ${shellWord(script)}`);
-    // [LAW:no-silent-failure] Typed is not restarted: the restart happened
-    // when the session's statusline, under the launcher, subscribes to lane
-    // B. The launcher starts nothing in place of an attach it could not make
-    // and says why in the pane.
-    if (
-      !(await edge.followed(
-        session.sessionId,
-        "statusline",
-        ATTACH_PATIENCE_MS,
-      ))
-    ) {
-      throw new Error(
-        `Claude Code in ${tmux.pane} did not come back attached within ${ATTACH_PATIENCE_MS / 1000} s of its restart — the pane says why`,
-      );
-    }
-  } finally {
-    edge.removeScript(script);
+  // [LAW:no-silent-failure] Typed is not restarted: the restart happened when
+  // the session's statusline, under the launcher, subscribes to lane B. The
+  // launcher starts nothing in place of an attach it could not make and says
+  // why in the pane.
+  if (
+    !(await edge.followed(session.sessionId, "statusline", ATTACH_PATIENCE_MS))
+  ) {
+    throw new Error(
+      `Claude Code in ${tmux.pane} did not come back attached within ${ATTACH_PATIENCE_MS / 1000} s of \`${line}\` — the pane says why`,
+    );
   }
-  return `restarted Claude Code in ${tmux.pane} under the attach launcher from ${relaunch.dir}, ${STARTED[start.kind](session.sessionId)}, and its statusline follows lane B`;
+  return `restarted Claude Code in ${tmux.pane} under the attach launcher with \`${line}\`, ${STARTED[start.kind](session.sessionId)}, and its statusline follows lane B`;
 }
 
 // [LAW:no-silent-failure] What a restart would lose of the session's
@@ -637,39 +720,4 @@ export class LaneSetups {
     }
     return Promise.resolve();
   }
-}
-
-// A variable `sh` can export: one whose name is an identifier. The others an
-// environment can carry (bash's exported functions, `BASH_FUNC_f%%`) are its
-// own, and the shell a pane runs re-exports them itself.
-const EXPORTABLE = /^[A-Za-z_][A-Za-z0-9_]*=/;
-
-// [LAW:effects-at-boundaries] The script a shell runs to start the session
-// again: `argv`, every word an absolute path or an argument, and nothing else
-// the shell would look up — `cd`, `unset`, `export` and `exec` are its own.
-// It is typed as `sh <script>`, a line every shell reads alike, so no quoting
-// has to survive the user's shell (fish quotes differently from sh). It runs
-// `argv` in `cwd` (the relaunch's directory), under the environment Claude
-// Code was started with (`env`, `NAME=value` each) — the variables it was
-// started with set as they were (a `CC_CANDYBAR_CONFIG`, a model), and its
-// Claude Code directory unset when it had none, so the session is looked up,
-// or started, where it lives whatever the pane's shell exports.
-export function relaunchScript(
-  cwd: string,
-  argv: readonly string[],
-  env: readonly string[],
-): string {
-  const exported = env.filter((v) => EXPORTABLE.test(v));
-  return [
-    `cd -- ${shellWord(cwd)} || exit 1`,
-    ...(exported.some((v) => v.startsWith("CLAUDE_CONFIG_DIR="))
-      ? []
-      : ["unset CLAUDE_CONFIG_DIR"]),
-    ...exported.map((v) => {
-      const eq = v.indexOf("=");
-      return `export ${v.slice(0, eq)}=${shellWord(v.slice(eq + 1))}`;
-    }),
-    `exec ${argv.map(shellWord).join(" ")}`,
-    "",
-  ].join("\n");
 }
