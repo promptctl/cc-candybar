@@ -171,17 +171,15 @@ export function transcriptReads(): TranscriptReads {
   return { ...totals };
 }
 
-// What one forward read made of the whole lines it reached: `lines` is the
-// caller's `decode` of them (of nothing when it reached no newline before its
-// end — a partial trailing line waits for its newline), `bytes` their length,
-// so `start + bytes` is the next read's offset. `atEnd` says the read reached
-// its end — the cap, or EOF — so a further read would find no whole line.
-// `size`/`stamp`/`ino` are the stat this read took. `longLine` is the length
-// of a line longer than the window that was read whole, 0 for none.
-export interface AppendedLines<T> {
-  readonly lines: T;
+// The whole lines one forward read reached: `lines` (empty when it reached
+// no newline before its end — a partial trailing line waits for its newline),
+// so `start + lines.length` is the next read's offset. `atEnd` says the read
+// reached its end — the cap, or EOF — so a further read would find no whole
+// line. `size`/`stamp`/`ino` are the stat this read took. `longLine` is the
+// length of a line longer than the window that was read whole, 0 for none.
+export interface WholeLines {
+  readonly lines: Buffer;
   readonly start: number;
-  readonly bytes: number;
   readonly atEnd: boolean;
   readonly size: number;
   readonly stamp: string;
@@ -190,12 +188,16 @@ export interface AppendedLines<T> {
   readonly longLine: number;
 }
 
-// [LAW:no-shared-mutable-globals] The window buffers, owned by the gate's
-// slots: a read takes one as it enters its slot and gives it back as it
-// leaves, so there are never more than TRANSCRIPT_FS_CONCURRENCY of them
-// (4 MiB) however many folds are queued, and a fold allocates no window
-// buffer per window or per file for the garbage collector to find
-// (brandon-unfiled-3248.bfnj).
+// A read whose `lines` may be a view of a lent window: disposing it gives the
+// window back. Read it through `decodeLines`, which does both.
+export type AppendedLines = WholeLines & Disposable;
+
+// [LAW:no-shared-mutable-globals] The window buffers: a read takes one as it
+// enters its gate slot and lends it to its caller, who gives it back as soon
+// as the lines are decoded (`decodeLines`). So there are never many more than
+// TRANSCRIPT_FS_CONCURRENCY of them (4 MiB) however many folds are queued, a
+// queued fold holds none, and a fold allocates no window buffer per window or
+// per file for the garbage collector to find (brandon-unfiled-3248.bfnj).
 const windows: Buffer[] = [];
 
 // [LAW:single-enforcer] The forward complement of readTail, through the SAME
@@ -206,9 +208,12 @@ const windows: Buffer[] = [];
 // byte cursor MUST use this, not raw node:fs, or it reintroduces the
 // unbounded-fs state the gate forbids.
 //
-// [LAW:types-are-the-program] The window is the slot's, so its bytes never
-// leave the slot: `decode` turns them into the caller's value inside it,
-// before the next read reuses the buffer. `decode` must not keep the buffer.
+// The window is lent rather than decoded inside the slot, so a read's result
+// never carries what the caller decodes: a fold keeps the result (its cursor
+// fields) across `step`'s await, and decoded entries kept across an I/O wait
+// outlive the other folds' allocations and are promoted to the old
+// generation — four concurrent cold folds of a 29 MB transcript grew RSS
+// +88 MB instead of +23 MB (`scripts/fold-cost.mts`).
 //
 // [LAW:single-enforcer] A line longer than the window is handled here and
 // nowhere else: a full window holding no newline scans on, window by window,
@@ -226,95 +231,124 @@ const windows: Buffer[] = [];
 //
 // [LAW:no-silent-failure] ENOENT (fresh session, no transcript yet) is `absent`;
 // any other error is `failed`, carrying its reason to the boundary that logs.
-export async function readAppended<T>(
+export async function readAppended(
   path: string,
   prior: { offset: number; ino: number } | undefined,
   until: number | undefined,
-  decode: (wholeLines: Buffer) => T,
-): Promise<Outcome<AppendedLines<T>>> {
+): Promise<Outcome<AppendedLines>> {
   return gate.run(async () => {
-    let fh: FileHandle | null = null;
     const window = windows.pop() ?? Buffer.allocUnsafe(FOLD_WINDOW_BYTES);
-    try {
-      fh = await fsOpen(path, "r");
-      const st = await fh.stat();
-      const { size, ino } = st;
-      const stamp = stampOf(st);
-      // [LAW:one-source-of-truth] The prior fold is a valid PREFIX of this file
-      // only while the file stays append-only. Two independent signals break
-      // that: the inode changed (a rename-based /compact or log rotation swapped
-      // the file under the path), or the file shrank below our cursor (an
-      // in-place truncate). Either ⇒ re-read from 0.
-      const reset =
-        prior !== undefined && (ino !== prior.ino || size < prior.offset);
-      const start = reset || prior === undefined ? 0 : prior.offset;
-      const end = reset || until === undefined ? size : Math.min(size, until);
-      let bytesRead = 0;
-      // The window's bytes, then — when they hold no newline — the scan for
-      // the one that ends the line. A short read (the file shrank under us)
-      // ends the read as EOF does.
-      const first = await readInto(fh, window.subarray(0, end - start), start);
-      bytesRead += first.length;
-      let lastNl = first.lastIndexOf(0x0a);
-      let reached = start + first.length;
-      let shortRead = first.length < Math.min(window.length, end - start);
-      while (lastNl < 0 && reached < end && !shortRead) {
-        const next = await readInto(
-          fh,
-          window.subarray(0, end - reached),
-          reached,
-        );
-        bytesRead += next.length;
-        const nl = next.indexOf(0x0a);
-        if (nl >= 0) lastNl = reached - start + nl;
-        shortRead = next.length < Math.min(window.length, end - reached);
-        reached += next.length;
-      }
-      const bytes = lastNl + 1;
-      const longLine = bytes > window.length ? bytes : 0;
-      // A long line is read once more, whole, now that its length is known.
-      const wholeLines =
-        longLine > 0
-          ? await readInto(fh, Buffer.allocUnsafe(bytes), start)
-          : first.subarray(0, bytes);
-      bytesRead += longLine > 0 ? wholeLines.length : 0;
-      totals.reads++;
-      totals.bytes += bytesRead;
-      totals.longLines += longLine > 0 ? 1 : 0;
-      totals.largestLine = Math.max(totals.largestLine, longLine);
-      return ok({
-        lines: decode(wholeLines),
-        start,
-        bytes: wholeLines.length,
-        // A long line was found by its newline alone, so lines after it may
-        // still be unread; otherwise the read saw everything up to its end.
-        atEnd:
-          longLine > 0 ? start + bytes >= end : reached >= end || shortRead,
-        size,
-        stamp,
-        ino,
-        reset,
-        longLine,
-      });
-    } catch (e) {
-      if ((e as NodeJS.ErrnoException).code === "ENOENT") return ABSENT;
-      return failed(
-        `readAppended ${path}: ${e instanceof Error ? e.message : String(e)}`,
-      );
-    } finally {
+    const read = await readWholeLines(path, prior, until, window);
+    if (read.kind !== "ok") {
       windows.push(window);
-      // [LAW:no-silent-failure] A close() rejection must NOT override the typed
-      // Outcome the try returned — callers await this and read `.kind`, so a raw
-      // rejection would escape every failed-guard. A failed close after a good
-      // read doesn't invalidate the read, but it can signal a real fs problem
-      // (ENOSPC on fsync), so log it at debug rather than swallowing it blind.
-      await fh?.close().catch((e: unknown) => {
-        debug(
-          `transcript-fs: close failed: ${e instanceof Error ? e.message : String(e)}`,
-        );
-      });
+      return read;
     }
+    return ok({
+      ...read.value,
+      [Symbol.dispose]: () => {
+        windows.push(window);
+      },
+    });
   });
+}
+
+// [LAW:types-are-the-program] The one way to read a lent read's lines: decode
+// them and give the window back, before anything else can be awaited.
+// `decode` must not keep the buffer.
+export function decodeLines<T>(
+  read: AppendedLines,
+  decode: (lines: Buffer) => T,
+): T {
+  using lent = read;
+  return decode(lent.lines);
+}
+
+// readAppended's file work, inside its gate slot: the whole lines into
+// `window` (or, for a long line, a buffer of its own), the file closed
+// before it returns.
+async function readWholeLines(
+  path: string,
+  prior: { offset: number; ino: number } | undefined,
+  until: number | undefined,
+  window: Buffer,
+): Promise<Outcome<WholeLines>> {
+  let fh: FileHandle | null = null;
+  try {
+    fh = await fsOpen(path, "r");
+    const st = await fh.stat();
+    const { size, ino } = st;
+    const stamp = stampOf(st);
+    // [LAW:one-source-of-truth] The prior fold is a valid PREFIX of this file
+    // only while the file stays append-only. Two independent signals break
+    // that: the inode changed (a rename-based /compact or log rotation swapped
+    // the file under the path), or the file shrank below our cursor (an
+    // in-place truncate). Either ⇒ re-read from 0.
+    const reset =
+      prior !== undefined && (ino !== prior.ino || size < prior.offset);
+    const start = reset || prior === undefined ? 0 : prior.offset;
+    const end = reset || until === undefined ? size : Math.min(size, until);
+    let bytesRead = 0;
+    // The window's bytes, then — when they hold no newline — the scan for
+    // the one that ends the line. A short read (the file shrank under us)
+    // ends the read as EOF does.
+    const first = await readInto(fh, window.subarray(0, end - start), start);
+    bytesRead += first.length;
+    let lastNl = first.lastIndexOf(0x0a);
+    let reached = start + first.length;
+    let shortRead = first.length < Math.min(window.length, end - start);
+    while (lastNl < 0 && reached < end && !shortRead) {
+      const next = await readInto(
+        fh,
+        window.subarray(0, end - reached),
+        reached,
+      );
+      bytesRead += next.length;
+      const nl = next.indexOf(0x0a);
+      if (nl >= 0) lastNl = reached - start + nl;
+      shortRead = next.length < Math.min(window.length, end - reached);
+      reached += next.length;
+    }
+    const bytes = lastNl + 1;
+    const longLine = bytes > window.length ? bytes : 0;
+    // A long line is read once more, whole, now that its length is known.
+    const wholeLines =
+      longLine > 0
+        ? await readInto(fh, Buffer.allocUnsafe(bytes), start)
+        : first.subarray(0, bytes);
+    bytesRead += longLine > 0 ? wholeLines.length : 0;
+    totals.reads++;
+    totals.bytes += bytesRead;
+    totals.longLines += longLine > 0 ? 1 : 0;
+    totals.largestLine = Math.max(totals.largestLine, longLine);
+    return ok({
+      lines: wholeLines,
+      start,
+      // A long line was found by its newline alone, so lines after it may
+      // still be unread; otherwise the read saw everything up to its end.
+      atEnd: longLine > 0 ? start + bytes >= end : reached >= end || shortRead,
+      size,
+      stamp,
+      ino,
+      reset,
+      longLine,
+    });
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") return ABSENT;
+    return failed(
+      `readAppended ${path}: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  } finally {
+    // [LAW:no-silent-failure] A close() rejection must NOT override the typed
+    // Outcome the try returned — callers await this and read `.kind`, so a raw
+    // rejection would escape every failed-guard. A failed close after a good
+    // read doesn't invalidate the read, but it can signal a real fs problem
+    // (ENOSPC on fsync), so log it at debug rather than swallowing it blind.
+    await fh?.close().catch((e: unknown) => {
+      debug(
+        `transcript-fs: close failed: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    });
+  }
 }
 
 // Fill `buf` from `position`, fewer bytes only at EOF. [LAW:no-silent-failure]
