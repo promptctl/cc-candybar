@@ -33,6 +33,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { majorProblem } from "./major-guard.mjs";
 import { awaitRegistryVisibility, registryState } from "./npm-registry.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -54,6 +55,10 @@ const version = process.argv[2];
 if (!version || !/^\d+\.\d+\.\d+(-[\w.]+)?$/.test(version)) {
   fail(`bad version: "${version}" (expected semver from semantic-release)`);
 }
+// Before anything is published or tagged: this script publishes the platform
+// packages itself, and semantic-release pushes the tag only after it returns.
+const majorRefusal = majorProblem(version);
+if (majorRefusal) fail(majorRefusal);
 
 console.log(`release.mjs: preparing per-platform packages for version ${version}`);
 
