@@ -97,7 +97,14 @@ import { BOOLEAN_TRUE } from "../themes/policy.js";
 import { settingControlDomain } from "./loader/globals.js";
 import { settingControl, type Affordance } from "./setting-control.js";
 import { declareHelp, type HelpArtifacts } from "./help.js";
-import { LANES, LANE_NAMES } from "./lanes.js";
+import {
+  LANE_NAMES,
+  LANES,
+  laneEffectiveVar,
+  laneFeedVar,
+  MOVING_FPS,
+  type Lane,
+} from "./lanes.js";
 import { LANE_HELP } from "../help-text.js";
 
 // [LAW:one-source-of-truth] THE anchor: one string that is simultaneously the
@@ -373,6 +380,33 @@ interface MenuControl extends SettingProjection {
   readonly control: Affordance;
   readonly beneath: readonly SegmentDecl[];
 }
+
+// [LAW:nothing-unseen] While a lane is on, its toggle says what its frames are
+// doing: with nobody following the session on that lane, that none is; else a
+// spinner turning a glyph every frame the feed draws at its moving rate — so it
+// turns smoothly exactly when frames arrive that fast, where a bar polled once a
+// second shows it stepping — then the frames pushed in the last second, and
+// that the pane is judged off screen when it is (it is then drawn at one a
+// second). The bundled effects move about one visible step a second, so a
+// pushed bar and a polled one look alike without it.
+const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+const laneReadout = (lane: Lane): string => {
+  const feed = (field: "subscribers" | "fps" | "shown") =>
+    `.${laneFeedVar(lane, field)}`;
+  const spinner = SPINNER.map((glyph) => `${1 / MOVING_FPS} "${glyph}"`).join(
+    " ",
+  );
+  return (
+    `{{ if .${laneEffectiveVar(lane)} }} ` +
+    `{{ if ${feed("subscribers")} }}{{ frames ${spinner} }} {{ ${feed("fps")} }} fps` +
+    `{{ if not ${feed("shown")} }} · off screen{{ end }}` +
+    `{{ else }}no subscriber{{ end }}{{ end }}`
+  );
+};
+// What a control shows after itself: a lane's toggle its readout.
+const TRAIL: Partial<Record<SettingName, string>> = Object.fromEntries(
+  laneSettings.map(([setting, lane]) => [setting, laneReadout(lane)]),
+);
 
 // [LAW:one-source-of-truth] Every setting the menu offers, generated
 // (brandon-settings-coverage-g4p.zoj): one control per row of SETTINGS, its
@@ -998,7 +1032,7 @@ function declareSettingControls(artifacts: MenuArtifacts): void {
     const resetCell = `{{ if .${controlResettable(c.name)} }} {{ action "${reset}" "↺" }}{{ end }}`;
     Object.assign(artifacts.variables, c.control.variables);
     artifacts.segments[controlSeg(c.name)] = {
-      template: `${c.control.template}${resetCell}`,
+      template: `${c.control.template}${TRAIL[c.name] ?? ""}${resetCell}`,
     };
     if (c.control.kind === "picker") {
       [

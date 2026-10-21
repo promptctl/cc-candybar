@@ -12,7 +12,13 @@
 
 import type { VariableDecl } from "./dsl-types.js";
 import { SESSION_ID_VAR_NAME } from "../var-system/sources.js";
-import { LANE_FLOOR, LANE_NAMES, laneEffectiveVar } from "./lanes.js";
+import {
+  LANE_FLOOR,
+  LANE_NAMES,
+  laneEffectiveVar,
+  laneFeedVar,
+  UNFOLLOWED,
+} from "./lanes.js";
 
 // `term.cols`'s default below: the width a template reads when no render
 // injected one.
@@ -157,6 +163,31 @@ export const PAYLOAD_INPUTS: Readonly<Record<string, VariableDecl>> = {
         path: laneEffectiveVar(lane),
         type: "boolean",
         default: LANE_FLOOR,
+      },
+    ]),
+  ),
+  // Each lane's feed of this session's frames (RenderPayload.feeds).
+  ...Object.fromEntries(
+    LANE_NAMES.flatMap((lane) =>
+      (["subscribers", "fps"] as const).map((field) => [
+        laneFeedVar(lane, field),
+        {
+          kind: "input",
+          path: laneFeedVar(lane, field),
+          type: "number",
+          default: UNFOLLOWED[field],
+        },
+      ]),
+    ),
+  ),
+  ...Object.fromEntries(
+    LANE_NAMES.map((lane) => [
+      laneFeedVar(lane, "shown"),
+      {
+        kind: "input",
+        path: laneFeedVar(lane, "shown"),
+        type: "boolean",
+        default: UNFOLLOWED.shown,
       },
     ]),
   ),

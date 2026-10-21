@@ -51,8 +51,15 @@ import { stripAnsi } from "./helpers/daemon-e2e";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import type { ValidatedConfig } from "../src/config/dsl-types";
 import { linkUrls, links } from "./helpers/ansi";
-import { instantOf } from "../src/utils/instant";
-import { LANES, LANE_NAMES, type Lane } from "../src/config/lanes";
+import { instantOf, type Instant } from "../src/utils/instant";
+import {
+  LANES,
+  LANE_NAMES,
+  MOVING_FPS,
+  UNFOLLOWED_FEEDS,
+  type Lane,
+  type LaneFeeds,
+} from "../src/config/lanes";
 import { LANE_HELP } from "../src/help-text";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
@@ -89,7 +96,7 @@ function rig(
   // moment it ran — so a test can pin how many reloads a click cost and that
   // the picks were still held while the file reloaded.
   reloads: { text: string; picks: Record<string, string | null> }[];
-  render: () => string;
+  render: (feeds?: LaneFeeds, at?: Instant) => string;
   click: (url: string) => void;
   dispose: () => void;
 } {
@@ -143,7 +150,7 @@ function rig(
     sessionState,
     logs,
     reloads,
-    render: () => {
+    render: (feeds = UNFOLLOWED_FEEDS, at = instantOf(new Date())) => {
       const { config, compiled, store, registry } = entry;
       // [LAW:one-source-of-truth] The daemon's own projection (server.ts): one
       // `resolveEffectiveGlobals` over the session's picks feeds the payload's
@@ -180,8 +187,9 @@ function rig(
             undo: durable?.history(SID).past.length ?? 0,
             redo: durable?.history(SID).future.length ?? 0,
           },
+          feeds,
         },
-        instantOf(new Date()),
+        at,
         renderOptionsOf(effective, width),
         undefined,
         effective,
@@ -1523,4 +1531,85 @@ describe("the animation lanes' toggles", () => {
       }
     },
   );
+});
+
+// [LAW:verifiable-goals] candybar-animation-wbxz.a4h: a lane toggle says what
+// its frames are doing, so whether a lane works can be seen from the bar.
+describe("a lane toggle's readout", () => {
+  const SPINNER = /[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/u;
+  // The 🧪 toggles submenu open in the ⚙ config tab, statusline (B) on.
+  const showToggles = (): ReturnType<typeof rig> => {
+    const r = rig(TWO_SEGMENT_ROOT);
+    r.click(writesTo(r.render(), "candybar.menu")[0]!);
+    showTab(r, "config");
+    const url = urlsOf(r.render()).find((u) =>
+      effectsOf(u).some(
+        (e) => e.args[1] === PICKERS_KEY && e.args[2] === "toggles",
+      ),
+    );
+    if (url === undefined) throw new Error("no link opens 🧪 toggles");
+    r.click(url);
+    r.sessionState.set(SID, "experimentalStatusline", "true");
+    return r;
+  };
+  const lineOf = (rendered: string): string =>
+    plain(rendered)
+      .split("\n")
+      .find((l) => l.includes("statusline (B)"))!;
+  const following = (feed: Partial<LaneFeeds["statusline"]>): LaneFeeds => ({
+    ...UNFOLLOWED_FEEDS,
+    statusline: { subscribers: 1, fps: MOVING_FPS, shown: true, ...feed },
+  });
+
+  test("off, the toggle says nothing more", () => {
+    const r = showToggles();
+    try {
+      r.sessionState.set(SID, "experimentalStatusline", "false");
+      const line = lineOf(r.render(following({})));
+      expect(line).not.toMatch(/fps|no subscriber/u);
+      expect(line).not.toMatch(SPINNER);
+    } finally {
+      r.dispose();
+    }
+  });
+
+  test("on with nobody following, it says so, and nothing turns", () => {
+    const r = showToggles();
+    try {
+      const line = lineOf(r.render());
+      expect(line).toContain("statusline (B) no subscriber");
+      expect(line).not.toMatch(SPINNER);
+    } finally {
+      r.dispose();
+    }
+  });
+
+  test("followed, it counts the frames pushed and its spinner turns every frame", () => {
+    const r = showToggles();
+    try {
+      const t0 = 1_792_573_980;
+      const glyphs = [0, 1, 2].map(
+        (n) =>
+          lineOf(r.render(following({}), instantOf(new Date((t0 + n / MOVING_FPS + 0.001) * 1000)))).match(SPINNER)![0],
+      );
+      expect(new Set(glyphs).size).toBe(3);
+      expect(lineOf(r.render(following({ fps: 29 })))).toMatch(
+        new RegExp(`statusline \\(B\\) ${SPINNER.source} 29 fps`, "u"),
+      );
+      expect(lineOf(r.render(following({}))).includes("off screen")).toBe(false);
+    } finally {
+      r.dispose();
+    }
+  });
+
+  test("followed from a pane judged off screen, it says so", () => {
+    const r = showToggles();
+    try {
+      expect(lineOf(r.render(following({ fps: 1, shown: false })))).toMatch(
+        / 1 fps · off screen/u,
+      );
+    } finally {
+      r.dispose();
+    }
+  });
 });

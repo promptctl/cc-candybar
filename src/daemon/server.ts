@@ -135,7 +135,12 @@ import {
   type EffectiveGlobals,
 } from "../config/effective-globals.js";
 import { EffectSessions, type PassageFrame } from "../render/effect.js";
-import { FEED_PERIODS, FrameFeeds, type FeedFrame } from "./frame-feed.js";
+import {
+  FEED_PERIODS,
+  feedsFact,
+  FrameFeeds,
+  type FeedFrame,
+} from "./frame-feed.js";
 import {
   LANE_NAMES,
   parseLane,
@@ -1553,6 +1558,7 @@ const payloadDeps: Omit<RenderPayloadDeps, "navigation"> = {
   // lanes (git, cache).
   ...payloadProviders,
   history: (sessionId: string) => settingsHistory.depth(sessionId),
+  feeds: (sessionId: string) => frameFeeds.feedsOf(sessionId),
 };
 
 function handleClick(
@@ -1906,6 +1912,7 @@ async function renderChecked(
     prompts: String(payload.metrics?.messageCount ?? "-"),
     nonPrompts: String(payload.metrics?.nonPrompts ?? "-"),
     pr: prFactOf(payload.git),
+    feeds: feedsFact(payload.feeds),
   });
   // [LAW:no-silent-failure] What renderDsl had to settle for itself and could
   // not honour (`RenderWarning`). Collected per render into a local, so there

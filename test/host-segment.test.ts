@@ -14,6 +14,7 @@
 // [LAW:behavior-not-structure] Everything below asserts observable behavior:
 // what lands in the payload, and whether the bundled segment renders.
 
+import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
 import os from "node:os";
 import { resolveThemeSelection } from "../src/themes/palette-resolvers.js";
@@ -69,6 +70,7 @@ const DEPS = {
   log: () => {},
   history: () => EMPTY_HISTORY_DEPTH,
     navigation: () => 0,
+    feeds: () => UNFOLLOWED_FEEDS,
 } as unknown as RenderPayloadDeps;
 
 const HOOK = {

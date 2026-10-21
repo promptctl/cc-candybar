@@ -5,13 +5,19 @@
 // subscribers share each render, and a feed with no subscriber draws nothing.
 
 import {
+  feedsFact,
   FrameFeeds,
   type FeedFrame,
   type Refusal,
   type Subscriber,
 } from "../src/daemon/frame-feed";
 import type { Response } from "../src/daemon/protocol";
-import type { Lane, LaneSwitches } from "../src/config/lanes";
+import {
+  UNFOLLOWED,
+  UNFOLLOWED_FEEDS,
+  type Lane,
+  type LaneSwitches,
+} from "../src/config/lanes";
 
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
@@ -534,4 +540,54 @@ test("newestWhere finds the session of the newest request it matches, and counts
   note("before-clear", "%3:c");
   expect(feeds.newestWhere(fromPane)).toBe("before-clear");
   expect(feeds.getStats()).toMatchObject({ lookups: 4, found: 3 });
+});
+
+describe("feedsOf", () => {
+  test("a session nobody follows is unfollowed on every lane", () => {
+    const { feeds, note } = harness({ motion: "moving" });
+    note("s", "bar");
+    expect(feeds.feedsOf("s")).toEqual(UNFOLLOWED_FEEDS);
+    expect(feedsFact(feeds.feedsOf("s"))).toBe("-");
+  });
+
+  test("counts each lane's subscribers and the frames pushed in the last second", async () => {
+    const { feeds, note } = harness({ motion: "moving" });
+    note("s", "bar");
+    const closeA = feeds.subscribe("s", sub(() => {}, "statusline"));
+    const closeB = feeds.subscribe("s", sub(() => {}, "statusline"));
+    const closeC = feeds.subscribe("s", sub(() => {}, "pane"));
+    await sleep(1100);
+    const now = feeds.feedsOf("s");
+    expect(now.band).toEqual(UNFOLLOWED);
+    expect(now.statusline.subscribers).toBe(2);
+    expect(now.pane.subscribers).toBe(1);
+    // 50 frames a second at a 20 ms period; a loaded box pushes fewer, and the
+    // window holds only the last second's, never the 1.1 s since subscribing.
+    expect(now.statusline.fps).toBeGreaterThanOrEqual(15);
+    expect(now.statusline.fps).toBeLessThanOrEqual(51);
+    expect(now.pane.fps).toBe(now.statusline.fps);
+    expect(now.statusline.shown).toBe(true);
+    expect(feedsFact(now)).toBe(
+      `statusline:2sub/${now.statusline.fps}fps/shown,pane:1sub/${now.pane.fps}fps/shown`,
+    );
+    closeA();
+    closeB();
+    closeC();
+    expect(feeds.feedsOf("s")).toEqual(UNFOLLOWED_FEEDS);
+  });
+
+  test("a pane off screen is drawn at the still rate, and says so", async () => {
+    const { feeds, note } = harness({ motion: "unseen" });
+    note("s", "bar");
+    const close = feeds.subscribe("s", sub(() => {}, "statusline"));
+    await sleep(1100);
+    const { statusline } = feeds.feedsOf("s");
+    close();
+    expect(statusline.shown).toBe(false);
+    // The still period is 400 ms: at most three frames in a second.
+    expect(statusline.fps).toBeLessThanOrEqual(3);
+    expect(feedsFact({ ...UNFOLLOWED_FEEDS, statusline })).toBe(
+      `statusline:1sub/${statusline.fps}fps/offscreen`,
+    );
+  });
 });

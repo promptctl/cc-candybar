@@ -25,7 +25,7 @@ import type { DslConfig, VariableDecl } from "../config/dsl-types.js";
 import type { BuildLineOptions } from "../render/strip.js";
 import type { SettingName } from "../config/setting-projections.js";
 import type { EffectiveGlobals } from "../config/effective-globals.js";
-import { perLane, type Lane } from "../config/lanes.js";
+import { perLane, type Lane, type LaneFeeds } from "../config/lanes.js";
 import { presetGlobals, presetRoot } from "../config/presets.js";
 import { EXPRESSION_SLOTS, isExpression } from "../themes/policy.js";
 import { walkNodes } from "../config/dsl-types.js";
@@ -210,6 +210,10 @@ export interface RenderPayload extends ClaudeHookData {
   // Each animation lane's toggle as the render resolved it, read back by its
   // menu control through `lanes.<lane>.effective` (src/config/lanes.ts).
   readonly lanes: Readonly<Record<Lane, { readonly effective: boolean }>>;
+  // What each lane of this session's frames is doing — its subscribers, the
+  // frames pushed to them in the last second, whether the pane is on a screen
+  // — read by the lane's toggle (src/config/settings-menu.ts).
+  readonly feeds: LaneFeeds;
   // [LAW:one-source-of-truth] How many steps this session's settings history
   // can undo and redo (src/daemon/settings-history.ts), read from the history
   // itself every render, so the menu's `↶`/`↷` exist exactly while there is
@@ -553,6 +557,8 @@ export interface RenderPayloadDeps {
   readonly history: (sessionId: string) => HistoryDepth;
   // The session's back depth — NavigationHistory.depth in the daemon.
   readonly navigation: (sessionId: string) => number;
+  // The session's lane feeds — FrameFeeds.feedsOf in the daemon.
+  readonly feeds: (sessionId: string) => LaneFeeds;
 }
 
 // ─── Rate-limit projection (pure) ──────────────────────────────────────────────
@@ -1353,6 +1359,7 @@ export async function buildRenderPayload(
     ...effectiveInputs(effective),
     history: deps.history(hookData.session_id),
     navigation: { back: deps.navigation(hookData.session_id) },
+    feeds: deps.feeds(hookData.session_id),
     ...settingCounts,
     ...(configPath !== null && { configPath }),
     resumeCommand: resumeCommand(

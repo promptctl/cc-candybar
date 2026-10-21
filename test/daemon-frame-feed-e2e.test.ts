@@ -69,6 +69,9 @@ jest.setTimeout(30_000);
 // name, whose frames are the render's own bytes, and the band lane.
 const CONFIGS = {
   moving: `{ globals: { effect: "sparkle", experimentalBand: true, experimentalStatusline: true }, segments: { a: { template: 'directory ~/code/cc-candybar' }, b: { template: 'branch main' }, c: { template: 'a moving mark' } }, root: { h: ['a', 'b', 'c'] } }`,
+  // A glyph that turns every thirtieth of a second, as a lane toggle's spinner
+  // does, so every frame the daemon draws while it moves is a new one.
+  turning: `{ globals: { experimentalStatusline: true }, segments: { mark: { template: '{{ frames ${1 / 30} "a" ${1 / 30} "b" ${1 / 30} "c" }}' } }, root: { h: ['mark'] } }`,
   still: `{ globals: { experimentalBand: true, experimentalStatusline: true }, segments: { mark: { template: 'a still mark' } }, root: { h: ['mark'] } }`,
   off: `{ segments: { mark: { template: 'an unswitched mark' } }, root: { h: ['mark'] } }`,
   // The band lane alone, which draws the bar elsewhere: its own file, since
@@ -239,6 +242,26 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     // count are frames it pushed while the stream was still open.
     expect(pushed.length).toBeGreaterThanOrEqual(after.pushed - before.pushed);
     expect(pushed.length).toBeGreaterThan(2);
+  });
+
+  // candybar-animation-wbxz.a4h: the frames a lane is pushed are a fact of
+  // every render of its session, so its toggle can show them.
+  test("a render while a lane streams names that lane's subscribers and frame rate", async () => {
+    await render(sockPath, "feed-rate", projectDir, {}, args("turning"));
+    await framesOf("feed-rate", async ({ received, waitFor }) => {
+      await waitFor(() => received.length >= 5, "the stream is moving");
+      await sleep(1000);
+      await render(sockPath, "feed-rate", projectDir, {}, args("turning"));
+    });
+    const events = readFileSync(daemonLog, "utf8")
+      .split("\n")
+      .filter((l) => l.includes("render sid=feed-rate "));
+    expect(events[0]).toContain(" feeds=- ");
+    const fps = /feeds=statusline:1sub\/(\d+)fps\/shown /u.exec(events.at(-1)!);
+    expect(fps).not.toBeNull();
+    // 30 a second while the bar moves; a third of that leaves room for a slow
+    // CI box, and is far past the one a second a polled bar reaches.
+    expect(Number(fps![1])).toBeGreaterThanOrEqual(10);
   });
 
   test("a still bar is pushed once, and not again while nothing changes", async () => {

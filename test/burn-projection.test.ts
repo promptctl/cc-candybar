@@ -7,6 +7,7 @@
 // session too young to project yields ABSENCE (a missing field → the -1 default
 // → "—"), never a fabricated number.
 
+import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
 import {
   buildRenderPayload,
@@ -101,6 +102,7 @@ function depsWith(
     log: () => {},
     history: () => EMPTY_HISTORY_DEPTH,
     navigation: () => 0,
+    feeds: () => UNFOLLOWED_FEEDS,
     ...overrides,
   } as unknown as RenderPayloadDeps;
 }
