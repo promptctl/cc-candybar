@@ -29,9 +29,8 @@ import {
 } from "../src/config/loader/persist-target";
 import {
   renderOptionsOf,
-  renderSelectionOf,
-  resolveEffectiveGlobals,
 } from "../src/daemon/render-payload";
+import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import { SessionState } from "../src/daemon/session-state";
@@ -277,7 +276,7 @@ function cellBg(source: string): { daemon: string; compileOnly: string } {
       at,
       renderOptionsOf(effective, OPTS_WIDTH),
       { perSegmentSink: sink },
-      renderSelectionOf(effective),
+      effective,
     );
     const daemon = bg();
     renderDsl(

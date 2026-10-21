@@ -14,8 +14,8 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import {
   effectiveInputs,
-  resolveEffectiveGlobals,
 } from "../src/daemon/render-payload";
+import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import {
   listResolvablePaletteNames,
   type ColorCompatibility,

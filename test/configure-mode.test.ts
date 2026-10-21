@@ -55,6 +55,7 @@ import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/settings-menu";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { linkUrls, stripAnsi } from "./helpers/ansi";
 import { instantOf } from "../src/utils/instant";
+import { picked, selectionFor } from "./helpers/selection";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = "s1";
@@ -98,7 +99,7 @@ afterEach(() => {
   durable.dispose();
 });
 
-// `preset` is the layout the render walks — the floor unless a test names one.
+// `preset` is the layout the render walks — the config's own unless a test names one.
 function buildRuntime(
   src: string,
   sessionState = new SessionState(),
@@ -125,7 +126,7 @@ function buildRuntime(
         width: 200,
       },
       undefined,
-      { preset },
+      selectionFor(config, {}, picked(preset === undefined ? {} : { preset })),
     );
   // The config a click reads, re-read from the file on a reload — as the
   // daemon's render cache does.

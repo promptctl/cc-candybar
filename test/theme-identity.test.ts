@@ -34,7 +34,7 @@ import {
 import { checkPayload } from "../src/check";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { unauthored, validateConfig } from "../src/config/dsl-loader";
-import { resolveEffectiveGlobals } from "../src/daemon/render-payload";
+import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { SessionState } from "../src/daemon/session-state";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import {
@@ -190,7 +190,7 @@ function render(theme: string, calm: boolean, { variation, shade, look }: Varian
       padding: e.padding,
     },
     undefined,
-    { theme: e.theme, style: e.style, preset: e.preset, variation: e.variation, shade: e.shade },
+    e,
   );
 }
 

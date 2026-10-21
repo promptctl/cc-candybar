@@ -32,9 +32,8 @@ import { listResolvablePaletteNames } from "../src/themes/policy";
 import {
   effectiveInputs,
   renderOptionsOf,
-  renderSelectionOf,
-  resolveEffectiveGlobals,
 } from "../src/daemon/render-payload";
+import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { VERBS, type VerbContext } from "../src/daemon/verbs";
 import {
   fileHeldSettings,
@@ -141,7 +140,7 @@ function rig(
       // [LAW:one-source-of-truth] The daemon's own projection (server.ts): one
       // `resolveEffectiveGlobals` over the session's picks feeds the payload's
       // `.effective` labels, the render options and the selection, through the
-      // same `effectiveInputs`/`renderOptionsOf`/`renderSelectionOf`, so a preset
+      // same `effectiveInputs`/`renderOptionsOf` and the resolution itself, so a preset
       // that pins a global reaches this bar exactly as it reaches the daemon's.
       // `.preset.customized` is the one fact not mirrored: the daemon reads it
       // off the render cache's raw parse, which this rig does not keep, and no
@@ -177,7 +176,7 @@ function rig(
         instantOf(new Date()),
         renderOptionsOf(effective, width),
         undefined,
-        renderSelectionOf(effective),
+        effective,
       );
     },
     // The daemon's own path: the URL's verb — `dispatch` for a compound

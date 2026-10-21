@@ -3,6 +3,7 @@
 // starts calm when it comes into force, and `none` draws exactly what the bar
 // always drew.
 
+import { selectionFor } from "./helpers/selection";
 import {
   ColorSpec,
   DEFAULT_TERMINAL_THEME,
@@ -88,10 +89,12 @@ function renderer(
   };
   return {
     render: (effect, when, effects, payload = {}) =>
-      renderDsl(config, compiled, store, registry, payload, when, opts, undefined, {
-        ...(effect === undefined ? {} : { effect: decideEffectName(effect) }),
-        ...(effects === undefined ? {} : { effects }),
-      }),
+      renderDsl(config, compiled, store, registry, payload, when, opts, undefined,
+        selectionFor(config, {
+          ...(effect === undefined ? {} : { effect: decideEffectName(effect) }),
+          ...(effects === undefined ? {} : { effects }),
+        }),
+      ),
     dispose: () => registry.dispose(),
   };
 }

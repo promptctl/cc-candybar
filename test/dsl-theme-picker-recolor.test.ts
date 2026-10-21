@@ -19,6 +19,7 @@
 // happens to lead the row, and silently starts measuring a different segment
 // the day a cell is added ahead of it.
 
+import { selectionFor } from "./helpers/selection";
 import type { RichText } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -33,7 +34,6 @@ import {
   boldUrls,
 } from "./helpers/click";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
-import { resolveThemeSelection } from "../src/themes";
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import { instantOf } from "../src/utils/instant";
 
@@ -107,13 +107,7 @@ function buildRuntime() {
       instantOf(new Date()),
       OPTS,
       { perSegmentSink: sink },
-      {
-        theme: resolveThemeSelection(
-          undefined,
-          sessionState.get(SID, "theme"),
-          config.globals.palette,
-        ),
-      },
+      selectionFor(config, {}, (key) => sessionState.get(SID, key)),
     );
     // [LAW:no-ambient-temporal-coupling] Snapshot the sink HERE. renderDsl
     // clears it at the top of the next call, so a colour read deferred past

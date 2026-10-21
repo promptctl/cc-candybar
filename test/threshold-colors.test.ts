@@ -17,6 +17,7 @@
 // change. [LAW:behavior-not-structure] — the contract is the colour at each
 // value, whichever spelling computes it.
 
+import { picked, selectionFor } from "./helpers/selection";
 import {
   contrastRatio,
   getThemePalette,
@@ -31,7 +32,6 @@ import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
-import { resolveThemeSelection } from "../src/themes/palette-resolvers";
 import { instantOf } from "../src/utils/instant";
 
 const SERIALIZED = JSON.stringify(RAW_DEFAULT_DSL_CONFIG);
@@ -209,7 +209,7 @@ function renderOne(
       instantOf(new Date()),
       OPTS,
       { onSegmentError },
-      { theme: resolveThemeSelection(undefined, null, themeName) },
+      selectionFor(one, {}, picked({ theme: themeName })),
     );
   } finally {
     registry.dispose();

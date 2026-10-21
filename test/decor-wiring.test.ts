@@ -95,11 +95,11 @@ function build(src: string, look?: ThemeKey, dflt?: DslConfig) {
       instantOf(new Date()),
       OPTS,
       { perSegmentSink: sink },
-      {
+      selectionFor(config, {
         ...(look === undefined ? {} : { style: { kind: "decided" as const, name: "test", value: look } }),
         ...(variation === undefined ? {} : { variation }),
         ...(shade === undefined ? {} : { shade }),
-      },
+      }),
     );
   const root = compiled.roots.get(PRESET_FLOOR)!;
   const bgOf = (name: string): string => {
@@ -345,6 +345,7 @@ import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import type { SemanticRole } from "../src/themes/decor";
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import { instantOf } from "../src/utils/instant";
+import { selectionFor } from "./helpers/selection";
 
 // [LAW:types-are-the-program] Keyed on the SemanticRole union, so a role added
 // to (or removed from) the type is a compile error here, not a silent gap.
@@ -586,7 +587,7 @@ describe("an open trigger on a row no colour stands off", () => {
         onSegmentError: (name, message) => errors.push(`${name}: ${message}`),
         onRenderWarning: (warning) => warnings.push(warning),
       },
-      { theme: { kind: "decided", name: "straddling", value: straddling } },
+      selectionFor(config, { theme: { kind: "decided", name: "straddling", value: straddling } }),
     );
     expect(errors).toEqual([]);
     expect(out).toContain("INNER-BODY");
@@ -646,7 +647,7 @@ describe("an open band whose plane stands on its trigger", () => {
         onSegmentError: (name, message) => errors.push(`${name}: ${message}`),
         onRenderWarning: (warning) => warnings.push(warning),
       },
-      { theme: { kind: "decided", name: "washed", value: washed } },
+      selectionFor(config, { theme: { kind: "decided", name: "washed", value: washed } }),
     );
     expect(errors).toEqual([]);
     expect(out).toContain("INNER-BODY");

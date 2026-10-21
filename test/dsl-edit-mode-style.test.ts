@@ -23,7 +23,7 @@ import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { testVerbContext, clickUrl, recordRender } from "./helpers/click";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
-import { resolveEffectiveGlobals } from "../src/daemon/render-payload";
+import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { ConfigError } from "../src/config/dsl-loader";
 import { EDIT_MODE_KEY, EDIT_MODE_ARRANGE } from "../src/config/loader/edit-mode";
@@ -100,10 +100,10 @@ function buildRuntime(source: string) {
         width: Number.POSITIVE_INFINITY,
       },
       undefined,
-      // The theme rides in the SELECTION now (brandon-themes-dzl), resolved from
-      // the same `effective` struct every other field above comes from — so the
-      // bar cannot be painted from one resolution and labelled from another.
-      { theme: effective.theme },
+      // The selection IS the same `effective` resolution every field above comes
+      // from — so the bar cannot be painted from one resolution and labelled
+      // from another.
+      effective,
     );
   };
 

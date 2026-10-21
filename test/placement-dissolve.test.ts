@@ -6,6 +6,7 @@
 // until the dissolve is over, then closes up in one step. A write to the
 // session's state, the width or the palette ends every dissolve in flight.
 
+import { selectionFor } from "./helpers/selection";
 import { decodeAnsi } from "@promptctl/rich-js";
 
 import { SessionState } from "../src/daemon/session-state";
@@ -95,7 +96,7 @@ function renderer(cfg: ValidatedConfig, session = new SessionState()) {
         when,
         { ...opts, width },
         undefined,
-        { effect: decideEffectName(bar), effects, transitions },
+        selectionFor(cfg, { effect: decideEffectName(bar), effects, transitions }),
       ),
     dispose: () => registry.dispose(),
   };

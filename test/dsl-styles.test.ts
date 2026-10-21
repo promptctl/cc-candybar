@@ -12,6 +12,7 @@
 // the click (gated by the config the session renders), and the same
 // effectiveStyleName/styleKeyByName the daemon calls. No parallel rig.
 
+import { selectionFor } from "./helpers/selection";
 import { stripAnsi } from "./helpers/ansi";
 import { ownValidators } from "./helpers/ambient-chrome";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -31,11 +32,7 @@ import {
 } from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { deriveActionValidators } from "../src/daemon/verbs/state-validators";
-import {
-  decideStyleName,
-  resolveThemeSelection,
-  resolveStyleSelection,
-} from "../src/themes";
+import { resolveStyleSelection } from "../src/themes";
 import { instantOf } from "../src/utils/instant";
 
 const SID = "s-looks";
@@ -363,17 +360,6 @@ describe("style click — live whole-bar recolor over the active theme", () => {
     // the click below resolves that config from.
     recordRender(sessionState, SID);
     const render = (): string => {
-      const theme = resolveThemeSelection(
-        undefined,
-        sessionState.get(SID, "theme"),
-        config.globals.palette,
-      );
-      const look = resolveStyleSelection(
-        undefined,
-        sessionState.get(SID, "style"),
-        config.globals.style,
-        config.styles,
-      );
       return renderDsl(
         config,
         compiled,
@@ -383,7 +369,7 @@ describe("style click — live whole-bar recolor over the active theme", () => {
         instantOf(new Date()),
         OPTS,
         undefined,
-        { theme, style: look },
+        selectionFor(config, {}, (key) => sessionState.get(SID, key)),
       );
     };
     const dispose = (): void => {
@@ -520,14 +506,19 @@ describe("globals.style as an expression — a style chosen by data", () => {
         instantOf(new Date()),
         OPTS,
         undefined,
-        {
-          style: resolveStyleSelection(
-            staged,
-            sessionState.get(SID, "style"),
-            config.globals.style,
-            config.styles,
-          ),
-        },
+        // `staged` stands in for edit mode's style.
+        selectionFor(
+          config,
+          {
+            style: resolveStyleSelection(
+              staged,
+              sessionState.get(SID, "style"),
+              config.globals.style,
+              config.styles,
+            ),
+          },
+          (key) => sessionState.get(SID, key),
+        ),
       );
     return { sessionState, render, dispose: () => registry.dispose() };
   }

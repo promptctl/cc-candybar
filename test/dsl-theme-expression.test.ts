@@ -22,6 +22,7 @@
 // door, so a positional read measures the door's accent and would agree with
 // itself while measuring the wrong cell.
 
+import { picked, selectionFor } from "./helpers/selection";
 import { stripAnsi } from "./helpers/ansi";
 import { transposePalette, getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -38,14 +39,13 @@ import { lastBinding } from "./helpers/render-binding";
 import { SessionState } from "../src/daemon/session-state";
 import { ConfigError } from "../src/config/dsl-loader";
 import type { RichText } from "@promptctl/rich-js";
-import {
-  decideThemeName,
-  resolveStyleSelection,
-  resolveThemeSelection,
-  THEME_FLOOR,
-} from "../src/themes";
+import { decideThemeName, resolveThemeSelection, THEME_FLOOR } from "../src/themes";
 import { resolvedStyle } from "../src/render/rich-theme.js";
-import { resolveEffectiveGlobals } from "../src/daemon/render-payload";
+import {
+  EDIT_MODE_ARRANGE,
+  EDIT_MODE_KEY,
+} from "../src/config/loader/edit-mode";
+import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { instantOf } from "../src/utils/instant";
 
 const SID = "s-theme-expr";
@@ -95,7 +95,7 @@ interface Runtime {
   readonly compiled: CompiledConfig;
   readonly sessionState: SessionState;
   readonly warnings: readonly RenderWarning[];
-  render(pct: number, staged?: string): Painted;
+  render(pct: number): Painted;
   dispose(): void;
 }
 
@@ -107,7 +107,7 @@ function buildRuntime(source = src(RULE)): Runtime {
   const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
   const warnings: RenderWarning[] = [];
   const sink = new Map<string, readonly RichText[]>();
-  const render = (pct: number, staged?: string): Painted => {
+  const render = (pct: number): Painted => {
     const text = renderDsl(
       config,
       compiled,
@@ -117,20 +117,8 @@ function buildRuntime(source = src(RULE)): Runtime {
       instantOf(new Date()),
       OPTS,
       { perSegmentSink: sink, onRenderWarning: (w) => warnings.push(w) },
-      {
-        // Resolved exactly as src/daemon/server.ts resolves it.
-        theme: resolveThemeSelection(
-          staged,
-          sessionState.get(SID, "theme"),
-          config.globals.palette,
-        ),
-        style: resolveStyleSelection(
-          undefined,
-          sessionState.get(SID, "style"),
-          config.globals.style,
-          config.styles,
-        ),
-      },
+      // Resolved as src/daemon/server.ts resolves it, over the session's picks.
+      selectionFor(config, {}, (key) => sessionState.get(SID, key)),
     );
     // [LAW:no-ambient-temporal-coupling] Snapshot the sink HERE: renderDsl clears
     // it at the top of the next call, so a colour read deferred past that call
@@ -225,12 +213,22 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
   });
 
   test("a staged (edit-mode) palette outranks the expression too", () => {
-    const { render, dispose } = buildRuntime();
-    try {
-      expect(render(90, "tokyo-night").bg("plain")).toBe(byName("tokyo-night"));
-    } finally {
-      dispose();
-    }
+    // Edit mode draws each placement as its label (`edit.label:<id>:<segment>`),
+    // so the staged render is compared with an edit-mode render of the theme.
+    const arrangedBg = (source: string): string => {
+      const { render, sessionState, dispose } = buildRuntime(source);
+      try {
+        sessionState.set(SID, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
+        return render(90).bg("edit.label:plain:plain");
+      } finally {
+        dispose();
+      }
+    };
+    const staged = arrangedBg(
+      src(RULE, "editGlobals: { palette: 'tokyo-night' },"),
+    );
+    expect(staged).toBe(arrangedBg(src("tokyo-night")));
+    expect(staged).not.toBe(arrangedBg(src(RULE)));
   });
 
   test("the rule composes with a style: the style transposes the rule's own base, once", () => {
@@ -589,7 +587,7 @@ describe("a rule inside a preset's globals", () => {
           instantOf(new Date()),
           OPTS,
           { perSegmentSink: sink },
-          { theme: effective.theme, style: effective.style },
+          effective,
         );
         const cells = sink.get("plain")!;
         return { text, bg: resolvedStyle(cells[0]!.style).bgcolor!.value!.hex };
@@ -620,7 +618,7 @@ describe("a rule inside a preset's globals", () => {
     );
   });
 
-  test("an omitting caller renders the ACTIVE preset's rule, not the config's top-level palette", () => {
+  test("a caller picking only a preset renders the ACTIVE preset's rule, not the config's top-level palette", () => {
     withRegistry(presetSrc(RULE), (config, registry, store) => {
       const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
       const text = renderDsl(
@@ -632,7 +630,7 @@ describe("a rule inside a preset's globals", () => {
         instantOf(new Date()),
         OPTS,
         {},
-        { preset: "ruled" },
+        selectionFor(config, {}, picked({ preset: "ruled" })),
       );
       expect(stripAnsi(text)).toContain("T=dracula");
     });
@@ -653,7 +651,7 @@ describe("a rule inside a preset's globals", () => {
           instantOf(new Date()),
           OPTS,
           { onRenderWarning: (w) => said.push(w) },
-          { preset: "ruled" },
+          selectionFor(config, {}, picked({ preset: "ruled" })),
         );
         expect(said).toEqual([
           { kind: "rule", slot: "palette", message: expect.stringMatching(/^presets\.ruled\.globals\.palette rendered /) },
@@ -676,7 +674,7 @@ describe("a rule inside a preset's globals", () => {
         instantOf(new Date()),
         OPTS,
         { onRenderWarning: (w) => said.push(w) },
-        { preset: "ruled" },
+        selectionFor(config, {}, picked({ preset: "ruled" })),
       );
       expect(said).toEqual([
         { kind: "rule", slot: "palette", message: expect.stringMatching(/^presets\.ruled\.globals\.palette rendered /) },

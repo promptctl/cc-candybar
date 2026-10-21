@@ -14,9 +14,9 @@ import { buildRenderPayload, prFactOf } from "../src/daemon/render-payload";
 import { claudeConfigDir } from "../src/claude-settings";
 import type { ClientHints } from "../src/daemon/protocol";
 import type {
-  EffectiveGlobals,
   RenderPayloadDeps,
 } from "../src/daemon/render-payload";
+import { type EffectiveGlobals } from "../src/config/effective-globals";
 import type { GitInfo, GitInfoOptions, PrState } from "../src/segments/git";
 import { ABSENT, failed, ok, type Outcome } from "../src/utils/outcome";
 import { FLOOR_EFFECT, FLOOR_STYLE } from "./helpers/floor-style";

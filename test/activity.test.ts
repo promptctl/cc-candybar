@@ -17,9 +17,9 @@ import { tmpdir } from "node:os";
 import { ActivityProvider, type ActivityInfo } from "../src/segments/activity";
 import { buildRenderPayload } from "../src/daemon/render-payload";
 import type {
-  EffectiveGlobals,
   RenderPayloadDeps,
 } from "../src/daemon/render-payload";
+import { type EffectiveGlobals } from "../src/config/effective-globals";
 import { ABSENT, ok } from "../src/utils/outcome";
 import { FLOOR_EFFECT, FLOOR_STYLE } from "./helpers/floor-style";
 import { entryActivity } from "../src/utils/transcript-activity";

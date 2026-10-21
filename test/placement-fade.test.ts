@@ -5,6 +5,7 @@
 // a click, an undo — and a reload draw from another source, so nothing they
 // reveal fades.
 
+import { selectionFor } from "./helpers/selection";
 import {
   DEFAULT_TERMINAL_THEME,
   RichText,
@@ -113,13 +114,13 @@ function renderer(
         when,
         opts,
         undefined,
-        {
+        selectionFor(cfg, {
           effect: decideEffectName(selection.bar ?? "none"),
           effects,
           ...(selection.transitions !== undefined && {
             transitions: selection.transitions,
           }),
-        },
+        }),
       ),
     dispose: () => registry.dispose(),
   };

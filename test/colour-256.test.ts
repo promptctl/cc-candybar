@@ -22,7 +22,7 @@ import {
 } from "@promptctl/rich-js";
 import { POWERLINE } from "./helpers/powerline";
 import { prepareConfig, renderEffective } from "../src/check";
-import { resolveEffectiveGlobals } from "../src/daemon/render-payload";
+import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import {
   listResolvablePaletteNames,
   type ColorCompatibility,

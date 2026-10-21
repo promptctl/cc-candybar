@@ -8,6 +8,7 @@
 // src/daemon/verbs/index.ts directly. That is the same handler the daemon
 // invokes for a wire-level click; no duplication.
 
+import { selectionFor } from "./helpers/selection";
 import { autorun } from "mobx";
 import { getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -16,7 +17,6 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { VERBS } from "../src/daemon/verbs";
-import { resolveThemeSelection } from "../src/themes";
 import { testVerbContext, recordRender } from "./helpers/click";
 import { stripAnsi } from "./helpers/ansi";
 import { PAYLOAD_INPUTS } from "../src/config/payload-inputs";
@@ -114,13 +114,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     // renders below would BOTH be the floor theme and the test would assert
     // that two identical strings differ — vacuous rather than merely weaker.
     const render = () =>
-      renderDsl(config, compiled, store, registry, HOOK_DATA, instantOf(new Date()), OPTS, undefined, {
-        theme: resolveThemeSelection(
-          undefined,
-          sessionState.get(SESSION_ID, "theme"),
-          config.globals.palette,
-        ),
-      });
+      renderDsl(config, compiled, store, registry, HOOK_DATA, instantOf(new Date()), OPTS, undefined, selectionFor(config, {}, (key) => sessionState.get(SESSION_ID, key)));
 
     const before = render(); // effective theme = textual-dark (globals default)
     recordRender(sessionState, SESSION_ID);

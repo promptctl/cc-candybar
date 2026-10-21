@@ -1,5 +1,5 @@
 // The decor a test renders the closed bar under, by name — the values the
-// render itself resolves a selection's names to (render.ts `declaredDecor`).
+// render itself resolves a selection's names to (render.ts `drawDsl`'s decor).
 import { DEFAULT_SHADE, DEFAULT_VARIATION } from "../../src/themes/policy";
 import {
   SHADES,

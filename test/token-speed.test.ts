@@ -25,10 +25,9 @@ import { join } from "node:path";
 import {
   buildRenderPayload,
   projectTokensPerSecond,
-  type EffectiveGlobals,
-
   type RenderPayloadDeps,
 } from "../src/daemon/render-payload";
+import { type EffectiveGlobals } from "../src/config/effective-globals";
 import type { ClientHints } from "../src/daemon/protocol";
 import { SessionUsageStore } from "../src/daemon/cache/session-usage-store";
 import { clearParseCache } from "../src/utils/claude";

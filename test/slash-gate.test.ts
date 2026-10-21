@@ -18,9 +18,9 @@ import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
 import {
   buildNeededPrefixes,
   buildRenderPayload,
-  type EffectiveGlobals,
   type RenderPayloadDeps,
 } from "../src/daemon/render-payload";
+import { type EffectiveGlobals } from "../src/config/effective-globals";
 import type { ClientHints } from "../src/daemon/protocol";
 import { resolveThemeSelection } from "../src/themes/palette-resolvers";
 import { VERB_SLASH } from "../src/click/wire";

@@ -12,10 +12,9 @@ import {
   buildRenderPayload,
   projectCostPerHour,
   projectEtaMinutes,
-  type EffectiveGlobals,
-
   type RenderPayloadDeps,
 } from "../src/daemon/render-payload";
+import { type EffectiveGlobals } from "../src/config/effective-globals";
 import type { ClientHints } from "../src/daemon/protocol";
 import { resolveThemeSelection } from "../src/themes/palette-resolvers.js";
 import { ABSENT, ok } from "../src/utils/outcome";

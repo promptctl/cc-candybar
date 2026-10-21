@@ -42,6 +42,7 @@
 //      authored root from the file, so the next reload falls back to the
 //      bundled tree — never a silent drift between screen and disk.
 
+import { picked, selectionFor } from "./helpers/selection";
 import { ownLinks } from "./helpers/ambient-chrome";
 import { SETTINGS_NS } from "../src/config/loader/reserved-namespace";
 import { writeFileSync } from "node:fs";
@@ -877,7 +878,7 @@ describe('the reset-layout banner survives quote/backslash preset names', () => 
       instantOf(new Date()),
       opts(),
       undefined,
-      { preset: presetName },
+      selectionFor(config, {}, picked({ preset: presetName })),
     );
     expect(rendered.replace(INVISIBLE, "")).toContain("↺ reset layout");
     registry.dispose();
@@ -930,7 +931,7 @@ describe("a preset root's own top-level `when` hides content, not the menu or ba
         instantOf(new Date()),
         opts(),
         undefined,
-        { preset: "gated" },
+        selectionFor(config, {}, picked({ preset: "gated" })),
       ).replace(INVISIBLE, "");
     } finally {
       registry.dispose();

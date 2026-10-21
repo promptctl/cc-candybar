@@ -33,7 +33,7 @@ import {
   DEFAULT_WRAP,
 } from "../src/themes/policy";
 import { stripAnsi } from "./helpers/ansi";
-import { resolveEffectiveGlobals } from "../src/daemon/render-payload";
+import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { instantOf } from "../src/utils/instant";
 
 const BASE_THEME = "textual-dark";

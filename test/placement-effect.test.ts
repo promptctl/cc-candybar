@@ -3,6 +3,7 @@
 // show its colour, on a clock of its own, and every other cell of the row is
 // drawn exactly as it is without the setting.
 
+import { selectionFor } from "./helpers/selection";
 import { decodeAnsi } from "@promptctl/rich-js";
 
 import { SessionState } from "../src/daemon/session-state";
@@ -82,10 +83,9 @@ function renderer(
   };
   return {
     render: (bar, when, effects) =>
-      renderDsl(config, compiled, store, registry, PAYLOAD, when, opts, undefined, {
-        effect: decideEffectName(bar),
-        effects,
-      }),
+      renderDsl(config, compiled, store, registry, PAYLOAD, when, opts, undefined,
+        selectionFor(config, { effect: decideEffectName(bar), effects }),
+      ),
     dispose: () => registry.dispose(),
   };
 }

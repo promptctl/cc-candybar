@@ -37,9 +37,8 @@ import { parseClientHints } from "../daemon/protocol.js";
 import {
   buildRenderPayload,
   renderOptionsOf,
-  renderSelectionOf,
-  resolveEffectiveGlobals,
 } from "../daemon/render-payload.js";
+import { resolveEffectiveGlobals } from "../config/effective-globals.js";
 import { SessionState } from "../daemon/session-state.js";
 import { settingCounts } from "../daemon/setting-drafts.js";
 import { EMPTY_HISTORY_DEPTH } from "../daemon/settings-history.js";
@@ -166,7 +165,7 @@ async function renderFrames(): Promise<void> {
         at,
         renderOptionsOf(effective, width),
         { onRenderWarning: ({ message }) => warn(message) },
-        { ...renderSelectionOf(effective), effects },
+        { ...effective, effects },
       );
       process.stdout.write(
         line

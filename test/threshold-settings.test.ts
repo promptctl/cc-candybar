@@ -10,6 +10,7 @@
 //   - A file that puts them out of order, or still declares a retired
 //     threshold variable, fails to load and says what to write instead.
 
+import { picked, selectionFor } from "./helpers/selection";
 import { configurePlacement } from "./helpers/configure";
 import { getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -18,7 +19,6 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
-import { resolveThemeSelection } from "../src/themes/palette-resolvers";
 import { testVerbContext, effectsOf } from "./helpers/click";
 import { parseHandlerUrl } from "../src/install/index";
 import { VERBS, type VerbContext } from "../src/daemon/verbs";
@@ -83,7 +83,7 @@ function buildRuntime(src: string, utilization: number) {
         width: 200,
       },
       undefined,
-      { theme: resolveThemeSelection(undefined, null, THEME) },
+      selectionFor(config, {}, picked({ theme: THEME })),
     );
   const ctx: VerbContext = {
     ...testVerbContext(sessionState, durable.historyFor(sessionState)),

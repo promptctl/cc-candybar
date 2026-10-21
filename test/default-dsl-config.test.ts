@@ -8,6 +8,7 @@
 // at compile time (via the `satisfies` on the constant) AND at runtime here
 // (via parseDslConfig). Two boundaries, one truth.
 
+import { selectionFor } from "./helpers/selection";
 import { stripAnsi } from "./helpers/ansi";
 import {
   DEFAULT_DSL_CONFIG,
@@ -40,11 +41,7 @@ import {
   decodeAnsi,
 } from "@promptctl/rich-js";
 import { listResolvablePaletteNames } from "../src/themes/policy";
-import {
-  resolveThemeSelection,
-  resolveStyleSelection,
-  paletteForThemeName,
-} from "../src/themes";
+import { paletteForThemeName } from "../src/themes";
 import {
   recordRender,
   testVerbContext,
@@ -58,10 +55,8 @@ import { narrowToSegment } from "./helpers/narrow-to-segment";
 import { checkPayload } from "../src/check";
 import {
   renderOptionsOf,
-  renderSelectionOf,
-  resolveEffectiveGlobals,
-  type EffectiveGlobals,
 } from "../src/daemon/render-payload";
+import { resolveEffectiveGlobals, type EffectiveGlobals } from "../src/config/effective-globals";
 import { resolvedStyle } from "../src/render/rich-theme";
 import { TEXT_MIN_CONTRAST } from "../src/themes/decor";
 import { QUIET_MIN_CONTRAST } from "../src/config/quiet-text";
@@ -309,7 +304,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
           when,
           renderOptionsOf(effective, Number.POSITIVE_INFINITY),
           { onSegmentError: (id, message) => errors.push(`${id}: ${message}`) },
-          renderSelectionOf(effective),
+          effective,
         );
         expect(errors).toEqual([]);
         const found = rendered
@@ -548,17 +543,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
       width: Number.POSITIVE_INFINITY,
     };
     const render = (): string => {
-      const theme = resolveThemeSelection(
-        undefined,
-        sessionState.get(SID, "theme"),
-        parsed.globals.palette,
-      );
-      const look = resolveStyleSelection(
-        undefined,
-        sessionState.get(SID, "style"),
-        parsed.globals.style,
-        parsed.styles,
-      );
       return renderDsl(
         parsed,
         compiled,
@@ -579,9 +563,9 @@ describe("DEFAULT_DSL_CONFIG", () => {
         opts,
         undefined,
         // Both `.effective` fields are renderDsl's to publish, so the payload
-        // carries neither and the SELECTIONS are what cross the seam — the same
-        // two values src/daemon/server.ts hands in.
-        { theme, style: look },
+        // carries neither and the SELECTION is what crosses the seam — resolved
+        // over the session's picks, as src/daemon/server.ts resolves it.
+        selectionFor(parsed, {}, (key) => sessionState.get(SID, key)),
       );
     };
     try {
@@ -1816,11 +1800,7 @@ describe("bundled preset library renders clean at every width — brandon-preset
           onSegmentError: (segName, message) =>
             segmentErrors.push(`segment "${segName}": ${message}`),
         },
-        {
-          style: effective.style,
-          preset: effective.preset,
-          variation: effective.variation,
-        },
+        effective,
       );
       return { rendered, segmentErrors };
     } finally {
