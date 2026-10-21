@@ -1,3 +1,9 @@
+## [1.151.0](https://github.com/promptctl/cc-candybar/compare/v1.150.0...v1.151.0) (2026-10-21)
+
+### Features
+
+* **menu:** each lane's toggle shows the frames it is sent ([5a0c087](https://github.com/promptctl/cc-candybar/commit/5a0c087ca379b741e0e4d362810713e3fbf895b1)), closes [#399](https://github.com/promptctl/cc-candybar/issues/399) [post-#399](https://github.com/promptctl/post-/issues/399)
+
 ## [1.150.0](https://github.com/promptctl/cc-candybar/compare/v1.149.5...v1.150.0) (2026-10-21)
 
 ### Features
