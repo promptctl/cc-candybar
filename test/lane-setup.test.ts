@@ -356,8 +356,23 @@ describe("lane B, statusline", () => {
     });
     await expect(
       finished(LANE_SETUP.statusline.on(session(), HOST, edge)),
-    ).rejects.toThrow(new RegExp(`exited, but .* \\(ELOOP\\).*claude --resume ${SID}`));
+    ).rejects.toThrow(new RegExp(`exited, but .* \\(ELOOP\\).*claude .*--resume ${SID}`));
     expect(did.some((d) => d.startsWith("script ") || d.startsWith("shell"))).toBe(false);
+  });
+
+  test("a script that cannot be written once Claude Code exited names the line that starts it again", async () => {
+    const { edge, did } = fakeEdge({
+      presence: () => "absent",
+      writeScript: () => {
+        throw new Error("ENOSPC");
+      },
+    });
+    await expect(
+      finished(LANE_SETUP.statusline.on(session({ tmux: TMUX }, "no"), HOST, edge)),
+    ).rejects.toThrow(
+      `exited, but its restart script could not be written (ENOSPC), so it was not started again — start it with \`cd /work && claude --worktree feat/tree --dangerously-skip-permissions --session-id ${SID}\``,
+    );
+    expect(did.some((d) => d.startsWith("shell"))).toBe(false);
   });
 
   test("a Claude Code that does not exit is not started again, and the wait says why", async () => {

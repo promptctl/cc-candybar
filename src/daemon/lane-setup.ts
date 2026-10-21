@@ -380,20 +380,41 @@ async function restartUnderAttach(
   // to resume is read once Claude Code has exited, when nothing is left to
   // write its transcript: a first message sent up to the kill writes it, and
   // a fresh start on its id would then be refused as in use.
+  // [LAW:no-silent-failure] Past the kill, a restart that stops leaves the
+  // pane at its shell: what stopped it is said with the line that starts
+  // Claude Code again on the session, as it ran.
+  const stranded = (why: string, chosen: readonly string[]): Error =>
+    new Error(
+      `Claude Code in ${tmux.pane} exited, but ${why}, so it was not started again — start it with \`cd ${shellWord(relaunch.dir)} && claude ${[...relaunch.args, ...chosen].map(shellWord).join(" ")}\``,
+    );
   const start = sessionStartOf(session, edge.presence(session.transcript));
   if (start.kind === "unchecked") {
-    throw new Error(
-      `Claude Code in ${tmux.pane} exited, but whether session ${session.sessionId} has a conversation could not be seen (${start.error}), so it was not started again — start it with \`claude --resume ${session.sessionId}\``,
+    throw stranded(
+      `whether session ${session.sessionId} has a conversation could not be seen (${start.error})`,
+      sessionArgs({ kind: "resume", sessionId: session.sessionId }),
     );
   }
-  const script = edge.writeScript(
-    `relaunch-${session.sessionId}.sh`,
-    relaunchScript(
-      relaunch.dir,
-      [...launcher, claude.executable, ...relaunch.args, ...sessionArgs(start)],
-      claude.env,
-    ),
-  );
+  let script: string;
+  try {
+    script = edge.writeScript(
+      `relaunch-${session.sessionId}.sh`,
+      relaunchScript(
+        relaunch.dir,
+        [
+          ...launcher,
+          claude.executable,
+          ...relaunch.args,
+          ...sessionArgs(start),
+        ],
+        claude.env,
+      ),
+    );
+  } catch (e) {
+    throw stranded(
+      `its restart script could not be written (${(e as Error).message})`,
+      sessionArgs(start),
+    );
+  }
   // [LAW:effects-at-boundaries] The script's whole life is this restart: it
   // is gone once the restart is decided, however that went.
   try {
