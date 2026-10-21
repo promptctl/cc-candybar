@@ -1,6 +1,6 @@
 // The effects a lane's setup performs (src/daemon/lane-setup.ts): tmux calls
 // against the session's recorded server, the `claude` CLI, the process table,
-// and the relaunch script. What a click waits on is synchronous — a tmux call
+// and the PATH lookup. What a click waits on is synchronous — a tmux call
 // answers in milliseconds — and what outlasts a click's 200 ms budget (the
 // `claude` CLI, the process table, the wait for an exit) runs off the
 // daemon's loop.
@@ -9,7 +9,6 @@
 // src/proc/tmux), under its own launch category.
 
 import fs from "node:fs";
-import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { launch, type LaunchResult } from "../proc/launch.js";
 import { runTmux, runTmuxAsync } from "../proc/tmux.js";
@@ -22,6 +21,7 @@ import {
 import { lineage, processTable } from "../proc/process-table.js";
 import { pidAlive } from "./parent-watchdog.js";
 import { presence } from "../utils/presence.js";
+import { executableOn } from "../attach-preload.js";
 import {
   BAR_PANE_OPTION,
   type LaneEdge,
@@ -224,13 +224,22 @@ export function claudeEnv(
     : { ...env, CLAUDE_CONFIG_DIR: claudeConfigDir };
 }
 
+// A regular file this user may run, as a shell's PATH search takes one.
+function isExecutable(file: string): boolean {
+  try {
+    fs.accessSync(file, fs.constants.X_OK);
+    return fs.statSync(file).isFile();
+  } catch {
+    return false;
+  }
+}
+
 // How often the wait for a lane's subscriber looks again.
 const FOLLOW_POLL_MS = 200;
 
 // `following` is the daemon's FrameFeeds' answer: the lanes whose subscribers
 // follow a session's frames now.
 export function productionLaneEdge(
-  scriptDir: string,
   following: (sessionId: string) => ReadonlySet<Lane>,
 ): LaneEdge {
   return {
@@ -282,14 +291,21 @@ export function productionLaneEdge(
     fileExists: (file) => fs.existsSync(file),
     presence,
     paneClaude,
-    // The daemon's own socket directory: this user's alone (mode 0700, which
-    // the daemon checks before it binds — src/daemon/paths.ts).
-    writeScript: (name, text) => {
-      const file = path.join(scriptDir, name);
-      fs.writeFileSync(file, text, { mode: 0o700 });
-      return file;
+    paneDir: async (hint) => {
+      const display = await runTmuxAsync(hint, "lane.tmux", [
+        "display",
+        "-p",
+        "-t",
+        hint.pane,
+        "#{pane_current_path}",
+      ]);
+      if (display.kind !== "ok") throw new Error(display.reason);
+      return display.stdout.trimEnd();
     },
-    removeScript: (file) => fs.rmSync(file, { force: true }),
+    onPath: (name, pathVariable) => {
+      const file = executableOn(name, pathVariable, isExecutable);
+      return file === null ? null : fs.realpathSync(file);
+    },
     followed: async (sessionId, lane, withinMs) => {
       const until = Date.now() + withinMs;
       while (!following(sessionId).has(lane)) {

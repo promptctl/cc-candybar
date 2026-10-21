@@ -25,9 +25,7 @@
 // attached one that failed.
 
 import path from "node:path";
-import { attachLauncherOf } from "./attach-launcher.js";
-
-export const PRELOAD_VARIABLE = "BUN_OPTIONS";
+import { attachLauncherOf, PRELOAD_VARIABLE } from "./attach-launcher.js";
 
 export type ExecPlan =
   | {
@@ -94,18 +92,20 @@ export function withoutPreload(
   return kept.length === 0 ? null : kept.join(" ");
 }
 
-// The first `node` on `pathVariable`, as the launcher's own `#!/usr/bin/env
-// node` would find it — the shell `claude` was typed into is the only place
-// that knows which node this user runs. Only absolute entries: a relative one
-// would resolve against whatever directory the session was started in.
-export function nodeOn(
+// The first executable named `name` on `pathVariable`, as a shell typing
+// `name` would find it — the launcher's own `#!/usr/bin/env node` finds
+// `node` so, and only the shell `claude` was typed into knows which node this
+// user runs. Only absolute entries: a relative one would resolve against
+// whatever directory the session was started in.
+export function executableOn(
+  name: string,
   pathVariable: string | undefined,
   isExecutable: (file: string) => boolean,
 ): string | null {
   for (const dir of (pathVariable ?? "").split(path.delimiter)) {
     if (!path.isAbsolute(dir)) continue;
-    const node = path.join(dir, "node");
-    if (isExecutable(node)) return node;
+    const file = path.join(dir, name);
+    if (isExecutable(file)) return file;
   }
   return null;
 }
@@ -147,7 +147,7 @@ export function planExec(facts: PreloadFacts): ExecPlan {
       why: `the attach launcher is not at ${launcher} beside this preload — rebuild (\`pnpm build\`) or reinstall cc-candybar`,
     };
   }
-  const node = nodeOn(facts.env.PATH, facts.isExecutable);
+  const node = executableOn("node", facts.env.PATH, facts.isExecutable);
   if (node === null) {
     return {
       kind: "refused",

@@ -7,7 +7,10 @@
 // consumers: the install that stages it and the lane that runs it.
 
 import path from "node:path";
-import { shellWord } from "./shell-word.js";
+import {
+  claudeCommandLine,
+  type ClaudeCommand,
+} from "./claude-command-line.js";
 
 export const ATTACH_DIR = "cc-extra";
 
@@ -31,12 +34,24 @@ export function attachPreloadOf(bundle: string): string {
   return path.join(path.dirname(bundle), ATTACH_PRELOAD);
 }
 
-// The line a user types to start Claude Code under the launcher with
-// `preload`: `BUN_OPTIONS='--preload <preload>' claude`. Bun splits
-// BUN_OPTIONS on whitespace and reads a backslash as taking the next character
-// (quotes it does not read, and `--preload=` keeps the backslash), so a space
-// in the path is escaped for Bun, and the whole value then quoted for the
-// shell.
-export function attachCommandLine(preload: string): string {
-  return `BUN_OPTIONS=${shellWord(`--preload ${preload.replace(/[\\\s]/g, "\\$&")}`)} claude`;
+// The variable that carries the preload into a Bun-compiled Claude Code.
+export const PRELOAD_VARIABLE = "BUN_OPTIONS";
+
+// `command` started under the launcher with `preload`: BUN_OPTIONS set to
+// `--preload <preload>` on it — `BUN_OPTIONS='--preload <preload>' claude`.
+// Bun splits BUN_OPTIONS on whitespace and reads a backslash as taking the
+// next character (quotes it does not read, and `--preload=` keeps the
+// backslash), so a space in the path is escaped for Bun, and the whole value
+// then quoted for the shell.
+export function attachCommandLine(
+  preload: string,
+  command: ClaudeCommand,
+): string {
+  return claudeCommandLine({
+    ...command,
+    env: [
+      ...command.env,
+      [PRELOAD_VARIABLE, `--preload ${preload.replace(/[\\\s]/g, "\\$&")}`],
+    ],
+  });
 }

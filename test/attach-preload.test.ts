@@ -13,7 +13,7 @@ import {
 import { stableAttachPreload } from "../src/install";
 import {
   bunWords,
-  nodeOn,
+  executableOn,
   planExec,
   withoutPreload,
   type PreloadFacts,
@@ -136,8 +136,8 @@ describe("the attach preload", () => {
 
   test("finds node only in absolute PATH entries, first first", () => {
     const has = new Set(["/a/node", "/b/node", "rel/node"]);
-    expect(nodeOn("rel:/b:/a", (f) => has.has(f))).toBe("/b/node");
-    expect(nodeOn(undefined, () => true)).toBeNull();
+    expect(executableOn("node", "rel:/b:/a", (f) => has.has(f))).toBe("/b/node");
+    expect(executableOn("node", undefined, () => true)).toBeNull();
   });
 
   test("reads BUN_OPTIONS as Bun does: whitespace splits, a backslash keeps the next character", () => {
@@ -149,13 +149,16 @@ describe("the attach preload", () => {
     ]);
   });
 
+  // `claude`, typed in the shell's own directory with nothing else on it.
+  const BARE_CLAUDE = { dir: undefined, env: [], program: "claude", args: [] };
+
   test("the line a user types gives Bun the preload's path, whatever it holds", () => {
     for (const preload of [
       "/Users/u/code/cc-candybar/dist/attach-preload.cjs",
       "/Users/u/Library/Application Support/CCCandybar/dist/attach-preload.cjs",
       "/tmp/it's here/attach-preload.cjs",
     ]) {
-      const line = attachCommandLine(preload);
+      const line = attachCommandLine(preload, BARE_CLAUDE);
       expect(line.endsWith(" claude")).toBe(true);
       const assignment = line.slice(0, -" claude".length);
       const value = execFileSync(
@@ -165,7 +168,7 @@ describe("the attach preload", () => {
       );
       expect(bunWords(value).map((w) => w.text)).toEqual(["--preload", preload]);
     }
-    expect(attachCommandLine("/Users/u/code/cc-candybar/dist/attach-preload.cjs")).toBe(
+    expect(attachCommandLine("/Users/u/code/cc-candybar/dist/attach-preload.cjs", BARE_CLAUDE)).toBe(
       "BUN_OPTIONS='--preload /Users/u/code/cc-candybar/dist/attach-preload.cjs' claude",
     );
   });

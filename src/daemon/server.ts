@@ -42,7 +42,8 @@ import { makeUpdateWatch, UPDATE_DISMISSED_KEY } from "./update-notice";
 import { makeBinaryWatch } from "./binary-watch";
 import { LANE_FRAMES } from "./lane-frames";
 import { REGISTRY_URL } from "../install/currency";
-import { dirname, isAbsolute } from "node:path";
+import { stableAttachPreload } from "../install/index.js";
+import { isAbsolute } from "node:path";
 import { explicitConfigPath } from "../utils/user-path";
 import {
   PROTOCOL_VERSION,
@@ -241,15 +242,14 @@ const effectSessions = new EffectSessions<RenderedLine>();
 // [LAW:single-enforcer] The one owner of what turning an animation lane on or
 // off takes (src/daemon/lane-setup.ts), told the switches every render draws by.
 const laneSetups = new LaneSetups({
-  edge: productionLaneEdge(dirname(socketPath()), (sessionId) =>
-    frameFeeds.following(sessionId),
-  ),
+  edge: productionLaneEdge((sessionId) => frameFeeds.following(sessionId)),
   // A bar pane runs this bundle under the node running it now, with the
   // flags it runs with (tsx's loader, under the test harness).
   host: {
     bundle: DAEMON_BUNDLE,
     node: [process.execPath, ...process.execArgv],
     socket: socketPath(),
+    preload: stableAttachPreload(DAEMON_BUNDLE),
   },
   state: sessionState,
   log: dlog,
