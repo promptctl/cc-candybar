@@ -384,7 +384,7 @@ interface MenuControl extends SettingProjection {
 // [LAW:nothing-unseen] While a lane is on, its toggle says what its frames are
 // doing: with nobody following the session on that lane, that none is; else a
 // spinner turning a glyph every frame the feed draws at its moving rate, then
-// the frames the daemon pushed in the last second, and that the pane is judged
+// the frames that went out to the lane in the last second, and that the pane is judged
 // off screen when it is (it is then drawn at one a second). The spinner is the
 // motion: it makes every frame new, so the number is the rate the daemon can
 // push this lane while something moves, not whether an effect animates. The

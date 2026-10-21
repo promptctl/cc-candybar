@@ -211,7 +211,7 @@ export interface RenderPayload extends ClaudeHookData {
   // menu control through `lanes.<lane>.effective` (src/config/lanes.ts).
   readonly lanes: Readonly<Record<Lane, { readonly effective: boolean }>>;
   // What each lane of this session's frames is doing — its subscribers, the
-  // frames pushed to them in the last second, whether the pane is on a screen
+  // frames that went out to it in the last second, whether the pane is on a screen
   // — read by the lane's toggle (src/config/settings-menu.ts).
   readonly feeds: LaneFeeds;
   // [LAW:one-source-of-truth] How many steps this session's settings history

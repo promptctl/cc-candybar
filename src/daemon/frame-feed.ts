@@ -119,8 +119,14 @@ type Phase =
 
 interface Feed {
   readonly sessionId: string;
-  // Each subscriber, with what it has been sent.
-  readonly sinks: Map<Subscriber, Following>;
+  // Each subscriber, with the bytes it was last sent: a lane whose answer a
+  // frame left as it was is not sent it again.
+  readonly followers: Map<Subscriber, string | null>;
+  // When each frame of the last RATE_WINDOW_MS went out to each lane a
+  // subscriber follows, oldest first: kept from the lane's first subscriber
+  // joining to its last leaving, and not counting the frame a subscriber is
+  // handed as it joins, which is the bar as it stood, not one more frame.
+  readonly rates: Map<Lane, number[]>;
   readonly unwatch: () => void;
   phase: Phase;
   // The last frame pushed, as serialized, so an unchanged frame is never
@@ -143,14 +149,6 @@ interface Feed {
   summarizedAt: number;
 }
 
-// What one subscriber has been sent: the bytes of the last frame, so a lane
-// whose answer a frame left as it was is not sent it again, and when each
-// frame of the last RATE_WINDOW_MS went to it, oldest first.
-interface Following {
-  bytes: string | null;
-  readonly sentAt: number[];
-}
-
 // The render event's `feeds=` field: each lane following the session as
 // `<lane>:<subscribers>sub/<fps>fps/shown|offscreen`, `-` when none does.
 export function feedsFact(feeds: LaneFeeds): string {
@@ -164,11 +162,12 @@ export function feedsFact(feeds: LaneFeeds): string {
   );
 }
 
-// Forget the sends older than the rate window, so a subscriber holds at most
-// one window's worth however long it follows.
-function trimRate(sink: Following, now: number): void {
-  const kept = sink.sentAt.findIndex((at) => at > now - RATE_WINDOW_MS);
-  sink.sentAt.splice(0, kept === -1 ? sink.sentAt.length : kept);
+// Note a frame going out to a lane at `now`, forgetting those older than the
+// rate window, so a lane holds at most one window's worth however long it runs.
+function noteSent(rate: number[], now: number): void {
+  rate.push(now);
+  const kept = rate.findIndex((at) => at > now - RATE_WINDOW_MS);
+  rate.splice(0, kept);
 }
 
 interface Sent {
@@ -292,12 +291,12 @@ export class FrameFeeds<Req> {
       return () => {};
     }
     const feed = this.feeds.get(sessionId) ?? this.open(sessionId);
-    const sink: Following = { bytes: null, sentAt: [] };
-    feed.sinks.set(sub, sink);
-    this.send(feed, sub, sink);
+    feed.followers.set(sub, null);
+    if (!feed.rates.has(sub.lane)) feed.rates.set(sub.lane, []);
+    this.send(feed, sub);
     this.deps.log(
       "info",
-      `feed sid=${JSON.stringify(sessionId)} subscribed lane=${sub.lane} subscribers=${feed.sinks.size} data=${this.requests.has(sessionId) ? "Y" : "N"}`,
+      `feed sid=${JSON.stringify(sessionId)} subscribed lane=${sub.lane} subscribers=${feed.followers.size} data=${this.requests.has(sessionId) ? "Y" : "N"}`,
     );
     return () => this.unsubscribe(feed, sub);
   }
@@ -305,7 +304,9 @@ export class FrameFeeds<Req> {
   // The lanes whose subscribers follow the session's frames now.
   following(sessionId: string): ReadonlySet<Lane> {
     return new Set(
-      [...(this.feeds.get(sessionId)?.sinks.keys() ?? [])].map((s) => s.lane),
+      [...(this.feeds.get(sessionId)?.followers.keys() ?? [])].map(
+        (s) => s.lane,
+      ),
     );
   }
 
@@ -355,32 +356,29 @@ export class FrameFeeds<Req> {
   }
 
   // [LAW:nothing-unseen] What each lane of `sessionId`'s frames is doing now:
-  // its subscribers, the frames sent in the last second to the one that has
-  // followed longest — a lane's subscribers are sent the same answer, so the
-  // others were sent those of them that came after they joined — and whether
-  // the session's pane is on a screen, which decides the rate a moving bar is
-  // drawn at.
+  // its subscribers, the frames that went out to it in the last second, and
+  // whether the session's pane is on a screen, which decides the rate a moving
+  // bar is drawn at.
   feedsOf(sessionId: string): LaneFeeds {
     const feed = this.feeds.get(sessionId);
     if (feed === undefined) return UNFOLLOWED_FEEDS;
-    const now = this.deps.now();
+    const since = this.deps.now() - RATE_WINDOW_MS;
     const shown = this.shown(feed);
     return perLane((lane) => {
+      const rate = feed.rates.get(lane);
+      if (rate === undefined) return UNFOLLOWED;
       let subscribers = 0;
+      for (const sub of feed.followers.keys())
+        if (sub.lane === lane) subscribers++;
       let fps = 0;
-      for (const [sub, sink] of feed.sinks) {
-        if (sub.lane !== lane) continue;
-        subscribers++;
-        trimRate(sink, now);
-        fps = Math.max(fps, sink.sentAt.length);
-      }
-      return subscribers === 0 ? UNFOLLOWED : { subscribers, fps, shown };
+      for (const at of rate) if (at > since) fps++;
+      return { subscribers, fps, shown };
     });
   }
 
   getStats(): FeedStats {
     let subscribers = 0;
-    for (const feed of this.feeds.values()) subscribers += feed.sinks.size;
+    for (const feed of this.feeds.values()) subscribers += feed.followers.size;
     return {
       feeds: this.feeds.size,
       subscribers,
@@ -396,7 +394,8 @@ export class FrameFeeds<Req> {
     const now = this.deps.now();
     const feed: Feed = {
       sessionId,
-      sinks: new Map(),
+      followers: new Map(),
+      rates: new Map(),
       unwatch: this.deps.watch(sessionId, () => this.wake(sessionId)),
       phase: { kind: "waiting" },
       last: null,
@@ -420,7 +419,10 @@ export class FrameFeeds<Req> {
   }
 
   private unsubscribe(feed: Feed, sub: Subscriber): void {
-    if (!feed.sinks.delete(sub) || feed.sinks.size > 0) return;
+    if (!feed.followers.delete(sub)) return;
+    if (![...feed.followers.keys()].some((s) => s.lane === sub.lane))
+      feed.rates.delete(sub.lane);
+    if (feed.followers.size > 0) return;
     if (feed.phase.kind === "due") clearTimeout(feed.phase.timer);
     feed.unwatch();
     this.feeds.delete(feed.sessionId);
@@ -525,13 +527,13 @@ export class FrameFeeds<Req> {
     const noted = this.requests.get(feed.sessionId);
     if (noted !== undefined) {
       const lanes = this.deps.lanes(noted.req);
-      for (const sub of [...feed.sinks.keys()]) {
+      for (const sub of [...feed.followers.keys()]) {
         if (lanes[sub.lane]) continue;
         this.unsubscribe(feed, sub);
         this.refuse(feed.sessionId, sub);
       }
     }
-    if (feed.sinks.size === 0) return;
+    if (feed.followers.size === 0) return;
     const answers = {
       bar: sentOf(frame.resp),
       statusline: sentOf(frame.statusline),
@@ -541,6 +543,7 @@ export class FrameFeeds<Req> {
       feed.last.answers.statusline.bytes === answers.statusline.bytes
     )
       return;
+    const before = feed.last?.answers ?? null;
     feed.last = { answers, drawnAt: frame.drawnAt };
     this.pushed++;
     feed.pushed++;
@@ -549,19 +552,23 @@ export class FrameFeeds<Req> {
     // same bytes, which are not pushed again, and the summary counts it.
     if (frame.failure !== null)
       this.deps.log(frame.failure.level, frame.failure.line);
-    for (const [sub, sink] of feed.sinks) this.send(feed, sub, sink);
+    const now = this.deps.now();
+    for (const [lane, rate] of feed.rates)
+      if (
+        before === null ||
+        answerOf(before, lane).bytes !== answerOf(answers, lane).bytes
+      )
+        noteSent(rate, now);
+    for (const sub of feed.followers.keys()) this.send(feed, sub);
   }
 
   // The last frame's answer for `sub`'s lane, unless it was sent that already.
-  private send(feed: Feed, sub: Subscriber, sink: Following): void {
+  private send(feed: Feed, sub: Subscriber): void {
     if (feed.last === null) return;
     const { resp, bytes } = answerOf(feed.last.answers, sub.lane);
-    if (sink.bytes === bytes) return;
-    sink.bytes = bytes;
-    const now = this.deps.now();
-    sink.sentAt.push(now);
-    trimRate(sink, now);
+    if (feed.followers.get(sub) === bytes) return;
     sub.frame(resp, bytes);
+    feed.followers.set(sub, bytes);
   }
 
   // A subscription its lane's toggle refuses, told why.
@@ -586,7 +593,7 @@ export class FrameFeeds<Req> {
     const now = this.deps.now();
     this.deps.log(
       "info",
-      `feed sid=${JSON.stringify(feed.sessionId)} ${state} subscribers=${feed.sinks.size} lanes=${[...feed.sinks.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round((now - feed.since) / 1000)}s drawn=${feed.drawn} noted=${feed.noted} moving=${feed.moving} unseen=${feed.unseen} failed=${feed.failed} pushed=${feed.pushed} meanDraw=${feed.drawn === 0 ? "-" : (feed.drawMs / feed.drawn).toFixed(2)}ms`,
+      `feed sid=${JSON.stringify(feed.sessionId)} ${state} subscribers=${feed.followers.size} lanes=${[...feed.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round((now - feed.since) / 1000)}s drawn=${feed.drawn} noted=${feed.noted} moving=${feed.moving} unseen=${feed.unseen} failed=${feed.failed} pushed=${feed.pushed} meanDraw=${feed.drawn === 0 ? "-" : (feed.drawMs / feed.drawn).toFixed(2)}ms`,
     );
     feed.summarizedAt = now;
   }

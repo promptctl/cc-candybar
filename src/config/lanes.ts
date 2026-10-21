@@ -54,7 +54,8 @@ export const MOVING_FPS = 30;
 
 // [LAW:nothing-unseen] What one lane of a session's frames is doing, as the
 // daemon's feed sees it: how many subscribers of that lane follow the session,
-// the frames pushed to them in the last second, and whether the session's pane
+// the frames that went out to that lane in the last second (a
+// subscriber's hand-over on joining is not one), and whether the session's pane
 // is on a screen — a pane judged off screen is drawn at one frame a second.
 // No subscriber is `subscribers: 0`, which pushes nothing.
 export interface LaneFeed {
