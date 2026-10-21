@@ -1,3 +1,9 @@
+## [1.152.0](https://github.com/promptctl/cc-candybar/compare/v1.151.0...v1.152.0) (2026-10-21)
+
+### Features
+
+* **daemon:** a fed bar shows the pace its feed draws at, beside the door ([#404](https://github.com/promptctl/cc-candybar/issues/404)) ([a2292fc](https://github.com/promptctl/cc-candybar/commit/a2292fc40c64415a15efe0be908f7fd8fda2134f))
+
 ## [1.151.0](https://github.com/promptctl/cc-candybar/compare/v1.150.0...v1.151.0) (2026-10-21)
 
 ### Features
