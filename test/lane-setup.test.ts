@@ -21,7 +21,7 @@ import {
   type LaneSession,
   type PaneClaude,
 } from "../src/daemon/lane-setup";
-import { relaunchArgs } from "../src/daemon/claude-relaunch";
+import { relaunchOf } from "../src/daemon/claude-relaunch";
 import {
   claudeEnv,
   refusalOf,
@@ -62,8 +62,8 @@ function fakeEdge(over: Partial<LaneEdge> = {}): { edge: LaneEdge; did: string[]
     pid: 4242,
     executable: "/u/.local/share/claude/versions/2.1.299",
     argv: ["claude", "--dangerously-skip-permissions", "--worktree"],
-    env: ["PATH=/usr/bin", "CC_CANDYBAR_CONFIG=/u/alt config.json5"],
-    cwd: "/work/tree",
+    env: ["PATH=/usr/bin", "PWD=/work", "CC_CANDYBAR_CONFIG=/u/alt config.json5"],
+    cwd: "/work/.claude/worktrees/feat+tree",
     fromShell: true,
     attached: false,
   };
@@ -95,6 +95,7 @@ function fakeEdge(over: Partial<LaneEdge> = {}): { edge: LaneEdge; did: string[]
       did.push(`graph ${node} ${reader} ${executable}`);
       return { ok: true };
     },
+    terminate: (pid) => void did.push(`terminate ${pid}`),
     exited: async () => true,
     typeShellLine: (_hint, line) => void did.push(`shell ${line}`),
     followed: async (sessionId, lane) => {
@@ -212,7 +213,7 @@ describe("lane A, band", () => {
 });
 
 describe("lane B, statusline", () => {
-  test("on exits Claude Code, then starts the binary it ran again under the launcher beside the bundle, on the same session", async () => {
+  test("on ends Claude Code, then starts the binary it ran again under the launcher beside the bundle, back in its worktree, on the same session", async () => {
     const { edge, did } = fakeEdge();
     const out = LANE_SETUP.statusline.on(session(), HOST, edge);
     // The click itself does nothing in the pane.
@@ -221,18 +222,21 @@ describe("lane B, statusline", () => {
     expect(did).toEqual([
       "graph /usr/bin/node /opt/candybar/dist/cc-extra/src/bun-graph.js /u/.local/share/claude/versions/2.1.299",
       `script /run/relaunch-${SID}.sh:\n${relaunchScript(
-        "/work/tree",
+        "/work",
         [
           "/usr/bin/node",
           "/opt/candybar/dist/cc-extra/src/bun-attach.js",
           "/u/.local/share/claude/versions/2.1.299",
+          "--worktree",
+          "feat/tree",
           "--dangerously-skip-permissions",
           "--resume",
           SID,
         ],
-        ["PATH=/usr/bin", "CC_CANDYBAR_CONFIG=/u/alt config.json5"],
+        ["PATH=/usr/bin", "PWD=/work", "CC_CANDYBAR_CONFIG=/u/alt config.json5"],
       )}`,
-      "type /exit",
+      // A signal, never `/exit`: `/exit` removes or asks about the worktree.
+      "terminate 4242",
       `shell sh /run/relaunch-${SID}.sh`,
       `followed ${SID} statusline`,
       `remove /run/relaunch-${SID}.sh`,
@@ -271,7 +275,7 @@ describe("lane B, statusline", () => {
 
   // Claude Code writes a session's transcript with its first message; resuming
   // one with none finds no conversation and leaves the pane at its shell.
-  test("a session with no conversation yet is refused before /exit is typed", () => {
+  test("a session with no conversation yet is refused before Claude Code is ended", () => {
     const { edge, did } = fakeEdge({
       fileExists: (file) => !file.endsWith(".jsonl"),
     });
@@ -289,9 +293,10 @@ describe("lane B, statusline", () => {
     expect(did.some((d) => d.startsWith("shell"))).toBe(false);
   });
 
-  // The screen of a session mid-turn, as tmux captured it (2.1.289): `/exit`
-  // typed here would queue until the turn ends, after the wait gave up.
-  test("a Claude Code in the middle of a turn is refused before /exit is typed", async () => {
+  // The screen of a session mid-turn, as tmux captured it (2.1.289): ending
+  // Claude Code here would end the turn. The screen is judged at the kill, so
+  // a turn started during the module-graph read is seen.
+  test("a Claude Code in the middle of a turn is refused before Claude Code is ended", async () => {
     const { edge, did } = fakeEdge({
       claudeInput: {
         read: () => ({
@@ -307,25 +312,37 @@ describe("lane B, statusline", () => {
     await expect(
       finished(LANE_SETUP.statusline.on(session(), HOST, edge)),
     ).rejects.toThrow(/in the middle of a turn/);
-    expect(did).toEqual([]);
+    expect(did.some((d) => d.startsWith("terminate"))).toBe(false);
+    expect(did.at(-1)).toBe(`remove /run/relaunch-${SID}.sh`);
   });
 
-  // ctrl+s stashes a draft before `/exit`, and the stash ends with the
-  // Claude Code holding it.
-  test("a draft in the prompt is refused before /exit is typed", async () => {
+  // A stash and a pending dialog die with the process; copy mode is a screen
+  // nothing can be read past.
+  test.each([
+    ["copy mode", { inMode: true, screen: READY_SCREEN }, /copy mode/],
+    ["a held stash", { inMode: false, screen: ["  › stashed", ...READY_SCREEN] }, /stashed prompt/],
+    ["a dialog", { inMode: false, screen: ["Allow this tool call?", "  ❯ 1. Yes"] }, /not at its prompt/],
+  ])("a pane showing %s is refused before Claude Code is ended", async (_what, snapshot, reason) => {
     const { edge, did } = fakeEdge({
-      claudeInput: {
-        read: () => ({
-          inMode: false,
-          screen: [READY_SCREEN[0]!, "❯ half a thought", READY_SCREEN[2]!],
-        }),
-        type: () => ({ kind: "typed" }),
-      },
+      claudeInput: { read: () => snapshot, type: () => ({ kind: "typed" }) },
     });
     await expect(
       finished(LANE_SETUP.statusline.on(session(), HOST, edge)),
-    ).rejects.toThrow(/holds a draft/);
-    expect(did.some((d) => d.startsWith("type"))).toBe(false);
+    ).rejects.toThrow(reason);
+    expect(did.some((d) => d.startsWith("terminate"))).toBe(false);
+  });
+
+  test("a Claude Code the pane no longer shows by the time of the kill is not killed", async () => {
+    const { edge: base } = fakeEdge();
+    const first = await base.paneClaude(TMUX);
+    let reads = 0;
+    const { edge, did } = fakeEdge({
+      paneClaude: async () => (reads++ === 0 ? first : { ...first, pid: 5151 }),
+    });
+    await expect(
+      finished(LANE_SETUP.statusline.on(session(), HOST, edge)),
+    ).rejects.toThrow(/no longer the process the restart read \(pid 4242\)/);
+    expect(did.some((d) => d.startsWith("terminate"))).toBe(false);
   });
 
   test.each([
@@ -388,7 +405,7 @@ describe("lane B, statusline", () => {
 
   // An npm install runs `node …/cli.js`: no module graph for the launcher to
   // run, so exiting it would leave the pane at its shell.
-  test("a Claude Code the launcher cannot start is refused before /exit is typed", async () => {
+  test("a Claude Code the launcher cannot start is refused before Claude Code is ended", async () => {
     const { edge, did } = fakeEdge({
       moduleGraph: async () => ({
         ok: false,
@@ -413,7 +430,7 @@ describe("lane B, statusline", () => {
     expect(refusalOf(stdout)).toBe(reason);
   });
 
-  test("a flag cc-candybar cannot carry refuses the restart before /exit is typed", async () => {
+  test("a flag cc-candybar cannot carry refuses the restart before Claude Code is ended", async () => {
     const { edge, did } = fakeEdge({
       paneClaude: async () => ({
         pid: 1,
@@ -428,7 +445,7 @@ describe("lane B, statusline", () => {
     await expect(
       finished(LANE_SETUP.statusline.on(session(), HOST, edge)),
     ).rejects.toThrow(/--brand-new-flag/);
-    expect(did.some((d) => d.startsWith("type"))).toBe(false);
+    expect(did.some((d) => d.startsWith("terminate"))).toBe(false);
   });
 
   test("a session with no tmux pane is refused in the click", () => {
@@ -502,11 +519,12 @@ describe("the restart script", () => {
   });
 });
 
-describe("relaunchArgs", () => {
+describe("relaunchOf", () => {
+  const started = (argv: string[], cwd = "/src") => ({ argv, cwd });
+
   test.each([
     [["claude"], []],
-    [["claude", "--dangerously-skip-permissions", "--worktree"], ["--dangerously-skip-permissions"]],
-    [["claude", "-w", "feature", "--model", "opus"], ["--model", "opus"]],
+    [["claude", "--dangerously-skip-permissions"], ["--dangerously-skip-permissions"]],
     [["claude", "--resume", "old-id", "--verbose"], ["--verbose"]],
     [["claude", "-r", "--verbose"], ["--verbose"]],
     [["claude", "-c", "--session-id", "u", "--fork-session"], []],
@@ -514,18 +532,55 @@ describe("relaunchArgs", () => {
     [["claude", "fix the bug", "--effort", "high"], ["--effort", "high"]],
     [["claude", "--", "--not-a-flag"], []],
     [["claude", "--append-system-prompt", "-be terse"], ["--append-system-prompt", "-be terse"]],
-  ])("%j starts again as %j and the session", (argv, kept) => {
-    expect(relaunchArgs(argv, SID)).toEqual({
-      kind: "args",
+    // A session started in a worktree that has left it runs, and restarts,
+    // outside it.
+    [["claude", "--worktree", "gone"], []],
+  ])("%j starts again where it runs as %j and the session", (argv, kept) => {
+    expect(relaunchOf(started(argv), SID)).toEqual({
+      kind: "relaunch",
+      dir: "/src",
       args: [...kept, "--resume", SID],
     });
   });
 
+  // Claude Code makes `--worktree feat/x` at `<repo>/.claude/worktrees/feat+x`
+  // and runs there; naming it again, from its repository, goes back in —
+  // whether the session was started with `--worktree` or entered it later.
   test.each([
-    [["claude", "--mystery"], /--mystery/],
-    [["claude", "--model"], /--model and no value/],
-  ])("%j is refused", (argv, reason) => {
-    const out = relaunchArgs(argv, SID);
+    [["claude", "--worktree"], "/src/.claude/worktrees/tidy-sunset", "/src", "tidy-sunset"],
+    [["claude", "--worktree", "feat/x.y", "--model", "opus"], "/src/.claude/worktrees/feat+x.y", "/src", "feat/x.y"],
+    [["claude", "-w", "fix"], "/src/.claude/worktrees/fix", "/src", "fix"],
+    [["claude", "--worktree=fix"], "/src/.claude/worktrees/fix", "/src", "fix"],
+    [["claude", "--model", "opus"], "/other/.claude/worktrees/entered", "/other", "entered"],
+    [["claude"], "/src/.claude/worktrees/fix/sub/dir", "/src", "fix"],
+    [["claude"], "/.claude/worktrees/top", "/", "top"],
+  ])("%j, running in %s, starts again from %s in worktree %j", (argv, cwd, dir, name) => {
+    expect(relaunchOf(started(argv, cwd), SID)).toEqual({
+      kind: "relaunch",
+      dir,
+      args: [
+        "--worktree",
+        name,
+        ...(argv.includes("--model") ? ["--model", "opus"] : []),
+        "--resume",
+        SID,
+      ],
+    });
+  });
+
+  test("a directory named like a worktree holder but holding none is no worktree", () => {
+    expect(relaunchOf(started(["claude"], "/src/.claude/worktrees"), SID)).toEqual({
+      kind: "relaunch",
+      dir: "/src/.claude/worktrees",
+      args: ["--resume", SID],
+    });
+  });
+
+  test.each([
+    [started(["claude", "--mystery"]), /--mystery/],
+    [started(["claude", "--model"]), /--model and no value/],
+  ])("%j is refused", (claude, reason) => {
+    const out = relaunchOf(claude, SID);
     expect(out.kind).toBe("refused");
     expect(out.kind === "refused" && out.reason).toMatch(reason);
   });
@@ -674,11 +729,11 @@ describe("LaneSetups", () => {
     setups.observe(session(), switches({ statusline: true }), 3);
     await settle();
     // The first restart waits for Claude Code to exit; nothing else has run.
-    expect(did.filter((d) => d.startsWith("type"))).toEqual(["type /exit"]);
+    expect(did.filter((d) => d.startsWith("terminate"))).toEqual(["terminate 4242"]);
     exit(true);
     await new Promise((r) => setTimeout(r, 20));
     // Off, then on: the second restart starts only after the first ended.
-    expect(did.filter((d) => d.startsWith("type"))).toEqual(["type /exit", "type /exit"]);
+    expect(did.filter((d) => d.startsWith("terminate"))).toEqual(["terminate 4242", "terminate 4242"]);
   });
 
   test("a switch turned off brings the lane down", async () => {

@@ -42,8 +42,14 @@ import {
   type ClaudeInputEdge,
 } from "../claude-input/edge.js";
 import { slashLine } from "../claude-input/slash-line.js";
-import { draftShown, turnRunning } from "../claude-input/prompt-screen.js";
-import { relaunchArgs } from "./claude-relaunch.js";
+import {
+  draftShown,
+  promptState,
+  turnRunning,
+  type PaneSnapshot,
+  type PromptState,
+} from "../claude-input/prompt-screen.js";
+import { relaunchOf } from "./claude-relaunch.js";
 import { sourceCheckoutOf } from "./build-currency.js";
 import { attachLauncherOf, moduleGraphReaderOf } from "../attach-launcher.js";
 import { BadVerbArgs } from "./verb-error.js";
@@ -57,7 +63,7 @@ const BAND_CLIENT = path.join("bin", "cc-candybar-native");
 // The tmux pane option naming, on a bar pane the daemon opened, the pane whose
 // bar it draws: how the daemon finds its bar panes again to close them.
 export const BAR_PANE_OPTION = "@cc-candybar-bar-pane";
-// How long the session's Claude Code has to exit after `/exit` before the
+// How long the session's Claude Code has to exit after SIGTERM before the
 // restart under the attach launcher is given up on.
 export const EXIT_PATIENCE_MS = 15_000;
 // How long the restarted Claude Code has to resume its session and have its
@@ -65,7 +71,6 @@ export const EXIT_PATIENCE_MS = 15_000;
 export const ATTACH_PATIENCE_MS = 30_000;
 
 const RELOAD_PLUGINS = slashLine("/reload-plugins");
-const EXIT = slashLine("/exit");
 
 // The Claude Code a session's pane shows: the pane's foreground process, the
 // executable it runs (what a restart runs again, with no PATH between),
@@ -116,6 +121,8 @@ export interface LaneEdge {
   ) => Promise<
     { readonly ok: true } | { readonly ok: false; readonly reason: string }
   >;
+  // Send `pid` SIGTERM.
+  readonly terminate: (pid: number) => void;
   // Resolves true once `pid` has exited, false if it is still running after
   // `withinMs`.
   readonly exited: (pid: number, withinMs: number) => Promise<boolean>;
@@ -305,28 +312,12 @@ async function restartUnderAttach(
   if (claude.attached) {
     return `left Claude Code in ${tmux.pane} running: it already runs under the attach launcher`;
   }
-  // [LAW:no-silent-failure] `/exit` typed mid-turn queues until the turn
-  // ends, long after the wait below gives up — and then the session exits
-  // with nothing to start it again.
-  if (turnRunning(edge.claudeInput.read(tmux))) {
-    throw new Error(
-      `Claude Code in ${tmux.pane} is in the middle of a turn, and restarting it under the attach launcher would end that turn — once it is idle, turn ${LANES.statusline.label} off and on again`,
-    );
-  }
-  // [LAW:no-silent-failure] `/exit` is typed as every command is, its draft
-  // stashed first, and a stash lives only as long as the Claude Code holding
-  // it: the restart would end it with the draft.
-  if (draftShown(edge.claudeInput.read(tmux))) {
-    throw new Error(
-      `the prompt in ${tmux.pane} holds a draft, which restarting Claude Code under the attach launcher would lose — send or clear it, then turn ${LANES.statusline.label} off and on again`,
-    );
-  }
   if (!claude.fromShell) {
     throw new Error(
       `Claude Code is the first process of pane ${tmux.pane}, so nothing would be left in the pane to start it again under the attach launcher — start Claude Code from a shell in the pane`,
     );
   }
-  const relaunch = relaunchArgs(claude.argv, session.sessionId);
+  const relaunch = relaunchOf(claude, session.sessionId);
   if (relaunch.kind === "refused") {
     throw new Error(`${relaunch.reason} — restart it with that flag removed`);
   }
@@ -347,7 +338,7 @@ async function restartUnderAttach(
   const script = edge.writeScript(
     `relaunch-${session.sessionId}.sh`,
     relaunchScript(
-      claude.cwd,
+      relaunch.dir,
       [...launcher, claude.executable, ...relaunch.args],
       claude.env,
     ),
@@ -355,15 +346,32 @@ async function restartUnderAttach(
   // [LAW:effects-at-boundaries] The script's whole life is this restart: it
   // is gone once the restart is decided, however that went.
   try {
-    const typed = typeSlash(edge.claudeInput, tmux, EXIT);
-    if (typed.kind === "refused") {
+    // [LAW:no-ambient-temporal-coupling] Whether ending Claude Code loses
+    // anything is judged on the pane as it is at the kill, not as it was
+    // before the module-graph read above (seconds, on a large binary): the
+    // user may have started a turn or a draft meanwhile, or left Claude Code.
+    const now = await edge.paneClaude(tmux);
+    if (now.pid !== claude.pid) {
       throw new Error(
-        `Claude Code was not restarted under the attach launcher: /exit was not typed: ${typed.reason}`,
+        `Claude Code in ${tmux.pane} is no longer the process the restart read (pid ${claude.pid}), so it was not restarted under the attach launcher`,
       );
     }
+    const loses = endingLoses(edge.claudeInput.read(tmux));
+    if (loses !== null) {
+      throw new Error(
+        `Claude Code in ${tmux.pane} was left running: ${loses} — then turn ${LANES.statusline.label} off and on again`,
+      );
+    }
+    // SIGTERM, not `/exit`: Claude Code exits on it as on `/exit`, printing
+    // its resume line, but `/exit` in a session started with `--worktree`
+    // removes the worktree when it holds no changes (the script would then
+    // start in a directory that is gone) and asks whether to keep it when it
+    // does (the restart would wait on that dialog). SIGTERM leaves the
+    // worktree as it is (measured on 2.1.289).
+    edge.terminate(claude.pid);
     if (!(await edge.exited(claude.pid, EXIT_PATIENCE_MS))) {
       throw new Error(
-        `Claude Code in ${tmux.pane} did not exit within ${EXIT_PATIENCE_MS / 1000} s of /exit, so it was not restarted under the attach launcher`,
+        `Claude Code in ${tmux.pane} did not exit within ${EXIT_PATIENCE_MS / 1000} s of SIGTERM, so it was not restarted under the attach launcher`,
       );
     }
     edge.typeShellLine(tmux, `sh ${shellWord(script)}`);
@@ -385,7 +393,32 @@ async function restartUnderAttach(
   } finally {
     edge.removeScript(script);
   }
-  return `restarted Claude Code in ${tmux.pane} under the attach launcher, resuming ${session.sessionId}, and its statusline follows lane B`;
+  return `restarted Claude Code in ${tmux.pane} under the attach launcher from ${relaunch.dir}, resuming ${session.sessionId}, and its statusline follows lane B`;
+}
+
+// [LAW:single-enforcer] What ending the Claude Code a pane shows would lose,
+// or null when nothing: the one judgement the restart makes before its kill.
+// A stash, a turn in progress, and a draft die with the process; a dialog
+// (a permission prompt waiting on a tool call) and a pane in copy mode are
+// screens no judgement here can read past.
+const UNREADABLE: Record<Exclude<PromptState["kind"], "ready">, string> = {
+  "in-mode": "its pane is in tmux copy mode — leave it (q)",
+  stashed:
+    "it holds a stashed prompt (ctrl+s), which ending it would lose — restore or send it",
+  "no-prompt":
+    "it is not at its prompt (a dialog or picker is open) — close it",
+};
+
+function endingLoses(snapshot: PaneSnapshot): string | null {
+  const state = promptState(snapshot);
+  if (state.kind !== "ready") return UNREADABLE[state.kind];
+  if (turnRunning(snapshot)) {
+    return "it is in the middle of a turn, which ending it would end — wait until it is idle";
+  }
+  if (draftShown(snapshot)) {
+    return "its prompt holds a draft, which ending it would lose — send or clear it";
+  }
+  return null;
 }
 
 // How many sessions' last reports LaneSetups keeps.
@@ -530,7 +563,7 @@ const EXPORTABLE = /^[A-Za-z_][A-Za-z0-9_]*=/;
 // the shell would look up — `cd`, `unset`, `export` and `exec` are its own.
 // It is typed as `sh <script>`, a line every shell reads alike, so no quoting
 // has to survive the user's shell (fish quotes differently from sh). It runs
-// `argv` in the directory Claude Code ran in, under the environment Claude
+// `argv` in `cwd` (the relaunch's directory), under the environment Claude
 // Code was started with (`env`, `NAME=value` each) — the variables it was
 // started with set as they were (a `CC_CANDYBAR_CONFIG`, a model), and its
 // Claude Code directory unset when it had none, so `--resume` looks where the

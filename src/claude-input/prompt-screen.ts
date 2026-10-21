@@ -73,10 +73,8 @@ export function draftShown(snapshot: PaneSnapshot): boolean {
 // Measured on 2.1.289: `✽ Processing… (26s · ↓ 2.0k tokens · thought for 15s)`.
 const TURN_RUNNING = /^\S+\s+\S[^…]*…\s+\((\d+[hms]\s*)+/u;
 
-// Whether the pane shows a turn in progress. A command typed mid-turn queues
-// until the turn ends (above), which a command that ends the session — the
-// restart under cc-attach types `/exit` — must not do: it would exit after
-// whoever waits on it has given up.
+// Whether the pane shows a turn in progress — which a command typed now would
+// queue behind (above), and which ending Claude Code would end with it.
 export function turnRunning(snapshot: PaneSnapshot): boolean {
   return snapshot.screen.some((line) => TURN_RUNNING.test(line));
 }
