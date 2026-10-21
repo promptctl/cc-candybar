@@ -99,10 +99,12 @@ import { settingControlDomain } from "./loader/globals.js";
 import { settingControl, type Affordance } from "./setting-control.js";
 import { declareHelp, type HelpArtifacts } from "./help.js";
 import {
+  drawingVar,
   LANE_NAMES,
   LANES,
   laneFeedVar,
   MOVING_FPS,
+  type Drawing,
   type Lane,
 } from "./lanes.js";
 import { LANE_HELP } from "../help-text.js";
@@ -397,6 +399,15 @@ const laneReadout = (lane: Lane): string => {
     `{{ else }}no subscriber{{ end }}{{ end }}`
   );
 };
+// [LAW:nothing-unseen] On a frame the feed drew, the door says how fast the
+// feed draws this bar: the moving rate while it moves where someone can see
+// it, one a second while it is still or unseen. A bar Claude Code polls is
+// answered by a request, which shows none. The pace is padded to the widest
+// it can be, MOVING_FPS, so a bar starting or stopping moves no cell after it.
+const FRAME_RATE =
+  `{{ if eq .${drawingVar("by")} "${"feed" satisfies Drawing["by"]}" }} ` +
+  `{{ printf "%${String(MOVING_FPS).length}d" (int .${drawingVar("fps")}) }} fps{{ end }}`;
+
 // What a control shows after itself: a lane's toggle its readout.
 const TRAIL: Partial<Record<SettingName, string>> = Object.fromEntries(
   laneSettings.map(([setting, lane]) => [setting, laneReadout(lane)]),
@@ -863,7 +874,8 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
           `{{ $door := ${disclosureTriggerCall(SETTINGS_ANCHOR, templateLiteral(doorGlyph), templateLiteral(DOOR_CLOSE_GLYPH))} }}` +
           `{{ if ${disclosureTerm(SETTINGS_REF)} }}` +
           `{{ fg (keptOn (color "${DOOR_CLOSE_ROLE}") (bgOf)) $door }}` +
-          `{{ else }}{{ $door }}{{ end }}`,
+          `{{ else }}{{ $door }}{{ end }}` +
+          FRAME_RATE,
       },
       [TOOLBAR_SEG]: { template: TOOLBAR.template },
       [COMMANDS_SEG]: { template: COMMANDS.template, when: COMMANDS.when },

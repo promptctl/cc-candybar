@@ -143,6 +143,8 @@ import {
 import {
   LANE_NAMES,
   parseLane,
+  ANSWERING,
+  type Drawing,
   type Lane,
   type LaneSwitches,
 } from "../config/lanes.js";
@@ -150,7 +152,6 @@ import {
   answeredClickError,
   clickErrorAt,
   type ClickErrorRecord,
-  type ClickErrorRender,
 } from "./click-error.js";
 import { newestWins } from "../utils/newest-wins.js";
 import {
@@ -258,7 +259,7 @@ const laneSetups = new LaneSetups({
 // (candybar-animation-wbxz.jmm.usl). A change to the session's own state — a
 // click — draws its next frame at once.
 const frameFeeds: FrameFeeds<CheckedRenderRequest> = new FrameFeeds({
-  render: (req) => renderFrame(req),
+  render: (req, fps) => renderFrame(req, fps),
   // [LAW:no-ambient-temporal-coupling] The wake runs on the next turn of the
   // event loop, not inside the session write that changed the revision, so a
   // click's whole run of writes lands before a frame of it is drawn.
@@ -1240,7 +1241,14 @@ export async function replyTo(
         at,
         order,
       );
-    if (checked.ok) sighted(checked.req, "drawing");
+    if (checked.ok) {
+      sighted(checked.req, "drawing");
+      // [LAW:one-source-of-truth] A request past the checkpoint is the
+      // session's data from now on, and a followed session's frame is drawn
+      // from it at once, beside this render: its answer is its own client's,
+      // drawn for a request, and never a frame (src/daemon/frame-feed.ts).
+      frameFeeds.note(checked.req.hookData.session_id, checked.req, order);
+    }
     const rendered: {
       outcome: RenderOutcome;
       resp: Response;
@@ -1248,24 +1256,8 @@ export async function replyTo(
     } = !checked.ok
       ? refusedRender(checked.problems)
       : await answerRequest(checked.req, order, at, facts).then(
-          ({ output, statusline, answer, motion, clickShown }) => {
+          ({ answer, motion, clickShown }) => {
             sighted(checked.req, motion);
-            const resp = { ok: true, output } as const;
-            // [LAW:one-source-of-truth] A request the render took is the
-            // session's data from now on: its frames are drawn from it, and
-            // this answer is its frame now.
-            frameFeeds.note(
-              checked.req.hookData.session_id,
-              checked.req,
-              order,
-              {
-                resp,
-                statusline: { ok: true, output: statusline },
-                drawnAt: t0,
-                moves: motion === "moves",
-                failure: null,
-              },
-            );
             return {
               outcome: { kind: "ok" } as const,
               resp: { ok: true, output: answer } as const,
@@ -1598,7 +1590,10 @@ function handleClick(
 // [LAW:nothing-unseen] A frame that throws carries the render event a throwing
 // request writes, for the feed to log when that failure is first pushed; the
 // feed summarizes the frames that render.
-async function renderFrame(req: CheckedRenderRequest): Promise<FeedFrame> {
+async function renderFrame(
+  req: CheckedRenderRequest,
+  fps: number,
+): Promise<FeedFrame> {
   const started = new Date();
   const facts: RenderFacts = [];
   try {
@@ -1606,7 +1601,7 @@ async function renderFrame(req: CheckedRenderRequest): Promise<FeedFrame> {
       req,
       instantOf(started),
       facts,
-      "frame",
+      { by: "feed", fps },
     );
     // [LAW:effects-at-boundaries] A frame only draws: the dump is the
     // session's requests' to write, and the frame links it only when it holds
@@ -1629,7 +1624,6 @@ async function renderFrame(req: CheckedRenderRequest): Promise<FeedFrame> {
           handedOffTo(lanes, frameFeeds.following(sessionId)),
         ),
       },
-      drawnAt: started.getTime(),
       moves: motion === "moves",
       failure: null,
     };
@@ -1644,7 +1638,6 @@ async function renderFrame(req: CheckedRenderRequest): Promise<FeedFrame> {
     return {
       resp: failed,
       statusline: failed,
-      drawnAt: started.getTime(),
       moves: false,
       failure: { level, line: `frame ${line}` },
     };
@@ -1794,7 +1787,7 @@ async function renderChecked(
   req: CheckedRenderRequest,
   at: Instant,
   facts: RenderFacts,
-  render: ClickErrorRender,
+  drawing: Drawing,
 ): Promise<{
   drawn: DrawnBar;
   motion: DrawnMotion;
@@ -1937,7 +1930,9 @@ async function renderChecked(
     state.compiled,
     state.store,
     state.registry,
-    payload,
+    // [LAW:one-source-of-truth] Who the render is for is the render's own
+    // fact, beside what the providers assembled.
+    { ...payload, drawing },
     at,
     renderOpts,
     // [LAW:single-enforcer] The per-segment StripCell sink for the
@@ -1959,7 +1954,7 @@ async function renderChecked(
   // [LAW:one-source-of-truth] The click error dispatch held for this session,
   // shown by every render inside its hold, and past it by a request until an
   // answer has carried it.
-  const clickHold = clickErrorAt(sessionState, sessionId, at, render);
+  const clickHold = clickErrorAt(sessionState, sessionId, at, drawing.by);
   const clickShown =
     clickHold.kind === "held" || clickHold.kind === "owed"
       ? clickHold.error
@@ -2144,12 +2139,6 @@ async function answerRequest(
   at: Instant,
   facts: RenderFacts,
 ): Promise<{
-  // The session's bar: what its frames are, and what a client drawing the
-  // bar itself is answered with.
-  output: string;
-  // What Claude Code's statusline shows: the bar, or the handoff line in its
-  // place while a lane draws it elsewhere.
-  statusline: string;
   // What this request's client is answered with: the statusline's answer to
   // Claude Code's statusline, the bar to a client drawing it itself.
   answer: string;
@@ -2161,7 +2150,7 @@ async function answerRequest(
     req,
     at,
     facts,
-    "request",
+    ANSWERING,
   );
   const { link, failure } = diagnosticDump.sync(
     req.hookData.session_id,
@@ -2185,8 +2174,6 @@ async function answerRequest(
     handoff: (toStatusline ? elsewhere : []).join(",") || "-",
   });
   return {
-    output,
-    statusline,
     answer: toStatusline ? statusline : output,
     motion,
     clickShown,

@@ -230,8 +230,11 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       await waitFor(() => received.length >= sent, "every counted frame arrived");
     });
     const pushed = outputs(frames);
-    for (const output of pushed)
+    for (const output of pushed) {
       expect(stripAnsi(output)).toContain("a moving mark");
+      // candybar-animation-wbxz.829: a frame the feed drew shows its pace.
+      expect(stripAnsi(output)).toMatch(/ \d+ fps /u);
+    }
     // An unchanged frame is never sent twice.
     for (let i = 1; i < pushed.length; i++)
       expect(pushed[i]).not.toBe(pushed[i - 1]);
@@ -267,8 +270,9 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   test("a still bar is pushed once, and not again while nothing changes", async () => {
     await render(sockPath, "feed-still", projectDir, {}, args("still"));
     const frames = await framesOf("feed-still", () => sleep(1500));
+    // Its pace, one a second, is part of the frame and does not change it.
     expect(outputs(frames).map(stripAnsi)).toEqual([
-      expect.stringContaining("a still mark"),
+      expect.stringMatching(/ 1 fps .*a still mark/su),
     ]);
   });
 
