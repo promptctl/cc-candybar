@@ -1421,10 +1421,10 @@ describe("a picker over a colour-valued domain paints what picking would apply",
   const LKEY = "menus.lookpicker.applyStyle";
 
   test("every theme option is its name in the list's own text, beside that theme's swatch", () => {
-    // The session picks the identity style, so the bar draws the base palette
-    // its expectations are computed from (the fixture's globals name `dim`).
-    const { render, sink, palette, clickToggle } =
-      buildRuntime(BOTH_PICKERS_SRC, "s1", "none");
+    // The fixture's globals wear `dim`: the names are written in the text of
+    // the bar's own (styled) list, while each swatch is its theme unstyled.
+    const { render, sink, config, palette, clickToggle } =
+      buildRuntime(BOTH_PICKERS_SRC);
     render();
     clickToggle(render(), TKEY, "applyTheme");
     render();
@@ -1432,7 +1432,11 @@ describe("a picker over a colour-valued domain paints what picking would apply",
     expect(cells.length).toBe(ALLOWED.size);
     const body = sink.get("themepicker")![1]!;
     const ground = groundOf(body);
-    const text = textOn(palette, ground, ColorDepth.TRUECOLOR).hex;
+    const text = textOn(
+      transposePalette(palette, config.styles["dim"]!),
+      ground,
+      ColorDepth.TRUECOLOR,
+    ).hex;
     for (const cell of cells) {
       expectSwatched(
         optionRuns(body, cell.name),

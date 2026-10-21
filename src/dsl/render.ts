@@ -1117,8 +1117,10 @@ export function drawDsl(
   observers?: RenderObservers,
   // [LAW:one-source-of-truth] An omitting caller renders as a session that has
   // never clicked: the daemon's own resolution with no picks, so a config
-  // declaring globals.preset or globals.style renders here as the bar does.
-  // Whether the file authors the preset's root is no part of the selection.
+  // declaring globals.preset or globals.style draws the preset, theme and look
+  // the bar does. `opts` stays the caller's own: the daemon derives it from the
+  // same resolution (`renderOptionsOf`). Whether the file authors the preset's
+  // root is no part of the selection.
   selection: RenderSelection = resolveEffectiveGlobals(
     config,
     () => null,

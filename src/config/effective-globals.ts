@@ -33,9 +33,10 @@ import {
 import type { ShadeName, VariationName } from "../themes/decor.js";
 import { themeDefaultsOf, underThemeDefault } from "./theme-defaults.js";
 
-// [LAW:one-source-of-truth] The daemon resolves each of these exactly ONCE
-// per render (server.ts, before both the payload build and renderDsl's
-// BuildLineOptions), so the value a trigger label displays and the value
+// [LAW:one-source-of-truth] Each of these is resolved exactly ONCE per render,
+// here: by the daemon (server.ts, before both the payload build and renderDsl's
+// BuildLineOptions), and by drawDsl itself for a caller that hands it no
+// selection — so the value a trigger label displays and the value
 // that actually shaped the render can never disagree — the same reasoning
 // theme/style already followed, generalized to every globals field a menu or
 // stepper can persist. Those with a session pick compose it over the config

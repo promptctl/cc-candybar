@@ -12,8 +12,14 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { SessionState } from "../src/daemon/session-state";
-import { THEME_FLOOR } from "../src/themes";
+import { STYLE_FLOOR, THEME_FLOOR } from "../src/themes";
+import { PRESET_FLOOR } from "../src/config/presets";
 import { instantOf } from "../src/utils/instant";
+
+// The first truecolor background a rendered bar draws.
+const bgOf = (rendered: string): string | undefined =>
+  // eslint-disable-next-line no-control-regex
+  /\x1b\[(?:[0-9;]*;)?48;2;(\d+;\d+;\d+)/.exec(rendered)?.[1];
 
 const OPTS = {
   endcaps: "powerline" as const,
@@ -40,7 +46,7 @@ const SRC = `{
   root: { h: ['label'] },
 }`;
 
-test("an omitted selection renders the declared preset and style, byte for byte as the daemon's resolution", () => {
+test("an omitted selection renders the declared preset and style, not the floors", () => {
   const config = parseAndValidate("<omitted>", SRC, new Set([THEME_FLOOR]));
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, new SessionState());
@@ -53,11 +59,20 @@ test("an omitted selection renders the declared preset and style, byte for byte 
       renderDsl(config, compiled, store, registry, { session_id: "s" }, at, OPTS, undefined, selection);
 
     const omitted = render();
-    // The daemon's resolution for a session with no picks (src/daemon/server.ts).
-    const daemon = render(resolveEffectiveGlobals(config, () => null, () => false));
+    // The floor preset and style, picked by the session: what an omitted
+    // selection drew before it resolved through the daemon's resolution.
+    const floor = render(
+      resolveEffectiveGlobals(
+        config,
+        (key) => ({ preset: PRESET_FLOOR, style: STYLE_FLOOR })[key] ?? null,
+        () => false,
+      ),
+    );
 
     expect(stripAnsi(omitted)).toContain("P=alt S=hot");
-    expect(omitted).toBe(daemon);
+    expect(stripAnsi(floor)).toContain(`P=floor S=${STYLE_FLOOR}`);
+    // The palette moved with the style, not only the published name.
+    expect(bgOf(omitted)).not.toBe(bgOf(floor));
   } finally {
     registry.dispose();
   }
