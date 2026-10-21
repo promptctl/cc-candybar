@@ -17,11 +17,11 @@
 // `reset` deletes it, and "is this preset customized" asks whether the file
 // authors it.
 
+import type { Globals } from "../dsl-types.js";
 import {
   THEME_DEFAULT_FIELDS,
-  type Globals,
   type ThemeDefaultField,
-} from "../dsl-types.js";
+} from "../globals-fields.js";
 import { isGlobalsField, isPresetGlobalsField } from "./globals.js";
 
 export type PersistTarget =

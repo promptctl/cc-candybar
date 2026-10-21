@@ -1,7 +1,7 @@
 // [LAW:verifiable-goals] Style-picker done-gate: clicking a style option
 // RESHAPES the whole bar live (the powerline cap/separator family changes). The
 // reshape lives in the daemon's PER-RENDER strip-style resolution
-// (effectiveEndcaps -> renderOpts.style), OUTSIDE renderDsl — the exact twin
+// (resolveEffectiveGlobals -> renderOpts.endcaps), OUTSIDE renderDsl — the exact twin
 // of how a theme click recolors via basePalette (see dsl-theme-picker-recolor).
 // This test replicates that resolution exactly as src/daemon/server.ts does, so
 // it proves the end-to-end loop: a set-state `style` click changes the bytes the
@@ -9,7 +9,8 @@
 //
 // [LAW:single-enforcer] Drives the real spine — registerDslConfig + renderDsl
 // for rendering, the real click wire for the set-state, and the same
-// effectiveEndcaps the daemon calls. No parallel rig, no hand-built joiner.
+// resolveEffectiveGlobals the daemon calls. No parallel rig, no hand-built
+// joiner.
 
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -18,11 +19,8 @@ import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { recordRender, testVerbContext, clickUrl } from "./helpers/click";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
-import {
-  effectiveEndcaps,
-  paletteForThemeName,
-  ENDCAPS_SHAPES,
-} from "../src/themes";
+import { paletteForThemeName, ENDCAPS_SHAPES } from "../src/themes";
+import { globalsFor } from "./helpers/selection";
 import { instantOf } from "../src/utils/instant";
 
 const SID = "s-reshape";
@@ -59,14 +57,10 @@ function buildRuntime() {
   // [LAW:one-source-of-truth] Resolve the strip style per render the SAME way the
   // daemon does — the session's clicked style over the config default over the
   // "powerline" floor. Freezing it would silently pass while the real daemon
-  // reshapes. (server.ts: renderOpts.style = effectiveEndcaps(undefined, 
-  // sessionState.get(sid,'endcaps'), globals.style)).
+  // reshapes. (server.ts: renderOptionsOf(resolveEffectiveGlobals(...))).
   const render = (): string =>
     renderDsl(config, compiled, store, registry, { session_id: SID }, instantOf(new Date()), {
-      endcaps: effectiveEndcaps(undefined, 
-        sessionState.get(SID, "endcaps"),
-        config.globals.endcaps,
-      ),
+      endcaps: globalsFor(config, (key) => sessionState.get(SID, key)).endcaps,
       colorCompatibility: "truecolor" as const, wrap: true, padding: 0,
       width: Number.POSITIVE_INFINITY,
     });
@@ -122,20 +116,31 @@ describe("DSL style picker — live reshape", () => {
   });
 });
 
-describe("effectiveEndcaps — session over config over floor", () => {
+describe("endcaps resolve session over config over floor", () => {
+  const endcapsOf = (
+    globals: string,
+    picks: Readonly<Record<string, string>>,
+  ): string =>
+    globalsFor(
+      parseAndValidate("<endcaps>", `{ globals: { ${globals} } }`, ALLOWED),
+      (key) => picks[key] ?? null,
+    ).endcaps;
   test("session pick wins over config default and floor", () => {
-    expect(effectiveEndcaps(undefined, "capsule", "plain")).toBe("capsule");
+    expect(endcapsOf("endcaps: 'plain'", { endcaps: "capsule" })).toBe(
+      "capsule",
+    );
   });
   test("config default applies when the session is unset", () => {
-    expect(effectiveEndcaps(undefined, null, "plain")).toBe("plain");
+    expect(endcapsOf("endcaps: 'plain'", {})).toBe("plain");
   });
   test("floor is powerline when neither session nor config is set", () => {
-    expect(effectiveEndcaps(undefined, null, undefined)).toBe("powerline");
+    expect(endcapsOf("", {})).toBe("powerline");
   });
-  test("a stale out-of-domain session value collapses to the floor", () => {
+  test("a stale out-of-domain session value collapses to the config default", () => {
     // A SessionState entry left over from a prior option vocabulary (e.g. the
     // legacy 'muted' preset) is not a renderable strip style — it must not leak
     // through as a Endcaps. [LAW:no-silent-failure] / [LAW:types-are-the-program]
-    expect(effectiveEndcaps(undefined, "muted", undefined)).toBe("powerline");
+    expect(endcapsOf("", { endcaps: "muted" })).toBe("powerline");
+    expect(endcapsOf("endcaps: 'plain'", { endcaps: "muted" })).toBe("plain");
   });
 });

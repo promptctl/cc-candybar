@@ -28,13 +28,10 @@
 
 import type { Palette, ThemeKey } from "@promptctl/rich-js";
 import {
-  COLOR_COMPATIBILITIES,
   listResolvablePaletteNames,
   placementThemeNames,
-  VARIATION_NAMES,
-  SHADE_NAMES,
-  ENDCAPS_SHAPES,
 } from "../themes/policy.js";
+import { NAMED_DOMAINS } from "./globals-fields.js";
 import {
   paletteForThemeName,
   placementPalette,
@@ -148,18 +145,17 @@ export const PLACEMENT_THEMES = "placementThemes";
 registerBuiltinDomain(PLACEMENT_THEMES, placementThemeNames, (option, render) =>
   placementPalette(option, render.palette),
 );
-registerBuiltinDomain("endcaps", () => ENDCAPS_SHAPES);
-// Not colour-valued in the `paletteOf` sense: a variation chooses which of
-// the palette's roles each row wears, and puts no other palette in force.
-registerBuiltinDomain("variations", () => VARIATION_NAMES);
-// Nor is a shade: it chooses which of a role's own shades each cell wears.
-registerBuiltinDomain("shades", () => SHADE_NAMES);
-// [LAW:one-source-of-truth] Same shape as themes/endcaps: the exact consts
-// the loader's own field validation and the render layer's glyph/color-depth
-// dispatch already derive from (themes/policy.ts COLOR_COMPATIBILITIES) — a
-// menu drawing from it can never enumerate a value the render layer would
-// reject.
-registerBuiltinDomain("colorCompatibilities", () => COLOR_COMPATIBILITIES);
+// [LAW:one-source-of-truth] Every globals row that names its closed list of
+// words (`endcaps`, `variations`, `shades`, `colorCompatibilities`) is a domain
+// an author's `from:` may name — the exact list the loader validates the field
+// against and the setting's control ranges, so a menu drawing from it can
+// never enumerate a value the render would reject. None is colour-valued in
+// the `paletteOf` sense: a variation chooses which of the palette's roles each
+// row wears, a shade which of a role's own shades each cell wears, and neither
+// puts another palette in force.
+for (const { name, members } of NAMED_DOMAINS) {
+  registerBuiltinDomain(name, () => members);
+}
 
 // [LAW:no-silent-failure] A built-in domain can never be re-claimed — a
 // config or feature registering a custom domain named "themes" gets a loud

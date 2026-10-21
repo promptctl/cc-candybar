@@ -8,15 +8,26 @@
 // theme or a preset is a `sessionPick`, which the resolution reads, never an
 // `over` field, or its theme default and the preset's globals would not follow.
 import type { DslConfig } from "../../src/config/dsl-types";
-import { resolveEffectiveGlobals } from "../../src/config/effective-globals";
+import {
+  resolveEffectiveGlobals,
+  type EffectiveGlobals,
+} from "../../src/config/effective-globals";
 import type { RenderSelection } from "../../src/dsl/render";
+
+// [LAW:one-source-of-truth] A config's globals as the daemon resolves them
+// for a session (none picked by default): what a fixture hands the payload
+// build, read the one way the bar reads it rather than spelled field by field.
+export const globalsFor = (
+  config: DslConfig,
+  sessionPick: (key: string) => string | null = () => null,
+): EffectiveGlobals => resolveEffectiveGlobals(config, sessionPick, () => false);
 
 export const selectionFor = (
   config: DslConfig,
   over: Partial<RenderSelection> = {},
   sessionPick: (key: string) => string | null = () => null,
 ): RenderSelection => ({
-  ...resolveEffectiveGlobals(config, sessionPick, () => false),
+  ...globalsFor(config, sessionPick),
   ...over,
 });
 

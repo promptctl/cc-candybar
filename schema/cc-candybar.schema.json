@@ -8,13 +8,10 @@
     "globals": {
       "type": "object",
       "properties": {
-        "default_empty_value": {
-          "type": "string"
-        },
-        "default_separator": {
-          "type": "string"
-        },
         "palette": {
+          "type": "string"
+        },
+        "preset": {
           "type": "string"
         },
         "style": {
@@ -36,9 +33,6 @@
               "pattern": "\\{\\{"
             }
           ]
-        },
-        "preset": {
-          "type": "string"
         },
         "endcaps": {
           "enum": [
@@ -76,6 +70,9 @@
             "brightest"
           ]
         },
+        "transitions": {
+          "type": "boolean"
+        },
         "autoWrap": {
           "type": "boolean"
         },
@@ -85,9 +82,6 @@
           "maximum": 16
         },
         "updateNotice": {
-          "type": "boolean"
-        },
-        "transitions": {
           "type": "boolean"
         },
         "experimentalBand": {
@@ -106,6 +100,12 @@
             "ansi",
             "none"
           ]
+        },
+        "default_empty_value": {
+          "type": "string"
+        },
+        "default_separator": {
+          "type": "string"
         },
         "menuGlyph": {
           "type": "string",
@@ -1217,15 +1217,11 @@
       "additionalProperties": {
         "type": "object",
         "properties": {
-          "shade": {
-            "enum": [
-              "muted",
-              "deepest",
-              "deeper",
-              "middle",
-              "brighter",
-              "brightest"
-            ]
+          "style": {
+            "type": "string",
+            "not": {
+              "pattern": "\\{\\{"
+            }
           },
           "variation": {
             "enum": [
@@ -1235,11 +1231,15 @@
               "alt"
             ]
           },
-          "style": {
-            "type": "string",
-            "not": {
-              "pattern": "\\{\\{"
-            }
+          "shade": {
+            "enum": [
+              "muted",
+              "deepest",
+              "deeper",
+              "middle",
+              "brighter",
+              "brightest"
+            ]
           }
         },
         "additionalProperties": false
@@ -1256,14 +1256,12 @@
           "globals": {
             "type": "object",
             "properties": {
-              "default_empty_value": {
-                "type": "string"
-              },
-              "default_separator": {
-                "type": "string"
-              },
               "palette": {
                 "type": "string"
+              },
+              "preset": {
+                "not": {},
+                "description": "not allowed here — a preset cannot select a preset"
               },
               "style": {
                 "type": "string"
@@ -1284,10 +1282,6 @@
                     "pattern": "\\{\\{"
                   }
                 ]
-              },
-              "preset": {
-                "not": {},
-                "description": "not allowed here — a preset cannot select a preset"
               },
               "endcaps": {
                 "enum": [
@@ -1325,6 +1319,9 @@
                   "brightest"
                 ]
               },
+              "transitions": {
+                "type": "boolean"
+              },
               "autoWrap": {
                 "type": "boolean"
               },
@@ -1334,9 +1331,6 @@
                 "maximum": 16
               },
               "updateNotice": {
-                "type": "boolean"
-              },
-              "transitions": {
                 "type": "boolean"
               },
               "experimentalBand": {
@@ -1356,6 +1350,12 @@
                   "none"
                 ]
               },
+              "default_empty_value": {
+                "type": "string"
+              },
+              "default_separator": {
+                "type": "string"
+              },
               "menuGlyph": {
                 "not": {},
                 "description": "not allowed here — a preset cannot change the settings menu glyph"
@@ -1370,17 +1370,15 @@
     "editGlobals": {
       "type": "object",
       "properties": {
-        "default_empty_value": {
-          "type": "string"
-        },
-        "default_separator": {
-          "type": "string"
-        },
         "palette": {
           "type": "string",
           "not": {
             "pattern": "\\{\\{"
           }
+        },
+        "preset": {
+          "not": {},
+          "description": "not allowed here — the editGlobals fragment cannot select a preset"
         },
         "style": {
           "type": "string",
@@ -1407,10 +1405,6 @@
           "not": {
             "pattern": "\\{\\{"
           }
-        },
-        "preset": {
-          "not": {},
-          "description": "not allowed here — the editGlobals fragment cannot select a preset"
         },
         "endcaps": {
           "enum": [
@@ -1448,6 +1442,9 @@
             "brightest"
           ]
         },
+        "transitions": {
+          "type": "boolean"
+        },
         "autoWrap": {
           "type": "boolean"
         },
@@ -1457,9 +1454,6 @@
           "maximum": 16
         },
         "updateNotice": {
-          "type": "boolean"
-        },
-        "transitions": {
           "type": "boolean"
         },
         "experimentalBand": {
@@ -1478,6 +1472,12 @@
             "ansi",
             "none"
           ]
+        },
+        "default_empty_value": {
+          "type": "string"
+        },
+        "default_separator": {
+          "type": "string"
         },
         "menuGlyph": {
           "not": {},

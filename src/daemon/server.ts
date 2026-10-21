@@ -115,14 +115,12 @@ import { drawDsl, type RenderWarning } from "../dsl/render.js";
 import type { DrawnMotion } from "../render/drawn-motion.js";
 import {
   renderStripCells,
-  DEFAULT_COLOR_COMPATIBILITY,
-  DEFAULT_PADDING,
   DEFAULT_TERMINAL_WIDTH,
-  DEFAULT_WRAP,
   type BuildLineOptions,
   type ColorCompatibility,
 } from "../render/strip.js";
 import { applyClaudeCodeReserve } from "../utils/terminal-width.js";
+import { floorOf } from "../config/globals-fields.js";
 import type { RichText } from "@promptctl/rich-js";
 import {
   buildRenderPayload,
@@ -131,6 +129,7 @@ import {
   type RenderPayloadDeps,
 } from "./render-payload.js";
 import {
+  laneSwitches,
   resolveEffectiveGlobals,
   type EffectiveGlobals,
 } from "../config/effective-globals.js";
@@ -1362,7 +1361,7 @@ export async function replyTo(
                 ? serializeSegmentCells(
                     dbgEntry.lastRenderCellsBySegment,
                     dbgEntry.config.globals.colorCompatibility ??
-                      DEFAULT_COLOR_COMPATIBILITY,
+                      floorOf("colorCompatibility"),
                   )
                 : EMPTY_RENDER_MAP,
           };
@@ -1508,10 +1507,10 @@ export const reloadConfig = verbCtx.reloadConfig;
 // per-segment opts with width: Number.POSITIVE_INFINITY since each segment
 // is rendered standalone (wrap doesn't apply to a one-segment projection).
 const RENDER_OPTS_BASE = {
-  endcaps: "powerline" as const,
-  colorCompatibility: DEFAULT_COLOR_COMPATIBILITY,
-  wrap: DEFAULT_WRAP,
-  padding: DEFAULT_PADDING,
+  endcaps: floorOf("endcaps"),
+  colorCompatibility: floorOf("colorCompatibility"),
+  wrap: floorOf("autoWrap"),
+  padding: floorOf("padding"),
 };
 const DEBUG_RENDER_OPTS: BuildLineOptions = {
   ...RENDER_OPTS_BASE,
@@ -1674,7 +1673,7 @@ function lanesOf(req: CheckedRenderRequest): LaneSwitches {
     origin.cwd,
     origin.configFile ?? undefined,
   );
-  return sessionGlobals(sessionId, hold.state).lanes;
+  return laneSwitches(sessionGlobals(sessionId, hold.state));
 }
 
 // A render request that crossed the checkpoint: its hookData carries every
@@ -1866,15 +1865,16 @@ async function renderChecked(
     sessionState.get(req.hookData.session_id, key);
   const effective: EffectiveGlobals = sessionGlobals(sessionId, state);
   // Which animation lanes this session's settings switch on.
+  const lanes = laneSwitches(effective);
   noteFacts(facts, {
-    lanes: LANE_NAMES.filter((lane) => effective.lanes[lane]).join(",") || "-",
+    lanes: LANE_NAMES.filter((lane) => lanes[lane]).join(",") || "-",
   });
   // [LAW:dataflow-not-control-flow] What a lane runs follows the switch every
   // render draws by, as the session's own setting moves moved it
   // (src/daemon/lane-setup.ts).
   laneSetups.observe(
     { sessionId, hints, origin, transcript: req.hookData.transcript_path },
-    effective.lanes,
+    lanes,
     settingsHistory.revision(sessionId),
   );
   const payload = await buildRenderPayload(
@@ -2057,7 +2057,7 @@ async function renderChecked(
     },
     motion: frame.motion,
     clickShown,
-    lanes: effective.lanes,
+    lanes,
   };
 }
 

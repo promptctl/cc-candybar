@@ -90,6 +90,7 @@ import {
   isSubmenu,
   tabOf,
   type Place,
+  type PreviewName,
   type SubmenuName,
   type TabName,
 } from "./menu-places.js";
@@ -286,35 +287,25 @@ const submenuRef = (name: SubmenuName): DisclosureRef => {
   return { variable: key, key, member: name };
 };
 
-// A style chooses how the bar's palette is adapted, and `{{ themePreview }}`
-// samples exactly the palette the bar is drawn in. (The theme picker carries
-// its own demo of the theme it has selected.)
-const PALETTE_PREVIEW: readonly SegmentDecl[] = [
-  { template: "{{ themePreview }}" },
-];
-const LAYOUT_PREVIEW: SegmentDecl = { template: "{{ layoutPreview }}" };
-
-// [LAW:types-are-the-program] What hangs under a picker's list of options —
-// each a row, open while the list is. The list names the options; these show
-// what the current one does to the bar.
-const BENEATH: Partial<Record<SettingName, readonly SegmentDecl[]>> = {
-  // A preset changes the arrangement: `{{ layoutPreview }}` draws every row
-  // of it, one block per segment, named. Under it, while the ring is on a
-  // preset the user made (brandon-save-undo-bwi.o6u), the click that deletes
-  // it; `+ preset` in the 📐 layout tab makes one.
-  preset: [
-    LAYOUT_PREVIEW,
-    {
-      when: "{{ not .preset.bundled }}",
-      template: `{{ action "${PRESET_DELETE}" (printf "${PRESET_DELETE_GLYPH} delete %s" .${SETTINGS.preset.effectiveVar}) }}`,
-    },
-  ],
-  style: PALETTE_PREVIEW,
-  // A variation says which role each ROW wears, and a shade which of the
-  // role's shades each CELL wears — `{{ layoutPreview }}` draws every row,
-  // each block in the tint the ring's current variation and shade deal it.
-  variation: [LAYOUT_PREVIEW],
-  shade: [LAYOUT_PREVIEW],
+// [LAW:types-are-the-program] What each preview a setting's row names draws
+// under its list of options — each a row, open while the list is. The list
+// names the options; these show what the current one does to the bar.
+const PREVIEWS: Readonly<Record<PreviewName, SegmentDecl>> = {
+  // `{{ layoutPreview }}` draws every row of the arrangement, one block per
+  // segment, named, each block in the tint the bar's variation and shade deal
+  // it — so it shows what a preset, a variation or a shade changes.
+  layout: { template: "{{ layoutPreview }}" },
+  // A style chooses how the bar's palette is adapted, and `{{ themePreview }}`
+  // samples exactly the palette the bar is drawn in. (The theme picker carries
+  // its own demo of the theme it has selected.)
+  palette: { template: "{{ themePreview }}" },
+  // While the preset ring is on a preset the user made
+  // (brandon-save-undo-bwi.o6u), the click that deletes it; `+ preset` in the
+  // 📐 layout tab makes one.
+  presetDelete: {
+    when: "{{ not .preset.bundled }}",
+    template: `{{ action "${PRESET_DELETE}" (printf "${PRESET_DELETE_GLYPH} delete %s" .${SETTINGS.preset.effectiveVar}) }}`,
+  },
 };
 
 // Row `row` of the body a picker opens: its list's rows, then the rows
@@ -376,12 +367,11 @@ interface MenuControl extends SettingProjection {
 
 // [LAW:one-source-of-truth] Every setting the menu offers, generated
 // (brandon-settings-coverage-g4p.zoj): one control per row of SETTINGS, its
-// shape — a toggle, a stepper, a picker — decided by the domain the loader
-// declares for the field beside its spec (`settingControlDomain`), through the
-// same generator configure mode uses for a placement's settings. Every apply
-// action is a session `set`: a draft until the save cell commits it.
-// A row naming a field no control shape fits is refused the moment this
-// module loads (`settingControlDomain`).
+// shape — a toggle, a stepper, a picker — decided by the domain the field's
+// row declares beside its spec (`settingControlDomain`), through the same
+// generator configure mode uses for a placement's settings. Every apply
+// action is a session `set`: a draft until the save cell commits it. A field
+// no control shape fits is a `text` row, which is no setting at all.
 const CONTROLS: readonly MenuControl[] = (
   Object.keys(SETTINGS) as SettingName[]
 ).map((name) => {
@@ -394,7 +384,12 @@ const CONTROLS: readonly MenuControl[] = (
     controlApply(name),
     accordionOf(PLACE[name]),
   );
-  return { ...row, name, control, beneath: BENEATH[name] ?? [] };
+  return {
+    ...row,
+    name,
+    control,
+    beneath: row.previews.map((preview) => PREVIEWS[preview]),
+  };
 });
 
 const controlsIn = (place: Place): readonly MenuControl[] =>

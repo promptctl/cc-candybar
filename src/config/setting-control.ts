@@ -93,7 +93,7 @@ export type Affordance =
 // [LAW:one-source-of-truth] Whether a control's domain holds `value`, spelled
 // as SessionState spells it. The flag and range arms ARE the session parses
 // the render resolves a pick with; an option domain's parse is membership of
-// the same list the domain names (isEndcaps, isVariationName, the installed
+// the same list the domain names (the GLOBAL_FIELDS row's parse, the installed
 // themes, this config's styles and presets), resolved here through the one
 // resolveOptionDomain with this config's own domains threaded in as data.
 export function controlDomainAdmits(

@@ -25,7 +25,6 @@ import type { DslConfig, VariableDecl } from "../config/dsl-types.js";
 import type { BuildLineOptions } from "../render/strip.js";
 import type { SettingName } from "../config/setting-projections.js";
 import type { EffectiveGlobals } from "../config/effective-globals.js";
-import { perLane, type Lane } from "../config/lanes.js";
 import { presetGlobals, presetRoot } from "../config/presets.js";
 import { EXPRESSION_SLOTS, isExpression } from "../themes/policy.js";
 import { walkNodes } from "../config/dsl-types.js";
@@ -64,8 +63,11 @@ import {
 import { claudeConfigDir, claudeSettingsPath } from "../claude-settings.js";
 import { resumeCommand } from "../claude-resume.js";
 import type { GitDataProvider } from "./cache/git.js";
-import type { ColorCompatibility, Endcaps } from "../themes/policy.js";
-import type { ShadeName, VariationName } from "../themes/decor.js";
+import {
+  VALUED_FIELDS,
+  type ValuedField,
+  type ValuedGlobals,
+} from "../config/globals-fields.js";
 import { dateOf, type Instant } from "../utils/instant.js";
 
 // The resolved globals as the options renderDsl's joiner and cells read (its
@@ -88,43 +90,32 @@ export function renderOptionsOf(
   };
 }
 
+// [LAW:types-are-the-program] Every valued global as the payload carries it:
+// `<field>.effective`, the value the render resolved, typed by its row
+// (src/config/globals-fields.ts) — so a setting declared there is published
+// with no edit here. `theme`, `style` and `effect` are not valued fields:
+// renderDsl injects them, because under a rule only it knows the answer.
+export type ValuedInputs = {
+  readonly [K in ValuedField]: { readonly effective: ValuedGlobals[K] };
+};
+
 // The `.effective` inputs a render reads back — the resolved globals, as the
-// payload fields a settings label or a carousel centre reads. No `theme`,
-// `style` or `effect`: renderDsl injects all three, because under a rule only
-// it knows the answer.
+// payload fields a settings label or a carousel centre reads.
 // [LAW:one-source-of-truth] The daemon's payload, `cc-candybar check`'s fixture
 // and the demo's payload all spread THIS, so a caller cannot render a label
 // blank by forgetting a field the daemon's payload carries.
-export type EffectiveInputs = Pick<
-  RenderPayload,
-  | "preset"
-  | "endcaps"
-  | "variation"
-  | "shade"
-  | "colorCompatibility"
-  | "autoWrap"
-  | "padding"
-  | "updateNotice"
-  | "transitions"
-  | "lanes"
->;
+export type EffectiveInputs = ValuedInputs & Pick<RenderPayload, "preset">;
 
 export function effectiveInputs(effective: EffectiveGlobals): EffectiveInputs {
   return {
+    ...(Object.fromEntries(
+      VALUED_FIELDS.map((field) => [field, { effective: effective[field] }]),
+    ) as ValuedInputs),
     preset: {
       effective: effective.preset,
       customized: effective.presetCustomized,
       bundled: isBundledPreset(effective.preset),
     },
-    endcaps: { effective: effective.endcaps },
-    variation: { effective: effective.variation },
-    shade: { effective: effective.shade },
-    colorCompatibility: { effective: effective.colorCompatibility },
-    autoWrap: { effective: effective.autoWrap },
-    padding: { effective: effective.padding },
-    updateNotice: { effective: effective.updateNotice },
-    transitions: { effective: effective.transitions },
-    lanes: perLane((lane) => ({ effective: effective.lanes[lane] })),
   };
 }
 
@@ -135,7 +126,7 @@ export function effectiveInputs(effective: EffectiveGlobals): EffectiveInputs {
 // individual provider failures (no transcript, no git repo, no tmux) leave
 // their slots null/missing — and the DSL templates handle absence via
 // `when`/inline guards, never by branching in this code.
-export interface RenderPayload extends ClaudeHookData {
+export interface RenderPayload extends ClaudeHookData, ValuedInputs {
   // env-style values surfaced as paths so the DSL can read them via `input`
   // alongside the rest of the payload. (`kind: "env"` is also available for
   // arbitrary env-var lookups in user configs.)
@@ -187,29 +178,14 @@ export interface RenderPayload extends ClaudeHookData {
     readonly customized: boolean;
     readonly bundled: boolean;
   };
-  // [LAW:one-type-per-behavior] endcaps/colorCompatibility/autoWrap/
-  // padding are theme/style's twins over the remaining persistable globals
+  // The valued globals (ValuedInputs, which this interface extends) are
+  // theme/style's twins over the remaining persistable globals
   // (candybar-config-engine-71o.3) — each REQUIRED and unconditionally
   // present for the same reason: the daemon already resolves the value for
   // BuildLineOptions every render, and this is that exact value, so a
   // trigger's "current selection" highlight and the render it describes
-  // trace to one resolution. See EffectiveGlobals for how each is derived.
-  // [LAW:types-are-the-program] Unlike theme/style (open, registry-extensible
-  // names with no closed union to narrow to), endcaps/colorCompatibility
-  // DO have one (Endcaps/ColorCompatibility) — narrowed to it
-  // rather than widened to `string`, so a downstream `switch` over these
-  // fields gets real exhaustiveness checking.
-  readonly endcaps: { readonly effective: Endcaps };
-  readonly variation: { readonly effective: VariationName };
-  readonly shade: { readonly effective: ShadeName };
-  readonly colorCompatibility: { readonly effective: ColorCompatibility };
-  readonly autoWrap: { readonly effective: boolean };
-  readonly padding: { readonly effective: number };
-  readonly updateNotice: { readonly effective: boolean };
-  readonly transitions: { readonly effective: boolean };
-  // Each animation lane's toggle as the render resolved it, read back by its
-  // menu control through `lanes.<lane>.effective` (src/config/lanes.ts).
-  readonly lanes: Readonly<Record<Lane, { readonly effective: boolean }>>;
+  // trace to one resolution. Each is narrowed to its row's own type rather
+  // than widened to `string`, so a downstream `switch` gets exhaustiveness.
   // [LAW:one-source-of-truth] How many steps this session's settings history
   // can undo and redo (src/daemon/settings-history.ts), read from the history
   // itself every render, so the menu's `↶`/`↷` exist exactly while there is

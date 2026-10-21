@@ -17,15 +17,17 @@ import {
   settingOrderProblems,
   settingSpelling,
   settingsOf,
-  THEME_DEFAULT_FIELDS,
   walkNodes,
   type DslConfig,
   type Globals,
   type RawDslConfig,
   type SettingDecl,
   type SettingValue,
-  type ThemeDefaultField,
 } from "../config/dsl-types.js";
+import {
+  THEME_DEFAULT_FIELDS,
+  type ThemeDefaultField,
+} from "../config/globals-fields.js";
 import { isPresetGlobalsField } from "../config/loader/globals.js";
 import {
   parsePersistTarget,
@@ -54,6 +56,7 @@ import {
   BOOLEAN_FALSE,
   BOOLEAN_TRUE,
   listResolvablePaletteNames,
+  type Selection,
 } from "../themes/policy.js";
 import { type SettingCounts } from "./render-payload.js";
 import {
@@ -69,30 +72,25 @@ export interface SettingDraft extends SettingProjection {
   readonly target: string;
 }
 
-// [LAW:types-are-the-program] Each setting's resolved value in the spelling its
-// SessionState key uses, total over SETTINGS so a new setting is a compile
-// error here until it says how it compares. A theme or style chosen by RULE has
-// no name until a render evaluates it, so it is `null`: it equals only the
-// same rule, and saving a picked name replaces the rule with it.
-const SPELLING: {
-  readonly [K in keyof typeof SETTINGS]: (e: EffectiveGlobals) => string | null;
-} = {
-  theme: (e) => (e.theme.kind === "decided" ? e.theme.name : null),
-  preset: (e) => e.preset,
-  style: (e) => (e.style.kind === "decided" ? e.style.name : null),
-  effect: (e) => (e.effect.kind === "decided" ? e.effect.name : null),
-  endcaps: (e) => e.endcaps,
-  variation: (e) => e.variation,
-  shade: (e) => e.shade,
-  transitions: (e) => (e.transitions ? BOOLEAN_TRUE : BOOLEAN_FALSE),
-  autoWrap: (e) => (e.autoWrap ? BOOLEAN_TRUE : BOOLEAN_FALSE),
-  padding: (e) => String(e.padding),
-  updateNotice: (e) => (e.updateNotice ? BOOLEAN_TRUE : BOOLEAN_FALSE),
-  experimentalBand: (e) => (e.lanes.band ? BOOLEAN_TRUE : BOOLEAN_FALSE),
-  experimentalStatusline: (e) =>
-    e.lanes.statusline ? BOOLEAN_TRUE : BOOLEAN_FALSE,
-  experimentalPane: (e) => (e.lanes.pane ? BOOLEAN_TRUE : BOOLEAN_FALSE),
-};
+// [LAW:one-source-of-truth] A setting's resolved value in the spelling its
+// SessionState key uses — the spelling a pick writes, decided by the value's
+// own primitive, so a setting declared in its row compares with no edit here.
+// A theme or style chosen by RULE has no name until a render evaluates it, so
+// it is `null`: it equals only the same rule, and saving a picked name
+// replaces the rule with it.
+function spelled(e: EffectiveGlobals, name: SettingName): string | null {
+  const value: string | number | boolean | Selection<unknown> = e[name];
+  switch (typeof value) {
+    case "boolean":
+      return value ? BOOLEAN_TRUE : BOOLEAN_FALSE;
+    case "number":
+      return String(value);
+    case "string":
+      return value;
+    default:
+      return value.kind === "decided" ? value.name : null;
+  }
+}
 
 const SETTING_ROWS = Object.entries(SETTINGS) as ReadonlyArray<
   [keyof typeof SETTINGS, SettingProjection]
@@ -172,8 +170,8 @@ function differing(
   targetOf: (row: SettingProjection) => string,
 ): readonly SettingDraft[] {
   return rows.flatMap(([name, row]) => {
-    const value = SPELLING[name](session);
-    return value === null || value === SPELLING[name](baseOf(name))
+    const value = spelled(session, name);
+    return value === null || value === spelled(baseOf(name), name)
       ? []
       : [{ ...row, value, target: targetOf(row) }];
   });
@@ -190,7 +188,7 @@ export function sessionSettingValue(
   sessionPick: (key: string) => string | null,
   name: SettingName,
 ): string | null {
-  return SPELLING[name](sessionGlobals(config, sessionPick));
+  return spelled(sessionGlobals(config, sessionPick), name);
 }
 
 // Every setting the session renders differently from the config file. The
@@ -446,21 +444,21 @@ export function themeDefaultSave(
   sessionPick: (key: string) => string | null,
 ): ThemeDefaultSave {
   const session = sessionGlobals(config, sessionPick);
-  const theme = SPELLING.theme(session);
+  const theme = spelled(session, "theme");
   if (theme === null) return { kind: "rule" };
   const own = themeOwnLook(config, theme);
   const declared = presetGlobals(config, session.preset);
   const look = Object.fromEntries(
     THEME_DEFAULT_FIELDS.map((f) => [
       f,
-      SPELLING[f](declared[f] === undefined ? session : own),
+      spelled(declared[f] === undefined ? session : own, f),
     ]),
   ) as Record<ThemeDefaultField, string>;
   return {
     kind: "look",
     theme,
     look,
-    differs: THEME_DEFAULT_FIELDS.some((f) => look[f] !== SPELLING[f](own)),
+    differs: THEME_DEFAULT_FIELDS.some((f) => look[f] !== spelled(own, f)),
   };
 }
 

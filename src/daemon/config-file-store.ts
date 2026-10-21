@@ -46,8 +46,11 @@ import type {
   Root,
   RootFragment,
   SettingValue,
-  ThemeDefaultField,
 } from "../config/dsl-types.js";
+import {
+  wireKindOf,
+  type ThemeDefaultField,
+} from "../config/globals-fields.js";
 import { isRowsFragment } from "../config/root.js";
 import { presetNames, presetRoot } from "../config/presets.js";
 import {
@@ -82,36 +85,6 @@ import type { DaemonLogger } from "../utils/logger.js";
 import { BUNDLED_PRESETS, isBundledPreset } from "./bundled-presets.js";
 import { ident } from "../config/ident.js";
 
-// [LAW:types-are-the-program] Every Globals field's primitive type, keyed by
-// `keyof Globals` — TypeScript forces this map to stay total over Globals, so
-// a field added to/removed from that interface is a compile error here until
-// this table is updated. This is the ONE place a `persist` write's canonical
-// string becomes the JSON5 text the file declares the field with (padding: a
-// number, autoWrap: a boolean, everything else: a string). A segment-palette
-// target has no row: it is always a NAME.
-const GLOBALS_FIELD_KIND: Readonly<
-  Record<keyof Globals, "string" | "number" | "boolean">
-> = {
-  default_empty_value: "string",
-  default_separator: "string",
-  palette: "string",
-  style: "string",
-  effect: "string",
-  preset: "string",
-  endcaps: "string",
-  variation: "string",
-  shade: "string",
-  autoWrap: "boolean",
-  padding: "number",
-  updateNotice: "boolean",
-  transitions: "boolean",
-  experimentalBand: "boolean",
-  experimentalStatusline: "boolean",
-  experimentalPane: "boolean",
-  colorCompatibility: "string",
-  menuGlyph: "string",
-};
-
 // [LAW:one-source-of-truth] The same four boolean-ish inputs validateBoolean
 // (state-validators.ts) accepts — a `persist` action's gate is an ALLOW-LIST
 // whose members pass through verbatim, so a config author writing
@@ -128,9 +101,7 @@ const BOOLEAN_FALSY = new Set(["0", "false", ""]);
 export function persistValueText(key: string, raw: string): string {
   const target = requireValueTarget(key);
   const kind =
-    target.scope === "segment-palette"
-      ? "string"
-      : GLOBALS_FIELD_KIND[target.field];
+    target.scope === "segment-palette" ? "string" : wireKindOf(target.field);
   if (kind === "string") return JSON.stringify(raw);
   if (kind === "number") {
     const n = Number(raw);

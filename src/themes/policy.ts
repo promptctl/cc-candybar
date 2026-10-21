@@ -490,35 +490,6 @@ export function isStyleEraEndcaps(value: string): value is Endcaps {
   return STYLE_ERA_ENDCAPS.includes(value);
 }
 
-// The endcaps a render should use, as data.
-// [LAW:one-type-per-behavior] `effectiveGlobal` over a closed registry-static
-// vocabulary: the narrowing guard IS the parse. `pickJoiner` would render an
-// unknown shape as powerline anyway; parsing here keeps the returned TYPE
-// honest rather than silently widening it.
-//
-// A stale SessionState entry (a member of a prior option vocabulary) is an
-// ABSENT session pick, not a pick of the floor: it falls through to the config
-// default, and only reaches "powerline" when the config declares no endcaps
-// either. That is a deliberate change from the pre-`effectiveGlobal` spelling,
-// which collapsed straight to the floor and skipped the user's own declared
-// default — a config saying `endcaps: "capsule"` deserves capsule when a session
-// entry goes stale, not powerline. Every field here now shares that one rule
-// [LAW:one-source-of-truth]; test/session-globals.test.ts pins it with a stale
-// pick over a valid non-floor default, the case the old tests never exercised.
-export function effectiveEndcaps(
-  stagedEndcaps: Endcaps | undefined,
-  sessionEndcaps: string | null,
-  globalsEndcaps: Endcaps | undefined,
-): Endcaps {
-  return effectiveGlobal(
-    stagedEndcaps,
-    sessionEndcaps,
-    globalsEndcaps,
-    "powerline",
-    (raw) => (isEndcaps(raw) ? raw : null),
-  );
-}
-
 // --- Color-depth identifiers ---
 
 // [LAW:one-source-of-truth][LAW:types-are-the-program] The single canonical set
@@ -544,11 +515,6 @@ export const COLOR_COMPATIBILITIES = [
   "none",
 ] as const;
 export type ColorCompatibility = (typeof COLOR_COMPATIBILITIES)[number];
-
-// [LAW:one-source-of-truth] The one statement of the globals.colorCompatibility
-// default (truecolor — deliberately NOT the legacy "auto", which would change
-// rendering for existing users).
-export const DEFAULT_COLOR_COMPATIBILITY: ColorCompatibility = "truecolor";
 
 export function isColorCompatibility(
   value: string,
@@ -578,30 +544,6 @@ export const VARIATION_NAMES = Object.keys(
   VARIATIONS,
 ) as readonly VariationName[];
 
-// [LAW:one-source-of-truth] The one statement of the globals.variation
-// default: rows in `secondary`, then `accent` (brandon-theme-picker-bgw.7g6).
-export const DEFAULT_VARIATION: VariationName = "accent";
-
-export function isVariationName(value: string): value is VariationName {
-  return (VARIATION_NAMES as readonly string[]).includes(value);
-}
-
-// [LAW:one-type-per-behavior] effectiveEndcaps's twin: the narrowing guard
-// IS the parse, and a stale session entry falls through to the config default.
-export function effectiveVariation(
-  stagedVariation: VariationName | undefined,
-  sessionVariation: string | null,
-  globalsVariation: VariationName | undefined,
-): VariationName {
-  return effectiveGlobal(
-    stagedVariation,
-    sessionVariation,
-    globalsVariation,
-    DEFAULT_VARIATION,
-    (raw) => (isVariationName(raw) ? raw : null),
-  );
-}
-
 // --- Bar shade identifiers ---
 
 // [LAW:one-source-of-truth] The names a `globals.shade` may hold — the keys of
@@ -610,53 +552,17 @@ export function effectiveVariation(
 // position the render has no shades for.
 export const SHADE_NAMES = Object.keys(SHADES) as readonly ShadeName[];
 
-// [LAW:one-source-of-truth] The one statement of the globals.shade default:
-// the window centred on each role's own colour — "the default will be
-// 'middle' (standard role)" (candybar-theme-colours-6fq5.e5n).
-export const DEFAULT_SHADE: ShadeName = "middle";
-
-export function isShadeName(value: string): value is ShadeName {
-  return (SHADE_NAMES as readonly string[]).includes(value);
-}
-
-// [LAW:one-type-per-behavior] effectiveVariation's twin: the narrowing guard
-// IS the parse, and a stale session entry falls through to the config default.
-export function effectiveShade(
-  stagedShade: ShadeName | undefined,
-  sessionShade: string | null,
-  globalsShade: ShadeName | undefined,
-): ShadeName {
-  return effectiveGlobal(
-    stagedShade,
-    sessionShade,
-    globalsShade,
-    DEFAULT_SHADE,
-    (raw) => (isShadeName(raw) ? raw : null),
-  );
-}
-
 // --- Layout globals (autoWrap, padding) ---
 //
 // Wrapping and cell padding are how much bar you want on your screen right now
 // — a taste that legitimately differs between one session in a wide terminal
 // and another in a split pane, so, unlike colorCompatibility above,
-// each resolves a session pick over the config default. Their floors and
-// domains live here, beside the other globals vocabularies, because both the
-// config loader (range validation, JSON-schema emit) and the render layer need
-// them and config must not import render [LAW:one-way-deps].
-// src/render/strip.ts re-exports them so render-layer callers keep their
-// existing import site.
-
-// [LAW:one-source-of-truth] The one statement of the globals.autoWrap default
-// (on — current behavior).
-export const DEFAULT_WRAP = true;
-// The update notice renders unless a config says otherwise: a developer
-// running a stale checkout, or a user on a superseded release, is told so
-// by default and opts OUT durably through the notice's own `[disable]`.
-export const DEFAULT_UPDATE_NOTICE = true;
-// A placement that appears does not fade in unless a config or a session asks
-// for it (brandon-effects-2gka.631): a 20 s bloom is a look somebody chooses.
-export const DEFAULT_TRANSITIONS = false;
+// each resolves a session pick over the config default. Their domains and the
+// session parses over them live here, beside the other globals vocabularies,
+// because both the config loader (range validation, JSON-schema emit) and the
+// render layer need them and config must not import render
+// [LAW:one-way-deps]; their floors are their rows'
+// (src/config/globals-fields.ts).
 
 // [LAW:one-source-of-truth] The spelling of a boolean as a SessionState string.
 // SessionState holds strings, so "true"/"false" is the wire vocabulary for every
@@ -671,11 +577,6 @@ export const DEFAULT_TRANSITIONS = false;
 export const BOOLEAN_TRUE = "true";
 export const BOOLEAN_FALSE = "false";
 export const BOOLEAN_MEMBERS = [BOOLEAN_TRUE, BOOLEAN_FALSE] as const;
-
-// [LAW:one-source-of-truth] The one statement of the globals.padding default
-// (one space per side inside each segment cell — current behavior, matching the
-// legacy display.padding).
-export const DEFAULT_PADDING = 1;
 
 // [LAW:one-source-of-truth] THE padding domain: an integer, inclusive both ends.
 // Read by the loader's `padding` int spec (config-file values), by the bundled
@@ -717,76 +618,4 @@ export function parseSessionInt(
     value <= range.max
     ? value
     : null;
-}
-
-function parsePadding(raw: string): number | null {
-  return parseSessionInt(raw, PADDING_RANGE);
-}
-
-// Whether a render wraps over-wide rows, as data. The session's pick over the
-// config default over the on floor — `effectiveGlobal` with a boolean domain.
-export function effectiveAutoWrap(
-  stagedAutoWrap: boolean | undefined,
-  sessionAutoWrap: string | null,
-  globalsAutoWrap: boolean | undefined,
-): boolean {
-  return effectiveGlobal(
-    stagedAutoWrap,
-    sessionAutoWrap,
-    globalsAutoWrap,
-    DEFAULT_WRAP,
-    parseSessionBoolean,
-  );
-}
-
-// Whether the update notice may render, as data — effectiveAutoWrap's twin
-// over the other boolean setting, with its own floor.
-export function effectiveUpdateNotice(
-  stagedUpdateNotice: boolean | undefined,
-  sessionUpdateNotice: string | null,
-  globalsUpdateNotice: boolean | undefined,
-): boolean {
-  return effectiveGlobal(
-    stagedUpdateNotice,
-    sessionUpdateNotice,
-    globalsUpdateNotice,
-    DEFAULT_UPDATE_NOTICE,
-    parseSessionBoolean,
-  );
-}
-
-// Whether placements fade in and dissolve out, as data — effectiveAutoWrap's
-// twin over the transitions setting, with its own floor.
-export function effectiveTransitions(
-  stagedTransitions: boolean | undefined,
-  sessionTransitions: string | null,
-  globalsTransitions: boolean | undefined,
-): boolean {
-  return effectiveGlobal(
-    stagedTransitions,
-    sessionTransitions,
-    globalsTransitions,
-    DEFAULT_TRANSITIONS,
-    parseSessionBoolean,
-  );
-}
-
-// The intra-cell padding a render uses, as data. A session value outside
-// PADDING_RANGE falls through to the config default, the same rule every other
-// field here follows: the gate already refuses out-of-range clicks, so a value
-// that gets here is a stale entry from a narrower-since range, and the user's
-// own default is the honest answer rather than a render at a width nobody
-// chose.
-export function effectivePadding(
-  stagedPadding: number | undefined,
-  sessionPadding: string | null,
-  globalsPadding: number | undefined,
-): number {
-  return effectiveGlobal(
-    stagedPadding,
-    sessionPadding,
-    globalsPadding,
-    DEFAULT_PADDING,
-    parsePadding,
-  );
 }
