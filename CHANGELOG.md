@@ -1,3 +1,9 @@
+## [1.149.4](https://github.com/promptctl/cc-candybar/compare/v1.149.3...v1.149.4) (2026-10-21)
+
+### Bug Fixes
+
+* **render:** an omitted render selection resolves through the daemon's globals resolution ([#401](https://github.com/promptctl/cc-candybar/issues/401)) ([deacf85](https://github.com/promptctl/cc-candybar/commit/deacf851ef798fb416dd0aa2061df0af75d3f946))
+
 ## [1.149.3](https://github.com/promptctl/cc-candybar/compare/v1.149.2...v1.149.3) (2026-10-21)
 
 ### Bug Fixes
