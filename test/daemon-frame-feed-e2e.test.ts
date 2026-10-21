@@ -362,19 +362,22 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       stripAnsi(await render(sockPath, sid, projectDir, {}, args("handoff"))),
     ).toContain("a handed-off mark");
     await until(() => events().length > 0, "the first render's event");
-    expect(events()).toEqual([expect.stringMatching(/ handoff=- /)]);
+    // A request answered TIMEOUT under load is asked again, and each is an
+    // event: every one so far kept the bar.
+    for (const event of events()) expect(event).toMatch(/ handoff=- /);
     // The band draws the whole bar.
     const band = subscribeUntilEnd(sid, "band");
     await until(() => band.live().length > 0, "the band's frame");
     expect(barText(band.frames[0]!)).toEqual(
       expect.stringContaining("a handed-off mark"),
     );
+    const before = events().length;
     const handedOff = await render(sockPath, sid, projectDir, {}, args("handoff"));
     expect(stripAnsi(handedOff).trim().split("\n")).toEqual([
       `🧪 the bar is drawn in the band above the prompt ${HANDOFF_BUTTON}`,
     ]);
-    await until(() => events().length > 1, "the handoff render's event");
-    expect(events()[1]).toMatch(/ handoff=band /);
+    await until(() => events().length > before, "the handoff render's event");
+    expect(events().at(-1)).toMatch(/ handoff=band /);
     const button = links(handedOff).find((l) => l.text.includes("⟲"));
     await click(sockPath, button!.url);
     // The reset took the lane's setting out of the file it was in.
