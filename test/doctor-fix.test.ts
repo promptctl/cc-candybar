@@ -7,7 +7,8 @@ import { execFileSync } from "node:child_process";
 // only ever asked when there is a server to ask. The settings file is the one
 // in the Claude Code directory the client's `claudeConfigDir` hint names.
 
-import { EMPTY_STORES, emptyStores, healthyDaemonEdge, healthyDataEdge, noManagedSettings, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, HEALTHY_FACTS, CARRIED, NAMED, STILL, drew, drewAt, EVERY_SECOND } from "./helpers/doctor-facts";
+import { EMPTY_STORES, emptyStores, healthyDaemonEdge, healthyDataEdge, noManagedSettings, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, HEALTHY_FACTS, CARRIED, NAMED, STILL, drew, drewAt, sightedIn, EVERY_SECOND } from "./helpers/doctor-facts";
+import type { FrameSighting } from "../src/daemon/render-sightings";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -84,7 +85,9 @@ const factsIn = (
   tmux: ClientHints["tmux"],
   edge: DoctorEdge = NO_TMUX,
   sessionPick: (key: string) => string | null = NO_SESSION,
-  frames: DoctorFacts["frames"] = STILL,
+  // The bars of a session in the project, under `conf` — so they read the
+  // settings chain the run reads itself.
+  bars: readonly FrameSighting[] = STILL,
 ) =>
 ({
     ...gatherFacts(
@@ -95,7 +98,8 @@ const factsIn = (
       { kind: "ok", value: HEALTHY_SERVING },
       CARRIED,
       NAMED,
-      frames,
+      { kind: "recent" },
+      sightedIn(projectDir(), conf, bars),
       HEALTHY_FACTS.width,
       EMPTY_STORES,
     ),
@@ -145,7 +149,7 @@ describe("applyFix (claude-settings, env)", () => {
       },
       model: "opus",
     });
-    expect(envVarOf(facts.claudeSettings.sources, TMUX_TRUECOLOR_VAR)).toEqual({
+    expect(envVarOf(facts.claudeSettings.origin.sources, TMUX_TRUECOLOR_VAR)).toEqual({
       kind: "ok",
       value: { kind: "set", value: "1", from: { scope: "user", path: settingsIn(conf) } },
     });
@@ -233,7 +237,13 @@ describe("applyFix (effectRefresh)", () => {
       ),
     });
     // Once Claude Code redraws every second, the row passes.
-    expect(check.probe({ ...after, frames: drewAt(EVERY_SECOND, "moves") })).toMatchObject({ ok: true });
+    const { origin } = after.claudeSettings;
+    expect(
+      check.probe({
+        ...after,
+        claudeSettings: { ...after.claudeSettings, origin: { ...origin, bars: drewAt(EVERY_SECOND, "moves") } },
+      }),
+    ).toMatchObject({ ok: true });
   });
 
   test("a longer interval is overwritten in place", () => {
@@ -249,9 +259,75 @@ describe("applyFix (effectRefresh)", () => {
   });
 });
 
+// brandon-doctor-v62x.y5d: each bar sits in the settings chain its session
+// reads — its project, its Claude Code directory's user file — each location
+// read once, and a fix re-reads every chain, so the one holding the file it
+// wrote is judged on what the file now holds.
+describe("gatherFacts: a settings chain per location", () => {
+  const otherProject = (): string => path.join(dir, "other");
+  // The facts of a run in the project under `conf`, whose bars are `sighted`.
+  const withBars = (conf: string, ...sighted: (readonly [string, readonly FrameSighting[]])[]) => ({
+    ...gatherFacts(
+      NO_TMUX,
+      { tmux: null, claudeConfigDir: conf },
+      { projectDir: projectDir(), cwd: projectDir(), configFile: null },
+      NO_SESSION,
+      { kind: "ok", value: HEALTHY_SERVING },
+      CARRIED,
+      NAMED,
+      { kind: "recent" },
+      {
+        kind: "ok",
+        value: sighted.flatMap(([project, bars]) => {
+          const asked = sightedIn(project, conf, bars);
+          return asked.kind === "ok" ? asked.value : [];
+        }),
+      },
+      HEALTHY_FACTS.width,
+      EMPTY_STORES,
+    ),
+    urlHandler: { kind: "unsupported" } as const,
+    askedBy: "command" as const,
+    install: HEALTHY_FACTS.install,
+  });
+
+  test("bars of the run's own location sit in its chain; another project's, in one of their own", () => {
+    const conf = writeSettings(`{ "statusLine": { "command": "x" } }`);
+    const facts = withBars(
+      conf,
+      [projectDir(), drew("still")],
+      [otherProject(), drew("moves")],
+      [otherProject(), drew("can-move")],
+    );
+    const { origin, elsewhere } = facts.claudeSettings;
+    expect(origin.at.projectDir).toBe(projectDir());
+    expect(origin.bars.map((b) => b.frame)).toEqual(["still"]);
+    expect(elsewhere.map((c) => [c.at.projectDir, c.bars.map((b) => b.frame)])).toEqual([
+      [otherProject(), ["moves", "can-move"]],
+    ]);
+    expect(facts.frames).toEqual({ kind: "read" });
+  });
+
+  test("a fix in another project's file is what that chain judges next", () => {
+    const conf = writeSettings(`{ "model": "opus" }`);
+    const local = path.join(otherProject(), ".claude", "settings.local.json");
+    fs.mkdirSync(path.dirname(local), { recursive: true });
+    fs.writeFileSync(local, `{ "statusLine": { "command": "x" } }\n`);
+    const facts = withBars(conf, [otherProject(), drewAt(EVERY_SECOND, "moves")]);
+    const check = checkByName("effectRefresh")!;
+    const verdict = check.probe(facts);
+    if (verdict.ok || verdict.fix === undefined) throw new Error("no fix");
+    expect(verdict.fix).toMatchObject({ file: { scope: "project-local", path: local } });
+    expect(check.probe(fixed(applyFix(emptyStores(), verdict.fix, facts)))).toEqual({
+      ok: true,
+      note: "Claude Code redrew the bar in 58 of the last 60 seconds",
+    });
+  });
+});
+
 describe("gatherFacts", () => {
   const sourcesOf = (conf: string, edge: DoctorEdge = NO_TMUX) =>
-    factsIn(conf, null, edge).claudeSettings.sources;
+    factsIn(conf, null, edge).claudeSettings.origin.sources;
   const lineOf = (conf: string, edge: DoctorEdge = NO_TMUX) =>
     statusLineOf(sourcesOf(conf, edge));
 

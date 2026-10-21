@@ -217,7 +217,7 @@ describe("install probe", () => {
       value: { daemon: PUBLISHED, nativeShipped: true, clients: [] },
     };
     expect(
-      checkByName("install")!.probe({ ...HEALTHY_FACTS, install, askedBy: "click" }),
+      checkByName("install")!.probe({ ...HEALTHY_FACTS, install, sighted: { kind: "session", sessionId: "s1" } }),
     ).toEqual({
       ok: false,
       reason:
@@ -356,13 +356,13 @@ describe("installOf: the clients the command judges", () => {
   test("only a session that drew within the window is one the bar runs", () => {
     const stale = { kind: "native", bundle: "/old/dist/index.mjs", source: null } as const;
     const current = { kind: "native", bundle: BUNDLE, source: null } as const;
-    const facts = installOf(HEALTHY_INSTALL_EDGE, {
+    const facts = installOf(HEALTHY_INSTALL_EDGE, { kind: "recent" }, {
       kind: "ok",
       value: {
         bundle: BUNDLE,
         clients: [
-          { client: stale, ago: RECENT_CLIENT_S + 1 },
-          { client: current, ago: RECENT_CLIENT_S },
+          { client: stale, sessionId: "s1", ago: RECENT_CLIENT_S + 1 },
+          { client: current, sessionId: "s2", ago: RECENT_CLIENT_S },
         ],
       },
     });
@@ -380,9 +380,9 @@ describe("parseDaemonClients: the CLI's read of daemon-stats", () => {
       parseDaemonClients(stats({
         bundle: BUNDLE,
         clients: [
-          { client: { kind: "native", bundle: BUNDLE, source: null }, ago: 2 },
-          { client: { kind: "native", bundle: "relative", source: null }, ago: 1 },
-          { client: null, ago: 0 },
+          { client: { kind: "native", bundle: BUNDLE, source: null }, sessionId: "s1", ago: 2 },
+          { client: { kind: "native", bundle: "relative", source: null }, sessionId: "s2", ago: 1 },
+          { client: null, sessionId: "s3", ago: 0 },
         ],
       })),
     ).toEqual({
@@ -390,15 +390,15 @@ describe("parseDaemonClients: the CLI's read of daemon-stats", () => {
       value: {
         bundle: BUNDLE,
         clients: [
-          { client: { kind: "native", bundle: BUNDLE, source: null }, ago: 2 },
-          { client: null, ago: 1 },
-          { client: null, ago: 0 },
+          { client: { kind: "native", bundle: BUNDLE, source: null }, sessionId: "s1", ago: 2 },
+          { client: null, sessionId: "s2", ago: 1 },
+          { client: null, sessionId: "s3", ago: 0 },
         ],
       },
     });
   });
 
-  test("a daemon of another build, or one reporting no age, is refused", () => {
+  test("a daemon of another build, or one reporting no age or session, is refused", () => {
     const { clients: _clients, ...rest } = stats({});
     const older = rest as StatsSnapshot;
     const asked = parseDaemonClients(older);
@@ -412,8 +412,11 @@ describe("parseDaemonClients: the CLI's read of daemon-stats", () => {
     ).toEqual({
       kind: "failed",
       reason:
-        'the running daemon (1.0.0) reported clients without their age: [{"client":null}]',
+        'the running daemon (1.0.0) reported clients without their age or session: [{"client":null}]',
     });
+    expect(
+      parseDaemonClients(stats({ bundle: BUNDLE, clients: [{ client: null, ago: 1 }] })),
+    ).toMatchObject({ kind: "failed" });
   });
 });
 

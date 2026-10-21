@@ -67,6 +67,7 @@ describe("framesOf: where each session's window ends", () => {
     role: "statusline" as const,
     frame: "moves" as const,
     claudeConfigDir: "/claude",
+    projectDir: `/${sessionId}`,
     ago: from,
     sessionId,
     since: from + 120,
@@ -74,16 +75,28 @@ describe("framesOf: where each session's window ends", () => {
   });
   const asked = { kind: "ok", value: [sighting("s1", 70), sighting("s2", 0)] } as const;
 
-  test("the session this command runs in ends now; any other at its last render", () => {
-    expect(framesOf(asked, "/claude", "s1")).toEqual({
+  // Run in session s1, the command judges s1's bar alone, known to be on
+  // screen, so its window ends now; run outside any session, every recent
+  // bar, each window ending at its last render. Each bar keeps where its
+  // session reads its settings (brandon-doctor-v62x.y5d).
+  test("the session this command runs in alone, ending now; outside one, every bar at its last render", () => {
+    expect(framesOf({ kind: "session", sessionId: "s1" }, asked)).toEqual({
       kind: "ok",
       value: [
-        { role: "statusline", frame: "moves", redraws: { kind: "seen", seconds: 0 } },
-        { role: "statusline", frame: "moves", redraws: { kind: "seen", seconds: 60 } },
+        {
+          role: "statusline",
+          frame: "moves",
+          projectDir: "/s1",
+          claudeConfigDir: "/claude",
+          redraws: { kind: "seen", seconds: 0 },
+        },
       ],
     });
-    expect(framesOf(asked, "/claude", undefined)).toMatchObject({
-      value: [{ redraws: { kind: "seen", seconds: 60 } }, { redraws: { kind: "seen", seconds: 60 } }],
+    expect(framesOf({ kind: "recent" }, asked)).toMatchObject({
+      value: [
+        { projectDir: "/s1", redraws: { kind: "seen", seconds: 60 } },
+        { projectDir: "/s2", redraws: { kind: "seen", seconds: 60 } },
+      ],
     });
   });
 });
@@ -95,6 +108,7 @@ describe("parseFrameSightings", () => {
     role: "statusline",
     frame: "moves",
     claudeConfigDir: "/claude",
+    projectDir: "/p",
     ago: 1,
     sessionId: "s1",
     since: 90,
@@ -111,6 +125,7 @@ describe("parseFrameSightings", () => {
     ["no second at all", { ...good, redrawn: [] }],
     ["no record start", { ...good, since: undefined }],
     ["no session", { ...good, sessionId: undefined }],
+    ["no project", { ...good, projectDir: undefined }],
   ])("%s → failed, naming the daemon's build", (_, client) => {
     expect(parseFrameSightings(stats(client))).toMatchObject({
       kind: "failed",

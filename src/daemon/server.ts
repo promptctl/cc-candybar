@@ -1203,6 +1203,7 @@ export async function replyTo(
           termCols: req.hints.termCols ?? null,
           rateLimits: req.rateLimits,
           claudeConfigDir: claudeConfigDir(req.hints.claudeConfigDir),
+          projectDir: req.requested.projectDir,
           transcript: transcriptSaid(req.hookData),
           frame,
         },

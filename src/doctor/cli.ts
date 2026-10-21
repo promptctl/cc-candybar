@@ -18,10 +18,15 @@ import process from "node:process";
 import { WriteStream } from "node:tty";
 import type { CliPlan } from "../check.js";
 import { DOOR_GLYPH } from "../config/disclosure.js";
-import { redrawsOf } from "./redraws.js";
+import {
+  barsOf,
+  inScope,
+  scopeOf,
+  type SightedBar,
+  type SightingScope,
+} from "./sightings.js";
 import { detectClientHints } from "../client-hints.js";
 import {
-  RECENT_CLIENT_S,
   runDoctor,
   type Asked,
   type Width,
@@ -59,7 +64,6 @@ import { fallbackState, loadFromDisk } from "../daemon/cache/render.js";
 import { SessionState } from "../daemon/session-state.js";
 import { claudeConfigDir } from "../claude-settings.js";
 import type {
-  FrameSighting,
   RateLimitsSeen,
   TranscriptSaid,
 } from "../daemon/render-sightings.js";
@@ -110,10 +114,11 @@ export function loadConfigOnce(origin: ConfigOrigin): ConfigLoad {
   };
 }
 
-// The install facts of the daemon's answer: every session's latest client
-// that drew a bar within RECENT_CLIENT_S — the clients the bar runs.
+// The install facts of the daemon's answer: the clients that drew the scope's
+// bars, and the bundle the daemon runs.
 export function installOf(
   edge: InstallEdge,
+  scope: SightingScope,
   asked: Asked<DaemonClients>,
 ): InstallFacts {
   return asked.kind === "failed"
@@ -121,17 +126,16 @@ export function installOf(
     : installFacts(
         edge,
         asked.value.bundle,
-        asked.value.clients
-          .filter(({ ago }) => ago <= RECENT_CLIENT_S)
-          .map(({ client }) => client),
+        inScope(scope, asked.value.clients).map(({ client }) => client),
       );
 }
 
-// What the recent renders of sessions running with this Claude Code
-// directory said of the rate-limit windows — the windows are that
-// directory's account's, so a session of another (a second Claude Code
-// directory on the machine) says nothing about this one.
+// What the scope's renders said of the rate-limit windows, from sessions
+// running with this Claude Code directory — the windows are that directory's
+// account's, so a session of another (a second Claude Code directory on the
+// machine) says nothing about this one.
 export function rateLimitsOf(
+  scope: SightingScope,
   asked: Asked<RateLimitSightings>,
   configDir: string,
 ): Asked<readonly RateLimitsSeen[]> {
@@ -139,73 +143,50 @@ export function rateLimitsOf(
     ? asked
     : {
         kind: "ok",
-        value: asked.value
-          .filter(
-            (s) => s.ago <= RECENT_CLIENT_S && s.claudeConfigDir === configDir,
-          )
+        value: inScope(scope, asked.value)
+          .filter((s) => s.claudeConfigDir === configDir)
           .map((s) => s.rateLimits),
       };
 }
 
-// The transcripts of every session that drew a bar within RECENT_CLIENT_S —
-// a transcript is its session's, whichever Claude Code directory it runs in.
+// The transcripts the scope's renders named — a transcript is its session's,
+// whichever Claude Code directory it runs in.
 export function transcriptsOf(
+  scope: SightingScope,
   asked: Asked<TranscriptSightings>,
 ): Asked<readonly TranscriptSaid[]> {
   return asked.kind === "failed"
     ? asked
     : {
         kind: "ok",
-        value: asked.value
-          .filter((s) => s.ago <= RECENT_CLIENT_S)
-          .map((s) => s.transcript),
+        value: inScope(scope, asked.value).map((s) => s.transcript),
       };
 }
 
-// What the recent renders of sessions running with this Claude Code
-// directory drew — the refresh that would redraw them is that directory's
-// settings file's, so a session of another says nothing about it. `onScreen`:
-// the session whose bar is known to be drawn now — the one this command runs
-// in — so the silence since its last render counts against its redraw rate;
-// any other session's window ends at its last render (src/doctor/redraws.ts).
+// The bars the scope's renders drew, each with where its session reads its
+// settings — so each is judged against its own chain, whichever Claude Code
+// directory or project it runs in (brandon-doctor-v62x.y5d).
 export function framesOf(
+  scope: SightingScope,
   asked: Asked<FrameSightings>,
-  configDir: string,
-  onScreen: string | undefined,
-): Asked<readonly FrameSighting[]> {
+): Asked<readonly SightedBar[]> {
   return asked.kind === "failed"
     ? asked
-    : {
-        kind: "ok",
-        value: asked.value
-          .filter(
-            (s) => s.ago <= RECENT_CLIENT_S && s.claudeConfigDir === configDir,
-          )
-          .map(({ role, frame, sessionId, since, redrawn }) => ({
-            role,
-            frame,
-            // A record holds its latest render's second, so `min` is defined.
-            redraws: redrawsOf(
-              redrawn,
-              since,
-              sessionId === onScreen ? 0 : Math.min(...redrawn),
-            ),
-          })),
-      };
+    : { kind: "ok", value: barsOf(scope, asked.value) };
 }
 
 // [LAW:one-source-of-truth] The width the terminal-width row judges. Run in a
-// Claude Code session's shell (Claude Code sets CLAUDE_CODE_SESSION_ID
-// there), it is the width that session's own statusline client measured, as
-// the daemon recorded it — the fact the 🩺 click reads — never this shell's,
-// which may have no terminal at all. Outside any session there is no client
-// to read, so the command's own measurement stands in for one started here.
+// Claude Code session's shell, it is the width that session's own statusline
+// client measured, as the daemon recorded it — the fact the 🩺 click reads —
+// never this shell's, which may have no terminal at all. Outside any session
+// there is no client to read, so the command's own measurement stands in for
+// one started here.
 export function widthOf(
-  sessionId: string | undefined,
+  scope: SightingScope,
   asked: Asked<WidthSightings>,
   measured: number | null,
 ): Asked<Width> {
-  if (sessionId === undefined || sessionId === "") {
+  if (scope.kind === "recent") {
     return {
       kind: "ok",
       value: { columns: measured, of: { kind: "command" } },
@@ -213,10 +194,7 @@ export function widthOf(
   }
   return asked.kind === "failed"
     ? asked
-    : sessionWidth(
-        sessionId,
-        asked.value.filter((s) => s.sessionId === sessionId),
-      );
+    : sessionWidth(scope.sessionId, inScope(scope, asked.value));
 }
 
 // [LAW:effects-at-boundaries] The whole CLI as data: facts in, (streams,
@@ -241,6 +219,9 @@ export async function doctorPlan(
     // command runs in, standing in for the stream Claude Code would hand
     // that client (which the command's own redirects say nothing about).
     const hints = detectClientHints(env, cwd, measureTerminal());
+    // [LAW:single-enforcer] Whose bars this run judges, decided once: the
+    // session it runs in, else every session that drew one recently.
+    const scope = scopeOf(env.CLAUDE_CODE_SESSION_ID);
     const gathered = gatherFacts(
       edge,
       hints,
@@ -259,18 +240,15 @@ export async function doctorPlan(
       // No session: the bar a session started here opens on.
       () => null,
       answer.serving,
-      rateLimitsOf(answer.rateLimits, claudeConfigDir(hints.claudeConfigDir)),
-      transcriptsOf(answer.transcripts),
-      framesOf(
-        answer.frames,
+      rateLimitsOf(
+        scope,
+        answer.rateLimits,
         claudeConfigDir(hints.claudeConfigDir),
-        env.CLAUDE_CODE_SESSION_ID,
       ),
-      widthOf(
-        env.CLAUDE_CODE_SESSION_ID,
-        answer.widths,
-        hints.termCols ?? null,
-      ),
+      transcriptsOf(scope, answer.transcripts),
+      scope,
+      framesOf(scope, answer.frames),
+      widthOf(scope, answer.widths, hints.termCols ?? null),
       // [LAW:one-source-of-truth] The stores as the daemon that files them
       // read them, never under this shell's own XDG_STATE_HOME.
       answer.stores,
@@ -280,7 +258,7 @@ export async function doctorPlan(
     facts = {
       ...gathered,
       urlHandler: await probeUrlHandler(handler),
-      install: installOf(edge.install, answer.clients),
+      install: installOf(edge.install, scope, answer.clients),
       askedBy: "command",
     };
   } catch (e) {

@@ -28,28 +28,32 @@ import { parsePostMortemsRead } from "./post-mortems-read.js";
 
 export interface DaemonClients {
   readonly bundle: string;
-  readonly clients: ReadonlyArray<Pick<RenderSighting, "client" | "ago">>;
+  readonly clients: ReadonlyArray<
+    Pick<RenderSighting, "client" | "sessionId" | "ago">
+  >;
 }
 
 // What each recent render said of the rate-limit windows, and the Claude Code
 // directory it ran with.
 export type RateLimitSightings = ReadonlyArray<
-  Pick<RenderSighting, "rateLimits" | "claudeConfigDir" | "ago">
+  Pick<RenderSighting, "rateLimits" | "claudeConfigDir" | "sessionId" | "ago">
 >;
 
 // Where each recent render's transcript is, and how long ago it rendered.
 export type TranscriptSightings = ReadonlyArray<
-  Pick<RenderSighting, "transcript" | "ago">
+  Pick<RenderSighting, "transcript" | "sessionId" | "ago">
 >;
 
 // What each recent render drew, whose it was, how often its session's bar
-// was redrawn, and the Claude Code directory it ran with.
+// was redrawn, and where its session reads its settings: the Claude Code
+// directory it ran with and its project.
 export type FrameSightings = ReadonlyArray<
   Pick<
     RenderSighting,
     | "role"
     | "frame"
     | "claudeConfigDir"
+    | "projectDir"
     | "ago"
     | "sessionId"
     | "since"
@@ -60,7 +64,7 @@ export type FrameSightings = ReadonlyArray<
 // Whose each recent render was, which client drew it, and the width it
 // measured.
 export type WidthSightings = ReadonlyArray<
-  Pick<RenderSighting, "sessionId" | "role" | "termCols">
+  Pick<RenderSighting, "sessionId" | "ago" | "role" | "termCols">
 >;
 
 type SightingRecord = Partial<Record<keyof RenderSighting, unknown>>;
@@ -89,10 +93,14 @@ export function parseDaemonClients(stats: StatsSnapshot): Asked<DaemonClients> {
     };
   }
   const sightings = sightingRecords(stats);
-  if (!sightings.every((c) => typeof c.ago === "number")) {
+  if (
+    !sightings.every(
+      (c) => typeof c.ago === "number" && typeof c.sessionId === "string",
+    )
+  ) {
     return {
       kind: "failed",
-      reason: `the running daemon (${stats.version}) reported clients without their age: ${JSON.stringify(stats.clients)}`,
+      reason: `the running daemon (${stats.version}) reported clients without their age or session: ${JSON.stringify(stats.clients)}`,
     };
   }
   return {
@@ -101,6 +109,7 @@ export function parseDaemonClients(stats: StatsSnapshot): Asked<DaemonClients> {
       bundle: stats.bundle,
       clients: sightings.map((c) => ({
         client: sanitizeClient(c.client) ?? null,
+        sessionId: c.sessionId as string,
         ago: c.ago as number,
       })),
     },
@@ -220,6 +229,7 @@ export const parseRateLimitSightings = (
     stats,
     (c): c is RateLimitSightings[number] =>
       typeof c.ago === "number" &&
+      typeof c.sessionId === "string" &&
       typeof c.claudeConfigDir === "string" &&
       (RATE_LIMITS_SEEN as readonly unknown[]).includes(c.rateLimits),
     "the rate-limit windows they carried",
@@ -235,6 +245,7 @@ export const parseTranscriptSightings = (
       const t = c.transcript as Partial<Record<string, unknown>> | undefined;
       return (
         typeof c.ago === "number" &&
+        typeof c.sessionId === "string" &&
         typeof t?.path === "string" &&
         typeof t.answered === "boolean"
       );
@@ -251,6 +262,7 @@ export const parseFrameSightings = (
     (c): c is FrameSightings[number] =>
       typeof c.ago === "number" &&
       typeof c.claudeConfigDir === "string" &&
+      typeof c.projectDir === "string" &&
       typeof c.sessionId === "string" &&
       typeof c.since === "number" &&
       // A record holds its latest render's second, so a list is never empty.
@@ -270,6 +282,7 @@ export const parseWidthSightings = (
     stats,
     (c): c is WidthSightings[number] =>
       typeof c.sessionId === "string" &&
+      typeof c.ago === "number" &&
       isRole(c) &&
       (c.termCols === null || typeof c.termCols === "number"),
     "whose they were or the width they measured",

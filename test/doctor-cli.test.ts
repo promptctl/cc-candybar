@@ -3,7 +3,7 @@
 // settings file, a clean setup, and a failed check carrying a fix.
 
 import { BUNDLED_GLYPHS } from "./helpers/bundled-glyphs";
-import { EMPTY_STORES, healthyDaemonEdge, healthyDataEdge, noManagedSettings, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, healthyDaemonIn, HEALTHY_FACTS, CARRIED, NAMED, STILL, reportedFrame } from "./helpers/doctor-facts";
+import { EMPTY_STORES, healthyDaemonEdge, healthyDataEdge, noManagedSettings, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, healthyDaemonIn, HEALTHY_FACTS, CARRIED, NAMED, STILL, sightedIn, reportedFrame } from "./helpers/doctor-facts";
 import { glyphSighting } from "../src/doctor/checks";
 import { withMark } from "../src/doctor/mark-book";
 import fs from "node:fs";
@@ -460,10 +460,61 @@ describe("doctorPlan over a real config", () => {
   });
 
   // Another directory's settings file redraws that session, not this one's.
-  test("a bar of another Claude Code directory says nothing about this one", async () => {
-    expect((await planOver(drawing("moves", "/elsewhere"))).stdout).toMatch(
-      /✗ effect refresh — no session of this Claude Code has drawn a statusline for this daemon in the last 5 minutes, so whether it moves is unknown/,
-    );
+  // brandon-doctor-v62x.y5d: each bar is judged against the settings chain
+  // ITS session reads — its project's files and its Claude Code directory's
+  // user file — never the one this command's cwd would read.
+  describe("each session's own settings chain", () => {
+    let other: string;
+    beforeEach(() => {
+      other = path.join(dir, "other");
+      fs.mkdirSync(path.join(other, ".claude"), { recursive: true });
+      // This command's cwd reads only the user file, which asks for nothing.
+      fs.writeFileSync(
+        settingsPath(),
+        `{ "statusLine": { "type": "command", "command": "cc-candybar" } }`,
+      );
+      // The other project holds its own statusLine, redrawing every second.
+      fs.writeFileSync(
+        path.join(other, ".claude", "settings.local.json"),
+        `{ "statusLine": { "type": "command", "command": "cc-candybar", "refreshInterval": 1 } }`,
+      );
+    });
+    const sessions =
+      (...frames: ReturnType<typeof reportedFrame>[]) =>
+      async (): Promise<DaemonAnswer> => ({
+        ...(await DAEMON()),
+        frames: { kind: "ok", value: frames },
+      });
+    // s1: the other project, redrawn every second. s2: this project, every 5 s.
+    const s1 = () => reportedFrame("moves", dir, 1, other, "s1");
+    const s2 = () => reportedFrame("moves", dir, 5, project, "s2");
+
+    test("a bar whose project sets the interval passes, though this cwd's chain sets none", async () => {
+      expect((await planOver(sessions(s1()))).stdout).toContain(
+        "✓ effect refresh — Claude Code redrew the bar in 60 of the last 60 seconds\n",
+      );
+    });
+
+    test("with bars in both, the one whose own chain fails is the finding, with its fix", async () => {
+      expect((await planOver(sessions(s1(), s2()))).stdout).toContain(
+        `✗ effect refresh — the bar moves (an effect, a fade, or an animated segment), but its statusLine sets no refreshInterval, so Claude Code redraws it only on events (statusLine from ${settingsPath()})`,
+      );
+    });
+
+    // Run in a session's shell, the command judges that session's bar alone,
+    // its window ending now — the second since its last render, a second
+    // ago, held none, so 59.
+    test("run in session s1, s2's bar is not judged", async () => {
+      const out = await doctorPlan(
+        REAL,
+        NO_HANDLER,
+        sessions(s1(), s2()),
+        inDir({ CLAUDE_CODE_SESSION_ID: "s1" }),
+        project,
+        () => ({ columns: 120 }),
+      );
+      expect(out.stdout).toContain("✓ effect refresh — Claude Code redrew the bar in 59 of the last 60 seconds\n");
+    });
   });
 
   test("$CC_CANDYBAR_CONFIG names the file checked, as the client reports it", async () => {
@@ -489,7 +540,8 @@ describe("doctorPlan over a real config", () => {
         { kind: "ok", value: HEALTHY_SERVING },
         CARRIED,
         NAMED,
-        STILL,
+        { kind: "recent" },
+        sightedIn(project, dir, STILL),
         { kind: "ok", value: { columns: 148, of: { kind: "command" } } },
         EMPTY_STORES,
       ),
