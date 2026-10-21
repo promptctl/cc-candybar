@@ -116,6 +116,40 @@ export interface PreloadFacts {
 // file on disk.
 const COMPILED_ENTRY = "/$bunfs/";
 
+// [LAW:types-are-the-program] The node the attach launcher runs under, or
+// why there is none.
+export type LauncherNode =
+  | { readonly kind: "node"; readonly file: string }
+  | { readonly kind: "refused"; readonly why: string };
+
+// [LAW:single-enforcer] The node the attach launcher runs under: the first
+// `node` on `pathVariable`, as the launcher's own `#!/usr/bin/env node` finds
+// it — the shell `claude` was typed into is the only place that knows which
+// node this user runs — and never Bun. The preload asks it at Claude Code's
+// start, and lane B's restart asks it of the PATH Claude Code was started
+// with before ending it (src/daemon/lane-setup.ts).
+export function launcherNode(
+  pathVariable: string | undefined,
+  isExecutable: (file: string) => boolean,
+  canonical: (file: string) => string,
+): LauncherNode {
+  const node = executableOn("node", pathVariable, isExecutable);
+  if (node === null) {
+    return {
+      kind: "refused",
+      why: "no `node` on PATH to run the attach launcher",
+    };
+  }
+  // Bun puts a `node` that is Bun first on PATH (`bun run`, and a machine
+  // with no Node); the launcher must run under Node.
+  return path.basename(canonical(node)) === "bun"
+    ? {
+        kind: "refused",
+        why: `the \`node\` on PATH (${node}) is Bun; the attach launcher runs under Node`,
+      }
+    : { kind: "node", file: node };
+}
+
 export function planExec(facts: PreloadFacts): ExecPlan {
   if (!(facts.argv[1] ?? "").startsWith(COMPILED_ENTRY)) {
     return {
@@ -130,21 +164,12 @@ export function planExec(facts: PreloadFacts): ExecPlan {
       why: `the attach launcher is not at ${launcher} beside this preload — rebuild (\`pnpm build\`) or reinstall cc-candybar`,
     };
   }
-  const node = executableOn("node", facts.env.PATH, facts.isExecutable);
-  if (node === null) {
-    return {
-      kind: "refused",
-      why: "no `node` on PATH to run the attach launcher",
-    };
-  }
-  // Bun puts a `node` that is Bun first on PATH (`bun run`, and a machine
-  // with no Node); the launcher must run under Node.
-  if (path.basename(facts.canonical(node)) === "bun") {
-    return {
-      kind: "refused",
-      why: `the \`node\` on PATH (${node}) is Bun; the attach launcher runs under Node`,
-    };
-  }
+  const node = launcherNode(
+    facts.env.PATH,
+    facts.isExecutable,
+    facts.canonical,
+  );
+  if (node.kind === "refused") return node;
   const self = facts.canonical(facts.self);
   const isSelf = (file: string): boolean => facts.canonical(file) === self;
   const env: string[] = [];
@@ -159,8 +184,8 @@ export function planExec(facts: PreloadFacts): ExecPlan {
   }
   return {
     kind: "exec",
-    file: node,
-    argv: [node, launcher, facts.executable, ...facts.argv.slice(2)],
+    file: node.file,
+    argv: [node.file, launcher, facts.executable, ...facts.argv.slice(2)],
     env,
   };
 }

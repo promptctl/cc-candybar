@@ -66,6 +66,7 @@ import {
   attachLauncherOf,
   moduleGraphReaderOf,
 } from "../attach-launcher.js";
+import type { LauncherNode } from "../attach-preload.js";
 import { BadVerbArgs } from "./verb-error.js";
 
 // The band mod, as the checkout's marketplace (`.claude-plugin/
@@ -98,6 +99,9 @@ export interface PaneClaude {
   // The environment it was started with, `NAME=value` each.
   readonly env: readonly string[];
   readonly cwd: string;
+  // The process that started it: the shell the restart line is typed into
+  // when `fromShell`.
+  readonly parent: number;
   readonly fromShell: boolean;
   readonly attached: boolean;
 }
@@ -123,9 +127,13 @@ export interface LaneEdge {
   readonly fileExists: (file: string) => boolean;
   readonly presence: (file: string) => Presence;
   readonly paneClaude: (tmux: TmuxHint) => Promise<PaneClaude>;
-  // The directory the pane's shell is in: once the Claude Code it started
-  // has exited, the directory Claude Code was started in.
-  readonly paneDir: (tmux: TmuxHint) => Promise<string>;
+  // The directory of the pane's shell `shell` once it holds the pane's
+  // terminal again: when the Claude Code it started has exited, the
+  // directory Claude Code was started in.
+  readonly paneDir: (tmux: TmuxHint, shell: number) => Promise<string>;
+  // The node the attach launcher would run under, started with
+  // `pathVariable` (`launcherNode`, src/attach-preload.ts).
+  readonly launcherNode: (pathVariable: string | undefined) => LauncherNode;
   // The first executable named `name` on `pathVariable`, links resolved, or
   // null when there is none.
   readonly onPath: (
@@ -345,22 +353,15 @@ const CARRIED_ENV: ReadonlySet<string> = new Set([
   ...MEMENTO_ENV_VARS,
 ]);
 
-// Of `env` (`NAME=value` each), the variables the restart line sets.
-function carriedEnv(
-  env: readonly string[],
-): ReadonlyArray<readonly [string, string]> {
-  return env.flatMap((v) => {
-    const at = v.indexOf("=");
-    const name = v.slice(0, at);
-    return at > 0 && CARRIED_ENV.has(name)
-      ? [[name, v.slice(at + 1)] as const]
-      : [];
-  });
-}
-
-// The value `env` (`NAME=value` each) gives `name`.
-function valueIn(env: readonly string[], name: string): string | undefined {
-  return env.find((v) => v.startsWith(`${name}=`))?.slice(name.length + 1);
+// [LAW:parse-dont-validate] An environment as a process image carries it,
+// `NAME=value` each, read once into its variables.
+function environmentOf(env: readonly string[]): ReadonlyMap<string, string> {
+  return new Map(
+    env.flatMap((v) => {
+      const at = v.indexOf("=");
+      return at > 0 ? [[v.slice(0, at), v.slice(at + 1)] as const] : [];
+    }),
+  );
 }
 
 // Exit the pane's Claude Code and start it again under the attach launcher,
@@ -424,14 +425,24 @@ async function restartUnderAttach(
   if (carried.kind === "refused") {
     throw new Error(`${carried.reason} — restart it with that flag removed`);
   }
+  const started = environmentOf(claude.env);
+  const searched = started.get("PATH");
+  // [LAW:no-silent-failure] The preload starts the launcher under the node
+  // the line's shell finds; one it would refuse is refused before the kill.
+  const node = edge.launcherNode(searched);
+  if (node.kind === "refused") {
+    throw new Error(
+      `Claude Code in ${tmux.pane} was left running: ${node.why} Claude Code was started with`,
+    );
+  }
   // The line names `claude` when the shell would find this same release by
   // that word: the release's own path is removed by Claude Code's next
   // update, and a rerun from history would then find nothing there.
   const program =
-    edge.onPath("claude", valueIn(claude.env, "PATH")) === claude.executable
+    edge.onPath("claude", searched) === claude.executable
       ? "claude"
       : claude.executable;
-  const env = carriedEnv(claude.env);
+  const env = [...started].filter(([name]) => CARRIED_ENV.has(name));
   const lineIn = (
     place: { readonly dir: string; readonly args: readonly string[] },
     start: SessionStart,
@@ -476,7 +487,7 @@ async function restartUnderAttach(
       : start;
   let startDir: string;
   try {
-    startDir = await edge.paneDir(tmux);
+    startDir = await edge.paneDir(tmux, claude.parent);
   } catch (e) {
     throw stranded(
       `the directory it was started in could not be read (${(e as Error).message})`,

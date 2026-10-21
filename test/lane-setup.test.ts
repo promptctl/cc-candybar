@@ -72,6 +72,7 @@ function fakeEdge(over: Partial<LaneEdge> = {}): { edge: LaneEdge; did: string[]
     argv: ["claude", "--dangerously-skip-permissions", "--worktree"],
     env: ["PATH=/usr/bin", "PWD=/work", "EDITOR=vi"],
     cwd: "/work/.claude/worktrees/feat+tree",
+    parent: 4100,
     fromShell: true,
     attached: false,
   };
@@ -96,7 +97,11 @@ function fakeEdge(over: Partial<LaneEdge> = {}): { edge: LaneEdge; did: string[]
     paneClaude: async () => claude,
     // The shell Claude Code was started from sits in the repository whose
     // worktree it runs in.
-    paneDir: async () => "/work",
+    paneDir: async (_hint, shell) => {
+      did.push(`dir of ${shell}`);
+      return "/work";
+    },
+    launcherNode: () => ({ kind: "node", file: "/usr/bin/node" }),
     // `claude` on its PATH is the release it runs.
     onPath: () => claude.executable,
     moduleGraph: async (node, reader, executable) => {
@@ -239,6 +244,8 @@ describe("lane B, statusline", () => {
       "graph /usr/bin/node /opt/candybar/dist/cc-extra/src/bun-graph.js /u/.local/share/claude/versions/2.1.299",
       // A signal, never `/exit`: `/exit` removes or asks about the worktree.
       "terminate 4242",
+      // Its shell's directory, once that shell holds the terminal again.
+      "dir of 4100",
       `shell ${RESTART_LINE()}`,
       `followed ${SID} statusline`,
     ]);
@@ -253,6 +260,20 @@ describe("lane B, statusline", () => {
     ).rejects.toThrow(
       `did not come back attached within ${ATTACH_PATIENCE_MS / 1000} s of \`${RESTART_LINE()}\` — the pane says why`,
     );
+  });
+
+  // The preload starts the launcher under the node the line's shell finds,
+  // so a node it would refuse ends nothing.
+  test("a PATH with no node the launcher can run under leaves Claude Code running", async () => {
+    const { edge, did } = fakeEdge({
+      launcherNode: () => ({ kind: "refused", why: "no `node` on PATH to run the attach launcher" }),
+    });
+    await expect(
+      finished(LANE_SETUP.statusline.on(session(), HOST, edge)),
+    ).rejects.toThrow(
+      "Claude Code in %7 was left running: no `node` on PATH to run the attach launcher Claude Code was started with",
+    );
+    expect(did.some((d) => d.startsWith("terminate"))).toBe(false);
   });
 
   // Claude Code's auto-update removes the release a path names; `claude`
@@ -522,6 +543,7 @@ describe("lane B, statusline", () => {
         argv: ["cc-attach"],
         env: [],
         cwd: "/",
+        parent: 4100,
         fromShell: true,
         attached: true,
       }),
@@ -540,6 +562,7 @@ describe("lane B, statusline", () => {
         argv: ["claude"],
         env: [],
         cwd: "/",
+        parent: 4100,
         fromShell: false,
         attached: false,
       }),
@@ -585,6 +608,7 @@ describe("lane B, statusline", () => {
         argv: ["claude", "--brand-new-flag", "x"],
         env: [],
         cwd: "/",
+        parent: 4100,
         fromShell: true,
         attached: false,
       }),

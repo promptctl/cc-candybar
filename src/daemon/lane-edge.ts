@@ -21,7 +21,8 @@ import {
 import { lineage, processTable } from "../proc/process-table.js";
 import { pidAlive } from "./parent-watchdog.js";
 import { presence } from "../utils/presence.js";
-import { executableOn, regularFileWith } from "../path-search.js";
+import { canonical, executableOn, regularFileWith } from "../path-search.js";
+import { launcherNode } from "../attach-preload.js";
 import {
   BAR_PANE_OPTION,
   type LaneEdge,
@@ -175,7 +176,15 @@ async function ps(what: string, args: string[]): Promise<string> {
   );
 }
 
-async function paneClaude(hint: TmuxHint): Promise<PaneClaude> {
+// [LAW:one-source-of-truth] A pane as tmux and the terminal report it: its
+// first process, the directory of the job that holds its terminal, and that
+// job — the process group its terminal hands input to, whose leader is the
+// program the shell started (every process on a terminal answers the same).
+async function paneForeground(hint: TmuxHint): Promise<{
+  readonly panePid: number;
+  readonly cwd: string;
+  readonly foreground: number;
+}> {
   const display = await runTmuxAsync(hint, "lane.tmux", [
     "display",
     "-p",
@@ -185,20 +194,25 @@ async function paneClaude(hint: TmuxHint): Promise<PaneClaude> {
   ]);
   if (display.kind !== "ok") throw new Error(display.reason);
   const [panePid = "", cwd = ""] = display.stdout.trimEnd().split("\t");
-  // The pane's foreground job: the process group its terminal hands input to,
-  // whose leader is the program the shell started.
-  const pid = Number(
-    (
-      await ps(`asking pane ${hint.pane}'s foreground job`, [
-        "-o",
-        "tpgid=",
-        "-p",
-        panePid,
-      ])
-    ).trim(),
-  );
+  const foreground = (
+    await ps(`asking pane ${hint.pane}'s foreground job`, [
+      "-o",
+      "tpgid=",
+      "-p",
+      panePid,
+    ])
+  ).trim();
+  return { panePid: Number(panePid), cwd, foreground: Number(foreground) };
+}
+
+async function paneClaude(hint: TmuxHint): Promise<PaneClaude> {
+  const { panePid, cwd, foreground: pid } = await paneForeground(hint);
   const table = await ps("listing processes", ["-A", "-o", "pid=,ppid=,args="]);
   const image = await imageOf(pid);
+  const parent = processTable(table).get(pid)?.ppid;
+  if (parent === undefined) {
+    throw new Error(`pane ${hint.pane}'s foreground job ${pid} is gone`);
+  }
   return {
     pid,
     // The installed binary itself, as cc-extra's own `bin/cc-attach` hands it
@@ -208,8 +222,9 @@ async function paneClaude(hint: TmuxHint): Promise<PaneClaude> {
     argv: image.argv,
     env: image.env,
     cwd,
-    fromShell: String(pid) !== panePid,
-    attached: runsAttached(table, pid, Number(panePid)),
+    parent,
+    fromShell: pid !== panePid,
+    attached: runsAttached(table, pid, panePid),
   };
 }
 
@@ -286,43 +301,36 @@ export function productionLaneEdge(
     // [LAW:no-ambient-temporal-coupling] The pane's directory is the
     // shell's once the shell holds its terminal again: until it has reaped
     // Claude Code and taken the foreground back, tmux reads the directory of
-    // the job that held it, or none.
-    paneDir: async (hint) => {
+    // the job that held it, or none. An interactive shell leads its own
+    // process group, so it holds the terminal when it is the foreground job
+    // — the shell that started Claude Code, which may itself be a job of the
+    // pane's first shell (`nix develop`, a nested `bash`).
+    paneDir: async (hint, shell) => {
       const until = Date.now() + SHELL_PATIENCE_MS;
       for (;;) {
-        const display = await runTmuxAsync(hint, "lane.tmux", [
-          "display",
-          "-p",
-          "-t",
-          hint.pane,
-          "#{pane_pid}\t#{pane_current_path}",
-        ]);
-        if (display.kind !== "ok") throw new Error(display.reason);
-        const [panePid = "", dir = ""] = display.stdout.trimEnd().split("\t");
-        const foreground = (
-          await ps(`asking pane ${hint.pane}'s foreground job`, [
-            "-o",
-            "tpgid=",
-            "-p",
-            panePid,
-          ])
-        ).trim();
-        if (foreground === panePid) {
+        const pane = await paneForeground(hint);
+        if (pane.foreground === shell) {
           // tmux prints an empty path when it cannot read the shell's
           // directory.
-          if (dir === "") {
+          if (pane.cwd === "") {
             throw new Error(`tmux read no directory for pane ${hint.pane}`);
           }
-          return dir;
+          return pane.cwd;
         }
         if (Date.now() > until) {
           throw new Error(
-            `the shell in pane ${hint.pane} did not take its terminal back within ${SHELL_PATIENCE_MS / 1000} s`,
+            `the shell in pane ${hint.pane} (pid ${shell}) did not take its terminal back within ${SHELL_PATIENCE_MS / 1000} s`,
           );
         }
         await sleep(EXIT_POLL_MS);
       }
     },
+    launcherNode: (pathVariable) =>
+      launcherNode(
+        pathVariable,
+        (f) => regularFileWith(f, fs.constants.X_OK),
+        canonical,
+      ),
     onPath: (name, pathVariable) => {
       const file = executableOn(name, pathVariable, (f) =>
         regularFileWith(f, fs.constants.X_OK),

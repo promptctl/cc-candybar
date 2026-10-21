@@ -32,3 +32,13 @@ export function regularFileWith(file: string, mode: number): boolean {
     return false;
   }
 }
+
+// A path with its links resolved, or — naming nothing on disk — its own
+// spelling, absolute: the one identity a typed path and a loaded one share.
+export function canonical(file: string): string {
+  try {
+    return fs.realpathSync(file);
+  } catch {
+    return path.resolve(file);
+  }
+}

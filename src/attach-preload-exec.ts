@@ -5,9 +5,8 @@
 
 import fs from "node:fs";
 import os from "node:os";
-import path from "node:path";
 import { planExec } from "./attach-preload.js";
-import { regularFileWith } from "./path-search.js";
+import { canonical, regularFileWith } from "./path-search.js";
 
 interface Ffi {
   readonly dlopen: (
@@ -77,16 +76,6 @@ function execve(
   const errno = read.i32(errnoAt());
   return `execve ${file} failed: ${ERRNO_NAMES.get(errno) ?? `errno ${errno}`}`;
 }
-
-const canonical = (file: string): string => {
-  try {
-    return fs.realpathSync(file);
-  } catch {
-    // Names nothing on disk: then it is not this file, and its own spelling
-    // is its identity.
-    return path.resolve(file);
-  }
-};
 
 const plan = planExec({
   self: __filename,
