@@ -1,3 +1,9 @@
+## [1.148.9](https://github.com/promptctl/cc-candybar/compare/v1.148.8...v1.148.9) (2026-10-21)
+
+### Bug Fixes
+
+* **release:** pin publishing to 1.x ([#395](https://github.com/promptctl/cc-candybar/issues/395)) ([4cbaf0c](https://github.com/promptctl/cc-candybar/commit/4cbaf0c6d1cc7710511b7d772a814c363f8d432d))
+
 ## [1.148.8](https://github.com/promptctl/cc-candybar/compare/v1.148.7...v1.148.8) (2026-10-20)
 
 
