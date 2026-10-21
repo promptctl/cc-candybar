@@ -27,6 +27,13 @@ describe("major guard", () => {
     expect(run.stdout).not.toContain("preparing per-platform packages");
   });
 
+  test.each([[], ["1.2"]])("release.mjs refuses a version that is not semver: %p", (...args: string[]) => {
+    const run = spawnSync("node", [resolve(ROOT, "scripts/release.mjs"), ...args], { encoding: "utf8" });
+    expect(run.status).toBe(1);
+    expect(run.stderr).toContain("is not a semver version");
+    expect(run.stdout).not.toContain("preparing per-platform packages");
+  });
+
   test("prepublishOnly runs the guard first", () => {
     const pkg = JSON.parse(readFileSync(resolve(ROOT, "package.json"), "utf8"));
     expect(pkg.scripts.prepublishOnly).toMatch(/^node scripts\/major-guard\.mjs "\$npm_package_version" && /);
@@ -87,6 +94,8 @@ describe("semantic-release under .releaserc.json", () => {
   test.each([
     "feat: drop the legacy layout\n\nBREAKING CHANGE: layout rows are gone",
     "fix: rename a flag\n\nBREAKING CHANGE: --old is now --new",
+    "feat!: drop the legacy layout",
+    "feat(layout)!: drop the legacy layout",
   ])("a breaking commit releases a minor: %p", (message) => {
     expect(releaseType(message)).toBe("minor");
   });

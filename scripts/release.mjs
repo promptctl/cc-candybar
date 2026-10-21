@@ -52,10 +52,9 @@ function fail(msg) {
 }
 
 const version = process.argv[2];
-if (!version || !/^\d+\.\d+\.\d+(-[\w.]+)?$/.test(version)) {
-  fail(`bad version: "${version}" (expected semver from semantic-release)`);
-}
-// Before anything is published or tagged: this script publishes the platform
+// [LAW:one-source-of-truth] The guard's parse is the one reading of the version:
+// it refuses a string that is not semver as well as a major other than 1. It runs
+// before anything is published or tagged: this script publishes the platform
 // packages itself, and semantic-release pushes the tag only after it returns.
 const majorRefusal = majorProblem(version);
 if (majorRefusal) fail(majorRefusal);
