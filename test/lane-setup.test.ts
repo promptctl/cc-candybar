@@ -273,16 +273,43 @@ describe("lane B, statusline", () => {
     expect(did).toEqual([]);
   });
 
-  // Claude Code writes a session's transcript with its first message; resuming
-  // one with none finds no conversation and leaves the pane at its shell.
-  test("a session with no conversation yet is refused before Claude Code is ended", () => {
+  // Claude Code writes a session's transcript with its first message, and
+  // `--resume` of one with none finds no conversation: such a session starts
+  // afresh under its own id (`--session-id`), so lane B's wait for its
+  // subscriber, which names that id, is answered by the restart.
+  test("a session with no conversation yet starts afresh on the same id, and its statusline follows lane B", async () => {
     const { edge, did } = fakeEdge({
       fileExists: (file) => !file.endsWith(".jsonl"),
     });
-    expect(() => LANE_SETUP.statusline.on(session(), HOST, edge)).toThrow(
-      /no conversation to resume yet — send a first message/,
-    );
-    expect(did).toEqual([]);
+    await expect(
+      finished(LANE_SETUP.statusline.on(session(), HOST, edge)),
+    ).resolves.toContain(`starting ${SID} afresh, since it had no conversation yet`);
+    const script = did.find((d) => d.startsWith("script "))!;
+    expect(script).toContain(`--session-id ${SID}`);
+    expect(script).not.toContain("--resume");
+    expect(did.slice(-3)).toEqual([
+      `shell sh /run/relaunch-${SID}.sh`,
+      `followed ${SID} statusline`,
+      `remove /run/relaunch-${SID}.sh`,
+    ]);
+  });
+
+  // A first message sent while the module graph is read writes the
+  // transcript; the session is then resumed, never started afresh on an id
+  // Claude Code would refuse as in use.
+  test("whether a session has a conversation is read at the kill, not at the click", async () => {
+    let written = false;
+    const { edge, did } = fakeEdge({
+      fileExists: (file) => !file.endsWith(".jsonl") || written,
+      moduleGraph: async () => {
+        written = true;
+        return { ok: true };
+      },
+    });
+    await expect(
+      finished(LANE_SETUP.statusline.on(session(), HOST, edge)),
+    ).resolves.toContain(`resuming ${SID}`);
+    expect(did.find((d) => d.startsWith("script "))).toContain(`--resume ${SID}`);
   });
 
   test("a Claude Code that does not exit is not started again, and the wait says why", async () => {
@@ -312,8 +339,8 @@ describe("lane B, statusline", () => {
     await expect(
       finished(LANE_SETUP.statusline.on(session(), HOST, edge)),
     ).rejects.toThrow(/in the middle of a turn/);
-    expect(did.some((d) => d.startsWith("terminate"))).toBe(false);
-    expect(did.at(-1)).toBe(`remove /run/relaunch-${SID}.sh`);
+    // Refused at the kill, before any script is written.
+    expect(did.some((d) => /^(script|terminate)/.test(d))).toBe(false);
   });
 
   // A stash and a pending dialog die with the process; copy mode is a screen
@@ -521,6 +548,7 @@ describe("the restart script", () => {
 
 describe("relaunchOf", () => {
   const started = (argv: string[], cwd = "/src") => ({ argv, cwd });
+  const RESUME = { kind: "resume", sessionId: SID } as const;
 
   test.each([
     [["claude"], []],
@@ -536,7 +564,7 @@ describe("relaunchOf", () => {
     // outside it.
     [["claude", "--worktree", "gone"], []],
   ])("%j starts again where it runs as %j and the session", (argv, kept) => {
-    expect(relaunchOf(started(argv), SID)).toEqual({
+    expect(relaunchOf(started(argv), RESUME)).toEqual({
       kind: "relaunch",
       dir: "/src",
       args: [...kept, "--resume", SID],
@@ -555,7 +583,7 @@ describe("relaunchOf", () => {
     [["claude"], "/src/.claude/worktrees/fix/sub/dir", "/src", "fix"],
     [["claude"], "/.claude/worktrees/top", "/", "top"],
   ])("%j, running in %s, starts again from %s in worktree %j", (argv, cwd, dir, name) => {
-    expect(relaunchOf(started(argv, cwd), SID)).toEqual({
+    expect(relaunchOf(started(argv, cwd), RESUME)).toEqual({
       kind: "relaunch",
       dir,
       args: [
@@ -568,8 +596,23 @@ describe("relaunchOf", () => {
     });
   });
 
+  // `--resume` of a session with no transcript finds no conversation; a fresh
+  // start on the same id keeps the id the session's picks are held under.
+  test("a session with no conversation yet starts afresh on the same id, its other flags carried", () => {
+    expect(
+      relaunchOf(started(["claude", "--resume", "old-id", "--verbose"]), {
+        kind: "fresh",
+        sessionId: SID,
+      }),
+    ).toEqual({
+      kind: "relaunch",
+      dir: "/src",
+      args: ["--verbose", "--session-id", SID],
+    });
+  });
+
   test("a directory named like a worktree holder but holding none is no worktree", () => {
-    expect(relaunchOf(started(["claude"], "/src/.claude/worktrees"), SID)).toEqual({
+    expect(relaunchOf(started(["claude"], "/src/.claude/worktrees"), RESUME)).toEqual({
       kind: "relaunch",
       dir: "/src/.claude/worktrees",
       args: ["--resume", SID],
@@ -580,7 +623,7 @@ describe("relaunchOf", () => {
     [started(["claude", "--mystery"]), /--mystery/],
     [started(["claude", "--model"]), /--model and no value/],
   ])("%j is refused", (claude, reason) => {
-    const out = relaunchOf(claude, SID);
+    const out = relaunchOf(claude, RESUME);
     expect(out.kind).toBe("refused");
     expect(out.kind === "refused" && out.reason).toMatch(reason);
   });

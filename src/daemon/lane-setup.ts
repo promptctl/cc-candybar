@@ -12,8 +12,8 @@
 //                   daemon's frames. It attaches only at process start
 //                   (cc-extra's SEAMS.md: JSC gives debug hooks only to code
 //                   compiled while a debugger is attached), so the session's
-//                   Claude Code is exited and started again under it, resuming
-//                   the session.
+//                   Claude Code is exited and started again under it, on the
+//                   same session.
 //   C, pane       — `cc-candybar bar-pane <pane>`, in a tmux pane split under
 //                   the session's.
 //
@@ -49,7 +49,7 @@ import {
   type PaneSnapshot,
   type PromptState,
 } from "../claude-input/prompt-screen.js";
-import { relaunchOf } from "./claude-relaunch.js";
+import { relaunchOf, type SessionStart } from "./claude-relaunch.js";
 import { sourceCheckoutOf } from "./build-currency.js";
 import { attachLauncherOf, moduleGraphReaderOf } from "../attach-launcher.js";
 import { BadVerbArgs } from "./verb-error.js";
@@ -219,13 +219,6 @@ export const LANE_SETUP: Readonly<Record<Lane, { on: Plan; off: Plan }>> = {
           `${LANES.statusline.label} restarts Claude Code under the attach launcher, which is not at ${launcher} beside this daemon's bundle — rebuild (\`pnpm build\`) or reinstall cc-candybar`,
         );
       }
-      // [LAW:no-silent-failure] `--resume` of a session with no transcript
-      // finds no conversation, and the pane is left at its shell.
-      if (!edge.fileExists(session.transcript)) {
-        throw new BadVerbArgs(
-          `this session has no conversation to resume yet — send a first message, then turn ${LANES.statusline.label} off and on again`,
-        );
-      }
       return {
         kind: "underway",
         said: `restarting Claude Code in ${tmux.pane} under the attach launcher`,
@@ -299,7 +292,7 @@ async function installBand(
 }
 
 // Exit the pane's Claude Code and start it again under the attach launcher
-// (`launcher`: node and the launcher's script), resuming the session — off the
+// (`launcher`: node and the launcher's script), on the same session — off the
 // daemon's loop: reading the process table and waiting for the exit outlast a
 // click.
 async function restartUnderAttach(
@@ -317,10 +310,6 @@ async function restartUnderAttach(
       `Claude Code is the first process of pane ${tmux.pane}, so nothing would be left in the pane to start it again under the attach launcher — start Claude Code from a shell in the pane`,
     );
   }
-  const relaunch = relaunchOf(claude, session.sessionId);
-  if (relaunch.kind === "refused") {
-    throw new Error(`${relaunch.reason} — restart it with that flag removed`);
-  }
   // [LAW:no-silent-failure] The launcher runs the module graph a Bun-compiled
   // Claude Code embeds; one installed from npm runs under node, embeds none,
   // and once exited could not be started again under the launcher.
@@ -335,6 +324,33 @@ async function restartUnderAttach(
       `Claude Code in ${tmux.pane} runs ${claude.executable}, which the attach launcher cannot start (${graph.reason}) — ${LANES.statusline.label} needs the native Claude Code install (\`claude install\`), so it was left running`,
     );
   }
+  // [LAW:no-ambient-temporal-coupling] Whether ending Claude Code loses
+  // anything is judged on the pane as it is at the kill, not as it was before
+  // the module-graph read above (seconds, on a large binary): the user may
+  // have started a turn or a draft meanwhile, or left Claude Code. So is
+  // whether the session has a conversation to resume: a first message sent
+  // meanwhile writes its transcript, and a fresh start on its id would then
+  // be refused as in use.
+  const now = await edge.paneClaude(tmux);
+  if (now.pid !== claude.pid) {
+    throw new Error(
+      `Claude Code in ${tmux.pane} is no longer the process the restart read (pid ${claude.pid}), so it was not restarted under the attach launcher`,
+    );
+  }
+  const loses = endingLoses(edge.claudeInput.read(tmux));
+  if (loses !== null) {
+    throw new Error(
+      `Claude Code in ${tmux.pane} was left running: ${loses} — then turn ${LANES.statusline.label} off and on again`,
+    );
+  }
+  const start: SessionStart = {
+    kind: edge.fileExists(session.transcript) ? "resume" : "fresh",
+    sessionId: session.sessionId,
+  };
+  const relaunch = relaunchOf(claude, start);
+  if (relaunch.kind === "refused") {
+    throw new Error(`${relaunch.reason} — restart it with that flag removed`);
+  }
   const script = edge.writeScript(
     `relaunch-${session.sessionId}.sh`,
     relaunchScript(
@@ -346,28 +362,6 @@ async function restartUnderAttach(
   // [LAW:effects-at-boundaries] The script's whole life is this restart: it
   // is gone once the restart is decided, however that went.
   try {
-    // [LAW:no-ambient-temporal-coupling] Whether ending Claude Code loses
-    // anything is judged on the pane as it is at the kill, not as it was
-    // before the module-graph read above (seconds, on a large binary): the
-    // user may have started a turn or a draft meanwhile, or left Claude Code.
-    const now = await edge.paneClaude(tmux);
-    if (now.pid !== claude.pid) {
-      throw new Error(
-        `Claude Code in ${tmux.pane} is no longer the process the restart read (pid ${claude.pid}), so it was not restarted under the attach launcher`,
-      );
-    }
-    const loses = endingLoses(edge.claudeInput.read(tmux));
-    if (loses !== null) {
-      throw new Error(
-        `Claude Code in ${tmux.pane} was left running: ${loses} — then turn ${LANES.statusline.label} off and on again`,
-      );
-    }
-    // SIGTERM, not `/exit`: Claude Code exits on it as on `/exit`, printing
-    // its resume line, but `/exit` in a session started with `--worktree`
-    // removes the worktree when it holds no changes (the script would then
-    // start in a directory that is gone) and asks whether to keep it when it
-    // does (the restart would wait on that dialog). SIGTERM leaves the
-    // worktree as it is (measured on 2.1.289).
     edge.terminate(claude.pid);
     if (!(await edge.exited(claude.pid, EXIT_PATIENCE_MS))) {
       throw new Error(
@@ -393,8 +387,16 @@ async function restartUnderAttach(
   } finally {
     edge.removeScript(script);
   }
-  return `restarted Claude Code in ${tmux.pane} under the attach launcher from ${relaunch.dir}, resuming ${session.sessionId}, and its statusline follows lane B`;
+  return `restarted Claude Code in ${tmux.pane} under the attach launcher from ${relaunch.dir}, ${STARTED[start.kind](session.sessionId)}, and its statusline follows lane B`;
 }
+
+// How the restart's report names the session it started on.
+const STARTED: Readonly<
+  Record<SessionStart["kind"], (sessionId: string) => string>
+> = {
+  resume: (id) => `resuming ${id}`,
+  fresh: (id) => `starting ${id} afresh, since it had no conversation yet`,
+};
 
 // [LAW:single-enforcer] What ending the Claude Code a pane shows would lose,
 // or null when nothing: the one judgement the restart makes before its kill.
@@ -566,8 +568,8 @@ const EXPORTABLE = /^[A-Za-z_][A-Za-z0-9_]*=/;
 // `argv` in `cwd` (the relaunch's directory), under the environment Claude
 // Code was started with (`env`, `NAME=value` each) — the variables it was
 // started with set as they were (a `CC_CANDYBAR_CONFIG`, a model), and its
-// Claude Code directory unset when it had none, so `--resume` looks where the
-// session lives whatever the pane's shell exports.
+// Claude Code directory unset when it had none, so the session is looked up,
+// or started, where it lives whatever the pane's shell exports.
 export function relaunchScript(
   cwd: string,
   argv: readonly string[],
