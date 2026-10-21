@@ -14,10 +14,25 @@
 
 import { settingMenuPath } from "./menu-places.js";
 
+// `elsewhere` is where a lane draws the bar when that is not the statusline:
+// while it is on, the statusline hands off to it (src/daemon/lane-handoff.ts).
+// Lane B draws the statusline itself, so it hands off nowhere.
 export const LANES = {
-  band: { setting: "experimentalBand", label: "🧪 band (A)" },
-  statusline: { setting: "experimentalStatusline", label: "🧪 statusline (B)" },
-  pane: { setting: "experimentalPane", label: "🧪 tmux pane (C)" },
+  band: {
+    setting: "experimentalBand",
+    label: "🧪 band (A)",
+    elsewhere: "the band above the prompt",
+  },
+  statusline: {
+    setting: "experimentalStatusline",
+    label: "🧪 statusline (B)",
+    elsewhere: null,
+  },
+  pane: {
+    setting: "experimentalPane",
+    label: "🧪 tmux pane (C)",
+    elsewhere: "a tmux pane below",
+  },
 } as const;
 
 export type Lane = keyof typeof LANES;

@@ -201,8 +201,14 @@ export const LANE_SETUP: Readonly<Record<Lane, { on: Plan; off: Plan }>> = {
       );
       return done(`opened bar pane ${opened} under ${tmux.pane}`);
     },
+    // Off is "no bar pane draws this session's bar", which a session with no
+    // tmux pane already is.
     off: (session, _host, edge) => {
-      const tmux = paneOf(session);
+      const pane = tmuxPaneOf(session.hints.tmux);
+      if (pane.kind === "refused") {
+        return done(`no bar pane to close: ${pane.reason}`);
+      }
+      const tmux = pane.hint;
       const open = edge.barPanes(tmux);
       for (const pane of open) edge.closePane(tmux, pane);
       return done(

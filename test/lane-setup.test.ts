@@ -119,6 +119,15 @@ describe("lane C, pane", () => {
     expect(did).toEqual([]);
   });
 
+  test("off in a session with no tmux pane has nothing to close, and says so", () => {
+    const { edge, did } = fakeEdge();
+    expect(LANE_SETUP.pane.off(session({ tmux: null }), HOST, edge)).toEqual({
+      kind: "done",
+      said: expect.stringMatching(/^no bar pane to close: .*not running inside tmux/),
+    });
+    expect(did).toEqual([]);
+  });
+
   test("off closes every bar pane drawing the session's bar", () => {
     const { edge, did } = fakeEdge({ barPanes: () => ["%9", "%11"] });
     LANE_SETUP.pane.off(session(), HOST, edge);

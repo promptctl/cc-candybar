@@ -102,6 +102,7 @@ import { ProbeArrivals } from "../doctor/handler-probe";
 import {
   RenderSightings,
   rateLimitsSeen,
+  roleOf,
   transcriptSaid,
   type FrameSeen,
   type RateLimitsSeen,
@@ -160,6 +161,7 @@ import type { RenderedLine } from "../dsl/node-registry.js";
 import { productionClaudeInputEdge } from "../claude-input/edge.js";
 import { LaneSetups } from "./lane-setup.js";
 import { productionLaneEdge } from "./lane-edge.js";
+import { laneHandoff, lanesDrawingElsewhere } from "./lane-handoff.js";
 import {
   collectDiagnostics,
   composeWithDiagnostics,
@@ -1223,7 +1225,7 @@ export async function replyTo(
     } = !checked.ok
       ? refusedRender(checked.problems)
       : await answerRequest(checked.req, order, at, facts).then(
-          ({ output, motion, clickShown }) => {
+          ({ output, answer, motion, clickShown }) => {
             sighted(checked.req, motion);
             const resp = { ok: true, output } as const;
             // [LAW:one-source-of-truth] A request the render took is the
@@ -1237,12 +1239,12 @@ export async function replyTo(
             );
             return {
               outcome: { kind: "ok" } as const,
-              resp,
+              resp: { ok: true, output: answer } as const,
               // [LAW:single-enforcer] An answer carrying the click error that
               // reaches its client is the one that delivered it
-              // (src/daemon/click-error.ts).
+              // (src/daemon/click-error.ts); a handoff line carries none.
               delivered:
-                clickShown === null
+                clickShown === null || answer !== output
                   ? NOTHING_DELIVERED
                   : () =>
                       answeredClickError(
@@ -2107,7 +2109,12 @@ async function answerRequest(
   at: Instant,
   facts: RenderFacts,
 ): Promise<{
+  // The session's bar: what its frames are, and what a client drawing the
+  // bar itself is answered with.
   output: string;
+  // What this request's client is answered with: the bar, or — for Claude
+  // Code's statusline while a lane draws the bar elsewhere — the handoff line.
+  answer: string;
   motion: DrawnMotion;
   clickShown: ClickErrorRecord | null;
 }> {
@@ -2128,5 +2135,28 @@ async function answerRequest(
   noteFacts(facts, {
     dumpFailed: failure === null ? "-" : JSON.stringify(failure),
   });
-  return { output: composeBar(drawn, link), motion, clickShown };
+  const output = composeBar(drawn, link);
+  const sessionId = req.hookData.session_id;
+  // A `frames` display draws the bar itself; Claude Code's statusline hands
+  // it to the lanes drawing it elsewhere.
+  const elsewhere =
+    roleOf(req.hints.client ?? null) === "statusline"
+      ? lanesDrawingElsewhere(lanesOf(req))
+      : [];
+  const [first, ...rest] = elsewhere;
+  // [LAW:nothing-unseen] Which lanes the statusline handed the bar to.
+  noteFacts(facts, { handoff: elsewhere.join(",") || "-" });
+  const answer =
+    first === undefined
+      ? output
+      : composeBar(
+          {
+            body: "",
+            diagnostics: laneHandoff(sessionId, [first, ...rest]),
+            failedConfigFile: null,
+            geometry: drawn.geometry,
+          },
+          link,
+        );
+  return { output, answer, motion, clickShown };
 }

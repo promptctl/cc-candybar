@@ -71,6 +71,15 @@ export const UPDATE_SEVERITY: DiagnosticSeverity = {
   colors: DIAGNOSTIC_WARNING_COLORS,
 };
 
+// The statusline handing the bar off to an animation lane that draws it
+// elsewhere (src/daemon/lane-handoff.ts): advisory, and its glyph is the
+// lanes' own.
+export const HANDOFF_SEVERITY: DiagnosticSeverity = {
+  heading: "LANES",
+  glyph: "🧪",
+  colors: DIAGNOSTIC_WARNING_COLORS,
+};
+
 // [LAW:parse-dont-validate] A run of words sharing one click. The text is
 // sanitized at construction — `diagnosticSpan` is the only constructor — so
 // every span the composer meets is already safe to emit, whatever produced

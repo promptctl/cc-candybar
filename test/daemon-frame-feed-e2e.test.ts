@@ -46,6 +46,8 @@ import {
   urlWriting,
 } from "./helpers/daemon-e2e";
 import { sendDaemonRequest } from "./helpers/daemon-wire";
+import { links } from "./helpers/ansi";
+import { HANDOFF_BUTTON } from "../src/daemon/lane-handoff";
 import { until } from "./helpers/until";
 import {
   effectsUrl,
@@ -69,10 +71,13 @@ const CONFIGS = {
   moving: `{ globals: { effect: "sparkle", experimentalBand: true, experimentalStatusline: true }, segments: { a: { template: 'directory ~/code/cc-candybar' }, b: { template: 'branch main' }, c: { template: 'a moving mark' } }, root: { h: ['a', 'b', 'c'] } }`,
   still: `{ globals: { experimentalBand: true, experimentalStatusline: true }, segments: { mark: { template: 'a still mark' } }, root: { h: ['mark'] } }`,
   off: `{ segments: { mark: { template: 'an unswitched mark' } }, root: { h: ['mark'] } }`,
+  // The band lane alone, which draws the bar elsewhere: its own file, since
+  // the statusline's reset button rewrites the file it names.
+  handoff: `{ globals: { experimentalBand: true }, segments: { mark: { template: 'a handed-off mark' } }, root: { h: ['mark'] } }`,
   // Moves, and carries a load warning (a duplicate key) the diagnostic strip
   // shows on every frame.
   warned: `{ globals: { effect: "sparkle", effect: "sparkle", experimentalBand: true, experimentalStatusline: true }, segments: { mark: { template: 'a warned mark' } }, root: { h: ['mark'] } }`,
-  toggle: `{ globals: { experimentalBand: true, experimentalStatusline: true }, variables: { face: { kind: "state", key: "face", default: "shut" } }, actions: { flip: { set: "face", cycle: ["shut", "open"] } }, segments: { door: { template: '{{ action "flip" "door shut" "door open" }}' } }, root: { h: ['door'] } }`,
+  toggle: `{ globals: { experimentalStatusline: true }, variables: { face: { kind: "state", key: "face", default: "shut" } }, actions: { flip: { set: "face", cycle: ["shut", "open"] } }, segments: { door: { template: '{{ action "flip" "door shut" "door open" }}' } }, root: { h: ['door'] } }`,
 };
 
 const sleep = (ms: number): Promise<void> =>
@@ -84,6 +89,7 @@ type Frame = { readonly at: number; readonly resp: Response };
 describe("a subscriber receives a session's frames as the bar moves", () => {
   let sockPath: string;
   let removeTmpDirs: () => void;
+  let daemonLog: string;
   let projectDir: string;
   let daemon: RunningDaemon | undefined;
 
@@ -178,6 +184,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   beforeAll(async () => {
     const prepared = prepareIsolatedDaemonEnv("cc-candybar-feed-e2e");
     ({ sockPath, removeTmpDirs } = prepared);
+    daemonLog = path.join(prepared.env.XDG_STATE_HOME!, "cc-candybar", "daemon.log");
     projectDir = mkdtempSync(path.join(os.tmpdir(), "cc-candybar-feed-e2e-"));
     for (const [name, text] of Object.entries(CONFIGS))
       writeFileSync(path.join(projectDir, `${name}.json5`), text);
@@ -327,6 +334,41 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   };
   const setState = (sid: string, key: string, value: string): Promise<void> =>
     click(sockPath, effectsUrl([{ verb: VERB_SET_STATE, args: [sid, key, value] }]));
+
+  // brandon-menus-sjhy.amf — Brandon: "When we're showing the bar in either
+  // the mod or the tmux pane, we should NOT show the original bar except a
+  // single line that contains a button to reset those settings".
+  test("while the band draws the bar, Claude Code's statusline is one line whose button brings the bar back", async () => {
+    const sid = "feed-handoff";
+    const handedOff = await render(sockPath, sid, projectDir, {}, args("handoff"));
+    expect(stripAnsi(handedOff).trim().split("\n")).toEqual([
+      `🧪 the bar is drawn in the band above the prompt ${HANDOFF_BUTTON}`,
+    ]);
+    // [LAW:nothing-unseen] The render event says the statusline handed off.
+    const events = (): string[] =>
+      readFileSync(daemonLog, "utf8")
+        .split("\n")
+        .filter((l) => l.includes(` render sid=${sid} `));
+    await until(() => events().length > 0, "the handoff render's event");
+    expect(events()).toEqual([expect.stringMatching(/ handoff=band /)]);
+    // The band itself draws the whole bar.
+    const band = subscribeUntilEnd(sid, "band");
+    await until(() => band.live().length > 0, "the band's frame");
+    expect(barText(band.frames[0]!)).toEqual(
+      expect.stringContaining("a handed-off mark"),
+    );
+    const button = links(handedOff).find((l) => l.text.includes("⟲"));
+    await click(sockPath, button!.url);
+    // The reset took the lane's setting out of the file it was in.
+    expect(readFileSync(path.join(projectDir, "handoff.json5"), "utf8")).not.toContain(
+      "experimentalBand",
+    );
+    expect(
+      stripAnsi(await render(sockPath, sid, projectDir, {}, args("handoff"))),
+    ).toContain("a handed-off mark");
+    // And the band's stream is refused now its lane is off.
+    expect(await band.ended).toMatchObject({ kind: "refused" });
+  });
 
   // A subscribe naming no lane is a client from before the toggles, told to
   // update (VERSION_MISMATCH stops it; BAD_REQUEST would have it retry).

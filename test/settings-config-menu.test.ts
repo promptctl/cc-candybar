@@ -98,6 +98,8 @@ function rig(
   durable?.write(source);
   if (durable === undefined) recordRender(sessionState, SID);
   else durable.seedOrigin(sessionState, SID);
+  // What a render records of the session's client: here, not in tmux.
+  sessionState.set(SID, SESSION_CLIENT_HINTS_KEY, JSON.stringify({ tmux: null }));
   // Everything the daemon's cache entry holds for one config — rebuilt whole
   // on a reload, the old registry disposed once the new one is built.
   const load = (text: string) => {
@@ -122,7 +124,9 @@ function rig(
   const ctx: VerbContext = {
     ...testVerbContext(sessionState, durable?.historyFor(sessionState)),
     dlog: (_level, msg) => logs.push(msg),
-    ...(lanes === undefined ? {} : { lanes }),
+    // A lane's setup is asked for and answers nothing, unless a test hands in
+    // its own.
+    lanes: lanes ?? { sync: () => "" },
     configFor: () => entry.config,
     reloadConfig: () => {
       reloads.push({
@@ -1527,6 +1531,40 @@ describe("the animation lanes' toggles", () => {
       }
     },
   );
+
+  test("a reset that turns a lane off sets the lane up too: its ↺, and ⟲ reset all", () => {
+    const { r } = openToggles();
+    try {
+      r.sessionState.set(SID, LANES.pane.setting, "true");
+      const reset = urlsOf(r.render()).find((u) =>
+        effectsOf(u).some(
+          (e) => e.verb === "reset-config" && e.args[1] === LANES.pane.setting,
+        ),
+      );
+      expect(effectsOf(reset!).map((e) => [e.verb, ...e.args])).toEqual([
+        ["reset-config", SID, LANES.pane.setting],
+        ["lane", SID, "pane"],
+      ]);
+      const arm = urlsOf(r.render()).find((u) =>
+        effectsOf(u).some(
+          (e) => e.args[1] === "candybar.resetAll.armed" && e.args[2] === "armed",
+        ),
+      );
+      r.click(arm!);
+      const all = urlsOf(r.render()).find((u) =>
+        effectsOf(u).some((e) => e.verb === "reset-config"),
+      );
+      const effects = effectsOf(all!);
+      const lastReset = effects.map((e) => e.verb).lastIndexOf("reset-config");
+      expect(
+        effects
+          .slice(lastReset + 1)
+          .map((e) => [e.verb, ...e.args]),
+      ).toEqual(LANE_NAMES.map((lane) => ["lane", SID, lane]));
+    } finally {
+      r.dispose();
+    }
+  });
 
   test.each(LANE_NAMES)(
     "%s: the (?) beside the toggle says what the lane does",

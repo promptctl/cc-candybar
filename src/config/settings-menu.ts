@@ -472,10 +472,18 @@ export const SETTINGS_WRITTEN_KEYS: ReadonlySet<string> = new Set(
   CONTROLS.flatMap((c) => [c.sessionKey, c.configKey]),
 );
 
+// A reset changes the setting as surely as its control does, so a control's
+// follower rides behind its reset too: a reset that turns a lane off closes
+// what the lane runs.
+const followed = CONTROLS.filter((c) => FOLLOWS[c.name] !== undefined);
+const resetThen = (name: string): string => `${controlReset(name)}.then`;
 const RESET_ALL = confirmStep(
   RESET_ALL_SEG,
   { arm: "⟲", confirm: "⟲ reset all?" },
-  CONTROLS.map((c) => controlReset(c.name)),
+  [
+    ...CONTROLS.map((c) => controlReset(c.name)),
+    ...followed.map((c) => controlFollow(c.name)),
+  ],
 );
 
 // ─── The save cell ──────────────────────────────────────────────────────────
@@ -1033,7 +1041,12 @@ function declareSettingControls(artifacts: MenuArtifacts): void {
       type: "boolean",
       default: false,
     };
-    const resetCell = `{{ if .${controlResettable(c.name)} }} {{ action "${reset}" "↺" }}{{ end }}`;
+    const resetClick =
+      FOLLOWS[c.name] === undefined ? reset : resetThen(c.name);
+    if (resetClick !== reset) {
+      artifacts.actions[resetClick] = { do: [reset, controlFollow(c.name)] };
+    }
+    const resetCell = `{{ if .${controlResettable(c.name)} }} {{ action "${resetClick}" "↺" }}{{ end }}`;
     Object.assign(artifacts.variables, c.control.variables);
     artifacts.segments[controlSeg(c.name)] = {
       template: `${c.control.template}${resetCell}`,
