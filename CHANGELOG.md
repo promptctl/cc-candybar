@@ -1,3 +1,9 @@
+## [1.154.1](https://github.com/promptctl/cc-candybar/compare/v1.154.0...v1.154.1) (2026-10-21)
+
+### Bug Fixes
+
+* **lanes:** lane B's restart waits for the TUI to mount before judging it a one-shot ([#410](https://github.com/promptctl/cc-candybar/issues/410)) ([1b417ef](https://github.com/promptctl/cc-candybar/commit/1b417ef0bd9702e3dcaa60bfb629b70c4a7bb15c))
+
 ## [1.154.0](https://github.com/promptctl/cc-candybar/compare/v1.153.0...v1.154.0) (2026-10-21)
 
 ### Features
