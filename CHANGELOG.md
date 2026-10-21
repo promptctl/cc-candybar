@@ -1,3 +1,9 @@
+## [1.152.2](https://github.com/promptctl/cc-candybar/compare/v1.152.1...v1.152.2) (2026-10-21)
+
+### Bug Fixes
+
+* **lanes:** lane B starts a session with no conversation afresh instead of refusing ([#407](https://github.com/promptctl/cc-candybar/issues/407)) ([6a07c0c](https://github.com/promptctl/cc-candybar/commit/6a07c0cf2c5430d770584f0410c751e2c1524d0b))
+
 ## [1.152.1](https://github.com/promptctl/cc-candybar/compare/v1.152.0...v1.152.1) (2026-10-21)
 
 ### Bug Fixes
