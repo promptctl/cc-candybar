@@ -313,6 +313,7 @@ export function productionLaneEdge(
       ran(`reading ${executable}'s module graph`, result);
       return { ok: true };
     },
+    terminate: (pid) => void process.kill(pid, "SIGTERM"),
     exited: async (pid, withinMs) => {
       const until = Date.now() + withinMs;
       while (pidAlive(pid)) {
