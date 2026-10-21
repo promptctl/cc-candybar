@@ -25,6 +25,7 @@ import type { DslConfig, VariableDecl } from "../config/dsl-types.js";
 import type { BuildLineOptions } from "../render/strip.js";
 import type { SettingName } from "../config/setting-projections.js";
 import type { EffectiveGlobals } from "../config/effective-globals.js";
+import type { LaneFeeds } from "../config/lanes.js";
 import { presetGlobals, presetRoot } from "../config/presets.js";
 import { EXPRESSION_SLOTS, isExpression } from "../themes/policy.js";
 import { walkNodes } from "../config/dsl-types.js";
@@ -186,6 +187,10 @@ export interface RenderPayload extends ClaudeHookData, ValuedInputs {
   // trigger's "current selection" highlight and the render it describes
   // trace to one resolution. Each is narrowed to its row's own type rather
   // than widened to `string`, so a downstream `switch` gets exhaustiveness.
+  // What each lane of this session's frames is doing — its subscribers, the
+  // frames that went out to it in the last second, whether the pane is on a
+  // screen — read by the lane's toggle (src/config/settings-menu.ts).
+  readonly feeds: LaneFeeds;
   // [LAW:one-source-of-truth] How many steps this session's settings history
   // can undo and redo (src/daemon/settings-history.ts), read from the history
   // itself every render, so the menu's `↶`/`↷` exist exactly while there is
@@ -529,6 +534,8 @@ export interface RenderPayloadDeps {
   readonly history: (sessionId: string) => HistoryDepth;
   // The session's back depth — NavigationHistory.depth in the daemon.
   readonly navigation: (sessionId: string) => number;
+  // The session's lane feeds — FrameFeeds.feedsOf in the daemon.
+  readonly feeds: (sessionId: string) => LaneFeeds;
 }
 
 // ─── Rate-limit projection (pure) ──────────────────────────────────────────────
@@ -1329,6 +1336,7 @@ export async function buildRenderPayload(
     ...effectiveInputs(effective),
     history: deps.history(hookData.session_id),
     navigation: { back: deps.navigation(hookData.session_id) },
+    feeds: deps.feeds(hookData.session_id),
     ...settingCounts,
     ...(configPath !== null && { configPath }),
     resumeCommand: resumeCommand(

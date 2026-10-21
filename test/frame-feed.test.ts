@@ -5,13 +5,19 @@
 // subscribers share each render, and a feed with no subscriber draws nothing.
 
 import {
+  feedsFact,
   FrameFeeds,
   type FeedFrame,
   type Refusal,
   type Subscriber,
 } from "../src/daemon/frame-feed";
 import type { Response } from "../src/daemon/protocol";
-import type { Lane, LaneSwitches } from "../src/config/lanes";
+import {
+  UNFOLLOWED,
+  UNFOLLOWED_FEEDS,
+  type Lane,
+  type LaneSwitches,
+} from "../src/config/lanes";
 
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
@@ -534,4 +540,115 @@ test("newestWhere finds the session of the newest request it matches, and counts
   note("before-clear", "%3:c");
   expect(feeds.newestWhere(fromPane)).toBe("before-clear");
   expect(feeds.getStats()).toMatchObject({ lookups: 4, found: 3 });
+});
+
+// On a faked clock, so each lane's frame count is exact.
+describe("feedsOf", () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+  const pass = (ms: number): Promise<void> => jest.advanceTimersByTimeAsync(ms);
+  // Frames a second a bar is pushed at, moving on a screen and otherwise.
+  const MOVING = 1000 / PERIODS.moving;
+
+  test("a session nobody follows is unfollowed on every lane", () => {
+    const { feeds, note } = harness({ motion: "moving" });
+    note("s", "bar");
+    expect(feeds.feedsOf("s")).toEqual(UNFOLLOWED_FEEDS);
+    expect(feedsFact(feeds.feedsOf("s"))).toBe("-");
+  });
+
+  test("counts each lane's subscribers and the frames pushed in the last second", async () => {
+    const { feeds, note } = harness({ motion: "moving" });
+    note("s", "bar");
+    const closeA = feeds.subscribe("s", sub(() => {}, "statusline"));
+    const closeB = feeds.subscribe("s", sub(() => {}, "statusline"));
+    const closeC = feeds.subscribe("s", sub(() => {}, "pane"));
+    await pass(1100);
+    const now = feeds.feedsOf("s");
+    expect(now.band).toEqual(UNFOLLOWED);
+    // The window holds only the last second's frames, never the 1.1 s since
+    // subscribing.
+    expect(now.statusline).toEqual({ subscribers: 2, fps: MOVING, shown: true });
+    expect(now.pane).toEqual({ subscribers: 1, fps: MOVING, shown: true });
+    expect(feedsFact(now)).toBe(
+      `statusline:2sub/${MOVING}fps/shown,pane:1sub/${MOVING}fps/shown`,
+    );
+    closeA();
+    closeB();
+    closeC();
+    expect(feeds.feedsOf("s")).toEqual(UNFOLLOWED_FEEDS);
+  });
+
+  test("a lane is credited only with the frames sent since its first subscriber joined", async () => {
+    const { feeds, note } = harness({ motion: "moving" });
+    note("s", "bar");
+    const closeA = feeds.subscribe("s", sub(() => {}, "statusline"));
+    await pass(1000);
+    const closeB = feeds.subscribe("s", sub(() => {}, "pane"));
+    await pass(100);
+    const now = feeds.feedsOf("s");
+    closeA();
+    closeB();
+    expect(now.statusline.fps).toBe(MOVING);
+    // The frames pushed since; the bar as it stood, handed over on joining,
+    // is not one more frame.
+    expect(now.pane.fps).toBe(100 / PERIODS.moving);
+  });
+
+  test("a lane's rate is unmoved by a subscriber joining it late or leaving it", async () => {
+    const { feeds, note } = harness({ motion: "moving" });
+    note("s", "bar");
+    const closeA = feeds.subscribe("s", sub(() => {}, "statusline"));
+    await pass(1000);
+    const closeB = feeds.subscribe("s", sub(() => {}, "statusline"));
+    await pass(100);
+    expect(feeds.feedsOf("s").statusline).toEqual({
+      subscribers: 2,
+      fps: MOVING,
+      shown: true,
+    });
+    closeA();
+    expect(feeds.feedsOf("s").statusline.fps).toBe(MOVING);
+    closeB();
+    expect(feeds.feedsOf("s").statusline).toEqual(UNFOLLOWED);
+  });
+
+  test("a subscriber rejoining a still bar is not counted as a frame", async () => {
+    const { feeds, note } = harness({ motion: "still" });
+    note("s", "bar");
+    const keep = feeds.subscribe("s", sub(() => {}, "band"));
+    await pass(1000);
+    for (let i = 0; i < 3; i++) feeds.subscribe("s", sub(() => {}, "band"))();
+    expect(feeds.feedsOf("s").band.fps).toBe(0);
+    keep();
+  });
+
+  test("a lane whose answer stands still is credited with no frames while the bar moves", async () => {
+    const { feeds, note, state } = harness({ motion: "moving" });
+    state.handoff = "the bar is drawn in the band";
+    note("s", "bar");
+    const closeBand = feeds.subscribe("s", sub(() => {}, "band"));
+    const closeLine = feeds.subscribe("s", sub(() => {}, "statusline"));
+    await pass(1100);
+    const now = feeds.feedsOf("s");
+    closeBand();
+    closeLine();
+    expect(now.band.fps).toBe(MOVING);
+    // The handoff line, sent once on joining and never again.
+    expect(now.statusline.fps).toBe(0);
+  });
+
+  test("a pane off screen is drawn at the still rate, and says so", async () => {
+    const { feeds, note } = harness({ motion: "unseen" });
+    note("s", "bar");
+    const close = feeds.subscribe("s", sub(() => {}, "statusline"));
+    await pass(1100);
+    const { statusline } = feeds.feedsOf("s");
+    close();
+    // Pushed at 400 and 800 ms, a still period apart, inside the window.
+    expect(statusline).toEqual({ subscribers: 1, fps: 2, shown: false });
+    expect(feedsFact({ ...UNFOLLOWED_FEEDS, statusline })).toBe(
+      "statusline:1sub/2fps/offscreen",
+    );
+  });
 });

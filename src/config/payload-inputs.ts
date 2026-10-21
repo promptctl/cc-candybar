@@ -12,6 +12,7 @@
 
 import type { VariableDecl } from "./dsl-types.js";
 import { SESSION_ID_VAR_NAME } from "../var-system/sources.js";
+import { LANE_NAMES, laneFeedVar, UNFOLLOWED, type LaneFeed } from "./lanes.js";
 import { CONFIG_KEY_TO_EFFECTIVE_VAR } from "./setting-projections.js";
 import {
   GLOBAL_FIELDS,
@@ -42,6 +43,17 @@ const EFFECTIVE_INPUTS: Readonly<Record<string, VariableDecl>> =
       effectiveInput(field as GlobalField, effectiveVar),
     ]),
   );
+
+// [LAW:types-are-the-program] The input type of every LaneFeed field, so a
+// field added to LaneFeed is a compile error here until it is declared.
+const LANE_FEED_TYPES = {
+  subscribers: "number",
+  fps: "number",
+  shown: "boolean",
+} as const satisfies Record<keyof LaneFeed, "number" | "boolean">;
+const LANE_FEED_FIELDS = Object.keys(LANE_FEED_TYPES) as ReadonlyArray<
+  keyof LaneFeed
+>;
 
 // `term.cols`'s default below: the width a template reads when no render
 // injected one.
@@ -94,6 +106,22 @@ export const PAYLOAD_INPUTS: Readonly<Record<string, VariableDecl>> = {
     type: "boolean",
     default: true,
   },
+  // Each lane's feed of this session's frames (RenderPayload.feeds), one input
+  // per field of LANE_FEED_TYPES.
+  ...Object.fromEntries(
+    LANE_NAMES.flatMap((lane) =>
+      LANE_FEED_FIELDS.map((field) => [
+        laneFeedVar(lane, field),
+        {
+          kind: "input",
+          path: laneFeedVar(lane, field),
+          type: LANE_FEED_TYPES[field],
+          default: UNFOLLOWED[field],
+        },
+      ]),
+    ),
+  ),
+
   // [LAW:one-source-of-truth] The usable terminal width for THIS render —
   // the exact post-reserve cell count FlexStrip wraps to. renderDsl injects
   // it into the payload from its own `opts.width`, the value a row fits to

@@ -3,6 +3,7 @@
 // reads either the provider's record, the payload the daemon would send, or the
 // rendered cell — never the fold's internal state.
 
+import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
 import {
   mkdtempSync,
@@ -532,6 +533,7 @@ describe("the payload projection", () => {
       log: () => {},
       history: () => EMPTY_HISTORY_DEPTH,
       navigation: () => 0,
+      feeds: () => UNFOLLOWED_FEEDS,
     } as unknown as RenderPayloadDeps;
     const built = await buildRenderPayload(
       hook(join(dir, "t.jsonl"), "p"),

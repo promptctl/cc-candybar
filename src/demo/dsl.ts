@@ -21,6 +21,7 @@
 // is not branching — it lets the config's own timed sources (shell, time)
 // populate, exactly as the daemon re-renders on each status-line tick.
 
+import { UNFOLLOWED_FEEDS } from "../config/lanes.js";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
@@ -146,6 +147,7 @@ async function renderFrames(): Promise<void> {
           ...providers,
           history: () => EMPTY_HISTORY_DEPTH,
           navigation: () => 0,
+          feeds: () => UNFOLLOWED_FEEDS,
         },
         cwd,
         state.neededInputPaths(effective.preset),

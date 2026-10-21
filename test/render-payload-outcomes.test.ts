@@ -4,6 +4,7 @@
 // from a real 0/"" — so the DSL input fallback chain (default + last_error)
 // fires. [LAW:no-silent-failure][LAW:single-enforcer][LAW:one-type-per-behavior]
 
+import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
 import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -43,6 +44,7 @@ function depsWith(
     log: (level: string, msg: string) => logs.push({ level, msg }),
     history: () => EMPTY_HISTORY_DEPTH,
     navigation: () => 0,
+    feeds: () => UNFOLLOWED_FEEDS,
     ...overrides,
   } as unknown as RenderPayloadDeps;
 }

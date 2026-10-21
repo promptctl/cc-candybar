@@ -6,6 +6,7 @@
 // every bundled slash control on the bar: the `commands` tray, `autocompact`,
 // and the settings menu's own tray, its door open.
 
+import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -80,6 +81,7 @@ async function bar(
     log: () => {},
     history: () => EMPTY_HISTORY_DEPTH,
     navigation: () => 0,
+    feeds: () => UNFOLLOWED_FEEDS,
   } as unknown as RenderPayloadDeps;
   const payload = await buildRenderPayload(
     HOOK_DATA,
