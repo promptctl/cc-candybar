@@ -7,6 +7,7 @@
 // consumers: the install that stages it and the lane that runs it.
 
 import path from "node:path";
+import { shellWord } from "./shell-word.js";
 
 export const ATTACH_DIR = "cc-extra";
 
@@ -19,4 +20,23 @@ export function attachLauncherOf(bundle: string): string {
 // beside `launcher`: the launcher's own self-check, run as a CLI.
 export function moduleGraphReaderOf(launcher: string): string {
   return path.join(path.dirname(launcher), "bun-graph.js");
+}
+
+// The preload that starts Claude Code under the launcher from one variable
+// (src/attach-preload.ts), built beside the bundle (tsdown.config.ts) and
+// staged beside it (src/install/index.ts).
+export const ATTACH_PRELOAD = "attach-preload.cjs";
+
+export function attachPreloadOf(bundle: string): string {
+  return path.join(path.dirname(bundle), ATTACH_PRELOAD);
+}
+
+// The line a user types to start Claude Code under the launcher with
+// `preload`: `BUN_OPTIONS='--preload <preload>' claude`. Bun splits
+// BUN_OPTIONS on whitespace and reads a backslash as taking the next character
+// (quotes it does not read, and `--preload=` keeps the backslash), so a space
+// in the path is escaped for Bun, and the whole value then quoted for the
+// shell.
+export function attachCommandLine(preload: string): string {
+  return `BUN_OPTIONS=${shellWord(`--preload ${preload.replace(/[\\\s]/g, "\\$&")}`)} claude`;
 }

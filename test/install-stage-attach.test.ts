@@ -6,7 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { runStageRuntime } from "../src/install/index";
-import { attachLauncherOf, ATTACH_DIR } from "../src/attach-launcher";
+import { attachLauncherOf, attachPreloadOf, ATTACH_DIR } from "../src/attach-launcher";
 
 describe("staging the runtime", () => {
   // Every stage names its own directory: the default is the user's real
@@ -27,9 +27,9 @@ describe("staging the runtime", () => {
     fs.rmSync(home, { recursive: true, force: true });
   });
 
-  // A package as it lays on disk: the bundle, the launcher beside it, the
-  // node shim.
-  const pkg = (launcher: string | null): string => {
+  // A package as it lays on disk: the bundle, the launcher and its preload
+  // beside it, the node shim.
+  const pkg = (launcher: string | null, preload: string | null = "// preload\n"): string => {
     const root = path.join(home, "pkg");
     fs.mkdirSync(path.join(root, "dist"), { recursive: true });
     fs.mkdirSync(path.join(root, "bin"), { recursive: true });
@@ -39,6 +39,9 @@ describe("staging the runtime", () => {
       const bundle = path.join(root, "dist", "index.mjs");
       fs.mkdirSync(path.dirname(attachLauncherOf(bundle)), { recursive: true });
       fs.writeFileSync(attachLauncherOf(bundle), launcher);
+    }
+    if (preload !== null) {
+      fs.writeFileSync(attachPreloadOf(path.join(root, "dist", "index.mjs")), preload);
     }
     return path.join(root, "dist", "index.mjs");
   };
@@ -64,5 +67,18 @@ describe("staging the runtime", () => {
     const staged = runStageRuntime(pkg("// launcher\n"), stage);
     runStageRuntime(staged.distPath, stage);
     expect(fs.readFileSync(attachLauncherOf(staged.distPath), "utf8")).toBe("// launcher\n");
+  });
+
+  test("the preload that starts Claude Code under the launcher is staged beside the staged bundle", () => {
+    const staged = runStageRuntime(pkg("// launcher\n", "// preload v1\n"), stage);
+    fs.writeFileSync(attachPreloadOf(path.join(home, "pkg", "dist", "index.mjs")), "// preload v2\n");
+    runStageRuntime(path.join(home, "pkg", "dist", "index.mjs"), stage);
+    expect(fs.readFileSync(attachPreloadOf(staged.distPath), "utf8")).toBe("// preload v2\n");
+  });
+
+  test("a package with no preload is refused, naming where it looked", () => {
+    expect(() => runStageRuntime(pkg("// launcher\n", null), stage)).toThrow(
+      /attach preload was not found at .*dist\/attach-preload\.cjs/,
+    );
   });
 });

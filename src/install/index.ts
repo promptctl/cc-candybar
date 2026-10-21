@@ -1,4 +1,9 @@
-import { ATTACH_DIR } from "../attach-launcher.js";
+import {
+  ATTACH_DIR,
+  ATTACH_PRELOAD,
+  attachPreloadOf,
+} from "../attach-launcher.js";
+import { sourceCheckoutOf } from "../daemon/build-currency.js";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -82,6 +87,18 @@ function stagedBinPath(dir: string = supportDir()): string {
 
 function stagedDistPath(dir: string = supportDir()): string {
   return path.join(dir, "dist", "index.mjs");
+}
+
+// The attach preload a user can keep typing across upgrades: a checkout's
+// own build, else the staged runtime's — never a package manager's store
+// path, which an upgrade removes.
+export function stableAttachPreload(runningBundle: string): string {
+  const checkout = sourceCheckoutOf(runningBundle);
+  return attachPreloadOf(
+    checkout === null
+      ? stagedDistPath()
+      : path.join(checkout, "dist", "index.mjs"),
+  );
 }
 
 function appleScriptSource(nodePath: string, scriptPath: string): string {
@@ -203,7 +220,8 @@ export interface StagedRuntime {
 }
 
 // Stage the full runtime at the stable path: dist/index.mjs (daemon + CLI
-// bundle), dist/cc-extra (the attach launcher) and bin/cc-candybar (render
+// bundle), dist/cc-extra (the attach launcher), dist/attach-preload.cjs (its
+// one-variable start) and bin/cc-candybar (render
 // entry) as adjacent files. Adjacency IS
 // the contract — every entry flavor locates the bundle via ../dist/index.mjs.
 // `sourceDist` is the bundle this process runs, as its entry names it; `dir`
@@ -234,12 +252,20 @@ export function runStageRuntime(
     );
   }
 
+  const preload = path.join(path.dirname(sourceDist), ATTACH_PRELOAD);
+  if (!fs.existsSync(preload)) {
+    throw new Error(
+      `install: the attach preload was not found at ${preload}. Reinstall the package.`,
+    );
+  }
+
   const distPath = stagedDistPath(dir);
   const binPath = stagedBinPath(dir);
   fs.mkdirSync(path.dirname(distPath), { recursive: true });
   fs.mkdirSync(path.dirname(binPath), { recursive: true });
   stageFile(sourceDist, distPath);
   stageDir(attach, path.join(path.dirname(distPath), ATTACH_DIR));
+  stageFile(preload, path.join(path.dirname(distPath), ATTACH_PRELOAD));
   stageFile(entry.sourcePath, binPath);
   fs.chmodSync(binPath, 0o755);
 

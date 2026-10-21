@@ -6,7 +6,12 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { json } from "node:stream/consumers";
 import { debug } from "./utils/logger";
-import { runInstall, runInstallUrlHandler, runUrlHandle } from "./install";
+import {
+  runInstall,
+  runInstallUrlHandler,
+  runUrlHandle,
+  stableAttachPreload,
+} from "./install";
 import { runDaemon } from "./daemon/server";
 import { tryRenderViaDaemon } from "./daemon/client";
 import { runDaemonStats } from "./daemon/client-stats";
@@ -18,6 +23,9 @@ import { runPlugin } from "./plugin-install";
 import { obtainDaemonKick } from "./daemon/acquire";
 import { planOutcome } from "./render/outcome-plan";
 import { HELP_TEXT } from "./help-text";
+import { attachCommandLine } from "./attach-launcher";
+import fs from "node:fs";
+import { LANES } from "./config/lanes";
 import { NODE_FLAGS } from "./cli-flags";
 import { PACKAGE_VERSION } from "./version";
 import { detectClientHints } from "./client-hints";
@@ -37,6 +45,14 @@ const hasFlag = (flags: readonly string[]): boolean =>
 
 function showHelpText(): void {
   console.log(HELP_TEXT);
+  // The one line of help that names this install: where its preload sits.
+  const preload = stableAttachPreload(RUNNING_BUNDLE);
+  const missing = fs.existsSync(preload)
+    ? ""
+    : "  (nothing is there yet: run `cc-candybar install` first — in a checkout, `pnpm build`)\n";
+  console.log(
+    `Starting Claude Code on ${LANES.statusline.label} yourself (a Bun-compiled Claude Code):\n  ${attachCommandLine(preload)}\n${missing}`,
+  );
 }
 
 // [LAW:dataflow-not-control-flow] Subcommand dispatch is data: argv[2] names

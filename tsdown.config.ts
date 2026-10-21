@@ -39,7 +39,7 @@ function sourceDigestPlugin() {
 // was the entry point for the deleted `src/browser.ts` library surface
 // (bzh.2 retired it alongside the legacy renderer; there is no longer a
 // public TypeScript API beyond the CLI).
-export default defineConfig({
+export default defineConfig([{
 	entry: ['src/index.ts'],
 	format: 'esm',
 	target: 'node18',
@@ -56,4 +56,19 @@ export default defineConfig({
 	// (scripts/vendor-cc-extra.mjs), beside the bundle that runs it: an
 	// install stages dist/cc-extra with dist/index.mjs.
 	copy: [{ from: 'vendor/cc-extra', to: 'dist', flatten: false }],
-});
+}, {
+	// The preload `BUN_OPTIONS='--preload <dist>/attach-preload.cjs' claude`
+	// runs inside Claude Code to start it under that launcher
+	// (src/attach-preload.ts). Its own build, so nothing it shares with the
+	// bundle above is split into a chunk the install would not stage. Bun runs
+	// it, so `bun:ffi` is Bun's, never bundled.
+	entry: { 'attach-preload': 'src/attach-preload-exec.ts' },
+	format: 'cjs',
+	target: 'node18',
+	platform: 'node',
+	clean: false,
+	minify: true,
+	nodeProtocol: true,
+	external: ['bun:ffi'],
+	outExtensions: () => ({ js: '.cjs' }),
+}]);
