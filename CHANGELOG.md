@@ -1,3 +1,9 @@
+## [1.154.0](https://github.com/promptctl/cc-candybar/compare/v1.153.0...v1.154.0) (2026-10-21)
+
+### Features
+
+* **lanes:** lane B's restart types one line the user can rerun from history ([#409](https://github.com/promptctl/cc-candybar/issues/409)) ([2f97f83](https://github.com/promptctl/cc-candybar/commit/2f97f83def8ea99e34cd2988022cd46da76a65f2))
+
 ## [1.153.0](https://github.com/promptctl/cc-candybar/compare/v1.152.2...v1.153.0) (2026-10-21)
 
 ### Features
