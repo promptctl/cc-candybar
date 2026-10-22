@@ -133,20 +133,25 @@ export interface PostMortem {
 // [LAW:types-are-the-program] The backstop's latest reading, or none yet:
 // `unmeasured` until the first probe answers — the instant before a daemon's
 // first check, and for good in the browser page, which never arms its limits.
-// Never a construction-time number passed off as a reading. `unreadRun` is the
-// readings running, this one included, whose platform measure went unread — 0
-// when this one read — and decides whether the limit judges the charge.
+// Never a construction-time number passed off as a reading.
 export type MemoryReading =
   | { readonly kind: "unmeasured" }
   | {
       readonly kind: "measured";
-      readonly charge: MemoryCharge;
-      readonly unreadRun: number;
+      readonly charge: ReadCharge;
       readonly rss: number;
       readonly heapTotal: number;
     };
 
-type Measured = Extract<MemoryReading, { kind: "measured" }>;
+// [LAW:types-are-the-program] The charge as a reading holds it: RSS standing
+// in carries `unreadRun`, the readings running, this one included (so ≥ 1),
+// whose platform measure went unread — which decides whether the limit judges
+// it. A charged reading has no run to carry.
+export type ReadCharge =
+  | Extract<MemoryCharge, { kind: "charged" }>
+  | (Extract<MemoryCharge, { kind: "stand-in" }> & {
+      readonly unreadRun: number;
+    });
 
 // The daemon as the doctor judges it (brandon-doctor-v62x.5mq): which process
 // it is, how much of its budget it holds, and the post-mortems its directory
@@ -168,19 +173,16 @@ export interface ServingDaemon {
 // read, which the stand-in still bounds.
 export const STAND_IN_AFTER_UNREAD = 3;
 
-// [LAW:single-enforcer] THE judgment of whether the limit holds a reading's
-// charge against it: the platform's own always, RSS standing in only once it
-// has stood in for STAND_IN_AFTER_UNREAD readings running. The breach, the
-// restart forecast and the doctor's daemon row all ask it.
-export function judged(reading: Measured): boolean {
-  return (
-    reading.charge.kind === "charged" ||
-    reading.unreadRun >= STAND_IN_AFTER_UNREAD
-  );
+// [LAW:single-enforcer] THE judgment of whether the limit holds a charge
+// against it: the platform's own always, RSS standing in only once it has
+// stood in for STAND_IN_AFTER_UNREAD readings running. The breach, the restart
+// forecast and the doctor's daemon row all ask it.
+export function judged(charge: ReadCharge): boolean {
+  return charge.kind === "charged" || charge.unreadRun >= STAND_IN_AFTER_UNREAD;
 }
 
-export function breaches(reading: Measured, limit: number): boolean {
-  return judged(reading) && reading.charge.bytes > limit;
+export function breaches(charge: ReadCharge, limit: number): boolean {
+  return judged(charge) && charge.bytes > limit;
 }
 
 // [LAW:single-enforcer] THE judgment of "near the limit": the restart
@@ -283,20 +285,21 @@ export function makeLimits(deps: LimitsDeps): LimitsHandle {
   async function measure(): Promise<boolean> {
     if (triggered) return true;
     const { rss, heapTotal } = deps.memoryBytes();
-    const charge = await deps.memoryCharge(rss);
-    const before = latest.kind === "measured" ? latest.unreadRun : 0;
-    const reading = {
-      kind: "measured",
-      charge,
-      unreadRun: charge.kind === "stand-in" ? before + 1 : 0,
-      rss,
-      heapTotal,
-    } as const;
+    const probed = await deps.memoryCharge(rss);
+    const before =
+      latest.kind === "measured" && latest.charge.kind === "stand-in"
+        ? latest.charge.unreadRun
+        : 0;
+    const charge: ReadCharge =
+      probed.kind === "stand-in"
+        ? { ...probed, unreadRun: before + 1 }
+        : probed;
+    const reading = { kind: "measured", charge, rss, heapTotal } as const;
     latest = reading;
     // [LAW:nothing-unseen] One line per reading, whatever it says: the history
     // a breach is read against, which no cache count can reconstruct.
     deps.log("info", `memory ${readingFields(reading, limit)}`);
-    if (!breaches(reading, limit)) return false;
+    if (!breaches(charge, limit)) return false;
     triggered = true;
     deps.log(
       "warn",
@@ -351,7 +354,7 @@ export function makeLimits(deps: LimitsDeps): LimitsHandle {
     // is a cache to fix, growth outside it is not, and the reader cannot tell
     // which from the charge alone.
     return latest.kind === "measured" &&
-      judged(latest) &&
+      judged(latest.charge) &&
       approachingLimit(latest.charge.bytes, limit)
       ? `${chargeWords(latest.charge)} approaching limit ${mb(limit)} MB (v8 heap ${mb(latest.heapTotal)} MB)`
       : null;
@@ -413,12 +416,12 @@ export function measureOf(charge: MemoryCharge): string {
 
 // The per-check log line's fields, logfmt.
 function readingFields(
-  { charge, unreadRun, rss, heapTotal }: Measured,
+  { charge, rss, heapTotal }: Extract<MemoryReading, { kind: "measured" }>,
   limit: number,
 ): string {
   const unread =
     charge.kind === "stand-in"
-      ? ` unread=${JSON.stringify(charge.unread)} unreadRun=${unreadRun}/${STAND_IN_AFTER_UNREAD}`
+      ? ` unread=${JSON.stringify(charge.unread)} unreadRun=${charge.unreadRun}/${STAND_IN_AFTER_UNREAD}`
       : "";
   return `measure=${measureOf(charge)} charge=${mb(charge.bytes)}MB rss=${mb(rss)}MB heap=${mb(heapTotal)}MB limit=${mb(limit)}MB${unread}`;
 }

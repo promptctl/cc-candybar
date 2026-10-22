@@ -127,13 +127,14 @@ const isPostMortem = (m: unknown): m is PostMortem => {
 };
 
 // A reading as the daemon spelled it: none yet, or a charge — the platform's
-// own measure, or RSS standing in with why — beside its unread run and the RSS
+// own measure, or RSS standing in with why and its unread run — beside the RSS
 // and heap it was read with.
 const isMemoryReading = (m: unknown): m is MemoryReading => {
   const r = (m ?? {}) as {
     kind?: unknown;
-    charge?: Partial<Record<"kind" | "measure" | "bytes" | "unread", unknown>>;
-    unreadRun?: unknown;
+    charge?: Partial<
+      Record<"kind" | "measure" | "bytes" | "unread" | "unreadRun", unknown>
+    >;
     rss?: unknown;
     heapTotal?: unknown;
   };
@@ -141,13 +142,15 @@ const isMemoryReading = (m: unknown): m is MemoryReading => {
   const c = r.charge;
   return (
     r.kind === "measured" &&
-    typeof r.unreadRun === "number" &&
     typeof r.rss === "number" &&
     typeof r.heapTotal === "number" &&
     typeof c?.bytes === "number" &&
     ((c.kind === "charged" &&
       (c.measure === "phys_footprint" || c.measure === "rss")) ||
-      (c.kind === "stand-in" && typeof c.unread === "string"))
+      (c.kind === "stand-in" &&
+        typeof c.unread === "string" &&
+        Number.isInteger(c.unreadRun) &&
+        (c.unreadRun as number) >= 1))
   );
 };
 

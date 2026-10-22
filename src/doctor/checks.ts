@@ -1119,15 +1119,20 @@ const daemon: Check = {
       // [LAW:no-silent-failure] RSS standing in for the platform's charge is
       // the limit judging — now, or once the run reaches its length — what
       // macOS has already reclaimed, the very misjudgment the charge exists to
-      // end, so it is a finding, near the limit or not.
+      // end, so it is a finding, near the limit or not, naming how far RSS is
+      // from it.
       ...(memory.kind === "measured" && memory.charge.kind === "stand-in"
         ? [
-            `the daemon could not read what macOS charges it (${memory.charge.unread}) ${memory.unreadRun}/${STAND_IN_AFTER_UNREAD} readings running, ${judged(memory) ? "so" : `and at ${STAND_IN_AFTER_UNREAD}`} its memory limit judges RSS, which counts pages macOS has reclaimed`,
+            `the daemon could not read what macOS charges it (${memory.charge.unread}) on ${
+              judged(memory.charge)
+                ? `${memory.charge.unreadRun} readings in a row, so`
+                : `${memory.charge.unreadRun} of the ${STAND_IN_AFTER_UNREAD} readings in a row after which`
+            } its memory limit judges RSS — ${mb(memory.charge.bytes)} MB of its ${mb(limit)} MB limit — which counts pages macOS has reclaimed`,
           ]
         : []),
       // [LAW:single-enforcer] Near the limit only by a charge it judges.
       ...(memory.kind === "measured" &&
-      judged(memory) &&
+      judged(memory.charge) &&
       approachingLimit(memory.charge.bytes, limit)
         ? [
             `the daemon holds ${chargeWords(memory.charge)} of its ${mb(limit)} MB limit — at the limit it records a post-mortem and restarts`,

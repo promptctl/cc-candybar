@@ -591,7 +591,6 @@ describe("post-mortems", () => {
       memory: {
         kind: "measured",
         charge: { kind: "charged", measure: "rss", bytes: rec.fakeRss },
-        unreadRun: 0,
         rss: rec.fakeRss,
         heapTotal: rec.fakeHeapTotal,
       },

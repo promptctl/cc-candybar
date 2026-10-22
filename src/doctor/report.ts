@@ -158,7 +158,7 @@ export function daemonFields({
       ? "unmeasured"
       : `${measureOf(memory.charge)}${
           memory.charge.kind === "stand-in"
-            ? `(${memory.unreadRun}/${STAND_IN_AFTER_UNREAD})`
+            ? `(${memory.charge.unreadRun}/${STAND_IN_AFTER_UNREAD})`
             : ""
         }:${mb(memory.charge.bytes)}`;
   return `${running} memory=${held}/${mb(limit)} postMortems=${told}`;

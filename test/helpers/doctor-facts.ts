@@ -36,7 +36,6 @@ export const HEALTHY_SERVING: ServingDaemon = {
   memory: {
     kind: "measured",
     charge: { kind: "charged", measure: "phys_footprint", bytes: 120 * 1024 * 1024 },
-    unreadRun: 0,
     rss: 160 * 1024 * 1024,
     heapTotal: 90 * 1024 * 1024,
   },
