@@ -1289,7 +1289,7 @@ describe("the preset action", () => {
 });
 
 // [LAW:verifiable-goals] candybar-theme-colours-6fq5.ix8: `⤓ default for
-// <theme>` in the 🎨 look tab saves the look the session draws as the active
+// <theme>` behind the theme's ⚙ saves the look the session draws as the active
 // theme's default. Found in the rendered bar and dispatched through the real
 // verb table; every assertion on the file is on its exact bytes.
 const THEMED = `{

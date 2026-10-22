@@ -33,7 +33,7 @@ import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { effectsOf } from "./helpers/click";
 import { stripAnsi } from "./helpers/ansi";
 
-// The look tab's theme picker, open, naming `theme` beside its swatch
+// The theme picker on the door's first line, open, naming `theme` beside its swatch
 // (brandon-theme-swatch-8v9r), read off the visible text.
 const showsTheme = (out: string, theme: string): boolean =>
   stripAnsi(out).includes(`${theme} ▀▀▀`);

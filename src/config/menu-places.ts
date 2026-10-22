@@ -8,6 +8,7 @@
 // the lane gate can read it without importing the menu that imports them.
 import {
   SETTINGS,
+  SETTING_NAMES,
   perSetting,
   type SettingName,
 } from "./setting-projections.js";
@@ -89,6 +90,25 @@ const placePath = (place: Place): string =>
 // Where a setting's control is in the settings menu — `⚙ config › 🧪 toggles`.
 export const settingMenuPath = (name: SettingName): string =>
   placePath(PLACE[name]);
+
+// Every place that holds a control, in the order the menu opens them — the
+// first line, then each tab, each followed by the submenus inside it — with
+// the settings whose controls it holds, in the order it draws them.
+interface PlaceSettings {
+  readonly path: string;
+  readonly names: readonly SettingName[];
+}
+export const settingsByPlace = (): readonly PlaceSettings[] =>
+  (["door", ...TABS.map((t) => t.member)] as const)
+    .flatMap((top): Place[] => [
+      top,
+      ...SUBMENU_NAMES.filter((s) => within(s, top)),
+    ])
+    .map((place) => ({
+      path: placePath(place),
+      names: SETTING_NAMES.filter((name) => PLACE[name] === place),
+    }))
+    .filter(({ names }) => names.length > 0);
 
 // Why a subscriber of `lane` is refused, naming the switch that admits it.
 export const laneOffReason = (lane: Lane): string =>

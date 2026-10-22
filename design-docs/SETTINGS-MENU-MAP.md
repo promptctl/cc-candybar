@@ -141,15 +141,17 @@ Added by me, at Brandon's request to fill out the list:
 
 ## Widths at 80 columns
 
-`pnpm exec tsx design-docs/settings-menu-map-render.mts` prints every number here. It renders today's menu through `renderDsl` and measures the proposed rows with a model that reproduces today's two widest rows exactly (139 and 182 cells, at 200 columns); the script fails if it stops. Widths are at padding 1, and each padding step adds two cells per cell.
+`pnpm exec tsx design-docs/settings-menu-map-render.mts` printed these numbers until it stopped running (brandon-menus-sjhy.bc0). The rows brandon-menus-sjhy.ek7 changed were re-measured through `renderDsl` on the bundled default at 200 columns, the others are the script's last output. Widths are at padding 1, and each padding step adds two cells per cell. "Drifted" is every setting resettable, one draft, one undo and one redo step.
 
 | Row | Cells |
 |---|---|
-| Door line 1: preset / with save cell / with reset confirm | 19 / 37 / 48 |
+| Door line 1: fresh / drifted / drifted with `⟲ reset all?` armed | 56 / 80 / 93 |
 | Door line 2: tabs (the open one led by `▾`) / two tabs marked `•` | 64 / 68 |
 | `⚡ session` links / commands | 50 / 52 |
-| `🎨 look` / long names / all four drifted | 63 / 73 / 77 |
-| `📐 layout` | 55 |
+| `🎨 look` / drifted | 53 / 59 |
+| `📐 layout` | 16 |
+| `⚙ config` / drifted | 61 / 69 |
+| ⚙ gear with `⤓ default for catppuccin-frappe` / drifted | 92 / 98 |
 | `🧰 tools` | 17 |
 | Edit mode's save row | 49 |
 

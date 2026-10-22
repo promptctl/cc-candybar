@@ -52,6 +52,8 @@ import {
 } from "../src/render/layout-preview";
 import { layoutRows, type CompiledNode } from "../src/dsl/node-registry";
 import { menuPageKey, sharedMenuStateKey } from "../src/config/menu-keys";
+import { PLACE, TABS, within } from "../src/config/menu-places";
+import type { SettingName } from "../src/config/setting-projections";
 import { randomOther, SWATCHES_RANDOM } from "../src/render/swatches";
 import { EDIT_MODE_KEY, EDIT_MODE_ARRANGE } from "../src/config/loader/edit-mode";
 import { EDIT_NS } from "../src/config/loader/reserved-namespace";
@@ -342,20 +344,22 @@ describe("the carousel rotates by applying", () => {
 // "◀ padding 0 ▶" carries two.
 const RING = new RegExp(`${CAROUSEL_PREV} \\S+ ${CAROUSEL_NEXT}`);
 
-// The door, then the control's tab, then — for a setting behind the theme
-// picker's gear — the gear, then its list: the click on the name between its
-// arrows (on the theme picker, its label).
+// The door, then the tab the control is in (none on the door's first line),
+// then — for a setting behind the theme picker's gear — the gear, then its
+// list: the click on the name between its arrows (on the theme picker, its
+// label). Where a control is comes from the menu's map, as the menu lays it.
 const PICKERS = sharedMenuStateKey("candybar.pickers");
 const GEAR_PICKERS = sharedMenuStateKey("candybar.gearPickers");
-const BEHIND_GEAR: ReadonlySet<string> = new Set(["style", "variation", "shade"]);
-function openPicker(rt: ReturnType<typeof rig>, control: string): void {
+function openPicker(rt: ReturnType<typeof rig>, control: SettingName): void {
+  const place = PLACE[control];
+  const behindGear = place === "gear";
   rt.render();
   rt.clickText("🍫");
-  // The preset control sits on the door's first line; the rest in a tab.
-  if (control !== "preset") rt.clickText("🎨 look");
-  if (BEHIND_GEAR.has(control)) rt.clickWriting(PICKERS, "gear");
+  const tab = TABS.find((t) => within(place, t.member));
+  if (tab !== undefined) rt.clickText(tab.label);
+  if (behindGear) rt.clickWriting(PICKERS, "gear");
   rt.clickWriting(
-    BEHIND_GEAR.has(control) ? GEAR_PICKERS : PICKERS,
+    behindGear ? GEAR_PICKERS : PICKERS,
     `candybar.apply.${control}`,
   );
 }
@@ -643,7 +647,7 @@ describe("the variation control", () => {
 });
 
 // candybar-theme-colours-6fq5.e5n: which of its role's shades each cell wears
-// is a setting in the 🎨 look tab, beside the variation.
+// is a setting behind the theme's ⚙, beside the variation.
 describe("the shade control", () => {
   test("▶ turns the dial one position in this session and the bar's closed cells recolour", () => {
     const rt = rig(`{ globals: { palette: 'nord' } }`);

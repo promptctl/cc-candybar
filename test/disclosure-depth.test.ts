@@ -79,7 +79,7 @@ const PAYLOAD = {
   session_id: SID,
   history: { undo: 1, redo: 1 },
   unsaved: 1,
-  // A look that differs from the theme's own default, so the 🎨 look body's
+  // A look that differs from the theme's own default, so the ⚙ gear body's
   // `⤓ default for <theme>` renders and its colour is checked with the rest.
   themeDefault: { differs: true, theme: THEME },
   cwd: "/tmp/proj",
@@ -349,6 +349,17 @@ describe("candybar-render-ai7.9 — the bundled 🍫 → 🎨 look → picker ch
     rt.clickWriting(gear, pickers, "gear");
     rt.render();
     expect(rt.bgOf(gear)).toBe(bandFor(palette, band1, ColorDepth.TRUECOLOR).state.hex);
+    // Its body — style, variation, shade, then `⤓ default for <theme>` — is
+    // depth-1 items, as the look tab's row is.
+    const gearRow = bodyCellsOf(root, gear);
+    expect(gearRow).toContain("candybar.themeDefault.save");
+    for (const name of gearRow) {
+      expect([name, rt.bgOf(name)]).toEqual([name, rt.expectedTint(name)]);
+      expect([name, rt.fgOf(name)]).toEqual([
+        name,
+        textOn(palette, bandItemFor(palette, band1, regionAddress(rt, name), ColorDepth.TRUECOLOR), ColorDepth.TRUECOLOR).hex,
+      ]);
+    }
     const style = "candybar.style";
     rt.clickWriting(style, sharedMenuStateKey("candybar.gearPickers"), "candybar.apply.style");
     rt.render();

@@ -186,9 +186,9 @@ const controlReset = (name: string): string => `${SETTINGS_NS}reset.${name}`;
 
 // ─── A theme's default look (candybar-theme-colours-6fq5.ix8) ──────────────
 //
-// `⤓ default for <theme>` in the theme's ⚙ gear: save the shade, variation and
-// style the bar wears — the gear's own settings — as the active theme's default. The cell shows exactly
-// while saving would change something — a fact the daemon publishes every
+// `⤓ default for <theme>` in the theme's ⚙ gear: save the shade, variation
+// and style the bar wears — the gear's own settings — as the active theme's
+// default. The cell shows exactly while saving would change something — a fact the daemon publishes every
 // render (RenderPayload.themeDefault, src/daemon/setting-drafts.ts), never one
 // a template computes — and so is the theme it names: the one the click
 // writes, not `theme.effective`, which edit mode's staged palette can move.
@@ -321,7 +321,8 @@ const PREVIEWS: Readonly<Record<PreviewName, SegmentDecl>> = {
 const controlRow = (name: string, row: number): string =>
   `${SETTINGS_NS}list.${name}.${row}`;
 // Whether the setting's reset would change anything (RenderPayload.resettable,
-// brandon-menu-ia-q30.nk8): the one fact its `↺`, its tab's `•`, and `⟲` read.
+// brandon-menu-ia-q30.nk8): the one fact its `↺`, the `•` on every trigger
+// opening a place it is under, and `⟲` read.
 const controlResettable = (name: string): string =>
   `${SETTINGS_NS}resettable.${name}`;
 // What a marked trigger carries after its label.
@@ -675,9 +676,10 @@ export function anchorUnderGate(node: LayoutNode, gated = false): boolean {
 // "Structure") — the door's first line, each tab, each submenu — keyed by every
 // place so none can be left without a body: its own segments, then the
 // controls `PLACE` puts in it, then what follows them. Every body takes the
-// controls, so `PLACE` naming any place is a placement the bar renders. A cell
-// whose width changes — one that comes and goes, or relabels itself — sits
-// `after` the controls, so it moves none of them.
+// controls, so `PLACE` naming any place is a placement the bar renders. A
+// body's own cell whose width changes — one that comes and goes, or relabels
+// itself — sits `after` the controls, so it moves none of them; a control's
+// own width (its value, its `↺`, a submenu's `•`) moves what follows it.
 interface PlaceBody {
   readonly direction: ContainerNode["direction"];
   readonly content: readonly LayoutNode[];

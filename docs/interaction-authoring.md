@@ -1291,8 +1291,8 @@ Opening it shows the always-available functionality. The menu opens
 body. The door rises with it — now `✖`, it leads the menu's first line and
 closes the menu, and the bar's row closes up where it was.
 The second line is five tabs, one open at a time; the open one wears its state
-colour, and its body drops below the strip. The tab stays open when the menu
-closes, so reopening the menu returns to it. Here the theme and style are
+colour, and its body drops below the strip. Closing the menu folds it back to
+`⚡ session`, so the menu always reopens there. Here the theme and style are
 picked in this session and not yet saved, and the theme's `⚙` is open:
 
 ```
