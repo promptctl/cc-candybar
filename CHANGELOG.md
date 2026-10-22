@@ -1,3 +1,9 @@
+## [1.156.0](https://github.com/promptctl/cc-candybar/compare/v1.155.2...v1.156.0) (2026-10-22)
+
+### Features
+
+* **menu:** theme and arrange beside preset; wrap and padding in ⚙ config ([#413](https://github.com/promptctl/cc-candybar/issues/413)) ([939d570](https://github.com/promptctl/cc-candybar/commit/939d5702aa465c220e7271d74abe2cc5b7e05d42))
+
 ## [1.155.2](https://github.com/promptctl/cc-candybar/compare/v1.155.1...v1.155.2) (2026-10-22)
 
 ### Bug Fixes
