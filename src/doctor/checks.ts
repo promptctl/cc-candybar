@@ -1121,7 +1121,7 @@ const daemon: Check = {
       ...(memory.kind === "measured" && memory.charge.kind === "stand-in"
         ? [
             `the daemon could not read what macOS charges it (${memory.charge.unread}), so its memory limit judges ${
-              memory.charge.gap > 0
+              memory.charge.gap !== 0
                 ? `RSS less the ${mb(memory.charge.gap)} MB it last ran over that charge, an estimate`
                 : "RSS, which counts pages macOS has reclaimed"
             }`,

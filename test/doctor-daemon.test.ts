@@ -124,6 +124,10 @@ describe("the daemon probe", () => {
     const unread =
       "the daemon could not read what macOS charges it (footprint timeout), so its memory limit judges RSS less the 150 MB it last ran over that charge, an estimate";
     expect(standIn(300 * MB, 150 * MB)).toEqual({ ok: false, reason: unread, more: [] });
+    // A footprint over RSS (compressed pages count toward it) is a gap too.
+    expect(standIn(300 * MB, -20 * MB)).toMatchObject({
+      reason: expect.stringContaining("judges RSS less the -20 MB it last ran over that charge, an estimate"),
+    });
     expect(standIn(450 * MB, 150 * MB)).toEqual({
       ok: false,
       reason: unread,
