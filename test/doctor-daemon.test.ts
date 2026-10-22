@@ -140,6 +140,8 @@ describe("the daemon probe", () => {
   test("the doctor's event carries the gap a stand-in is judged less, and a charge as it was", () => {
     const facts = { ...HEALTHY_FACTS.daemon, ...standInFacts(450 * MB, 150 * MB) };
     expect(daemonFields(facts)).toMatch(/ memory=rss-stand-in\(-150\):450\/512 /);
+    const over = { ...HEALTHY_FACTS.daemon, ...standInFacts(305 * MB, -5 * MB) };
+    expect(daemonFields(over)).toMatch(/ memory=rss-stand-in\(\+5\):305\/512 /);
     expect(daemonFields(HEALTHY_FACTS.daemon)).toMatch(/ memory=phys_footprint:120\/512 /);
   });
 

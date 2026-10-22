@@ -126,10 +126,14 @@ export function installFields(install: InstallFacts): string {
   return `clients=${described.join(",") || "-"}`;
 }
 
+const signedMb = (bytes: number): string =>
+  `${bytes >= 0 ? "+" : ""}${mb(bytes)}`;
+
 // [LAW:nothing-unseen] What the daemon check reasoned over, as logfmt fields:
 // how many daemons run and which besides the serving one, the serving one's
-// memory against its limit (RSS standing in carrying the gap it was judged
-// less, `rss-stand-in(-<MB>)`), and its post-mortems as
+// memory against its limit (RSS standing in carrying, signed, what its gap
+// moved it by: `rss-stand-in(-150)`, or `(+5)` where the footprint ran over
+// RSS), and its post-mortems as
 // `<unread>/<total>` — `unread` where a list could not be read, `unasked`
 // where no daemon answered.
 export function daemonFields({
@@ -157,7 +161,9 @@ export function daemonFields({
     memory.kind === "unmeasured"
       ? "unmeasured"
       : `${measureOf(memory.charge)}${
-          memory.charge.kind === "stand-in" ? `(-${mb(memory.charge.gap)})` : ""
+          memory.charge.kind === "stand-in"
+            ? `(${signedMb(-memory.charge.gap)})`
+            : ""
         }:${mb(memory.charge.bytes)}`;
   return `${running} memory=${held}/${mb(limit)} postMortems=${told}`;
 }
