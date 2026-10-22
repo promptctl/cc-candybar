@@ -17,6 +17,10 @@ const LANE_PLACES = [
   ...new Set(Object.values(LANES).map((l) => settingMenuPath(l.setting))),
 ].join(" or ");
 
+// The settings list's label column starts two spaces past the longest field.
+const FIELD_COLUMN =
+  Math.max(...Object.values(SETTINGS).map((s) => s.configKey.length)) + 2;
+
 // [LAW:effects-at-boundaries] Pure data, no I/O — index.ts owns the console.log
 // effect. Kept as its own module so the text is importable (and testable) without
 // pulling in index.ts's top-level `main()` call.
@@ -86,9 +90,10 @@ Configuration:
 
   Every bar carries a settings menu, whatever your config says — no config
   needed, and writing your own \`root\` cannot delete it. Click
-  it on the bar (${DOOR_GLYPH} by default; globals.menuGlyph changes it). Its
-  first line holds ✎ arrange (edit mode) and 💾 save, which appears while you
-  have unsaved changes and writes them to your config file. Under it are its
+  it on the bar (${DOOR_GLYPH} by default; globals.menuGlyph changes it). Beside
+  the settings listed below, its first line holds ◁ back, ✎ arrange (edit mode)
+  and 💾 save, which appears while you have unsaved changes and writes them to
+  your config file. Under it are its
   tabs, ${TABS.map((t) => t.label).join(", ")};
   ${TAB_LABEL.session} holds quick actions and commands, ${TAB_LABEL.layout} a new preset.
   A change applies to this session at once.
@@ -99,7 +104,7 @@ ${settingsByPlace()
     `    ${path}`,
     ...names.map(
       (name) =>
-        `      ${SETTINGS[name].configKey.padEnd(22)}${SETTINGS[name].label}`,
+        `      ${SETTINGS[name].configKey.padEnd(FIELD_COLUMN)}${SETTINGS[name].label}`,
     ),
   ])
   .join("\n")}

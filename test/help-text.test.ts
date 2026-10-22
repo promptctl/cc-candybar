@@ -20,9 +20,12 @@ describe("HELP_TEXT", () => {
   // brandon-menus-sjhy.ek7: the place each setting is listed under is the
   // menu's map, so a control the menu moves moves its line in --help.
   test("names every setting under the place its control is in", () => {
+    const escaped = (text: string): string =>
+      text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     for (const { configKey, label } of Object.values(SETTINGS)) {
-      expect(HELP_TEXT).toContain(configKey);
-      expect(HELP_TEXT).toContain(label);
+      expect(HELP_TEXT).toMatch(
+        new RegExp(`\\n\\s+${escaped(configKey)}\\s+${escaped(label)}\\n`),
+      );
     }
     expect(HELP_TEXT).toMatch(/first line\n\s+palette\s+🎨 theme\n\s+preset\s/);
     expect(HELP_TEXT).toMatch(/⚙ config\n\s+autoWrap\s+wrap\n\s+padding\s+padding\n/);
