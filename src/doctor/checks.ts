@@ -42,10 +42,8 @@ import type { SightingScope } from "./sightings.js";
 import {
   approachingLimit,
   chargeWords,
-  judged,
   laterIdentity,
   mb,
-  STAND_IN_AFTER_UNREAD,
   type PostMortem,
   type ServingDaemon,
 } from "../daemon/limits.js";
@@ -1117,22 +1115,19 @@ const daemon: Check = {
           `daemon ${p.pid} (started ${p.started}, rss ${mb(p.rss)} MB${p.ppid === 1 ? "" : `, child of ${p.ppid}`}) runs beside the one serving the bar (${pid}) — \`kill ${p.pid}\``,
       ),
       // [LAW:no-silent-failure] RSS standing in for the platform's charge is
-      // the limit judging — now, or once the run reaches its length — what
-      // macOS has already reclaimed, the very misjudgment the charge exists to
-      // end, so it is a finding, near the limit or not, naming how far RSS is
-      // from it.
+      // the limit judging an estimate — or, with no gap yet read, what macOS
+      // has already reclaimed, the very misjudgment the charge exists to end —
+      // so it is a finding, near the limit or not.
       ...(memory.kind === "measured" && memory.charge.kind === "stand-in"
         ? [
-            `the daemon could not read what macOS charges it (${memory.charge.unread}) on ${
-              judged(memory.charge)
-                ? `${memory.charge.unreadRun} readings in a row, so`
-                : `${memory.charge.unreadRun} of the ${STAND_IN_AFTER_UNREAD} readings in a row after which`
-            } its memory limit judges RSS — ${mb(memory.charge.bytes)} MB of its ${mb(limit)} MB limit — which counts pages macOS has reclaimed`,
+            `the daemon could not read what macOS charges it (${memory.charge.unread}), so its memory limit judges ${
+              memory.charge.gap > 0
+                ? `RSS less the ${mb(memory.charge.gap)} MB it last ran over that charge, an estimate`
+                : "RSS, which counts pages macOS has reclaimed"
+            }`,
           ]
         : []),
-      // [LAW:single-enforcer] Near the limit only by a charge it judges.
       ...(memory.kind === "measured" &&
-      judged(memory.charge) &&
       approachingLimit(memory.charge.bytes, limit)
         ? [
             `the daemon holds ${chargeWords(memory.charge)} of its ${mb(limit)} MB limit — at the limit it records a post-mortem and restarts`,

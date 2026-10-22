@@ -143,15 +143,19 @@ export type MemoryReading =
       readonly heapTotal: number;
     };
 
-// [LAW:types-are-the-program] The charge as a reading holds it: RSS standing
-// in carries `unreadRun`, the readings running, this one included (so ≥ 1),
-// whose platform measure went unread — which decides whether the limit judges
-// it. A charged reading has no run to carry.
+// [LAW:types-are-the-program] The charge as a reading holds it: the
+// platform's own, or RSS standing in less `gap` — how far RSS ran over the
+// platform's charge at the last reading it charged, carried through every
+// stand-in since, 0 before any (and on Linux, whose charge IS RSS). `bytes` is
+// what the limit judges either way.
 export type ReadCharge =
   | Extract<MemoryCharge, { kind: "charged" }>
-  | (Extract<MemoryCharge, { kind: "stand-in" }> & {
-      readonly unreadRun: number;
-    });
+  | {
+      readonly kind: "stand-in";
+      readonly bytes: number;
+      readonly gap: number;
+      readonly unread: string;
+    };
 
 // The daemon as the doctor judges it (brandon-doctor-v62x.5mq): which process
 // it is, how much of its budget it holds, and the post-mortems its directory
@@ -165,24 +169,26 @@ export interface ServingDaemon {
     | { readonly kind: "failed"; readonly reason: string };
 }
 
-// How many readings in a row (a minute apart) the platform's measure must go
-// unread before RSS standing in for it can end the daemon. macOS RSS runs
-// ~150 MB over phys_footprint, so judging it on ONE unread reading killed two
+// [LAW:single-enforcer] THE charge a reading holds, from what the probe
+// answered and the reading before it. macOS RSS runs ~150 MB over
+// phys_footprint, so judging raw RSS on one unread footprint killed two
 // daemons whose footprint never passed 435 MB of a 512 MB budget
-// (brandon-unfiled-3248.ptv0). A run this long is a host whose measure does not
-// read, which the stand-in still bounds.
-export const STAND_IN_AFTER_UNREAD = 3;
-
-// [LAW:single-enforcer] THE judgment of whether the limit holds a charge
-// against it: the platform's own always, RSS standing in only once it has
-// stood in for STAND_IN_AFTER_UNREAD readings running. The breach, the restart
-// forecast and the doctor's daemon row all ask it.
-export function judged(charge: ReadCharge): boolean {
-  return charge.kind === "charged" || charge.unreadRun >= STAND_IN_AFTER_UNREAD;
-}
-
-export function breaches(charge: ReadCharge, limit: number): boolean {
-  return judged(charge) && charge.bytes > limit;
+// (brandon-unfiled-3248.ptv0); the gap held at 148–153 MB minute to minute on
+// the live daemon, so RSS less the last one stands in for the footprint as
+// closely as it moves, and a runaway is judged at once. A host whose footprint
+// never read has no gap, and is judged on RSS.
+export function readCharge(
+  probed: MemoryCharge,
+  previous: MemoryReading,
+): ReadCharge {
+  if (probed.kind === "charged") return probed;
+  const gap =
+    previous.kind === "unmeasured"
+      ? 0
+      : previous.charge.kind === "charged"
+        ? previous.rss - previous.charge.bytes
+        : previous.charge.gap;
+  return { ...probed, bytes: probed.bytes - gap, gap };
 }
 
 // [LAW:single-enforcer] THE judgment of "near the limit": the restart
@@ -285,21 +291,13 @@ export function makeLimits(deps: LimitsDeps): LimitsHandle {
   async function measure(): Promise<boolean> {
     if (triggered) return true;
     const { rss, heapTotal } = deps.memoryBytes();
-    const probed = await deps.memoryCharge(rss);
-    const before =
-      latest.kind === "measured" && latest.charge.kind === "stand-in"
-        ? latest.charge.unreadRun
-        : 0;
-    const charge: ReadCharge =
-      probed.kind === "stand-in"
-        ? { ...probed, unreadRun: before + 1 }
-        : probed;
+    const charge = readCharge(await deps.memoryCharge(rss), latest);
     const reading = { kind: "measured", charge, rss, heapTotal } as const;
     latest = reading;
     // [LAW:nothing-unseen] One line per reading, whatever it says: the history
     // a breach is read against, which no cache count can reconstruct.
     deps.log("info", `memory ${readingFields(reading, limit)}`);
-    if (!breaches(charge, limit)) return false;
+    if (charge.bytes <= limit) return false;
     triggered = true;
     deps.log(
       "warn",
@@ -354,7 +352,6 @@ export function makeLimits(deps: LimitsDeps): LimitsHandle {
     // is a cache to fix, growth outside it is not, and the reader cannot tell
     // which from the charge alone.
     return latest.kind === "measured" &&
-      judged(latest.charge) &&
       approachingLimit(latest.charge.bytes, limit)
       ? `${chargeWords(latest.charge)} approaching limit ${mb(limit)} MB (v8 heap ${mb(latest.heapTotal)} MB)`
       : null;
@@ -402,10 +399,10 @@ export function makeLimits(deps: LimitsDeps): LimitsHandle {
 
 // [LAW:one-source-of-truth] The one spelling of a charge in a sentence: the
 // breach line, the restart forecast and the doctor's row all say it this way.
-export function chargeWords(charge: MemoryCharge): string {
+export function chargeWords(charge: ReadCharge): string {
   return charge.kind === "charged"
     ? `${charge.measure} ${mb(charge.bytes)} MB`
-    : `rss ${mb(charge.bytes)} MB (standing in: ${charge.unread})`;
+    : `rss ${mb(charge.bytes + charge.gap)} MB${charge.gap === 0 ? "" : ` less its last ${mb(charge.gap)} MB gap`} (standing in: ${charge.unread})`;
 }
 
 // [LAW:one-source-of-truth] The one token naming what a charge measured: the
@@ -421,7 +418,7 @@ function readingFields(
 ): string {
   const unread =
     charge.kind === "stand-in"
-      ? ` unread=${JSON.stringify(charge.unread)} unreadRun=${charge.unreadRun}/${STAND_IN_AFTER_UNREAD}`
+      ? ` unread=${JSON.stringify(charge.unread)} gap=${mb(charge.gap)}MB`
       : "";
   return `measure=${measureOf(charge)} charge=${mb(charge.bytes)}MB rss=${mb(rss)}MB heap=${mb(heapTotal)}MB limit=${mb(limit)}MB${unread}`;
 }

@@ -88,49 +88,54 @@ describe("the daemon probe", () => {
     });
   });
 
-  const standInFacts = (bytes: number, unreadRun: number): Pick<DaemonFacts, "serving"> => ({
+  // A stand-in judged at `bytes`: RSS less `gap`.
+  const standInFacts = (bytes: number, gap: number): Pick<DaemonFacts, "serving"> => ({
     serving: {
       kind: "ok",
       value: {
         ...HEALTHY_SERVING,
         memory: {
           kind: "measured",
-          charge: { kind: "stand-in", bytes, unread: "footprint timeout", unreadRun },
-          rss: bytes,
+          charge: { kind: "stand-in", bytes, gap, unread: "footprint timeout" },
+          rss: bytes + gap,
           heapTotal: 100 * MB,
         },
       },
     },
   });
-  const standIn = (bytes: number, unreadRun: number) => verdictOf(standInFacts(bytes, unreadRun));
+  const standIn = (bytes: number, gap: number) => verdictOf(standInFacts(bytes, gap));
 
-  // brandon-unfiled-3248.ptv0: the limit does not judge RSS until the run is
-  // STAND_IN_AFTER_UNREAD long, so neither may the row.
-  test("RSS standing in for a shorter run is a finding saying when it will be judged and how far RSS is from the limit, and no restart is forecast however far over", () => {
-    expect(standIn(600 * MB, 2)).toEqual({
+  test("RSS standing in with no gap read is a finding however far under the limit, and is judged too", () => {
+    const unread =
+      "the daemon could not read what macOS charges it (footprint timeout), so its memory limit judges RSS, which counts pages macOS has reclaimed";
+    expect(standIn(100 * MB, 0)).toEqual({ ok: false, reason: unread, more: [] });
+    expect(standIn(450 * MB, 0)).toEqual({
       ok: false,
-      reason:
-        "the daemon could not read what macOS charges it (footprint timeout) on 2 of the 3 readings in a row after which its memory limit judges RSS — 600 MB of its 512 MB limit — which counts pages macOS has reclaimed",
-      more: [],
-    });
-  });
-
-  test("RSS standing in for the full run is a finding however far under the limit, and is judged too", () => {
-    const unread = (bytes: number) =>
-      `the daemon could not read what macOS charges it (footprint timeout) on 3 readings in a row, so its memory limit judges RSS — ${bytes} MB of its 512 MB limit — which counts pages macOS has reclaimed`;
-    expect(standIn(100 * MB, 3)).toEqual({ ok: false, reason: unread(100), more: [] });
-    expect(standIn(450 * MB, 3)).toEqual({
-      ok: false,
-      reason: unread(450),
+      reason: unread,
       more: [
         "the daemon holds rss 450 MB (standing in: footprint timeout) of its 512 MB limit — at the limit it records a post-mortem and restarts",
       ],
     });
   });
 
-  test("the doctor's event carries the stand-in's unread run, and a charge as it was", () => {
-    const facts = { ...HEALTHY_FACTS.daemon, ...standInFacts(600 * MB, 2) };
-    expect(daemonFields(facts)).toMatch(/ memory=rss-stand-in\(2\/3\):600\/512 /);
+  // brandon-unfiled-3248.ptv0: a stand-in is judged less the gap RSS last ran
+  // over the footprint, and the row says so — near the limit by that estimate.
+  test("RSS standing in less its gap is a finding naming the estimate, near the limit by it", () => {
+    const unread =
+      "the daemon could not read what macOS charges it (footprint timeout), so its memory limit judges RSS less the 150 MB it last ran over that charge, an estimate";
+    expect(standIn(300 * MB, 150 * MB)).toEqual({ ok: false, reason: unread, more: [] });
+    expect(standIn(450 * MB, 150 * MB)).toEqual({
+      ok: false,
+      reason: unread,
+      more: [
+        "the daemon holds rss 600 MB less its last 150 MB gap (standing in: footprint timeout) of its 512 MB limit — at the limit it records a post-mortem and restarts",
+      ],
+    });
+  });
+
+  test("the doctor's event carries the gap a stand-in is judged less, and a charge as it was", () => {
+    const facts = { ...HEALTHY_FACTS.daemon, ...standInFacts(450 * MB, 150 * MB) };
+    expect(daemonFields(facts)).toMatch(/ memory=rss-stand-in\(-150\):450\/512 /);
     expect(daemonFields(HEALTHY_FACTS.daemon)).toMatch(/ memory=phys_footprint:120\/512 /);
   });
 
@@ -413,25 +418,25 @@ describe("parseServingDaemon", () => {
     // RSS standing in must say why; without its reason it is misshapen.
     const reasonless = {
       ...HEALTHY_SERVING,
-      memory: { kind: "measured", charge: { kind: "stand-in", bytes: 1, unreadRun: 1 }, rss: 1, heapTotal: 1 },
+      memory: { kind: "measured", charge: { kind: "stand-in", bytes: 1, gap: 0 }, rss: 1, heapTotal: 1 },
     };
     expect(parseServingDaemon({ ...stats, daemon: reasonless as never })).toMatchObject({ kind: "failed" });
-    // A stand-in from before the unread run cannot say whether it is judged,
-    // and a run is at least the reading that carries it.
-    const standInRun = (unreadRun: unknown) => ({
+    // A stand-in must say the gap it is judged less, or its charge is RSS
+    // passed off as an estimate.
+    const standInGap = (gap: unknown) => ({
       ...HEALTHY_SERVING,
       memory: {
         kind: "measured",
-        charge: { kind: "stand-in", bytes: 1, unread: "footprint timeout", unreadRun },
+        charge: { kind: "stand-in", bytes: 1, unread: "footprint timeout", gap },
         rss: 1,
         heapTotal: 1,
       },
     });
-    for (const run of [undefined, 0, 1.5, Number.NaN]) {
-      expect(parseServingDaemon({ ...stats, daemon: standInRun(run) as never })).toMatchObject({ kind: "failed" });
+    for (const gap of [undefined, "150", Number.NaN]) {
+      expect(parseServingDaemon({ ...stats, daemon: standInGap(gap) as never })).toMatchObject({ kind: "failed" });
     }
-    expect(parseServingDaemon({ ...stats, daemon: standInRun(2) as never })).toMatchObject({ kind: "ok" });
-    // A charged reading has no run, so one from before the run still reads.
+    expect(parseServingDaemon({ ...stats, daemon: standInGap(0) as never })).toMatchObject({ kind: "ok" });
+    // A charged reading carries no gap, so one from before the gap still reads.
     expect(parseServingDaemon({ ...stats, daemon: HEALTHY_SERVING })).toMatchObject({ kind: "ok" });
     const odd = { ...HEALTHY_SERVING, postMortems: { kind: "ok", value: [{ identity: 3 }] } };
     expect(parseServingDaemon({ ...stats, daemon: odd as never })).toEqual({

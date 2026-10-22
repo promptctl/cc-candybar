@@ -8,7 +8,6 @@ import {
   heapCapMb,
   postMortemsOf,
   realLimitsDeps,
-  STAND_IN_AFTER_UNREAD,
 } from "../src/daemon/limits";
 import type { MemoryCharge } from "../src/daemon/memory-report";
 import fs from "node:fs";
@@ -344,19 +343,25 @@ describe("describeNextRestart", () => {
     );
   });
 
-  // brandon-unfiled-3248.ptv0: RSS the limit does not judge yet forecasts no
-  // restart, however far over it is.
-  test("forecasts by RSS standing in only once the limit judges it", async () => {
+  // brandon-unfiled-3248.ptv0: RSS standing in forecasts as the limit judges
+  // it, less the gap the last charged reading measured.
+  test("forecasts by RSS standing in less its gap", async () => {
+    const MB = 1024 * 1024;
     const rec = newRec();
-    rec.fakeHeapTotal = 11 * 1024 * 1024;
-    rec.fakeCharge = { kind: "stand-in", bytes: 600 * 1024 * 1024, unread: "footprint timeout" };
+    rec.fakeHeapTotal = 11 * MB;
     const limits = makeLimits(makeDeps(rec));
+    rec.fakeRss = 350 * MB;
+    rec.fakeCharge = { kind: "charged", measure: "phys_footprint", bytes: 200 * MB };
+    await limits.check();
+    rec.fakeRss = 500 * MB;
+    rec.fakeCharge = { kind: "stand-in", bytes: 500 * MB, unread: "footprint timeout" };
     await limits.check();
     expect(limits.describeNextRestart()).toBeNull();
-    rec.fakeCharge = { kind: "stand-in", bytes: 450 * 1024 * 1024, unread: "footprint timeout" };
-    for (let i = 1; i < STAND_IN_AFTER_UNREAD; i++) await limits.check();
+    rec.fakeRss = 600 * MB;
+    rec.fakeCharge = { kind: "stand-in", bytes: 600 * MB, unread: "footprint timeout" };
+    await limits.check();
     expect(limits.describeNextRestart()).toBe(
-      "rss 450 MB (standing in: footprint timeout) approaching limit 512 MB (v8 heap 11 MB)",
+      "rss 600 MB less its last 150 MB gap (standing in: footprint timeout) approaching limit 512 MB (v8 heap 11 MB)",
     );
   });
 });
@@ -395,65 +400,69 @@ describe("the charge is the verdict", () => {
   });
 
   // brandon-unfiled-3248.ptv0: one unread footprint killed daemons whose
-  // footprint never passed 435 MB, judged on the RSS standing in for it.
-  const unreadOver = {
-    kind: "stand-in",
-    bytes: 600 * MB,
-    unread: "footprint timeout",
-  } as const;
+  // footprint never passed 435 MB, judged on the raw RSS standing in for it.
+  // The probe's stand-in is RSS itself, as `footprintCharge` answers it.
+  const read = (rec: Recorder, rss: number, footprint: number | null): void => {
+    rec.fakeRss = rss;
+    rec.fakeCharge =
+      footprint === null
+        ? { kind: "stand-in", bytes: rss, unread: "footprint timeout" }
+        : { kind: "charged", measure: "phys_footprint", bytes: footprint };
+  };
 
-  test("one unread reading over the limit is no breach, and its line counts the run", async () => {
+  test("RSS standing in is judged less the gap the last charged reading measured, through every stand-in since", async () => {
     const rec = newRec();
-    rec.fakeRss = 600 * MB;
     rec.fakeHeapTotal = 150 * MB;
-    rec.fakeCharge = unreadOver;
     const limits = makeLimits(makeDeps(rec));
+    read(rec, 450 * MB, 300 * MB);
+    await limits.check();
+    read(rec, 600 * MB, null);
     expect(await limits.check()).toBe(false);
+    read(rec, 620 * MB, null);
     expect(await limits.check()).toBe(false);
     expect(rec.shutdownCalls).toEqual([]);
-    expect(rec.logs.map((l) => l.msg)).toEqual([
-      'memory measure=rss-stand-in charge=600MB rss=600MB heap=150MB limit=512MB unread="footprint timeout" unreadRun=1/3',
-      'memory measure=rss-stand-in charge=600MB rss=600MB heap=150MB limit=512MB unread="footprint timeout" unreadRun=2/3',
+    expect(rec.logs.slice(1).map((l) => l.msg)).toEqual([
+      'memory measure=rss-stand-in charge=450MB rss=600MB heap=150MB limit=512MB unread="footprint timeout" gap=150MB',
+      'memory measure=rss-stand-in charge=470MB rss=620MB heap=150MB limit=512MB unread="footprint timeout" gap=150MB',
     ]);
   });
 
-  test("RSS standing in for STAND_IN_AFTER_UNREAD readings running is judged, the line saying why it stands in", async () => {
+  test("a runaway is judged at once, though its footprint went unread", async () => {
     const rec = newRec();
-    rec.fakeRss = 600 * MB;
     rec.fakeHeapTotal = 150 * MB;
-    rec.fakeCharge = unreadOver;
     const limits = makeLimits(makeDeps(rec));
-    for (let i = 1; i < STAND_IN_AFTER_UNREAD; i++) {
-      expect(await limits.check()).toBe(false);
-    }
+    read(rec, 450 * MB, 300 * MB);
+    await limits.check();
+    read(rec, 2000 * MB, null);
     expect(await limits.check()).toBe(true);
     expect(rec.shutdownCalls).toEqual([0]);
-    expect(rec.logs.slice(STAND_IN_AFTER_UNREAD - 1, STAND_IN_AFTER_UNREAD + 1)).toEqual([
-      {
-        level: "info",
-        msg: 'memory measure=rss-stand-in charge=600MB rss=600MB heap=150MB limit=512MB unread="footprint timeout" unreadRun=3/3',
-      },
-      {
-        level: "warn",
-        msg: "rss 600 MB (standing in: footprint timeout) > limit 512 MB (rss 600 MB, v8 heap 150 MB); recording memory then shutting down",
-      },
+    expect(rec.logs).toContainEqual({
+      level: "warn",
+      msg: "rss 2000 MB less its last 150 MB gap (standing in: footprint timeout) > limit 512 MB (rss 2000 MB, v8 heap 150 MB); recording memory then shutting down",
+    });
+  });
+
+  test("with no footprint ever read, RSS is judged whole", async () => {
+    const rec = newRec();
+    rec.fakeHeapTotal = 150 * MB;
+    read(rec, 600 * MB, null);
+    expect(await makeLimits(makeDeps(rec)).check()).toBe(true);
+    expect(rec.logs.slice(0, 2).map((l) => l.msg)).toEqual([
+      'memory measure=rss-stand-in charge=600MB rss=600MB heap=150MB limit=512MB unread="footprint timeout" gap=0MB',
+      "rss 600 MB (standing in: footprint timeout) > limit 512 MB (rss 600 MB, v8 heap 150 MB); recording memory then shutting down",
     ]);
   });
 
-  test("a reading the platform charges ends the unread run", async () => {
+  test("a charged reading over the limit after a stand-in breaches at once", async () => {
     const rec = newRec();
-    rec.fakeRss = 600 * MB;
     const limits = makeLimits(makeDeps(rec));
-    rec.fakeCharge = unreadOver;
+    read(rec, 450 * MB, 300 * MB);
     await limits.check();
-    await limits.check();
-    rec.fakeCharge = { kind: "charged", measure: "phys_footprint", bytes: 300 * MB };
-    await limits.check();
-    rec.fakeCharge = unreadOver;
+    read(rec, 450 * MB, null);
     expect(await limits.check()).toBe(false);
-    expect(await limits.check()).toBe(false);
-    expect(rec.shutdownCalls).toEqual([]);
-    expect(rec.logs.at(-1)?.msg).toMatch(/ unreadRun=2\/3$/);
+    read(rec, 700 * MB, 600 * MB);
+    expect(await limits.check()).toBe(true);
+    expect(rec.shutdownCalls).toEqual([0]);
   });
 
   test("arm reads at once, and schedules the next only once the last has answered", async () => {
