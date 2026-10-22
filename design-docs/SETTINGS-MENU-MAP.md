@@ -6,10 +6,10 @@ The settings menu's structure, for brandon-menu-ia-q30.1ws. Quotes are Brandon's
 
 The menu opens above the bar and leaves the bar as it was: "Opening the candy menu (the top level menu) should show the menus ABOVE the existing bar rather than replacing it."
 
-The menu is two lines, then the body of the open tab. The first line holds the preset control and, when there is something to save or step, the save cell. The second holds the five tabs. One tab is open at a time.
+The menu is two lines, then the body of the open tab. The first line holds the theme picker and its `⚙`, the preset control, `✎ arrange` and, when there is something to save or step, the save cell. The second holds the five tabs. One tab is open at a time.
 
 ```
-✖  ◁  ▦ ◀ default ▶  💾 save 3 ↶ ↷ ⟲
+✖  ◁  🎨 theme ▀▀▀  ⚙  ▦ ◀ default ▶  ✎ arrange  💾 save 3 ↶ ↷ ⟲
    ⚡ session  🎨 look  📐 layout  ⚙ config  🧰 tools
 ✕  …the open tab's body…
 host  directory  gitaculous             ← the bar, less the door
@@ -18,15 +18,16 @@ host  directory  gitaculous             ← the bar, less the door
 A body drops below its trigger or rises above the whole bar (`placement: "drop" | "above"`, `src/config/disclosure.ts`); opening above replaced the menu's old takeover of the door's row. An `above` body's trigger rises with it: the door, wearing ✖, leads the menu's first line, followed by `◁` back, and the bar row closes up where it was.
 
 - **Preset** is top-level: "preset is top-level". It opens the preset menu with its layout preview below.
+- **Theme and arrange** are top-level beside it (brandon-menus-sjhy.ek7): "Make theme and arrange top-level menus, next to preset." The theme picker's `⚙` comes with it and holds style, variation and shade, then `⤓ default for <theme>` while the look differs from the theme's default, since that saves exactly those three. A closed `⚙` is marked `•` while one of them would change on reset, as a tab is.
 - **Tabs** stay as listed until Brandon changes them: "Keep them all until I tell you otherwise."
 - **Save, undo, redo, reset all** follow the preset as one cell, `💾 save 3 ↶ ↷ ⟲`. Each part shows on its own condition, as today: save when there are drafts, undo and redo when there is history, `⟲` when a reset would change something (a draft or a config-file value). A fresh session over a customized config file shows `⟲` alone (brandon-save-undo-bwi.hpi, .jby, .wt5).
 
 | Tab | Holds |
 |---|---|
 | `⚡ session` | `⎘ id`, `⎘ resume`, `↗ proj`, `↗ log`, `↗ repo`, `↗ config` (shown only when a config file exists); a second row of `/compact /clear /model` (xta.qhj) and the autocompact control (xta.e3p) |
-| `🎨 look` | The theme picker and its `⚙` (style, variation, shade), then effect, endcaps and fade in/out (below) |
-| `📐 layout` | `+ preset` (bwi.o6u), `✎ arrange` (today's `✎ edit`, see Edit mode), `wrap: on/off`, `◀ padding ▶`. "this is just temporary until we figure out what to do it with"; padding "is probably also useless" |
-| `⚙ config` | "all config options": the controls generated from the config schema (brandon-settings-coverage-g4p.zoj) that no other tab holds: `☑ update notice`, then `🧪 toggles`, a submenu holding the animation lanes' toggles (`🧪 band (A)`, `🧪 statusline (B)`, `🧪 tmux pane (C)`). `PLACE` in `src/config/menu-places.ts` names each setting's tab or submenu, keyed by every `SETTINGS` row, so a control lands in exactly one place |
+| `🎨 look` | Effect, endcaps and fade in/out |
+| `📐 layout` | `+ preset` (bwi.o6u) |
+| `⚙ config` | "all config options": the controls generated from the config schema (brandon-settings-coverage-g4p.zoj) that no other place holds: `☑ wrap`, `◀ padding ▶` ("Move padding and wrap from the layout menu to config", ek7), `☑ update notice`, then `🧪 toggles`, a submenu holding the animation lanes' toggles (`🧪 band (A)`, `🧪 statusline (B)`, `🧪 tmux pane (C)`). Each setting's row in `src/config/globals-fields.ts` names its place — the first line, a tab, or a submenu — so a control lands in exactly one place |
 | `🧰 tools` | `🩺 doctor` and its check rows (below) |
 
 `📐` replaces `▦` on the layout tab because `▦` is the preset control's glyph.
@@ -71,6 +72,8 @@ gitPr       The pull request open for this branch, as a link; `⚠ PR` when the 
 ```
 
 ## The look tab
+
+Since brandon-menus-sjhy.ek7 the theme picker and its `⚙` sit on the menu's first line, and this tab holds effect, endcaps and fade in/out. What follows records how the look controls were designed.
 
 ```
 look

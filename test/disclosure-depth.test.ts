@@ -328,34 +328,34 @@ describe("candybar-render-ai7.9 — the bundled 🍫 → 🎨 look → picker ch
 
     // A picker control open: the ticket's Done-when, verbatim — its trigger
     // is `bandFor(palette, { hue, depth: 2 }, drawnAt).state`, and the first
-    // row it opens — the theme picker's swatches (brandon-theme-swatch-8v9r)
-    // — is a depth-2 item of that band.
+    // row it opens — the effect's list of options — is a depth-2 item of
+    // that band.
     const control = row2[0]!;
+    expect(control).toBe("candybar.effect");
     const pickers = sharedMenuStateKey("candybar.pickers");
-    rt.clickWriting(control, pickers, "candybar.apply.theme");
+    rt.clickWriting(control, pickers, "candybar.apply.effect");
     rt.render();
     const band2: Disclosure = { ...band0, depth: 2 };
     expect(rt.bgOf(control)).toBe(bandFor(palette, band2, ColorDepth.TRUECOLOR).state.hex);
-    const list = "candybar.list.theme.0";
+    const list = "candybar.list.effect.0";
     expect(rt.bgOf(list)).toBe(
       bandItemFor(palette, band2, regionAddress(rt, list), ColorDepth.TRUECOLOR).hex,
     );
 
-    // The ⚙ beside the theme control is a trigger in the depth-1 band too, so
-    // it opens depth 2, and the style control behind it opens depth 3 — the
-    // deepest the bundled menu reaches, and its list a depth-3 item.
+    // The ⚙ beside the theme control sits on the door's first line, a trigger
+    // in the depth-0 band like the tabs, so it opens depth 1, and the style
+    // control behind it opens depth 2 — its list a depth-2 item.
     const gear = "candybar.gear";
     rt.clickWriting(gear, pickers, "gear");
     rt.render();
-    expect(rt.bgOf(gear)).toBe(bandFor(palette, band2, ColorDepth.TRUECOLOR).state.hex);
+    expect(rt.bgOf(gear)).toBe(bandFor(palette, band1, ColorDepth.TRUECOLOR).state.hex);
     const style = "candybar.style";
     rt.clickWriting(style, sharedMenuStateKey("candybar.gearPickers"), "candybar.apply.style");
     rt.render();
-    const band3: Disclosure = { ...band0, depth: 3 };
-    expect(rt.bgOf(style)).toBe(bandFor(palette, band3, ColorDepth.TRUECOLOR).state.hex);
+    expect(rt.bgOf(style)).toBe(bandFor(palette, band2, ColorDepth.TRUECOLOR).state.hex);
     const styles = "candybar.list.style.0";
     expect(rt.bgOf(styles)).toBe(
-      bandItemFor(palette, band3, regionAddress(rt, styles), ColorDepth.TRUECOLOR).hex,
+      bandItemFor(palette, band2, regionAddress(rt, styles), ColorDepth.TRUECOLOR).hex,
     );
     rt.dispose();
   });

@@ -64,7 +64,7 @@ describe("candybar-settings-ui-aok.1: real daemon, real user config", () => {
       // 1. The door exists, from a config that declared only two segments.
       const closed = await render(sockPath, SID, projectDir);
       expect(stripAnsi(closed)).toContain(DOOR_GLYPH);
-      expect(stripAnsi(closed)).not.toContain("📐 layout");
+      expect(stripAnsi(closed)).not.toContain("✎ arrange");
 
       // 2. Its click opens the body — found in the rendered bytes and
       //    dispatched through the real click gate, so a menu the derived
@@ -73,16 +73,12 @@ describe("candybar-settings-ui-aok.1: real daemon, real user config", () => {
       const opened = stripAnsi(await render(sockPath, SID, projectDir));
       expect(opened).toContain(DOOR_CLOSE_GLYPH);
       expect(opened).not.toContain(DOOR_GLYPH);
-      expect(opened).toContain("📐 layout"); // the tab holding edit mode
+      expect(opened).toContain("✎ arrange"); // edit mode, on the first line
       expect(opened).toContain("▦"); // preset switching
 
-      // 3. Edit mode is genuinely entered from the layout tab: the row's edit
-      //    chrome is on screen the moment edit mode is, and the menu stays
-      //    open above it.
-      await click(
-        sockPath,
-        urlWriting(await render(sockPath, SID, projectDir), "candybar.tab", "layout"),
-      );
+      // 3. Edit mode is genuinely entered from the menu's first line: the
+      //    row's edit chrome is on screen the moment edit mode is, and the
+      //    menu stays open above it.
       const bodyOut = await render(sockPath, SID, projectDir);
       expect(stripAnsi(bodyOut)).toContain("✎ arrange");
       await click(sockPath, urlWriting(bodyOut, EDIT_MODE_KEY, "arrange"));

@@ -88,7 +88,7 @@ import {
   SUBMENU_NAMES,
   TABS,
   isSubmenu,
-  tabOf,
+  within,
   type Place,
   type PreviewName,
   type SubmenuName,
@@ -186,8 +186,8 @@ const controlReset = (name: string): string => `${SETTINGS_NS}reset.${name}`;
 
 // ─── A theme's default look (candybar-theme-colours-6fq5.ix8) ──────────────
 //
-// `⤓ default for <theme>` in the 🎨 look tab: save the shade, variation and
-// style the bar wears as the active theme's default. The cell shows exactly
+// `⤓ default for <theme>` in the theme's ⚙ gear: save the shade, variation and
+// style the bar wears — the gear's own settings — as the active theme's default. The cell shows exactly
 // while saving would change something — a fact the daemon publishes every
 // render (RenderPayload.themeDefault, src/daemon/setting-drafts.ts), never one
 // a template computes — and so is the theme it names: the one the click
@@ -324,7 +324,7 @@ const controlRow = (name: string, row: number): string =>
 // brandon-menu-ia-q30.nk8): the one fact its `↺`, its tab's `•`, and `⟲` read.
 const controlResettable = (name: string): string =>
   `${SETTINGS_NS}resettable.${name}`;
-// What a marked tab carries after its label.
+// What a marked trigger carries after its label.
 const DRIFT_MARK = " •";
 // A boolean `or` over the named controls' resettable flags — `false` over none,
 // so a tab holding no control is never marked.
@@ -442,9 +442,20 @@ const CONTROLS: readonly MenuControl[] = (
 
 const controlsIn = (place: Place): readonly MenuControl[] =>
   CONTROLS.filter((c) => PLACE[c.name] === place);
-// What a tab holds, the controls inside its submenus included.
-const controlsUnder = (tab: "door" | TabName): readonly MenuControl[] =>
-  CONTROLS.filter((c) => tabOf(PLACE[c.name]) === tab);
+// What a place holds, the controls inside its submenus included.
+const controlsUnder = (place: Place): readonly MenuControl[] =>
+  CONTROLS.filter((c) => within(PLACE[c.name], place));
+// [LAW:one-source-of-truth] A trigger that opens a place — a tab, a submenu —
+// is marked `•` while a control inside it would change on reset
+// (brandon-menu-ia-q30.nk8), open or closed, so drift is findable without
+// opening each one. The mark rides inside the trigger's link. The door itself
+// is unmarked: `⟲` on its first line says the same.
+const markedDisplay =
+  (place: Place) =>
+  (text: string): string =>
+    `(print ${templateLiteral(text)} (ternary ${templateLiteral(DRIFT_MARK)} "" ${anyResettable(
+      controlsUnder(place).map((c) => c.name),
+    )}))`;
 // The submenus laid right after a setting's control.
 const submenusBeside = (name: SettingName): SubmenuName[] =>
   SUBMENU_NAMES.filter((s) => SUBMENUS[s].beside === name);
@@ -455,12 +466,7 @@ const controlsAt = (place: Place): LayoutNode[] =>
     controlNode(c),
     ...[HELP[c.name]].filter((h) => h !== undefined),
     ...submenusBeside(c.name).map((s) =>
-      disclosureNode(
-        submenuSeg(s),
-        submenuRef(s),
-        { kind: "container", direction: "horizontal", children: controlsAt(s) },
-        "drop",
-      ),
+      disclosureNode(submenuSeg(s), submenuRef(s), placeBody(s), "drop"),
     ),
   ]);
 
@@ -665,18 +671,26 @@ export function anchorUnderGate(node: LayoutNode, gated = false): boolean {
   return node.children.some((child) => anchorUnderGate(child, here));
 }
 
-// [LAW:one-source-of-truth] What each tab holds (design-docs/SETTINGS-MENU-MAP.md,
-// "Structure"), keyed by every tab so none can be left without a body: its own
-// segments, then the controls `PLACE` puts in it, then what follows them.
-// Every body takes the controls, so `PLACE` naming any tab is a placement the
-// bar renders. A cell that comes and goes sits `after` the controls, so its
-// coming and going moves none of them.
-interface TabBody {
+// [LAW:one-source-of-truth] What each place holds (design-docs/SETTINGS-MENU-MAP.md,
+// "Structure") — the door's first line, each tab, each submenu — keyed by every
+// place so none can be left without a body: its own segments, then the
+// controls `PLACE` puts in it, then what follows them. Every body takes the
+// controls, so `PLACE` naming any place is a placement the bar renders. A cell
+// whose width changes — one that comes and goes, or relabels itself — sits
+// `after` the controls, so it moves none of them.
+interface PlaceBody {
   readonly direction: ContainerNode["direction"];
   readonly content: readonly LayoutNode[];
   readonly after: readonly LayoutNode[];
 }
-const TAB_CONTENT: Readonly<Record<TabName, TabBody>> = {
+const PLACE_BODY: Readonly<Record<Place, PlaceBody>> = {
+  // `◁ back`, the controls one click from the door — theme, preset — then
+  // arranging the bar, then the save cell whenever it has something to do.
+  door: {
+    direction: "horizontal",
+    content: [seg(BACK_SEG)],
+    after: [seg(EDIT_SEG), seg(SAVE_SEG)],
+  },
   // The quick actions, then the commands typed into Claude Code beside the
   // auto-compact window they would summarize at.
   session: {
@@ -691,34 +705,32 @@ const TAB_CONTENT: Readonly<Record<TabName, TabBody>> = {
     ],
     after: [],
   },
-  // The look controls, then — while the look differs from the theme's own
-  // default — the cell that saves it as that default.
-  look: {
-    direction: "horizontal",
-    content: [],
-    after: [seg(THEME_DEFAULT_SEG)],
-  },
-  layout: {
-    direction: "horizontal",
-    content: [seg(PRESET_SAVE), seg(EDIT_SEG)],
-    after: [],
-  },
+  look: { direction: "horizontal", content: [], after: [] },
+  layout: { direction: "horizontal", content: [seg(PRESET_SAVE)], after: [] },
   config: { direction: "horizontal", content: [], after: [] },
   tools: {
     direction: "vertical",
     content: [seg(DOCTOR_SEG), ...CHECKS.map((c) => seg(doctorRowSeg(c.name)))],
     after: [],
   },
+  // The settings that adapt the theme, then — while the look they make
+  // differs from the theme's own default — the cell that saves it as that
+  // default.
+  gear: {
+    direction: "horizontal",
+    content: [],
+    after: [seg(THEME_DEFAULT_SEG)],
+  },
+  toggles: { direction: "horizontal", content: [], after: [] },
 };
-const tabBody = (tab: TabName): ContainerNode => ({
-  kind: "container",
-  direction: TAB_CONTENT[tab].direction,
-  children: [
-    ...TAB_CONTENT[tab].content,
-    ...controlsAt(tab),
-    ...TAB_CONTENT[tab].after,
-  ],
-});
+function placeBody(place: Place): ContainerNode {
+  const { direction, content, after } = PLACE_BODY[place];
+  return {
+    kind: "container",
+    direction,
+    children: [...content, ...controlsAt(place), ...after],
+  };
+}
 
 // [LAW:one-type-per-behavior] The lowering, THE one every disclosure takes
 // (`disclosureNode`, as lowerGroup): the anchor leaf becomes the toggle with
@@ -741,18 +753,15 @@ function expandAnchor(node: AnchoredRoot | LayoutNode): LayoutNode {
 }
 
 // Two lines stacked over the bar, then the open tab's body. The first line
-// holds what the menu is FOR — switching arrangement — and, beside it, the save
-// cell whenever it has something to do. The second is the tab strip.
+// holds what the menu is most often opened for — the theme, the preset,
+// arranging the bar — and the save cell (PLACE_BODY.door). The second is the
+// tab strip.
 function doorBody(): ContainerNode {
   return {
     kind: "container",
     direction: "vertical",
     children: [
-      {
-        kind: "container",
-        direction: "horizontal",
-        children: [seg(BACK_SEG), ...controlsAt("door"), seg(SAVE_SEG)],
-      },
+      placeBody("door"),
       {
         kind: "container",
         direction: "horizontal",
@@ -760,7 +769,7 @@ function doorBody(): ContainerNode {
           disclosureNode(
             tabSeg(member),
             tabRef(member),
-            tabBody(member),
+            placeBody(member),
             "drop",
           ),
         ),
@@ -931,9 +940,6 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
   // confirm a tab holds, as one `do` (the door's shape): the tab is the click's
   // face, and switching tabs drops a half-made confirm it took out of view.
   artifacts.variables[TAB_KEY] = disclosureStateVar(TAB_KEY, FIRST_TAB);
-  // A tab holding a control whose reset would change something is marked `•`
-  // (brandon-menu-ia-q30.nk8), open or closed, so drift is findable from the
-  // strip without opening every tab. The mark rides inside the tab's link.
   for (const { member, label } of TABS) {
     artifacts.actions[tabToggle(member)] = disclosureCycleAction(
       TAB_KEY,
@@ -942,10 +948,7 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
     artifacts.actions[tabSeg(member)] = {
       do: [tabToggle(member), ...TAB_DISARMS],
     };
-    const marked = anyResettable(controlsUnder(member).map((c) => c.name));
-    const mark = `(ternary ${templateLiteral(DRIFT_MARK)} "" ${marked})`;
-    const display = (text: string): string =>
-      `(print ${templateLiteral(text)} ${mark})`;
+    const display = markedDisplay(member);
     artifacts.segments[tabSeg(member)] = {
       template: `{{ ${disclosureTriggerCall(
         tabSeg(member),
@@ -1066,7 +1069,7 @@ function declareSettingControls(artifacts: MenuArtifacts): void {
       ref.member,
     );
     artifacts.segments[submenuSeg(name)] = {
-      template: `{{ action "${submenuToggle(name)}" ${templateLiteral(SUBMENUS[name].trigger)} }}`,
+      template: `{{ action "${submenuToggle(name)}" ${markedDisplay(name)(SUBMENUS[name].trigger)} }}`,
     };
   }
 }

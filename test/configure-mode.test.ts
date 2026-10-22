@@ -639,9 +639,8 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
     durable.write(SRC);
     const rt = buildRuntime(SRC);
     configurePlacement(rt.sessionState, SID, "default", "vcs2");
-    // The menu's own ✎ control sits in its layout tab.
+    // The menu's own ✎ control sits on its first line.
     rt.sessionState.set(SID, SETTINGS_ANCHOR, SETTINGS_OPEN);
-    rt.sessionState.set(SID, "candybar.tab", "layout");
     const leaving = linkUrls(rt.render()).filter((u) =>
       effectsOf(u).some(
         (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === DISCLOSURE_CLOSED,

@@ -71,10 +71,11 @@ export type PreviewName = "layout" | "palette" | "presetDelete";
 export const isSubmenu = (place: Place): place is SubmenuName =>
   Object.hasOwn(SUBMENUS, place);
 
-// A submenu sits beside a control, so what is inside it is in that control's
-// tab.
-export const tabOf = (place: Place): "door" | TabName =>
-  isSubmenu(place) ? tabOf(PLACE[SUBMENUS[place].beside]) : place;
+// Whether a control at `place` is shown inside `container`: it is there, or in
+// a submenu laid beside a control that is.
+export const within = (place: Place, container: Place): boolean =>
+  place === container ||
+  (isSubmenu(place) && within(PLACE[SUBMENUS[place].beside], container));
 
 // Where a place is, in the words the menu draws: the tab's label, then each
 // submenu's trigger.

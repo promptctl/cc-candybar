@@ -353,7 +353,7 @@ export const GLOBAL_FIELDS = {
     "theme",
     paletteOrRuleSpec,
     { themes: "themes" },
-    control("🎨 theme", "look"),
+    control("🎨 theme", "door"),
   ),
   // The config default for the PRESET — a named fragment from `presets:`
   // whose globals and root the session renders. Membership in the merged
@@ -415,7 +415,7 @@ export const GLOBAL_FIELDS = {
   // Whether FlexStrip soft-wraps a root row that exceeds the usable width
   // (the legacy display.autoWrap). False renders each row as one unbounded
   // line, overflow off-screen.
-  autoWrap: boolSetting(true, control("wrap", "layout")),
+  autoWrap: boolSetting(true, control("wrap", "config")),
   // Spaces synthesized INSIDE each segment cell per side (intra-cell, within
   // the bg fill — the legacy display.padding). Templates author content; this
   // chrome is applied structurally at the cell-formation seam. Bounded above
@@ -425,7 +425,7 @@ export const GLOBAL_FIELDS = {
   padding: intSetting(
     { ...PADDING_RANGE, step: 1 },
     1,
-    control("padding", "layout"),
+    control("padding", "config"),
   ),
   // Whether the daemon renders its update notice — the row saying newer source
   // or a newer release exists than the code rendering the bar

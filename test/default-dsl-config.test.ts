@@ -569,16 +569,14 @@ describe("DEFAULT_DSL_CONFIG", () => {
       );
     };
     try {
-      // The theme control lives in the synthesized settings menu's look tab
-      // (candybar-settings-ui-aok.3), behind two nested disclosures, and
-      // names the theme in force once opened (brandon-theme-swatch-8v9r) —
-      // open all three with the same clicks a "🍫", "🎨 look" then
-      // "🎨 theme" tap would dispatch, so the controls this test exercises
-      // render.
+      // The theme control lives on the synthesized settings menu's first
+      // line (brandon-menus-sjhy.ek7), and names the theme in force once
+      // opened (brandon-theme-swatch-8v9r) — open both with the same clicks
+      // a "🍫" then "🎨 theme" tap would dispatch, so the controls this test
+      // exercises render.
       clickUrl(
         effectsUrl([
           { verb: VERB_SET_STATE, args: [SID, "candybar.menu", "open"] },
-          { verb: VERB_SET_STATE, args: [SID, "candybar.tab", "look"] },
           {
             verb: VERB_SET_STATE,
             args: [SID, "menus.candybar_pickers", "candybar.apply.theme"],

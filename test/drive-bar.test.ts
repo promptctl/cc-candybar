@@ -41,9 +41,9 @@ describe("drive-bar", () => {
     bar = await startBar({ width: 120, rows: 40, config: original, cwd: process.cwd(), ssh: false });
     await bar.render();
     await bar.click(DOOR_GLYPH);
-    await bar.click("📐 layout");
+    await bar.click("⚙ config");
     // The second ▶ on screen: the first steps the preset control on the door's
-    // line, the second the padding stepper in the layout tab.
+    // line, the second the padding stepper in the config tab.
     const { rendered: out } = await bar.click("▶", 2);
     // The stepper's step is a session draft; save writes it to the config.
     const save = drawnLinks(out).find((l) => describeLink(l).startsWith("save "));
@@ -67,7 +67,6 @@ describe("drive-bar", () => {
     bar = await startBar({ width: 200, rows: 40, config: null, cwd: process.cwd(), ssh: false });
     await bar.render();
     await bar.click(DOOR_GLYPH);
-    await bar.click("📐 layout");
     await bar.click("✎ arrange");
     // ✖ #1 is the risen door; #2 removes host, #3 directory.
     expect(stripAnsi((await bar.click("✖", 3)).rendered)).not.toContain("✖ directory");
