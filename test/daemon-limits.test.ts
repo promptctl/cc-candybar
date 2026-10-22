@@ -343,6 +343,22 @@ describe("describeNextRestart", () => {
       "phys_footprint 400 MB approaching limit 512 MB (v8 heap 11 MB)",
     );
   });
+
+  // brandon-unfiled-3248.ptv0: RSS the limit does not judge yet forecasts no
+  // restart, however far over it is.
+  test("forecasts by RSS standing in only once the limit judges it", async () => {
+    const rec = newRec();
+    rec.fakeHeapTotal = 11 * 1024 * 1024;
+    rec.fakeCharge = { kind: "stand-in", bytes: 600 * 1024 * 1024, unread: "footprint timeout" };
+    const limits = makeLimits(makeDeps(rec));
+    await limits.check();
+    expect(limits.describeNextRestart()).toBeNull();
+    rec.fakeCharge = { kind: "stand-in", bytes: 450 * 1024 * 1024, unread: "footprint timeout" };
+    for (let i = 1; i < STAND_IN_AFTER_UNREAD; i++) await limits.check();
+    expect(limits.describeNextRestart()).toBe(
+      "rss 450 MB (standing in: footprint timeout) approaching limit 512 MB (v8 heap 11 MB)",
+    );
+  });
 });
 
 // brandon-unfiled-3248.2j3m: macOS RSS counts pages malloc freed and marked
@@ -575,6 +591,7 @@ describe("post-mortems", () => {
       memory: {
         kind: "measured",
         charge: { kind: "charged", measure: "rss", bytes: rec.fakeRss },
+        unreadRun: 0,
         rss: rec.fakeRss,
         heapTotal: rec.fakeHeapTotal,
       },

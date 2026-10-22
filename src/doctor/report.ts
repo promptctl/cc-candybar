@@ -37,7 +37,7 @@ import {
 } from "./checks.js";
 import type { SettingsSource } from "../claude-settings.js";
 import { SETTINGS_NS } from "../config/loader/reserved-namespace.js";
-import { mb, measureOf } from "../daemon/limits.js";
+import { mb, measureOf, STAND_IN_AFTER_UNREAD } from "../daemon/limits.js";
 import { valueOf } from "../utils/logfmt.js";
 import { FRAMES_SEEN, type FrameSeen } from "../daemon/render-sightings.js";
 
@@ -128,9 +128,10 @@ export function installFields(install: InstallFacts): string {
 
 // [LAW:nothing-unseen] What the daemon check reasoned over, as logfmt fields:
 // how many daemons run and which besides the serving one, the serving one's
-// memory against its limit, and its post-mortems as `<unread>/<total>` —
-// `unread` where a list could not be read, `unasked` where no daemon
-// answered.
+// memory against its limit (RSS standing in carrying its unread run, which
+// decides whether the limit judges it), and its post-mortems as
+// `<unread>/<total>` — `unread` where a list could not be read, `unasked`
+// where no daemon answered.
 export function daemonFields({
   serving,
   processes,
@@ -155,7 +156,11 @@ export function daemonFields({
   const held =
     memory.kind === "unmeasured"
       ? "unmeasured"
-      : `${measureOf(memory.charge)}:${mb(memory.charge.bytes)}`;
+      : `${measureOf(memory.charge)}${
+          memory.charge.kind === "stand-in"
+            ? `(${memory.unreadRun}/${STAND_IN_AFTER_UNREAD})`
+            : ""
+        }:${mb(memory.charge.bytes)}`;
   return `${running} memory=${held}/${mb(limit)} postMortems=${told}`;
 }
 
