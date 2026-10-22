@@ -85,6 +85,18 @@ import {
   type TemplateScope,
 } from "./refs.js";
 
+type UnreadDistribution = "cell" | "band";
+// What each distribution nothing reads says, at the layout it was found in.
+const UNREAD_DISTRIBUTION: Record<
+  UnreadDistribution,
+  (layoutKey: string) => string
+> = {
+  cell: (layoutKey) =>
+    `${layoutKey} sets "distribution" on a container inside a bar cell — everything inside a cell wears that cell's hue and shade, so it would place nothing. Set it on the row whose children are the cells (the horizontal container) or on the root, which places the rows.`,
+  band: (layoutKey) =>
+    `${layoutKey} sets "distribution" on a container inside a disclosure body none of whose children is a segment — a body's segment wears the colour picked by the step its own parent placed it by, so it would place nothing. Set it on the container whose children are the segments.`,
+};
+
 // [LAW:single-enforcer] Runs HERE — on `cfg.presets`, the MERGED map — not
 // in loader/presets.ts's per-file structural pass (where a round-1 version
 // of this check lived): that pass validates one config source at a time
@@ -288,10 +300,10 @@ export function validateCrossReferences(
         line: layoutLine,
       });
     }
-    if (distributionInsideCell(tree)) {
+    for (const where of unreadDistributions(tree)) {
       ctx.issues.push({
         path: layoutKey,
-        message: `${layoutKey} sets "distribution" on a container inside a bar cell — everything inside a cell wears that cell's hue and shade, so it would place nothing. Set it on the row whose children are the cells (the horizontal container) or on the root, which places the rows.`,
+        message: UNREAD_DISTRIBUTION[where](layoutKey),
         line: layoutLine,
       });
     }
@@ -312,22 +324,43 @@ export function validateCrossReferences(
       });
     }
   };
-  // [LAW:no-silent-failure] The bar reads two steps of an address — the
+  // [LAW:no-silent-failure] A `distribution` is honoured only where something
+  // reads the steps it places. The bar reads two steps of an address — the
   // innermost row, and the cell of that row (decorEntryFor) — so a container
-  // nested inside a cell has no step the bar reads, and its `distribution`
-  // would be accepted and ignored. A disclosure body is a band, whose items
-  // are placed by every step (bandAxis), so the walk stops at `opens`.
-  function distributionInsideCell(node: LayoutNode, inCell = false): boolean {
-    if (node.kind === "segment") return false;
-    return (
-      (inCell && node.distribution !== undefined) ||
-      node.children.some((child) =>
-        distributionInsideCell(
-          child,
-          inCell || AXIS_OF[node.direction] === "cell",
-        ),
-      )
-    );
+  // nested inside a cell places nothing. A disclosure body is a band, whose
+  // items read only the step their own parent placed them by (bandItemFor), so
+  // a body container none of whose children is a segment places nothing.
+  // Either would be accepted and ignored; each is refused, once per layout.
+  function unreadDistributions(
+    node: LayoutNode,
+    where: "bar" | "cell" | "band" = "bar",
+  ): ReadonlySet<UnreadDistribution> {
+    if (node.kind === "segment") {
+      return node.opens === undefined
+        ? new Set()
+        : unreadDistributions(node.opens.body, "band");
+    }
+    const unread: UnreadDistribution | undefined =
+      node.distribution === undefined
+        ? undefined
+        : where === "cell"
+          ? "cell"
+          : where === "band" &&
+              !node.children.some((child) => child.kind === "segment")
+            ? "band"
+            : undefined;
+    const below =
+      where === "band"
+        ? "band"
+        : where === "cell" || AXIS_OF[node.direction] === "cell"
+          ? "cell"
+          : "bar";
+    return new Set([
+      ...(unread === undefined ? [] : [unread]),
+      ...node.children.flatMap((child) => [
+        ...unreadDistributions(child, below),
+      ]),
+    ]);
   }
   // [LAW:one-source-of-truth] Walks what the author WROTE — the file's own
   // fragment at this key, never the merged root — so a node is reported at

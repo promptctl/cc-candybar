@@ -31,6 +31,7 @@ import {
   drawnColour,
   ColorRgba,
   relativeLuminance,
+  SEAM_MIN_DELTA_E,
   type Palette,
 } from "@promptctl/rich-js";
 import { memoPerPalette } from "./palette-memo.js";
@@ -378,32 +379,6 @@ export interface AddressStep extends PlacedStep {
 
 /** The steps from the root to a node. The root's address is empty. */
 export type Address = readonly AddressStep[];
-
-/**
- * Each level's contribution to a band item's place decays by this factor, so
- * an item's outermost step decides the coarse position and every step nested
- * under it refines it. The value the evidence demo was validated with; the
- * doc's band separations were measured under it.
- */
-export const LEVEL_DECAY = 0.37;
-
-/**
- * Where `address` lands on a band's plane→state axis, in [0, 1): a weighted
- * fold of the per-level positions — each level placed by its own step's
- * distribution, decaying by `LEVEL_DECAY` — taken modulo 1. One step yields
- * exactly that step's placement (`d % 1 === d` for `d` in [0, 1)), so a
- * picker's options, one step each under their trigger, land at their own
- * placement; the empty address (the band's root) lands at 0.
- */
-function bandAxis(address: readonly PlacedStep[]): number {
-  let value = 0;
-  let weight = 1;
-  for (const { index, count, distribution } of address) {
-    value += distribution(index, count) * weight;
-    weight *= LEVEL_DECAY;
-  }
-  return value % 1;
-}
 
 /**
  * How a placement in [0, 1) picks one of `size` entries. Each bar vocabulary
@@ -925,10 +900,15 @@ export interface Disclosure {
 /**
  * The cells the trigger of the band `disclosure` opens stands among: a bar
  * trigger (depth 0) among its row's closed cells, and a trigger that is itself
- * an item of a band — a tab, a picker's control — on that band's plane. Held
- * off the bar's row as well, a nested state was driven to the same end of the
- * lightness axis as its parent's on a row of vivid shades, and the two
- * collapsed into one; held off nothing, it could sit on the plane it stands on.
+ * an item of a band — a tab, a picker's control — among what it is drawn
+ * beside there: that band's plane, and its state, which the ✕ leading the
+ * trigger's row wears (b9w: held off the plane alone, the open first tab and
+ * the ✕ beside it were drawn ΔE under .04 apart — joined by the joiner's
+ * divider — on 1,798 of 80,040 bundled bands in truecolor, the default
+ * theme's among them). Held off the bar's row as well, a nested state was
+ * driven to the same end of the lightness axis as its parent's on a row of
+ * vivid shades, and the two collapsed into one; held off nothing, it could
+ * sit on the plane it stands on.
  */
 function standsAmong(
   palette: Palette,
@@ -937,7 +917,14 @@ function standsAmong(
 ): readonly ColorRgba[] {
   return disclosure.depth === 0
     ? groundCells(palette, disclosure.ground)
-    : enclosingPlane(palette, disclosure, drawnAt);
+    : [
+        ...enclosingPlane(palette, disclosure, drawnAt),
+        searchOf(
+          palette,
+          { ...disclosure, depth: disclosure.depth - 1 },
+          drawnAt,
+        ).anchor,
+      ];
 }
 
 // The plane of the band `disclosure` hangs in, before `drawnAt` rounds it: none
@@ -957,6 +944,27 @@ const enclosingPlane = (
           drawnAt,
         ).plane,
       ];
+
+// [LAW:one-source-of-truth] The state search of the trigger that opens the band
+// `disclosure`: the band's own state, the anchor its plane and items are
+// blended from, and — one depth down — the state a trigger open inside it wears.
+const searchOf = (
+  palette: Palette,
+  disclosure: Disclosure,
+  drawnAt: ColorDepth,
+): StateSearch =>
+  stateFor(
+    palette,
+    hueAtDepth(disclosure.hue, disclosure.depth),
+    standsAmong(palette, disclosure, drawnAt),
+    drawnAt,
+  );
+
+/** The band a trigger standing in `disclosure`'s band opens: one depth further. */
+const nestedIn = (disclosure: Disclosure): Disclosure => ({
+  ...disclosure,
+  depth: disclosure.depth + 1,
+});
 
 /** The line the render reports for a state that stands short of its floor, if it does. */
 const stateShortfall = (
@@ -1005,17 +1013,12 @@ export const BAND_RECESSION = {
 } as const;
 
 /**
- * The window along the plane→state axis a band's items are placed in, as a
- * fraction of that axis: they start `floor` above the plane and never reach
- * the state, so no item is the plane and none is its own trigger.
+ * How far above its plane, as a fraction of the plane→state axis, a band's
+ * low item stands: off the plane, which a dropped menu line sits on, by a
+ * margin, and as far from the state as the axis allows, so the high item has
+ * room between them (`bandFor`).
  */
-export const BAND_WINDOW = { floor: 0.12, span: 0.8 } as const;
-
-/**
- * How an item whose own place rounds onto its plane or its trigger steps
- * toward the middle of the window (`bandItemFor`): in twelfths of the way.
- */
-const ITEM_STEPS = 12;
+export const BAND_ITEM_FLOOR = 0.12;
 
 /** The vocabulary hue `depth` steps after `hue`, wrapping — depth advances the hue. */
 export function hueAtDepth(hue: DecorHue, depth: number): DecorHue {
@@ -1054,11 +1057,21 @@ export interface BandColours {
 /** A band as the terminal draws it, and the floors it stands short of. */
 export interface Band extends BandColours {
   /**
+   * The two colours a band's items wear, low then high: each stands
+   * `SEAM_MIN_DELTA_E` off the other, off `state` (the ✕ that leads each of the
+   * band's rows) and off the state of a trigger open in the band, as drawn —
+   * the four colours a band row draws beside one another — so the joiner
+   * draws a filled arrow between any two of them, never its divider.
+   * `bandItemFor` deals them alternately along a row.
+   */
+  readonly items: readonly [ColorRgba, ColorRgba];
+  /**
    * One line per floor the band stands short of as drawn, for the render to
    * report where its trigger opens: `state` off the ground its lineage's
-   * trigger stands on (STATE_FLOOR, `StateSearch`), and `plane` off `state`
-   * (BAND_FLOORS.triggerPlane). Empty when it clears both, and at a depth
-   * that draws no colour.
+   * trigger stands on (STATE_FLOOR, `StateSearch`), `plane` off `state`
+   * (BAND_FLOORS.triggerPlane), and each pair of the four colours a row draws
+   * beside one another (`items`) closer than `SEAM_MIN_DELTA_E`. Empty when it
+   * clears them all, and at a depth that draws no colour.
    */
   readonly shortfalls: readonly string[];
 }
@@ -1087,12 +1100,7 @@ export function bandFor(
   drawnAt: ColorDepth,
 ): Band {
   return BANDS(palette, `${disclosureKey(disclosure)}|${drawnAt}`, () => {
-    const search = stateFor(
-      palette,
-      hueAtDepth(disclosure.hue, disclosure.depth),
-      standsAmong(palette, disclosure, drawnAt),
-      drawnAt,
-    );
+    const search = searchOf(palette, disclosure, drawnAt);
     const { state } = search;
     // The plane is the unrounded plane as drawn — rounded once, from the anchor
     // the state is drawn from, never blended from a state already rounded.
@@ -1112,10 +1120,18 @@ export function bandFor(
         `palette "${palette.name}": the ${disclosure.hue} band at depth ${disclosure.depth} cannot keep its floors on the colours drawn at depth ${ColorDepth[drawnAt]}`,
       );
     }
+    const opened = searchOf(palette, nestedIn(disclosure), drawnAt).state;
+    const items = bandItems(
+      palette,
+      disclosure,
+      { state, opened, plane },
+      drawnAt,
+    );
     const asDrawn = shownAt(drawnAt);
     return {
       state,
       plane,
+      items,
       // No floor is measurable where nothing is drawn in colour (`none` draws
       // at DEFAULT, `drawnDepth`), so nothing there stands short of one.
       shortfalls:
@@ -1126,6 +1142,11 @@ export function bandFor(
               ...planeShortfall(
                 palette,
                 deltaE(asDrawn(state), asDrawn(plane)),
+                drawnAt,
+              ),
+              ...seamShortfalls(
+                palette,
+                { state, opened, low: items[0], high: items[1] },
                 drawnAt,
               ),
             ],
@@ -1140,6 +1161,119 @@ const disclosureKey = ({ hue, depth, ground }: Disclosure): string =>
 
 const deltaE = (a: ColorRgba, b: ColorRgba): number =>
   Oklch.fromRgba(a).deltaE(Oklch.fromRgba(b));
+
+// The four colours a band row draws beside one another: the ✕ leading it (the
+// band's state), a trigger open in it (the next band's state), and its two
+// items — named as the shortfall line names them.
+interface RowColours {
+  readonly state: ColorRgba;
+  readonly opened: ColorRgba;
+  readonly low: ColorRgba;
+  readonly high: ColorRgba;
+}
+const ROW_COLOUR_NAMES: Record<keyof RowColours, string> = {
+  state: "trigger",
+  opened: "open trigger",
+  low: "low item",
+  high: "high item",
+};
+
+/**
+ * One line per pair of a band row's colours standing too near, as drawn, for
+ * the joiner to draw an arrow between them: below `SEAM_MIN_DELTA_E` it draws
+ * its divider, and the two cells read as one.
+ */
+const seamShortfalls = (
+  palette: Palette,
+  row: RowColours,
+  drawnAt: ColorDepth,
+): readonly string[] => {
+  const asDrawn = shownAt(drawnAt);
+  const names = Object.keys(ROW_COLOUR_NAMES) as Array<keyof RowColours>;
+  return names.flatMap((a, i) =>
+    names.slice(i + 1).flatMap((b) => {
+      const apart = deltaE(asDrawn(row[a]), asDrawn(row[b]));
+      return apart >= SEAM_MIN_DELTA_E
+        ? []
+        : [
+            `theme "${palette.name}": an open band's ${ROW_COLOUR_NAMES[a]} and ${ROW_COLOUR_NAMES[b]} stand ΔE ${apart.toFixed(3)} apart as drawn at depth ${ColorDepth[drawnAt]}, under the ${SEAM_MIN_DELTA_E} below which two cells in those colours are joined by a divider and read as one`,
+          ];
+    }),
+  );
+};
+
+/**
+ * A band's two item colours (`Band.items`). Unrounded, low stands
+ * `BAND_ITEM_FLOOR` above the plane, and high is the colour on the ray from
+ * low to the state standing furthest off the nearest of low, the state and
+ * the open trigger — the colours an item is drawn beside — so its seams are
+ * as wide as the axis allows. As drawn, each is replaced by the nearest
+ * colour the depth draws that stands `SEAM_MIN_DELTA_E` off every other colour
+ * of the row and is not the plane (`ensureDrawn`).
+ */
+function bandItems(
+  palette: Palette,
+  disclosure: Disclosure,
+  drawnBand: Pick<RowColours, "state" | "opened"> & {
+    readonly plane: ColorRgba;
+  },
+  drawnAt: ColorDepth,
+): readonly [ColorRgba, ColorRgba] {
+  const unrounded = unroundedBand(palette, disclosure, drawnAt);
+  const unroundedOpened = searchOf(
+    palette,
+    nestedIn(disclosure),
+    drawnAt,
+  ).anchor;
+  const low = blendRgb(unrounded.plane, unrounded.state, BAND_ITEM_FLOOR);
+  const high = furthestAlong(low, unrounded.state, [unroundedOpened]);
+  const seen =
+    (others: readonly ColorRgba[]) =>
+    (candidate: ColorRgba, drawn: (c: ColorRgba) => ColorRgba): boolean =>
+      candidate.hex !== drawn(drawnBand.plane).hex &&
+      others.every(
+        (other) => deltaE(candidate, drawn(other)) >= SEAM_MIN_DELTA_E,
+      );
+  // [LAW:no-silent-failure] Where the depth draws no colour that stands off
+  // the rest, the item is drawn at its place, and `seamShortfalls` reports
+  // the pair it stands too near.
+  const beside = [drawnBand.state, drawnBand.opened];
+  const drawnLow = ensureDrawn(low, drawnAt, seen(beside)) ?? low;
+  const drawnHigh =
+    ensureDrawn(high, drawnAt, seen([...beside, drawnLow])) ?? high;
+  return [drawnLow, drawnHigh];
+}
+
+// The colour on the ray from `from` to `to` standing furthest (ΔE, in
+// truecolor) off the nearest of `from`, `to` and `besides`. The ray is drawn in
+// 8-bit steps, so one sample per step of its widest channel visits every
+// colour it draws — on textual-dark, whose state the search carries to black,
+// there are eight.
+function furthestAlong(
+  from: ColorRgba,
+  to: ColorRgba,
+  besides: readonly ColorRgba[],
+): ColorRgba {
+  const ends = [from, to, ...besides].map((c) => Oklch.fromRgba(shownTrue(c)));
+  const stands = (c: ColorRgba): number => {
+    const at = Oklch.fromRgba(shownTrue(c));
+    return Math.min(...ends.map((end) => at.deltaE(end)));
+  };
+  const steps = Math.max(
+    1,
+    Math.abs(to.red - from.red),
+    Math.abs(to.green - from.green),
+    Math.abs(to.blue - from.blue),
+  );
+  let best = from;
+  let bestStands = 0;
+  for (let i = 0; i <= steps; i++) {
+    const candidate = blendRgb(from, to, i / steps);
+    const s = stands(candidate);
+    if (s > bestStands) [best, bestStands] = [candidate, s];
+  }
+  return best;
+}
 
 // The band before `drawnAt` rounds it — its state the anchor the search settled
 // on at that depth (`StateSearch`), the colours that depth rounds from, and the
@@ -1166,12 +1300,7 @@ function computeUnroundedBand(
   disclosure: Disclosure,
   drawnAt: ColorDepth,
 ): BandColours {
-  const { anchor: state } = stateFor(
-    palette,
-    hueAtDepth(disclosure.hue, disclosure.depth),
-    standsAmong(palette, disclosure, drawnAt),
-    drawnAt,
-  );
+  const { anchor: state } = searchOf(palette, disclosure, drawnAt);
   const recession = Math.min(
     BAND_RECESSION.cap,
     BAND_RECESSION.base + BAND_RECESSION.perDepth * disclosure.depth,
@@ -1245,12 +1374,7 @@ function planeFloors(
   const plane = unroundedPlane(depth);
   const keptApart = (floor: number, other: ColorRgba): number =>
     deltaE(shownTrue(plane), shownTrue(other)) >= floor ? floor : 0;
-  const nested = stateFor(
-    palette,
-    hueAtDepth(hue, depth + 1),
-    standsAmong(palette, { hue, depth: depth + 1, ground }, drawnAt),
-    drawnAt,
-  );
+  const nested = searchOf(palette, nestedIn(disclosure), drawnAt);
   const keptUnder =
     contrastRatio(shownTrue(plane), shownTrue(nested.anchor)) >= STATE_FLOOR
       ? STATE_FLOOR
@@ -1277,12 +1401,15 @@ function planeFloors(
 /**
  * The colour of the item at `address` — its steps from the band's root, each
  * placed by its parent's own distribution — in the band `disclosure` opens:
- * placed along the plane→state axis inside `BAND_WINDOW`. A band's items are
- * addressed by the SAME step shape the bar's rows and cells address the
- * vocabulary through — one placement mechanism at every level; a band only
- * folds the steps onto its plane-to-state axis (`bandAxis`) instead of into
- * the vocabulary. A picker's options are one step each; a group's body is a
- * container whose cells may nest, and nests fold the same way.
+ * one of the band's two `items`, picked by the step its own parent placed it
+ * by, as the bar's cell picks its shade (`decorEntryFor`) — one placement
+ * mechanism at every level. Over two items `inBin` is a van der Corput
+ * placement's parity, so consecutive cells of a row alternate whatever its
+ * length; a picker's option is one step, its index over the WHOLE option
+ * domain, so paging never recolours it. Like a bar cell's, an item's colour is
+ * a function of its address: a sibling hiding recolours nobody, so the two
+ * cells either side of a hidden one, or neighbours an authored distribution
+ * places in one bin, wear one item and are joined by the joiner's divider.
  */
 export function bandItemFor(
   palette: Palette,
@@ -1290,37 +1417,11 @@ export function bandItemFor(
   address: readonly PlacedStep[],
   drawnAt: ColorDepth,
 ): ColorRgba {
-  const band = bandFor(palette, disclosure, drawnAt);
-  const unrounded = unroundedBand(palette, disclosure, drawnAt);
-  const at = (place: number): ColorRgba =>
-    blendRgb(unrounded.plane, unrounded.state, place);
-  const own = BAND_WINDOW.floor + BAND_WINDOW.span * bandAxis(address);
-  const middle = BAND_WINDOW.floor + BAND_WINDOW.span / 2;
-  // An item is never the plane it sits on and never its own trigger — as
-  // drawn, where a rounding can land it on either. Where its own place does,
-  // it takes the nearest place toward the window's middle that is neither: at
-  // 256 colours and ansi the depth offers another colour for the place itself
-  // (`ensureDrawn`); truecolor draws a place as itself, so it steps inward.
-  const neither = (
-    candidate: ColorRgba,
-    drawn: (c: ColorRgba) => ColorRgba,
-  ): boolean =>
-    candidate.hex !== drawn(band.plane).hex &&
-    candidate.hex !== drawn(band.state).hex;
-  for (let step = 0; step <= ITEM_STEPS; step++) {
-    const item = ensureDrawn(
-      at(own + ((middle - own) * step) / ITEM_STEPS),
-      drawnAt,
-      neither,
-    );
-    if (item !== undefined) return item;
-  }
-  // [LAW:no-silent-failure] Not even the window's middle is neither: the
-  // plane stands on its trigger, which `bandFor` reports where the trigger
-  // opens. Drawn at its place rather than thrown — the items of the door's
-  // band are the settings controls, and a throw would take them away, as one
-  // from `stateFor` would the door.
-  return at(own);
+  return vocabularySelect(
+    bandFor(palette, disclosure, drawnAt).items,
+    address.at(-1),
+    inBin,
+  );
 }
 
 // --- Regions -------------------------------------------------------------------

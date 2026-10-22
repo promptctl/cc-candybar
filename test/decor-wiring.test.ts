@@ -519,6 +519,23 @@ describe("candybar-render-ai7.8 — `distribution` is authored per placer", () =
     );
   });
 
+  test("a distribution in a body on a container with no segment child is a load error: a body's cells read their own step", () => {
+    const body = (inner: string, outer: string): string => `{
+      globals: { palette: '${THEME}' },
+      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+      segments: { a: { template: 'A' }, b: { template: 'B' } },
+      root: { v: [
+        { kind: 'group', name: 'more', label: 'more', open: true,
+          children: [ { v: [ { h: ['a', 'b']${inner} } ]${outer} } ] },
+      ] },
+    }`;
+    // On the container whose children are the segments, it places them.
+    build(body(", distribution: 'monotonic'", "")).dispose();
+    expect(() => build(body("", ", distribution: 'monotonic'"))).toThrow(
+      /sets "distribution" on a container inside a disclosure body none of whose children is a segment/,
+    );
+  });
+
   test("a group carries the same field for its body", () => {
     const group = (field: string): string => `{
       globals: { palette: '${THEME}' },
