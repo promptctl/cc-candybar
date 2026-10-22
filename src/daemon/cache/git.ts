@@ -3,7 +3,12 @@ import path from "node:path";
 import { GitService, type GitInfo, type PullRequest } from "../../segments/git";
 import { ABSENT, ok, type Outcome } from "../../utils/outcome";
 import { quietLogger } from "../../utils/logger";
-import { WatcherRegistry, type WatcherHandle } from "./watchers";
+import {
+  WatcherRegistry,
+  type DirTarget,
+  type WatcherHandle,
+  type WatchTargets,
+} from "./watchers";
 import { TrailingEdge } from "../../utils/trailing-edge";
 
 // Logger callable for cache invalidation / eviction / subscriber-error
@@ -85,14 +90,33 @@ interface ResolutionCacheEntry {
   readonly computedAt: number;
 }
 
+// [LAW:types-are-the-program] An entry holds two things with two lifetimes:
+// the watch on its repo, held for as long as the cache holds the entry, and
+// the value derived from the repo, which a TTL or a change expires. A change
+// makes the value `expired`, never deletes the entry, so the watch outlives
+// every refetch — closing and reopening it per value leaked native memory on
+// macOS (brandon-unfiled-3248.576q; see src/daemon/cache/watchers.ts).
+type GitCacheValue =
+  | { kind: "fresh"; info: GitInfo; computedAt: number; mtime: MtimeSnapshot }
+  | { kind: "expired" };
+
 interface GitCacheEntry {
-  info: GitInfo;
-  computedAt: number;
-  mtime: MtimeSnapshot;
-  watcher: WatcherHandle;
+  value: GitCacheValue;
+  readonly watcher: WatcherHandle;
   // All entries for the same repoRoot share invalidation: one watcher fires →
-  // every option-set entry for that repo is dropped.
-  repoRoot: string;
+  // every option-set entry for that repo expires.
+  readonly repoRoot: string;
+}
+
+// `expired` counts the entries a change expired: each holds a watch and no
+// value. A `fresh` entry past its TTL is not counted; the next read refetches it.
+export interface GitCacheStats {
+  size: number;
+  expired: number;
+  hits: number;
+  misses: number;
+  invalidations: number;
+  watchers: number;
 }
 
 type GitOptions = NonNullable<Parameters<GitService["getGitInfo"]>[1]>;
@@ -156,16 +180,21 @@ function mtimeChanged(a: MtimeSnapshot, b: MtimeSnapshot): boolean {
 // `GitService.resolveGitDir(repoRoot)` returns). For a normal repo that's
 // `<repoRoot>/.git`; for a worktree it's the worktree-metadata dir nested
 // under the main repo's `.git/worktrees/`. Either way, `HEAD` and `index`
-// live directly inside `gitDir`, so the file watchers find real files.
+// live directly inside `gitDir`.
+//
+// They are watched as NAMES in `gitDir`, never as files: git replaces both by
+// renaming a `.lock` file over them, and a watch on the file follows the inode
+// git just unlinked — it fires once and never again (measured, macOS). A watch
+// held across refetches would go deaf after the first commit.
 //
 // `refs/heads/` only exists in the main repo's gitDir, not under a worktree's
 // metadata dir. WatcherRegistry would log a warn-level "watch failed" for
 // every worktree if we passed the target unconditionally (the injected dlog
 // surfaces what was previously silent). Check existence here and only include
-// the dir target when it's real — the file watchers on HEAD/index still cover
-// branch and index changes in the worktree case.
-function watcherTargets(gitDir: string) {
-  const dirs: Array<{ path: string }> = [];
+// the dir target when it's real — the `gitDir` watch on HEAD/index still
+// covers branch and index changes in the worktree case.
+function watcherTargets(gitDir: string): WatchTargets {
+  const dirs: DirTarget[] = [{ path: gitDir, filenames: ["HEAD", "index"] }];
   const refsHeads = path.join(gitDir, "refs/heads");
   try {
     if (fs.statSync(refsHeads).isDirectory()) {
@@ -174,10 +203,7 @@ function watcherTargets(gitDir: string) {
   } catch {
     // ENOENT (worktree case) or other fs error — skip the dir target.
   }
-  return {
-    files: [path.join(gitDir, "HEAD"), path.join(gitDir, "index")],
-    dirs,
-  };
+  return { files: [], dirs };
 }
 
 export class GitDataProvider extends GitService {
@@ -272,15 +298,14 @@ export class GitDataProvider extends GitService {
     return this.watchers;
   }
 
-  getStats(): {
-    size: number;
-    hits: number;
-    misses: number;
-    invalidations: number;
-    watchers: number;
-  } {
+  getStats(): GitCacheStats {
+    let expired = 0;
+    for (const entry of this.entries.values()) {
+      if (entry.value.kind === "expired") expired++;
+    }
     return {
       size: this.entries.size,
+      expired,
       hits: this.hits,
       misses: this.misses,
       invalidations: this.invalidations,
@@ -373,11 +398,14 @@ export class GitDataProvider extends GitService {
     const now = Date.now();
 
     const existing = this.entries.get(key);
-    if (existing && now - existing.computedAt < this.ttlMs) {
+    if (
+      existing?.value.kind === "fresh" &&
+      now - existing.value.computedAt < this.ttlMs
+    ) {
       this.entries.delete(key);
       this.entries.set(key, existing);
       this.hits++;
-      return Promise.resolve(ok(existing.info));
+      return Promise.resolve(ok(existing.value.info));
     }
 
     // Coalesce concurrent misses on the same key — see fetchInFlight comment.
@@ -409,8 +437,12 @@ export class GitDataProvider extends GitService {
     //
     // Only `ok` is cached: absent/failed pass through uncached (the next
     // caller re-fetches, matching the prior null-isn't-cached behavior), and
-    // the outcome carries the reason to each surface's logging edge.
+    // the outcome carries the reason to each surface's logging edge. An
+    // `absent` repo (a removed worktree, a deleted `.git`) also takes every
+    // entry for it, and their watch, with it; a `failed` read says nothing
+    // about the repo, so its watch stays rather than close and reopen.
     const outcome = await this.inner.getGitInfo(repoRoot, options);
+    if (outcome.kind === "absent") this.dropRepo(repoRoot);
     if (outcome.kind !== "ok") return outcome;
     const info = outcome.value;
 
@@ -423,25 +455,30 @@ export class GitDataProvider extends GitService {
       info.pullRequest = await this.getPullRequestCached(repoRoot, info.branch);
     }
 
-    // Drop any prior entry for this exact key before re-inserting (so we
-    // release its watcher refcount cleanly).
-    this.dropEntry(key);
-
-    // Files/dirs inside .git that meaningfully change what we'd render.
-    // Working-tree changes are picked up by `git status` itself the next time
+    // [LAW:dataflow-not-control-flow] The new value lands on the entry this
+    // key already has, keeping its watch; only a key with no entry acquires
+    // one. Files/dirs inside .git that meaningfully change what we'd render;
+    // working-tree changes are picked up by `git status` itself the next time
     // the cache misses.
-    const watcher = this.watchers.acquire(
-      `git:${repoRoot}`,
-      watcherTargets(gitDir),
-      () => this.invalidateRepo(repoRoot),
-    );
-    this.entries.set(key, {
+    const value: GitCacheValue = {
+      kind: "fresh",
       info,
       computedAt: now,
       mtime: mtimeBefore,
-      watcher,
+    };
+    const entry: GitCacheEntry = this.entries.get(key) ?? {
+      value,
+      watcher: this.watchers.acquire(
+        `git:${repoRoot}`,
+        watcherTargets(gitDir),
+        () => this.invalidateRepo(repoRoot),
+      ),
       repoRoot,
-    });
+    };
+    entry.value = value;
+    // LRU touch: re-inserting moves the key to the newest end.
+    this.entries.delete(key);
+    this.entries.set(key, entry);
     this.evictIfNeeded();
     return outcome;
   }
@@ -607,20 +644,22 @@ export class GitDataProvider extends GitService {
     };
   }
 
-  // Public for tests + future stats endpoint. Drops every entry for repoRoot
-  // and re-fetches for any active subscribers (the watcher fire path).
+  // Public for tests + future stats endpoint. Expires every fresh entry for
+  // repoRoot, keeping their watches, and re-fetches for any active subscribers
+  // (the watcher fire path). Only entries this call turned expired count: a
+  // repo nobody renders keeps its watch now, and its every fire would
+  // otherwise log.
   invalidateRepo(repoRoot: string): void {
-    let dropped = 0;
-    for (const [key, entry] of this.entries) {
-      if (entry.repoRoot === repoRoot) {
-        entry.watcher.release();
-        this.entries.delete(key);
-        dropped++;
+    let expired = 0;
+    for (const entry of this.entries.values()) {
+      if (entry.repoRoot === repoRoot && entry.value.kind === "fresh") {
+        entry.value = { kind: "expired" };
+        expired++;
       }
     }
-    if (dropped > 0) {
-      this.invalidations += dropped;
-      this.logger("info", `gitCache invalidate ${repoRoot} dropped=${dropped}`);
+    if (expired > 0) {
+      this.invalidations += expired;
+      this.logger("info", `gitCache invalidate ${repoRoot} expired=${expired}`);
     }
     this.refreshSubscribers(repoRoot);
   }
@@ -678,6 +717,19 @@ export class GitDataProvider extends GitService {
     this.entries.delete(key);
   }
 
+  private dropRepo(repoRoot: string): void {
+    let dropped = 0;
+    for (const [key, entry] of this.entries) {
+      if (entry.repoRoot === repoRoot) {
+        this.dropEntry(key);
+        dropped++;
+      }
+    }
+    if (dropped > 0) {
+      this.logger("info", `gitCache drop ${repoRoot} entries=${dropped}`);
+    }
+  }
+
   private evictIfNeeded(): void {
     while (this.entries.size > this.maxEntries) {
       const oldest = this.entries.keys().next().value;
@@ -694,13 +746,15 @@ export class GitDataProvider extends GitService {
   private runSanityCheck(): void {
     const seen = new Map<string, MtimeSnapshot>();
     for (const entry of this.entries.values()) {
+      // An expired entry is already known stale: there is nothing to compare.
+      if (entry.value.kind === "expired") continue;
       let current = seen.get(entry.repoRoot);
       if (!current) {
         const gitDir = this.inner.resolveGitDir(entry.repoRoot);
         current = snapshotMtimes(gitDir);
         seen.set(entry.repoRoot, current);
       }
-      if (mtimeChanged(entry.mtime, current)) {
+      if (mtimeChanged(entry.value.mtime, current)) {
         this.invalidateRepo(entry.repoRoot);
       }
     }

@@ -66,7 +66,6 @@ function makeCache(
     counters: {
       watchersOpened: 0,
       watchersClosed: 0,
-      watchersEvicted: 0,
     },
     logger: () => {},
   });

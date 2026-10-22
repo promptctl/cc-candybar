@@ -45,7 +45,7 @@ afterEach(() => {
 function makeCache(budgetBytes: number, maxEntries?: number) {
   const lines: string[] = [];
   const watchers = new WatcherRegistry({
-    counters: { watchersOpened: 0, watchersClosed: 0, watchersEvicted: 0 },
+    counters: { watchersOpened: 0, watchersClosed: 0 },
     logger: () => {},
   });
   const gitService = new GitDataProvider({ sanityIntervalMs: 0, logger: () => {} });

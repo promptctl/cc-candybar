@@ -165,6 +165,7 @@ export function formatStats(s: StatsSnapshot): string {
   lines.push(``);
   lines.push(`gitCache`);
   lines.push(`  size          ${s.gitCache.size}`);
+  lines.push(`  expired       ${s.gitCache.expired}`);
   lines.push(
     `  hit rate      ${fmtRate(s.gitCache.hits, s.gitCache.misses)} (${s.gitCache.hits} / ${s.gitCache.hits + s.gitCache.misses})`,
   );
@@ -205,7 +206,6 @@ export function formatStats(s: StatsSnapshot): string {
   lines.push(`  active        ${s.watchers.active}`);
   lines.push(`  opened        ${s.watchers.opened}`);
   lines.push(`  closed        ${s.watchers.closed}`);
-  lines.push(`  evicted       ${s.watchers.evicted}`);
   lines.push(``);
   lines.push(`subprocesses`);
   lines.push(`  total         ${s.subprocesses.total}`);

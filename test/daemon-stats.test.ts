@@ -24,11 +24,11 @@ describe("RuntimeStats.snapshot", () => {
     stats.inFlight = 1;
     stats.watchersOpened = 5;
     stats.watchersClosed = 3;
-    stats.watchersEvicted = 1;
 
     const snap = stats.snapshot({
       gitCache: {
         size: 4,
+        expired: 1,
         hits: 100,
         misses: 20,
         invalidations: 3,
@@ -97,6 +97,7 @@ describe("RuntimeStats.snapshot", () => {
       inFlight: 1,
     });
     expect(snap.gitCache.hits).toBe(100);
+    expect(snap.gitCache.expired).toBe(1);
     expect(snap.usageCache.size).toBe(10);
     expect(snap.effectCache).toEqual({ sessions: 2, effects: 5 });
     expect(snap.sessionState).toEqual({ sessions: 2, observers: 11, revision: 7 });
@@ -104,7 +105,6 @@ describe("RuntimeStats.snapshot", () => {
       active: 2,
       opened: 5,
       closed: 3,
-      evicted: 1,
     });
     expect(snap.uptimeSec).toBeGreaterThanOrEqual(0);
     expect(snap.pid).toBe(process.pid);
@@ -192,6 +192,7 @@ describe("formatStats", () => {
       requests: { total: 100, errored: 2, timedOut: 1, inFlight: 0 },
       gitCache: {
         size: 5,
+        expired: 2,
         hits: 80,
         misses: 20,
         invalidations: 3,
@@ -211,7 +212,7 @@ describe("formatStats", () => {
       sessionState: { sessions: 2, observers: 11, revision: 7 },
       frameFeeds: { feeds: 0, subscribers: 0, drawn: 0, pushed: 0, refused: 0, lookups: 0, found: 0 },
       tmuxStatus: { sessions: 0, layouts: 0, writes: 0, failedWrites: 0 },
-      watchers: { active: 5, opened: 7, closed: 2, evicted: 0 },
+      watchers: { active: 5, opened: 7, closed: 2 },
       subprocesses: {
         total: 0,
         inFlight: 0,
@@ -230,6 +231,7 @@ describe("formatStats", () => {
     expect(out).toContain("pid           1234");
     expect(out).toContain("uptime        2m5s");
     expect(out).toContain("rss           50.0MB");
+    expect(out).toContain("expired       2");
     expect(out).toContain("hit rate      80.0%");
     expect(out).toContain("active        5");
     expect(out).toContain("effects       3");
@@ -253,7 +255,14 @@ describe("formatStats", () => {
       externalBytes: 0,
       arrayBuffersBytes: 0,
       requests: { total: 0, errored: 0, timedOut: 0, inFlight: 0 },
-      gitCache: { size: 0, hits: 0, misses: 0, invalidations: 0, watchers: 0 },
+      gitCache: {
+        size: 0,
+        expired: 0,
+        hits: 0,
+        misses: 0,
+        invalidations: 0,
+        watchers: 0,
+      },
       usageCache: { size: 0, hits: 0, misses: 0, sweeps: 0 },
       transcriptReads: { reads: 0, bytes: 0, longLines: 0, largestLine: 0 },
       renderCache: {
@@ -268,7 +277,7 @@ describe("formatStats", () => {
       sessionState: { sessions: 0, observers: 0, revision: 0 },
       frameFeeds: { feeds: 0, subscribers: 0, drawn: 0, pushed: 0, refused: 0, lookups: 0, found: 0 },
       tmuxStatus: { sessions: 0, layouts: 0, writes: 0, failedWrites: 0 },
-      watchers: { active: 0, opened: 0, closed: 0, evicted: 0 },
+      watchers: { active: 0, opened: 0, closed: 0 },
       subprocesses: {
         total: 0,
         inFlight: 0,

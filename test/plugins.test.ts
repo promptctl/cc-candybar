@@ -484,7 +484,7 @@ describe("an installed plugin", () => {
     fs.mkdirSync(path.join(dir, "main/src"), { recursive: true });
     const p = placing("plugins.lit.ticket");
     const watchers = new WatcherRegistry({
-      counters: { watchersOpened: 0, watchersClosed: 0, watchersEvicted: 0 },
+      counters: { watchersOpened: 0, watchersClosed: 0 },
       logger: () => {},
     });
     const gitService = new GitDataProvider({ sanityIntervalMs: 0, logger: () => {} });
@@ -714,7 +714,7 @@ describe("an installed plugin", () => {
   // seed searches the entry's repo, so the plugin that would fix it reloads.
   test("a failed first load still watches the repo's plugin root", () => {
     const watchers = new WatcherRegistry({
-      counters: { watchersOpened: 0, watchersClosed: 0, watchersEvicted: 0 },
+      counters: { watchersOpened: 0, watchersClosed: 0 },
       logger: () => {},
     });
     const gitService = new GitDataProvider({ sanityIntervalMs: 0, logger: () => {} });

@@ -52,18 +52,24 @@ describe("WatcherRegistry", () => {
     rmrf(repo);
   });
 
-  test("LRU evicts oldest watcher and fires invalidation on the evicted slot", async () => {
-    const repos = [makeRepo(), makeRepo(), makeRepo()];
-    const reg = new WatcherRegistry({ maxWatchers: 2 });
+  // brandon-unfiled-3248.576q: the registry bounds nothing — its consumers do.
+  // An LRU cap here closed watches under holders that still held them.
+  test("a slot closes only when its last holder releases it, however many are open", () => {
+    const counters = { watchersOpened: 0, watchersClosed: 0 };
+    const reg = new WatcherRegistry({ counters });
     const fired: string[] = [];
-    reg.acquire(repos[0]!, { files: [], dirs: [] }, () => fired.push(repos[0]!));
-    reg.acquire(repos[1]!, { files: [], dirs: [] }, () => fired.push(repos[1]!));
-    reg.acquire(repos[2]!, { files: [], dirs: [] }, () => fired.push(repos[2]!));
+    const handles = Array.from({ length: 300 }, (_, i) =>
+      reg.acquire(`k${i}`, { files: [], dirs: [] }, () => fired.push(`k${i}`)),
+    );
 
-    expect(reg.size()).toBe(2);
-    expect(fired).toContain(repos[0]); // evicted slot fires its invalidate
+    expect(reg.size()).toBe(300);
+    expect(counters).toEqual({ watchersOpened: 300, watchersClosed: 0 });
+    expect(fired).toEqual([]);
+
+    handles[0]!.release();
+    expect(reg.size()).toBe(299);
+    expect(counters.watchersClosed).toBe(1);
     reg.closeAll();
-    repos.forEach(rmrf);
   });
 
   test("closeAll closes every watcher", () => {
@@ -133,10 +139,13 @@ describe("GitDataProvider + watchers integration", () => {
     fs.utimesSync(headPath, future, future);
 
     svc.runSanityCheckNow();
-    // Allow the debounced watcher (which may also fire) plus sanity drop.
+    // Allow the debounced watcher (which may also fire) plus sanity expiry.
     await new Promise((r) => setTimeout(r, 100));
 
-    expect(svc.getStats().size).toBe(0);
+    // The cached value is stale: the next read fetches afresh.
+    expect(svc.getStats().invalidations).toBeGreaterThanOrEqual(1);
+    await svc.getGitInfo(repo, {});
+    expect(inner.calls).toBe(2);
     svc.close();
     rmrf(repo);
   });
