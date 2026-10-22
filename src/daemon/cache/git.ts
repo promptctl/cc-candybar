@@ -437,9 +437,17 @@ export class GitDataProvider extends GitService {
     //
     // Only `ok` is cached: absent/failed pass through uncached (the next
     // caller re-fetches, matching the prior null-isn't-cached behavior), and
-    // the outcome carries the reason to each surface's logging edge.
+    // the outcome carries the reason to each surface's logging edge. The key's
+    // entry goes with it: its watch was taken on a repo this fetch could not
+    // read (a removed worktree, a deleted `.git`), and the next `ok` acquires
+    // one on the repo as it is then.
     const outcome = await this.inner.getGitInfo(repoRoot, options);
-    if (outcome.kind !== "ok") return outcome;
+    if (outcome.kind !== "ok") {
+      if (this.dropEntry(key)) {
+        this.logger("info", `gitCache drop ${key} outcome=${outcome.kind}`);
+      }
+      return outcome;
+    }
     const info = outcome.value;
 
     // [LAW:decomposition] The inner GitService never resolves the PR — the
@@ -706,11 +714,13 @@ export class GitDataProvider extends GitService {
     }
   }
 
-  private dropEntry(key: string): void {
+  // Whether the key held an entry to drop.
+  private dropEntry(key: string): boolean {
     const entry = this.entries.get(key);
-    if (!entry) return;
+    if (!entry) return false;
     entry.watcher.release();
     this.entries.delete(key);
+    return true;
   }
 
   private evictIfNeeded(): void {

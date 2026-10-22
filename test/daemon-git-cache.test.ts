@@ -835,6 +835,25 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
     expect(counters.watchersClosed).toBe(2);
   });
 
+  test("a refetch that finds no repo drops the entry and releases its watch", async () => {
+    const { svc, inner, counters, logs } = counted();
+    inner.repoRootByDir["/repo"] = "/repo";
+
+    await svc.getGitInfo("/repo", {}); // resolution is cached from here on
+    svc.invalidateRepo("/repo");
+    inner.repoRootByDir["/repo"] = null; // the worktree was removed
+    const gone = await svc.getGitInfo("/repo", {});
+    await svc.getGitInfo("/repo", {}); // no entry left: logs nothing more
+
+    expect(gone.kind).toBe("absent");
+    expect(svc.getStats()).toMatchObject({ size: 0, expired: 0 });
+    expect(counters).toEqual({ watchersOpened: 1, watchersClosed: 1 });
+    expect(logs.filter((l) => l.startsWith("gitCache drop"))).toEqual([
+      "gitCache drop /repo|{} outcome=absent",
+    ]);
+    svc.close();
+  });
+
   test("the sanity check's mtime walk expires a changed repo's entry", async () => {
     const repo = fs.mkdtempSync(path.join(os.tmpdir(), "git-cache-576q-"));
     fs.mkdirSync(path.join(repo, ".git"));
