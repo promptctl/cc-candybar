@@ -690,7 +690,8 @@ describe("effectRefresh probe", () => {
     expect(effectRefresh(STILL, ok([]))).toEqual({ ok: true });
   });
 
-  // No frame seen is no answer: the check says so rather than pass.
+  // No frame seen is no answer where no file says 1: the check says so
+  // rather than pass.
   test("no render seen → failed, unknown", () => {
     expect(effectRefresh([], interval())).toEqual({
       ok: false,
