@@ -1,3 +1,9 @@
+## [1.156.1](https://github.com/promptctl/cc-candybar/compare/v1.156.0...v1.156.1) (2026-10-22)
+
+### Bug Fixes
+
+* **doctor:** effect refresh judges from the settings files again; remove the arrival-count measure (brandon-doctor-v62x.5at) ([#414](https://github.com/promptctl/cc-candybar/issues/414)) ([b861a25](https://github.com/promptctl/cc-candybar/commit/b861a25684942958c6564128b2c651097c0abea5)), closes [#394](https://github.com/promptctl/cc-candybar/issues/394)
+
 ## [1.156.0](https://github.com/promptctl/cc-candybar/compare/v1.155.2...v1.156.0) (2026-10-22)
 
 ### Features
