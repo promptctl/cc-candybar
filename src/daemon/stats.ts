@@ -109,7 +109,6 @@ export interface StatsSnapshot {
     active: number;
     opened: number;
     closed: number;
-    evicted: number;
   };
   subprocesses: {
     total: number;
@@ -147,7 +146,6 @@ export class RuntimeStats {
 
   watchersOpened = 0;
   watchersClosed = 0;
-  watchersEvicted = 0;
 
   // [LAW:dataflow-not-control-flow] Subprocess metering. Every launch carries
   // its category through one boundary; the per-category state below is a
@@ -348,7 +346,6 @@ export class RuntimeStats {
         active: extras.watchersActive,
         opened: this.watchersOpened,
         closed: this.watchersClosed,
-        evicted: this.watchersEvicted,
       },
       subprocesses: this.snapshotSubprocesses(),
       nextRestartReason: extras.nextRestartReason ?? null,

@@ -1,4 +1,8 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { GitDataProvider } from "../src/daemon/cache/git";
+import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import {
   GitService,
   type GitInfo,
@@ -719,5 +723,99 @@ describe("GitDataProvider PR cache", () => {
     if (out.kind !== "ok") return;
     expect(out.value.pullRequest).toEqual(ABSENT);
     expect(inner.prCalls).toHaveLength(0);
+  });
+});
+
+// brandon-unfiled-3248.576q: on macOS every directory watch opened or closed
+// leaks native memory (libuv's FSEvents reschedule), so a repo's watch must
+// outlive the values cached from it — a refetch or a change replaces the
+// value, never the watch.
+describe("GitDataProvider holds a repo's watch across its values", () => {
+  function counted(opts: { ttlMs?: number; maxEntries?: number } = {}) {
+    const inner = new StubGitService();
+    const counters = { watchersOpened: 0, watchersClosed: 0 };
+    const logs: string[] = [];
+    const logger = (_level: string, message: string) => logs.push(message);
+    const watchers = new WatcherRegistry({ counters, logger });
+    const svc = new GitDataProvider({
+      ...opts,
+      inner,
+      watchers,
+      logger,
+      sanityIntervalMs: 0,
+    });
+    return { svc, inner, counters, logs, watchers };
+  }
+
+  test("TTL refetches and change invalidations never close or reopen the watch", async () => {
+    const { svc, inner, counters, watchers } = counted({ ttlMs: 0 });
+    inner.repoRootByDir["/repo"] = "/repo";
+
+    for (let i = 0; i < 5; i++) {
+      await svc.getGitInfo("/repo", {});
+      svc.invalidateRepo("/repo");
+    }
+
+    expect(inner.computeCalls).toHaveLength(5);
+    expect(counters).toEqual({ watchersOpened: 1, watchersClosed: 0 });
+    expect(watchers.size()).toBe(1);
+    svc.close();
+  });
+
+  test("an invalidation expires the entry: the next read refetches, and only a newly expired entry counts", async () => {
+    const { svc, inner, logs } = counted();
+    inner.repoRootByDir["/repo"] = "/repo";
+
+    await svc.getGitInfo("/repo", {});
+    svc.invalidateRepo("/repo");
+    svc.invalidateRepo("/repo"); // already expired: counts and logs nothing
+
+    expect(svc.getStats().invalidations).toBe(1);
+    expect(logs.filter((l) => l.startsWith("gitCache invalidate"))).toEqual([
+      "gitCache invalidate /repo expired=1",
+    ]);
+
+    inner.stubInfo = { ...inner.stubInfo, branch: "feature" };
+    const after = await svc.getGitInfo("/repo", {});
+    expect(after).toMatchObject({ kind: "ok", value: { branch: "feature" } });
+    expect(inner.computeCalls).toHaveLength(2);
+    expect(svc.getStats().size).toBe(1);
+    svc.close();
+  });
+
+  test("the git cache's own LRU eviction is what releases a watch", async () => {
+    const { svc, inner, counters } = counted({ maxEntries: 1 });
+    inner.repoRootByDir = { "/a": "/a", "/b": "/b" };
+
+    await svc.getGitInfo("/a", {});
+    await svc.getGitInfo("/b", {}); // evicts /a's entry, its watch's only holder
+
+    expect(counters).toEqual({ watchersOpened: 2, watchersClosed: 1 });
+    svc.close();
+    expect(counters.watchersClosed).toBe(2);
+  });
+
+  test("the sanity check's mtime walk expires a changed repo's entry", async () => {
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), "git-cache-576q-"));
+    fs.mkdirSync(path.join(repo, ".git"));
+    const head = path.join(repo, ".git", "HEAD");
+    fs.writeFileSync(head, "ref: refs/heads/main\n");
+    const { svc, inner, counters } = counted();
+    inner.repoRootByDir[repo] = repo;
+    try {
+      await svc.getGitInfo(repo, {});
+      const later = new Date(Date.now() + 60_000);
+      fs.utimesSync(head, later, later);
+      svc.runSanityCheckNow();
+      svc.runSanityCheckNow(); // the entry is expired now: nothing to compare
+
+      expect(svc.getStats().invalidations).toBe(1);
+      await svc.getGitInfo(repo, {});
+      expect(inner.computeCalls).toHaveLength(2);
+      expect(counters.watchersOpened).toBe(1);
+    } finally {
+      svc.close();
+      fs.rmSync(repo, { recursive: true, force: true });
+    }
   });
 });

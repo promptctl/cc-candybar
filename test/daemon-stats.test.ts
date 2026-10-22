@@ -24,7 +24,6 @@ describe("RuntimeStats.snapshot", () => {
     stats.inFlight = 1;
     stats.watchersOpened = 5;
     stats.watchersClosed = 3;
-    stats.watchersEvicted = 1;
 
     const snap = stats.snapshot({
       gitCache: {
@@ -104,7 +103,6 @@ describe("RuntimeStats.snapshot", () => {
       active: 2,
       opened: 5,
       closed: 3,
-      evicted: 1,
     });
     expect(snap.uptimeSec).toBeGreaterThanOrEqual(0);
     expect(snap.pid).toBe(process.pid);
@@ -211,7 +209,7 @@ describe("formatStats", () => {
       sessionState: { sessions: 2, observers: 11, revision: 7 },
       frameFeeds: { feeds: 0, subscribers: 0, drawn: 0, pushed: 0, refused: 0, lookups: 0, found: 0 },
       tmuxStatus: { sessions: 0, layouts: 0, writes: 0, failedWrites: 0 },
-      watchers: { active: 5, opened: 7, closed: 2, evicted: 0 },
+      watchers: { active: 5, opened: 7, closed: 2 },
       subprocesses: {
         total: 0,
         inFlight: 0,
@@ -268,7 +266,7 @@ describe("formatStats", () => {
       sessionState: { sessions: 0, observers: 0, revision: 0 },
       frameFeeds: { feeds: 0, subscribers: 0, drawn: 0, pushed: 0, refused: 0, lookups: 0, found: 0 },
       tmuxStatus: { sessions: 0, layouts: 0, writes: 0, failedWrites: 0 },
-      watchers: { active: 0, opened: 0, closed: 0, evicted: 0 },
+      watchers: { active: 0, opened: 0, closed: 0 },
       subprocesses: {
         total: 0,
         inFlight: 0,

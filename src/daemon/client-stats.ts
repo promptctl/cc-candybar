@@ -205,7 +205,6 @@ export function formatStats(s: StatsSnapshot): string {
   lines.push(`  active        ${s.watchers.active}`);
   lines.push(`  opened        ${s.watchers.opened}`);
   lines.push(`  closed        ${s.watchers.closed}`);
-  lines.push(`  evicted       ${s.watchers.evicted}`);
   lines.push(``);
   lines.push(`subprocesses`);
   lines.push(`  total         ${s.subprocesses.total}`);

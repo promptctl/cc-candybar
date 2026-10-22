@@ -85,14 +85,22 @@ interface ResolutionCacheEntry {
   readonly computedAt: number;
 }
 
+// [LAW:types-are-the-program] An entry holds two things with two lifetimes:
+// the watch on its repo, held for as long as the cache holds the entry, and
+// the value derived from the repo, which a TTL or a change expires. A change
+// makes the value `expired`, never deletes the entry, so the watch outlives
+// every refetch — closing and reopening it per value leaked native memory on
+// macOS (brandon-unfiled-3248.576q; see src/daemon/cache/watchers.ts).
+type GitCacheValue =
+  | { kind: "fresh"; info: GitInfo; computedAt: number; mtime: MtimeSnapshot }
+  | { kind: "expired" };
+
 interface GitCacheEntry {
-  info: GitInfo;
-  computedAt: number;
-  mtime: MtimeSnapshot;
-  watcher: WatcherHandle;
+  value: GitCacheValue;
+  readonly watcher: WatcherHandle;
   // All entries for the same repoRoot share invalidation: one watcher fires →
-  // every option-set entry for that repo is dropped.
-  repoRoot: string;
+  // every option-set entry for that repo expires.
+  readonly repoRoot: string;
 }
 
 type GitOptions = NonNullable<Parameters<GitService["getGitInfo"]>[1]>;
@@ -373,11 +381,14 @@ export class GitDataProvider extends GitService {
     const now = Date.now();
 
     const existing = this.entries.get(key);
-    if (existing && now - existing.computedAt < this.ttlMs) {
+    if (
+      existing?.value.kind === "fresh" &&
+      now - existing.value.computedAt < this.ttlMs
+    ) {
       this.entries.delete(key);
       this.entries.set(key, existing);
       this.hits++;
-      return Promise.resolve(ok(existing.info));
+      return Promise.resolve(ok(existing.value.info));
     }
 
     // Coalesce concurrent misses on the same key — see fetchInFlight comment.
@@ -423,25 +434,30 @@ export class GitDataProvider extends GitService {
       info.pullRequest = await this.getPullRequestCached(repoRoot, info.branch);
     }
 
-    // Drop any prior entry for this exact key before re-inserting (so we
-    // release its watcher refcount cleanly).
-    this.dropEntry(key);
-
-    // Files/dirs inside .git that meaningfully change what we'd render.
-    // Working-tree changes are picked up by `git status` itself the next time
+    // [LAW:dataflow-not-control-flow] The new value lands on the entry this
+    // key already has, keeping its watch; only a key with no entry acquires
+    // one. Files/dirs inside .git that meaningfully change what we'd render;
+    // working-tree changes are picked up by `git status` itself the next time
     // the cache misses.
-    const watcher = this.watchers.acquire(
-      `git:${repoRoot}`,
-      watcherTargets(gitDir),
-      () => this.invalidateRepo(repoRoot),
-    );
-    this.entries.set(key, {
+    const value: GitCacheValue = {
+      kind: "fresh",
       info,
       computedAt: now,
       mtime: mtimeBefore,
-      watcher,
+    };
+    const entry: GitCacheEntry = this.entries.get(key) ?? {
+      value,
+      watcher: this.watchers.acquire(
+        `git:${repoRoot}`,
+        watcherTargets(gitDir),
+        () => this.invalidateRepo(repoRoot),
+      ),
       repoRoot,
-    });
+    };
+    entry.value = value;
+    // LRU touch: re-inserting moves the key to the newest end.
+    this.entries.delete(key);
+    this.entries.set(key, entry);
     this.evictIfNeeded();
     return outcome;
   }
@@ -607,20 +623,22 @@ export class GitDataProvider extends GitService {
     };
   }
 
-  // Public for tests + future stats endpoint. Drops every entry for repoRoot
-  // and re-fetches for any active subscribers (the watcher fire path).
+  // Public for tests + future stats endpoint. Expires every fresh entry for
+  // repoRoot, keeping their watches, and re-fetches for any active subscribers
+  // (the watcher fire path). Only entries this call turned expired count: a
+  // repo nobody renders keeps its watch now, and its every fire would
+  // otherwise log.
   invalidateRepo(repoRoot: string): void {
-    let dropped = 0;
-    for (const [key, entry] of this.entries) {
-      if (entry.repoRoot === repoRoot) {
-        entry.watcher.release();
-        this.entries.delete(key);
-        dropped++;
+    let expired = 0;
+    for (const entry of this.entries.values()) {
+      if (entry.repoRoot === repoRoot && entry.value.kind === "fresh") {
+        entry.value = { kind: "expired" };
+        expired++;
       }
     }
-    if (dropped > 0) {
-      this.invalidations += dropped;
-      this.logger("info", `gitCache invalidate ${repoRoot} dropped=${dropped}`);
+    if (expired > 0) {
+      this.invalidations += expired;
+      this.logger("info", `gitCache invalidate ${repoRoot} expired=${expired}`);
     }
     this.refreshSubscribers(repoRoot);
   }
@@ -694,13 +712,15 @@ export class GitDataProvider extends GitService {
   private runSanityCheck(): void {
     const seen = new Map<string, MtimeSnapshot>();
     for (const entry of this.entries.values()) {
+      // An expired entry is already known stale: there is nothing to compare.
+      if (entry.value.kind === "expired") continue;
       let current = seen.get(entry.repoRoot);
       if (!current) {
         const gitDir = this.inner.resolveGitDir(entry.repoRoot);
         current = snapshotMtimes(gitDir);
         seen.set(entry.repoRoot, current);
       }
-      if (mtimeChanged(entry.mtime, current)) {
+      if (mtimeChanged(entry.value.mtime, current)) {
         this.invalidateRepo(entry.repoRoot);
       }
     }

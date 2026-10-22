@@ -17,13 +17,24 @@ const defaultLogger: WatcherLogger = (_level, message) => debug(message);
 // [LAW:single-enforcer] One registry owns *all* fs watchers for any consumer
 // (git cache, config cache, ...). Scattered watchers across modules would leak
 // FDs and miss cleanup at shutdown.
+//
+// [LAW:single-enforcer] It shares and refcounts; it bounds nothing. Each
+// consumer bounds what it holds (the git cache's entries, the render cache's
+// MAX_ENTRIES, a git subscription dying with its render state), so a slot
+// closes only when its last holder releases it — never under a holder that
+// still holds it (brandon-unfiled-3248.576q: an LRU cap here closed watches
+// whose holders kept handles to nothing).
+//
+// Opening or closing a DIRECTORY watch is not free on macOS: libuv ≤ 1.53.0
+// rebuilds its one FSEvents stream and leaks a CFString per watched directory
+// each time (fixed upstream in libuv 9ac5b3cee0). Hold a watch for as long as
+// its target matters, not for as long as one value derived from it.
 
 // [LAW:one-source-of-truth] Exported: the invalidation-debounce floor is the
 // single source consumers derive from (e.g. the load harness's git-churn
 // interval must sit above it). Restating "50" anywhere else would let the two
 // drift silently.
 export const DEBOUNCE_MS = 50;
-const DEFAULT_MAX_WATCHERS = 128;
 
 // Absolute filesystem paths the consumer wants invalidation for.
 // `files`: regular files (existence required to watch).
@@ -50,8 +61,6 @@ interface WatcherSlot {
   debounceTimer: NodeJS.Timeout | null;
   onInvalidate: () => void;
   targets: WatchTargets;
-  // Last-seen accessed-at, so LRU eviction picks the staler one.
-  lastTouched: number;
 }
 
 export interface WatcherHandle {
@@ -61,19 +70,16 @@ export interface WatcherHandle {
 export interface WatcherCounters {
   watchersOpened: number;
   watchersClosed: number;
-  watchersEvicted: number;
 }
 
 export class WatcherRegistry {
   private readonly slots = new Map<string, WatcherSlot>();
-  private readonly maxWatchers: number;
   private readonly counters?: WatcherCounters;
   private readonly logger: WatcherLogger;
   private closed = false;
 
   constructor(
     opts: {
-      maxWatchers?: number;
       counters?: WatcherCounters;
       // [LAW:single-enforcer] One injection point per consumer. The daemon
       // passes `dlog` so watcher-failure events land in daemon.log; non-
@@ -82,7 +88,6 @@ export class WatcherRegistry {
       logger?: WatcherLogger;
     } = {},
   ) {
-    this.maxWatchers = opts.maxWatchers ?? DEFAULT_MAX_WATCHERS;
     this.counters = opts.counters;
     this.logger = opts.logger ?? defaultLogger;
   }
@@ -110,10 +115,6 @@ export class WatcherRegistry {
     if (existing) {
       existing.refcount++;
       existing.onInvalidate = onInvalidate;
-      existing.lastTouched = Date.now();
-      // LRU bump.
-      this.slots.delete(key);
-      this.slots.set(key, existing);
       return this.makeHandle(key);
     }
 
@@ -124,12 +125,10 @@ export class WatcherRegistry {
       debounceTimer: null,
       onInvalidate,
       targets,
-      lastTouched: Date.now(),
     };
     this.openWatchers(slot);
     this.slots.set(key, slot);
     if (this.counters) this.counters.watchersOpened++;
-    this.evictIfNeeded();
     return this.makeHandle(key);
   }
 
@@ -214,25 +213,6 @@ export class WatcherRegistry {
     }
     slot.watchers = [];
     if (this.counters) this.counters.watchersClosed++;
-  }
-
-  private evictIfNeeded(): void {
-    while (this.slots.size > this.maxWatchers) {
-      // Map iteration order = insertion order = LRU order (we re-insert on
-      // access).
-      const oldest = this.slots.keys().next().value;
-      if (oldest === undefined) break;
-      const slot = this.slots.get(oldest)!;
-      this.closeSlot(slot);
-      this.slots.delete(oldest);
-      if (this.counters) this.counters.watchersEvicted++;
-      // Force the consumer to drop their entry too — without this the cache
-      // would keep stale data with no watcher behind it.
-      try {
-        slot.onInvalidate();
-      } catch {}
-      this.logger("info", `watcher LRU evict ${oldest}`);
-    }
   }
 
   size(): number {
