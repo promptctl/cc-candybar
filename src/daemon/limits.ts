@@ -155,6 +155,28 @@ export interface ServingDaemon {
     | { readonly kind: "failed"; readonly reason: string };
 }
 
+// How many readings in a row (a minute apart) the platform's measure must go
+// unread before RSS standing in for it can end the daemon. macOS RSS runs
+// ~150 MB over phys_footprint, so judging it on ONE unread reading killed two
+// daemons whose footprint never passed 435 MB of a 512 MB budget
+// (brandon-unfiled-3248.ptv0). A run this long is a host whose measure does not
+// read, which the stand-in still bounds.
+export const STAND_IN_AFTER_UNREAD = 3;
+
+// [LAW:single-enforcer] THE breach verdict: the platform's charge over the
+// limit, or RSS over it once it has stood in for STAND_IN_AFTER_UNREAD
+// readings running. `unreadRun` counts this reading.
+export function breaches(
+  charge: MemoryCharge,
+  unreadRun: number,
+  limit: number,
+): boolean {
+  return (
+    charge.bytes > limit &&
+    (charge.kind === "charged" || unreadRun >= STAND_IN_AFTER_UNREAD)
+  );
+}
+
 // [LAW:single-enforcer] THE judgment of "near the limit": the restart
 // forecast in daemon-stats and the doctor's daemon row both ask it.
 export function approachingLimit(bytes: number, limit: number): boolean {
@@ -240,6 +262,8 @@ export function makeLimits(deps: LimitsDeps): LimitsHandle {
   // [LAW:one-source-of-truth] The one reading: the breach verdict, the restart
   // forecast and the doctor's daemon row all read it, never one of their own.
   let latest: MemoryReading = { kind: "unmeasured" };
+  // Readings running whose platform measure went unread (see breaches).
+  let unreadRun = 0;
   // [LAW:no-ambient-temporal-coupling] The reading in flight, shared: a
   // second caller while one is out waits on the same reading rather than
   // taking its own, so a breach is judged — and recorded — once.
@@ -256,12 +280,13 @@ export function makeLimits(deps: LimitsDeps): LimitsHandle {
     if (triggered) return true;
     const { rss, heapTotal } = deps.memoryBytes();
     const charge = await deps.memoryCharge(rss);
+    unreadRun = charge.kind === "stand-in" ? unreadRun + 1 : 0;
     const reading = { kind: "measured", charge, rss, heapTotal } as const;
     latest = reading;
     // [LAW:nothing-unseen] One line per reading, whatever it says: the history
     // a breach is read against, which no cache count can reconstruct.
-    deps.log("info", `memory ${readingFields(reading, limit)}`);
-    if (charge.bytes <= limit) return false;
+    deps.log("info", `memory ${readingFields(reading, limit, unreadRun)}`);
+    if (!breaches(charge, unreadRun, limit)) return false;
     triggered = true;
     deps.log(
       "warn",
@@ -379,10 +404,11 @@ export function measureOf(charge: MemoryCharge): string {
 function readingFields(
   { charge, rss, heapTotal }: Extract<MemoryReading, { kind: "measured" }>,
   limit: number,
+  unreadRun: number,
 ): string {
   const unread =
     charge.kind === "stand-in"
-      ? ` unread=${JSON.stringify(charge.unread)}`
+      ? ` unread=${JSON.stringify(charge.unread)} unreadRun=${unreadRun}/${STAND_IN_AFTER_UNREAD}`
       : "";
   return `measure=${measureOf(charge)} charge=${mb(charge.bytes)}MB rss=${mb(rss)}MB heap=${mb(heapTotal)}MB limit=${mb(limit)}MB${unread}`;
 }
