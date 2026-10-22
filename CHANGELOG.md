@@ -1,3 +1,9 @@
+## [1.155.1](https://github.com/promptctl/cc-candybar/compare/v1.155.0...v1.155.1) (2026-10-22)
+
+### Bug Fixes
+
+* **daemon:** one unread footprint no longer ends the daemon on the RSS standing in for it ([#411](https://github.com/promptctl/cc-candybar/issues/411)) ([c1056b2](https://github.com/promptctl/cc-candybar/commit/c1056b28564fbf384e712a6d46979d012bcc76f8))
+
 ## [1.155.0](https://github.com/promptctl/cc-candybar/compare/v1.154.1...v1.155.0) (2026-10-22)
 
 ### Features
