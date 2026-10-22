@@ -33,7 +33,7 @@ import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { effectsOf } from "./helpers/click";
 import { stripAnsi } from "./helpers/ansi";
 
-// The look tab's theme picker, open, naming `theme` beside its swatch
+// The theme picker on the door's first line, open, naming `theme` beside its swatch
 // (brandon-theme-swatch-8v9r), read off the visible text.
 const showsTheme = (out: string, theme: string): boolean =>
   stripAnsi(out).includes(`${theme} ▀▀▀`);
@@ -98,8 +98,8 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
       // for this project has no gate to pass yet.
       await render(sockPath, SID, projectDir);
 
-      // The settings menu and its config row are collapsed by default — open
-      // both, the same two clicks a "🍫" then "🎨 look" tap dispatches.
+      // The settings menu is collapsed by default — open it, the click a "🍫"
+      // tap dispatches.
       // The disclosure contract (write the disclosure's own name to its own
       // key) is stable synthesis, not render output, so constructing it
       // directly matches test/default-dsl-config.test.ts's own precedent
@@ -108,13 +108,12 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
         sockPath,
         effectsUrl([
           { verb: VERB_SET_STATE, args: [SID, "candybar.menu", "open"] },
-          { verb: VERB_SET_STATE, args: [SID, "candybar.tab", "look"] },
         ]),
       );
 
       const menuOpen = await render(sockPath, SID, projectDir);
 
-      // The look tab reveals the theme picker, `🎨 theme ▀▀▀`, not its row of
+      // The door's first line shows the theme picker, `🎨 theme ▀▀▀`, not its row of
       // swatches: the label is the row's toggle (a set-state write on the
       // pickers accordion key, whose member is the apply action's name, with
       // the row's page cursor beside it). Click it before any per-theme
@@ -198,7 +197,6 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
         sockPath,
         effectsUrl([
           { verb: VERB_SET_STATE, args: [OTHER_SID, "candybar.menu", "open"] },
-          { verb: VERB_SET_STATE, args: [OTHER_SID, "candybar.tab", "look"] },
           { verb: VERB_SET_STATE, args: [OTHER_SID, ...OPEN_THEME_PICKER] },
         ]),
       );
@@ -221,18 +219,18 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
       );
       expect(targetThemeUrl).toBeDefined();
       await click(sockPath, targetThemeUrl!);
-      // The padding stepper sits in the 📐 layout tab.
+      // The padding stepper sits in the ⚙ config tab.
       await click(
         sockPath,
         effectsUrl([
-          { verb: VERB_SET_STATE, args: [SID, "candybar.tab", "layout"] },
+          { verb: VERB_SET_STATE, args: [SID, "candybar.tab", "config"] },
         ]),
       );
-      const layoutTab = await render(sockPath, SID, projectDir);
+      const configTab = await render(sockPath, SID, projectDir);
       // The padding stepper's ▶: a relative step on the session key (the
       // step-state args are [sessionId, key, String(by)]) — the one whose `by`
       // is positive, so the file assertion below is pinned to the increment.
-      const paddingUpUrl = findUrl(linkUrls(layoutTab), (effects) =>
+      const paddingUpUrl = findUrl(linkUrls(configTab), (effects) =>
         effects.some(
           (e) =>
             e.verb === "step-state" &&
@@ -267,14 +265,7 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
       expect(showsTheme(afterClicks, targetTheme)).toBe(true);
 
       // …and the SAVING session shows it too, with nothing left to save: the
-      // save reloaded the file and released the picks. Its theme control is
-      // back in the 🎨 look tab.
-      await click(
-        sockPath,
-        effectsUrl([
-          { verb: VERB_SET_STATE, args: [SID, "candybar.tab", "look"] },
-        ]),
-      );
+      // save reloaded the file and released the picks.
       const committing = await renderUntil(
         sockPath,
         SID,
@@ -316,7 +307,6 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
         sockPath,
         effectsUrl([
           { verb: VERB_SET_STATE, args: [FRESH_SID, "candybar.menu", "open"] },
-          { verb: VERB_SET_STATE, args: [FRESH_SID, "candybar.tab", "look"] },
           { verb: VERB_SET_STATE, args: [FRESH_SID, ...OPEN_THEME_PICKER] },
         ]),
       );

@@ -2,14 +2,24 @@ import { DOOR_GLYPH } from "./config/disclosure";
 import { HELP_GLYPH_CLOSED } from "./config/help";
 import { ADD_GLYPH, CONFIGURE_GLYPH, REMOVE_GLYPH } from "./config/edit-glyphs";
 import { NODE_FLAGS } from "./cli-flags";
-import { SUBMENUS, TAB_LABEL, settingMenuPath } from "./config/menu-places";
+import {
+  TABS,
+  TAB_LABEL,
+  settingMenuPath,
+  settingsByPlace,
+} from "./config/menu-places";
 import { LANES, LANE_NAMES, type Lane } from "./config/lanes";
+import { SETTINGS } from "./config/setting-projections";
 
 // Where the lanes' toggles are, each place once: one place while they sit
 // together, every place if the menu's map ever parts them.
 const LANE_PLACES = [
   ...new Set(Object.values(LANES).map((l) => settingMenuPath(l.setting))),
 ].join(" or ");
+
+// The settings list's label column starts two spaces past the longest field.
+const FIELD_COLUMN =
+  Math.max(...Object.values(SETTINGS).map((s) => s.configKey.length)) + 2;
 
 // [LAW:effects-at-boundaries] Pure data, no I/O — index.ts owns the console.log
 // effect. Kept as its own module so the text is importable (and testable) without
@@ -80,12 +90,24 @@ Configuration:
 
   Every bar carries a settings menu, whatever your config says — no config
   needed, and writing your own \`root\` cannot delete it. Click
-  it on the bar (${DOOR_GLYPH} by default; globals.menuGlyph changes it) for
-  preset switching and its tabs: ${TAB_LABEL.session} (quick actions and commands),
-  ${TAB_LABEL.look} (theme/style/variation/shade/endcaps), ${TAB_LABEL.layout} (new preset, edit mode,
-  wrap, padding), ${TAB_LABEL.config} (update notice, ${SUBMENUS.toggles.trigger}) and
-  ${TAB_LABEL.tools}. A change applies to this session at once; 💾 save appears while
-  you have unsaved changes and writes them to your config file.
+  it on the bar (${DOOR_GLYPH} by default; globals.menuGlyph changes it). Beside
+  the settings listed below, its first line holds ◁ back, ✎ arrange (edit mode)
+  and 💾 save, which appears while you have unsaved changes and writes them to
+  your config file. Under it are its
+  tabs, ${TABS.map((t) => t.label).join(", ")};
+  ${TAB_LABEL.session} holds quick actions and commands, ${TAB_LABEL.layout} a new preset.
+  A change applies to this session at once.
+  Where each setting is in the menu: the globals field that sets it in a
+  config file, then the control's label.
+${settingsByPlace()
+  .flatMap(({ path, names }) => [
+    `    ${path}`,
+    ...names.map(
+      (name) =>
+        `      ${SETTINGS[name].configKey.padEnd(FIELD_COLUMN)}${SETTINGS[name].label}`,
+    ),
+  ])
+  .join("\n")}
   The 🧰 tools tab holds 🩺 doctor: click it to check your setup, and click a
   failed row's [fix] to repair it (the same checks \`cc-candybar doctor\` runs).
 

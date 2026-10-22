@@ -1,6 +1,6 @@
 // The look each bundled theme ships with: every entry is the default Brandon
-// set for that theme in the bar (`⤓ default for <theme>` in the settings
-// menu's 🎨 look tab writes one into a config file's `themeDefaults`; the
+// set for that theme in the bar (`⤓ default for <theme>` behind the settings
+// menu's theme ⚙ writes one into a config file's `themeDefaults`; the
 // chosen entries are copied here to ship). A theme with no entry wears the
 // floors — shade "middle", variation "accent", style "none" — and a user's
 // own `themeDefaults.<theme>` merges over its entry field by field.

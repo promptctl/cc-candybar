@@ -182,7 +182,7 @@ export function checkPayload(
     navigation: { back: 1 },
     unsaved: 1,
     resettable: perSetting(() => true) satisfies RenderPayload["resettable"],
-    // A look that differs from the theme's default, so the 🎨 look tab's
+    // A look that differs from the theme's default, so the theme gear's
     // `⤓ default for <theme>` renders and gets its template checked.
     themeDefault: { differs: true, theme: "<theme>" },
     // A resume command (the daemon's own projection) and a config file, so

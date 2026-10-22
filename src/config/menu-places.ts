@@ -8,6 +8,7 @@
 // the lane gate can read it without importing the menu that imports them.
 import {
   SETTINGS,
+  SETTING_NAMES,
   perSetting,
   type SettingName,
 } from "./setting-projections.js";
@@ -71,10 +72,11 @@ export type PreviewName = "layout" | "palette" | "presetDelete";
 export const isSubmenu = (place: Place): place is SubmenuName =>
   Object.hasOwn(SUBMENUS, place);
 
-// A submenu sits beside a control, so what is inside it is in that control's
-// tab.
-export const tabOf = (place: Place): "door" | TabName =>
-  isSubmenu(place) ? tabOf(PLACE[SUBMENUS[place].beside]) : place;
+// Whether a control at `place` is shown inside `container`: it is there, or in
+// a submenu laid beside a control that is.
+export const within = (place: Place, container: Place): boolean =>
+  place === container ||
+  (isSubmenu(place) && within(PLACE[SUBMENUS[place].beside], container));
 
 // Where a place is, in the words the menu draws: the tab's label, then each
 // submenu's trigger.
@@ -88,6 +90,25 @@ const placePath = (place: Place): string =>
 // Where a setting's control is in the settings menu — `⚙ config › 🧪 toggles`.
 export const settingMenuPath = (name: SettingName): string =>
   placePath(PLACE[name]);
+
+// Every place that holds a control, in the order the menu opens them — the
+// first line, then each tab, each followed by the submenus inside it — with
+// the settings whose controls it holds, in the order it draws them.
+interface PlaceSettings {
+  readonly path: string;
+  readonly names: readonly SettingName[];
+}
+export const settingsByPlace = (): readonly PlaceSettings[] =>
+  (["door", ...TABS.map((t) => t.member)] as const)
+    .flatMap((top): Place[] => [
+      top,
+      ...SUBMENU_NAMES.filter((s) => within(s, top)),
+    ])
+    .map((place) => ({
+      path: placePath(place),
+      names: SETTING_NAMES.filter((name) => PLACE[name] === place),
+    }))
+    .filter(({ names }) => names.length > 0);
 
 // Why a subscriber of `lane` is refused, naming the switch that admits it.
 export const laneOffReason = (lane: Lane): string =>

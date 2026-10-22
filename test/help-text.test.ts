@@ -1,5 +1,6 @@
 import { DOOR_GLYPH } from "../src/config/disclosure";
 import { HELP_TEXT } from "../src/help-text";
+import { SETTINGS } from "../src/config/setting-projections";
 
 describe("HELP_TEXT", () => {
   // [LAW:one-source-of-truth] --help points a user at the surface the controls
@@ -12,9 +13,22 @@ describe("HELP_TEXT", () => {
     for (const tab of ["⚡ session", "🎨 look", "📐 layout", "⚙ config", "🧰 tools"]) {
       expect(HELP_TEXT).toContain(tab);
     }
-    expect(HELP_TEXT).toMatch(/theme\/style\/variation\/shade\/endcaps/);
     expect(HELP_TEXT).toContain(DOOR_GLYPH);
     expect(HELP_TEXT).toMatch(/💾 save/);
+  });
+
+  // brandon-menus-sjhy.ek7: the place each setting is listed under is the
+  // menu's map, so a control the menu moves moves its line in --help.
+  test("names every setting under the place its control is in", () => {
+    const escaped = (text: string): string =>
+      text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    for (const { configKey, label } of Object.values(SETTINGS)) {
+      expect(HELP_TEXT).toMatch(
+        new RegExp(`\\n\\s+${escaped(configKey)}\\s+${escaped(label)}\\n`),
+      );
+    }
+    expect(HELP_TEXT).toMatch(/first line\n\s+palette\s+🎨 theme\n\s+preset\s/);
+    expect(HELP_TEXT).toMatch(/⚙ config\n\s+autoWrap\s+wrap\n\s+padding\s+padding\n/);
   });
 
   // brandon-check-m2a. A flag nobody is told about is a flag nobody uses: the

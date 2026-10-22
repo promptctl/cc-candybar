@@ -384,8 +384,8 @@ too. `"accent"` (the default: secondary, then accent), `"duo"` (primary,
 then secondary), `"mono"` (every row in primary), or `"alt"` (secondary and
 accent, also turning along the row every three cells, each row starting on
 its own). Cells side by side still differ by shade. It resolves like `endcaps` — the session's pick
-over the config value over the default — and the settings menu's `🎨 look`
-tab carries a `🎼` carousel over it. `variations` is a registered domain and
+over the config value over the default — and the `⚙` beside the settings
+menu's theme picker carries a `🎼` carousel over it. `variations` is a registered domain and
 `{{ .variation.effective }}` its projection, so a control of your own is the
 same two lines as any other picker:
 
@@ -431,7 +431,7 @@ below the deepest window, `"muted"`: every cell of a row in the role's muted
 form under the role's own text colour, as Textual's labels wear them, the
 cells parted by the joiner's divider. Under a window, cells side by side step
 up and down it a shade at a time. It resolves like `variation`, and the
-settings menu's `🎨 look` tab carries a `🔆` carousel over it. `shades` is a
+`⚙` beside the settings menu's theme picker carries a `🔆` carousel over it. `shades` is a
 registered domain and `{{ .shade.effective }}` its projection:
 
 ```json5 check:pass
@@ -487,7 +487,7 @@ field by field.
 }
 ```
 
-The settings menu's `🎨 look` tab sets one from the bar: while the look you
+The `⚙` beside the settings menu's theme picker sets one from the bar: while the look you
 are wearing differs from the theme's default, it shows `⤓ default for
 <theme>`. That is `{ themeDefault: "save" }`: it writes the session's current
 shade, variation and style into `themeDefaults.<theme>` in your config file
@@ -1291,20 +1291,22 @@ Opening it shows the always-available functionality. The menu opens
 body. The door rises with it — now `✖`, it leads the menu's first line and
 closes the menu, and the bar's row closes up where it was.
 The second line is five tabs, one open at a time; the open one wears its state
-colour, and its body drops below the strip. The tab stays open when the menu
-closes, so reopening the menu returns to it. Here the theme and style are
-picked in this session and not yet saved:
+colour, and its body drops below the strip. Closing the menu folds it back to
+`⚡ session`, so the menu always reopens there. Here the theme and style are
+picked in this session and not yet saved, and the theme's `⚙` is open:
 
 ```
-✖ ◁ ▦ default ▸   💾 save 2 ↶ ⟲
-  ⚡ session   ▾ 🎨 look •   📐 layout   ⚙ config   🧰 tools
-✕ 🎨 tokyo-night ▸ ↺   ◐ none ▸ ↺   ✦ powerline ▸   🎼 accent ▸
+✖ ◁ 🎨 theme ▀▀▀ ↺   ⚙ •   ▦ ◀ default ▶   ✎ arrange   💾 save 2 ↶ ⟲
+✕ ◐ ◀ dim ▀▀▀ ▶ ↺   🎼 ◀ accent ▶   🔆 ◀ middle ▶   ⤓ default for tokyo-night ▀▀▀
+  ▾ ⚡ session   🎨 look   📐 layout   ⚙ config   🧰 tools
+✕ ⎘ id ⎘ resume ↗ proj ↗ log ↗ repo ↗ config
+  …
 host   directory   gitaculous             ← the bar, less the door
 ```
 
 Every row an open disclosure drops leads with a `✕` that closes **that**
-disclosure, in the same state colour its trigger wears while open: the look
-tab's `✕` closes the tab and leaves the menu open. Nothing stacks — a row
+disclosure, in the same state colour its trigger wears while open: the
+gear's `✕` closes the gear and leaves the menu open. Nothing stacks — a row
 carries the `✕` of the innermost disclosure it belongs to, and a picker line
 keeps the picker's own. This is true of every disclosure on the bar (a group
 body, a `(?)` line), not only this menu; no author writes it and no author can
@@ -1328,20 +1330,23 @@ there is nothing to go back to), and the bar's row closes up where the door was.
   every setting to the bundled default — a second click, `⟲ reset all?`,
   confirms. Each part shows only while it has something to do: `⟲` whenever a
   setting holds a draft or your config file holds a value for it.
-- **The preset switcher** sits on the first line, one click from the door,
-  because switching arrangement is what you most often open this menu to do.
-  Under its carousel, `🚮 delete <name>` removes the preset you are in when you
-  made it (see "Save as preset" above).
-- **`🎨 look`** holds theme, style, variation, shade and endcaps; **`📐 layout`**
-  holds `+ preset`, which keeps the bar as a new preset and switches to it,
-  `✎ arrange`, wrap and padding; **`⚙ config`** holds the update notice.
+- **The first line** holds what you most often open this menu for, one click
+  from the door: the theme picker and its `⚙` (style, variation, shade, and
+  `⤓ default for <theme>` while the look differs from the theme's default),
+  the preset switcher, and `✎ arrange`. Under the preset carousel,
+  `🚮 delete <name>` removes the preset you are in when you made it (see
+  "Save as preset" above).
+- **`🎨 look`** holds effect, endcaps and fade in/out; **`📐 layout`** holds
+  `+ preset`, which keeps the bar as a new preset and switches to it;
+  **`⚙ config`** holds wrap, padding, the update notice and `🧪 toggles`.
   Every setting is ONE control, in
-  exactly one tab. A control shows `↺` while resetting it would change
+  exactly one place. A control shows `↺` while resetting it would change
   something — it holds a draft, or your config file holds a value for it —
   and clicking it returns the setting to the bundled default at every layer;
   a value your own preset pins is not marked, since a reset leaves it. A tab
-  holding such a control is marked `•` (`🎨 look •`), open or closed, so
-  what differs from the default is findable without opening every tab. The
+  or submenu holding such a control is marked `•` (`🎨 look •`, `⚙ •`), open
+  or closed, so what differs from the default is findable without opening
+  each one. The
   controls are generated from the `globals` declarations: a field with a list
   of values gets a `◀ value ▶` picker, a boolean a `☑`/`☐` toggle, a bounded number a
   `◀ ▶` stepper — the same controls configure mode generates for a

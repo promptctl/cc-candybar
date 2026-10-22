@@ -247,8 +247,8 @@ async function closedBars(): Promise<{
 
 // The open states, reached by the clicks a user makes: the 🍫 door (its tray
 // and the preset picker's band items), each tab that holds controls (the 🎨 look
-// tab, then 📐 layout and ⚙ config), and the theme picker, whose options wear
-// the palette each would apply. Each stage is handed a render of the bar in
+// tab, then 📐 layout and ⚙ config), and the theme picker on the door's first
+// line, whose options wear the palette each would apply. Each stage is handed a render of the bar in
 // that state at any depth.
 const STAGE_NAMES = [
   "closed",

@@ -202,12 +202,12 @@ describe("the global settings menu is reachable from a user config", () => {
     // One symbol per state: the open door is the ✖, and the door glyph is gone.
     expect(opened).toContain(DOOR_CLOSE_GLYPH);
     expect(opened).not.toContain(DOOR_GLYPH);
-    // Switch presets (the picker's own disclosure glyph, hosted by the preset
-    // entry), and edit mode one tab away.
-    expect(opened).toContain("▦");
-    expect(opened).toContain("📐 layout");
-    clickWriting(render(), TAB_KEY, "layout");
-    expect(stripAnsi(render())).toContain("✎ arrange");
+    // The first line: the theme, switching presets (the picker's own
+    // disclosure glyph, hosted by the preset entry), and edit mode.
+    const firstLine = opened.split("\n")[0]!;
+    expect(firstLine).toContain("🎨 theme");
+    expect(firstLine).toContain("▦");
+    expect(firstLine).toContain("✎ arrange");
   });
 
   // brandon-menu-ia-q30.4oj: the menu opens ABOVE the bar and leaves the
@@ -284,7 +284,6 @@ describe("the global settings menu is reachable from a user config", () => {
       userConfig(TWO_SEGMENT_ROW),
     );
     clickWriting(render(), SETTINGS_ANCHOR, "open");
-    clickWriting(render(), TAB_KEY, "layout");
     clickWriting(render(), EDIT_MODE_KEY, "arrange");
     expect(sessionState.get("s1", EDIT_MODE_KEY)).toBe("arrange");
     // The menu stays as it was, so its tabs and ◁ back stay in reach while
@@ -502,7 +501,7 @@ describe("the menu's second line is five tabs, one open at a time", () => {
       expect(openBg).toBeDefined();
       expect(closedBgs).not.toContain(openBg);
       // The body is the open tab's: its first control, and no other tab's.
-      const marker = { session: "⎘ id", look: "🎨 theme", layout: "✎ arrange", config: "update notice", tools: "🩺 doctor" };
+      const marker = { session: "⎘ id", look: "✨", layout: "+ preset", config: "update notice", tools: "🩺 doctor" };
       for (const tab of TABS) {
         expect([tab, out.includes(marker[tab])]).toEqual([tab, tab === open]);
       }

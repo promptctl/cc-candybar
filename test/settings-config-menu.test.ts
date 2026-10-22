@@ -249,11 +249,10 @@ function showTab(
 }
 
 // The theme picker's gear (brandon-theme-swatch-8v9r): the style, variation
-// and shade controls are behind it, in the 🎨 look tab.
+// and shade controls are behind it, beside the theme on the door's first line.
 function showGear(
   r: { render: () => string; click: (url: string) => void; sessionState: SessionState },
 ): void {
-  showTab(r, "look");
   if (r.sessionState.get(SID, PICKERS_KEY) === "gear") return;
   const url = urlsOf(r.render()).find((u) =>
     effectsOf(u).some((e) => e.args[1] === PICKERS_KEY && e.args[2] === "gear"),
@@ -265,7 +264,6 @@ function showGear(
 function showThemePicker(
   r: { render: () => string; click: (url: string) => void; sessionState: SessionState },
 ): void {
-  showTab(r, "look");
   if (r.sessionState.get(SID, PICKERS_KEY) === "candybar.apply.theme") return;
   const url = urlsOf(r.render()).find((u) =>
     effectsOf(u).some(
@@ -343,13 +341,11 @@ describe("the config menu, reached from a user config whose root is one row", ()
   beforeEach(() => {
     durable = durableConfig("cc-candybar-settings-menu-");
     r = rig(TWO_SEGMENT_ROOT, durable);
-    // Open the menu and its look tab — the two clicks a "🍫" then "🎨 look"
-    // tap dispatches. Both affordances are found in the rendered bytes, never
-    // constructed, so this also proves they are REACHABLE.
+    // Open the menu — the click a "🍫" tap dispatches, found in the rendered
+    // bytes, never constructed, so this also proves it is REACHABLE.
     const menuToggle = writesTo(r.render(), "candybar.menu")[0];
     expect(menuToggle).toBeDefined();
     r.click(menuToggle!);
-    showTab(r, "look");
   });
   afterEach(() => {
     r.dispose();
@@ -357,11 +353,11 @@ describe("the config menu, reached from a user config whose root is one row", ()
   });
 
   const wrapUrl = (): string => {
-    showTab(r, "layout");
+    showTab(r, "config");
     return writesTo(r.render(), "autoWrap").find((u) => !isReset(u))!;
   };
   const paddingUp = (): string => {
-    showTab(r, "layout");
+    showTab(r, "config");
     return links(r.render()).find(
       (l) =>
         stripAnsi(l.text) === "▶" &&
@@ -396,6 +392,23 @@ describe("the config menu, reached from a user config whose root is one row", ()
     expect(saveUrl()).toBeUndefined();
   });
 
+  // brandon-menus-sjhy.ek7: "Make theme and arrange top-level menus, next to
+  // preset. Move padding and wrap from the layout menu to config."
+  test("theme and arrange sit beside preset on the first line; wrap and padding are in ⚙ config", () => {
+    const firstLine = plain(r.render()).split("\n")[0]!;
+    for (const cell of ["🎨 theme ▀▀▀", "⚙", "▦ ◀ default ▶", "✎ arrange"]) {
+      expect(firstLine).toContain(cell);
+    }
+    const tab = (name: string): string => (showTab(r, name), plain(r.render()));
+    expect(tab("config")).toMatch(/☑ wrap[\s\S]*padding 1/);
+    for (const name of ["look", "layout"]) {
+      const body = tab(name).split("\n").slice(2).join("\n");
+      for (const moved of ["🎨 theme", "✎ arrange", "wrap", "padding"]) {
+        expect(body).not.toContain(moved);
+      }
+    }
+  });
+
   test("every control writes the session key; the only durable links are the ↺ resets", () => {
     // Open the theme ring so its option cells render too.
     const themeMenu = writesTo(r.render(), "menus.candybar_pickers").find((u) =>
@@ -427,7 +440,7 @@ describe("the config menu, reached from a user config whose root is one row", ()
   // the stepper starts from the 0 the bar shows, never top-level globals' 1.
   test("an unpicked padding steps from the value the session's preset shows", () => {
     r.sessionState.set(SID, "preset", "compact");
-    showTab(r, "layout");
+    showTab(r, "config");
     expect(plain(r.render())).toContain("padding 0");
     r.click(paddingUp());
     expect(r.sessionState.get(SID, "padding")).toBe("1");
@@ -659,7 +672,7 @@ describe("reset returns settings to the bundled default", () => {
 
   // The ↺ beside one setting: the link whose only reset names `configKey`,
   // in whichever tab holds that setting's control.
-  const TAB_OF: Record<string, string> = { padding: "layout" };
+  const TAB_OF: Record<string, string> = { padding: "config" };
   const resetOf = (configKey: string): string => {
     showTab(r, TAB_OF[configKey] ?? "look");
     return links(r.render()).find(
@@ -811,7 +824,7 @@ describe("reset returns settings to the bundled default", () => {
     showGear(r);
     expect(plain(r.render())).toContain("◐ ◀ none ▀▀▀ ▶");
     expect(plain(r.render())).not.toContain("💾");
-    showTab(r, "layout");
+    showTab(r, "config");
     expect(plain(r.render())).toContain("padding 1");
 
     // One click, one step — undone by the ↶ on the bar.
@@ -876,11 +889,25 @@ describe("the drift marker", () => {
     try {
       r.sessionState.set(SID, "padding", "5");
       expect(marked(r)).toEqual(["padding"]);
-      expect(markedTabs(r)).toEqual(["layout"]);
+      expect(markedTabs(r)).toEqual(["config"]);
       expect(plain(r.render())).toContain("⟲");
       // The open tab keeps its mark beside the open glyph.
-      showTab(r, "layout");
-      expect(plain(r.render())).toContain("▾ 📐 layout •");
+      showTab(r, "config");
+      expect(plain(r.render())).toContain("▾ ⚙ config •");
+    } finally {
+      r.dispose();
+    }
+  });
+
+  // brandon-menus-sjhy.ek7: the ⚙ gear sits on the door's first line, which
+  // no tab encloses, so the gear's own trigger carries the mark.
+  test("a gear setting's draft marks the closed ⚙ gear and no tab", () => {
+    const r = open(TWO_SEGMENT_ROOT);
+    try {
+      expect(plain(r.render())).not.toContain("⚙ •");
+      r.sessionState.set(SID, "shade", "deepest");
+      expect(plain(r.render())).toContain("⚙ •");
+      expect(markedTabs(r)).toEqual([]);
     } finally {
       r.dispose();
     }
@@ -907,7 +934,7 @@ describe("the drift marker", () => {
       // padding is held twice (globals and compact's fragment), endcaps once;
       // narrow's pin is the user's own preset, which a reset leaves alone.
       expect(marked(r)).toEqual(["endcaps", "padding", "palette"]);
-      expect(markedTabs(r)).toEqual(["look", "layout"]);
+      expect(markedTabs(r)).toEqual(["look", "config"]);
     } finally {
       r.dispose();
     }
@@ -928,7 +955,7 @@ describe("the drift marker", () => {
     const r = open(TWO_SEGMENT_ROOT);
     try {
       r.sessionState.set(SID, "preset", "compact");
-      showTab(r, "layout");
+      showTab(r, "config");
       expect(plain(r.render())).toContain("padding 0");
       expect(marked(r)).toEqual(["preset"]);
       expect(markedTabs(r)).toEqual([]);
@@ -950,7 +977,6 @@ describe("a pick leaves the picker open", () => {
   beforeEach(() => {
     r = rig(TWO_SEGMENT_ROOT, undefined, 80);
     r.click(writesTo(r.render(), "candybar.menu")[0]!);
-    showTab(r, "look");
     r.click(
       writesTo(r.render(), "menus.candybar_pickers").find((u) =>
         effectsOf(u).some((e) => e.args[2] === "candybar.apply.theme"),
@@ -1263,7 +1289,7 @@ describe("the preset action", () => {
 });
 
 // [LAW:verifiable-goals] candybar-theme-colours-6fq5.ix8: `⤓ default for
-// <theme>` in the 🎨 look tab saves the look the session draws as the active
+// <theme>` behind the theme's ⚙ saves the look the session draws as the active
 // theme's default. Found in the rendered bar and dispatched through the real
 // verb table; every assertion on the file is on its exact bytes.
 const THEMED = `{
@@ -1304,12 +1330,13 @@ describe("a theme's default look, set from the bar", () => {
     );
     return [e.shade, e.variation, e.style.kind === "decided" ? e.style.name : "(rule)"];
   };
-  // The door, then the 🎨 look tab.
+  // The door, then the theme's ⚙ gear, where the cell sits beside the
+  // settings it saves.
   function start(source: string): void {
     durable = durableConfig("cc-candybar-theme-default-");
     r = rig(source, durable);
     r.click(writesTo(r.render(), "candybar.menu")[0]!);
-    showTab(r, "look");
+    showGear(r);
   }
   afterEach(() => {
     r.dispose();
