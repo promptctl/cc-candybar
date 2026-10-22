@@ -2,7 +2,6 @@ import type { Asked, DaemonProcess, DoctorFacts, MarkBook, PostMortemsRead } fro
 import type { FrameSeen, FrameSighting } from "../../src/daemon/render-sightings";
 import type { SettingsSource } from "../../src/claude-settings";
 import type { SightedBar } from "../../src/doctor/sightings";
-import type { Redraws } from "../../src/doctor/redraws";
 import { readStores, type DoctorEdge, type DoctorStores, type InstallEdge, type StoresRead } from "../../src/doctor/edge";
 import type { DaemonAnswer } from "../../src/doctor/daemon-answer";
 import type { ServingDaemon } from "../../src/daemon/limits";
@@ -90,22 +89,9 @@ export const renderSaid = (
   frame: "still" as const,
 });
 
-// A bar Claude Code redraws on events alone (src/doctor/redraws.ts): a
-// second in five of the window held a render.
-export const ON_EVENTS: Redraws = { kind: "seen", seconds: 12 };
-// A bar Claude Code redraws every second, a daemon stall or two aside.
-export const EVERY_SECOND: Redraws = { kind: "seen", seconds: 58 };
-
-// The bars a session's statusline renders drew, redrawn as `redraws` says.
-export const drewAt = (
-  redraws: Redraws,
-  ...frames: FrameSeen[]
-): readonly FrameSighting[] =>
-  frames.map((frame) => ({ role: "statusline", frame, redraws }));
-
-// The bars a session's statusline renders drew, redrawn on events alone.
+// The bars a session's statusline renders drew.
 export const drew = (...frames: FrameSeen[]): readonly FrameSighting[] =>
-  drewAt(ON_EVENTS, ...frames);
+  frames.map((frame) => ({ role: "statusline", frame }));
 
 // The location every fact-level test's own settings chain is read at.
 export const ORIGIN_AT = {
@@ -167,12 +153,10 @@ export const healthyDataEdge = (): Pick<
 });
 
 // One session's statusline frame as daemon-stats reports it: session
-// `sessionId` of the project `projectDir`, drawn a second ago, watched for two
-// minutes, and rendered every `interval` seconds in them.
+// `sessionId` of the project `projectDir`, drawn a second ago.
 export const reportedFrame = (
   frame: FrameSeen,
   claudeConfigDir: string,
-  interval = 1,
   projectDir = "/p",
   sessionId = "s1",
 ) => ({
@@ -182,10 +166,6 @@ export const reportedFrame = (
   projectDir,
   ago: 1,
   sessionId,
-  since: 120,
-  redrawn: Array.from({ length: 119 }, (_, i) => i + 1).filter(
-    (age) => (age - 1) % interval === 0,
-  ),
 });
 
 // That daemon, as `cc-candybar doctor` asks it: one session drawn a second

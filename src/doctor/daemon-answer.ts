@@ -44,20 +44,12 @@ export type TranscriptSightings = ReadonlyArray<
   Pick<RenderSighting, "transcript" | "sessionId" | "ago">
 >;
 
-// What each recent render drew, whose it was, how often its session's bar
-// was redrawn, and where its session reads its settings: the Claude Code
-// directory it ran with and its project.
+// What each recent render drew, whose it was, and where its session reads
+// its settings: the Claude Code directory it ran with and its project.
 export type FrameSightings = ReadonlyArray<
   Pick<
     RenderSighting,
-    | "role"
-    | "frame"
-    | "claudeConfigDir"
-    | "projectDir"
-    | "ago"
-    | "sessionId"
-    | "since"
-    | "redrawn"
+    "role" | "frame" | "claudeConfigDir" | "projectDir" | "ago" | "sessionId"
   >
 >;
 
@@ -268,14 +260,9 @@ export const parseFrameSightings = (
       typeof c.claudeConfigDir === "string" &&
       typeof c.projectDir === "string" &&
       typeof c.sessionId === "string" &&
-      typeof c.since === "number" &&
-      // A record holds its latest render's second, so a list is never empty.
-      Array.isArray(c.redrawn) &&
-      c.redrawn.length > 0 &&
-      c.redrawn.every(Number.isInteger) &&
       isRole(c) &&
       (FRAMES_SEEN as readonly unknown[]).includes(c.frame),
-    "what they drew, when, and from which project",
+    "what they drew and from which project",
   );
 
 // The width half: the terminal-width check's.
