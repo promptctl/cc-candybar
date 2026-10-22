@@ -108,8 +108,8 @@ interface GitCacheEntry {
   readonly repoRoot: string;
 }
 
-// `expired` counts the entries holding a watch but no value: `size - expired`
-// are the values a render can be served from.
+// `expired` counts the entries a change expired: each holds a watch and no
+// value. A `fresh` entry past its TTL is not counted; the next read refetches it.
 export interface GitCacheStats {
   size: number;
   expired: number;
@@ -437,17 +437,13 @@ export class GitDataProvider extends GitService {
     //
     // Only `ok` is cached: absent/failed pass through uncached (the next
     // caller re-fetches, matching the prior null-isn't-cached behavior), and
-    // the outcome carries the reason to each surface's logging edge. The key's
-    // entry goes with it: its watch was taken on a repo this fetch could not
-    // read (a removed worktree, a deleted `.git`), and the next `ok` acquires
-    // one on the repo as it is then.
+    // the outcome carries the reason to each surface's logging edge. An
+    // `absent` repo (a removed worktree, a deleted `.git`) also takes every
+    // entry for it, and their watch, with it; a `failed` read says nothing
+    // about the repo, so its watch stays rather than close and reopen.
     const outcome = await this.inner.getGitInfo(repoRoot, options);
-    if (outcome.kind !== "ok") {
-      if (this.dropEntry(key)) {
-        this.logger("info", `gitCache drop ${key} outcome=${outcome.kind}`);
-      }
-      return outcome;
-    }
+    if (outcome.kind === "absent") this.dropRepo(repoRoot);
+    if (outcome.kind !== "ok") return outcome;
     const info = outcome.value;
 
     // [LAW:decomposition] The inner GitService never resolves the PR — the
@@ -714,13 +710,24 @@ export class GitDataProvider extends GitService {
     }
   }
 
-  // Whether the key held an entry to drop.
-  private dropEntry(key: string): boolean {
+  private dropEntry(key: string): void {
     const entry = this.entries.get(key);
-    if (!entry) return false;
+    if (!entry) return;
     entry.watcher.release();
     this.entries.delete(key);
-    return true;
+  }
+
+  private dropRepo(repoRoot: string): void {
+    let dropped = 0;
+    for (const [key, entry] of this.entries) {
+      if (entry.repoRoot === repoRoot) {
+        this.dropEntry(key);
+        dropped++;
+      }
+    }
+    if (dropped > 0) {
+      this.logger("info", `gitCache drop ${repoRoot} entries=${dropped}`);
+    }
   }
 
   private evictIfNeeded(): void {

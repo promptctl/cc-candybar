@@ -8,7 +8,7 @@ import {
   type GitInfo,
   type PullRequest,
 } from "../src/segments/git";
-import { ABSENT, ok, type Outcome } from "../src/utils/outcome";
+import { ABSENT, failed, ok, type Outcome } from "../src/utils/outcome";
 
 class StubGitService extends GitService {
   public computeCalls: Array<{ workingDir: string; projectDir?: string }> = [];
@@ -91,6 +91,9 @@ class StubGitService extends GitService {
     return root === null ? ABSENT : ok(root);
   }
 
+  // A repo `git status` could not read: the fetch outcome is `failed`.
+  public infoFailure: string | null = null;
+
   override async getGitInfo(
     workingDir: string,
     _options: Parameters<GitService["getGitInfo"]>[1] = {},
@@ -98,6 +101,7 @@ class StubGitService extends GitService {
   ): Promise<Outcome<GitInfo>> {
     if (!(workingDir in this.repoRootByDir)) return ABSENT;
     if (this.repoRootByDir[workingDir] === null) return ABSENT;
+    if (this.infoFailure !== null) return failed(this.infoFailure);
     this.computeCalls.push({ workingDir, projectDir });
     return ok(this.stubInfo);
   }
@@ -835,22 +839,41 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
     expect(counters.watchersClosed).toBe(2);
   });
 
-  test("a refetch that finds no repo drops the entry and releases its watch", async () => {
+  test("a refetch that finds no repo drops every entry for it and releases the watch", async () => {
     const { svc, inner, counters, logs } = counted();
     inner.repoRootByDir["/repo"] = "/repo";
 
-    await svc.getGitInfo("/repo", {}); // resolution is cached from here on
+    // Two option-sets, one watch; resolution is cached from here on.
+    await svc.getGitInfo("/repo", { showSha: true });
+    await svc.getGitInfo("/repo", { showSha: false });
     svc.invalidateRepo("/repo");
     inner.repoRootByDir["/repo"] = null; // the worktree was removed
-    const gone = await svc.getGitInfo("/repo", {});
-    await svc.getGitInfo("/repo", {}); // no entry left: logs nothing more
+    const gone = await svc.getGitInfo("/repo", { showSha: true });
+    await svc.getGitInfo("/repo", { showSha: true }); // nothing left to drop
 
     expect(gone.kind).toBe("absent");
     expect(svc.getStats()).toMatchObject({ size: 0, expired: 0 });
     expect(counters).toEqual({ watchersOpened: 1, watchersClosed: 1 });
     expect(logs.filter((l) => l.startsWith("gitCache drop"))).toEqual([
-      "gitCache drop /repo|{} outcome=absent",
+      "gitCache drop /repo entries=2",
     ]);
+    svc.close();
+  });
+
+  test("a failed refetch keeps the entry and its watch", async () => {
+    const { svc, inner, counters } = counted();
+    inner.repoRootByDir["/repo"] = "/repo";
+
+    await svc.getGitInfo("/repo", {});
+    svc.invalidateRepo("/repo");
+    inner.infoFailure = "git status timed out";
+    const out = await svc.getGitInfo("/repo", {});
+    inner.infoFailure = null;
+    await svc.getGitInfo("/repo", {});
+
+    expect(out.kind).toBe("failed");
+    expect(svc.getStats()).toMatchObject({ size: 1, expired: 0 });
+    expect(counters).toEqual({ watchersOpened: 1, watchersClosed: 0 });
     svc.close();
   });
 
