@@ -542,8 +542,8 @@ export interface DoctorFacts {
 // the truthful thing after a fix has landed but Claude Code has not
 // restarted, naming the file it landed in. A chain that could not be read
 // fails the rows that read it, never the run. `bars`: what the bars whose
-// sessions read this chain drew — a bar's
-// chain is where it sits, so no bar can name a chain the run did not read.
+// sessions read this chain drew — a bar's chain is where it sits, so no bar
+// can name a chain the run did not read.
 export interface SettingsChain {
   readonly at: SettingsChainAt;
   readonly sources: Asked<readonly SettingsSource[]>;
@@ -1283,34 +1283,22 @@ const effectRefresh: Check = {
   label: "effect refresh",
   takesMark: false,
   probe: ({ frames, claudeSettings: { origin, elsewhere }, sighted }) => {
-    const chains = [origin, ...elsewhere];
     // [LAW:one-source-of-truth] Each bar is judged against the chain that
     // redraws it (brandon-doctor-v62x.y5d). The run's own chain first; the
     // first failure leads the others', which follow as `more`, and the fix
     // is the lead's.
-    const verdicts = chains.flatMap(({ sources, bars }) =>
-      chainVerdict(sources, motionOf(bars)),
+    const verdicts = [origin, ...elsewhere].flatMap(
+      ({ sources, bars }) => chainVerdict(sources, barsSeen(bars)) ?? [],
     );
     const [first] = verdicts;
     if (first === undefined) {
+      // No chain redraws every second, and none holds a bar.
       if (frames.kind === "failed") return { ok: false, reason: frames.reason };
-      const all = chains.flatMap((c) => c.bars);
-      const drawn = refreshedFrames(all);
-      if (drawn.some((f) => f.frame === "still")) return { ok: true };
-      const unseen =
-        drawn.length > 0
-          ? drawn.some((f) => f.frame === "drawing")
-            ? "the bar's latest render has not finished"
-            : "the bar's recent renders failed"
-          : all.length > 0
-            ? "only a `cc-candybar frames` display has drawn this bar, not Claude Code's statusline"
-            : sighted.kind !== "recent"
-              ? noRenderOf(sighted)
-              : `no session has drawn a statusline for this daemon in the last ${RECENT_CLIENT_S / 60} minutes`;
-      return {
-        ok: false,
-        reason: `${unseen}, so whether it moves is unknown — run the doctor again once the bar has redrawn`,
-      };
+      return unknownMotion(
+        sighted.kind !== "recent"
+          ? noRenderOf(sighted)
+          : `no session has drawn a statusline for this daemon in the last ${RECENT_CLIENT_S / 60} minutes`,
+      );
     }
     const [lead, ...others] = verdicts.flatMap((v) => (v.ok ? [] : [v]));
     if (lead === undefined) return first;
@@ -1321,25 +1309,61 @@ const effectRefresh: Check = {
   },
 };
 
-// What the moving bars among a chain's statusline renders drew: `moves` when
-// one moves now, `can-move` when one can start moving, else none.
-type Motion = "moves" | "can-move" | null;
-const motionOf = (bars: readonly FrameSighting[]): Motion => {
+// What a chain's bars say about motion: the first that holds, in this order.
+type BarsSeen =
+  | { readonly kind: "moving"; readonly wearing: string }
+  | { readonly kind: "still" }
+  | { readonly kind: "unknown"; readonly unseen: string }
+  | { readonly kind: "none" };
+
+// [LAW:single-enforcer] The one reading of what a chain's bars drew.
+const barsSeen = (bars: readonly FrameSighting[]): BarsSeen => {
   const drawn = refreshedFrames(bars).map((f) => f.frame);
-  return drawn.includes("moves")
-    ? "moves"
-    : drawn.includes("can-move")
-      ? "can-move"
-      : null;
+  if (drawn.includes("moves")) {
+    return {
+      kind: "moving",
+      wearing: "the bar moves (an effect, a fade, or an animated segment)",
+    };
+  }
+  if (drawn.includes("can-move")) {
+    return {
+      kind: "moving",
+      wearing:
+        "the bar can start moving (a globals.effect rule, placements that fade in and out, or a placement with an effect of its own that is not drawn now)",
+    };
+  }
+  if (drawn.includes("still")) return { kind: "still" };
+  if (drawn.includes("drawing")) {
+    return {
+      kind: "unknown",
+      unseen: "the bar's latest render has not finished",
+    };
+  }
+  if (drawn.length > 0) {
+    return { kind: "unknown", unseen: "the bar's recent renders failed" };
+  }
+  if (bars.length > 0) {
+    return {
+      kind: "unknown",
+      unseen:
+        "only a `cc-candybar frames` display has drawn this bar, not Claude Code's statusline",
+    };
+  }
+  return { kind: "none" };
 };
 
-// One settings chain's verdict, or none: a chain whose statusLine redraws
-// every second passes whatever its bars drew, and one asking for less is
-// judged only when a bar it redraws moves or can start to.
+const unknownMotion = (unseen: string): Verdict<never> => ({
+  ok: false,
+  reason: `${unseen}, so whether it moves is unknown — run the doctor again once the bar has redrawn`,
+});
+
+// One settings chain's verdict, or null when it has nothing to judge: a chain
+// whose statusLine redraws every second passes whatever its bars drew, and
+// one asking for less is judged on the bars it redraws.
 function chainVerdict(
   sources: Asked<readonly SettingsSource[]>,
-  motion: Motion,
-): ReadonlyArray<Verdict<never>> {
+  seen: BarsSeen,
+): Verdict<never> | null {
   const statusLine = statusLineOf(sources);
   // [LAW:one-source-of-truth] Claude Code's own reading: a number of
   // seconds, no fewer than the minimum, so the minimum itself is the one
@@ -1351,42 +1375,40 @@ function chainVerdict(
     statusLine.kind === "present" &&
     statusLine.refreshInterval === EFFECT_REFRESH_INTERVAL
   ) {
-    return [
-      {
-        ok: true,
-        note: `statusLine.refreshInterval is ${EFFECT_REFRESH_INTERVAL} in ${statusLine.from.path}`,
-      },
-    ];
+    return {
+      ok: true,
+      note: `statusLine.refreshInterval is ${EFFECT_REFRESH_INTERVAL} in ${statusLine.from.path}`,
+    };
   }
-  if (motion === null) return [];
-  const wearing =
-    motion === "moves"
-      ? "the bar moves (an effect, a fade, or an animated segment)"
-      : "the bar can start moving (a globals.effect rule, placements that fade in and out, or a placement with an effect of its own that is not drawn now)";
+  switch (seen.kind) {
+    case "none":
+      return null;
+    case "still":
+      return { ok: true };
+    case "unknown":
+      return unknownMotion(seen.unseen);
+    case "moving":
+      break;
+  }
+  const { wearing } = seen;
   switch (statusLine.kind) {
     case "unread":
-      return [
-        {
-          ok: false,
-          reason: `${wearing}, and Claude Code's settings could not be read: ${statusLine.reason}`,
-        },
-      ];
+      return {
+        ok: false,
+        reason: `${wearing}, and Claude Code's settings could not be read: ${statusLine.reason}`,
+      };
     case "absent":
-      return [
-        {
-          ok: false,
-          reason: `${wearing}, and no settings file Claude Code reads here sets a statusLine (read: ${statusLine.read.join(", ") || "none"}) — the one that runs the bar comes from --settings, MDM or server-managed settings, which the doctor cannot read; set "refreshInterval": ${EFFECT_REFRESH_INTERVAL} beside its command there`,
-        },
-      ];
+      return {
+        ok: false,
+        reason: `${wearing}, and no settings file Claude Code reads here sets a statusLine (read: ${statusLine.read.join(", ") || "none"}) — the one that runs the bar comes from --settings, MDM or server-managed settings, which the doctor cannot read; set "refreshInterval": ${EFFECT_REFRESH_INTERVAL} beside its command there`,
+      };
     case "not-an-object":
-      return [
-        {
-          ok: false,
-          // `cc-candybar install` writes the user file only, so only there
-          // does re-running it replace the line.
-          reason: `${wearing}, and ${statusLine.from.path} sets statusLine to ${JSON.stringify(statusLine.value)}, not a statusLine object — ${statusLine.from.scope === "user" ? "re-run `cc-candybar install` to write one" : "replace it there with the statusLine object that runs cc-candybar"}`,
-        },
-      ];
+      return {
+        ok: false,
+        // `cc-candybar install` writes the user file only, so only there
+        // does re-running it replace the line.
+        reason: `${wearing}, and ${statusLine.from.path} sets statusLine to ${JSON.stringify(statusLine.value)}, not a statusLine object — ${statusLine.from.scope === "user" ? "re-run `cc-candybar install` to write one" : "replace it there with the statusLine object that runs cc-candybar"}`,
+      };
     case "present": {
       const { from, refreshInterval: interval } = statusLine;
       const why =
@@ -1402,23 +1424,21 @@ function chainVerdict(
       // project-local statusLine holding only an interval would outrank the
       // project's, which holds the command. So for those two the reason
       // says where the line goes.
-      return [
-        doctorWrites(from)
-          ? {
-              ok: false,
-              reason: `${wearing}, but ${why} (statusLine from ${from.path})`,
-              fix: {
-                kind: "claude-settings",
-                file: from,
-                path: ["statusLine", "refreshInterval"],
-                value: EFFECT_REFRESH_INTERVAL,
-              },
-            }
-          : {
-              ok: false,
-              reason: `${wearing}, but ${why} — its statusLine is in ${from.scope === "managed" ? "managed settings" : "the project's shared settings"}, ${from.path}: set "refreshInterval": ${EFFECT_REFRESH_INTERVAL} there`,
+      return doctorWrites(from)
+        ? {
+            ok: false,
+            reason: `${wearing}, but ${why} (statusLine from ${from.path})`,
+            fix: {
+              kind: "claude-settings",
+              file: from,
+              path: ["statusLine", "refreshInterval"],
+              value: EFFECT_REFRESH_INTERVAL,
             },
-      ];
+          }
+        : {
+            ok: false,
+            reason: `${wearing}, but ${why} — its statusLine is in ${from.scope === "managed" ? "managed settings" : "the project's shared settings"}, ${from.path}: set "refreshInterval": ${EFFECT_REFRESH_INTERVAL} there`,
+          };
     }
   }
 }
