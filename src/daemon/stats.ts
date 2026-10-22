@@ -6,6 +6,7 @@ import type { TmuxStatusStats } from "./tmux-status.js";
 import type { TranscriptReads } from "../utils/transcript-fs";
 import type { FeedStats } from "./frame-feed";
 import type { RenderCacheStats } from "./cache/render";
+import type { GitCacheStats } from "./cache/git";
 import type { ProbeArrival } from "../doctor/handler-probe";
 import type { RenderSighting } from "./render-sightings";
 import type { ServingDaemon } from "./limits";
@@ -61,13 +62,7 @@ export interface StatsSnapshot {
     timedOut: number;
     inFlight: number;
   };
-  gitCache: {
-    size: number;
-    hits: number;
-    misses: number;
-    invalidations: number;
-    watchers: number;
-  };
+  gitCache: GitCacheStats;
   usageCache: {
     size: number;
     hits: number;
@@ -257,7 +252,14 @@ export class RuntimeStats {
   // spelling of the type, means a field added here is checked for there.
   static referenceSnapshot(): StatsSnapshot {
     return new RuntimeStats().snapshot({
-      gitCache: { size: 0, hits: 0, misses: 0, invalidations: 0, watchers: 0 },
+      gitCache: {
+        size: 0,
+        expired: 0,
+        hits: 0,
+        misses: 0,
+        invalidations: 0,
+        watchers: 0,
+      },
       usageCache: { size: 0, hits: 0, misses: 0, sweeps: 0 },
       transcriptReads: { reads: 0, bytes: 0, longLines: 0, largestLine: 0 },
       renderCache: {

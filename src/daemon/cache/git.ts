@@ -3,7 +3,12 @@ import path from "node:path";
 import { GitService, type GitInfo, type PullRequest } from "../../segments/git";
 import { ABSENT, ok, type Outcome } from "../../utils/outcome";
 import { quietLogger } from "../../utils/logger";
-import { WatcherRegistry, type WatcherHandle } from "./watchers";
+import {
+  WatcherRegistry,
+  type DirTarget,
+  type WatcherHandle,
+  type WatchTargets,
+} from "./watchers";
 import { TrailingEdge } from "../../utils/trailing-edge";
 
 // Logger callable for cache invalidation / eviction / subscriber-error
@@ -103,6 +108,17 @@ interface GitCacheEntry {
   readonly repoRoot: string;
 }
 
+// `expired` counts the entries holding a watch but no value: `size - expired`
+// are the values a render can be served from.
+export interface GitCacheStats {
+  size: number;
+  expired: number;
+  hits: number;
+  misses: number;
+  invalidations: number;
+  watchers: number;
+}
+
 type GitOptions = NonNullable<Parameters<GitService["getGitInfo"]>[1]>;
 
 type SubscribeCallback = (info: GitInfo | null) => void;
@@ -164,16 +180,21 @@ function mtimeChanged(a: MtimeSnapshot, b: MtimeSnapshot): boolean {
 // `GitService.resolveGitDir(repoRoot)` returns). For a normal repo that's
 // `<repoRoot>/.git`; for a worktree it's the worktree-metadata dir nested
 // under the main repo's `.git/worktrees/`. Either way, `HEAD` and `index`
-// live directly inside `gitDir`, so the file watchers find real files.
+// live directly inside `gitDir`.
+//
+// They are watched as NAMES in `gitDir`, never as files: git replaces both by
+// renaming a `.lock` file over them, and a watch on the file follows the inode
+// git just unlinked — it fires once and never again (measured, macOS). A watch
+// held across refetches would go deaf after the first commit.
 //
 // `refs/heads/` only exists in the main repo's gitDir, not under a worktree's
 // metadata dir. WatcherRegistry would log a warn-level "watch failed" for
 // every worktree if we passed the target unconditionally (the injected dlog
 // surfaces what was previously silent). Check existence here and only include
-// the dir target when it's real — the file watchers on HEAD/index still cover
-// branch and index changes in the worktree case.
-function watcherTargets(gitDir: string) {
-  const dirs: Array<{ path: string }> = [];
+// the dir target when it's real — the `gitDir` watch on HEAD/index still
+// covers branch and index changes in the worktree case.
+function watcherTargets(gitDir: string): WatchTargets {
+  const dirs: DirTarget[] = [{ path: gitDir, filenames: ["HEAD", "index"] }];
   const refsHeads = path.join(gitDir, "refs/heads");
   try {
     if (fs.statSync(refsHeads).isDirectory()) {
@@ -182,10 +203,7 @@ function watcherTargets(gitDir: string) {
   } catch {
     // ENOENT (worktree case) or other fs error — skip the dir target.
   }
-  return {
-    files: [path.join(gitDir, "HEAD"), path.join(gitDir, "index")],
-    dirs,
-  };
+  return { files: [], dirs };
 }
 
 export class GitDataProvider extends GitService {
@@ -280,15 +298,14 @@ export class GitDataProvider extends GitService {
     return this.watchers;
   }
 
-  getStats(): {
-    size: number;
-    hits: number;
-    misses: number;
-    invalidations: number;
-    watchers: number;
-  } {
+  getStats(): GitCacheStats {
+    let expired = 0;
+    for (const entry of this.entries.values()) {
+      if (entry.value.kind === "expired") expired++;
+    }
     return {
       size: this.entries.size,
+      expired,
       hits: this.hits,
       misses: this.misses,
       invalidations: this.invalidations,

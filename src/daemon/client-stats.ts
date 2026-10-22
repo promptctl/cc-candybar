@@ -165,6 +165,7 @@ export function formatStats(s: StatsSnapshot): string {
   lines.push(``);
   lines.push(`gitCache`);
   lines.push(`  size          ${s.gitCache.size}`);
+  lines.push(`  expired       ${s.gitCache.expired}`);
   lines.push(
     `  hit rate      ${fmtRate(s.gitCache.hits, s.gitCache.misses)} (${s.gitCache.hits} / ${s.gitCache.hits + s.gitCache.misses})`,
   );

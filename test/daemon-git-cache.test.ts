@@ -770,7 +770,11 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
     svc.invalidateRepo("/repo");
     svc.invalidateRepo("/repo"); // already expired: counts and logs nothing
 
-    expect(svc.getStats().invalidations).toBe(1);
+    expect(svc.getStats()).toMatchObject({
+      invalidations: 1,
+      size: 1,
+      expired: 1,
+    });
     expect(logs.filter((l) => l.startsWith("gitCache invalidate"))).toEqual([
       "gitCache invalidate /repo expired=1",
     ]);
@@ -779,8 +783,44 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
     const after = await svc.getGitInfo("/repo", {});
     expect(after).toMatchObject({ kind: "ok", value: { branch: "feature" } });
     expect(inner.computeCalls).toHaveLength(2);
-    expect(svc.getStats().size).toBe(1);
+    expect(svc.getStats()).toMatchObject({ size: 1, expired: 0 });
     svc.close();
+  });
+
+  // Git writes HEAD and index by renaming a `.lock` file over them. A watch
+  // held across refetches must hear every such replacement, not just the first.
+  test("the held watch hears every lock-file rename over index and HEAD", async () => {
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), "git-cache-576q-"));
+    const gitDir = path.join(repo, ".git");
+    fs.mkdirSync(gitDir);
+    const replace = (name: string, text: string) => {
+      const lock = path.join(gitDir, `${name}.lock`);
+      fs.writeFileSync(lock, text);
+      fs.renameSync(lock, path.join(gitDir, name));
+    };
+    replace("HEAD", "ref: refs/heads/main\n");
+    replace("index", "0");
+    const { svc, inner, counters } = counted();
+    inner.repoRootByDir[repo] = repo;
+    const invalidatedTo = async (n: number) => {
+      const deadline = Date.now() + 5_000;
+      while (svc.getStats().invalidations < n && Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 20));
+      }
+      expect(svc.getStats().invalidations).toBe(n);
+    };
+    try {
+      const renames = ["index", "index", "HEAD", "index", "HEAD"];
+      for (const [i, name] of renames.entries()) {
+        await svc.getGitInfo(repo, {}); // a fresh value for the rename to expire
+        replace(name, String(i + 1));
+        await invalidatedTo(i + 1);
+      }
+      expect(counters).toEqual({ watchersOpened: 1, watchersClosed: 0 });
+    } finally {
+      svc.close();
+      fs.rmSync(repo, { recursive: true, force: true });
+    }
   });
 
   test("the git cache's own LRU eviction is what releases a watch", async () => {
