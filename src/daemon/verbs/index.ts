@@ -1208,8 +1208,7 @@ function writeReport(ctx: VerbContext, sid: string, facts: DoctorFacts): void {
 // the doctor did not see.
 function clickFacts(ctx: VerbContext, sid: string): DoctorFacts {
   // The session's own renders, read once: whatever its Claude Code sends, it
-  // sends to this session. The click proves its bar is on screen, so each
-  // window ends now (`barsOf`).
+  // sends to this session.
   const scope = {
     kind: "clicked",
     sessionId: sid,

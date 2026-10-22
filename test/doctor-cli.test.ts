@@ -428,16 +428,15 @@ describe("doctorPlan over a real config", () => {
     ).toBe(`✗ config — helper "h" is never called\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width — 120 columns, as this command's terminal measured\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n✓ session data\n`);
   });
 
-  // brandon-effects-2gka.21e, brandon-doctor-v62x.tgp, .5at: what the recent
-  // bars of this Claude Code directory drew decides whether the bar moves,
-  // and how often their renders arrived whether Claude Code redraws it — the
-  // settings file in this shell's CLAUDE_CONFIG_DIR says why, and takes the
-  // fix. A bar rendered every 5 s is redrawn too rarely.
+  // brandon-effects-2gka.21e, brandon-doctor-v62x.tgp: what the recent bars
+  // of this Claude Code directory drew decides whether the bar moves, and the
+  // settings file in this shell's CLAUDE_CONFIG_DIR whether Claude Code
+  // redraws it every second — and takes the fix.
   const drawing = (frame: FrameSeen, claudeConfigDir: string) => async () => ({
     ...(await DAEMON()),
     frames: {
       kind: "ok" as const,
-      value: [reportedFrame(frame, claudeConfigDir, 5)],
+      value: [reportedFrame(frame, claudeConfigDir)],
     },
   });
   const planOver = (daemon: () => Promise<DaemonAnswer>) =>
@@ -486,13 +485,14 @@ describe("doctorPlan over a real config", () => {
         ...(await DAEMON()),
         frames: { kind: "ok", value: frames },
       });
-    // s1: the other project, redrawn every second. s2: this project, every 5 s.
-    const s1 = () => reportedFrame("moves", dir, 1, other, "s1");
-    const s2 = () => reportedFrame("moves", dir, 5, project, "s2");
+    // s1: the other project, whose chain sets 1. s2: this project, whose
+    // chain sets none.
+    const s1 = () => reportedFrame("moves", dir, other, "s1");
+    const s2 = () => reportedFrame("moves", dir, project, "s2");
 
     test("a bar whose project sets the interval passes, though this cwd's chain sets none", async () => {
       expect((await planOver(sessions(s1()))).stdout).toContain(
-        "✓ effect refresh — Claude Code redrew the bar in 60 of the last 60 seconds\n",
+        `✓ effect refresh — statusLine.refreshInterval is 1 in ${path.join(other, ".claude", "settings.local.json")}\n`,
       );
     });
 
@@ -502,9 +502,7 @@ describe("doctorPlan over a real config", () => {
       );
     });
 
-    // Run in a session's shell, the command judges that session's bar alone,
-    // its window ending now — the second since its last render, a second
-    // ago, held none, so 59.
+    // Run in a session's shell, the command judges that session's bar alone.
     // The project a shell's session reads its settings from is the one its
     // render recorded, whichever directory under it the shell has cd'd into.
     test("run in a session, its own chain is the session's project's, not the shell's cwd", () => {
@@ -523,7 +521,9 @@ describe("doctorPlan over a real config", () => {
         project,
         () => ({ columns: 120 }),
       );
-      expect(out.stdout).toContain("✓ effect refresh — Claude Code redrew the bar in 59 of the last 60 seconds\n");
+      expect(out.stdout).toContain(
+        `✓ effect refresh — statusLine.refreshInterval is 1 in ${path.join(other, ".claude", "settings.local.json")}\n`,
+      );
     });
   });
 

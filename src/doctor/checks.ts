@@ -32,12 +32,6 @@ import {
   type TranscriptSaid,
 } from "../daemon/render-sightings.js";
 import type { DeclKind, UnusedDecl } from "../config/unused.js";
-import {
-  REDRAW_WINDOW_S,
-  bySlowest,
-  redrawnEverySecond,
-  slowestOf,
-} from "./redraws.js";
 import type { SightingScope } from "./sightings.js";
 import {
   approachingLimit,
@@ -548,8 +542,8 @@ export interface DoctorFacts {
 // the truthful thing after a fix has landed but Claude Code has not
 // restarted, naming the file it landed in. A chain that could not be read
 // fails the rows that read it, never the run. `bars`: what the bars whose
-// sessions read this chain drew, and how often they were redrawn — a bar's
-// chain is where it sits, so no bar can name a chain the run did not read.
+// sessions read this chain drew — a bar's chain is where it sits, so no bar
+// can name a chain the run did not read.
 export interface SettingsChain {
   readonly at: SettingsChainAt;
   readonly sources: Asked<readonly SettingsSource[]>;
@@ -1283,59 +1277,31 @@ export const refreshedFrames = (
 // its frames, whatever Claude Code's refresh.
 // [LAW:one-source-of-truth] Whether it moves is what the drawn frame says
 // (brandon-doctor-v62x.tgp), not what the config asks for: a template's
-// `frames` — the effort gauge at max — moves the bar with no effect on. And
-// whether Claude Code redraws it is what the render requests' arrivals say
-// (brandon-doctor-v62x.5at, src/doctor/redraws.ts), not a file saying 1:
-// a statusLine from --settings, MDM or server-managed settings outranks every
-// file the doctor reads. A file asking for less still fails the row, since
-// events can fill the arrivals and the fix is right whoever outranks it.
+// `frames` — the effort gauge at max — moves the bar with no effect on.
 const effectRefresh: Check = {
   name: "effectRefresh",
   label: "effect refresh",
   takesMark: false,
   probe: ({ frames, claudeSettings: { origin, elsewhere }, sighted }) => {
-    if (frames.kind === "failed") return { ok: false, reason: frames.reason };
-    const chains = [origin, ...elsewhere];
     // [LAW:one-source-of-truth] Each bar is judged against the chain that
-    // redraws it (brandon-doctor-v62x.y5d): a chain's slowest moving bar
-    // decides that chain's verdict, against that chain's own statusLine.
-    // Slowest chain first: its verdict decides a pass, its failure leads the
-    // others', which follow as `more`, and the fix is the leading failure's.
-    const [slowest, ...slower] = chains
-      .flatMap(({ sources, bars }) => {
-        const [first, ...rest] = refreshedFrames(bars).filter(
-          (f) => f.frame === "moves" || f.frame === "can-move",
-        );
-        if (first === undefined) return [];
-        const decider = slowestOf([first, ...rest]);
-        return [
-          { redraws: decider.redraws, verdict: chainVerdict(sources, decider) },
-        ];
-      })
-      .sort((a, b) => bySlowest(a.redraws, b.redraws));
-    if (slowest === undefined) {
-      const all = chains.flatMap((c) => c.bars);
-      const drawn = refreshedFrames(all);
-      if (drawn.some((f) => f.frame === "still")) return { ok: true };
-      const unseen =
-        drawn.length > 0
-          ? drawn.some((f) => f.frame === "drawing")
-            ? "the bar's latest render has not finished"
-            : "the bar's recent renders failed"
-          : all.length > 0
-            ? "only a `cc-candybar frames` display has drawn this bar, not Claude Code's statusline"
-            : sighted.kind !== "recent"
-              ? noRenderOf(sighted)
-              : `no session has drawn a statusline for this daemon in the last ${RECENT_CLIENT_S / 60} minutes`;
-      return {
-        ok: false,
-        reason: `${unseen}, so whether it moves is unknown — run the doctor again once the bar has redrawn`,
-      };
-    }
-    const [lead, ...others] = [slowest, ...slower].flatMap(({ verdict }) =>
-      verdict.ok ? [] : [verdict],
+    // redraws it (brandon-doctor-v62x.y5d). The run's own chain first; the
+    // first failure leads the others', which follow as `more`, and the fix
+    // is the lead's.
+    const verdicts = [origin, ...elsewhere].flatMap(
+      ({ sources, bars }) => chainVerdict(sources, barsSeen(bars)) ?? [],
     );
-    if (lead === undefined) return slowest.verdict;
+    const [first] = verdicts;
+    if (first === undefined) {
+      // No chain redraws every second, and none holds a bar.
+      if (frames.kind === "failed") return { ok: false, reason: frames.reason };
+      return unknownMotion(
+        sighted.kind !== "recent"
+          ? noRenderOf(sighted)
+          : `no session has drawn a statusline for this daemon in the last ${RECENT_CLIENT_S / 60} minutes`,
+      );
+    }
+    const [lead, ...others] = verdicts.flatMap((v) => (v.ok ? [] : [v]));
+    if (lead === undefined) return first;
     const more = [...new Set(others.map((f) => f.reason))].filter(
       (r) => r !== lead.reason,
     );
@@ -1343,107 +1309,137 @@ const effectRefresh: Check = {
   },
 };
 
-// The verdict of one settings chain on the moving bar it redraws slowest.
+// What a chain's bars say about motion: the first that holds, in this order.
+type BarsSeen =
+  | { readonly kind: "moving"; readonly wearing: string }
+  | { readonly kind: "still" }
+  | { readonly kind: "unknown"; readonly unseen: string }
+  | { readonly kind: "none" };
+
+// [LAW:single-enforcer] The one reading of what a chain's bars drew.
+const barsSeen = (bars: readonly FrameSighting[]): BarsSeen => {
+  const drawn = refreshedFrames(bars).map((f) => f.frame);
+  if (drawn.includes("moves")) {
+    return {
+      kind: "moving",
+      wearing: "the bar moves (an effect, a fade, or an animated segment)",
+    };
+  }
+  if (drawn.includes("can-move")) {
+    return {
+      kind: "moving",
+      wearing:
+        "the bar can start moving (a globals.effect rule, placements that fade in and out, or a placement with an effect of its own that is not drawn now)",
+    };
+  }
+  if (drawn.includes("still")) return { kind: "still" };
+  if (drawn.includes("drawing")) {
+    return {
+      kind: "unknown",
+      unseen: "the bar's latest render has not finished",
+    };
+  }
+  if (drawn.length > 0) {
+    return { kind: "unknown", unseen: "the bar's recent renders failed" };
+  }
+  if (bars.length > 0) {
+    return {
+      kind: "unknown",
+      unseen:
+        "only a `cc-candybar frames` display has drawn this bar, not Claude Code's statusline",
+    };
+  }
+  return { kind: "none" };
+};
+
+const unknownMotion = (unseen: string): Verdict<never> => ({
+  ok: false,
+  reason: `${unseen}, so whether it moves is unknown — run the doctor again once the bar has redrawn`,
+});
+
+// One settings chain's verdict, or null when it has nothing to judge: a chain
+// whose statusLine redraws every second passes whatever its bars drew, and
+// one asking for less is judged on the bars it redraws.
 function chainVerdict(
   sources: Asked<readonly SettingsSource[]>,
-  decider: FrameSighting,
-): Verdict<never> {
-  const wearing =
-    decider.frame === "moves"
-      ? "the bar moves (an effect, a fade, or an animated segment)"
-      : "the bar can start moving (a globals.effect rule, placements that fade in and out, or a placement with an effect of its own that is not drawn now)";
+  seen: BarsSeen,
+): Verdict<never> | null {
   const statusLine = statusLineOf(sources);
-
   // [LAW:one-source-of-truth] Claude Code's own reading: a number of
   // seconds, no fewer than the minimum, so the minimum itself is the one
-  // value that redraws every second. A statusLine the doctor reads asking
-  // for anything else is wrong whatever the arrivals say: event-driven
-  // redraws in a busy turn can fill a window's seconds, so a count can show
-  // a bar redrawn too rarely but never one redrawn by a timer. And setting
-  // the minimum there is right even when something the doctor cannot read
-  // outranks the file. Unset runs on events only; anything under the
-  // minimum or not a number is a value the docs give no meaning, so the
-  // reason names it rather than guess, and the fix overwrites it.
+  // value that redraws every second — and once it is set, nothing the bar
+  // draws needs more. Unset runs on events only; anything under the minimum
+  // or not a number is a value the docs give no meaning, so the reason names
+  // it rather than guess, and the fix overwrites it.
   if (
     statusLine.kind === "present" &&
-    statusLine.refreshInterval !== EFFECT_REFRESH_INTERVAL
+    statusLine.refreshInterval === EFFECT_REFRESH_INTERVAL
   ) {
-    const { from, refreshInterval: interval } = statusLine;
-    const why =
-      interval === undefined
-        ? "its statusLine sets no refreshInterval, so Claude Code redraws it only on events"
-        : typeof interval === "number" && interval > EFFECT_REFRESH_INTERVAL
-          ? `its statusLine redraws it only every ${interval} s`
-          : `its statusLine.refreshInterval is ${JSON.stringify(interval)}, not a number of seconds Claude Code accepts (its minimum is ${EFFECT_REFRESH_INTERVAL})`;
-    // [LAW:single-enforcer] The doctor writes only a file that is the
-    // user's own (`doctorWrites`). Nor can it put the interval alone in a
-    // file it may write: under the scope-wins-whole reading above
-    // (unverified), managed settings outrank every such file, and a
-    // project-local statusLine holding only an interval would outrank the
-    // project's, which holds the command. So for those two the reason says
-    // where the line goes.
-    return doctorWrites(from)
-      ? {
-          ok: false,
-          reason: `${wearing}, but ${why} (statusLine from ${from.path})`,
-          fix: {
-            kind: "claude-settings",
-            file: from,
-            path: ["statusLine", "refreshInterval"],
-            value: EFFECT_REFRESH_INTERVAL,
-          },
-        }
-      : {
-          ok: false,
-          reason: `${wearing}, but ${why} — its statusLine is in ${from.scope === "managed" ? "managed settings" : "the project's shared settings"}, ${from.path}: set "refreshInterval": ${EFFECT_REFRESH_INTERVAL} there`,
-        };
-  }
-
-  // Past here no file the doctor reads asks for less than every second, so
-  // the arrivals decide.
-  const { redraws } = decider;
-  if (redraws.kind === "unseen") {
-    return {
-      ok: false,
-      reason: `${wearing}, and this daemon has watched Claude Code redraw it for only ${redraws.over} of the ${REDRAW_WINDOW_S} seconds its redraw rate is judged over, so whether it is redrawn every second is unknown — run the doctor again once the bar has been on screen for a minute`,
-    };
-  }
-  if (redrawnEverySecond(redraws)) {
     return {
       ok: true,
-      note: `Claude Code redrew the bar in ${redraws.seconds} of the last ${REDRAW_WINDOW_S} seconds`,
+      note: `statusLine.refreshInterval is ${EFFECT_REFRESH_INTERVAL} in ${statusLine.from.path}`,
     };
   }
-
-  const slow = `${wearing}, but Claude Code redrew it in only ${redraws.seconds} of the last ${REDRAW_WINDOW_S} seconds`;
-  const elsewhere = `a statusLine from --settings, MDM or server-managed settings, which the doctor cannot read, runs the bar; set "refreshInterval": ${EFFECT_REFRESH_INTERVAL} beside its command there`;
+  switch (seen.kind) {
+    case "none":
+      return null;
+    case "still":
+      return { ok: true };
+    case "unknown":
+      return unknownMotion(seen.unseen);
+    case "moving":
+      break;
+  }
+  const { wearing } = seen;
   switch (statusLine.kind) {
     case "unread":
       return {
         ok: false,
-        reason: `${slow}, and Claude Code's settings could not be read: ${statusLine.reason}`,
+        reason: `${wearing}, and Claude Code's settings could not be read: ${statusLine.reason}`,
       };
     case "absent":
       return {
         ok: false,
-        reason: `${slow}, and no settings file Claude Code reads here sets a statusLine (read: ${statusLine.read.join(", ") || "none"}) — ${elsewhere}`,
+        reason: `${wearing}, and no settings file Claude Code reads here sets a statusLine (read: ${statusLine.read.join(", ") || "none"}) — the one that runs the bar comes from --settings, MDM or server-managed settings, which the doctor cannot read; set "refreshInterval": ${EFFECT_REFRESH_INTERVAL} beside its command there`,
       };
     case "not-an-object":
       return {
         ok: false,
         // `cc-candybar install` writes the user file only, so only there
         // does re-running it replace the line.
-        reason: `${slow}, and ${statusLine.from.path} sets statusLine to ${JSON.stringify(statusLine.value)}, not a statusLine object — ${statusLine.from.scope === "user" ? "re-run `cc-candybar install` to write one" : "replace it there with the statusLine object that runs cc-candybar"}`,
+        reason: `${wearing}, and ${statusLine.from.path} sets statusLine to ${JSON.stringify(statusLine.value)}, not a statusLine object — ${statusLine.from.scope === "user" ? "re-run `cc-candybar install` to write one" : "replace it there with the statusLine object that runs cc-candybar"}`,
       };
-    case "present":
-      // The file holds the minimum while the bar was redrawn too rarely:
-      // outranked, or set within the window, as by the doctor's own fix,
-      // and the rate seen is from before it took effect. Either way no
-      // file the doctor may write would change it.
-      return {
-        ok: false,
-        reason: `${slow}, though ${statusLine.from.path} sets statusLine.refreshInterval to ${EFFECT_REFRESH_INTERVAL} — set within the last minute, it shows once Claude Code has redrawn the bar for one (restart Claude Code if it does not); otherwise ${elsewhere}`,
-      };
+    case "present": {
+      const { from, refreshInterval: interval } = statusLine;
+      const why =
+        interval === undefined
+          ? "its statusLine sets no refreshInterval, so Claude Code redraws it only on events"
+          : typeof interval === "number" && interval > EFFECT_REFRESH_INTERVAL
+            ? `its statusLine redraws it only every ${interval} s`
+            : `its statusLine.refreshInterval is ${JSON.stringify(interval)}, not a number of seconds Claude Code accepts (its minimum is ${EFFECT_REFRESH_INTERVAL})`;
+      // [LAW:single-enforcer] The doctor writes only a file that is the
+      // user's own (`doctorWrites`). Nor can it put the interval alone in a
+      // file it may write: under the scope-wins-whole reading above
+      // (unverified), managed settings outrank every such file, and a
+      // project-local statusLine holding only an interval would outrank the
+      // project's, which holds the command. So for those two the reason
+      // says where the line goes.
+      return doctorWrites(from)
+        ? {
+            ok: false,
+            reason: `${wearing}, but ${why} (statusLine from ${from.path})`,
+            fix: {
+              kind: "claude-settings",
+              file: from,
+              path: ["statusLine", "refreshInterval"],
+              value: EFFECT_REFRESH_INTERVAL,
+            },
+          }
+        : {
+            ok: false,
+            reason: `${wearing}, but ${why} — its statusLine is in ${from.scope === "managed" ? "managed settings" : "the project's shared settings"}, ${from.path}: set "refreshInterval": ${EFFECT_REFRESH_INTERVAL} there`,
+          };
+    }
   }
 }
 

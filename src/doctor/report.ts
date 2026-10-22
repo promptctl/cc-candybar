@@ -198,13 +198,11 @@ export function dataFields(data: SegmentDataFacts): string {
   return `data=pr:${pr()},rateLimits:${rateLimits()},memento:${memento}`;
 }
 
-// [LAW:nothing-unseen] What the effect-refresh check reasoned over, as three
+// [LAW:nothing-unseen] What the effect-refresh check reasoned over, as two
 // logfmt fields: the frames the statusline renders drew, counted per
 // `FRAMES_SEEN` member in its order — moves/can-move/still/failed/drawing
 // (brandon-doctor-v62x.tgp); `failed` when the renders could not be asked.
-// Then how often each was redrawn (brandon-doctor-v62x.5at): the seconds of
-// the window that held an arrival, or `unseen(<seconds watched>)` — `-` for
-// no statusline render. Then each settings chain read, the run's own first
+// Then each settings chain read, the run's own first
 // (brandon-doctor-v62x.y5d): the scope its statusLine comes from and the
 // refresh interval it holds (`-` for none), `absent` when no file sets one,
 // `not-an-object`, or `failed` when the chain could not be read.
@@ -215,15 +213,12 @@ export function frameFields(
   const chains = [origin, ...elsewhere];
   const lines = chains.map(({ sources }) => statusLineValue(sources)).join(",");
   if (frames.kind === "failed") {
-    return `frames=failed redrawn=failed chains=${valueOf(lines)}`;
+    return `frames=failed chains=${valueOf(lines)}`;
   }
   const drawn = refreshedFrames(chains.flatMap((c) => c.bars));
   const count = (seen: FrameSeen) =>
     drawn.filter((f) => f.frame === seen).length;
-  const redrawn = drawn.map(({ redraws }) =>
-    redraws.kind === "seen" ? `${redraws.seconds}` : `unseen(${redraws.over})`,
-  );
-  return `frames=${FRAMES_SEEN.map(count).join("/")} redrawn=${redrawn.join(",") || "-"} chains=${valueOf(lines)}`;
+  return `frames=${FRAMES_SEEN.map(count).join("/")} chains=${valueOf(lines)}`;
 }
 
 // One chain's statusLine, as the `chains=` field spells it. The interval is

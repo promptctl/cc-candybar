@@ -62,8 +62,6 @@ describe("RuntimeStats.snapshot", () => {
           frame: "still",
           role: "statusline",
           ago: 4,
-          since: 30,
-          redrawn: [4, 5],
         },
       ],
       bundle: "/opt/cc/dist/index.mjs",
@@ -83,8 +81,6 @@ describe("RuntimeStats.snapshot", () => {
           frame: "still",
           role: "statusline",
           ago: 4,
-          since: 30,
-          redrawn: [4, 5],
         },
     ]);
     expect(snap.bundle).toBe("/opt/cc/dist/index.mjs");

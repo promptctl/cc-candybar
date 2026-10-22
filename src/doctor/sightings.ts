@@ -13,7 +13,6 @@ import type {
   RenderSighting,
 } from "../daemon/render-sightings.js";
 import { RECENT_CLIENT_S } from "./checks.js";
-import { redrawsOf } from "./redraws.js";
 
 // How a doctor click reached the daemon: a link the terminal drew, delivered
 // by the URL handler (its version, or null from one too old to report it), or
@@ -74,45 +73,28 @@ export const ownProject = (
   return own === undefined ? cwd : own.projectDir;
 };
 
-// One bar a sighting drew, how often Claude Code redrew it, and where the
-// settings that redraw it are read: the session's project, and the Claude
-// Code directory it runs with.
+// One bar a sighting drew, and where the settings that redraw it are read:
+// the session's project, and the Claude Code directory it runs with.
 export interface SightedBar extends FrameSighting {
   readonly projectDir: string;
   readonly claudeConfigDir: string;
 }
 
-// The bars of a scope's sightings. Each window ends now for a bar known to be
-// on screen, so the silence since its last render counts against its redraw
-// rate; any other ends at its last render, since a session that closed and
-// one idle on events alone look the same from the daemon (src/doctor/redraws.ts).
+// The bars of a scope's sightings.
 export const barsOf = (
   scope: SightingScope,
   sightings: ReadonlyArray<
     Pick<
       RenderSighting,
-      | "sessionId"
-      | "ago"
-      | "role"
-      | "frame"
-      | "since"
-      | "redrawn"
-      | "projectDir"
-      | "claudeConfigDir"
+      "sessionId" | "ago" | "role" | "frame" | "projectDir" | "claudeConfigDir"
     >
   >,
 ): readonly SightedBar[] =>
   inScope(scope, sightings).map(
-    ({ role, frame, since, redrawn, projectDir, claudeConfigDir }) => ({
+    ({ role, frame, projectDir, claudeConfigDir }) => ({
       role,
       frame,
       projectDir,
       claudeConfigDir,
-      // A record holds its latest render's second, so `min` is defined.
-      redraws: redrawsOf(
-        redrawn,
-        since,
-        scope.kind === "recent" ? Math.min(...redrawn) : 0,
-      ),
     }),
   );

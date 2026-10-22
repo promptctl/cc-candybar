@@ -21,7 +21,6 @@ import { installFacts, type InstallEdge } from "../src/doctor/edge";
 import { installFields } from "../src/doctor/report";
 import { parseDaemonClients } from "../src/doctor/daemon-answer";
 import { RenderSightings, SIGHTINGS_KEPT } from "../src/daemon/render-sightings";
-import { REDRAW_WINDOW_S } from "../src/doctor/redraws";
 import { parseClientHints } from "../src/daemon/protocol";
 import type { Instant } from "../src/utils/instant";
 import { HEALTHY_FACTS, HEALTHY_INSTALL_EDGE, renderSaid } from "./helpers/doctor-facts";
@@ -448,8 +447,8 @@ describe("RenderSightings: each session's latest client", () => {
     sightings.see("s1", renderSaid(client(BUNDLE)), at(105), 105);
     sightings.see("s2", renderSaid(undefined), at(103), 103);
     expect(sightings.list(at(110))).toEqual([
-      { ...renderSaid(client(BUNDLE)), role: "statusline", sessionId: "s1", ago: 5, since: 10, redrawn: [10, 5] },
-      { ...renderSaid(null), role: "statusline", sessionId: "s2", ago: 7, since: 7, redrawn: [7] },
+      { ...renderSaid(client(BUNDLE)), role: "statusline", sessionId: "s1", ago: 5 },
+      { ...renderSaid(null), role: "statusline", sessionId: "s2", ago: 7 },
     ]);
   });
 
@@ -458,7 +457,7 @@ describe("RenderSightings: each session's latest client", () => {
     sightings.see("s1", renderSaid(client(BUNDLE)), at(100), 100);
     sightings.see("s2", renderSaid(undefined), at(104), 104);
     expect(sightings.ofSession("s1", at(110))).toEqual([
-      { ...renderSaid(client(BUNDLE)), role: "statusline", sessionId: "s1", ago: 10, since: 10, redrawn: [10] },
+      { ...renderSaid(client(BUNDLE)), role: "statusline", sessionId: "s1", ago: 10 },
     ]);
     expect(sightings.ofSession("restarted-under-me", at(110))).toEqual([]);
   });
@@ -489,7 +488,7 @@ describe("RenderSightings: each session's latest client", () => {
     }
     const kept = sightings.list(at(1000));
     expect(kept).toHaveLength(SIGHTINGS_KEPT);
-    expect(kept[0]).toEqual({ ...renderSaid(null), role: "statusline", sessionId: "s1", ago: 999, since: 999, redrawn: [999] });
+    expect(kept[0]).toEqual({ ...renderSaid(null), role: "statusline", sessionId: "s1", ago: 999 });
   });
 
   // Renders settle out of order: an older request settling after a newer one
@@ -499,34 +498,8 @@ describe("RenderSightings: each session's latest client", () => {
     sightings.see("s1", renderSaid(client(BUNDLE)), at(105), 2);
     sightings.see("s1", renderSaid(client("/old/dist/index.mjs")), at(100), 1);
     expect(sightings.list(at(110))).toEqual([
-      { ...renderSaid(client(BUNDLE)), role: "statusline", sessionId: "s1", ago: 5, since: 5, redrawn: [5] },
+      { ...renderSaid(client(BUNDLE)), role: "statusline", sessionId: "s1", ago: 5 },
     ]);
-  });
-
-  // brandon-doctor-v62x.5at: the seconds a session's requests arrived in,
-  // what the effect-refresh check counts.
-  test("a request's arrival and its settling count its second once", () => {
-    const sightings = new RenderSightings();
-    sightings.see("s1", renderSaid(undefined), at(100.2), 1);
-    sightings.see("s1", { ...renderSaid(undefined), frame: "moves" }, at(100.2), 1);
-    sightings.see("s1", renderSaid(undefined), at(100.7), 2);
-    sightings.see("s1", renderSaid(undefined), at(101.1), 3);
-    expect(sightings.list(at(102.5))).toMatchObject([
-      { since: 102.5 - 100.2, redrawn: [2, 1] },
-    ]);
-  });
-
-  test("the seconds kept are the window ending at the newest arrival", () => {
-    const sightings = new RenderSightings();
-    for (let t = 0; t <= 2 * REDRAW_WINDOW_S; t++) {
-      sightings.see("s1", renderSaid(undefined), at(1000 + t), t);
-    }
-    const [seen] = sightings.list(at(1000 + 2 * REDRAW_WINDOW_S));
-    expect(seen!.redrawn).toEqual(
-      Array.from({ length: REDRAW_WINDOW_S }, (_, i) => REDRAW_WINDOW_S - 1 - i),
-    );
-    // The record still began with the first.
-    expect(seen!.since).toBe(2 * REDRAW_WINDOW_S);
   });
 });
 

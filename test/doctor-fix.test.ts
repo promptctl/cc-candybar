@@ -7,7 +7,7 @@ import { execFileSync } from "node:child_process";
 // only ever asked when there is a server to ask. The settings file is the one
 // in the Claude Code directory the client's `claudeConfigDir` hint names.
 
-import { EMPTY_STORES, emptyStores, healthyDaemonEdge, healthyDataEdge, noManagedSettings, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, HEALTHY_FACTS, CARRIED, NAMED, STILL, drew, drewAt, sightedIn, EVERY_SECOND } from "./helpers/doctor-facts";
+import { EMPTY_STORES, emptyStores, healthyDaemonEdge, healthyDataEdge, noManagedSettings, HEALTHY_SERVING, HEALTHY_INSTALL_EDGE, HEALTHY_FACTS, CARRIED, NAMED, STILL, drew, sightedIn } from "./helpers/doctor-facts";
 import type { FrameSighting } from "../src/daemon/render-sightings";
 import fs from "node:fs";
 import os from "node:os";
@@ -227,22 +227,10 @@ describe("applyFix (effectRefresh)", () => {
       model: "opus",
     });
     assertOnlyInserted(before, text, /,\s*"refreshInterval": 1/);
-    // The rate seen is from before the fix: the row says the file is set,
-    // and offers no second fix (brandon-doctor-v62x.5at).
     expect(check.probe(after)).toEqual({
-      ok: false,
-      reason: expect.stringContaining(
-        `though ${settingsIn(conf)} sets statusLine.refreshInterval to 1 — set within the last minute, it shows once Claude Code has redrawn the bar for one`,
-      ),
+      ok: true,
+      note: `statusLine.refreshInterval is 1 in ${settingsIn(conf)}`,
     });
-    // Once Claude Code redraws every second, the row passes.
-    const { origin } = after.claudeSettings;
-    expect(
-      check.probe({
-        ...after,
-        claudeSettings: { ...after.claudeSettings, origin: { ...origin, bars: drewAt(EVERY_SECOND, "moves") } },
-      }),
-    ).toMatchObject({ ok: true });
   });
 
   test("a longer interval is overwritten in place", () => {
@@ -311,14 +299,14 @@ describe("gatherFacts: a settings chain per location", () => {
     const local = path.join(otherProject(), ".claude", "settings.local.json");
     fs.mkdirSync(path.dirname(local), { recursive: true });
     fs.writeFileSync(local, `{ "statusLine": { "command": "x" } }\n`);
-    const facts = withBars(conf, [otherProject(), drewAt(EVERY_SECOND, "moves")]);
+    const facts = withBars(conf, [otherProject(), drew("moves")]);
     const check = checkByName("effectRefresh")!;
     const verdict = check.probe(facts);
     if (verdict.ok || verdict.fix === undefined) throw new Error("no fix");
     expect(verdict.fix).toMatchObject({ file: { scope: "project-local", path: local } });
     expect(check.probe(fixed(applyFix(emptyStores(), verdict.fix, facts)))).toEqual({
       ok: true,
-      note: "Claude Code redrew the bar in 58 of the last 60 seconds",
+      note: `statusLine.refreshInterval is 1 in ${local}`,
     });
   });
 });
@@ -601,8 +589,8 @@ describe("gatherFacts", () => {
       expect(JSON.parse(fs.readFileSync(shared, "utf8")).statusLine.refreshInterval).toBe(1);
       expect(JSON.parse(fs.readFileSync(settingsIn(conf), "utf8"))).toEqual(line());
       expect(check.probe(after)).toEqual({
-        ok: false,
-        reason: expect.stringContaining(`though ${shared} sets statusLine.refreshInterval to 1`),
+        ok: true,
+        note: `statusLine.refreshInterval is 1 in ${shared}`,
       });
     });
   });

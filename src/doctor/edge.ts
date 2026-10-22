@@ -671,7 +671,7 @@ function settingsChains(
   ): SettingsChain => ({
     at,
     sources: readSettings(at),
-    bars: its.map(({ role, frame, redraws }) => ({ role, frame, redraws })),
+    bars: its.map(({ role, frame }) => ({ role, frame })),
   });
   return {
     origin: chain(originAt, atOrigin),
