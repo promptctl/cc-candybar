@@ -39,7 +39,6 @@ import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
 import {
   barRoot,
   bandFor,
-  bandItemFor,
   bandRoot,
   decorFor,
   decorationFor,
@@ -303,7 +302,7 @@ describe("candybar-render-ai7.9 — the bundled 🍫 → 🎨 look → picker ch
           { index: line, count: lines.length },
           { index, count: cells.length },
         ]);
-        const item = bandItemFor(palette, band0, address, ColorDepth.TRUECOLOR);
+        const item = decorationFor(palette, { kind: "band", band: band0, address: address }, ColorDepth.TRUECOLOR).tint;
         expect([name, rt.bgOf(name)]).toEqual([name, item.hex]);
         expect([name, rt.fgOf(name)]).toEqual([name, textOn(palette, item, ColorDepth.TRUECOLOR).hex]);
       }
@@ -322,7 +321,7 @@ describe("candybar-render-ai7.9 — the bundled 🍫 → 🎨 look → picker ch
       expect([name, rt.bgOf(name)]).toEqual([name, rt.expectedTint(name)]);
       expect([name, rt.fgOf(name)]).toEqual([
         name,
-        textOn(palette, bandItemFor(palette, band1, regionAddress(rt, name), ColorDepth.TRUECOLOR), ColorDepth.TRUECOLOR).hex,
+        textOn(palette, decorationFor(palette, { kind: "band", band: band1, address: regionAddress(rt, name) }, ColorDepth.TRUECOLOR).tint, ColorDepth.TRUECOLOR).hex,
       ]);
     }
 
@@ -339,7 +338,7 @@ describe("candybar-render-ai7.9 — the bundled 🍫 → 🎨 look → picker ch
     expect(rt.bgOf(control)).toBe(bandFor(palette, band2, ColorDepth.TRUECOLOR).state.hex);
     const list = "candybar.list.effect.0";
     expect(rt.bgOf(list)).toBe(
-      bandItemFor(palette, band2, regionAddress(rt, list), ColorDepth.TRUECOLOR).hex,
+      decorationFor(palette, { kind: "band", band: band2, address: regionAddress(rt, list) }, ColorDepth.TRUECOLOR).tint.hex,
     );
 
     // The ⚙ beside the theme control sits on the door's first line, a trigger
@@ -357,7 +356,7 @@ describe("candybar-render-ai7.9 — the bundled 🍫 → 🎨 look → picker ch
       expect([name, rt.bgOf(name)]).toEqual([name, rt.expectedTint(name)]);
       expect([name, rt.fgOf(name)]).toEqual([
         name,
-        textOn(palette, bandItemFor(palette, band1, regionAddress(rt, name), ColorDepth.TRUECOLOR), ColorDepth.TRUECOLOR).hex,
+        textOn(palette, decorationFor(palette, { kind: "band", band: band1, address: regionAddress(rt, name) }, ColorDepth.TRUECOLOR).tint, ColorDepth.TRUECOLOR).hex,
       ]);
     }
     const style = "candybar.style";
@@ -366,7 +365,7 @@ describe("candybar-render-ai7.9 — the bundled 🍫 → 🎨 look → picker ch
     expect(rt.bgOf(style)).toBe(bandFor(palette, band2, ColorDepth.TRUECOLOR).state.hex);
     const styles = "candybar.list.style.0";
     expect(rt.bgOf(styles)).toBe(
-      bandItemFor(palette, band2, regionAddress(rt, styles), ColorDepth.TRUECOLOR).hex,
+      decorationFor(palette, { kind: "band", band: band2, address: regionAddress(rt, styles) }, ColorDepth.TRUECOLOR).tint.hex,
     );
     rt.dispose();
   });
@@ -495,7 +494,7 @@ describe("candybar-render-ai7.9 — a group's toggle is a trigger", () => {
     expect(rt.bgOf("groups.inner")).toBe(band1.state.hex);
     expect(rt.bgOf("d")).toBe(rt.expectedTint("d"));
     expect(rt.bgOf("d")).toBe(
-      bandItemFor(palette, nested, regionAddress(rt, "d"), ColorDepth.TRUECOLOR).hex,
+      decorationFor(palette, { kind: "band", band: nested, address: regionAddress(rt, "d") }, ColorDepth.TRUECOLOR).tint.hex,
     );
     rt.dispose();
   });

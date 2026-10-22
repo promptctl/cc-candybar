@@ -109,7 +109,7 @@ export function bandItemStyle(
 ): Style {
   return stateCell(
     active.palette,
-    bandItemFor(active.palette, active.disclosure, [step], drawnAt),
+    bandItemFor(active.palette, active.disclosure, step, drawnAt),
     drawnAt,
   );
 }

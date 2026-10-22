@@ -1399,29 +1399,44 @@ function planeFloors(
 }
 
 /**
- * The colour of the item at `address` — its steps from the band's root, each
- * placed by its parent's own distribution — in the band `disclosure` opens:
- * one of the band's two `items`, picked by the step its own parent placed it
- * by, as the bar's cell picks its shade (`decorEntryFor`) — one placement
- * mechanism at every level. Over two items `inBin` is a van der Corput
- * placement's parity, so consecutive cells of a row alternate whatever its
- * length; a picker's option is one step, its index over the WHOLE option
- * domain, so paging never recolours it. Like a bar cell's, an item's colour is
- * a function of its address: a sibling hiding recolours nobody, so the two
- * cells either side of a hidden one, or neighbours an authored distribution
- * places in one bin, wear one item and are joined by the joiner's divider.
+ * The colour of the item `place` places in the band `disclosure` opens: one of
+ * the band's two `items`, picked by that step as the bar's cell picks its
+ * shade (`decorEntryFor`) — one placement mechanism at every level. Over two
+ * items `inBin` is a van der Corput placement's parity, so consecutive cells
+ * of a row alternate whatever its length; a picker's option is one step, its
+ * index over the WHOLE option domain, so paging never recolours it; an absent
+ * step (a body that is one segment) is placed where a first child is. Like a
+ * bar cell's, an item's colour is a function of its place: a sibling hiding
+ * recolours nobody, so the two cells either side of a hidden one, or
+ * neighbours an authored distribution places in one bin, wear one item and are
+ * joined by the joiner's divider.
  */
 export function bandItemFor(
   palette: Palette,
   disclosure: Disclosure,
-  address: readonly PlacedStep[],
+  place: PlacedStep | undefined,
   drawnAt: ColorDepth,
 ): ColorRgba {
   return vocabularySelect(
     bandFor(palette, disclosure, drawnAt).items,
-    address.at(-1),
+    place,
     inBin,
   );
+}
+
+/**
+ * The step that places a band node along its band: the address as far as its
+ * cell — the first step on the cell axis, where the bar finds a cell too
+ * (`rowAndCell`) — and that part's last step. So whatever is nested inside a
+ * cell (edit chrome's unit around a content cell, an authored container) wears
+ * that cell's item, as on the bar, and a node that is a row by itself is
+ * placed by its row. Reading the address's last step instead put every content
+ * cell of a user's body after the first on one item: under edit chrome each is
+ * the second child of its unit.
+ */
+function bandPlace(address: Address): AddressStep | undefined {
+  const cell = address.findIndex((step) => step.axis === "cell");
+  return (cell === -1 ? address : address.slice(0, cell + 1)).at(-1);
 }
 
 // --- Regions -------------------------------------------------------------------
@@ -1523,7 +1538,7 @@ export function decorationFor(
     }
     case "band": {
       const { band, address } = region;
-      const tint = bandItemFor(palette, band, address, drawnAt);
+      const tint = bandItemFor(palette, band, bandPlace(address), drawnAt);
       return {
         tint,
         text: textOn(palette, tint, drawnAt),

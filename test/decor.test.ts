@@ -1103,31 +1103,41 @@ describe("a band is a plane", () => {
     expect(checked).toBeGreaterThan(LINEAGES.length);
   });
 
-  test("an item wears one of its band's two items, picked by the step its own parent placed it by", () => {
+  test("an item wears one of its band's two items, picked by the step that places it along its row", () => {
     const disclosure: Disclosure = { hue: "primary", depth: 0, ground: FIRST_ROW };
     const at = (index: number, count: number): PlacedStep => ({ index, count, distribution: VDC });
+    const row = (index: number, count: number): AddressStep => ({ ...at(index, count), axis: "row" });
+    const cell = (index: number, count: number): AddressStep => ({ ...at(index, count), axis: "cell" });
     for (const palette of THEMES) {
       const { items } = bandFor(palette, disclosure, ColorDepth.TRUECOLOR);
-      const item = (address: readonly PlacedStep[]) =>
-        bandItemFor(palette, disclosure, address, ColorDepth.TRUECOLOR).hex;
+      const [low, high] = [items[0]!.hex, items[1]!.hex];
+      const item = (place: PlacedStep | undefined) =>
+        bandItemFor(palette, disclosure, place, ColorDepth.TRUECOLOR).hex;
+      const inBand = (address: Address) =>
+        decorationFor(palette, { kind: "band", band: disclosure, address }, ColorDepth.TRUECOLOR).tint.hex;
       // Consecutive cells of a row alternate, however long the row — the
       // seams a row draws are between neighbours.
       for (const count of [2, 5, 12]) {
-        const row = Array.from({ length: count }, (_, index) => item([at(index, count)]));
-        expect(row).toEqual(row.map((_, index) => items[index % 2]!.hex));
+        const cells = Array.from({ length: count }, (_, index) => item(at(index, count)));
+        expect(cells).toEqual(cells.map((_, index) => items[index % 2]!.hex));
       }
-      // A cell of a row inside a body is picked by its own step, not its row's:
+      // A cell of a row inside a body is picked by its cell, not its row:
       // rows 0 and 1 of a body deal their cells alike.
       for (const r of [0, 1]) {
-        expect([0, 1, 2].map((c) => item([at(r, 2), at(c, 3)]))).toEqual(
-          [items[0]!.hex, items[1]!.hex, items[0]!.hex],
-        );
+        expect([0, 1, 2].map((c) => inBand([row(r, 2), cell(c, 3)]))).toEqual([low, high, low]);
       }
+      // Whatever is nested inside a cell wears that cell's item: edit chrome
+      // wraps every content cell of a user's body in a unit (✚, label, the
+      // cell, ✚), so the cell is the unit's second child whichever cell it is.
+      expect([0, 1, 2].map((c) => inBand([cell(c, 3), cell(1, 4)]))).toEqual([low, high, low]);
+      // A segment that is a row by itself is placed by its row.
+      expect([0, 1].map((r) => inBand([row(r, 2)]))).toEqual([low, high]);
       // A body that is one segment is the low item, beside its ✕.
-      expect(item([])).toBe(items[0]!.hex);
+      expect(inBand([])).toBe(low);
+      expect(item(undefined)).toBe(low);
       // A picker's option is its index over the whole domain: the page it is
       // drawn on (the count it is placed among) never recolours it.
-      expect(item([at(7, 8)])).toBe(item([at(7, 40)]));
+      expect(item(at(7, 8))).toBe(item(at(7, 40)));
     }
   });
 
@@ -1144,9 +1154,7 @@ describe("a band is a plane", () => {
         const cells = [
           plane,
           ...[0, 1, 2, 3, 4, 5].map((index) =>
-            bandItemFor(palette, disclosure, [
-              { index, count: 6, distribution: DISTRIBUTIONS[DEFAULT_DISTRIBUTION] },
-            ], ColorDepth.TRUECOLOR),
+            bandItemFor(palette, disclosure, { index, count: 6, distribution: DISTRIBUTIONS[DEFAULT_DISTRIBUTION] }, ColorDepth.TRUECOLOR),
           ),
         ];
         for (const cell of cells) {
@@ -1361,7 +1369,7 @@ describe("a band item is drawn, never thrown — the settings controls are band 
         );
       }
       for (let index = 0; index < 6; index++) {
-        expect(() => bandItemFor(washed, disclosure, [{ index, count: 6, distribution: VDC }], drawnAt)).not.toThrow();
+        expect(() => bandItemFor(washed, disclosure, { index, count: 6, distribution: VDC }, drawnAt)).not.toThrow();
       }
     }
   });

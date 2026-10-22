@@ -515,24 +515,32 @@ describe("candybar-render-ai7.8 — `distribution` is authored per placer", () =
     }`;
     build(nested("")).dispose();
     expect(() => build(nested(", distribution: 'monotonic'"))).toThrow(
-      /sets "distribution" on a container inside a bar cell/,
+      /sets "distribution" on a container inside a cell/,
     );
   });
 
-  test("a distribution in a body on a container with no segment child is a load error: a body's cells read their own step", () => {
-    const body = (inner: string, outer: string): string => `{
+  test("in a body, a distribution is refused where nothing reads it: inside a cell, or on a vertical container of rows that are containers", () => {
+    const body = (tree: string): string => `{
       globals: { palette: '${THEME}' },
       variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
-      segments: { a: { template: 'A' }, b: { template: 'B' } },
+      segments: { a: { template: 'A' }, b: { template: 'B' }, c: { template: 'C' } },
       root: { v: [
-        { kind: 'group', name: 'more', label: 'more', open: true,
-          children: [ { v: [ { h: ['a', 'b']${inner} } ]${outer} } ] },
+        { kind: 'group', name: 'more', label: 'more', open: true, children: [ ${tree} ] },
       ] },
     }`;
-    // On the container whose children are the segments, it places them.
-    build(body(", distribution: 'monotonic'", "")).dispose();
-    expect(() => build(body("", ", distribution: 'monotonic'"))).toThrow(
-      /sets "distribution" on a container inside a disclosure body none of whose children is a segment/,
+    const M = ", distribution: 'monotonic'";
+    // On the row whose children are the cells, it places them — even when a
+    // cell is itself a container, since a cell's place is read whatever it holds.
+    build(body(`{ v: [ { h: ['a', 'b']${M} } ] }`)).dispose();
+    build(body(`{ h: [ { v: ['a'] }, { v: ['b'] } ]${M} }`)).dispose();
+    // On a vertical container holding a segment row of its own, it places that row.
+    build(body(`{ v: [ 'c', { h: ['a', 'b'] } ]${M} }`)).dispose();
+    expect(() => build(body(`{ v: [ { h: ['a', 'b'] } ]${M} }`))).toThrow(
+      /sets "distribution" on a vertical container inside a disclosure body none of whose children is a segment/,
+    );
+    // Inside a cell of a body it places nothing, as on the bar.
+    expect(() => build(body(`{ h: [ 'c', { h: ['a', 'b']${M} } ] }`))).toThrow(
+      /sets "distribution" on a container inside a cell/,
     );
   });
 
@@ -637,7 +645,7 @@ describe("an open band whose plane stands on its trigger", () => {
     ]),
   );
 
-  test("still renders its body, and reports the plane once", () => {
+  test("still renders its body, and reports the plane and each seam it leaves short, once", () => {
     const config = parseAndValidate(
       "<test>",
       `{
@@ -672,6 +680,20 @@ describe("an open band whose plane stands on its trigger", () => {
       {
         kind: "band-floor",
         message: expect.stringMatching(/^theme "washed": an open band's plane stands ΔE 0\.\d{3} off the trigger that opened it as drawn at depth TRUECOLOR, under the 0\.1 that tells them apart; another style clears it$/),
+      },
+      // Washed's accent and background are one white, so the band's trigger
+      // and both its items are that white too: every seam among them is short.
+      {
+        kind: "band-floor",
+        message: `theme "washed": an open band's trigger and low item stand ΔE 0.000 apart as drawn at depth TRUECOLOR, under the 0.04 below which two cells in those colours are joined by a divider and read as one`,
+      },
+      {
+        kind: "band-floor",
+        message: `theme "washed": an open band's trigger and high item stand ΔE 0.000 apart as drawn at depth TRUECOLOR, under the 0.04 below which two cells in those colours are joined by a divider and read as one`,
+      },
+      {
+        kind: "band-floor",
+        message: `theme "washed": an open band's low item and high item stand ΔE 0.000 apart as drawn at depth TRUECOLOR, under the 0.04 below which two cells in those colours are joined by a divider and read as one`,
       },
     ]);
     registry.dispose();

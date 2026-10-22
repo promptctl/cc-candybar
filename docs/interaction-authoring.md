@@ -2009,9 +2009,13 @@ its position (the convention stated above every example): the placement of
 its row among the rows chooses the hue, and its placement among the cells of
 that row chooses the shade. A container nested inside a cell does not re-place
 the bar — everything in it wears that cell's hue and shade, so a `distribution`
-there is a load error (`sets "distribution" on a container inside a bar cell`)
-— though inside a disclosure body every level still places its cells along
-the band.
+there is a load error (`sets "distribution" on a container inside a cell`).
+A disclosure body is read the same way: its items are placed along their
+rows, each cell wearing one of the band's two item colours and everything
+nested in a cell wearing that cell's, so a `distribution` inside a body's cell
+is the same load error, and one on a body's vertical container none of whose
+children is a segment is refused too (`sets "distribution" on a vertical
+container inside a disclosure body none of whose children is a segment`).
 `distribution` is the one field that says *how* a placer spreads those
 positions across the vocabulary. There are two kinds of placer and one field:
 
