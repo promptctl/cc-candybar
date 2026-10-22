@@ -1,3 +1,9 @@
+## [1.155.0](https://github.com/promptctl/cc-candybar/compare/v1.154.1...v1.155.0) (2026-10-22)
+
+### Features
+
+* **lanes:** lane C draws the animated bar in the tmux status line too ([#405](https://github.com/promptctl/cc-candybar/issues/405)) ([3d7e291](https://github.com/promptctl/cc-candybar/commit/3d7e2919e22c42034ad5d1586465a83a93f0e78c))
+
 ## [1.154.1](https://github.com/promptctl/cc-candybar/compare/v1.154.0...v1.154.1) (2026-10-21)
 
 ### Bug Fixes
