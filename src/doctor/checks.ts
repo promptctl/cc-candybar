@@ -1115,12 +1115,16 @@ const daemon: Check = {
           `daemon ${p.pid} (started ${p.started}, rss ${mb(p.rss)} MB${p.ppid === 1 ? "" : `, child of ${p.ppid}`}) runs beside the one serving the bar (${pid}) — \`kill ${p.pid}\``,
       ),
       // [LAW:no-silent-failure] RSS standing in for the platform's charge is
-      // the limit judging what macOS has already reclaimed — the very
-      // misjudgment the charge exists to end — so it is a finding, near the
-      // limit or not.
+      // the limit judging an estimate — or, with no gap yet read, what macOS
+      // has already reclaimed, the very misjudgment the charge exists to end —
+      // so it is a finding, near the limit or not.
       ...(memory.kind === "measured" && memory.charge.kind === "stand-in"
         ? [
-            `the daemon could not read what macOS charges it (${memory.charge.unread}), so its memory limit judges RSS, which counts pages macOS has reclaimed`,
+            `the daemon could not read what macOS charges it (${memory.charge.unread}), so its memory limit judges ${
+              memory.charge.gap !== 0
+                ? `RSS less the ${mb(memory.charge.gap)} MB it last ran over that charge, an estimate`
+                : "RSS, which counts pages macOS has reclaimed"
+            }`,
           ]
         : []),
       ...(memory.kind === "measured" &&

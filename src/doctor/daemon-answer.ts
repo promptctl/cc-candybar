@@ -127,12 +127,14 @@ const isPostMortem = (m: unknown): m is PostMortem => {
 };
 
 // A reading as the daemon spelled it: none yet, or a charge — the platform's
-// own measure, or RSS standing in with why — beside the RSS and heap it was
-// read with.
+// own measure, or RSS standing in with why and the gap it is judged less —
+// beside the RSS and heap it was read with.
 const isMemoryReading = (m: unknown): m is MemoryReading => {
   const r = (m ?? {}) as {
     kind?: unknown;
-    charge?: Partial<Record<"kind" | "measure" | "bytes" | "unread", unknown>>;
+    charge?: Partial<
+      Record<"kind" | "measure" | "bytes" | "unread" | "gap", unknown>
+    >;
     rss?: unknown;
     heapTotal?: unknown;
   };
@@ -145,7 +147,9 @@ const isMemoryReading = (m: unknown): m is MemoryReading => {
     typeof c?.bytes === "number" &&
     ((c.kind === "charged" &&
       (c.measure === "phys_footprint" || c.measure === "rss")) ||
-      (c.kind === "stand-in" && typeof c.unread === "string"))
+      (c.kind === "stand-in" &&
+        typeof c.unread === "string" &&
+        Number.isFinite(c.gap)))
   );
 };
 
