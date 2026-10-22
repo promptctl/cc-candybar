@@ -142,7 +142,7 @@ import {
 import { withMark } from "../../doctor/mark-book";
 import { withClicked } from "../../doctor/clicked-terminals";
 import { DoctorBusy } from "../../doctor/busy";
-import { barsOf } from "../../doctor/sightings";
+import { barsOf, type ClickArrival } from "../../doctor/sightings";
 import {
   applyFix,
   clickArrived,
@@ -172,10 +172,11 @@ export interface VerbContext {
   readonly doctor: DoctorEdge;
   // The doctor's stores, which this daemon files (src/doctor/edge.ts).
   readonly doctorStores: DoctorStores;
-  // The package version of the client that delivered THIS click (the URL
-  // handler's staged runtime), or null from one too old to report it — the
-  // one per-click fact here; the daemon's dispatcher sets it on each click.
-  readonly clientVersion: string | null;
+  // How THIS click arrived — a link the URL handler delivered (its staged
+  // runtime's version, or null from one too old to report it), or a tmux
+  // status-line range — the one per-click fact here; the daemon's dispatcher
+  // sets it on each click.
+  readonly arrival: ClickArrival;
   // Where a `doctor-probe` link records that it arrived.
   readonly probes: ProbeArrivals;
   // Which client drew each session's bar, as this process saw it render, and
@@ -1209,7 +1210,11 @@ function clickFacts(ctx: VerbContext, sid: string): DoctorFacts {
   // The session's own renders, read once: whatever its Claude Code sends, it
   // sends to this session. The click proves its bar is on screen, so each
   // window ends now (`barsOf`).
-  const scope = { kind: "clicked", sessionId: sid } as const;
+  const scope = {
+    kind: "clicked",
+    sessionId: sid,
+    via: ctx.arrival.via,
+  } as const;
   const said = ctx.clients.ofSession(sid, instantOf(new Date()));
   let gathered: ReturnType<typeof gatherFacts>;
   try {
@@ -1232,7 +1237,7 @@ function clickFacts(ctx: VerbContext, sid: string): DoctorFacts {
   }
   return {
     ...gathered,
-    urlHandler: clickArrived(ctx.clientVersion),
+    urlHandler: clickArrived(ctx.arrival),
     // The client that drew the bar this click came from, and the daemon the
     // click reached — this process.
     install: installFacts(
@@ -1244,12 +1249,13 @@ function clickFacts(ctx: VerbContext, sid: string): DoctorFacts {
   };
 }
 
-// [LAW:one-source-of-truth] A doctor click is a link the session's terminal
-// drew and the user clicked, so it settles for good that this terminal draws
-// links: filed (src/doctor/clicked-terminals.ts) where `cc-candybar doctor` —
-// which cannot click — reads it. Nothing is filed where nothing names the
-// terminal, or over a list that does not read (the store answers that
-// failure, which the run reports as its own).
+// [LAW:one-source-of-truth] A doctor click that arrived as a link is a link
+// the session's terminal drew and the user clicked, so it settles for good
+// that this terminal draws links: filed (src/doctor/clicked-terminals.ts)
+// where `cc-candybar doctor` — which cannot click — reads it. Nothing is
+// filed from a tmux status-line click (tmux ran it, no link), where nothing
+// names the terminal, or over a list that does not read (the store answers
+// that failure, which the run reports as its own).
 // [LAW:no-silent-failure] The filing rides along with the run it came with,
 // so a write that fails is logged — and the event's `clicked=no` shows
 // nothing was filed — while the run reports over the list as it was read.
@@ -1259,7 +1265,7 @@ function clickedFrom(
 ): DoctorFacts["clicked"] {
   const sighting =
     terminal.kind === "seen" ? sightingOf(terminal.identified) : null;
-  if (sighting === null) return clicked;
+  if (sighting === null || ctx.arrival.via !== "link") return clicked;
   try {
     return ctx.doctorStores.clicked.update((list) =>
       withClicked(list, sighting),
@@ -1285,10 +1291,15 @@ const doctorProbe: VerbHandler = (value, ctx) => {
   if (nonce === null) {
     throw new BadVerbArgs("doctor-probe: the value is not a probe nonce");
   }
-  ctx.probes.arrive({ nonce, handler: ctx.clientVersion });
+  // [LAW:no-silent-failure] A probe link is opened by the CLI, never drawn in
+  // a frame, so one cannot come from the tmux status line.
+  if (ctx.arrival.via !== "link")
+    throw new BadVerbArgs("doctor-probe: a probe arrives only as a link");
+  const { handler } = ctx.arrival;
+  ctx.probes.arrive({ nonce, handler });
   ctx.dlog(
     "info",
-    `doctor-probe: arrived nonce=${nonce} handler=${ctx.clientVersion ?? "unreported"}`,
+    `doctor-probe: arrived nonce=${nonce} handler=${handler ?? "unreported"}`,
   );
 };
 

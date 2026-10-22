@@ -6,7 +6,7 @@
 // why the bar could not be drawn; for the band lane its rows of styled runs
 // (src/daemon/lane-frames.ts).
 //
-// `--lane <band|statusline|pane>` names the animation lane this stream serves
+// `--lane <lane>` names the animation lane this stream serves
 // (src/config/lanes.ts). While the session's toggle for it is off the daemon
 // refuses the stream with SWITCHED_OFF: that refusal is the stream's state, so
 // it is written to stdout like a frame — once, until a frame replaces it — and

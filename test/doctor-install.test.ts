@@ -104,7 +104,7 @@ describe("install probe", () => {
       ]),
     ).toEqual({
       ok: false,
-      reason: `the statusline client runs /old/dist/index.mjs, not the daemon's ${CHECKOUT_BUNDLE} — run \`node ${CHECKOUT_BUNDLE} frames --lane <band|statusline|pane>\``,
+      reason: `the statusline client runs /old/dist/index.mjs, not the daemon's ${CHECKOUT_BUNDLE} — run \`node ${CHECKOUT_BUNDLE} frames --lane <band|statusline|pane|tmuxStatus>\``,
       more: [],
     });
     // Re-installing stages the same files and changes nothing a frames
@@ -120,7 +120,7 @@ describe("install probe", () => {
       ]),
     ).toEqual({
       ok: false,
-      reason: `the statusline client runs /global/dist/index.mjs, not the daemon's ${BUNDLE} — run \`node ${BUNDLE} frames --lane <band|statusline|pane>\``,
+      reason: `the statusline client runs /global/dist/index.mjs, not the daemon's ${BUNDLE} — run \`node ${BUNDLE} frames --lane <band|statusline|pane|tmuxStatus>\``,
       more: [],
     });
   });
@@ -217,7 +217,7 @@ describe("install probe", () => {
       value: { daemon: PUBLISHED, nativeShipped: true, clients: [] },
     };
     expect(
-      checkByName("install")!.probe({ ...HEALTHY_FACTS, install, sighted: { kind: "clicked", sessionId: "s1" } }),
+      checkByName("install")!.probe({ ...HEALTHY_FACTS, install, sighted: { kind: "clicked", sessionId: "s1", via: "link" } }),
     ).toEqual({
       ok: false,
       reason:

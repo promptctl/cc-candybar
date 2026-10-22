@@ -43,7 +43,7 @@ function harness(opts: { motion: Motion; renderMs?: number; fails?: boolean }) {
     // The lanes the session's settings switch on, read by the feed when it
     // asks; `opened` counts the times the feeds began to watch, `stopped` the
     // times they stopped.
-    lanes: { band: true, statusline: true, pane: true } as LaneSwitches,
+    lanes: { band: true, statusline: true, pane: true, tmuxStatus: true } as LaneSwitches,
     opened: 0,
     stopped: 0,
     // A lane gate that throws, as a daemon bug in reading the settings would.
@@ -124,7 +124,7 @@ const sub = (
   frame: (resp: Response) => unknown,
   lane: Lane = "band",
   refused: (resp: Refusal) => unknown = () => {},
-): Subscriber => ({ lane, frame, refused });
+): Subscriber => ({ lane, frame, refused, drawing: () => true });
 
 const outputOf = (resp: Response): string =>
   resp.ok && "output" in resp ? resp.output : JSON.stringify(resp);
@@ -157,6 +157,22 @@ test("while a lane draws the bar elsewhere, the statusline lane is sent the hand
   expect(statusline.filter((l) => l === "the bar is drawn in the band")).toHaveLength(1);
   expect(statusline.length).toBeGreaterThan(2);
   expect(statusline.slice(1).every((l) => l.startsWith("bar#"))).toBe(true);
+});
+
+// Review of PR #405: the daemon's own tmux status line subscriber follows
+// every session it holds, but draws only the one its status line shows.
+test("a lane follows a session only while one of its subscribers draws it", () => {
+  const { feeds, note } = harness({ motion: "still" });
+  note("s", "bar");
+  let drawing = false;
+  const close = feeds.subscribe("s", {
+    ...sub(() => {}, "tmuxStatus"),
+    drawing: () => drawing,
+  });
+  expect(feeds.following("s").has("tmuxStatus")).toBe(false);
+  drawing = true;
+  expect(feeds.following("s").has("tmuxStatus")).toBe(true);
+  close();
 });
 
 test("a moving bar is drawn a moving period apart, every new frame pushed", async () => {
@@ -427,7 +443,7 @@ test("the feeds watch from the first feed opening to the last closing", async ()
 describe("a subscription's lane", () => {
   test("switched off in the session's settings is refused before any feed opens", async () => {
     const { feeds, note, state, log } = harness({ motion: "moving" });
-    state.lanes = { band: false, statusline: true, pane: true };
+    state.lanes = { band: false, statusline: true, pane: true, tmuxStatus: false };
     note("s", "bar");
     const refusals: Refusal[] = [];
     const frames: string[] = [];
@@ -457,7 +473,7 @@ describe("a subscription's lane", () => {
     feeds.subscribe("s", sub((r) => band.push(outputOf(r)), "band", (r) => refusals.push(r)));
     const closePane = feeds.subscribe("s", sub((r) => pane.push(outputOf(r)), "pane"));
     await sleep(30);
-    state.lanes = { band: false, statusline: true, pane: true };
+    state.lanes = { band: false, statusline: true, pane: true, tmuxStatus: false };
     state.motion = "moving"; // the next frame differs, so it is pushed
     changes.get("s")!();
     await sleep(60);
@@ -507,7 +523,7 @@ describe("a subscription's lane", () => {
     feeds.subscribe("s", sub(() => {}, "pane", (r) => refusals.push(r)));
     await sleep(20);
     expect(refusals).toEqual([]);
-    state.lanes = { band: true, statusline: true, pane: false };
+    state.lanes = { band: true, statusline: true, pane: false, tmuxStatus: false };
     note("s", "bar");
     await sleep(20);
     expect(refusals.map((r) => r.code)).toEqual(["SWITCHED_OFF"]);
@@ -518,12 +534,12 @@ describe("a subscription's lane", () => {
   // toggle turned on is honoured by the next subscribe, with no new request.
   test("turned on in the session's settings is honoured at once, with no frame between", async () => {
     const { feeds, note, state } = harness({ motion: "still" });
-    state.lanes = { band: false, statusline: true, pane: true };
+    state.lanes = { band: false, statusline: true, pane: true, tmuxStatus: false };
     note("s", "bar");
     const refusals: Refusal[] = [];
     feeds.subscribe("s", sub(() => {}, "band", (r) => refusals.push(r)));
     expect(refusals.map((r) => r.code)).toEqual(["SWITCHED_OFF"]);
-    state.lanes = { band: true, statusline: true, pane: true };
+    state.lanes = { band: true, statusline: true, pane: true, tmuxStatus: false };
     const frames: string[] = [];
     const close = feeds.subscribe("s", sub((r) => frames.push(outputOf(r))));
     await sleep(20);

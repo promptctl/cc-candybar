@@ -47,6 +47,7 @@ describe("RuntimeStats.snapshot", () => {
       effectCache: { sessions: 2, effects: 5 },
       sessionState: { sessions: 2, observers: 11, revision: 7 },
       frameFeeds: { feeds: 0, subscribers: 0, drawn: 0, pushed: 0, refused: 0, lookups: 0, found: 0 },
+      tmuxStatus: { sessions: 0, layouts: 0, writes: 0, failedWrites: 0 },
       watchersActive: 2,
       handlerProbes: [{ nonce: "n", handler: "1.2.3" }],
       clients: [
@@ -209,6 +210,7 @@ describe("formatStats", () => {
       effectCache: { sessions: 2, effects: 3 },
       sessionState: { sessions: 2, observers: 11, revision: 7 },
       frameFeeds: { feeds: 0, subscribers: 0, drawn: 0, pushed: 0, refused: 0, lookups: 0, found: 0 },
+      tmuxStatus: { sessions: 0, layouts: 0, writes: 0, failedWrites: 0 },
       watchers: { active: 5, opened: 7, closed: 2, evicted: 0 },
       subprocesses: {
         total: 0,
@@ -265,6 +267,7 @@ describe("formatStats", () => {
       effectCache: { sessions: 0, effects: 0 },
       sessionState: { sessions: 0, observers: 0, revision: 0 },
       frameFeeds: { feeds: 0, subscribers: 0, drawn: 0, pushed: 0, refused: 0, lookups: 0, found: 0 },
+      tmuxStatus: { sessions: 0, layouts: 0, writes: 0, failedWrites: 0 },
       watchers: { active: 0, opened: 0, closed: 0, evicted: 0 },
       subprocesses: {
         total: 0,

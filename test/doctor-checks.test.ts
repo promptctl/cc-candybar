@@ -46,7 +46,7 @@ const STILL = drew("still");
 // Where the run's own settings chain is read.
 const AT = { managedDir: "/managed", projectDir: "/p", userFile: SETTINGS_PATH } as const;
 // A run judging the bar of the session it is asked from.
-const SESSION: SightingScope = { kind: "clicked", sessionId: "s1" };
+const SESSION: SightingScope = { kind: "clicked", sessionId: "s1", via: "link" };
 
 // One settings file of the chain, as `readSettingsChain` returns it.
 const source = (

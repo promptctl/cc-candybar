@@ -201,7 +201,7 @@ describe("the session data row", () => {
 
   test("no render to name a transcript fails, worded for what asked", () => {
     const none = { kind: "ok", value: [] } as const;
-    expect(probe(none, { kind: "clicked", sessionId: "s1" })).toMatchObject({
+    expect(probe(none, { kind: "clicked", sessionId: "s1", via: "link" })).toMatchObject({
       ok: false,
       reason: expect.stringMatching(
         /^this daemon holds no render of this bar .*so which transcript it reads is unknown/,

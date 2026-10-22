@@ -93,6 +93,9 @@
         "experimentalPane": {
           "type": "boolean"
         },
+        "experimentalTmuxStatus": {
+          "type": "boolean"
+        },
         "colorCompatibility": {
           "enum": [
             "truecolor",
@@ -1342,6 +1345,9 @@
               "experimentalPane": {
                 "type": "boolean"
               },
+              "experimentalTmuxStatus": {
+                "type": "boolean"
+              },
               "colorCompatibility": {
                 "enum": [
                   "truecolor",
@@ -1463,6 +1469,9 @@
           "type": "boolean"
         },
         "experimentalPane": {
+          "type": "boolean"
+        },
+        "experimentalTmuxStatus": {
           "type": "boolean"
         },
         "colorCompatibility": {

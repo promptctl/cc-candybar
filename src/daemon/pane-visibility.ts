@@ -20,9 +20,12 @@ import type { TmuxRun } from "../proc/tmux.js";
 export const LIST_PANES_FORMAT =
   "#{pane_id} #{session_id} #{session_attached} #{window_active} #{window_zoomed_flag} #{pane_active}";
 
-// One line per client: the id of the session it is attached to, and whether it
-// is a control-mode client (iTerm2's `tmux -CC`).
-export const LIST_CLIENTS_FORMAT = "#{session_id} #{client_control_mode}";
+// One line per client: the id of the session it is attached to, whether it is
+// a control-mode client (iTerm2's `tmux -CC`), and its current pane — the
+// active pane of its session's current window, the pane its status line is
+// expanded for (measured, tmux 3.6a).
+export const LIST_CLIENTS_FORMAT =
+  "#{session_id} #{client_control_mode} #{pane_id}";
 
 // The sessions a control-mode client is attached to. Such a client draws each
 // of the session's windows as a native window of its own, any number of which
@@ -60,11 +63,45 @@ export function shownPanes(
   return shown;
 }
 
+// What a tmux server's status lines show: the session each of its panes is in,
+// and for each session a client draws a status line for, the pane that status
+// line is expanded for. A control-mode client draws no tmux status line.
+export interface StatusLines {
+  readonly sessionOf: ReadonlyMap<string, string>;
+  readonly shownBy: ReadonlyMap<string, string>;
+}
+
+// [LAW:effects-at-boundaries] Pure over the same two answers `shownPanes`
+// reads, in LIST_PANES_FORMAT and LIST_CLIENTS_FORMAT.
+export function statusLinesOf(
+  listPanes: string,
+  listClients: string,
+): StatusLines {
+  const sessionOf = new Map<string, string>();
+  for (const line of listPanes.split("\n")) {
+    const [pane, session] = line.trim().split(" ");
+    if (pane !== undefined && pane !== "" && session !== undefined)
+      sessionOf.set(pane, session);
+  }
+  const shownBy = new Map<string, string>();
+  for (const line of listClients.split("\n")) {
+    const [session, control, pane] = line.trim().split(" ");
+    if (session !== undefined && control === "0" && pane !== undefined)
+      shownBy.set(session, pane);
+  }
+  return { sessionOf, shownBy };
+}
+
 // [LAW:types-are-the-program] What one tmux server last said: the panes it
-// shows, or why it could not be asked. A server that could not be asked shows
-// every pane, so a failed query costs frames, never a frozen bar.
+// shows and what its status lines show, or why it could not be asked. A server
+// that could not be asked shows every pane, so a failed query costs frames,
+// never a frozen bar.
 type ServerView =
-  | { readonly kind: "asked"; readonly shown: ReadonlySet<string> }
+  | {
+      readonly kind: "asked";
+      readonly shown: ReadonlySet<string>;
+      readonly status: StatusLines;
+    }
   | { readonly kind: "unasked"; readonly reason: string };
 
 export interface VisibilityDeps {
@@ -77,6 +114,9 @@ export interface VisibilityDeps {
   // Called after a refresh in which any server's shown panes changed, or
   // whether it could be asked, with those servers' sockets.
   onChange(sockets: ReadonlySet<string>): void;
+  // Called on every refresh with each server that answered, and what its
+  // status lines show.
+  onAnswer(socket: string, status: StatusLines): void;
   // From the start of one refresh of the loop to the next.
   intervalMs: number;
   log(level: "info" | "warn" | "error", line: string): void;
@@ -194,6 +234,7 @@ export class PaneVisibility {
                     panes.stdout,
                     controlledSessions(clients.stdout),
                   ),
+                  status: statusLinesOf(panes.stdout, clients.stdout),
                 };
         return [socket, view] as const;
       }),
@@ -213,6 +254,8 @@ export class PaneVisibility {
           : `visibility socket=${JSON.stringify(socket)} unasked: ${view.reason} — its panes count as shown`,
       );
     }
+    for (const [socket, view] of answers)
+      if (view.kind === "asked") this.deps.onAnswer(socket, view.status);
     if (changed.size > 0) this.deps.onChange(changed);
   }
 }

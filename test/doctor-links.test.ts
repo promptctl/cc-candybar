@@ -46,7 +46,7 @@ const verdict = (
     terminal,
     sighted:
       askedBy === "click"
-        ? { kind: "clicked", sessionId: "s1" }
+        ? { kind: "clicked", sessionId: "s1", via: "link" }
         : { kind: "recent" },
     clicked,
   });

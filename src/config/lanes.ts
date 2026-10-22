@@ -2,8 +2,9 @@
 // the bar faster than Claude Code reruns its statusline, each by subscribing to
 // the daemon's pushed frames (src/daemon/frame-feed.ts) — A in the band above
 // the prompt (a Claude Code mod), B in a patched Claude Code's own statusline,
-// C in a tmux pane beside the session. All three are experimental, and each
-// sits behind its own toggle so it can be switched off, or removed, alone.
+// C outside Claude Code, in tmux: a pane beside the session, and the tmux
+// status line. All are experimental, and each sits behind its own toggle so it
+// can be switched off, or removed, alone.
 //
 // [LAW:one-type-per-behavior] One behavior, three instances: a lane is a
 // subscriber, and what differs between them is a name and a setting.
@@ -30,6 +31,11 @@ export const LANES = {
     setting: "experimentalPane",
     label: "🧪 tmux pane (C)",
     elsewhere: "a tmux pane below",
+  },
+  tmuxStatus: {
+    setting: "experimentalTmuxStatus",
+    label: "🧪 tmux status line (C)",
+    elsewhere: "the tmux status line",
   },
 } as const;
 

@@ -52,7 +52,7 @@ function tmuxRun(result: LaunchResult, args: readonly string[]): TmuxRun {
 // Holds the daemon's loop until tmux answers: for a click, which must finish
 // before its handler returns.
 export function runTmux(
-  hint: TmuxHint,
+  hint: Pick<TmuxHint, "socket">,
   category: LaunchCategory,
   args: readonly string[],
   stdinInput?: string,
@@ -68,6 +68,10 @@ export async function runTmuxAsync(
   hint: Pick<TmuxHint, "socket">,
   category: LaunchCategory,
   args: readonly string[],
+  stdinInput?: string,
 ): Promise<TmuxRun> {
-  return tmuxRun(await launch(invocation(hint, category, args)), args);
+  return tmuxRun(
+    await launch(invocation(hint, category, args, stdinInput)),
+    args,
+  );
 }

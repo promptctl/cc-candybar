@@ -23,7 +23,7 @@ use serde::Deserialize;
 use crate::{obtain_daemon_kick, read_frame, socket_path, write_frame, PROTOCOL_VERSION};
 
 // [LAW:one-source-of-truth] Mirrors LANES in src/config/lanes.ts.
-const LANE_NAMES: [&str; 3] = ["band", "statusline", "pane"];
+const LANE_NAMES: [&str; 4] = ["band", "statusline", "pane", "tmuxStatus"];
 // [LAW:one-source-of-truth] Mirror src/daemon/frame-follow.ts.
 const RECONNECT_FIRST_MS: u64 = 250;
 const RECONNECT_MAX_MS: u64 = 2000;
@@ -455,7 +455,7 @@ mod tests {
 
     #[test]
     fn a_subscription_this_client_could_not_send_well_formed_is_refused() {
-        let lanes = "--lane needs one of band, statusline, pane";
+        let lanes = "--lane needs one of band, statusline, pane, tmuxStatus";
         for (args, why) in [
             (argv(&["--session", "s"]), lanes),
             (argv(&["--lane", "everywhere", "--session", "s"]), lanes),
@@ -469,6 +469,6 @@ mod tests {
 
     #[test]
     fn usage_names_every_lane() {
-        assert!(usage().starts_with(&format!("{USAGE_HEAD} <band|statusline|pane> --session <id>")));
+        assert!(usage().starts_with(&format!("{USAGE_HEAD} <band|statusline|pane|tmuxStatus> --session <id>")));
     }
 }

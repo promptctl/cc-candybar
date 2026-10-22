@@ -6,6 +6,8 @@ import {
   PaneVisibility,
   controlledSessions,
   shownPanes,
+  statusLinesOf,
+  type StatusLines,
 } from "../src/daemon/pane-visibility";
 import type { TmuxRun } from "../src/proc/tmux";
 
@@ -13,6 +15,25 @@ const hint = (socket: string, pane: string) => ({
   socket,
   pane,
   truecolor: null,
+});
+
+// What a status line shows (lane C's tmux status line,
+// candybar-animation-wbxz.oy3.w5t): each pane's session, and per session the
+// current pane of a client that draws a status line — a control-mode client
+// draws none.
+describe("statusLinesOf", () => {
+  test("names each pane's session and the pane each session's status line shows", () => {
+    const panes = ["%1 $1 1 1 0 1", "%2 $1 1 1 0 0", "%3 $2 1 1 0 1", "%4 $3 1 1 0 1"].join("\n");
+    const clients = ["$1 0 %1", "$2 1 %3", ""].join("\n");
+    const status = statusLinesOf(panes, clients);
+    expect([...status.sessionOf]).toEqual([
+      ["%1", "$1"],
+      ["%2", "$1"],
+      ["%3", "$2"],
+      ["%4", "$3"],
+    ]);
+    expect([...status.shownBy]).toEqual([["$1", "%1"]]);
+  });
 });
 
 describe("shownPanes", () => {
@@ -61,6 +82,7 @@ describe("PaneVisibility", () => {
   // records whether two were ever out at once.
   function harness(answers: Record<string, TmuxRun>, answerMs = 0) {
     const changes: string[][] = [];
+    const answered: Array<[string, StatusLines]> = [];
     const log: string[] = [];
     const sockets = new Set(Object.keys(answers));
     const counts = { asks: 0, inFlight: 0, overlap: false, readFails: false };
@@ -79,11 +101,12 @@ describe("PaneVisibility", () => {
         return sockets;
       },
       onChange: (changed) => changes.push([...changed]),
+      onAnswer: (socket, status) => answered.push([socket, status]),
       intervalMs: INTERVAL_MS,
       log: (_level, line) => log.push(line),
     });
     const serverLog = () => log.filter((l) => l.startsWith("visibility socket="));
-    return { visibility, changes, log, serverLog, answers, sockets, counts };
+    return { visibility, changes, answered, log, serverLog, answers, sockets, counts };
   }
 
   test("a session outside tmux, or on a server not yet asked, counts as shown", () => {
@@ -111,6 +134,20 @@ describe("PaneVisibility", () => {
     expect(h.serverLog()).toEqual([
       'visibility socket="/s" shown=%1',
       'visibility socket="/s" shown=%2',
+    ]);
+  });
+
+  test("every answer, changed or not, hands its status lines on; an unasked server hands none", async () => {
+    const h = harness({ "/s": { kind: "ok", stdout: "%1 $1 1 1 0 1\n" } });
+    const stop = h.visibility.follow();
+    await pass(0);
+    await pass(INTERVAL_MS);
+    h.answers["/s"] = { kind: "failed", reason: "tmux list-panes failed (no server)" };
+    await pass(INTERVAL_MS);
+    stop();
+    expect(h.answered.map(([socket, status]) => [socket, [...status.sessionOf]])).toEqual([
+      ["/s", [["%1", "$1"]]],
+      ["/s", [["%1", "$1"]]],
     ]);
   });
 

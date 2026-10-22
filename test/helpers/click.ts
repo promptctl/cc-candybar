@@ -108,7 +108,7 @@ export function testVerbContext(
     },
     // A click from the handler this build would stage, and nowhere of the
     // daemon's for a probe to land: a test that reads arrivals hands in its own.
-    clientVersion: PACKAGE_VERSION,
+    arrival: { via: "link", handler: PACKAGE_VERSION },
     probes: new ProbeArrivals(),
     clients: new RenderSightings(),
     bundle: HEALTHY_BUNDLE,

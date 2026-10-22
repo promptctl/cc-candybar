@@ -99,7 +99,7 @@ import { fileClickedTerminals } from "./clicked-terminals.js";
 import { filePostMortemsRead } from "./post-mortems-read.js";
 import type { StateFile } from "./state-file.js";
 import { laterIdentity, type ServingDaemon } from "../daemon/limits.js";
-import type { SightedBar, SightingScope } from "./sightings.js";
+import type { ClickArrival, SightedBar, SightingScope } from "./sightings.js";
 
 // [LAW:effects-at-boundaries] The install check's reads of the machine: a
 // path resolved through every link, the checkout a bundle was built in, a
@@ -772,10 +772,24 @@ function terminalFacts(
   };
 }
 
-// A click the daemon is handling IS a link that came back through the URL
-// handler, carrying the version of the handler that delivered it.
-export function clickArrived(handler: string | null): UrlHandlerFacts {
-  return { kind: "arrived", handler, bar: PACKAGE_VERSION };
+// A click that arrived as a link IS a link that came back through the URL
+// handler, carrying the version of the handler that delivered it; one from
+// the tmux status line came through tmux, and says nothing of the handler.
+export function clickArrived(arrival: ClickArrival): UrlHandlerFacts {
+  switch (arrival.via) {
+    case "link":
+      return {
+        kind: "arrived",
+        handler: arrival.handler,
+        bar: PACKAGE_VERSION,
+      };
+    case "tmux-status":
+      return {
+        kind: "unprobed",
+        reason:
+          "this run was asked from the tmux status line, whose clicks tmux runs rather than the URL handler — run `cc-candybar doctor` to probe the handler",
+      };
+  }
 }
 
 // [LAW:dataflow-not-control-flow] A source is asked exactly when a segment

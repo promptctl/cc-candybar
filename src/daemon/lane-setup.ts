@@ -16,6 +16,9 @@
 //                   same session.
 //   C, pane       — `cc-candybar bar-pane <pane>`, in a tmux pane split under
 //                   the session's.
+//   C, tmuxStatus — none: the daemon itself follows the session's frames and
+//                   writes them into its tmux status line while the switch is
+//                   on (src/daemon/tmux-status.ts).
 //
 // [LAW:effects-at-boundaries] Each lane's setup is a plan over `LaneEdge`, the
 // record holding every effect (tmux, the `claude` CLI, the process table, the
@@ -309,6 +312,19 @@ export const LANE_SETUP: Readonly<Record<Lane, { on: Plan; off: Plan }>> = {
           : `closed bar pane ${open.join(", ")}`,
       );
     },
+  },
+  // The daemon draws the tmux status line itself, for every session whose
+  // switch is on (src/daemon/tmux-status.ts), so there is nothing to start or
+  // stop — only a session outside tmux to tell why nothing will be drawn.
+  tmuxStatus: {
+    on: (session) => {
+      const tmux = paneOf(session);
+      return done(`the daemon draws ${tmux.pane}'s bar in its status line`);
+    },
+    off: () =>
+      done(
+        "nothing to stop: the daemon puts the status line back once the lane is off",
+      ),
   },
 };
 

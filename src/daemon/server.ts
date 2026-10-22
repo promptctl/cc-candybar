@@ -100,6 +100,7 @@ import { validateHookData } from "../utils/schema-validator.js";
 import { transcriptReads } from "../utils/transcript-fs.js";
 import { fileStores, productionEdge, readStores } from "../doctor/edge";
 import { ProbeArrivals } from "../doctor/handler-probe";
+import type { ClickArrival } from "../doctor/sightings";
 import {
   RenderSightings,
   rateLimitsSeen,
@@ -110,7 +111,7 @@ import {
   type RateLimitsSeen,
 } from "./render-sightings";
 import { claudeConfigDir } from "../claude-settings";
-import { setLaunchStats } from "../proc/launch";
+import { launchSync, setLaunchStats } from "../proc/launch";
 import { buildDebugSnapshot } from "./debug";
 import { DEBUG_WHATS, isDebugWhat } from "./debug-types";
 import { drawDsl, type RenderWarning } from "../dsl/render.js";
@@ -161,7 +162,11 @@ import {
   LIST_PANES_FORMAT,
   PaneVisibility,
 } from "./pane-visibility.js";
-import { runTmuxAsync } from "../proc/tmux.js";
+import { runTmux, runTmuxAsync } from "../proc/tmux.js";
+import { TmuxStatusLines } from "./tmux-status.js";
+import { VERB_TMUX_STATUS_CLICK } from "../click/wire.js";
+import { parseHandlerUrl } from "../install/index.js";
+import { shellWord } from "../shell-word.js";
 import { reaction } from "mobx";
 import { setImmediate } from "node:timers";
 import type { RenderedLine } from "../dsl/node-registry.js";
@@ -239,6 +244,9 @@ const navigationHistory = new NavigationHistory();
 // Each session's effect memory — when its effect came into force — held in
 // daemon memory only: a restarted daemon starts every session's effect again.
 const effectSessions = new EffectSessions<RenderedLine>();
+// How this daemon's node runs its bundle: what a bar pane runs, and what a
+// click in a tmux status line runs to hand the click back.
+const DAEMON_NODE: readonly string[] = [process.execPath, ...process.execArgv];
 // [LAW:single-enforcer] The one owner of what turning an animation lane on or
 // off takes (src/daemon/lane-setup.ts), told the switches every render draws by.
 const laneSetups = new LaneSetups({
@@ -247,7 +255,7 @@ const laneSetups = new LaneSetups({
   // flags it runs with (tsx's loader, under the test harness).
   host: {
     bundle: DAEMON_BUNDLE,
-    node: [process.execPath, ...process.execArgv],
+    node: DAEMON_NODE,
     socket: socketPath(),
     preload: stableAttachPreload(DAEMON_BUNDLE),
   },
@@ -255,6 +263,33 @@ const laneSetups = new LaneSetups({
   log: dlog,
   now: () => instantOf(new Date()),
   defer: (run) => void setImmediate(run),
+});
+// [LAW:single-enforcer] The one writer of the tmux status line lane's tmux
+// state (src/daemon/tmux-status.ts).
+const tmuxStatusLines: TmuxStatusLines = new TmuxStatusLines({
+  edge: {
+    run: (socket, args, stdin) =>
+      runTmuxAsync({ socket }, "tmux-status", args, stdin),
+    runSync: (socket, args, stdin) =>
+      runTmux({ socket }, "tmux-status", args, stdin),
+  },
+  subscribe: (sessionId, sub) => frameFeeds.subscribe(sessionId, sub),
+  sessionInPane: (socket, pane) =>
+    frameFeeds.newestWhere(
+      ({ hints: { tmux } }) =>
+        tmux !== null &&
+        tmux !== undefined &&
+        tmux.socket === socket &&
+        tmux.pane === pane,
+    ),
+  handler: [
+    `CC_CANDYBAR_SOCKET=${shellWord(socketPath())}`,
+    ...[...DAEMON_NODE, DAEMON_BUNDLE].map(shellWord),
+    "url-handle",
+  ].join(" "),
+  owner: socketPath(),
+  defer: (run) => void setImmediate(run),
+  log: dlog,
 });
 // Each subscribed session's frames, drawn from its latest render request
 // (candybar-animation-wbxz.jmm.usl). A change to the session's own state — a
@@ -296,6 +331,7 @@ const paneVisibility: PaneVisibility = new PaneVisibility({
   // The servers of the sessions someone is watching.
   sockets: () =>
     new Set(frameFeeds.watched().flatMap(({ req }) => tmuxServersOf(req))),
+  onAnswer: (socket, status) => tmuxStatusLines.answered(socket, status),
   // Only the sessions on a server whose view changed are drawn again.
   onChange: (sockets) =>
     frameFeeds.wakeWhere((req) =>
@@ -789,6 +825,9 @@ function shutdown(code: number): void {
   // existing handleAddressInUse logic on the next daemon's startup
   // (probe → dead → unlink + rebind, ~50ms one-shot cost).
   try {
+    // [LAW:single-enforcer] Every tmux status line this daemon laid out is put
+    // back before it goes (src/daemon/tmux-status.ts).
+    tmuxStatusLines.restoreAll();
     gitService.close();
   } catch (e) {
     dlog("warn", `gitService close failed: ${(e as Error).message}`);
@@ -976,6 +1015,7 @@ function handleConnection(sock: net.Socket): void {
       // frame still waiting for the socket to drain is dropped, as
       // newest-wins drops any frame a newer one replaces.
       refused: (resp) => sock.end(encodeFrame(resp)),
+      drawing: () => true,
     });
     // Answered only once the subscription stands: a subscribe that threw is
     // the connection's `handler threw`, answered RENDER_FAILED and ended,
@@ -1192,6 +1232,7 @@ export async function replyTo(
           revision: sessionState.latestRevision(),
         },
         frameFeeds: frameFeeds.getStats(),
+        tmuxStatus: tmuxStatusLines.stats(),
         watchersActive: watcherRegistry.size(),
         nextRestartReason: establishedLimits().describeNextRestart(),
         handlerProbes: handlerProbes.list(),
@@ -1303,11 +1344,10 @@ export async function replyTo(
 
   if (req.kind === "click") {
     return stay(
-      handleClick(
-        req.verb,
-        req.value,
-        sanitizeClientVersion(req.clientVersion),
-      ),
+      handleClick(req.verb, req.value, {
+        via: "link",
+        handler: sanitizeClientVersion(req.clientVersion),
+      }),
     );
   }
 
@@ -1556,8 +1596,9 @@ const payloadDeps: Omit<RenderPayloadDeps, "navigation"> = {
 function handleClick(
   verb: string,
   value: string,
-  clientVersion: string | null,
+  arrival: ClickArrival,
 ): Response {
+  if (verb === VERB_TMUX_STATUS_CLICK) return statusLineClick(value);
   const handler = VERBS.get(verb);
   if (!handler) {
     return {
@@ -1568,7 +1609,7 @@ function handleClick(
     };
   }
   try {
-    handler(value, { ...verbCtx, clientVersion });
+    handler(value, { ...verbCtx, arrival });
     return { ok: true, output: "" };
   } catch (e) {
     const code = e instanceof BadVerbArgs ? "BAD_REQUEST" : "RENDER_FAILED";
@@ -1579,6 +1620,43 @@ function handleClick(
       daemonV: PROTOCOL_VERSION,
     };
   }
+}
+
+// A click in a tmux status line: the link the daemon's frame marks that range
+// with, run as a click on it in the bar would run — a `cc-candybar://` link
+// through its own verb, any other through the platform's opener. Its verb
+// is told the click came through tmux, not the URL handler.
+function statusLineClick(value: string): Response {
+  const refused = (error: string): Response => ({
+    ok: false,
+    error,
+    code: "BAD_REQUEST",
+    daemonV: PROTOCOL_VERSION,
+  });
+  const click = tmuxStatusLines.linkAt(value);
+  if (click.kind === "refused") return refused(click.reason);
+  dlog("info", `tmux-status: click ${JSON.stringify(click.url)}`);
+  if (click.url.startsWith("cc-candybar://")) {
+    const parsed = parseHandlerUrl(click.url);
+    // [LAW:no-silent-failure] A link the bar draws never names this verb; one
+    // that did would be a click that only ever clicks another.
+    if (parsed.verb === VERB_TMUX_STATUS_CLICK)
+      return refused("a status-line link names another status-line click");
+    return handleClick(parsed.verb, parsed.value, { via: "tmux-status" });
+  }
+  const opened = launchSync({
+    bin: process.platform === "darwin" ? "/usr/bin/open" : "xdg-open",
+    args: [click.url],
+    category: "click.open",
+  });
+  return opened.ok
+    ? { ok: true, output: "" }
+    : {
+        ok: false,
+        error: `opening ${click.url} failed (${opened.error ?? opened.reason})`,
+        code: "RENDER_FAILED",
+        daemonV: PROTOCOL_VERSION,
+      };
 }
 
 // --- render ---
@@ -1883,6 +1961,7 @@ async function renderChecked(
     lanes,
     settingsHistory.revision(sessionId),
   );
+  tmuxStatusLines.observe(sessionId, hints.tmux, lanes.tmuxStatus);
   const payload = await buildRenderPayload(
     req.hookData,
     at,
