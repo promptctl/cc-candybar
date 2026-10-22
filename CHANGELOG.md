@@ -1,3 +1,9 @@
+## [1.155.2](https://github.com/promptctl/cc-candybar/compare/v1.155.1...v1.155.2) (2026-10-22)
+
+### Bug Fixes
+
+* **daemon:** a repo's watch outlives the git values cached from it, so macOS stops leaking a CFString per watched directory per refetch ([#412](https://github.com/promptctl/cc-candybar/issues/412)) ([b2ac597](https://github.com/promptctl/cc-candybar/commit/b2ac597e6774de3d65c7ee12da9951615b954346))
+
 ## [1.155.1](https://github.com/promptctl/cc-candybar/compare/v1.155.0...v1.155.1) (2026-10-22)
 
 ### Bug Fixes
