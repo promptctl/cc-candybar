@@ -1345,14 +1345,14 @@ describe("a band item is drawn, never thrown — the settings controls are band 
     );
     const disclosure: Disclosure = { hue: OPEN_HUE, depth: 0, ground: [{ hue: "secondary", shade: "darken-1" }] };
     for (const drawnAt of DRAWN) {
-      // The plane, and the item seams a plane on its trigger leaves no room for.
+      // The plane, then any item seam it leaves no room for (which pairs a band
+      // must report is held by the seam test above; this pins the wording).
       const [plane, ...seams] = bandFor(washed, disclosure, drawnAt).shortfalls;
       expect(plane).toMatch(
         new RegExp(
           `^theme "washed": an open band's plane stands ΔE 0\\.\\d{3} off the trigger that opened it as drawn at depth ${ColorDepth[drawnAt]}, under the 0\\.1 that tells them apart; another style clears it$`,
         ),
       );
-      expect(seams.length).toBeGreaterThan(0);
       for (const seam of seams) {
         expect(seam).toMatch(
           new RegExp(
