@@ -1392,14 +1392,14 @@ export async function replyTo(
     // [LAW:dataflow-not-control-flow] The debug projection samples whatever
     // DSL state the cache currently holds. With cache keys scoped on
     // (projectDir, cwd) and the debug request carrying neither, we sample
-    // the first populated existing entry — sufficient for `debug vars`,
+    // the most recently rendered session's view — sufficient for `debug vars`,
     // `debug segments`, `debug config` against the active workload.
-    // firstView reads existing views only; it does NOT open one,
+    // latestView reads existing views only; it does NOT open one,
     // so debug introspection never has the side effect of standing up a new
     // (projectDir=undefined) cache entry tied to the daemon's own
     // process.cwd(). A future debug-target selector would thread (session,
     // projectDir, cwd) through the wire.
-    const dbgView = renderCache.firstView();
+    const dbgView = renderCache.latestView();
     // [LAW:dataflow-not-control-flow] Lazy per-segment serialization: the
     // cache stores StripCell arrays (cheap, written by renderDsl).
     // The debug projection needs strings, so serialize only for the

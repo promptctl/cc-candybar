@@ -26,7 +26,9 @@ afterEach(() => {
   for (const fn of cleanups.reverse()) fn();
 });
 
-function makeCache() {
+function makeCache(
+  opts: { budgetBytes?: number; log?: (line: string) => void } = {},
+) {
   const lines: string[] = [];
   const watchers = new WatcherRegistry({
     counters: { watchersOpened: 0, watchersClosed: 0 },
@@ -39,9 +41,12 @@ function makeCache() {
       gitService,
       sessionState: new SessionState(),
       watchers,
-      log: (_level, line) => lines.push(line),
+      log: (_level, line) => {
+        opts.log?.(line);
+        lines.push(line);
+      },
     },
-    { budgetBytes: () => 1024 * 1024 * 1024 },
+    { budgetBytes: () => opts.budgetBytes ?? 1024 * 1024 * 1024 },
   );
   cleanups.push(() => cache.close());
   return { cache, lines };
@@ -82,7 +87,11 @@ function configure(cwd: string): void {
   fs.writeFileSync(path.join(cwd, ".cc-candybar.json5"), JSON.stringify(config));
 }
 
-const drawn = (view: SessionView, sid = view.sessionId): string =>
+const drawn = (
+  view: SessionView,
+  sid = view.sessionId,
+  at = new Date(),
+): string =>
   stripAnsi(
     renderDsl(
       view.state.config,
@@ -90,7 +99,7 @@ const drawn = (view: SessionView, sid = view.sessionId): string =>
       view.store,
       view.registry,
       { session_id: sid, workspace: { project_dir: dir } },
-      instantOf(new Date()),
+      instantOf(at),
       { endcaps: "plain", colorCompatibility: "none", wrap: true, padding: 1, width: 300 },
     ),
   );
@@ -101,10 +110,11 @@ async function render(
   cache: RenderCache,
   sid: string,
   cwd = dir,
+  at = new Date(),
 ): Promise<{ text: string; view: SessionView }> {
   const { text, view } = (() => {
     using held = cache.holdSession(cwd, cwd, undefined, sid);
-    return { text: drawn(held.view, sid), view: held.view };
+    return { text: drawn(held.view, sid, at), view: held.view };
   })();
   expect(await view.registry.settled(5000)).toEqual([]);
   return { text, view };
@@ -198,5 +208,65 @@ test("a view held by a render in flight is disposed only when the render returns
   held[Symbol.dispose]();
   expect(lines).toContainEqual(
     expect.stringMatching(/^session view closed sid="s-a" reason=reload .* held=1 /),
+  );
+});
+
+test("a directory source keyed on the render's instant runs again when a later render moves its key", async () => {
+  fs.writeFileSync(
+    path.join(dir, ".cc-candybar.json5"),
+    JSON.stringify({
+      variables: {
+        clocked: {
+          kind: "shell",
+          command: counted("clocked", "c"),
+          cache: { key: '{{ now | date "15:04" }}' },
+        },
+      },
+      segments: { s: { template: "{{ .clocked }}" } },
+      root: { h: ["s"] },
+    }),
+  );
+  const { cache } = makeCache();
+  const at = new Date(2026, 9, 23, 12, 0, 30);
+  const first = await render(cache, "s-a", dir, at);
+  // The key reads no session value: the directory runs it, for every session.
+  expect(first.view.state.registry.variableStore.has("clocked")).toBe(true);
+  expect(first.view.registry.cachePolicyFaults().size).toBe(0);
+  const settled = runs("clocked");
+  await render(cache, "s-b", dir, new Date(at.getTime() + 60_000));
+  await first.view.state.registry.settled(5000);
+  expect(runs("clocked")).toBe(settled + 1);
+});
+
+test("debug introspection samples the most recently rendered session's view", async () => {
+  configure(dir);
+  const { cache } = makeCache();
+  await render(cache, "s-a");
+  await render(cache, "s-b");
+  await render(cache, "s-a");
+  expect(cache.latestView()?.sessionId).toBe("s-a");
+});
+
+test("a view that fails to open releases the state hold it was opened under", () => {
+  configure(dir);
+  const { cache } = makeCache({
+    log: (line) => {
+      if (line.startsWith("session view opened")) throw new Error("log boom");
+    },
+  });
+  expect(() => cache.holdSession(dir, dir, undefined, "s-a")).toThrow(
+    "log boom",
+  );
+  // Retired by the reload and held by nothing, the state is reclaimed now.
+  cache.reload(dir, dir, undefined);
+  expect(cache.stats.retired).toBe(0);
+});
+
+test("views the served entry alone carries past the budget are said, not hidden", async () => {
+  configure(dir);
+  const { cache, lines } = makeCache({ budgetBytes: 1 });
+  await render(cache, "s-a");
+  expect(lines).toContainEqual(
+    expect.stringMatching(/^render-cache over budget entries=1 views=1 /),
   );
 });

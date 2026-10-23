@@ -1337,13 +1337,18 @@ export class SourceRegistry {
   }
 
   // Called by the render beside applyInput: the depth this render draws at.
+  // A view's render is its directory's too: a directory source's `key` may
+  // read the depth or the instant, and only a render publishes them — until
+  // step 6 of brandon-unfiled-3248.8ro6 refuses a key that reads either.
   drawAt(depth: ColorDepth): void {
     this.store.runInAction(() => this.drawn.set(depth));
+    this.parent?.drawAt(depth);
   }
 
   // Called by the render beside drawAt: the instant this render is drawn at.
   renderAt(at: Instant): void {
     this.store.runInAction(() => this.instant.set(at));
+    this.parent?.renderAt(at);
   }
 
   // Called by the render beside renderAt: its session's animation clock read

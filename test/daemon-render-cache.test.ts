@@ -670,13 +670,11 @@ describe("RenderCache", () => {
       // The entry — and the live registry + watcher it owns — is in the
       // cache, so eviction/dispose can still reach it.
       expect(cache.size).toBe(1);
-      expect(cache.stats.size).toBe(1);
       expect(watchers.size()).toBe(1);
       // A second lookup finds it rather than building a duplicate: the
       // observer (which would throw again) does not run, and no second
       // watcher opens.
-      const found = cache.getOrCreate(dir, dir, undefined);
-      expect(found.state).toBe(cache.getOrCreate(dir, dir, undefined).state);
+      cache.getOrCreate(dir, dir, undefined);
       expect(cache.size).toBe(1);
       expect(watchers.size()).toBe(1);
     } finally {

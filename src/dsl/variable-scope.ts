@@ -78,13 +78,26 @@ const KIND_SCOPE: Readonly<
   dropped: "directory",
 };
 
+// A config's scopes, computed once per config object: every view a session
+// opens declares from them.
+const SCOPES = new WeakMap<ValidatedConfig, ReadonlyMap<string, VarScope>>();
+
+export function variableScopes(
+  config: ValidatedConfig,
+): ReadonlyMap<string, VarScope> {
+  let scopes = SCOPES.get(config);
+  if (scopes === undefined) {
+    scopes = scopesOf(config);
+    SCOPES.set(config, scopes);
+  }
+  return scopes;
+}
+
 // [LAW:dataflow-not-control-flow] One fold to a fixpoint: a source starts in
 // the directory and moves to the view when anything its policy reads is the
 // view's — a read of nothing declared included, since only a view could
 // answer it — and a source a moved source's policy reads moves it too.
-export function variableScopes(
-  config: ValidatedConfig,
-): ReadonlyMap<string, VarScope> {
+function scopesOf(config: ValidatedConfig): ReadonlyMap<string, VarScope> {
   const declared = new Map(declaredVariables(config));
   const names = new Set(declared.keys());
   const scopes = new Map<string, VarScope>(

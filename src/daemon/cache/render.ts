@@ -910,8 +910,18 @@ export class RenderCache {
     sessionId: string,
   ): SessionHold {
     const held = this.hold(projectDir, cwd, configFile);
-    const view = this.viewOf(sessionId, held.entry, held.state);
-    const lease = this.leaseOf(view);
+    let view: SessionView;
+    let lease: ViewHold;
+    try {
+      view = this.viewOf(sessionId, held.entry, held.state);
+      lease = this.leaseOf(view);
+    } catch (err) {
+      // [LAW:no-ambient-temporal-coupling] The state hold is this call's
+      // until the returned hold carries it: a throw before then releases it,
+      // or the state could never be reclaimed.
+      held[Symbol.dispose]();
+      throw err;
+    }
     lease.holders++;
     lease.read = true;
     let released = false;
@@ -936,7 +946,12 @@ export class RenderCache {
     state: DslRenderState,
   ): SessionView {
     const current = this.views.get(sessionId);
-    if (current?.state === state) return current;
+    if (current?.state === state) {
+      // Move to end (most recently used), as getOrCreate does an entry.
+      this.views.delete(sessionId);
+      this.views.set(sessionId, current);
+      return current;
+    }
     if (current !== undefined) this.retireView(current, "moved");
     const view = openView(state, entry.cwd, sessionId);
     this.views.set(sessionId, view);
@@ -1088,6 +1103,13 @@ export class RenderCache {
       if (evicted === served) continue;
       this.drop(key, evicted, "evict");
     }
+    // [LAW:no-silent-failure] Nothing left to evict: the entry served and its
+    // sessions' views alone exceed the budget.
+    if (!fits())
+      this.log(
+        "warn",
+        `render-cache over budget entries=${this.entries.size} views=${this.views.size} accounted=${mb(this.accountedBytes())}/${mb(this.budgetBytes())}MB`,
+      );
   }
 
   // The cache starts serving `state`: unheld, and not yet retired — and the
@@ -1240,9 +1262,10 @@ export class RenderCache {
   // Reads existing views — does NOT open one, so debug introspection never
   // has the side effect of creating a fresh cache entry (with its own
   // SourceRegistry timers/watchers) tied to the daemon's own `process.cwd()`.
-  // Null until a session has rendered; debug responses are empty in that
+  // The most recently rendered session's, since `views` is kept in use order.
+  // Null while no session's view is open; debug responses are empty in that
   // case by construction.
-  firstView(): SessionView | null {
-    return this.views.values().next().value ?? null;
+  latestView(): SessionView | null {
+    return [...this.views.values()].at(-1) ?? null;
   }
 }
