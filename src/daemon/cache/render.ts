@@ -251,7 +251,7 @@ export function pluginLoadLine(
 // the cache retired it — those deferred the teardown to the last one's return
 // (brandon-unfiled-3248.6rc) — beside the load line of what replaced it.
 export interface Teardown {
-  readonly reason: "reload" | "evict";
+  readonly reason: "reload" | "evict" | "close";
   // Renders holding the state when it was retired: 0 is a teardown at
   // retirement, more is one deferred to the last release.
   readonly held: number;
@@ -677,6 +677,7 @@ export const ENTRY_IDLE_MS = 5 * 60_000;
 export class RenderCache {
   private readonly entries = new Map<string, CacheEntry>();
   private sweep: ReturnType<typeof setInterval> | null = null;
+  private closed = false;
   private readonly now: () => number;
   // Every state the map serves or served, until reclaimed.
   private readonly holds = new Map<DslRenderState, StateHold>();
@@ -735,6 +736,9 @@ export class RenderCache {
     cwd: string,
     configFile: string | undefined,
   ): CacheEntry {
+    // [LAW:no-silent-failure] A closed cache disposed every state it built;
+    // one built after would hold timers and watchers nothing tears down.
+    if (this.closed) throw new Error("render cache used after close");
     const key = cacheKey(projectDir, cwd, configFile);
     const existing = this.entries.get(key);
     if (existing) {
@@ -840,6 +844,22 @@ export class RenderCache {
       clearInterval(this.sweep);
       this.sweep = null;
     }
+  }
+
+  // [LAW:single-enforcer] The cache's teardown: the sweep stops, and every
+  // entry leaves the map and is retired, so its state is disposed now or when
+  // the render holding it returns. The sweep and the entries' watchers would
+  // otherwise keep the cache, and every compile it serves, alive for as long
+  // as the process runs.
+  close(): void {
+    this.closed = true;
+    if (this.sweep !== null) clearInterval(this.sweep);
+    this.sweep = null;
+    for (const entry of this.entries.values()) {
+      entry.watcher?.release();
+      this.retire(entry.state, "close");
+    }
+    this.entries.clear();
   }
 
   get stats(): RenderCacheStats {

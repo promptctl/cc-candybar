@@ -977,6 +977,7 @@ function makeCache(reloads?: ReloadSignal): {
       ...(reloads === undefined ? {} : { observers: reloads.observers }),
     },
   );
+  cleanups.unshift(() => cache.close());
   return { cache, sessionState, cleanups };
 }
 

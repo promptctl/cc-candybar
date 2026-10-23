@@ -85,6 +85,7 @@ function makeCache(
       observers: observers ?? reloads.observers,
     },
   );
+  cleanups.unshift(() => cache.close());
   return { cache, cleanups, gitService, reloads, watchers };
 }
 
@@ -965,6 +966,43 @@ describe("RenderCache", () => {
 // drawn from for ENTRY_IDLE_MS releases its holds, and its next render takes
 // them back.
 describe("RenderCache idle sweep", () => {
+  // A cache nobody closes keeps its sweep armed, and the sweep keeps the cache
+  // and every compile it serves alive for the life of the process: a jest
+  // worker that ran a few such files held a heap snapshot past V8's string
+  // limit (brandon-unfiled-3248.8ro6).
+  test("close disposes every state, releases its holds and leaves no timer", () => {
+    jest.useFakeTimers();
+    const { dir, cleanup } = mkConfigDir();
+    const watchers = new WatcherRegistry({ logger: () => {} });
+    const gitService = new GitDataProvider({ logger: () => {} });
+    const cache = new RenderCache(
+      { gitService, sessionState: new SessionState(), watchers },
+      { budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES },
+    );
+    try {
+      let released = 0;
+      {
+        using hold = cache.hold(dir, dir, undefined);
+        hold.state.registry.holds.take("repo", () => () => {
+          released++;
+        });
+      }
+      expect(jest.getTimerCount()).toBe(1);
+      cache.close();
+      expect(released).toBe(1);
+      expect(cache.size).toBe(0);
+      expect(jest.getTimerCount()).toBe(0);
+      expect(() => cache.getOrCreate(dir, dir, undefined)).toThrow(
+        "render cache used after close",
+      );
+    } finally {
+      jest.useRealTimers();
+      gitService.close();
+      watchers.closeAll();
+      cleanup();
+    }
+  });
+
   test("an entry idle past ENTRY_IDLE_MS releases its holds; a render takes them back", () => {
     const { dir, cleanup } = mkConfigDir();
     const watchers = new WatcherRegistry({ logger: () => {} });
@@ -1009,6 +1047,7 @@ describe("RenderCache idle sweep", () => {
       cache.releaseIdle();
       expect(released).toBe(1);
     } finally {
+      cache.close();
       gitService.close();
       watchers.closeAll();
       cleanup();

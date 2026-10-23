@@ -840,6 +840,7 @@ function makeCache(): {
     { gitService, sessionState, watchers },
     { budgetBytes: () => renderCacheBudget(memoryLimitBytes({})), observers: reloads.observers },
   );
+  cleanups.unshift(() => cache.close());
   return { cache, sessionState, cleanups, reloads };
 }
 

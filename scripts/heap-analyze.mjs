@@ -40,15 +40,30 @@ import { readFileSync } from "node:fs";
 // [LAW:one-source-of-truth] The single snapshot parser. heap-retainers.mjs
 // imports this rather than re-deriving the field offsets — the two tools
 // cannot disagree about how to read a snapshot.
+//
+// The file is read as bytes and never decoded whole: a snapshot past V8's
+// string limit (~512 MiB — a jest worker's heap, or a daemon near its memory
+// limit) cannot be one string, so `JSON.parse` of it fails before parsing
+// starts. Only the `snapshot` header and each string of the table are decoded.
 export function parseSnapshot(path) {
-  const raw = JSON.parse(readFileSync(path, "utf8"));
-  const meta = raw.snapshot.meta;
+  const bytes = readFileSync(path);
+  const nodesAt = keyAt(bytes, "nodes", 0);
+  // The header is every byte before `"nodes":`, a `{"snapshot":{…},` object
+  // whose closing brace is the file's.
+  const header = bytes.toString("utf8", 0, nodesAt).replace(/,\s*$/, "}");
+  const { meta, node_count: nodeCount, edge_count: edgeCount } =
+    JSON.parse(header).snapshot;
   const nodeFields = meta.node_fields;
   const edgeFields = meta.edge_fields;
+  const nodes = readInts(bytes, nodesAt, nodeCount * nodeFields.length);
+  const edgesAt = keyAt(bytes, "edges", nodes.end);
+  const edges = readInts(bytes, edgesAt, edgeCount * edgeFields.length);
   const s = {
-    nodes: raw.nodes,
-    edges: raw.edges,
-    strings: raw.strings,
+    nodes: nodes.values,
+    edges: edges.values,
+    // Everything between the edges and the strings is numbers, so the first
+    // `"strings":` after the edges is the key, never text inside a string.
+    strings: readStrings(bytes, keyAt(bytes, "strings", edges.end)),
     nodeTypes: meta.node_types[0],
     edgeTypes: meta.edge_types[0],
     nodeStride: nodeFields.length,
@@ -63,6 +78,59 @@ export function parseSnapshot(path) {
   };
   s.nodeCount = s.nodes.length / s.nodeStride;
   return s;
+}
+
+// The offset of the top-level key `"<key>":`, searched from `from`.
+function keyAt(bytes, key, from) {
+  const at = bytes.indexOf(`"${key}":`, from);
+  if (at < 0) throw new Error(`not a V8 heap snapshot: no "${key}" array`);
+  return at;
+}
+
+// The `[n,n,…]` array starting at `from`, exactly `count` unsigned integers
+// (every node and edge field is one), and the offset past its `]`.
+// [LAW:no-silent-failure] A count other than the header's is a truncated or
+// foreign file, refused rather than read as a smaller heap.
+function readInts(bytes, from, count) {
+  const values = new Uint32Array(count);
+  let i = bytes.indexOf(0x5b /* [ */, from) + 1;
+  let n = 0;
+  let value = 0;
+  let digits = false;
+  for (; i < bytes.length; i++) {
+    const b = bytes[i];
+    if (b >= 0x30 && b <= 0x39) {
+      value = value * 10 + (b - 0x30);
+      digits = true;
+    } else if (b === 0x2c /* , */ || b === 0x5d /* ] */) {
+      if (digits) {
+        if (n === count) break;
+        values[n++] = value;
+      }
+      value = 0;
+      digits = false;
+      if (b === 0x5d) break;
+    }
+  }
+  if (n !== count || bytes[i] !== 0x5d) {
+    throw new Error(`heap snapshot array at byte ${from}: expected ${count} values, read ${n}`);
+  }
+  return { values, end: i + 1 };
+}
+
+// The `["…","…",…]` string table starting at `from`, each string decoded on
+// its own.
+function readStrings(bytes, from) {
+  const strings = [];
+  let i = bytes.indexOf(0x5b /* [ */, from) + 1;
+  for (; i < bytes.length && bytes[i] !== 0x5d /* ] */; i++) {
+    if (bytes[i] !== 0x22 /* " */) continue;
+    let end = i + 1;
+    while (bytes[end] !== 0x22) end += bytes[end] === 0x5c /* \ */ ? 2 : 1;
+    strings.push(JSON.parse(bytes.toString("utf8", i, end + 1)));
+    i = end;
+  }
+  return strings;
 }
 
 // "<type> / <name>" label for node ordinal i — the unit a histogram counts.

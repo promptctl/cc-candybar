@@ -17,7 +17,6 @@ import {
   pluginLoadLine,
   RenderCache,
   renderCacheBudget,
-  type DslRenderState,
 } from "../src/daemon/cache/render";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { pluginRoots } from "../src/config/loader/plugin-folders";
@@ -488,15 +487,14 @@ describe("an installed plugin", () => {
       logger: () => {},
     });
     const gitService = new GitDataProvider({ logger: () => {} });
-    let states: DslRenderState[] = [];
+    const cache = new RenderCache(
+      { gitService, sessionState: new SessionState(), watchers },
+      { budgetBytes: () => renderCacheBudget(memoryLimitBytes({})) },
+    );
     try {
-      const cache = new RenderCache(
-        { gitService, sessionState: new SessionState(), watchers },
-        { budgetBytes: () => renderCacheBudget(memoryLimitBytes({})) },
-      );
       const main = path.join(dir, "main");
       const cwds = [main, path.join(main, ".claude/worktrees/w"), path.join(main, "src")];
-      states = cwds.map((cwd) => cache.getOrCreate(main, cwd, p).state);
+      const states = cwds.map((cwd) => cache.getOrCreate(main, cwd, p).state);
       expect(states.map((s) => s.config.variables["plugins.lit.data"])).toMatchObject([
         { path: path.join(main, ".lit/state.json") },
         { path: path.join(main, ".claude/worktrees/w/.lit/state.json") },
@@ -523,7 +521,7 @@ describe("an installed plugin", () => {
       expect(drawn[1]).toContain("#w-2");
       expect(drawn[2]).toContain("#main-1");
     } finally {
-      for (const s of states) s.registry.dispose();
+      cache.close();
       watchers.closeAll();
       gitService.close();
     }
@@ -718,19 +716,19 @@ describe("an installed plugin", () => {
       logger: () => {},
     });
     const gitService = new GitDataProvider({ logger: () => {} });
+    const cache = new RenderCache(
+      { gitService, sessionState: new SessionState(), watchers },
+      { budgetBytes: () => renderCacheBudget(memoryLimitBytes({})) },
+    );
     try {
       const repo = path.join(dir, "repo");
       fs.mkdirSync(repo);
       const p = write("config.json5", `{ root: { h: ["plugins.lit.status"] } }`);
-      const cache = new RenderCache(
-        { gitService, sessionState: new SessionState(), watchers },
-        { budgetBytes: () => renderCacheBudget(memoryLimitBytes({})) },
-      );
       const entry = cache.getOrCreate(repo, repo, p);
       expect(entry.lastError).not.toBeNull();
       expect(entry.state.plugins.roots).toContain(path.join(repo, ".cc-candybar", "plugins"));
-      entry.state.registry.dispose();
     } finally {
+      cache.close();
       watchers.closeAll();
       gitService.close();
     }
