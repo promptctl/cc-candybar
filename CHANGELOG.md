@@ -1,3 +1,9 @@
+## [1.156.3](https://github.com/promptctl/cc-candybar/compare/v1.156.2...v1.156.3) (2026-10-23)
+
+### Bug Fixes
+
+* **render-cache:** a cache is closed, and the heap tools read snapshots past 512 MiB (8ro6) ([#417](https://github.com/promptctl/cc-candybar/issues/417)) ([f1f4822](https://github.com/promptctl/cc-candybar/commit/f1f4822e7a54bdc010194ac77eaaabe3e4be595a)), closes [#416](https://github.com/promptctl/cc-candybar/issues/416)
+
 ## [1.156.2](https://github.com/promptctl/cc-candybar/compare/v1.156.1...v1.156.2) (2026-10-23)
 
 ### Bug Fixes
