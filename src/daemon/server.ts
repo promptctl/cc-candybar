@@ -232,7 +232,9 @@ const payloadProviders = createPayloadProviders({
 const {
   gitProvider: gitService,
   usageStore,
+  tmuxService,
   mementoProvider,
+  autoCompact,
 } = payloadProviders;
 // [LAW:locality-or-seam] Constructed ephemeral so importing this module (CLI
 // relay, subcommands) does no disk I/O. The daemon binds the file-backed
@@ -824,28 +826,26 @@ function shutdown(code: number): void {
   // process.exit; the stale path that remains is recovered by the
   // existing handleAddressInUse logic on the next daemon's startup
   // (probe → dead → unlink + rebind, ~50ms one-shot cost).
-  try {
+  // [LAW:no-silent-failure][LAW:dataflow-not-control-flow] Every teardown step
+  // runs, each in order, and one that throws is logged by name without
+  // skipping the rest: the session state still flushes after a close failed.
+  const teardown: ReadonlyArray<readonly [string, () => void]> = [
     // [LAW:single-enforcer] Every tmux status line this daemon laid out is put
     // back before it goes (src/daemon/tmux-status.ts).
-    tmuxStatusLines.restoreAll();
-    gitService.close();
-  } catch (e) {
-    dlog("warn", `gitService close failed: ${(e as Error).message}`);
-  }
-  try {
-    usageStore.close();
-  } catch (e) {
-    dlog("warn", `usageStore close failed: ${(e as Error).message}`);
-  }
-  try {
-    watcherRegistry.closeAll();
-  } catch (e) {
-    dlog("warn", `watcherRegistry close failed: ${(e as Error).message}`);
-  }
-  try {
-    sessionState.flush();
-  } catch (e) {
-    dlog("warn", `sessionState flush failed: ${(e as Error).message}`);
+    ["tmuxStatusLines restore", () => tmuxStatusLines.restoreAll()],
+    ["gitService close", () => gitService.close()],
+    ["usageStore close", () => usageStore.close()],
+    ["tmuxService close", () => tmuxService.close()],
+    ["mementoProvider close", () => mementoProvider.close()],
+    ["watcherRegistry close", () => watcherRegistry.closeAll()],
+    ["sessionState flush", () => sessionState.flush()],
+  ];
+  for (const [step, run] of teardown) {
+    try {
+      run();
+    } catch (e) {
+      dlog("warn", `${step} failed: ${(e as Error).message}`);
+    }
   }
   // [LAW:one-source-of-truth] Remove the lease only if it still names us. A
   // displaced daemon (socket stolen, thief wrote its own lease) must not delete
@@ -1223,6 +1223,11 @@ export async function replyTo(
       stats: stats.snapshot({
         gitCache: gitService.getStats(),
         usageCache: usageStore.getStats(),
+        sources: {
+          tmux: tmuxService.getStats(),
+          memento: mementoProvider.getStats(),
+          autocompact: autoCompact.getStats(),
+        },
         transcriptReads: transcriptReads(),
         renderCache: renderCache.stats,
         effectCache: effectSessions.getStats(),

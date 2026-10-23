@@ -7,6 +7,7 @@ import type { TranscriptReads } from "../utils/transcript-fs";
 import type { FeedStats } from "./frame-feed";
 import type { RenderCacheStats } from "./cache/render";
 import type { GitCacheStats } from "./cache/git";
+import type { KeyedSourceStats, SourceStats } from "../utils/keyed-source";
 import type { ProbeArrival } from "../doctor/handler-probe";
 import type { RenderSighting } from "./render-sightings";
 import type { ServingDaemon } from "./limits";
@@ -36,6 +37,19 @@ const ROLLING_BUFFER_CAP = 16384;
 // counter-mod-N strategy: deterministic and adequate for human-eyeball
 // dashboards (no statistical claim of unbiased sampling).
 const HISTOGRAM_CAP = 16;
+
+export interface SourceSnapshots {
+  tmux: KeyedSourceStats;
+  memento: KeyedSourceStats;
+  autocompact: SourceStats<"request">;
+}
+
+const KEYED_SOURCE_ZERO: KeyedSourceStats = {
+  entries: 0,
+  held: 0,
+  refreshes: { first: 0, period: 0, supersede: 0 },
+  failures: 0,
+};
 
 export interface StatsSnapshot {
   pid: number;
@@ -69,6 +83,10 @@ export interface StatsSnapshot {
     misses: number;
     sweeps: number;
   };
+  // The shared sources each owner refreshes on its own triggers
+  // (brandon-unfiled-3248.8ro6, step 1): the entries each keeps, how many a
+  // home holds, its refreshes by the trigger that asked, and how many failed.
+  sources: SourceSnapshots;
   // [LAW:nothing-unseen] Every forward transcript read since start: gated
   // reads, bytes off disk, lines longer than the fold window read whole and
   // the longest of them — what bounds a fold's memory beyond its window
@@ -262,6 +280,11 @@ export class RuntimeStats {
         watchers: 0,
       },
       usageCache: { size: 0, hits: 0, misses: 0, sweeps: 0 },
+      sources: {
+        tmux: KEYED_SOURCE_ZERO,
+        memento: KEYED_SOURCE_ZERO,
+        autocompact: { entries: 0, refreshes: { request: 0 }, failures: 0 },
+      },
       transcriptReads: { reads: 0, bytes: 0, longLines: 0, largestLine: 0 },
       renderCache: {
         size: 0,
@@ -304,6 +327,7 @@ export class RuntimeStats {
   snapshot(extras: {
     gitCache: StatsSnapshot["gitCache"];
     usageCache: StatsSnapshot["usageCache"];
+    sources: SourceSnapshots;
     transcriptReads: TranscriptReads;
     renderCache: StatsSnapshot["renderCache"];
     effectCache: StatsSnapshot["effectCache"];
@@ -339,6 +363,7 @@ export class RuntimeStats {
       },
       gitCache: extras.gitCache,
       usageCache: extras.usageCache,
+      sources: extras.sources,
       transcriptReads: extras.transcriptReads,
       renderCache: extras.renderCache,
       effectCache: extras.effectCache,

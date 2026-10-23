@@ -198,5 +198,7 @@ try {
   // the process ends when the frames do.
   providers.gitProvider.close();
   providers.usageStore.close();
+  providers.tmuxService.close();
+  providers.mementoProvider.close();
   watchers.closeAll();
 }

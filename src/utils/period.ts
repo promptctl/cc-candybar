@@ -1,3 +1,18 @@
+import type { Outcome } from "./outcome";
+
+// [LAW:types-are-the-program] A period chosen by the last read's outcome: a
+// failed read is retried on its own (usually shorter) period, so a transient
+// outage is not pinned to the bar for the full ok-period. A source whose
+// failures wait as long as its answers names one number twice.
+export interface Every {
+  readonly okMs: number;
+  readonly failedMs: number;
+}
+
+export function periodOf(every: Every, outcome: Outcome<unknown>): number {
+  return outcome.kind === "failed" ? every.failedMs : every.okMs;
+}
+
 // [LAW:single-enforcer] The one clock an owner refreshes a shared entry on
 // (brandon-unfiled-3248.8ro6, step 1). A read never decides whether its value
 // is fresh; the owner's period re-reads the entry in the background, and a

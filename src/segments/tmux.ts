@@ -1,25 +1,17 @@
 import { runTmuxAsync } from "../proc/tmux";
 import type { TmuxHint } from "../tmux-hint";
-import { debug } from "../utils/logger";
+import type { Holds } from "../utils/holds";
+import { KeyedSource, type KeyedSourceStats } from "../utils/keyed-source";
+import { quietLogger, type DaemonLogger } from "../utils/logger";
+import { valueOf } from "../utils/logfmt";
 import { ABSENT, failed, ok, type Outcome } from "../utils/outcome";
-import { SingleFlight } from "../utils/single-flight";
 
-// How long a pane's session name stands before the next render asks tmux
-// again. A pane's session can be renamed, the pane moved to another session,
-// and a pane id reused by a new server on the same socket; a failure may be a
-// timeout on a loaded machine. This bounds how late the bar learns of any of
-// them.
-const NAME_TTL_MS = 30_000;
+// The period a held pane's session name is asked again on. A pane's session
+// can be renamed, the pane moved to another session, and a pane id reused by
+// a new server on the same socket; a failure may be a timeout on a loaded
+// machine. This bounds how late the bar learns of any of them.
+export const NAME_PERIOD_MS = 30_000;
 const MAX_ENTRIES = 64;
-
-interface Entry {
-  readonly outcome: Outcome<string>;
-  readonly at: number;
-}
-
-// A socket path cannot hold a newline's worth of pane id, so the pair is
-// unambiguous.
-const keyOf = (hint: TmuxHint): string => `${hint.socket}\n${hint.pane}`;
 
 // The session name of the pane a session's CLIENT reported (src/tmux-hint.ts):
 // its server socket and its pane id. The daemon is detached, so its own
@@ -27,51 +19,59 @@ const keyOf = (hint: TmuxHint): string => `${hint.socket}\n${hint.pane}`;
 // (brandon-tmux-tk7).
 //
 // [LAW:single-enforcer] One owner of the readings and of the one tmux
-// invocation a pane may have in flight, so concurrent renders share a spawn
-// and a render never spawns for a pane whose reading still stands.
+// invocation a pane may have in flight (brandon-unfiled-3248.8ro6, step 1): a
+// render takes the stored name, and only a pane never asked about waits on
+// tmux. A pane is asked again on its period only while a home holds it, so a
+// pane whose Claude Code exited costs no spawn once no render reads it
+// (src/utils/holds.ts).
 export class TmuxService {
-  private readonly names = new Map<string, Entry>();
-  private readonly asking = new SingleFlight();
+  private readonly names: KeyedSource<TmuxHint, string>;
 
-  constructor(private readonly now: () => number = Date.now) {}
+  constructor(opts: { readonly logger?: DaemonLogger } = {}) {
+    this.names = new KeyedSource({
+      name: "tmux",
+      // A socket path cannot hold a newline's worth of pane id, so the pair
+      // is unambiguous.
+      keyOf: (hint) => `${hint.socket}\n${hint.pane}`,
+      fields: (hint) =>
+        `pane=${valueOf(hint.pane)} socket=${valueOf(hint.socket)}`,
+      read: askSessionName,
+      every: { okMs: NAME_PERIOD_MS, failedMs: NAME_PERIOD_MS },
+      maxEntries: MAX_ENTRIES,
+      logger: opts.logger ?? quietLogger,
+    });
+  }
 
   // ok — the session name; absent — tmux answered with an empty name; failed
   // — the invocation itself failed, carried to the payload boundary as a
-  // value ([LAW:no-silent-failure]) and asked again once it expires. An
-  // expired reading is still drawn while its replacement is fetched, so only a
-  // pane with no reading at all waits on tmux.
+  // value ([LAW:no-silent-failure]) and logged once, by the refresh that
+  // failed.
   //
   // [LAW:types-are-the-program] Takes the pane to ask about. "Not in tmux" is
   // the caller's fact (the hint is null), so there is no pane-less call to
   // answer.
-  getSessionName(hint: TmuxHint): Promise<Outcome<string>> {
-    const key = keyOf(hint);
-    const cached = this.names.get(key);
-    if (cached && this.now() - cached.at < NAME_TTL_MS) {
-      return Promise.resolve(cached.outcome);
-    }
-    const fetched = this.asking.run(key, () => this.ask(key, hint));
-    return cached ? Promise.resolve(cached.outcome) : fetched;
+  getSessionName(holds: Holds, hint: TmuxHint): Promise<Outcome<string>> {
+    return this.names.read(holds, hint);
   }
 
-  private async ask(key: string, hint: TmuxHint): Promise<Outcome<string>> {
-    debug(`Getting tmux session name for pane ${hint.pane} on ${hint.socket}`);
-
-    const run = await runTmuxAsync(hint, "tmux", [
-      "display-message",
-      "-p",
-      "-t",
-      hint.pane,
-      "#S",
-    ]);
-    const name = run.kind === "ok" ? run.stdout.trim() : "";
-    const outcome: Outcome<string> =
-      run.kind !== "ok" ? failed(run.reason) : name ? ok(name) : ABSENT;
-    this.names.delete(key);
-    this.names.set(key, { outcome, at: this.now() });
-    while (this.names.size > MAX_ENTRIES) {
-      this.names.delete(this.names.keys().next().value!);
-    }
-    return outcome;
+  getStats(): KeyedSourceStats {
+    return this.names.stats();
   }
+
+  close(): void {
+    this.names.close();
+  }
+}
+
+async function askSessionName(hint: TmuxHint): Promise<Outcome<string>> {
+  const run = await runTmuxAsync(hint, "tmux", [
+    "display-message",
+    "-p",
+    "-t",
+    hint.pane,
+    "#S",
+  ]);
+  if (run.kind !== "ok") return failed(run.reason);
+  const name = run.stdout.trim();
+  return name ? ok(name) : ABSENT;
 }

@@ -19,6 +19,7 @@
 import type { HistoryDepth } from "./settings-history";
 import path from "node:path";
 import os from "node:os";
+import { inspect } from "node:util";
 import type { ClaudeHookData } from "../utils/claude.js";
 import type { ClientHints } from "./protocol.js";
 import type { DslConfig, VariableDecl } from "../config/dsl-types.js";
@@ -38,7 +39,7 @@ import {
   type PrState,
   type Tracking,
 } from "../segments/git.js";
-import { ABSENT, failed, type Outcome } from "../utils/outcome.js";
+import { ABSENT, failed, orElse, type Outcome } from "../utils/outcome.js";
 import { cacheExpiresAt } from "../segments/cache.js";
 import type { DaemonLogger } from "../utils/logger.js";
 import { isBundledPreset } from "./bundled-presets.js";
@@ -55,6 +56,7 @@ import type {
 } from "../segments/activity.js";
 import type { TmuxService } from "../segments/tmux.js";
 import type { MementoProvider } from "../segments/memento.js";
+import type { AutoCompactProvider } from "../segments/autocompact-provider.js";
 import { ceilingScope, type CeilingReading } from "../memento/edge.js";
 import {
   autoCompactControls,
@@ -525,12 +527,13 @@ export interface RenderPayloadDeps {
   readonly tmuxService: TmuxService;
   readonly mementoProvider: MementoProvider;
   // Claude Code's auto-compact window, read from the user settings file at
-  // this path.
-  readonly autoCompact: (settingsPath: string) => Outcome<AutoCompactWindow>;
-  // [LAW:single-enforcer] The log capability for every provider lane:
-  // buildRenderPayload is the ONE place lane failures are logged, so the
-  // providers' interiors never log and never double-log — except git, whose
-  // owner refreshes it on its own triggers and logs each refresh that failed.
+  // the path a render names.
+  readonly autoCompact: AutoCompactProvider;
+  // [LAW:single-enforcer] The log capability for the provider lanes whose
+  // owner does not log: buildRenderPayload is the ONE place their failures
+  // are logged. Git, tmux, memento and autocompact are not among them: each
+  // owner refreshes on its own triggers and logs each refresh that failed,
+  // so a failure stored there is logged once, never once per render.
   readonly log: DaemonLogger;
   // The session's undo/redo depth — SettingsHistory.depth in the daemon.
   readonly history: (sessionId: string) => HistoryDepth;
@@ -1073,19 +1076,28 @@ export async function buildRenderPayload(
   const tmuxPane = hints.tmux ?? null;
 
   // [LAW:dataflow-not-control-flow][LAW:one-type-per-behavior] Every provider
-  // lane is ONE shape: "needed → call provider (whose contract is to never
-  // reject — the catch makes the lane total against bugs, mapping a throw
-  // into the same logged failure path)" or "not needed → ABSENT". The skipped
-  // lanes resolve immediately; no variant means lanes are present/absent at
-  // the array level (which would change the destructure shape).
-  const lane = <T>(
+  // lane is ONE shape: "needed → call provider" or "not needed → ABSENT". The
+  // skipped lanes resolve immediately; no variant means lanes are
+  // present/absent at the array level (which would change the destructure
+  // shape).
+  //
+  // [LAW:no-silent-failure] A provider's contract is to answer, never to
+  // throw or reject, so a throw — at once or later, the provider's or the
+  // lane's own code around it — is a bug, logged here where it is caught,
+  // and the lane answers it as failed.
+  const lane = async <T>(
     name: string,
     needed: boolean,
     run: () => Promise<Outcome<T>>,
-  ): Promise<Outcome<T>> =>
-    needed
-      ? run().catch((e: unknown) => failed(`${name}: ${String(e)}`))
-      : Promise.resolve(ABSENT);
+  ): Promise<Outcome<T>> => {
+    if (!needed) return ABSENT;
+    try {
+      return await run();
+    } catch (e) {
+      deps.log("error", `${name} lane threw: ${inspect(e)}`);
+      return failed(`${name}: ${String(e)}`);
+    }
+  };
 
   const [
     gitOutcome,
@@ -1138,7 +1150,7 @@ export async function buildRenderPayload(
       (): Promise<Outcome<string>> =>
         tmuxPane === null
           ? Promise.resolve(ABSENT)
-          : deps.tmuxService.getSessionName(tmuxPane),
+          : deps.tmuxService.getSessionName(deps.holds, tmuxPane),
     ),
     // Prompt-cache expiry: a bounded tail-read through the gated transcript-fs
     // seam, so it runs alongside the other providers and stays in the shared
@@ -1161,6 +1173,7 @@ export async function buildRenderPayload(
     // with — the last two from the client, which runs where that hook does.
     lane("memento", wants("memento"), () =>
       deps.mementoProvider.getCeiling(
+        deps.holds,
         ceilingScope(
           {
             sessionId: hookData.session_id,
@@ -1176,7 +1189,7 @@ export async function buildRenderPayload(
     // which answers for whichever session spawned it.
     lane("autocompact", wants("autocompact"), () =>
       Promise.resolve(
-        deps.autoCompact(
+        deps.autoCompact.window(
           claudeSettingsPath(claudeConfigDir(hints.claudeConfigDir)),
         ),
       ),
@@ -1195,9 +1208,11 @@ export async function buildRenderPayload(
     return oc.kind === "ok" ? oc.value : undefined;
   };
 
-  // Git logs its own failures — once per refresh or resolution that failed,
-  // and a read that throws (src/daemon/cache/git.ts): its value is stored, so
-  // logging it here would repeat one failure on every render.
+  // Git, tmux, memento and autocompact log their own failures — once per
+  // refresh that failed (src/daemon/cache/git.ts, src/utils/keyed-source.ts,
+  // src/segments/autocompact-provider.ts): their values are stored, so
+  // logging one here would repeat a failure on every render. Their failures
+  // reach the payload as values; a lane that threw was logged by `lane`.
   const gitProjection = projectGitInfo(gitOutcome, nowMs);
   // Ungated, like `home` below: two syscalls and a hint already in hand, so a
   // `wants` gate would add a branch and save nothing.
@@ -1208,17 +1223,13 @@ export async function buildRenderPayload(
   const contextValue = take(context);
   const metricsValue = take(metrics);
   const activityValue = take(activity);
-  const tmuxValue = take(tmuxSession);
+  const tmuxValue = orElse<string | undefined>(tmuxSession, undefined);
   const cacheValue = take(cacheExpiry);
   const mementoValue = projectMemento(memento);
-  if (memento.kind === "failed") failures.push(`memento: ${memento.reason}`);
   const autoCompactValue = projectAutoCompact(
     autoCompact,
     contextValue?.maxTokens,
   );
-  if (autoCompact.kind === "failed") {
-    failures.push(`autocompact: ${autoCompact.reason}`);
-  }
   for (const f of failures) deps.log("warn", `provider fetch failed: ${f}`);
   // [LAW:dataflow-not-control-flow] block.* reads straight from hookData
   // alongside weekly. (The prior dedicated provider only re-derived

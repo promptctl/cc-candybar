@@ -36,6 +36,21 @@ describe("RuntimeStats.snapshot", () => {
         watchers: 2,
       },
       usageCache: { size: 10, hits: 50, misses: 5, sweeps: 1 },
+      sources: {
+        tmux: {
+          entries: 2,
+          held: 1,
+          refreshes: { first: 2, period: 7, supersede: 0 },
+          failures: 1,
+        },
+        memento: {
+          entries: 1,
+          held: 1,
+          refreshes: { first: 1, period: 3, supersede: 1 },
+          failures: 0,
+        },
+        autocompact: { entries: 1, refreshes: { request: 2 }, failures: 0 },
+      },
       transcriptReads: { reads: 0, bytes: 0, longLines: 0, largestLine: 0 },
       renderCache: {
         size: 3,
@@ -96,6 +111,12 @@ describe("RuntimeStats.snapshot", () => {
     expect(snap.gitCache.hits).toBe(100);
     expect(snap.gitCache.held).toBe(1);
     expect(snap.usageCache.size).toBe(10);
+    expect(snap.sources.tmux.refreshes).toEqual({
+      first: 2,
+      period: 7,
+      supersede: 0,
+    });
+    expect(snap.sources.autocompact.refreshes).toEqual({ request: 2 });
     expect(snap.effectCache).toEqual({ sessions: 2, effects: 5 });
     expect(snap.sessionState).toEqual({ sessions: 2, observers: 11, revision: 7 });
     expect(snap.watchers).toEqual({
@@ -197,6 +218,21 @@ describe("formatStats", () => {
         watchers: 5,
       },
       usageCache: { size: 3, hits: 40, misses: 10, sweeps: 0 },
+      sources: {
+        tmux: {
+          entries: 2,
+          held: 1,
+          refreshes: { first: 2, period: 7, supersede: 0 },
+          failures: 1,
+        },
+        memento: {
+          entries: 0,
+          held: 0,
+          refreshes: { first: 0, period: 0, supersede: 0 },
+          failures: 0,
+        },
+        autocompact: { entries: 1, refreshes: { request: 2 }, failures: 0 },
+      },
       transcriptReads: { reads: 0, bytes: 0, longLines: 0, largestLine: 0 },
       renderCache: {
         size: 4,
@@ -231,6 +267,12 @@ describe("formatStats", () => {
     expect(out).toContain("rss           50.0MB");
     expect(out).toContain("held          2");
     expect(out).toContain("hit rate      80.0%");
+    expect(out).toContain(
+      "tmux          entries=2 held=1 failures=1 refreshes first:2 period:7 supersede:0",
+    );
+    expect(out).toContain(
+      "autocompact   entries=1 failures=0 refreshes request:2",
+    );
     expect(out).toContain("active        5");
     expect(out).toContain("effects       3");
     expect(out).toContain("observers     11");
@@ -263,6 +305,7 @@ describe("formatStats", () => {
         watchers: 0,
       },
       usageCache: { size: 0, hits: 0, misses: 0, sweeps: 0 },
+      sources: RuntimeStats.referenceSnapshot().sources,
       transcriptReads: { reads: 0, bytes: 0, longLines: 0, largestLine: 0 },
       renderCache: {
         size: 0,

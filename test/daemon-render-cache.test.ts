@@ -25,7 +25,6 @@ import {
   type RenderCacheObservers,
   ENTRY_BYTES,
   COMPILE_BYTES,
-  ENTRY_IDLE_MS,
 } from "../src/daemon/cache/render";
 import { GitDataProvider } from "../src/daemon/cache/git";
 import { SessionState } from "../src/daemon/session-state";
@@ -985,9 +984,10 @@ describe("RenderCache", () => {
 });
 
 // brandon-unfiled-3248.8ro6: what an entry's state holds of the daemon's shared
-// entries (a repo) keeps their owners' periods running, so an entry nothing has
-// drawn from for ENTRY_IDLE_MS releases its holds, and its next render takes
-// them back.
+// entries (a repo, a pane, a memento reading) keeps their owners' periods
+// running, so a hold the entry's renders have not read across a whole sweep is
+// released — whether or not the entry is still drawn — and the next render that
+// reads it takes it back.
 describe("RenderCache idle sweep", () => {
   // A cache nobody closes keeps its sweep armed, and the sweep keeps the cache
   // and every compile it serves alive for the life of the process: a jest
@@ -1032,12 +1032,11 @@ describe("RenderCache idle sweep", () => {
     }
   });
 
-  test("an entry idle past ENTRY_IDLE_MS releases its holds; a render takes them back", () => {
+  test("a hold no render read across a whole sweep is released; a render takes it back", () => {
     const { dir, cleanup } = mkConfigDir();
     const watchers = new WatcherRegistry({ logger: () => {} });
     const gitService = new GitDataProvider({ logger: () => {} });
     const logs: string[] = [];
-    let clock = 1_000_000;
     const cache = new RenderCache(
       {
         gitService,
@@ -1045,36 +1044,45 @@ describe("RenderCache idle sweep", () => {
         watchers,
         log: (_level, message) => logs.push(message),
       },
-      { budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES, now: () => clock },
+      { budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES },
     );
-    let released = 0;
+    const released: string[] = [];
     try {
-      const take = (): void => {
+      // One render of the entry, reading the keys it names.
+      const render = (...keys: string[]): void => {
         using hold = cache.hold(dir, dir, undefined);
-        hold.state.registry.holds.take("repo", () => () => {
-          released++;
-        });
+        for (const key of keys) {
+          hold.state.registry.holds.take(key, () => () => {
+            released.push(key);
+          });
+        }
       };
-      take();
+      render("repo", "memento:ended-session");
       expect(
         cache.getOrCreate(dir, dir, undefined).state.registry.holds.size,
-      ).toBe(1);
+      ).toBe(2);
 
-      clock += ENTRY_IDLE_MS - 1;
+      // Read since the last sweep: kept.
       cache.releaseIdle();
-      expect(released).toBe(0);
+      expect(released).toEqual([]);
 
-      clock += 1;
+      // The entry is still drawn, but no render reads the session that ended:
+      // its hold goes at the next sweep, the repo's stays.
+      render("repo");
       cache.releaseIdle();
-      expect(released).toBe(1);
+      expect(released).toEqual(["memento:ended-session"]);
       expect(logs).toContain("render-cache idle released=1 entries=1");
 
-      // The next render holds the entry again and takes its holds back.
-      take();
+      // Nothing drawn across a whole sweep: the repo goes too.
+      cache.releaseIdle();
+      expect(released).toEqual(["memento:ended-session", "repo"]);
+
+      // The next render that reads it takes it back.
+      render("repo");
       const state = cache.getOrCreate(dir, dir, undefined).state;
       expect(state.registry.holds.size).toBe(1);
       cache.releaseIdle();
-      expect(released).toBe(1);
+      expect(released).toHaveLength(2);
     } finally {
       cache.close();
       gitService.close();

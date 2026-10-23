@@ -7,6 +7,7 @@ import { GitDataProvider } from "../src/daemon/cache/git";
 import { GitService, type GitInfo } from "../src/segments/git";
 import { ok, type Outcome } from "../src/utils/outcome";
 import { Holds } from "../src/utils/holds";
+import { until } from "./helpers/until";
 
 function makeRepo(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "powerline-watch-"));
@@ -116,13 +117,14 @@ describe("GitDataProvider + watchers integration", () => {
     await new Promise((r) => setTimeout(r, 50));
 
     fs.writeFileSync(path.join(repo, ".git/HEAD"), "ref: refs/heads/y\n");
-    await new Promise((r) => setTimeout(r, 400));
-
-    expect(inner.calls).toBe(2);
+    // FSEvents may deliver the one write as more than one event, and a fire
+    // mid-read queues one re-read after it, so the count is at least one more.
+    await until(() => inner.calls >= 2, "the HEAD change's re-read");
     expect(svc.getStats().changes).toBeGreaterThanOrEqual(1);
     // The read takes the value the change's re-read stored.
+    const reads = inner.calls;
     await svc.getGitInfo(holds, repo, {});
-    expect(inner.calls).toBe(2);
+    expect(inner.calls).toBe(reads);
 
     svc.close();
     rmrf(repo);
@@ -140,7 +142,8 @@ describe("GitDataProvider + watchers integration", () => {
     expect(inner.calls).toBeGreaterThanOrEqual(3);
 
     // Released, the repo costs no read on the period.
-    holds.release();
+    holds.releaseUnread();
+    holds.releaseUnread();
     const after = inner.calls;
     await new Promise((r) => setTimeout(r, 400));
     expect(inner.calls).toBe(after);
