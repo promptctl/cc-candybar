@@ -667,11 +667,11 @@ export function fallbackState(
 // render and stopped with the last entry: every interval it releases each
 // hold an entry's renders have not read since the interval before
 // (`Holds.releaseUnread`), so an owner's period stops visiting a repo, pane
-// or memento reading 5 to 10 minutes after the last render that read it —
+// or memento reading 2.5 to 5 minutes after the last render that read it —
 // a session that ended, or left for another directory, while the entry is
 // still drawn included (brandon-unfiled-3248.8ro6). The next read takes the
 // hold back, and a period resumed after a gap reads at once.
-export const HOLD_SWEEP_MS = 5 * 60_000;
+export const HOLD_SWEEP_MS = 150_000;
 
 export class RenderCache {
   private readonly entries = new Map<string, CacheEntry>();
