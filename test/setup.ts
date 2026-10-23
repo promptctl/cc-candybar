@@ -79,3 +79,12 @@ const noPlugins = path.join(
 );
 process.env.XDG_DATA_HOME = noPlugins;
 process.env.XDG_DATA_DIRS = noPlugins;
+
+// [LAW:single-enforcer] No test load finds the host's own config: the XDG
+// location is the lowest layer of every chain (src/config/loader/discovery.ts),
+// so a host config would join every test's — and an invalid one fail it. A
+// test exercising that location points it at its own.
+process.env.XDG_CONFIG_HOME = path.join(
+  os.tmpdir(),
+  `cc-candybar-jest-config-${crypto.randomUUID()}`,
+);

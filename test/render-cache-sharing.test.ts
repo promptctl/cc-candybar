@@ -268,7 +268,7 @@ describe("the cache is bounded by bytes", () => {
   });
 });
 
-test("a compile's store and clocks are the render's: read outside one, it refuses", () => {
+test("a compile's clock is the draw's: read outside one, it refuses", () => {
   const compiled = compileDslConfig(
     compileInputOf(
       parseAndValidate(
@@ -278,7 +278,7 @@ test("a compile's store and clocks are the render's: read outside one, it refuse
     ),
   );
   expect(() => compiled.segments["clock"]!.template.evaluate({})).toThrow(
-    /now ran outside a render: no render bound its store and clocks/,
+    /the clock was read outside a draw/,
   );
 });
 

@@ -24,7 +24,6 @@ export {
 export {
   SourceRegistry,
   parseDuration,
-  formatGoTime,
   MIN_SHELL_TTL_MS,
   type CachePolicy,
   type ShellOptions,

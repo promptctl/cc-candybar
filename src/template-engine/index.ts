@@ -1,4 +1,4 @@
-export { createCcCandybarEngine } from "./engine.js";
+export { bindClock, createCcCandybarEngine } from "./engine.js";
 export { buildScope, placementScope } from "./scope.js";
 export { ccCandybarFuncs } from "./funcs.js";
 export { fragmentsToCells } from "./cells.js";

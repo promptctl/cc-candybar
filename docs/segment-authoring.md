@@ -141,9 +141,12 @@ The complete shape of a `shell` variable:
 
 A source that reads no session's value runs once for its directory, shared by
 every session rendering there. One whose `key` or `depends_on` reads a
-session's value — an `input` such as `session.id`, a `state`, a `template` or a
-`time` variable — runs once per session, on that session's values: another
-session rendering from the same directory never re-runs it.
+session's value — an `input` such as `session.id`, a `state` or a `template`
+variable — runs once per session, on that session's values: another
+session rendering from the same directory never re-runs it. A `key` or
+`depends_on` that reads the clock — a `time` variable, a template calling
+`now`, or a variable reading either — is refused at load: to re-run on time,
+use `ttl` (see "A cache key that reads the clock" under Mistakes).
 
 A `file` variable is the same declaration with `path` (absolute — `~` and
 relative paths are refused at load, like a relative `watch_file`; write the
@@ -935,6 +938,34 @@ There is no default policy. The error lists the five:
 
 ```error
 shell variables must declare a cache policy (one of: ttl, watch_file, depends_on, key, never)
+```
+
+### A cache key that reads the clock
+
+A key over a `time` variable looks like "re-run once an hour", but the clock
+is read when a frame is drawn, not stored, so no change of it can re-run the
+source. The same refusal covers a `depends_on` naming a `time` variable and a
+key calling `now`. Re-run on a period instead: `cache: { ttl: "1h" }`.
+
+```json5 check:fail
+{
+  variables: {
+    hour: { kind: "time", layout: "15" },
+    budget: {
+      kind: "shell",
+      command: "budget-status",
+      parse: { json: true },
+      cache: { key: "{{ .hour }}" },
+      default: { period: "?", spent: 0, limit: 0, spentPct: 0, timePct: 0 },
+    },
+  },
+  segments: { budget: { template: "{{ .budget.spentPct }}% spent" } },
+  root: { rows: { status: { h: ["model", "budget"] } } },
+}
+```
+
+```error
+cache.key reads "hour", which is a time variable: it reads the instant a frame is drawn at
 ```
 
 ### A `parse.regex` with no capture group

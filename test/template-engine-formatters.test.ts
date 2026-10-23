@@ -15,7 +15,7 @@
 // expression yet (locale grouping, regex model-name parsing) plus the
 // clock-reading numeric primitive minutesUntilReset.
 
-import { WALL_CLOCKS } from "./helpers/engine-clocks";
+import { TEST_ENGINE } from "./helpers/test-engine";
 import { createCcCandybarEngine } from "../src/template-engine/engine";
 import { formatterFuncs } from "../src/template-engine/funcs";
 import {
@@ -26,7 +26,7 @@ import {
 
 // Helper: evaluate a template against a plain-object scope, return joined text.
 function evalText(source: string, scope: object = {}): string {
-  const engine = createCcCandybarEngine(WALL_CLOCKS);
+  const engine = createCcCandybarEngine(TEST_ENGINE);
   return engine.parse(source).evaluate(scope).map((rt) => rt.plain).join("");
 }
 
@@ -46,27 +46,27 @@ describe("numeric argType gate — precision-losing bigint rejected at the bound
   test("int accepts a bigint within safe-integer range", () => {
     // Engine encodes ambiguous Go-template numeric literals as bigint; values
     // inside ±Number.MAX_SAFE_INTEGER (2^53 − 1) round-trip safely.
-    const tpl = createCcCandybarEngine(WALL_CLOCKS).parse("{{ formatInteger 1000000000 }}");
+    const tpl = createCcCandybarEngine(TEST_ENGINE).parse("{{ formatInteger 1000000000 }}");
     expect(() => tpl.evaluate({})).not.toThrow();
   });
 
   test("int rejects a bigint above MAX_SAFE_INTEGER", () => {
     const huge = String(BigInt(Number.MAX_SAFE_INTEGER) + 1n);
-    const tpl = createCcCandybarEngine(WALL_CLOCKS).parse(`{{ formatInteger ${huge} }}`);
+    const tpl = createCcCandybarEngine(TEST_ENGINE).parse(`{{ formatInteger ${huge} }}`);
     expect(() => tpl.evaluate({})).toThrow();
   });
 
   test("int rejects a bigint below MIN_SAFE_INTEGER", () => {
     const tiny = String(BigInt(Number.MIN_SAFE_INTEGER) - 1n);
-    const tpl = createCcCandybarEngine(WALL_CLOCKS).parse(`{{ formatInteger ${tiny} }}`);
+    const tpl = createCcCandybarEngine(TEST_ENGINE).parse(`{{ formatInteger ${tiny} }}`);
     expect(() => tpl.evaluate({})).toThrow();
   });
 
   test("int accepts the safe-integer boundaries themselves", () => {
-    const maxTpl = createCcCandybarEngine(WALL_CLOCKS).parse(
+    const maxTpl = createCcCandybarEngine(TEST_ENGINE).parse(
       `{{ formatInteger ${Number.MAX_SAFE_INTEGER} }}`,
     );
-    const minTpl = createCcCandybarEngine(WALL_CLOCKS).parse(
+    const minTpl = createCcCandybarEngine(TEST_ENGINE).parse(
       `{{ formatInteger ${Number.MIN_SAFE_INTEGER} }}`,
     );
     expect(() => maxTpl.evaluate({})).not.toThrow();
@@ -75,7 +75,7 @@ describe("numeric argType gate — precision-losing bigint rejected at the bound
 
   test("float (round) accepts a large finite value without a precision guard", () => {
     // float is intentionally lossy-tolerant — a big literal converts, not throws.
-    const tpl = createCcCandybarEngine(WALL_CLOCKS).parse("{{ round 1000000000 }}");
+    const tpl = createCcCandybarEngine(TEST_ENGINE).parse("{{ round 1000000000 }}");
     expect(() => tpl.evaluate({})).not.toThrow();
   });
 });
@@ -157,18 +157,17 @@ describe("shortenModelName wrapper", () => {
 
 describe("formatterFuncs registry", () => {
   test("registers exactly the expected names", () => {
-    const funcs = formatterFuncs(() => new Date(0));
+    const funcs = formatterFuncs();
     expect(Object.keys(funcs).sort()).toEqual([
       "formatInteger",
       "formatModelName",
-      "minutesUntilReset",
       "round",
       "shortenModelName",
     ]);
   });
 
   test("all entries have argTypes arrays", () => {
-    for (const [, entry] of Object.entries(formatterFuncs(() => new Date(0)))) {
+    for (const [, entry] of Object.entries(formatterFuncs())) {
       expect(Array.isArray(entry.argTypes)).toBe(true);
     }
   });
@@ -178,8 +177,8 @@ describe("formatterFuncs registry", () => {
   // but throws FuncNotFoundError at eval time. This regression test catches
   // an engine.ts refactor that drops the spread.
   test("each registered name is callable from the engine", () => {
-    const engine = createCcCandybarEngine(WALL_CLOCKS);
-    for (const name of Object.keys(formatterFuncs(() => new Date(0)))) {
+    const engine = createCcCandybarEngine(TEST_ENGINE);
+    for (const name of Object.keys(formatterFuncs())) {
       // Parse-only smoke: a missing func is reported at evaluate time, but the
       // engine pre-validates that referenced names exist in the registry.
       // Calling parse alone doesn't trigger the check (Go templates resolve

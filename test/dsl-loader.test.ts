@@ -476,6 +476,99 @@ describe("loadDslConfig — variable source kinds", () => {
     });
   });
 
+  // [LAW:no-ambient-temporal-coupling] A cache policy re-runs its source when
+  // a stored value changes; the instant changes every frame and is stored
+  // nowhere, so a policy reading it — directly, through a variable over it, or
+  // through a helper — is refused at its path, pointing at a period.
+  describe("a cache policy that reads the instant is refused", () => {
+    const TTL = 'cache: { ttl: "<duration>" }';
+    const shell = (cache: string) =>
+      `{ kind: "shell", command: "echo", cache: ${cache} }`;
+
+    test.each([
+      [
+        "calls a clock function",
+        `{ key: '{{ now | date "15:04" }}' }`,
+        'cache.key calls "now"',
+      ],
+      [
+        "calls one through a helper",
+        `{ key: '{{ template "stamp" . }}' }`,
+        'cache.key calls "now"',
+      ],
+      [
+        "reads a time variable",
+        `{ key: "{{ .clock }}" }`,
+        'cache.key reads "clock", which is a time variable',
+      ],
+      [
+        "reads a template over the instant",
+        `{ key: "{{ .ago }}" }`,
+        'cache.key reads "ago", which calls "now"',
+      ],
+      [
+        "depends on a time variable",
+        `{ depends_on: ["clock"] }`,
+        'cache.depends_on names "clock", which is a time variable',
+      ],
+      [
+        "depends on a template over a time variable",
+        `{ depends_on: ["shown"] }`,
+        'cache.depends_on names "shown", which reads "clock", which is a time variable',
+      ],
+    ])("a policy that %s", (_, cache, message) => {
+      const err = expectError(`{
+        helpers: { stamp: "{{ unixEpoch now }}" },
+        variables: {
+          clock: { kind: "time", layout: "15:04" },
+          ago: { kind: "template", template: "{{ now }}" },
+          shown: { kind: "template", template: "{{ .clock }}" },
+          s: ${shell(cache)},
+        },
+      }`);
+      const issue = err.issues.find((i) =>
+        i.path.startsWith("variables.s.cache"),
+      );
+      expect(issue?.message).toContain(message);
+      expect(issue?.message).toContain(TTL);
+    });
+
+    test("a segment's local source too, at its own path", () => {
+      expectIssue(
+        `{ segments: { seg: { template: "x", vars: { s: ${shell(`{ key: "{{ now }}" }`)} } } } }`,
+        {
+          path: "segments.seg.vars.s.cache.key",
+          message: 'cache.key calls "now"',
+        },
+      );
+    });
+
+    // A date function of its arguments formats a stored value: no instant.
+    test("a key formatting a stored time loads", () => {
+      const ok = parseAndValidate(
+        FILE,
+        `{ variables: {
+          stamp: { kind: "input", path: "stamp" },
+          s: ${shell(`{ key: '{{ date "2006-01-02" .stamp }}{{ duration 60 }}' }`)},
+        } }`,
+      );
+      expect(Object.keys(ok.variables)).toContain("s");
+    });
+
+    // A field, a variable and a string literal named like a clock function
+    // call nothing.
+    test("a key naming the instant without reading it loads", () => {
+      const ok = parseAndValidate(
+        FILE,
+        `{ variables: {
+          now: { kind: "literal", value: "x" },
+          s: ${shell(`{ key: '{{ .now }}{{ $now := 1 }}{{ "now" }}' }`)},
+        } }`,
+      );
+      expect(Object.keys(ok.variables)).toContain("s");
+    });
+  });
+
   test("git: field must be in closed set, and a cache is refused", () => {
     expectIssue(`{ variables: { b: { kind: "git" } } }`, {
       path: "variables.b.field",

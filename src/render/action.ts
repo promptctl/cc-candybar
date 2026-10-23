@@ -284,9 +284,10 @@ export interface RenderBinding {
   // [LAW:one-source-of-truth] The store the render reads every variable from —
   // so an action reads session.id and the current values the bar shows.
   readonly store: VariableStore;
-  // The render's clocks: the instant it is drawn at, its session's animation
-  // clock read at that instant, and the depth it draws.
-  readonly registry: Pick<SourceRegistry, "now" | "animatedAt" | "drawnAt">;
+  // The depth the render draws at, its view's (SourceRegistry.drawAt). Its
+  // instant is no part of the binding: the engine's clock reads the draw in
+  // progress (template-engine/engine.ts, bindClock).
+  readonly registry: Pick<SourceRegistry, "drawnAt">;
   // [LAW:locality-or-seam] The width the render's strip wraps to (the value
   // `term.cols` carries), so fitting a row reads no variable a config must
   // declare.

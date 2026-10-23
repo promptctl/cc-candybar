@@ -129,6 +129,12 @@ export function introspectVars(
 // document reads as its JSON text, or — before its first scan / after a
 // failed one — as the state a template read of it would surface.
 function valueOf(node: StoreNode): Pick<VarSnapshot, "type" | "value"> {
+  // A projection has a value only at a frame's instant, and a snapshot is no
+  // frame: it says so rather than reading it, and the error its last draw
+  // recorded, if any, stands beside it as the variable's lastError.
+  if (node.kind === "projection") {
+    return { type: node.type, value: "(read at each frame's instant)" };
+  }
   if (node.kind !== "document") {
     // [LAW:no-silent-failure] A `template` variable with no authored `default`
     // now READS as its failure rather than as an empty string

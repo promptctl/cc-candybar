@@ -2,7 +2,7 @@
 // series maps to a deterministic glyph string, relative to the window's own
 // min/max — never the internals of how the index is computed.
 
-import { WALL_CLOCKS } from "./helpers/engine-clocks";
+import { TEST_ENGINE } from "./helpers/test-engine";
 import {
   renderSparkline,
   parseSeries,
@@ -12,7 +12,7 @@ import { createCcCandybarEngine } from "../src/template-engine/engine";
 
 // Evaluate the registered `sparkline` template func against a plain scope.
 function evalText(source: string, scope: object): string {
-  const engine = createCcCandybarEngine(WALL_CLOCKS);
+  const engine = createCcCandybarEngine(TEST_ENGINE);
   return engine
     .parse(source)
     .evaluate(scope)

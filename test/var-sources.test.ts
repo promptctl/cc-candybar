@@ -7,12 +7,11 @@ import {
   VariableStore,
   SourceRegistry,
   parseDuration,
-  formatGoTime,
   MIN_SHELL_TTL_MS,
   type SourceParse,
 } from "../src/var-system";
 import { SessionState } from "../src/daemon/session-state";
-import { instantOf } from "../src/utils/instant";
+import { drawingAt } from "./helpers/test-engine";
 import type { GitDataProvider } from "../src/daemon/cache/git";
 import { buildScope } from "../src/template-engine/scope";
 
@@ -1067,7 +1066,7 @@ describe("SourceRegistry — shell: key: cache policy", () => {
         parse: { kind: "json", default: undefined },
         cache: { kind: "never" },
       });
-      registry.declareTemplate("t", "{{ .doc.x }}");
+      registry.declareTemplate("t", "{{ .doc.x }}", DERIVED);
       const keys = {
         direct: "{{ .doc.x }}",
         called: '{{ index (index . "doc") "x" }}',
@@ -1327,42 +1326,9 @@ describe("SourceRegistry — dispose", () => {
   });
 });
 
-// ─── formatGoTime ─────────────────────────────────────────────────────────────
-
-describe("formatGoTime", () => {
-  // Fixed reference date: 2024-03-15 09:07:05 (Friday)
-  const ref = new Date(2024, 2 /* March */, 15, 9, 7, 5);
-
-  it.each([
-    ["2006-01-02", "2024-03-15"],
-    ["15:04:05", "09:07:05"],
-    ["15:04", "09:07"],
-    ["Jan 2, 2006", "Mar 15, 2024"],
-    ["January 2006", "March 2024"],
-    ["Mon Jan 2", "Fri Mar 15"],
-    ["Monday", "Friday"],
-    ["3:04 PM", "9:07 AM"],
-    ["3:04 pm", "9:07 am"],
-    ["06", "24"],
-    ["1/2/06", "3/15/24"],
-  ] as const)('layout "%s" → "%s"', (layout, expected) => {
-    expect(formatGoTime(layout, ref)).toBe(expected);
-  });
-
-  it("passes through non-token characters unchanged", () => {
-    expect(formatGoTime("Time: 15:04:05!", ref)).toBe("Time: 09:07:05!");
-  });
-
-  it("PM marker for hour >= 12", () => {
-    const afternoon = new Date(2024, 0, 1, 14, 30, 0);
-    expect(formatGoTime("3:04 PM", afternoon)).toBe("2:30 PM");
-  });
-
-  it("hour 0 renders as 12 in 12h format", () => {
-    const midnight = new Date(2024, 0, 1, 0, 0, 0);
-    expect(formatGoTime("3:04 PM", midnight)).toBe("12:00 AM");
-  });
-});
+// A template variable that reads no instant: what the projection fold says of
+// every template these tests declare.
+const DERIVED = { derivation: "computed" } as const;
 
 // ─── template source kind ─────────────────────────────────────────────────────
 
@@ -1370,14 +1336,14 @@ describe("SourceRegistry — template: basic", () => {
   it("evaluates a static template literal", () => {
     const { store, registry } = make();
     registry.declareLiteral("greeting", "hello");
-    registry.declareTemplate("msg", `{{ .greeting }} world`);
+    registry.declareTemplate("msg", `{{ .greeting }} world`, DERIVED);
     expect(store.read("msg")).toBe("hello world");
   });
 
   it("type is always 'string'", () => {
     const { store, registry } = make();
     registry.declareLiteral("x", "val");
-    registry.declareTemplate("t", "{{ .x }}");
+    registry.declareTemplate("t", "{{ .x }}", DERIVED);
     expect(store.getType("t")).toBe("string");
   });
 
@@ -1387,7 +1353,7 @@ describe("SourceRegistry — template: basic", () => {
     // fact, and a template variable is a cached derivation — it must observe it.
     const store = new VariableStore();
     const registry = registryOver(store);
-    registry.declareTemplate("ink", `{{ readableOn "#e72abb" "#2e082f" 4.5 }}`);
+    registry.declareTemplate("ink", `{{ readableOn "#e72abb" "#2e082f" 4.5 }}`, DERIVED);
     const [fg, bg] = [parseRgbHex("e72abb"), parseRgbHex("2e082f")];
     const at = (d: ColorDepth) => ensureContrast(fg, bg, 4.5, d).hex;
     expect(at(ColorDepth.EIGHT_BIT)).not.toBe(at(ColorDepth.TRUECOLOR));
@@ -1403,7 +1369,7 @@ describe("SourceRegistry — template: basic", () => {
     const store = new VariableStore();
     const registry = registryOver(store);
     store.defineBox("name", "string", "Alice");
-    registry.declareTemplate("greeting", `Hello, {{ .name }}!`);
+    registry.declareTemplate("greeting", `Hello, {{ .name }}!`, DERIVED);
 
     expect(store.read("greeting")).toBe("Hello, Alice!");
     store.setBox("name", "Bob");
@@ -1414,8 +1380,8 @@ describe("SourceRegistry — template: basic", () => {
     const store = new VariableStore();
     const registry = registryOver(store);
     store.defineBox("base", "string", "foo");
-    registry.declareTemplate("mid", `{{ .base }}-mid`);
-    registry.declareTemplate("top", `{{ .mid }}-top`);
+    registry.declareTemplate("mid", `{{ .base }}-mid`, DERIVED);
+    registry.declareTemplate("top", `{{ .mid }}-top`, DERIVED);
 
     expect(store.read("top")).toBe("foo-mid-top");
     store.setBox("base", "bar");
@@ -1426,7 +1392,7 @@ describe("SourceRegistry — template: basic", () => {
     const store = new VariableStore();
     const registry = registryOver(store);
     store.defineBox("x", "string", "ok");
-    registry.declareTemplate("t", "{{ .x }}");
+    registry.declareTemplate("t", "{{ .x }}", DERIVED);
     store.read("t");
     expect(registry.getLastError("t")).toBeUndefined();
   });
@@ -1434,7 +1400,7 @@ describe("SourceRegistry — template: basic", () => {
   it("varDefault returned when template evaluation fails (missing variable)", () => {
     const store = new VariableStore();
     const registry = registryOver(store);
-    registry.declareTemplate("t", "{{ .nonexistent }}", { varDefault: "fallback" });
+    registry.declareTemplate("t", "{{ .nonexistent }}", { ...DERIVED, varDefault: "fallback" });
     expect(store.read("t")).toBe("fallback");
     expect(registry.getLastError("t")).toBeDefined();
   });
@@ -1449,7 +1415,7 @@ describe("SourceRegistry — template: basic", () => {
   it("a failed template is NOT absorbed by defaultEmptyValue: the read is the failure", () => {
     const store = new VariableStore();
     const registry = registryOver(store, "(none)");
-    registry.declareTemplate("t", "{{ .nonexistent }}");
+    registry.declareTemplate("t", "{{ .nonexistent }}", DERIVED);
     expect(() => store.read("t")).toThrow(/variable "t"/);
     expect(registry.getLastError("t")).toBeDefined();
   });
@@ -1460,7 +1426,7 @@ describe("SourceRegistry — template: basic", () => {
   it("a template that throws with no default reads as the failure, naming variable and reason", () => {
     const store = new VariableStore();
     const registry = registryOver(store);
-    registry.declareTemplate("c", '{{ ramp 35 "step" 0 "panel" }}');
+    registry.declareTemplate("c", '{{ ramp 35 "step" 0 "panel" }}', DERIVED);
     // `ramp` is registered per-segment by the renderer, so a variable template
     // evaluated outside any segment cannot see it — the exact shape that found
     // this bug while writing docs/segment-authoring.md.
@@ -1474,7 +1440,7 @@ describe("SourceRegistry — template: basic", () => {
   it("a throwing template does not make registration throw; its read records the error", () => {
     const store = new VariableStore();
     const registry = registryOver(store);
-    expect(() => registry.declareTemplate("c", "{{ .nope }}")).not.toThrow();
+    expect(() => registry.declareTemplate("c", "{{ .nope }}", DERIVED)).not.toThrow();
     expect(() => store.read("c")).toThrow();
     expect(registry.getLastError("c")).toBeDefined();
   });
@@ -1489,7 +1455,7 @@ describe("SourceRegistry — template: basic", () => {
       fs.writeFileSync(dataFile, "v1");
       const store = new VariableStore();
       const registry = registryOver(store);
-      registry.declareTemplate("broken", "{{ .nope }}");
+      registry.declareTemplate("broken", "{{ .nope }}", DERIVED);
       expect(() =>
         registry.declareShell("val", `cat ${dataFile}`, {
           cwd: process.cwd(),
@@ -1509,7 +1475,7 @@ describe("SourceRegistry — template: cycle detection", () => {
   it("self-referencing template records a last_error when read", () => {
     const store = new VariableStore();
     const registry = registryOver(store);
-    registry.declareTemplate("self", "{{ .self }}");
+    registry.declareTemplate("self", "{{ .self }}", DERIVED);
     expect(() => store.read("self")).toThrow();
     expect(registry.getLastError("self")).toBeDefined();
   });
@@ -1526,7 +1492,7 @@ describe("SourceRegistry — template: cycle detection", () => {
   it("a self-referencing template reads as the failure, repeatably", () => {
     const store = new VariableStore();
     const registry = registryOver(store, "(cycle)");
-    registry.declareTemplate("self", "{{ .self }}");
+    registry.declareTemplate("self", "{{ .self }}", DERIVED);
     expect(() => store.read("self")).toThrow(/variable "self"/);
     expect(() => store.read("self")).toThrow(/variable "self"/);
     expect(registry.getLastError("self")).toBeDefined();
@@ -1535,39 +1501,59 @@ describe("SourceRegistry — template: cycle detection", () => {
 
 // ─── time source kind ─────────────────────────────────────────────────────────
 
-describe("SourceRegistry — time: the render's instant, formatted", () => {
+describe("SourceRegistry — time: the draw's instant, formatted", () => {
   // Built from local fields, so the layout's local-time reading is the same
   // wherever the suite runs.
   const at = (h: number, m: number, sec: number) =>
-    instantOf(new Date(2026, 5, 4, h, m, sec));
+    new Date(2026, 5, 4, h, m, sec);
+  // Fixed reference date: 2024-03-15 09:07:05 (Friday)
+  const ref = new Date(2024, 2 /* March */, 15, 9, 7, 5);
 
-  it("is the published instant in the variable's layout", () => {
+  it.each([
+    ["2006-01-02", ref, "2024-03-15"],
+    ["15:04:05", ref, "09:07:05"],
+    ["15:04", ref, "09:07"],
+    ["Jan 2, 2006", ref, "Mar 15, 2024"],
+    ["January 2006", ref, "March 2024"],
+    ["Mon Jan 2", ref, "Fri Mar 15"],
+    ["Monday", ref, "Friday"],
+    ["3:04 PM", ref, "9:07 AM"],
+    ["3:04 pm", ref, "9:07 am"],
+    ["06", ref, "24"],
+    ["1/2/06", ref, "3/15/24"],
+    ["Time: 15:04:05!", ref, "Time: 09:07:05!"],
+    ["3:04 PM", new Date(2024, 0, 1, 14, 30, 0), "2:30 PM"],
+    ["3:04 PM", new Date(2024, 0, 1, 0, 0, 0), "12:00 AM"],
+    // Go's padded day, which a layout reads as a token rather than text.
+    ["Jan _2", new Date(2024, 0, 1), "Jan  1"],
+  ] as const)('layout "%s" at %s → "%s"', (layout, date, expected) => {
     const { store, registry } = make();
-    registry.declareTime("t", { format: "2006-01-02 15:04:05" });
-    registry.renderAt(at(12, 34, 56));
-    expect(store.read("t")).toBe("2026-06-04 12:34:56");
-    expect(store.getType("t")).toBe("string");
+    registry.declareTime("t", { format: layout });
+    using _draw = drawingAt(date);
+    expect(store.read("t")).toBe(expected);
   });
 
-  it("moves when a later render publishes a later instant, and only then", () => {
+  it("is a projection: each draw reads its own instant", () => {
     const { store, registry } = make();
     registry.declareTime("t", { format: "15:04:05" });
-    registry.renderAt(at(9, 0, 0));
-    expect(store.read("t")).toBe("09:00:00");
-    expect(store.read("t")).toBe("09:00:00");
-    registry.renderAt(at(9, 0, 1));
+    expect(store.getNode("t").kind).toBe("projection");
+    {
+      using _draw = drawingAt(at(9, 0, 0));
+      expect(store.read("t")).toBe("09:00:00");
+    }
+    using _draw = drawingAt(at(9, 0, 1));
     expect(store.read("t")).toBe("09:00:01");
   });
 
-  it("before any render has published an instant, a read says so — or yields the authored default", () => {
+  it("outside a draw, a read says so — or yields the authored default", () => {
     const { store, registry } = make();
     registry.declareTime("bare", { format: "15:04" });
     registry.declareTime("fallback", { format: "15:04", varDefault: "--:--" });
     expect(() => store.read("bare")).toThrow(
-      /variable "bare": the time was read before any render published its instant/,
+      /variable "bare": .*the clock was read outside a draw/,
     );
     expect(store.read("fallback")).toBe("--:--");
-    registry.renderAt(at(7, 5, 0));
+    using _draw = drawingAt(at(7, 5, 0));
     expect(store.read("bare")).toBe("07:05");
     expect(store.read("fallback")).toBe("07:05");
   });
@@ -2120,7 +2106,7 @@ describe("SourceRegistry — parse seam", () => {
       registry.declareTemplate(
         "t",
         "{{ .doc.a }}-{{ .doc.b }}-{{ .doc.c }}-{{ index .doc.nest.d 1 }}",
-        { varDefault: "(pending)" },
+        { ...DERIVED, varDefault: "(pending)" },
       );
       await ran(registry);
       expect(readDoc(store, "doc")).toEqual({ a: 1, b: "x", c: true, nest: { d: [1, 2] } });

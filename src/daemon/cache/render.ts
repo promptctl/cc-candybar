@@ -45,6 +45,7 @@ import type {
 } from "./watchers.js";
 import { quietLogger, type DaemonLogger } from "../../utils/logger.js";
 import { pluginDataVar, pluginNameOf } from "../../config/loader/plugins.js";
+import { projectionsOf } from "../../config/loader/projections.js";
 
 // [LAW:one-source-of-truth] Each cache entry owns the live DSL state for a
 // (projectDir, cwd) tuple: the parsed config, the variable store +
@@ -239,7 +240,7 @@ export function pluginLoadLine(
     return data?.kind === "file" ? data.path : "none";
   };
   return (
-    `config load ${layers.join(" < ") || "<default>"}: plugins loaded=${loaded.length} dropped=${dropped.length} unplaced=${unreached.length} checkout=${checkoutField}` +
+    `config load ${layers.join(" < ") || "<default>"}: projections=${[...projectionsOf(config).keys()].join(",") || "-"} plugins loaded=${loaded.length} dropped=${dropped.length} unplaced=${unreached.length} checkout=${checkoutField}` +
     loaded.map((p) => ` +${p} data=${dataOf(p)}`).join("") +
     dropped.map((d) => ` -${d.path} (${d.reason})`).join("") +
     unreached.map((d) => ` ~${d.path} (${d.reason})`).join("")

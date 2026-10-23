@@ -2,7 +2,7 @@
 // style.link presence) and style outcomes, never AST shapes or internal
 // state of the conversion walk.
 
-import { WALL_CLOCKS } from "./helpers/engine-clocks";
+import { TEST_ENGINE } from "./helpers/test-engine";
 import { createCcCandybarEngine } from "../src/template-engine/engine";
 import { fragmentsToCells } from "../src/template-engine/cells";
 import { renderStripCells } from "../src/render/strip";
@@ -28,7 +28,7 @@ const SGR = "\x1b[";
 
 // Helper: evaluate a template and convert to StripCells.
 function evalCells(source: string, scope: object = {}) {
-  const engine = createCcCandybarEngine(WALL_CLOCKS);
+  const engine = createCcCandybarEngine(TEST_ENGINE);
   const fragments = engine.parse(source).evaluate(scope);
   return fragmentsToCells(fragments);
 }

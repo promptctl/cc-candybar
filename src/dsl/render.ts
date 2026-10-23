@@ -14,7 +14,7 @@
 import { createHash } from "node:crypto";
 import type { ColorDepth, RichText, Palette } from "@promptctl/rich-js";
 import { Defines, type Engine, type Template } from "@promptctl/go-template-js";
-import type { AnimationTime, Instant } from "../utils/instant.js";
+import type { Instant } from "../utils/instant.js";
 import type {
   ValidatedConfig,
   VariableDecl,
@@ -39,7 +39,7 @@ import {
 import { PRESET_FLOOR, presetNames, presetRoot } from "../config/presets.js";
 import { configOptionDomains, arrangedSegment } from "../config/edit-chrome.js";
 import { EDIT_NS } from "../config/loader/reserved-namespace.js";
-import type { VariableStore } from "../var-system/store.js";
+import type { Derivation, VariableStore } from "../var-system/store.js";
 import type { SourceRegistry } from "../var-system/sources.js";
 import {
   parseDuration,
@@ -81,6 +81,7 @@ import { ANIMATION_SPEEDS, FOLLOW_BAR } from "../themes/policy.js";
 import type { DrawnMotion } from "../render/drawn-motion.js";
 import { buildScope, placementScope } from "../template-engine/scope.js";
 import {
+  bindClock,
   createCcCandybarEngine,
   evaluateWhen,
   gateOf,
@@ -109,11 +110,9 @@ import {
   type ActiveSegmentRef,
 } from "../render/active-segment.js";
 import { segmentColorFuncs } from "../render/segment-color.js";
-import {
-  declaredVariables,
-  variableScopes,
-  type VarScope,
-} from "./variable-scope.js";
+import { variableScopes, type VarScope } from "./variable-scope.js";
+import { declaredVariables } from "../config/loader/refs.js";
+import { projectionsOf } from "../config/loader/projections.js";
 import { closeCell, stateCell } from "../render/band-style.js";
 import {
   barRoot,
@@ -271,6 +270,7 @@ function declareOne(
   name: string,
   decl: VariableDecl,
   cwd: string,
+  derivation: Derivation,
 ): void {
   switch (decl.kind) {
     case "literal":
@@ -318,6 +318,7 @@ function declareOne(
     case "template":
       registry.declareTemplate(name, decl.template, {
         varDefault: decl.default,
+        derivation,
       });
       break;
 
@@ -550,6 +551,7 @@ export function declareDslVariables(
   scopes: ReadonlySet<VarScope>,
 ): readonly string[] {
   const scopeOf = variableScopes(config);
+  const projections = projectionsOf(config);
   // [LAW:dataflow-not-control-flow] One variable failing to declare does not
   // abort the rest. Errors are data (accumulated in loadWarnings); the store
   // simply lacks the broken variable. Segments that reference it get a
@@ -559,7 +561,13 @@ export function declareDslVariables(
   for (const [name, decl] of declaredVariables(config)) {
     if (!scopes.has(scopeOf.get(name)!)) continue;
     try {
-      declareOne(registry, name, decl, cwd);
+      declareOne(
+        registry,
+        name,
+        decl,
+        cwd,
+        projections.has(name) ? "projection" : "computed",
+      );
     } catch (err) {
       loadWarnings.push(
         `Variable "${name}": ${(err as Error).message ?? String(err)}`,
@@ -604,12 +612,9 @@ export function compileDslConfig({
   // per-feature pointer would let two features disagree about which segment is
   // current. Built before the engine so the funcs can close over it; `current`
   // stays null until a render walk publishes one.
-  // [LAW:one-source-of-truth] The render's clocks: this engine's datetime
-  // functions read the instant its variables' do, and its `readableOn` floors
-  // at the same depth theirs does — the registry the render bound.
-  const now = (): Date => renderBinding(actionRuntime, "now").registry.now();
-  const animatedAt = (): AnimationTime =>
-    renderBinding(actionRuntime, "animatedAt").registry.animatedAt();
+  // [LAW:one-source-of-truth] This engine's `readableOn` floors at the depth
+  // its variables' does — the registry the render bound. Its clock is the
+  // engine's own, the draw in progress, as theirs is.
   const drawnAt = (): ColorDepth =>
     renderBinding(actionRuntime, "drawnAt").registry.drawnAt();
   const activeSegment = createActiveSegmentRef(drawnAt);
@@ -636,9 +641,6 @@ export function compileDslConfig({
       ...pickerFuncs(actionRuntime, activeSegment),
       ...carouselFuncs(actionRuntime, activeSegment),
       ...themePreviewFuncs(actionRuntime, activeSegment),
-      // The swatch row's `?` picks from the render's one instant, so a render
-      // at a given instant offers one pick, as it shows one clock.
-      ...swatchFuncs(actionRuntime, activeSegment, now),
       ...layoutPreviewFuncs(actionRuntime, activeSegment),
       ...menuFuncs(menuRuntime),
       // [LAW:one-source-of-truth] `{{ color }}` reads the palette of the
@@ -667,8 +669,11 @@ export function compileDslConfig({
         arity: { kind: "exact" },
       },
     },
-    clock: now,
-    animatedAt,
+    // The swatch row's `?` picks from the draw's one instant, so a draw at a
+    // given instant offers one pick, as it shows one clock.
+    clockFuncs: [
+      (clock) => swatchFuncs(actionRuntime, activeSegment, clock.now),
+    ],
     drawnAt,
   });
   // [LAW:single-enforcer] THE one parse path for this config: every template —
@@ -1156,18 +1161,18 @@ export function drawDsl(
   // The band-floor shortfalls of the bands this render opens, each reported
   // once after the walk however many triggers open a band that falls short.
   const shortfalls = new Set<string>();
-  // [LAW:one-source-of-truth] The instant and the depth this render draws at,
-  // published once before the walk into the registry's clocks: every time read
-  // below — a template's `now`, a `time` variable — reads the one instant, and
-  // every text colour chosen below — and every variable template's
-  // `readableOn` — is floored on the one depth.
-  registry.renderAt(at);
   // [LAW:one-source-of-truth] The session's animation clock, read once at the
   // render's instant: its templates' `frames` animate by this reading, and the
   // effects below by the same value (brandon-menus-sjhy.nt2).
   const effects = selection.effects ?? new SessionEffects<RenderedLine>("");
   const clock = effects.clockAt(at, ANIMATION_SPEEDS[selection.animationSpeed]);
-  registry.animateAt(clock.anim);
+  // [LAW:one-source-of-truth] The instant this render draws at, bound to the
+  // engines' one clock for the walk and unbound on every exit: every time read
+  // below — a template's `now`, a `time` variable — reads the one instant.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- held for its disposal
+  using _clock = bindClock(at, clock.anim);
+  // The depth it draws at, into the view's registry: every text colour chosen
+  // below — and every variable template's `readableOn` — is floored on it.
   registry.drawAt(drawnDepth(opts.colorCompatibility));
   // [LAW:no-ambient-temporal-coupling] The compile may serve many stores (one
   // per render-cache entry its config compiles alike in): every template it
