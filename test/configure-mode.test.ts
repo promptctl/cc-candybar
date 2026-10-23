@@ -389,9 +389,8 @@ describe("configure mode: one placement's settings at a time", () => {
     );
     rt.click(done!);
     expect(rt.sessionState.get(SID, EDIT_MODE_KEY)).toBe(DISCLOSURE_CLOSED);
-    expect(rt.sessionState.get(SID, EDIT_CONFIGURE_KEY)).toBe(
-      DISCLOSURE_CLOSED,
-    );
+    // Cleared, as a fresh session holds it.
+    expect(rt.sessionState.get(SID, EDIT_CONFIGURE_KEY)).toBeNull();
     // Arranging again starts with nothing configured.
     rt.sessionState.set(SID, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
     expect(stripAnsi(rt.render())).not.toContain("form ◀");
@@ -648,13 +647,13 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
     );
     // ✎ done on the bar and ✎ in the menu.
     expect(new Set(leaving).size).toBe(2);
-    for (const url of leaving) {
-      expect(
-        effectsOf(url).some(
-          (e) =>
-            e.args[1] === EDIT_CONFIGURE_KEY && e.args[2] === DISCLOSURE_CLOSED,
-        ),
-      ).toBe(true);
+    for (const url of new Set(leaving)) {
+      configurePlacement(rt.sessionState, SID, "default", "vcs2");
+      rt.click(url);
+      expect([url, rt.sessionState.get(SID, EDIT_CONFIGURE_KEY)]).toEqual([
+        url,
+        null,
+      ]);
     }
   });
 

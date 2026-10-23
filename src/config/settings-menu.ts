@@ -67,7 +67,7 @@ import {
   VERDICT_OK,
   VERDICT_UNRUN,
 } from "../doctor/report.js";
-import { EDIT_SWITCH, editModeArtifacts } from "./loader/edit-mode.js";
+import { EDIT_TOGGLE_ACTION, editModeArtifacts } from "./loader/edit-mode.js";
 import { presetByName, presetNames, presetRoot } from "./presets.js";
 import { quickActions } from "./quick-actions.js";
 import { commandTray } from "./command-tray.js";
@@ -797,10 +797,6 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
       [DOOR_TOGGLE]: disclosureCycleAction(SETTINGS_ANCHOR, SETTINGS_OPEN),
       [SETTINGS_ANCHOR]: { do: [DOOR_TOGGLE, ...DOOR_DISARMS] },
       [DOCTOR_RUN_ACTION]: { doctor: "run" },
-      // Entering or leaving edit mode is a click like every other in the
-      // menu: the menu stays as it was, so `◁ back` and the tabs stay in reach
-      // while the bar is arranged.
-      [EDIT_SEG]: { do: [...EDIT_SWITCH] },
       ...TOOLBAR.actions,
       ...COMMANDS.actions,
       ...AUTOCOMPACT.actions,
@@ -859,7 +855,10 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
         template: `{{ action "${DOCTOR_RUN_ACTION}" "🩺 doctor" }}`,
       },
       [EDIT_SEG]: {
-        template: `{{ action "${EDIT_SEG}" "✎ arrange" "✎ done" }}`,
+        // Entering or leaving edit mode is a click like every other in the
+        // menu: the menu stays as it was, so `◁ back` and the tabs stay in
+        // reach while the bar is arranged.
+        template: `{{ action "${EDIT_TOGGLE_ACTION}" "✎ arrange" "✎ done" }}`,
       },
     },
   };
@@ -1029,8 +1028,8 @@ function declareSettingControls(artifacts: MenuArtifacts): void {
 // [LAW:one-source-of-truth] Edit mode's state and switch, ensured rather than
 // duplicated: this pass and synthesizeEditModeToggle both mint
 // editModeArtifacts(), so whichever lands first is the only one. Ensuring it
-// here is not an optional courtesy — the EDIT_SEG action above fires
-// EDIT_SWITCH, and that pass is demand-driven off a scan of the segments a
+// here is not an optional courtesy — the EDIT_SEG segment above fires
+// `edit.toggle`, and that pass is demand-driven off a scan of the segments a
 // FILE declared, which cannot see a segment this pass mints later.
 function ensureEditToggle(artifacts: MenuArtifacts): void {
   const { variables, actions } = editModeArtifacts();

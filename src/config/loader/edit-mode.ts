@@ -55,14 +55,6 @@ export const EDIT_CONFIGURE_KEY = "edit.configure";
 export const EDIT_TOGGLE_ACTION = "edit.toggle";
 // Closes whichever placement's settings hang open.
 export const EDIT_UNCONFIGURE_ACTION = "edit.unconfigure";
-// [LAW:one-source-of-truth] What the bundled controls that enter or leave edit
-// mode fire: the toggle, and the close of the settings left open, so arranging
-// from them starts with none configured. `edit.toggle` stays the bare cycle,
-// because an author's own `do` may fire it and a `do` cannot fire a `do`.
-export const EDIT_SWITCH = [
-  EDIT_TOGGLE_ACTION,
-  EDIT_UNCONFIGURE_ACTION,
-] as const;
 export const EDIT_MODE_ARRANGE = "arrange";
 
 // The namespace every placement's unsaved setting value lives under, as a

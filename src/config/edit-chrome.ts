@@ -51,7 +51,7 @@ import {
   EDIT_MODE_GATE,
   EDIT_CONFIGURE_KEY,
   EDIT_MODE_REF,
-  EDIT_SWITCH,
+  EDIT_TOGGLE_ACTION,
   PLACEMENT_DRAFT_NS,
 } from "./loader/edit-mode.js";
 import { EDIT_NS, isReservedName } from "./loader/reserved-namespace.js";
@@ -340,7 +340,8 @@ export function placementDraftKey(
 // through. The body is a disclosure over `edit.configure` at this placement's
 // `<preset>:<id>` member, so its `✕` writes that key closed, configuring
 // another placement closes it by overwriting the value it is open on, and
-// the bundled controls that switch edit mode close it (EDIT_SWITCH).
+// leaving edit mode by any control closes it (`within` edit mode,
+// src/config/disclosure-nest.ts).
 interface ConfigureParts {
   readonly term: string;
   readonly ref: DisclosureRef;
@@ -884,10 +885,10 @@ export function synthesizeEditChrome(config: DslConfig): DslConfig {
   // `(?)` alone trails the bar's last row.
   const live: LayoutNode = { kind: "segment", name: EDIT_LIVE_KEY };
   const tail: LayoutNode = help;
-  // Leaving edit mode, minted once like the `(?)`: the same switch the menu's
-  // `✎ arrange` fires (EDIT_SWITCH), so the two cannot disagree about what
-  // leaving edit mode closes. `✓` also saves; the menu's `✎ done` does not,
-  // and leaves anything unsaved to the `💾 save` beside it.
+  // Leaving edit mode, minted once like the `(?)`: the same toggle the menu's
+  // `✎ arrange` fires, and what leaving closes is the nest's
+  // (src/config/disclosure-nest.ts). `✓` also saves; the menu's `✎ done` does
+  // not, and leaves anything unsaved to the `💾 save` beside it.
   artifacts.variables[EDIT_CHANGES_VAR] = {
     kind: "input",
     path: "history.sinceEdit",
@@ -897,7 +898,7 @@ export function synthesizeEditChrome(config: DslConfig): DslConfig {
   // [LAW:one-source-of-truth] Saving is the settings menu's own `💾 save`
   // action, so the two cannot disagree about what saving writes.
   artifacts.actions[EDIT_DONE_SEG] = {
-    do: [SAVE_SEG, ...EDIT_SWITCH],
+    do: [SAVE_SEG, EDIT_TOGGLE_ACTION],
   };
   artifacts.segments[EDIT_DONE_SEG] = {
     template:
@@ -905,12 +906,12 @@ export function synthesizeEditChrome(config: DslConfig): DslConfig {
       `{{ else }}{{ action "${EDIT_DONE_SEG}" "✓ done" }}{{ end }}`,
     when: EDIT_MODE_GATE,
   };
-  // [LAW:one-source-of-truth] Cancel is the rewind and then the same switch
-  // `✓` fires, as one click: the rewind is the face, the switch rides along
+  // [LAW:one-source-of-truth] Cancel is the rewind and then the same toggle
+  // `✓` fires, as one click: the rewind is the face, the toggle rides along
   // (`do`), so leaving edit mode closes exactly what it closes everywhere.
   artifacts.actions[EDIT_REWIND_ACTION] = { rewind: true };
   artifacts.actions[EDIT_CANCEL_SEG] = {
-    do: [EDIT_REWIND_ACTION, ...EDIT_SWITCH],
+    do: [EDIT_REWIND_ACTION, EDIT_TOGGLE_ACTION],
   };
   // [LAW:dataflow-not-control-flow] Hidden by data, not by a branch: with
   // nothing changed there is nothing to discard.

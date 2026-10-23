@@ -32,13 +32,14 @@ export function closingView(
       (key) => store.get(sessionId, key),
       writes,
     );
-    if (folds.length > 0) {
-      log(`close-nested: folded=${folds.join(",")} (session=${sessionId})`);
-    }
     runInAction(() => {
       land();
       for (const key of folds) store.clear(sessionId, key);
     });
+    // Once landed: a write the store refuses folded nothing.
+    if (folds.length > 0) {
+      log(`close-nested: folded=${folds.join(",")} (session=${sessionId})`);
+    }
   };
   const setBatch = (sessionId: string, pairs: readonly StateWrite[]): void =>
     write(sessionId, pairs, () => store.setBatch(sessionId, pairs));

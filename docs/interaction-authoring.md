@@ -1970,8 +1970,9 @@ segment. Declared inline in `root`:
   trigger) or author the raw grammar yourself.
 - `key` — same accordion semantics as the menu option: siblings sharing a key
   are mutually exclusive. **Nested** groups must use *distinct* keys. A closed
-  parent hides its children, and closing it closes every group and
-  `{{ menu }}` open inside it, so it reopens with them closed.
+  parent hides its children, and closing it returns every group and
+  `{{ menu }}` inside it to how a fresh session finds them, so it reopens with
+  them closed, or open for a group that declares `open: true`.
 - `open: true` — initially open; at most one group per shared key.
 - `direction` — how the body container stacks (`vertical` default). Every
   row of the open body leads with a `✕` that closes the group (it writes the
