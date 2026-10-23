@@ -5,7 +5,12 @@
 import { projectionsOf } from "../src/config/loader/projections";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { CLOCK_FUNCTIONS } from "../src/template-engine/engine";
-import { declareDslVariables, EVERY_SCOPE } from "../src/dsl/render";
+import {
+  compileInputOf,
+  compileKey,
+  declareDslVariables,
+  EVERY_SCOPE,
+} from "../src/dsl/render";
 import { SourceRegistry, VariableStore } from "../src/var-system";
 import { drawingAt } from "./helpers/test-engine";
 import fs from "node:fs";
@@ -161,9 +166,9 @@ test("a projection is derived at each draw; a derived template is cached", () =>
 test("the config load line names the load's projections", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-projections-"));
   const gitService = new GitDataProvider({ logger: () => {} });
-  const line = (variables: string): string => {
+  const line = (variables: string, segments = "{}"): string => {
     const file = path.join(dir, "config.json5");
-    fs.writeFileSync(file, `{ variables: ${variables} }`);
+    fs.writeFileSync(file, `{ variables: ${variables}, segments: ${segments} }`);
     const loaded = loadFromDisk(dir, dir, file, {
       gitService,
       sessionState: new SessionState(),
@@ -178,10 +183,50 @@ test("the config load line names the load's projections", () => {
         clock: { kind: "time", layout: "15:04" },
         shown: { kind: "template", template: "{{ .clock }}" },
       }`),
-    ).toContain(": projections=clock,shown plugins ");
-    expect(line("{}")).toContain(": projections=- plugins ");
+    ).toContain(": projections=clock,shown instantSegments=");
+    expect(line("{}")).toContain(": projections=- instantSegments=");
+    // brandon-unfiled-3248.8ro6 step 6: and which segments it draws at every
+    // frame, the bundled default's among them.
+    const segments = (text: string): string[] =>
+      / instantSegments=(\S+) /.exec(text)![1]!.split(",");
+    const stamped = segments(
+      line("{}", `{ stamp: { template: "{{ unixEpoch now }}" } }`),
+    );
+    expect(stamped).toContain("stamp");
+    expect(stamped).toContain("cacheTimer");
+    expect(segments(line("{}"))).not.toContain("stamp");
+    // And how many templates it draws so, whatever holds them: a segment's
+    // own one more.
+    const templates = (text: string): number =>
+      Number(/ instantTemplates=(\d+) /.exec(text)![1]);
+    expect(
+      templates(line("{}", `{ stamp: { template: "{{ unixEpoch now }}" } }`)),
+    ).toBe(templates(line("{}")) + 1);
   } finally {
     gitService.close();
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+// A compile reads of the variables only what decides whether a read lands on a
+// projection, so configs declaring other variables differently share one.
+test("a compile is keyed on the names that decide a projection read", () => {
+  const key = (variables: string, read = ".clock") =>
+    compileKey(
+      compileInputOf(
+        parseAndValidate(
+          "/tmp/test.json5",
+          `{ variables: ${variables}, segments: { s: { template: "{{ ${read} }}" } }, root: { h: ["s"] } }`,
+        ),
+      ),
+    );
+  const clock = `clock: { kind: "time", layout: "15:04" }`;
+  expect(key(`{ ${clock}, a: { kind: "literal", value: "1" } }`)).toBe(
+    key(`{ ${clock}, b: { kind: "literal", value: "2" } }`),
+  );
+  // A name nested under a projection decides what a read under it lands on.
+  const nested = `"clock.at": { kind: "literal", value: "1" }`;
+  expect(key(`{ ${clock}, ${nested} }`)).not.toBe(
+    key(`{ ${clock}, a: { kind: "literal", value: "1" } }`),
+  );
 });

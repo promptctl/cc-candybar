@@ -35,6 +35,7 @@ import {
   type Palette,
 } from "@promptctl/rich-js";
 import { memoPerPalette } from "./palette-memo.js";
+import { is, sameBy, sameEach } from "../utils/same.js";
 
 // --- The vocabulary -----------------------------------------------------------
 
@@ -1504,6 +1505,43 @@ export type Region =
       readonly band: Disclosure;
       readonly address: Address;
     };
+
+// [LAW:one-source-of-truth] Whether two regions are one place: the same arm,
+// the same decor or band, and the same address step for step — so whatever is
+// dealt one of them (`decorationFor`) is dealt the other.
+export function sameRegion(a: Region, b: Region): boolean {
+  switch (a.kind) {
+    case "bar":
+      return b.kind === "bar" && sameBarRegion(a, b);
+    case "band":
+      return b.kind === "band" && sameBandRegion(a, b);
+  }
+}
+
+const sameAddress = sameEach(
+  sameBy<AddressStep>({ index: is, count: is, distribution: is, axis: is }),
+);
+
+export const sameDecor = sameBy<Decor>({ variation: is, shade: is });
+
+// Whether two disclosures are one band: one hue, at one depth, on one ground.
+export const sameDisclosure = sameBy<Disclosure>({
+  hue: is,
+  depth: is,
+  ground: sameEach(sameBy<DecorEntry>({ hue: is, shade: is })),
+});
+
+const sameBarRegion = sameBy<Extract<Region, { kind: "bar" }>>({
+  kind: is,
+  decor: sameDecor,
+  address: sameAddress,
+});
+
+const sameBandRegion = sameBy<Extract<Region, { kind: "band" }>>({
+  kind: is,
+  band: sameDisclosure,
+  address: sameAddress,
+});
 
 /** The bar's root under `decor`: the top of the layout tree, before any step. */
 export const barRoot = (decor: Decor): Region => ({

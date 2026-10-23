@@ -194,6 +194,16 @@ describe("every render request writes one render event, whatever its outcome", (
     expect(field(drawn, "client")).toBe("unreported");
     // Which animation lanes the session's settings switch on: none by default.
     expect(field(drawn, "lanes")).toBe("-");
+    // How many of its view's parts a render evaluated: all of them cold, and
+    // only those whose inputs moved when the session draws the same data
+    // again (brandon-unfiled-3248.8ro6).
+    await render(sockPath, "ev-kept", projectDir, hints, configFlag("drawn"));
+    await render(sockPath, "ev-kept", projectDir, hints, configFlag("drawn"));
+    const [cold, kept] = eventsOf("ev-kept").map((e) =>
+      Number(field(e, "evaluated")),
+    );
+    expect(cold).toBeGreaterThan(0);
+    expect(kept).toBeLessThan(cold!);
     await render(
       sockPath,
       "ev-native",

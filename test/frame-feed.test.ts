@@ -93,6 +93,9 @@ function harness(opts: { motion: Motion; renderMs?: number; fails?: boolean }) {
   return { feeds, note, state, changes, log };
 }
 
+// The parts each bar frame says it evaluated.
+const EVALUATED = 3;
+
 // A frame drawing `output`, whose statusline shows `handoff` in its place, if
 // any.
 function barFrame(
@@ -104,6 +107,7 @@ function barFrame(
     resp: { ok: true, output },
     statusline: { ok: true, output: handoff ?? output },
     moves,
+    evaluated: EVALUATED,
     failure: null,
   };
 }
@@ -114,6 +118,7 @@ function failedFrame(req: string): FeedFrame {
     resp,
     statusline: resp,
     moves: false,
+    evaluated: 0,
     failure: { level: "error", line: `frame ${req} threw` },
   };
 }
@@ -385,6 +390,20 @@ describe("on a faked clock", () => {
     close();
     expect(state.rates.at(-1)).toBe(pace(PERIODS.still));
     expect(log.at(-1)).toMatch(new RegExp(` pace=${pace(PERIODS.still)}fps `));
+  });
+
+  // brandon-unfiled-3248.8ro6 step 7: what the feed's frames evaluated rides
+  // beside what it drew.
+  test("the summary counts the parts its frames evaluated", async () => {
+    const { feeds, note, state, log } = harness({ motion: "moving" });
+    note("s", "bar");
+    const close = feeds.subscribe("s", sub(() => {}));
+    await pass(100);
+    close();
+    expect(state.renders).toBeGreaterThan(1);
+    expect(log.at(-1)).toMatch(
+      new RegExp(` drawn=${state.renders} .* evaluated=${EVALUATED * state.renders} `),
+    );
   });
 
   // The pace is drawn into the frame, so a pace that moved with a render's

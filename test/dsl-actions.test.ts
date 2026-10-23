@@ -815,6 +815,22 @@ describe("2de.12 — loader proves the ActionDecl invariants", () => {
     expectIssue(source, /doctor must be "run", "fix", "mark"/);
   });
 
+  // A layout node's `when` binds actions as a segment's does, so the one
+  // check covers both: before it, the compile threw an opaque TypeError on
+  // the name nothing declares.
+  test("an unresolved `{{ action }}` in a layout node's `when` is rejected at its node", () => {
+    expectIssue(
+      `{
+        globals: {},
+        variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' }, k: { kind: 'state', key: 'k', default: '' } },
+        actions: { a: { set: 'k', to: 'v' } },
+        segments: { bar: { template: 'x' } },
+        root: { v: [{ h: ['bar'], when: '{{ $a := action "ghost" "?" }}true' }] },
+      }`,
+      /root\.children\[0\]\.when\] when references unknown action "ghost"/,
+    );
+  });
+
   test("an unresolved `{{ action }}` reference is rejected", () => {
     expectIssue(
       base(`{ a: { set: 'k', to: 'v' } }`, '{{ action "ghost" "?" }}'),

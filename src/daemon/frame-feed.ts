@@ -39,6 +39,8 @@ export interface FeedFrame {
   readonly resp: Response;
   readonly statusline: Response;
   readonly moves: boolean;
+  // How many of the view's parts the frame evaluated (src/dsl/parts.ts).
+  readonly evaluated: number;
   readonly failure: LogLine | null;
 }
 
@@ -151,6 +153,8 @@ interface Feed {
   // The frames a second the feed draws at, as it last set the next frame.
   pace: number;
   drawMs: number;
+  // Parts its frames evaluated: between data changes, those reading the instant.
+  evaluated: number;
   summarizedAt: number;
 }
 
@@ -401,6 +405,7 @@ export class FrameFeeds<Req> {
       // moving period later, shows the moving pace.
       pace: paceOf(this.deps.periods.still),
       drawMs: 0,
+      evaluated: 0,
       summarizedAt: now,
     };
     this.feeds.set(sessionId, feed);
@@ -461,6 +466,7 @@ export class FrameFeeds<Req> {
     this.drawn++;
     feed.drawn++;
     feed.drawMs += finished - started;
+    feed.evaluated += frame.evaluated;
     // Unsubscribed while this frame was drawn: the feed is gone, and so is
     // its clock.
     if (this.feeds.get(feed.sessionId) !== feed) return;
@@ -583,7 +589,7 @@ export class FrameFeeds<Req> {
     const now = this.deps.now();
     this.deps.log(
       "info",
-      `feed sid=${JSON.stringify(feed.sessionId)} ${state} subscribers=${feed.followers.size} lanes=${[...feed.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round((now - feed.since) / 1000)}s drawn=${feed.drawn} noted=${feed.noted} moving=${feed.moving} unseen=${feed.unseen} failed=${feed.failed} pushed=${feed.pushed} pace=${feed.pace}fps meanDraw=${feed.drawn === 0 ? "-" : (feed.drawMs / feed.drawn).toFixed(2)}ms`,
+      `feed sid=${JSON.stringify(feed.sessionId)} ${state} subscribers=${feed.followers.size} lanes=${[...feed.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round((now - feed.since) / 1000)}s drawn=${feed.drawn} noted=${feed.noted} moving=${feed.moving} unseen=${feed.unseen} failed=${feed.failed} pushed=${feed.pushed} pace=${feed.pace}fps evaluated=${feed.evaluated} meanDraw=${feed.drawn === 0 ? "-" : (feed.drawMs / feed.drawn).toFixed(2)}ms`,
     );
     feed.summarizedAt = now;
   }

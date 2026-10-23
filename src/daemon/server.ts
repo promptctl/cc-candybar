@@ -1701,7 +1701,7 @@ async function renderFrame(
   const started = new Date();
   const facts: RenderFacts = [];
   try {
-    const { drawn, motion, lanes } = await renderChecked(
+    const { drawn, motion, evaluated, lanes } = await renderChecked(
       req,
       instantOf(started),
       facts,
@@ -1729,6 +1729,7 @@ async function renderFrame(
         ),
       },
       moves: motion === "moves",
+      evaluated,
       failure: null,
     };
   } catch (error) {
@@ -1743,6 +1744,7 @@ async function renderFrame(
       resp: failed,
       statusline: failed,
       moves: false,
+      evaluated: 0,
       failure: { level, line: `frame ${line}` },
     };
   }
@@ -1895,6 +1897,7 @@ async function renderChecked(
 ): Promise<{
   drawn: DrawnBar;
   motion: DrawnMotion;
+  evaluated: number;
   clickShown: ClickErrorRecord | null;
   // Which animation lanes the session's settings switch on, as drawn.
   lanes: LaneSwitches;
@@ -2168,6 +2171,9 @@ async function renderChecked(
     leaves: passages(fx.leaves),
     // What the frame drew: whether anything on it changes without new data.
     motion: frame.motion,
+    // How many of the view's parts it evaluated: between data changes, only
+    // those that read the instant (src/dsl/parts.ts).
+    evaluated: String(frame.evaluated),
     err: combinedError ? "Y" : "N",
     clickError: clickHold.kind === "none" ? "-" : clickHold.kind,
     upd: String(updates.length),
@@ -2185,6 +2191,7 @@ async function renderChecked(
       },
     },
     motion: frame.motion,
+    evaluated: frame.evaluated,
     clickShown,
     lanes,
   };

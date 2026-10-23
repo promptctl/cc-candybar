@@ -48,7 +48,10 @@ const PAYLOAD = {
 
 // The bundled default, registered into a fresh store against the shared
 // SessionState and rendered once — what every RenderCache entry is.
-function renderedEntry(sessionState: SessionState): SourceRegistry {
+function renderedEntry(
+  sessionState: SessionState,
+  drawn = true,
+): SourceRegistry {
   const config = parseAndValidate(
     "<test>",
     "{}",
@@ -58,15 +61,17 @@ function renderedEntry(sessionState: SessionState): SourceRegistry {
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
-  renderDsl(
-    config,
-    compiled,
-    store,
-    registry,
-    PAYLOAD,
-    instantOf(new Date()),
-    OPTS,
-  );
+  if (drawn) {
+    renderDsl(
+      config,
+      compiled,
+      store,
+      registry,
+      PAYLOAD,
+      instantOf(new Date()),
+      OPTS,
+    );
+  }
   return registry;
 }
 
@@ -92,6 +97,15 @@ describe("VariableStore.dispose releases every computed's subscriptions", () => 
     );
 
     second.dispose();
+    expect(sessionState.observers()).toBe(0);
+  });
+
+  // brandon-unfiled-3248.8ro6 step 6: what a draw keeps of its parts lives in
+  // its store, and goes with its variables.
+  it("releases the parts a draw kept beside the variables", () => {
+    const sessionState = new SessionState();
+    const variables = renderedEntry(sessionState, false).dispose();
+    expect(renderedEntry(sessionState).dispose()).toBeGreaterThan(variables);
     expect(sessionState.observers()).toBe(0);
   });
 

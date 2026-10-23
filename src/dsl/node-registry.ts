@@ -54,7 +54,6 @@ import {
 } from "../themes/decor.js";
 import {
   fragmentsToCells,
-  evaluateWhen,
   applySegmentLayout,
   placementScope,
 } from "../template-engine/index.js";
@@ -229,7 +228,7 @@ export interface NodeRenderCtx {
   // on with the steps since that body — extended by one step per container
   // level by the driver, re-rooted onto a band by `renderBody`. A pure fact
   // about position — unchanged by any node being hidden — that the segment
-  // hands to `evaluateSegment` so its colours derive from where it sits, with no
+  // hands its parts (`PlacementParts.evaluate`) so its colours derive from where it sits, with no
   // walk state read.
   readonly region: Region;
   readonly perSegmentSink?: Map<string, readonly RichText[]>;
@@ -241,44 +240,23 @@ export interface NodeRenderCtx {
   // (the registry-dispose contract) — see RenderObservers.onSegmentError.
   readonly onSegmentError?: (placementId: string, message: string) => void;
   // [LAW:locality-or-seam] The segment seam, injected as a capability so this
-  // module never imports the menu or color features — it only hands over a
-  // segment's templates and gets back what evaluating them produced.
-  //
-  // Before any of the segment's templates evaluate, the seam publishes what
-  // they may ask about themselves — the name a `{{ menu }}` derives its
-  // identity from, the palette `{{ color }}` resolves against, the background
-  // `{{ bgOf }}` returns — and resolves the segment's `bg:`/`fg:` into its
-  // base Style along the way; a body asking for its own background can only be
-  // answered once the background exists. Then the body evaluates, and the seam
-  // returns its fragments beside the bodies its open `{{ menu }}`s dropped
-  // (template order), for the boundary to stack below the row.
-  //
-  // [LAW:no-ambient-temporal-coupling] Publishing and tearing down are ONE
-  // call, so a template that throws cannot leave the record published for
-  // whatever evaluates next outside any segment.
-  evaluateSegment(
-    placement: CompiledSegmentNode,
+  // module never imports the menu or color features — it only names a
+  // placement and gets back its parts as the view keeps them
+  // (src/dsl/parts.ts): its own `when`, whether the body it hangs is open,
+  // and what its templates evaluate to where the walk draws it.
+  placement(node: CompiledSegmentNode): PlacementParts;
+  // A template of the placement evaluated once, kept nowhere, as its body
+  // would be in `palette` on this node's region: a broken placement's edit
+  // buttons, drawn beside its ⚠.
+  evaluateOnce(
+    node: CompiledSegmentNode,
     scope: object,
     palette: Palette,
-    region: Region,
-    templates: {
-      readonly bg: Template<RichText> | undefined;
-      readonly fg: Template<RichText> | undefined;
-      readonly body: Template<RichText>;
-      readonly lead: Template<RichText> | undefined;
-      readonly trail: Template<RichText> | undefined;
-    },
-    // Whether the disclosure body this segment hangs is open: with the menu
-    // bodies its own template drops, it decides the ground the segment wears.
-    bodyOpen: boolean,
+    body: Template<RichText>,
   ): EvaluatedSegment;
-  // Resolve a segment name to its decl + compiled form (the driver closes over
-  // config.segments + the compiled segments).
-  lookupSegment(
-    name: string,
-  ):
-    | { readonly seg: SegmentDecl; readonly compiled: CompiledSegment }
-    | undefined;
+  // Resolve a segment name to its declaration (the driver closes over
+  // config.segments).
+  lookupSegment(name: string): SegmentDecl | undefined;
   // Continue the walk into a child node (parentVisible = this node's
   // visibility; step = which child of how many, extending the address).
   renderChild(
@@ -369,6 +347,21 @@ export interface EvaluatedSegment {
   // Whether anything hangs open under the segment — a dropped menu body or
   // its open disclosure body — so it wears its band's state colour.
   readonly open: boolean;
+  // The floors the band it opens stands short of as drawn (`bandFor`), none
+  // while nothing hangs open under it.
+  readonly shortfalls: readonly string[];
+}
+
+// [LAW:one-source-of-truth] A placement's parts as its view keeps them
+// (src/dsl/parts.ts): its segment's own `when`, whether the body it hangs is
+// open, and what its templates evaluate to in the palette and region the walk
+// draws it in — each a derived value of the view, so a frame between data
+// changes evaluates only the parts that read the instant. A part that throws
+// throws at every read until what it read changes.
+export interface PlacementParts {
+  shown(): boolean;
+  bodyOpen(): boolean;
+  evaluate(palette: Palette, region: Region): EvaluatedSegment;
 }
 
 // ─── Composition ───────────────────────────────────────────────────────────────
@@ -614,15 +607,13 @@ function drawSegment(
   node: CompiledSegmentNode,
   ctx: NodeRenderCtx,
 ): RenderedLines {
-  const found = ctx.lookupSegment(node.name);
+  const seg = ctx.lookupSegment(node.name);
   // [LAW:no-defensive-null-guards] The loader validates every segment ref
-  // against the segments map and registerDslConfig compiles every declared
-  // segment; a miss is a caller bug (renderDsl given a mismatched compiled
-  // object).
-  if (!found) {
+  // against the segments map; a miss is a caller bug (renderDsl given a
+  // mismatched config).
+  if (seg === undefined) {
     throw new Error(`Layout segment "${node.name}" has no matching segment`);
   }
-  const { seg, compiled: segCompiled } = found;
   if (ctx.gate.kind === "hidden") return [];
   // [LAW:one-source-of-truth] Every template of THIS placement — its
   // segment's `when`, `bg:`, `fg:`, body, and edit mode's lead and trail — reads
@@ -643,7 +634,8 @@ function drawSegment(
   // partial rendering: the new config stays active, working segments render, and
   // broken segments show an error cell.
   try {
-    if (!evaluateWhen(segCompiled.when, scope)) return [];
+    const parts = ctx.placement(node);
+    if (!parts.shown()) return [];
 
     // [LAW:dataflow-not-control-flow] The per-placement variability is
     // WHICH palette, and it is a value: this placement's `theme` setting,
@@ -677,27 +669,16 @@ function drawSegment(
     // a `(?)`'s), walked AFTER exit — its cells are segments of their own,
     // each entering the seam in turn — on the band this trigger computed.
     // Walked open or closed, like every child: visibility is a value.
-    const bodyOpen =
-      node.opens !== undefined && evaluateWhen(node.opens.open, ctx.scope);
+    const bodyOpen = parts.bodyOpen();
     // [LAW:dataflow-not-control-flow] `open` is the PRESENCE of something
     // under the segment: a dropped menu body, or an open disclosure body.
     // Either way the segment is the TRIGGER of the band below it and wears
     // that band's state colour — drawn from what it opens, not from where
     // it sits. The seam decides it (the drop list is only known once the
     // body has evaluated) and evaluates the lead and trail on that ground.
-    const { styles, fragments, lead, trail, drops, open } = ctx.evaluateSegment(
-      node,
-      scope,
+    const { styles, fragments, lead, trail, drops, open } = parts.evaluate(
       palette,
       ctx.region,
-      {
-        bg: segCompiled.bg,
-        fg: segCompiled.fg,
-        body: segCompiled.template,
-        lead: node.lead,
-        trail: node.trail,
-      },
-      bodyOpen,
     );
     const baseStyle = open ? styles.trigger : styles.closed;
     const layout = {
@@ -889,20 +870,7 @@ function errorAffix(
 ): readonly RichText[] {
   if (affix === undefined) return [];
   try {
-    return ctx.evaluateSegment(
-      node,
-      scope,
-      ctx.palette,
-      ctx.region,
-      {
-        bg: undefined,
-        fg: undefined,
-        body: affix,
-        lead: undefined,
-        trail: undefined,
-      },
-      false,
-    ).fragments;
+    return ctx.evaluateOnce(node, scope, ctx.palette, affix).fragments;
   } catch (err) {
     ctx.onSegmentError?.(node.id, (err as Error).message ?? String(err));
     return [];

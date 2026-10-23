@@ -1,9 +1,9 @@
 import type { ActionRuntime, RenderBinding } from "../../src/render/action";
 
-// The binding the latest render bound into `runtime`, kept after drawDsl drops
-// it, so a test can read what that render published — its look, its layout
-// rows. Nothing in the daemon keeps one: a compile is shared between entries
-// and must hold nothing of a render once it returns.
+// The binding the latest render bound into `runtime`, kept after drawDsl
+// unbinds it, so a test can read what that render published — its look, its
+// layout rows. The compile holds none once a render returns: it is shared
+// between entries, and each binding is its view's.
 export function lastBinding(runtime: ActionRuntime): () => RenderBinding {
   let live: RenderBinding | undefined;
   let drawn: RenderBinding | undefined;

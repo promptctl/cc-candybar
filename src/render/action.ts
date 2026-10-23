@@ -276,8 +276,9 @@ export interface RenderLook extends RenderPalettes {
 /**
  * What a render binds into the compile it draws with: everything a template
  * function reads of the render in progress. [LAW:no-ambient-temporal-coupling]
- * It lives exactly as long as the render — drawDsl builds it, binds it, and
- * drops it on every exit — so a compile shared between render-cache entries
+ * It is the view's (src/dsl/parts.ts), each field a value the view's parts
+ * track, and is bound for exactly as long as one draw — drawDsl binds it and
+ * unbinds it on every exit — so a compile shared between render-cache entries
  * holds nothing of whichever entry drew last.
  */
 export interface RenderBinding {
@@ -306,11 +307,12 @@ export interface RenderBinding {
   readonly seamCols: number;
   // [LAW:no-ambient-temporal-coupling] The look this render draws in and the
   // rows it lays its closed segments out in. Only the render can resolve them
-  // (a `globals.palette` rule needs the payload), so drawDsl publishes each
-  // once it has, before the walk evaluates a template that reads it; read
-  // through `renderLook` / `renderLayout`.
-  look: RenderLook | undefined;
-  layout: (() => PreviewRows) | undefined;
+  // (a `globals.palette` rule needs the payload), so drawDsl publishes the
+  // look once it has, before the walk evaluates a template that reads either,
+  // and neither is there while a rule is evaluated; read through
+  // `renderLook` / `renderLayout`.
+  readonly look: RenderLook | undefined;
+  readonly layout: (() => PreviewRows) | undefined;
 }
 
 /**
