@@ -61,6 +61,7 @@ describe("a daemon render's event names the effect it wore", () => {
       .map((l) => ({
         effect: l.match(/ effect=(\S+) /)?.[1],
         t: Number(l.match(/ effectT=(\d+\.\d{3}) /)?.[1]),
+        speed: l.match(/ speed=(\S+) /)?.[1],
         made: Number(l.match(/ effectRows=(\d+)made\//)?.[1]),
         reused: Number(l.match(/\/(\d+)reused /)?.[1]),
         own: l.match(/ effectOwn=(\S+) /)?.[1],
@@ -76,7 +77,12 @@ describe("a daemon render's event names the effect it wore", () => {
     expect(events.length).toBeGreaterThanOrEqual(2);
     const first = events[0]!;
     const last = events[events.length - 1]!;
-    expect(first).toMatchObject({ effect: "shimmer", t: 0, reused: 0 });
+    expect(first).toMatchObject({
+      effect: "shimmer",
+      t: 0,
+      speed: "1x",
+      reused: 0,
+    });
     expect(first.made).toBeGreaterThan(0);
     expect(last.effect).toBe("shimmer");
     expect(last.t).toBeGreaterThan(0);
@@ -85,6 +91,37 @@ describe("a daemon render's event names the effect it wore", () => {
     // keeps its own clock.
     expect(ownT(first.own)).toBe(0);
     expect(ownT(last.own)).toBeGreaterThan(0);
+  });
+
+  // brandon-menus-sjhy.nt2: the event names the speed the session's animation
+  // clock ran at, and the effect's clock runs at it.
+  test("a session at 20x names its speed, and its effect's clock runs twenty times the wall's", async () => {
+    const sessionId = "effect-e2e-speed";
+    const fast = path.join(projectDir, "fast.json5");
+    writeFileSync(
+      fast,
+      `{ globals: { effect: "shimmer", animationSpeed: "20x" }, segments: { a: { template: 'steady' } }, root: { h: ['a'] } }`,
+    );
+    const argv = ["cc-candybar", "--config", fast];
+    await render(sockPath, sessionId, projectDir, {}, argv);
+    const gapMs = 100;
+    await new Promise((resolve) => setTimeout(resolve, gapMs));
+    await render(sockPath, sessionId, projectDir, {}, argv);
+
+    const events = readFileSync(logPath(env), "utf8")
+      .split("\n")
+      .filter((l) => l.includes(`render sid=${sessionId} `))
+      .map((l) => ({
+        speed: l.match(/ speed=(\S+) /)?.[1],
+        t: Number(l.match(/ effectT=(\d+\.\d{3}) /)?.[1]),
+      }));
+    expect(events.length).toBeGreaterThanOrEqual(2);
+    expect(events.every((e) => e.speed === "20x")).toBe(true);
+    // At least the gap passed between the first render and the last, so the
+    // effect's clock moved at least twenty gaps.
+    expect(events[events.length - 1]!.t).toBeGreaterThanOrEqual(
+      (20 * gapMs) / 1000,
+    );
   });
 
   // brandon-effects-2gka.3vt: a placement the payload hides dissolves out, and

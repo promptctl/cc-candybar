@@ -8,6 +8,7 @@
 // fg), which is what makes `{{ bgOf }}` readable in a `fg:` template and an
 // error in a `bg:` one.
 
+import { WALL_CLOCKS } from "./helpers/engine-clocks";
 import {
   Palette,
   parseRgbHex,
@@ -79,7 +80,7 @@ interface Harness {
 function makeHarness(): Harness {
   const ref = createActiveSegmentRef(() => ColorDepth.TRUECOLOR);
   const engine = createCcCandybarEngine({
-    clock: () => new Date(),
+    ...WALL_CLOCKS,
     extraFuncs: segmentColorFuncs(ref),
   });
   return { ref, parse: (src: string) => engine.parse(src) };
@@ -184,7 +185,7 @@ describe("keptOn: a colour shown exactly as given, which the terminal's rounding
   const at = (drawnAt: ColorDepth) => {
     const ref = createActiveSegmentRef(() => drawnAt);
     const engine = createCcCandybarEngine({
-      clock: () => new Date(),
+      ...WALL_CLOCKS,
       extraFuncs: segmentColorFuncs(ref),
     });
     openSegment(ref, SEG, SEG, makeTestPalette(), DISCLOSURE, TINT, PAIRED_TEXT);
@@ -460,7 +461,7 @@ describe("segment color functions in the engine", () => {
   test('{{ fg (color "primary") … }} paints the palette color', () => {
     const ref = createActiveSegmentRef(() => ColorDepth.TRUECOLOR);
     const engine = createCcCandybarEngine({
-      clock: () => new Date(),
+      ...WALL_CLOCKS,
       extraFuncs: segmentColorFuncs(ref),
     });
     const tpl = engine.parse('{{ fg (color "primary") "hello" }}');
@@ -471,19 +472,19 @@ describe("segment color functions in the engine", () => {
   });
 
   test("an engine built without segmentColorFuncs has no `color` function", () => {
-    const engine = createCcCandybarEngine({ clock: () => new Date() }); // no segment-scoped funcs
+    const engine = createCcCandybarEngine(WALL_CLOCKS); // no segment-scoped funcs
     const tpl = engine.parse('{{ color "primary" }}');
     expect(() => tpl.evaluate({})).toThrow(/"color" is not registered/);
   });
 
   test("an engine built without segmentColorFuncs has no `bgOf` function", () => {
-    const engine = createCcCandybarEngine({ clock: () => new Date() });
+    const engine = createCcCandybarEngine(WALL_CLOCKS);
     const tpl = engine.parse("{{ bgOf }}");
     expect(() => tpl.evaluate({})).toThrow(/"bgOf" is not registered/);
   });
 
   test("an engine built without segmentColorFuncs has no `tint` function", () => {
-    const engine = createCcCandybarEngine({ clock: () => new Date() });
+    const engine = createCcCandybarEngine(WALL_CLOCKS);
     const tpl = engine.parse("{{ tint }}");
     expect(() => tpl.evaluate({})).toThrow(/"tint" is not registered/);
   });

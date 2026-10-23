@@ -14,7 +14,7 @@
 import { createHash } from "node:crypto";
 import type { ColorDepth, RichText, Palette } from "@promptctl/rich-js";
 import { Defines, type Engine, type Template } from "@promptctl/go-template-js";
-import type { Instant } from "../utils/instant.js";
+import type { AnimationTime, Instant } from "../utils/instant.js";
 import type {
   ValidatedConfig,
   VariableDecl,
@@ -77,7 +77,7 @@ import {
   placementPalette,
   transposedPalette,
 } from "../themes/index.js";
-import { FOLLOW_BAR } from "../themes/policy.js";
+import { ANIMATION_SPEEDS, FOLLOW_BAR } from "../themes/policy.js";
 import type { DrawnMotion } from "../render/drawn-motion.js";
 import { buildScope, placementScope } from "../template-engine/scope.js";
 import {
@@ -604,6 +604,8 @@ export function compileDslConfig({
   // functions read the instant its variables' do, and its `readableOn` floors
   // at the same depth theirs does — the registry the render bound.
   const now = (): Date => renderBinding(actionRuntime, "now").registry.now();
+  const animatedAt = (): AnimationTime =>
+    renderBinding(actionRuntime, "animatedAt").registry.animatedAt();
   const drawnAt = (): ColorDepth =>
     renderBinding(actionRuntime, "drawnAt").registry.drawnAt();
   const activeSegment = createActiveSegmentRef(drawnAt);
@@ -662,6 +664,7 @@ export function compileDslConfig({
       },
     },
     clock: now,
+    animatedAt,
     drawnAt,
   });
   // [LAW:single-enforcer] THE one parse path for this config: every template —
@@ -1099,6 +1102,7 @@ export type RenderSelection = Pick<
   | "variation"
   | "shade"
   | "transitions"
+  | "animationSpeed"
   | "menuTimeout"
 > & {
   // The session's effect memory: when its effect came into force (the effect's
@@ -1154,6 +1158,12 @@ export function drawDsl(
   // every text colour chosen below — and every variable template's
   // `readableOn` — is floored on the one depth.
   registry.renderAt(at);
+  // [LAW:one-source-of-truth] The session's animation clock, read once at the
+  // render's instant: its templates' `frames` animate by this reading, and the
+  // effects below by the same value (brandon-menus-sjhy.nt2).
+  const effects = selection.effects ?? new SessionEffects<RenderedLine>("");
+  const clock = effects.clockAt(at, ANIMATION_SPEEDS[selection.animationSpeed]);
+  registry.animateAt(clock.anim);
   registry.drawAt(drawnDepth(opts.colorCompatibility));
   // [LAW:no-ambient-temporal-coupling] The compile may serve many stores (one
   // per render-cache entry its config compiles alike in): every template it
@@ -1303,11 +1313,9 @@ export function drawDsl(
           fill: flashFill,
           text: textOn(palette, flashFill, registry.drawnAt()),
         };
-  const motion = (
-    selection.effects ?? new SessionEffects<RenderedLine>("")
-  ).motion(
+  const motion = effects.motion(
     effect.value,
-    at,
+    clock,
     {
       transitions,
       source: {

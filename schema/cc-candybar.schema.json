@@ -73,6 +73,13 @@
         "transitions": {
           "type": "boolean"
         },
+        "animationSpeed": {
+          "enum": [
+            "1x",
+            "5x",
+            "20x"
+          ]
+        },
         "autoWrap": {
           "type": "boolean"
         },
@@ -1330,6 +1337,13 @@
               "transitions": {
                 "type": "boolean"
               },
+              "animationSpeed": {
+                "enum": [
+                  "1x",
+                  "5x",
+                  "20x"
+                ]
+              },
               "autoWrap": {
                 "type": "boolean"
               },
@@ -1460,6 +1474,13 @@
         },
         "transitions": {
           "type": "boolean"
+        },
+        "animationSpeed": {
+          "enum": [
+            "1x",
+            "5x",
+            "20x"
+          ]
         },
         "autoWrap": {
           "type": "boolean"

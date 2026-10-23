@@ -223,7 +223,7 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
     const sessions = new EffectSessions<RenderedLine>();
     const effects = sessions.of("s");
     const draw = (when: Instant, rows: number): void => {
-      const motion = effects.motion("shimmer", when, STILL_FRAME);
+      const motion = effects.motion("shimmer", effects.clockAt(when, 1), STILL_FRAME);
       for (let row = 0; row < rows; row++) {
         const moving = motion.row(`flow.own#${row}`, "bar", []);
         if (moving.kind !== "moving") throw new Error("shimmer is still");
@@ -244,7 +244,7 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
 
   test("a row says when it next changes: now while its loop moves, never while every part holds still", () => {
     const effects = new SessionEffects<RenderedLine>("s");
-    const motion = effects.motion("shimmer", at(7), STILL_FRAME);
+    const motion = effects.motion("shimmer", effects.clockAt(at(7), 1), STILL_FRAME);
     const moving = motion.row("flow.own#0", "bar", []);
     if (moving.kind !== "moving") throw new Error("shimmer is still");
     const row = moving.wrap(new RichText("abc"));

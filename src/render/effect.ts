@@ -37,7 +37,7 @@ import {
   type EffectName,
   type PlacementEffect,
 } from "../themes/policy.js";
-import type { Instant } from "../utils/instant.js";
+import type { AnimationTime, Instant } from "../utils/instant.js";
 import { CLOSING_FLASH } from "../config/menu-timeout.js";
 
 // [LAW:types-are-the-program] The placement a laid cell belongs to, its
@@ -163,10 +163,22 @@ interface RowEffect {
   readonly effect: Effect;
 }
 
-// When an effect came into force: its own t = 0.
+// When an effect came into force: its own t = 0, on the animation clock.
 interface InForce {
   readonly name: EffectName;
-  readonly since: Instant;
+  readonly since: AnimationTime;
+}
+
+// [LAW:types-are-the-program] One frame's reading of the session's animation
+// clock (brandon-menus-sjhy.nt2): the wall instant the frame is drawn at, the
+// animation time that instant reads as, and the speed the clock runs at from
+// it on. Read once before the walk (`SessionEffects.clockAt`) and handed to
+// every consumer — the templates' `frames`, and `motion` — so all of a frame's
+// animations read one time; kept as the clock's anchor once the frame is drawn.
+export interface FrameClock {
+  readonly wall: Instant;
+  readonly anim: AnimationTime;
+  readonly speed: number;
 }
 
 // A placement wearing its own effect in one render, as its event reports it.
@@ -195,6 +207,8 @@ export interface EffectFrame {
   readonly effect: EffectName;
   // Seconds since the effect came into force: the effect's own clock.
   readonly t: number;
+  // The rate the animation clock ran at for this frame.
+  readonly speed: number;
   // Effects made for rows this render, and ones that reused last frame's.
   readonly made: number;
   readonly reused: number;
@@ -214,7 +228,7 @@ export interface EffectFrame {
 // once from the placement's ground — rich-js keeps each cell's place in it.
 interface Passage {
   readonly name: TransitionName;
-  readonly since: Instant;
+  readonly since: AnimationTime;
   readonly transition: Transition;
 }
 
@@ -361,6 +375,12 @@ export class SessionEffects<Line> {
   // changed to its current value: the effect's own t = 0 is a recorded fact,
   // never inferred from when renders happened to arrive.
   private inForce: InForce | null = null;
+  // [LAW:no-ambient-temporal-coupling] Where the session's animation clock
+  // stood at its last drawn frame, and the speed it ran at from there: the
+  // anchor every later reading is measured from, so a change of speed changes
+  // the clock's slope from the frame it lands in and never its reading, so no
+  // loop jumps phase. None before the session's first frame.
+  private anchor: FrameClock | null = null;
   // The same fact for each placement wearing its own effect, by placement id,
   // kept for the placements the latest render drew: one that stopped being
   // drawn starts its effect again at t = 0 when it is drawn again, as the
@@ -380,6 +400,7 @@ export class SessionEffects<Line> {
   private frame: EffectFrame = {
     effect: EFFECT_FLOOR,
     t: 0,
+    speed: 1,
     made: 0,
     reused: 0,
     own: [],
@@ -408,7 +429,22 @@ export class SessionEffects<Line> {
   }
 
   /**
-   * The motion of each row of a render drawn at `at` whose bar wears `name`,
+   * The session's animation clock read at the wall instant `at`, running at
+   * `speed` from it on. The time since the last drawn frame passed at the
+   * speed in force then; the first frame reads `at` itself, so a session that
+   * has only ever run at 1x reads the wall instant at every frame. Reads only: the frame
+   * that draws keeps it as the anchor (`drawn`).
+   */
+  clockAt(at: Instant, speed: number): FrameClock {
+    const anim =
+      this.anchor === null
+        ? at
+        : this.anchor.anim + (at - this.anchor.wall) * this.anchor.speed;
+    return { wall: at, anim: anim as AnimationTime, speed };
+  }
+
+  /**
+   * The motion of each row of a render drawn at `clock` whose bar wears `name`,
    * given the row's strip items. Records an effect coming into force — the
    * bar's, or a placement's — when it differs from the last render's, so every
    * catalogue effect starts calm at its t = 0: pulse at rest, shimmer entering
@@ -419,10 +455,13 @@ export class SessionEffects<Line> {
    */
   motion(
     name: EffectName,
-    at: Instant,
+    clock: FrameClock,
     given: FrameTransitions<Line>,
     flash: MenuFlash = null,
   ): FrameMotion<Line> {
+    // Every animation of the frame reads the animation clock: `at` is the
+    // time it reads, and every `since` is a reading of the same clock.
+    const at = clock.anim;
     const inForce =
       this.inForce?.name === name ? this.inForce : { name, since: at };
     const bar: Omit<Part, "owners"> = {
@@ -454,6 +493,7 @@ export class SessionEffects<Line> {
     const frame = {
       effect: name,
       t: bar.t,
+      speed: clock.speed,
       made: 0,
       reused: 0,
       own,
@@ -684,6 +724,7 @@ export class SessionEffects<Line> {
       placed: basis === "off" ? (_id, lines) => lines : reached,
       row,
       drawn: () => {
+        this.anchor = clock;
         this.inForce = inForce;
         this.placements = placements;
         this.made = made;
