@@ -5,9 +5,10 @@
 // built here: a provider added to `RenderPayloadDeps` is constructed in this
 // one place, so every renderer has it and none restates the list.
 //
-// [LAW:effects-at-boundaries] Construction arms two unref'd timers (the git
-// sanity check, the usage sweep) and touches no disk; the log sink and the
-// watcher pool are the caller's, so only the daemon writes daemon.log.
+// [LAW:effects-at-boundaries] Construction arms one unref'd timer (the usage
+// sweep) and touches no disk — every owner's period starts only once a home
+// holds one of its entries; the log sink and the watcher pool are the
+// caller's, so only the daemon writes daemon.log.
 
 import { GitDataProvider } from "./cache/git";
 import { SessionUsageStore } from "./cache/session-usage-store";
@@ -22,12 +23,12 @@ import { MementoProvider } from "../segments/memento.js";
 import { productionMementoEdge } from "../memento/edge.js";
 import { readAutoCompactWindow } from "../segments/autocompact.js";
 
-// What a session's own history contributes (`history`, `navigation`) and the
-// frames the renderer pushes it (`feeds`) are the renderer's to supply;
-// everything else is a provider.
+// What a session's own history contributes (`history`, `navigation`), the
+// frames the renderer pushes it (`feeds`) and the home the render reads for
+// (`holds`) are the renderer's to supply; everything else is a provider.
 export type PayloadProviders = Omit<
   RenderPayloadDeps,
-  "history" | "navigation" | "feeds"
+  "history" | "navigation" | "feeds" | "holds"
 >;
 
 export function createPayloadProviders(opts: {

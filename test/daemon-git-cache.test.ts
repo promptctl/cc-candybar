@@ -1,7 +1,11 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { GitDataProvider } from "../src/daemon/cache/git";
+import {
+  GIT_PERIOD_MS,
+  GitDataProvider,
+  PR_PERIOD,
+} from "../src/daemon/cache/git";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import {
   GitService,
@@ -9,6 +13,7 @@ import {
   type PullRequest,
 } from "../src/segments/git";
 import { ABSENT, failed, ok, type Outcome } from "../src/utils/outcome";
+import { Holds } from "../src/utils/holds";
 
 class StubGitService extends GitService {
   public computeCalls: Array<{ workingDir: string; projectDir?: string }> = [];
@@ -38,19 +43,29 @@ class StubGitService extends GitService {
     head: "c0ffee",
   });
   public stubRemote: Outcome<string> = ok("git@github.com:acme/widget.git");
+  public remoteGate: { promise: Promise<void>; resolve: () => void } | null =
+    null;
 
   override async getRepoRemoteUrl(
     _workingDir: string,
   ): Promise<Outcome<string>> {
-    return this.stubRemote;
+    const remote = this.stubRemote;
+    if (this.remoteGate) await this.remoteGate.promise;
+    return remote;
   }
+
+  // Holds every forge lookup open until resolved; a lookup answers with the PR
+  // the forge held as it BEGAN.
+  public prGate: { promise: Promise<void>; resolve: () => void } | null = null;
 
   override async resolvePullRequest(
     workingDir: string,
     remoteUrl: string,
   ): Promise<Outcome<PullRequest>> {
     this.prCalls.push({ workingDir, remoteUrl });
-    return this.stubPr;
+    const pr = this.stubPr;
+    if (this.prGate) await this.prGate.promise;
+    return pr;
   }
 
   override async findGitRoot(workingDir: string): Promise<Outcome<string>> {
@@ -93,6 +108,10 @@ class StubGitService extends GitService {
 
   // A repo `git status` could not read: the fetch outcome is `failed`.
   public infoFailure: string | null = null;
+  // Holds every read open until resolved, so a test can land a change while a
+  // read is out. The read answers with what the repo held as it BEGAN.
+  public infoGate: { promise: Promise<void>; resolve: () => void } | null =
+    null;
 
   override async getGitInfo(
     workingDir: string,
@@ -101,115 +120,161 @@ class StubGitService extends GitService {
   ): Promise<Outcome<GitInfo>> {
     if (!(workingDir in this.repoRootByDir)) return ABSENT;
     if (this.repoRootByDir[workingDir] === null) return ABSENT;
-    if (this.infoFailure !== null) return failed(this.infoFailure);
     this.computeCalls.push({ workingDir, projectDir });
-    return ok(this.stubInfo);
+    const failure = this.infoFailure;
+    const info = this.stubInfo;
+    if (this.infoGate) await this.infoGate.promise;
+    return failure !== null ? failed(failure) : ok(info);
   }
 }
 
-function makeCache(opts: { ttlMs?: number; maxEntries?: number } = {}) {
+function makeCache(
+  opts: {
+    periodMs?: number;
+    maxRepos?: number;
+    // Throws once on the first message it matches, standing in for a bug
+    // inside a refresh.
+    throwOn?: string;
+  } = {},
+) {
   const inner = new StubGitService();
-  // sanityIntervalMs=0 disables the periodic check in unit tests; we drive
-  // it manually via runSanityCheckNow().
-  const svc = new GitDataProvider({ ...opts, inner, sanityIntervalMs: 0 });
-  return { svc, inner };
+  const logs: string[] = [];
+  let throwOn = opts.throwOn;
+  const svc = new GitDataProvider({
+    periodMs: opts.periodMs,
+    maxRepos: opts.maxRepos,
+    inner,
+    logger: (_level, message) => {
+      if (throwOn !== undefined && message.includes(throwOn)) {
+        throwOn = undefined;
+        throw new Error("logger bug");
+      }
+      logs.push(message);
+    },
+  });
+  return { svc, inner, logs, holds: new Holds() };
+}
+
+// A promise whose settling the test controls — the only way to make a read
+// genuinely in flight, rather than hoping an await boundary lands where needed.
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolve!: () => void;
+  const promise = new Promise<void>((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
+}
+
+// Drains a refresh a watch fire started: it has no handle of its own to await,
+// and its chain (fetch, settle, the PR's remote read) is a few rounds deep.
+async function tick(times = 5): Promise<void> {
+  for (let i = 0; i < times; i++) {
+    await new Promise<void>((r) => setImmediate(r));
+  }
 }
 
 afterEach(() => {
-  // Watchers will fail on the synthetic /repo/* paths but registry guards
-  // against the resulting throw; nothing to clean up here.
+  jest.useRealTimers();
 });
 
 describe("GitDataProvider", () => {
-  test("two cwds in same repo share one cache entry", async () => {
-    const { svc, inner } = makeCache();
-    // After kz8.3 review fix, provider's inner.getGitInfo is invoked with the
-    // resolved repoRoot (not the cwd) so the inner doesn't re-walk findGitRoot.
-    // The stub's lookups expect to see the resolved key.
+  test("two cwds in same repo share one state", async () => {
+    const { svc, inner, holds } = makeCache();
     inner.repoRootByDir = {
       "/repo/a": "/repo",
       "/repo/b": "/repo",
       "/repo": "/repo",
     };
 
-    await svc.getGitInfo("/repo/a", { showSha: false });
-    await svc.getGitInfo("/repo/b", { showSha: false });
+    await svc.getGitInfo(holds, "/repo/a", { showSha: false });
+    await svc.getGitInfo(holds, "/repo/b", { showSha: false });
 
     expect(inner.computeCalls).toHaveLength(1);
     expect(svc.getStats()).toMatchObject({ size: 1, hits: 1, misses: 1 });
   });
 
-  test("different repos get different entries", async () => {
-    const { svc, inner } = makeCache();
+  test("different repos get different states", async () => {
+    const { svc, inner, holds } = makeCache();
     inner.repoRootByDir = { "/r1": "/r1", "/r2": "/r2" };
 
-    await svc.getGitInfo("/r1", {});
-    await svc.getGitInfo("/r2", {});
+    await svc.getGitInfo(holds, "/r1", {});
+    await svc.getGitInfo(holds, "/r2", {});
 
     expect(svc.getStats().size).toBe(2);
     expect(inner.computeCalls).toHaveLength(2);
   });
 
-  test("different option sets in same repo are separate entries", async () => {
-    const { svc, inner } = makeCache();
+  test("different option sets in one repo are separate values of it", async () => {
+    const { svc, inner, holds } = makeCache();
     inner.repoRootByDir = { "/repo": "/repo" };
 
-    await svc.getGitInfo("/repo", { showSha: true });
-    await svc.getGitInfo("/repo", { showSha: false });
+    await svc.getGitInfo(holds, "/repo", { showSha: true });
+    await svc.getGitInfo(holds, "/repo", { showSha: false });
 
-    expect(svc.getStats().size).toBe(2);
+    expect(svc.getStats().size).toBe(1);
+    // A new option set is read by a pass over the whole repo — one serialized
+    // loop per repo is what keeps an older read from landing over a newer one —
+    // so the set already held is read again beside it.
+    expect(inner.computeCalls).toHaveLength(3);
+    await svc.getGitInfo(holds, "/repo", { showSha: true });
+    await svc.getGitInfo(holds, "/repo", { showSha: false });
+    expect(inner.computeCalls).toHaveLength(3);
   });
 
-  test("LRU evicts oldest at cap", async () => {
-    const { svc, inner } = makeCache({ maxEntries: 3 });
+  test("a read of a warm repo never fetches", async () => {
+    const { svc, inner, holds } = makeCache();
+    inner.repoRootByDir["/repo"] = "/repo";
+
+    for (let i = 0; i < 5; i++) await svc.getGitInfo(holds, "/repo", {});
+
+    expect(inner.computeCalls).toHaveLength(1);
+    expect(svc.getStats()).toMatchObject({ hits: 4, misses: 1 });
+  });
+
+  test("the LRU evicts the oldest repo nobody holds", async () => {
+    const { svc, inner } = makeCache({ maxRepos: 3 });
     for (let i = 0; i < 5; i++) {
       inner.repoRootByDir[`/r${i}`] = `/r${i}`;
-      await svc.getGitInfo(`/r${i}`, {});
+      const holds = new Holds();
+      await svc.getGitInfo(holds, `/r${i}`, {});
+      holds.release();
     }
     expect(svc.getStats().size).toBe(3);
   });
 
-  test("LRU bumps recently-used entries past eviction", async () => {
-    const { svc, inner } = makeCache({ maxEntries: 2 });
+  test("a held repo is never evicted: it keeps its value past the cap", async () => {
+    const { svc, inner } = makeCache({ maxRepos: 1 });
     inner.repoRootByDir = { "/a": "/a", "/b": "/b", "/c": "/c" };
+    const holdsA = new Holds();
+    const holdsB = new Holds();
 
-    await svc.getGitInfo("/a", {});
-    await svc.getGitInfo("/b", {});
-    await svc.getGitInfo("/a", {}); // bumps /a
-    await svc.getGitInfo("/c", {}); // should evict /b, not /a
+    await svc.getGitInfo(holdsA, "/a", {});
+    await svc.getGitInfo(holdsB, "/b", {});
+    expect(svc.getStats()).toMatchObject({ size: 2, held: 2 });
+    holdsB.release();
+    await svc.getGitInfo(new Holds(), "/c", {}); // evicts /b, never /a
 
-    // Re-access /a → cache hit; /b → miss (evicted).
     inner.computeCalls = [];
-    await svc.getGitInfo("/a", {});
-    await svc.getGitInfo("/b", {});
+    await svc.getGitInfo(holdsA, "/a", {});
+    await svc.getGitInfo(new Holds(), "/b", {});
     expect(inner.computeCalls.map((c) => c.workingDir)).toEqual(["/b"]);
   });
 
-  test("TTL expiry forces recompute", async () => {
-    const { svc, inner } = makeCache({ ttlMs: 0 });
-    inner.repoRootByDir["/repo"] = "/repo";
-
-    await svc.getGitInfo("/repo", {});
-    await svc.getGitInfo("/repo", {});
-
-    expect(inner.computeCalls).toHaveLength(2);
-  });
-
-  test("non-repo path returns absent and does not cache", async () => {
-    const { svc, inner } = makeCache();
+  test("non-repo path returns absent and creates no state", async () => {
+    const { svc, inner, holds } = makeCache();
     inner.repoRootByDir = { "/nowhere": null };
 
-    const r1 = await svc.getGitInfo("/nowhere", {});
+    const r1 = await svc.getGitInfo(holds, "/nowhere", {});
     expect(r1).toEqual({ kind: "absent" });
     expect(svc.getStats().size).toBe(0);
+    expect(holds.size).toBe(0);
   });
 
-  test("projectDir override keys cache on effective gitDir, not workingDir", async () => {
+  test("projectDir override keys the state on effective gitDir, not workingDir", async () => {
     // workingDir=/cwd is in repoA, but a projectDir=/repoB override makes the
-    // effective gitDir /repoB. The cache key must follow the effective gitDir
-    // so repo B's data doesn't get cached under repo A's key (the pre-fix bug
-    // Copilot flagged on the second-pass review of kz8.3).
-    const { svc, inner } = makeCache();
+    // effective gitDir /repoB. The state must follow the effective gitDir so
+    // repo B's data doesn't get stored under repo A's key.
+    const { svc, inner, holds } = makeCache();
     inner.repoRootByDir = {
       "/cwd": "/repoA",
       "/repoA": "/repoA",
@@ -220,57 +285,45 @@ describe("GitDataProvider", () => {
       "/cwd": "/repoA", // without, gitDir is /repoA
     };
 
-    await svc.getGitInfo("/cwd", {}, "/repoB");
-    await svc.getGitInfo("/cwd", {});
+    await svc.getGitInfo(holds, "/cwd", {}, "/repoB");
+    await svc.getGitInfo(holds, "/cwd", {});
 
-    // Two distinct effective gitDirs → two cache entries, no contamination.
     expect(svc.getStats().size).toBe(2);
-    // Inner shell-outs land on the resolved gitDirs, not the cwd.
     const dirs = inner.computeCalls.map((c) => c.workingDir).sort();
     expect(dirs).toEqual(["/repoA", "/repoB"]);
   });
 
   test("worktree path resolves HEAD/index from .git file's gitdir target", async () => {
     // In a worktree, repoRoot/.git is a *file* pointing at the real metadata
-    // dir under main-repo/.git/worktrees/. Watchers and mtime snapshots must
-    // follow that pointer or they silently no-op (the bug Copilot caught on
-    // PR #8 review pass 4).
-    const { svc, inner } = makeCache();
+    // dir under main-repo/.git/worktrees/. The watch must follow that pointer
+    // or it silently no-ops.
+    const { svc, inner, holds } = makeCache();
     inner.repoRootByDir = { "/wt": "/wt" };
     inner.gitDirByDir = { "/wt": "/main/.git/worktrees/wt" };
 
-    // Fetch + cache without crashing. The internal calls to watcherTargets /
-    // snapshotMtimes use the resolved gitDir, so synthetic "/main/.git/..."
-    // paths don't fail (statSync misses → mtime 0, fs.watch misses → no
-    // watcher, both bounded). The point is that the resolution path *runs*.
-    const r = await svc.getGitInfo("/wt", {});
+    const r = await svc.getGitInfo(holds, "/wt", {});
     expect(r).toMatchObject({ kind: "ok", value: { branch: "main" } });
-
-    // Verify resolveGitDir was actually consulted for the worktree path.
     expect(inner.gitDirCalls).toContain("/wt");
   });
 
-  test("concurrent cache misses on same key coalesce into one fetch", async () => {
-    // Two parallel callers requesting the same key — without in-flight
-    // coalescing, both observe "no entry yet" and both shell out, doubling
-    // the work the cache exists to eliminate (the race Copilot flagged on
-    // PR #8 review pass 3).
-    const { svc, inner } = makeCache();
+  test("concurrent first reads of one value share one fetch", async () => {
+    const { svc, inner, holds } = makeCache();
     inner.repoRootByDir = { "/repo": "/repo" };
 
     const [r1, r2] = await Promise.all([
-      svc.getGitInfo("/repo", {}),
-      svc.getGitInfo("/repo", {}),
+      svc.getGitInfo(holds, "/repo", {}),
+      svc.getGitInfo(holds, "/repo", {}),
     ]);
 
     expect(r1).toMatchObject({ kind: "ok", value: { branch: "main" } });
     expect(r2).toBe(r1); // same object → same fetch
     expect(inner.computeCalls).toHaveLength(1);
-    expect(svc.getStats()).toMatchObject({ size: 1, hits: 0, misses: 1 });
+    // Both waited for the first value.
+    expect(svc.getStats()).toMatchObject({ size: 1, hits: 0, misses: 2 });
   });
 
-  test("two cwds with same projectDir share one cache entry", async () => {
-    const { svc, inner } = makeCache();
+  test("two cwds with same projectDir share one state", async () => {
+    const { svc, inner, holds } = makeCache();
     inner.repoRootByDir = {
       "/cwd-x": "/repoA",
       "/cwd-y": "/repoA",
@@ -281,40 +334,250 @@ describe("GitDataProvider", () => {
       "/cwd-y|/repoA": "/repoA",
     };
 
-    await svc.getGitInfo("/cwd-x", {}, "/repoA");
-    await svc.getGitInfo("/cwd-y", {}, "/repoA");
+    await svc.getGitInfo(holds, "/cwd-x", {}, "/repoA");
+    await svc.getGitInfo(holds, "/cwd-y", {}, "/repoA");
 
     expect(svc.getStats()).toMatchObject({ size: 1, hits: 1, misses: 1 });
   });
+
+  test("a home holds a repo once however often it reads it", async () => {
+    const { svc, inner, holds } = makeCache();
+    inner.repoRootByDir = { "/repo/a": "/repo", "/repo/b": "/repo" };
+
+    await svc.getGitInfo(holds, "/repo/a", {});
+    await svc.getGitInfo(holds, "/repo/b", { showSha: true });
+    expect(holds.size).toBe(1);
+    expect(svc.getStats().held).toBe(1);
+    holds.release();
+    expect(svc.getStats().held).toBe(0);
+  });
 });
 
-// Drain helper — subscribe()/refresh callbacks fire after a chain of awaits
-// (gitDir resolution, fetch, in-flight tracker .finally) whose depth is
-// implementation-detail. Each `setImmediate` yield drains a full round of
-// microtasks; some tests trigger nested async chains and need N rounds.
-// A promise whose settling the test controls — the only way to make N callers
-// genuinely concurrent, rather than hoping an await boundary lands where needed.
-function deferred(): { promise: Promise<void>; resolve: () => void } {
-  let resolve!: () => void;
-  const promise = new Promise<void>((r) => {
-    resolve = r;
-  });
-  return { promise, resolve };
-}
+// brandon-unfiled-3248.8ro6, step 1: a read never refreshes. A repo's value is
+// re-read by its watch (a change queues one re-read) and by one period over the
+// repos something holds (a tick shares the read in flight).
+describe("GitDataProvider refreshes on its own triggers", () => {
+  test("a watch fire re-reads with no read asking; the next read takes that value", async () => {
+    const { svc, inner, holds } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+    await svc.getGitInfo(holds, "/repo", {});
 
-async function tick(times = 1): Promise<void> {
-  for (let i = 0; i < times; i++) {
-    await new Promise<void>((r) => setImmediate(r));
-  }
-}
+    inner.stubInfo = { ...inner.stubInfo, branch: "feature" };
+    svc.changed("/repo");
+    await tick();
+    expect(inner.computeCalls).toHaveLength(2);
+
+    const out = await svc.getGitInfo(holds, "/repo", {});
+    expect(out).toMatchObject({ kind: "ok", value: { branch: "feature" } });
+    expect(inner.computeCalls).toHaveLength(2);
+    expect(svc.getStats()).toMatchObject({ changes: 1, refreshes: 2 });
+  });
+
+  test("a change mid-read queues one re-read after it, so the last change lands (brandon-unfiled-3248.xjma)", async () => {
+    const { svc, inner, holds } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+    const delivered: Array<string | undefined> = [];
+    inner.infoGate = deferred();
+
+    const sub = svc.subscribe("/repo", (info) => delivered.push(info?.branch));
+    const read = svc.getGitInfo(holds, "/repo", {});
+    await tick();
+    expect(inner.computeCalls).toHaveLength(1); // the first read is out
+
+    // The repo changes after that read began: its answer is already stale.
+    inner.stubInfo = { ...inner.stubInfo, branch: "feature" };
+    svc.changed("/repo");
+    const gate = inner.infoGate;
+    inner.infoGate = null;
+    gate.resolve();
+
+    await sub.firstDelivery;
+    await read;
+    await tick();
+
+    // Both the stored value and the subscriber end on a value read after the
+    // change, never on the one read before it.
+    expect(delivered).toEqual(["main", "feature"]);
+    const now = await svc.getGitInfo(holds, "/repo", {});
+    expect(now).toMatchObject({ kind: "ok", value: { branch: "feature" } });
+    sub.unsubscribe();
+  });
+
+  test("a read during a refresh takes the stored value at once; the value stands until the re-read lands", async () => {
+    const { svc, inner, holds } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+    await svc.getGitInfo(holds, "/repo", {});
+
+    inner.infoGate = deferred();
+    inner.stubInfo = { ...inner.stubInfo, branch: "feature" };
+    svc.changed("/repo");
+    await tick();
+    expect(inner.computeCalls).toHaveLength(2); // the re-read is out
+
+    const during = await svc.getGitInfo(holds, "/repo", {});
+    expect(during).toMatchObject({ kind: "ok", value: { branch: "main" } });
+
+    inner.infoGate.resolve();
+    await tick();
+    const after = await svc.getGitInfo(holds, "/repo", {});
+    expect(after).toMatchObject({ kind: "ok", value: { branch: "feature" } });
+  });
+
+  test("a repo evicted while its re-read is out, then read again, gets a first read of its own", async () => {
+    const { svc, inner } = makeCache({ maxRepos: 1 });
+    inner.repoRootByDir = { "/a": "/a", "/b": "/b" };
+    const first = new Holds();
+    await svc.getGitInfo(first, "/a", {});
+
+    inner.infoGate = deferred();
+    svc.changed("/a");
+    await tick();
+    first.release(); // unused while its re-read is out
+    const gate = inner.infoGate;
+    inner.infoGate = null;
+    await svc.getGitInfo(new Holds(), "/b", {}); // evicts /a mid-read
+
+    const again = svc.getGitInfo(new Holds(), "/a", {});
+    gate.resolve();
+    await expect(again).resolves.toMatchObject({ kind: "ok" });
+  });
+
+  test("rapid changes coalesce into at most two refreshes", async () => {
+    const { svc, inner } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+
+    const calls: Array<GitInfo | null> = [];
+    const sub = svc.subscribe("/repo", (info) => calls.push(info));
+    await sub.firstDelivery;
+    expect(calls).toHaveLength(1); // initial
+    const initialComputeCalls = inner.computeCalls.length;
+
+    // The first starts a refresh; the rest collapse into one trailing re-read.
+    for (let i = 0; i < 10; i++) svc.changed("/repo");
+    await tick(10);
+
+    expect(calls.length - 1).toBeLessThanOrEqual(2);
+    expect(inner.computeCalls.length - initialComputeCalls).toBeLessThanOrEqual(
+      2,
+    );
+    sub.unsubscribe();
+  });
+
+  test("a held repo is re-read every period; released, it costs no read", async () => {
+    jest.useFakeTimers();
+    const { svc, inner, holds } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+    await svc.getGitInfo(holds, "/repo", {});
+    expect(inner.computeCalls).toHaveLength(1);
+
+    await jest.advanceTimersByTimeAsync(GIT_PERIOD_MS - 1);
+    expect(inner.computeCalls).toHaveLength(1);
+    await jest.advanceTimersByTimeAsync(1);
+    expect(inner.computeCalls).toHaveLength(2);
+    await jest.advanceTimersByTimeAsync(GIT_PERIOD_MS);
+    expect(inner.computeCalls).toHaveLength(3);
+
+    holds.release();
+    await jest.advanceTimersByTimeAsync(GIT_PERIOD_MS * 5);
+    expect(inner.computeCalls).toHaveLength(3);
+    svc.close();
+  });
+
+  test("a period that resumes reads at the time it has left, or at once when its last read is older", async () => {
+    jest.useFakeTimers();
+    const { svc, inner } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+    const first = new Holds();
+    await svc.getGitInfo(first, "/repo", {});
+    await jest.advanceTimersByTimeAsync(10_000);
+    first.release();
+    await jest.advanceTimersByTimeAsync(10_000);
+
+    // Held again 20 s after its last read: the next read is 10 s away.
+    const second = new Holds();
+    await svc.getGitInfo(second, "/repo", {});
+    await jest.advanceTimersByTimeAsync(9_999);
+    expect(inner.computeCalls).toHaveLength(1);
+    await jest.advanceTimersByTimeAsync(1);
+    expect(inner.computeCalls).toHaveLength(2);
+
+    // Released past a whole period: held again, it reads at once.
+    second.release();
+    await jest.advanceTimersByTimeAsync(GIT_PERIOD_MS * 2);
+    await svc.getGitInfo(new Holds(), "/repo", {});
+    await jest.advanceTimersByTimeAsync(0);
+    expect(inner.computeCalls).toHaveLength(3);
+    svc.close();
+  });
+
+  test("a change on a repo nobody holds reads nothing until it is held again, then at once", async () => {
+    const { svc, inner } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+    const first = new Holds();
+    await svc.getGitInfo(first, "/repo", {});
+    first.release();
+
+    inner.stubInfo = { ...inner.stubInfo, branch: "feature" };
+    svc.changed("/repo");
+    await tick();
+    expect(inner.computeCalls).toHaveLength(1);
+
+    const second = new Holds();
+    await svc.getGitInfo(second, "/repo", {});
+    await tick();
+    expect(inner.computeCalls).toHaveLength(2);
+    const now = await svc.getGitInfo(second, "/repo", {});
+    expect(now).toMatchObject({ kind: "ok", value: { branch: "feature" } });
+  });
+
+  test("a failed refresh is logged once, by the refresh; reads of it log nothing", async () => {
+    const { svc, inner, logs, holds } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+    inner.infoFailure = "git status timed out";
+
+    for (let i = 0; i < 3; i++) {
+      expect((await svc.getGitInfo(holds, "/repo", {})).kind).toBe("failed");
+    }
+    expect(logs.filter((l) => l.startsWith("git refresh failed"))).toEqual([
+      "git refresh failed (/repo): git status timed out",
+    ]);
+
+    inner.infoFailure = null;
+    svc.changed("/repo");
+    await tick();
+    expect((await svc.getGitInfo(holds, "/repo", {})).kind).toBe("ok");
+  });
+
+  test("a field git could not read is logged once per refresh, never per read", async () => {
+    const { svc, inner, logs, holds } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+    inner.stubInfo = {
+      ...inner.stubInfo,
+      stashCount: failed("git stash list: timeout"),
+    };
+
+    for (let i = 0; i < 3; i++) await svc.getGitInfo(holds, "/repo", {});
+    expect(logs.filter((l) => l.startsWith("git refresh failed"))).toEqual([
+      "git refresh failed (/repo): git.stash: git stash list: timeout",
+    ]);
+  });
+
+  test("a HEAD git could not read is logged, though the payload only reads it for the PR", async () => {
+    const { svc, inner, logs, holds } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+    inner.stubInfo = { ...inner.stubInfo, head: failed("git rev-parse: timeout") };
+
+    await svc.getGitInfo(holds, "/repo", {});
+    expect(logs.filter((l) => l.startsWith("git refresh failed"))).toEqual([
+      "git refresh failed (/repo): git.head: git rev-parse: timeout",
+    ]);
+  });
+});
 
 // [LAW:no-ambient-temporal-coupling] The first delivery is awaited through the
-// subscription's own `firstDelivery`, never through a count of setImmediates:
-// "the initial snapshot has landed" is a state the provider publishes, so these
-// tests assert against it instead of betting on how many ticks the resolve +
-// fetch chain happens to take. `tick()` survives only where the wait is for a
-// delivery the provider does NOT promise — a post-invalidation refresh, whose
-// arrival has no such handle (and whose own seam is brandon-var-sources-tex).
+// subscription's own `firstDelivery`, never through a count of setImmediates;
+// `tick()` survives only where the wait is for a delivery the provider does
+// NOT promise — a refresh a watch fire started.
 describe("GitDataProvider.subscribe", () => {
   test("delivers initial snapshot once", async () => {
     const { svc, inner } = makeCache();
@@ -323,6 +586,7 @@ describe("GitDataProvider.subscribe", () => {
     const calls: Array<GitInfo | null> = [];
     const sub = svc.subscribe("/repo", (info) => calls.push(info));
     await sub.firstDelivery;
+    await tick();
 
     expect(calls).toHaveLength(1);
     expect(calls[0]).toMatchObject({ branch: "main", status: "clean" });
@@ -338,12 +602,11 @@ describe("GitDataProvider.subscribe", () => {
     await sub.firstDelivery;
 
     expect(calls).toEqual([null]);
-    // No subscriber registered → no watcher acquired.
     expect(svc.getStats().watchers).toBe(0);
     sub.unsubscribe();
   });
 
-  test("invalidateRepo refreshes subscribers", async () => {
+  test("a change refreshes subscribers", async () => {
     const { svc, inner } = makeCache();
     inner.repoRootByDir = { "/repo": "/repo" };
 
@@ -353,12 +616,37 @@ describe("GitDataProvider.subscribe", () => {
     expect(calls).toHaveLength(1);
 
     inner.stubInfo = { ...inner.stubInfo, branch: "feature" };
-    svc.invalidateRepo("/repo");
+    svc.changed("/repo");
     await tick();
 
     expect(calls).toHaveLength(2);
     expect(calls[1]).toMatchObject({ branch: "feature" });
     sub.unsubscribe();
+  });
+
+  test("a subscriber hears every change but holds no period", async () => {
+    jest.useFakeTimers();
+    const { svc, inner } = makeCache({ maxRepos: 1 });
+    inner.repoRootByDir = { "/repo": "/repo", "/other": "/other" };
+
+    const sub = svc.subscribe("/repo", () => {});
+    await sub.firstDelivery;
+    expect(svc.getStats().held).toBe(0);
+    await jest.advanceTimersByTimeAsync(GIT_PERIOD_MS * 3);
+    expect(inner.computeCalls).toHaveLength(1);
+
+    // In use, so never evicted, and a change reaches it.
+    await svc.getGitInfo(new Holds(), "/other", {});
+    expect(svc.getStats().size).toBe(2);
+    svc.changed("/repo");
+    await jest.advanceTimersByTimeAsync(0);
+    expect(inner.computeCalls.map((c) => c.workingDir)).toEqual([
+      "/repo",
+      "/other",
+      "/repo",
+    ]);
+    sub.unsubscribe();
+    svc.close();
   });
 
   test("multiple subscribers in same repo share one watcher slot", async () => {
@@ -369,9 +657,6 @@ describe("GitDataProvider.subscribe", () => {
     const subB = svc.subscribe("/repo/b", () => {});
     await Promise.all([subA.firstDelivery, subB.firstDelivery]);
 
-    // Both subscribers acquire the same key "git:/repo"; refcount = 2 inside
-    // one slot. The cache's getInfo path also acquires the same key — slot
-    // count, not refcount, is the right metric.
     expect(svc.getStats().watchers).toBe(1);
     subA.unsubscribe();
     subB.unsubscribe();
@@ -402,7 +687,6 @@ describe("GitDataProvider.subscribe", () => {
     const good = svc.subscribe("/repo", (info) => goodCalls.push(info));
     await Promise.all([bad.firstDelivery, good.firstDelivery]);
 
-    // The throwing subscriber must not prevent later notifications.
     expect(goodCalls).toHaveLength(1);
     expect(goodCalls[0]).toMatchObject({ branch: "main" });
     bad.unsubscribe();
@@ -413,10 +697,6 @@ describe("GitDataProvider.subscribe", () => {
     const { svc, inner } = makeCache();
     inner.repoRootByDir = { "/nowhere": null };
 
-    // The throwing subscriber has to actually RECEIVE the null delivery for this
-    // to prove anything, and awaiting firstDelivery is what makes it: the
-    // previous shape unsubscribed first, so the callback never ran and the test
-    // asserted only that two synchronous calls did not throw.
     const bad = svc.subscribe("/nowhere", () => {
       throw new Error("bad subscriber");
     });
@@ -429,7 +709,7 @@ describe("GitDataProvider.subscribe", () => {
     good.unsubscribe();
   });
 
-  test("unsubscribe during invalidation prevents stale delivery", async () => {
+  test("unsubscribe during a refresh prevents stale delivery", async () => {
     const { svc, inner } = makeCache();
     inner.repoRootByDir = { "/repo": "/repo" };
 
@@ -438,57 +718,27 @@ describe("GitDataProvider.subscribe", () => {
     await sub.firstDelivery;
     expect(calls).toHaveLength(1); // initial
 
-    // Schedule invalidation; unsubscribe before the async refresh delivers.
     inner.stubInfo = { ...inner.stubInfo, branch: "feature" };
-    svc.invalidateRepo("/repo");
+    svc.changed("/repo");
     sub.unsubscribe();
     await tick();
 
     expect(calls).toHaveLength(1); // no post-unsubscribe delivery
   });
 
-  test("refresh path does not re-resolve repoRoot on invalidation", async () => {
+  test("a refresh does not re-resolve the repo", async () => {
     const { svc, inner } = makeCache();
     inner.repoRootByDir = { "/repo": "/repo" };
 
     const sub = svc.subscribe("/repo", () => {});
     await sub.firstDelivery;
-    // Subscribe resolves once.
     expect(inner.resolveCalls.length).toBe(1);
 
-    // Invalidate a few times; the refresh loop should reuse the stored
-    // repoRoot — not call resolveEffectiveGitDir again per iteration.
-    svc.invalidateRepo("/repo");
-    svc.invalidateRepo("/repo");
+    svc.changed("/repo");
+    svc.changed("/repo");
     await tick(10);
 
-    // Still 1 — refreshes used the stored repoRoot.
     expect(inner.resolveCalls.length).toBe(1);
-    sub.unsubscribe();
-  });
-
-  test("rapid invalidations coalesce into at most two refreshes", async () => {
-    const { svc, inner } = makeCache();
-    inner.repoRootByDir = { "/repo": "/repo" };
-
-    const calls: Array<GitInfo | null> = [];
-    const sub = svc.subscribe("/repo", (info) => calls.push(info));
-    await sub.firstDelivery;
-    expect(calls).toHaveLength(1); // initial
-    const initialComputeCalls = inner.computeCalls.length;
-
-    // Fire 10 invalidations synchronously. The first triggers a refresh; the
-    // rest collapse into one trailing-edge re-fetch via refreshAgain.
-    for (let i = 0; i < 10; i++) svc.invalidateRepo("/repo");
-    await tick(10);
-
-    // Subscribers see at most 2 additional deliveries (the leading edge fetch
-    // and the trailing-edge fetch). Without coalescing this would be 10.
-    expect(calls.length - 1).toBeLessThanOrEqual(2);
-    // Inner shell-outs also bounded — leading + trailing only.
-    expect(inner.computeCalls.length - initialComputeCalls).toBeLessThanOrEqual(
-      2,
-    );
     sub.unsubscribe();
   });
 });
@@ -496,19 +746,15 @@ describe("GitDataProvider.subscribe", () => {
 // ─── Resolution cache ────────────────────────────────────────────────────────
 
 // [LAW:behavior-not-structure] brandon-git-cache-y2t: outside a repo, every
-// render re-asked "which repo is this?" and that question costs a `git rev-parse
-// --show-toplevel` spawn, so a Claude Code session in a non-repo directory spawned
-// git on every status-line tick for its whole lifetime. These pin the BEHAVIOUR —
-// how many times the inner resolver is asked — not the cache's shape.
+// render re-asked "which repo is this?". These pin the BEHAVIOUR — how many
+// times the inner resolver is asked — not the cache's shape.
 describe("GitDataProvider gitDir resolution cache", () => {
   test("N renders in a non-repo cwd ask the resolver once, not N times", async () => {
-    const { svc, inner } = makeCache();
-    // No entry for /nowhere: the stub answers ABSENT, as rev-parse's non-zero
-    // exit does for a directory in no repo.
+    const { svc, inner, holds } = makeCache();
     inner.repoRootByDir = { "/nowhere": null };
 
     for (let i = 0; i < 10; i++) {
-      expect((await svc.getGitInfo("/nowhere", {})).kind).toBe("absent");
+      expect((await svc.getGitInfo(holds, "/nowhere", {})).kind).toBe("absent");
     }
 
     expect(inner.resolveCalls).toHaveLength(1);
@@ -517,25 +763,25 @@ describe("GitDataProvider gitDir resolution cache", () => {
   test("an absent answer expires, so a directory that becomes a repo is seen", async () => {
     // The invalidation story for a negative answer is the TTL: `git init` in a
     // directory the bar has already rendered becomes visible within one window.
-    const { svc, inner } = makeCache({ ttlMs: 0 });
+    jest.useFakeTimers();
+    const { svc, inner, holds } = makeCache();
     inner.repoRootByDir = { "/nowhere": null };
-    expect((await svc.getGitInfo("/nowhere", {})).kind).toBe("absent");
+    expect((await svc.getGitInfo(holds, "/nowhere", {})).kind).toBe("absent");
 
     inner.repoRootByDir = { "/nowhere": "/nowhere" };
-    const after = await svc.getGitInfo("/nowhere", {});
+    jest.advanceTimersByTime(30_000);
+    const after = await svc.getGitInfo(holds, "/nowhere", {});
     expect(after.kind).toBe("ok");
-    expect(inner.resolveCalls.length).toBeGreaterThan(1);
+    expect(inner.resolveCalls.length).toBe(2);
+    svc.close();
   });
 
   test("a failed resolution is cached too — the timeout case is the costly one", async () => {
-    // A resolution that fails by TIMEOUT burns two seconds of a render; retrying
-    // it every tick forever is the worst of the three outcome kinds, so it is not
-    // the one left uncached.
-    const { svc, inner } = makeCache();
+    const { svc, inner, holds } = makeCache();
     inner.resolveFailure = "git rev-parse --show-toplevel timed out";
 
     for (let i = 0; i < 5; i++) {
-      const out = await svc.getGitInfo("/wherever", {});
+      const out = await svc.getGitInfo(holds, "/wherever", {});
       expect(out.kind).toBe("failed");
     }
 
@@ -546,12 +792,12 @@ describe("GitDataProvider gitDir resolution cache", () => {
     // registerDslConfig calls subscribe() once per declared `kind: "git"`
     // variable inside ONE synchronous loop, so the concurrent case is the real
     // one: six variables in a non-repo cwd must not be six rev-parse spawns.
-    const { svc, inner } = makeCache();
+    const { svc, inner, holds } = makeCache();
     inner.repoRootByDir = { "/nowhere": null };
     inner.resolveGate = deferred();
 
     const pending = Array.from({ length: 6 }, () =>
-      svc.getGitInfo("/nowhere", {}),
+      svc.getGitInfo(holds, "/nowhere", {}),
     );
     inner.resolveGate.resolve();
     for (const out of await Promise.all(pending)) {
@@ -561,70 +807,82 @@ describe("GitDataProvider gitDir resolution cache", () => {
     expect(inner.resolveCalls).toHaveLength(1);
   });
 
-  test("the pull and subscribe surfaces share one resolution", async () => {
-    const { svc, inner } = makeCache();
+  test("the read and subscribe surfaces share one resolution", async () => {
+    const { svc, inner, holds } = makeCache();
     inner.repoRootByDir = { "/repo": "/repo" };
 
-    await svc.getGitInfo("/repo", {});
+    await svc.getGitInfo(holds, "/repo", {});
     const sub = svc.subscribe("/repo", () => {});
     await sub.firstDelivery;
 
-    // Two surfaces, one question asked once — they go through the same override.
     expect(inner.resolveCalls).toHaveLength(1);
     sub.unsubscribe();
   });
 
   test("projectDir is part of the key, so it cannot be answered by the wrong entry", async () => {
-    const { svc, inner } = makeCache();
+    const { svc, inner, holds } = makeCache();
     inner.repoRootByDir = { "/cwd": "/cwd", "/project": "/project" };
     inner.effectiveDirByKey = { "/cwd|/project": "/project" };
 
-    expect(await svc.getGitInfo("/cwd", {})).toMatchObject({ kind: "ok" });
-    await svc.getGitInfo("/cwd", {}, "/project");
+    expect(await svc.getGitInfo(holds, "/cwd", {})).toMatchObject({
+      kind: "ok",
+    });
+    await svc.getGitInfo(holds, "/cwd", {}, "/project");
 
     expect(inner.resolveCalls).toEqual([
       { workingDir: "/cwd", projectDir: undefined },
       { workingDir: "/cwd", projectDir: "/project" },
     ]);
-    // …and the second call landed on /project, not on /cwd's cached answer.
     expect(inner.computeCalls.map((c) => c.workingDir)).toEqual([
       "/cwd",
       "/project",
     ]);
   });
 
-  test("a rejecting resolver is not pinned for a window", async () => {
-    // resolveEffectiveGitDir returns outcomes by construction, so a REJECTION is
-    // a bug, not an answer: it must reach the caller and leave no entry behind.
-    const { svc, inner } = makeCache();
+  test("a rejecting resolver is not pinned for a window; each read answers failed", async () => {
+    const { svc, inner, logs, holds } = makeCache();
     inner.resolveThrows = true;
 
-    await expect(svc.getGitInfo("/boom", {})).rejects.toThrow("resolver bug");
-    await expect(svc.getGitInfo("/boom", {})).rejects.toThrow("resolver bug");
+    for (let i = 0; i < 2; i++) {
+      expect(await svc.getGitInfo(holds, "/boom", {})).toEqual(
+        failed("git: Error: resolver bug"),
+      );
+    }
 
     expect(inner.resolveCalls).toHaveLength(2);
+    expect(logs).toEqual([
+      "git read threw: Error: resolver bug",
+      "git read threw: Error: resolver bug",
+    ]);
   });
 
   test("close() drops the answers instead of carrying them past shutdown", async () => {
-    const { svc, inner } = makeCache();
+    const { svc, inner, holds } = makeCache();
     inner.repoRootByDir = { "/nowhere": null };
-    await svc.getGitInfo("/nowhere", {});
+    await svc.getGitInfo(holds, "/nowhere", {});
     expect(inner.resolveCalls).toHaveLength(1);
 
     svc.close();
-    // A closed provider holds no answers: every cache it owns is rebuilt cold,
-    // and the resolution cache is not the one exception.
-    await svc.getGitInfo("/nowhere", {});
+    await svc.getGitInfo(holds, "/nowhere", {});
     expect(inner.resolveCalls).toHaveLength(2);
   });
 });
 
-describe("GitDataProvider PR cache", () => {
+// The PR is its own source: a key of the branch and the remote, a period chosen
+// by the last lookup's outcome, composed onto a read rather than fetched in one.
+describe("GitDataProvider PR source", () => {
+  const OPEN_PR = ok({
+    number: 7,
+    state: "open" as const,
+    url: "https://example.test/pull/7",
+    head: "c0ffee",
+  });
+
   test("showPullRequest off → resolvePullRequest never called, no PR attached", async () => {
-    const { svc, inner } = makeCache();
+    const { svc, inner, holds } = makeCache();
     inner.repoRootByDir = { "/repo": "/repo" };
 
-    const out = await svc.getGitInfo("/repo", {});
+    const out = await svc.getGitInfo(holds, "/repo", {});
     expect(out.kind).toBe("ok");
     if (out.kind !== "ok") return;
     expect(out.value.pullRequest).toBeUndefined();
@@ -632,70 +890,77 @@ describe("GitDataProvider PR cache", () => {
   });
 
   test("showPullRequest on → PR attached to GitInfo", async () => {
-    const { svc, inner } = makeCache();
+    const { svc, inner, holds } = makeCache();
     inner.repoRootByDir = { "/repo": "/repo" };
 
-    const out = await svc.getGitInfo("/repo", { showPullRequest: true });
+    const out = await svc.getGitInfo(holds, "/repo", { showPullRequest: true });
     expect(out.kind).toBe("ok");
     if (out.kind !== "ok") return;
-    expect(out.value.pullRequest).toEqual(
-      ok({ number: 7, state: "open", url: "https://example.test/pull/7", head: "c0ffee" }),
-    );
+    expect(out.value.pullRequest).toEqual(OPEN_PR);
     expect(inner.prCalls).toHaveLength(1);
   });
 
-  test("PR cache survives GitInfo refetch — one forge call across many renders", async () => {
-    // ttlMs:0 forces a GitInfo miss every call (doFetch runs each time), so
-    // this isolates the PR cache: its own (long) TTL means the forge lookup
-    // fires once even as the local GitInfo is recomputed repeatedly.
-    const { svc, inner } = makeCache({ ttlMs: 0 });
+  test("git refreshes on one key look the PR up no further", async () => {
+    const { svc, inner, holds } = makeCache();
     inner.repoRootByDir = { "/repo": "/repo" };
 
-    await svc.getGitInfo("/repo", { showPullRequest: true });
-    await svc.getGitInfo("/repo", { showPullRequest: true });
-    await svc.getGitInfo("/repo", { showPullRequest: true });
+    await svc.getGitInfo(holds, "/repo", { showPullRequest: true });
+    for (let i = 0; i < 3; i++) {
+      svc.changed("/repo");
+      await tick();
+    }
+    await svc.getGitInfo(holds, "/repo", { showPullRequest: true });
 
-    expect(inner.computeCalls.length).toBeGreaterThanOrEqual(3);
+    expect(inner.computeCalls.length).toBeGreaterThanOrEqual(4);
     expect(inner.prCalls).toHaveLength(1);
   });
 
-  test("branch switch → PR re-fetched (branch is part of the key)", async () => {
-    const { svc, inner } = makeCache({ ttlMs: 0 });
+  test("a branch switch is a new key, looked up afresh", async () => {
+    const { svc, inner, holds } = makeCache();
     inner.repoRootByDir = { "/repo": "/repo" };
 
     inner.stubInfo = { ...inner.stubInfo, branch: "feature-a" };
-    await svc.getGitInfo("/repo", { showPullRequest: true });
+    await svc.getGitInfo(holds, "/repo", { showPullRequest: true });
     inner.stubInfo = { ...inner.stubInfo, branch: "feature-b" };
-    await svc.getGitInfo("/repo", { showPullRequest: true });
+    svc.changed("/repo");
+    await tick();
+    await svc.getGitInfo(holds, "/repo", { showPullRequest: true });
 
     expect(inner.prCalls).toHaveLength(2);
   });
 
-  test("a failed forge lookup is attached as failed (surfaced, not dropped)", async () => {
-    const { svc, inner } = makeCache();
+  test("a failed forge lookup is attached as failed (surfaced, not dropped) and logged once", async () => {
+    const { svc, inner, logs, holds } = makeCache();
     inner.repoRootByDir = { "/repo": "/repo" };
     inner.stubPr = { kind: "failed", reason: "gh pr view: non-zero, HTTP 401" };
 
-    const out = await svc.getGitInfo("/repo", { showPullRequest: true });
-    expect(out.kind).toBe("ok");
-    if (out.kind !== "ok") return;
-    expect(out.value.pullRequest).toEqual({
-      kind: "failed",
-      reason: "gh pr view: non-zero, HTTP 401",
-    });
+    for (let i = 0; i < 3; i++) {
+      const out = await svc.getGitInfo(holds, "/repo", {
+        showPullRequest: true,
+      });
+      expect(out.kind).toBe("ok");
+      if (out.kind !== "ok") return;
+      expect(out.value.pullRequest).toEqual({
+        kind: "failed",
+        reason: "gh pr view: non-zero, HTTP 401",
+      });
+    }
+    expect(logs.filter((l) => l.includes("git.pr"))).toEqual([
+      "git refresh failed (/repo): git.pr: gh pr view: non-zero, HTTP 401",
+    ]);
   });
 
-  test("remote change → new key → PR re-fetched (remote is part of the key)", async () => {
-    const { svc, inner } = makeCache({ ttlMs: 0 });
+  test("a re-pointed origin is a new key, looked up afresh", async () => {
+    const { svc, inner, holds } = makeCache();
     inner.repoRootByDir = { "/repo": "/repo" };
 
     inner.stubRemote = ok("git@github.com:acme/widget.git");
-    await svc.getGitInfo("/repo", { showPullRequest: true });
-    // Re-point origin to a different forge/repo on the same branch.
+    await svc.getGitInfo(holds, "/repo", { showPullRequest: true });
     inner.stubRemote = ok("git@gitlab.com:acme/widget.git");
-    await svc.getGitInfo("/repo", { showPullRequest: true });
+    svc.changed("/repo");
+    await tick();
+    await svc.getGitInfo(holds, "/repo", { showPullRequest: true });
 
-    expect(inner.prCalls).toHaveLength(2);
     expect(inner.prCalls.map((c) => c.remoteUrl)).toEqual([
       "git@github.com:acme/widget.git",
       "git@gitlab.com:acme/widget.git",
@@ -703,11 +968,11 @@ describe("GitDataProvider PR cache", () => {
   });
 
   test("failed remote read → PR failed (surfaced); no forge call", async () => {
-    const { svc, inner } = makeCache();
+    const { svc, inner, holds } = makeCache();
     inner.repoRootByDir = { "/repo": "/repo" };
     inner.stubRemote = { kind: "failed", reason: "git config: timeout" };
 
-    const out = await svc.getGitInfo("/repo", { showPullRequest: true });
+    const out = await svc.getGitInfo(holds, "/repo", { showPullRequest: true });
     expect(out.kind).toBe("ok");
     if (out.kind !== "ok") return;
     expect(out.value.pullRequest).toEqual({
@@ -718,81 +983,285 @@ describe("GitDataProvider PR cache", () => {
   });
 
   test("no remote (absent) → PR absent; no forge call", async () => {
-    const { svc, inner } = makeCache();
+    const { svc, inner, holds } = makeCache();
     inner.repoRootByDir = { "/repo": "/repo" };
     inner.stubRemote = ABSENT;
 
-    const out = await svc.getGitInfo("/repo", { showPullRequest: true });
+    const out = await svc.getGitInfo(holds, "/repo", { showPullRequest: true });
     expect(out.kind).toBe("ok");
     if (out.kind !== "ok") return;
     expect(out.value.pullRequest).toEqual(ABSENT);
     expect(inner.prCalls).toHaveLength(0);
   });
+
+  test("a failed lookup is retried after 45 s, a found one after 5 min", async () => {
+    jest.useFakeTimers();
+    const { svc, inner, holds } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+    inner.stubPr = { kind: "failed", reason: "gh: network" };
+
+    await svc.getGitInfo(holds, "/repo", { showPullRequest: true });
+    expect(inner.prCalls).toHaveLength(1);
+    inner.stubPr = OPEN_PR;
+    await jest.advanceTimersByTimeAsync(PR_PERIOD.failedMs - 1);
+    expect(inner.prCalls).toHaveLength(1);
+    await jest.advanceTimersByTimeAsync(1);
+    expect(inner.prCalls).toHaveLength(2);
+
+    await jest.advanceTimersByTimeAsync(PR_PERIOD.okMs - 1);
+    expect(inner.prCalls).toHaveLength(2);
+    await jest.advanceTimersByTimeAsync(1);
+    expect(inner.prCalls).toHaveLength(3);
+    svc.close();
+  });
+
+  test("a PR whose repo nobody holds is not looked up on its period", async () => {
+    jest.useFakeTimers();
+    const { svc, inner, holds } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+
+    await svc.getGitInfo(holds, "/repo", { showPullRequest: true });
+    holds.release();
+    await jest.advanceTimersByTimeAsync(PR_PERIOD.okMs * 3);
+    expect(inner.prCalls).toHaveLength(1);
+    expect(inner.computeCalls).toHaveLength(1);
+    svc.close();
+  });
+});
+
+describe("GitDataProvider owns its failures and its PR's timing", () => {
+  const PR_B = ok({
+    number: 8,
+    state: "open" as const,
+    url: "https://example.test/pull/8",
+    head: "beef",
+  });
+
+  test("a failed resolution is logged once, by the resolution; reads of it log nothing", async () => {
+    const { svc, inner, logs, holds } = makeCache();
+    inner.resolveFailure = "git rev-parse: timeout";
+
+    for (let i = 0; i < 3; i++) {
+      expect(await svc.getGitInfo(holds, "/slow", {})).toEqual(
+        failed("git rev-parse: timeout"),
+      );
+    }
+    svc.subscribe("/slow", () => {});
+    await tick();
+    expect(logs).toEqual(["git resolve failed (/slow): git rev-parse: timeout"]);
+  });
+
+  test("a read that throws is logged by the provider and answers failed", async () => {
+    const { svc, inner, logs, holds } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+    holds.close();
+
+    const out = await svc.getGitInfo(holds, "/repo", {});
+    expect(out.kind).toBe("failed");
+    expect(logs.filter((l) => l.startsWith("git "))).toEqual([
+      "git read threw: Error: hold taken after close: git:/repo",
+    ]);
+  });
+
+  test("a branch switch never pairs the new branch with the old branch's PR", async () => {
+    const { svc, inner, holds } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+    const onA = { ...inner.stubInfo, branch: "a" };
+    inner.stubInfo = onA;
+    const first = await svc.getGitInfo(holds, "/repo", {
+      showPullRequest: true,
+    });
+    if (first.kind !== "ok") throw new Error("first read failed");
+    const prA = first.value.pullRequest;
+
+    // The switch's re-read is out, its remote read held open: a read now is
+    // all branch a, never b's values beside a's PR.
+    inner.stubInfo = { ...inner.stubInfo, branch: "b" };
+    inner.stubPr = PR_B;
+    inner.remoteGate = deferred();
+    inner.prGate = deferred();
+    svc.changed("/repo");
+    await tick();
+    expect(
+      await svc.getGitInfo(holds, "/repo", { showPullRequest: true }),
+    ).toEqual(ok({ ...onA, pullRequest: prA }));
+
+    // Stored, b's values wait for b's PR rather than wear a's.
+    inner.remoteGate.resolve();
+    await tick();
+    let read: Outcome<GitInfo> | null = null;
+    void svc
+      .getGitInfo(holds, "/repo", { showPullRequest: true })
+      .then((out) => (read = out));
+    await tick();
+    expect(read).toBeNull();
+    inner.prGate.resolve();
+    await tick();
+    expect(read).toEqual(ok({ ...inner.stubInfo, pullRequest: PR_B }));
+  });
+
+  test("a hanging PR lookup holds back neither a change's re-read nor the period", async () => {
+    jest.useFakeTimers();
+    const { svc, inner, holds } = makeCache({ periodMs: 1_000 });
+    inner.repoRootByDir = { "/repo": "/repo" };
+    await svc.getGitInfo(holds, "/repo", { showPullRequest: true });
+
+    inner.stubInfo = { ...inner.stubInfo, branch: "b" };
+    inner.prGate = deferred();
+    svc.changed("/repo");
+    await jest.advanceTimersByTimeAsync(0);
+    expect(inner.prCalls).toHaveLength(2);
+    expect(inner.computeCalls).toHaveLength(2);
+
+    svc.changed("/repo");
+    await jest.advanceTimersByTimeAsync(0);
+    expect(inner.computeCalls).toHaveLength(3);
+    await jest.advanceTimersByTimeAsync(1_000);
+    expect(inner.computeCalls).toHaveLength(4);
+    await jest.advanceTimersByTimeAsync(1_000);
+    expect(inner.computeCalls).toHaveLength(5);
+    inner.prGate.resolve();
+    svc.close();
+  });
+
+  test("a refresh that throws is logged, and the repo keeps its period", async () => {
+    jest.useFakeTimers();
+    const { svc, inner, logs, holds } = makeCache({
+      periodMs: 1_000,
+      throwOn: "git refresh failed",
+    });
+    inner.repoRootByDir = { "/repo": "/repo" };
+    inner.infoFailure = "git status: boom";
+
+    void svc.getGitInfo(holds, "/repo", {});
+    await jest.advanceTimersByTimeAsync(0);
+    expect(logs.filter((l) => l.startsWith("git "))).toEqual([
+      "git refresh threw (/repo): Error: logger bug",
+    ]);
+    await jest.advanceTimersByTimeAsync(1_000);
+    expect(inner.computeCalls).toHaveLength(2);
+    expect(logs).toContain("git refresh failed (/repo): git status: boom");
+    svc.close();
+  });
+});
+
+describe("GitDataProvider PR keys, drops and refresh events", () => {
+  const PR_B = ok({
+    number: 8,
+    state: "open" as const,
+    url: "https://example.test/pull/8",
+    head: "beef",
+  });
+
+  test("a branch switched back to is answered from its own key's last lookup, with no new one", async () => {
+    const { svc, inner, logs, holds } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+    const onA = { ...inner.stubInfo, branch: "a" };
+    inner.stubInfo = onA;
+    const first = await svc.getGitInfo(holds, "/repo", {
+      showPullRequest: true,
+    });
+    if (first.kind !== "ok") throw new Error("first read failed");
+
+    inner.stubInfo = { ...onA, branch: "b" };
+    inner.stubPr = PR_B;
+    svc.changed("/repo");
+    await tick();
+    inner.stubInfo = onA;
+    svc.changed("/repo");
+    await tick();
+
+    expect(
+      await svc.getGitInfo(holds, "/repo", { showPullRequest: true }),
+    ).toEqual(ok({ ...onA, pullRequest: first.value.pullRequest }));
+    expect(inner.prCalls).toHaveLength(2);
+    expect(logs.filter((l) => l.startsWith("git refresh /repo"))).toEqual([
+      expect.stringMatching(/ by=first,pr values=1 failed=0 pr=looked-up /),
+      expect.stringMatching(/ by=watch values=1 failed=0 pr=looked-up /),
+      expect.stringMatching(/ by=watch values=1 failed=0 pr=recalled /),
+    ]);
+  });
+
+  test("the PR's first ask, while a stored value is stale, pairs the values it answers with", async () => {
+    const { svc, inner, holds } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+    inner.stubInfo = { ...inner.stubInfo, branch: "a" };
+    await svc.getGitInfo(holds, "/repo", {});
+
+    // The repo is on b, and the pass that will say so is out.
+    inner.stubInfo = { ...inner.stubInfo, branch: "b" };
+    inner.stubPr = PR_B;
+    inner.infoGate = deferred();
+    svc.changed("/repo");
+    const read = svc.getGitInfo(holds, "/repo", { showPullRequest: true });
+    await tick();
+    inner.infoGate.resolve();
+    inner.infoGate = null;
+
+    expect(await read).toEqual(ok({ ...inner.stubInfo, pullRequest: PR_B }));
+  });
+
+  test("a first read out when the cache closes is answered, never left waiting", async () => {
+    const { svc, inner, holds } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+    inner.infoGate = deferred();
+
+    const read = svc.getGitInfo(holds, "/repo", {});
+    await tick();
+    svc.close();
+    expect(await read).toEqual(failed("git state dropped: /repo"));
+    inner.infoGate.resolve();
+  });
+
+  test("a pass the period started says so on its refresh event", async () => {
+    jest.useFakeTimers();
+    const { svc, inner, logs, holds } = makeCache({ periodMs: 1_000 });
+    inner.repoRootByDir = { "/repo": "/repo" };
+    await svc.getGitInfo(holds, "/repo", {});
+    await jest.advanceTimersByTimeAsync(1_000);
+
+    expect(logs.filter((l) => l.startsWith("git refresh /repo"))).toEqual([
+      expect.stringMatching(/ by=first values=1 failed=0 pr=- took=\d+ms$/),
+      expect.stringMatching(/ by=period values=1 failed=0 pr=- took=\d+ms$/),
+    ]);
+    svc.close();
+  });
 });
 
 // brandon-unfiled-3248.576q: on macOS every directory watch opened or closed
 // leaks native memory (libuv's FSEvents reschedule), so a repo's watch must
-// outlive the values cached from it — a refetch or a change replaces the
-// value, never the watch.
+// outlive the values read from it — a refresh or a change replaces the value,
+// never the watch.
 describe("GitDataProvider holds a repo's watch across its values", () => {
-  function counted(opts: { ttlMs?: number; maxEntries?: number } = {}) {
+  function counted(opts: { maxRepos?: number } = {}) {
     const inner = new StubGitService();
     const counters = { watchersOpened: 0, watchersClosed: 0 };
     const logs: string[] = [];
     const logger = (_level: string, message: string) => logs.push(message);
     const watchers = new WatcherRegistry({ counters, logger });
-    const svc = new GitDataProvider({
-      ...opts,
-      inner,
-      watchers,
-      logger,
-      sanityIntervalMs: 0,
-    });
+    const svc = new GitDataProvider({ ...opts, inner, watchers, logger });
     return { svc, inner, counters, logs, watchers };
   }
 
-  test("TTL refetches and change invalidations never close or reopen the watch", async () => {
-    const { svc, inner, counters, watchers } = counted({ ttlMs: 0 });
+  test("refreshes and changes never close or reopen the watch", async () => {
+    const { svc, inner, counters, watchers } = counted();
     inner.repoRootByDir["/repo"] = "/repo";
+    const holds = new Holds();
 
+    await svc.getGitInfo(holds, "/repo", {});
     for (let i = 0; i < 5; i++) {
-      await svc.getGitInfo("/repo", {});
-      svc.invalidateRepo("/repo");
+      svc.changed("/repo");
+      await tick();
     }
 
-    expect(inner.computeCalls).toHaveLength(5);
+    expect(inner.computeCalls).toHaveLength(6);
     expect(counters).toEqual({ watchersOpened: 1, watchersClosed: 0 });
     expect(watchers.size()).toBe(1);
     svc.close();
   });
 
-  test("an invalidation expires the entry: the next read refetches, and only a newly expired entry counts", async () => {
-    const { svc, inner, logs } = counted();
-    inner.repoRootByDir["/repo"] = "/repo";
-
-    await svc.getGitInfo("/repo", {});
-    svc.invalidateRepo("/repo");
-    svc.invalidateRepo("/repo"); // already expired: counts and logs nothing
-
-    expect(svc.getStats()).toMatchObject({
-      invalidations: 1,
-      size: 1,
-      expired: 1,
-    });
-    expect(logs.filter((l) => l.startsWith("gitCache invalidate"))).toEqual([
-      "gitCache invalidate /repo expired=1",
-    ]);
-
-    inner.stubInfo = { ...inner.stubInfo, branch: "feature" };
-    const after = await svc.getGitInfo("/repo", {});
-    expect(after).toMatchObject({ kind: "ok", value: { branch: "feature" } });
-    expect(inner.computeCalls).toHaveLength(2);
-    expect(svc.getStats()).toMatchObject({ size: 1, expired: 0 });
-    svc.close();
-  });
-
   // Git writes HEAD and index by renaming a `.lock` file over them. A watch
-  // held across refetches must hear every such replacement, not just the first.
+  // held across refreshes must hear every such replacement, not just the first.
   test("the held watch hears every lock-file rename over index and HEAD", async () => {
     const repo = fs.mkdtempSync(path.join(os.tmpdir(), "git-cache-576q-"));
     const gitDir = path.join(repo, ".git");
@@ -806,19 +1275,19 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
     replace("index", "0");
     const { svc, inner, counters } = counted();
     inner.repoRootByDir[repo] = repo;
-    const invalidatedTo = async (n: number) => {
+    const changedTo = async (n: number) => {
       const deadline = Date.now() + 5_000;
-      while (svc.getStats().invalidations < n && Date.now() < deadline) {
+      while (svc.getStats().changes < n && Date.now() < deadline) {
         await new Promise((r) => setTimeout(r, 20));
       }
-      expect(svc.getStats().invalidations).toBe(n);
+      expect(svc.getStats().changes).toBe(n);
     };
     try {
+      await svc.getGitInfo(new Holds(), repo, {});
       const renames = ["index", "index", "HEAD", "index", "HEAD"];
       for (const [i, name] of renames.entries()) {
-        await svc.getGitInfo(repo, {}); // a fresh value for the rename to expire
         replace(name, String(i + 1));
-        await invalidatedTo(i + 1);
+        await changedTo(i + 1);
       }
       expect(counters).toEqual({ watchersOpened: 1, watchersClosed: 0 });
     } finally {
@@ -828,76 +1297,33 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
   });
 
   test("the git cache's own LRU eviction is what releases a watch", async () => {
-    const { svc, inner, counters } = counted({ maxEntries: 1 });
+    const { svc, inner, counters } = counted({ maxRepos: 1 });
     inner.repoRootByDir = { "/a": "/a", "/b": "/b" };
 
-    await svc.getGitInfo("/a", {});
-    await svc.getGitInfo("/b", {}); // evicts /a's entry, its watch's only holder
+    const holdsA = new Holds();
+    await svc.getGitInfo(holdsA, "/a", {});
+    holdsA.release();
+    await svc.getGitInfo(new Holds(), "/b", {}); // evicts /a, its watch's only holder
 
     expect(counters).toEqual({ watchersOpened: 2, watchersClosed: 1 });
     svc.close();
     expect(counters.watchersClosed).toBe(2);
   });
 
-  test("a refetch that finds no repo drops every entry for it and releases the watch", async () => {
-    const { svc, inner, counters, logs } = counted();
+  test("a repo that disappears reads absent and keeps its watch while held", async () => {
+    const { svc, inner, counters } = counted();
     inner.repoRootByDir["/repo"] = "/repo";
+    const holds = new Holds();
 
-    // Two option-sets, one watch; resolution is cached from here on.
-    await svc.getGitInfo("/repo", { showSha: true });
-    await svc.getGitInfo("/repo", { showSha: false });
-    svc.invalidateRepo("/repo");
+    await svc.getGitInfo(holds, "/repo", {});
     inner.repoRootByDir["/repo"] = null; // the worktree was removed
-    const gone = await svc.getGitInfo("/repo", { showSha: true });
-    await svc.getGitInfo("/repo", { showSha: true }); // nothing left to drop
+    svc.changed("/repo");
+    await tick();
+    const gone = await svc.getGitInfo(holds, "/repo", {});
 
     expect(gone.kind).toBe("absent");
-    expect(svc.getStats()).toMatchObject({ size: 0, expired: 0 });
-    expect(counters).toEqual({ watchersOpened: 1, watchersClosed: 1 });
-    expect(logs.filter((l) => l.startsWith("gitCache drop"))).toEqual([
-      "gitCache drop /repo entries=2",
-    ]);
-    svc.close();
-  });
-
-  test("a failed refetch keeps the entry and its watch", async () => {
-    const { svc, inner, counters } = counted();
-    inner.repoRootByDir["/repo"] = "/repo";
-
-    await svc.getGitInfo("/repo", {});
-    svc.invalidateRepo("/repo");
-    inner.infoFailure = "git status timed out";
-    const out = await svc.getGitInfo("/repo", {});
-    inner.infoFailure = null;
-    await svc.getGitInfo("/repo", {});
-
-    expect(out.kind).toBe("failed");
-    expect(svc.getStats()).toMatchObject({ size: 1, expired: 0 });
+    expect(svc.getStats().size).toBe(1);
     expect(counters).toEqual({ watchersOpened: 1, watchersClosed: 0 });
     svc.close();
-  });
-
-  test("the sanity check's mtime walk expires a changed repo's entry", async () => {
-    const repo = fs.mkdtempSync(path.join(os.tmpdir(), "git-cache-576q-"));
-    fs.mkdirSync(path.join(repo, ".git"));
-    const head = path.join(repo, ".git", "HEAD");
-    fs.writeFileSync(head, "ref: refs/heads/main\n");
-    const { svc, inner, counters } = counted();
-    inner.repoRootByDir[repo] = repo;
-    try {
-      await svc.getGitInfo(repo, {});
-      const later = new Date(Date.now() + 60_000);
-      fs.utimesSync(head, later, later);
-      svc.runSanityCheckNow();
-      svc.runSanityCheckNow(); // the entry is expired now: nothing to compare
-
-      expect(svc.getStats().invalidations).toBe(1);
-      await svc.getGitInfo(repo, {});
-      expect(inner.computeCalls).toHaveLength(2);
-      expect(counters.watchersOpened).toBe(1);
-    } finally {
-      svc.close();
-      fs.rmSync(repo, { recursive: true, force: true });
-    }
   });
 });

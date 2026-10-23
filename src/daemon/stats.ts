@@ -254,10 +254,11 @@ export class RuntimeStats {
     return new RuntimeStats().snapshot({
       gitCache: {
         size: 0,
-        expired: 0,
+        held: 0,
         hits: 0,
         misses: 0,
-        invalidations: 0,
+        changes: 0,
+        refreshes: 0,
         watchers: 0,
       },
       usageCache: { size: 0, hits: 0, misses: 0, sweeps: 0 },

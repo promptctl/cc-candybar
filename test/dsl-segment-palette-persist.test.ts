@@ -487,7 +487,6 @@ function makeCache(): {
   });
   cleanups.push(() => watchers.closeAll());
   const gitService = new GitDataProvider({
-    sanityIntervalMs: 0,
     logger: () => {},
   });
   cleanups.push(() => gitService.close());

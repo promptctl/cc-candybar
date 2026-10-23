@@ -64,6 +64,7 @@ import {
 import { claudeConfigDir, claudeSettingsPath } from "../claude-settings.js";
 import { resumeCommand } from "../claude-resume.js";
 import type { GitDataProvider } from "./cache/git.js";
+import type { Holds } from "../utils/holds.js";
 import {
   VALUED_FIELDS,
   type ValuedField,
@@ -528,7 +529,8 @@ export interface RenderPayloadDeps {
   readonly autoCompact: (settingsPath: string) => Outcome<AutoCompactWindow>;
   // [LAW:single-enforcer] The log capability for every provider lane:
   // buildRenderPayload is the ONE place lane failures are logged, so the
-  // providers' interiors never log and never double-log.
+  // providers' interiors never log and never double-log — except git, whose
+  // owner refreshes it on its own triggers and logs each refresh that failed.
   readonly log: DaemonLogger;
   // The session's undo/redo depth — SettingsHistory.depth in the daemon.
   readonly history: (sessionId: string) => HistoryDepth;
@@ -536,6 +538,9 @@ export interface RenderPayloadDeps {
   readonly navigation: (sessionId: string) => number;
   // The session's lane feeds — FrameFeeds.feedsOf in the daemon.
   readonly feeds: (sessionId: string) => LaneFeeds;
+  // The home this render reads for: what it reads of a shared entry (a repo)
+  // it holds until it is disposed, so the entry's owner keeps refreshing it.
+  readonly holds: Holds;
 }
 
 // ─── Rate-limit projection (pure) ──────────────────────────────────────────────
@@ -1097,6 +1102,7 @@ export async function buildRenderPayload(
   ] = await Promise.all([
     lane("git", wants("git"), () =>
       deps.gitProvider.getGitInfo(
+        deps.holds,
         cwd ?? hookData.workspace?.current_dir,
         gitOptionsFromClosure(neededInputPaths),
         hookData.workspace?.project_dir,
@@ -1189,8 +1195,10 @@ export async function buildRenderPayload(
     return oc.kind === "ok" ? oc.value : undefined;
   };
 
+  // Git logs its own failures — once per refresh or resolution that failed,
+  // and a read that throws (src/daemon/cache/git.ts): its value is stored, so
+  // logging it here would repeat one failure on every render.
   const gitProjection = projectGitInfo(gitOutcome, nowMs);
-  failures.push(...gitProjection.failures);
   // Ungated, like `home` below: two syscalls and a hint already in hand, so a
   // `wants` gate would add a branch and save nothing.
   const hostProjection = readHost(hints);
@@ -1509,58 +1517,44 @@ function posixify(s: string | undefined): string | undefined {
 // [LAW:types-are-the-program] Project the outcome-carrying GitInfo down to
 // the flat shape the DSL input paths read. A pure fold: `ok` fields become
 // values, `absent` and `failed` fields become MISSING keys (the DSL input
-// fallback chain fills the declared default and records a last_error), and
-// every `failed` contributes a description for the boundary to log — this
-// function performs no effect itself ([LAW:effects-at-boundaries]).
+// fallback chain fills the declared default and records a last_error). It
+// performs no effect ([LAW:effects-at-boundaries]): the git refresh that read a
+// failure is what logged it.
 function projectGitInfo(
   outcome: Outcome<GitInfo>,
   nowMs: number,
-): {
-  readonly git?: GitPayload;
-  readonly failures: readonly string[];
-} {
-  if (outcome.kind === "absent") return { failures: [] };
-  if (outcome.kind === "failed") return { failures: [outcome.reason] };
+): { readonly git?: GitPayload } {
+  if (outcome.kind !== "ok") return {};
 
   const info = outcome.value;
-  const failures: string[] = [];
-  const field = <T>(
-    name: string,
-    oc: Outcome<T> | undefined,
-  ): T | undefined => {
-    if (oc === undefined || oc.kind === "absent") return undefined;
-    if (oc.kind === "failed") {
-      failures.push(`git.${name}: ${oc.reason}`);
-      return undefined;
-    }
-    return oc.value;
-  };
+  const field = <T>(oc: Outcome<T> | undefined): T | undefined =>
+    oc?.kind === "ok" ? oc.value : undefined;
 
-  const aheadBehind = field("aheadBehind", info.aheadBehind);
-  const sha = field("sha", info.sha);
-  const operation = field("operation", info.operation);
+  const aheadBehind = field(info.aheadBehind);
+  const sha = field(info.sha);
+  const operation = field(info.operation);
   // [LAW:one-source-of-truth] The age is the commit's date subtracted from the
   // render's instant — the "now" every other time read in this render sees.
-  const committedAt = field("timeSinceCommit", info.committedAt);
+  const committedAt = field(info.committedAt);
   const timeSinceCommit =
     committedAt === undefined
       ? undefined
       : Math.floor((nowMs - committedAt) / 1000);
-  const stash = field("stash", info.stashCount);
-  const upstream = field("upstream", info.upstream);
+  const stash = field(info.stashCount);
+  const upstream = field(info.upstream);
   const tracking =
     info.upstream === undefined
       ? undefined
-      : field("tracking", trackingOf(info.upstream, info.aheadBehind));
-  const repoName = field("repoName", info.repoName);
-  const repoUrl = field("repoUrl", info.repoUrl);
+      : field(trackingOf(info.upstream, info.aheadBehind));
+  const repoName = field(info.repoName);
+  const repoUrl = field(info.repoUrl);
 
   // [LAW:no-silent-failure] The PR deliberately breaks the `field` pattern: a
   // `failed` lookup is NOT dropped to a missing key (which the template can't
-  // tell apart from "no PR"). It is BOTH logged AND surfaced as `prError` so
-  // the segment renders a distinct marker. `absent` is still a missing key (no
-  // PR / no forge → segment off). The reason is the gate value the template
-  // tests; the same reason is logged for the operator.
+  // tell apart from "no PR"). It is surfaced as `prError` so the segment
+  // renders a distinct marker; the lookup that failed logged the same reason
+  // for the operator. `absent` is still a missing key (no PR / no forge →
+  // segment off).
   const pr =
     info.pullRequest === undefined
       ? undefined
@@ -1575,7 +1569,6 @@ function projectGitInfo(
       };
       break;
     case "failed":
-      failures.push(`git.pr: ${pr.reason}`);
       prFields = { prError: pr.reason };
       break;
     case "earlier":
@@ -1610,6 +1603,5 @@ function projectGitInfo(
       ...(repoUrl !== undefined && { repoUrl }),
       ...prFields,
     },
-    failures,
   };
 }

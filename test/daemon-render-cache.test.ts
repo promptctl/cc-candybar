@@ -25,6 +25,7 @@ import {
   type RenderCacheObservers,
   ENTRY_BYTES,
   COMPILE_BYTES,
+  ENTRY_IDLE_MS,
 } from "../src/daemon/cache/render";
 import { GitDataProvider } from "../src/daemon/cache/git";
 import { SessionState } from "../src/daemon/session-state";
@@ -71,7 +72,6 @@ function makeCache(
   });
   cleanups.push(() => watchers.closeAll());
   const gitService = new GitDataProvider({
-    sanityIntervalMs: 0,
     logger: () => {},
   });
   cleanups.push(() => gitService.close());
@@ -956,6 +956,62 @@ describe("RenderCache", () => {
     } finally {
       cleanup();
       for (const fn of cleanups) fn();
+    }
+  });
+});
+
+// brandon-unfiled-3248.8ro6: what an entry's state holds of the daemon's shared
+// entries (a repo) keeps their owners' periods running, so an entry nothing has
+// drawn from for ENTRY_IDLE_MS releases its holds, and its next render takes
+// them back.
+describe("RenderCache idle sweep", () => {
+  test("an entry idle past ENTRY_IDLE_MS releases its holds; a render takes them back", () => {
+    const { dir, cleanup } = mkConfigDir();
+    const watchers = new WatcherRegistry({ logger: () => {} });
+    const gitService = new GitDataProvider({ logger: () => {} });
+    const logs: string[] = [];
+    let clock = 1_000_000;
+    const cache = new RenderCache(
+      {
+        gitService,
+        sessionState: new SessionState(),
+        watchers,
+        log: (_level, message) => logs.push(message),
+      },
+      { budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES, now: () => clock },
+    );
+    let released = 0;
+    try {
+      const take = (): void => {
+        using hold = cache.hold(dir, dir, undefined);
+        hold.state.registry.holds.take("repo", () => () => {
+          released++;
+        });
+      };
+      take();
+      expect(
+        cache.getOrCreate(dir, dir, undefined).state.registry.holds.size,
+      ).toBe(1);
+
+      clock += ENTRY_IDLE_MS - 1;
+      cache.releaseIdle();
+      expect(released).toBe(0);
+
+      clock += 1;
+      cache.releaseIdle();
+      expect(released).toBe(1);
+      expect(logs).toContain("render-cache idle released=1 entries=1");
+
+      // The next render holds the entry again and takes its holds back.
+      take();
+      const state = cache.getOrCreate(dir, dir, undefined).state;
+      expect(state.registry.holds.size).toBe(1);
+      cache.releaseIdle();
+      expect(released).toBe(1);
+    } finally {
+      gitService.close();
+      watchers.closeAll();
+      cleanup();
     }
   });
 });
