@@ -1066,8 +1066,9 @@ export interface Band extends BandColours {
    * `SEAM_MIN_DELTA_E` off the other, off `state` (the ✕ that leads each of the
    * band's rows) and off the state of a trigger open in the band, as drawn —
    * the four colours a band row draws beside one another — so the joiner
-   * draws a filled arrow between any two of them, never its divider.
-   * `bandItemFor` deals them alternately along a row.
+   * draws a filled arrow between any two of them, never its divider. Where
+   * the axis or the depth leaves no such colour, the band names the pair in
+   * `shortfalls`. `bandItemFor` deals them alternately along a row.
    */
   readonly items: readonly [ColorRgba, ColorRgba];
   /**
@@ -1250,9 +1251,11 @@ const seamShortfalls = (
  * `BAND_ITEM_FLOOR` above the plane, and high is the colour on the ray from
  * low to the state standing furthest off the nearest of low, the state and
  * the open trigger — the colours an item is drawn beside — so its seams are
- * as wide as the axis allows. As drawn, each is replaced by the nearest
- * colour the depth draws that stands `SEAM_MIN_DELTA_E` off every other colour
- * of the row and is not the plane (`ensureDrawn`).
+ * as wide as the axis allows. At 256 colours and ansi, an item whose rounding
+ * stands under `SEAM_MIN_DELTA_E` off another colour of the row, or is the
+ * plane, is replaced by the nearest entry that holds (`ensureDrawn`); truecolor
+ * draws each where it lies. Where neither holds, `seamShortfalls` names the
+ * pair.
  */
 function bandItems(
   palette: Palette,
@@ -1467,21 +1470,6 @@ export function bandItemFor(
   );
 }
 
-/**
- * The step that places a band node along its band: the address as far as its
- * cell — the first step on the cell axis, where the bar finds a cell too
- * (`rowAndCell`) — and that part's last step. So whatever is nested inside a
- * cell (edit chrome's unit around a content cell, an authored container) wears
- * that cell's item, as on the bar, and a node that is a row by itself is
- * placed by its row. Reading the address's last step instead put every content
- * cell of a user's body after the first on one item: under edit chrome each is
- * the second child of its unit.
- */
-function bandPlace(address: Address): AddressStep | undefined {
-  const cell = address.findIndex((step) => step.axis === "cell");
-  return (cell === -1 ? address : address.slice(0, cell + 1)).at(-1);
-}
-
 // --- Regions -------------------------------------------------------------------
 
 /**
@@ -1581,7 +1569,17 @@ export function decorationFor(
     }
     case "band": {
       const { band, address } = region;
-      const tint = bandItemFor(palette, band, bandPlace(address), drawnAt);
+      // [LAW:one-source-of-truth] A band item is placed by its cell, read as
+      // the bar reads one (`rowAndCell`): whatever is nested in a cell — edit
+      // chrome's unit around each content cell of a user's body — wears that
+      // cell's item, and a row picks nothing, so a one-cell row and edit
+      // chrome's wrapping of it are both a first cell.
+      const tint = bandItemFor(
+        palette,
+        band,
+        rowAndCell(address).cell,
+        drawnAt,
+      );
       return {
         tint,
         text: textOn(palette, tint, drawnAt),

@@ -536,7 +536,7 @@ describe("candybar-render-ai7.8 — `distribution` is authored per placer", () =
     );
   });
 
-  test("in a body, a distribution is refused where nothing reads it: inside a cell, or on a vertical container of rows that are containers", () => {
+  test("in a body, a distribution is refused where nothing reads it: inside a cell, or on a vertical container", () => {
     const body = (tree: string): string => `{
       globals: { palette: '${THEME}' },
       variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
@@ -550,11 +550,12 @@ describe("candybar-render-ai7.8 — `distribution` is authored per placer", () =
     // cell is itself a container, since a cell's place is read whatever it holds.
     build(body(`{ v: [ { h: ['a', 'b']${M} } ] }`)).dispose();
     build(body(`{ h: [ { v: ['a'] }, { v: ['b'] } ]${M} }`)).dispose();
-    // On a vertical container holding a segment row of its own, it places that row.
-    build(body(`{ v: [ 'c', { h: ['a', 'b'] } ]${M} }`)).dispose();
-    expect(() => build(body(`{ v: [ { h: ['a', 'b'] } ]${M} }`))).toThrow(
-      /sets "distribution" on a vertical container inside a disclosure body none of whose children is a segment/,
-    );
+    // A body's rows pick nothing, whatever they hold; the message names the node.
+    for (const tree of [`{ v: [ 'c', { h: ['a', 'b'] } ]${M} }`, `{ v: [ { h: ['a', 'b'] } ]${M} }`]) {
+      expect(() => build(body(tree))).toThrow(
+        /root\.children\[0\]\.opens\.body\.children\[0\] sets "distribution" on a vertical container in a disclosure body/,
+      );
+    }
     // Inside a cell of a body it places nothing, as on the bar.
     expect(() => build(body(`{ h: [ 'c', { h: ['a', 'b']${M} } ] }`))).toThrow(
       /sets "distribution" on a container inside a cell/,

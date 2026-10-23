@@ -1131,8 +1131,10 @@ describe("a band is a plane", () => {
       // wraps every content cell of a user's body in a unit (✚, label, the
       // cell, ✚), so the cell is the unit's second child whichever cell it is.
       expect([0, 1, 2].map((c) => inBand([cell(c, 3), cell(1, 4)]))).toEqual([low, high, low]);
-      // A segment that is a row by itself is placed by its row.
-      expect([0, 1].map((r) => inBand([row(r, 2)]))).toEqual([low, high]);
+      // A row picks nothing: a segment that is a row by itself is a first
+      // cell, as edit chrome's one-cell row around it is.
+      expect([0, 1].map((r) => inBand([row(r, 2)]))).toEqual([low, low]);
+      expect([0, 1].map((r) => inBand([row(r, 2), cell(0, 1), cell(1, 4)]))).toEqual([low, low]);
       // A body that is one segment is the low item, beside its ✕.
       expect(inBand([])).toBe(low);
       expect(item(undefined)).toBe(low);
