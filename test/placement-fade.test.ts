@@ -424,14 +424,14 @@ describe("a render that throws leaves the last drawn frame to compare against", 
     const fx = new SessionEffects<string>("s");
     const first = fx.motion("none", at(0), fades);
     first.placed("left", left);
-    first.row("r", [item("left")]);
+    first.row("r", "bar", [item("left")]);
     first.drawn();
     // The next render's walk finds `left` gone, then it throws before its
     // first row: it is never drawn, so `left` never began leaving.
     fx.motion("none", at(1), fades).placed("left", []);
     const after = fx.motion("none", at(2), fades);
     after.placed("left", left);
-    after.row("r", [item("left")]);
+    after.row("r", "bar", [item("left")]);
     after.drawn();
     expect(fx.lastFrame()).toMatchObject({
       basis: "compared",

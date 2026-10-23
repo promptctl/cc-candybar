@@ -26,8 +26,10 @@ import { stateGate, stateKeySeed } from "./state-validators";
 import {
   disclosureNest,
   NO_NEST,
+  openRoots,
   type DisclosureNest,
 } from "../../config/disclosure-nest";
+import { DISCLOSURE_CLOSED } from "../../config/disclosure";
 import { closingView } from "../closing-view";
 import { configGate, configKeySeed } from "./config-validators";
 import type { Gate, RangeParams } from "./validator-registry";
@@ -165,7 +167,9 @@ import {
 } from "../../doctor/handler-probe";
 import { typeSlash, type ClaudeInputEdge } from "../../claude-input/edge";
 
-export interface VerbContext {
+// What the daemon hands everything that writes a session's state: a click's
+// verb, and the idle timer that closes its menus (`closeIdleMenus`).
+export interface DaemonContext {
   readonly sessionState: SessionStateRW;
   readonly dlog: (level: "info" | "warn" | "error", msg: string) => void;
   // [LAW:effects-at-boundaries] The update notice's act (src/daemon/
@@ -178,11 +182,6 @@ export interface VerbContext {
   readonly doctor: DoctorEdge;
   // The doctor's stores, which this daemon files (src/doctor/edge.ts).
   readonly doctorStores: DoctorStores;
-  // How THIS click arrived — a link the URL handler delivered (its staged
-  // runtime's version, or null from one too old to report it), or a tmux
-  // status-line range — the one per-click fact here; the daemon's dispatcher
-  // sets it on each click.
-  readonly arrival: ClickArrival;
   // Where a `doctor-probe` link records that it arrived.
   readonly probes: ProbeArrivals;
   // Which client drew each session's bar, as this process saw it render, and
@@ -214,14 +213,25 @@ export interface VerbContext {
   readonly reloadConfig: (origin: RenderOrigin) => void;
 }
 
+export interface VerbContext extends DaemonContext {
+  // How THIS click arrived — a link the URL handler delivered (its staged
+  // runtime's version, or null from one too old to report it), or a tmux
+  // status-line range — the one per-click fact here; the daemon's dispatcher
+  // sets it on each click.
+  readonly arrival: ClickArrival;
+}
+
+// A context with the journals the verb table opens around a write.
+export type Journaled<C extends DaemonContext> = C & {
+  readonly journal: Journal;
+  readonly navigating: SessionStateRW;
+};
+
 // What a handler runs with: the daemon's context, with `sessionState` the
 // click's journaling view of it and `journal` where its file writes report.
 // `navigating` is the view the navigating verbs write through: the same store,
 // with what they change on screen recorded for `back` as well.
-export interface ClickContext extends VerbContext {
-  readonly journal: Journal;
-  readonly navigating: SessionStateRW;
-}
+export type ClickContext = Journaled<VerbContext>;
 
 // [LAW:types-are-the-program] The handler IS the contract — it takes the
 // raw wire-level `value` string and the daemon's verb context; it returns
@@ -652,7 +662,7 @@ function sessionOrigin(ctx: VerbContext, sid: string): RenderOrigin {
 
 // The origin the session's last request recorded, under its load-config
 // pick; null for a session that has never rendered.
-function recordedOrigin(ctx: VerbContext, sid: string): RenderOrigin | null {
+function recordedOrigin(ctx: DaemonContext, sid: string): RenderOrigin | null {
   const raw = ctx.sessionState.get(sid, SESSION_RENDER_ORIGIN_KEY);
   return raw === null
     ? null
@@ -682,7 +692,7 @@ function sessionConfig(ctx: VerbContext, sid: string): DslConfig {
 
 // What the session's config nests; a session that has never rendered has no
 // config, so nothing nested.
-function nestOf(ctx: VerbContext, sid: string): DisclosureNest {
+function nestOf(ctx: DaemonContext, sid: string): DisclosureNest {
   const origin = recordedOrigin(ctx, sid);
   return origin === null ? NO_NEST : disclosureNest(ctx.configFor(origin));
 }
@@ -1626,18 +1636,26 @@ const SESSION_FIRST_VERBS: ReadonlySet<string> = new Set([
 // so the bar shows WHICH effect(s) failed, for the hold src/daemon/click-error.ts
 // sets. Only possible when a session ID
 // is available from a set-state or toolbar-toggle effect in the same click.
+// [LAW:one-source-of-truth] The session a click is in: the first segment of
+// its first session-bearing effect — every SESSION_FIRST_VERBS member carries
+// it there — or none. Dispatch surfaces a failed step in that session's bar,
+// and the daemon counts the click as that session's activity
+// (src/daemon/menu-idle.ts).
+export function clickSessionOf(verb: string, value: string): string | null {
+  const effects =
+    verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
+  const bearing = effects.find((e) => SESSION_FIRST_VERBS.has(e.verb));
+  const [sid = ""] = bearing === undefined ? [] : decodeSegments(bearing.value);
+  return sid === "" ? null : sid;
+}
+
 const dispatch: VerbHandler = (rawValue, ctx) => {
   const errors: string[] = [];
   let operational = false;
-  let sessionId: string | null = null;
+  // The click's session, for error display, so a failing step surfaces in the
+  // bar like any other.
+  const sessionId = clickSessionOf(VERB_DISPATCH, rawValue);
   for (const { verb, value } of batchAdjacentWrites(parseEffects(rawValue))) {
-    // Extract session ID from the first session-bearing effect for error
-    // display — every SESSION_FIRST_VERBS member carries it as its first
-    // segment, so a failing step surfaces in the bar like any other.
-    if (!sessionId && SESSION_FIRST_VERBS.has(verb)) {
-      const parts = decodeSegments(value);
-      if (parts.length > 0 && parts[0]) sessionId = parts[0];
-    }
     const handler = LEAF_VERBS.get(verb);
     if (!handler) {
       errors.push(`unknown effect verb "${verb}"`);
@@ -1672,9 +1690,9 @@ const dispatch: VerbHandler = (rawValue, ctx) => {
 // before the throw is real, so it is recorded. [LAW:no-silent-failure] A
 // commit that fails too never hides the handler's own error: the click
 // reports both.
-function journaled(
-  handler: VerbHandler,
-): (value: string, ctx: VerbContext) => void {
+function journaled<C extends DaemonContext>(
+  handler: (value: string, ctx: Journaled<C>) => void,
+): (value: string, ctx: C) => void {
   return (value, ctx) => {
     const journal = ctx.history.begin();
     const navigation = ctx.navigation.begin(journal.sessionState);
@@ -1727,3 +1745,36 @@ export const VERBS: ReadonlyMap<
 export const VERB_NAMES: readonly string[] = Object.freeze([
   ...VERBS.keys(),
 ]) as readonly string[];
+
+// How long a session's menus sat with no click before its timer closed them.
+export interface IdleClose {
+  readonly idleS: number;
+  readonly timeoutS: number;
+}
+
+// [LAW:single-enforcer] The idle timer's close (brandon-menus-sjhy.my3) takes
+// a click's own path: the journals the verb table opens — so an exit from edit
+// mode releases its savepoint, and ◁ back can reopen what it closed — and the
+// closing view, which folds everything open inside what closes. It writes
+// `closed` to each menu open at the top, the write its ✕ makes. No URL names
+// it: it is not in VERBS.
+export function closeIdleMenus(
+  sid: string,
+  idle: IdleClose,
+  ctx: DaemonContext,
+): void {
+  journaled<DaemonContext>((_value, c) => {
+    const roots = openRoots(nestOf(c, sid), (key) =>
+      c.navigating.get(sid, key),
+    );
+    c.navigating.setBatch(
+      sid,
+      roots.map(({ key }) => ({ key, value: DISCLOSURE_CLOSED })),
+    );
+    c.dlog(
+      "info",
+      `menu-idle: closed=${roots.map(({ key }) => key).join(",") || "-"} ` +
+        `idle=${idle.idleS.toFixed(1)}s timeout=${idle.timeoutS}s (session=${sid})`,
+    );
+  })("", ctx);
+}

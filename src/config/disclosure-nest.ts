@@ -38,12 +38,15 @@ export interface DisclosureNest {
   readonly inside: (parent: Disclosure) => readonly NestedKey[];
   // What `key` holds in a fresh session.
   readonly defaultOf: (key: string) => string;
+  // Every disclosure inside no other: closing these closes everything.
+  readonly roots: readonly Disclosure[];
 }
 
 // A session with no rendered config has nothing nested to close.
 export const NO_NEST: DisclosureNest = {
   inside: () => [],
   defaultOf: () => DISCLOSURE_CLOSED,
+  roots: [],
 };
 
 const idOf = (d: Disclosure): string => `${d.key}\0${d.member}`;
@@ -143,8 +146,16 @@ export function buildDisclosureNest(config: DslConfig): DisclosureNest {
     closures.set(idOf(parent), keys);
     return keys;
   };
+  const nested = new Set(
+    [...inside.values()].flatMap((children) => [...children.keys()]),
+  );
   return {
     inside: closure,
+    roots: [...members].flatMap(([key, held]) =>
+      [...held]
+        .map((member) => ({ key, member }))
+        .filter((d) => !nested.has(idOf(d))),
+    ),
     // A disclosure that declares no default starts closed: its toggle counts
     // an unknown value as its first member, `closed`.
     defaultOf: (key) => defaults.get(key) ?? DISCLOSURE_CLOSED,
@@ -195,4 +206,17 @@ export function closeNested(
     }
   }
   return [...folds];
+}
+
+// The disclosures open at the top of the session's menus: each root whose key
+// holds it. Closing them — the write each one's ✕ makes — closes everything
+// open inside them (`closeNested`), so a nested key with an open default
+// (a tab) goes back to that default rather than to `closed`.
+export function openRoots(
+  nest: DisclosureNest,
+  read: (key: string) => string | null,
+): readonly Disclosure[] {
+  return nest.roots.filter(
+    ({ key, member }) => (read(key) ?? nest.defaultOf(key)) === member,
+  );
 }

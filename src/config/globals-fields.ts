@@ -54,6 +54,7 @@ import { DISCLOSURE_GLYPH_CLOSE, DOOR_CLOSE_GLYPH } from "./disclosure.js";
 import { LANES, LANE_NAMES, type Lane, type LaneSetting } from "./lanes.js";
 import type { ControlDomain } from "./setting-control.js";
 import type { SettingRange } from "./dsl-types.js";
+import { MENU_TIMEOUT_DEFAULT, MENU_TIMEOUT_RANGE } from "./menu-timeout.js";
 import type { Place, PreviewName } from "./menu-places.js";
 
 // ─── What a row says ─────────────────────────────────────────────────────────
@@ -432,6 +433,13 @@ export const GLOBAL_FIELDS = {
   // (src/daemon/update-notice.ts). The notice's own `[disable]` writes `false`
   // here; a per-session, per-version dismissal lives in SessionState instead.
   updateNotice: boolSetting(true, control("update notice", "config")),
+  // Seconds without a click before every open menu flashes and closes
+  // (src/config/menu-timeout.ts, src/daemon/menu-idle.ts).
+  menuTimeout: intSetting(
+    MENU_TIMEOUT_RANGE,
+    MENU_TIMEOUT_DEFAULT,
+    control("menu timeout", "config"),
+  ),
   ...LANE_ROWS,
   // The color depth rich-js downsamples output to (the legacy
   // display.colorCompatibility) — truecolor by default, deliberately NOT the
