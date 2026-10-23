@@ -1,7 +1,7 @@
 // [LAW:behavior-not-structure] The animation speed (brandon-menus-sjhy.nt2):
 // at 5x or 20x every decorative animation — the bar's loop, a fade, a
 // template's `frames` — runs that many times faster than at 1x, a change of
-// speed moves none of them to another phase, and a readout of real time
+// speed moves no loop to another phase, and a readout of real time
 // (`realtimeFrames`) keeps real time.
 import { DEFAULT_TERMINAL_THEME, RichText } from "@promptctl/rich-js";
 
@@ -120,17 +120,26 @@ describe("a fade runs at the session's animation speed", () => {
     return fx.lastFrame().fades;
   };
 
-  test("a fade begun at 1x and sped to 20x goes on from where it was, and ends twenty times sooner", () => {
-    const fx = new SessionEffects<string>("s");
-    frame(fx, at(0), "1x", false);
-    expect(frame(fx, at(1), "1x", true)).toEqual([{ placement: "left", t: 0 }]);
-    // One second in, the speed changes: the fade stands where it stood.
-    expect(frame(fx, at(2), "20x", true)[0]!.t).toBeCloseTo(1, 9);
-    expect(frame(fx, at(2.5), "20x", true)[0]!.t).toBeCloseTo(11, 9);
-    // Nineteen of its twenty seconds remained at the switch: at 20x they pass
-    // in 0.95 s, where 1x would still be fading until at(21).
-    expect(frame(fx, at(3), "20x", true)).toEqual([]);
-  });
+  // A speed is picked by a write to the session's state, which ends every fade
+  // in flight (its revision moves), so a fade runs at one speed throughout.
+  test.each([
+    ["1x", 1.5, [{ placement: "left", t: 1.5 }]],
+    ["20x", 1.5, []],
+  ] as const)(
+    "at %s, a twenty-second fade %s s in is %j",
+    (speed, later, fading) => {
+      const fx = new SessionEffects<string>("s");
+      frame(fx, at(0), speed, false);
+      expect(frame(fx, at(1), speed, true)).toEqual([
+        { placement: "left", t: 0 },
+      ]);
+      expect(frame(fx, at(1 + later / 2), speed, true)[0]!.t).toBeCloseTo(
+        (later / 2) * ANIMATION_SPEEDS[speed],
+        9,
+      );
+      expect(frame(fx, at(1 + later), speed, true)).toEqual(fading);
+    },
+  );
 });
 
 describe("a template's frames run at the session's animation speed; realtimeFrames does not", () => {
@@ -199,9 +208,12 @@ describe("a template's frames run at the session's animation speed; realtimeFram
     ["1x", 1, "anim=b", "real=b"],
     ["5x", 1, "anim=f", "real=b"],
     ["20x", 0.4, "anim=i", "real=a"],
-  ] as const)("at %s, %d s later draws %s and %s", (speed, later, anim, real) => {
-    const bar = drawn(speed, [0, later]);
-    expect(bar).toContain(anim);
-    expect(bar).toContain(real);
-  });
+  ] as const)(
+    "at %s, %d s later draws %s and %s",
+    (speed, later, anim, real) => {
+      const bar = drawn(speed, [0, later]);
+      expect(bar).toContain(anim);
+      expect(bar).toContain(real);
+    },
+  );
 });

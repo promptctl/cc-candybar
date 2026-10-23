@@ -378,9 +378,8 @@ export class SessionEffects<Line> {
   // [LAW:no-ambient-temporal-coupling] Where the session's animation clock
   // stood at its last drawn frame, and the speed it ran at from there: the
   // anchor every later reading is measured from, so a change of speed changes
-  // the clock's slope from the frame it lands in and never its reading — no
-  // effect jumps phase, and a fade in flight goes on from where it was. None
-  // before the session's first frame.
+  // the clock's slope from the frame it lands in and never its reading, so no
+  // loop jumps phase. None before the session's first frame.
   private anchor: FrameClock | null = null;
   // The same fact for each placement wearing its own effect, by placement id,
   // kept for the placements the latest render drew: one that stopped being
@@ -433,7 +432,7 @@ export class SessionEffects<Line> {
    * The session's animation clock read at the wall instant `at`, running at
    * `speed` from it on. The time since the last drawn frame passed at the
    * speed in force then; the first frame reads `at` itself, so a session that
-   * runs at 1x reads the wall instant at every frame. Reads only: the frame
+   * has only ever run at 1x reads the wall instant at every frame. Reads only: the frame
    * that draws keeps it as the anchor (`drawn`).
    */
   clockAt(at: Instant, speed: number): FrameClock {
