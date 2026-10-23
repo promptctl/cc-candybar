@@ -1295,11 +1295,15 @@ describe("open trigger, its band, and a nested band are mutually distinguishable
         const band = bandFor(palette, { hue, depth, ground }, drawnAt);
         const nested = bandFor(palette, { hue, depth: depth + 1, ground }, drawnAt);
         const onPlane = band.items.some((item) => shown(item).hex === shown(band.plane).hex);
-        const short = seamOf(band, nested.state, drawnAt).filter((pair) =>
-          !(pair.endsWith("open trigger") ? nested : band).shortfalls.some((line) =>
-            line.includes(`band's ${pair} stand`),
-          ),
-        );
+        // An open trigger's seam is named by the band it opens, beside the
+        // colour of the band it sits in; every other pair by the band itself.
+        const short = seamOf(band, nested.state, drawnAt).filter((pair) => {
+          const [first] = pair.split(" and ");
+          const [owner, words] = pair.endsWith("open trigger")
+            ? [nested, `a trigger open in a band and that band's ${first} stand`]
+            : [band, `an open band's ${pair} stand`];
+          return !owner.shortfalls.some((line) => line.includes(words));
+        });
         return [...(onPlane ? [`${name} depth ${depth}: an item is the plane`] : []), ...short.map((pair) => `${name} depth ${depth}: ${pair}`)];
       }),
     );
@@ -1320,6 +1324,23 @@ describe("open trigger, its band, and a nested band are mutually distinguishable
       ),
     );
     expect([...new Set(short)]).toEqual(["textual-dark/dim depth 0: low item and high item"]);
+  });
+
+  test("a nested trigger's state shortfall names the remedy that clears it: another shade or style", () => {
+    // A trigger in a band stands among that band's plane and ✕, which another
+    // variation moves too little to clear (measured: of 128 such shortfalls,
+    // another shade or style cleared all, another variation 48).
+    const lines = STYLED.flatMap(({ palette }) =>
+      GROUNDS.flatMap(({ ground }) =>
+        ([1, 2, 3] as const).flatMap((depth) =>
+          bandFor(palette, { hue: OPEN_HUE, depth, ground }, ColorDepth.TRUECOLOR).shortfalls.filter((line) =>
+            line.includes("no open-trigger colour"),
+          ),
+        ),
+      ),
+    );
+    expect(lines.length).toBeGreaterThan(0);
+    expect(lines.filter((line) => !line.endsWith("; another shade or style clears it"))).toEqual([]);
   });
 
   test("a nested trigger is told from the trigger that opened it wherever the theme tells their hues apart", () => {

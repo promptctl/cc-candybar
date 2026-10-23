@@ -974,14 +974,25 @@ const nestedIn = (disclosure: Disclosure): Disclosure => ({
 /** The line the render reports for a state that stands short of its floor, if it does. */
 const stateShortfall = (
   palette: Palette,
+  disclosure: Disclosure,
   { short }: StateSearch,
   drawnAt: ColorDepth,
 ): readonly string[] =>
   short === null
     ? []
     : [
-        `theme "${palette.name}": no open-trigger colour stands ${STATE_FLOOR}:1 off every cell beside it — the nearest stands ${short.toFixed(2)}:1 as drawn at depth ${ColorDepth[drawnAt]}; another shade or variation clears it`,
+        `theme "${palette.name}": no open-trigger colour stands ${STATE_FLOOR}:1 off every cell beside it — the nearest stands ${short.toFixed(2)}:1 as drawn at depth ${ColorDepth[drawnAt]}; ${STATE_REMEDY[disclosure.depth === 0 ? "bar" : "band"]} clears it`,
       ];
+// What clears a state's shortfall, by where its trigger stands. A bar
+// trigger stands among its row, which the shade and variation deal. A trigger
+// in a band stands among that band's plane and ✕, which the variation moves
+// less: of the 128 nested shortfalls over every bundled theme, style,
+// variation and shade (truecolor and 256 colours), another shade or another
+// style cleared every one, another variation 48.
+const STATE_REMEDY = {
+  bar: "another shade or variation",
+  band: "another shade or style",
+} as const;
 
 /**
  * The line the render reports for a plane standing too near the trigger that
@@ -1111,7 +1122,10 @@ export function bandFor(
     const { state } = search;
     // The plane is the unrounded plane as drawn — rounded once, from the anchor
     // the state is drawn from, never blended from a state already rounded.
-    const floors = planeFloors(palette, disclosure, state, drawnAt);
+    // The search of a trigger open in this band — once, read by the plane's
+    // floors, the items and the seams alike.
+    const nested = searchOf(palette, nestedIn(disclosure), drawnAt);
+    const floors = planeFloors(palette, disclosure, state, nested, drawnAt);
     const plane = ensureDrawn(
       unroundedBand(palette, disclosure, drawnAt).plane,
       drawnAt,
@@ -1127,11 +1141,11 @@ export function bandFor(
         `palette "${palette.name}": the ${disclosure.hue} band at depth ${disclosure.depth} cannot keep its floors on the colours drawn at depth ${ColorDepth[drawnAt]}`,
       );
     }
-    const opened = searchOf(palette, nestedIn(disclosure), drawnAt).state;
     const items = bandItems(
       palette,
       disclosure,
-      { state, opened, plane },
+      { state, plane },
+      nested,
       drawnAt,
     );
     const asDrawn = shownAt(drawnAt);
@@ -1145,7 +1159,7 @@ export function bandFor(
         drawnAt === ColorDepth.DEFAULT
           ? []
           : [
-              ...stateShortfall(palette, search, drawnAt),
+              ...stateShortfall(palette, disclosure, search, drawnAt),
               ...planeShortfall(
                 palette,
                 deltaE(asDrawn(state), asDrawn(plane)),
@@ -1169,33 +1183,21 @@ const disclosureKey = ({ hue, depth, ground }: Disclosure): string =>
 const deltaE = (a: ColorRgba, b: ColorRgba): number =>
   Oklch.fromRgba(a).deltaE(Oklch.fromRgba(b));
 
-// The four colours a band row draws beside one another: the ✕ leading it (the
-// band's state), a trigger open in it (the next band's state), and its two
-// items — named as the shortfall line names them.
-interface RowColours {
-  readonly state: ColorRgba;
-  readonly opened: ColorRgba;
-  readonly low: ColorRgba;
-  readonly high: ColorRgba;
+// One seam a band row can draw: its two colours, and the words its shortfall
+// line names them by.
+interface Seam {
+  readonly between: string;
+  readonly a: ColorRgba;
+  readonly b: ColorRgba;
 }
-const ROW_COLOUR_NAMES: Record<keyof RowColours, string> = {
-  state: "trigger",
-  opened: "open trigger",
-  low: "low item",
-  high: "high item",
-};
-
-// One of a band row's colours, under the name its shortfall line gives it.
-type Named = readonly [keyof RowColours, ColorRgba];
-type Seam = readonly [Named, Named];
 
 /**
- * The pairs of band-row colours that opening the band `disclosure` puts on
- * screen beside one another: its own ✕ and two items, each beside the others,
+ * The seams opening the band `disclosure` puts on screen: its own ✕ (the
+ * band's state, named its trigger) and two items, each beside the others,
  * and — for a band opened by a trigger inside another band — that trigger, in
  * this band's state, beside the enclosing band's ✕ and items. A band reports
- * an open trigger only once one is open: it is the nested band that opens
- * then, so a band whose body holds no trigger reports none.
+ * an open trigger's seams only once one is open: it is the nested band that
+ * opens then, so a band whose body holds no trigger reports none.
  */
 const drawnSeams = (
   palette: Palette,
@@ -1203,11 +1205,12 @@ const drawnSeams = (
   { state, items }: Pick<Band, "state" | "items">,
   drawnAt: ColorDepth,
 ): readonly Seam[] => {
-  const row = (b: Pick<Band, "state" | "items">): readonly Named[] => [
-    ["state", b.state],
-    ["low", b.items[0]],
-    ["high", b.items[1]],
-  ];
+  const row = (b: Pick<Band, "state" | "items">) =>
+    [
+      ["trigger", b.state],
+      ["low item", b.items[0]],
+      ["high item", b.items[1]],
+    ] as const;
   const own = row({ state, items });
   const enclosing =
     disclosure.depth === 0
@@ -1220,8 +1223,18 @@ const drawnSeams = (
           ),
         );
   return [
-    ...own.flatMap((a, i) => own.slice(i + 1).map((b): Seam => [a, b])),
-    ...enclosing.map((b): Seam => [b, ["opened", state]]),
+    ...own.flatMap(([na, a], i) =>
+      own.slice(i + 1).map(([nb, b]) => ({
+        between: `an open band's ${na} and ${nb}`,
+        a,
+        b,
+      })),
+    ),
+    ...enclosing.map(([n, b]) => ({
+      between: `a trigger open in a band and that band's ${n}`,
+      a: state,
+      b,
+    })),
   ];
 };
 
@@ -1236,12 +1249,12 @@ const seamShortfalls = (
   drawnAt: ColorDepth,
 ): readonly string[] => {
   const asDrawn = shownAt(drawnAt);
-  return seams.flatMap(([[a, ca], [b, cb]]) => {
-    const apart = deltaE(asDrawn(ca), asDrawn(cb));
+  return seams.flatMap(({ between, a, b }) => {
+    const apart = deltaE(asDrawn(a), asDrawn(b));
     return apart >= SEAM_MIN_DELTA_E
       ? []
       : [
-          `theme "${palette.name}": an open band's ${ROW_COLOUR_NAMES[a]} and ${ROW_COLOUR_NAMES[b]} stand ΔE ${apart.toFixed(3)} apart as drawn at depth ${ColorDepth[drawnAt]}, under the ${SEAM_MIN_DELTA_E} below which two cells in those colours are joined by a divider and read as one`,
+          `theme "${palette.name}": ${between} stand ΔE ${apart.toFixed(3)} apart as drawn at depth ${ColorDepth[drawnAt]}, under the ${SEAM_MIN_DELTA_E} below which two cells in those colours are joined by a divider and read as one`,
         ];
   });
 };
@@ -1260,19 +1273,13 @@ const seamShortfalls = (
 function bandItems(
   palette: Palette,
   disclosure: Disclosure,
-  drawnBand: Pick<RowColours, "state" | "opened"> & {
-    readonly plane: ColorRgba;
-  },
+  drawnBand: Pick<Band, "state" | "plane">,
+  nested: StateSearch,
   drawnAt: ColorDepth,
 ): readonly [ColorRgba, ColorRgba] {
   const unrounded = unroundedBand(palette, disclosure, drawnAt);
-  const unroundedOpened = searchOf(
-    palette,
-    nestedIn(disclosure),
-    drawnAt,
-  ).anchor;
   const low = blendRgb(unrounded.plane, unrounded.state, BAND_ITEM_FLOOR);
-  const high = furthestAlong(low, unrounded.state, [unroundedOpened]);
+  const high = furthestAlong(low, unrounded.state, [nested.anchor]);
   const seen =
     (others: readonly ColorRgba[]) =>
     (candidate: ColorRgba, drawn: (c: ColorRgba) => ColorRgba): boolean =>
@@ -1281,12 +1288,14 @@ function bandItems(
         (other) => deltaE(candidate, drawn(other)) >= SEAM_MIN_DELTA_E,
       );
   // [LAW:no-silent-failure] Where the depth draws no colour that stands off
-  // the rest, the item is drawn at its place, and `seamShortfalls` reports
-  // the pair it stands too near.
-  const beside = [drawnBand.state, drawnBand.opened];
-  const drawnLow = ensureDrawn(low, drawnAt, seen(beside)) ?? low;
+  // the rest, the item is drawn at its place — as drawn, like every colour
+  // `ensureDrawn` returns — and `seamShortfalls` reports the pair it stands
+  // too near.
+  const asDrawn = shownAt(drawnAt);
+  const beside = [drawnBand.state, nested.state];
+  const drawnLow = ensureDrawn(low, drawnAt, seen(beside)) ?? asDrawn(low);
   const drawnHigh =
-    ensureDrawn(high, drawnAt, seen([...beside, drawnLow])) ?? high;
+    ensureDrawn(high, drawnAt, seen([...beside, drawnLow])) ?? asDrawn(high);
   return [drawnLow, drawnHigh];
 }
 
@@ -1408,6 +1417,7 @@ function planeFloors(
   palette: Palette,
   disclosure: Disclosure,
   state: ColorRgba,
+  nested: StateSearch,
   drawnAt: ColorDepth,
 ): readonly PlaneFloor[] {
   const { hue, depth, ground } = disclosure;
@@ -1420,7 +1430,6 @@ function planeFloors(
   const plane = unroundedPlane(depth);
   const keptApart = (floor: number, other: ColorRgba): number =>
     deltaE(shownTrue(plane), shownTrue(other)) >= floor ? floor : 0;
-  const nested = searchOf(palette, nestedIn(disclosure), drawnAt);
   const keptUnder =
     contrastRatio(shownTrue(plane), shownTrue(nested.anchor)) >= STATE_FLOOR
       ? STATE_FLOOR

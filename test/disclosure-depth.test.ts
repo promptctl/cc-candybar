@@ -20,7 +20,7 @@
 //     opens is the depth-0 `OPEN_HUE` band every bar trigger opens — the
 //     anchor of the chain.
 
-import { ColorDepth } from "@promptctl/rich-js";
+import { ColorDepth, type ColorRgba } from "@promptctl/rich-js";
 import { getThemePalette } from "@promptctl/rich-js";
 import type { Palette, RichText } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -147,6 +147,21 @@ function bodyOf(root: CompiledNode, trigger: string): CompiledContainerNode {
 /** The names of the segments directly inside the body `trigger` opens. */
 function bodyCellsOf(root: CompiledNode, trigger: string): string[] {
   return cellsOf(bodyOf(root, trigger));
+}
+
+// [LAW:behavior-not-structure] An item's colour as the model states it, from
+// the cell's place alone — never through decorationFor, the function the walk
+// colours it with. Under the default van der Corput placement, two items are
+// dealt by the cell's index parity; a row of a vertical body is a first cell.
+function itemAt(palette: Palette, band: Disclosure, cellIndex: number): ColorRgba {
+  return bandFor(palette, band, ColorDepth.TRUECOLOR).items[cellIndex % 2]!;
+}
+
+// The index of segment `name` among the cells of the row `trigger` opens.
+function cellIndexIn(root: CompiledNode, trigger: string, name: string): number {
+  const index = bodyOf(root, trigger).children.findIndex((c) => c.kind === "segment" && c.name === name);
+  if (index === -1) throw new Error(`"${name}" is not a cell of "${trigger}"'s body`);
+  return index;
 }
 
 function cellsOf(node: CompiledContainerNode): string[] {
@@ -302,7 +317,7 @@ describe("candybar-render-ai7.9 — the bundled 🍫 → 🎨 look → picker ch
           { index: line, count: lines.length },
           { index, count: cells.length },
         ]);
-        const item = decorationFor(palette, { kind: "band", band: band0, address: address }, ColorDepth.TRUECOLOR).tint;
+        const item = itemAt(palette, band0, index);
         expect([name, rt.bgOf(name)]).toEqual([name, item.hex]);
         expect([name, rt.fgOf(name)]).toEqual([name, textOn(palette, item, ColorDepth.TRUECOLOR).hex]);
       }
@@ -321,7 +336,7 @@ describe("candybar-render-ai7.9 — the bundled 🍫 → 🎨 look → picker ch
       expect([name, rt.bgOf(name)]).toEqual([name, rt.expectedTint(name)]);
       expect([name, rt.fgOf(name)]).toEqual([
         name,
-        textOn(palette, decorationFor(palette, { kind: "band", band: band1, address: regionAddress(rt, name) }, ColorDepth.TRUECOLOR).tint, ColorDepth.TRUECOLOR).hex,
+        textOn(palette, itemAt(palette, band1, cellIndexIn(root, look, name)), ColorDepth.TRUECOLOR).hex,
       ]);
     }
 
@@ -338,7 +353,7 @@ describe("candybar-render-ai7.9 — the bundled 🍫 → 🎨 look → picker ch
     expect(rt.bgOf(control)).toBe(bandFor(palette, band2, ColorDepth.TRUECOLOR).state.hex);
     const list = "candybar.list.effect.0";
     expect(rt.bgOf(list)).toBe(
-      decorationFor(palette, { kind: "band", band: band2, address: regionAddress(rt, list) }, ColorDepth.TRUECOLOR).tint.hex,
+      itemAt(palette, band2, 0).hex,
     );
 
     // The ⚙ beside the theme control sits on the door's first line, a trigger
@@ -356,7 +371,7 @@ describe("candybar-render-ai7.9 — the bundled 🍫 → 🎨 look → picker ch
       expect([name, rt.bgOf(name)]).toEqual([name, rt.expectedTint(name)]);
       expect([name, rt.fgOf(name)]).toEqual([
         name,
-        textOn(palette, decorationFor(palette, { kind: "band", band: band1, address: regionAddress(rt, name) }, ColorDepth.TRUECOLOR).tint, ColorDepth.TRUECOLOR).hex,
+        textOn(palette, itemAt(palette, band1, cellIndexIn(root, gear, name)), ColorDepth.TRUECOLOR).hex,
       ]);
     }
     const style = "candybar.style";
@@ -365,7 +380,7 @@ describe("candybar-render-ai7.9 — the bundled 🍫 → 🎨 look → picker ch
     expect(rt.bgOf(style)).toBe(bandFor(palette, band2, ColorDepth.TRUECOLOR).state.hex);
     const styles = "candybar.list.style.0";
     expect(rt.bgOf(styles)).toBe(
-      decorationFor(palette, { kind: "band", band: band2, address: regionAddress(rt, styles) }, ColorDepth.TRUECOLOR).tint.hex,
+      itemAt(palette, band2, 0).hex,
     );
     rt.dispose();
   });
@@ -494,7 +509,7 @@ describe("candybar-render-ai7.9 — a group's toggle is a trigger", () => {
     expect(rt.bgOf("groups.inner")).toBe(band1.state.hex);
     expect(rt.bgOf("d")).toBe(rt.expectedTint("d"));
     expect(rt.bgOf("d")).toBe(
-      decorationFor(palette, { kind: "band", band: nested, address: regionAddress(rt, "d") }, ColorDepth.TRUECOLOR).tint.hex,
+      itemAt(palette, nested, 0).hex,
     );
     rt.dispose();
   });

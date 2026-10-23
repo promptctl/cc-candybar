@@ -63,7 +63,12 @@ import {
 import { endcapsNameMessage } from "./styles.js";
 import { parsePersistTarget } from "./persist-target.js";
 import { presetNames, presetRoot } from "../presets.js";
-import { fragmentNodePaths, rootNode } from "../root.js";
+import {
+  fragmentNode,
+  fragmentNodePaths,
+  isRowsFragment,
+  rootNode,
+} from "../root.js";
 import {
   anchorUnderGate,
   countAnchors,
@@ -306,10 +311,14 @@ export function validateCrossReferences(
         line: layoutLine,
       });
     }
-    for (const [where, nodePath] of unreadDistributions(tree, layoutKey)) {
+    // The root's own field places the merged root's rows, inherited ones
+    // included, so it is judged here; every node beneath is judged where the
+    // author wrote it (checkLayoutTree).
+    const rootUnread = unreadAt(tree, "bar");
+    if (rootUnread !== undefined) {
       ctx.issues.push({
         path: layoutKey,
-        message: UNREAD_DISTRIBUTION[where](nodePath),
+        message: UNREAD_DISTRIBUTION[rootUnread](layoutKey),
         line: layoutLine,
       });
     }
@@ -337,33 +346,50 @@ export function validateCrossReferences(
   // bar or in a body, nor one on a vertical container whose rows pick nothing:
   // on the bar, one whose every row is itself a vertical container; in a body,
   // any. Each would be accepted and ignored; each is refused at its node.
-  function* unreadDistributions(
+  function unreadAt(
     node: LayoutNode,
-    path: string,
-    where: UnreadDistribution = "bar",
-  ): IterableIterator<readonly [UnreadDistribution, string]> {
-    if (node.kind === "segment") {
-      if (node.opens !== undefined)
-        yield* unreadDistributions(node.opens.body, bodyPath(path), "band");
-      return;
-    }
-    const axis = AXIS_OF[node.direction];
+    where: UnreadDistribution,
+  ): UnreadDistribution | undefined {
+    if (node.kind === "segment" || node.distribution === undefined)
+      return undefined;
+    if (where === "cell") return "cell";
     const placesRows =
       where === "bar" &&
       node.children.some(
         (child) =>
           child.kind === "segment" || AXIS_OF[child.direction] === "cell",
       );
-    if (node.distribution !== undefined) {
-      if (where === "cell") yield ["cell", path];
-      else if (axis === "row" && !placesRows) yield [where, path];
-    }
-    for (const [i, child] of node.children.entries()) {
-      yield* unreadDistributions(
-        child,
-        childPath(path, i),
-        axis === "cell" ? "cell" : where,
-      );
+    return AXIS_OF[node.direction] === "row" && !placesRows ? where : undefined;
+  }
+  // Where a node's children sit: a segment's body is a band, a horizontal
+  // container's children are cells.
+  const whereBelow = (
+    node: LayoutNode,
+    where: UnreadDistribution,
+  ): UnreadDistribution =>
+    node.kind === "segment"
+      ? "band"
+      : AXIS_OF[node.direction] === "cell"
+        ? "cell"
+        : where;
+  // A node's children with their diagnostic paths (walkNodePaths' spelling).
+  const childPaths = (
+    node: LayoutNode,
+    path: string,
+  ): ReadonlyArray<readonly [LayoutNode, string]> =>
+    node.kind === "container"
+      ? node.children.map((child, i) => [child, childPath(path, i)] as const)
+      : node.opens === undefined
+        ? []
+        : [[node.opens.body, bodyPath(path)]];
+  function* unreadBelow(
+    children: ReadonlyArray<readonly [LayoutNode, string]>,
+    where: UnreadDistribution,
+  ): IterableIterator<readonly [UnreadDistribution, string]> {
+    for (const [child, path] of children) {
+      const own = unreadAt(child, where);
+      if (own !== undefined) yield [own, path];
+      yield* unreadBelow(childPaths(child, path), whereBelow(child, where));
     }
   }
   // [LAW:one-source-of-truth] Walks what the author WROTE — the file's own
@@ -373,6 +399,19 @@ export function validateCrossReferences(
   // below (placement counts); an inherited row names only bundled segments,
   // which no file can remove.
   const checkLayoutTree = (root: RootFragment, layoutKey: string): void => {
+    const top = fragmentNode(root);
+    const rows = isRowsFragment(root)
+      ? Object.entries(root.rows).map(
+          ([name, row]) => [row, `${layoutKey}.rows.${name}`] as const,
+        )
+      : childPaths(top, layoutKey);
+    for (const [where, path] of unreadBelow(rows, whereBelow(top, "bar"))) {
+      ctx.issues.push({
+        path,
+        message: UNREAD_DISTRIBUTION[where](path),
+        line: findKeyLine(ctx.source, path.split(".")),
+      });
+    }
     for (const [node, path] of fragmentNodePaths(root, layoutKey)) {
       const line = findKeyLine(ctx.source, path.split("."));
       // [LAW:locality-or-seam] A node's `when` reads the global scope (bare
