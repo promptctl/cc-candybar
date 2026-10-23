@@ -35,7 +35,7 @@
 // plus a `strings` table. node[name] indexes `strings`; node[type] indexes the
 // `node_types[0]` enum.
 
-import { readFileSync } from "node:fs";
+import { closeSync, fstatSync, openSync, readSync } from "node:fs";
 
 // [LAW:one-source-of-truth] The single snapshot parser. heap-retainers.mjs
 // imports this rather than re-deriving the field offsets — the two tools
@@ -46,7 +46,7 @@ import { readFileSync } from "node:fs";
 // limit) cannot be one string, so `JSON.parse` of it fails before parsing
 // starts. Only the `snapshot` header and each string of the table are decoded.
 export function parseSnapshot(path) {
-  const bytes = readFileSync(path);
+  const bytes = readWhole(path);
   const nodesAt = keyAt(bytes, "nodes", 0);
   // The header is every byte before `"nodes":`, a `{"snapshot":{…},` object
   // whose closing brace is the file's.
@@ -81,7 +81,7 @@ export function parseSnapshot(path) {
     edgeNameIdx: edgeFields.indexOf("name_or_index"),
     edgeToIdx: edgeFields.indexOf("to_node"),
   };
-  s.nodeCount = s.nodes.length / s.nodeStride;
+  s.nodeCount = nodeCount;
   return s;
 }
 
@@ -102,75 +102,110 @@ const SIZES = {
 };
 const INDICES = { make: (n) => new Uint32Array(n), max: 0xffffffff };
 
+// [LAW:single-enforcer] The one reader of a list's grammar: `[`, then items
+// each followed by `,` or `]`, whitespace allowed around either. `item(i)`
+// reads the item at byte i and returns the offset past it, or -1 when none
+// starts there. Returns the offset past `]`.
+// [LAW:no-silent-failure] A list cut short, an empty element, two items with
+// no comma between them, or any byte the grammar does not admit is a
+// truncated or foreign file, refused rather than read as a different heap.
+function readList(bytes, from, what, item) {
+  let i = skipSpace(bytes, bytes.indexOf(0x5b /* [ */, from) + 1);
+  if (bytes[i] === 0x5d /* ] */) return i + 1;
+  for (;;) {
+    const next = item(i);
+    if (next < 0) break;
+    i = skipSpace(bytes, next);
+    if (bytes[i] === 0x5d /* ] */) return i + 1;
+    if (bytes[i] !== 0x2c /* , */) break;
+    i = skipSpace(bytes, i + 1);
+  }
+  throw new Error(
+    `heap snapshot list at byte ${from}: not a list of ${what} at byte ${i}`,
+  );
+}
+
 // The `[n,n,…]` array starting at `from`, exactly `count` unsigned integers no
-// larger than `width.max`, and the offset past its `]`.
-// V8 ends each node's row with a newline straight after its last digit, so
-// whitespace ends a number; a digit after it would join two.
-// [LAW:no-silent-failure] Anything else — a count other than the header's, a
-// value past the width, a byte no integer list holds — is a truncated or
-// foreign file, refused rather than read as a different heap.
+// larger than `width.max`, and the offset past its `]`. V8 ends each node's
+// row with a newline straight after its last digit, so whitespace ends a
+// number.
 function readInts(bytes, from, count, width) {
   const values = width.make(count);
-  let i = bytes.indexOf(0x5b /* [ */, from) + 1;
   let n = 0;
-  let value = 0;
-  let digits = false;
-  let spaced = false;
-  for (; i < bytes.length; i++) {
-    const b = bytes[i];
-    if (b >= 0x30 && b <= 0x39) {
-      if (spaced) break;
-      value = value * 10 + (b - 0x30);
-      digits = true;
-    } else if (b === 0x2c /* , */ || b === 0x5d /* ] */) {
-      if (digits) {
-        if (n === count || value > width.max) break;
-        values[n++] = value;
-      }
-      value = 0;
-      digits = false;
-      spaced = false;
-      if (b === 0x5d) break;
-    } else if (isSpace(b)) {
-      spaced = digits;
-    } else break;
-  }
-  if (n !== count || bytes[i] !== 0x5d) {
+  const end = readList(
+    bytes,
+    from,
+    `unsigned integers up to ${width.max}`,
+    (i) => {
+      const start = i;
+      let value = 0;
+      for (; bytes[i] >= 0x30 && bytes[i] <= 0x39; i++)
+        value = value * 10 + (bytes[i] - 0x30);
+      if (i === start || value > width.max) return -1;
+      if (n < count) values[n] = value;
+      n++;
+      return i;
+    },
+  );
+  // [LAW:no-silent-failure] An array the header does not count is a foreign
+  // or mismatched file, never a smaller or larger heap.
+  if (n !== count) {
     throw new Error(
-      `heap snapshot array at byte ${from}: expected ${count} unsigned integers up to ${width.max}, read ${n} before byte ${i}`,
+      `heap snapshot array at byte ${from}: the header counts ${count} values, the array holds ${n}`,
     );
   }
-  return { values, end: i + 1 };
+  return { values, end };
 }
 
 // The `["…","…",…]` string table starting at `from`, each string decoded on
 // its own.
-// [LAW:no-silent-failure] A string cut off, a byte no string list holds
-// between its strings, or no closing `]` is a truncated file, refused rather
-// than read as a shorter table that names every later node `undefined`.
 function readStrings(bytes, from) {
   const strings = [];
-  let i = bytes.indexOf(0x5b /* [ */, from) + 1;
-  for (; i < bytes.length && bytes[i] !== 0x5d /* ] */; i++) {
-    if (bytes[i] === 0x2c /* , */ || isSpace(bytes[i])) continue;
-    if (bytes[i] !== 0x22 /* " */) break;
+  readList(bytes, from, "strings", (i) => {
+    if (bytes[i] !== 0x22 /* " */) return -1;
     let end = i + 1;
     while (end < bytes.length && bytes[end] !== 0x22)
       end += bytes[end] === 0x5c /* \ */ ? 2 : 1;
-    if (end >= bytes.length) break;
+    if (end >= bytes.length) return -1;
     strings.push(JSON.parse(bytes.toString("utf8", i, end + 1)));
-    i = end;
-  }
-  if (bytes[i] !== 0x5d) {
-    throw new Error(
-      `heap snapshot string table at byte ${from}: no closing ] after ${strings.length} strings, at byte ${i}`,
-    );
-  }
+    return end + 1;
+  });
   return strings;
 }
 
-function isSpace(b) {
-  return b === 0x20 || b === 0x0a || b === 0x0d || b === 0x09;
+function skipSpace(bytes, i) {
+  while (
+    bytes[i] === 0x20 ||
+    bytes[i] === 0x0a ||
+    bytes[i] === 0x0d ||
+    bytes[i] === 0x09
+  )
+    i++;
+  return i;
+}
+
+// `readFileSync` reads in one call, which Node caps at 2 GiB; a Buffer holds
+// far more, so the file is read into one a gigabyte at a time.
+function readWhole(path) {
+  const fd = openSync(path, "r");
+  try {
+    const bytes = Buffer.allocUnsafe(fstatSync(fd).size);
+    for (let at = 0; at < bytes.length; ) {
+      const n = readSync(
+        fd,
+        bytes,
+        at,
+        Math.min(bytes.length - at, 2 ** 30),
+        at,
+      );
+      if (n === 0)
+        throw new Error(`${path}: ended at byte ${at} of ${bytes.length}`);
+      at += n;
+    }
+    return bytes;
+  } finally {
+    closeSync(fd);
+  }
 }
 
 // "<type> / <name>" label for node ordinal i — the unit a histogram counts.

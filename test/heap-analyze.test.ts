@@ -56,28 +56,52 @@ test.each([
   [
     "cut inside a string",
     WHOLE.slice(0, WHOLE.indexOf("Foo") + 2),
-    /no closing \]/,
+    /not a list of strings/,
   ],
   [
     "cut between strings",
     `${HEADER}"nodes":[1,0,1,48,0,0,0\n],\n"edges":[],\n"strings":["Foo",`,
-    /no closing \]/,
+    /not a list of strings/,
   ],
   [
     "a value past 2^53",
     WHOLE.replace("48", "9007199254740993"),
-    /unsigned integers up to/,
+    /not a list of unsigned integers up to/,
   ],
-  ["a negative value", WHOLE.replace("48", "-48"), /unsigned integers up to/],
+  [
+    "a negative value",
+    WHOLE.replace("48", "-48"),
+    /not a list of unsigned integers up to/,
+  ],
   [
     "two numbers joined by whitespace",
     WHOLE.replace("48", "4 8"),
-    /unsigned integers up to/,
+    /not a list of unsigned integers up to/,
   ],
   [
     "fewer values than the header counts",
     WHOLE.replace("48,", ""),
-    /expected 7/,
+    /counts 7 values, the array holds 6/,
+  ],
+  [
+    "more values than the header counts",
+    WHOLE.replace("0,0,0\n]", "0,0,0,9\n]"),
+    /counts 7 values, the array holds 8/,
+  ],
+  [
+    "an empty element",
+    WHOLE.replace('"edges":[]', '"edges":[,,]'),
+    /not a list of unsigned/,
+  ],
+  [
+    "a trailing comma",
+    WHOLE.replace("0,0,0\n]", "0,0,0,\n]"),
+    /not a list of unsigned/,
+  ],
+  [
+    "two strings with no comma between them",
+    WHOLE.replace('["Foo"]', '["Foo""Bar"]'),
+    /not a list of strings/,
   ],
 ])("%s is refused", (_case, text, message) => {
   const run = analyze(text);

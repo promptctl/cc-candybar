@@ -736,9 +736,6 @@ export class RenderCache {
     cwd: string,
     configFile: string | undefined,
   ): CacheEntry {
-    // [LAW:no-silent-failure] A closed cache disposed every state it built;
-    // one built after would hold timers and watchers nothing tears down.
-    if (this.closed) throw new Error("render cache used after close");
     const key = cacheKey(projectDir, cwd, configFile);
     const existing = this.entries.get(key);
     if (existing) {
@@ -748,7 +745,7 @@ export class RenderCache {
       return existing;
     }
 
-    const loaded = loadFromDisk(projectDir, cwd, configFile, this.deps);
+    const loaded = this.load(projectDir, cwd, configFile);
     if (loaded.state !== null)
       this.log("info", pluginLoadLine(loaded.layers, loaded.state));
     // [LAW:no-silent-failure] A config that fails its FIRST load still yields
@@ -851,6 +848,7 @@ export class RenderCache {
   // the entries' watchers would otherwise keep the cache, and every compile it
   // serves, alive for as long as the process runs.
   close(): void {
+    if (this.closed) return;
     this.closed = true;
     if (this.sweep !== null) clearInterval(this.sweep);
     this.sweep = null;
@@ -862,6 +860,20 @@ export class RenderCache {
       "info",
       `render-cache closed entries=${entries} deferred=${this.stats.retired}`,
     );
+  }
+
+  // [LAW:single-enforcer] The one place the cache loads a state, so a closed
+  // cache refuses every way one would be built — a new entry, a reload, a
+  // config watch firing after the close.
+  // [LAW:no-silent-failure] A closed cache disposed every state it built; one
+  // built after would hold timers and watchers nothing tears down.
+  private load(
+    projectDir: string,
+    cwd: string,
+    configFile: string | undefined,
+  ): LoadOutcome {
+    if (this.closed) throw new Error("render cache used after close");
+    return loadFromDisk(projectDir, cwd, configFile, this.deps);
   }
 
   // [LAW:single-enforcer] The one way an entry leaves the map: its watcher
@@ -987,12 +999,7 @@ export class RenderCache {
   // straight-line, so the signal structurally cannot be skipped by whichever
   // arm the load took.
   private reloadInto(entry: CacheEntry): void {
-    const loaded = loadFromDisk(
-      entry.projectDir,
-      entry.cwd,
-      entry.configFile,
-      this.deps,
-    );
+    const loaded = this.load(entry.projectDir, entry.cwd, entry.configFile);
     entry.lastWarning = loaded.warning;
     entry.lastError = loaded.error;
     if (loaded.state !== null) {

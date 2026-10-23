@@ -784,6 +784,11 @@ describe("RenderCache", () => {
       expect(lines.filter((l) => l.startsWith("render-cache closed "))).toEqual(
         ["render-cache closed entries=4 deferred=1"],
       );
+      // A closed cache has nothing left to close.
+      cache.close();
+      expect(
+        lines.filter((l) => l.startsWith("render-cache closed ")),
+      ).toHaveLength(1);
       expect(closes()).toHaveLength(3);
       for (const line of closes())
         expect(line).toMatch(
@@ -1011,7 +1016,11 @@ describe("RenderCache idle sweep", () => {
       expect(released).toBe(1);
       expect(cache.size).toBe(0);
       expect(jest.getTimerCount()).toBe(0);
+      // Every way a state is built refuses: an entry, or a reload of one.
       expect(() => cache.getOrCreate(dir, dir, undefined)).toThrow(
+        "render cache used after close",
+      );
+      expect(() => cache.reload(dir, dir, undefined)).toThrow(
         "render cache used after close",
       );
     } finally {
