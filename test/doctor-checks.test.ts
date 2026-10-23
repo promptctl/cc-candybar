@@ -717,7 +717,7 @@ describe("effectRefresh probe", () => {
   test("a bar that can start moving with no interval → failed WITH the fix", () => {
     expect(effectRefresh(drew("can-move"), interval())).toEqual({
       ok: false,
-      reason: `the bar can start moving (a globals.effect rule, placements that fade in and out, or a placement with an effect of its own that is not drawn now), but its statusLine sets no refreshInterval, so Claude Code redraws it only on events${FROM}`,
+      reason: `the bar can start moving (an open menu, which flashes and closes on its own, a globals.effect rule, placements that fade in and out, or a placement with an effect of its own that is not drawn now), but its statusLine sets no refreshInterval, so Claude Code redraws it only on events${FROM}`,
       fix: FIX,
     });
   });

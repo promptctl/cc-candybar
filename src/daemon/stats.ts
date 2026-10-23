@@ -2,6 +2,7 @@
 // watchers each receive a tiny handle they're allowed to bump, but the
 // canonical object lives here. Stats are read-only after serialization.
 
+import type { MenuIdleStats } from "./menu-idle.js";
 import type { TmuxStatusStats } from "./tmux-status.js";
 import type { TranscriptReads } from "../utils/transcript-fs";
 import type { FeedStats } from "./frame-feed";
@@ -102,6 +103,9 @@ export interface StatsSnapshot {
     sessions: number;
     effects: number;
   };
+  // Sessions whose idle clock is kept, and those with a timer armed to close
+  // their menus (src/daemon/menu-idle.ts).
+  menuIdle: MenuIdleStats;
   // The per-session click store: how many sessions it holds, how many
   // derivations are subscribed to it, and its revision — how many changes it
   // has taken. Observers climbing while renderCache holds steady is a
@@ -295,6 +299,7 @@ export class RuntimeStats {
         budgetBytes: 0,
       },
       effectCache: { sessions: 0, effects: 0 },
+      menuIdle: { sessions: 0, armed: 0 },
       sessionState: { sessions: 0, observers: 0, revision: 0 },
       frameFeeds: {
         feeds: 0,
@@ -331,6 +336,7 @@ export class RuntimeStats {
     transcriptReads: TranscriptReads;
     renderCache: StatsSnapshot["renderCache"];
     effectCache: StatsSnapshot["effectCache"];
+    menuIdle: StatsSnapshot["menuIdle"];
     sessionState: StatsSnapshot["sessionState"];
     frameFeeds: FeedStats;
     tmuxStatus: TmuxStatusStats;
@@ -367,6 +373,7 @@ export class RuntimeStats {
       transcriptReads: extras.transcriptReads,
       renderCache: extras.renderCache,
       effectCache: extras.effectCache,
+      menuIdle: extras.menuIdle,
       sessionState: extras.sessionState,
       frameFeeds: extras.frameFeeds,
       tmuxStatus: extras.tmuxStatus,

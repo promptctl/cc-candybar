@@ -33,6 +33,7 @@ import {
 } from "./helpers/spawn-isolated-daemon";
 import { effectsOf } from "./helpers/click";
 import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/settings-menu";
+import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
 import { SETTINGS_NS } from "../src/config/loader/reserved-namespace";
 import { VERB_DOCTOR_PROBE, VERB_DOCTOR_RUN } from "../src/click/wire";
 import { PROTOCOL_VERSION } from "../src/daemon/protocol";
@@ -53,10 +54,7 @@ import {
   parseDaemonClients,
   parseRateLimitSightings,
 } from "../src/doctor/daemon-answer";
-import {
-  claudeConfigDir,
-  detectClaudeConfigDir,
-} from "../src/claude-settings";
+import { claudeConfigDir, detectClaudeConfigDir } from "../src/claude-settings";
 import type { ClientHints } from "../src/daemon/protocol";
 import type { StatsSnapshot } from "../src/daemon/stats";
 
@@ -70,7 +68,11 @@ test("the doctor's config row reports the session's own config load", async () =
   const { env, sockPath, removeTmpDirs } = prepareIsolatedDaemonEnv(
     "cc-candybar-doctor-e2e",
   );
-  const userConfig = path.join(env.XDG_CONFIG_HOME!, "cc-candybar", "config.json5");
+  const userConfig = path.join(
+    env.XDG_CONFIG_HOME!,
+    "cc-candybar",
+    "config.json5",
+  );
   mkdirSync(path.dirname(userConfig), { recursive: true });
   writeFileSync(userConfig, "{}");
   const projectDir = realpathSync(
@@ -126,7 +128,11 @@ test("a probe click is listed in stats; a doctor click's handler version is its 
   try {
     daemon = await spawnDaemonWithEnv(env);
     const request = (body: Record<string, unknown>) =>
-      sendDaemonRequest(sockPath, { v: PROTOCOL_VERSION, ...body } as never, 5000);
+      sendDaemonRequest(
+        sockPath,
+        { v: PROTOCOL_VERSION, ...body } as never,
+        5000,
+      );
 
     const nonce = "123e4567-e89b-42d3-a456-426614174000";
     expect(
@@ -152,8 +158,22 @@ test("a probe click is listed in stats; a doctor click's handler version is its 
         clientVersion: "0.0.1",
       }),
     ).toMatchObject({ ok: true });
-    await click(sockPath, urlWriting(await render(sockPath, SID, projectDir), SETTINGS_ANCHOR, SETTINGS_OPEN));
-    await click(sockPath, urlWriting(await render(sockPath, SID, projectDir), `${SETTINGS_NS}tab`, "tools"));
+    await click(
+      sockPath,
+      urlWriting(
+        await render(sockPath, SID, projectDir),
+        SETTINGS_ANCHOR,
+        SETTINGS_OPEN,
+      ),
+    );
+    await click(
+      sockPath,
+      urlWriting(
+        await render(sockPath, SID, projectDir),
+        `${SETTINGS_NS}tab`,
+        "tools",
+      ),
+    );
     expect(flat(await render(sockPath, SID, projectDir))).toContain(
       "✗ URL handler — the URL handler runs cc-candybar 0.0.1; the bar runs",
     );
@@ -239,7 +259,11 @@ test("the clients the daemon saw render are the install check's facts", async ()
       );
       const stats = (resp as { stats: StatsSnapshot }).stats;
       const asked = parseDaemonClients(stats);
-      const install = installOf(productionInstallEdge, { kind: "recent" }, asked);
+      const install = installOf(
+        productionInstallEdge,
+        { kind: "recent" },
+        asked,
+      );
       return checkByName("install")!.probe({ install } as never);
     };
 
@@ -250,8 +274,7 @@ test("the clients the daemon saw render are the install check's facts", async ()
     await render(sockPath, "install-e2e-2", projectDir);
     expect(await verdict()).toEqual({
       ok: false,
-      reason:
-        `the bar is drawn by a statusline client too old to say what it is — run \`just install-rust\` and point the statusLine command at ${repo}/bin/cc-candybar-native`,
+      reason: `the bar is drawn by a statusline client too old to say what it is — run \`just install-rust\` and point the statusLine command at ${repo}/bin/cc-candybar-native`,
       more: [],
     });
 
@@ -275,7 +298,9 @@ test("the rate-limit windows each render carried are the segment-data row's fact
   const projectDir = realpathSync(
     mkdtempSync(path.join(os.tmpdir(), "cc-candybar-doctor-e2e-project-")),
   );
-  const ownDir = claudeConfigDir(detectClaudeConfigDir(process.env, projectDir));
+  const ownDir = claudeConfigDir(
+    detectClaudeConfigDir(process.env, projectDir),
+  );
   const answered = {
     total_input_tokens: 10,
     total_output_tokens: 5,
@@ -418,8 +443,14 @@ test("a bar whose only motion is a template's fails effect refresh", async () =>
     const SID = "doctor-e2e-frames";
     const hints = { claudeConfigDir: claudeDir };
     const draw = () => render(sockPath, SID, projectDir, hints);
-    await click(sockPath, urlWriting(await draw(), SETTINGS_ANCHOR, SETTINGS_OPEN));
-    await click(sockPath, urlWriting(await draw(), `${SETTINGS_NS}tab`, "tools"));
+    await click(
+      sockPath,
+      urlWriting(await draw(), SETTINGS_ANCHOR, SETTINGS_OPEN),
+    );
+    await click(
+      sockPath,
+      urlWriting(await draw(), `${SETTINGS_NS}tab`, "tools"),
+    );
     const run = linkUrls(await draw()).find((u) =>
       effectsOf(u).some((e) => e.verb === VERB_DOCTOR_RUN),
     );
@@ -433,6 +464,27 @@ test("a bar whose only motion is a template's fails effect refresh", async () =>
     await click(sockPath, run!);
     await draw();
     await click(sockPath, run!);
+    // Still, but drawn under the open menu the doctor is clicked from, which
+    // flashes and closes on its own.
+    expect(flat(await draw())).toContain(
+      "✗ effect refresh — the bar can start moving (an open menu,",
+    );
+
+    // The same bar with its menu closed is still, and passes.
+    await click(
+      sockPath,
+      urlWriting(await draw(), SETTINGS_ANCHOR, DISCLOSURE_CLOSED),
+    );
+    await draw();
+    await click(sockPath, run!);
+    await click(
+      sockPath,
+      urlWriting(await draw(), SETTINGS_ANCHOR, SETTINGS_OPEN),
+    );
+    await click(
+      sockPath,
+      urlWriting(await draw(), `${SETTINGS_NS}tab`, "tools"),
+    );
     expect(flat(await draw())).toContain("✓ effect refresh");
 
     const motion = readFileSync(logPath(env), "utf8")
@@ -440,13 +492,21 @@ test("a bar whose only motion is a template's fails effect refresh", async () =>
       .filter((l) => l.includes(`render sid=${SID} `))
       .map((l) => l.match(/ motion=(\S+) /)?.[1]);
     expect(motion[0]).toBe("moves");
-    expect(motion.at(-1)).toBe("still");
+    expect(motion).toContain("can-move");
+    // The render event says how long a drawn menu has sat idle, of its timeout.
+    const menuIdle = readFileSync(logPath(env), "utf8")
+      .split("\n")
+      .filter((l) => l.includes(`render sid=${SID} `))
+      .map((l) => l.match(/ menuIdle=(\S+) /)?.[1]);
+    expect(menuIdle[0]).toBe("-");
+    expect(menuIdle).toContainEqual(expect.stringMatching(/^\d+\.\ds\/30s$/));
+    expect(motion).toContain("still");
     expect(
       readFileSync(logPath(env), "utf8")
         .split("\n")
         .filter((l) => l.includes("doctor:") && l.includes(`session=${SID}`))
         .map((l) => l.match(/ frames=(\S+) /)?.[1]),
-    ).toEqual(["1/0/0/0/0", "1/0/0/0/0", "0/0/1/0/0"]);
+    ).toEqual(["1/0/0/0/0", "1/0/0/0/0", "0/1/0/0/0", "0/0/1/0/0"]);
   } finally {
     if (daemon) await killAndWait(daemon);
     removeTmpDirs();

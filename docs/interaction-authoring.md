@@ -532,6 +532,17 @@ a different thing: it writes the session key `update.dismissed` with the
 identity of the newer thing, so a dismissal lapses by itself the next time
 something newer appears.
 
+`menuTimeout` (seconds, 10–600, default 30) is how long a session's open
+menus — every disclosure body and dropped `{{ menu }}` — stay open with no
+click in that session, counted from the later of that click and the first
+frame that drew them. They flash for their last 7.5 s, every lit cell a solid
+`warning` fill, then close as if their ✕ were clicked, with everything open
+inside them. A toggle that opens no menu, such as edit mode's `☑ live`, is
+left as it is. Claude Code redraws its statusline only on events unless
+its `statusLine` sets `refreshInterval: 1`, so without it neither the flash
+nor the close shows until the next event. It has a session half, the
+`menu timeout` stepper under `⚙ config`.
+
 `autoWrap` and `padding` each have a session half, because each describes how
 much bar fits in the terminal a session runs in, and two sessions on one
 machine can sit in two different terminals. Both spellings are available for
@@ -2349,8 +2360,8 @@ Give the second its own id and each copy's menu opens on its own:
 ### A setting value the setting does not have
 
 A `set` on a setting's key (`theme`, `style`, `effect`, `preset`, `endcaps`,
-`variation`, `shade`, `autoWrap`, `padding`, `updateNotice`, `transitions`,
-`experimentalBand`, `experimentalStatusline`, `experimentalPane`,
+`variation`, `shade`, `autoWrap`, `padding`, `updateNotice`, `menuTimeout`,
+`transitions`, `experimentalBand`, `experimentalStatusline`, `experimentalPane`,
 `experimentalTmuxStatus`) may only write members of
 that setting's domain. Anything else would load, be admitted by the click
 gate, and change nothing. The check covers a `to`, a `cycle`'s members, a

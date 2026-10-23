@@ -88,6 +88,8 @@ import { NavigationHistory } from "./navigation-history";
 import { stateGate } from "./verbs/state-validators";
 import {
   VERBS,
+  clickSessionOf,
+  closeIdleMenus,
   BadVerbArgs,
   SESSION_RENDER_ORIGIN_KEY,
   SESSION_CLIENT_HINTS_KEY,
@@ -186,6 +188,7 @@ import {
 } from "../render/diagnostic-strip.js";
 import { DiagnosticDump } from "./diagnostic-dump.js";
 import { instantOf, type Instant } from "../utils/instant.js";
+import { MenuIdle } from "./menu-idle.js";
 import {
   noteFacts,
   renderEvent,
@@ -246,6 +249,18 @@ const navigationHistory = new NavigationHistory();
 // Each session's effect memory — when its effect came into force — held in
 // daemon memory only: a restarted daemon starts every session's effect again.
 const effectSessions = new EffectSessions<RenderedLine>();
+// [LAW:single-enforcer] Each session's idle clock and the timer that closes
+// its menus (src/daemon/menu-idle.ts): a click restarts the clock, and the
+// close is the journaled write a ✕ makes.
+const menuIdle = new MenuIdle({
+  now: () => instantOf(new Date()),
+  close: (sessionId, idle) => closeIdleMenus(sessionId, idle, verbCtx),
+  failed: (sessionId, error) =>
+    dlog(
+      "error",
+      `menu-idle: close failed (session=${sessionId}): ${inspect(error)}`,
+    ),
+});
 // How this daemon's node runs its bundle: what a bar pane runs, and what a
 // click in a tmux status line runs to hand the click back.
 const DAEMON_NODE: readonly string[] = [process.execPath, ...process.execArgv];
@@ -1231,6 +1246,7 @@ export async function replyTo(
         transcriptReads: transcriptReads(),
         renderCache: renderCache.stats,
         effectCache: effectSessions.getStats(),
+        menuIdle: menuIdle.getStats(),
         sessionState: {
           sessions: sessionState.size(),
           observers: sessionState.observers(),
@@ -1614,6 +1630,10 @@ function handleClick(
     };
   }
   try {
+    // A click restarts its session's idle clock; one naming no session
+    // restarts none.
+    const clickedIn = clickSessionOf(verb, value);
+    if (clickedIn !== null) menuIdle.clicked(clickedIn, instantOf(new Date()));
     handler(value, { ...verbCtx, arrival });
     return { ok: true, output: "" };
   } catch (e) {
@@ -2013,6 +2033,7 @@ async function renderChecked(
   // computation to drift from it.
   const renderOpts = renderOptionsOf(effective, width);
   const effects = effectSessions.of(sessionId);
+  const idleSince = menuIdle.since(sessionId, at);
   // [LAW:single-enforcer] renderDsl internally calls
   // `registry.applyInput(payload)` as its first step (see step 1 in
   // src/dsl/render.ts). The daemon must not pre-apply — doing so
@@ -2042,8 +2063,17 @@ async function renderChecked(
     // and name together, so renderDsl publishes the `theme.effective` the
     // bar was actually painted from. No separate basePalette argument: one
     // would be a second clock free to disagree with that name.
-    { ...effective, effects },
+    { ...effective, effects, idleSince },
   );
+  // What this frame drew is what the session's close timer follows.
+  menuIdle.observe(sessionId, at, frame.menuRows > 0, effective.menuTimeout);
+  const menusSince = menuIdle.since(sessionId, at);
+  noteFacts(facts, {
+    menuIdle:
+      menusSince === undefined
+        ? "-"
+        : `${(at - menusSince).toFixed(1)}s/${effective.menuTimeout}s`,
+  });
   // [LAW:one-source-of-truth] The click error dispatch held for this session,
   // shown by every render inside its hold, and past it by a request until an
   // answer has carried it.

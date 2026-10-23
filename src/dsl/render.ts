@@ -55,7 +55,12 @@ import {
   stripSeamCols,
 } from "../render/strip.js";
 import { resolveFill } from "../render/fill.js";
-import { SessionEffects } from "../render/effect.js";
+import {
+  SessionEffects,
+  type MenuFlash,
+  type RowKind,
+} from "../render/effect.js";
+import { flashAt } from "../config/menu-timeout.js";
 import {
   decideEffectName,
   decideStyleName,
@@ -111,6 +116,8 @@ import {
   bandRoot,
   decorationFor,
   descend,
+  paletteRole,
+  textOn,
   SHADES,
   VARIATIONS,
   type AddressStep,
@@ -1031,6 +1038,9 @@ export interface RenderObservers {
 export interface DrawnFrame {
   readonly text: string;
   readonly motion: DrawnMotion;
+  // The rows an open menu added — a disclosure body, a dropped `{{ menu }}` —
+  // which flash and close once the session goes idle.
+  readonly menuRows: number;
 }
 
 // [LAW:types-are-the-program] What a render could not honour, by what failed:
@@ -1089,6 +1099,7 @@ export type RenderSelection = Pick<
   | "variation"
   | "shade"
   | "transitions"
+  | "menuTimeout"
 > & {
   // The session's effect memory: when its effect came into force (the effect's
   // own t = 0), the effects already made for its rows, and what each placement
@@ -1096,6 +1107,11 @@ export type RenderSelection = Pick<
   // caller draws with a fresh one, so its render is the effect's calm first
   // frame and nothing in it fades in or dissolves out.
   readonly effects?: SessionEffects<RenderedLine>;
+  // When the session's idle period began — its last click, or its first
+  // render by this daemon (src/daemon/menu-idle.ts) — which the flash its open
+  // menus wear before they close counts from. A caller with no such clock
+  // (check, the demo) never flashes.
+  readonly idleSince?: Instant;
 };
 
 // The bar's bytes alone: `drawDsl`'s text, for a caller that draws one frame
@@ -1271,19 +1287,40 @@ export function drawDsl(
   // and what each placement this frame draws, so one the last frame — drawn
   // from this config, preset and session state — did not draw fades in, and
   // one it drew that this frame does not dissolves out as it was drawn there.
+  // [LAW:one-source-of-truth] The flash counts down to the instant the
+  // daemon's timer closes the menus (`flashAt`), lit in the theme's `warning`
+  // — something is about to happen — under the text chosen for it.
+  const flashT =
+    selection.idleSince === undefined
+      ? null
+      : flashAt(selection.idleSince, selection.menuTimeout, at);
+  const flashFill = paletteRole(palette, "warning");
+  const flash: MenuFlash =
+    flashT === null
+      ? null
+      : {
+          t: flashT,
+          fill: flashFill,
+          text: textOn(palette, flashFill, registry.drawnAt()),
+        };
   const motion = (
     selection.effects ?? new SessionEffects<RenderedLine>("")
-  ).motion(effect.value, at, {
-    transitions,
-    source: {
-      config,
-      preset,
-      revision: registry.stateRevision(),
-      width: opts.width,
+  ).motion(
+    effect.value,
+    at,
+    {
+      transitions,
+      source: {
+        config,
+        preset,
+        revision: registry.stateRevision(),
+        width: opts.width,
+      },
+      returned: returnedBy,
+      hold: heldLine,
     },
-    returned: returnedBy,
-    hold: heldLine,
-  });
+    flash,
+  );
 
   perSegmentSink?.clear();
 
@@ -1527,18 +1564,25 @@ export function drawDsl(
     // effect its cell demands.
     .map(({ line, row }) => {
       const items = resolveFill(line.cells, opts);
-      return drawStripCells(
-        items.map((item) => item.owner),
-        opts,
-        motion.row(row, items),
-      );
+      // At the root, a `deeper` line is one an open menu added.
+      const kind: RowKind = line.band === "deeper" ? "menu" : "bar";
+      return {
+        kind,
+        ...drawStripCells(
+          items.map((item) => item.owner),
+          opts,
+          motion.row(row, kind, items),
+        ),
+      };
     });
   motion.drawn();
-  // What the config arms under the settings in force, drawn or not: an effect
-  // rule, fades, or a placement of this preset — hidden by its `when` or a
+  const menuRows = rendered.filter((row) => row.kind === "menu").length;
+  // What the frame arms under the settings in force, drawn or not: an open
+  // menu, which flashes before it closes on its own, an effect rule, fades, or a placement of this preset — hidden by its `when` or a
   // closed body right now — wearing an effect of its own. Asked only of a
   // frame no row of which moves.
   const armed = (): boolean =>
+    menuRows > 0 ||
     selectedEffect.kind === "expression" ||
     transitions ||
     segmentsUnder(root).some(
@@ -1562,5 +1606,6 @@ export function drawDsl(
   return {
     text: rendered.map((row) => row.text).join("\n"),
     motion: frameMotion,
+    menuRows,
   };
 }

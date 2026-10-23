@@ -144,6 +144,7 @@ const PIN_AND_PICK: Record<PinnedSetting, { pin: string; pick: string }> = {
   autoWrap: { pin: "false", pick: "true" },
   padding: { pin: "3", pick: "2" },
   updateNotice: { pin: "false", pick: "true" },
+  menuTimeout: { pin: "60", pick: "45" },
   transitions: { pin: "true", pick: "false" },
   experimentalBand: { pin: "true", pick: "false" },
   experimentalStatusline: { pin: "false", pick: "true" },

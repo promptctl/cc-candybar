@@ -38,6 +38,7 @@ import {
   type PlacementEffect,
 } from "../themes/policy.js";
 import type { Instant } from "../utils/instant.js";
+import { CLOSING_FLASH } from "../config/menu-timeout.js";
 
 // [LAW:types-are-the-program] The placement a laid cell belongs to, its
 // `effect` setting and its ground: what a laid cell demands of its row
@@ -120,7 +121,11 @@ export interface FrameMotion<Line> {
   // (brandon-effects-2gka.p04: the payload that hides a placement is often one
   // its template errors on), beside the deeper lines it returned.
   readonly placed: (id: string, lines: readonly Line[]) => readonly Line[];
-  readonly row: (row: string, items: readonly RowItem[]) => RowMotion;
+  readonly row: (
+    row: string,
+    kind: RowKind,
+    items: readonly RowItem[],
+  ) => RowMotion;
   readonly drawn: () => void;
 }
 
@@ -135,6 +140,21 @@ export type RowMotion =
     };
 
 export const STILL: RowMotion = { kind: "still" };
+
+// [LAW:types-are-the-program] What a row of the bar is: one of the bar's own,
+// or one an open menu added — a disclosure body, a dropped `{{ menu }}` —
+// which is what flashes before the menus close.
+export type RowKind = "bar" | "menu";
+
+// [LAW:types-are-the-program] The flash an idle session's menus wear before
+// they close on their own (src/config/menu-timeout.ts): none, or how far into
+// it this frame is and the colours a lit hold draws every cell in — a fill, and
+// the text that reads on it.
+export type MenuFlash = null | {
+  readonly t: number;
+  readonly fill: ColorRgba;
+  readonly text: ColorRgba;
+};
 
 // An effect made for one row — the bar's, or one placement's on that row — and
 // the name it was made for.
@@ -312,6 +332,25 @@ function noiseOffset(text: string): number {
 // rows of one bar and two sessions' bars are unrelated stretches of it.
 const NOISE_DEPTH = 4096;
 
+// [LAW:one-source-of-truth] The flash's holds (`CLOSING_FLASH`) as one
+// animation of what a menu row's cells are drawn in: lit, every cell in the
+// flash's fill and text — a cap keeps the terminal's side and wears the fill,
+// as it wore the cell it caps — and dark, as drawn. Held between holds, so a
+// host draws a new frame only when one turns, and never after the last.
+function closingFlash(fill: ColorRgba, text: ColorRgba): Effect {
+  const lit: CellFrame = (colors, { terminal }) => ({
+    bg: terminal.bg ? colors.bg : fill,
+    fg: terminal.fg ? colors.fg : terminal.bg ? fill : text,
+  });
+  const dark: CellFrame = (colors) => colors;
+  const holds = CLOSING_FLASH.reduceRight<Animation<CellFrame>>(
+    (after, { lit: on, seconds }) =>
+      Animation.sequence(Animation.constant(on ? lit : dark), seconds, after),
+    Animation.constant(dark),
+  );
+  return () => holds;
+}
+
 /**
  * [LAW:no-shared-mutable-globals] One session's effect memory, owned by whoever
  * keeps the session (the daemon, per session id; a compile-only render, for the
@@ -382,6 +421,7 @@ export class SessionEffects<Line> {
     name: EffectName,
     at: Instant,
     given: FrameTransitions<Line>,
+    flash: MenuFlash = null,
   ): FrameMotion<Line> {
     const inForce =
       this.inForce?.name === name ? this.inForce : { name, since: at };
@@ -576,7 +616,21 @@ export class SessionEffects<Line> {
       });
     };
 
-    const row = (rowName: string, items: readonly RowItem[]): RowMotion => {
+    // [LAW:dataflow-not-control-flow] A menu row wears the flash while there
+    // is one, on the flash's own clock; every other row, and every row while
+    // there is none, wears nothing more.
+    const flashPart: Array<{ t: number; effect: Effect }> =
+      flash === null
+        ? []
+        : [{ t: flash.t, effect: closingFlash(flash.fill, flash.text) }];
+    const flashing = (kind: RowKind): Array<{ t: number; effect: Effect }> =>
+      kind === "menu" ? flashPart : [];
+
+    const row = (
+      rowName: string,
+      kind: RowKind,
+      items: readonly RowItem[],
+    ): RowMotion => {
       // [LAW:dataflow-not-control-flow] Each item is drawn under its own
       // effect or the bar's. rich-js confines an effect to the colours of the
       // items it names and has no complement, so "the bar's everywhere else" is
@@ -594,7 +648,9 @@ export class SessionEffects<Line> {
       // so it draws the bytes it always drew.
       const moving = parts.filter(isMoving);
       const passing = passagesOf(items);
-      if (moving.length === 0 && passing.length === 0) return STILL;
+      const flashed = flashing(kind);
+      if (moving.length === 0 && passing.length === 0 && flashed.length === 0)
+        return STILL;
       const rowKey = `${this.key}#${rowName}`;
       return {
         kind: "moving",
@@ -613,6 +669,9 @@ export class SessionEffects<Line> {
                 };
               }),
               ...passing,
+              // Last, so a lit hold is the flash's over whatever a fade
+              // veils: the menu is about to close.
+              ...flashed,
             ]),
             { t: bar.t, key: rowKey, theme: ASSUMED_TERMINAL },
           ),
