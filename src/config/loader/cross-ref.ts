@@ -84,6 +84,7 @@ import {
 } from "./retired-variables.js";
 import { SYNTAX_ENGINE } from "./syntax-engine.js";
 import { type ValidateCtx } from "./validate-core.js";
+import { instantReadOf, projectionsOf } from "./projections.js";
 import {
   templateActionRefs,
   templateReads,
@@ -797,6 +798,48 @@ function checkDependsOn(
   }
 }
 
+// [LAW:no-silent-failure] A cache policy re-runs its source when a stored value
+// changes; the instant a frame is drawn at is no stored value — it changes
+// every frame — so a key or depends_on that reads it, directly or through a
+// variable over it, is refused at its path, pointing at the policy that does
+// re-run a source with time: a period. The one fold says what reads the
+// instant (projections.ts), the one the declaration reads [LAW:single-enforcer].
+const INSTANT_POLICY =
+  'it reads the instant a frame is drawn at, which changes every frame, and a cache policy re-runs its source when a stored value changes — re-run it on a period instead: cache: { ttl: "<duration>" }';
+
+function checkPolicyInstant(
+  ctx: ValidateCtx,
+  declPath: string,
+  v: VariableDecl,
+  cfg: DslConfig,
+): void {
+  if (!hasCacheField(v)) return;
+  const line = (field: string): number | undefined =>
+    findKeyLine(ctx.source, [...declPath.split("."), "cache", field]);
+  if ("key" in v.cache) {
+    const why = instantReadOf(v.cache.key, cfg);
+    if (why !== null) {
+      ctx.issues.push({
+        path: `${declPath}.cache.key`,
+        message: `cache.key ${why}: ${INSTANT_POLICY}`,
+        line: line("key"),
+      });
+    }
+  }
+  if ("depends_on" in v.cache) {
+    const projections = projectionsOf(cfg);
+    v.cache.depends_on.forEach((target, i) => {
+      const why = projections.get(target);
+      if (why === undefined) return;
+      ctx.issues.push({
+        path: `${declPath}.cache.depends_on[${i}]`,
+        message: `cache.depends_on names "${target}", which ${why}: ${INSTANT_POLICY}`,
+        line: line("depends_on"),
+      });
+    });
+  }
+}
+
 // [LAW:no-silent-failure] A malformed `when` in an authored tree is a load
 // error at its position in that tree, before any synthesis. The compile would
 // catch it too, but it
@@ -1308,6 +1351,7 @@ export function validateDeclarations(
   // resolution rule, exactly as for templates.
   for (const [name, v] of subjects(cfg.variables, subject)) {
     checkDependsOn(ctx, `variables.${name}`, v, templateScope);
+    checkPolicyInstant(ctx, `variables.${name}`, v, cfg);
   }
   for (const [segName, seg] of subjects(cfg.segments, subject)) {
     if (!seg.vars) continue;
@@ -1319,6 +1363,7 @@ export function validateDeclarations(
         templateScope,
         segName,
       );
+      checkPolicyInstant(ctx, `segments.${segName}.vars.${vName}`, vDecl, cfg);
     }
   }
 }

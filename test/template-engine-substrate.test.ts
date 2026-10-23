@@ -3,15 +3,14 @@
 // primitives + an injectable clock that later formatter migrations (bdi.3/.4)
 // compile against; these tests are the contract those tickets build on.
 
-import { WALL_CLOCKS } from "./helpers/engine-clocks";
+import { drawingAt, TEST_ENGINE } from "./helpers/test-engine";
 import { createCcCandybarEngine } from "../src/template-engine/engine";
 
-// Evaluate a source against an empty scope, return joined plain text.
-function evalText(
-  source: string,
-  clock: () => Date = () => new Date(),
-): string {
-  return createCcCandybarEngine({ ...WALL_CLOCKS, clock })
+// Evaluate a source against an empty scope inside a draw at `at`, return
+// joined plain text.
+function evalText(source: string, at: Date = new Date()): string {
+  using _draw = drawingAt(at);
+  return createCcCandybarEngine(TEST_ENGINE)
     .parse(source)
     .evaluate({})
     .map((rt) => rt.plain)
@@ -52,14 +51,25 @@ describe("sprigConversions primitives are registered", () => {
   });
 });
 
-describe("the clock seam is injectable", () => {
-  // [LAW:single-enforcer] One clock feeds sprigDatetime AND createEngine. A
-  // frozen clock makes `now`-dependent evaluation deterministic — the whole
-  // point of threading it instead of calling new Date() inside the funcs.
-  test("now / unixEpoch read the injected clock, not the wall clock", () => {
+describe("the clock is the draw in progress", () => {
+  // [LAW:single-enforcer] One clock feeds every datetime function: the instant
+  // of the draw bound around the evaluation, never the wall clock.
+  test("now / unixEpoch read the draw's instant, not the wall clock", () => {
     const fixed = new Date("2026-06-04T12:00:00.000Z");
     const epoch = String(Math.floor(fixed.getTime() / 1000));
-    expect(evalText("{{ unixEpoch (now) }}", () => fixed)).toBe(epoch);
+    expect(evalText("{{ unixEpoch (now) }}", fixed)).toBe(epoch);
+  });
+
+  // [LAW:no-silent-failure] Only a draw evaluates a projection, so a clock
+  // read with none bound is a read outside any frame.
+  test("a clock read outside a draw throws", () => {
+    const tpl = createCcCandybarEngine(TEST_ENGINE).parse("{{ now }}");
+    expect(() => tpl.evaluate({})).toThrow(/clock was read outside a draw/);
+  });
+
+  test("draws do not nest", () => {
+    using _draw = drawingAt();
+    expect(() => drawingAt()).toThrow(/draws do not nest/);
   });
 });
 

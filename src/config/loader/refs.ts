@@ -300,6 +300,28 @@ export function templateActionRefs(
   return [...refs.values()];
 }
 
+// [LAW:single-enforcer] Every function a template CALLS by name — in its own
+// text and every reachable helper's (`callGraphBlocks`) — as one more fold over
+// the call-graph walk. A name is a bare identifier in code: a field (`.now`), a
+// variable (`$now`) and a string literal ("now") call nothing. The keywords
+// (`if`, `range`, `template`) are bare identifiers too, so ask it about a
+// function's name, never for a list of functions.
+const BARE_NAME_RE = /(?<![\w.$])[A-Za-z_]\w*/g;
+export function templateFunctions(
+  template: string,
+  helpers: Readonly<Record<string, string>>,
+): ReadonlySet<string> {
+  const called = new Set<string>();
+  for (const { code } of callGraphBlocks(template, helpers)) {
+    for (const [name] of code
+      .replace(STRING_LITERAL_RE, "")
+      .matchAll(BARE_NAME_RE)) {
+      called.add(name);
+    }
+  }
+  return called;
+}
+
 // [LAW:single-enforcer] Every declared helper a template CALLS — directly, or
 // through a helper it calls — as one more fold over the call-graph walk. Read
 // off the calls rather than off the blocks a helper yields, so a helper with
@@ -326,6 +348,34 @@ export function templateHelperCalls(
     for (const { name } of helperCalls(code, dot, root)) called.add(name);
   }
   return called;
+}
+
+// Every variable the config declares, under the name the store holds it by:
+// a global by its own name, a segment's local as `segName.varName`.
+export function* declaredVariables(
+  config: Pick<DslConfig, "variables" | "segments">,
+): IterableIterator<readonly [name: string, decl: VariableDecl]> {
+  yield* Object.entries(config.variables);
+  for (const [segName, seg] of Object.entries(config.segments)) {
+    for (const [varName, decl] of Object.entries(seg.vars ?? {})) {
+      yield [`${segName}.${varName}`, decl];
+    }
+  }
+}
+
+// The variable a dotted read lands on: the longest declared name the path
+// starts with (`.budget.spent` reads the document `budget`). Null for a read
+// of nothing declared.
+export function variableRead(
+  path: string,
+  names: ReadonlySet<string>,
+): string | null {
+  const parts = path.split(".");
+  for (let n = parts.length; n > 0; n--) {
+    const name = parts.slice(0, n).join(".");
+    if (names.has(name)) return name;
+  }
+  return null;
 }
 
 // [LAW:types-are-the-program] What a template reference resolves against:

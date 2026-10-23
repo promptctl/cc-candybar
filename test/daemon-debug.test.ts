@@ -35,7 +35,7 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
 import { ABSENT, failed, ok } from "../src/utils/outcome";
-import { instantOf } from "../src/utils/instant";
+import { drawingAt } from "./helpers/test-engine";
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -224,22 +224,24 @@ describe("introspectVars with populated state", () => {
     expect(byName.get("derived")?.ageMs).toBeNull();
   });
 
-  // A time variable no segment reads is never read by a render, so its error
-  // and its value must come from the snapshot's own read: before any render it
-  // is the missing instant on both sides, after one it is the time, clean.
-  test("a time variable nothing rendered reads: lastError agrees with the value", () => {
+  // A time variable is a projection: it has a value only at a frame's
+  // instant, so the snapshot names it as such and reads it at none — a healthy
+  // one carries no error, and a broken one the error its last draw recorded.
+  test("a time variable is listed as read at each frame, with its draw's error", () => {
     const state = buildPopulatedState();
     state.registry.declareTime("year", { format: "2006" });
     const year = () => introspectVars(state).find((v) => v.name === "year");
 
-    const before = year();
-    expect(before?.lastError?.message).toContain("before any render");
-    expect(String(before?.value)).toContain("before any render");
+    expect(year()?.value).toBe("(read at each frame's instant)");
+    expect(year()?.lastError).toBeNull();
 
-    state.registry.renderAt(instantOf(new Date(2031, 5, 1)));
-    const after = year();
-    expect(after?.value).toBe("2031");
-    expect(after?.lastError).toBeNull();
+    expect(() => state.store.read("year")).toThrow(/outside a draw/);
+    expect(year()?.lastError?.message).toContain("outside a draw");
+    {
+      using _draw = drawingAt(new Date(2031, 5, 1));
+      expect(state.store.read("year")).toBe("2031");
+    }
+    expect(year()?.lastError).toBeNull();
   });
 
   test("type matches each variable's declared type", () => {

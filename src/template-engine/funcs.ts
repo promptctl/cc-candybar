@@ -5,6 +5,7 @@
 
 import { basename as pathBasename, dirname as pathDirname } from "path";
 import type { FuncMap } from "@promptctl/go-template-js";
+import type { ClockFactory } from "./clock.js";
 import {
   toNumber,
   toString,
@@ -201,29 +202,30 @@ export function ccCandybarFuncs(): FuncMap {
 // The display-formatting families moved to DSL helpers in DEFAULT_DSL_CONFIG:
 // cost/token/budget (bdi.3), duration/time-remaining (bdi.4).
 //
-// [LAW:single-enforcer] minutesUntilReset reads "now" from the injected
-// `clock` — the SAME seam createCcCandybarEngine threads to sprigDatetime
-// (now/unixEpoch) and createEngine. One clock governs every time-dependent
-// evaluation. Required, as the engine's is: a default would be a wall clock a
-// caller could fall onto by omission, beside the render's instant.
-export function formatterFuncs(clock: () => Date): FuncMap {
-  return {
-    // Epoch-seconds → whole minutes until that instant, clamped at 0 for a past
-    // expiry: round(max(0, epoch*1000 − now)/60000). Consumed by the
-    // `formatResetCountdown` helper (block/weekly, which adds the minute in
-    // progress) and the cacheTimer warmth countdown (numeric `le` thresholds,
-    // 0 = cold).
-    minutesUntilReset: {
-      fn: (epochSeconds: number) =>
-        Math.round(
-          Math.max(0, epochSeconds * 1000 - clock().getTime()) / 60000,
-        ),
-      // [LAW:types-are-the-program] An epoch is integer-valued; `int` rejects a
-      // fractional or precision-losing carrier at the gate.
-      argTypes: ["int"],
-      arity: { kind: "exact" },
-    },
+// [LAW:single-enforcer] minutesUntilReset reads "now" from the engine's one
+// clock: it is a clock factory (template-engine/engine.ts), so the engine hands
+// it the instant of the draw in progress and records its name among the clock
+// functions, which a template calling it is a projection for.
+export const minutesUntilResetFuncs: ClockFactory = (clock) => ({
+  // Epoch-seconds → whole minutes until that instant, clamped at 0 for a past
+  // expiry: round(max(0, epoch*1000 − now)/60000). Consumed by the
+  // `formatResetCountdown` helper (block/weekly, which adds the minute in
+  // progress) and the cacheTimer warmth countdown (numeric `le` thresholds,
+  // 0 = cold).
+  minutesUntilReset: {
+    fn: (epochSeconds: number) =>
+      Math.round(
+        Math.max(0, epochSeconds * 1000 - clock.now().getTime()) / 60000,
+      ),
+    // [LAW:types-are-the-program] An epoch is integer-valued; `int` rejects a
+    // fractional or precision-losing carrier at the gate.
+    argTypes: ["int"],
+    arity: { kind: "exact" },
+  },
+});
 
+export function formatterFuncs(): FuncMap {
+  return {
     // ─── Locale-grouped integer (context's "50,000") ──────────────────
     // [LAW:one-source-of-truth] bdi.5: deliberately RETAINED as a primitive
     // (not migrated to a DSL helper). toLocaleString reads the host locale the

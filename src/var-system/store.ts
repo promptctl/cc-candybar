@@ -25,10 +25,19 @@ import {
 } from "./types";
 import type { Outcome } from "../utils/outcome.js";
 
+// [LAW:types-are-the-program] How the store holds a derived value. A
+// `computed` keeps its answer until what it read changes. A `projection` reads
+// the instant of the draw in progress (brandon-unfiled-3248.8ro6, step 6), which
+// changes every frame, so the store keeps no answer for it: every read derives
+// it again. Which one a variable is, is the projection fold's to say
+// (src/config/loader/projections.ts) — and since whatever reads a projection is
+// one, no computed ever caches an instant.
+export type Derivation = "computed" | "projection";
+
 export interface VarNode {
   readonly name: string;
   readonly type: VarType;
-  readonly kind: "box" | "computed";
+  readonly kind: "box" | Derivation;
   read(): VarValue;
   // [LAW:types-are-the-program] Age is a property of the node, not of an
   // external bookkeeping layer — duplicating it in a side map would let the
@@ -160,6 +169,29 @@ class ComputedNode implements VarNode {
     // "updated" moment — the cache is valid until a tracked dep changes.
     // Returning null is structurally distinct from "updated at 0," so a
     // consumer can render "—" for computed and a real age for boxes.
+    return null;
+  }
+}
+
+// A projection holds no value: each read runs its deriver, at the draw in
+// progress. Nothing cached reads one, so it has no subscriptions to release.
+class ProjectionNode implements VarNode {
+  readonly kind = "projection" as const;
+
+  constructor(
+    readonly name: string,
+    readonly type: VarType,
+    private readonly deriver: () => VarValue,
+  ) {}
+
+  read(): VarValue {
+    const v = this.deriver();
+    assertType(this.name, this.type, v, "projection result");
+    return v;
+  }
+
+  lastUpdatedMs(): null {
+    // Derived on every read: it has no age.
     return null;
   }
 }
@@ -298,8 +330,18 @@ export class VariableStore {
     type: VarType,
     deriver: (read: (other: string) => VarValue) => VarValue,
   ): void {
+    this.defineDerived(name, type, "computed", deriver);
+  }
+
+  defineDerived(
+    name: string,
+    type: VarType,
+    derivation: Derivation,
+    deriver: (read: (other: string) => VarValue) => VarValue,
+  ): void {
     const reader = (other: string): VarValue => this.read(other);
-    this.declare(name, new ComputedNode(name, type, () => deriver(reader)));
+    const Node = derivation === "computed" ? ComputedNode : ProjectionNode;
+    this.declare(name, new Node(name, type, () => deriver(reader)));
   }
 
   read(name: string): VarValue {

@@ -8,7 +8,7 @@
 // that one cell exactly to `width`, with truncation/padding applied.
 // Span-preserving across every op (OSC-8 links survive as interior spans).
 
-import { WALL_CLOCKS } from "./helpers/engine-clocks";
+import { TEST_ENGINE } from "./helpers/test-engine";
 import {
   DEFAULT_TERMINAL_THEME,
   Style,
@@ -62,7 +62,7 @@ const autoOptions = {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("evaluateWhen", () => {
-  const engine = createCcCandybarEngine(WALL_CLOCKS);
+  const engine = createCcCandybarEngine(TEST_ENGINE);
 
   test("undefined template → always true", () => {
     expect(evaluateWhen(undefined, {})).toBe(true);

@@ -26,7 +26,7 @@ import {
   type VarType,
   type VarValue,
 } from "./types.js";
-import { VariableStore } from "./store.js";
+import { VariableStore, type Derivation } from "./store.js";
 import { createCcCandybarEngine } from "../template-engine/engine.js";
 import { buildScope } from "../template-engine/scope.js";
 import { GitDataProvider } from "../daemon/cache/git.js";
@@ -43,7 +43,6 @@ import { AbsentValueError, readAbsentValue, type JsonValue } from "./types.js";
 import type { SessionStateReader } from "../daemon/session-state.js";
 import { TrailingEdge } from "../utils/trailing-edge.js";
 import { Holds } from "../utils/holds.js";
-import { dateOf, type AnimationTime, type Instant } from "../utils/instant.js";
 
 // How long text that is not a document may be a write still in progress
 // before it shows as the failure it is (documentPublisher).
@@ -131,6 +130,9 @@ export interface FileOptions {
 
 export interface TemplateOptions {
   readonly varDefault?: string;
+  // Whether the template reads the instant: the projection fold's answer
+  // (src/config/loader/projections.ts), never the registry's guess.
+  readonly derivation: Derivation;
 }
 
 export interface TimeOptions {
@@ -252,111 +254,6 @@ function parsed<V>(
 // The publish half of a source, closed over its store node: takes what the
 // reader yielded, parses it, and writes the node — value or fallback.
 type Publish = (read: Outcome<string>) => void;
-
-// ─── Go reference-time formatter ─────────────────────────────────────────────
-
-const MONTHS_FULL = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-] as const;
-const MONTHS_SHORT = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
-] as const;
-const WEEKDAYS_FULL = [
-  "Sunday",
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-] as const;
-const WEEKDAYS_SHORT = [
-  "Sun",
-  "Mon",
-  "Tue",
-  "Wed",
-  "Thu",
-  "Fri",
-  "Sat",
-] as const;
-
-// [LAW:single-enforcer] One Go-reference-time formatter shared by all time
-// source kinds.  Tokens are matched longest-first in a single left-to-right
-// pass so overlapping prefixes ("January" before "Jan") never conflict.
-//
-// Reference time components:
-//   2006 → 4-digit year       06 → 2-digit year
-//   January / Jan → month     01 → 2-digit month   1 → 1/2-digit month
-//   Monday / Mon → weekday
-//   02 → 2-digit day          2 → 1/2-digit day
-//   15 → 24h hour (00-23)     3 → 12h hour (1-12)
-//   04 → 2-digit minute       4 → minute
-//   05 → 2-digit second       5 → second
-//   PM / pm → AM/PM marker
-export function formatGoTime(layout: string, d: Date): string {
-  type Token = readonly [string, (d: Date) => string];
-  const tokens: readonly Token[] = [
-    ["2006", (d) => String(d.getFullYear())],
-    ["January", (d) => MONTHS_FULL[d.getMonth()]!],
-    ["Monday", (d) => WEEKDAYS_FULL[d.getDay()]!],
-    ["Jan", (d) => MONTHS_SHORT[d.getMonth()]!],
-    ["Mon", (d) => WEEKDAYS_SHORT[d.getDay()]!],
-    ["15", (d) => String(d.getHours()).padStart(2, "0")],
-    ["06", (d) => String(d.getFullYear() % 100).padStart(2, "0")],
-    ["01", (d) => String(d.getMonth() + 1).padStart(2, "0")],
-    ["02", (d) => String(d.getDate()).padStart(2, "0")],
-    ["04", (d) => String(d.getMinutes()).padStart(2, "0")],
-    ["05", (d) => String(d.getSeconds()).padStart(2, "0")],
-    ["PM", (d) => (d.getHours() < 12 ? "AM" : "PM")],
-    ["pm", (d) => (d.getHours() < 12 ? "am" : "pm")],
-    ["1", (d) => String(d.getMonth() + 1)],
-    ["2", (d) => String(d.getDate())],
-    ["3", (d) => String(d.getHours() % 12 || 12)],
-    ["4", (d) => String(d.getMinutes())],
-    ["5", (d) => String(d.getSeconds())],
-  ];
-
-  let result = "";
-  let i = 0;
-  while (i < layout.length) {
-    let consumed = false;
-    for (const [token, fn] of tokens) {
-      if (layout.startsWith(token, i)) {
-        result += fn(d);
-        i += token.length;
-        consumed = true;
-        break;
-      }
-    }
-    if (!consumed) {
-      result += layout[i];
-      i++;
-    }
-  }
-  return result;
-}
 
 // ─── Git helpers ─────────────────────────────────────────────────────────────
 
@@ -726,54 +623,19 @@ export class SourceRegistry {
   // run cannot outlive the registry that started it (RenderCache's
   // dispose-before-swap contract reaches the children too).
   private readonly abort = new AbortController();
-  // [LAW:one-source-of-truth] The depth the terminal draws the current render
-  // at — the one clock every contrast floor reads, in this registry's variable
+  // [LAW:one-source-of-truth] The depth the terminal draws this view's renders
+  // at — the one depth every contrast floor reads, in this registry's variable
   // templates and in the render engine alike. Observable, because the depth is
-  // a per-render fact (edit mode stages it over the config's own): a template
-  // variable whose `readableOn` read it recomputes when it moves rather than
-  // keeping the answer it measured at the previous depth.
+  // the session's setting (edit mode stages it over the config's own): a
+  // template variable whose `readableOn` read it recomputes when it moves rather
+  // than keeping the answer it measured at the previous depth. A render
+  // publishing the depth it already holds moves nothing (MobX compares).
   private readonly drawn = observable.box(ColorDepth.TRUECOLOR);
   readonly drawnAt = (): ColorDepth => this.drawn.get();
-  // [LAW:one-source-of-truth] The instant the current render is drawn at — the
-  // one clock every time read in a render reads: the datetime functions of this
-  // registry's variable templates and of the render engine, and every `time`
-  // variable. Observable for the depth's reason: a variable that read the time
-  // recomputes when a later render moves it, and one that did not is untouched.
-  // Absent until a render publishes one, and a read before then says so
-  // [LAW:no-silent-failure]: there is no instant a render has not been given.
-  private readonly instant = observable.box<Instant | null>(null);
-  readonly now = (): Date => {
-    const at = this.instant.get();
-    if (at === null) {
-      throw new Error(
-        "the time was read before any render published its instant",
-      );
-    }
-    return dateOf(at);
-  };
-  // [LAW:one-source-of-truth] The current render's reading of its session's
-  // animation clock (brandon-menus-sjhy.nt2) — what every template `frames` and
-  // `stepped` animates by, in this registry's variable templates and in the
-  // render engine alike. Observable and absent-until-published for the
-  // instant's reasons.
-  private readonly animation = observable.box<AnimationTime | null>(null);
-  readonly animatedAt = (): AnimationTime => {
-    const at = this.animation.get();
-    if (at === null) {
-      throw new Error(
-        "the animation clock was read before any render published its reading",
-      );
-    }
-    return at;
-  };
   // Shared engine instance — parse() is expensive; the engine is reused for
   // all key: template compilations.
   // [LAW:one-source-of-truth] One engine per registry, not one per variable.
-  private readonly engine = createCcCandybarEngine({
-    clock: this.now,
-    animatedAt: this.animatedAt,
-    drawnAt: this.drawnAt,
-  });
+  private readonly engine = createCcCandybarEngine({ drawnAt: this.drawnAt });
 
   private readonly gitProvider: GitDataProvider;
   private readonly ownsGitProvider: boolean;
@@ -1099,19 +961,18 @@ export class SourceRegistry {
   // template: a variable whose value is derived by evaluating a go-template
   // against the current variable store.  MobX auto-tracks every store.read()
   // made during evaluation — no explicit dep declarations needed.
-  // [LAW:dataflow-not-control-flow] defineComputed registers a MobX computed;
-  // the invalidation graph builds itself from the template's read pattern.
-  declareTemplate(
-    name: string,
-    template: string,
-    opts: TemplateOptions = {},
-  ): void {
+  // [LAW:dataflow-not-control-flow] A derived template is a MobX computed, its
+  // invalidation graph built from the template's read pattern; a projection
+  // (one that reads the instant: src/config/loader/projections.ts) is derived
+  // again by every read, at the draw in progress.
+  declareTemplate(name: string, template: string, opts: TemplateOptions): void {
     // Parse once at declaration time — parse() is expensive; evaluate() is cheap.
     // A ParseError propagates here so invalid templates fail at config load, not
     // at the first render.
     const parsedTpl = this.engine.parse(template);
     this.declareDerived(
       name,
+      opts.derivation,
       () =>
         parsedTpl
           .evaluate(buildScope(this.store))
@@ -1121,28 +982,38 @@ export class SourceRegistry {
     );
   }
 
-  // time: the instant the render is drawn at, formatted with a Go
-  // reference-time layout — a derivation of the registry's one clock like a
-  // template reading `now`, so it changes exactly when a render's instant does.
+  // time: the instant of the draw in progress in a Go reference-time layout —
+  // a template over `now` (`{{ date <layout> now }}`), and so a projection.
+  // [LAW:one-type-per-behavior] The engine's own `date` formats it: one Go
+  // layout implementation, the one a template calling `date` gets.
   declareTime(name: string, opts: TimeOptions): void {
+    const parsedTpl = this.engine.parse("{{ date .layout now }}");
+    const scope = { layout: opts.format };
     this.declareDerived(
       name,
-      () => formatGoTime(opts.format, this.now()),
+      "projection",
+      () =>
+        parsedTpl
+          .evaluate(scope)
+          .map((f) => f.plain)
+          .join(""),
       opts.varDefault,
     );
   }
 
   // [LAW:one-type-per-behavior] The one shape of a derived string variable — a
-  // template and a time variable differ only in what they compute. Evaluated at
-  // its first read, never at declaration: there is no instant to read the time
-  // at until a render publishes one, and cycles are the loader's to refuse
-  // (validateNoCycles) [LAW:single-enforcer].
+  // template and a time variable differ only in what they compute, and a
+  // computed and a projection only in whether the store keeps the answer.
+  // Evaluated at its first read, never at declaration: a projection has no
+  // instant to read until a draw binds one, and cycles are the loader's to
+  // refuse (validateNoCycles) [LAW:single-enforcer].
   private declareDerived(
     name: string,
+    derivation: Derivation,
     derive: () => string,
     varDefault: string | undefined,
   ): void {
-    this.store.defineComputed(name, "string", () => {
+    this.store.defineDerived(name, "string", derivation, () => {
       try {
         const result = derive();
         this.lastErrors.delete(name);
@@ -1336,25 +1207,11 @@ export class SourceRegistry {
     });
   }
 
-  // Called by the render beside applyInput: the depth this render draws at.
-  // A view's render is its directory's too: a directory source's `key` may
-  // read the depth or the instant, and only a render publishes them — until
-  // step 6 of brandon-unfiled-3248.8ro6 refuses a key that reads either.
+  // Called by the render beside applyInput: the depth this render draws at,
+  // into this registry alone. A directory reads no depth: a source whose key
+  // reads one is a view's (src/dsl/variable-scope.ts).
   drawAt(depth: ColorDepth): void {
     this.store.runInAction(() => this.drawn.set(depth));
-    this.parent?.drawAt(depth);
-  }
-
-  // Called by the render beside drawAt: the instant this render is drawn at.
-  renderAt(at: Instant): void {
-    this.store.runInAction(() => this.instant.set(at));
-    this.parent?.renderAt(at);
-  }
-
-  // Called by the render beside renderAt: its session's animation clock read
-  // at that instant.
-  animateAt(at: AnimationTime): void {
-    this.store.runInAction(() => this.animation.set(at));
   }
 
   // ─── Diagnostics ─────────────────────────────────────────────────────────

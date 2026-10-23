@@ -212,7 +212,10 @@ test("a view held by a render in flight is disposed only when the render returns
   );
 });
 
-test("a directory source keyed on the render's instant runs again when a later render moves its key", async () => {
+// [LAW:no-ambient-temporal-coupling] The instant is the draw's, and a
+// directory is never drawn: a key over it could only be answered by whichever
+// session's draw last touched the directory, so it is refused at load.
+test("a source keyed on the instant is refused at load, naming the period that re-runs it", () => {
   fs.writeFileSync(
     path.join(dir, ".cc-candybar.json5"),
     JSON.stringify({
@@ -228,15 +231,36 @@ test("a directory source keyed on the render's instant runs again when a later r
     }),
   );
   const { cache } = makeCache();
-  const at = new Date(2026, 9, 23, 12, 0, 30);
-  const first = await render(cache, "s-a", dir, at);
-  // The key reads no session value: the directory runs it, for every session.
-  expect(first.view.state.registry.variableStore.has("clocked")).toBe(true);
-  expect(first.view.registry.cachePolicyFaults().size).toBe(0);
-  const settled = runs("clocked");
-  await render(cache, "s-b", dir, new Date(at.getTime() + 60_000));
-  await first.view.state.registry.settled(5000);
-  expect(runs("clocked")).toBe(settled + 1);
+  const entry = cache.getOrCreate(dir, dir, undefined);
+  expect(entry.lastError).toContain('cache.key calls "now"');
+  expect(entry.lastError).toContain('cache: { ttl: "<duration>" }');
+});
+
+// A key over the depth reads a session's setting, which only its view holds:
+// each view runs its own, floored at the depth that view draws at.
+test("a source keyed on the drawn depth is each view's own", async () => {
+  fs.writeFileSync(
+    path.join(dir, ".cc-candybar.json5"),
+    JSON.stringify({
+      variables: {
+        inked: {
+          kind: "shell",
+          command: counted("inked", "i"),
+          cache: { key: '{{ readableOn "#777777" "#000000" 4.5 }}' },
+        },
+      },
+      segments: { s: { template: "{{ .inked }}" } },
+      root: { h: ["s"] },
+    }),
+  );
+  const { cache } = makeCache();
+  const a = await render(cache, "s-a");
+  const afterA = runs("inked");
+  const b = await render(cache, "s-b");
+  expect(a.view.state.registry.variableStore.has("inked")).toBe(false);
+  expect(drawn(a.view)).toContain(" i ");
+  expect(drawn(b.view)).toContain(" i ");
+  expect(runs("inked")).toBe(afterA + 1);
 });
 
 test("debug introspection samples the most recently rendered session's view", async () => {

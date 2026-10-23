@@ -7,48 +7,34 @@
 // - a session's own values — its `input`s (the request's facts), its `state`
 //   reads — are the view's;
 // - a derivation (`template`, `time`) is the view's: it reads the session's
-//   values and the render's instant and depth, which only a view has;
+//   values, the depth its view draws at, and — a projection — the instant of
+//   a draw, and only a view is drawn;
 // - a value the directory alone decides (`literal`, `env`, `git`, a dropped
 //   plugin's document) is the directory's;
 // - a `shell` or `file` source is the directory's unless its cache policy —
 //   the key it re-runs on, or the variables it depends on — reads a view's
-//   value: then each session runs its own, keyed by its own values, and no
-//   session's request re-runs another's.
+//   value, the drawn depth included: then each session runs its own, keyed by
+//   its own values, and no session's request re-runs another's. A policy never
+//   reads the instant: the loader refuses one that does
+//   (src/config/loader/projections.ts), so a directory reads no clock at all.
 //
 // The command and the path read nothing (plain strings), so a source with a
 // `ttl`, `watch_file` or `never` policy runs once per directory.
 
-import { templateReads } from "../config/loader/refs.js";
+import {
+  declaredVariables,
+  templateFunctions,
+  templateReads,
+  variableRead,
+} from "../config/loader/refs.js";
 import type { ValidatedConfig, VariableDecl } from "../config/dsl-types.js";
+import { DEPTH_FUNCTIONS } from "../template-engine/engine.js";
 
 export type VarScope = "directory" | "view";
 
-// Every variable the config declares, under the name the store holds it by:
-// a global by its own name, a segment's local as `segName.varName`.
-export function* declaredVariables(
-  config: ValidatedConfig,
-): IterableIterator<readonly [name: string, decl: VariableDecl]> {
-  yield* Object.entries(config.variables);
-  for (const [segName, seg] of Object.entries(config.segments)) {
-    for (const [varName, decl] of Object.entries(seg.vars ?? {})) {
-      yield [`${segName}.${varName}`, decl];
-    }
-  }
-}
-
-// The variable a dotted read lands on: the longest declared name the path
-// starts with (`.budget.spent` reads the document `budget`). Null for a read
-// of nothing declared.
-function variableRead(path: string, names: ReadonlySet<string>): string | null {
-  const parts = path.split(".");
-  for (let n = parts.length; n > 0; n--) {
-    const name = parts.slice(0, n).join(".");
-    if (names.has(name)) return name;
-  }
-  return null;
-}
-
-// What a source's cache policy reads — the variables whose change re-runs it.
+// What a source's cache policy reads — the variables whose change re-runs it,
+// and a `null` for a read only a view answers: a variable nothing declares, or
+// the depth a depth function (`readableOn`) floors at.
 function policyReads(
   decl: VariableDecl,
   names: ReadonlySet<string>,
@@ -58,9 +44,14 @@ function policyReads(
   const { cache } = decl;
   if ("depends_on" in cache) return cache.depends_on;
   if ("key" in cache) {
-    return [...templateReads(cache.key, helpers).keys()].map((path) =>
-      variableRead(path, names),
-    );
+    return [
+      ...[...templateReads(cache.key, helpers).keys()].map((path) =>
+        variableRead(path, names),
+      ),
+      ...[...templateFunctions(cache.key, helpers)]
+        .filter((name) => DEPTH_FUNCTIONS.has(name))
+        .map(() => null),
+    ];
   }
   return [];
 }
