@@ -30,7 +30,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 
 import { detectClientHints } from "../client-hints.js";
 import { ConfigError } from "../config/loader/diagnostics.js";
-import { buildRenderState } from "../daemon/cache/render.js";
+import { buildRenderState, openView } from "../daemon/cache/render.js";
 import { WatcherRegistry } from "../daemon/cache/watchers.js";
 import type { DaemonLogger } from "../utils/logger.js";
 import { createPayloadProviders } from "../daemon/payload-providers.js";
@@ -120,6 +120,8 @@ function loadState(): ReturnType<typeof buildRenderState> {
 
 async function renderFrames(): Promise<void> {
   const state = loadState();
+  // The session's view of the state, as the daemon opens one per session.
+  const view = openView(state, cwd, sessionId);
   try {
     const effective = resolveEffectiveGlobals(
       state.config,
@@ -145,7 +147,7 @@ async function renderFrames(): Promise<void> {
         at,
         {
           ...providers,
-          holds: state.registry.holds,
+          holds: view.registry.holds,
           history: () => EMPTY_HISTORY_DEPTH,
           navigation: () => 0,
           feeds: () => UNFOLLOWED_FEEDS,
@@ -162,8 +164,8 @@ async function renderFrames(): Promise<void> {
       const line = renderDsl(
         state.config,
         state.compiled,
-        state.store,
-        state.registry,
+        view.store,
+        view.registry,
         payload,
         at,
         renderOptionsOf(effective, width),
@@ -181,6 +183,7 @@ async function renderFrames(): Promise<void> {
 
     process.stdout.write("\n");
   } finally {
+    view.registry.dispose();
     state.registry.dispose();
   }
 }

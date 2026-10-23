@@ -502,15 +502,19 @@ describe("an installed plugin", () => {
       ]);
       expect(cache.stats).toMatchObject({ size: 3, compiles: 1 });
       const drawn = await Promise.all(
-        states.map(async (s) => {
+        cwds.map(async (cwd, i) => {
+          // Each through a session's view of its entry, as the daemon draws.
+          using held = cache.holdSession(main, cwd, p, `s${i}`);
+          const s = held.state;
+          expect(s).toBe(states[i]);
           expect(await s.registry.settled(5000)).toEqual([]);
           return stripAnsi(
             renderDsl(
               s.config,
               s.compiled,
-              s.store,
-              s.registry,
-              { session_id: "s", project_dir: main },
+              held.view.store,
+              held.view.registry,
+              { session_id: `s${i}`, project_dir: main },
               instantOf(new Date()),
               { endcaps: "powerline", colorCompatibility: "truecolor", wrap: true, padding: 1, width: 200 },
             ),

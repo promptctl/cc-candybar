@@ -22,6 +22,7 @@ import {
   compileInputOf,
   compileKey,
   declareDslVariables,
+  EVERY_SCOPE,
   renderDsl,
   type CompiledConfig,
 } from "../src/dsl/render";
@@ -87,7 +88,7 @@ function renderer(
 ) {
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, session);
-  declareDslVariables(cfg, registry, "/tmp");
+  declareDslVariables(cfg, registry, "/tmp", EVERY_SCOPE);
   const opts = {
     endcaps: "powerline" as const,
     colorCompatibility: "truecolor" as const,

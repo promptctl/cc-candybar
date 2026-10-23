@@ -109,6 +109,11 @@ import {
   type ActiveSegmentRef,
 } from "../render/active-segment.js";
 import { segmentColorFuncs } from "../render/segment-color.js";
+import {
+  declaredVariables,
+  variableScopes,
+  type VarScope,
+} from "./variable-scope.js";
 import { closeCell, stateCell } from "../render/band-style.js";
 import {
   barRoot,
@@ -426,6 +431,7 @@ export function registerDslConfig(
     registry,
     opts.cwd,
     compileAlone,
+    EVERY_SCOPE,
   );
   return { ...compiled, loadWarnings };
 }
@@ -452,20 +458,22 @@ export interface Registration {
 // [LAW:single-enforcer] The one composition of a config into a registry, which
 // `cc-candybar check` (registerDslConfig) and the daemon (buildRenderState)
 // both take: the compile `compile` hands back for the config's key — a render
-// cache's shared one, or one of its own — then the variables declared into
-// the registry.
+// cache's shared one, or one of its own — then the variables of `scopes`
+// declared into the registry: both for a one-shot render, the directory's
+// alone for a render cache entry, whose sessions each declare a view.
 export function registerCompiled(
   config: ValidatedConfig,
   registry: SourceRegistry,
   cwd: string,
   compile: CompileProvider,
+  scopes: ReadonlySet<VarScope> = EVERY_SCOPE,
 ): Registration {
   const input = compileInputOf(config);
   const key = compileKey(input);
   return {
     compiled: compile(key, input),
     compileKey: key,
-    loadWarnings: declareDslVariables(config, registry, cwd),
+    loadWarnings: declareDslVariables(config, registry, cwd, scopes),
   };
 }
 
@@ -531,21 +539,25 @@ export function compileKey(input: CompileInput): string {
   return createHash("sha256").update(JSON.stringify(input)).digest("hex");
 }
 
-// Declare every variable the config holds into the registry, the global ones
-// and each segment's locals under `segName.varName`. Returns the declaration
+// Declare every variable of the given scopes into the registry — a directory's
+// sources into its home, a session's values into its view (variable-scope.ts),
+// or both into one registry for a one-shot render. Returns the declaration
 // failures: the rest are declared (see RegisteredConfig.loadWarnings).
 export function declareDslVariables(
   config: ValidatedConfig,
   registry: SourceRegistry,
   cwd: string,
+  scopes: ReadonlySet<VarScope>,
 ): readonly string[] {
+  const scopeOf = variableScopes(config);
   // [LAW:dataflow-not-control-flow] One variable failing to declare does not
   // abort the rest. Errors are data (accumulated in loadWarnings); the store
   // simply lacks the broken variable. Segments that reference it get a
   // MissingFieldError at render time and show an error cell. Segments that
   // don't (e.g. configSwitcher) render normally.
   const loadWarnings: string[] = [];
-  for (const [name, decl] of Object.entries(config.variables)) {
+  for (const [name, decl] of declaredVariables(config)) {
+    if (!scopes.has(scopeOf.get(name)!)) continue;
     try {
       declareOne(registry, name, decl, cwd);
     } catch (err) {
@@ -554,22 +566,14 @@ export function declareDslVariables(
       );
     }
   }
-
-  // Segment-local vars stored under namespaced key segName.varName.
-  for (const [segName, seg] of Object.entries(config.segments)) {
-    if (!seg.vars) continue;
-    for (const [varName, decl] of Object.entries(seg.vars)) {
-      try {
-        declareOne(registry, `${segName}.${varName}`, decl, cwd);
-      } catch (err) {
-        loadWarnings.push(
-          `Variable "${segName}.${varName}": ${(err as Error).message ?? String(err)}`,
-        );
-      }
-    }
-  }
   return loadWarnings;
 }
+
+// Both scopes: a registry that is its own directory and its own one view.
+export const EVERY_SCOPE: ReadonlySet<VarScope> = new Set([
+  "directory",
+  "view",
+]);
 
 // Pre-parse every template the config holds against one engine whose
 // template functions read the store and clocks of the render in progress

@@ -21,6 +21,7 @@ import { DEFAULT_DSL_CONFIG } from "../../config/default-dsl-config.js";
 import {
   compileAlone,
   compileDslConfig,
+  declareDslVariables,
   registerCompiled,
   type CompileInput,
   type CompileProvider,
@@ -34,6 +35,7 @@ import { presetNames, presetRoot } from "../../config/presets.js";
 import { unusedDeclarations, type UnusedDecl } from "../../config/unused.js";
 import { VariableStore } from "../../var-system/store.js";
 import { SourceRegistry } from "../../var-system/sources.js";
+import type { VarScope } from "../../dsl/variable-scope.js";
 import type { GitDataProvider } from "./git.js";
 import type { SessionStateRW } from "../session-state.js";
 import type {
@@ -64,6 +66,12 @@ import { pluginDataVar, pluginNameOf } from "../../config/loader/plugins.js";
 // 9.3 MB an entry, every one compiling its own.
 export const ENTRY_BYTES = 3 * 1024 * 1024;
 export const COMPILE_BYTES = 10 * 1024 * 1024;
+// A session's view (SessionView): its store of the session's values over the
+// entry's, rendered once. Measured 2026-10-23 over the bundled default: 770 KB
+// a view, and 1.7 MB an entry with its first view (the entry alone held them
+// all before brandon-unfiled-3248.8ro6 step 2, at 1.8 MB) — the constant keeps
+// the entry's headroom for a full user config.
+export const VIEW_BYTES = 1.5 * 1024 * 1024;
 
 // The render cache's share of the daemon's memory limit: a quarter, leaving the
 // rest to V8's own mappings, the code, the other caches, and the heap's growth
@@ -165,14 +173,9 @@ export type ReloadedEntry = Readonly<
 // preset, computed once per preset. The daemon's payload builder reads the
 // active preset's to gate provider invocation.
 //
-// `lastRenderCellsBySegment` is the per-segment StripCell sink that
-// renderDsl writes on each render — pre-layout cells, NOT serialized
-// ANSI. Storing cells (not strings) keeps the hot path free of the
-// per-segment renderStripCells call: the debug projection serializes on
-// demand only when a `debug segments` request actually arrives. The map
-// identity is stable for the entry's lifetime; renderDsl clears +
-// repopulates it in place. A segment hidden by `when` is absent from the
-// map — its presence in the keys is the "this segment rendered" signal.
+// `store` and `registry` are the entry's DIRECTORY home: the sources no
+// session value reaches (variable-scope.ts). A session draws through its own
+// view over them (SessionView).
 export interface DslRenderState {
   readonly config: ValidatedConfig;
   // [LAW:one-source-of-truth] The identity of `compiled` (compileKey of what
@@ -182,7 +185,6 @@ export interface DslRenderState {
   readonly registry: SourceRegistry;
   readonly compiled: CompiledConfig;
   readonly neededInputPaths: (preset: string) => ReadonlySet<string>;
-  readonly lastRenderCellsBySegment: Map<string, readonly RichText[]>;
   // [LAW:one-source-of-truth] The preset names whose layout tree the config
   // FILE authors at the path presetRoot() reports for them (candybar-config-
   // dqe): `root` for a preset staging the config's own root, `presets.<n>.
@@ -323,6 +325,25 @@ export interface Hold extends Disposable {
   readonly state: DslRenderState;
 }
 
+// A render's hold on the session's view it draws through, and the state the
+// view is of — both released by the one `using`.
+export interface SessionHold extends Hold {
+  readonly view: SessionView;
+}
+
+// Why a view stopped being served: its state did (reload, evict, close), its
+// session's latest render resolved to another entry (`moved`), or no render
+// read it across a whole sweep (`idle`).
+export type ViewClose = Teardown["reason"] | "moved" | "idle";
+
+// A view's lifetime, as a state's (StateHold), and whether a render read it
+// since the last sweep.
+interface ViewHold {
+  holders: number;
+  retired: { readonly reason: ViewClose; readonly held: number } | null;
+  read: boolean;
+}
+
 // [LAW:nothing-unseen] The states renders are drawing with now, and those
 // retired but not yet reclaimed because one still is (`daemon-stats`):
 // `retired` climbing while `size` holds is a render that never returned.
@@ -333,6 +354,8 @@ export interface RenderCacheStats {
   // Distinct compiles the cache holds — below `size` exactly when entries
   // share them.
   readonly compiles: number;
+  // Sessions' views served now: one per session at most.
+  readonly views: number;
   // What the entries the map serves are charged against the budget.
   readonly accountedBytes: number;
   readonly budgetBytes: number;
@@ -512,6 +535,7 @@ export function buildRenderState(
       registry,
       cwd,
       deps.compile ?? compileAlone,
+      DIRECTORY_SCOPE,
     );
     // [LAW:dataflow-not-control-flow] Partial-load warnings (variable
     // declaration failures that didn't abort the load) flow through the
@@ -519,6 +543,14 @@ export function buildRenderState(
     // appended before the validator pass so a derive throw still carries
     // them.
     warnings.push(...registration.loadWarnings);
+    // [LAW:single-enforcer] A session value that cannot declare (a template
+    // that does not parse) is a fact of the config, so the load finds it, as
+    // it finds a directory source's: the session values are declared once into
+    // a view no session draws, then disposed. Every session's view declares
+    // them identically and reports nothing (openView).
+    const probe = registry.view();
+    warnings.push(...declareDslVariables(config, probe, cwd, VIEW_SCOPE));
+    probe.dispose();
     // [LAW:no-silent-failure] The gates this config's sessions click through
     // are derived from its action table on demand (stateGate / configGate),
     // so nothing is installed here. They are built once now so an action
@@ -544,7 +576,6 @@ export function buildRenderState(
     registry,
     compiled: registration.compiled,
     neededInputPaths: neededPrefixesByPreset(config),
-    lastRenderCellsBySegment: new Map<string, readonly RichText[]>(),
     // What a reset clears is the home's: resets write nowhere else.
     authoredRoots: authoredRoots(merged, homeRaw),
     fileHeldSettings: fileHeldSettings(homeRaw),
@@ -663,6 +694,54 @@ export function fallbackState(
   return buildRenderState(cwd, { layers: [], home: "", projectDir }, [], deps);
 }
 
+// The scopes a render cache entry and a session's view declare.
+const DIRECTORY_SCOPE: ReadonlySet<VarScope> = new Set(["directory"]);
+const VIEW_SCOPE: ReadonlySet<VarScope> = new Set(["view"]);
+
+// [LAW:one-source-of-truth] A session's view of one entry's state
+// (brandon-unfiled-3248.8ro6, step 2): the session's own values — its inputs,
+// its state reads, its derivations, the sources keyed on them — in a store
+// over the entry's directory store, which it reads through to. Each session
+// renders through its own, so a request writes only its own session's values
+// and no other session's render re-runs, reads, or reports them.
+//
+// `lastRenderCellsBySegment` is the per-segment StripCell sink that renderDsl
+// writes on each render — pre-layout cells, NOT serialized ANSI. Storing cells
+// (not strings) keeps the hot path free of the per-segment renderStripCells
+// call: the debug projection serializes on demand only when a `debug segments`
+// request actually arrives. The map identity is stable for the view's
+// lifetime; renderDsl clears + repopulates it in place. A segment hidden by
+// `when` is absent from the map — its presence in the keys is the "this
+// segment rendered" signal.
+export interface SessionView {
+  readonly sessionId: string;
+  readonly state: DslRenderState;
+  readonly store: VariableStore;
+  readonly registry: SourceRegistry;
+  readonly lastRenderCellsBySegment: Map<string, readonly RichText[]>;
+}
+
+// [LAW:single-enforcer] The one way a view is built: the state's directory
+// registry opens a view registry, and the config's view-scoped variables are
+// declared into it, in `cwd` — the entry's, where its shells run.
+export function openView(
+  state: DslRenderState,
+  cwd: string,
+  sessionId: string,
+): SessionView {
+  const registry = state.registry.view();
+  // What fails to declare here failed in the load's probe (buildRenderState),
+  // which reported it: a declaration reads only the config.
+  declareDslVariables(state.config, registry, cwd, VIEW_SCOPE);
+  return {
+    sessionId,
+    state,
+    store: registry.variableStore,
+    registry,
+    lastRenderCellsBySegment: new Map<string, readonly RichText[]>(),
+  };
+}
+
 // [LAW:no-ambient-temporal-coupling] The cache's one timer, armed by the first
 // render and stopped with the last entry: every interval it releases each
 // hold an entry's renders have not read since the interval before
@@ -679,6 +758,11 @@ export class RenderCache {
   private closed = false;
   // Every state the map serves or served, until reclaimed.
   private readonly holds = new Map<DslRenderState, StateHold>();
+  // [LAW:one-source-of-truth] Each session's ONE view: of the entry its latest
+  // render resolved to. A render from another entry replaces it.
+  private readonly views = new Map<string, SessionView>();
+  // Every view the cache serves or served, until reclaimed.
+  private readonly viewHolds = new Map<SessionView, ViewHold>();
   // [LAW:one-source-of-truth] One compile per compile key, shared by every
   // state carrying that key, and dropped with the last of them (reclaim).
   private readonly compiles = new Map<string, CompiledConfig>();
@@ -720,7 +804,11 @@ export class RenderCache {
     const keys = new Set(
       [...this.entries.values()].map((e) => e.state.compileKey),
     );
-    return this.entries.size * ENTRY_BYTES + keys.size * COMPILE_BYTES;
+    return (
+      this.entries.size * ENTRY_BYTES +
+      keys.size * COMPILE_BYTES +
+      this.views.size * VIEW_BYTES
+    );
   }
 
   // [LAW:dataflow-not-control-flow] One uniform shape: every entry has the
@@ -811,6 +899,84 @@ export class RenderCache {
     };
   }
 
+  // [LAW:no-ambient-temporal-coupling] A render's hold on the session's view
+  // of the state it draws with, for the same reason as `hold`: a move, a
+  // reload, an eviction or an idle sweep retires the view, and the cache
+  // disposes it when this hold is released.
+  holdSession(
+    projectDir: string,
+    cwd: string,
+    configFile: string | undefined,
+    sessionId: string,
+  ): SessionHold {
+    const held = this.hold(projectDir, cwd, configFile);
+    const view = this.viewOf(sessionId, held.entry, held.state);
+    const lease = this.leaseOf(view);
+    lease.holders++;
+    lease.read = true;
+    let released = false;
+    return {
+      entry: held.entry,
+      state: held.state,
+      view,
+      [Symbol.dispose]: () => {
+        if (released) throw new Error("render-cache view hold released twice");
+        released = true;
+        lease.holders--;
+        this.reclaimView(view, lease);
+        held[Symbol.dispose]();
+      },
+    };
+  }
+
+  // The session's view of `state`: the one it has, or a new one replacing it.
+  private viewOf(
+    sessionId: string,
+    entry: CacheEntry,
+    state: DslRenderState,
+  ): SessionView {
+    const current = this.views.get(sessionId);
+    if (current?.state === state) return current;
+    if (current !== undefined) this.retireView(current, "moved");
+    const view = openView(state, entry.cwd, sessionId);
+    this.views.set(sessionId, view);
+    this.viewHolds.set(view, { holders: 0, retired: null, read: true });
+    this.log(
+      "info",
+      `session view opened sid=${JSON.stringify(sessionId)} cwd=${entry.cwd} views=${this.views.size}`,
+    );
+    // A view is charged to the budget like an entry.
+    this.fit(entry);
+    return view;
+  }
+
+  private leaseOf(view: SessionView): ViewHold {
+    const lease = this.viewHolds.get(view);
+    // [LAW:no-silent-failure] As holdOf: every view handed out was entered.
+    if (lease === undefined) throw new Error("render-cache view never served");
+    return lease;
+  }
+
+  // The cache stopped serving `view`; its teardown is due now, or when the
+  // last render holding it returns.
+  private retireView(view: SessionView, reason: ViewClose): void {
+    if (this.views.get(view.sessionId) === view)
+      this.views.delete(view.sessionId);
+    const lease = this.leaseOf(view);
+    lease.retired = { reason, held: lease.holders };
+    this.reclaimView(view, lease);
+  }
+
+  // [LAW:single-enforcer] The one place a view is disposed: retired and unheld.
+  private reclaimView(view: SessionView, lease: ViewHold): void {
+    if (lease.retired === null || lease.holders > 0) return;
+    this.viewHolds.delete(view);
+    this.log(
+      "info",
+      `session view closed sid=${JSON.stringify(view.sessionId)} reason=${lease.retired.reason} released=${view.registry.dispose()} held=${lease.retired.held} views=${this.views.size}`,
+    );
+  }
+
   private armSweep(): void {
     if (this.sweep !== null) return;
     this.sweep = setInterval(() => this.releaseIdle(), HOLD_SWEEP_MS);
@@ -819,9 +985,19 @@ export class RenderCache {
 
   // One sweep. Public so a test can run it at an instant it chose.
   releaseIdle(): void {
+    // A view no render read across the whole interval is closed: its session
+    // ended, or draws from another daemon's bar no more.
+    for (const [view, lease] of this.viewHolds) {
+      if (lease.retired !== null) continue;
+      if (lease.read) lease.read = false;
+      else this.retireView(view, "idle");
+    }
     let released = 0;
     for (const entry of this.entries.values()) {
       released += entry.state.registry.holds.releaseUnread();
+    }
+    for (const view of this.views.values()) {
+      released += view.registry.holds.releaseUnread();
     }
     if (released > 0) {
       this.log(
@@ -892,6 +1068,7 @@ export class RenderCache {
       held,
       retired,
       compiles: this.compiles.size,
+      views: this.views.size,
       accountedBytes: this.accountedBytes(),
       budgetBytes: this.budgetBytes(),
     };
@@ -944,6 +1121,11 @@ export class RenderCache {
   // The cache stopped serving `state`: it left the map, or a reload
   // replaced it. Its teardown is due — now, or at its last holder's return.
   private retire(state: DslRenderState, reason: Teardown["reason"]): void {
+    // [LAW:single-enforcer] A view is a child of its state: the state going
+    // retires every view of it first, so each is disposed before or with it.
+    for (const view of [...this.views.values()]) {
+      if (view.state === state) this.retireView(view, reason);
+    }
     const hold = this.holdOf(state);
     hold.retired = { reason, held: hold.holders };
     this.reclaim(state, hold);
@@ -1053,14 +1235,14 @@ export class RenderCache {
     return this.entries.size;
   }
 
-  // [LAW:single-enforcer] One read path for "any entry's state" used by
+  // [LAW:single-enforcer] One read path for "any session's view" used by
   // the debug protocol's introspection (`debug vars` / `segments` / `config`).
-  // Reads existing entries — does NOT call getOrCreate, so debug
-  // introspection never has the side effect of creating a fresh cache entry
-  // (with its own SourceRegistry timers/watchers) tied to the daemon's own
-  // `process.cwd()`. Null only when the cache is empty; debug responses are
-  // empty in that case by construction.
-  firstState(): DslRenderState | null {
-    return this.entries.values().next().value?.state ?? null;
+  // Reads existing views — does NOT open one, so debug introspection never
+  // has the side effect of creating a fresh cache entry (with its own
+  // SourceRegistry timers/watchers) tied to the daemon's own `process.cwd()`.
+  // Null until a session has rendered; debug responses are empty in that
+  // case by construction.
+  firstView(): SessionView | null {
+    return this.views.values().next().value ?? null;
   }
 }

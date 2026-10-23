@@ -139,6 +139,12 @@ The complete shape of a `shell` variable:
 | `cache` | **required** — exactly one of `{ ttl: "60s" }` (re-run on a timer; units `ms`/`s`/`m`/`h`; a shell `ttl` below 500 ms is silently raised to 500 ms), `{ watch_file: "/abs/path" }` (re-run when that file changes; a watch the OS refuses is reported like a key that throws, below), `{ depends_on: ["otherVar"] }` (re-run when a declared variable changes), `{ key: "{{ .otherVar }}" }` (re-run when the key template's value changes; a key over a document still waiting for its first scan waits with it; while the key throws, the variable keeps its last value, the bar's warning strip says it `cannot refresh`, and `cc-candybar check` fails on it), `{ never: true }` (run once) |
 | `default` | what the variable reads until the first run completes and whenever a run fails. Under `text`/`regex` it is a string; under `json` it is a JSON value — normally the document shape, every field your templates read, with placeholder values — and it stands in only when there was nothing to read (the command failed, the file is missing): text that was read and is not JSON is the `⚠`, default or not |
 
+A source that reads no session's value runs once for its directory, shared by
+every session rendering there. One whose `key` or `depends_on` reads a
+session's value — an `input` such as `session.id`, a `state`, a `template` or a
+`time` variable — runs once per session, on that session's values: another
+session rendering from the same directory never re-runs it.
+
 A `file` variable is the same declaration with `path` (absolute — `~` and
 relative paths are refused at load, like a relative `watch_file`; write the
 full path) in place of `command`, plus an

@@ -1394,12 +1394,12 @@ export async function replyTo(
     // (projectDir, cwd) and the debug request carrying neither, we sample
     // the first populated existing entry — sufficient for `debug vars`,
     // `debug segments`, `debug config` against the active workload.
-    // firstState reads existing entries only; it does NOT
-    // create a fresh one, so debug introspection never has the side effect
-    // of standing up a new (projectDir=undefined) cache entry tied to the
-    // daemon's own process.cwd(). A future debug-target selector would
-    // thread (projectDir, cwd) through the wire.
-    const dbgEntry = renderCache.firstState();
+    // firstView reads existing views only; it does NOT open one,
+    // so debug introspection never has the side effect of standing up a new
+    // (projectDir=undefined) cache entry tied to the daemon's own
+    // process.cwd(). A future debug-target selector would thread (session,
+    // projectDir, cwd) through the wire.
+    const dbgView = renderCache.firstView();
     // [LAW:dataflow-not-control-flow] Lazy per-segment serialization: the
     // cache stores StripCell arrays (cheap, written by renderDsl).
     // The debug projection needs strings, so serialize only for the
@@ -1408,18 +1408,18 @@ export async function replyTo(
     // serializer cost — that work shifts to debug-request time, which is
     // operator-driven and rare.
     const dbgState =
-      dbgEntry === null
+      dbgView === null
         ? null
         : {
-            store: dbgEntry.store,
-            registry: dbgEntry.registry,
-            config: dbgEntry.config,
-            compiled: dbgEntry.compiled,
+            store: dbgView.store,
+            registry: dbgView.registry,
+            config: dbgView.state.config,
+            compiled: dbgView.state.compiled,
             lastRenderBySegment:
               req.what === "segments"
                 ? serializeSegmentCells(
-                    dbgEntry.lastRenderCellsBySegment,
-                    dbgEntry.config.globals.colorCompatibility ??
+                    dbgView.lastRenderCellsBySegment,
+                    dbgView.state.config.globals.colorCompatibility ??
                       floorOf("colorCompatibility"),
                   )
                 : EMPTY_RENDER_MAP,
@@ -1938,17 +1938,19 @@ async function renderChecked(
   // (checkRenderRequest). All three are client facts; the daemon's own env is
   // never consulted (brandon-config-5g8).
   const origin = sessionRenderOrigin(req.requested, sessionState, sessionId);
-  // [LAW:no-ambient-temporal-coupling] Held, not fetched: `state` is what
-  // this render resolves its payload from and draws with after the payload
-  // await below. An eviction or a reload meanwhile retires it, and the cache
-  // disposes it when this hold is released — never under the render
+  // [LAW:no-ambient-temporal-coupling] Held, not fetched: `state`, and the
+  // session's `view` of it, are what this render resolves its payload from and
+  // draws with after the payload await below. An eviction, a reload, or the
+  // session's own render from another entry meanwhile retires them, and the
+  // cache disposes them when this hold is released — never under the render
   // (brandon-unfiled-3248.6rc). `using` releases the hold on every exit.
-  using hold = renderCache.hold(
+  using hold = renderCache.holdSession(
     origin.projectDir,
     origin.cwd,
     origin.configFile ?? undefined,
+    sessionId,
   );
-  const { entry, state } = hold;
+  const { entry, state, view } = hold;
   const termCols = hints.termCols;
   const width = applyClaudeCodeReserve(termCols ?? DEFAULT_TERMINAL_WIDTH);
   const rowCap = diagnosticRowCap(hints.termRows);
@@ -1992,8 +1994,8 @@ async function renderChecked(
     at,
     {
       ...payloadDeps,
-      // The entry's registry is the home this render reads for.
-      holds: state.registry.holds,
+      // The session's view is the home this render reads for.
+      holds: view.registry.holds,
       // Measured against the gate of the config this render draws with.
       navigation: (sessionId: string) =>
         navigationHistory.depth(
@@ -2042,8 +2044,8 @@ async function renderChecked(
   const frame = drawDsl(
     state.config,
     state.compiled,
-    state.store,
-    state.registry,
+    view.store,
+    view.registry,
     // [LAW:one-source-of-truth] Who the render is for is the render's own
     // fact, beside what the providers assembled.
     { ...payload, drawing },
@@ -2051,12 +2053,12 @@ async function renderChecked(
     renderOpts,
     // [LAW:single-enforcer] The per-segment StripCell sink for the
     // `debug segments` projection. Its identity stays stable for the
-    // cache entry's lifetime; renderDsl clears + repopulates it
+    // view's lifetime; renderDsl clears + repopulates it
     // in place. Cells are cheap (already computed during the render);
     // the per-segment ANSI serialization happens lazily inside the
     // debug handler so normal renders pay no extra serializer cost.
     {
-      perSegmentSink: state.lastRenderCellsBySegment,
+      perSegmentSink: view.lastRenderCellsBySegment,
       onRenderWarning: (warning) => renderWarnings.push(warning),
     },
     // [LAW:one-source-of-truth] The theme crosses as the SELECTION, palette
