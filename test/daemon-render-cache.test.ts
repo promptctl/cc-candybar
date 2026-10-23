@@ -781,6 +781,9 @@ describe("RenderCache", () => {
       const closes = () =>
         lines.filter((l) => l.startsWith("config disposed reason=close"));
       cache.close();
+      expect(lines.filter((l) => l.startsWith("render-cache closed "))).toEqual(
+        ["render-cache closed entries=4 deferred=1"],
+      );
       expect(closes()).toHaveLength(3);
       for (const line of closes())
         expect(line).toMatch(
@@ -1002,7 +1005,8 @@ describe("RenderCache idle sweep", () => {
           released++;
         });
       }
-      expect(jest.getTimerCount()).toBe(1);
+      // The sweep is armed, beside whatever the entry's sources arm.
+      expect(jest.getTimerCount()).toBeGreaterThan(0);
       cache.close();
       expect(released).toBe(1);
       expect(cache.size).toBe(0);
@@ -1011,6 +1015,7 @@ describe("RenderCache idle sweep", () => {
         "render cache used after close",
       );
     } finally {
+      cache.close();
       jest.useRealTimers();
       gitService.close();
       watchers.closeAll();

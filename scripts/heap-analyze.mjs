@@ -55,9 +55,14 @@ export function parseSnapshot(path) {
     JSON.parse(header).snapshot;
   const nodeFields = meta.node_fields;
   const edgeFields = meta.edge_fields;
-  const nodes = readInts(bytes, nodesAt, nodeCount * nodeFields.length);
+  const nodes = readInts(bytes, nodesAt, nodeCount * nodeFields.length, SIZES);
   const edgesAt = keyAt(bytes, "edges", nodes.end);
-  const edges = readInts(bytes, edgesAt, edgeCount * edgeFields.length);
+  const edges = readInts(
+    bytes,
+    edgesAt,
+    edgeCount * edgeFields.length,
+    INDICES,
+  );
   const s = {
     nodes: nodes.values,
     edges: edges.values,
@@ -87,15 +92,25 @@ function keyAt(bytes, key, from) {
   return at;
 }
 
-// The `[n,n,…]` array starting at `from`, exactly `count` unsigned 32-bit
-// integers (every node and edge field is one), and the offset past its `]`.
+// How wide an array's values run. A node's `self_size` is a size_t (a 4 GiB
+// backing store is one node), so node fields are held as doubles, exact to
+// 2^53; every edge field indexes a table or the nodes, so edges fit 32 bits
+// at half the memory.
+const SIZES = {
+  make: (n) => new Float64Array(n),
+  max: Number.MAX_SAFE_INTEGER,
+};
+const INDICES = { make: (n) => new Uint32Array(n), max: 0xffffffff };
+
+// The `[n,n,…]` array starting at `from`, exactly `count` unsigned integers no
+// larger than `width.max`, and the offset past its `]`.
 // V8 ends each node's row with a newline straight after its last digit, so
 // whitespace ends a number; a digit after it would join two.
 // [LAW:no-silent-failure] Anything else — a count other than the header's, a
-// value past 2^32, a byte no integer list holds — is a truncated or foreign
-// file, refused rather than read as a different heap.
-function readInts(bytes, from, count) {
-  const values = new Uint32Array(count);
+// value past the width, a byte no integer list holds — is a truncated or
+// foreign file, refused rather than read as a different heap.
+function readInts(bytes, from, count, width) {
+  const values = width.make(count);
   let i = bytes.indexOf(0x5b /* [ */, from) + 1;
   let n = 0;
   let value = 0;
@@ -109,7 +124,7 @@ function readInts(bytes, from, count) {
       digits = true;
     } else if (b === 0x2c /* , */ || b === 0x5d /* ] */) {
       if (digits) {
-        if (n === count || value > 0xffffffff) break;
+        if (n === count || value > width.max) break;
         values[n++] = value;
       }
       value = 0;
@@ -122,7 +137,7 @@ function readInts(bytes, from, count) {
   }
   if (n !== count || bytes[i] !== 0x5d) {
     throw new Error(
-      `heap snapshot array at byte ${from}: expected ${count} unsigned 32-bit integers, read ${n} before byte ${i}`,
+      `heap snapshot array at byte ${from}: expected ${count} unsigned integers up to ${width.max}, read ${n} before byte ${i}`,
     );
   }
   return { values, end: i + 1 };

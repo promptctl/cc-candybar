@@ -854,7 +854,14 @@ export class RenderCache {
     this.closed = true;
     if (this.sweep !== null) clearInterval(this.sweep);
     this.sweep = null;
+    const entries = this.entries.size;
     for (const [key, entry] of this.entries) this.drop(key, entry, "close");
+    // [LAW:one-source-of-truth] Every state left in `holds` is retired and
+    // waits on a render, so `retired` is the count of teardowns deferred.
+    this.log(
+      "info",
+      `render-cache closed entries=${entries} deferred=${this.stats.retired}`,
+    );
   }
 
   // [LAW:single-enforcer] The one way an entry leaves the map: its watcher

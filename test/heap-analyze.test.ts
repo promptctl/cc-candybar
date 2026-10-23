@@ -2,7 +2,7 @@
 // byte by byte (brandon-unfiled-3248.8ro6), so a truncated or foreign file is
 // its own to refuse: a post-mortem the SIGKILL backstop cut short must fail
 // loudly, never hang the tool or print a smaller heap.
-import { execFileSync, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -33,15 +33,23 @@ function analyze(text: string) {
   });
 }
 
+function histogram(text: string) {
+  const run = analyze(text);
+  expect(run.stderr).toBe("");
+  return JSON.parse(run.stdout).histogram;
+}
+
 test("a whole snapshot reads its one node", () => {
-  const path = join(dir, "whole.heapsnapshot");
-  writeFileSync(path, WHOLE);
-  const out = JSON.parse(
-    execFileSync(process.execPath, [SCRIPT, path, "--json"], {
-      encoding: "utf8",
-    }),
-  );
-  expect(JSON.stringify(out)).toContain("object / Foo");
+  expect(histogram(WHOLE)).toEqual([
+    { label: "object / Foo", count: 1, selfSize: 48 },
+  ]);
+});
+
+// A node's self_size is a size_t: a 4 GiB backing store is one node.
+test("a self size past 2^32 reads as itself", () => {
+  expect(histogram(WHOLE.replace("48", "4294967296"))).toEqual([
+    { label: "object / Foo", count: 1, selfSize: 4294967296 },
+  ]);
 });
 
 test.each([
@@ -55,12 +63,16 @@ test.each([
     `${HEADER}"nodes":[1,0,1,48,0,0,0\n],\n"edges":[],\n"strings":["Foo",`,
     /no closing \]/,
   ],
-  ["a value past 2^32", WHOLE.replace("48", "4294967296"), /unsigned 32-bit/],
-  ["a negative value", WHOLE.replace("48", "-48"), /unsigned 32-bit/],
+  [
+    "a value past 2^53",
+    WHOLE.replace("48", "9007199254740993"),
+    /unsigned integers up to/,
+  ],
+  ["a negative value", WHOLE.replace("48", "-48"), /unsigned integers up to/],
   [
     "two numbers joined by whitespace",
     WHOLE.replace("48", "4 8"),
-    /unsigned 32-bit/,
+    /unsigned integers up to/,
   ],
   [
     "fewer values than the header counts",
