@@ -619,10 +619,12 @@ export class SessionEffects<Line> {
     // [LAW:dataflow-not-control-flow] A menu row wears the flash while there
     // is one, on the flash's own clock; every other row, and every row while
     // there is none, wears nothing more.
+    const flashPart: Array<{ t: number; effect: Effect }> =
+      flash === null
+        ? []
+        : [{ t: flash.t, effect: closingFlash(flash.fill, flash.text) }];
     const flashing = (kind: RowKind): Array<{ t: number; effect: Effect }> =>
-      kind === "menu" && flash !== null
-        ? [{ t: flash.t, effect: closingFlash(flash.fill, flash.text) }]
-        : [];
+      kind === "menu" ? flashPart : [];
 
     const row = (
       rowName: string,
@@ -666,8 +668,10 @@ export class SessionEffects<Line> {
                       : paintedOn(effect, part.owners),
                 };
               }),
-              ...flashed,
               ...passing,
+              // Last, so a lit hold is the flash's over whatever a fade
+              // veils: the menu is about to close.
+              ...flashed,
             ]),
             { t: bar.t, key: rowKey, theme: ASSUMED_TERMINAL },
           ),

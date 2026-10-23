@@ -2067,11 +2067,12 @@ async function renderChecked(
   );
   // What this frame drew is what the session's close timer follows.
   menuIdle.observe(sessionId, at, frame.menuRows > 0, effective.menuTimeout);
+  const menusSince = menuIdle.since(sessionId, at);
   noteFacts(facts, {
     menuIdle:
-      frame.menuRows === 0
+      menusSince === undefined
         ? "-"
-        : `${(at - idleSince).toFixed(1)}s/${effective.menuTimeout}s`,
+        : `${(at - menusSince).toFixed(1)}s/${effective.menuTimeout}s`,
   });
   // [LAW:one-source-of-truth] The click error dispatch held for this session,
   // shown by every render inside its hold, and past it by a request until an

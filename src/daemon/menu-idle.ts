@@ -51,14 +51,18 @@ export class MenuIdle {
     this.settle(sessionId);
   }
 
-  // When the session's idle period began: its last click, or — for a
-  // session this daemon has not seen click — its first render here.
-  since(sessionId: string, at: Instant): Instant {
-    return this.record(sessionId, at).since;
+  // When the idle period of the menus the session's last frame drew began —
+  // its last click, or the first frame that drew them, whichever is later —
+  // or nothing, while it drew none: a menu that appears now has only begun.
+  since(sessionId: string, at: Instant): Instant | undefined {
+    const idle = this.record(sessionId, at);
+    return idle.shown ? idle.since : undefined;
   }
 
   // What the session's latest render drew: whether a menu row, and the
-  // timeout its settings resolve to.
+  // timeout its settings resolve to. A menu drawn where the last frame drew
+  // none begins its idle period here, so one nobody clicked open (a group
+  // open by default, from a reload) is not closed by a click from long ago.
   observe(
     sessionId: string,
     at: Instant,
@@ -66,6 +70,7 @@ export class MenuIdle {
     timeoutS: number,
   ): void {
     const idle = this.record(sessionId, at);
+    if (shown && !idle.shown && at > idle.since) idle.since = at;
     idle.shown = shown;
     idle.timeoutS = timeoutS;
     this.settle(sessionId);

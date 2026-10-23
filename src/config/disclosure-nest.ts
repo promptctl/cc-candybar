@@ -38,18 +38,19 @@ export interface DisclosureNest {
   readonly inside: (parent: Disclosure) => readonly NestedKey[];
   // What `key` holds in a fresh session.
   readonly defaultOf: (key: string) => string;
-  // Every menu inside no other — a disclosure that hangs a body or drops a
-  // `{{ menu }}`, the rows a frame counts as menu rows — so closing these
-  // closes every menu. A toggle that hangs nothing (edit mode's `☑ live`, an
-  // author's `when` gate) is a view preference, not a menu.
-  readonly roots: readonly Disclosure[];
+  // Every menu — a disclosure that hangs a body or drops a `{{ menu }}`, the
+  // rows a frame counts as menu rows — and every disclosure a menu sits
+  // inside (edit mode, whose `✚` lists are within it). A toggle that holds no
+  // menu (edit mode's `☑ live`, an author's `when` gate) is a view
+  // preference, not one of these.
+  readonly menus: readonly Disclosure[];
 }
 
 // A session with no rendered config has nothing nested to close.
 export const NO_NEST: DisclosureNest = {
   inside: () => [],
   defaultOf: () => DISCLOSURE_CLOSED,
-  roots: [],
+  menus: [],
 };
 
 const idOf = (d: Disclosure): string => `${d.key}\0${d.member}`;
@@ -151,12 +152,19 @@ export function buildDisclosureNest(config: DslConfig): DisclosureNest {
     closures.set(idOf(parent), keys);
     return keys;
   };
-  const nested = new Set(
-    [...inside.values()].flatMap((children) => [...children.keys()]),
-  );
+  const holdsMenu = (d: Disclosure): boolean =>
+    closure(d).some(({ key, outside }) =>
+      [...members.get(key)!].some(
+        (member) => !outside.has(member) && hung.has(idOf({ key, member })),
+      ),
+    );
   return {
     inside: closure,
-    roots: [...hung].flatMap(([id, d]) => (nested.has(id) ? [] : [d])),
+    menus: [...members].flatMap(([key, held]) =>
+      [...held]
+        .map((member) => ({ key, member }))
+        .filter((d) => hung.has(idOf(d)) || holdsMenu(d)),
+    ),
     // A disclosure that declares no default starts closed: its toggle counts
     // an unknown value as its first member, `closed`.
     defaultOf: (key) => defaults.get(key) ?? DISCLOSURE_CLOSED,
@@ -209,15 +217,30 @@ export function closeNested(
   return [...folds];
 }
 
-// The disclosures open at the top of the session's menus: each root whose key
-// holds it. Closing them — the write each one's ✕ makes — closes everything
-// open inside them (`closeNested`), so a nested key with an open default
-// (a tab) goes back to that default rather than to `closed`.
+// The menus open at the top of the session's state, read off the state: each
+// open one inside no open one, except one inside a closed one that holds its
+// default — what that one's close left it (a tab, under a closed door), so
+// nothing to close. Edit mode opened by an author's own `edit.toggle` is open
+// inside a closed door away from its default, so it is closed itself.
+// Closing them — the write each one's ✕ makes — closes everything open inside
+// them (`closeNested`), so a nested key with an open default goes back to
+// that default rather than to `closed`.
 export function openRoots(
   nest: DisclosureNest,
   read: (key: string) => string | null,
 ): readonly Disclosure[] {
-  return nest.roots.filter(
-    ({ key, member }) => (read(key) ?? nest.defaultOf(key)) === member,
-  );
+  const open = ({ key, member }: Disclosure): boolean =>
+    (read(key) ?? nest.defaultOf(key)) === member;
+  const within = (child: Disclosure, parent: Disclosure): boolean =>
+    nest
+      .inside(parent)
+      .some(
+        ({ key, outside }) => key === child.key && !outside.has(child.member),
+      );
+  return nest.menus.filter((d) => {
+    const parents = nest.menus.filter((p) => p !== d && within(d, p));
+    const leftByParent =
+      parents.length > 0 && nest.defaultOf(d.key) === d.member;
+    return open(d) && !parents.some(open) && !leftByParent;
+  });
 }

@@ -1576,12 +1576,13 @@ export function drawDsl(
       };
     });
   motion.drawn();
+  const menuRows = rendered.filter((row) => row.kind === "menu").length;
   // What the frame arms under the settings in force, drawn or not: an open
   // menu, which flashes before it closes on its own, an effect rule, fades, or a placement of this preset — hidden by its `when` or a
   // closed body right now — wearing an effect of its own. Asked only of a
   // frame no row of which moves.
   const armed = (): boolean =>
-    rendered.some((row) => row.kind === "menu") ||
+    menuRows > 0 ||
     selectedEffect.kind === "expression" ||
     transitions ||
     segmentsUnder(root).some(
@@ -1605,6 +1606,6 @@ export function drawDsl(
   return {
     text: rendered.map((row) => row.text).join("\n"),
     motion: frameMotion,
-    menuRows: rendered.filter((row) => row.kind === "menu").length,
+    menuRows,
   };
 }

@@ -534,9 +534,11 @@ something newer appears.
 
 `menuTimeout` (seconds, 10–600, default 30) is how long a session's open
 menus — every disclosure body and dropped `{{ menu }}` — stay open with no
-click in that session. They flash for their last 7.5 s, lit toward the
-theme's `warning`, then close as if their ✕ were clicked, with everything
-open inside them. Claude Code redraws its statusline only on events unless
+click in that session, counted from the later of that click and the first
+frame that drew them. They flash for their last 7.5 s, every lit cell a solid
+`warning` fill, then close as if their ✕ were clicked, with everything open
+inside them. A toggle that opens no menu, such as edit mode's `☑ live`, is
+left as it is. Claude Code redraws its statusline only on events unless
 its `statusLine` sets `refreshInterval: 1`, so without it neither the flash
 nor the close shows until the next event. It has a session half, the
 `menu timeout` stepper under `⚙ config`.

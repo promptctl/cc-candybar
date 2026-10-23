@@ -97,9 +97,11 @@ describe("MenuIdle: the close follows the idle clock, whoever writes it", () => 
     jest.advanceTimersByTime(s * 1000);
   };
 
-  test("a drawn menu closes a timeout after the session's first render", () => {
-    expect(idle.since("s", at(now))).toBe(1000);
+  test("a drawn menu closes a timeout after the first frame that drew it", () => {
+    // Nothing drawn yet: a frame drawing a menu now has only begun it.
+    expect(idle.since("s", at(now))).toBeUndefined();
     idle.observe("s", at(now), true, 30);
+    expect(idle.since("s", at(now))).toBe(1000);
     expect(idle.getStats().armed).toBe(1);
     advance(29.9);
     expect(closes).toEqual([]);
@@ -114,6 +116,19 @@ describe("MenuIdle: the close follows the idle clock, whoever writes it", () => 
     advance(10);
     expect(closes).toEqual([]);
     advance(20);
+    expect(closes).toEqual([{ sid: "s", idleS: 30, timeoutS: 30 }]);
+  });
+
+  test("a menu first drawn long after the last click closes a timeout after it appears", () => {
+    idle.clicked("s", at(now));
+    idle.observe("s", at(now), false, 30);
+    advance(3600);
+    // A reload adds a group open by default.
+    idle.observe("s", at(now), true, 30);
+    expect(idle.since("s", at(now))).toBe(4600);
+    advance(29.9);
+    expect(closes).toEqual([]);
+    advance(0.1);
     expect(closes).toEqual([{ sid: "s", idleS: 30, timeoutS: 30 }]);
   });
 
@@ -178,7 +193,7 @@ describe("MenuIdle: the close follows the idle clock, whoever writes it", () => 
     expect(failing.getStats().armed).toBe(0);
     advance(5);
     failing.observe("s", at(now), true, 30);
-    advance(24.9);
+    advance(29.9);
     expect(failures).toHaveLength(1);
     advance(0.1);
     expect(failures).toHaveLength(2);
@@ -282,6 +297,24 @@ describe("the close is the write the door's ✕ makes, on a click's own path", (
     closeIdleMenus(SID, IDLE, rt.ctx);
     expect(rt.held(EDIT_MODE_KEY)).not.toBe(EDIT_MODE_ARRANGE);
     expect(rt.ctx.history.history(SID).savepoint).toBeUndefined();
+  });
+
+  test("edit mode open with the door closed closes, with the ✚ library open in it", () => {
+    const rt = buildRuntime(`{
+      segments: { arrange: { template: '{{ action "edit.toggle" "✎" }}' } },
+      root: { h: ['directory', 'arrange'] },
+    }`);
+    const library = "menus.edit_default_insertSeg_0.edit_default_insert_0";
+    rt.clickWriting(EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
+    rt.clickWriting(library, "edit.default.insert.0");
+    expect(rt.held(SETTINGS_ANCHOR)).toBe(DISCLOSURE_CLOSED);
+    closeIdleMenus(SID, IDLE, rt.ctx);
+    expect(rt.held(EDIT_MODE_KEY)).toBe(DISCLOSURE_CLOSED);
+    expect(rt.held(library)).toBe(DISCLOSURE_CLOSED);
+    expect(rt.draw(instantOf(new Date())).menuRows).toBe(0);
+    expect(rt.logged).toContain(
+      `menu-idle: closed=${EDIT_MODE_KEY} idle=30.0s timeout=30s (session=${SID})`,
+    );
   });
 
   test("a toggle that hangs no menu is a view preference, and is left as it is", () => {
