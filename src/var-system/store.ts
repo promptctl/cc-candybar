@@ -391,7 +391,7 @@ export class VariableStore {
     derivation: Derivation,
     deriver: () => T,
   ): Derived<T> {
-    this.refuseDisposed(name);
+    this.refuseDisposed(`Derived value "${name}"`);
     if (derivation === "projection") return new Projected(deriver);
     const kept = new Kept(name, deriver);
     this.kept.push(kept);
@@ -586,14 +586,14 @@ export class VariableStore {
   // [LAW:no-silent-failure] A computed declared after dispose has no release
   // to come: it would subscribe to the world and hold this store exactly as
   // before brandon-unfiled-3248.t14.
-  private refuseDisposed(name: string): void {
+  private refuseDisposed(what: string): void {
     if (this.disposed) {
-      throw new Error(`Variable "${name}": cannot declare on a disposed store`);
+      throw new Error(`${what}: cannot declare on a disposed store`);
     }
   }
 
   private declare(name: string, node: StoreNode): void {
-    this.refuseDisposed(name);
+    this.refuseDisposed(`Variable "${name}"`);
     if (this.has(name)) {
       throw new Error(`Variable "${name}" is already declared`);
     }

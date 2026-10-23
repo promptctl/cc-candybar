@@ -136,6 +136,7 @@ import {
   returnedBy,
   heldLine,
   nodeType,
+  layoutRows,
   rowIdentities,
   type Compiled,
   type CompiledNode,
@@ -945,24 +946,24 @@ export function instantSegments(compiled: CompiledConfig): string[] {
   );
 }
 
-// The gates a layout's `{{ layoutPreview }}` reads: every node's own `when`
-// and each placed segment's.
+// [LAW:one-source-of-truth] The gates a layout's `{{ layoutPreview }}` reads:
+// the own `when` of every node `layoutRows` asks about, all of them shown, and
+// each segment's among them — so no gate it never asks makes it a projection.
 const layoutGates =
   (segments: CompiledSegments) =>
-  (root: CompiledNode): Array<Template<RichText>> =>
-    nodesUnder(root).flatMap((node) => [
+  (root: CompiledNode): Array<Template<RichText>> => {
+    const asked: CompiledNode[] = [];
+    layoutRows(root, (node) => {
+      asked.push(node);
+      return true;
+    });
+    return asked.flatMap((node) => [
       ...(node.when === undefined ? [] : [node.when]),
       ...(node.kind === "segment" && segments[node.name]!.when !== undefined
         ? [segments[node.name]!.when!]
         : []),
     ]);
-
-// Every node a layout node holds, itself and its open bodies' included.
-function nodesUnder(node: CompiledNode): CompiledNode[] {
-  return node.kind === "container"
-    ? [node, ...node.children.flatMap(nodesUnder)]
-    : [node, ...(node.opens === undefined ? [] : nodesUnder(node.opens.body))];
-}
+  };
 
 // ─── A globals slot holding a rule (brandon-looks-pe6, brandon-themes-dzl) ───
 

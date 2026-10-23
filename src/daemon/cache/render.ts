@@ -69,11 +69,12 @@ import { projectionsOf } from "../../config/loader/projections.js";
 export const ENTRY_BYTES = 3 * 1024 * 1024;
 export const COMPILE_BYTES = 10 * 1024 * 1024;
 // A session's view (SessionView): its store of the session's values over the
-// entry's, rendered once. Measured 2026-10-23 over the bundled default: 770 KB
-// a view, and 1.7 MB an entry with its first view (the entry alone held them
-// all before brandon-unfiled-3248.8ro6 step 2, at 1.8 MB) — the constant keeps
-// the entry's headroom for a full user config.
-export const VIEW_BYTES = 1.5 * 1024 * 1024;
+// entry's, and the parts of every placement it has drawn, kept until it is
+// disposed (src/dsl/parts.ts). Measured 2026-10-23 over the bundled default:
+// 1.0 MB a view drawn once, and 1.6 MB a view that has opened every list the
+// menu hangs and every tab — the most it draws — so the constant charges that,
+// with headroom for a user config's further placements.
+export const VIEW_BYTES = 2.5 * 1024 * 1024;
 
 // The render cache's share of the daemon's memory limit: a quarter, leaving the
 // rest to V8's own mappings, the code, the other caches, and the heap's growth

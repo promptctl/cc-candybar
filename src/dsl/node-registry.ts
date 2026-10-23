@@ -228,7 +228,7 @@ export interface NodeRenderCtx {
   // on with the steps since that body — extended by one step per container
   // level by the driver, re-rooted onto a band by `renderBody`. A pure fact
   // about position — unchanged by any node being hidden — that the segment
-  // hands to `evaluateSegment` so its colours derive from where it sits, with no
+  // hands its parts (`PlacementParts.evaluate`) so its colours derive from where it sits, with no
   // walk state read.
   readonly region: Region;
   readonly perSegmentSink?: Map<string, readonly RichText[]>;

@@ -62,16 +62,12 @@ function instantRead(template: string, basis: InstantBasis): string | null {
 // starts as a projection, and a template variable joins once its template
 // reads the instant through anything already in. Computed once per config
 // object: the loader's check and every declaration read the same answer.
-// The declared names ride beside the answer: a cache key is read against the
-// same names the fold read [LAW:one-source-of-truth].
-interface Fold {
-  readonly names: ReadonlySet<string>;
-  readonly projections: Projections;
-}
+// The answer is the basis it was told against, declared names included: a
+// cache key is read against the same basis the fold read
+// [LAW:one-source-of-truth].
+const FOLDS = new WeakMap<ProjectionConfig, InstantBasis>();
 
-const FOLDS = new WeakMap<ProjectionConfig, Fold>();
-
-function foldOf(config: ProjectionConfig): Fold {
+function foldOf(config: ProjectionConfig): InstantBasis {
   let fold = FOLDS.get(config);
   if (fold === undefined) {
     fold = foldProjections(config);
@@ -89,7 +85,7 @@ export function variableNamesOf(config: ProjectionConfig): ReadonlySet<string> {
   return foldOf(config).names;
 }
 
-function foldProjections(config: ProjectionConfig): Fold {
+function foldProjections(config: ProjectionConfig): InstantBasis {
   const declared = new Map(declaredVariables(config));
   const names = new Set(declared.keys());
   const projections = new Map<string, string>();
@@ -113,7 +109,7 @@ function foldProjections(config: ProjectionConfig): Fold {
       }
     }
   }
-  return { names, projections };
+  return basis;
 }
 
 // Why a template reads the instant, through the config's projections; null
@@ -122,13 +118,7 @@ export function instantReadOf(
   template: string,
   config: ProjectionConfig,
 ): string | null {
-  const { names, projections } = foldOf(config);
-  return instantRead(template, {
-    helpers: config.helpers,
-    names,
-    projections,
-    clock: CLOCK_FUNCTIONS,
-  });
+  return instantRead(template, foldOf(config));
 }
 
 // [LAW:single-enforcer] Which of a compile's templates read the instant — a
@@ -167,9 +157,19 @@ export function templateInstants(
     actionReads.set(name, reads);
     return reads;
   };
-  return (template) =>
-    instantRead(template, basis) !== null ||
-    templateActionRefs(template, basis.helpers).some((ref) =>
-      actionReadsInstant(ref.name),
-    );
+  // One answer per source: a gate's text recurs at every node of every
+  // preset that edit chrome wraps alike.
+  const answers = new Map<string, boolean>();
+  return (template) => {
+    let reads = answers.get(template);
+    if (reads === undefined) {
+      reads =
+        instantRead(template, basis) !== null ||
+        templateActionRefs(template, basis.helpers).some((ref) =>
+          actionReadsInstant(ref.name),
+        );
+      answers.set(template, reads);
+    }
+    return reads;
+  };
 }

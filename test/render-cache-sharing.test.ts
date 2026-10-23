@@ -27,7 +27,11 @@ import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
 import { instantOf } from "../src/utils/instant";
-import { stripAnsi } from "./helpers/ansi";
+import { links, stripAnsi } from "./helpers/ansi";
+import { recordRender, testVerbContext } from "./helpers/click";
+import { VERBS } from "../src/daemon/verbs";
+import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
+import { parseHandlerUrl } from "../src/install/index";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 
 // brandon-unfiled-3248.8yp: the render cache held one 9.3 MB state per
@@ -54,14 +58,15 @@ function makeCache(budgetBytes: number, maxEntries?: number) {
   });
   const gitService = new GitDataProvider({ logger: () => {} });
   cleanups.push(() => watchers.closeAll(), () => gitService.close());
+  const sessionState = new SessionState();
   const cache = new RenderCache(
-    { gitService, sessionState: new SessionState(), watchers, log: (_level, line) => lines.push(line) },
+    { gitService, sessionState, watchers, log: (_level, line) => lines.push(line) },
     { budgetBytes: () => budgetBytes, maxEntries },
   );
   // Run first (cleanups run in reverse): every state the cache serves is torn
   // down before the watchers and git close under it.
   cleanups.push(() => cache.close());
-  return { cache, lines };
+  return { cache, lines, sessionState };
 }
 
 function file(rel: string, text: string): string {
@@ -72,8 +77,9 @@ function file(rel: string, text: string): string {
 }
 
 // A session's frame, drawn through its view as the daemon draws one.
-const drawn = (view: SessionView): string =>
-  stripAnsi(
+const drawn = (view: SessionView): string => stripAnsi(drawnBytes(view));
+
+const drawnBytes = (view: SessionView): string =>
     renderDsl(
       view.state.config,
       view.state.compiled,
@@ -82,8 +88,7 @@ const drawn = (view: SessionView): string =>
       { session_id: view.sessionId, project_dir: dir },
       instantOf(new Date()),
       { endcaps: "powerline", colorCompatibility: "truecolor", wrap: true, padding: 1, width: 200 },
-    ),
-  );
+    );
 
 // A frame of `state` through a view of its own, disposed after.
 const render = (state: ReturnType<RenderCache["getOrCreate"]>["state"]): string => {
@@ -158,7 +163,7 @@ describe("entries share a compile exactly when their configs compile alike", () 
   // must not share: the second's carousel would read a variable its store
   // never declared.
   test("configs differing only in which variable reads a key back get two compiles", () => {
-    const { cache } = makeCache(64 * COMPILE_BYTES);
+    const { cache, sessionState } = makeCache(64 * COMPILE_BYTES);
     const one = file("one.json5", carouselConfig("mode", "alpha"));
     const two = file("two.json5", carouselConfig("other", "beta"));
     const a = cache.getOrCreate(dir, dir, one).state;
@@ -174,7 +179,7 @@ describe("entries share a compile exactly when their configs compile alike", () 
 // action table last. The table learns a compile only from a state it serves,
 // so the refused load leaves none that nothing could ever reclaim.
 test("a load that fails after compiling leaves no compile behind", () => {
-  const { cache } = makeCache(64 * COMPILE_BYTES);
+  const { cache, sessionState } = makeCache(64 * COMPILE_BYTES);
   const clash = file(
     "clash.json5",
     `{ actions: { step: { set: "k", min: 0, max: 3, by: 1 }, flip: { set: "k", cycle: ["x", "y"] } } }`,
@@ -331,7 +336,7 @@ test("an entry, a compile and a view hold no more than the cache charges for the
   held.length = 0;
   expect(compileBytes).toBeLessThan(COMPILE_BYTES);
 
-  const { cache } = makeCache(64 * COMPILE_BYTES);
+  const { cache, sessionState } = makeCache(64 * COMPILE_BYTES);
   // Rendered once by a session of its own, as every entry the daemon holds has
   // been: the render fills the session's view of it and the view's sink.
   const entry = (i: number) => {
@@ -364,4 +369,47 @@ test("an entry, a compile and a view hold no more than the cache charges for the
   const perView = (heapUsed() - beforeViews) / N;
   expect(cache.stats.views).toBe(2 * N + 2);
   expect(perView).toBeLessThan(VIEW_BYTES);
+
+  // A view keeps the parts of every placement it has drawn until it is
+  // disposed (src/dsl/parts.ts), so it is charged for the most the bundled
+  // default draws: a session that opened the door, the theme picker, every
+  // list behind the ⚙ and the preset list, and every tab.
+  const walked = (i: number): SessionView => {
+    const sid = `w${i}`;
+    using held = cache.holdSession(dir + "/c0", dir + "/c0", undefined, sid);
+    recordRender(sessionState, sid);
+    const ctx = testVerbContext(sessionState, undefined, held.state.config);
+    let last = drawnBytes(held.view);
+    for (const text of MENU_WALK) {
+      const hit = links(last).find((l) => stripAnsi(l.text).trim() === text);
+      if (hit === undefined) throw new Error(`no link "${text}" in:\n${stripAnsi(last)}`);
+      const { verb, value } = parseHandlerUrl(hit.url);
+      const effects = verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
+      for (const e of effects) VERBS.get(e.verb)!(e.value, ctx);
+      last = drawnBytes(held.view);
+    }
+    return held.view;
+  };
+  views.push(walked(0));
+  const beforeWalked = heapUsed();
+  for (let i = 1; i <= N; i++) views.push(walked(i));
+  const perWalked = (heapUsed() - beforeWalked) / N;
+  expect(perWalked).toBeLessThan(VIEW_BYTES);
 });
+
+// Every list the bundled menu hangs, then every tab, then the door closed.
+const MENU_WALK = [
+  "🍫",
+  "🎨 theme",
+  "⚙",
+  "none ▀▀▀",
+  "accent",
+  "muted",
+  "default",
+  "🎨 look",
+  "📐 layout",
+  "⚙ config",
+  "🧰 tools",
+  "⚡ session",
+  "✖",
+];
