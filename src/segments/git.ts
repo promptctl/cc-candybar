@@ -138,24 +138,43 @@ export interface GitInfo {
   pullRequest?: Outcome<PullRequest>;
 }
 
-// [LAW:no-silent-failure] Every field of one read that git could not answer,
-// named as the payload names it. The refresh that read them logs these once
-// (src/daemon/cache/git.ts); a draw of the stored value never logs them again.
+// The fields of one git read that carry an outcome. The PR is its own source,
+// whose lookup logs its own failures.
+type ReadField = Exclude<
+  {
+    [K in keyof GitInfo]-?: NonNullable<GitInfo[K]> extends Outcome<unknown>
+      ? K
+      : never;
+  }[keyof GitInfo],
+  "pullRequest"
+>;
+
+// [LAW:types-are-the-program] Every outcome field of a read, named as the
+// payload names it: a field added to GitInfo is a compile error here until it
+// is named, so no failure of it can go unlogged.
+const READ_FIELD_NAMES: Record<ReadField, string> = {
+  aheadBehind: "aheadBehind",
+  head: "head",
+  sha: "sha",
+  operation: "operation",
+  tag: "tag",
+  committedAt: "timeSinceCommit",
+  stashCount: "stash",
+  upstream: "upstream",
+  repoName: "repoName",
+  repoUrl: "repoUrl",
+};
+
+// [LAW:no-silent-failure] Every field of one read that git could not answer.
+// The refresh that read them logs these once (src/daemon/cache/git.ts); a draw
+// of the stored value never logs them again.
 export function gitInfoFailures(info: GitInfo): string[] {
-  const fields: ReadonlyArray<readonly [string, Outcome<unknown> | undefined]> =
-    [
-      ["aheadBehind", info.aheadBehind],
-      ["sha", info.sha],
-      ["operation", info.operation],
-      ["timeSinceCommit", info.committedAt],
-      ["stash", info.stashCount],
-      ["upstream", info.upstream],
-      ["repoName", info.repoName],
-      ["repoUrl", info.repoUrl],
-    ];
-  return fields.flatMap(([name, outcome]) =>
-    outcome?.kind === "failed" ? [`git.${name}: ${outcome.reason}`] : [],
-  );
+  return (Object.keys(READ_FIELD_NAMES) as ReadField[]).flatMap((field) => {
+    const outcome = info[field];
+    return outcome?.kind === "failed"
+      ? [`git.${READ_FIELD_NAMES[field]}: ${outcome.reason}`]
+      : [];
+  });
 }
 
 // [LAW:one-source-of-truth] The one shape of getGitInfo's `show*` toggles. Each

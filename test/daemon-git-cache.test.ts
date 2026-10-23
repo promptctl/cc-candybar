@@ -561,6 +561,17 @@ describe("GitDataProvider refreshes on its own triggers", () => {
       "git refresh failed (/repo): git.stash: git stash list: timeout",
     ]);
   });
+
+  test("a HEAD git could not read is logged, though the payload only reads it for the PR", async () => {
+    const { svc, inner, logs, holds } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+    inner.stubInfo = { ...inner.stubInfo, head: failed("git rev-parse: timeout") };
+
+    await svc.getGitInfo(holds, "/repo", {});
+    expect(logs.filter((l) => l.startsWith("git refresh failed"))).toEqual([
+      "git refresh failed (/repo): git.head: git rev-parse: timeout",
+    ]);
+  });
 });
 
 // [LAW:no-ambient-temporal-coupling] The first delivery is awaited through the
