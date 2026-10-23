@@ -6,7 +6,10 @@ import vm from "node:vm";
 import {
   COMPILE_BYTES,
   ENTRY_BYTES,
+  openView,
   RenderCache,
+  VIEW_BYTES,
+  type SessionView,
 } from "../src/daemon/cache/render";
 import { GitDataProvider } from "../src/daemon/cache/git";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
@@ -15,6 +18,7 @@ import {
   compileDslConfig,
   compileInputOf,
   declareDslVariables,
+  EVERY_SCOPE,
   renderDsl,
   type CompiledConfig,
 } from "../src/dsl/render";
@@ -67,18 +71,29 @@ function file(rel: string, text: string): string {
   return p;
 }
 
-const render = (state: ReturnType<RenderCache["getOrCreate"]>["state"]): string =>
+// A session's frame, drawn through its view as the daemon draws one.
+const drawn = (view: SessionView): string =>
   stripAnsi(
     renderDsl(
-      state.config,
-      state.compiled,
-      state.store,
-      state.registry,
-      { session_id: "s", project_dir: dir },
+      view.state.config,
+      view.state.compiled,
+      view.store,
+      view.registry,
+      { session_id: view.sessionId, project_dir: dir },
       instantOf(new Date()),
       { endcaps: "powerline", colorCompatibility: "truecolor", wrap: true, padding: 1, width: 200 },
     ),
   );
+
+// A frame of `state` through a view of its own, disposed after.
+const render = (state: ReturnType<RenderCache["getOrCreate"]>["state"]): string => {
+  const view = openView(state, dir, "s");
+  try {
+    return drawn(view);
+  } finally {
+    view.registry.dispose();
+  }
+};
 
 // Draw one frame of `compiled` from a store and registry of its own, as a
 // render-cache entry would, then dispose the registry; the store is returned
@@ -86,7 +101,7 @@ const render = (state: ReturnType<RenderCache["getOrCreate"]>["state"]): string 
 const drawAlone = (config: ValidatedConfig, compiled: CompiledConfig): VariableStore => {
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, new SessionState());
-  declareDslVariables(config, registry, dir);
+  declareDslVariables(config, registry, dir, EVERY_SCOPE);
   renderDsl(
     config,
     compiled,
@@ -284,11 +299,12 @@ test("a compile keeps nothing of a render once it returns", async () => {
   expect(compiled.menuRuntime.action.bound).toBeUndefined();
 });
 
-// [LAW:verifiable-goals] ENTRY_BYTES and COMPILE_BYTES are the cache's map of
-// what an entry and a compile hold; this redraws the map from the heap, so a
-// change that grows either fails here rather than quietly over-filling the
-// budget. The bundled default, as `test/setup.ts` leaves the XDG config empty.
-test("an entry and a compile hold no more than the cache charges for them", () => {
+// [LAW:verifiable-goals] ENTRY_BYTES, COMPILE_BYTES and VIEW_BYTES are the
+// cache's map of what an entry, a compile and a session's view hold; this
+// redraws the map from the heap, so a change that grows any fails here rather
+// than quietly over-filling the budget. The bundled default, as `test/setup.ts`
+// leaves the XDG config empty.
+test("an entry, a compile and a view hold no more than the cache charges for them", () => {
   const gc = exposeGc();
   const heapUsed = (): number => {
     gc();
@@ -316,14 +332,14 @@ test("an entry and a compile hold no more than the cache charges for them", () =
   expect(compileBytes).toBeLessThan(COMPILE_BYTES);
 
   const { cache } = makeCache(64 * COMPILE_BYTES);
-  // Rendered once, as every entry the daemon holds has been: a render fills
-  // the store and the per-segment sink the entry keeps.
+  // Rendered once by a session of its own, as every entry the daemon holds has
+  // been: the render fills the session's view of it and the view's sink.
   const entry = (i: number) => {
     const cwd = path.join(dir, `c${i}`);
     fs.mkdirSync(cwd);
-    const { state } = cache.getOrCreate(cwd, cwd, undefined);
-    render(state);
-    return state;
+    using held = cache.holdSession(cwd, cwd, undefined, `e${i}`);
+    drawn(held.view);
+    return held.state;
   };
   const keep = [entry(0)];
   const before = heapUsed();
@@ -331,5 +347,21 @@ test("an entry and a compile hold no more than the cache charges for them", () =
   for (let i = 1; i <= N; i++) keep.push(entry(i));
   const perEntry = (heapUsed() - before) / N;
   expect(cache.stats.compiles).toBe(1);
-  expect(perEntry).toBeLessThan(ENTRY_BYTES);
+  expect(cache.stats.views).toBe(N + 1);
+  expect(perEntry).toBeLessThan(ENTRY_BYTES + VIEW_BYTES);
+
+  // A further session in a directory already rendered from costs its view.
+  const shared = keep[0]!;
+  const view = (i: number): SessionView => {
+    using held = cache.holdSession(dir + "/c0", dir + "/c0", undefined, `v${i}`);
+    expect(held.state).toBe(shared);
+    drawn(held.view);
+    return held.view;
+  };
+  const views = [view(0)];
+  const beforeViews = heapUsed();
+  for (let i = 1; i <= N; i++) views.push(view(i));
+  const perView = (heapUsed() - beforeViews) / N;
+  expect(cache.stats.views).toBe(2 * N + 2);
+  expect(perView).toBeLessThan(VIEW_BYTES);
 });

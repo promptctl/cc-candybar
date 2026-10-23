@@ -670,13 +670,11 @@ describe("RenderCache", () => {
       // The entry — and the live registry + watcher it owns — is in the
       // cache, so eviction/dispose can still reach it.
       expect(cache.size).toBe(1);
-      expect(cache.firstState()).not.toBeNull();
       expect(watchers.size()).toBe(1);
       // A second lookup finds it rather than building a duplicate: the
       // observer (which would throw again) does not run, and no second
       // watcher opens.
-      const found = cache.getOrCreate(dir, dir, undefined);
-      expect(found.state).toBe(cache.firstState());
+      cache.getOrCreate(dir, dir, undefined);
       expect(cache.size).toBe(1);
       expect(watchers.size()).toBe(1);
     } finally {
@@ -750,20 +748,30 @@ describe("RenderCache", () => {
 
   // [LAW:nothing-unseen] brandon-unfiled-3248.t14: a teardown that released
   // nothing was found in a heap snapshot because no teardown said what it
-  // did. Both teardown sites log the count the store returns.
+  // did. Both teardown sites log the count the store returns — the state's
+  // (its directory's sources: none of the bundled default's computeds) and,
+  // with it, each session's view of it, which holds them.
   test("eviction and reload each log the teardown and how many computeds it released", () => {
     const lines: string[] = [];
     const { cache, cleanups } = makeCache(undefined, (_level, msg) =>
       lines.push(msg),
     );
     try {
+      cache.holdSession("/p0", "/p0", undefined, "s0")[Symbol.dispose]();
       for (let i = 0; i < 5; i++)
         cache.getOrCreate(`/p${i}`, `/p${i}`, undefined);
       const evict = lines.filter((l) => l.startsWith("config disposed "));
       expect(evict).toHaveLength(1);
       expect(evict[0]).toMatch(
-        /^config disposed reason=evict released=[1-9]\d* held=0$/,
+        /^config disposed reason=evict released=\d+ held=0$/,
       );
+      expect(
+        lines.filter((l) => l.startsWith("session view closed ")),
+      ).toEqual([
+        expect.stringMatching(
+          /^session view closed sid="s0" reason=evict released=[1-9]\d* held=0 /,
+        ),
+      ]);
 
       cache.reload("/p4", "/p4", undefined);
       const reload = lines.filter((l) =>
@@ -771,7 +779,7 @@ describe("RenderCache", () => {
       );
       expect(reload).toHaveLength(1);
       expect(reload[0]).toMatch(
-        /^config disposed reason=reload released=[1-9]\d* held=0$/,
+        /^config disposed reason=reload released=\d+ held=0$/,
       );
 
       // A close tears every entry down at once, but a state a render still
@@ -791,12 +799,12 @@ describe("RenderCache", () => {
       expect(closes()).toHaveLength(3);
       for (const line of closes())
         expect(line).toMatch(
-          /^config disposed reason=close released=[1-9]\d* held=0$/,
+          /^config disposed reason=close released=\d+ held=0$/,
         );
       hold[Symbol.dispose]();
       expect(closes()).toHaveLength(4);
       expect(closes()[3]).toMatch(
-        /^config disposed reason=close released=[1-9]\d* held=1$/,
+        /^config disposed reason=close released=\d+ held=1$/,
       );
     } finally {
       for (const fn of cleanups) fn();
@@ -824,7 +832,7 @@ describe("RenderCache", () => {
       // the render still draws with it, and its store still answers.
       expect(cache.stats).toMatchObject({ size: 4, held: 1, retired: 1 });
       expect(disposals()).toEqual([]);
-      expect(hold.state.store.read("session.id")).toBe("");
+      expect(hold.state.store.names().length).toBeGreaterThan(0);
       // Asking for /p0 again is a new entry with a state of its own — and a
       // fifth insertion, so unheld /p1 goes at once.
       const again = cache.getOrCreate("/p0", "/p0", undefined);
@@ -836,7 +844,7 @@ describe("RenderCache", () => {
       expect(disposals()).toEqual([
         expect.stringMatching(/ held=0$/),
         expect.stringMatching(
-          /^config disposed reason=evict released=[1-9]\d* held=1$/,
+          /^config disposed reason=evict released=\d+ held=1$/,
         ),
       ]);
       expect(cache.stats).toMatchObject({ size: 4, held: 0, retired: 0 });
@@ -864,7 +872,7 @@ describe("RenderCache", () => {
       hold[Symbol.dispose]();
       expect(disposals()).toEqual([
         expect.stringMatching(
-          /^config disposed reason=reload released=[1-9]\d* held=1$/,
+          /^config disposed reason=reload released=\d+ held=1$/,
         ),
       ]);
       expect(cache.stats).toMatchObject({ size: 1, held: 0, retired: 0 });

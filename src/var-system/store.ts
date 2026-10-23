@@ -261,12 +261,17 @@ function assertType(
   }
 }
 
-// [LAW:single-enforcer] All declarations and reads go through one
-// VariableStore instance per daemon. Two stores cannot coexist for the
-// same daemon — the dep graph would split, click handlers would mutate
-// one while renders read the other.
+// [LAW:one-source-of-truth] Every variable lives in ONE store, the home its
+// scope names (brandon-unfiled-3248.8ro6, step 2): a directory's store holds
+// the sources no session value reaches, and each session's view is a store of
+// its own over it — `parent` — holding the session's inputs, state and
+// derivations. A view READS through to its parent and declares and writes only
+// its own nodes, so no session's write lands in another session's values, and
+// a directory value is one node however many sessions read it.
 
 export class VariableStore {
+  constructor(private readonly parent: VariableStore | null = null) {}
+
   // [LAW:no-ambient-temporal-coupling] Which names are declared is itself
   // observable: a reaction that read a name before its declaration (a cache
   // key over a variable declared after it) re-runs when it is declared, so
@@ -312,7 +317,7 @@ export class VariableStore {
   }
 
   setDocument(name: string, value: Outcome<JsonValue>): void {
-    const node = this.requireNode(name);
+    const node = this.requireOwn(name);
     if (node.kind !== "document") {
       throw new TypeError(
         `Variable "${name}" is a ${node.kind}, not a document (use defineDocument to create one)`,
@@ -322,7 +327,7 @@ export class VariableStore {
   }
 
   setBox(name: string, value: VarValue): void {
-    const node = this.requireNode(name);
+    const node = this.requireOwn(name);
     if (node.kind !== "box") {
       throw new TypeError(
         `Variable "${name}" is a ${node.kind}, not a box (use defineBox to create a settable variable)`,
@@ -345,7 +350,7 @@ export class VariableStore {
   }
 
   has(name: string): boolean {
-    return this.nodes.has(name);
+    return this.nodes.has(name) || (this.parent?.has(name) ?? false);
   }
 
   getType(name: string): VarType {
@@ -412,7 +417,7 @@ export class VariableStore {
   }
 
   names(): string[] {
-    return [...this.nodes.keys()];
+    return [...(this.parent?.names() ?? []), ...this.nodes.keys()];
   }
 
   // Release every computed's subscriptions, so nothing outliving this store
@@ -448,9 +453,22 @@ export class VariableStore {
   private disposed = false;
 
   private requireNode(name: string): StoreNode {
-    const node = this.nodes.get(name);
+    const node = this.nodes.get(name) ?? this.parent?.requireNode(name);
     if (!node) throw new ReferenceError(`Unknown variable "${name}"`);
     return node;
+  }
+
+  // [LAW:single-enforcer] The one door a write takes: a node of this store.
+  // A view writing its directory's node would write every session's value.
+  private requireOwn(name: string): StoreNode {
+    const node = this.nodes.get(name);
+    if (node !== undefined) return node;
+    if (this.parent?.has(name)) {
+      throw new Error(
+        `Variable "${name}" lives in the directory's store; a session's view cannot write it`,
+      );
+    }
+    throw new ReferenceError(`Unknown variable "${name}"`);
   }
 
   // [LAW:parse-dont-validate] The scalar reads (`read`, `getType`) demand a
@@ -473,7 +491,7 @@ export class VariableStore {
     if (this.disposed) {
       throw new Error(`Variable "${name}": cannot declare on a disposed store`);
     }
-    if (this.nodes.has(name)) {
+    if (this.has(name)) {
       throw new Error(`Variable "${name}" is already declared`);
     }
     mobxRunInAction(() => this.nodes.set(name, node));

@@ -26,7 +26,7 @@ import {
   type VarType,
   type VarValue,
 } from "./types.js";
-import type { VariableStore } from "./store.js";
+import { VariableStore } from "./store.js";
 import { createCcCandybarEngine } from "../template-engine/engine.js";
 import { buildScope } from "../template-engine/scope.js";
 import { GitDataProvider } from "../daemon/cache/git.js";
@@ -802,6 +802,8 @@ export class SourceRegistry {
     private readonly defaultEmptyValue: VarValue = "",
     gitProvider?: GitDataProvider,
     sessionState?: SessionStateReader,
+    // The directory home a session's view reads through to (`view()`).
+    private readonly parent: SourceRegistry | null = null,
   ) {
     if (gitProvider) {
       this.gitProvider = gitProvider;
@@ -811,6 +813,24 @@ export class SourceRegistry {
       this.ownsGitProvider = true;
     }
     this.sessionState = sessionState;
+  }
+
+  // [LAW:one-source-of-truth] A session's view of this directory home
+  // (brandon-unfiled-3248.8ro6, step 2): a registry of its own over a store of
+  // its own, which reads through to this one. The session's values are
+  // declared there, so its inputs, its state and its derivations are its own,
+  // and what its sources fail with is recorded there; a directory value it
+  // reads is this home's one node, and its failure this home's one record. It
+  // shares the daemon's git provider and session state, and is disposed on its
+  // own: a session leaving the directory disposes nothing of it.
+  view(): SourceRegistry {
+    return new SourceRegistry(
+      new VariableStore(this.store),
+      this.defaultEmptyValue,
+      this.gitProvider,
+      this.sessionState,
+      this,
+    );
   }
 
   // [LAW:one-source-of-truth] The registry IS the owner of its store — every
@@ -1317,13 +1337,18 @@ export class SourceRegistry {
   }
 
   // Called by the render beside applyInput: the depth this render draws at.
+  // A view's render is its directory's too: a directory source's `key` may
+  // read the depth or the instant, and only a render publishes them — until
+  // step 6 of brandon-unfiled-3248.8ro6 refuses a key that reads either.
   drawAt(depth: ColorDepth): void {
     this.store.runInAction(() => this.drawn.set(depth));
+    this.parent?.drawAt(depth);
   }
 
   // Called by the render beside drawAt: the instant this render is drawn at.
   renderAt(at: Instant): void {
     this.store.runInAction(() => this.instant.set(at));
+    this.parent?.renderAt(at);
   }
 
   // Called by the render beside renderAt: its session's animation clock read
@@ -1337,6 +1362,9 @@ export class SourceRegistry {
   // Returns the recorded error for a variable, or undefined if the last
   // resolution succeeded (or the variable has never been resolved).
   getLastError(name: string): LastError | undefined {
+    // A variable's record is its home's: a view asks its directory for a
+    // directory value's.
+    if (!this.declaredHere(name)) return this.parent?.getLastError(name);
     const read = this.lastErrors.get(name);
     const fault = this.policyFaults.get(name);
     if (fault === undefined) return read;
@@ -1352,7 +1380,15 @@ export class SourceRegistry {
   // reports them (`RenderWarning` kind `refresh`), since the bar draws such a
   // variable's last value with nothing of its own to say it has stopped.
   cachePolicyFaults(): ReadonlyMap<string, LastError> {
-    return this.policyFaults;
+    return new Map([
+      ...(this.parent?.cachePolicyFaults() ?? []),
+      ...this.policyFaults,
+    ]);
+  }
+
+  // Whether `name` lives in this registry's own store, not its directory's.
+  private declaredHere(name: string): boolean {
+    return this.store.has(name) && !(this.parent?.store.has(name) ?? false);
   }
 
   // ─── Lifecycle ────────────────────────────────────────────────────────────
