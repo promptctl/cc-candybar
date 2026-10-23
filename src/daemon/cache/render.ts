@@ -251,7 +251,7 @@ export function pluginLoadLine(
 // the cache retired it — those deferred the teardown to the last one's return
 // (brandon-unfiled-3248.6rc) — beside the load line of what replaced it.
 export interface Teardown {
-  readonly reason: "reload" | "evict";
+  readonly reason: "reload" | "evict" | "close";
   // Renders holding the state when it was retired: 0 is a teardown at
   // retirement, more is one deferred to the last release.
   readonly held: number;
@@ -677,6 +677,7 @@ export const ENTRY_IDLE_MS = 5 * 60_000;
 export class RenderCache {
   private readonly entries = new Map<string, CacheEntry>();
   private sweep: ReturnType<typeof setInterval> | null = null;
+  private closed = false;
   private readonly now: () => number;
   // Every state the map serves or served, until reclaimed.
   private readonly holds = new Map<DslRenderState, StateHold>();
@@ -744,7 +745,7 @@ export class RenderCache {
       return existing;
     }
 
-    const loaded = loadFromDisk(projectDir, cwd, configFile, this.deps);
+    const loaded = this.load(projectDir, cwd, configFile);
     if (loaded.state !== null)
       this.log("info", pluginLoadLine(loaded.layers, loaded.state));
     // [LAW:no-silent-failure] A config that fails its FIRST load still yields
@@ -842,6 +843,51 @@ export class RenderCache {
     }
   }
 
+  // The cache's teardown: the sweep stops, and every entry is dropped, so its
+  // state is disposed now or when the render holding it returns. The sweep and
+  // the entries' watchers would otherwise keep the cache, and every compile it
+  // serves, alive for as long as the process runs.
+  close(): void {
+    if (this.closed) return;
+    this.closed = true;
+    if (this.sweep !== null) clearInterval(this.sweep);
+    this.sweep = null;
+    const entries = this.entries.size;
+    for (const [key, entry] of this.entries) this.drop(key, entry, "close");
+    // [LAW:one-source-of-truth] Every state left in `holds` is retired and
+    // waits on a render, so `retired` is the count of teardowns deferred.
+    this.log(
+      "info",
+      `render-cache closed entries=${entries} deferred=${this.stats.retired}`,
+    );
+  }
+
+  // [LAW:single-enforcer] The one place the cache loads a state, so a closed
+  // cache refuses every way one would be built — a new entry, a reload, a
+  // config watch firing after the close.
+  // [LAW:no-silent-failure] A closed cache disposed every state it built; one
+  // built after would hold timers and watchers nothing tears down.
+  private load(
+    projectDir: string,
+    cwd: string,
+    configFile: string | undefined,
+  ): LoadOutcome {
+    if (this.closed) throw new Error("render cache used after close");
+    return loadFromDisk(projectDir, cwd, configFile, this.deps);
+  }
+
+  // [LAW:single-enforcer] The one way an entry leaves the map: its watcher
+  // goes, the map stops serving it, and its state is retired.
+  private drop(
+    key: string,
+    entry: CacheEntry,
+    reason: Teardown["reason"],
+  ): void {
+    entry.watcher?.release();
+    this.entries.delete(key);
+    this.retire(entry.state, reason);
+  }
+
   get stats(): RenderCacheStats {
     let held = 0;
     let retired = 0;
@@ -871,9 +917,7 @@ export class RenderCache {
     for (const [key, evicted] of this.entries) {
       if (fits()) return;
       if (evicted === served) continue;
-      evicted.watcher?.release();
-      this.entries.delete(key);
-      this.retire(evicted.state, "evict");
+      this.drop(key, evicted, "evict");
     }
   }
 
@@ -955,12 +999,7 @@ export class RenderCache {
   // straight-line, so the signal structurally cannot be skipped by whichever
   // arm the load took.
   private reloadInto(entry: CacheEntry): void {
-    const loaded = loadFromDisk(
-      entry.projectDir,
-      entry.cwd,
-      entry.configFile,
-      this.deps,
-    );
+    const loaded = this.load(entry.projectDir, entry.cwd, entry.configFile);
     entry.lastWarning = loaded.warning;
     entry.lastError = loaded.error;
     if (loaded.state !== null) {

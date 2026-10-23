@@ -54,15 +54,9 @@ function makeCache(budgetBytes: number, maxEntries?: number) {
     { gitService, sessionState: new SessionState(), watchers, log: (_level, line) => lines.push(line) },
     { budgetBytes: () => budgetBytes, maxEntries },
   );
-  // Every state a test is served is torn down after it: the cache disposes
-  // only what it evicts, and a live registry's timers keep jest from exiting.
-  const served = cache.getOrCreate.bind(cache);
-  cache.getOrCreate = (...args) => {
-    const entry = served(...args);
-    const { registry } = entry.state;
-    cleanups.push(() => void registry.dispose());
-    return entry;
-  };
+  // Run first (cleanups run in reverse): every state the cache serves is torn
+  // down before the watchers and git close under it.
+  cleanups.push(() => cache.close());
   return { cache, lines };
 }
 

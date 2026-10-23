@@ -85,6 +85,7 @@ function makeCache(
       observers: observers ?? reloads.observers,
     },
   );
+  cleanups.unshift(() => cache.close());
   return { cache, cleanups, gitService, reloads, watchers };
 }
 
@@ -773,6 +774,31 @@ describe("RenderCache", () => {
       expect(reload[0]).toMatch(
         /^config disposed reason=reload released=[1-9]\d* held=0$/,
       );
+
+      // A close tears every entry down at once, but a state a render still
+      // holds waits for it, as an eviction's does.
+      const hold = cache.hold("/p4", "/p4", undefined);
+      const closes = () =>
+        lines.filter((l) => l.startsWith("config disposed reason=close"));
+      cache.close();
+      expect(lines.filter((l) => l.startsWith("render-cache closed "))).toEqual(
+        ["render-cache closed entries=4 deferred=1"],
+      );
+      // A closed cache has nothing left to close.
+      cache.close();
+      expect(
+        lines.filter((l) => l.startsWith("render-cache closed ")),
+      ).toHaveLength(1);
+      expect(closes()).toHaveLength(3);
+      for (const line of closes())
+        expect(line).toMatch(
+          /^config disposed reason=close released=[1-9]\d* held=0$/,
+        );
+      hold[Symbol.dispose]();
+      expect(closes()).toHaveLength(4);
+      expect(closes()[3]).toMatch(
+        /^config disposed reason=close released=[1-9]\d* held=1$/,
+      );
     } finally {
       for (const fn of cleanups) fn();
     }
@@ -866,9 +892,7 @@ describe("RenderCache", () => {
       expect(cache.stats).toMatchObject({ size: 1, held: 1, retired: 0 });
       cache.reload("/p0", "/p0", undefined);
       holds[0]![Symbol.dispose]();
-      expect(lines.filter((l) => l.startsWith("config disposed "))).toEqual(
-        [],
-      );
+      expect(lines.filter((l) => l.startsWith("config disposed "))).toEqual([]);
       holds[1]![Symbol.dispose]();
       expect(lines.filter((l) => l.startsWith("config disposed "))).toEqual([
         expect.stringMatching(/ held=2$/),
@@ -965,6 +989,49 @@ describe("RenderCache", () => {
 // drawn from for ENTRY_IDLE_MS releases its holds, and its next render takes
 // them back.
 describe("RenderCache idle sweep", () => {
+  // A cache nobody closes keeps its sweep armed, and the sweep keeps the cache
+  // and every compile it serves alive for the life of the process: a jest
+  // worker that ran a few such files held a heap snapshot past V8's string
+  // limit (brandon-unfiled-3248.8ro6).
+  test("close disposes every state, releases its holds and leaves no timer", () => {
+    jest.useFakeTimers();
+    const { dir, cleanup } = mkConfigDir();
+    const watchers = new WatcherRegistry({ logger: () => {} });
+    const gitService = new GitDataProvider({ logger: () => {} });
+    const cache = new RenderCache(
+      { gitService, sessionState: new SessionState(), watchers },
+      { budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES },
+    );
+    try {
+      let released = 0;
+      {
+        using hold = cache.hold(dir, dir, undefined);
+        hold.state.registry.holds.take("repo", () => () => {
+          released++;
+        });
+      }
+      // The sweep is armed, beside whatever the entry's sources arm.
+      expect(jest.getTimerCount()).toBeGreaterThan(0);
+      cache.close();
+      expect(released).toBe(1);
+      expect(cache.size).toBe(0);
+      expect(jest.getTimerCount()).toBe(0);
+      // Every way a state is built refuses: an entry, or a reload of one.
+      expect(() => cache.getOrCreate(dir, dir, undefined)).toThrow(
+        "render cache used after close",
+      );
+      expect(() => cache.reload(dir, dir, undefined)).toThrow(
+        "render cache used after close",
+      );
+    } finally {
+      cache.close();
+      jest.useRealTimers();
+      gitService.close();
+      watchers.closeAll();
+      cleanup();
+    }
+  });
+
   test("an entry idle past ENTRY_IDLE_MS releases its holds; a render takes them back", () => {
     const { dir, cleanup } = mkConfigDir();
     const watchers = new WatcherRegistry({ logger: () => {} });
@@ -1009,6 +1076,7 @@ describe("RenderCache idle sweep", () => {
       cache.releaseIdle();
       expect(released).toBe(1);
     } finally {
+      cache.close();
       gitService.close();
       watchers.closeAll();
       cleanup();
