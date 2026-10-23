@@ -17,10 +17,12 @@ import { SessionState } from "../src/daemon/session-state";
 // now one shared Defines (src/dsl/render.ts compileHelpers), which brought a
 // stdlib config to ~1.2 MB; the stdlib has grown since (~4.2 MB at
 // brandon-settings-coverage-g4p.lx2, whose per-placement threshold controls
-// added ~0.2 MB). This pins the order of magnitude, not the exact figure: a
-// regression back to per-template copies overshoots the bound several times;
+// added ~0.2 MB; 8.2 MB by brandon-unfiled-3248.8ro6 step 6, part 1, and
+// 8.3 MB once part 2 classified every template's reads of the instant — 8.6 MB
+// as CI measured it). This pins the order of magnitude, not the exact figure:
+// a regression back to per-template copies overshoots the bound several times;
 // ordinary growth of the stdlib does not.
-const PER_CONFIG_BOUND_BYTES = 8 * 1024 * 1024;
+const PER_CONFIG_BOUND_BYTES = 12 * 1024 * 1024;
 
 v8.setFlagsFromString("--expose_gc");
 const gc = vm.runInNewContext("gc") as () => void;
@@ -40,7 +42,7 @@ function registerStdlib() {
   return { registry, compiled: registerDslConfig(config, registry, { cwd: "/tmp" }) };
 }
 
-test("a registered stdlib config costs single-digit megabytes, helpers included", () => {
+test("a registered stdlib config costs megabytes, not tens of them, helpers included", () => {
   const keep = [registerStdlib()];
   const before = heapUsed();
   const K = 4;
