@@ -1604,7 +1604,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     gitStash:
       '{{ if and .settings.stash (gt .git.stash 0) }} {{ template "gitPaint" (dict "color" .git.color.stash "text" (printf "(%v stashed)" .git.stash)) }}{{ end }}',
     gitAge:
-      '{{ if and .settings.age (gt .git.timeSinceCommit 0) }} ◷ {{ template "formatTimeSince" .git.timeSinceCommit }}{{ end }}',
+      '{{ $age := .git.timeSinceCommit }}{{ if and .settings.age (gt $age 0) }} ◷ {{ template "formatTimeSince" $age }}{{ end }}',
 
     // Cost: under a cent reads "<$0.01"; otherwise "$" + two decimals. (Null is
     // unrepresentable through the var-system — type:number with a numeric default

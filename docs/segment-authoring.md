@@ -272,7 +272,7 @@ the variable), never a zero:
     budgetAhead: {
       kind: "template",
       type: "number",
-      template: "{{ sub .budget.spentPct .budget.timePct }}",
+      template: "{{ subf .budget.spentPct .budget.timePct }}",
     },
   },
   segments: {
