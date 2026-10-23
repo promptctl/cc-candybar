@@ -132,6 +132,17 @@ describe("MenuIdle: the close follows the idle clock, whoever writes it", () => 
     expect(closes).toEqual([{ sid: "s", idleS: 30, timeoutS: 30 }]);
   });
 
+  test("a render that finishes after a newer one tells nothing", () => {
+    const older = at(now);
+    advance(1);
+    // The newer frame, drawn after a ✕ click, shows no menu.
+    idle.observe("s", at(now), false, 30);
+    // The older frame, which drew the menu, finishes last.
+    idle.observe("s", older, true, 30);
+    expect(idle.getStats().armed).toBe(0);
+    expect(idle.since("s", at(now))).toBeUndefined();
+  });
+
   test("a click in another session moves nothing here", () => {
     idle.observe("s", at(now), true, 30);
     advance(20);
@@ -299,7 +310,7 @@ describe("the close is the write the door's ✕ makes, on a click's own path", (
     expect(rt.ctx.history.history(SID).savepoint).toBeUndefined();
   });
 
-  test("edit mode open with the door closed closes, with the ✚ library open in it", () => {
+  test("a ✚ library open in edit mode with the door closed closes; edit mode, which drew no menu, stays", () => {
     const rt = buildRuntime(`{
       segments: { arrange: { template: '{{ action "edit.toggle" "✎" }}' } },
       root: { h: ['directory', 'arrange'] },
@@ -308,12 +319,13 @@ describe("the close is the write the door's ✕ makes, on a click's own path", (
     rt.clickWriting(EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
     rt.clickWriting(library, "edit.default.insert.0");
     expect(rt.held(SETTINGS_ANCHOR)).toBe(DISCLOSURE_CLOSED);
+    expect(rt.draw(instantOf(new Date())).menuRows).toBeGreaterThan(0);
     closeIdleMenus(SID, IDLE, rt.ctx);
-    expect(rt.held(EDIT_MODE_KEY)).toBe(DISCLOSURE_CLOSED);
     expect(rt.held(library)).toBe(DISCLOSURE_CLOSED);
+    expect(rt.held(EDIT_MODE_KEY)).toBe(EDIT_MODE_ARRANGE);
     expect(rt.draw(instantOf(new Date())).menuRows).toBe(0);
     expect(rt.logged).toContain(
-      `menu-idle: closed=${EDIT_MODE_KEY} idle=30.0s timeout=30s (session=${SID})`,
+      `menu-idle: closed=${library} idle=30.0s timeout=30s (session=${SID})`,
     );
   });
 

@@ -17,6 +17,8 @@ interface Idle {
   since: Instant;
   timeoutS: number;
   shown: boolean;
+  // The instant of the frame `shown` and `timeoutS` were read off.
+  drawnAt: Instant;
   timer: { readonly at: Instant; readonly handle: NodeJS.Timeout } | null;
 }
 
@@ -59,10 +61,12 @@ export class MenuIdle {
     return idle.shown ? idle.since : undefined;
   }
 
-  // What the session's latest render drew: whether a menu row, and the
-  // timeout its settings resolve to. A menu drawn where the last frame drew
-  // none begins its idle period here, so one nobody clicked open (a group
-  // open by default, from a reload) is not closed by a click from long ago.
+  // What the session's newest frame drew: whether a menu row, and the
+  // timeout its settings resolve to. Frames are taken by their instant, not
+  // by when their render finished, so a render that outlived a newer one
+  // tells nothing. A menu drawn where the last frame drew none begins its
+  // idle period here, so one nobody clicked open (a group open by default,
+  // from a reload) is not closed by a click from long ago.
   observe(
     sessionId: string,
     at: Instant,
@@ -70,6 +74,8 @@ export class MenuIdle {
     timeoutS: number,
   ): void {
     const idle = this.record(sessionId, at);
+    if (at < idle.drawnAt) return;
+    idle.drawnAt = at;
     if (shown && !idle.shown && at > idle.since) idle.since = at;
     idle.shown = shown;
     idle.timeoutS = timeoutS;
@@ -93,6 +99,7 @@ export class MenuIdle {
       since: at,
       timeoutS: 0,
       shown: false,
+      drawnAt: at,
       timer: null,
     };
     // Touched last, so evicted last.
