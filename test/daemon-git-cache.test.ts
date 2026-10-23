@@ -237,7 +237,8 @@ describe("GitDataProvider", () => {
       inner.repoRootByDir[`/r${i}`] = `/r${i}`;
       const holds = new Holds();
       await svc.getGitInfo(holds, `/r${i}`, {});
-      holds.release();
+      holds.releaseUnread();
+      holds.releaseUnread();
     }
     expect(svc.getStats().size).toBe(3);
   });
@@ -251,7 +252,8 @@ describe("GitDataProvider", () => {
     await svc.getGitInfo(holdsA, "/a", {});
     await svc.getGitInfo(holdsB, "/b", {});
     expect(svc.getStats()).toMatchObject({ size: 2, held: 2 });
-    holdsB.release();
+    holdsB.releaseUnread();
+    holdsB.releaseUnread();
     await svc.getGitInfo(new Holds(), "/c", {}); // evicts /b, never /a
 
     inner.computeCalls = [];
@@ -348,7 +350,8 @@ describe("GitDataProvider", () => {
     await svc.getGitInfo(holds, "/repo/b", { showSha: true });
     expect(holds.size).toBe(1);
     expect(svc.getStats().held).toBe(1);
-    holds.release();
+    holds.releaseUnread();
+    holds.releaseUnread();
     expect(svc.getStats().held).toBe(0);
   });
 });
@@ -432,7 +435,8 @@ describe("GitDataProvider refreshes on its own triggers", () => {
     inner.infoGate = deferred();
     svc.changed("/a");
     await tick();
-    first.release(); // unused while its re-read is out
+    first.releaseUnread();
+    first.releaseUnread(); // unused while its re-read is out
     const gate = inner.infoGate;
     inner.infoGate = null;
     await svc.getGitInfo(new Holds(), "/b", {}); // evicts /a mid-read
@@ -477,7 +481,8 @@ describe("GitDataProvider refreshes on its own triggers", () => {
     await jest.advanceTimersByTimeAsync(GIT_PERIOD_MS);
     expect(inner.computeCalls).toHaveLength(3);
 
-    holds.release();
+    holds.releaseUnread();
+    holds.releaseUnread();
     await jest.advanceTimersByTimeAsync(GIT_PERIOD_MS * 5);
     expect(inner.computeCalls).toHaveLength(3);
     svc.close();
@@ -490,7 +495,8 @@ describe("GitDataProvider refreshes on its own triggers", () => {
     const first = new Holds();
     await svc.getGitInfo(first, "/repo", {});
     await jest.advanceTimersByTimeAsync(10_000);
-    first.release();
+    first.releaseUnread();
+    first.releaseUnread();
     await jest.advanceTimersByTimeAsync(10_000);
 
     // Held again 20 s after its last read: the next read is 10 s away.
@@ -502,7 +508,8 @@ describe("GitDataProvider refreshes on its own triggers", () => {
     expect(inner.computeCalls).toHaveLength(2);
 
     // Released past a whole period: held again, it reads at once.
-    second.release();
+    second.releaseUnread();
+    second.releaseUnread();
     await jest.advanceTimersByTimeAsync(GIT_PERIOD_MS * 2);
     await svc.getGitInfo(new Holds(), "/repo", {});
     await jest.advanceTimersByTimeAsync(0);
@@ -515,7 +522,8 @@ describe("GitDataProvider refreshes on its own triggers", () => {
     inner.repoRootByDir = { "/repo": "/repo" };
     const first = new Holds();
     await svc.getGitInfo(first, "/repo", {});
-    first.release();
+    first.releaseUnread();
+    first.releaseUnread();
 
     inner.stubInfo = { ...inner.stubInfo, branch: "feature" };
     svc.changed("/repo");
@@ -1021,7 +1029,8 @@ describe("GitDataProvider PR source", () => {
     inner.repoRootByDir = { "/repo": "/repo" };
 
     await svc.getGitInfo(holds, "/repo", { showPullRequest: true });
-    holds.release();
+    holds.releaseUnread();
+    holds.releaseUnread();
     await jest.advanceTimersByTimeAsync(PR_PERIOD.okMs * 3);
     expect(inner.prCalls).toHaveLength(1);
     expect(inner.computeCalls).toHaveLength(1);
@@ -1302,7 +1311,8 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
 
     const holdsA = new Holds();
     await svc.getGitInfo(holdsA, "/a", {});
-    holdsA.release();
+    holdsA.releaseUnread();
+    holdsA.releaseUnread();
     await svc.getGitInfo(new Holds(), "/b", {}); // evicts /a, its watch's only holder
 
     expect(counters).toEqual({ watchersOpened: 2, watchersClosed: 1 });

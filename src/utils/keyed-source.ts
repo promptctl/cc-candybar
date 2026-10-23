@@ -20,6 +20,49 @@ export interface SourceStats<Trigger extends string> {
   readonly failures: number;
 }
 
+// [LAW:one-source-of-truth] The one spelling of a source's refresh event and
+// of the counts its stats report, whatever schedules its reads: one event per
+// refresh, a failed one at warn, so a read of the stored value never logs it
+// again.
+export class Refreshes<Trigger extends string> {
+  private readonly counts: Record<Trigger, number>;
+  private failures = 0;
+
+  constructor(
+    private readonly name: string,
+    triggers: readonly Trigger[],
+    private readonly logger: DaemonLogger,
+  ) {
+    this.counts = Object.fromEntries(triggers.map((t) => [t, 0])) as Record<
+      Trigger,
+      number
+    >;
+  }
+
+  // `fields` is the refreshed entry's logfmt identity.
+  recorded(
+    fields: string,
+    by: Trigger,
+    outcome: Outcome<unknown>,
+    took: number,
+  ): void {
+    this.counts[by]++;
+    if (outcome.kind === "failed") this.failures++;
+    const why =
+      outcome.kind === "failed"
+        ? ` reason=${JSON.stringify(outcome.reason)}`
+        : "";
+    this.logger(
+      outcome.kind === "failed" ? "warn" : "info",
+      `${this.name} refresh ${fields} by=${by} outcome=${outcome.kind}${why} took=${took}ms`,
+    );
+  }
+
+  stats(entries: number): SourceStats<Trigger> {
+    return { entries, refreshes: { ...this.counts }, failures: this.failures };
+  }
+}
+
 // What asks a keyed source to read: a key's first read, its period's tick,
 // or a supersede (the daemon itself changed what the key reads).
 export type KeyedTrigger = "first" | "period" | "supersede";
@@ -70,14 +113,15 @@ interface Entry<I, T> extends Readable<T> {
 // a fresh read lands.
 export class KeyedSource<I, T> {
   private readonly entries = new Map<string, Entry<I, T>>();
-  private readonly refreshes: Record<KeyedTrigger, number> = {
-    first: 0,
-    period: 0,
-    supersede: 0,
-  };
-  private failures = 0;
+  private readonly refreshes: Refreshes<KeyedTrigger>;
 
-  constructor(private readonly spec: KeyedSourceSpec<I, T>) {}
+  constructor(private readonly spec: KeyedSourceSpec<I, T>) {
+    this.refreshes = new Refreshes(
+      spec.name,
+      ["first", "period", "supersede"],
+      spec.logger,
+    );
+  }
 
   // The one read. `holds` is the home reading: it holds the entry until it
   // releases its holds (idle, or disposed), which keeps the entry on its
@@ -114,12 +158,7 @@ export class KeyedSource<I, T> {
   stats(): KeyedSourceStats {
     let held = 0;
     for (const entry of this.entries.values()) if (entry.holders > 0) held++;
-    return {
-      entries: this.entries.size,
-      held,
-      refreshes: { ...this.refreshes },
-      failures: this.failures,
-    };
+    return { ...this.refreshes.stats(this.entries.size), held };
   }
 
   // Ends every entry's period: a held entry's period re-arms on every landing,
@@ -165,7 +204,12 @@ export class KeyedSource<I, T> {
         // record below ends, so a held entry is always visited again.
         try {
           settle(entry, outcome);
-          this.recorded(entry, by, outcome, Date.now() - startedAt);
+          this.refreshes.recorded(
+            this.spec.fields(entry.input),
+            by,
+            outcome,
+            Date.now() - startedAt,
+          );
         } finally {
           entry.period.landed(periodOf(this.spec.every, outcome));
         }
@@ -176,26 +220,6 @@ export class KeyedSource<I, T> {
           `${this.spec.name} refresh threw (${this.spec.fields(entry.input)}): ${String(e)}`,
         );
       });
-  }
-
-  // [LAW:no-silent-failure] One event per refresh, a failed one at warn: a
-  // read of the stored value never logs it again.
-  private recorded(
-    entry: Entry<I, T>,
-    by: KeyedTrigger,
-    outcome: Outcome<T>,
-    took: number,
-  ): void {
-    this.refreshes[by]++;
-    if (outcome.kind === "failed") this.failures++;
-    const why =
-      outcome.kind === "failed"
-        ? ` reason=${JSON.stringify(outcome.reason)}`
-        : "";
-    this.spec.logger(
-      outcome.kind === "failed" ? "warn" : "info",
-      `${this.spec.name} refresh ${this.spec.fields(entry.input)} by=${by} outcome=${outcome.kind}${why} took=${took}ms`,
-    );
   }
 
   private hold(entry: Entry<I, T>): Release {

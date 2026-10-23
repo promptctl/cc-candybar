@@ -393,11 +393,12 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
     expect(payload.context).toBeUndefined();
     // The pane is the client's report and survives the failed name lookup,
     // whose failure its owner logged when the refresh failed: the render
-    // logs only the lane that threw.
+    // logs only the lane that threw — the throw where it was caught, then
+    // the lane's failure.
     expect(payload.tmux).toEqual({ pane: "%7" });
-    expect(logs).toHaveLength(1);
-    expect(logs[0]!.msg).toContain("context:");
-    expect(logs[0]!.msg).toContain("stub bug");
+    expect(logs.map((l) => l.level)).toEqual(["error", "warn"]);
+    expect(logs[0]!.msg).toContain("context lane threw: Error: stub bug");
+    expect(logs[1]!.msg).toBe("provider fetch failed: context: Error: stub bug");
   });
 
   // brandon-tmux-tk7: the tmux family is the session's own client hint. With
@@ -780,6 +781,35 @@ describe("buildRenderPayload — autocompact lane", () => {
       lower: 100_000,
       higher: 0,
     });
+  });
+
+  // A provider that throws before it returns a promise is the lane's to
+  // catch too: the render still builds, and the throw is logged.
+  test("a provider that throws at once: failed in the payload, and logged", async () => {
+    const logs: LogEntry[] = [];
+    const deps = depsWith(ABSENT, logs, {
+      autoCompact: {
+        window: () => {
+          throw new Error("stub bug");
+        },
+      },
+    });
+    const payload = await buildRenderPayload(
+      hookData("/no/such/transcript.jsonl"),
+      instantOf(new Date()),
+      deps,
+      undefined,
+      AUTOCOMPACT_PATHS,
+      EFFECTIVE_GLOBALS,
+      NO_HINTS,
+      NO_CONFIG_FILE,
+    );
+    expect(payload.autocompact).toEqual({
+      error: "autocompact: Error: stub bug",
+    });
+    expect(logs).toHaveLength(1);
+    expect(logs[0]!.level).toBe("error");
+    expect(logs[0]!.msg).toContain("autocompact lane threw: Error: stub bug");
   });
 
   test("a refused read: the reason in the payload, and no log of it from the render", async () => {

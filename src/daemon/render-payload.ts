@@ -19,6 +19,7 @@
 import type { HistoryDepth } from "./settings-history";
 import path from "node:path";
 import os from "node:os";
+import { inspect } from "node:util";
 import type { ClaudeHookData } from "../utils/claude.js";
 import type { ClientHints } from "./protocol.js";
 import type { DslConfig, VariableDecl } from "../config/dsl-types.js";
@@ -1075,19 +1076,28 @@ export async function buildRenderPayload(
   const tmuxPane = hints.tmux ?? null;
 
   // [LAW:dataflow-not-control-flow][LAW:one-type-per-behavior] Every provider
-  // lane is ONE shape: "needed → call provider (whose contract is to never
-  // reject — the catch makes the lane total against bugs, mapping a throw
-  // into the same logged failure path)" or "not needed → ABSENT". The skipped
-  // lanes resolve immediately; no variant means lanes are present/absent at
-  // the array level (which would change the destructure shape).
-  const lane = <T>(
+  // lane is ONE shape: "needed → call provider" or "not needed → ABSENT". The
+  // skipped lanes resolve immediately; no variant means lanes are
+  // present/absent at the array level (which would change the destructure
+  // shape).
+  //
+  // [LAW:no-silent-failure] A provider's contract is to answer, never to
+  // throw or reject, so a throw — at once or later, the provider's or the
+  // lane's own code around it — is a bug, logged here where it is caught,
+  // and the lane answers it as failed.
+  const lane = async <T>(
     name: string,
     needed: boolean,
     run: () => Promise<Outcome<T>>,
-  ): Promise<Outcome<T>> =>
-    needed
-      ? run().catch((e: unknown) => failed(`${name}: ${String(e)}`))
-      : Promise.resolve(ABSENT);
+  ): Promise<Outcome<T>> => {
+    if (!needed) return ABSENT;
+    try {
+      return await run();
+    } catch (e) {
+      deps.log("error", `${name} lane threw: ${inspect(e)}`);
+      return failed(`${name}: ${String(e)}`);
+    }
+  };
 
   const [
     gitOutcome,
@@ -1199,10 +1209,10 @@ export async function buildRenderPayload(
   };
 
   // Git, tmux, memento and autocompact log their own failures — once per
-  // refresh that failed, and a read that throws (src/daemon/cache/git.ts,
-  // src/utils/keyed-source.ts, src/segments/autocompact-provider.ts): their
-  // values are stored, so logging one here would repeat a failure on every
-  // render. Their failures reach the payload as values, never as log lines.
+  // refresh that failed (src/daemon/cache/git.ts, src/utils/keyed-source.ts,
+  // src/segments/autocompact-provider.ts): their values are stored, so
+  // logging one here would repeat a failure on every render. Their failures
+  // reach the payload as values; a lane that threw was logged by `lane`.
   const gitProjection = projectGitInfo(gitOutcome, nowMs);
   // Ungated, like `home` below: two syscalls and a hint already in hand, so a
   // `wants` gate would add a branch and save nothing.

@@ -21,7 +21,8 @@ const MAX_ENTRIES = 64;
 // invocation a pane may have in flight (brandon-unfiled-3248.8ro6, step 1): a
 // render takes the stored name, and only a pane never asked about waits on
 // tmux. A pane is asked again on its period only while a home holds it, so a
-// pane whose Claude Code exited costs no spawn.
+// pane whose Claude Code exited costs no spawn once no render reads it
+// (src/utils/holds.ts).
 export class TmuxService {
   private readonly names: KeyedSource<TmuxHint, string>;
 

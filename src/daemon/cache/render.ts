@@ -300,9 +300,6 @@ export interface CacheEntry {
   watcher: WatcherHandle | null;
   // The key `watcher` was acquired under — the identity of its target set.
   watcherKey: string | null;
-  // When a render last held the entry's state (epoch ms): what the idle sweep
-  // releases the state's holds by.
-  usedAt: number;
 }
 
 // [LAW:no-ambient-temporal-coupling] A state's lifetime is a fact the cache
@@ -666,19 +663,20 @@ export function fallbackState(
   return buildRenderState(cwd, { layers: [], home: "", projectDir }, [], deps);
 }
 
-// [LAW:no-ambient-temporal-coupling] An entry nothing has drawn from for this
-// long releases what its state holds of the daemon's shared entries (a repo),
-// so their owners' periods stop visiting them (brandon-unfiled-3248.8ro6); its
-// next render takes them back, and a period resumed after a gap reads at once.
-// The sweep that does it is the cache's one timer, armed by the first render
-// and stopped with the last entry.
-export const ENTRY_IDLE_MS = 5 * 60_000;
+// [LAW:no-ambient-temporal-coupling] The cache's one timer, armed by the first
+// render and stopped with the last entry: every interval it releases each
+// hold an entry's renders have not read since the interval before
+// (`Holds.releaseUnread`), so an owner's period stops visiting a repo, pane
+// or memento reading 5 to 10 minutes after the last render that read it —
+// a session that ended, or left for another directory, while the entry is
+// still drawn included (brandon-unfiled-3248.8ro6). The next read takes the
+// hold back, and a period resumed after a gap reads at once.
+export const HOLD_SWEEP_MS = 5 * 60_000;
 
 export class RenderCache {
   private readonly entries = new Map<string, CacheEntry>();
   private sweep: ReturnType<typeof setInterval> | null = null;
   private closed = false;
-  private readonly now: () => number;
   // Every state the map serves or served, until reclaimed.
   private readonly holds = new Map<DslRenderState, StateHold>();
   // [LAW:one-source-of-truth] One compile per compile key, shared by every
@@ -697,10 +695,8 @@ export class RenderCache {
       budgetBytes: () => number;
       maxEntries?: number;
       observers?: RenderCacheObservers;
-      now?: () => number;
     },
   ) {
-    this.now = opts.now ?? Date.now;
     this.deps = {
       ...deps,
       compile: (key, input) => this.compileOf(key, input),
@@ -766,7 +762,6 @@ export class RenderCache {
       state: loaded.state ?? fallbackState(cwd, projectDir, this.deps),
       watcher: null,
       watcherKey: null,
-      usedAt: this.now(),
     };
     this.serve(entry.state);
     // [LAW:single-enforcer] Insert, bound, watch, then notify — in that
@@ -800,7 +795,6 @@ export class RenderCache {
     const { state } = entry;
     const hold = this.holdOf(state);
     hold.holders++;
-    entry.usedAt = this.now();
     this.armSweep();
     let released = false;
     return {
@@ -819,17 +813,15 @@ export class RenderCache {
 
   private armSweep(): void {
     if (this.sweep !== null) return;
-    this.sweep = setInterval(() => this.releaseIdle(), ENTRY_IDLE_MS / 5);
+    this.sweep = setInterval(() => this.releaseIdle(), HOLD_SWEEP_MS);
     this.sweep.unref?.();
   }
 
-  // Releases the shared-entry holds of every entry idle past ENTRY_IDLE_MS.
-  // Public so a test can run the sweep at an instant it chose.
+  // One sweep. Public so a test can run it at an instant it chose.
   releaseIdle(): void {
     let released = 0;
     for (const entry of this.entries.values()) {
-      if (this.now() - entry.usedAt < ENTRY_IDLE_MS) continue;
-      released += entry.state.registry.holds.release();
+      released += entry.state.registry.holds.releaseUnread();
     }
     if (released > 0) {
       this.log(

@@ -21,15 +21,15 @@ const MAX_ENTRIES = 64;
 // Code directory or memento config home is reading different layers, and a
 // new directory is a new reading, since the project layer memento reads is
 // anchored there.
+const envOf = (s: CeilingScope): ReadonlyArray<string | null> | null =>
+  s.env === undefined ? null : MEMENTO_ENV_VARS.map((v) => s.env?.[v] ?? null);
 const keyOf = (s: CeilingScope): string =>
   JSON.stringify([
     s.sessionId,
     s.projectDir,
     s.cwd,
     s.claudeConfigDir,
-    s.env === undefined
-      ? null
-      : MEMENTO_ENV_VARS.map((v) => s.env?.[v] ?? null),
+    envOf(s),
   ]);
 
 // The bar's view of memento's context ceiling, per session: the reading each
@@ -48,8 +48,9 @@ export class MementoProvider {
     this.readings = new KeyedSource({
       name: "memento",
       keyOf,
+      // Every part of the key, so two entries' events tell apart.
       fields: (s) =>
-        `sid=${JSON.stringify(s.sessionId)} cwd=${JSON.stringify(s.cwd)}`,
+        `sid=${JSON.stringify(s.sessionId)} project=${JSON.stringify(s.projectDir)} cwd=${JSON.stringify(s.cwd)} configDir=${JSON.stringify(s.claudeConfigDir)} env=${JSON.stringify(envOf(s))}`,
       read: (scope) => {
         const located = edge.locate(scope);
         return located.kind === "ok"

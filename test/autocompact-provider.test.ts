@@ -64,7 +64,7 @@ describe("AutoCompactProvider", () => {
     expect(provider.window(settings)).toBe(first);
     expect(lines).toEqual([
       expect.stringMatching(
-        /^warn autocompact refresh ".*settings\.json" by=request stamp=\S+ outcome=failed reason=".*not a window \/autocompact accepts.*" took=\d+ms$/,
+        /^warn autocompact refresh path=".*settings\.json" stamp=\S+ by=request outcome=failed reason=".*not a window \/autocompact accepts.*" took=\d+ms$/,
       ),
     ]);
     expect(provider.getStats().failures).toBe(1);

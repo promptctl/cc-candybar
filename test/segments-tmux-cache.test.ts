@@ -148,7 +148,8 @@ describe("TmuxService", () => {
     fakeClock();
     const h = hint("/client/a.sock", "%7");
     await svc.getSessionName(holds, h);
-    holds.release();
+    holds.releaseUnread();
+    holds.releaseUnread();
     await jest.advanceTimersByTimeAsync(NAME_PERIOD_MS * 3);
     expect(starts).toEqual(["tmux"]);
     expect(svc.getStats()).toMatchObject({ entries: 1, held: 0 });

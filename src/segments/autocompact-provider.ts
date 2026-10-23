@@ -3,7 +3,7 @@ import {
   readAutoCompactWindow,
   type AutoCompactWindow,
 } from "./autocompact.js";
-import type { SourceStats } from "../utils/keyed-source.js";
+import { Refreshes, type SourceStats } from "../utils/keyed-source.js";
 import { quietLogger, type DaemonLogger } from "../utils/logger.js";
 import type { Outcome } from "../utils/outcome.js";
 import { stampOf } from "../utils/transcript-fs.js";
@@ -24,10 +24,11 @@ interface Known {
 // sessions sharing one Claude Code directory read it once between them.
 export class AutoCompactProvider {
   private readonly known = new Map<string, Known>();
-  private reads = 0;
-  private failures = 0;
+  private readonly refreshes: Refreshes<"request">;
 
-  constructor(private readonly logger: DaemonLogger = quietLogger) {}
+  constructor(logger: DaemonLogger = quietLogger) {
+    this.refreshes = new Refreshes("autocompact", ["request"], logger);
+  }
 
   window(settingsPath: string): Outcome<AutoCompactWindow> {
     const stamp = stampAt(settingsPath);
@@ -40,7 +41,12 @@ export class AutoCompactProvider {
     }
     const startedAt = Date.now();
     const outcome = readAutoCompactWindow(settingsPath);
-    this.recorded(settingsPath, stamp, outcome, Date.now() - startedAt);
+    this.refreshes.recorded(
+      `path=${JSON.stringify(settingsPath)} stamp=${stamp}`,
+      "request",
+      outcome,
+      Date.now() - startedAt,
+    );
     this.known.set(settingsPath, { stamp, outcome });
     for (const oldest of this.known.keys()) {
       if (this.known.size <= MAX_FILES) break;
@@ -50,31 +56,7 @@ export class AutoCompactProvider {
   }
 
   getStats(): SourceStats<"request"> {
-    return {
-      entries: this.known.size,
-      refreshes: { request: this.reads },
-      failures: this.failures,
-    };
-  }
-
-  // [LAW:no-silent-failure] One event per read, a failed one at warn: a
-  // request answered from the stored reading never logs it again.
-  private recorded(
-    settingsPath: string,
-    stamp: string,
-    outcome: Outcome<AutoCompactWindow>,
-    took: number,
-  ): void {
-    this.reads++;
-    if (outcome.kind === "failed") this.failures++;
-    const why =
-      outcome.kind === "failed"
-        ? ` reason=${JSON.stringify(outcome.reason)}`
-        : "";
-    this.logger(
-      outcome.kind === "failed" ? "warn" : "info",
-      `autocompact refresh ${JSON.stringify(settingsPath)} by=request stamp=${stamp} outcome=${outcome.kind}${why} took=${took}ms`,
-    );
+    return this.refreshes.stats(this.known.size);
   }
 }
 

@@ -109,7 +109,8 @@ describe("KeyedSource", () => {
     const first = source.read(holds, "a");
     f.answer(0, ok("A"));
     await first;
-    holds.release();
+    holds.releaseUnread();
+    holds.releaseUnread();
     await jest.advanceTimersByTimeAsync(EVERY.okMs * 5);
     expect(f.calls).toHaveLength(1);
     // The next read takes the stored value and its hold back; the period,
@@ -128,12 +129,14 @@ describe("KeyedSource", () => {
     void source.read(b, "k");
     f.answer(0, ok("K"));
     await first;
-    a.release();
+    a.releaseUnread();
+    a.releaseUnread();
     await jest.advanceTimersByTimeAsync(EVERY.okMs);
     expect(f.calls).toHaveLength(2);
     f.answer(1, ok("K"));
     await settled();
-    b.release();
+    b.releaseUnread();
+    b.releaseUnread();
     await jest.advanceTimersByTimeAsync(EVERY.okMs * 3);
     expect(f.calls).toHaveLength(2);
     expect(source.stats().held).toBe(0);
@@ -199,11 +202,13 @@ describe("KeyedSource", () => {
     const loose = new Holds();
     void source.read(held, "kept");
     void source.read(loose, "a");
-    loose.release();
+    loose.releaseUnread();
+    loose.releaseUnread();
     void source.read(loose, "b");
     // "kept" is held, so the bound falls on "a": two entries, one held.
     expect(source.stats()).toMatchObject({ entries: 2, held: 2 });
-    loose.release();
+    loose.releaseUnread();
+    loose.releaseUnread();
     void source.read(new Holds(), "c");
     expect(source.stats().entries).toBe(2);
     // "kept" is still the stored entry: read again, it asks nothing.
@@ -217,7 +222,8 @@ describe("KeyedSource", () => {
     source = sourceOf(f.read, { maxEntries: 0 });
     const holds = new Holds();
     const waiting = source.read(holds, "a");
-    holds.release();
+    holds.releaseUnread();
+    holds.releaseUnread();
     void source.read(new Holds(), "b");
     expect(await waiting).toEqual(failed("fake entry dropped"));
   });
