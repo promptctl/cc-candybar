@@ -828,17 +828,6 @@ function shutdown(code: number): void {
     // [LAW:single-enforcer] Every tmux status line this daemon laid out is put
     // back before it goes (src/daemon/tmux-status.ts).
     tmuxStatusLines.restoreAll();
-  } catch (e) {
-    dlog("warn", `tmux status restore failed: ${(e as Error).message}`);
-  }
-  try {
-    // Before the providers: disposing each config releases what it holds of
-    // theirs.
-    renderCache.close();
-  } catch (e) {
-    dlog("warn", `renderCache close failed: ${(e as Error).message}`);
-  }
-  try {
     gitService.close();
   } catch (e) {
     dlog("warn", `gitService close failed: ${(e as Error).message}`);

@@ -87,50 +87,75 @@ function keyAt(bytes, key, from) {
   return at;
 }
 
-// The `[n,n,…]` array starting at `from`, exactly `count` unsigned integers
-// (every node and edge field is one), and the offset past its `]`.
-// [LAW:no-silent-failure] A count other than the header's is a truncated or
-// foreign file, refused rather than read as a smaller heap.
+// The `[n,n,…]` array starting at `from`, exactly `count` unsigned 32-bit
+// integers (every node and edge field is one), and the offset past its `]`.
+// V8 ends each node's row with a newline straight after its last digit, so
+// whitespace ends a number; a digit after it would join two.
+// [LAW:no-silent-failure] Anything else — a count other than the header's, a
+// value past 2^32, a byte no integer list holds — is a truncated or foreign
+// file, refused rather than read as a different heap.
 function readInts(bytes, from, count) {
   const values = new Uint32Array(count);
   let i = bytes.indexOf(0x5b /* [ */, from) + 1;
   let n = 0;
   let value = 0;
   let digits = false;
+  let spaced = false;
   for (; i < bytes.length; i++) {
     const b = bytes[i];
     if (b >= 0x30 && b <= 0x39) {
+      if (spaced) break;
       value = value * 10 + (b - 0x30);
       digits = true;
     } else if (b === 0x2c /* , */ || b === 0x5d /* ] */) {
       if (digits) {
-        if (n === count) break;
+        if (n === count || value > 0xffffffff) break;
         values[n++] = value;
       }
       value = 0;
       digits = false;
+      spaced = false;
       if (b === 0x5d) break;
-    }
+    } else if (isSpace(b)) {
+      spaced = digits;
+    } else break;
   }
   if (n !== count || bytes[i] !== 0x5d) {
-    throw new Error(`heap snapshot array at byte ${from}: expected ${count} values, read ${n}`);
+    throw new Error(
+      `heap snapshot array at byte ${from}: expected ${count} unsigned 32-bit integers, read ${n} before byte ${i}`,
+    );
   }
   return { values, end: i + 1 };
 }
 
 // The `["…","…",…]` string table starting at `from`, each string decoded on
 // its own.
+// [LAW:no-silent-failure] A string cut off, a byte no string list holds
+// between its strings, or no closing `]` is a truncated file, refused rather
+// than read as a shorter table that names every later node `undefined`.
 function readStrings(bytes, from) {
   const strings = [];
   let i = bytes.indexOf(0x5b /* [ */, from) + 1;
   for (; i < bytes.length && bytes[i] !== 0x5d /* ] */; i++) {
-    if (bytes[i] !== 0x22 /* " */) continue;
+    if (bytes[i] === 0x2c /* , */ || isSpace(bytes[i])) continue;
+    if (bytes[i] !== 0x22 /* " */) break;
     let end = i + 1;
-    while (bytes[end] !== 0x22) end += bytes[end] === 0x5c /* \ */ ? 2 : 1;
+    while (end < bytes.length && bytes[end] !== 0x22)
+      end += bytes[end] === 0x5c /* \ */ ? 2 : 1;
+    if (end >= bytes.length) break;
     strings.push(JSON.parse(bytes.toString("utf8", i, end + 1)));
     i = end;
   }
+  if (bytes[i] !== 0x5d) {
+    throw new Error(
+      `heap snapshot string table at byte ${from}: no closing ] after ${strings.length} strings, at byte ${i}`,
+    );
+  }
   return strings;
+}
+
+function isSpace(b) {
+  return b === 0x20 || b === 0x0a || b === 0x0d || b === 0x09;
 }
 
 // "<type> / <name>" label for node ordinal i — the unit a histogram counts.

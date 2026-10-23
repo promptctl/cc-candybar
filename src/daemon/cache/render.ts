@@ -846,20 +846,27 @@ export class RenderCache {
     }
   }
 
-  // [LAW:single-enforcer] The cache's teardown: the sweep stops, and every
-  // entry leaves the map and is retired, so its state is disposed now or when
-  // the render holding it returns. The sweep and the entries' watchers would
-  // otherwise keep the cache, and every compile it serves, alive for as long
-  // as the process runs.
+  // The cache's teardown: the sweep stops, and every entry is dropped, so its
+  // state is disposed now or when the render holding it returns. The sweep and
+  // the entries' watchers would otherwise keep the cache, and every compile it
+  // serves, alive for as long as the process runs.
   close(): void {
     this.closed = true;
     if (this.sweep !== null) clearInterval(this.sweep);
     this.sweep = null;
-    for (const entry of this.entries.values()) {
-      entry.watcher?.release();
-      this.retire(entry.state, "close");
-    }
-    this.entries.clear();
+    for (const [key, entry] of this.entries) this.drop(key, entry, "close");
+  }
+
+  // [LAW:single-enforcer] The one way an entry leaves the map: its watcher
+  // goes, the map stops serving it, and its state is retired.
+  private drop(
+    key: string,
+    entry: CacheEntry,
+    reason: Teardown["reason"],
+  ): void {
+    entry.watcher?.release();
+    this.entries.delete(key);
+    this.retire(entry.state, reason);
   }
 
   get stats(): RenderCacheStats {
@@ -891,9 +898,7 @@ export class RenderCache {
     for (const [key, evicted] of this.entries) {
       if (fits()) return;
       if (evicted === served) continue;
-      evicted.watcher?.release();
-      this.entries.delete(key);
-      this.retire(evicted.state, "evict");
+      this.drop(key, evicted, "evict");
     }
   }
 

@@ -774,6 +774,23 @@ describe("RenderCache", () => {
       expect(reload[0]).toMatch(
         /^config disposed reason=reload released=[1-9]\d* held=0$/,
       );
+
+      // A close tears every entry down at once, but a state a render still
+      // holds waits for it, as an eviction's does.
+      const hold = cache.hold("/p4", "/p4", undefined);
+      const closes = () =>
+        lines.filter((l) => l.startsWith("config disposed reason=close"));
+      cache.close();
+      expect(closes()).toHaveLength(3);
+      for (const line of closes())
+        expect(line).toMatch(
+          /^config disposed reason=close released=[1-9]\d* held=0$/,
+        );
+      hold[Symbol.dispose]();
+      expect(closes()).toHaveLength(4);
+      expect(closes()[3]).toMatch(
+        /^config disposed reason=close released=[1-9]\d* held=1$/,
+      );
     } finally {
       for (const fn of cleanups) fn();
     }
@@ -867,9 +884,7 @@ describe("RenderCache", () => {
       expect(cache.stats).toMatchObject({ size: 1, held: 1, retired: 0 });
       cache.reload("/p0", "/p0", undefined);
       holds[0]![Symbol.dispose]();
-      expect(lines.filter((l) => l.startsWith("config disposed "))).toEqual(
-        [],
-      );
+      expect(lines.filter((l) => l.startsWith("config disposed "))).toEqual([]);
       holds[1]![Symbol.dispose]();
       expect(lines.filter((l) => l.startsWith("config disposed "))).toEqual([
         expect.stringMatching(/ held=2$/),
