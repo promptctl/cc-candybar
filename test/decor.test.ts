@@ -19,6 +19,7 @@ import {
   Oklch,
   Palette,
   relativeLuminance,
+  SEAM_MIN_DELTA_E,
   transposePalette,
 } from "@promptctl/rich-js";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
@@ -26,7 +27,6 @@ import { floorOf } from "../src/config/globals-fields";
 import {
   BAND_FLOORS,
   BAND_RECESSION,
-  BAND_WINDOW,
   VARIATIONS,
   SHADES,
   DECOR_HUES,
@@ -34,7 +34,6 @@ import {
   DEFAULT_DISTRIBUTION,
   DISTRIBUTION_NAMES,
   DISTRIBUTIONS,
-  LEVEL_DECAY,
   STATE_FLOOR,
   bandFor,
   bandItemFor,
@@ -976,16 +975,15 @@ describe("depth advances the hue", () => {
 
   test("a trigger wears the state of the band it opens — one expression at every depth", () => {
     // A bar trigger (depth 0) stands among its row's cells; a trigger inside a
-    // band stands on that band's plane.
+    // band among what it is drawn beside there: that band's plane, and its
+    // state, which the ✕ leading the trigger's row wears (b9w).
     for (const { palette, hue, ground } of LINEAGES) {
+      let among: readonly ColorRgba[] = groundCells(palette, ground);
       for (const depth of [0, 1, 2, 3]) {
-        const among =
-          depth === 0
-            ? groundCells(palette, ground)
-            : [bandFor(palette, { hue, depth: depth - 1, ground }, ColorDepth.TRUECOLOR).plane];
-        expect(bandFor(palette, { hue, depth, ground }, ColorDepth.TRUECOLOR).state.hex).toBe(
-          stateFor(palette, hueAtDepth(hue, depth), among, ColorDepth.TRUECOLOR).state.hex,
-        );
+        const search = stateFor(palette, hueAtDepth(hue, depth), among, ColorDepth.TRUECOLOR);
+        const band = bandFor(palette, { hue, depth, ground }, ColorDepth.TRUECOLOR);
+        expect(band.state.hex).toBe(search.state.hex);
+        among = [band.plane, search.anchor];
       }
     }
   });
@@ -1078,8 +1076,10 @@ describe("a band is a plane", () => {
     let ownAnchor = 0;
     for (const { palette, hue, ground, name } of LINEAGES) {
       let outer: readonly ColorRgba[] = [];
+      // A trigger inside a band stands among that band's plane and its state
+      // as the ✕ is drawn in it.
+      let among: readonly ColorRgba[] = groundCells(palette, ground);
       for (const depth of DEPTHS) {
-        const among = depth === 0 ? groundCells(palette, ground) : outer;
         const anchorAt = (at: ColorDepth): ColorRgba =>
           stateFor(palette, hueAtDepth(hue, depth), among, at).anchor;
         const { plane } = recededPlane(palette, anchorAt(drawnAt), depth, outer);
@@ -1095,6 +1095,7 @@ describe("a band is a plane", () => {
           if (shown(band(depth).plane).hex !== once.hex) wrong.push(`${name} depth ${depth}`);
         }
         outer = [plane];
+        among = [plane, stateFor(palette, hueAtDepth(hue, depth), among, drawnAt).state];
       }
     }
     expect(wrong).toEqual([]);
@@ -1103,75 +1104,43 @@ describe("a band is a plane", () => {
     expect(checked).toBeGreaterThan(LINEAGES.length);
   });
 
-  test("items are placed along the plane→state axis by the band's distribution, inside the window", () => {
+  test("an item wears one of its band's two items, picked by the step that places it along its row", () => {
     const disclosure: Disclosure = { hue: "primary", depth: 0, ground: FIRST_ROW };
+    const at = (index: number, count: number): PlacedStep => ({ index, count, distribution: VDC });
+    const row = (index: number, count: number): AddressStep => ({ ...at(index, count), axis: "row" });
+    const cell = (index: number, count: number): AddressStep => ({ ...at(index, count), axis: "cell" });
     for (const palette of THEMES) {
-      const { state, plane } = bandFor(palette, disclosure, ColorDepth.TRUECOLOR);
-      // `uniform` puts every item at the window's midpoint — the formula, once.
-      const mid = bandItemFor(palette, disclosure, [
-        { index: 0, count: 1, distribution: DISTRIBUTIONS.uniform },
-      ], ColorDepth.TRUECOLOR);
-      expect(mid.hex).toBe(
-        blendRgb(plane, state, BAND_WINDOW.floor + BAND_WINDOW.span * 0.5).hex,
-      );
-      // `monotonic` walks the axis: each item is further from the plane than
-      // the one before it, and none is the plane or the state (the window
-      // keeps them off both ends).
-      const distances = [0, 1, 2, 3].map((index) => {
-        const item = bandItemFor(palette, disclosure, [
-          { index, count: 4, distribution: DISTRIBUTIONS.monotonic },
-        ], ColorDepth.TRUECOLOR);
-        expect(item.hex).not.toBe(plane.hex);
-        expect(item.hex).not.toBe(state.hex);
-        return deltaE(item, plane);
-      });
-      for (let i = 1; i < distances.length; i++) {
-        expect(distances[i]!).toBeGreaterThan(distances[i - 1]!);
+      const { items } = bandFor(palette, disclosure, ColorDepth.TRUECOLOR);
+      const [low, high] = [items[0]!.hex, items[1]!.hex];
+      const item = (place: PlacedStep | undefined) =>
+        bandItemFor(palette, disclosure, place, ColorDepth.TRUECOLOR).hex;
+      const inBand = (address: Address) =>
+        decorationFor(palette, { kind: "band", band: disclosure, address }, ColorDepth.TRUECOLOR).tint.hex;
+      // Consecutive cells of a row alternate, however long the row — the
+      // seams a row draws are between neighbours.
+      for (const count of [2, 5, 12]) {
+        const cells = Array.from({ length: count }, (_, index) => item(at(index, count)));
+        expect(cells).toEqual(cells.map((_, index) => items[index % 2]!.hex));
       }
-    }
-  });
-
-  test("a nested address folds the same way: each level decayed, the sum taken modulo 1", () => {
-    const disclosure: Disclosure = { hue: "primary", depth: 0, ground: FIRST_ROW };
-    const step = (index: number): PlacedStep => ({
-      index,
-      count: 4,
-      distribution: DISTRIBUTIONS.monotonic,
-    });
-    // The documented fold, stated once: `d0 + d1·LEVEL_DECAY`, modulo 1.
-    const expected = (palette: Palette, address: readonly PlacedStep[]) => {
-      const { state, plane } = bandFor(palette, disclosure, ColorDepth.TRUECOLOR);
-      const axis =
-        address.reduce(
-          (sum, { index, count, distribution }, level) =>
-            sum + distribution(index, count) * LEVEL_DECAY ** level,
-          0,
-        ) % 1;
-      return blendRgb(plane, state, BAND_WINDOW.floor + BAND_WINDOW.span * axis).hex;
-    };
-    for (const palette of THEMES) {
-      const { state, plane } = bandFor(palette, disclosure, ColorDepth.TRUECOLOR);
-      // A row of four under the second cell of a row of four: every nested
-      // cell lands where the fold says, inside the window, and the four are
-      // pairwise distinct — from each other and from their parent's own place.
-      const parent = bandItemFor(palette, disclosure, [step(1)], ColorDepth.TRUECOLOR);
-      const nested = [0, 1, 2, 3].map((index) => {
-        const item = bandItemFor(palette, disclosure, [step(1), step(index)], ColorDepth.TRUECOLOR);
-        expect(item.hex).toBe(expected(palette, [step(1), step(index)]));
-        expect(item.hex).not.toBe(plane.hex);
-        expect(item.hex).not.toBe(state.hex);
-        return item.hex;
-      });
-      expect(new Set([parent.hex, ...nested]).size).toBe(5);
-      // The row decides the coarse position and the cell refines it: the
-      // same two steps in the other order land somewhere else.
-      expect(bandItemFor(palette, disclosure, [step(3), step(0)], ColorDepth.TRUECOLOR).hex).not.toBe(
-        bandItemFor(palette, disclosure, [step(0), step(3)], ColorDepth.TRUECOLOR).hex,
-      );
-      // A raw sum past 1 (0.875 + 0.875·0.37) wraps into the same window.
-      const wrapped = bandItemFor(palette, disclosure, [step(3), step(3)], ColorDepth.TRUECOLOR);
-      expect(wrapped.hex).toBe(expected(palette, [step(3), step(3)]));
-      expect(deltaE(wrapped, plane)).toBeLessThan(deltaE(parent, plane));
+      // A cell of a row inside a body is picked by its cell, not its row:
+      // rows 0 and 1 of a body deal their cells alike.
+      for (const r of [0, 1]) {
+        expect([0, 1, 2].map((c) => inBand([row(r, 2), cell(c, 3)]))).toEqual([low, high, low]);
+      }
+      // Whatever is nested inside a cell wears that cell's item: edit chrome
+      // wraps every content cell of a user's body in a unit (✚, label, the
+      // cell, ✚), so the cell is the unit's second child whichever cell it is.
+      expect([0, 1, 2].map((c) => inBand([cell(c, 3), cell(1, 4)]))).toEqual([low, high, low]);
+      // A row picks nothing: a segment that is a row by itself is a first
+      // cell, as edit chrome's one-cell row around it is.
+      expect([0, 1].map((r) => inBand([row(r, 2)]))).toEqual([low, low]);
+      expect([0, 1].map((r) => inBand([row(r, 2), cell(0, 1), cell(1, 4)]))).toEqual([low, low]);
+      // A body that is one segment is the low item, beside its ✕.
+      expect(inBand([])).toBe(low);
+      expect(item(undefined)).toBe(low);
+      // A picker's option is its index over the whole domain: the page it is
+      // drawn on (the count it is placed among) never recolours it.
+      expect(item(at(7, 8))).toBe(item(at(7, 40)));
     }
   });
 
@@ -1188,9 +1157,7 @@ describe("a band is a plane", () => {
         const cells = [
           plane,
           ...[0, 1, 2, 3, 4, 5].map((index) =>
-            bandItemFor(palette, disclosure, [
-              { index, count: 6, distribution: DISTRIBUTIONS[DEFAULT_DISTRIBUTION] },
-            ], ColorDepth.TRUECOLOR),
+            bandItemFor(palette, disclosure, { index, count: 6, distribution: DISTRIBUTIONS[DEFAULT_DISTRIBUTION] }, ColorDepth.TRUECOLOR),
           ),
         ];
         for (const cell of cells) {
@@ -1303,21 +1270,77 @@ describe("open trigger, its band, and a nested band are mutually distinguishable
     },
   );
 
-  test.each(DRAWN)("a band item is drawn as neither its plane nor its trigger (depth %s)", (drawnAt) => {
+  // [LAW:verifiable-goals] brandon-menus-sjhy.b9w: a band row draws four colours
+  // beside one another — the ✕ leading it (the band's state), a trigger open
+  // in it (the next band's state) and its two items — and rich-js joins two
+  // cells whose drawn backgrounds stand under SEAM_MIN_DELTA_E with its thin
+  // divider, so they read as one. Every pair stands apart as drawn, no item is
+  // the plane, or the band names the pair it stands short on — a pair with the
+  // open trigger named by the band that trigger opens, which is open exactly
+  // when that trigger is drawn.
+  const seamOf = (band: ReturnType<typeof bandFor>, opened: ColorRgba, drawnAt: ColorDepth) => {
     const shown = shownAt(drawnAt);
-    const wrong = LINEAGES.flatMap(({ palette, hue, ground, name }) =>
+    const row = { trigger: band.state, "low item": band.items[0], "high item": band.items[1], "open trigger": opened };
+    const names = Object.keys(row) as Array<keyof typeof row>;
+    return names.flatMap((a, i) =>
+      names.slice(i + 1).flatMap((b) =>
+        deltaE(shown(row[a]), shown(row[b])) >= SEAM_MIN_DELTA_E ? [] : [`${a} and ${b}`],
+      ),
+    );
+  };
+  test.each(DRAWN)("a band row's colours stand a seam apart, or the band names the pair (depth %s)", (drawnAt) => {
+    const shown = shownAt(drawnAt);
+    const unreported = LINEAGES.flatMap(({ palette, hue, ground, name }) =>
       DEPTHS.flatMap((depth) => {
         const band = bandFor(palette, { hue, depth, ground }, drawnAt);
-        return Array.from({ length: 6 }, (_, index) =>
-          shown(bandItemFor(palette, { hue, depth, ground }, [{ index, count: 6, distribution: DISTRIBUTIONS["van-der-corput"] }], drawnAt)),
-        ).flatMap((item, index) =>
-          item.hex === shown(band.plane).hex || item.hex === shown(band.state).hex
-            ? [`${name} depth ${depth} item ${index}`]
-            : [],
-        );
+        const nested = bandFor(palette, { hue, depth: depth + 1, ground }, drawnAt);
+        const onPlane = band.items.some((item) => shown(item).hex === shown(band.plane).hex);
+        // An open trigger's seam is named by the band it opens, beside the
+        // colour of the band it sits in; every other pair by the band itself.
+        const short = seamOf(band, nested.state, drawnAt).filter((pair) => {
+          const [first] = pair.split(" and ");
+          const [owner, words] = pair.endsWith("open trigger")
+            ? [nested, `a trigger open in a band and that band's ${first} stand`]
+            : [band, `an open band's ${pair} stand`];
+          return !owner.shortfalls.some((line) => line.includes(words));
+        });
+        return [...(onPlane ? [`${name} depth ${depth}: an item is the plane`] : []), ...short.map((pair) => `${name} depth ${depth}: ${pair}`)];
       }),
     );
-    expect(wrong).toEqual([]);
+    expect(unreported).toEqual([]);
+  });
+
+  test("in truecolor every bundled theme's band rows stand a seam apart under every bundled style but dim", () => {
+    // The one exception is textual-dark under `dim`: its door band's state is
+    // carried to black over a plane of #050505, and no two colours between
+    // them stand .04 off each other and off black.
+    const short = STYLED.flatMap(({ name, palette }) =>
+      GROUNDS.flatMap(({ ground }) =>
+        DEPTHS.flatMap((depth) => {
+          const band = bandFor(palette, { hue: OPEN_HUE, depth, ground }, ColorDepth.TRUECOLOR);
+          const opened = bandFor(palette, { hue: OPEN_HUE, depth: depth + 1, ground }, ColorDepth.TRUECOLOR).state;
+          return seamOf(band, opened, ColorDepth.TRUECOLOR).map((pair) => `${name} depth ${depth}: ${pair}`);
+        }),
+      ),
+    );
+    expect([...new Set(short)]).toEqual(["textual-dark/dim depth 0: low item and high item"]);
+  });
+
+  test("a nested trigger's state shortfall names the remedy that clears it: another shade or style", () => {
+    // A trigger in a band stands among that band's plane and ✕, which another
+    // variation moves too little to clear (measured: of 128 such shortfalls,
+    // another shade or style cleared all, another variation 48).
+    const lines = STYLED.flatMap(({ palette }) =>
+      GROUNDS.flatMap(({ ground }) =>
+        ([1, 2, 3] as const).flatMap((depth) =>
+          bandFor(palette, { hue: OPEN_HUE, depth, ground }, ColorDepth.TRUECOLOR).shortfalls.filter((line) =>
+            line.includes("no open-trigger colour"),
+          ),
+        ),
+      ),
+    );
+    expect(lines.length).toBeGreaterThan(0);
+    expect(lines.filter((line) => !line.endsWith("; another shade or style clears it"))).toEqual([]);
   });
 
   test("a nested trigger is told from the trigger that opened it wherever the theme tells their hues apart", () => {
@@ -1341,26 +1364,6 @@ describe("open trigger, its band, and a nested band are mutually distinguishable
 });
 
 describe("a band item is drawn, never thrown — the settings controls are band items", () => {
-  test("an item whose own place rounds onto its trigger takes the nearest place inward that is neither", () => {
-    // textual-dark under `dim`, an `alt` row at the brightest shade: option 21
-    // of 32 placed by golden angle sits .98 of the way up its window, where
-    // truecolor rounds it onto the open trigger's own colour.
-    const palette = STYLED.find(({ name }) => name === "textual-dark/dim")!.palette;
-    const { ground } = GROUNDS.find(
-      ({ name }) =>
-        name === "secondary-lighten-1+secondary-lighten-2+secondary-lighten-3+accent-lighten-1+accent-lighten-2+accent-lighten-3",
-    )!;
-    const disclosure: Disclosure = { hue: OPEN_HUE, depth: 0, ground };
-    const goldenAngle = DISTRIBUTIONS["golden-angle"];
-    const { state, plane } = bandFor(palette, disclosure, ColorDepth.TRUECOLOR);
-    // Non-vacuous: the item's own place is its trigger's colour, on a band
-    // with room — its plane stands its floor off the trigger.
-    expect(blendRgb(plane, state, BAND_WINDOW.floor + BAND_WINDOW.span * goldenAngle(21)).hex).toBe(state.hex);
-    expect(deltaE(state, plane)).toBeGreaterThanOrEqual(BAND_FLOORS.triggerPlane);
-    const item = bandItemFor(palette, disclosure, [{ index: 21, count: 32, distribution: goldenAngle }], ColorDepth.TRUECOLOR);
-    expect([item.hex === plane.hex, item.hex === state.hex]).toEqual([false, false]);
-  });
-
   test("a band whose plane stands on its trigger reports it, and its items are drawn at every depth", () => {
     // A palette a style washed out: the accent, the background and the
     // foreground all but meet, the accent stands off its dark row as it is,
@@ -1378,15 +1381,23 @@ describe("a band item is drawn, never thrown — the settings controls are band 
     );
     const disclosure: Disclosure = { hue: OPEN_HUE, depth: 0, ground: [{ hue: "secondary", shade: "darken-1" }] };
     for (const drawnAt of DRAWN) {
-      expect(bandFor(washed, disclosure, drawnAt).shortfalls).toEqual([
-        expect.stringMatching(
-          new RegExp(
-            `^theme "washed": an open band's plane stands ΔE 0\\.\\d{3} off the trigger that opened it as drawn at depth ${ColorDepth[drawnAt]}, under the 0\\.1 that tells them apart; another style clears it$`,
-          ),
+      // The plane, then any item seam it leaves no room for (which pairs a band
+      // must report is held by the seam test above; this pins the wording).
+      const [plane, ...seams] = bandFor(washed, disclosure, drawnAt).shortfalls;
+      expect(plane).toMatch(
+        new RegExp(
+          `^theme "washed": an open band's plane stands ΔE 0\\.\\d{3} off the trigger that opened it as drawn at depth ${ColorDepth[drawnAt]}, under the 0\\.1 that tells them apart; another style clears it$`,
         ),
-      ]);
+      );
+      for (const seam of seams) {
+        expect(seam).toMatch(
+          new RegExp(
+            `^theme "washed": an open band's (trigger|open trigger|low item|high item) and (open trigger|low item|high item) stand ΔE 0\\.\\d{3} apart as drawn at depth ${ColorDepth[drawnAt]}, under the 0\\.04 below which two cells in those colours are joined by a divider and read as one$`,
+          ),
+        );
+      }
       for (let index = 0; index < 6; index++) {
-        expect(() => bandItemFor(washed, disclosure, [{ index, count: 6, distribution: VDC }], drawnAt)).not.toThrow();
+        expect(() => bandItemFor(washed, disclosure, { index, count: 6, distribution: VDC }, drawnAt)).not.toThrow();
       }
     }
   });

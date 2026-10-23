@@ -746,13 +746,11 @@ describe("toggle round trip + drop stacking", () => {
       // And it is NOT the band item it would have worn as a generic option:
       // the address is out of the decision.
       expect(style.bgcolor?.value?.hex).not.toBe(
-        bandItemFor(palette, disclosure, [
-          {
+        bandItemFor(palette, disclosure, {
             index: options.indexOf(name),
             count: options.length,
             distribution: DISTRIBUTIONS[DEFAULT_DISTRIBUTION],
-          },
-        ], ColorDepth.TRUECOLOR).hex,
+          }, ColorDepth.TRUECOLOR).hex,
       );
     }
   });
@@ -1331,13 +1329,11 @@ describe("a menu's `distribution` option places its band", () => {
       const style = resolvedStyle(span.style);
       const step = { index, count: options.length };
       expect(style.bgcolor?.value?.hex).toBe(
-        bandItemFor(palette, disclosure, [{ ...step, distribution: DISTRIBUTIONS.monotonic }], ColorDepth.TRUECOLOR).hex,
+        bandItemFor(palette, disclosure, { ...step, distribution: DISTRIBUTIONS.monotonic }, ColorDepth.TRUECOLOR).hex,
       );
       if (
         style.bgcolor?.value?.hex !==
-        bandItemFor(palette, disclosure, [
-          { ...step, distribution: DISTRIBUTIONS[DEFAULT_DISTRIBUTION] },
-        ], ColorDepth.TRUECOLOR).hex
+        bandItemFor(palette, disclosure, { ...step, distribution: DISTRIBUTIONS[DEFAULT_DISTRIBUTION] }, ColorDepth.TRUECOLOR).hex
       )
         differsFromDefault++;
     }
@@ -1601,13 +1597,11 @@ describe("a picker over a colour-valued domain paints what picking would apply",
     expect(cells.length).toBe(WORDS.length);
     for (const cell of cells) {
       expect(cell.bg).toBe(
-        bandItemFor(palette, disclosure, [
-          {
+        bandItemFor(palette, disclosure, {
             index: WORDS.indexOf(cell.name),
             count: WORDS.length,
             distribution: DISTRIBUTIONS[DEFAULT_DISTRIBUTION],
-          },
-        ], ColorDepth.TRUECOLOR).hex,
+          }, ColorDepth.TRUECOLOR).hex,
       );
     }
   });

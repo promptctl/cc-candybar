@@ -1978,7 +1978,8 @@ segment. Declared inline in `root`:
   group's `✕`, not the parent's.
 - `distribution` — how the body container places its children's tints; it is
   the body's field, not the toggle's (the same field a `{ h }`/`{ v }` row
-  carries — see `distribution` below).
+  carries — see `distribution` below). A body's rows pick nothing, so it needs
+  `direction: 'horizontal'`; on a vertical body it is a load error.
 
 The accordion drawer:
 
@@ -2009,9 +2010,14 @@ its position (the convention stated above every example): the placement of
 its row among the rows chooses the hue, and its placement among the cells of
 that row chooses the shade. A container nested inside a cell does not re-place
 the bar — everything in it wears that cell's hue and shade, so a `distribution`
-there is a load error (`sets "distribution" on a container inside a bar cell`)
-— though inside a disclosure body every level still places its cells along
-the band.
+there is a load error (`sets "distribution" on a container inside a cell`).
+A disclosure body is read the same way: its items are placed along their
+rows, each cell wearing one of the band's two item colours and everything
+nested in a cell wearing that cell's, so a `distribution` inside a body's cell
+is the same load error. A body's rows pick nothing, so one on a vertical
+container in a body is refused too (`sets "distribution" on a vertical
+container in a disclosure body`) — a group's `distribution` places its body's
+children only with `direction: 'horizontal'`.
 `distribution` is the one field that says *how* a placer spreads those
 positions across the vocabulary. There are two kinds of placer and one field:
 
