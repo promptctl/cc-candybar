@@ -421,12 +421,7 @@ export function templateScopeOf(cfg: DslConfig): TemplateScope {
     names.add(name);
     if (isDocumentDecl(v)) documents.add(name);
   };
-  for (const [name, v] of Object.entries(cfg.variables)) declare(name, v);
-  for (const [segName, seg] of Object.entries(cfg.segments)) {
-    for (const [name, v] of Object.entries(seg.vars ?? {})) {
-      declare(`${segName}.${name}`, v);
-    }
-  }
+  for (const [name, v] of declaredVariables(cfg)) declare(name, v);
   return { names, documents, helpers: cfg.helpers };
 }
 

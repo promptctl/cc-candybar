@@ -8,6 +8,12 @@ import { CLOCK_FUNCTIONS } from "../src/template-engine/engine";
 import { declareDslVariables, EVERY_SCOPE } from "../src/dsl/render";
 import { SourceRegistry, VariableStore } from "../src/var-system";
 import { drawingAt } from "./helpers/test-engine";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { loadFromDisk, pluginLoadLine } from "../src/daemon/cache/render";
+import { GitDataProvider } from "../src/daemon/cache/git";
+import { SessionState } from "../src/daemon/session-state";
 
 const config = (variables: string, helpers = "{}") =>
   parseAndValidate(
@@ -76,6 +82,25 @@ test("a value reaching the instant by a name it does not spell is refused, never
   }
 });
 
+test("a value that keeps its answer is told why, drawn or not", () => {
+  const cfg = config(`{
+    clock: { kind: "time", layout: "15:04:05" },
+    hidden: { kind: "template", template: '{{ index . "clock" }}' },
+  }`);
+  const store = new VariableStore();
+  const registry = new SourceRegistry(store);
+  try {
+    declareDslVariables(cfg, registry, process.cwd(), EVERY_SCOPE);
+    expect(() => store.read("hidden")).toThrow(
+      /clock was read by a value that keeps its answer/,
+    );
+    // Nothing keeps the time variable's answer: outside a draw is the reason.
+    expect(() => store.read("clock")).toThrow(/outside a draw/);
+  } finally {
+    registry.dispose();
+  }
+});
+
 test("the set is closed upward: whatever reads a projection is one", () => {
   const projections = projectionsOf(
     config(
@@ -128,5 +153,35 @@ test("a projection is derived at each draw; a derived template is cached", () =>
     expect(store.read("clock")).toBe("2000");
   } finally {
     registry.dispose();
+  }
+});
+
+// [LAW:verifiable-goals] Each load says which variables it derives at every
+// draw, so a variable evaluated per frame is named in the daemon's log.
+test("the config load line names the load's projections", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-projections-"));
+  const gitService = new GitDataProvider({ logger: () => {} });
+  const line = (variables: string): string => {
+    const file = path.join(dir, "config.json5");
+    fs.writeFileSync(file, `{ variables: ${variables} }`);
+    const loaded = loadFromDisk(dir, dir, file, {
+      gitService,
+      sessionState: new SessionState(),
+    });
+    expect(loaded.error).toBeNull();
+    loaded.state!.registry.dispose();
+    return pluginLoadLine(loaded.layers, loaded.state!);
+  };
+  try {
+    expect(
+      line(`{
+        clock: { kind: "time", layout: "15:04" },
+        shown: { kind: "template", template: "{{ .clock }}" },
+      }`),
+    ).toContain(": projections=clock,shown plugins ");
+    expect(line("{}")).toContain(": projections=- plugins ");
+  } finally {
+    gitService.close();
+    fs.rmSync(dir, { recursive: true, force: true });
   }
 });

@@ -105,13 +105,15 @@ function drawInProgress(read: string): {
   readonly at: Instant;
   readonly anim: AnimationTime;
 } {
-  if (drawing === null) {
-    throw new Error(`the clock was read outside a draw (${read})`);
-  }
+  // A value that keeps its answer is refused first, drawn or not: its fix is
+  // its template, whenever it is first read.
   if (_isComputingDerivation()) {
     throw new Error(
       `the clock was read by a value that keeps its answer (${read}): a template reaching a time variable or a clock function by a name it does not spell (index, get) is not known to read the instant — name it: {{ .clock }}`,
     );
+  }
+  if (drawing === null) {
+    throw new Error(`the clock was read outside a draw (${read})`);
   }
   return drawing;
 }
@@ -215,8 +217,6 @@ export function createCcCandybarEngine(opts: {
     // prints as Go prints a map, instead of leaking the object into the
     // fragments as if it were text.
     isT: (v): v is RichText => v instanceof RichText,
-    // [LAW:single-enforcer] one clock: the same one the datetime funcs read.
-    clock: CLOCK.now,
     // [LAW:no-defensive-null-guards] missing fields must throw at the boundary,
     // not silently produce "<no value>". Callers (SourceRegistry, segments)
     // depend on MissingFieldError to drive varDefault / defaultEmptyValue.
