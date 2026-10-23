@@ -202,6 +202,7 @@ export function formatStats(s: StatsSnapshot): string {
   lines.push(`  retired       ${s.renderCache.retired}`);
   lines.push(`  compiles      ${s.renderCache.compiles}`);
   lines.push(`  views         ${s.renderCache.views}`);
+  lines.push(`  retired views ${s.renderCache.retiredViews}`);
   lines.push(
     `  accounted     ${fmtBytes(s.renderCache.accountedBytes)} / ${fmtBytes(s.renderCache.budgetBytes)}`,
   );

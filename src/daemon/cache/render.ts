@@ -356,6 +356,10 @@ export interface RenderCacheStats {
   readonly compiles: number;
   // Sessions' views served now: one per session at most.
   readonly views: number;
+  // Views retired but not yet disposed because a render still holds one: as
+  // `retired` is for states, climbing while `views` holds is a render that
+  // never returned.
+  readonly retiredViews: number;
   // What the entries the map serves are charged against the budget.
   readonly accountedBytes: number;
   readonly budgetBytes: number;
@@ -1078,12 +1082,17 @@ export class RenderCache {
       if (hold.holders > 0) held++;
       if (hold.retired !== null) retired++;
     }
+    let retiredViews = 0;
+    for (const lease of this.viewHolds.values()) {
+      if (lease.retired !== null) retiredViews++;
+    }
     return {
       size: this.entries.size,
       held,
       retired,
       compiles: this.compiles.size,
       views: this.views.size,
+      retiredViews,
       accountedBytes: this.accountedBytes(),
       budgetBytes: this.budgetBytes(),
     };

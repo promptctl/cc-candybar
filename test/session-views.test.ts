@@ -201,11 +201,12 @@ test("a view held by a render in flight is disposed only when the render returns
   const { cache, lines } = makeCache();
   const held = cache.holdSession(dir, dir, undefined, "s-a");
   cache.reload(dir, dir, undefined);
-  expect(cache.stats.views).toBe(0);
+  expect(cache.stats).toMatchObject({ views: 0, retiredViews: 1 });
   // Retired, not disposed: the render still draws through it.
   expect(lines.some((l) => l.startsWith("session view closed"))).toBe(false);
   expect(drawn(held.view)).toContain("who=s-a");
   held[Symbol.dispose]();
+  expect(cache.stats.retiredViews).toBe(0);
   expect(lines).toContainEqual(
     expect.stringMatching(/^session view closed sid="s-a" reason=reload .* held=1 /),
   );
