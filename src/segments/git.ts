@@ -158,7 +158,7 @@ const READ_FIELD_NAMES: Record<ReadField, string> = {
   sha: "sha",
   operation: "operation",
   tag: "tag",
-  committedAt: "timeSinceCommit",
+  committedAt: "committedAt",
   stashCount: "stash",
   upstream: "upstream",
   repoName: "repoName",
@@ -187,7 +187,7 @@ export interface GitInfoOptions {
   showWorkingTree?: boolean;
   showOperation?: boolean;
   showTag?: boolean;
-  showTimeSinceCommit?: boolean;
+  showCommittedAt?: boolean;
   showStashCount?: boolean;
   showUpstream?: boolean;
   showRepoName?: boolean;
@@ -1027,7 +1027,7 @@ export class GitService {
     if (options.showTag) {
       result.tag = await this.getNearestTagAsync(gitDir);
     }
-    if (options.showTimeSinceCommit) {
+    if (options.showCommittedAt) {
       result.committedAt = await this.committedAt(gitDir, core.value.oid);
     }
 

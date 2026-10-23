@@ -31,7 +31,8 @@
 //    at its instant: clock factories.
 //  • ccCandybarFuncs: basename, dirname, int, string, bool, urlEncode,
 //    themes, endcaps, sparkline.
-//  • minutesUntilResetFuncs: minutesUntilReset — a clock factory.
+//  • relativeTimeFuncs: minutesUntilReset, secondsSince, etaMinutes — a clock
+//    factory.
 //  • formatterFuncs: formatInteger, round, formatModelName, shortenModelName.
 //    (The cost/token/
 //    budget AND duration/time-remaining formatters moved to DSL helper templates
@@ -58,11 +59,7 @@ import {
   richTextFuncs,
   type DrawnAt,
 } from "@promptctl/rich-js/template-bindings";
-import {
-  ccCandybarFuncs,
-  formatterFuncs,
-  minutesUntilResetFuncs,
-} from "./funcs.js";
+import { ccCandybarFuncs, formatterFuncs, relativeTimeFuncs } from "./funcs.js";
 import type { Clock, ClockFactory } from "./clock.js";
 import { dateOf, type AnimationTime, type Instant } from "../utils/instant.js";
 
@@ -165,7 +162,7 @@ const CLOCK_FACTORIES: readonly ClockFactory[] = [
         ],
       ),
     ),
-  minutesUntilResetFuncs,
+  relativeTimeFuncs,
 ];
 
 function clockFuncs(factories: readonly ClockFactory[]): FuncMap {

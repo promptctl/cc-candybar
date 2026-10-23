@@ -25,7 +25,7 @@ import { GitService, type GitInfoOptions } from "../src/segments/git";
 import type { LaunchResult } from "../src/proc/launch";
 
 // The seven flags gitaculous asks for: sha, the four worktree counts, stash,
-// upstream, repoName, operation, timeSinceCommit.
+// upstream, repoName, operation, committedAt.
 const GITACULOUS_OPTIONS: GitInfoOptions = {
   showSha: true,
   showWorkingTree: true,
@@ -33,7 +33,7 @@ const GITACULOUS_OPTIONS: GitInfoOptions = {
   showUpstream: true,
   showRepoName: true,
   showOperation: true,
-  showTimeSinceCommit: true,
+  showCommittedAt: true,
 };
 
 class CountingGitService extends GitService {
@@ -124,16 +124,16 @@ describe("git spawns per cache miss", () => {
     const logCalls = (): string[] =>
       svc.invocations.filter((i) => i.startsWith("log -1"));
 
-    await svc.getGitInfo(moving, { showTimeSinceCommit: true });
+    await svc.getGitInfo(moving, { showCommittedAt: true });
     expect(logCalls()).toHaveLength(1);
 
     run("git commit -q --allow-empty -m two", moving);
     svc.invocations.length = 0;
-    await svc.getGitInfo(moving, { showTimeSinceCommit: true });
+    await svc.getGitInfo(moving, { showCommittedAt: true });
     expect(logCalls()).toHaveLength(1);
 
     svc.invocations.length = 0;
-    await svc.getGitInfo(moving, { showTimeSinceCommit: true });
+    await svc.getGitInfo(moving, { showCommittedAt: true });
     expect(logCalls()).toHaveLength(0);
   });
 
@@ -146,7 +146,7 @@ describe("git spawns per cache miss", () => {
     mkdirSync(empty);
     run("git init -q -b main", empty);
 
-    const info = await svc.getGitInfo(empty, { showTimeSinceCommit: true });
+    const info = await svc.getGitInfo(empty, { showCommittedAt: true });
     expect(info.kind).toBe("ok");
     if (info.kind !== "ok") return;
     expect(info.value.committedAt).toEqual({ kind: "absent" });

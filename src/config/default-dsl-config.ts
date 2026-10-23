@@ -329,11 +329,21 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     },
     "git.status": { kind: "input", path: "git.status", default: "clean" },
     "git.operation": { kind: "input", path: "git.operation", default: "" },
-    "git.timeSinceCommit": {
+    // The last commit's date, epoch seconds; 0 when git could not read it.
+    "git.committedAt": {
       kind: "input",
-      path: "git.timeSinceCommit",
+      path: "git.committedAt",
       type: "number",
       default: 0,
+    },
+    // [LAW:one-source-of-truth] Its age in seconds, against the instant the
+    // frame is drawn at — a projection, so a frame between two git reads shows
+    // the age it is drawn at. 0 when the date is unknown.
+    "git.timeSinceCommit": {
+      kind: "template",
+      type: "number",
+      template:
+        "{{ if gt .git.committedAt 0 }}{{ secondsSince .git.committedAt }}{{ else }}0{{ end }}",
     },
     // The palette role each git fact is painted in — data a user overrides one
     // fact at a time (`"git.color.behind": { kind: "literal", value: "error" }`).
@@ -451,17 +461,18 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       type: "number",
       default: -1,
     },
+    // Minutes until each window's use reaches its cap at the rate it has run
+    // since it opened (5 h and 7 d windows), against the instant the frame is
+    // drawn at; -1 when too young to project or unused.
     "block.etaMinutes": {
-      kind: "input",
-      path: "block.etaMinutes",
+      kind: "template",
       type: "number",
-      default: -1,
+      template: "{{ etaMinutes .block.nativeUtilization .block.resetsAt 300 }}",
     },
     "weekly.etaMinutes": {
-      kind: "input",
-      path: "weekly.etaMinutes",
+      kind: "template",
       type: "number",
-      default: -1,
+      template: "{{ etaMinutes .weekly.percentage .weekly.resetsAt 10080 }}",
     },
 
     // Token throughput for the active turn — daemon-derived tok/s on three lanes

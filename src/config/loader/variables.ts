@@ -357,6 +357,7 @@ function noCachePolicy(why: string): Readonly<Record<string, string>> {
 }
 const TEMPLATE_FIELDS: FieldSpecMap<Omit<TemplateVarDecl, "kind">> = {
   template: requireStringSpec(),
+  type: optionalEnumSpec(["string", "number", "boolean"] as const),
   default: optionalStringSpec(),
 };
 // [LAW:no-silent-failure] A template variable is a computed that tracks every

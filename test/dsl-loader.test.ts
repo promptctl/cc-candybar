@@ -448,6 +448,22 @@ describe("loadDslConfig — variable source kinds", () => {
     });
   });
 
+  test("template: a type is one an input may have", () => {
+    const ok = parseAndValidate(
+      FILE,
+      `{ variables: { age: { kind: "template", type: "number", template: "{{ 1 }}" } } }`,
+    );
+    expect(ok.variables.age).toEqual({
+      kind: "template",
+      type: "number",
+      template: "{{ 1 }}",
+    });
+    expectIssue(
+      `{ variables: { age: { kind: "template", type: "date", template: "{{ 1 }}" } } }`,
+      { path: "variables.age.type", message: "variables.age.type" },
+    );
+  });
+
   test("time: requires layout", () => {
     expectIssue(`{ variables: { now: { kind: "time" } } }`, {
       path: "variables.now.layout",

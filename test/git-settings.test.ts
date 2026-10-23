@@ -15,6 +15,9 @@ import { instantOf } from "../src/utils/instant";
 
 const SESSION = "s1";
 
+// The instant every case is drawn at.
+const AT_SEC = 1_700_000_000;
+
 // Every optional fact present, so each setting has something to take away.
 const GIT = {
   branch: "feature",
@@ -30,7 +33,8 @@ const GIT = {
   operation: "rebase",
   stash: 1,
   status: "dirty",
-  timeSinceCommit: 300,
+  // Five minutes before the instant every case is drawn at.
+  committedAt: AT_SEC - 300,
 };
 
 type Detail = "collapsed" | "expanded";
@@ -70,7 +74,7 @@ function renderPair(
       store,
       registry,
       { session_id: SESSION, cwd: "/tmp", git: GIT },
-      instantOf(new Date()),
+      instantOf(new Date(AT_SEC * 1000)),
       {
         endcaps: "powerline",
         colorCompatibility: "truecolor",

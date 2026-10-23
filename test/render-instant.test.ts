@@ -10,6 +10,7 @@ import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { instantOf, type Instant } from "../src/utils/instant";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { stripAnsi } from "./helpers/ansi";
+import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 
 const OPTS = {
   endcaps: "powerline" as const,
@@ -90,6 +91,89 @@ describe("a render is drawn at the instant its caller hands it", () => {
       expect(render(instantOf(A))).toBe(atA);
     } finally {
       dispose();
+    }
+  });
+});
+
+// brandon-unfiled-3248.8ro6 step 3: the payload stores instants, and what they
+// say relative to now is the draw's — so a frame drawn after the read that
+// stored them shows the age and the ETA it is drawn at.
+describe("a stored instant is read against the frame's instant", () => {
+  const BUNDLED = parseAndValidate(
+    "<test>",
+    `{
+      segments: {
+        ages: { template: "{{ .git.timeSinceCommit }}s {{ .block.etaMinutes }}m" },
+      },
+      root: { h: ["ages"] },
+    }`,
+    undefined,
+    DEFAULT_DSL_CONFIG,
+  );
+  const AT = 1_700_000_000;
+  // Committed a minute before AT; 20% of a 5 h window used in its first hour.
+  const PAYLOAD = {
+    session_id: "s",
+    git: { committedAt: AT - 60 },
+    block: { nativeUtilization: 20, resetsAt: AT + 4 * 3600 },
+  };
+
+  test("one payload, two frames: each draws its own age and ETA", () => {
+    const store = new VariableStore();
+    const registry = new SourceRegistry(
+      store,
+      "",
+      undefined,
+      new SessionState(),
+    );
+    try {
+      const compiled = registerDslConfig(BUNDLED, registry, { cwd: "/tmp" });
+      const draw = (sec: number): string =>
+        stripAnsi(
+          renderDsl(
+            BUNDLED,
+            compiled,
+            store,
+            registry,
+            PAYLOAD,
+            instantOf(new Date(sec * 1000)),
+            OPTS,
+          ),
+        );
+      expect(draw(AT)).toContain("60s 240m");
+      // An hour on, nothing re-read: an hour older, and the same use over two
+      // hours reaches the cap later.
+      expect(draw(AT + 3600)).toContain("3660s 480m");
+    } finally {
+      registry.dispose();
+    }
+  });
+
+  test("no commit date reads as no age, and an unused window as no ETA", () => {
+    const store = new VariableStore();
+    const registry = new SourceRegistry(
+      store,
+      "",
+      undefined,
+      new SessionState(),
+    );
+    try {
+      const compiled = registerDslConfig(BUNDLED, registry, { cwd: "/tmp" });
+      expect(
+        stripAnsi(
+          renderDsl(
+            BUNDLED,
+            compiled,
+            store,
+            registry,
+            { session_id: "s" },
+            instantOf(new Date(AT * 1000)),
+            OPTS,
+          ),
+        ),
+      ).toContain("0s -1m");
+    } finally {
+      registry.dispose();
     }
   });
 });

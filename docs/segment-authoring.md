@@ -253,6 +253,37 @@ have a capture group:
 Prefer the document whenever the script has a second field to print: a regex
 per field is a spawn per field, and the casts follow you into every template.
 
+A value computed from others is a `template` variable, and it is text unless
+it says otherwise. Give it `type: "number"` (or `"boolean"`) and it is read
+as one, the way an `input` is, so one name serves every template that compares
+or ramps it; a template that renders no number is a failed read (a ⚠ naming
+the variable), never a zero:
+
+```json5 check:pass
+{
+  variables: {
+    budget: {
+      kind: "shell",
+      command: "budget-status",
+      parse: { json: true },
+      cache: { ttl: "60s" },
+      default: { period: "?", spent: 0, limit: 0, spentPct: 0, timePct: 0 },
+    },
+    budgetAhead: {
+      kind: "template",
+      type: "number",
+      template: "{{ sub .budget.spentPct .budget.timePct }}",
+    },
+  },
+  segments: {
+    budget: {
+      template: "{{ .budget.spentPct }}% spent{{ if gt .budgetAhead 10 }} ⚠{{ end }}",
+    },
+  },
+  root: { rows: { status: { h: ["model", "context", "budget"] } } },
+}
+```
+
 ## Step 4 — the template
 
 The template is Go template text over the document's fields. Format numbers

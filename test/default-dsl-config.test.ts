@@ -1042,7 +1042,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         operation: "",
         stash: 2,
         status: "conflicts",
-        timeSinceCommit: 0,
+        committedAt: 0,
       },
     };
 
@@ -1187,7 +1187,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       operation: "rebase",
       stash: 1,
       status: "dirty",
-      timeSinceCommit: 0,
+      committedAt: 0,
     };
     const CLEAN = {
       branch: "main",

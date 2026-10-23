@@ -494,6 +494,13 @@
               "template": {
                 "type": "string"
               },
+              "type": {
+                "enum": [
+                  "string",
+                  "number",
+                  "boolean"
+                ]
+              },
               "default": {
                 "type": "string"
               }
@@ -1968,6 +1975,13 @@
                   "template": {
                     "type": "string"
                   },
+                  "type": {
+                    "enum": [
+                      "string",
+                      "number",
+                      "boolean"
+                    ]
+                  },
                   "default": {
                     "type": "string"
                   }
@@ -2557,6 +2571,13 @@
                   },
                   "template": {
                     "type": "string"
+                  },
+                  "type": {
+                    "enum": [
+                      "string",
+                      "number",
+                      "boolean"
+                    ]
                   },
                   "default": {
                     "type": "string"

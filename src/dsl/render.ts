@@ -327,6 +327,7 @@ function declareOne(
 
     case "template":
       registry.declareTemplate(name, decl.template, {
+        type: decl.type ?? "string",
         varDefault: decl.default,
         derivation,
       });

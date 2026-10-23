@@ -1328,7 +1328,7 @@ describe("SourceRegistry — dispose", () => {
 
 // A template variable that reads no instant: what the projection fold says of
 // every template these tests declare.
-const DERIVED = { derivation: "computed" } as const;
+const DERIVED = { type: "string", derivation: "computed" } as const;
 
 // ─── template source kind ─────────────────────────────────────────────────────
 
@@ -1340,11 +1340,41 @@ describe("SourceRegistry — template: basic", () => {
     expect(store.read("msg")).toBe("hello world");
   });
 
-  it("type is always 'string'", () => {
+  it("its type is 'string' unless declared otherwise", () => {
     const { store, registry } = make();
     registry.declareLiteral("x", "val");
     registry.declareTemplate("t", "{{ .x }}", DERIVED);
     expect(store.getType("t")).toBe("string");
+  });
+
+  it("a number template is read as a number, so it compares as one", () => {
+    const { store, registry } = make();
+    store.defineBox("n", "number", 41);
+    registry.declareTemplate("next", "{{ add .n 1 }}", { ...DERIVED, type: "number" });
+    registry.declareTemplate("big", "{{ gt .next 40 }}", DERIVED);
+    expect(store.getType("next")).toBe("number");
+    expect(store.read("next")).toBe(42);
+    expect(store.read("big")).toBe("true");
+  });
+
+  it("a number template rendering no number is a failed read, never a zero", () => {
+    const { store, registry } = make();
+    registry.declareTemplate("n", "soon", { ...DERIVED, type: "number" });
+    expect(() => store.read("n")).toThrow(/variable "n".*cast "soon" to number/);
+    expect(registry.getLastError("n")).toBeDefined();
+  });
+
+  it("a number template's default answers its failure as a number", () => {
+    const { store, registry } = make();
+    registry.declareTemplate("n", "soon", { ...DERIVED, type: "number", varDefault: "-1" });
+    expect(store.read("n")).toBe(-1);
+  });
+
+  it("a default its type cannot read is refused at declaration", () => {
+    const { registry } = make();
+    expect(() =>
+      registry.declareTemplate("n", "{{ 1 }}", { ...DERIVED, type: "number", varDefault: "never" }),
+    ).toThrow(/cast "never" to number/);
   });
 
   it("a readableOn re-measures when the drawn depth moves", () => {
