@@ -97,7 +97,7 @@ import { disclosureCloseFragment } from "../render/disclosure-close.js";
 import { pickerFuncs } from "../render/picker.js";
 import { carouselFuncs } from "../render/carousel.js";
 import { themePreviewFuncs } from "../render/theme-preview.js";
-import { swatchFuncs } from "../render/swatches.js";
+import { swatchFuncs, swatchesFuncs } from "../render/swatches.js";
 import {
   LAYOUT_PREVIEW,
   layoutPreviewFuncs,
@@ -659,11 +659,12 @@ export function compileDslConfig({
   // The swatch row's `?` picks from the draw's one instant, so a draw at a
   // given instant offers one pick, as it shows one clock.
   const renderClocks: readonly ClockFactory[] = [
-    (clock) => swatchFuncs(actionRuntime, activeSegment, clock.now),
+    (clock) => swatchesFuncs(actionRuntime, activeSegment, clock.now),
   ];
   const engine = createCcCandybarEngine({
     extraFuncs: {
       ...actionFuncs(actionRuntime),
+      ...swatchFuncs(actionRuntime),
       ...pickerFuncs(actionRuntime, activeSegment),
       ...carouselFuncs(actionRuntime, activeSegment),
       ...themePreviewFuncs(actionRuntime, activeSegment),

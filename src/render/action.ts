@@ -305,13 +305,14 @@ export interface RenderBinding {
   // (`stripSeamCols`): a disclosure body leads each row with its ✕ as a cell
   // of its own, so a row fitted inside a body reserves that cell.
   readonly seamCols: number;
-  // [LAW:no-ambient-temporal-coupling] The look this render draws in. Only the
-  // render can resolve it (a `globals.palette` rule needs the payload), so
-  // drawDsl publishes it once it has, before the walk evaluates a template
-  // that reads it; read through `renderLook`.
+  // [LAW:no-ambient-temporal-coupling] The look this render draws in and the
+  // rows it lays its closed segments out in. Only the render can resolve them
+  // (a `globals.palette` rule needs the payload), so drawDsl publishes the
+  // look once it has, before the walk evaluates a template that reads either,
+  // and neither is there while a rule is evaluated; read through
+  // `renderLook` / `renderLayout`.
   readonly look: RenderLook | undefined;
-  // The rows it lays its closed segments out in, read through `renderLayout`.
-  readonly layout: () => PreviewRows;
+  readonly layout: (() => PreviewRows) | undefined;
 }
 
 /**
@@ -352,7 +353,11 @@ export function renderLayout(
   runtime: ActionRuntime,
   reader: string,
 ): PreviewRows {
-  return renderBinding(runtime, reader).layout();
+  const { layout } = renderBinding(runtime, reader);
+  if (layout === undefined) {
+    throw new Error(`${reader} read the render's rows before they were laid`);
+  }
+  return layout();
 }
 
 /**

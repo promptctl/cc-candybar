@@ -151,9 +151,8 @@ export function inSegment<T>(
   place: SegmentPlace,
   run: (active: ActiveSegment) => T,
 ): T {
-  const prior = ref.current;
-  try {
-    return run(
+  return publishing(ref, () =>
+    run(
       openSegment(
         ref,
         place.segName,
@@ -163,7 +162,27 @@ export function inSegment<T>(
         place.tint,
         place.text,
       ),
-    );
+    ),
+  );
+}
+
+/**
+ * Run `run` with no segment published — a gate, which the walk evaluates
+ * between segments — and put back whatever was, so its answer is the same
+ * whichever segment's template first asks it (a layout a template lays out).
+ * [LAW:no-ambient-temporal-coupling]
+ */
+export function outsideSegments<T>(ref: ActiveSegmentRef, run: () => T): T {
+  return publishing(ref, () => {
+    ref.current = null;
+    return run();
+  });
+}
+
+function publishing<T>(ref: ActiveSegmentRef, run: () => T): T {
+  const prior = ref.current;
+  try {
+    return run();
   } finally {
     ref.current = prior;
   }

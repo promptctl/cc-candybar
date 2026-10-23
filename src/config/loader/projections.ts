@@ -152,9 +152,13 @@ export function templateInstants(
     // A `do` names its members, never itself or a nested `do` (cross-ref), so
     // the walk ends; the entry guards it while it runs.
     actionReads.set(name, false);
-    // [LAW:no-defensive-null-guards] cross-ref proved every bound action is
-    // declared.
-    const decl = actions[name]!;
+    // [LAW:no-silent-failure] An action no declaration names binds nothing,
+    // so nothing of its reads the instant: the template that names it fails
+    // where it binds it, as it would kept or projected. cross-ref refuses one
+    // in a segment's or a layout node's templates; a globals rule, or an
+    // action's own text, is checked only where it is evaluated.
+    const decl = actions[name];
+    if (decl === undefined) return false;
     const reads =
       [...actionTemplates(decl)].some(
         ([, source]) => instantRead(source, basis) !== null,

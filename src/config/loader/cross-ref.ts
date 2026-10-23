@@ -423,6 +423,7 @@ export function validateCrossReferences(
           line,
         });
         checkWhenParses(ctx, `${path}.when`, node.when, line);
+        checkActionRefs(ctx, cfg, `${path}.when`, node.when, line);
       }
       if (node.kind !== "segment") continue;
       // [LAW:one-source-of-truth] The anchor is a position, not a declared
@@ -858,6 +859,45 @@ function checkWhenParses(
     ctx.issues.push({
       path,
       message: `Template parse error in ${path}: ${(e as Error).message}`,
+      line,
+    });
+  }
+}
+
+// [LAW:single-enforcer] `{{ action "name" … }}` refs, and the option domain a
+// `{{ picker }}`/`{{ menu }}`/`{{ carousel }}`/`{{ swatches }}` lays out,
+// resolve against the action table on the merged config — so a template can
+// reference a default-provided action — through every helper it calls,
+// exactly as its variable reads do: one check for every authored template
+// that binds actions, a segment's and a layout node's `when` alike.
+function checkActionRefs(
+  ctx: ValidateCtx,
+  cfg: DslConfig,
+  path: string,
+  template: string,
+  line: number | undefined,
+): void {
+  const field = path.slice(path.lastIndexOf(".") + 1);
+  for (const { name: aref, site, via } of templateActionRefs(
+    template,
+    cfg.helpers,
+  )) {
+    if (Object.prototype.hasOwnProperty.call(cfg.actions, aref)) continue;
+    const inOptions =
+      site === "options"
+        ? " (in a picker, menu, carousel, swatch, swatches or themePreview)"
+        : "";
+    if (via !== null) {
+      checkHelperIssue(
+        ctx,
+        via,
+        `Template references unknown action "${aref}"${inOptions}`,
+      );
+      continue;
+    }
+    ctx.issues.push({
+      path,
+      message: `${field} references unknown action "${aref}"${inOptions}`,
       line,
     });
   }
@@ -1313,35 +1353,13 @@ export function validateDeclarations(
         segCtx: segName,
         settings,
       });
-      // [LAW:locality-or-seam] `{{ action "name" … }}` refs, and the option
-      // domain a `{{ picker }}`/`{{ menu }}`/`{{ carousel }}`/`{{ swatches }}`
-      // lays out, resolve
-      // against the action table on the merged config — so a segment can
-      // reference a default-provided action — through every helper the field
-      // calls, exactly as its variable reads do.
-      for (const { name: aref, site, via } of templateActionRefs(
+      checkActionRefs(
+        ctx,
+        cfg,
+        `segments.${segName}.${field}`,
         tpl,
-        cfg.helpers,
-      )) {
-        if (Object.prototype.hasOwnProperty.call(cfg.actions, aref)) continue;
-        const inOptions =
-          site === "options"
-            ? " (in a picker, menu, carousel, swatch, swatches or themePreview)"
-            : "";
-        if (via !== null) {
-          checkHelperIssue(
-            ctx,
-            via,
-            `Template references unknown action "${aref}"${inOptions}`,
-          );
-          continue;
-        }
-        ctx.issues.push({
-          path: `segments.${segName}.${field}`,
-          message: `${field} references unknown action "${aref}"${inOptions}`,
-          line: findKeyLine(ctx.source, ["segments", segName, field]),
-        });
-      }
+        findKeyLine(ctx.source, ["segments", segName, field]),
+      );
     }
   }
 

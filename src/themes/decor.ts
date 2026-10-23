@@ -35,6 +35,7 @@ import {
   type Palette,
 } from "@promptctl/rich-js";
 import { memoPerPalette } from "./palette-memo.js";
+import { is, sameBy, sameEach } from "../utils/same.js";
 
 // --- The vocabulary -----------------------------------------------------------
 
@@ -1509,38 +1510,38 @@ export type Region =
 // the same decor or band, and the same address step for step — so whatever is
 // dealt one of them (`decorationFor`) is dealt the other.
 export function sameRegion(a: Region, b: Region): boolean {
-  if (!sameAddress(a.address, b.address)) return false;
   switch (a.kind) {
     case "bar":
-      return (
-        b.kind === "bar" &&
-        a.decor.variation === b.decor.variation &&
-        a.decor.shade === b.decor.shade
-      );
+      return b.kind === "bar" && sameBarRegion(a, b);
     case "band":
-      return b.kind === "band" && sameDisclosure(a.band, b.band);
+      return b.kind === "band" && sameBandRegion(a, b);
   }
 }
 
-const sameAddress = (a: Address, b: Address): boolean =>
-  a.length === b.length &&
-  a.every(
-    (step, i) =>
-      step.index === b[i]!.index &&
-      step.count === b[i]!.count &&
-      step.distribution === b[i]!.distribution &&
-      step.axis === b[i]!.axis,
-  );
+const sameAddress = sameEach(
+  sameBy<AddressStep>({ index: is, count: is, distribution: is, axis: is }),
+);
+
+export const sameDecor = sameBy<Decor>({ variation: is, shade: is });
 
 // Whether two disclosures are one band: one hue, at one depth, on one ground.
-export const sameDisclosure = (a: Disclosure, b: Disclosure): boolean =>
-  a.hue === b.hue &&
-  a.depth === b.depth &&
-  a.ground.length === b.ground.length &&
-  a.ground.every(
-    (entry, i) =>
-      entry.hue === b.ground[i]!.hue && entry.shade === b.ground[i]!.shade,
-  );
+export const sameDisclosure = sameBy<Disclosure>({
+  hue: is,
+  depth: is,
+  ground: sameEach(sameBy<DecorEntry>({ hue: is, shade: is })),
+});
+
+const sameBarRegion = sameBy<Extract<Region, { kind: "bar" }>>({
+  kind: is,
+  decor: sameDecor,
+  address: sameAddress,
+});
+
+const sameBandRegion = sameBy<Extract<Region, { kind: "band" }>>({
+  kind: is,
+  band: sameDisclosure,
+  address: sameAddress,
+});
 
 /** The bar's root under `decor`: the top of the layout tree, before any step. */
 export const barRoot = (decor: Decor): Region => ({

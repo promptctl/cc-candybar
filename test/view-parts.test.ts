@@ -11,7 +11,12 @@ import { SessionState } from "../src/daemon/session-state";
 import { VERBS } from "../src/daemon/verbs";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import { parseHandlerUrl } from "../src/install/index";
-import { drawDsl, registerDslConfig, type DrawnFrame } from "../src/dsl/render";
+import {
+  drawDsl,
+  registerDslConfig,
+  type DrawnFrame,
+  type RenderWarning,
+} from "../src/dsl/render";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
@@ -37,6 +42,7 @@ function viewOf(config: ValidatedConfig, sessionState = new SessionState()) {
   const registry = new SourceRegistry(store, "", undefined, sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
   const errors: string[] = [];
+  const warnings: RenderWarning[] = [];
   const draw = (
     payload: object,
     at: Instant,
@@ -51,10 +57,13 @@ function viewOf(config: ValidatedConfig, sessionState = new SessionState()) {
       payload,
       at,
       opts,
-      { onSegmentError: (id, message) => errors.push(`${id}: ${message}`) },
+      {
+        onSegmentError: (id, message) => errors.push(`${id}: ${message}`),
+        onRenderWarning: (warning) => warnings.push(warning),
+      },
       selection,
     );
-  return { compiled, registry, errors, draw };
+  return { compiled, registry, errors, warnings, draw };
 }
 
 describe("a frame evaluates the parts whose inputs moved", () => {
@@ -152,6 +161,105 @@ describe("what reads the instant is a projection, however it reaches the clock",
     const view = viewOf(config);
     view.draw({}, A);
     expect(view.errors.join("\n")).toMatch(/keeps its answer/);
+  });
+});
+
+// A part's answer is the template's alone: the same whichever template first
+// asks it, at whichever point of the draw, so keeping it keeps nothing of
+// where it was asked.
+describe("a kept part keeps nothing of where it was first asked", () => {
+  const THEMES = `actions: { applyTheme: { set: "theme", from: "themes" } },`;
+
+  test("a placement's gate is evaluated outside every segment", () => {
+    // `preview` lays out the bar, `gated` among it, so `gated`'s gate is first
+    // asked inside `preview`'s body, where a segment is active; the walk asks
+    // it between segments, where `bgOf` has no segment to read.
+    const view = viewOf(
+      parseAndValidate(
+        "<test>",
+        `{
+          segments: {
+            preview: { template: "{{ layoutPreview }}" },
+            gated: { template: "g", when: '{{ ne (bgOf) "" }}' },
+          },
+          root: { v: [{ h: ["preview"] }, { h: ["gated"] }] },
+        }`,
+      ),
+    );
+    for (const at of [A, B]) {
+      view.errors.length = 0;
+      view.draw({}, at);
+      expect(view.errors).toEqual([
+        expect.stringMatching(/^gated: .*only available inside a segment/),
+      ]);
+    }
+  });
+
+  test("a globals rule reads no look, at the first draw or any after", () => {
+    const view = viewOf(
+      parseAndValidate(
+        "<test>",
+        `{
+          ${THEMES}
+          globals: { style: '{{ swatch "applyTheme" }}' },
+          segments: { s: { template: "s" } },
+          root: { h: ["s"] },
+        }`,
+        new Set(listResolvablePaletteNames()),
+      ),
+    );
+    for (const at of [A, B]) {
+      view.warnings.length = 0;
+      view.draw({}, at);
+      expect(view.warnings).toEqual([
+        expect.objectContaining({
+          kind: "rule",
+          slot: "style",
+          message: expect.stringMatching(
+            /read the render's look before it was resolved/,
+          ),
+        }),
+      ]);
+    }
+  });
+
+  test("a swatch reads no clock, so its cell is kept between frames", () => {
+    const view = viewOf(
+      parseAndValidate(
+        "<test>",
+        `{
+          ${THEMES}
+          segments: { s: { template: '{{ swatch "applyTheme" }}' } },
+          root: { h: ["s"] },
+        }`,
+        new Set(listResolvablePaletteNames()),
+      ),
+    );
+    view.draw({}, A);
+    expect(view.draw({}, B).evaluated).toBe(0);
+    expect(view.errors).toEqual([]);
+  });
+
+  // [LAW:no-silent-failure] An action no declaration names reads nothing:
+  // the rule binding it is refused where it is evaluated, never the compile.
+  test("a rule binding an undeclared action fails as a rule", () => {
+    const view = viewOf(
+      parseAndValidate(
+        "<test>",
+        `{
+          globals: { style: '{{ $a := action "ghost" "?" }}none' },
+          segments: { s: { template: "s" } },
+          root: { h: ["s"] },
+        }`,
+      ),
+    );
+    view.draw({}, A);
+    expect(view.warnings).toEqual([
+      expect.objectContaining({
+        kind: "rule",
+        message: expect.stringMatching(/action "ghost" is not declared/),
+      }),
+    ]);
   });
 });
 

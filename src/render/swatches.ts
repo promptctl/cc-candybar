@@ -118,11 +118,7 @@ export function optionPalette(
   return apply.paletteOf(option, renderLook(runtime, `{{ ${helper} }}`));
 }
 
-export function swatchFuncs(
-  runtime: ActionRuntime,
-  activeSegment: ActiveSegmentRef,
-  clock: () => Date,
-): FuncMap {
+export function swatchFuncs(runtime: ActionRuntime): FuncMap {
   return {
     swatch: {
       fn: (applyName: string, ...tail: unknown[]) => {
@@ -139,6 +135,18 @@ export function swatchFuncs(
       arity: { kind: "variadic" },
       returnType: "T",
     },
+  };
+}
+
+// [LAW:one-source-of-truth] Apart from `swatch` because its `?` reads the
+// draw's clock: a clock factory's functions are what makes a template read
+// the instant (engineClockFunctions), and `swatch` reads none.
+export function swatchesFuncs(
+  runtime: ActionRuntime,
+  activeSegment: ActiveSegmentRef,
+  clock: () => Date,
+): FuncMap {
+  return {
     swatches: {
       fn: (applyName: string, pageName: string): RichText => {
         const apply = requireSwatchable(runtime, applyName, "swatches");

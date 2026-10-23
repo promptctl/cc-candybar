@@ -30,13 +30,18 @@ import type { Template } from "@promptctl/go-template-js";
 import type { Derived, VariableStore } from "../var-system/store.js";
 import type { SourceRegistry } from "../var-system/sources.js";
 import { buildScope, placementScope } from "../template-engine/scope.js";
+import { is, sameBy } from "../utils/same.js";
 import {
   evaluateWhen,
   gateOf,
   resolveSegmentColors,
 } from "../template-engine/index.js";
 import type { Gate } from "../template-engine/layout.js";
-import { inSegment, type ActiveSegmentRef } from "../render/active-segment.js";
+import {
+  inSegment,
+  outsideSegments,
+  type ActiveSegmentRef,
+} from "../render/active-segment.js";
 import type {
   PreviewRows,
   RenderBinding,
@@ -48,6 +53,7 @@ import { placementPalette } from "../themes/index.js";
 import {
   bandFor,
   decorationFor,
+  sameDecor,
   sameDisclosure,
   sameRegion,
   type Disclosure,
@@ -109,13 +115,11 @@ function unwrap<T>(answer: Answer<T>): T {
 // [LAW:one-type-per-behavior] A value no template computes, read as a part is.
 const always = <T>(value: T): Derived<T> => ({ read: () => value });
 
-const sameLook = (a: RenderLook | undefined, b: RenderLook | undefined) =>
-  a !== undefined &&
-  b !== undefined &&
-  a.basePalette === b.basePalette &&
-  a.palette === b.palette &&
-  a.decor.variation === b.decor.variation &&
-  a.decor.shade === b.decor.shade;
+const sameLook = sameBy<RenderLook>({
+  basePalette: is,
+  palette: is,
+  decor: sameDecor,
+});
 
 // Where the walk draws a placement: the palette its colours resolve from, and
 // the region its decoration is dealt by.
@@ -136,9 +140,15 @@ export class ViewParts {
   private readonly facts: DrawFacts;
   private readonly look = observable.box<RenderLook | undefined>(undefined, {
     deep: false,
-    equals: sameLook,
+    equals: (a, b) => a !== undefined && b !== undefined && sameLook(a, b),
   });
   private readonly layout: Derived<PreviewRows>;
+  // [LAW:no-ambient-temporal-coupling] A globals rule is evaluated before the
+  // draw resolves its look — the look is what the rules decide — so while one
+  // is, the binding has neither look nor layout to give: a read is refused by
+  // name (renderLook, renderLayout), never answered with the last draw's.
+  // Read outside every kept part but the rule's own, which always runs here.
+  private readonly phase = { ruling: false };
   private readonly gates = new Map<CompiledNode, Derived<Gate>>();
   private readonly placements = new Map<CompiledSegmentNode, Placement>();
   private readonly rules = new Map<Template<RichText>, Derived<RuleOutcome>>();
@@ -153,6 +163,8 @@ export class ViewParts {
     const drawn = observable(facts, undefined, { deep: false });
     this.facts = drawn;
     const look = this.look;
+    const phase = this.phase;
+    const layout = (): PreviewRows => this.layout.read();
     this.binding = {
       store,
       registry,
@@ -169,13 +181,16 @@ export class ViewParts {
         return drawn.seamCols;
       },
       get look() {
-        return look.get();
+        return phase.ruling ? undefined : look.get();
       },
-      layout: () => this.layout.read(),
+      get layout() {
+        return phase.ruling ? undefined : layout;
+      },
     };
     this.layout = this.derive("layout", source.layoutReadsInstant, () => {
       // [LAW:no-defensive-null-guards] The draw resolves the preset to a
-      // compiled one before it publishes it.
+      // compiled one before it publishes it, and publishes its look before
+      // the walk, the one place outside a rule the layout is read.
       const root = source.roots.get(drawn.preset)!;
       const palette = look.get()!.palette;
       return layoutRows(root, (node) => this.shown(node)).map((row) =>
@@ -216,7 +231,9 @@ export class ViewParts {
     let part = this.gates.get(node);
     if (part === undefined) {
       part = this.derive("when", this.readsInstant(when), () =>
-        gateOf(when, this.scope),
+        outsideSegments(this.source.activeSegment, () =>
+          gateOf(when, this.scope),
+        ),
       );
       this.gates.set(node, part);
     }
@@ -239,6 +256,7 @@ export class ViewParts {
         "rule",
         this.readsInstant(template),
         (): RuleOutcome => {
+          this.phase.ruling = true;
           try {
             return {
               kind: "named",
@@ -252,6 +270,8 @@ export class ViewParts {
               kind: "failed",
               error: e instanceof Error ? e.message : String(e),
             };
+          } finally {
+            this.phase.ruling = false;
           }
         },
       );
@@ -336,14 +356,20 @@ export function viewParts(
 class Placement implements PlacementParts {
   // What the walk hands each part: where it draws the placement, then what
   // the colours and the body evaluated to.
-  private readonly where = inlet<Where>(
-    (a, b) => a.palette === b.palette && sameRegion(a.region, b.region),
+  private readonly where = inlet(
+    sameBy<Where>({ palette: is, region: sameRegion }),
   );
-  private readonly ground = inlet<{ colours: Colours; bodyOpen: boolean }>(
-    (a, b) => sameColours(a.colours, b.colours) && a.bodyOpen === b.bodyOpen,
+  private readonly ground = inlet(
+    sameBy<{ colours: Dealt; bodyOpen: boolean }>({
+      colours: sameDealt,
+      bodyOpen: is,
+    }),
   );
-  private readonly opened = inlet<{ colours: Colours; open: boolean }>(
-    (a, b) => sameColours(a.colours, b.colours) && a.open === b.open,
+  private readonly opened = inlet(
+    sameBy<{ colours: Dealt; open: boolean }>({
+      colours: sameDealt,
+      open: is,
+    }),
   );
   private readonly gate: Derived<boolean>;
   private readonly open: Derived<boolean>;
@@ -368,13 +394,13 @@ class Placement implements PlacementParts {
       when === undefined
         ? always(true)
         : view.derive(`${node.id} when`, view.readsInstant(when), () =>
-            evaluateWhen(when, scope),
+            outsideSegments(ref, () => evaluateWhen(when, scope)),
           );
     this.open =
       opens === undefined
         ? always(false)
         : view.derive(`${node.id} body gate`, view.readsInstant(opens), () =>
-            evaluateWhen(opens, view.scope),
+            outsideSegments(ref, () => evaluateWhen(opens, view.scope)),
           );
     this.colours = view.derive(
       `${node.id} colours`,
@@ -453,15 +479,18 @@ function inlet<T>(same: (a: T, b: T) => boolean) {
   };
 }
 
-// Whether two colourings deal a body and its affixes alike: what they read of
-// it — its record, its ground, and the band it opens.
-const sameColours = (a: Colours, b: Colours): boolean =>
-  a.palette === b.palette &&
-  a.drawnAt === b.drawnAt &&
-  a.tint.hex === b.tint.hex &&
-  a.text.hex === b.text.hex &&
-  a.bg.hex === b.bg.hex &&
-  sameDisclosure(a.disclosure, b.disclosure);
+const sameHex = (a: ColorRgba, b: ColorRgba): boolean => a.hex === b.hex;
+
+// Whether two colourings deal a body and its affixes alike: everything they
+// can read of it — its record, its ground, and the band it opens.
+const sameDealt = sameBy<Dealt>({
+  palette: is,
+  drawnAt: is,
+  tint: sameHex,
+  text: sameHex,
+  bg: sameHex,
+  disclosure: sameDisclosure,
+});
 
 // ─── What a placement's templates evaluate to ─────────────────────────────────
 
@@ -477,6 +506,11 @@ interface Colours {
   readonly bg: ColorRgba;
   readonly style: Style;
 }
+
+// [LAW:types-are-the-program] What of its colours a placement's body and its
+// lead and trail are handed: all but the closed cell's style, which the walk
+// alone reads — so they read nothing `sameDealt` does not compare.
+type Dealt = Omit<Colours, "style">;
 
 interface Body {
   readonly fragments: readonly RichText[];
@@ -510,7 +544,7 @@ function placeOf(
 
 // The band the segment opens, read the one way for the background `{{ bgOf }}`
 // sees, its shortfalls and every Style it can wear.
-const bandOf = (colours: Colours) =>
+const bandOf = (colours: Dealt) =>
   bandFor(colours.palette, colours.disclosure, colours.drawnAt);
 
 // [LAW:one-source-of-truth] What the segment is dealt is ONE `decorationFor`
@@ -551,7 +585,7 @@ function coloursOf(
 function bodyOf(
   ref: ActiveSegmentRef,
   node: CompiledSegmentNode,
-  colours: Colours,
+  colours: Dealt,
   template: Template<RichText>,
   bodyOpen: boolean,
   scope: object,
@@ -570,7 +604,7 @@ function bodyOf(
 function affixesOf(
   ref: ActiveSegmentRef,
   node: CompiledSegmentNode,
-  colours: Colours,
+  colours: Dealt,
   open: boolean,
   lead: Template<RichText> | undefined,
   trail: Template<RichText> | undefined,
