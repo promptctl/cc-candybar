@@ -1,3 +1,9 @@
+## [1.156.4](https://github.com/promptctl/cc-candybar/compare/v1.156.3...v1.156.4) (2026-10-23)
+
+### Bug Fixes
+
+* **menu:** a sub-menu closes when its parent closes (brandon-menus-sjhy.9p6) ([#418](https://github.com/promptctl/cc-candybar/issues/418)) ([9c65b5a](https://github.com/promptctl/cc-candybar/commit/9c65b5a2315f16c1e50bd26cd397654754974dba))
+
 ## [1.156.3](https://github.com/promptctl/cc-candybar/compare/v1.156.2...v1.156.3) (2026-10-23)
 
 ### Bug Fixes
