@@ -86,7 +86,8 @@ export interface HelpArtifacts {
 // structurally (edit mode's `(?)` trails a row edit chrome gates by `when`).
 // The trigger inherits those gates, and a hidden trigger renders no body, so a
 // `(?)` opened inside a surface that is then closed cannot leave its body
-// stranded on the bar [LAW:dataflow-not-control-flow].
+// stranded on the bar [LAW:dataflow-not-control-flow]; its state carries them
+// too, so closing that surface closes the `(?)`.
 export function declareHelp(
   name: string,
   lines: readonly string[],
@@ -94,7 +95,10 @@ export function declareHelp(
   out: HelpArtifacts,
 ): SegmentNode {
   const self: DisclosureRef = { variable: name, key: name, member: HELP_OPEN };
-  out.variables[name] = disclosureStateVar(name, DISCLOSURE_CLOSED);
+  out.variables[name] = {
+    ...disclosureStateVar(name, DISCLOSURE_CLOSED),
+    ...(within.length > 0 && { within }),
+  };
   out.actions[name] = disclosureCycleAction(name, HELP_OPEN);
   out.segments[name] = {
     template: disclosureTrigger(

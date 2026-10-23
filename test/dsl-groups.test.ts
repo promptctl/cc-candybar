@@ -11,7 +11,7 @@
 //   3. Accordion = sibling groups sharing `key`: one key holds one open name,
 //      so opening B auto-closes A — no accordion mode, just the shared value.
 //   4. Nested disclosure = nested groups with DISTINCT keys; a closed parent
-//      hides the whole subtree (child state persists invisibly).
+//      hides the whole subtree, and closing it closes what was open inside.
 //   5. The loader proves the group invariants (identifier name, unique names,
 //      reserved namespace, ancestor/descendant key sharing, one open per key).
 
@@ -251,7 +251,7 @@ describe("2de.4 — nested groups (distinct keys)", () => {
     );
   });
 
-  test("a closed parent hides the whole subtree; child state persists invisibly", () => {
+  test("a closed parent hides the whole subtree, and closes what was open in it", () => {
     const { render, clickToggle } = buildRuntime(SRC);
     // Closed outer: inner toggle not rendered at all.
     expect(stripAnsi(render())).not.toContain("inner");
@@ -261,11 +261,13 @@ describe("2de.4 — nested groups (distinct keys)", () => {
     expect(out).not.toContain("LEAF-BODY");
     clickToggle(render(), "groups.inner", "inner");
     expect(stripAnsi(render())).toContain("LEAF-BODY");
-    // Close outer: everything inside vanishes; reopen: inner is STILL open.
+    // Close outer: everything inside vanishes; reopen: inner is closed.
     clickToggle(render(), "groups.outer", "closed");
     expect(stripAnsi(render())).not.toContain("LEAF-BODY");
     clickToggle(render(), "groups.outer", "outer");
-    expect(stripAnsi(render())).toContain("LEAF-BODY");
+    out = stripAnsi(render());
+    expect(out).toContain("inner ▸");
+    expect(out).not.toContain("LEAF-BODY");
   });
 });
 

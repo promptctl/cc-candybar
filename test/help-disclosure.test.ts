@@ -171,12 +171,11 @@ function openSettingsMenu(rt: ReturnType<typeof buildRuntime>): void {
 // The real route into edit mode from a minimal user config: the `✎ arrange`
 // control lives on the settings menu's first line, which is the whole point of
 // candybar-settings-ui-aok.1 — a user root deletes every other trigger.
-// Arranging keeps the menu open, so the door closes it after: what is measured
-// is the edit-mode bar itself, not the bar with the menu risen over it.
+// Arranging keeps the menu open, and closing it leaves edit mode
+// (brandon-menus-sjhy.9p6), so the edit-mode bar is measured under the menu.
 function enterEditMode(rt: ReturnType<typeof buildRuntime>): void {
   openSettingsMenu(rt);
   rt.clickWriting(rt.render(200), EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
-  rt.clickWriting(rt.render(200), SETTINGS_ANCHOR, DISCLOSURE_CLOSED);
 }
 
 // ─── 1. Identity with the corpus, not similarity ─────────────────────────────

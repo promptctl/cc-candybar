@@ -344,10 +344,12 @@ describe("edit mode is in every config", () => {
       set: "edit.configure",
       to: "closed",
     });
+    // Arranging lives inside the settings door: closing it leaves edit mode.
     expect(config.variables[EDIT_MODE_KEY]).toEqual({
       kind: "state",
       key: EDIT_MODE_KEY,
       default: "closed",
+      within: [{ variable: "candybar.menu", key: "candybar.menu", member: "open" }],
     });
   });
 

@@ -27,7 +27,7 @@ import type {
   DisclosureRef,
   Placement,
   SegmentNode,
-  VariableDecl,
+  StateVarDecl,
 } from "./dsl-types.js";
 
 // The "nothing open" sentinel a disclosure's key starts from and returns to on
@@ -229,7 +229,7 @@ export function templateLiteral(text: string): string {
 // an independent disclosure, or an initially-open member for a group's
 // `open: true`). One shape, so a group var and a menu var declared on one key
 // cannot disagree on kind or key.
-export function disclosureStateVar(key: string, def: string): VariableDecl {
+export function disclosureStateVar(key: string, def: string): StateVarDecl {
   return { kind: "state", key, default: def };
 }
 
@@ -241,4 +241,21 @@ export function disclosureStateVar(key: string, def: string): VariableDecl {
 // `set`, so a disclosure toggle needs no parallel verb [LAW:single-enforcer].
 export function disclosureCycleAction(key: string, member: string): ActionDecl {
   return { set: key, cycle: [DISCLOSURE_CLOSED, member] };
+}
+
+// One disclosure's open state: the key and the member it holds while open —
+// a `DisclosureRef` less the variable a template reads it through.
+export type Disclosure = Pick<DisclosureRef, "key" | "member">;
+
+// [LAW:one-source-of-truth] The inverse of `disclosureCycleAction`: the
+// disclosure an action toggles, read off the one shape every disclosure's
+// toggle has, or none for any other action.
+export function disclosureOfAction(decl: ActionDecl): Disclosure | undefined {
+  if (!("set" in decl && "cycle" in decl)) return undefined;
+  const [first, member, ...more] = decl.cycle;
+  return first === DISCLOSURE_CLOSED &&
+    member !== undefined &&
+    more.length === 0
+    ? { key: decl.set, member }
+    : undefined;
 }

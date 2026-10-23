@@ -35,7 +35,6 @@
 //     `✓ done` fires — so the ordering is load-bearing in that direction too,
 //     not merely tidy.
 
-import { ident } from "./ident.js";
 import { sharedMenuStateKey } from "./menu-keys.js";
 import { QUIET_TEXT } from "./quiet-text.js";
 import type { ActionDecl } from "./action.js";
@@ -68,7 +67,7 @@ import {
   VERDICT_OK,
   VERDICT_UNRUN,
 } from "../doctor/report.js";
-import { EDIT_SWITCH, editModeArtifacts } from "./loader/edit-mode.js";
+import { EDIT_TOGGLE_ACTION, editModeArtifacts } from "./loader/edit-mode.js";
 import { presetByName, presetNames, presetRoot } from "./presets.js";
 import { quickActions } from "./quick-actions.js";
 import { commandTray } from "./command-tray.js";
@@ -76,6 +75,7 @@ import { autocompactControl } from "./autocompact-control.js";
 import { formatTokenCount } from "./format-token-count.js";
 import { confirmStep } from "./confirm-step.js";
 import { SETTINGS_NS } from "./loader/reserved-namespace.js";
+import { SETTINGS_ANCHOR, SETTINGS_OPEN, SETTINGS_REF } from "./door.js";
 import {
   SETTINGS,
   type SettingName,
@@ -109,18 +109,9 @@ import {
 } from "./lanes.js";
 import { LANE_HELP } from "../help-text.js";
 
-// [LAW:one-source-of-truth] THE anchor: one string that is simultaneously the
-// segment name an author places in `root` to choose the menu's position, the
-// name of the toggle segment the synthesis puts there, the disclosure's state
-// variable, and its cycle action. Group sugar already spans those four with one
-// `groups.<name>` string for the same reason — one name means the toggle's
-// click and the body's `when` cannot address different keys.
-export const SETTINGS_ANCHOR = `${SETTINGS_NS}menu`;
-
-// The open member of every binary disclosure this menu mints — each holds the
-// CLOSED sentinel or this. The tab key is the accordion exception: it holds
-// the open tab's name.
-export const SETTINGS_OPEN = "open";
+// The door lives in src/config/door.ts, downhill of edit mode, which sits
+// inside it.
+export { SETTINGS_ANCHOR, SETTINGS_OPEN } from "./door.js";
 
 // The body's content segments.
 const EDIT_SEG = `${SETTINGS_NS}edit`;
@@ -140,8 +131,9 @@ const seg = (name: string): LayoutNode => ({ kind: "segment", name });
 // a time, its body dropped below the strip. A tab strip is an accordion: every
 // tab is a disclosure trigger on ONE key, which holds the open tab's name, so
 // opening one closes the rest and the open one wears its state colour like any
-// open trigger. The door's click folds it back to the first tab (doorFolds),
-// so the menu always reopens at its top level.
+// open trigger. Closing the door returns it to the first tab, as it returns
+// everything inside the door (src/config/disclosure-nest.ts), so the menu
+// always reopens at its top level.
 const TAB_KEY = `${SETTINGS_NS}tab`;
 // The tab a fresh session opens the menu on.
 const FIRST_TAB: TabName = "session";
@@ -216,16 +208,6 @@ const THEME_DEFAULT_CELL: SegmentDecl = {
 const RESET_ALL_SEG = `${SETTINGS_NS}resetAll`;
 // The door's own open/close cycle, fired beside the disarm.
 const DOOR_TOGGLE = `${SETTINGS_ANCHOR}.toggle`;
-
-// [LAW:one-source-of-truth] The door's disclosure as a ref rather than a gate
-// string (each tab's is `tabRef`): every gate below — and every `(?)` nested
-// inside them — derives from a ref, so the toggle that writes a key and the
-// `when` that reads it cannot name different variables.
-const SETTINGS_REF: DisclosureRef = {
-  variable: SETTINGS_ANCHOR,
-  key: SETTINGS_ANCHOR,
-  member: SETTINGS_OPEN,
-};
 
 // Undo and redo step the session's one settings history
 // (src/daemon/settings-history.ts).
@@ -780,36 +762,7 @@ function doorBody(): ContainerNode {
   };
 }
 
-// The door's body is one value: the anchor hangs it and the fold reads its keys
-// off it, so the two cannot describe different bodies.
 const DOOR_BODY = doorBody();
-
-// [LAW:one-source-of-truth] The door's click returns everything its body holds
-// to how a fresh session finds it — each disclosure inside it, at any depth,
-// written back to its state variable's default (the first tab, every picker
-// closed) — so the menu never reopens onto panels left open from an earlier
-// visit. The keys are read off the body itself, so a disclosure added to the
-// menu later is folded with no list to keep. One action per key, fired beside
-// the door's toggle in the same click.
-function doorFolds(artifacts: MenuArtifacts): string[] {
-  const keys = new Map<string, string>();
-  for (const node of walkNodes(DOOR_BODY)) {
-    if (node.kind === "segment" && node.opens !== undefined) {
-      keys.set(node.opens.ref.key, node.opens.ref.variable);
-    }
-  }
-  return [...keys].map(([key, variable]) => {
-    const decl = artifacts.variables[variable];
-    if (decl?.kind !== "state" || decl.default === undefined) {
-      throw new Error(
-        `settings menu: the door folds "${key}", but "${variable}" is not a state variable the menu declares with a default`,
-      );
-    }
-    const name = `${SETTINGS_ANCHOR}.fold.${ident(key)}`;
-    artifacts.actions[name] = { set: key, to: decl.default };
-    return name;
-  });
-}
 
 function expandContainer<
   N extends { readonly children: readonly LayoutNode[] },
@@ -842,11 +795,8 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
     },
     actions: {
       [DOOR_TOGGLE]: disclosureCycleAction(SETTINGS_ANCHOR, SETTINGS_OPEN),
+      [SETTINGS_ANCHOR]: { do: [DOOR_TOGGLE, ...DOOR_DISARMS] },
       [DOCTOR_RUN_ACTION]: { doctor: "run" },
-      // Entering or leaving edit mode is a click like every other in the
-      // menu: the menu stays as it was, so `◁ back` and the tabs stay in reach
-      // while the bar is arranged.
-      [EDIT_SEG]: { do: [...EDIT_SWITCH] },
       ...TOOLBAR.actions,
       ...COMMANDS.actions,
       ...AUTOCOMPACT.actions,
@@ -905,7 +855,10 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
         template: `{{ action "${DOCTOR_RUN_ACTION}" "🩺 doctor" }}`,
       },
       [EDIT_SEG]: {
-        template: `{{ action "${EDIT_SEG}" "✎ arrange" "✎ done" }}`,
+        // Entering or leaving edit mode is a click like every other in the
+        // menu: the menu stays as it was, so `◁ back` and the tabs stay in
+        // reach while the bar is arranged.
+        template: `{{ action "${EDIT_TOGGLE_ACTION}" "✎ arrange" "✎ done" }}`,
       },
     },
   };
@@ -962,10 +915,6 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
   Object.assign(artifacts.variables, COMMANDS.variables, RESET_ALL.variables);
   declareSettingControls(artifacts);
   declareDoctorRows(artifacts);
-  // Last, so every disclosure the body holds has declared its state.
-  artifacts.actions[SETTINGS_ANCHOR] = {
-    do: [DOOR_TOGGLE, ...DOOR_DISARMS, ...doorFolds(artifacts)],
-  };
   return artifacts;
 }
 
@@ -1079,8 +1028,8 @@ function declareSettingControls(artifacts: MenuArtifacts): void {
 // [LAW:one-source-of-truth] Edit mode's state and switch, ensured rather than
 // duplicated: this pass and synthesizeEditModeToggle both mint
 // editModeArtifacts(), so whichever lands first is the only one. Ensuring it
-// here is not an optional courtesy — the EDIT_SEG action above fires
-// EDIT_SWITCH, and that pass is demand-driven off a scan of the segments a
+// here is not an optional courtesy — the EDIT_SEG segment above fires
+// `edit.toggle`, and that pass is demand-driven off a scan of the segments a
 // FILE declared, which cannot see a segment this pass mints later.
 function ensureEditToggle(artifacts: MenuArtifacts): void {
   const { variables, actions } = editModeArtifacts();

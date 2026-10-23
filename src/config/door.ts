@@ -1,0 +1,30 @@
+// The settings menu's door: its anchor and the disclosure it opens. Downhill
+// of the settings menu (src/config/settings-menu.ts) and of edit mode, which
+// lives inside the door (src/config/loader/edit-mode.ts), so both name one
+// door [LAW:one-way-deps].
+
+import type { DisclosureRef } from "./dsl-types.js";
+import { SETTINGS_NS } from "./loader/reserved-namespace.js";
+
+// [LAW:one-source-of-truth] THE anchor: one string that is simultaneously the
+// segment name an author places in `root` to choose the menu's position, the
+// name of the toggle segment the synthesis puts there, the disclosure's state
+// variable, and its cycle action. Group sugar already spans those four with one
+// `groups.<name>` string for the same reason — one name means the toggle's
+// click and the body's `when` cannot address different keys.
+export const SETTINGS_ANCHOR = `${SETTINGS_NS}menu`;
+
+// The open member of every binary disclosure this menu mints — each holds the
+// CLOSED sentinel or this. The tab key is the accordion exception: it holds
+// the open tab's name.
+export const SETTINGS_OPEN = "open";
+
+// [LAW:one-source-of-truth] The door's disclosure as a ref rather than a gate
+// string (each tab's is `tabRef`): every gate the menu builds — and every
+// `(?)` nested inside them — derives from a ref, so the toggle that writes a
+// key and the `when` that reads it cannot name different variables.
+export const SETTINGS_REF: DisclosureRef = {
+  variable: SETTINGS_ANCHOR,
+  key: SETTINGS_ANCHOR,
+  member: SETTINGS_OPEN,
+};

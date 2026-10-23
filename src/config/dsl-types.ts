@@ -662,6 +662,12 @@ export interface StateVarDecl {
   readonly kind: "state";
   readonly key: string;
   readonly default?: string;
+  // The disclosures this key's own disclosure sits inside without hanging in
+  // their body — edit chrome is gated on edit mode by `when`, not hung under
+  // it — so closing one returns this key to its default, as closing a body
+  // returns what hangs in it (src/config/disclosure-nest.ts). Synthesis-only,
+  // like `SegmentNode.opens`: the loader's variable schema does not list it.
+  readonly within?: readonly DisclosureRef[];
 }
 
 export type GitField =

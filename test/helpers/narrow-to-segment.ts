@@ -2,15 +2,12 @@
 // narrow an already-validated config to that segment's leaf. Shared by every
 // test that pins a single segment's bytes or colours.
 
-import type {
-  SettingValue,
-  ValidatedConfig,
-} from "../../src/config/dsl-types";
+import type { SettingValue, ValidatedConfig } from "../../src/config/dsl-types";
 import { rootOf } from "../../src/config/root";
 import {
   EDIT_CONFIGURE_KEY,
   EDIT_MODE_KEY,
-  EDIT_SWITCH,
+  EDIT_UNCONFIGURE_ACTION,
   EDIT_TOGGLE_ACTION,
 } from "../../src/config/loader/edit-mode";
 import { EDIT_NS } from "../../src/config/loader/reserved-namespace";
@@ -59,13 +56,13 @@ export const oneSegmentRoot = (
 // exercise (test/dsl-edit-mode.test.ts and test/dsl-layout-edit.test.ts own
 // that surface), so the clean narrowing drops every synthesized per-preset
 // `edit.*` chrome artifact too — EXCEPT the bare, preset-independent names the
-// settings menu mints once (its `✎ arrange` fires EDIT_SWITCH, over the two
+// settings menu mints once (its `✎ arrange` fires the toggle, over the two
 // keys), which stay so that control still compiles.
 const MENU_EDIT_NAMES: ReadonlySet<string> = new Set([
   EDIT_MODE_KEY,
   EDIT_CONFIGURE_KEY,
   EDIT_TOGGLE_ACTION,
-  ...EDIT_SWITCH,
+  EDIT_UNCONFIGURE_ACTION,
 ]);
 const EDIT_CHROME_NAME = (name: string) =>
   name.startsWith(EDIT_NS) && !MENU_EDIT_NAMES.has(name);

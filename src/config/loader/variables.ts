@@ -385,7 +385,8 @@ const GIT_VAR_FIELDS: FieldSpecMap<Omit<GitVarDecl, "kind">> = {
 const GIT_VAR_REMOVED = noCachePolicy(
   "a git variable is refreshed by the daemon's own watch on the repository",
 );
-const STATE_FIELDS: FieldSpecMap<Omit<StateVarDecl, "kind">> = {
+// `within` is synthesis-only: no file may author it.
+const STATE_FIELDS: FieldSpecMap<Omit<StateVarDecl, "kind" | "within">> = {
   key: requireStringSpec(),
   default: optionalStringSpec(),
 };

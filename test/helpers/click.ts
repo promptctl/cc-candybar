@@ -130,8 +130,9 @@ export function testVerbContext(
       },
     },
     // The config the session renders with: a test whose click reads it (a
-    // save, a step from an unset key) hands it in; reaching the lookup
-    // without one is a test bug.
+    // save, a step from an unset key, any session write once the session has
+    // rendered — the write closes what it closes in that config) hands it in;
+    // reaching the lookup without one is a test bug.
     configFor: () => {
       if (config === undefined) {
         throw new Error("configFor: this test handed in no config");

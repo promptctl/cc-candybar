@@ -595,11 +595,11 @@ describe("the menu's second line is five tabs, one open at a time", () => {
     expect(stripAnsi(render())).toContain("⎘ id");
     clickWriting(render(), TAB_KEY, "tools");
     expect(stripAnsi(render())).toContain("🩺 doctor");
-    // However the menu was closed — here a row's ✕ — the door's click that
-    // reopens it folds what was left open inside it.
+    // Closing the menu clears what was left open inside it, so reopening
+    // finds the tab a fresh session holds: none, read as its default.
     clickWriting(render(), SETTINGS_ANCHOR, DISCLOSURE_CLOSED);
     clickWriting(render(), SETTINGS_ANCHOR, "open");
-    expect(sessionState.get("s1", TAB_KEY)).toBe("session");
+    expect(sessionState.get("s1", TAB_KEY)).toBeNull();
     const reopened = stripAnsi(render());
     expect(reopened).toContain("⎘ id");
     expect(reopened).not.toContain("🩺 doctor");
