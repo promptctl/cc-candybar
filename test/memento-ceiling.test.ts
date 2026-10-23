@@ -34,7 +34,8 @@ import {
   type CeilingScope,
   type MementoEdge,
 } from "../src/memento/edge";
-import { MementoProvider } from "../src/segments/memento";
+import { MementoProvider, READING_PERIOD_MS } from "../src/segments/memento";
+import { Holds } from "../src/utils/holds";
 import { projectMemento } from "../src/daemon/render-payload";
 import { ABSENT, failed, ok, type Outcome } from "../src/utils/outcome";
 import { linkUrls, stripAnsi } from "./helpers/ansi";
@@ -336,45 +337,72 @@ function fakeEdge(readings: Outcome<CeilingReading>[]) {
 describe("MementoProvider", () => {
   const A = ok({ ceiling: 350_000, session: null });
   const B = ok({ ceiling: 450_000, session: "450000" });
+  let provider: MementoProvider | undefined;
+  let holds: Holds;
+  const providerOf = (edge: MementoEdge): MementoProvider =>
+    (provider = new MementoProvider(edge));
 
-  test("a reading stands for its TTL; past it, it is drawn while memento is asked again", async () => {
-    let now = 0;
+  beforeEach(() => {
+    jest.useFakeTimers();
+    holds = new Holds();
+  });
+
+  afterEach(() => {
+    provider?.close();
+    provider = undefined;
+    jest.useRealTimers();
+  });
+
+  test("a held reading is asked again on its period; a render never waits on it", async () => {
     const f = fakeEdge([A, B]);
-    const p = new MementoProvider(f.edge, () => now);
-    expect(await p.getCeiling(SCOPE)).toEqual(A);
-    now = 9_999;
-    expect(await p.getCeiling(SCOPE)).toEqual(A);
+    const p = providerOf(f.edge);
+    expect(await p.getCeiling(holds, SCOPE)).toEqual(A);
+    await jest.advanceTimersByTimeAsync(READING_PERIOD_MS - 1);
+    expect(await p.getCeiling(holds, SCOPE)).toEqual(A);
     expect(f.reads).toHaveLength(1);
-    now = 10_000;
-    // The render does not wait on the spawn: it draws the expired reading.
-    expect(await p.getCeiling(SCOPE)).toEqual(A);
+    await jest.advanceTimersByTimeAsync(1);
     expect(f.reads).toHaveLength(2);
-    expect(await p.getCeiling(SCOPE)).toEqual(B);
+    expect(await p.getCeiling(holds, SCOPE)).toEqual(B);
     expect(f.reads).toHaveLength(2);
   });
 
-  test("a move drops the reading, so the next render reads what it left", async () => {
+  test("a reading nobody holds is not asked again", async () => {
     const f = fakeEdge([A, B]);
-    const p = new MementoProvider(f.edge, () => 0);
-    await p.getCeiling(SCOPE);
+    const p = providerOf(f.edge);
+    await p.getCeiling(holds, SCOPE);
+    holds.release();
+    await jest.advanceTimersByTimeAsync(READING_PERIOD_MS * 3);
+    expect(f.reads).toHaveLength(1);
+  });
+
+  test("a move supersedes the reading: the next render reads what it left", async () => {
+    const f = fakeEdge([A, B]);
+    const p = providerOf(f.edge);
+    await p.getCeiling(holds, SCOPE);
     p.move(SCOPE, { kind: "set", to: "+100_000" });
     expect(f.moves).toEqual([{ kind: "set", to: "+100_000" }]);
-    // The click already asked memento; the render joins that read.
+    // The click already asked memento; the render waits on that read.
     expect(f.reads).toHaveLength(2);
-    expect(await p.getCeiling(SCOPE)).toEqual(B);
+    expect(await p.getCeiling(holds, SCOPE)).toEqual(B);
     expect(f.reads).toHaveLength(2);
+    expect(p.getStats().refreshes).toEqual({
+      first: 1,
+      period: 0,
+      supersede: 1,
+    });
   });
 
-  test("a read in flight when a move lands is not cached", async () => {
+  test("a render waiting when a move lands is answered by the read after it, never the one before", async () => {
     const f = fakeEdge([A, B]);
-    const p = new MementoProvider(f.edge, () => 0);
+    const p = providerOf(f.edge);
     f.holdReads();
-    const stale = p.getCeiling(SCOPE);
+    const waiting = p.getCeiling(holds, SCOPE);
     p.move(SCOPE, { kind: "clear" });
+    // The read from before the move lands after the move's own read.
+    expect(await waiting).toEqual(B);
     f.release();
-    await stale;
-    // Not served from the stale read: memento is asked afresh.
-    await p.getCeiling(SCOPE);
+    await jest.advanceTimersByTimeAsync(0);
+    expect(await p.getCeiling(holds, SCOPE)).toEqual(B);
     expect(f.reads).toHaveLength(2);
   });
 
@@ -391,12 +419,12 @@ describe("MementoProvider", () => {
         return ok("/plugin");
       },
     };
-    const p = new MementoProvider(edge, () => 0);
+    const p = providerOf(edge);
     const zai = { ...SCOPE, claudeConfigDir: "/home/u/.claude.zai", env: {} };
-    expect(await p.getCeiling(SCOPE)).toEqual(A);
-    expect(await p.getCeiling(zai)).toEqual(B);
+    expect(await p.getCeiling(holds, SCOPE)).toEqual(A);
+    expect(await p.getCeiling(holds, zai)).toEqual(B);
     expect(located).toEqual([SCOPE, zai]);
-    expect(await p.getCeiling(SCOPE)).toEqual(A);
+    expect(await p.getCeiling(holds, SCOPE)).toEqual(A);
     expect(f.reads).toEqual([SCOPE, zai]);
   });
 
@@ -423,8 +451,8 @@ describe("MementoProvider", () => {
         throw new Error("unreachable");
       },
     };
-    const p = new MementoProvider(edge, () => 0);
-    expect(await p.getCeiling(SCOPE)).toEqual(ABSENT);
+    const p = providerOf(edge);
+    expect(await p.getCeiling(holds, SCOPE)).toEqual(ABSENT);
     expect(() => p.move(SCOPE, { kind: "clear" })).toThrow(/not installed/);
   });
 });

@@ -179,6 +179,17 @@ export function formatStats(s: StatsSnapshot): string {
   );
   lines.push(`  sweeps        ${s.usageCache.sweeps}`);
   lines.push(``);
+  lines.push(`sources`);
+  for (const [name, source] of Object.entries(s.sources)) {
+    const refreshes = Object.entries(source.refreshes)
+      .map(([by, n]) => `${by}:${n}`)
+      .join(" ");
+    const held = "held" in source ? ` held=${source.held}` : "";
+    lines.push(
+      `  ${name.padEnd(12)}  entries=${source.entries}${held} failures=${source.failures} refreshes ${refreshes}`,
+    );
+  }
+  lines.push(``);
   lines.push(`transcriptReads`);
   lines.push(`  reads         ${s.transcriptReads.reads}`);
   lines.push(`  bytes         ${fmtBytes(s.transcriptReads.bytes)}`);

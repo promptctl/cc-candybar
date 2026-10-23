@@ -77,7 +77,7 @@ async function bar(
         return ok("work");
       },
     },
-    autoCompact: () => ok(400_000),
+    autoCompact: { window: () => ok(400_000) },
     log: () => {},
     history: () => EMPTY_HISTORY_DEPTH,
     navigation: () => 0,

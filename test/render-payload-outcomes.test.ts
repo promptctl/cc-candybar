@@ -371,11 +371,12 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
   test("a lane stub that THROWS is totalized to failed and logged with its lane name", async () => {
     const logs: LogEntry[] = [];
     const deps = depsWith(ABSENT, logs, {
-      tmuxService: {
-        getSessionName: async () => {
+      contextProvider: {
+        getContextInfo: async () => {
           throw new Error("stub bug");
         },
       },
+      tmuxService: { getSessionName: async () => failed("no server") },
     });
 
     const payload = await buildRenderPayload(
@@ -389,10 +390,13 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
       NO_CONFIG_FILE,
     );
 
-    // The pane is the client's report and survives the failed name lookup.
+    expect(payload.context).toBeUndefined();
+    // The pane is the client's report and survives the failed name lookup,
+    // whose failure its owner logged when the refresh failed: the render
+    // logs only the lane that threw.
     expect(payload.tmux).toEqual({ pane: "%7" });
     expect(logs).toHaveLength(1);
-    expect(logs[0]!.msg).toContain("tmux:");
+    expect(logs[0]!.msg).toContain("context:");
     expect(logs[0]!.msg).toContain("stub bug");
   });
 
@@ -434,7 +438,7 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
     const asked: unknown[] = [];
     const deps = depsWith(ABSENT, [], {
       tmuxService: {
-        getSessionName: async (hint: unknown) => {
+        getSessionName: async (_holds: unknown, hint: unknown) => {
           asked.push(hint);
           return ABSENT;
         },
@@ -700,8 +704,9 @@ describe("buildRenderPayload — git PR projection", () => {
 
 // brandon-context-ceiling-xta.e3p: the autocompact lane reads the settings file
 // of the Claude Code directory THIS render's client reported — never the
-// daemon's own env — and its refusal is logged once by the one log site and
-// carried into the payload as text the segment shows.
+// daemon's own env — and its refusal is carried into the payload as text the
+// segment shows. The refusal is logged by its owner, once per read that
+// failed (test/autocompact-provider.test.ts), never by the render.
 describe("buildRenderPayload — autocompact lane", () => {
   const AUTOCOMPACT_PATHS = new Set(["autocompact.window"]);
   const run = async (
@@ -711,9 +716,11 @@ describe("buildRenderPayload — autocompact lane", () => {
   ) => {
     const asked: string[] = [];
     const deps = depsWith(ABSENT, logs, {
-      autoCompact: (settingsPath: string) => {
-        asked.push(settingsPath);
-        return read;
+      autoCompact: {
+        window: (settingsPath: string) => {
+          asked.push(settingsPath);
+          return read;
+        },
       },
     });
     const payload = await buildRenderPayload(
@@ -751,7 +758,7 @@ describe("buildRenderPayload — autocompact lane", () => {
   // are capped to the model's window, which only it knows.
   test("the cap comes from the context lane even when no template reads context", async () => {
     const deps = depsWith(ABSENT, [], {
-      autoCompact: () => ok(800_000),
+      autoCompact: { window: () => ok(800_000) },
       contextProvider: {
         getContextInfo: async () =>
           ok({ totalTokens: 1, maxTokens: 200_000, contextLeftPercentage: 99 }),
@@ -775,18 +782,13 @@ describe("buildRenderPayload — autocompact lane", () => {
     });
   });
 
-  test("a refused read: one warn log naming the lane, the reason in the payload", async () => {
+  test("a refused read: the reason in the payload, and no log of it from the render", async () => {
     const logs: LogEntry[] = [];
     const { payload } = await run(failed("cannot read /c/settings.json: nope"), {}, logs);
     expect(payload.autocompact).toEqual({
       error: "cannot read /c/settings.json: nope",
     });
-    expect(logs).toEqual([
-      {
-        level: "warn",
-        msg: "provider fetch failed: autocompact: cannot read /c/settings.json: nope",
-      },
-    ]);
+    expect(logs).toEqual([]);
   });
 });
 
@@ -799,7 +801,7 @@ describe("buildRenderPayload — the lanes that read a session's Claude Code", (
     const seeded: unknown[] = [];
     const deps = depsWith(ABSENT, [], {
       mementoProvider: {
-        getCeiling: async (scope: unknown) => {
+        getCeiling: async (_holds: unknown, scope: unknown) => {
           scopes.push(scope);
           return ABSENT;
         },

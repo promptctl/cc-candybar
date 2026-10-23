@@ -232,7 +232,9 @@ const payloadProviders = createPayloadProviders({
 const {
   gitProvider: gitService,
   usageStore,
+  tmuxService,
   mementoProvider,
+  autoCompact,
 } = payloadProviders;
 // [LAW:locality-or-seam] Constructed ephemeral so importing this module (CLI
 // relay, subcommands) does no disk I/O. The daemon binds the file-backed
@@ -837,6 +839,8 @@ function shutdown(code: number): void {
   } catch (e) {
     dlog("warn", `usageStore close failed: ${(e as Error).message}`);
   }
+  tmuxService.close();
+  mementoProvider.close();
   try {
     watcherRegistry.closeAll();
   } catch (e) {
@@ -1223,6 +1227,11 @@ export async function replyTo(
       stats: stats.snapshot({
         gitCache: gitService.getStats(),
         usageCache: usageStore.getStats(),
+        sources: {
+          tmux: tmuxService.getStats(),
+          memento: mementoProvider.getStats(),
+          autocompact: autoCompact.getStats(),
+        },
         transcriptReads: transcriptReads(),
         renderCache: renderCache.stats,
         effectCache: effectSessions.getStats(),

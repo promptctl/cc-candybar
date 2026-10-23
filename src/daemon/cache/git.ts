@@ -16,7 +16,14 @@ import {
   type WatchTargets,
 } from "./watchers";
 import { TrailingEdge } from "../../utils/trailing-edge";
-import { Period } from "../../utils/period";
+import { Period, periodOf, type Every } from "../../utils/period";
+import {
+  answerPending,
+  outcomeOf,
+  pending,
+  settle,
+  type Readable,
+} from "../../utils/reading";
 import type { Holds, Release } from "../../utils/holds";
 
 // Logger callable for cache refresh / eviction / subscriber-error events.
@@ -67,14 +74,10 @@ const PASS = "pass";
 // outage is not pinned to the bar for the full ok-period — and its own key (the
 // branch and the remote), so a branch switch or a re-pointed origin is a fresh
 // lookup, never the old branch's answer.
-export const PR_PERIOD = { okMs: 5 * 60_000, failedMs: 45_000 } as const;
+export const PR_PERIOD: Every = { okMs: 5 * 60_000, failedMs: 45_000 };
 // How many of a repo's PR keys keep their latest answer: the branches a user
 // switches between, each answered from its own last lookup on the way back.
 const PR_KEYS_KEPT = 16;
-
-function prPeriodOf(outcome: Outcome<PullRequest>): number {
-  return outcome.kind === "failed" ? PR_PERIOD.failedMs : PR_PERIOD.okMs;
-}
 
 // Options applied to subscribe()'s value. var-system's six GitField values
 // (branch, sha, dirty, ahead, behind, stash) all project from these flags —
@@ -90,48 +93,6 @@ const SUBSCRIBE_OPTIONS: GitOptions = {
 // Every toggle but the PR: the PR is its own source (above), composed onto a
 // read rather than fetched inside one.
 type GitOptions = Omit<GitInfoOptions, "showPullRequest">;
-
-// [LAW:types-are-the-program] What a source holds: nothing yet, or the latest
-// outcome. `pending` carries the promise its first read resolves, so a reader
-// that must wait for a first value waits on the read itself, never on a poll.
-type Reading<T> =
-  | {
-      readonly kind: "pending";
-      readonly landed: Promise<void>;
-      readonly land: () => void;
-    }
-  | { readonly kind: "read"; readonly outcome: Outcome<T> };
-
-interface Readable<T> {
-  reading: Reading<T>;
-}
-
-function pending<T>(): Reading<T> {
-  let land!: () => void;
-  const landed = new Promise<void>((resolve) => {
-    land = resolve;
-  });
-  return { kind: "pending", landed, land };
-}
-
-function settle<T>(source: Readable<T>, outcome: Outcome<T>): void {
-  const prior = source.reading;
-  source.reading = { kind: "read", outcome };
-  if (prior.kind === "pending") prior.land();
-}
-
-function answerPending<T>(source: Readable<T>, outcome: Outcome<never>): void {
-  if (source.reading.kind === "pending") settle(source, outcome);
-}
-
-// A source's outcome once it has one. A key that changes while a reader waits
-// leaves a fresh `pending` behind, which this waits out too.
-async function outcomeOf<T>(source: Readable<T>): Promise<Outcome<T>> {
-  const reading = source.reading;
-  if (reading.kind === "read") return reading.outcome;
-  await reading.landed;
-  return outcomeOf(source);
-}
 
 // One option set's value in a repo.
 interface GitValue extends Readable<GitInfo> {
@@ -736,7 +697,7 @@ export class GitDataProvider {
       pr.seen.delete(key);
       pr.seen.set(key, known);
       settle(pr, known.outcome);
-      pr.period.landed(prPeriodOf(known.outcome), known.at);
+      pr.period.landed(periodOf(PR_PERIOD, known.outcome), known.at);
       return "recalled";
     }
     if (pr.reading.kind === "read") pr.reading = pending();
@@ -776,7 +737,7 @@ export class GitDataProvider {
       }
       if (pr.key !== key) return;
       settle(pr, outcome);
-      pr.period.landed(prPeriodOf(outcome), at);
+      pr.period.landed(periodOf(PR_PERIOD, outcome), at);
     });
     pr.inFlight = { key, done };
     return done;

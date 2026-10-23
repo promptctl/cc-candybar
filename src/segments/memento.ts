@@ -5,22 +5,22 @@ import type {
   MementoEdge,
 } from "../memento/edge.js";
 import { MEMENTO_ENV_VARS } from "../memento-hint.js";
+import type { Holds } from "../utils/holds.js";
+import { KeyedSource, type KeyedSourceStats } from "../utils/keyed-source.js";
+import { quietLogger, type DaemonLogger } from "../utils/logger.js";
 import type { Outcome } from "../utils/outcome.js";
 
-// How long a session's reading stands before the next render asks memento
-// again. A move from the bar drops the reading at once (`move` below); this
-// bounds only how late the bar learns of a move made elsewhere — the
-// `/memento:ceiling` skill, a hand edit, memento's own /clear hook.
-const READING_TTL_MS = 10_000;
+// The period a held session's reading is asked again on. A move from the bar
+// supersedes the reading at once (`move` below); this bounds only how late the
+// bar learns of a move made elsewhere — the `/memento:ceiling` skill, a hand
+// edit, memento's own /clear hook.
+export const READING_PERIOD_MS = 10_000;
 const MAX_ENTRIES = 64;
 
-interface Entry {
-  readonly outcome: Outcome<CeilingReading>;
-  readonly at: number;
-}
-
 // Every field of the scope: a session whose client reports another Claude
-// Code directory or memento config home is reading different layers.
+// Code directory or memento config home is reading different layers, and a
+// new directory is a new reading, since the project layer memento reads is
+// anchored there.
 const keyOf = (s: CeilingScope): string =>
   JSON.stringify([
     s.sessionId,
@@ -36,64 +36,43 @@ const keyOf = (s: CeilingScope): string =>
 // render shows, and the one way a click moves it.
 //
 // [LAW:single-enforcer] Reading and moving share this owner, so a move and the
-// cache it invalidates cannot drift apart: after `move` returns, the next
-// render asks memento afresh and draws what the move actually left.
+// reading it makes stale cannot drift apart: a move supersedes the reading,
+// so no render after it draws what memento said before it.
 export class MementoProvider {
-  private readonly readings = new Map<string, Entry>();
-  // [LAW:no-ambient-temporal-coupling] The one read a key may cache from. A
-  // move replaces it, so a read that was already in flight when the click
-  // landed is handed to its caller but never cached as the session's reading
-  // — it describes the layer before the move.
-  private readonly inFlight = new Map<
-    string,
-    Promise<Outcome<CeilingReading>>
-  >();
+  private readonly readings: KeyedSource<CeilingScope, CeilingReading>;
 
   constructor(
     private readonly edge: MementoEdge,
-    private readonly now: () => number = Date.now,
-  ) {}
+    opts: { readonly logger?: DaemonLogger } = {},
+  ) {
+    this.readings = new KeyedSource({
+      name: "memento",
+      keyOf,
+      fields: (s) =>
+        `sid=${JSON.stringify(s.sessionId)} cwd=${JSON.stringify(s.cwd)}`,
+      read: (scope) => {
+        const located = edge.locate(scope);
+        return located.kind === "ok"
+          ? edge.read(located.value, scope)
+          : Promise.resolve(located);
+      },
+      every: { okMs: READING_PERIOD_MS, failedMs: READING_PERIOD_MS },
+      maxEntries: MAX_ENTRIES,
+      logger: opts.logger ?? quietLogger,
+    });
+  }
 
   // absent — memento is not installed (or not enabled) for this project;
   // failed — memento refused (an unreadable layer: the very state that
-  // switches its gate off). An expired reading is still drawn while its
-  // replacement is fetched: a python spawn does not fit in a render's budget,
-  // so only a scope with no reading at all waits on one — a new session, or a
-  // new directory, since the project layer memento reads is anchored there.
-  getCeiling(scope: CeilingScope): Promise<Outcome<CeilingReading>> {
-    const key = keyOf(scope);
-    const cached = this.readings.get(key);
-    if (cached && this.now() - cached.at < READING_TTL_MS) {
-      return Promise.resolve(cached.outcome);
-    }
-    const fetched = this.inFlight.get(key) ?? this.fetch(key, scope);
-    return cached ? Promise.resolve(cached.outcome) : fetched;
-  }
-
-  private fetch(
-    key: string,
+  // switches its gate off). A python spawn does not fit in a render's budget,
+  // so a render takes the stored reading and waits on one only where there
+  // is none to take: a scope never read (a new session, or a new directory),
+  // or one a move superseded.
+  getCeiling(
+    holds: Holds,
     scope: CeilingScope,
   ): Promise<Outcome<CeilingReading>> {
-    const located = this.edge.locate(scope);
-    const fetched: Promise<Outcome<CeilingReading>> = (
-      located.kind === "ok"
-        ? this.edge.read(located.value, scope)
-        : Promise.resolve(located)
-    )
-      .then((outcome) => {
-        if (this.inFlight.get(key) !== fetched) return outcome;
-        this.readings.delete(key);
-        this.readings.set(key, { outcome, at: this.now() });
-        while (this.readings.size > MAX_ENTRIES) {
-          this.readings.delete(this.readings.keys().next().value!);
-        }
-        return outcome;
-      })
-      .finally(() => {
-        if (this.inFlight.get(key) === fetched) this.inFlight.delete(key);
-      });
-    this.inFlight.set(key, fetched);
-    return fetched;
+    return this.readings.read(holds, scope);
   }
 
   // [LAW:no-silent-failure] Memento absent is a refusal here, not a no-op: a
@@ -107,16 +86,21 @@ export class MementoProvider {
           : "memento is not installed or not enabled for this project",
       );
     }
-    const key = keyOf(scope);
     try {
       this.edge.move(located.value, scope, m);
     } finally {
-      // Replaced even when memento refused: the refusal may name a layer that
-      // changed under it, which the next render should show as it now stands.
-      // The render after the click joins this read instead of starting one.
-      this.readings.delete(key);
-      this.inFlight.delete(key);
-      void this.fetch(key, scope);
+      // Superseded even when memento refused: the refusal may name a layer
+      // that changed under it, which the next render should show as it now
+      // stands.
+      this.readings.supersede(scope);
     }
+  }
+
+  getStats(): KeyedSourceStats {
+    return this.readings.stats();
+  }
+
+  close(): void {
+    this.readings.close();
   }
 }
