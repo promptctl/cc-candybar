@@ -1584,10 +1584,10 @@ function serializeSegmentCells(
 
 // [LAW:single-enforcer] The payload-builder dependency bundle. One value
 // passed through every render — the data the daemon brings to each tick.
-const payloadDeps: Omit<RenderPayloadDeps, "navigation"> = {
+const payloadDeps: Omit<RenderPayloadDeps, "navigation" | "holds"> = {
   // [LAW:single-enforcer] The providers carry `dlog` as `log`:
   // buildRenderPayload is the one log site for the outcome-carrying provider
-  // lanes (git, cache).
+  // lanes read per render (cache, …); git logs the refreshes it makes.
   ...payloadProviders,
   history: (sessionId: string) => settingsHistory.depth(sessionId),
   feeds: (sessionId: string) => frameFeeds.feedsOf(sessionId),
@@ -1967,6 +1967,8 @@ async function renderChecked(
     at,
     {
       ...payloadDeps,
+      // The entry's registry is the home this render reads for.
+      holds: state.registry.holds,
       // Measured against the gate of the config this render draws with.
       navigation: (sessionId: string) =>
         navigationHistory.depth(

@@ -138,6 +138,26 @@ export interface GitInfo {
   pullRequest?: Outcome<PullRequest>;
 }
 
+// [LAW:no-silent-failure] Every field of one read that git could not answer,
+// named as the payload names it. The refresh that read them logs these once
+// (src/daemon/cache/git.ts); a draw of the stored value never logs them again.
+export function gitInfoFailures(info: GitInfo): string[] {
+  const fields: ReadonlyArray<readonly [string, Outcome<unknown> | undefined]> =
+    [
+      ["aheadBehind", info.aheadBehind],
+      ["sha", info.sha],
+      ["operation", info.operation],
+      ["timeSinceCommit", info.committedAt],
+      ["stash", info.stashCount],
+      ["upstream", info.upstream],
+      ["repoName", info.repoName],
+      ["repoUrl", info.repoUrl],
+    ];
+  return fields.flatMap(([name, outcome]) =>
+    outcome?.kind === "failed" ? [`git.${name}: ${outcome.reason}`] : [],
+  );
+}
+
 // [LAW:one-source-of-truth] The one shape of getGitInfo's `show*` toggles. Each
 // flag opts into an extra git invocation; an unset flag leaves its GitInfo field
 // undefined (not requested). Every caller that builds these options

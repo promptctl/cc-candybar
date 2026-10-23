@@ -145,6 +145,7 @@ async function renderFrames(): Promise<void> {
         at,
         {
           ...providers,
+          holds: state.registry.holds,
           history: () => EMPTY_HISTORY_DEPTH,
           navigation: () => 0,
           feeds: () => UNFOLLOWED_FEEDS,

@@ -6,6 +6,7 @@ import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { GitDataProvider } from "../src/daemon/cache/git";
 import { GitService, type GitInfo } from "../src/segments/git";
 import { ok, type Outcome } from "../src/utils/outcome";
+import { Holds } from "../src/utils/holds";
 
 function makeRepo(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "powerline-watch-"));
@@ -103,49 +104,46 @@ class StubInner extends GitService {
 }
 
 describe("GitDataProvider + watchers integration", () => {
-  test("HEAD change invalidates the cache entry", async () => {
+  test("a HEAD change re-reads the repo with no read asking", async () => {
     const repo = makeRepo();
     const inner = new StubInner(repo);
-    const svc = new GitDataProvider({ inner, sanityIntervalMs: 0 });
+    const svc = new GitDataProvider({ inner });
+    const holds = new Holds();
 
-    await svc.getGitInfo(repo, {});
-    await svc.getGitInfo(repo, {});
+    await svc.getGitInfo(holds, repo, {});
+    await svc.getGitInfo(holds, repo, {});
     expect(inner.calls).toBe(1);
     await new Promise((r) => setTimeout(r, 50));
 
     fs.writeFileSync(path.join(repo, ".git/HEAD"), "ref: refs/heads/y\n");
     await new Promise((r) => setTimeout(r, 400));
 
-    await svc.getGitInfo(repo, {});
     expect(inner.calls).toBe(2);
-    expect(svc.getStats().invalidations).toBeGreaterThanOrEqual(1);
+    expect(svc.getStats().changes).toBeGreaterThanOrEqual(1);
+    // The read takes the value the change's re-read stored.
+    await svc.getGitInfo(holds, repo, {});
+    expect(inner.calls).toBe(2);
 
     svc.close();
     rmrf(repo);
   });
 
-  test("sanity check catches missed events via mtime mismatch", async () => {
+  test("a held repo is re-read on its period, which a dropped watch event cannot stop", async () => {
     const repo = makeRepo();
     const inner = new StubInner(repo);
-    const svc = new GitDataProvider({ inner, sanityIntervalMs: 0 });
+    const svc = new GitDataProvider({ inner, periodMs: 150 });
+    const holds = new Holds();
 
-    await svc.getGitInfo(repo, {});
-    expect(svc.getStats().size).toBe(1);
+    await svc.getGitInfo(holds, repo, {});
+    expect(inner.calls).toBe(1);
+    await new Promise((r) => setTimeout(r, 400));
+    expect(inner.calls).toBeGreaterThanOrEqual(3);
 
-    // Bypass watchers entirely: change HEAD mtime without going through
-    // the events path. The sanity check must still detect this.
-    const headPath = path.join(repo, ".git/HEAD");
-    const future = new Date(Date.now() + 60_000);
-    fs.utimesSync(headPath, future, future);
-
-    svc.runSanityCheckNow();
-    // Allow the debounced watcher (which may also fire) plus sanity expiry.
-    await new Promise((r) => setTimeout(r, 100));
-
-    // The cached value is stale: the next read fetches afresh.
-    expect(svc.getStats().invalidations).toBeGreaterThanOrEqual(1);
-    await svc.getGitInfo(repo, {});
-    expect(inner.calls).toBe(2);
+    // Released, the repo costs no read on the period.
+    holds.release();
+    const after = inner.calls;
+    await new Promise((r) => setTimeout(r, 400));
+    expect(inner.calls).toBe(after);
     svc.close();
     rmrf(repo);
   });
@@ -153,8 +151,8 @@ describe("GitDataProvider + watchers integration", () => {
   test("close releases all watchers", async () => {
     const repo = makeRepo();
     const inner = new StubInner(repo);
-    const svc = new GitDataProvider({ inner, sanityIntervalMs: 0 });
-    await svc.getGitInfo(repo, {});
+    const svc = new GitDataProvider({ inner });
+    await svc.getGitInfo(new Holds(), repo, {});
     expect(svc.getStats().watchers).toBe(1);
     svc.close();
     expect(svc.getStats().watchers).toBe(0);

@@ -353,7 +353,7 @@ test("the daemon's load records the plugins it merged and dropped", () => {
     good,
     `{ plugins: ["./deploy/plugin.json5", "./q/plugin.json5"], root: { h: ["plugins.deploy.status"] } }`,
   );
-  const gitService = new GitDataProvider({ sanityIntervalMs: 0, logger: () => {} });
+  const gitService = new GitDataProvider({ logger: () => {} });
   try {
     const loaded = loadFromDisk(dir, dir, good, {
       gitService,
@@ -447,7 +447,7 @@ describe("an installed plugin", () => {
     install("data", "lit", CHECKOUT_DEFINITION);
     fs.mkdirSync(path.join(dir, "main/.git"), { recursive: true });
     write("main/.claude/worktrees/w/.git", "gitdir: ../../../.git/worktrees/w\n");
-    const gitService = new GitDataProvider({ sanityIntervalMs: 0, logger: () => {} });
+    const gitService = new GitDataProvider({ logger: () => {} });
     try {
       const loaded = loadFromDisk(
         path.join(dir, "main"),
@@ -487,7 +487,7 @@ describe("an installed plugin", () => {
       counters: { watchersOpened: 0, watchersClosed: 0 },
       logger: () => {},
     });
-    const gitService = new GitDataProvider({ sanityIntervalMs: 0, logger: () => {} });
+    const gitService = new GitDataProvider({ logger: () => {} });
     let states: DslRenderState[] = [];
     try {
       const cache = new RenderCache(
@@ -542,7 +542,7 @@ describe("an installed plugin", () => {
     install("data", "lit", CHECKOUT_DEFINITION);
     fs.mkdirSync(path.join(dir, "outer/inner"), { recursive: true });
     const p = placing("plugins.lit.ticket");
-    const gitService = new GitDataProvider({ sanityIntervalMs: 0, logger: () => {} });
+    const gitService = new GitDataProvider({ logger: () => {} });
     const load = (): string => {
       const loaded = loadFromDisk(dir, path.join(dir, "outer/inner"), p, {
         gitService,
@@ -700,7 +700,7 @@ describe("an installed plugin", () => {
     install("data", "deploy", `{ data: "./d.json", segments: { status: { template: "installed" } } }`);
     write("deploy/plugin.json5", `{ data: "./d.json", segments: { status: { template: "listed" } } }`);
     const p = write("config.json5", `{ plugins: ["./deploy/plugin.json5"], root: { h: ["plugins.deploy.status"] } }`);
-    const gitService = new GitDataProvider({ sanityIntervalMs: 0, logger: () => {} });
+    const gitService = new GitDataProvider({ logger: () => {} });
     try {
       const loaded = loadFromDisk(dir, dir, p, { gitService, sessionState: new SessionState() });
       expect(loaded.state?.plugins.loaded).toEqual([path.join(dir, "deploy/plugin.json5")]);
@@ -717,7 +717,7 @@ describe("an installed plugin", () => {
       counters: { watchersOpened: 0, watchersClosed: 0 },
       logger: () => {},
     });
-    const gitService = new GitDataProvider({ sanityIntervalMs: 0, logger: () => {} });
+    const gitService = new GitDataProvider({ logger: () => {} });
     try {
       const repo = path.join(dir, "repo");
       fs.mkdirSync(repo);
@@ -766,7 +766,7 @@ describe("an installed plugin", () => {
     install("data", "deploy", `{ data: "./d.json", segments: { status: { template: "installed" } } }`);
     write("deploy/plugin.json5", `{ data: "./d.json", segments: { status: { template: "{{ if }}" } } }`);
     const p = write("config.json5", `{ plugins: ["./deploy/plugin.json5"], root: { h: ["plugins.deploy.status"] } }`);
-    const gitService = new GitDataProvider({ sanityIntervalMs: 0, logger: () => {} });
+    const gitService = new GitDataProvider({ logger: () => {} });
     try {
       const loaded = loadFromDisk(dir, dir, p, { gitService, sessionState: new SessionState() });
       expect(loaded.state?.plugins.loaded).toEqual([]);
@@ -816,7 +816,7 @@ describe("an installed plugin", () => {
   test("a drop is reached by its definition, not by its notice", () => {
     const def = install("data", "lit", `{ data: "./d.json", segments: { s: { template: "{{ if }}" } } }`);
     const p = placing("plugins.lit.s");
-    const gitService = new GitDataProvider({ sanityIntervalMs: 0, logger: () => {} });
+    const gitService = new GitDataProvider({ logger: () => {} });
     try {
       const loaded = loadFromDisk(dir, dir, p, { gitService, sessionState: new SessionState() });
       expect([...(loaded.state?.plugins.reached ?? [])]).toEqual([def]);

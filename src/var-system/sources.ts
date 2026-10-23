@@ -42,6 +42,7 @@ import {
 import { AbsentValueError, readAbsentValue, type JsonValue } from "./types.js";
 import type { SessionStateReader } from "../daemon/session-state.js";
 import { TrailingEdge } from "../utils/trailing-edge.js";
+import { Holds } from "../utils/holds.js";
 import { dateOf, type Instant } from "../utils/instant.js";
 
 // How long text that is not a document may be a write still in progress
@@ -760,6 +761,10 @@ export class SourceRegistry {
 
   private readonly gitProvider: GitDataProvider;
   private readonly ownsGitProvider: boolean;
+  // [LAW:single-enforcer] What this home holds of the daemon's shared entries
+  // (a repo it reads), so their owners' periods visit them while it lives and
+  // stop when it is disposed (brandon-unfiled-3248.8ro6, step 1).
+  readonly holds = new Holds();
   // [LAW:locality-or-seam] sessionState is injected (not constructed here)
   // so tests can substitute a fake and the daemon shares its singleton.
   // Absent in non-daemon contexts; declareState() rejects loudly in that case
@@ -786,7 +791,7 @@ export class SourceRegistry {
       this.gitProvider = gitProvider;
       this.ownsGitProvider = false;
     } else {
-      this.gitProvider = new GitDataProvider({ sanityIntervalMs: 0 });
+      this.gitProvider = new GitDataProvider();
       this.ownsGitProvider = true;
     }
     this.sessionState = sessionState;
@@ -1347,6 +1352,7 @@ export class SourceRegistry {
     this.reads.clear();
     this.watchMgr.dispose();
     this.ttlMgr.dispose();
+    this.holds.close();
     if (this.ownsGitProvider) this.gitProvider.close();
     // The store's computeds are the last handles outward: a keepAlive computed
     // stays subscribed to the daemon-wide SessionState atom until released, and

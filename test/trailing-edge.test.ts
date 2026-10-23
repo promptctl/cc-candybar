@@ -76,6 +76,37 @@ describe("TrailingEdge", () => {
     expect(edge.size).toBe(0);
   });
 
+  it("a share during a pass joins that pass and queues none", async () => {
+    const edge = new TrailingEdge();
+    const w = controllable();
+
+    const done = started(edge.run("k", w.work));
+    // An ask (a period's tick) carries no news that the answer changed: the
+    // pass already out answers it.
+    const shared = edge.share("k", w.work);
+    expect(w.passes).toBe(1);
+
+    await w.finish(0);
+    await Promise.all([done, shared]);
+    expect(w.passes).toBe(1);
+    expect(edge.size).toBe(0);
+  });
+
+  it("a share on an idle key starts a pass, and a change during it still queues one", async () => {
+    const edge = new TrailingEdge();
+    const w = controllable();
+
+    const shared = edge.share("k", w.work);
+    expect(w.passes).toBe(1);
+    expect(edge.run("k", w.work)).toEqual({ kind: "queued" });
+
+    await w.finish(0);
+    expect(w.passes).toBe(2);
+    await w.finish(1);
+    await shared;
+    expect(w.passes).toBe(2);
+  });
+
   it("the started promise resolves only after the queued pass has run", async () => {
     const edge = new TrailingEdge();
     const w = controllable();

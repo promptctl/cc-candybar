@@ -48,7 +48,7 @@ function makeCache(budgetBytes: number, maxEntries?: number) {
     counters: { watchersOpened: 0, watchersClosed: 0 },
     logger: () => {},
   });
-  const gitService = new GitDataProvider({ sanityIntervalMs: 0, logger: () => {} });
+  const gitService = new GitDataProvider({ logger: () => {} });
   cleanups.push(() => watchers.closeAll(), () => gitService.close());
   const cache = new RenderCache(
     { gitService, sessionState: new SessionState(), watchers, log: (_level, line) => lines.push(line) },

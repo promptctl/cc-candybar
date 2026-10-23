@@ -1,7 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
-import { GitService, type GitInfo, type PullRequest } from "../../segments/git";
-import { ABSENT, ok, type Outcome } from "../../utils/outcome";
+import {
+  GitService,
+  gitInfoFailures,
+  type GitInfo,
+  type GitInfoOptions,
+  type PullRequest,
+} from "../../segments/git";
+import { ABSENT, failed, ok, type Outcome } from "../../utils/outcome";
 import { quietLogger } from "../../utils/logger";
 import {
   WatcherRegistry,
@@ -10,12 +16,14 @@ import {
   type WatchTargets,
 } from "./watchers";
 import { TrailingEdge } from "../../utils/trailing-edge";
+import { Period } from "../../utils/period";
+import type { Holds, Release } from "../../utils/holds";
 
-// Logger callable for cache invalidation / eviction / subscriber-error
-// events. Daemon passes `dlog` so these land in daemon.log at the right
-// level for ops/debugging; non-daemon consumers (var-system in tests,
-// future library use) take the default debug-routed logger so var-system
-// module load never touches daemon log files.
+// Logger callable for cache refresh / eviction / subscriber-error events.
+// Daemon passes `dlog` so these land in daemon.log at the right level for
+// ops/debugging; non-daemon consumers (var-system in tests, future library use)
+// take the default debug-routed logger so var-system module load never touches
+// daemon log files.
 // [LAW:no-defensive-null-guards] Default is non-null; injection replaces
 // the implementation, never adds a "no logger" mode.
 export type GitProviderLogger = (
@@ -23,134 +31,173 @@ export type GitProviderLogger = (
   message: string,
 ) => void;
 
-// [LAW:one-source-of-truth] One provider for git data in the daemon. The
-// daemon is the sole owner; segments pull via getInfo() (per-render snapshot),
-// var-system pushes via subscribe() (MobX-driven reactivity). Both surfaces
-// share one cache (keyed by *effective git directory*), one watcher set per
-// effective dir, and one launch category ("git"). Pre-kz8.3 there were three
-// parallel fleets — see the ticket epic for the inventory that this file
-// replaces.
+// [LAW:one-source-of-truth] One provider for git data in the daemon, and the
+// one owner that schedules every read of it (brandon-unfiled-3248.8ro6, step
+// 1). A read never fetches a repo the cache has read before: it takes the
+// value stored, and the stored value is refreshed by exactly two triggers —
+// the repo's watch, and one period over the repos something holds. Segments
+// read through getGitInfo(); var-system's `kind: "git"` variables are pushed
+// each refresh through subscribe(). Both share one state per repo (keyed by
+// the *effective git directory*), one watch, and one launch category ("git").
 //
-// [LAW:one-source-of-truth] Cache key derives from `resolveEffectiveGitDir`,
+// [LAW:one-source-of-truth] The repo key derives from `resolveEffectiveGitDir`,
 // which returns the exact directory the shell-runner will run git in (taking
 // `projectDir` and worktree-ness into account). Keying off only
 // `findGitRoot(workingDir)` would cache repo B's data under repo A's key
-// whenever `projectDir` overrides workingDir's repo — the bug Copilot caught
-// on first review of kz8.3.
-//
-// [LAW:single-enforcer] subscribe() is the only reactive entrypoint. When a
-// watcher fires (or the sanity-check mtime walk detects a missed event), the
-// provider re-fetches the core snapshot once per gitDir and notifies every
-// subscriber for that gitDir. No parallel poller, no parallel WatchManager.
+// whenever `projectDir` overrides workingDir's repo.
 
-const DEFAULT_TTL_MS = 30_000;
-const DEFAULT_MAX_ENTRIES = 64;
-const SANITY_INTERVAL_MS = 5 * 60_000;
+// The period a held repo is re-read on. It covers the working-tree edits no
+// watch sees (a saved file moves no `.git` name) and the watch events a
+// filesystem drops (network mounts, some FUSE volumes), which is what the old
+// five-minute mtime walk backstopped; a visit refetches outright where the
+// walk only compared mtimes and could not see a working-tree edit at all.
+export const GIT_PERIOD_MS = 30_000;
+// How long "which repo is this directory in" is believed. Not a source: an
+// answer about the directory, re-asked by the first read after it expires, so
+// `git init` in a directory the bar has seen is visible within one window.
+const RESOLUTION_TTL_MS = 30_000;
+const DEFAULT_MAX_REPOS = 64;
+// The one key of a repo's own refresh loop.
+const PASS = "pass";
 
-// [LAW:decomposition] The forge PR lookup is a network resource with a
-// different lifecycle than local git state: it changes ~twice in a PR's life
-// and the fs watchers on .git/HEAD|index say nothing about remote PR state. So
-// it gets its OWN cache + TTL — independent of the 30s GitInfo TTL — so the
-// per-render git fetch stays all-local and the gh/glab spawn happens at most
-// once per window (or on branch switch, via the branch in the key). A `failed`
-// lookup caches for a SHORTER window so a transient forge outage is retried
-// soon, not pinned to the bar for the full ok-TTL.
-const PR_TTL_OK_MS = 5 * 60_000;
-const PR_TTL_FAIL_MS = 45_000;
+// [LAW:decomposition] The forge PR lookup is a network resource with its own
+// lifecycle: it changes ~twice in a PR's life and the watch on `.git` says
+// nothing about remote PR state. So it has its OWN period, chosen by the last
+// lookup's outcome — a `failed` lookup is retried sooner, so a transient forge
+// outage is not pinned to the bar for the full ok-period — and its own key (the
+// branch and the remote), so a branch switch or a re-pointed origin is a fresh
+// lookup, never the old branch's answer.
+export const PR_PERIOD = { okMs: 5 * 60_000, failedMs: 45_000 } as const;
 
-// Options applied to subscribe()'s internal getInfo() call. var-system's six
-// GitField values (branch, sha, dirty, ahead, behind, stash) all project from
-// these flags — keep them in lockstep with the projection in
-// src/var-system/sources.ts. Anything not asked for here is undefined on the
-// snapshot delivered to subscribers, which makes the projection's missing-
-// field paths reachable and tested.
-const SUBSCRIBE_OPTIONS = {
+// Options applied to subscribe()'s value. var-system's six GitField values
+// (branch, sha, dirty, ahead, behind, stash) all project from these flags —
+// keep them in lockstep with the projection in src/var-system/sources.ts.
+// Anything not asked for here is undefined on the snapshot delivered to
+// subscribers, which makes the projection's missing-field paths reachable and
+// tested.
+const SUBSCRIBE_OPTIONS: GitOptions = {
   showSha: true,
   showStashCount: true,
-} as const;
+};
 
-interface MtimeSnapshot {
-  head: number;
-  index: number;
+// Every toggle but the PR: the PR is its own source (above), composed onto a
+// read rather than fetched inside one.
+type GitOptions = Omit<GitInfoOptions, "showPullRequest">;
+
+// [LAW:types-are-the-program] What a source holds: nothing yet, or the latest
+// outcome. `pending` carries the promise its first read resolves, so a reader
+// that must wait for a first value waits on the read itself, never on a poll.
+type Reading<T> =
+  | {
+      readonly kind: "pending";
+      readonly landed: Promise<void>;
+      readonly land: () => void;
+    }
+  | { readonly kind: "read"; readonly outcome: Outcome<T> };
+
+interface Readable<T> {
+  reading: Reading<T>;
 }
 
-interface PrCacheEntry {
-  pr: Outcome<PullRequest>;
-  computedAt: number;
+function pending<T>(): Reading<T> {
+  let land!: () => void;
+  const landed = new Promise<void>((resolve) => {
+    land = resolve;
+  });
+  return { kind: "pending", landed, land };
 }
 
-// [LAW:types-are-the-program] The cached value is the PROMISE of the resolution,
-// not the resolved outcome, so caching and coalescing are one fact rather than a
-// cache plus a parallel in-flight map. The N callers that arrive while the first
-// resolution is still running share it — and `registerDslConfig` makes that real,
-// calling subscribe() once per declared `kind: "git"` variable inside a single
-// synchronous loop.
+function settle<T>(source: Readable<T>, outcome: Outcome<T>): void {
+  const prior = source.reading;
+  source.reading = { kind: "read", outcome };
+  if (prior.kind === "pending") prior.land();
+}
+
+// A source's outcome once it has one. A key that changes while a reader waits
+// leaves a fresh `pending` behind, which this waits out too.
+async function outcomeOf<T>(source: Readable<T>): Promise<Outcome<T>> {
+  const reading = source.reading;
+  if (reading.kind === "read") return reading.outcome;
+  await reading.landed;
+  return outcomeOf(source);
+}
+
+// One option set's value in a repo.
+interface GitValue extends Readable<GitInfo> {
+  readonly options: GitOptions;
+}
+
+// The branch's PR. `key` is the branch and remote the reading answers for, set
+// by the first ask and moved by every git refresh that finds a new one.
+interface PrSource extends Readable<PullRequest> {
+  readonly period: Period;
+  key: string;
+  remote: Outcome<string>;
+  inFlight: { readonly key: string; readonly done: Promise<void> } | null;
+}
+
+// [LAW:types-are-the-program] One repo the cache knows. The watch lives as long
+// as the state does — closing and reopening it per value leaked native memory
+// on macOS (brandon-unfiled-3248.576q; src/daemon/cache/watchers.ts). Two uses
+// keep it: `holders`, the homes drawing from it, which alone run the period;
+// and `subscriptions`, the `kind: "git"` subscribers, which hear every change
+// but run no period (a config's subscription lives as long as its entry, idle
+// or not). A change on a repo nothing uses reads nothing; `changedUnused`
+// makes its next use read at once.
+interface RepoState {
+  readonly root: string;
+  // [LAW:single-enforcer] The repo's one serialized refresh loop, owned by its
+  // state so a state dropped mid-read and built again never queues on the old
+  // one's loop. What a trigger does while a pass is running is decided by its
+  // kind: a change (a watch fire, a new option set) queues exactly one more
+  // pass, so the last change always lands (brandon-unfiled-3248.xjma); an ask
+  // (a period tick) shares the pass in flight, which already answers it.
+  readonly refresh: TrailingEdge;
+  readonly watcher: WatcherHandle;
+  readonly period: Period;
+  readonly values: Map<string, GitValue>;
+  readonly subscribers: Set<SubscribeCallback>;
+  holders: number;
+  subscriptions: number;
+  changedUnused: boolean;
+  pr: PrSource | null;
+}
+
+function inUse(state: RepoState): boolean {
+  return state.holders > 0 || state.subscriptions > 0;
+}
+
 interface ResolutionCacheEntry {
   readonly dir: Promise<Outcome<string>>;
   readonly computedAt: number;
 }
 
-// [LAW:types-are-the-program] An entry holds two things with two lifetimes:
-// the watch on its repo, held for as long as the cache holds the entry, and
-// the value derived from the repo, which a TTL or a change expires. A change
-// makes the value `expired`, never deletes the entry, so the watch outlives
-// every refetch — closing and reopening it per value leaked native memory on
-// macOS (brandon-unfiled-3248.576q; see src/daemon/cache/watchers.ts).
-type GitCacheValue =
-  | { kind: "fresh"; info: GitInfo; computedAt: number; mtime: MtimeSnapshot }
-  | { kind: "expired" };
-
-interface GitCacheEntry {
-  value: GitCacheValue;
-  readonly watcher: WatcherHandle;
-  // All entries for the same repoRoot share invalidation: one watcher fires →
-  // every option-set entry for that repo expires.
-  readonly repoRoot: string;
-}
-
-// `expired` counts the entries a change expired: each holds a watch and no
-// value. A `fresh` entry past its TTL is not counted; the next read refetches it.
+// `held` counts the repos a home holds — the ones the period visits.
+// `refreshes` counts the passes that read a repo (each reads every option set
+// of it); `changes` the watch fires that queued one.
 export interface GitCacheStats {
   size: number;
-  expired: number;
+  held: number;
   hits: number;
   misses: number;
-  invalidations: number;
+  changes: number;
+  refreshes: number;
   watchers: number;
 }
-
-type GitOptions = NonNullable<Parameters<GitService["getGitInfo"]>[1]>;
 
 type SubscribeCallback = (info: GitInfo | null) => void;
 
 // [LAW:types-are-the-program] subscribe() starts work that finishes later, so
 // what it returns carries both facts about that work: how to stop listening, and
-// when the first snapshot has actually landed. A bare `() => void` left the
-// second one unrepresentable, and every consumer that needed it had to guess —
-// `cc-candybar check` rendered git boxes at their declare-time zero and reported
-// nothing outstanding, and the provider's own tests awaited a count of
-// setImmediates (brandon-check-settle-dt7).
+// when the first snapshot has actually landed (brandon-check-settle-dt7).
 export interface GitSubscription {
   // Resolves once the first delivery is done — after gitDir resolution and the
-  // first fetch, and equally after the single `null` delivery for a cwd that is
+  // first read, and equally after the single `null` delivery for a cwd that is
   // not a repo, or immediately if the caller unsubscribed before either. It is
   // the *completion* of that delivery, never a promise of the snapshot:
-  // subscribers read values through the callback, and keeping the first delivery
-  // on the same path as every later one is what makes them one mechanism
-  // [LAW:one-source-of-truth].
+  // subscribers read values through the callback [LAW:one-source-of-truth].
   readonly firstDelivery: Promise<void>;
   readonly unsubscribe: () => void;
-}
-
-interface RepoSubscribers {
-  // The effective gitDir is the cache + watcher identity; subscribers
-  // register with a working directory but we resolve to gitDir once at
-  // subscribe-time and store both so the refresh path doesn't have to
-  // re-resolve on every invalidation.
-  workingDir: string;
-  repoRoot: string;
-  callbacks: Set<SubscribeCallback>;
-  watcher: WatcherHandle;
 }
 
 function optionsKey(options: GitOptions): string {
@@ -158,22 +205,6 @@ function optionsKey(options: GitOptions): string {
   const normalized: Record<string, unknown> = {};
   for (const k of keys) normalized[k as string] = options[k];
   return JSON.stringify(normalized);
-}
-
-function snapshotMtimes(gitDir: string): MtimeSnapshot {
-  // Missing files → 0; comparison still detects changes (0 → number).
-  const stat = (rel: string): number => {
-    try {
-      return fs.statSync(path.join(gitDir, rel)).mtimeMs;
-    } catch {
-      return 0;
-    }
-  };
-  return { head: stat("HEAD"), index: stat("index") };
-}
-
-function mtimeChanged(a: MtimeSnapshot, b: MtimeSnapshot): boolean {
-  return a.head !== b.head || a.index !== b.index;
 }
 
 // `gitDir` must be the *resolved* git directory (the value
@@ -184,15 +215,11 @@ function mtimeChanged(a: MtimeSnapshot, b: MtimeSnapshot): boolean {
 //
 // They are watched as NAMES in `gitDir`, never as files: git replaces both by
 // renaming a `.lock` file over them, and a watch on the file follows the inode
-// git just unlinked — it fires once and never again (measured, macOS). A watch
-// held across refetches would go deaf after the first commit.
+// git just unlinked — it fires once and never again (measured, macOS).
 //
 // `refs/heads/` only exists in the main repo's gitDir, not under a worktree's
-// metadata dir. WatcherRegistry would log a warn-level "watch failed" for
-// every worktree if we passed the target unconditionally (the injected dlog
-// surfaces what was previously silent). Check existence here and only include
-// the dir target when it's real — the `gitDir` watch on HEAD/index still
-// covers branch and index changes in the worktree case.
+// metadata dir, so it is watched only where it is real — the `gitDir` watch on
+// HEAD/index still covers branch and index changes in the worktree case.
 function watcherTargets(gitDir: string): WatchTargets {
   const dirs: DirTarget[] = [{ path: gitDir, filenames: ["HEAD", "index"] }];
   const refsHeads = path.join(gitDir, "refs/heads");
@@ -206,77 +233,57 @@ function watcherTargets(gitDir: string): WatchTargets {
   return { files: [], dirs };
 }
 
-export class GitDataProvider extends GitService {
-  private readonly entries = new Map<string, GitCacheEntry>();
-  private readonly subscribersByRepo = new Map<string, RepoSubscribers>();
-  // [LAW:single-enforcer] Coalesce concurrent cache misses on the same key.
-  // Renders build lines in parallel (Promise.all in src/powerline.ts), so two
-  // line-renders requesting the same git data can both observe the cache as
-  // cold and would otherwise spawn duplicate `git` work — exactly the failure
-  // mode the daemon is meant to eliminate. The first miss installs a promise
-  // here; subsequent concurrent callers await the same promise and resolve in
-  // lockstep.
-  private readonly fetchInFlight = new Map<string, Promise<Outcome<GitInfo>>>();
+// The branch the repo's values last read, from whichever answered.
+function branchOf(state: RepoState): string | undefined {
+  for (const value of state.values.values()) {
+    if (value.reading.kind === "read" && value.reading.outcome.kind === "ok") {
+      return value.reading.outcome.value.branch;
+    }
+  }
+  return undefined;
+}
+
+function threw(label: string): (e: unknown) => Outcome<never> {
+  return (e) => failed(`${label} threw: ${String(e)}`);
+}
+
+export class GitDataProvider {
+  private readonly repos = new Map<string, RepoState>();
   // [LAW:one-source-of-truth] The gitDir-resolution cache, keyed by the two
-  // inputs resolution reads — `workingDir|projectDir`. Separate from `entries`
-  // because it answers a different question: `entries` holds a repo's STATE,
-  // this holds WHICH repo (if any) a directory belongs to. Untracked, that
-  // question is re-asked on every render. When this cache landed, re-asking it
-  // outside a repo meant spawning `git rev-parse --show-toplevel` on every
-  // status-line tick for a session's whole lifetime (brandon-git-cache-y2t);
-  // `findGitRoot` is a filesystem ascent now (brandon-git-cache-y9h), so what
-  // this bounds is a walk to the filesystem root — the deeper the non-repo cwd,
-  // the more stats it saves — rather than a subprocess. Smaller stakes, same
-  // shape, and it still coalesces the burst of concurrent resolutions
-  // `registerDslConfig` starts for a config's `kind: "git"` variables.
+  // inputs resolution reads — `workingDir|projectDir`. It answers WHICH repo
+  // (if any) a directory belongs to, which `repos` cannot: a state exists only
+  // once something asks for its repo. Untracked, the question is re-asked on
+  // every render — a walk to the filesystem root outside a repo
+  // (brandon-git-cache-y2t, -y9h) — and it coalesces the burst of concurrent
+  // resolutions `registerDslConfig` starts for a config's `kind: "git"`
+  // variables.
   private readonly resolutions = new Map<string, ResolutionCacheEntry>();
-  // [LAW:one-source-of-truth] The forge PR cache, keyed by `repoRoot|branch`
-  // (a branch switch is a new key, so its PR is fetched fresh; the old branch's
-  // entry ages out). Separate from `entries` because it carries its own TTL.
-  private readonly prCache = new Map<string, PrCacheEntry>();
-  // [LAW:single-enforcer] Coalesce concurrent PR misses on the same key — same
-  // role as fetchInFlight for the GitInfo path, but for the network forge call.
-  private readonly prFetchInFlight = new Map<
-    string,
-    Promise<Outcome<PullRequest>>
-  >();
-  // [LAW:single-enforcer] Coalesce overlapping refreshes for the same repo: a
-  // new invalidation arriving while a refresh is in flight makes the running
-  // loop re-fetch once more rather than starting a second fetch, so back-to-back
-  // invalidations (rapid commits, a rebase) collapse into at most two fetches
-  // instead of fanning out into parallel `git status` calls — the failure kz8.3
-  // collapses. The mechanism itself is src/utils/trailing-edge.ts, shared with
-  // the var-system's shell/file sources, which had the same bug in the other
-  // direction (brandon-var-sources-tex).
-  private readonly refreshes = new TrailingEdge();
   private hits = 0;
   private misses = 0;
-  private invalidations = 0;
+  private changes = 0;
+  private refreshCount = 0;
   private readonly inner: GitService;
-  private readonly ttlMs: number;
-  private readonly maxEntries: number;
+  private readonly periodMs: number;
+  private readonly maxRepos: number;
   private readonly watchers: WatcherRegistry;
   private readonly ownsWatchers: boolean;
   private readonly logger: GitProviderLogger;
-  private sanityTimer: NodeJS.Timeout | null = null;
 
   constructor(
     opts: {
-      ttlMs?: number;
-      maxEntries?: number;
+      periodMs?: number;
+      maxRepos?: number;
       inner?: GitService;
       watchers?: WatcherRegistry;
-      sanityIntervalMs?: number;
       // [LAW:single-enforcer] One injection point. Daemon passes `dlog`;
       // non-daemon consumers leave the default (debug-routed, quiet
       // unless CC_CANDYBAR_DEBUG is set).
       logger?: GitProviderLogger;
     } = {},
   ) {
-    super();
     this.inner = opts.inner ?? new GitService();
-    this.ttlMs = opts.ttlMs ?? DEFAULT_TTL_MS;
-    this.maxEntries = opts.maxEntries ?? DEFAULT_MAX_ENTRIES;
+    this.periodMs = opts.periodMs ?? GIT_PERIOD_MS;
+    this.maxRepos = opts.maxRepos ?? DEFAULT_MAX_REPOS;
     this.logger = opts.logger ?? quietLogger;
     if (opts.watchers) {
       this.watchers = opts.watchers;
@@ -287,11 +294,6 @@ export class GitDataProvider extends GitService {
       this.watchers = new WatcherRegistry({ logger: this.logger });
       this.ownsWatchers = true;
     }
-    const sanityMs = opts.sanityIntervalMs ?? SANITY_INTERVAL_MS;
-    if (sanityMs > 0) {
-      this.sanityTimer = setInterval(() => this.runSanityCheck(), sanityMs);
-      this.sanityTimer.unref();
-    }
   }
 
   getWatcherRegistry(): WatcherRegistry {
@@ -299,39 +301,25 @@ export class GitDataProvider extends GitService {
   }
 
   getStats(): GitCacheStats {
-    let expired = 0;
-    for (const entry of this.entries.values()) {
-      if (entry.value.kind === "expired") expired++;
-    }
+    let held = 0;
+    for (const state of this.repos.values()) if (state.holders > 0) held++;
     return {
-      size: this.entries.size,
-      expired,
+      size: this.repos.size,
+      held,
       hits: this.hits,
       misses: this.misses,
-      invalidations: this.invalidations,
+      changes: this.changes,
+      refreshes: this.refreshCount,
       watchers: this.watchers.size(),
     };
   }
 
-  // [LAW:single-enforcer] The daemon-side cache for the resolution step, placed
-  // here because this class IS "GitService with the daemon's caching": it already
-  // overrides getGitInfo and owns `entries` and `prCache`, and resolution was the
-  // one fact it forwarded uncached. Overriding it means every caller — the pull
-  // path below, subscribe(), any future one — shares the cache without opting in,
-  // and `findGitRoot` stays uncached in src/segments/git.ts as its own comment
-  // promises (brandon-git-cache-y2t).
-  //
-  // One TTL over ALL THREE outcome kinds, and the SAME ttlMs the GitInfo entries
-  // use [LAW:one-type-per-behavior]: the bar is already that stale about git
-  // state, so being that stale about "is this a repo" promises nothing new, and
-  // `git init` in a directory the bar has seen becomes visible within one window
-  // — the invalidation story a negative answer needs. There is deliberately no
-  // branch on `kind` here. `failed` is the kind that matters most: a resolution
-  // that fails by TIMEOUT costs two seconds of a render, and retrying it every
-  // tick forever is the worst of the three cases, not the one to leave uncached.
-  // (`doFetch`'s separate choice to cache only `ok` is about a repo's STATE, a
-  // value that self-heals on the next miss; it is untouched.)
-  override resolveEffectiveGitDir(
+  // One TTL over ALL THREE outcome kinds [LAW:one-type-per-behavior]: being
+  // that stale about "is this a repo" promises nothing new. `failed` is the
+  // kind that matters most: a resolution that fails by TIMEOUT costs two
+  // seconds of a render, and retrying it every tick forever is the worst of
+  // the three cases, not the one to leave uncached.
+  resolveEffectiveGitDir(
     workingDir: string,
     projectDir?: string,
   ): Promise<Outcome<string>> {
@@ -339,9 +327,8 @@ export class GitDataProvider extends GitService {
     const now = Date.now();
 
     const existing = this.resolutions.get(key);
-    if (existing && now - existing.computedAt < this.ttlMs) {
-      // LRU touch, as `entries` and `prCache` do: the cwd being rendered every
-      // tick is the one that must survive eviction.
+    if (existing && now - existing.computedAt < RESOLUTION_TTL_MS) {
+      // LRU touch: the cwd being rendered every tick must survive eviction.
       this.resolutions.delete(key);
       this.resolutions.set(key, existing);
       return existing.dir;
@@ -356,239 +343,63 @@ export class GitDataProvider extends GitService {
     void dir.catch(() => {
       if (this.resolutions.get(key)?.dir === dir) this.resolutions.delete(key);
     });
-    this.evictResolutionsIfNeeded();
-    return dir;
-  }
-
-  private evictResolutionsIfNeeded(): void {
-    while (this.resolutions.size > this.maxEntries) {
+    while (this.resolutions.size > this.maxRepos) {
       const oldest = this.resolutions.keys().next().value;
       if (oldest === undefined) break;
       this.resolutions.delete(oldest);
     }
+    return dir;
   }
 
-  override async getGitInfo(
+  // [LAW:single-enforcer] The one read. `holds` is the home reading: it holds
+  // the repo from this read until the home releases its holds (idle, or
+  // disposed), which is what keeps the repo on the period. A warm repo answers
+  // from its stored value at once; only a value never read is awaited, and a
+  // PR is composed from its own source.
+  async getGitInfo(
+    holds: Holds,
     workingDir: string,
-    options: GitOptions = {},
+    options: GitInfoOptions = {},
     projectDir?: string,
   ): Promise<Outcome<GitInfo>> {
-    // [LAW:one-source-of-truth] Effective gitDir is the cache + watcher
-    // identity. Resolving once here means inner.getGitInfo sees workingDir =
-    // effectiveDir, projectDir = undefined: it lands on the same dir without
-    // re-running its own resolution branches. An absent (not a repo) or
-    // failed resolution passes through as the fetch outcome.
-    const effectiveDir = await this.resolveEffectiveGitDir(
-      workingDir,
-      projectDir,
-    );
-    if (effectiveDir.kind !== "ok") return effectiveDir;
-    return this.getGitInfoForRoot(effectiveDir.value, options);
-  }
-
-  // Cache+fetch helper that *already knows* the effective gitDir. Subscribe
-  // and refresh use this directly so they don't pay an extra resolution per
-  // call (which on the refresh-loop hot path was an extra `git rev-parse`
-  // per invalidation — finding from PR #8 review pass 2).
-  private getGitInfoForRoot(
-    repoRoot: string,
-    options: GitOptions,
-  ): Promise<Outcome<GitInfo>> {
-    const key = `${repoRoot}|${optionsKey(options)}`;
-    const now = Date.now();
-
-    const existing = this.entries.get(key);
-    if (
-      existing?.value.kind === "fresh" &&
-      now - existing.value.computedAt < this.ttlMs
-    ) {
-      this.entries.delete(key);
-      this.entries.set(key, existing);
-      this.hits++;
-      return Promise.resolve(ok(existing.value.info));
-    }
-
-    // Coalesce concurrent misses on the same key — see fetchInFlight comment.
-    const pending = this.fetchInFlight.get(key);
-    if (pending) return pending;
-
-    const promise = this.doFetch(repoRoot, key, options, now).finally(() => {
-      this.fetchInFlight.delete(key);
+    // [LAW:one-source-of-truth] The effective gitDir is the state + watch
+    // identity. An absent (not a repo) or failed resolution passes through as
+    // the read's outcome.
+    const resolved = await this.resolveEffectiveGitDir(workingDir, projectDir);
+    if (resolved.kind !== "ok") return resolved;
+    const state = this.repo(resolved.value);
+    holds.take(`git:${state.root}`, () => this.hold(state));
+    const { showPullRequest, ...gitOptions } = options;
+    const value = this.value(state, gitOptions);
+    if (value.reading.kind === "pending") this.misses++;
+    else this.hits++;
+    const info = await outcomeOf(value);
+    if (!showPullRequest || info.kind !== "ok") return info;
+    return ok({
+      ...info.value,
+      pullRequest: await this.pullRequest(state, info.value.branch),
     });
-    this.fetchInFlight.set(key, promise);
-    return promise;
-  }
-
-  private async doFetch(
-    repoRoot: string,
-    key: string,
-    options: GitOptions,
-    now: number,
-  ): Promise<Outcome<GitInfo>> {
-    this.misses++;
-    // [LAW:one-source-of-truth] gitDir is the watch+mtime identity for the
-    // repo. For worktrees this differs from repoRoot — keying watchers off
-    // <repoRoot>/.git/HEAD would silently fail there since .git is a file.
-    const gitDir = this.inner.resolveGitDir(repoRoot);
-    const mtimeBefore = snapshotMtimes(gitDir);
-    // Pass repoRoot as workingDir, no projectDir: inner's gitDir resolution
-    // lands on repoRoot via the sync isWorktree/isGitRepo checks — no extra
-    // findGitRoot shell-out.
-    //
-    // Only `ok` is cached: absent/failed pass through uncached (the next
-    // caller re-fetches, matching the prior null-isn't-cached behavior), and
-    // the outcome carries the reason to each surface's logging edge. An
-    // `absent` repo (a removed worktree, a deleted `.git`) also takes every
-    // entry for it, and their watch, with it; a `failed` read says nothing
-    // about the repo, so its watch stays rather than close and reopen.
-    const outcome = await this.inner.getGitInfo(repoRoot, options);
-    if (outcome.kind === "absent") this.dropRepo(repoRoot);
-    if (outcome.kind !== "ok") return outcome;
-    const info = outcome.value;
-
-    // [LAW:decomposition] The inner GitService never resolves the PR — the
-    // cache layer owns that lookup so it can give it an independent TTL. On the
-    // 30s GitInfo refetch the prCache is almost always warm, so attaching the
-    // PR here is a memory read; the gh/glab spawn only fires when the prCache
-    // entry has aged past its (outcome-dependent) TTL or the branch changed.
-    if (options.showPullRequest) {
-      info.pullRequest = await this.getPullRequestCached(repoRoot, info.branch);
-    }
-
-    // [LAW:dataflow-not-control-flow] The new value lands on the entry this
-    // key already has, keeping its watch; only a key with no entry acquires
-    // one. Files/dirs inside .git that meaningfully change what we'd render;
-    // working-tree changes are picked up by `git status` itself the next time
-    // the cache misses.
-    const value: GitCacheValue = {
-      kind: "fresh",
-      info,
-      computedAt: now,
-      mtime: mtimeBefore,
-    };
-    const entry: GitCacheEntry = this.entries.get(key) ?? {
-      value,
-      watcher: this.watchers.acquire(
-        `git:${repoRoot}`,
-        watcherTargets(gitDir),
-        () => this.invalidateRepo(repoRoot),
-      ),
-      repoRoot,
-    };
-    entry.value = value;
-    // LRU touch: re-inserting moves the key to the newest end.
-    this.entries.delete(key);
-    this.entries.set(key, entry);
-    this.evictIfNeeded();
-    return outcome;
-  }
-
-  // [LAW:single-enforcer] The one read path for a branch's PR. Reads the remote
-  // (cheap local git) so the cache key reflects every input the PR value
-  // depends on — `repoRoot|branch|remote` — and a re-pointed origin is a fresh
-  // key, not a stale hit ([LAW:one-source-of-truth]). TTL is outcome-dependent
-  // (a `failed` retries sooner). Concurrent misses coalesce through
-  // prFetchInFlight. The forge dispatch delegates to inner.resolvePullRequest —
-  // this layer is cache + lifecycle only, never forge knowledge.
-  private async getPullRequestCached(
-    repoRoot: string,
-    branch: string,
-  ): Promise<Outcome<PullRequest>> {
-    // [LAW:no-silent-failure] A `failed` remote read (git couldn't run) must
-    // surface; only `absent` (no remote configured) means "no forge PR".
-    const remote = await this.inner.getRepoRemoteUrl(repoRoot);
-    if (remote.kind === "failed") return remote;
-    if (remote.kind === "absent") return ABSENT;
-    const remoteUrl = remote.value;
-
-    const key = `${repoRoot}|${branch}|${remoteUrl}`;
-    const now = Date.now();
-
-    const existing = this.prCache.get(key);
-    if (existing) {
-      const ttl = existing.pr.kind === "failed" ? PR_TTL_FAIL_MS : PR_TTL_OK_MS;
-      if (now - existing.computedAt < ttl) {
-        // LRU touch so the active branch's PR survives eviction.
-        this.prCache.delete(key);
-        this.prCache.set(key, existing);
-        return existing.pr;
-      }
-    }
-
-    const pending = this.prFetchInFlight.get(key);
-    if (pending) return pending;
-
-    const promise = this.inner
-      .resolvePullRequest(repoRoot, remoteUrl)
-      .then((pr) => {
-        this.prCache.set(key, { pr, computedAt: Date.now() });
-        this.evictPrIfNeeded();
-        return pr;
-      })
-      .finally(() => {
-        this.prFetchInFlight.delete(key);
-      });
-    this.prFetchInFlight.set(key, promise);
-    return promise;
-  }
-
-  private evictPrIfNeeded(): void {
-    while (this.prCache.size > this.maxEntries) {
-      const oldest = this.prCache.keys().next().value;
-      if (oldest === undefined) break;
-      this.prCache.delete(oldest);
-    }
-  }
-
-  // [LAW:effects-at-boundaries] The subscribe surface's edge: fold the typed
-  // outcome into the GitInfo|null the var-system callback contract expects.
-  // `failed` is logged HERE — the one log site for this consumption path
-  // (the pull path's edge is buildRenderPayload) — so the interior fetch
-  // machinery never logs and never double-logs.
-  private deliverable(
-    outcome: Outcome<GitInfo>,
-    repoRoot: string,
-  ): GitInfo | null {
-    if (outcome.kind === "failed") {
-      this.logger("warn", `git fetch failed (${repoRoot}): ${outcome.reason}`);
-      return null;
-    }
-    return outcome.kind === "ok" ? outcome.value : null;
   }
 
   // [LAW:dataflow-not-control-flow] Push surface for var-system. The callback
-  // receives the current snapshot once (after the initial fetch completes)
-  // and again after each invalidation — sharing the one cache + one watcher
-  // already managed by getInfo(). Multiple subscribers for the same repoRoot
-  // share one fetch; the resolved repoRoot is the unit of sharing, not the
-  // workingDir.
-  //
-  // Initial delivery is asynchronous: subscribe() returns immediately, but
-  // the callback fires *after* both gitDir resolution and the first fetch
-  // settle (the fetch can include a `git status` shell-out on a cold cache).
-  // It is **not** a same-tick or microtask delivery — so a consumer that needs
-  // to know when it happened awaits the returned `firstDelivery` rather than
-  // counting ticks.
+  // receives the current snapshot once (after the first read lands) and again
+  // after each refresh. A subscriber keeps its repo in use — never evicted,
+  // every change read — but holds no period: only a home drawing does.
+  // Initial delivery is asynchronous — a consumer that needs to know when it
+  // happened awaits the returned `firstDelivery` rather than counting ticks.
   subscribe(workingDir: string, callback: SubscribeCallback): GitSubscription {
     let unsubscribed = false;
-    let attached: { repoRoot: string; entry: RepoSubscribers } | null = null;
+    let attached: { state: RepoState; release: Release } | null = null;
 
     const firstDelivery = (async () => {
-      // Resolve once at subscribe time through the SAME method the pull surface
-      // uses — this class's own override, so both surfaces share one cache-key
-      // derivation and one resolution cache [LAW:one-source-of-truth]. That
-      // sharing is what makes N declared git variables in a non-repo cwd one
-      // `rev-parse` instead of N: registerDslConfig starts every subscribe in one
-      // synchronous loop, and they all await the first one's promise.
+      // The SAME resolution the read uses [LAW:one-source-of-truth]: N declared
+      // git variables in a non-repo cwd are one resolution, not N.
       const resolved = await this.resolveEffectiveGitDir(workingDir);
       if (unsubscribed) return;
 
       if (resolved.kind !== "ok") {
         // Not in a git repo (absent) or resolution failed: deliver null once.
-        // No watcher, no follow-up — when the path later becomes a repo, the
-        // existing daemon-lifecycle invariants don't try to detect that, and
-        // neither did the prior GitPoller. Subscribers handle null by
-        // applying their fallback chain; a failure is logged at this edge.
+        // No watch, no follow-up; a failure is logged at this edge.
         if (resolved.kind === "failed") {
           this.logger(
             "warn",
@@ -598,35 +409,22 @@ export class GitDataProvider extends GitService {
         this.safeInvoke(callback, null);
         return;
       }
-      const repoRoot = resolved.value;
-
-      let entry = this.subscribersByRepo.get(repoRoot);
-      if (!entry) {
-        const gitDir = this.inner.resolveGitDir(repoRoot);
-        const watcher = this.watchers.acquire(
-          `git:${repoRoot}`,
-          watcherTargets(gitDir),
-          () => this.invalidateRepo(repoRoot),
-        );
-        entry = {
-          workingDir,
-          repoRoot,
-          callbacks: new Set<SubscribeCallback>(),
-          watcher,
-        };
-        this.subscribersByRepo.set(repoRoot, entry);
-      }
-      entry.callbacks.add(callback);
-      attached = { repoRoot, entry };
-
-      // Initial fetch: routes through getGitInfoForRoot using the already-
-      // resolved repoRoot — no second findGitRoot. Cache is shared with the
-      // pull surface so concurrent segment renders see the same value.
-      const initial = await this.getGitInfoForRoot(repoRoot, {
-        ...SUBSCRIBE_OPTIONS,
-      });
+      const state = this.repo(resolved.value);
+      state.subscriptions++;
+      this.used(state);
+      attached = {
+        state,
+        release: () => {
+          state.subscriptions--;
+        },
+      };
+      const value = this.value(state, SUBSCRIBE_OPTIONS);
+      const initial = await outcomeOf(value);
       if (unsubscribed) return;
-      this.safeInvoke(callback, this.deliverable(initial, repoRoot));
+      this.safeInvoke(callback, initial.kind === "ok" ? initial.value : null);
+      // Joined only now, so the refresh that delivered `initial` to the others
+      // does not deliver it to this one a second time.
+      state.subscribers.add(callback);
     })();
 
     return {
@@ -634,69 +432,236 @@ export class GitDataProvider extends GitService {
       unsubscribe: () => {
         unsubscribed = true;
         if (!attached) return;
-        const { repoRoot, entry } = attached;
-        entry.callbacks.delete(callback);
-        if (entry.callbacks.size === 0) {
-          entry.watcher.release();
-          this.subscribersByRepo.delete(repoRoot);
-        }
+        attached.state.subscribers.delete(callback);
+        attached.release();
+        attached = null;
       },
     };
   }
 
-  // Public for tests + future stats endpoint. Expires every fresh entry for
-  // repoRoot, keeping their watches, and re-fetches for any active subscribers
-  // (the watcher fire path). Only entries this call turned expired count: a
-  // repo nobody renders keeps its watch now, and its every fire would
-  // otherwise log.
-  invalidateRepo(repoRoot: string): void {
-    let expired = 0;
-    for (const entry of this.entries.values()) {
-      if (entry.repoRoot === repoRoot && entry.value.kind === "fresh") {
-        entry.value = { kind: "expired" };
-        expired++;
+  // A watch fire: the repo changed since any read in flight began.
+  changed(root: string): void {
+    const state = this.repos.get(root);
+    if (!state) return;
+    this.changes++;
+    if (!inUse(state)) {
+      state.changedUnused = true;
+      return;
+    }
+    this.changedPass(state);
+  }
+
+  private repo(root: string): RepoState {
+    const existing = this.repos.get(root);
+    if (existing) {
+      // LRU touch: re-inserting moves the repo to the newest end.
+      this.repos.delete(root);
+      this.repos.set(root, existing);
+      return existing;
+    }
+    const gitDir = this.inner.resolveGitDir(root);
+    const state: RepoState = {
+      root,
+      refresh: new TrailingEdge(),
+      watcher: this.watchers.acquire(
+        `git:${root}`,
+        watcherTargets(gitDir),
+        () => this.changed(root),
+      ),
+      period: new Period(() => {
+        void state.refresh.share(PASS, () => this.pass(state));
+      }),
+      values: new Map(),
+      subscribers: new Set(),
+      holders: 0,
+      subscriptions: 0,
+      changedUnused: false,
+      pr: null,
+    };
+    this.repos.set(root, state);
+    return state;
+  }
+
+  private changedPass(state: RepoState): void {
+    state.refresh.run(PASS, () => this.pass(state));
+  }
+
+  private hold(state: RepoState): Release {
+    state.holders++;
+    this.held(state);
+    this.used(state);
+    return () => {
+      state.holders--;
+      this.held(state);
+    };
+  }
+
+  // A read or a subscribe has just put `state` in use. A change it missed
+  // while unused is read now; and every state is created by such a use, so the
+  // LRU is trimmed here, where the newest state cannot be the one it picks.
+  private used(state: RepoState): void {
+    if (state.changedUnused) {
+      state.changedUnused = false;
+      this.changedPass(state);
+    }
+    this.evict();
+  }
+
+  private held(state: RepoState): void {
+    const held = state.holders > 0;
+    state.period.hold(held);
+    state.pr?.period.hold(held);
+  }
+
+  // The value of one option set, created pending on first ask. A new option
+  // set must be read even if a pass is in flight that does not include it, so
+  // it queues a pass rather than sharing one.
+  private value(state: RepoState, options: GitOptions): GitValue {
+    const key = optionsKey(options);
+    const existing = state.values.get(key);
+    if (existing) return existing;
+    const value: GitValue = { options, reading: pending() };
+    state.values.set(key, value);
+    this.changedPass(state);
+    return value;
+  }
+
+  // One pass: read every option set of the repo, store the outcomes, log each
+  // failure once, deliver to subscribers, and follow the PR's key.
+  private async pass(state: RepoState): Promise<void> {
+    if (this.repos.get(state.root) !== state) return;
+    const values = [...state.values.values()];
+    const outcomes = await Promise.all(
+      values.map((value) =>
+        this.inner
+          .getGitInfo(state.root, value.options)
+          .catch(threw("git fetch")),
+      ),
+    );
+    // Dropped or closed while the read was out: nothing of it is stored.
+    if (this.repos.get(state.root) !== state) return;
+    this.refreshCount++;
+    const failures = new Set<string>();
+    values.forEach((value, i) => {
+      const outcome = outcomes[i]!;
+      settle(value, outcome);
+      if (outcome.kind === "failed") failures.add(outcome.reason);
+      if (outcome.kind === "ok") {
+        for (const f of gitInfoFailures(outcome.value)) failures.add(f);
       }
-    }
-    if (expired > 0) {
-      this.invalidations += expired;
-      this.logger("info", `gitCache invalidate ${repoRoot} expired=${expired}`);
-    }
-    this.refreshSubscribers(repoRoot);
-  }
-
-  // Nobody listening means nothing to schedule — checked here rather than inside
-  // the pass so an invalidation on a repo with no subscribers (every watcher fire
-  // for a pull-path-only repo) starts no loop at all.
-  private refreshSubscribers(repoRoot: string): void {
-    const entry = this.subscribersByRepo.get(repoRoot);
-    if (!entry || entry.callbacks.size === 0) return;
-    this.refreshes.run(repoRoot, () => this.refreshOnce(repoRoot));
-  }
-
-  // One pass: re-fetch and deliver. Returning early here ends the pass, not the
-  // loop — so where the old inline `do/while` exited outright on a vanished
-  // subscriber set, this can perform one further no-op pass when a trigger was
-  // queued mid-flight. It re-reads the same empty set and returns, delivering
-  // nothing either way.
-  private async refreshOnce(repoRoot: string): Promise<void> {
-    const entry = this.subscribersByRepo.get(repoRoot);
-    if (!entry || entry.callbacks.size === 0) return;
-    // Use the stored repoRoot — no findGitRoot per refresh, no chance of
-    // re-resolving to a different value under racing fs changes.
-    const refreshed = await this.getGitInfoForRoot(repoRoot, {
-      ...SUBSCRIBE_OPTIONS,
     });
-    const info = this.deliverable(refreshed, repoRoot);
-    const current = this.subscribersByRepo.get(repoRoot);
-    if (!current || current.callbacks.size === 0) return;
-    // [LAW:dataflow-not-control-flow] Membership check at call time, not at
-    // snapshot time. A subscriber that unsubscribed during the await above
-    // (or during a prior cb invocation in this same iteration) must not
-    // receive this notification — has() reads the current truth.
-    for (const cb of [...current.callbacks]) {
-      if (!current.callbacks.has(cb)) continue;
+    // [LAW:no-silent-failure] Logged once, by the refresh that failed; a read
+    // of the stored value never logs it again.
+    for (const f of failures) {
+      this.logger("warn", `git refresh failed (${state.root}): ${f}`);
+    }
+    state.period.landed(this.periodMs);
+    this.deliver(state);
+    // An `absent` repo — a removed worktree, a deleted `.git` — is stored as
+    // absent like any outcome. A state has one lifetime rule: kept while in
+    // use, and bounded by the LRU once nothing uses it.
+    const branch = branchOf(state);
+    if (state.pr !== null && branch !== undefined) {
+      await this.followPr(state, state.pr, branch);
+    }
+  }
+
+  private deliver(state: RepoState): void {
+    const value = state.values.get(optionsKey(SUBSCRIBE_OPTIONS));
+    if (value === undefined || value.reading.kind !== "read") return;
+    const outcome = value.reading.outcome;
+    const info = outcome.kind === "ok" ? outcome.value : null;
+    // [LAW:dataflow-not-control-flow] Membership checked at call time: a
+    // subscriber that unsubscribed during an earlier callback in this same
+    // delivery must not receive it.
+    for (const cb of [...state.subscribers]) {
+      if (!state.subscribers.has(cb)) continue;
       this.safeInvoke(cb, info);
     }
+  }
+
+  // The branch's PR, from its own source. The first ask creates the source and
+  // reads it; later asks take its stored value.
+  private async pullRequest(
+    state: RepoState,
+    branch: string,
+  ): Promise<Outcome<PullRequest>> {
+    const existing = state.pr;
+    if (existing !== null) return outcomeOf(existing);
+    const pr: PrSource = {
+      period: new Period(() => {
+        void this.readPr(state, pr);
+      }),
+      key: "",
+      remote: ABSENT,
+      reading: pending(),
+      inFlight: null,
+    };
+    state.pr = pr;
+    pr.period.hold(state.holders > 0);
+    await this.followPr(state, pr, branch);
+    return outcomeOf(pr);
+  }
+
+  // [LAW:one-source-of-truth] The PR's key is every input its value depends on
+  // — the branch and the remote — so a branch switch or a re-pointed origin is
+  // a new key: its reading is pending until the new lookup lands, and an old
+  // key's answer is never stored for a new one. The same key is left to its
+  // own period.
+  private async followPr(
+    state: RepoState,
+    pr: PrSource,
+    branch: string,
+  ): Promise<void> {
+    // [LAW:no-silent-failure] A `failed` remote read (git couldn't run) is the
+    // PR's failure; only `absent` (no remote configured) means "no forge PR".
+    const remote = await this.inner
+      .getRepoRemoteUrl(state.root)
+      .catch(threw("git remote"));
+    if (state.pr !== pr || this.repos.get(state.root) !== state) return;
+    const key = `${branch}|${remote.kind === "ok" ? remote.value : remote.kind}`;
+    if (key === pr.key) return;
+    pr.key = key;
+    pr.remote = remote;
+    if (pr.reading.kind === "read") pr.reading = pending();
+    await this.readPr(state, pr);
+  }
+
+  // One lookup for the PR's current key; an ask for a key already being looked
+  // up shares that lookup. The forge dispatch delegates to
+  // inner.resolvePullRequest — this layer is the source's lifecycle only.
+  private readPr(state: RepoState, pr: PrSource): Promise<void> {
+    const key = pr.key;
+    if (pr.inFlight?.key === key) return pr.inFlight.done;
+    const remote = pr.remote;
+    const lookup: Promise<Outcome<PullRequest>> =
+      remote.kind === "ok"
+        ? this.inner
+            .resolvePullRequest(state.root, remote.value)
+            .catch(threw("PR lookup"))
+        : Promise.resolve(remote.kind === "failed" ? remote : ABSENT);
+    const done = lookup.then((outcome) => {
+      if (pr.inFlight?.key === key) pr.inFlight = null;
+      if (
+        state.pr !== pr ||
+        pr.key !== key ||
+        this.repos.get(state.root) !== state
+      ) {
+        return;
+      }
+      settle(pr, outcome);
+      if (outcome.kind === "failed") {
+        this.logger(
+          "warn",
+          `git refresh failed (${state.root}): git.pr: ${outcome.reason}`,
+        );
+      }
+      pr.period.landed(
+        outcome.kind === "failed" ? PR_PERIOD.failedMs : PR_PERIOD.okMs,
+      );
+    });
+    pr.inFlight = { key, done };
+    return done;
   }
 
   private safeInvoke(cb: SubscribeCallback, info: GitInfo | null): void {
@@ -710,86 +675,31 @@ export class GitDataProvider extends GitService {
     }
   }
 
-  private dropEntry(key: string): void {
-    const entry = this.entries.get(key);
-    if (!entry) return;
-    entry.watcher.release();
-    this.entries.delete(key);
+  private drop(state: RepoState): void {
+    this.repos.delete(state.root);
+    state.refresh.clear();
+    state.watcher.release();
+    state.period.dispose();
+    state.pr?.period.dispose();
   }
 
-  private dropRepo(repoRoot: string): void {
-    let dropped = 0;
-    for (const [key, entry] of this.entries) {
-      if (entry.repoRoot === repoRoot) {
-        this.dropEntry(key);
-        dropped++;
-      }
+  // The LRU bounds the repos nothing uses; a repo in use is never evicted, so
+  // those are bounded by their users (the render cache's budget).
+  private evict(): void {
+    for (const state of this.repos.values()) {
+      if (this.repos.size <= this.maxRepos) return;
+      if (inUse(state)) continue;
+      this.drop(state);
+      this.logger("info", `gitCache evict ${state.root}`);
     }
-    if (dropped > 0) {
-      this.logger("info", `gitCache drop ${repoRoot} entries=${dropped}`);
-    }
-  }
-
-  private evictIfNeeded(): void {
-    while (this.entries.size > this.maxEntries) {
-      const oldest = this.entries.keys().next().value;
-      if (oldest === undefined) break;
-      this.dropEntry(oldest);
-      this.logger("info", `gitCache evict ${oldest}`);
-    }
-  }
-
-  // [LAW:single-enforcer] Watchers are an optimization; this mtime walk is
-  // the correctness backstop for filesystems where fs.watch silently no-ops
-  // (network mounts, some FUSE volumes). Sample mtimes from the *resolved*
-  // gitDir so worktrees compare against real HEAD/index files.
-  private runSanityCheck(): void {
-    const seen = new Map<string, MtimeSnapshot>();
-    for (const entry of this.entries.values()) {
-      // An expired entry is already known stale: there is nothing to compare.
-      if (entry.value.kind === "expired") continue;
-      let current = seen.get(entry.repoRoot);
-      if (!current) {
-        const gitDir = this.inner.resolveGitDir(entry.repoRoot);
-        current = snapshotMtimes(gitDir);
-        seen.set(entry.repoRoot, current);
-      }
-      if (mtimeChanged(entry.value.mtime, current)) {
-        this.invalidateRepo(entry.repoRoot);
-      }
-    }
-  }
-
-  // Test hook: drive the sanity check synchronously.
-  runSanityCheckNow(): void {
-    this.runSanityCheck();
   }
 
   close(): void {
-    if (this.sanityTimer) {
-      clearInterval(this.sanityTimer);
-      this.sanityTimer = null;
-    }
-    for (const entry of this.entries.values()) {
-      entry.watcher.release();
-    }
-    this.entries.clear();
-    for (const entry of this.subscribersByRepo.values()) {
-      entry.callbacks.clear();
-      entry.watcher.release();
-    }
-    this.subscribersByRepo.clear();
-    // In-flight refreshes will observe the empty subscribers map on their
-    // next iteration and exit naturally; the flags are cleared so a fresh
-    // provider with the same repoRoot starts clean. In-flight fetches still
-    // resolve (we can't cancel a pending await on inner.getGitInfo) but the
-    // map is cleared so the next caller starts a fresh fetch.
-    this.refreshes.clear();
-    this.fetchInFlight.clear();
-    // In-flight PR fetches resolve naturally; clearing the maps means the next
-    // caller starts fresh (the prCache is rebuilt cold like every other cache).
-    this.prCache.clear();
-    this.prFetchInFlight.clear();
+    // In-flight passes still resolve (an await on inner.getGitInfo cannot be
+    // cancelled) but find their state gone and store nothing; no queued pass is
+    // honoured after this (drop clears each loop).
+    for (const state of this.repos.values()) this.drop(state);
+    this.repos.clear();
     // In-flight resolutions resolve naturally; clearing the map means a fresh
     // provider re-asks rather than inheriting this one's answers.
     this.resolutions.clear();

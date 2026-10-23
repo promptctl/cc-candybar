@@ -1,5 +1,6 @@
 // Boundary contract for the provider lanes — every lane carries a typed
-// Outcome and buildRenderPayload is the ONE log site for their failures;
+// Outcome and buildRenderPayload is the ONE log site for the failures of the
+// lanes it reads per render (git logs its own refreshes);
 // `absent` and `failed` both project as MISSING payload fields — distinct
 // from a real 0/"" — so the DSL input fallback chain (default + last_error)
 // fires. [LAW:no-silent-failure][LAW:single-enforcer][LAW:one-type-per-behavior]
@@ -80,7 +81,10 @@ function hookData(transcriptPath: string) {
 }
 
 describe("buildRenderPayload — git outcome lane", () => {
-  test("whole-fetch failure: no git key, exactly one warn log with the reason", async () => {
+  // A git failure is logged by the refresh that read it (src/daemon/cache/git.ts,
+  // test/daemon-git-cache.test.ts): the value is stored, so a payload that
+  // logged it would repeat it on every render.
+  test("whole-fetch failure: no git key, and the payload logs nothing", async () => {
     const logs: LogEntry[] = [];
     const deps = depsWith(failed("git status --porcelain=v2 --branch: timeout"), logs);
 
@@ -96,12 +100,7 @@ describe("buildRenderPayload — git outcome lane", () => {
     );
 
     expect(payload.git).toBeUndefined();
-    expect(logs).toEqual([
-      {
-        level: "warn",
-        msg: "provider fetch failed: git status --porcelain=v2 --branch: timeout",
-      },
-    ]);
+    expect(logs).toEqual([]);
   });
 
   test("absent (not a repo): no git key, NOTHING logged", async () => {
@@ -123,7 +122,34 @@ describe("buildRenderPayload — git outcome lane", () => {
     expect(logs).toEqual([]);
   });
 
-  test("per-field failure: field missing, siblings present, one log naming the field", async () => {
+  test("a git read that throws is logged, since no refresh saw it", async () => {
+    const logs: LogEntry[] = [];
+    const deps = depsWith(ABSENT, logs, {
+      gitProvider: {
+        getGitInfo: async () => {
+          throw new Error("resolver bug");
+        },
+      },
+    });
+
+    const payload = await buildRenderPayload(
+      hookData("/no/such/transcript.jsonl"),
+      instantOf(new Date()),
+      deps,
+      undefined,
+      GIT_PATHS,
+      EFFECTIVE_GLOBALS,
+      NO_HINTS,
+      NO_CONFIG_FILE,
+    );
+
+    expect(payload.git).toBeUndefined();
+    expect(logs).toEqual([
+      { level: "error", msg: "git read threw: Error: resolver bug" },
+    ]);
+  });
+
+  test("per-field failure: field missing, siblings present, nothing logged here", async () => {
     const logs: LogEntry[] = [];
     const deps = depsWith(
       ok({
@@ -161,14 +187,9 @@ describe("buildRenderPayload — git outcome lane", () => {
       tracking: "none",
     });
     expect("stash" in payload.git!).toBe(false);
-    // The absent upstream is also missing but logs nothing; only the failed
-    // stash produces a log line.
-    expect(logs).toEqual([
-      {
-        level: "warn",
-        msg: "provider fetch failed: git.stash: git stash list: timeout, exit null",
-      },
-    ]);
+    // Neither the absent upstream nor the failed stash is logged here: the
+    // refresh that read the stash logged it.
+    expect(logs).toEqual([]);
   });
 
   // The provider caches one GitInfo for a whole TTL window; the age must move
@@ -622,7 +643,7 @@ describe("buildRenderPayload — git PR projection", () => {
     const asked: GitInfoOptions[] = [];
     const deps = depsWith(ABSENT, [], {
       gitProvider: {
-        getGitInfo: async (_dir: string, options: GitInfoOptions) => {
+        getGitInfo: async (_holds: unknown, _dir: string, options: GitInfoOptions) => {
           asked.push(options);
           return ABSENT;
         },
@@ -643,7 +664,7 @@ describe("buildRenderPayload — git PR projection", () => {
     expect(asked).toEqual([expect.objectContaining({ showPullRequest: true })]);
   });
 
-  test("lookup failed → prError surfaced AND logged (visible, distinct)", async () => {
+  test("lookup failed → prError surfaced (visible, distinct); the lookup logged it", async () => {
     const logs: LogEntry[] = [];
     const deps = depsWith(
       ok({
@@ -670,12 +691,7 @@ describe("buildRenderPayload — git PR projection", () => {
     expect(payload.git!.prError).toBe("gh pr view: non-zero, exit 1, HTTP 401");
     expect("prNumber" in payload.git!).toBe(false);
     expect("prUrl" in payload.git!).toBe(false);
-    expect(logs).toEqual([
-      {
-        level: "warn",
-        msg: "provider fetch failed: git.pr: gh pr view: non-zero, exit 1, HTTP 401",
-      },
-    ]);
+    expect(logs).toEqual([]);
   });
 
   test("no PR (absent) → no pr* fields, nothing logged", async () => {
