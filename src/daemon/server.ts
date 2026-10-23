@@ -1246,6 +1246,7 @@ export async function replyTo(
         transcriptReads: transcriptReads(),
         renderCache: renderCache.stats,
         effectCache: effectSessions.getStats(),
+        menuIdle: menuIdle.getStats(),
         sessionState: {
           sessions: sessionState.size(),
           observers: sessionState.observers(),

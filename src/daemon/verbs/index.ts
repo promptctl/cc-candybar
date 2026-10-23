@@ -87,6 +87,7 @@ import {
   decodeSegments,
   batchAdjacentWrites,
   parseEffects,
+  type ParsedEffect,
   VERB_APPLY_LAYOUT_OP,
   VERB_APPLY_UPDATE,
   VERB_COPY,
@@ -1642,8 +1643,12 @@ const SESSION_FIRST_VERBS: ReadonlySet<string> = new Set([
 // and the daemon counts the click as that session's activity
 // (src/daemon/menu-idle.ts).
 export function clickSessionOf(verb: string, value: string): string | null {
-  const effects =
-    verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
+  return sessionOfEffects(
+    verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }],
+  );
+}
+
+function sessionOfEffects(effects: readonly ParsedEffect[]): string | null {
   const bearing = effects.find((e) => SESSION_FIRST_VERBS.has(e.verb));
   const [sid = ""] = bearing === undefined ? [] : decodeSegments(bearing.value);
   return sid === "" ? null : sid;
@@ -1652,10 +1657,11 @@ export function clickSessionOf(verb: string, value: string): string | null {
 const dispatch: VerbHandler = (rawValue, ctx) => {
   const errors: string[] = [];
   let operational = false;
+  const effects = parseEffects(rawValue);
   // The click's session, for error display, so a failing step surfaces in the
   // bar like any other.
-  const sessionId = clickSessionOf(VERB_DISPATCH, rawValue);
-  for (const { verb, value } of batchAdjacentWrites(parseEffects(rawValue))) {
+  const sessionId = sessionOfEffects(effects);
+  for (const { verb, value } of batchAdjacentWrites(effects)) {
     const handler = LEAF_VERBS.get(verb);
     if (!handler) {
       errors.push(`unknown effect verb "${verb}"`);

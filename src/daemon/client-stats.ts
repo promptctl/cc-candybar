@@ -209,6 +209,10 @@ export function formatStats(s: StatsSnapshot): string {
   lines.push(`  sessions      ${s.effectCache.sessions}`);
   lines.push(`  effects       ${s.effectCache.effects}`);
   lines.push(``);
+  lines.push(`menuIdle`);
+  lines.push(`  sessions      ${s.menuIdle.sessions}`);
+  lines.push(`  armed         ${s.menuIdle.armed}`);
+  lines.push(``);
   lines.push(`sessionState`);
   lines.push(`  sessions      ${s.sessionState.sessions}`);
   lines.push(`  observers     ${s.sessionState.observers}`);

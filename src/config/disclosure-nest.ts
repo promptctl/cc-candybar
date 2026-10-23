@@ -38,7 +38,10 @@ export interface DisclosureNest {
   readonly inside: (parent: Disclosure) => readonly NestedKey[];
   // What `key` holds in a fresh session.
   readonly defaultOf: (key: string) => string;
-  // Every disclosure inside no other: closing these closes everything.
+  // Every menu inside no other — a disclosure that hangs a body or drops a
+  // `{{ menu }}`, the rows a frame counts as menu rows — so closing these
+  // closes every menu. A toggle that hangs nothing (edit mode's `☑ live`, an
+  // author's `when` gate) is a view preference, not a menu.
   readonly roots: readonly Disclosure[];
 }
 
@@ -85,6 +88,7 @@ export function buildDisclosureNest(config: DslConfig): DisclosureNest {
   // `within`.
   const inside = new Map<string, Map<string, Disclosure>>();
   const members = new Map<string, Set<string>>();
+  const hung = new Map<string, Disclosure>();
   const known = (d: Disclosure): void => {
     members.set(d.key, (members.get(d.key) ?? new Set()).add(d.member));
   };
@@ -100,6 +104,7 @@ export function buildDisclosureNest(config: DslConfig): DisclosureNest {
     }
     for (const child of triggeredBy(node)) {
       known(child);
+      hung.set(idOf(child), child);
       for (const parent of enclosing) note(parent, child);
     }
     if (node.opens !== undefined) {
@@ -151,11 +156,7 @@ export function buildDisclosureNest(config: DslConfig): DisclosureNest {
   );
   return {
     inside: closure,
-    roots: [...members].flatMap(([key, held]) =>
-      [...held]
-        .map((member) => ({ key, member }))
-        .filter((d) => !nested.has(idOf(d))),
-    ),
+    roots: [...hung].flatMap(([id, d]) => (nested.has(id) ? [] : [d])),
     // A disclosure that declares no default starts closed: its toggle counts
     // an unknown value as its first member, `closed`.
     defaultOf: (key) => defaults.get(key) ?? DISCLOSURE_CLOSED,

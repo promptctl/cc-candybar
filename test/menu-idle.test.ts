@@ -30,6 +30,7 @@ import {
   EDIT_MODE_ARRANGE,
 } from "../src/config/loader/edit-mode";
 import { disclosureNest } from "../src/config/disclosure-nest";
+import { EDIT_LIVE_KEY } from "../src/config/edit-chrome";
 import {
   CLOSING_FLASH_SECONDS,
   MENU_TIMEOUT_RANGE,
@@ -99,7 +100,7 @@ describe("MenuIdle: the close follows the idle clock, whoever writes it", () => 
   test("a drawn menu closes a timeout after the session's first render", () => {
     expect(idle.since("s", at(now))).toBe(1000);
     idle.observe("s", at(now), true, 30);
-    expect(idle.armed).toBe(1);
+    expect(idle.getStats().armed).toBe(1);
     advance(29.9);
     expect(closes).toEqual([]);
     advance(0.1);
@@ -138,7 +139,7 @@ describe("MenuIdle: the close follows the idle clock, whoever writes it", () => 
     idle.observe("s", at(now), true, 30);
     advance(10);
     idle.observe("s", at(now), false, 30);
-    expect(idle.armed).toBe(0);
+    expect(idle.getStats().armed).toBe(0);
     advance(60);
     expect(closes).toEqual([]);
   });
@@ -154,7 +155,16 @@ describe("MenuIdle: the close follows the idle clock, whoever writes it", () => 
     expect(closes).toHaveLength(2);
   });
 
-  test("a close that throws is reported, and the clock goes on", () => {
+  test("a session that stops rendering after a close is closed once, not every timeout", () => {
+    idle.observe("s", at(now), true, 30);
+    advance(30);
+    expect(closes).toHaveLength(1);
+    expect(idle.getStats().armed).toBe(0);
+    advance(300);
+    expect(closes).toHaveLength(1);
+  });
+
+  test("a close that throws is reported, and retried a timeout after the next render that draws the menu", () => {
     const failing = new MenuIdle({
       now: () => at(now),
       close: () => {
@@ -165,7 +175,13 @@ describe("MenuIdle: the close follows the idle clock, whoever writes it", () => 
     failing.observe("s", at(now), true, 30);
     advance(30);
     expect(failures).toEqual(["s: no config"]);
-    expect(failing.armed).toBe(1);
+    expect(failing.getStats().armed).toBe(0);
+    advance(5);
+    failing.observe("s", at(now), true, 30);
+    advance(24.9);
+    expect(failures).toHaveLength(1);
+    advance(0.1);
+    expect(failures).toHaveLength(2);
     failing.dispose();
   });
 });
@@ -266,6 +282,16 @@ describe("the close is the write the door's ✕ makes, on a click's own path", (
     closeIdleMenus(SID, IDLE, rt.ctx);
     expect(rt.held(EDIT_MODE_KEY)).not.toBe(EDIT_MODE_ARRANGE);
     expect(rt.ctx.history.history(SID).savepoint).toBeUndefined();
+  });
+
+  test("a toggle that hangs no menu is a view preference, and is left as it is", () => {
+    const rt = buildRuntime(BUNDLED);
+    rt.clickWriting(SETTINGS_ANCHOR, SETTINGS_OPEN);
+    rt.clickWriting(EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
+    rt.clickWriting(EDIT_LIVE_KEY, "open");
+    closeIdleMenus(SID, IDLE, rt.ctx);
+    expect(rt.held(SETTINGS_ANCHOR)).toBe(DISCLOSURE_CLOSED);
+    expect(rt.held(EDIT_LIVE_KEY)).toBe("open");
   });
 
   test("a group open by default is closed, and stays closed", () => {

@@ -20,6 +20,11 @@ interface Idle {
   timer: { readonly at: Instant; readonly handle: NodeJS.Timeout } | null;
 }
 
+export interface MenuIdleStats {
+  readonly sessions: number;
+  readonly armed: number;
+}
+
 export interface MenuIdleDeps {
   // The instant now, on the clock renders are drawn by.
   readonly now: () => Instant;
@@ -66,10 +71,11 @@ export class MenuIdle {
     this.settle(sessionId);
   }
 
-  // Sessions whose close timer is armed.
-  get armed(): number {
-    return [...this.sessions.values()].filter((idle) => idle.timer !== null)
-      .length;
+  // The sessions whose clocks are kept, and those whose close timer is armed.
+  getStats(): MenuIdleStats {
+    let armed = 0;
+    for (const idle of this.sessions.values()) if (idle.timer !== null) armed++;
+    return { sessions: this.sessions.size, armed };
   }
 
   dispose(): void {
@@ -116,8 +122,11 @@ export class MenuIdle {
   }
 
   // The deadline passed with no click: close the menus, and begin a new idle
-  // period now, so a menu drawn open after the close (a group open by
-  // default) closes a timeout later rather than at once, over and over.
+  // period now. What the last frame drew no longer stands — the close wrote
+  // every menu shut — so the timer waits for a render that draws a menu again
+  // (a group open by default, a close that failed) and closes it a timeout
+  // after this one: never at once, and never for a session that stopped
+  // rendering.
   private fire(sessionId: string): void {
     const idle = this.sessions.get(sessionId)!;
     idle.timer = null;
@@ -127,11 +136,11 @@ export class MenuIdle {
       timeoutS: idle.timeoutS,
     };
     idle.since = now;
+    idle.shown = false;
     try {
       this.deps.close(sessionId, closing);
     } catch (e) {
       this.deps.failed(sessionId, e);
     }
-    this.settle(sessionId);
   }
 }
