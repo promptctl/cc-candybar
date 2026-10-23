@@ -2156,6 +2156,8 @@ async function renderChecked(
     usage: `${u.size}/${u.hits}h/${u.misses}m`,
     effect: fx.effect,
     effectT: fx.t.toFixed(3),
+    // The rate the session's animation clock ran at for this frame.
+    speed: `${fx.speed}x`,
     effectRows: `${fx.made}made/${fx.reused}reused`,
     effectOwn: own,
     fadeBasis: fx.basis,

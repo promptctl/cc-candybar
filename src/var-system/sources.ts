@@ -43,7 +43,7 @@ import { AbsentValueError, readAbsentValue, type JsonValue } from "./types.js";
 import type { SessionStateReader } from "../daemon/session-state.js";
 import { TrailingEdge } from "../utils/trailing-edge.js";
 import { Holds } from "../utils/holds.js";
-import { dateOf, type Instant } from "../utils/instant.js";
+import { dateOf, type AnimationTime, type Instant } from "../utils/instant.js";
 
 // How long text that is not a document may be a write still in progress
 // before it shows as the failure it is (documentPublisher).
@@ -751,11 +751,27 @@ export class SourceRegistry {
     }
     return dateOf(at);
   };
+  // [LAW:one-source-of-truth] The current render's reading of its session's
+  // animation clock (brandon-menus-sjhy.nt2) — what every template `frames` and
+  // `stepped` animates by, in this registry's variable templates and in the
+  // render engine alike. Observable and absent-until-published for the
+  // instant's reasons.
+  private readonly animation = observable.box<AnimationTime | null>(null);
+  readonly animatedAt = (): AnimationTime => {
+    const at = this.animation.get();
+    if (at === null) {
+      throw new Error(
+        "the animation clock was read before any render published its reading",
+      );
+    }
+    return at;
+  };
   // Shared engine instance — parse() is expensive; the engine is reused for
   // all key: template compilations.
   // [LAW:one-source-of-truth] One engine per registry, not one per variable.
   private readonly engine = createCcCandybarEngine({
     clock: this.now,
+    animatedAt: this.animatedAt,
     drawnAt: this.drawnAt,
   });
 
@@ -1308,6 +1324,12 @@ export class SourceRegistry {
   // Called by the render beside drawAt: the instant this render is drawn at.
   renderAt(at: Instant): void {
     this.store.runInAction(() => this.instant.set(at));
+  }
+
+  // Called by the render beside renderAt: its session's animation clock read
+  // at that instant.
+  animateAt(at: AnimationTime): void {
+    this.store.runInAction(() => this.animation.set(at));
   }
 
   // ─── Diagnostics ─────────────────────────────────────────────────────────

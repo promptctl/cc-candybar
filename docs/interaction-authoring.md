@@ -1348,7 +1348,7 @@ there is nothing to go back to), and the bar's row closes up where the door was.
   the preset switcher, and `✎ arrange`. Under the preset carousel,
   `🚮 delete <name>` removes the preset you are in when you made it (see
   "Save as preset" above).
-- **`🎨 look`** holds effect, endcaps and fade in/out; **`📐 layout`** holds
+- **`🎨 look`** holds effect, endcaps, fade in/out and the animation speed; **`📐 layout`** holds
   `+ preset`, which keeps the bar as a new preset and switches to it;
   **`⚙ config`** holds wrap, padding, the update notice and `🧪 toggles`.
   Every setting is ONE control, in
@@ -2361,7 +2361,7 @@ Give the second its own id and each copy's menu opens on its own:
 
 A `set` on a setting's key (`theme`, `style`, `effect`, `preset`, `endcaps`,
 `variation`, `shade`, `autoWrap`, `padding`, `updateNotice`, `menuTimeout`,
-`transitions`, `experimentalBand`, `experimentalStatusline`, `experimentalPane`,
+`transitions`, `animationSpeed`, `experimentalBand`, `experimentalStatusline`, `experimentalPane`,
 `experimentalTmuxStatus`) may only write members of
 that setting's domain. Anything else would load, be admitted by the click
 gate, and change nothing. The check covers a `to`, a `cycle`'s members, a

@@ -377,7 +377,7 @@ const laneReadout = (lane: Lane): string => {
   );
   return (
     `{{ if .${SETTINGS[LANES[lane].setting].effectiveVar} }} ` +
-    `{{ if ${feed("subscribers")} }}{{ frames ${spinner} }} {{ ${feed("fps")} }} fps` +
+    `{{ if ${feed("subscribers")} }}{{ realtimeFrames ${spinner} }} {{ ${feed("fps")} }} fps` +
     `{{ if not ${feed("shown")} }} · off screen{{ end }}` +
     `{{ else }}no subscriber{{ end }}{{ end }}`
   );

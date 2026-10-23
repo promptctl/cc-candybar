@@ -28,6 +28,7 @@
 // menu and the control generator.
 
 import {
+  ANIMATION_SPEED_NAMES,
   COLOR_COMPATIBILITIES,
   EFFECT_NAMES,
   ENDCAPS_SHAPES,
@@ -413,6 +414,15 @@ export const GLOBAL_FIELDS = {
   // (brandon-effects-2gka.631) and one that leaves dissolves out over 30 s
   // (brandon-effects-2gka.3vt). Off: a bloom is a look somebody chooses.
   transitions: boolSetting(false, control("fade in/out", "look")),
+  // How fast every decorative animation runs — the effects above, fades and
+  // dissolves, and a template's `frames`/`stepped` (brandon-menus-sjhy.nt2):
+  // the rate the session's animation clock advances against the wall clock
+  // (`ANIMATION_SPEEDS`, src/render/effect.ts `SessionEffects.clockAt`).
+  animationSpeed: enumSetting(
+    ANIMATION_SPEED_NAMES,
+    "1x",
+    control("speed", "look"),
+  ),
   // Whether FlexStrip soft-wraps a root row that exceeds the usable width
   // (the legacy display.autoWrap). False renders each row as one unbounded
   // line, overflow off-screen.

@@ -53,6 +53,7 @@ import {
   richTextFuncs,
 } from "@promptctl/rich-js/template-bindings";
 import { ccCandybarFuncs, formatterFuncs } from "./funcs.js";
+import type { AnimationTime } from "../utils/instant.js";
 
 // [LAW:single-enforcer] fromString/toString are declared once here.
 // richTextFuncs() provides the theme-independent vocabulary: painting, color
@@ -71,12 +72,16 @@ import { ccCandybarFuncs, formatterFuncs } from "./funcs.js";
 // `drawnAt` is forwarded to rich-js `richTextFuncs` as the depth it reads, whose
 // own default (truecolor) is the one default: the depth `readableOn` floors text
 // at. It carries no terminal: the detached daemon cannot see the client's.
+// `animatedAt` is the second clock, and required for `clock`'s reason: the
+// session's animation clock (brandon-menus-sjhy.nt2), which a template's
+// decorative animation reads so it runs at the session's animation speed.
 export function createCcCandybarEngine(opts: {
   readonly clock: () => Date;
+  readonly animatedAt: () => AnimationTime;
   readonly drawnAt?: () => ColorDepth;
   readonly extraFuncs?: FuncMap;
 }): Engine<RichText> {
-  const { clock, drawnAt, extraFuncs } = opts;
+  const { clock, animatedAt, drawnAt, extraFuncs } = opts;
   return createEngine<RichText>({
     fromString: (s) => new RichText(s),
     toString: (rt) => rt.plain,
@@ -106,10 +111,22 @@ export function createCcCandybarEngine(opts: {
       // decoupled from any payload's nesting — no per-payload helper variant.
       ...sprigDicts(),
       ...richTextFuncs(drawnAt && (() => ({ depth: drawnAt() }))),
-      // [LAW:single-enforcer] `frames`/`stepped` draw for the same instant
-      // every other time read in the render does: the one `clock`, in seconds
-      // since the epoch.
-      ...animationFuncs(() => clock().getTime() / 1000),
+      // [LAW:one-type-per-behavior] One rich-js pair, bound to each of the
+      // render's two clocks. `frames`/`stepped` are decoration, so they draw at
+      // the session's animation clock and run at its speed;
+      // `realtimeFrames`/`realtimeStepped` are the same pair at the wall instant
+      // every other time read in the render reads, for a readout of real time —
+      // the lane toggles' spinner, which shows frames arriving at 30 a second
+      // and would read frozen at 20x (brandon-menus-sjhy.nt2).
+      ...animationFuncs(animatedAt),
+      ...Object.fromEntries(
+        Object.entries(animationFuncs(() => clock().getTime() / 1000)).map(
+          ([name, func]) => [
+            `realtime${name.replace(/^./, (c) => c.toUpperCase())}`,
+            func,
+          ],
+        ),
+      ),
       // Domain-specific overrides last (wins on collision with sprig aliases).
       // [LAW:one-source-of-truth] ccCandybarFuncs' `int` is the var-system cast
       // (toNumber over VarValue); it intentionally shadows sprigConversions' `int`

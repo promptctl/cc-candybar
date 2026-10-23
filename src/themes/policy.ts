@@ -402,6 +402,17 @@ export const EFFECT_NAMES: readonly EffectName[] = Object.freeze([
   ...(Object.keys(EFFECT_CATALOGUE.loops) as LoopName[]),
 ]);
 
+// [LAW:one-source-of-truth] How fast the bar's animations run
+// (brandon-menus-sjhy.nt2), by name: the keys are the `globals.animationSpeed`
+// domain the loader, the settings control and the session gate admit, and each
+// value is the rate the session's animation clock advances at against the wall
+// clock.
+export const ANIMATION_SPEEDS = Object.freeze({ "1x": 1, "5x": 5, "20x": 20 });
+export type AnimationSpeedName = keyof typeof ANIMATION_SPEEDS;
+export const ANIMATION_SPEED_NAMES = Object.keys(
+  ANIMATION_SPEEDS,
+) as readonly AnimationSpeedName[];
+
 // [LAW:types-are-the-program] What a placement's `effect` setting may hold
 // (brandon-effects-2gka.bm1): the bar's own effect — `globals.effect` as the
 // session resolves it, the setting's default — or any effect by name, `none`
