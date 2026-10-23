@@ -300,6 +300,26 @@ export function templateActionRefs(
   return [...refs.values()];
 }
 
+// Whether a template — through its own text or any helper it calls — binds an
+// action by a name it computes (`{{ action $name "x" }}`, `{{ menu .which }}`)
+// rather than spells: a binding keyword whose first argument is no literal.
+// `templateActionRefs` reads only spelled names, so such a template may bind
+// any declared action. A keyword with no argument (`{{ themePreview }}`)
+// binds none.
+const COMPUTED_BINDING_RE =
+  /(?<![\w.$])(?:action|picker|menu|carousel|swatches|swatch|themePreview)\s+(?=[^\s"`)|}])/;
+export function bindsComputedAction(
+  template: string,
+  helpers: Readonly<Record<string, string>>,
+): boolean {
+  for (const { code } of callGraphBlocks(template, helpers)) {
+    if (COMPUTED_BINDING_RE.test(code.replace(STRING_LITERAL_RE, '""'))) {
+      return true;
+    }
+  }
+  return false;
+}
+
 // [LAW:single-enforcer] Every function a template CALLS by name — in its own
 // text and every reachable helper's (`callGraphBlocks`) — as one more fold over
 // the call-graph walk. A name is a bare identifier in code: a field (`.now`), a

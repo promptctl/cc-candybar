@@ -5,7 +5,12 @@
 import { projectionsOf } from "../src/config/loader/projections";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { CLOCK_FUNCTIONS } from "../src/template-engine/engine";
-import { declareDslVariables, EVERY_SCOPE } from "../src/dsl/render";
+import {
+  compileInputOf,
+  compileKey,
+  declareDslVariables,
+  EVERY_SCOPE,
+} from "../src/dsl/render";
 import { SourceRegistry, VariableStore } from "../src/var-system";
 import { drawingAt } from "./helpers/test-engine";
 import fs from "node:fs";
@@ -190,8 +195,38 @@ test("the config load line names the load's projections", () => {
     expect(stamped).toContain("stamp");
     expect(stamped).toContain("cacheTimer");
     expect(segments(line("{}"))).not.toContain("stamp");
+    // And how many templates it draws so, whatever holds them: a segment's
+    // own one more.
+    const templates = (text: string): number =>
+      Number(/ instantTemplates=(\d+) /.exec(text)![1]);
+    expect(
+      templates(line("{}", `{ stamp: { template: "{{ unixEpoch now }}" } }`)),
+    ).toBe(templates(line("{}")) + 1);
   } finally {
     gitService.close();
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+// A compile reads of the variables only what decides whether a read lands on a
+// projection, so configs declaring other variables differently share one.
+test("a compile is keyed on the names that decide a projection read", () => {
+  const key = (variables: string, read = ".clock") =>
+    compileKey(
+      compileInputOf(
+        parseAndValidate(
+          "/tmp/test.json5",
+          `{ variables: ${variables}, segments: { s: { template: "{{ ${read} }}" } }, root: { h: ["s"] } }`,
+        ),
+      ),
+    );
+  const clock = `clock: { kind: "time", layout: "15:04" }`;
+  expect(key(`{ ${clock}, a: { kind: "literal", value: "1" } }`)).toBe(
+    key(`{ ${clock}, b: { kind: "literal", value: "2" } }`),
+  );
+  // A name nested under a projection decides what a read under it lands on.
+  const nested = `"clock.at": { kind: "literal", value: "1" }`;
+  expect(key(`{ ${clock}, ${nested} }`)).not.toBe(
+    key(`{ ${clock}, a: { kind: "literal", value: "1" } }`),
+  );
 });

@@ -112,9 +112,9 @@ import { variableScopes, type VarScope } from "./variable-scope.js";
 import { evaluateOnce, viewParts, type ViewParts } from "./parts.js";
 import { declaredVariables } from "../config/loader/refs.js";
 import {
+  projectionNamesOf,
   projectionsOf,
   templateInstants,
-  variableNamesOf,
 } from "../config/loader/projections.js";
 import {
   barRoot,
@@ -511,10 +511,11 @@ export interface CompileInput {
   readonly config: Omit<ValidatedConfig, "variables">;
   readonly stateReads: ReadonlyArray<readonly [key: string, variable: string]>;
   // [LAW:one-source-of-truth] What the compile tells its own templates' reads
-  // of the instant by (projections.ts): the declared variables' names, and
-  // which are projections, with why — the one other fact of the variables a
-  // compile reads, sorted so it is part of the compile's identity.
-  readonly variableNames: readonly string[];
+  // of the instant by (projections.ts): the declared names that decide whether
+  // a read lands on a projection, and the projections, with why — the one
+  // other fact of the variables a compile reads, sorted so it is part of the
+  // compile's identity.
+  readonly projectionNames: readonly string[];
   readonly projections: ReadonlyArray<readonly [variable: string, why: string]>;
 }
 
@@ -547,7 +548,7 @@ export function compileInputOf(config: ValidatedConfig): CompileInput {
   return {
     config: rest,
     stateReads: [...stateKeyToVar].sort(([a], [b]) => (a < b ? -1 : 1)),
-    variableNames: [...variableNamesOf(config)].sort(),
+    projectionNames: projectionNamesOf(config),
     projections: [...projectionsOf(config)].sort(([a], [b]) =>
       a < b ? -1 : 1,
     ),
@@ -609,7 +610,7 @@ export const EVERY_SCOPE: ReadonlySet<VarScope> = new Set([
 export function compileDslConfig({
   config,
   stateReads,
-  variableNames,
+  projectionNames,
   projections,
 }: CompileInput): CompiledConfig {
   // [LAW:locality-or-seam] One engine per config load, carrying THIS config's
@@ -898,7 +899,7 @@ export function compileDslConfig({
   // is drawn outside any segment, where no layout can be asked for.
   const basis = {
     helpers: config.helpers,
-    names: new Set(variableNames),
+    names: new Set(projectionNames),
     projections: new Map(projections),
     clock: engineClockFunctions(renderClocks),
   };
@@ -907,15 +908,12 @@ export function compileDslConfig({
   const layoutReadsInstant = gates.some((gate) =>
     gateReadsInstant(sources.get(gate)!),
   );
-  const readsInstant = templateInstants(
-    {
-      ...basis,
-      clock: layoutReadsInstant
-        ? new Set([...basis.clock, LAYOUT_PREVIEW])
-        : basis.clock,
-    },
-    config.actions,
-  );
+  const readsInstant = layoutReadsInstant
+    ? templateInstants(
+        { ...basis, clock: new Set([...basis.clock, LAYOUT_PREVIEW]) },
+        config.actions,
+      )
+    : gateReadsInstant;
   const instant = new Set(
     [...sources].flatMap(([template, source]) =>
       readsInstant(source) ? [template] : [],

@@ -114,7 +114,8 @@ export interface Derived<T> {
 class Kept<T> implements Derived<T> {
   private readonly cell: KeepAliveComputed<T>;
 
-  constructor(name: string, deriver: () => T) {
+  // `what` names the value in a refusal: `Variable "x"`, `Derived value "x"`.
+  constructor(what: string, deriver: () => T) {
     // [LAW:one-source-of-truth] keepAlive caches the value across reads
     // so `.get()` re-runs the deriver only when a tracked dep
     // invalidates — without it, MobX treats an unobserved computed as
@@ -128,16 +129,17 @@ class Kept<T> implements Derived<T> {
     // down this way — or guards the teardown by another flag, so lifting this
     // one leaves `suspend_` a no-op — would leak every disposed store again,
     // quietly, until the RSS backstop fired. Throw instead: registerDslConfig
-    // folds a declaration's throw into a load warning per variable, so the
-    // first such build shows the message on every computed's ⚠ cell.
+    // folds a declaration's throw into a load warning per variable, and a
+    // part's throw is its placement's ⚠, so the first such build shows the
+    // message wherever a computed is made.
     if (typeof this.cell.suspend_ !== "function") {
       throw new TypeError(
-        `Variable "${name}": this MobX's computed has no suspend_; release() cannot unsubscribe it`,
+        `${what}: this MobX's computed has no suspend_; release() cannot unsubscribe it`,
       );
     }
     if (typeof this.cell.keepAlive_ !== "boolean") {
       throw new TypeError(
-        `Variable "${name}": this MobX's computed has no keepAlive_ flag; release() cannot lift it`,
+        `${what}: this MobX's computed has no keepAlive_ flag; release() cannot lift it`,
       );
     }
   }
@@ -183,7 +185,7 @@ class ComputedNode implements VarNode {
     readonly type: VarType,
     deriver: () => VarValue,
   ) {
-    this.cell = new Kept(name, () => {
+    this.cell = new Kept(`Variable "${name}"`, () => {
       const v = deriver();
       assertType(this.name, this.type, v, "computed result");
       return v;
@@ -393,7 +395,7 @@ export class VariableStore {
   ): Derived<T> {
     this.refuseDisposed(`Derived value "${name}"`);
     if (derivation === "projection") return new Projected(deriver);
-    const kept = new Kept(name, deriver);
+    const kept = new Kept(`Derived value "${name}"`, deriver);
     this.kept.push(kept);
     return kept;
   }

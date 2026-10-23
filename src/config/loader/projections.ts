@@ -16,6 +16,7 @@ import type { DslConfig } from "../dsl-types.js";
 import { actionTemplates, type ActionDecl } from "../action.js";
 import { CLOCK_FUNCTIONS } from "../../template-engine/engine.js";
 import {
+  bindsComputedAction,
   declaredVariables,
   templateActionRefs,
   templateFunctions,
@@ -78,11 +79,6 @@ function foldOf(config: ProjectionConfig): InstantBasis {
 
 export function projectionsOf(config: ProjectionConfig): Projections {
   return foldOf(config).projections;
-}
-
-// The declared variable names the fold read the config's templates against.
-export function variableNamesOf(config: ProjectionConfig): ReadonlySet<string> {
-  return foldOf(config).names;
 }
 
 function foldProjections(config: ProjectionConfig): InstantBasis {
@@ -157,6 +153,10 @@ export function templateInstants(
     actionReads.set(name, reads);
     return reads;
   };
+  // A name the template computes may be any declared action's.
+  let anyReads: boolean | undefined;
+  const anyActionReadsInstant = (): boolean =>
+    (anyReads ??= Object.keys(actions).some(actionReadsInstant));
   // One answer per source: a gate's text recurs at every node of every
   // preset that edit chrome wraps alike.
   const answers = new Map<string, boolean>();
@@ -167,9 +167,28 @@ export function templateInstants(
         instantRead(template, basis) !== null ||
         templateActionRefs(template, basis.helpers).some((ref) =>
           actionReadsInstant(ref.name),
-        );
+        ) ||
+        (bindsComputedAction(template, basis.helpers) &&
+          anyActionReadsInstant());
       answers.set(template, reads);
     }
     return reads;
   };
+}
+
+// [LAW:one-source-of-truth] The declared names that decide whether a read
+// lands on a projection: each projection, and every name nested under one. A
+// read lands on the longest declared name it starts with, so whatever lies
+// outside these resolves a read no differently — a compile keyed on them alone
+// is shared by configs that declare other variables differently.
+export function projectionNamesOf(config: ProjectionConfig): string[] {
+  const { names, projections } = foldOf(config);
+  return [...names]
+    .filter((name) =>
+      [...projections.keys()].some(
+        (projection) =>
+          name === projection || name.startsWith(`${projection}.`),
+      ),
+    )
+    .sort();
 }

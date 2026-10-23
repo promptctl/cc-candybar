@@ -246,7 +246,7 @@ export function pluginLoadLine(
     return data?.kind === "file" ? data.path : "none";
   };
   return (
-    `config load ${layers.join(" < ") || "<default>"}: projections=${[...projectionsOf(config).keys()].join(",") || "-"} instantSegments=${instantSegments(compiled).join(",") || "-"} plugins loaded=${loaded.length} dropped=${dropped.length} unplaced=${unreached.length} checkout=${checkoutField}` +
+    `config load ${layers.join(" < ") || "<default>"}: projections=${[...projectionsOf(config).keys()].join(",") || "-"} instantSegments=${instantSegments(compiled).join(",") || "-"} instantTemplates=${compiled.instant.size} plugins loaded=${loaded.length} dropped=${dropped.length} unplaced=${unreached.length} checkout=${checkoutField}` +
     loaded.map((p) => ` +${p} data=${dataOf(p)}`).join("") +
     dropped.map((d) => ` -${d.path} (${d.reason})`).join("") +
     unreached.map((d) => ` ~${d.path} (${d.reason})`).join("")

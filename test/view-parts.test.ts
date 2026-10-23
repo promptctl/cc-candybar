@@ -131,6 +131,28 @@ describe("what reads the instant is a projection, however it reaches the clock",
     expect(view.errors).toEqual([]);
   });
 
+  // [LAW:no-silent-failure] A name the template computes may be any declared
+  // action's, so it reads the instant when any action's own text does.
+  test("a template binding an action by a name it computes", () => {
+    const config = parseAndValidate(
+      "<test>",
+      `{
+        actions: { copyNow: { copy: "{{ unixEpoch now }}" } },
+        segments: { stamp: { template: '{{ $a := "copyNow" }}{{ action $a "copy" }}' } },
+        root: { h: ["stamp"] },
+      }`,
+    );
+    const view = viewOf(config);
+    const urls = [A, B].map(
+      (at) =>
+        links(view.draw({}, at).text).find((l) => stripAnsi(l.text) === "copy")!
+          .url,
+    );
+    expect(urls[0]).toContain(String(Math.floor(A)));
+    expect(urls[1]).toContain(String(Math.floor(B)));
+    expect(view.errors).toEqual([]);
+  });
+
   test("a layout whose gates read the instant", () => {
     const gated = (when: string) =>
       viewOf(
