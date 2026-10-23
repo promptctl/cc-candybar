@@ -49,3 +49,24 @@ export function retiredReadHint(ref: string): string {
     ? ""
     : ` — ".${ref}" is no longer a variable: ${replacement(to)}; a "${to.segment}" template reads it as ".settings.${to.setting}"`;
 }
+
+// [LAW:one-source-of-truth] The payload paths the daemon no longer writes:
+// path → what to read instead. An `input` reading one would publish its
+// default forever [LAW:no-silent-failure], so the loader refuses it. A future
+// retirement is one row here.
+// brandon-unfiled-3248.8ro6: the payload stores instants; what they say
+// relative to now is the draw's.
+export const RETIRED_INPUT_PATHS: ReadonlyMap<string, string> = new Map([
+  [
+    "git.timeSinceCommit",
+    'the payload stores the commit\'s date, "git.committedAt" (epoch seconds), and the bundled template variable "git.timeSinceCommit" is its age: drop this declaration, or declare it { kind: "template", type: "number", template: "{{ sub (int (unixEpoch now)) .git.committedAt }}" }',
+  ],
+  [
+    "block.etaMinutes",
+    'the bundled template variable "block.etaMinutes" computes it at the draw: drop this declaration, or declare it { kind: "template", type: "number", template: "{{ etaMinutes .block.nativeUtilization .block.resetsAt 300 }}" }',
+  ],
+  [
+    "weekly.etaMinutes",
+    'the bundled template variable "weekly.etaMinutes" computes it at the draw: drop this declaration, or declare it { kind: "template", type: "number", template: "{{ etaMinutes .weekly.percentage .weekly.resetsAt 10080 }}" }',
+  ],
+]);

@@ -165,13 +165,13 @@ describe("buildRenderPayload — git outcome lane", () => {
     expect(logs).toEqual([]);
   });
 
-  // The provider caches one GitInfo for a whole TTL window; the age must move
-  // with each render's instant, not stay frozen at the fetch.
+  // The git provider stores one GitInfo between reads; the age must move with
+  // each draw's instant, not stay frozen at the read.
   test("the commit date is stored as an instant, whatever the render's instant", async () => {
     // [LAW:one-source-of-truth] Its age is the draw's (the bundled
     // git.timeSinceCommit): a payload holding an age would be stale in every
     // frame drawn after the read that built it.
-    const committedAt = Date.UTC(2026, 9, 15, 12, 0, 0);
+    const committedAt = Date.UTC(2026, 9, 15, 12, 0, 0) / 1000;
     const deps = depsWith(
       ok({
         branch: "main",
@@ -186,7 +186,7 @@ describe("buildRenderPayload — git outcome lane", () => {
       (
         await buildRenderPayload(
           hookData("/no/such/transcript.jsonl"),
-          instantOf(new Date(committedAt + secondsLater * 1000)),
+          instantOf(new Date((committedAt + secondsLater) * 1000)),
           deps,
           undefined,
           new Set(["git.committedAt"]),
@@ -196,8 +196,8 @@ describe("buildRenderPayload — git outcome lane", () => {
         )
       ).git?.committedAt;
 
-    expect(await storedAt(90.5)).toBe(committedAt / 1000);
-    expect(await storedAt(3600)).toBe(committedAt / 1000);
+    expect(await storedAt(90.5)).toBe(committedAt);
+    expect(await storedAt(3600)).toBe(committedAt);
   });
 });
 

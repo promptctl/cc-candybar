@@ -1366,15 +1366,8 @@ describe("SourceRegistry — template: basic", () => {
 
   it("a number template's default answers its failure as a number", () => {
     const { store, registry } = make();
-    registry.declareTemplate("n", "soon", { ...DERIVED, type: "number", varDefault: "-1" });
+    registry.declareTemplate("n", "soon", { ...DERIVED, type: "number", varDefault: -1 });
     expect(store.read("n")).toBe(-1);
-  });
-
-  it("a default its type cannot read is refused at declaration", () => {
-    const { registry } = make();
-    expect(() =>
-      registry.declareTemplate("n", "{{ 1 }}", { ...DERIVED, type: "number", varDefault: "never" }),
-    ).toThrow(/cast "never" to number/);
   });
 
   it("a readableOn re-measures when the drawn depth moves", () => {

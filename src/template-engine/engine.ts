@@ -31,8 +31,7 @@
 //    at its instant: clock factories.
 //  • ccCandybarFuncs: basename, dirname, int, string, bool, urlEncode,
 //    themes, endcaps, sparkline.
-//  • relativeTimeFuncs: minutesUntilReset, secondsSince, etaMinutes — a clock
-//    factory.
+//  • relativeTimeFuncs: minutesUntilReset, etaMinutes — a clock factory.
 //  • formatterFuncs: formatInteger, round, formatModelName, shortenModelName.
 //    (The cost/token/
 //    budget AND duration/time-remaining formatters moved to DSL helper templates

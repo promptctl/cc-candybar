@@ -181,7 +181,7 @@ export function ccCandybarFuncs(): FuncMap {
 // expression — the bdi migration is complete. Do NOT migrate these to DSL
 // helpers; each one is retained for a load-bearing reason:
 //
-//   minutesUntilReset, secondsSince, etaMinutes — return a NUMBER for
+//   minutesUntilReset, etaMinutes — return a NUMBER for
 //     comparisons and arithmetic (`le (minutesUntilReset .x) 8`). A template
 //     helper writes to output and cannot return a value, so a helper form
 //     would duplicate the formula across every comparison site
@@ -244,14 +244,6 @@ export const relativeTimeFuncs: ClockFactory = (clock) => ({
       ),
     // [LAW:types-are-the-program] An epoch is integer-valued; `int` rejects a
     // fractional or precision-losing carrier at the gate.
-    argTypes: ["int"],
-    arity: { kind: "exact" },
-  },
-  // Epoch-seconds → whole seconds since that instant: the bundled
-  // `git.timeSinceCommit`.
-  secondsSince: {
-    fn: (epochSeconds: number) =>
-      Math.floor(clock.now().getTime() / 1000) - epochSeconds,
     argTypes: ["int"],
     arity: { kind: "exact" },
   },

@@ -628,7 +628,7 @@ export interface TemplateVarDecl {
   readonly kind: "template";
   readonly template: string;
   readonly type?: "string" | "number" | "boolean";
-  readonly default?: string;
+  readonly default?: string | number | boolean;
 }
 
 // [LAW:types-are-the-program] No `cache`: a time variable is the instant its

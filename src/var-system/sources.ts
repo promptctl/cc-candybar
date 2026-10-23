@@ -131,7 +131,7 @@ export interface FileOptions {
 export interface TemplateOptions {
   // What the template's text is read as.
   readonly type: VarType;
-  readonly varDefault?: string;
+  readonly varDefault?: VarValue;
   // Whether the template reads the instant: the projection fold's answer
   // (src/config/loader/projections.ts), never the registry's guess.
   readonly derivation: Derivation;
@@ -1016,12 +1016,9 @@ export class SourceRegistry {
     type: VarType,
     derivation: Derivation,
     derive: () => string,
-    varDefault: string | undefined,
+    // Of the variable's type: the loader's `default` spec pairs the two.
+    fallback: VarValue | undefined,
   ): void {
-    // A default that cannot be read as the variable's type fails here, at
-    // load, rather than at the first read that falls back to it.
-    const fallback =
-      varDefault === undefined ? undefined : coerceToType(varDefault, type);
     this.store.defineDerived(name, type, derivation, () => {
       try {
         // [LAW:single-enforcer] The text is cast by the rule an input's

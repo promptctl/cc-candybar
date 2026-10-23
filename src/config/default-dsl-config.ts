@@ -343,7 +343,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       kind: "template",
       type: "number",
       template:
-        "{{ if gt .git.committedAt 0 }}{{ secondsSince .git.committedAt }}{{ else }}0{{ end }}",
+        "{{ if gt .git.committedAt 0 }}{{ sub (int (unixEpoch now)) .git.committedAt }}{{ else }}0{{ end }}",
     },
     // The palette role each git fact is painted in — data a user overrides one
     // fact at a time (`"git.color.behind": { kind: "literal", value: "error" }`).
@@ -450,11 +450,11 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       default: 0,
     },
 
-    // Burn rate + cap projection — daemon-derived (see render-payload.ts).
-    // Each projection is ABSENT when not projectable; the var-system fills the
-    // -1 default, a structurally-impossible value the burnrate helpers read as
-    // "—" [LAW:no-silent-failure] (0 minutes / $0-per-hr are real, displayable
-    // values, so they cannot double as the absence marker).
+    // Burn rate — daemon-derived (see render-payload.ts). ABSENT when not
+    // projectable; the var-system fills the -1 default, a structurally-
+    // impossible value the burnrate helpers read as "—" [LAW:no-silent-failure]
+    // ($0/hr is a real, displayable value, so it cannot double as the absence
+    // marker).
     "burn.costPerHour": {
       kind: "input",
       path: "burn.costPerHour",
@@ -861,9 +861,9 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     },
     // Burn rate + cap projection: "$X/hr · Nm to 5h · Nd to wk". The headline
     // number of a usage monitor — how fast you are spending and when you hit
-    // the wall. All math is daemon-side (render-payload.ts); the template only
-    // formats. Heats as the 5h cap NEARS — the ramp runs over minutes-to-cap,
-    // smaller = hotter, the inverse of block's fuller-is-hotter — and the -1
+    // the wall. The rate is daemon-side (render-payload.ts), the ETAs the
+    // draw's (`block.etaMinutes`); the template only formats. Heats as the 5h
+    // cap NEARS — the ramp runs over minutes-to-cap, smaller = hotter, the inverse of block's fuller-is-hotter — and the -1
     // "cannot project" sentinel sits calm at the first stop. Shown when either
     // rate-limit window is active — the same signal block/weekly gate on.
     burnrate: {
@@ -1638,8 +1638,8 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // so the dollar policy has one home.
     formatRate:
       '{{ if lt . 0 }}—/hr{{ else }}{{ template "formatCost" . }}/hr{{ end }}',
-    // ETA to a rate-limit cap: humanized minutes when projectable, "—" when the
-    // daemon could not project (-1 sentinel). Reuses the long-remaining cascade.
+    // ETA to a rate-limit cap: humanized minutes when projectable, "—" when it
+    // cannot be projected (-1 sentinel). Reuses the long-remaining cascade.
     formatEta:
       '{{ if lt . 0 }}—{{ else }}{{ template "formatLongTimeRemaining" . }}{{ end }}',
     // Token throughput: "N/s" (K/M-scaled, rounded) when measured (>= 0), "—"

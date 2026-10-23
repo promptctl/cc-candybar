@@ -1003,8 +1003,9 @@ export type ConfigFileFacts = SettingCounts & {
 export async function buildRenderPayload(
   hookData: ClaudeHookData,
   // [LAW:one-source-of-truth] The instant the render this payload feeds is
-  // drawn at — the one renderDsl publishes to the template engine, so an ETA
-  // here and the `minutesUntilReset` countdown beside it agree on "now".
+  // drawn at — the one renderDsl publishes to the template engine, so the day
+  // `today` sums and the speed lane's sample agree with every clock read the
+  // draw makes. The payload stores no value relative to it (BlockPayload).
   at: Instant,
   deps: RenderPayloadDeps,
   cwd: string | undefined,
@@ -1492,9 +1493,7 @@ function projectGitInfo(outcome: Outcome<GitInfo>): {
   const aheadBehind = field(info.aheadBehind);
   const sha = field(info.sha);
   const operation = field(info.operation);
-  const committedAtMs = field(info.committedAt);
-  const committedAt =
-    committedAtMs === undefined ? undefined : Math.floor(committedAtMs / 1000);
+  const committedAt = field(info.committedAt);
   const stash = field(info.stashCount);
   const upstream = field(info.upstream);
   const tracking =

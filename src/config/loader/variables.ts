@@ -51,6 +51,7 @@ import {
   type ValidateCtx,
 } from "./validate-core.js";
 import { requireCacheSpec } from "./cache.js";
+import { RETIRED_INPUT_PATHS } from "./retired-variables.js";
 
 export function validateVariables(
   ctx: ValidateCtx,
@@ -130,15 +131,15 @@ function gitFieldSpec(): FieldSpec<GitField> {
   };
 }
 
-// [LAW:types-are-the-program] `input`'s `default` carries the cross-field
-// invariant — it must match the declared `type` (an absent or invalid `type`
-// defaults the check to "string"). A field spec receives the WHOLE record, so it
+// [LAW:types-are-the-program] A typed variable's `default` (`input`,
+// `template`) carries the cross-field invariant — it must match the declared
+// `type` (an absent or invalid `type` defaults the check to "string"). A field spec receives the WHOLE record, so it
 // reads its sibling `raw.type` to pick the expected type WITHOUT re-reporting a
 // bad type (the `type` field spec owns that error — reading raw here avoids the
 // duplicate issue). This is what lets `input` derive BOTH `parse` and `json` from
 // one field map via `arm()`, like every other arm — closing the last spot where
 // the two interpreters were authored independently [LAW:one-source-of-truth].
-function inputDefaultSpec(): FieldSpec<string | number | boolean> {
+function typedDefaultSpec(): FieldSpec<string | number | boolean> {
   return {
     required: false,
     json: { type: ["string", "number", "boolean"] },
@@ -256,7 +257,7 @@ function parseSpec(): FieldSpec<ParseDecl> {
 // [LAW:types-are-the-program] A source's `default` lives in its parser's
 // OUTPUT domain — a string for the text/regex arms, any JSON value for the
 // json arm — so this spec reads its sibling `raw.parse` to pick the domain,
-// the way inputDefaultSpec reads `raw.type`. This is THE enforcer of the
+// the way typedDefaultSpec reads `raw.type`. This is THE enforcer of the
 // arm↔default pairing: FileVarDecl/ShellVarDecl type `default` as the union
 // of both domains and declareOne's lowering trusts the stamp. The sibling's
 // own errors are parseSpec's to report: the json domain is the json key
@@ -328,10 +329,32 @@ const LITERAL_FIELDS: FieldSpecMap<Omit<LiteralVarDecl, "kind">> = {
   value: literalValueSpec(),
   default: optionalStringSpec(),
 };
+// [LAW:no-silent-failure] An input's path names a payload field; one the
+// payload no longer carries would publish the default forever, so it is
+// refused with what replaced it (RETIRED_INPUT_PATHS).
+function inputPathSpec(): FieldSpec<string> {
+  const text = requireStringSpec();
+  return {
+    ...text,
+    parse: (ctx, path, field, raw) => {
+      const value = text.parse(ctx, path, field, raw);
+      const instead =
+        value === undefined ? undefined : RETIRED_INPUT_PATHS.get(value);
+      return instead === undefined
+        ? value
+        : (reject<string>(
+            ctx,
+            `${path}.${field}`,
+            `${path}.${field} "${value}" is no longer in the payload: ${instead}`,
+          ) ?? undefined);
+    },
+  };
+}
+
 const INPUT_FIELDS: FieldSpecMap<Omit<InputVarDecl, "kind">> = {
-  path: requireStringSpec(),
+  path: inputPathSpec(),
   type: optionalEnumSpec(["string", "number", "boolean"] as const),
-  default: inputDefaultSpec(),
+  default: typedDefaultSpec(),
 };
 const ENV_FIELDS: FieldSpecMap<Omit<EnvVarDecl, "kind">> = {
   name: requireStringSpec(),
@@ -358,7 +381,7 @@ function noCachePolicy(why: string): Readonly<Record<string, string>> {
 const TEMPLATE_FIELDS: FieldSpecMap<Omit<TemplateVarDecl, "kind">> = {
   template: requireStringSpec(),
   type: optionalEnumSpec(["string", "number", "boolean"] as const),
-  default: optionalStringSpec(),
+  default: typedDefaultSpec(),
 };
 // [LAW:no-silent-failure] A template variable is a computed that tracks every
 // variable it reads; a `cache:` was accepted here and never reached the runtime,
@@ -440,7 +463,7 @@ const VARIABLE_SCHEMA: TaggedUnionSchema<AuthoredVariableDecl, "kind"> = {
   arms: {
     literal: arm("literal", LITERAL_FIELDS),
     // [LAW:one-source-of-truth] `input`'s `default`/`type` cross-field invariant
-    // lives in `inputDefaultSpec` (a field spec reading its sibling), so `input`
+    // lives in `typedDefaultSpec` (a field spec reading its sibling), so `input`
     // is one field map like every other arm — `arm()` derives both `parse` and
     // `json` from INPUT_FIELDS, no hand-authored schema to keep in sync.
     input: arm("input", INPUT_FIELDS),
