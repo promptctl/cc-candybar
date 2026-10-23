@@ -1,3 +1,9 @@
+## [1.156.2](https://github.com/promptctl/cc-candybar/compare/v1.156.1...v1.156.2) (2026-10-23)
+
+### Bug Fixes
+
+* **menu:** neighbouring menu cells wear two shades joined by a filled arrow (brandon-menus-sjhy.b9w) ([#415](https://github.com/promptctl/cc-candybar/issues/415)) ([fefa3a1](https://github.com/promptctl/cc-candybar/commit/fefa3a1e1b600fea9df0cae164274e4f500db01a))
+
 ## [1.156.1](https://github.com/promptctl/cc-candybar/compare/v1.156.0...v1.156.1) (2026-10-22)
 
 ### Bug Fixes
