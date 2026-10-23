@@ -276,8 +276,9 @@ export interface RenderLook extends RenderPalettes {
 /**
  * What a render binds into the compile it draws with: everything a template
  * function reads of the render in progress. [LAW:no-ambient-temporal-coupling]
- * It lives exactly as long as the render — drawDsl builds it, binds it, and
- * drops it on every exit — so a compile shared between render-cache entries
+ * It is the view's (src/dsl/parts.ts), each field a value the view's parts
+ * track, and is bound for exactly as long as one draw — drawDsl binds it and
+ * unbinds it on every exit — so a compile shared between render-cache entries
  * holds nothing of whichever entry drew last.
  */
 export interface RenderBinding {
@@ -304,13 +305,13 @@ export interface RenderBinding {
   // (`stripSeamCols`): a disclosure body leads each row with its ✕ as a cell
   // of its own, so a row fitted inside a body reserves that cell.
   readonly seamCols: number;
-  // [LAW:no-ambient-temporal-coupling] The look this render draws in and the
-  // rows it lays its closed segments out in. Only the render can resolve them
-  // (a `globals.palette` rule needs the payload), so drawDsl publishes each
-  // once it has, before the walk evaluates a template that reads it; read
-  // through `renderLook` / `renderLayout`.
-  look: RenderLook | undefined;
-  layout: (() => PreviewRows) | undefined;
+  // [LAW:no-ambient-temporal-coupling] The look this render draws in. Only the
+  // render can resolve it (a `globals.palette` rule needs the payload), so
+  // drawDsl publishes it once it has, before the walk evaluates a template
+  // that reads it; read through `renderLook`.
+  readonly look: RenderLook | undefined;
+  // The rows it lays its closed segments out in, read through `renderLayout`.
+  readonly layout: () => PreviewRows;
 }
 
 /**
@@ -351,11 +352,7 @@ export function renderLayout(
   runtime: ActionRuntime,
   reader: string,
 ): PreviewRows {
-  const { layout } = renderBinding(runtime, reader);
-  if (layout === undefined) {
-    throw new Error(`${reader} read the render's rows before they were laid`);
-  }
-  return layout();
+  return renderBinding(runtime, reader).layout();
 }
 
 /**

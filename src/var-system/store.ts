@@ -102,29 +102,28 @@ interface KeepAliveComputed<T> extends IComputedValue<T> {
   suspend_(): void;
 }
 
-class ComputedNode implements VarNode {
-  readonly kind = "computed" as const;
-  private readonly cell: KeepAliveComputed<VarValue>;
+// [LAW:one-type-per-behavior] A value the store derives, whatever it is a
+// value of: a variable (ComputedNode, ProjectionNode), or a template a draw
+// evaluates (a placement's parts, src/dsl/parts.ts). Read is the whole of it.
+export interface Derived<T> {
+  read(): T;
+}
 
-  constructor(
-    readonly name: string,
-    readonly type: VarType,
-    deriver: () => VarValue,
-  ) {
+// A derived value that keeps its answer until what it read changes, and is
+// released with the store that holds it.
+class Kept<T> implements Derived<T> {
+  private readonly cell: KeepAliveComputed<T>;
+
+  constructor(name: string, deriver: () => T) {
     // [LAW:one-source-of-truth] keepAlive caches the value across reads
     // so `.get()` re-runs the deriver only when a tracked dep
     // invalidates — without it, MobX treats an unobserved computed as
     // "not cached" and re-runs on every read. The render path is pull-
     // only (no autorun), so keepAlive is the only mode that gives the
     // reactive-cache contract the proposal promises.
-    this.cell = computed(
-      () => {
-        const v = deriver();
-        assertType(this.name, this.type, v, "computed result");
-        return v;
-      },
-      { keepAlive: true },
-    ) as KeepAliveComputed<VarValue>;
+    this.cell = computed(deriver, {
+      keepAlive: true,
+    }) as KeepAliveComputed<T>;
     // [LAW:no-silent-failure] A MobX whose computed no longer tears itself
     // down this way — or guards the teardown by another flag, so lifting this
     // one leaves `suspend_` a no-op — would leak every disposed store again,
@@ -143,7 +142,7 @@ class ComputedNode implements VarNode {
     }
   }
 
-  read(): VarValue {
+  read(): T {
     return this.cell.get();
   }
 
@@ -163,6 +162,41 @@ class ComputedNode implements VarNode {
     this.cell.keepAlive_ = false;
     this.cell.suspend_();
   }
+}
+
+// A derived value with no answer to keep: each read runs its deriver, at the
+// draw in progress. Nothing cached reads one, so it has nothing to release.
+class Projected<T> implements Derived<T> {
+  constructor(private readonly deriver: () => T) {}
+
+  read(): T {
+    return this.deriver();
+  }
+}
+
+class ComputedNode implements VarNode {
+  readonly kind = "computed" as const;
+  private readonly cell: Kept<VarValue>;
+
+  constructor(
+    readonly name: string,
+    readonly type: VarType,
+    deriver: () => VarValue,
+  ) {
+    this.cell = new Kept(name, () => {
+      const v = deriver();
+      assertType(this.name, this.type, v, "computed result");
+      return v;
+    });
+  }
+
+  read(): VarValue {
+    return this.cell.read();
+  }
+
+  release(): void {
+    this.cell.release();
+  }
 
   lastUpdatedMs(): null {
     // [LAW:no-defensive-null-guards] Computed nodes have no single
@@ -177,17 +211,22 @@ class ComputedNode implements VarNode {
 // progress. Nothing cached reads one, so it has no subscriptions to release.
 class ProjectionNode implements VarNode {
   readonly kind = "projection" as const;
+  private readonly cell: Projected<VarValue>;
 
   constructor(
     readonly name: string,
     readonly type: VarType,
-    private readonly deriver: () => VarValue,
-  ) {}
+    deriver: () => VarValue,
+  ) {
+    this.cell = new Projected(() => {
+      const v = deriver();
+      assertType(this.name, this.type, v, "projection result");
+      return v;
+    });
+  }
 
   read(): VarValue {
-    const v = this.deriver();
-    assertType(this.name, this.type, v, "projection result");
-    return v;
+    return this.cell.read();
   }
 
   lastUpdatedMs(): null {
@@ -344,6 +383,23 @@ export class VariableStore {
     this.declare(name, new Node(name, type, () => deriver(reader)));
   }
 
+  // A derived value of this store that is no variable — a template a draw
+  // evaluates (src/dsl/parts.ts) — held as a variable's would be: kept until
+  // what it read changes, or derived at every read, and released with them.
+  derive<T>(
+    name: string,
+    derivation: Derivation,
+    deriver: () => T,
+  ): Derived<T> {
+    this.refuseDisposed(name);
+    if (derivation === "projection") return new Projected(deriver);
+    const kept = new Kept(name, deriver);
+    this.kept.push(kept);
+    return kept;
+  }
+
+  private readonly kept: Array<Kept<unknown>> = [];
+
   read(name: string): VarValue {
     return this.requireVar(name).read();
   }
@@ -470,7 +526,7 @@ export class VariableStore {
   // tracks it for the batch and unobserves again as the batch ends) — so a
   // late reader cannot resubscribe the store to the world for good. A
   // declaration after dispose would: it would mint a keepAlive computed with
-  // no release to come, so `declare` refuses it. Returns how many computeds it
+  // no release to come, so `declare` and `derive` refuse it. Returns how many computeds it
   // released, the fact the caller's log line carries (0 on a second call). One action, so the
   // cascading unobservation settles once, when it ends. [LAW:single-enforcer]
   // called by SourceRegistry.dispose, the one teardown of everything a config
@@ -488,8 +544,9 @@ export class VariableStore {
           released++;
         }
       }
+      for (const kept of this.kept) kept.release();
     });
-    return released;
+    return released + this.kept.length;
   }
 
   private disposed = false;
@@ -526,13 +583,17 @@ export class VariableStore {
     return node;
   }
 
-  private declare(name: string, node: StoreNode): void {
-    // [LAW:no-silent-failure] A computed declared after dispose has no
-    // release to come: it would subscribe to the world and hold this store
-    // exactly as before brandon-unfiled-3248.t14.
+  // [LAW:no-silent-failure] A computed declared after dispose has no release
+  // to come: it would subscribe to the world and hold this store exactly as
+  // before brandon-unfiled-3248.t14.
+  private refuseDisposed(name: string): void {
     if (this.disposed) {
       throw new Error(`Variable "${name}": cannot declare on a disposed store`);
     }
+  }
+
+  private declare(name: string, node: StoreNode): void {
+    this.refuseDisposed(name);
     if (this.has(name)) {
       throw new Error(`Variable "${name}" is already declared`);
     }

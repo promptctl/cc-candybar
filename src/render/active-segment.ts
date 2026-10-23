@@ -135,6 +135,40 @@ export function openSegment(
   return active;
 }
 
+/** What a segment's record says of it before any of its templates run. */
+export type SegmentPlace = Omit<ActiveSegment, "bg" | "drops">;
+
+/**
+ * Run `run` with a fresh record for `place` published, and put back whatever
+ * was published before, on every exit, a throw included: publishing and
+ * tearing down are one call, so a template that throws leaves no record
+ * behind, and a segment's part evaluated while another's runs (a layout a
+ * template lays out) leaves that one's in place.
+ * [LAW:no-ambient-temporal-coupling]
+ */
+export function inSegment<T>(
+  ref: ActiveSegmentRef,
+  place: SegmentPlace,
+  run: (active: ActiveSegment) => T,
+): T {
+  const prior = ref.current;
+  try {
+    return run(
+      openSegment(
+        ref,
+        place.segName,
+        place.placementId,
+        place.palette,
+        place.disclosure,
+        place.tint,
+        place.text,
+      ),
+    );
+  } finally {
+    ref.current = prior;
+  }
+}
+
 /**
  * Read the active segment, or fail with a message that says *why* nothing is
  * active rather than what is missing.

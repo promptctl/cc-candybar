@@ -1505,6 +1505,43 @@ export type Region =
       readonly address: Address;
     };
 
+// [LAW:one-source-of-truth] Whether two regions are one place: the same arm,
+// the same decor or band, and the same address step for step — so whatever is
+// dealt one of them (`decorationFor`) is dealt the other.
+export function sameRegion(a: Region, b: Region): boolean {
+  if (!sameAddress(a.address, b.address)) return false;
+  switch (a.kind) {
+    case "bar":
+      return (
+        b.kind === "bar" &&
+        a.decor.variation === b.decor.variation &&
+        a.decor.shade === b.decor.shade
+      );
+    case "band":
+      return b.kind === "band" && sameDisclosure(a.band, b.band);
+  }
+}
+
+const sameAddress = (a: Address, b: Address): boolean =>
+  a.length === b.length &&
+  a.every(
+    (step, i) =>
+      step.index === b[i]!.index &&
+      step.count === b[i]!.count &&
+      step.distribution === b[i]!.distribution &&
+      step.axis === b[i]!.axis,
+  );
+
+// Whether two disclosures are one band: one hue, at one depth, on one ground.
+export const sameDisclosure = (a: Disclosure, b: Disclosure): boolean =>
+  a.hue === b.hue &&
+  a.depth === b.depth &&
+  a.ground.length === b.ground.length &&
+  a.ground.every(
+    (entry, i) =>
+      entry.hue === b.ground[i]!.hue && entry.shade === b.ground[i]!.shade,
+  );
+
 /** The bar's root under `decor`: the top of the layout tree, before any step. */
 export const barRoot = (decor: Decor): Region => ({
   kind: "bar",

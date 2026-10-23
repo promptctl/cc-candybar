@@ -23,7 +23,7 @@ import {
   type RawDslConfig,
   type RawSegmentDecl,
 } from "../dsl-types.js";
-import type { ActionDecl } from "../action.js";
+import { actionTemplates, type ActionDecl } from "../action.js";
 import { listResolvablePaletteNames } from "../../themes/policy.js";
 import { ConfigError, type ConfigIssue } from "./diagnostics.js";
 import { resolveUserPath } from "../../utils/user-path.js";
@@ -633,10 +633,9 @@ function* fragmentTemplates(
     yield [`helpers.${name}`, `{{ define "${name}" }}${body}{{ end }}`];
   }
   for (const [name, a] of Object.entries(fragment.actions ?? {})) {
-    if ("copy" in a) yield [`actions.${name}.copy`, a.copy];
-    if ("open" in a) yield [`actions.${name}.open`, a.open];
-    if ("preset" in a && a.preset === "delete")
-      yield [`actions.${name}.name`, a.name];
+    for (const [field, source] of actionTemplates(a)) {
+      yield [`actions.${name}.${field}`, source];
+    }
   }
 }
 

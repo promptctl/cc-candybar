@@ -182,6 +182,14 @@ export const CLOCK_FUNCTIONS: ReadonlySet<string> = new Set(
   Object.keys(clockFuncs(CLOCK_FACTORIES)),
 );
 
+// The clock functions of an engine built with `extra` clock factories beside
+// its own — a compile's, whose segment templates can call the swatch row's.
+export function engineClockFunctions(
+  extra: readonly ClockFactory[],
+): ReadonlySet<string> {
+  return new Set([...CLOCK_FUNCTIONS, ...Object.keys(clockFuncs(extra))]);
+}
+
 // [LAW:one-source-of-truth] The functions that read the drawn depth: rich-js's
 // one DrawnAt-reading binding, registered from this table over richTextFuncs'
 // own, so the names the scope fold reads (a cache key calling one reads a

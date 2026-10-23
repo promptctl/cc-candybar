@@ -161,9 +161,9 @@ test("a projection is derived at each draw; a derived template is cached", () =>
 test("the config load line names the load's projections", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-projections-"));
   const gitService = new GitDataProvider({ logger: () => {} });
-  const line = (variables: string): string => {
+  const line = (variables: string, segments = "{}"): string => {
     const file = path.join(dir, "config.json5");
-    fs.writeFileSync(file, `{ variables: ${variables} }`);
+    fs.writeFileSync(file, `{ variables: ${variables}, segments: ${segments} }`);
     const loaded = loadFromDisk(dir, dir, file, {
       gitService,
       sessionState: new SessionState(),
@@ -178,8 +178,18 @@ test("the config load line names the load's projections", () => {
         clock: { kind: "time", layout: "15:04" },
         shown: { kind: "template", template: "{{ .clock }}" },
       }`),
-    ).toContain(": projections=clock,shown plugins ");
-    expect(line("{}")).toContain(": projections=- plugins ");
+    ).toContain(": projections=clock,shown instantSegments=");
+    expect(line("{}")).toContain(": projections=- instantSegments=");
+    // brandon-unfiled-3248.8ro6 step 6: and which segments it draws at every
+    // frame, the bundled default's among them.
+    const segments = (text: string): string[] =>
+      / instantSegments=(\S+) /.exec(text)![1]!.split(",");
+    const stamped = segments(
+      line("{}", `{ stamp: { template: "{{ unixEpoch now }}" } }`),
+    );
+    expect(stamped).toContain("stamp");
+    expect(stamped).toContain("cacheTimer");
+    expect(segments(line("{}"))).not.toContain("stamp");
   } finally {
     gitService.close();
     fs.rmSync(dir, { recursive: true, force: true });

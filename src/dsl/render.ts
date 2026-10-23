@@ -12,9 +12,10 @@
 // govern output, not whether operations run.
 
 import { createHash } from "node:crypto";
-import type { ColorDepth, RichText, Palette } from "@promptctl/rich-js";
+import type { ColorDepth, RichText } from "@promptctl/rich-js";
 import { Defines, type Engine, type Template } from "@promptctl/go-template-js";
 import type { Instant } from "../utils/instant.js";
+import type { ClockFactory } from "../template-engine/clock.js";
 import type {
   ValidatedConfig,
   VariableDecl,
@@ -37,7 +38,7 @@ import {
   type EffectiveGlobals,
 } from "../config/effective-globals.js";
 import { PRESET_FLOOR, presetNames, presetRoot } from "../config/presets.js";
-import { configOptionDomains, arrangedSegment } from "../config/edit-chrome.js";
+import { configOptionDomains } from "../config/edit-chrome.js";
 import { EDIT_NS } from "../config/loader/reserved-namespace.js";
 import type { Derivation, VariableStore } from "../var-system/store.js";
 import type { SourceRegistry } from "../var-system/sources.js";
@@ -74,19 +75,15 @@ import {
   isExpression,
   SLOT_FLOORS,
   EFFECT_FLOOR,
-  placementPalette,
   transposedPalette,
 } from "../themes/index.js";
 import { ANIMATION_SPEEDS, FOLLOW_BAR } from "../themes/policy.js";
 import type { DrawnMotion } from "../render/drawn-motion.js";
-import { buildScope, placementScope } from "../template-engine/scope.js";
 import {
   bindClock,
   createCcCandybarEngine,
-  evaluateWhen,
-  gateOf,
+  engineClockFunctions,
   HIDDEN,
-  resolveSegmentColors,
 } from "../template-engine/index.js";
 import {
   compileActions,
@@ -94,7 +91,6 @@ import {
   bindRender,
   renderBinding,
   type ActionRuntime,
-  type RenderBinding,
 } from "../render/action.js";
 import { SESSION_KEY_TO_EFFECTIVE_VAR } from "../config/setting-projections.js";
 import { disclosureCloseFragment } from "../render/disclosure-close.js";
@@ -102,30 +98,33 @@ import { pickerFuncs } from "../render/picker.js";
 import { carouselFuncs } from "../render/carousel.js";
 import { themePreviewFuncs } from "../render/theme-preview.js";
 import { swatchFuncs } from "../render/swatches.js";
-import { layoutPreviewFuncs } from "../render/layout-preview.js";
+import {
+  LAYOUT_PREVIEW,
+  layoutPreviewFuncs,
+} from "../render/layout-preview.js";
 import { menuFuncs, type MenuRuntime } from "../render/menu.js";
 import {
   createActiveSegmentRef,
-  openSegment,
   type ActiveSegmentRef,
 } from "../render/active-segment.js";
 import { segmentColorFuncs } from "../render/segment-color.js";
 import { variableScopes, type VarScope } from "./variable-scope.js";
+import { evaluateOnce, viewParts, type ViewParts } from "./parts.js";
 import { declaredVariables } from "../config/loader/refs.js";
-import { projectionsOf } from "../config/loader/projections.js";
-import { closeCell, stateCell } from "../render/band-style.js";
+import {
+  projectionsOf,
+  templateInstants,
+  variableNamesOf,
+} from "../config/loader/projections.js";
 import {
   barRoot,
-  bandFor,
   bandRoot,
-  decorationFor,
   descend,
   paletteRole,
   textOn,
   SHADES,
   VARIATIONS,
   type AddressStep,
-  type Band,
   type Decor,
   type Region,
 } from "../themes/decor.js";
@@ -136,7 +135,6 @@ import {
 import {
   returnedBy,
   heldLine,
-  layoutRows,
   nodeType,
   rowIdentities,
   type Compiled,
@@ -150,8 +148,8 @@ import {
   type NodeCompileCtx,
   type NodeGate,
   type NodeRenderCtx,
-  type SegmentStyles,
   type EvaluatedSegment,
+  type PlacementParts,
 } from "./node-registry.js";
 
 // ─── Compiled config ───────────────────────────────────────────────────────────
@@ -215,6 +213,17 @@ export interface CompiledConfig {
   // synchronous, so no cross-render leak) — the spatial cousin of the hue
   // cursor, one owner. [LAW:no-ambient-temporal-coupling]
   readonly activeSegment: ActiveSegmentRef;
+  // [LAW:one-source-of-truth] The templates above that read the instant
+  // (projections.ts): a view derives these at every draw and keeps every other
+  // template's answer until what it read changes (src/dsl/parts.ts). Whether
+  // the layout `{{ layoutPreview }}` lays out reads it, through its gates.
+  readonly instant: ReadonlySet<Template<RichText>>;
+  readonly layoutReadsInstant: boolean;
+  // [LAW:single-enforcer] Each store this compile draws from, with the parts it
+  // keeps there. A store is drawn by one compile, and releases its parts with
+  // its variables (VariableStore.dispose), so an entry here lives exactly as
+  // long as its store.
+  readonly views: WeakMap<VariableStore, ViewParts>;
 }
 
 // ─── CacheDecl → CachePolicy ─────────────────────────────────────────────────
@@ -500,6 +509,12 @@ export interface RegisteredConfig extends CompiledConfig {
 export interface CompileInput {
   readonly config: Omit<ValidatedConfig, "variables">;
   readonly stateReads: ReadonlyArray<readonly [key: string, variable: string]>;
+  // [LAW:one-source-of-truth] What the compile tells its own templates' reads
+  // of the instant by (projections.ts): the declared variables' names, and
+  // which are projections, with why — the one other fact of the variables a
+  // compile reads, sorted so it is part of the compile's identity.
+  readonly variableNames: readonly string[];
+  readonly projections: ReadonlyArray<readonly [variable: string, why: string]>;
 }
 
 export function compileInputOf(config: ValidatedConfig): CompileInput {
@@ -531,6 +546,10 @@ export function compileInputOf(config: ValidatedConfig): CompileInput {
   return {
     config: rest,
     stateReads: [...stateKeyToVar].sort(([a], [b]) => (a < b ? -1 : 1)),
+    variableNames: [...variableNamesOf(config)].sort(),
+    projections: [...projectionsOf(config)].sort(([a], [b]) =>
+      a < b ? -1 : 1,
+    ),
   };
 }
 
@@ -589,6 +608,8 @@ export const EVERY_SCOPE: ReadonlySet<VarScope> = new Set([
 export function compileDslConfig({
   config,
   stateReads,
+  variableNames,
+  projections,
 }: CompileInput): CompiledConfig {
   // [LAW:locality-or-seam] One engine per config load, carrying THIS config's
   // action runtime. Engine creation amortizes across all of this config's segment
@@ -635,6 +656,11 @@ export function compileDslConfig({
   const styleNames = Object.keys(config.styles);
   const presetOptions = presetNames(config.presets);
   const perConfigDomains = configOptionDomains(config);
+  // The swatch row's `?` picks from the draw's one instant, so a draw at a
+  // given instant offers one pick, as it shows one clock.
+  const renderClocks: readonly ClockFactory[] = [
+    (clock) => swatchFuncs(actionRuntime, activeSegment, clock.now),
+  ];
   const engine = createCcCandybarEngine({
     extraFuncs: {
       ...actionFuncs(actionRuntime),
@@ -669,11 +695,7 @@ export function compileDslConfig({
         arity: { kind: "exact" },
       },
     },
-    // The swatch row's `?` picks from the draw's one instant, so a draw at a
-    // given instant offers one pick, as it shows one clock.
-    clockFuncs: [
-      (clock) => swatchFuncs(actionRuntime, activeSegment, clock.now),
-    ],
+    clockFuncs: renderClocks,
     drawnAt,
   });
   // [LAW:single-enforcer] THE one parse path for this config: every template —
@@ -683,7 +705,15 @@ export function compileDslConfig({
   // there is exactly one boundary where helpers come into scope (and one place
   // a helper could fail to be visible). The helpers are parsed ONCE here.
   const helpers = compileHelpers(engine, config.helpers);
-  const parse = (src: string): Template<RichText> => engine.parse(src, helpers);
+  // Every template parsed, with its text: which read the instant is decided
+  // once all are parsed (below), since a `{{ layoutPreview }}` reads every
+  // layout gate.
+  const sources = new Map<Template<RichText>, string>();
+  const parse = (src: string): Template<RichText> => {
+    const parsed = engine.parse(src, helpers);
+    sources.set(parsed, src);
+    return parsed;
+  };
   // A node's templates recur across many nodes — edit mode gates every chrome
   // cell and every placed segment in every preset by a handful of predicates,
   // and draws one segment's remove lead and configure trail on both its label and its content —
@@ -858,13 +888,79 @@ export function compileDslConfig({
     }
   }
 
+  // [LAW:single-enforcer] Which of these templates read the instant
+  // (projections.ts), so a view keeps every other as a derived value of its
+  // store (src/dsl/parts.ts). A `{{ layoutPreview }}` lays out the active
+  // preset under its gates, so it reads the instant when one of them does:
+  // the gates are told first, by the engine's clock functions alone — a gate
+  // is drawn outside any segment, where no layout can be asked for.
+  const basis = {
+    helpers: config.helpers,
+    names: new Set(variableNames),
+    projections: new Map(projections),
+    clock: engineClockFunctions(renderClocks),
+  };
+  const gateReadsInstant = templateInstants(basis, config.actions);
+  const gates = [...roots.values()].flatMap(layoutGates(compiled));
+  const layoutReadsInstant = gates.some((gate) =>
+    gateReadsInstant(sources.get(gate)!),
+  );
+  const readsInstant = templateInstants(
+    {
+      ...basis,
+      clock: layoutReadsInstant
+        ? new Set([...basis.clock, LAYOUT_PREVIEW])
+        : basis.clock,
+    },
+    config.actions,
+  );
+  const instant = new Set(
+    [...sources].flatMap(([template, source]) =>
+      readsInstant(source) ? [template] : [],
+    ),
+  );
+
   return {
     segments: compiled,
     roots,
     activeSegment,
     menuRuntime,
     globalExpressions,
+    instant,
+    layoutReadsInstant,
+    views: new WeakMap(),
   };
+}
+
+// The segments a compile's draws evaluate at every frame: those any of whose
+// templates read the instant, in declaration order.
+export function instantSegments(compiled: CompiledConfig): string[] {
+  return Object.entries(compiled.segments).flatMap(([name, segment]) =>
+    [segment.when, segment.bg, segment.fg, segment.template].some(
+      (template) => template !== undefined && compiled.instant.has(template),
+    )
+      ? [name]
+      : [],
+  );
+}
+
+// The gates a layout's `{{ layoutPreview }}` reads: every node's own `when`
+// and each placed segment's.
+const layoutGates =
+  (segments: CompiledSegments) =>
+  (root: CompiledNode): Array<Template<RichText>> =>
+    nodesUnder(root).flatMap((node) => [
+      ...(node.when === undefined ? [] : [node.when]),
+      ...(node.kind === "segment" && segments[node.name]!.when !== undefined
+        ? [segments[node.name]!.when!]
+        : []),
+    ]);
+
+// Every node a layout node holds, itself and its open bodies' included.
+function nodesUnder(node: CompiledNode): CompiledNode[] {
+  return node.kind === "container"
+    ? [node, ...node.children.flatMap(nodesUnder)]
+    : [node, ...(node.opens === undefined ? [] : nodesUnder(node.opens.body))];
 }
 
 // ─── A globals slot holding a rule (brandon-looks-pe6, brandon-themes-dzl) ───
@@ -906,35 +1002,35 @@ function compiledRule(
   return rule;
 }
 
-// [LAW:single-enforcer] THE evaluation of a globals rule: its result, or —
-// when its template throws (a `fail`, a missing field) — its slot's floor,
+// [LAW:single-enforcer] THE reading of a globals rule: the name it wrote, or —
+// when its template threw (a `fail`, a missing field) — its slot's floor,
 // reported. Thrown on, a rule's own fault would take the whole statusline away
 // (brandon-unfiled-3248.2gq), where a failing segment costs one ⚠ cell; a
 // globals slot has no cell of its own, so the strip is where it says so
 // [LAW:no-silent-failure]. The floor is a NAME, so each slot's `decide` turns
-// it into that slot's floor value exactly as it would a rule naming it.
+// it into that slot's floor value exactly as it would a rule naming it. The
+// rule itself is a part of the view (`ViewParts.rule`).
 function evalRule(
   slot: ExpressionSlot,
   rule: CompiledRule,
-  scope: object,
+  parts: ViewParts,
   warn: (warning: RenderWarning) => void,
 ): string {
-  try {
-    return rule.template
-      .evaluate(scope)
-      .map((f) => f.plain)
-      .join("");
-  } catch (e) {
-    warn({
-      kind: "rule",
-      slot,
-      message: ruleFloorMessage(
-        rule.where,
+  const outcome = parts.rule(rule.template);
+  switch (outcome.kind) {
+    case "named":
+      return outcome.name;
+    case "failed":
+      warn({
+        kind: "rule",
         slot,
-        `the rule failed — ${e instanceof Error ? e.message : String(e)}`,
-      ),
-    });
-    return SLOT_FLOORS[slot];
+        message: ruleFloorMessage(
+          rule.where,
+          slot,
+          `the rule failed — ${outcome.error}`,
+        ),
+      });
+      return SLOT_FLOORS[slot];
   }
 }
 
@@ -1053,6 +1149,9 @@ export interface DrawnFrame {
   // The rows an open menu added — a disclosure body, a dropped `{{ menu }}` —
   // which flash and close once the session goes idle.
   readonly menuRows: number;
+  // How many of the view's parts this frame evaluated (src/dsl/parts.ts):
+  // between data changes, only those that read the instant.
+  readonly evaluated: number;
 }
 
 // [LAW:types-are-the-program] What a render could not honour, by what failed:
@@ -1174,22 +1273,26 @@ export function drawDsl(
   // The depth it draws at, into the view's registry: every text colour chosen
   // below — and every variable template's `readableOn` — is floored on it.
   registry.drawAt(drawnDepth(opts.colorCompatibility));
-  // [LAW:no-ambient-temporal-coupling] The compile may serve many stores (one
-  // per render-cache entry its config compiles alike in): every template it
-  // evaluates below reads THIS render's binding, bound for the walk and dropped
-  // on every exit, a throw included, so the compile keeps nothing of it.
-  const binding: RenderBinding = {
-    store,
-    registry,
+  // [LAW:one-source-of-truth] The view's parts: every template below is read
+  // through them, kept until what it read changes unless it reads the instant
+  // (src/dsl/parts.ts). The draw's own facts first, so no part reads the last
+  // draw's.
+  const facts = {
     width: opts.width,
     chromeCols: stripChromeCols(opts),
     padding: opts.padding,
     seamCols: stripSeamCols(opts),
-    look: undefined,
-    layout: undefined,
+    preset: selection.preset,
   };
+  const parts = viewParts(compiled, store, registry, facts);
+  parts.draw(facts);
+  const evaluatedBefore = parts.evaluated;
+  // [LAW:no-ambient-temporal-coupling] The compile may serve many stores (one
+  // per render-cache entry its config compiles alike in): every template it
+  // evaluates below reads THIS view's binding, bound for the walk and dropped
+  // on every exit, a throw included, so the compile keeps nothing of it.
   // eslint-disable-next-line @typescript-eslint/no-unused-vars -- held for its disposal
-  using _bound = bindRender(compiled.menuRuntime.action, binding);
+  using _bound = bindRender(compiled.menuRuntime.action, parts.binding);
   const {
     preset,
     theme: selectedTheme,
@@ -1244,7 +1347,6 @@ export function drawDsl(
       provisionalName(selectedEffect, "effect"),
     ),
   );
-  const scope = buildScope(store);
   // The other half of each fold, which could only ever happen here: a rule reads
   // the store the push above just filled with this render's values. A decided
   // selection returns ITSELF, so the republish below is skipped by identity
@@ -1258,20 +1360,20 @@ export function drawDsl(
     // channel to the caller: a result naming no installed theme renders the floor
     // and says so, rather than throwing away the whole bar.
     return decideThemeName(
-      evalRule("palette", rule, scope, warn),
+      evalRule("palette", rule, parts, warn),
       rule.where,
       (message) => warn({ kind: "rule", slot: "palette", message }),
     );
   });
   const style = finishSelection(selectedStyle, (source) =>
     decideStyleName(
-      evalRule("style", compiledRule(compiled, "style", source), scope, warn),
+      evalRule("style", compiledRule(compiled, "style", source), parts, warn),
       config.styles,
     ),
   );
   const effect = finishSelection(selectedEffect, (source) =>
     decideEffectName(
-      evalRule("effect", compiledRule(compiled, "effect", source), scope, warn),
+      evalRule("effect", compiledRule(compiled, "effect", source), parts, warn),
     ),
   );
   // [LAW:no-silent-failure] A rule arm learned a name the push above could not
@@ -1300,7 +1402,7 @@ export function drawDsl(
   const palette = transposedPalette(basePalette, style.value);
   // The look the walk below draws in, published before it evaluates a template
   // that reads it (`renderLook`).
-  binding.look = { basePalette, palette, decor };
+  parts.publishLook({ basePalette, palette, decor });
   // The motion of each row this render draws: the session's effect memory
   // records the settled effect coming into force, so its clock starts there,
   // and what each placement this frame draws, so one the last frame — drawn
@@ -1341,122 +1443,24 @@ export function drawDsl(
 
   perSegmentSink?.clear();
 
-  // [LAW:no-defensive-null-guards] A segment node names one segment; resolve it to
-  // its decl + compiled form. Both are always present together (loader validates,
-  // registerDslConfig compiles); a miss is a caller bug the segment render throws on.
-  const lookupSegment = (name: string) => {
-    const seg = config.segments[name];
-    const segCompiled = compiled.segments[name];
-    return seg !== undefined && segCompiled !== undefined
-      ? { seg, compiled: segCompiled }
-      : undefined;
-  };
+  // [LAW:no-defensive-null-guards] A segment node names one declared segment
+  // (the loader validates it); a miss is a caller bug the segment render
+  // throws on.
+  const lookupSegment = (name: string) => config.segments[name];
 
-  // [LAW:single-enforcer] The segment seam, owned here. It first establishes
-  // everything a segment's templates may ask about themselves — the name
-  // `{{ menu }}` derives its identity from, the palette `{{ color }}` resolves
-  // against, the background `{{ bgOf }}` returns, the band a `{{ menu }}` body
-  // colours its items by — and every Style the segment can wear: its authored
-  // `closed` Style, and the `trigger` / `band` pair of the band it opens (the
-  // state colour and its plane), both from the one `bandFor` read so the
-  // trigger and its dropped band cannot disagree about their hue. Then the
-  // body evaluates, and the menu bodies it appended to the record come back
-  // beside its fragments.
-  //
-  // [LAW:no-ambient-temporal-coupling] The record is set and cleared around each
-  // segment's evaluation by the walk ONLY, so "which segment am I in" is owned
-  // state with one writer, never ambient context a reader has to hope is
-  // current. Publishing and clearing are one call with the clear in `finally`,
-  // so a `bg:`, `fg:` or body that throws leaves no record behind for a
-  // container `when` or the next segment to read.
-  //
-  // [LAW:one-source-of-truth] What the segment is dealt is ONE `decorationFor`
-  // read of its region (src/themes/decor.ts): the tint its closed cell wears
-  // and the disclosure it opens —
-  // so the cell, the band it drops, and the body hung under it cannot disagree
-  // about their hue.
-  const evaluateSegment = (
-    placement: CompiledSegmentNode,
-    segScope: object,
-    palette: Palette,
-    region: Region,
-    templates: {
-      readonly bg: Template<RichText> | undefined;
-      readonly fg: Template<RichText> | undefined;
-      readonly body: Template<RichText>;
-      readonly lead: Template<RichText> | undefined;
-      readonly trail: Template<RichText> | undefined;
-    },
-    bodyOpen: boolean,
-  ): EvaluatedSegment => {
-    try {
-      const drawnAt = registry.drawnAt();
-      const { tint, text, disclosure } = decorationFor(
-        palette,
-        region,
-        drawnAt,
-      );
-      const active = openSegment(
-        compiled.activeSegment,
-        placement.name,
-        placement.id,
-        palette,
-        disclosure,
-        tint,
-        text,
-      );
-      const closed = resolveSegmentColors(
-        active,
-        drawnAt,
-        templates.bg,
-        templates.fg,
-        segScope,
-      );
-      // `{{ bgOf }}` reads the ground the text is drawn on: an open segment
-      // wears its band's state colour, not its closed background. An open
-      // disclosure body is known before the body evaluates, so the body reads
-      // it too; a dropped menu is known only after, so the lead and trail —
-      // evaluated last — read the final ground either way.
-      // [LAW:one-source-of-truth] The band the segment opens, read the one way
-      // for the background `{{ bgOf }}` sees, its shortfalls and every Style
-      // below.
-      const opened = (): Band => bandFor(palette, disclosure, drawnAt);
-      if (bodyOpen) active.bg = opened().state;
-      const fragments = templates.body.evaluate(segScope);
-      // [LAW:one-source-of-truth] Open is the PRESENCE of something under the
-      // segment: a dropped menu body (known only now the body has evaluated),
-      // or an open disclosure body. Decided once, here, and returned — the
-      // walk picks the cell's Style by this same value.
-      const open = active.drops.length > 0 || bodyOpen;
-      if (open) {
-        const band = opened();
-        active.bg = band.state;
-        // [LAW:no-silent-failure] A floor the band stands short of is drawn as
-        // near as it comes, and said so.
-        for (const shortfall of band.shortfalls) shortfalls.add(shortfall);
-      }
-      const lead = templates.lead?.evaluate(segScope) ?? [];
-      const trail = templates.trail?.evaluate(segScope) ?? [];
-      // Read only where something hangs open under the segment: a band that
-      // can never be drawn (a hue with no state) throws when it is opened,
-      // never from a closed cell or a body cell that merely deals it.
-      const styles: SegmentStyles = {
-        closed,
-        get trigger() {
-          return stateCell(palette, opened().state, drawnAt);
-        },
-        get band() {
-          return stateCell(palette, opened().plane, drawnAt);
-        },
-        get close() {
-          return closeCell(palette, opened().state, drawnAt);
-        },
-        disclosure,
-      };
-      return { styles, fragments, lead, trail, drops: active.drops, open };
-    } finally {
-      compiled.activeSegment.current = null;
-    }
+  // [LAW:no-silent-failure] Every floor an open band stands short of, from
+  // what the placement evaluated to, reported once after the walk.
+  const collected = (evaluated: EvaluatedSegment): EvaluatedSegment => {
+    for (const shortfall of evaluated.shortfalls) shortfalls.add(shortfall);
+    return evaluated;
+  };
+  const placement = (node: CompiledSegmentNode): PlacementParts => {
+    const own = parts.placement(node);
+    return {
+      shown: () => own.shown(),
+      bodyOpen: () => own.bodyOpen(),
+      evaluate: (palette, region) => collected(own.evaluate(palette, region)),
+    };
   };
 
   // [LAW:dataflow-not-control-flow] ONE walk renders any node to LINES OF CELLS
@@ -1473,7 +1477,7 @@ export function drawDsl(
     region: Region,
   ): RenderedLines => {
     // A hidden parent's child is hidden without its `when` being asked.
-    const evaluated = parentVisible ? gateOf(node.when, scope) : HIDDEN;
+    const evaluated = parentVisible ? parts.gate(node) : HIDDEN;
     const gate: NodeGate =
       evaluated.kind === "failed"
         ? {
@@ -1490,14 +1494,26 @@ export function drawDsl(
           }
         : evaluated;
     const ctx: NodeRenderCtx = {
-      scope,
+      scope: parts.scope,
       palette,
       gate,
       padding: opts.padding,
       region,
       perSegmentSink,
       onSegmentError,
-      evaluateSegment,
+      placement,
+      evaluateOnce: (node, scope, palette, body) =>
+        collected(
+          evaluateOnce(
+            compiled.activeSegment,
+            node,
+            palette,
+            region,
+            registry.drawnAt(),
+            body,
+            scope,
+          ),
+        ),
       lookupSegment,
       renderChild: (child, childVisible, step: AddressStep) =>
         renderNode(child, childVisible, descend(region, step)),
@@ -1535,43 +1551,6 @@ export function drawDsl(
         `(have: ${[...compiled.roots.keys()].join(", ")})`,
     );
   }
-  // [LAW:one-source-of-truth] The rows `{{ layoutPreview }}` draws, from the
-  // tree about to be walked and the walk's own visibility: a node's `when`,
-  // then a segment's own — and a segment either `when` of which throws is
-  // SHOWN, because the walk draws an error cell exactly there, where a
-  // container whose `when` throws draws nothing. Edit mode's `+`/`-` and reset
-  // banner are affordances over the arrangement, not part of it, while a name
-  // label stands in for its segment (`arrangedSegment`). Each segment
-  // keeps the palette the walk colours it in, pin included.
-  const shown = (node: CompiledNode): boolean => {
-    const gate = gateOf(node.when, scope);
-    if (node.kind === "container") return gate.kind === "shown";
-    if (arrangedSegment(node.name) === undefined) return false;
-    if (gate.kind !== "shown") return gate.kind === "failed";
-    try {
-      return evaluateWhen(
-        compiled.segments[node.name]!.when,
-        placementScope(scope, node.settings),
-      );
-    } catch {
-      return true;
-    }
-  };
-  binding.layout = () =>
-    layoutRows(root, shown).map((row) =>
-      row.flatMap(({ name: placedName, address, settings }) => {
-        const name = arrangedSegment(placedName);
-        return name === undefined
-          ? []
-          : [
-              {
-                name,
-                address,
-                palette: placementPalette(settings.theme, palette),
-              },
-            ];
-      }),
-    );
   const rendered = rowIdentities(renderNode(root, true, barRoot(decor)))
     // A row's fill demands resolve here and nowhere else: this is the one place a
     // composed row and the width it must fit are both in hand (brandon-layout-0c2).
@@ -1624,5 +1603,6 @@ export function drawDsl(
     text: rendered.map((row) => row.text).join("\n"),
     motion: frameMotion,
     menuRows,
+    evaluated: parts.evaluated - evaluatedBefore,
   };
 }

@@ -286,6 +286,17 @@ export function ceilingMoveArgs(a: CeilingAction): readonly string[] {
   return a.ceiling === "set" ? ["set", a.to] : ["clear"];
 }
 
+// [LAW:one-source-of-truth] The templates an action's own text holds, by
+// field: `copy`'s and `open`'s text and a preset delete's `name`, each
+// evaluated where the action is realized.
+export function* actionTemplates(
+  a: ActionDecl,
+): IterableIterator<readonly [field: string, source: string]> {
+  if ("copy" in a) yield ["copy", a.copy];
+  if ("open" in a) yield ["open", a.open];
+  if ("preset" in a && a.preset === "delete") yield ["name", a.name];
+}
+
 // [LAW:types-are-the-program] Does this action take the value it writes from
 // the TEMPLATE (a picker's bound option, a cursor's integer)? Such an action
 // cannot ride behind a `do` head: only the head is bound a display, so a

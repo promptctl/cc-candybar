@@ -22,6 +22,7 @@ import {
   compileAlone,
   compileDslConfig,
   declareDslVariables,
+  instantSegments,
   registerCompiled,
   type CompileInput,
   type CompileProvider,
@@ -226,7 +227,11 @@ export interface ConfigChain {
 // the demo.
 export function pluginLoadLine(
   layers: readonly string[],
-  { plugins, config }: Pick<DslRenderState, "plugins" | "config">,
+  {
+    plugins,
+    config,
+    compiled,
+  }: Pick<DslRenderState, "plugins" | "config" | "compiled">,
 ): string {
   const { checkout, loaded, dropped, unreached } = plugins;
   const checkoutField =
@@ -240,7 +245,7 @@ export function pluginLoadLine(
     return data?.kind === "file" ? data.path : "none";
   };
   return (
-    `config load ${layers.join(" < ") || "<default>"}: projections=${[...projectionsOf(config).keys()].join(",") || "-"} plugins loaded=${loaded.length} dropped=${dropped.length} unplaced=${unreached.length} checkout=${checkoutField}` +
+    `config load ${layers.join(" < ") || "<default>"}: projections=${[...projectionsOf(config).keys()].join(",") || "-"} instantSegments=${instantSegments(compiled).join(",") || "-"} plugins loaded=${loaded.length} dropped=${dropped.length} unplaced=${unreached.length} checkout=${checkoutField}` +
     loaded.map((p) => ` +${p} data=${dataOf(p)}`).join("") +
     dropped.map((d) => ` -${d.path} (${d.reason})`).join("") +
     unreached.map((d) => ` ~${d.path} (${d.reason})`).join("")

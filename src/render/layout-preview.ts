@@ -97,12 +97,16 @@ export function renderLayoutPreview(
   return preview;
 }
 
+// The function's name: a template calling it reads every gate of the layout
+// it lays out, which the compile's instant fold asks (src/dsl/render.ts).
+export const LAYOUT_PREVIEW = "layoutPreview";
+
 export function layoutPreviewFuncs(
   runtime: ActionRuntime,
   activeSegment: ActiveSegmentRef,
 ): FuncMap {
   return {
-    layoutPreview: {
+    [LAYOUT_PREVIEW]: {
       fn: () =>
         renderLayoutPreview(
           renderLayout(runtime, "{{ layoutPreview }}"),
