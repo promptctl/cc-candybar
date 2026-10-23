@@ -23,6 +23,12 @@ import type { SessionStateReader, SessionStateRW } from "../session-state";
 import { holdClickError } from "../click-error";
 import { instantOf } from "../../utils/instant";
 import { stateGate, stateKeySeed } from "./state-validators";
+import {
+  disclosureNest,
+  NO_NEST,
+  type DisclosureNest,
+} from "../../config/disclosure-nest";
+import { closingView } from "../closing-view";
 import { configGate, configKeySeed } from "./config-validators";
 import type { Gate, RangeParams } from "./validator-registry";
 import {
@@ -672,6 +678,13 @@ function reloadIfWritten(ctx: VerbContext, sid: string, step: Step): void {
 // merge of every config the daemon holds.
 function sessionConfig(ctx: VerbContext, sid: string): DslConfig {
   return ctx.configFor(sessionOrigin(ctx, sid));
+}
+
+// What the session's config nests; a session that has never rendered has no
+// config, so nothing nested.
+function nestOf(ctx: VerbContext, sid: string): DisclosureNest {
+  const origin = recordedOrigin(ctx, sid);
+  return origin === null ? NO_NEST : disclosureNest(ctx.configFor(origin));
 }
 
 function originHome(origin: RenderOrigin): ConfigHome {
@@ -1666,12 +1679,20 @@ function journaled(
     const journal = ctx.history.begin();
     const navigation = ctx.navigation.begin(journal.sessionState);
     const failures: unknown[] = [];
+    // Both views close what a write closes, the navigating one above its
+    // recording, so ◁ back restores a closed menu with what was open in it.
+    const closing = (store: SessionStateRW): SessionStateRW =>
+      closingView(
+        store,
+        (sid) => nestOf(ctx, sid),
+        (line) => ctx.dlog("info", line),
+      );
     try {
       handler(value, {
         ...ctx,
-        sessionState: journal.sessionState,
+        sessionState: closing(journal.sessionState),
         journal,
-        navigating: navigation.sessionState,
+        navigating: closing(navigation.sessionState),
       });
     } catch (e) {
       failures.push(e);

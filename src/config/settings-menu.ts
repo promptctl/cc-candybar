@@ -35,7 +35,6 @@
 //     `✓ done` fires — so the ordering is load-bearing in that direction too,
 //     not merely tidy.
 
-import { ident } from "./ident.js";
 import { sharedMenuStateKey } from "./menu-keys.js";
 import { QUIET_TEXT } from "./quiet-text.js";
 import type { ActionDecl } from "./action.js";
@@ -68,7 +67,11 @@ import {
   VERDICT_OK,
   VERDICT_UNRUN,
 } from "../doctor/report.js";
-import { EDIT_SWITCH, editModeArtifacts } from "./loader/edit-mode.js";
+import {
+  EDIT_MODE_KEY,
+  EDIT_SWITCH,
+  editModeArtifacts,
+} from "./loader/edit-mode.js";
 import { presetByName, presetNames, presetRoot } from "./presets.js";
 import { quickActions } from "./quick-actions.js";
 import { commandTray } from "./command-tray.js";
@@ -140,8 +143,9 @@ const seg = (name: string): LayoutNode => ({ kind: "segment", name });
 // a time, its body dropped below the strip. A tab strip is an accordion: every
 // tab is a disclosure trigger on ONE key, which holds the open tab's name, so
 // opening one closes the rest and the open one wears its state colour like any
-// open trigger. The door's click folds it back to the first tab (doorFolds),
-// so the menu always reopens at its top level.
+// open trigger. Closing the door returns it to the first tab, as it returns
+// everything inside the door (src/config/disclosure-nest.ts), so the menu
+// always reopens at its top level.
 const TAB_KEY = `${SETTINGS_NS}tab`;
 // The tab a fresh session opens the menu on.
 const FIRST_TAB: TabName = "session";
@@ -780,36 +784,7 @@ function doorBody(): ContainerNode {
   };
 }
 
-// The door's body is one value: the anchor hangs it and the fold reads its keys
-// off it, so the two cannot describe different bodies.
 const DOOR_BODY = doorBody();
-
-// [LAW:one-source-of-truth] The door's click returns everything its body holds
-// to how a fresh session finds it — each disclosure inside it, at any depth,
-// written back to its state variable's default (the first tab, every picker
-// closed) — so the menu never reopens onto panels left open from an earlier
-// visit. The keys are read off the body itself, so a disclosure added to the
-// menu later is folded with no list to keep. One action per key, fired beside
-// the door's toggle in the same click.
-function doorFolds(artifacts: MenuArtifacts): string[] {
-  const keys = new Map<string, string>();
-  for (const node of walkNodes(DOOR_BODY)) {
-    if (node.kind === "segment" && node.opens !== undefined) {
-      keys.set(node.opens.ref.key, node.opens.ref.variable);
-    }
-  }
-  return [...keys].map(([key, variable]) => {
-    const decl = artifacts.variables[variable];
-    if (decl?.kind !== "state" || decl.default === undefined) {
-      throw new Error(
-        `settings menu: the door folds "${key}", but "${variable}" is not a state variable the menu declares with a default`,
-      );
-    }
-    const name = `${SETTINGS_ANCHOR}.fold.${ident(key)}`;
-    artifacts.actions[name] = { set: key, to: decl.default };
-    return name;
-  });
-}
 
 function expandContainer<
   N extends { readonly children: readonly LayoutNode[] },
@@ -842,6 +817,7 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
     },
     actions: {
       [DOOR_TOGGLE]: disclosureCycleAction(SETTINGS_ANCHOR, SETTINGS_OPEN),
+      [SETTINGS_ANCHOR]: { do: [DOOR_TOGGLE, ...DOOR_DISARMS] },
       [DOCTOR_RUN_ACTION]: { doctor: "run" },
       // Entering or leaving edit mode is a click like every other in the
       // menu: the menu stays as it was, so `◁ back` and the tabs stay in reach
@@ -962,10 +938,6 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
   Object.assign(artifacts.variables, COMMANDS.variables, RESET_ALL.variables);
   declareSettingControls(artifacts);
   declareDoctorRows(artifacts);
-  // Last, so every disclosure the body holds has declared its state.
-  artifacts.actions[SETTINGS_ANCHOR] = {
-    do: [DOOR_TOGGLE, ...DOOR_DISARMS, ...doorFolds(artifacts)],
-  };
   return artifacts;
 }
 
@@ -1082,9 +1054,19 @@ function declareSettingControls(artifacts: MenuArtifacts): void {
 // here is not an optional courtesy — the EDIT_SEG action above fires
 // EDIT_SWITCH, and that pass is demand-driven off a scan of the segments a
 // FILE declared, which cannot see a segment this pass mints later.
+//
+// Arranging lives inside the door: closing the menu leaves edit mode
+// (brandon-menus-sjhy.9p6, Brandon: "I'd like edit mode to exit if we close
+// the main menu"). The menu's artifacts land over the file's, so this is the
+// declaration every config renders with.
 function ensureEditToggle(artifacts: MenuArtifacts): void {
   const { variables, actions } = editModeArtifacts();
-  Object.assign(artifacts.variables, variables);
+  Object.assign(artifacts.variables, variables, {
+    [EDIT_MODE_KEY]: {
+      ...disclosureStateVar(EDIT_MODE_KEY, DISCLOSURE_CLOSED),
+      within: [SETTINGS_REF],
+    },
+  });
   Object.assign(artifacts.actions, actions);
 }
 

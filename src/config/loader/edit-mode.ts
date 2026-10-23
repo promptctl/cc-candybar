@@ -156,10 +156,12 @@ export function editModeArtifacts(): {
   return {
     variables: {
       [EDIT_MODE_KEY]: disclosureStateVar(EDIT_MODE_KEY, DISCLOSURE_CLOSED),
-      [EDIT_CONFIGURE_KEY]: disclosureStateVar(
-        EDIT_CONFIGURE_KEY,
-        DISCLOSURE_CLOSED,
-      ),
+      // Configuring is a level inside arranging, so leaving edit mode by any
+      // control closes it (src/config/disclosure-nest.ts).
+      [EDIT_CONFIGURE_KEY]: {
+        ...disclosureStateVar(EDIT_CONFIGURE_KEY, DISCLOSURE_CLOSED),
+        within: [EDIT_MODE_REF],
+      },
     },
     actions: {
       [EDIT_TOGGLE_ACTION]: disclosureCycleAction(

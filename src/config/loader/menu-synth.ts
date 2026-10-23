@@ -49,6 +49,7 @@ import {
   DISCLOSURE_CLOSED,
   disclosureCycleAction,
   disclosureStateVar,
+  type Disclosure,
 } from "../disclosure.js";
 import {
   placementId,
@@ -227,6 +228,28 @@ function parseCalls(
     // not the place that reports it.
     return "parse-failed";
   }
+}
+
+// [LAW:one-source-of-truth] The disclosures the `{{ menu }}`s of one placement
+// open, keyed exactly as `synthesizePlacementMenus` mints their state — so a
+// reader asking which menus sit in a body finds the keys a click writes.
+export function hostedMenus(
+  template: string,
+  placement: string,
+): readonly Disclosure[] {
+  const calls = parseCalls(template);
+  return calls === "parse-failed"
+    ? []
+    : calls.flatMap((call) =>
+        call.kind === "ok"
+          ? [
+              {
+                key: menuStateKey(placement, call.apply, call.options.key),
+                member: menuMember(call.apply),
+              },
+            ]
+          : [],
+      );
 }
 
 // [LAW:single-enforcer] THE "does this segment host a menu" predicate — read

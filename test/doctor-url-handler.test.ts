@@ -422,7 +422,7 @@ describe("the daemon's side of the round trip", () => {
     );
     const logs: string[] = [];
     const ctx: VerbContext = {
-      ...testVerbContext(sessionState),
+      ...testVerbContext(sessionState, undefined, DEFAULT_DSL_CONFIG),
       arrival,
       probes,
       clients,

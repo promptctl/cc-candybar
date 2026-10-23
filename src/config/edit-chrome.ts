@@ -363,6 +363,9 @@ function configureParts(
   // it is a template path no other variable owns. Named by position, so the
   // placement configured there next would find a list left open; entering
   // configure folds it, and each visit starts with every list closed.
+  // [LAW:single-enforcer] exception: closing configure folds this list too
+  // (disclosure-nest.ts), but a layout edit releases configure on the
+  // reloaded config, where the removed placement's member nests nothing.
   const listKey = sharedMenuStateKey(enter);
   const fold = `${enter}.fold`;
   ctx.artifacts.actions[fold] = { set: listKey, to: DISCLOSURE_CLOSED };
@@ -519,10 +522,12 @@ function insertTerm(
   const stateKey = menuStateKey(chromeSegName, applyName, undefined);
   const pageKey = menuPageKey(stateKey);
   const identity = menuActionName(stateKey, member);
-  artifacts.variables[stateKey] = disclosureStateVar(
-    stateKey,
-    DISCLOSURE_CLOSED,
-  );
+  // A `✚` is edit chrome, gated on edit mode rather than hung under it, so its
+  // list says so: leaving edit mode closes it.
+  artifacts.variables[stateKey] = {
+    ...disclosureStateVar(stateKey, DISCLOSURE_CLOSED),
+    within: [EDIT_MODE_REF],
+  };
   artifacts.variables[pageKey] = { kind: "state", key: pageKey, default: "0" };
   artifacts.actions[identity] = disclosureCycleAction(stateKey, member);
   artifacts.actions[pageKey] = { set: pageKey, int: true };

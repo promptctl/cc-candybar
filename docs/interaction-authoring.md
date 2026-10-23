@@ -1021,8 +1021,9 @@ synthesizes:
   `<preset>:<id>` (the one placement whose settings hang open, a level inside
   arranging) — and `edit.toggle` itself, a `cycle` action between
   `closed` and `arrange`. Wire your own trigger to it, or copy `editControl`
-  above verbatim; to close a configured placement as you leave, as the
-  bundled controls do, fire `edit.unconfigure` beside it in a `do`.
+  above verbatim. Leaving edit mode closes what it opened (a configured
+  placement, a `✚`'s list, the `(?)`), and closing the settings menu leaves
+  edit mode.
 - For **every** preset (the `"default"` floor included) and every ordinary
   segment in its resolved root: a red `✖` (a synthesized `removeSegment` action
   behind `{{ action }}`) drawn inside the segment's own cell, then a green `✚`
@@ -1968,8 +1969,9 @@ segment. Declared inline in `root`:
   unsupported; if the trigger must be dynamic, use `{{ menu }}` (any-template
   trigger) or author the raw grammar yourself.
 - `key` — same accordion semantics as the menu option: siblings sharing a key
-  are mutually exclusive. **Nested** groups must use *distinct* keys (a closed
-  parent hides its children; child open-state persists invisibly).
+  are mutually exclusive. **Nested** groups must use *distinct* keys. A closed
+  parent hides its children, and closing it closes every group and
+  `{{ menu }}` open inside it, so it reopens with them closed.
 - `open: true` — initially open; at most one group per shared key.
 - `direction` — how the body container stacks (`vertical` default). Every
   row of the open body leads with a `✕` that closes the group (it writes the
