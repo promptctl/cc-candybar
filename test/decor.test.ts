@@ -1076,7 +1076,8 @@ describe("a band is a plane", () => {
     let ownAnchor = 0;
     for (const { palette, hue, ground, name } of LINEAGES) {
       let outer: readonly ColorRgba[] = [];
-      // A trigger inside a band stands among that band's plane and state.
+      // A trigger inside a band stands among that band's plane and its state
+      // as the ✕ is drawn in it.
       let among: readonly ColorRgba[] = groundCells(palette, ground);
       for (const depth of DEPTHS) {
         const anchorAt = (at: ColorDepth): ColorRgba =>
@@ -1094,7 +1095,7 @@ describe("a band is a plane", () => {
           if (shown(band(depth).plane).hex !== once.hex) wrong.push(`${name} depth ${depth}`);
         }
         outer = [plane];
-        among = [plane, anchorAt(drawnAt)];
+        among = [plane, stateFor(palette, hueAtDepth(hue, depth), among, drawnAt).state];
       }
     }
     expect(wrong).toEqual([]);
@@ -1272,10 +1273,12 @@ describe("open trigger, its band, and a nested band are mutually distinguishable
   // in it (the next band's state) and its two items — and rich-js joins two
   // cells whose drawn backgrounds stand under SEAM_MIN_DELTA_E with its thin
   // divider, so they read as one. Every pair stands apart as drawn, no item is
-  // the plane, or the band names the pair it stands short on.
+  // the plane, or the band names the pair it stands short on — a pair with the
+  // open trigger named by the band that trigger opens, which is open exactly
+  // when that trigger is drawn.
   const seamOf = (band: ReturnType<typeof bandFor>, opened: ColorRgba, drawnAt: ColorDepth) => {
     const shown = shownAt(drawnAt);
-    const row = { trigger: band.state, "open trigger": opened, "low item": band.items[0], "high item": band.items[1] };
+    const row = { trigger: band.state, "low item": band.items[0], "high item": band.items[1], "open trigger": opened };
     const names = Object.keys(row) as Array<keyof typeof row>;
     return names.flatMap((a, i) =>
       names.slice(i + 1).flatMap((b) =>
@@ -1288,10 +1291,12 @@ describe("open trigger, its band, and a nested band are mutually distinguishable
     const unreported = LINEAGES.flatMap(({ palette, hue, ground, name }) =>
       DEPTHS.flatMap((depth) => {
         const band = bandFor(palette, { hue, depth, ground }, drawnAt);
-        const opened = bandFor(palette, { hue, depth: depth + 1, ground }, drawnAt).state;
+        const nested = bandFor(palette, { hue, depth: depth + 1, ground }, drawnAt);
         const onPlane = band.items.some((item) => shown(item).hex === shown(band.plane).hex);
-        const short = seamOf(band, opened, drawnAt).filter(
-          (pair) => !band.shortfalls.some((line) => line.includes(`band's ${pair} stand`)),
+        const short = seamOf(band, nested.state, drawnAt).filter((pair) =>
+          !(pair.endsWith("open trigger") ? nested : band).shortfalls.some((line) =>
+            line.includes(`band's ${pair} stand`),
+          ),
         );
         return [...(onPlane ? [`${name} depth ${depth}: an item is the plane`] : []), ...short.map((pair) => `${name} depth ${depth}: ${pair}`)];
       }),

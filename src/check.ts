@@ -182,11 +182,11 @@ export function checkPayload(
     navigation: { back: 1 },
     unsaved: 1,
     resettable: perSetting(() => true) satisfies RenderPayload["resettable"],
-    // A look that differs from the theme's default, so the theme gear's
-    // `⤓ default for <theme>` renders and gets its template checked. It names
-    // the theme in force, as the daemon does, because the cell draws that
-    // theme's swatch; under a rule-chosen theme the daemon never offers the
-    // save (themeDefaultSave, src/daemon/setting-drafts.ts), and neither does this.
+    // The field the theme gear's `⤓ default for <theme>` reads, spelled as the
+    // daemon spells it (themeDefaultSave, src/daemon/setting-drafts.ts): the
+    // theme in force, whose swatch the cell draws, and no save under a
+    // rule-chosen theme. Check opens no trigger, so it never draws the cell; a
+    // render that opens the gear over this payload does (settings-menu-seams).
     themeDefault:
       effective.theme.kind === "decided"
         ? { differs: true, theme: effective.theme.name }

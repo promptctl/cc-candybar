@@ -519,6 +519,23 @@ describe("candybar-render-ai7.8 — `distribution` is authored per placer", () =
     );
   });
 
+  test("on the bar, a distribution on a vertical container whose rows stack further in is a load error", () => {
+    const bar = (tree: string): string => `{
+      globals: { palette: '${THEME}' },
+      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+      segments: { a: { template: 'A' }, b: { template: 'B' } },
+      root: ${tree},
+    }`;
+    const M = ", distribution: 'monotonic'";
+    // A row ends where a segment or a horizontal container is: it places those.
+    build(bar(`{ v: [ { h: ['a'] }, { v: ['b'] } ]${M} }`)).dispose();
+    build(bar(`{ v: [ 'a', { v: ['b'] } ]${M} }`)).dispose();
+    // Every row a vertical container: each row's hue is its own container's step.
+    expect(() => build(bar(`{ v: [ { v: ['a'] }, { v: ['b'] } ]${M} }`))).toThrow(
+      /sets "distribution" on a vertical container none of whose children is a segment or a horizontal container/,
+    );
+  });
+
   test("in a body, a distribution is refused where nothing reads it: inside a cell, or on a vertical container of rows that are containers", () => {
     const body = (tree: string): string => `{
       globals: { palette: '${THEME}' },

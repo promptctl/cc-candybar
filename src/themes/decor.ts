@@ -908,7 +908,12 @@ export interface Disclosure {
  * theme's among them). Held off the bar's row as well, a nested state was
  * driven to the same end of the lightness axis as its parent's on a row of
  * vivid shades, and the two collapsed into one; held off nothing, it could
- * sit on the plane it stands on.
+ * sit on the plane it stands on. The state is the one the ✕ is DRAWN in: at
+ * 256 colours and ansi the parent's search repairs its state, which then
+ * rounds elsewhere than its anchor does, and held off the anchor's rounding
+ * the open trigger drew in the ✕'s own colour (95 open settings menus at
+ * ansi). The plane is the unrounded one, since the drawn plane's repair reads
+ * the state of the trigger nested in it (`planeFloors`).
  */
 function standsAmong(
   palette: Palette,
@@ -923,7 +928,7 @@ function standsAmong(
           palette,
           { ...disclosure, depth: disclosure.depth - 1 },
           drawnAt,
-        ).anchor,
+        ).state,
       ];
 }
 
@@ -1069,9 +1074,10 @@ export interface Band extends BandColours {
    * One line per floor the band stands short of as drawn, for the render to
    * report where its trigger opens: `state` off the ground its lineage's
    * trigger stands on (STATE_FLOOR, `StateSearch`), `plane` off `state`
-   * (BAND_FLOORS.triggerPlane), and each pair of the four colours a row draws
-   * beside one another (`items`) closer than `SEAM_MIN_DELTA_E`. Empty when it
-   * clears them all, and at a depth that draws no colour.
+   * (BAND_FLOORS.triggerPlane), and each seam opening it draws (`drawnSeams`:
+   * its ✕ and items, and its state beside the enclosing band's) closer than
+   * `SEAM_MIN_DELTA_E`. Empty when it clears them all, and at a depth that
+   * draws no colour.
    */
   readonly shortfalls: readonly string[];
 }
@@ -1146,7 +1152,7 @@ export function bandFor(
               ),
               ...seamShortfalls(
                 palette,
-                { state, opened, low: items[0], high: items[1] },
+                drawnSeams(palette, disclosure, { state, items }, drawnAt),
                 drawnAt,
               ),
             ],
@@ -1178,28 +1184,65 @@ const ROW_COLOUR_NAMES: Record<keyof RowColours, string> = {
   high: "high item",
 };
 
+// One of a band row's colours, under the name its shortfall line gives it.
+type Named = readonly [keyof RowColours, ColorRgba];
+type Seam = readonly [Named, Named];
+
 /**
- * One line per pair of a band row's colours standing too near, as drawn, for
- * the joiner to draw an arrow between them: below `SEAM_MIN_DELTA_E` it draws
- * its divider, and the two cells read as one.
+ * The pairs of band-row colours that opening the band `disclosure` puts on
+ * screen beside one another: its own ✕ and two items, each beside the others,
+ * and — for a band opened by a trigger inside another band — that trigger, in
+ * this band's state, beside the enclosing band's ✕ and items. A band reports
+ * an open trigger only once one is open: it is the nested band that opens
+ * then, so a band whose body holds no trigger reports none.
+ */
+const drawnSeams = (
+  palette: Palette,
+  disclosure: Disclosure,
+  { state, items }: Pick<Band, "state" | "items">,
+  drawnAt: ColorDepth,
+): readonly Seam[] => {
+  const row = (b: Pick<Band, "state" | "items">): readonly Named[] => [
+    ["state", b.state],
+    ["low", b.items[0]],
+    ["high", b.items[1]],
+  ];
+  const own = row({ state, items });
+  const enclosing =
+    disclosure.depth === 0
+      ? []
+      : row(
+          bandFor(
+            palette,
+            { ...disclosure, depth: disclosure.depth - 1 },
+            drawnAt,
+          ),
+        );
+  return [
+    ...own.flatMap((a, i) => own.slice(i + 1).map((b): Seam => [a, b])),
+    ...enclosing.map((b): Seam => [b, ["opened", state]]),
+  ];
+};
+
+/**
+ * One line per seam whose two colours stand too near, as drawn, for the
+ * joiner to draw an arrow between them: below `SEAM_MIN_DELTA_E` it draws its
+ * divider, and the two cells read as one.
  */
 const seamShortfalls = (
   palette: Palette,
-  row: RowColours,
+  seams: readonly Seam[],
   drawnAt: ColorDepth,
 ): readonly string[] => {
   const asDrawn = shownAt(drawnAt);
-  const names = Object.keys(ROW_COLOUR_NAMES) as Array<keyof RowColours>;
-  return names.flatMap((a, i) =>
-    names.slice(i + 1).flatMap((b) => {
-      const apart = deltaE(asDrawn(row[a]), asDrawn(row[b]));
-      return apart >= SEAM_MIN_DELTA_E
-        ? []
-        : [
-            `theme "${palette.name}": an open band's ${ROW_COLOUR_NAMES[a]} and ${ROW_COLOUR_NAMES[b]} stand ΔE ${apart.toFixed(3)} apart as drawn at depth ${ColorDepth[drawnAt]}, under the ${SEAM_MIN_DELTA_E} below which two cells in those colours are joined by a divider and read as one`,
-          ];
-    }),
-  );
+  return seams.flatMap(([[a, ca], [b, cb]]) => {
+    const apart = deltaE(asDrawn(ca), asDrawn(cb));
+    return apart >= SEAM_MIN_DELTA_E
+      ? []
+      : [
+          `theme "${palette.name}": an open band's ${ROW_COLOUR_NAMES[a]} and ${ROW_COLOUR_NAMES[b]} stand ΔE ${apart.toFixed(3)} apart as drawn at depth ${ColorDepth[drawnAt]}, under the ${SEAM_MIN_DELTA_E} below which two cells in those colours are joined by a divider and read as one`,
+        ];
+  });
 };
 
 /**

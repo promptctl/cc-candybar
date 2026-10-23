@@ -85,7 +85,9 @@ import {
   type TemplateScope,
 } from "./refs.js";
 
-type UnreadDistribution = "cell" | "band";
+// Where a distribution nothing reads sits: inside a cell, or on a vertical
+// container whose rows are placed further in, on the bar or in a body.
+type UnreadDistribution = "cell" | "bar" | "band";
 // What each distribution nothing reads says, at the layout it was found in.
 const UNREAD_DISTRIBUTION: Record<
   UnreadDistribution,
@@ -93,6 +95,8 @@ const UNREAD_DISTRIBUTION: Record<
 > = {
   cell: (layoutKey) =>
     `${layoutKey} sets "distribution" on a container inside a cell — everything inside a cell wears that cell's colour, so it would place nothing. Set it on the row whose children are the cells (the horizontal container), or, on the bar, on the root, which places the rows.`,
+  bar: (layoutKey) =>
+    `${layoutKey} sets "distribution" on a vertical container none of whose children is a segment or a horizontal container — a bar row's hue is placed by the innermost vertical container it stacks through, so it would place nothing. Set it on that container, or on the row whose children are the cells (the horizontal container).`,
   band: (layoutKey) =>
     `${layoutKey} sets "distribution" on a vertical container inside a disclosure body none of whose children is a segment — a body's items are placed along their rows, never by which row they sit on, so it would place nothing. Set it on the row whose children are the items (the horizontal container).`,
 };
@@ -326,39 +330,37 @@ export function validateCrossReferences(
   };
   // [LAW:no-silent-failure] A `distribution` is honoured only where something
   // reads the steps it places. The bar reads two steps of an address — the
-  // innermost row, and the cell of that row (decorEntryFor) — and a band one,
-  // the step placing an item along its row: its cell, or a segment's own row
-  // when it is a row by itself (bandPlace). So a container nested inside a cell
-  // places nothing, on the bar or in a body, and neither does a body's vertical
-  // container none of whose children is a segment. Either would be accepted
-  // and ignored; each is refused, once per layout.
+  // innermost row, and the cell of that row (rowAndCell) — and a band one, the
+  // address as far as its cell (bandPlace). So nothing reads a distribution
+  // inside a cell, on the bar or in a body, nor one on a vertical container
+  // whose every row is placed further in: on the bar, rows that are vertical
+  // containers themselves; in a body, rows that are containers at all, since a
+  // body's row picks nothing. Each would be accepted and ignored; each is
+  // refused, once per layout.
   function unreadDistributions(
-    node: LayoutNode,
-    where: "bar" | "band" | "cell" = "bar",
+    tree: LayoutNode,
   ): ReadonlySet<UnreadDistribution> {
-    if (node.kind === "segment") {
-      return node.opens === undefined
-        ? new Set()
-        : unreadDistributions(node.opens.body, "band");
-    }
-    const axis = AXIS_OF[node.direction];
-    const unread: UnreadDistribution | undefined =
-      node.distribution === undefined
-        ? undefined
-        : where === "cell"
-          ? "cell"
-          : where === "band" &&
-              axis === "row" &&
-              !node.children.some((child) => child.kind === "segment")
-            ? "band"
-            : undefined;
-    const below = axis === "cell" ? "cell" : where;
-    return new Set([
-      ...(unread === undefined ? [] : [unread]),
-      ...node.children.flatMap((child) => [
-        ...unreadDistributions(child, below),
-      ]),
-    ]);
+    const unread = new Set<UnreadDistribution>();
+    const walk = (node: LayoutNode, where: UnreadDistribution): void => {
+      if (node.kind === "segment") {
+        if (node.opens !== undefined) walk(node.opens.body, "band");
+        return;
+      }
+      const axis = AXIS_OF[node.direction];
+      const endsRows = node.children.some(
+        (child) =>
+          child.kind === "segment" ||
+          (where === "bar" && AXIS_OF[child.direction] === "cell"),
+      );
+      if (node.distribution !== undefined) {
+        if (where === "cell") unread.add("cell");
+        else if (axis === "row" && !endsRows) unread.add(where);
+      }
+      for (const child of node.children)
+        walk(child, axis === "cell" ? "cell" : where);
+    };
+    walk(tree, "bar");
+    return unread;
   }
   // [LAW:one-source-of-truth] Walks what the author WROTE — the file's own
   // fragment at this key, never the merged root — so a node is reported at
