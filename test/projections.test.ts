@@ -25,6 +25,57 @@ test("every name a clock factory returns makes a template calling it a projectio
   }
 });
 
+test("a date function of its arguments alone reads no clock", () => {
+  const pure = [
+    "date",
+    "dateInZone",
+    "dateModify",
+    "htmlDate",
+    "htmlDateInZone",
+    "duration",
+    "durationRound",
+    "toDate",
+    "unixEpoch",
+  ];
+  expect(pure.filter((name) => CLOCK_FUNCTIONS.has(name))).toEqual([]);
+  const cfg = config(`{
+    stamp: { kind: "literal", value: "1700000000" },
+    took: { kind: "template", template: "{{ duration 90 }}" },
+    day: { kind: "template", template: '{{ date "2006-01-02" (int .stamp) }}' },
+  }`);
+  expect([...projectionsOf(cfg).keys()]).toEqual([]);
+  const store = new VariableStore();
+  const registry = new SourceRegistry(store);
+  try {
+    declareDslVariables(cfg, registry, process.cwd(), EVERY_SCOPE);
+    // Read with no draw bound: neither reaches the clock.
+    expect(store.read("took")).toBe("1m30s");
+    expect(store.read("day")).toMatch(/^2023-11-1[45]$/);
+  } finally {
+    registry.dispose();
+  }
+});
+
+test("a value reaching the instant by a name it does not spell is refused, never frozen", () => {
+  const cfg = config(`{
+    clock: { kind: "time", layout: "15:04:05" },
+    hidden: { kind: "template", template: '{{ index . "clock" }}' },
+  }`);
+  const store = new VariableStore();
+  const registry = new SourceRegistry(store);
+  try {
+    declareDslVariables(cfg, registry, process.cwd(), EVERY_SCOPE);
+    // The fold cannot see the read, so `hidden` keeps its answer.
+    expect(store.getNode("hidden").kind).toBe("computed");
+    using _draw = drawingAt(new Date(2026, 0, 1, 9, 0, 0));
+    expect(() => store.read("hidden")).toThrow(
+      /clock was read by a value that keeps its answer/,
+    );
+  } finally {
+    registry.dispose();
+  }
+});
+
 test("the set is closed upward: whatever reads a projection is one", () => {
   const projections = projectionsOf(
     config(
@@ -43,7 +94,7 @@ test("the set is closed upward: whatever reads a projection is one", () => {
   expect(Object.fromEntries(projections)).toEqual({
     clock: "is a time variable",
     viaVar: 'reads "clock", which is a time variable',
-    viaHelper: 'calls "unixEpoch"',
+    viaHelper: 'calls "now"',
     twoDeep: 'reads "viaVar", which reads "clock", which is a time variable',
   });
 });

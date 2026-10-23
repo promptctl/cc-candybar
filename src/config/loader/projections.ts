@@ -54,18 +54,29 @@ function instantRead(
 // starts as a projection, and a template variable joins once its template
 // reads the instant through anything already in. Computed once per config
 // object: the loader's check and every declaration read the same answer.
-const PROJECTIONS = new WeakMap<ProjectionConfig, Projections>();
-
-export function projectionsOf(config: ProjectionConfig): Projections {
-  let projections = PROJECTIONS.get(config);
-  if (projections === undefined) {
-    projections = foldProjections(config);
-    PROJECTIONS.set(config, projections);
-  }
-  return projections;
+// The declared names ride beside the answer: a cache key is read against the
+// same names the fold read [LAW:one-source-of-truth].
+interface Fold {
+  readonly names: ReadonlySet<string>;
+  readonly projections: Projections;
 }
 
-function foldProjections(config: ProjectionConfig): Projections {
+const FOLDS = new WeakMap<ProjectionConfig, Fold>();
+
+function foldOf(config: ProjectionConfig): Fold {
+  let fold = FOLDS.get(config);
+  if (fold === undefined) {
+    fold = foldProjections(config);
+    FOLDS.set(config, fold);
+  }
+  return fold;
+}
+
+export function projectionsOf(config: ProjectionConfig): Projections {
+  return foldOf(config).projections;
+}
+
+function foldProjections(config: ProjectionConfig): Fold {
   const declared = new Map(declaredVariables(config));
   const names = new Set(declared.keys());
   const projections = new Map<string, string>();
@@ -83,7 +94,7 @@ function foldProjections(config: ProjectionConfig): Projections {
       }
     }
   }
-  return projections;
+  return { names, projections };
 }
 
 // Why a template reads the instant, through the config's projections; null
@@ -92,6 +103,6 @@ export function instantReadOf(
   template: string,
   config: ProjectionConfig,
 ): string | null {
-  const names = new Set([...declaredVariables(config)].map(([name]) => name));
-  return instantRead(template, config, names, projectionsOf(config));
+  const { names, projections } = foldOf(config);
+  return instantRead(template, config, names, projections);
 }

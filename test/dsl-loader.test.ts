@@ -494,7 +494,7 @@ describe("loadDslConfig — variable source kinds", () => {
       [
         "calls one through a helper",
         `{ key: '{{ template "stamp" . }}' }`,
-        'cache.key calls "unixEpoch"',
+        'cache.key calls "now"',
       ],
       [
         "reads a time variable",
@@ -541,6 +541,18 @@ describe("loadDslConfig — variable source kinds", () => {
           message: 'cache.key calls "now"',
         },
       );
+    });
+
+    // A date function of its arguments formats a stored value: no instant.
+    test("a key formatting a stored time loads", () => {
+      const ok = parseAndValidate(
+        FILE,
+        `{ variables: {
+          stamp: { kind: "input", path: "stamp" },
+          s: ${shell(`{ key: '{{ date "2006-01-02" .stamp }}{{ duration 60 }}' }`)},
+        } }`,
+      );
+      expect(Object.keys(ok.variables)).toContain("s");
     });
 
     // A field, a variable and a string literal named like a clock function

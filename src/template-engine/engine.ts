@@ -12,8 +12,9 @@
 //  • sprigLists: has (membership test: `has "v" $list`).
 //  • sprigMath: add, sub, mul, div, mod, floor, ceil, round, min, max,
 //    seq, until (round here is shadowed by formatterFuncs' Math.round below).
-//  • sprigDatetime: now, date, ago, unixEpoch, dateInZone, dateModify,
-//    toDate, duration — a clock factory, all reading "now" off the engine's clock.
+//  • sprigDatetime: now and ago read the engine's clock (a clock factory);
+//    date, dateInZone, dateModify, toDate, duration, unixEpoch, … are
+//    functions of their arguments alone.
 //  • sprigConversions: atoi, int, int64, float64, toString, toStrings
 //    (int here is shadowed by ccCandybarFuncs' var-system cast below).
 //  • sprigDicts: dict, get, set, keys, values, pick, omit, hasKey, merge —
@@ -50,6 +51,7 @@ import {
   sprigDicts,
 } from "@promptctl/go-template-js";
 import { RichText, type ColorDepth } from "@promptctl/rich-js";
+import { _isComputingDerivation } from "mobx";
 import {
   animationFuncs,
   readableOnFunc,
@@ -91,12 +93,25 @@ export function bindClock(at: Instant, anim: AnimationTime): Disposable {
   };
 }
 
+// [LAW:single-enforcer] Every projection ends in a read here, so this is
+// where a value that keeps its answer is refused the instant: a computed or a
+// reaction tracking when the clock is read would hold this draw's instant
+// until something else it reads changes. The load's fold makes a projection of
+// every template that names the instant (projections.ts); this catches one
+// reaching it by a name it does not spell (`index . "clock"`).
+// [LAW:single-enforcer] exception: MobX's `_isComputingDerivation` is reached
+// here and nowhere else; it is true exactly while a derivation tracks.
 function drawInProgress(read: string): {
   readonly at: Instant;
   readonly anim: AnimationTime;
 } {
   if (drawing === null) {
     throw new Error(`the clock was read outside a draw (${read})`);
+  }
+  if (_isComputingDerivation()) {
+    throw new Error(
+      `the clock was read by a value that keeps its answer (${read}): a template reaching a time variable or a clock function by a name it does not spell (index, get) is not known to read the instant — name it: {{ .clock }}`,
+    );
   }
   return drawing;
 }
@@ -115,8 +130,29 @@ const CLOCK: Clock = {
 // readout of real time — the lane toggles' spinner, which shows frames arriving
 // at 30 a second and would read frozen at 20x (brandon-menus-sjhy.nt2)
 // [LAW:one-type-per-behavior].
+// sprig's datetime vocabulary bundles functions of their arguments with the
+// two that read its clock; only those two are clock functions. The rest are
+// built over a clock that refuses, so a release of sprig that reads the clock
+// in another is a loud error rather than a projection nobody knows of
+// [LAW:no-silent-failure].
+const SPRIG_CLOCK_READERS = new Set(["now", "ago"]);
+
+function sprigDatetimeWhere(clock: () => Date, readsClock: boolean): FuncMap {
+  return Object.fromEntries(
+    Object.entries(sprigDatetime(clock)).filter(
+      ([name]) => SPRIG_CLOCK_READERS.has(name) === readsClock,
+    ),
+  );
+}
+
+const SPRIG_DATE_FUNCS = sprigDatetimeWhere(() => {
+  throw new Error(
+    "a sprig date function other than now and ago read the clock: add it to SPRIG_CLOCK_READERS",
+  );
+}, false);
+
 const CLOCK_FACTORIES: readonly ClockFactory[] = [
-  (clock) => sprigDatetime(clock.now),
+  (clock) => sprigDatetimeWhere(clock.now, true),
   (clock) => animationFuncs(clock.animatedAt),
   (clock) =>
     Object.fromEntries(
@@ -199,6 +235,7 @@ export function createCcCandybarEngine(opts: {
       // It makes a multi-input formatter's domain exactly {named scalars},
       // decoupled from any payload's nesting — no per-payload helper variant.
       ...sprigDicts(),
+      ...SPRIG_DATE_FUNCS,
       ...richTextFuncs(depth),
       ...Object.fromEntries(
         Object.entries(DEPTH_BINDINGS).map(([name, bind]) => [
