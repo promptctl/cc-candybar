@@ -1145,6 +1145,89 @@ describe("GitDataProvider owns its failures and its PR's timing", () => {
   });
 });
 
+describe("GitDataProvider PR keys, drops and refresh events", () => {
+  const PR_B = ok({
+    number: 8,
+    state: "open" as const,
+    url: "https://example.test/pull/8",
+    head: "beef",
+  });
+
+  test("a branch switched back to is answered from its own key's last lookup, with no new one", async () => {
+    const { svc, inner, logs, holds } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+    const onA = { ...inner.stubInfo, branch: "a" };
+    inner.stubInfo = onA;
+    const first = await svc.getGitInfo(holds, "/repo", {
+      showPullRequest: true,
+    });
+    if (first.kind !== "ok") throw new Error("first read failed");
+
+    inner.stubInfo = { ...onA, branch: "b" };
+    inner.stubPr = PR_B;
+    svc.changed("/repo");
+    await tick();
+    inner.stubInfo = onA;
+    svc.changed("/repo");
+    await tick();
+
+    expect(
+      await svc.getGitInfo(holds, "/repo", { showPullRequest: true }),
+    ).toEqual(ok({ ...onA, pullRequest: first.value.pullRequest }));
+    expect(inner.prCalls).toHaveLength(2);
+    expect(logs.filter((l) => l.startsWith("git refresh /repo"))).toEqual([
+      expect.stringMatching(/ by=first,pr values=1 failed=0 pr=looked-up /),
+      expect.stringMatching(/ by=watch values=1 failed=0 pr=looked-up /),
+      expect.stringMatching(/ by=watch values=1 failed=0 pr=recalled /),
+    ]);
+  });
+
+  test("the PR's first ask, while a stored value is stale, pairs the values it answers with", async () => {
+    const { svc, inner, holds } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+    inner.stubInfo = { ...inner.stubInfo, branch: "a" };
+    await svc.getGitInfo(holds, "/repo", {});
+
+    // The repo is on b, and the pass that will say so is out.
+    inner.stubInfo = { ...inner.stubInfo, branch: "b" };
+    inner.stubPr = PR_B;
+    inner.infoGate = deferred();
+    svc.changed("/repo");
+    const read = svc.getGitInfo(holds, "/repo", { showPullRequest: true });
+    await tick();
+    inner.infoGate.resolve();
+    inner.infoGate = null;
+
+    expect(await read).toEqual(ok({ ...inner.stubInfo, pullRequest: PR_B }));
+  });
+
+  test("a first read out when the cache closes is answered, never left waiting", async () => {
+    const { svc, inner, holds } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+    inner.infoGate = deferred();
+
+    const read = svc.getGitInfo(holds, "/repo", {});
+    await tick();
+    svc.close();
+    expect(await read).toEqual(failed("git state dropped: /repo"));
+    inner.infoGate.resolve();
+  });
+
+  test("a pass the period started says so on its refresh event", async () => {
+    jest.useFakeTimers();
+    const { svc, inner, logs, holds } = makeCache({ periodMs: 1_000 });
+    inner.repoRootByDir = { "/repo": "/repo" };
+    await svc.getGitInfo(holds, "/repo", {});
+    await jest.advanceTimersByTimeAsync(1_000);
+
+    expect(logs.filter((l) => l.startsWith("git refresh /repo"))).toEqual([
+      expect.stringMatching(/ by=first values=1 failed=0 pr=- took=\d+ms$/),
+      expect.stringMatching(/ by=period values=1 failed=0 pr=- took=\d+ms$/),
+    ]);
+    svc.close();
+  });
+});
+
 // brandon-unfiled-3248.576q: on macOS every directory watch opened or closed
 // leaks native memory (libuv's FSEvents reschedule), so a repo's watch must
 // outlive the values read from it — a refresh or a change replaces the value,

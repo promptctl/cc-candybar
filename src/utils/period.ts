@@ -10,9 +10,13 @@
 // whose hold returns after a gap resumes where it left off: at once when its
 // last read is older than its period, else when the rest of the period is up.
 // An entry never read schedules nothing: its first read is the reader's.
+//
+// [LAW:types-are-the-program] Disposed is a state of its own, the last one:
+// the owner dropped the entry, and a hold or a landing that reaches it after
+// (a home releasing its hold during teardown) schedules nothing.
 export class Period {
   private timer: ReturnType<typeof setTimeout> | null = null;
-  private held = false;
+  private state: "released" | "held" | "disposed" = "released";
   private last: { readonly at: number; readonly periodMs: number } | null =
     null;
 
@@ -23,27 +27,30 @@ export class Period {
     private readonly now: () => number = Date.now,
   ) {}
 
-  // A read landed. `periodMs` is chosen by the caller from the read's outcome
-  // (a failed PR lookup is retried sooner than a found one).
-  landed(periodMs: number): void {
-    this.last = { at: this.now(), periodMs };
+  // A read landed at `at` (now, unless the owner is resuming an answer it
+  // kept from earlier). `periodMs` is chosen by the caller from the read's
+  // outcome (a failed PR lookup is retried sooner than a found one).
+  landed(periodMs: number, at: number = this.now()): void {
+    this.last = { at, periodMs };
     this.schedule();
   }
 
   hold(held: boolean): void {
-    if (held === this.held) return;
-    this.held = held;
+    if (this.state === "disposed") return;
+    const next = held ? "held" : "released";
+    if (next === this.state) return;
+    this.state = next;
     this.schedule();
   }
 
   dispose(): void {
-    this.held = false;
+    this.state = "disposed";
     this.cancel();
   }
 
   private schedule(): void {
     this.cancel();
-    if (!this.held || this.last === null) return;
+    if (this.state !== "held" || this.last === null) return;
     const wait = Math.max(0, this.last.at + this.last.periodMs - this.now());
     this.timer = setTimeout(() => {
       this.timer = null;

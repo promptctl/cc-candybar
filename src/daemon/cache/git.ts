@@ -68,6 +68,13 @@ const PASS = "pass";
 // branch and the remote), so a branch switch or a re-pointed origin is a fresh
 // lookup, never the old branch's answer.
 export const PR_PERIOD = { okMs: 5 * 60_000, failedMs: 45_000 } as const;
+// How many of a repo's PR keys keep their latest answer: the branches a user
+// switches between, each answered from its own last lookup on the way back.
+const PR_KEYS_KEPT = 16;
+
+function prPeriodOf(outcome: Outcome<PullRequest>): number {
+  return outcome.kind === "failed" ? PR_PERIOD.failedMs : PR_PERIOD.okMs;
+}
 
 // Options applied to subscribe()'s value. var-system's six GitField values
 // (branch, sha, dirty, ahead, behind, stash) all project from these flags —
@@ -113,6 +120,10 @@ function settle<T>(source: Readable<T>, outcome: Outcome<T>): void {
   if (prior.kind === "pending") prior.land();
 }
 
+function answerPending<T>(source: Readable<T>, outcome: Outcome<never>): void {
+  if (source.reading.kind === "pending") settle(source, outcome);
+}
+
 // A source's outcome once it has one. A key that changes while a reader waits
 // leaves a fresh `pending` behind, which this waits out too.
 async function outcomeOf<T>(source: Readable<T>): Promise<Outcome<T>> {
@@ -127,14 +138,33 @@ interface GitValue extends Readable<GitInfo> {
   readonly options: GitOptions;
 }
 
-// The branch's PR. `key` is the branch and remote the reading answers for, set
-// by the first ask and moved by every git refresh that finds a new one.
+// The branch's PR. `key` is the branch and remote the reading answers for
+// ("" until the first pass moves it), moved only by a git pass, which reads
+// the remote beside the values it pairs with. `seen` keeps the latest answer
+// of each key looked up, so a branch switched back to is answered from its
+// own key's last lookup — never another key's — and its period resumes where
+// that lookup left off.
 interface PrSource extends Readable<PullRequest> {
   readonly period: Period;
+  readonly seen: Map<string, PrAnswer>;
   key: string;
   remote: Outcome<string>;
   inFlight: { readonly key: string; readonly done: Promise<void> } | null;
 }
+
+interface PrAnswer {
+  readonly outcome: Outcome<PullRequest>;
+  readonly at: number;
+}
+
+// What a pass did to the PR's key, for its refresh event: no PR source, the
+// same key, a key answered from its own last lookup, or a key looked up.
+type PrMove = "-" | "kept" | "recalled" | "looked-up";
+
+// What asked for a pass, beside the period: a watch fire, a new option set, a
+// use after a change nobody saw, the first PR ask. A pass none of these asked
+// for is the period's.
+type PassReason = "watch" | "first" | "resume" | "pr";
 
 // [LAW:types-are-the-program] One repo the cache knows. The watch lives as long
 // as the state does — closing and reopening it per value leaked native memory
@@ -160,6 +190,8 @@ interface RepoState {
   holders: number;
   subscriptions: number;
   changedUnused: boolean;
+  // The reasons a pass was asked for since the last one began.
+  readonly asked: Set<PassReason>;
   pr: PrSource | null;
 }
 
@@ -403,18 +435,18 @@ export class GitDataProvider {
     const state = this.repo(resolved.value);
     holds.take(`git:${state.root}`, () => this.hold(state));
     const { showPullRequest, ...gitOptions } = options;
-    const value = this.value(state, gitOptions);
+    const { value, pr } = this.ask(state, gitOptions, showPullRequest === true);
     if (value.reading.kind === "pending") this.misses++;
     else this.hits++;
-    // The value and the PR are taken in one turn, and a pass stores a branch's
-    // values and moves its PR's key in one turn, so the two always answer for
-    // the same pass.
+    const first = await outcomeOf(value);
+    if (pr === null || first.kind !== "ok") return first;
+    const pullRequest = await outcomeOf(pr);
+    // The value as it stands once the PR has landed. A pass stores a branch's
+    // values and moves the PR's key in one turn (or a pass that began before
+    // the PR's first ask queues the one that will), so the two answer for the
+    // same pass.
     const info = await outcomeOf(value);
-    if (!showPullRequest || info.kind !== "ok") return info;
-    return ok({
-      ...info.value,
-      pullRequest: await this.pullRequest(state, info.value.branch),
-    });
+    return info.kind === "ok" ? ok({ ...info.value, pullRequest }) : info;
   }
 
   // [LAW:dataflow-not-control-flow] Push surface for var-system. The callback
@@ -448,7 +480,7 @@ export class GitDataProvider {
           state.subscriptions--;
         },
       };
-      const value = this.value(state, SUBSCRIBE_OPTIONS);
+      const { value } = this.ask(state, SUBSCRIBE_OPTIONS, false);
       const initial = await outcomeOf(value);
       if (unsubscribed) return;
       this.safeInvoke(callback, initial.kind === "ok" ? initial.value : null);
@@ -478,7 +510,7 @@ export class GitDataProvider {
       state.changedUnused = true;
       return;
     }
-    this.changedPass(state);
+    this.changedPass(state, "watch");
   }
 
   private repo(root: string): RepoState {
@@ -506,13 +538,15 @@ export class GitDataProvider {
       holders: 0,
       subscriptions: 0,
       changedUnused: false,
+      asked: new Set(),
       pr: null,
     };
     this.repos.set(root, state);
     return state;
   }
 
-  private changedPass(state: RepoState): void {
+  private changedPass(state: RepoState, reason: PassReason): void {
+    state.asked.add(reason);
     state.refresh.run(PASS, () => this.refreshPass(state));
   }
 
@@ -547,7 +581,7 @@ export class GitDataProvider {
   private used(state: RepoState): void {
     if (state.changedUnused) {
       state.changedUnused = false;
-      this.changedPass(state);
+      this.changedPass(state, "resume");
     }
     this.evict();
   }
@@ -558,25 +592,46 @@ export class GitDataProvider {
     state.pr?.period.hold(held);
   }
 
-  // The value of one option set, created pending on first ask. A new option
-  // set must be read even if a pass is in flight that does not include it, so
-  // it queues a pass rather than sharing one.
-  private value(state: RepoState, options: GitOptions): GitValue {
+  // What one read asks of its repo: its option set's value and, when it shows
+  // the PR, the PR source — each created pending on first ask. Whatever is new
+  // is read by ONE pass, queued once all of it is in place, so a first value
+  // and the PR's first key ride one pass (which reads the remote beside the
+  // values). A new one must be read even if a pass is in flight that does not
+  // include it, so it queues a pass rather than sharing one. A reason already
+  // in `asked` means such a pass is queued, and it will see this one too.
+  private ask(
+    state: RepoState,
+    options: GitOptions,
+    showsPr: boolean,
+  ): { readonly value: GitValue; readonly pr: PrSource | null } {
+    const before = state.asked.size;
     const key = optionsKey(options);
-    const existing = state.values.get(key);
-    if (existing) return existing;
-    const value: GitValue = { options, reading: pending() };
-    state.values.set(key, value);
-    this.changedPass(state);
-    return value;
+    let value = state.values.get(key);
+    if (value === undefined) {
+      value = { options, reading: pending() };
+      state.values.set(key, value);
+      state.asked.add("first");
+    }
+    if (showsPr && state.pr === null) {
+      state.pr = this.prSource(state);
+      state.asked.add("pr");
+    }
+    if (state.asked.size > before) {
+      state.refresh.run(PASS, () => this.refreshPass(state));
+    }
+    return { value, pr: showsPr ? state.pr : null };
   }
 
   // One pass: read every option set of the repo and its remote, store the
   // outcomes, log each failure once, deliver to subscribers, and move the PR's
   // key — all in one turn once the reads land, so no read sees a branch's
-  // values beside another branch's PR.
+  // values beside another branch's PR. Each pass that lands writes one refresh
+  // event.
   private async pass(state: RepoState): Promise<void> {
     if (this.repos.get(state.root) !== state) return;
+    const startedAt = Date.now();
+    const by = state.asked.size === 0 ? "period" : [...state.asked].join(",");
+    state.asked.clear();
     const values = [...state.values.values()];
     const pr = state.pr;
     const [outcomes, remote] = await Promise.all([
@@ -611,9 +666,14 @@ export class GitDataProvider {
     // absent like any outcome. A state has one lifetime rule: kept while in
     // use, and bounded by the LRU once nothing uses it.
     const branch = branchOf(state);
-    if (pr !== null && remote !== null && branch !== undefined) {
-      this.movePr(state, pr, branch, remote);
-    }
+    const prMove: PrMove =
+      pr !== null && remote !== null && branch !== undefined
+        ? this.movePr(state, pr, branch, remote)
+        : "-";
+    this.logger(
+      "info",
+      `git refresh ${state.root} by=${by} values=${values.length} failed=${failures.size} pr=${prMove} took=${Date.now() - startedAt}ms`,
+    );
   }
 
   private deliver(state: RepoState): void {
@@ -630,27 +690,22 @@ export class GitDataProvider {
     }
   }
 
-  // The branch's PR, from its own source. The first ask creates the source and
-  // reads it; later asks take its stored value.
-  private async pullRequest(
-    state: RepoState,
-    branch: string,
-  ): Promise<Outcome<PullRequest>> {
-    const existing = state.pr;
-    if (existing !== null) return outcomeOf(existing);
+  // The branch's PR source, pending until the pass its first ask queues gives
+  // it a key: [LAW:single-enforcer] the key moves only in a pass, beside the
+  // values it pairs with.
+  private prSource(state: RepoState): PrSource {
     const pr: PrSource = {
       period: new Period(() => {
         void this.readPr(state, pr);
       }),
+      seen: new Map(),
       key: "",
       remote: ABSENT,
       reading: pending(),
       inFlight: null,
     };
-    state.pr = pr;
     pr.period.hold(state.holders > 0);
-    this.movePr(state, pr, branch, await this.remoteOf(state));
-    return outcomeOf(pr);
+    return pr;
   }
 
   // [LAW:no-silent-failure] A `failed` remote read (git couldn't run) is the
@@ -671,13 +726,22 @@ export class GitDataProvider {
     pr: PrSource,
     branch: string,
     remote: Outcome<string>,
-  ): void {
+  ): PrMove {
     const key = `${branch}|${remote.kind === "ok" ? remote.value : remote.kind}`;
-    if (key === pr.key) return;
+    if (key === pr.key) return "kept";
     pr.key = key;
     pr.remote = remote;
+    const known = pr.seen.get(key);
+    if (known !== undefined) {
+      pr.seen.delete(key);
+      pr.seen.set(key, known);
+      settle(pr, known.outcome);
+      pr.period.landed(prPeriodOf(known.outcome), known.at);
+      return "recalled";
+    }
     if (pr.reading.kind === "read") pr.reading = pending();
     void this.readPr(state, pr);
+    return "looked-up";
   }
 
   // One lookup for the PR's current key; an ask for a key already being looked
@@ -695,23 +759,24 @@ export class GitDataProvider {
         : Promise.resolve(remote.kind === "failed" ? remote : ABSENT);
     const done = lookup.then((outcome) => {
       if (pr.inFlight?.key === key) pr.inFlight = null;
-      if (
-        state.pr !== pr ||
-        pr.key !== key ||
-        this.repos.get(state.root) !== state
-      ) {
-        return;
-      }
-      settle(pr, outcome);
+      if (this.repos.get(state.root) !== state) return;
       if (outcome.kind === "failed") {
         this.logger(
           "warn",
           `git refresh failed (${state.root}): git.pr: ${outcome.reason}`,
         );
       }
-      pr.period.landed(
-        outcome.kind === "failed" ? PR_PERIOD.failedMs : PR_PERIOD.okMs,
-      );
+      // Kept under its own key whether or not the PR has moved on since.
+      const at = Date.now();
+      pr.seen.delete(key);
+      pr.seen.set(key, { outcome, at });
+      for (const oldest of pr.seen.keys()) {
+        if (pr.seen.size <= PR_KEYS_KEPT) break;
+        pr.seen.delete(oldest);
+      }
+      if (pr.key !== key) return;
+      settle(pr, outcome);
+      pr.period.landed(prPeriodOf(outcome), at);
     });
     pr.inFlight = { key, done };
     return done;
@@ -729,6 +794,11 @@ export class GitDataProvider {
   }
 
   private drop(state: RepoState): void {
+    // [LAW:no-silent-failure] A reader waiting on a first value of a dropped
+    // state is answered, never left waiting on a pass that will store nothing.
+    const gone = failed(`git state dropped: ${state.root}`);
+    for (const value of state.values.values()) answerPending(value, gone);
+    if (state.pr !== null) answerPending(state.pr, gone);
     this.repos.delete(state.root);
     state.refresh.clear();
     state.watcher.release();
