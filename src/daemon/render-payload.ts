@@ -1100,21 +1100,13 @@ export async function buildRenderPayload(
     memento,
     autoCompact,
   ] = await Promise.all([
-    // [LAW:no-silent-failure] A git read that throws is a bug no refresh saw
-    // (a failed READ is logged by the refresh that made it), so it is logged
-    // here, where it surfaces.
     lane("git", wants("git"), () =>
-      deps.gitProvider
-        .getGitInfo(
-          deps.holds,
-          cwd ?? hookData.workspace?.current_dir,
-          gitOptionsFromClosure(neededInputPaths),
-          hookData.workspace?.project_dir,
-        )
-        .catch((e: unknown) => {
-          deps.log("error", `git read threw: ${String(e)}`);
-          return failed(`git: ${String(e)}`);
-        }),
+      deps.gitProvider.getGitInfo(
+        deps.holds,
+        cwd ?? hookData.workspace?.current_dir,
+        gitOptionsFromClosure(neededInputPaths),
+        hookData.workspace?.project_dir,
+      ),
     ),
     // [LAW:dataflow-not-control-flow] The burn segment reads `burn.costPerHour`,
     // a derivative of session cost and metrics duration — so wanting `burn`
@@ -1203,9 +1195,9 @@ export async function buildRenderPayload(
     return oc.kind === "ok" ? oc.value : undefined;
   };
 
-  // Git logs its own failures, once per refresh that failed
-  // (src/daemon/cache/git.ts): its value is stored, so logging it here would
-  // repeat one failure on every render.
+  // Git logs its own failures — once per refresh or resolution that failed,
+  // and a read that throws (src/daemon/cache/git.ts): its value is stored, so
+  // logging it here would repeat one failure on every render.
   const gitProjection = projectGitInfo(gitOutcome, nowMs);
   // Ungated, like `home` below: two syscalls and a hint already in hand, so a
   // `wants` gate would add a branch and save nothing.

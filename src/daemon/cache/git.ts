@@ -336,13 +336,27 @@ export class GitDataProvider {
 
     const dir = this.inner.resolveEffectiveGitDir(workingDir, projectDir);
     this.resolutions.set(key, { dir, computedAt: now });
-    // [LAW:no-silent-failure] A REJECTION is a bug in the resolver, not an answer
-    // worth pinning for a window — resolveEffectiveGitDir returns outcomes by
+    // [LAW:no-silent-failure] A failed answer is logged once, by the resolution
+    // that made it: it is believed for the window, so a read of it never logs
+    // it again. A REJECTION is a bug in the resolver, not an answer worth
+    // pinning for a window — resolveEffectiveGitDir returns outcomes by
     // construction, so drop the entry and let the next caller re-ask. The
     // rejection still reaches whoever awaited `dir`; this handler only evicts.
-    void dir.catch(() => {
-      if (this.resolutions.get(key)?.dir === dir) this.resolutions.delete(key);
-    });
+    void dir.then(
+      (outcome) => {
+        if (outcome.kind === "failed") {
+          this.logger(
+            "warn",
+            `git resolve failed (${workingDir}): ${outcome.reason}`,
+          );
+        }
+      },
+      () => {
+        if (this.resolutions.get(key)?.dir === dir) {
+          this.resolutions.delete(key);
+        }
+      },
+    );
     while (this.resolutions.size > this.maxRepos) {
       const oldest = this.resolutions.keys().next().value;
       if (oldest === undefined) break;
@@ -356,11 +370,30 @@ export class GitDataProvider {
   // disposed), which is what keeps the repo on the period. A warm repo answers
   // from its stored value at once; only a value never read is awaited, and a
   // PR is composed from its own source.
-  async getGitInfo(
+  //
+  // [LAW:no-silent-failure] Git logs its own failures — a refresh's by the
+  // refresh, a resolution's by the resolution — so its caller logs none. A
+  // read that THROWS is a bug none of those saw, logged here where it
+  // surfaces; the promise never rejects.
+  getGitInfo(
     holds: Holds,
     workingDir: string,
     options: GitInfoOptions = {},
     projectDir?: string,
+  ): Promise<Outcome<GitInfo>> {
+    return this.read(holds, workingDir, options, projectDir).catch(
+      (e: unknown) => {
+        this.logger("error", `git read threw: ${String(e)}`);
+        return failed(`git: ${String(e)}`);
+      },
+    );
+  }
+
+  private async read(
+    holds: Holds,
+    workingDir: string,
+    options: GitInfoOptions,
+    projectDir: string | undefined,
   ): Promise<Outcome<GitInfo>> {
     // [LAW:one-source-of-truth] The effective gitDir is the state + watch
     // identity. An absent (not a repo) or failed resolution passes through as
@@ -373,6 +406,9 @@ export class GitDataProvider {
     const value = this.value(state, gitOptions);
     if (value.reading.kind === "pending") this.misses++;
     else this.hits++;
+    // The value and the PR are taken in one turn, and a pass stores a branch's
+    // values and moves its PR's key in one turn, so the two always answer for
+    // the same pass.
     const info = await outcomeOf(value);
     if (!showPullRequest || info.kind !== "ok") return info;
     return ok({
@@ -398,14 +434,8 @@ export class GitDataProvider {
       if (unsubscribed) return;
 
       if (resolved.kind !== "ok") {
-        // Not in a git repo (absent) or resolution failed: deliver null once.
-        // No watch, no follow-up; a failure is logged at this edge.
-        if (resolved.kind === "failed") {
-          this.logger(
-            "warn",
-            `git resolve failed (subscribe ${workingDir}): ${resolved.reason}`,
-          );
-        }
+        // Not in a git repo (absent) or resolution failed (logged by the
+        // resolution): deliver null once. No watch, no follow-up.
         this.safeInvoke(callback, null);
         return;
       }
@@ -469,7 +499,7 @@ export class GitDataProvider {
         () => this.changed(root),
       ),
       period: new Period(() => {
-        void state.refresh.share(PASS, () => this.pass(state));
+        void state.refresh.share(PASS, () => this.refreshPass(state));
       }),
       values: new Map(),
       subscribers: new Set(),
@@ -483,7 +513,22 @@ export class GitDataProvider {
   }
 
   private changedPass(state: RepoState): void {
-    state.refresh.run(PASS, () => this.pass(state));
+    state.refresh.run(PASS, () => this.refreshPass(state));
+  }
+
+  // The loop's work. Nobody awaits it — a watch fire or a tick starts it — so
+  // [LAW:no-silent-failure] a throw is logged here as the bug it is, never an
+  // unhandled rejection. [LAW:no-ambient-temporal-coupling] The period lands
+  // when the pass ENDS, after its every await, so a tick that shares a running
+  // pass is always followed by the landing that schedules the next one.
+  private async refreshPass(state: RepoState): Promise<void> {
+    try {
+      await this.pass(state);
+    } catch (e) {
+      this.logger("error", `git refresh threw (${state.root}): ${String(e)}`);
+    } finally {
+      state.period.landed(this.periodMs);
+    }
   }
 
   private hold(state: RepoState): Release {
@@ -526,18 +571,24 @@ export class GitDataProvider {
     return value;
   }
 
-  // One pass: read every option set of the repo, store the outcomes, log each
-  // failure once, deliver to subscribers, and follow the PR's key.
+  // One pass: read every option set of the repo and its remote, store the
+  // outcomes, log each failure once, deliver to subscribers, and move the PR's
+  // key — all in one turn once the reads land, so no read sees a branch's
+  // values beside another branch's PR.
   private async pass(state: RepoState): Promise<void> {
     if (this.repos.get(state.root) !== state) return;
     const values = [...state.values.values()];
-    const outcomes = await Promise.all(
-      values.map((value) =>
-        this.inner
-          .getGitInfo(state.root, value.options)
-          .catch(threw("git fetch")),
+    const pr = state.pr;
+    const [outcomes, remote] = await Promise.all([
+      Promise.all(
+        values.map((value) =>
+          this.inner
+            .getGitInfo(state.root, value.options)
+            .catch(threw("git fetch")),
+        ),
       ),
-    );
+      pr === null ? null : this.remoteOf(state),
+    ]);
     // Dropped or closed while the read was out: nothing of it is stored.
     if (this.repos.get(state.root) !== state) return;
     this.refreshCount++;
@@ -555,14 +606,13 @@ export class GitDataProvider {
     for (const f of failures) {
       this.logger("warn", `git refresh failed (${state.root}): ${f}`);
     }
-    state.period.landed(this.periodMs);
     this.deliver(state);
     // An `absent` repo — a removed worktree, a deleted `.git` — is stored as
     // absent like any outcome. A state has one lifetime rule: kept while in
     // use, and bounded by the LRU once nothing uses it.
     const branch = branchOf(state);
-    if (state.pr !== null && branch !== undefined) {
-      await this.followPr(state, state.pr, branch);
+    if (pr !== null && remote !== null && branch !== undefined) {
+      this.movePr(state, pr, branch, remote);
     }
   }
 
@@ -599,32 +649,35 @@ export class GitDataProvider {
     };
     state.pr = pr;
     pr.period.hold(state.holders > 0);
-    await this.followPr(state, pr, branch);
+    this.movePr(state, pr, branch, await this.remoteOf(state));
     return outcomeOf(pr);
+  }
+
+  // [LAW:no-silent-failure] A `failed` remote read (git couldn't run) is the
+  // PR's failure; only `absent` (no remote configured) means "no forge PR".
+  private remoteOf(state: RepoState): Promise<Outcome<string>> {
+    return this.inner.getRepoRemoteUrl(state.root).catch(threw("git remote"));
   }
 
   // [LAW:one-source-of-truth] The PR's key is every input its value depends on
   // — the branch and the remote — so a branch switch or a re-pointed origin is
   // a new key: its reading is pending until the new lookup lands, and an old
   // key's answer is never stored for a new one. The same key is left to its
-  // own period.
-  private async followPr(
+  // own period. [LAW:decomposition] The lookup is the PR source's own work,
+  // started here and never awaited by a git pass, so a slow forge never holds
+  // back the next local refresh.
+  private movePr(
     state: RepoState,
     pr: PrSource,
     branch: string,
-  ): Promise<void> {
-    // [LAW:no-silent-failure] A `failed` remote read (git couldn't run) is the
-    // PR's failure; only `absent` (no remote configured) means "no forge PR".
-    const remote = await this.inner
-      .getRepoRemoteUrl(state.root)
-      .catch(threw("git remote"));
-    if (state.pr !== pr || this.repos.get(state.root) !== state) return;
+    remote: Outcome<string>,
+  ): void {
     const key = `${branch}|${remote.kind === "ok" ? remote.value : remote.kind}`;
     if (key === pr.key) return;
     pr.key = key;
     pr.remote = remote;
     if (pr.reading.kind === "read") pr.reading = pending();
-    await this.readPr(state, pr);
+    void this.readPr(state, pr);
   }
 
   // One lookup for the PR's current key; an ask for a key already being looked

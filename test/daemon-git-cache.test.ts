@@ -43,19 +43,29 @@ class StubGitService extends GitService {
     head: "c0ffee",
   });
   public stubRemote: Outcome<string> = ok("git@github.com:acme/widget.git");
+  public remoteGate: { promise: Promise<void>; resolve: () => void } | null =
+    null;
 
   override async getRepoRemoteUrl(
     _workingDir: string,
   ): Promise<Outcome<string>> {
-    return this.stubRemote;
+    const remote = this.stubRemote;
+    if (this.remoteGate) await this.remoteGate.promise;
+    return remote;
   }
+
+  // Holds every forge lookup open until resolved; a lookup answers with the PR
+  // the forge held as it BEGAN.
+  public prGate: { promise: Promise<void>; resolve: () => void } | null = null;
 
   override async resolvePullRequest(
     workingDir: string,
     remoteUrl: string,
   ): Promise<Outcome<PullRequest>> {
     this.prCalls.push({ workingDir, remoteUrl });
-    return this.stubPr;
+    const pr = this.stubPr;
+    if (this.prGate) await this.prGate.promise;
+    return pr;
   }
 
   override async findGitRoot(workingDir: string): Promise<Outcome<string>> {
@@ -118,13 +128,29 @@ class StubGitService extends GitService {
   }
 }
 
-function makeCache(opts: { periodMs?: number; maxRepos?: number } = {}) {
+function makeCache(
+  opts: {
+    periodMs?: number;
+    maxRepos?: number;
+    // Throws once on the first message it matches, standing in for a bug
+    // inside a refresh.
+    throwOn?: string;
+  } = {},
+) {
   const inner = new StubGitService();
   const logs: string[] = [];
+  let throwOn = opts.throwOn;
   const svc = new GitDataProvider({
-    ...opts,
+    periodMs: opts.periodMs,
+    maxRepos: opts.maxRepos,
     inner,
-    logger: (_level, message) => logs.push(message),
+    logger: (_level, message) => {
+      if (throwOn !== undefined && message.includes(throwOn)) {
+        throwOn = undefined;
+        throw new Error("logger bug");
+      }
+      logs.push(message);
+    },
   });
   return { svc, inner, logs, holds: new Holds() };
 }
@@ -802,18 +828,21 @@ describe("GitDataProvider gitDir resolution cache", () => {
     ]);
   });
 
-  test("a rejecting resolver is not pinned for a window", async () => {
-    const { svc, inner, holds } = makeCache();
+  test("a rejecting resolver is not pinned for a window; each read answers failed", async () => {
+    const { svc, inner, logs, holds } = makeCache();
     inner.resolveThrows = true;
 
-    await expect(svc.getGitInfo(holds, "/boom", {})).rejects.toThrow(
-      "resolver bug",
-    );
-    await expect(svc.getGitInfo(holds, "/boom", {})).rejects.toThrow(
-      "resolver bug",
-    );
+    for (let i = 0; i < 2; i++) {
+      expect(await svc.getGitInfo(holds, "/boom", {})).toEqual(
+        failed("git: Error: resolver bug"),
+      );
+    }
 
     expect(inner.resolveCalls).toHaveLength(2);
+    expect(logs).toEqual([
+      "git read threw: Error: resolver bug",
+      "git read threw: Error: resolver bug",
+    ]);
   });
 
   test("close() drops the answers instead of carrying them past shutdown", async () => {
@@ -985,6 +1014,122 @@ describe("GitDataProvider PR source", () => {
     await jest.advanceTimersByTimeAsync(PR_PERIOD.okMs * 3);
     expect(inner.prCalls).toHaveLength(1);
     expect(inner.computeCalls).toHaveLength(1);
+    svc.close();
+  });
+});
+
+describe("GitDataProvider owns its failures and its PR's timing", () => {
+  const PR_B = ok({
+    number: 8,
+    state: "open" as const,
+    url: "https://example.test/pull/8",
+    head: "beef",
+  });
+
+  test("a failed resolution is logged once, by the resolution; reads of it log nothing", async () => {
+    const { svc, inner, logs, holds } = makeCache();
+    inner.resolveFailure = "git rev-parse: timeout";
+
+    for (let i = 0; i < 3; i++) {
+      expect(await svc.getGitInfo(holds, "/slow", {})).toEqual(
+        failed("git rev-parse: timeout"),
+      );
+    }
+    svc.subscribe("/slow", () => {});
+    await tick();
+    expect(logs).toEqual(["git resolve failed (/slow): git rev-parse: timeout"]);
+  });
+
+  test("a read that throws is logged by the provider and answers failed", async () => {
+    const { svc, inner, logs, holds } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+    holds.close();
+
+    const out = await svc.getGitInfo(holds, "/repo", {});
+    expect(out.kind).toBe("failed");
+    expect(logs.filter((l) => l.startsWith("git "))).toEqual([
+      "git read threw: Error: hold taken after close: git:/repo",
+    ]);
+  });
+
+  test("a branch switch never pairs the new branch with the old branch's PR", async () => {
+    const { svc, inner, holds } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+    const onA = { ...inner.stubInfo, branch: "a" };
+    inner.stubInfo = onA;
+    const first = await svc.getGitInfo(holds, "/repo", {
+      showPullRequest: true,
+    });
+    if (first.kind !== "ok") throw new Error("first read failed");
+    const prA = first.value.pullRequest;
+
+    // The switch's re-read is out, its remote read held open: a read now is
+    // all branch a, never b's values beside a's PR.
+    inner.stubInfo = { ...inner.stubInfo, branch: "b" };
+    inner.stubPr = PR_B;
+    inner.remoteGate = deferred();
+    inner.prGate = deferred();
+    svc.changed("/repo");
+    await tick();
+    expect(
+      await svc.getGitInfo(holds, "/repo", { showPullRequest: true }),
+    ).toEqual(ok({ ...onA, pullRequest: prA }));
+
+    // Stored, b's values wait for b's PR rather than wear a's.
+    inner.remoteGate.resolve();
+    await tick();
+    let read: Outcome<GitInfo> | null = null;
+    void svc
+      .getGitInfo(holds, "/repo", { showPullRequest: true })
+      .then((out) => (read = out));
+    await tick();
+    expect(read).toBeNull();
+    inner.prGate.resolve();
+    await tick();
+    expect(read).toEqual(ok({ ...inner.stubInfo, pullRequest: PR_B }));
+  });
+
+  test("a hanging PR lookup holds back neither a change's re-read nor the period", async () => {
+    jest.useFakeTimers();
+    const { svc, inner, holds } = makeCache({ periodMs: 1_000 });
+    inner.repoRootByDir = { "/repo": "/repo" };
+    await svc.getGitInfo(holds, "/repo", { showPullRequest: true });
+
+    inner.stubInfo = { ...inner.stubInfo, branch: "b" };
+    inner.prGate = deferred();
+    svc.changed("/repo");
+    await jest.advanceTimersByTimeAsync(0);
+    expect(inner.prCalls).toHaveLength(2);
+    expect(inner.computeCalls).toHaveLength(2);
+
+    svc.changed("/repo");
+    await jest.advanceTimersByTimeAsync(0);
+    expect(inner.computeCalls).toHaveLength(3);
+    await jest.advanceTimersByTimeAsync(1_000);
+    expect(inner.computeCalls).toHaveLength(4);
+    await jest.advanceTimersByTimeAsync(1_000);
+    expect(inner.computeCalls).toHaveLength(5);
+    inner.prGate.resolve();
+    svc.close();
+  });
+
+  test("a refresh that throws is logged, and the repo keeps its period", async () => {
+    jest.useFakeTimers();
+    const { svc, inner, logs, holds } = makeCache({
+      periodMs: 1_000,
+      throwOn: "git refresh failed",
+    });
+    inner.repoRootByDir = { "/repo": "/repo" };
+    inner.infoFailure = "git status: boom";
+
+    void svc.getGitInfo(holds, "/repo", {});
+    await jest.advanceTimersByTimeAsync(0);
+    expect(logs.filter((l) => l.startsWith("git "))).toEqual([
+      "git refresh threw (/repo): Error: logger bug",
+    ]);
+    await jest.advanceTimersByTimeAsync(1_000);
+    expect(inner.computeCalls).toHaveLength(2);
+    expect(logs).toContain("git refresh failed (/repo): git status: boom");
     svc.close();
   });
 });

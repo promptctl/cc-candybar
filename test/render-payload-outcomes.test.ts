@@ -122,33 +122,6 @@ describe("buildRenderPayload — git outcome lane", () => {
     expect(logs).toEqual([]);
   });
 
-  test("a git read that throws is logged, since no refresh saw it", async () => {
-    const logs: LogEntry[] = [];
-    const deps = depsWith(ABSENT, logs, {
-      gitProvider: {
-        getGitInfo: async () => {
-          throw new Error("resolver bug");
-        },
-      },
-    });
-
-    const payload = await buildRenderPayload(
-      hookData("/no/such/transcript.jsonl"),
-      instantOf(new Date()),
-      deps,
-      undefined,
-      GIT_PATHS,
-      EFFECTIVE_GLOBALS,
-      NO_HINTS,
-      NO_CONFIG_FILE,
-    );
-
-    expect(payload.git).toBeUndefined();
-    expect(logs).toEqual([
-      { level: "error", msg: "git read threw: Error: resolver bug" },
-    ]);
-  });
-
   test("per-field failure: field missing, siblings present, nothing logged here", async () => {
     const logs: LogEntry[] = [];
     const deps = depsWith(
