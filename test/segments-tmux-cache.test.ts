@@ -184,7 +184,7 @@ describe("TmuxService", () => {
     expect(await svc.getSessionName(holds, h)).toBe(first);
     expect(starts).toEqual(["tmux"]);
     expect(lines).toEqual([
-      expect.stringMatching(/^warn tmux refresh pane="%1" socket="\/client\/refuse.sock" by=first outcome=failed reason=".*no server running on \/client\/refuse.sock.*" took=\d+ms$/),
+      expect.stringMatching(/^warn tmux refresh pane=%1 socket=\/client\/refuse.sock stored=Y by=first outcome=failed reason=".*no server running on \/client\/refuse.sock.*" took=\d+ms$/),
     ]);
 
     await jest.advanceTimersByTimeAsync(NAME_PERIOD_MS);

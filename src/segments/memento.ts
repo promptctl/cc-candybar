@@ -8,6 +8,7 @@ import { MEMENTO_ENV_VARS } from "../memento-hint.js";
 import type { Holds } from "../utils/holds.js";
 import { KeyedSource, type KeyedSourceStats } from "../utils/keyed-source.js";
 import { quietLogger, type DaemonLogger } from "../utils/logger.js";
+import { valueOf } from "../utils/logfmt.js";
 import type { Outcome } from "../utils/outcome.js";
 
 // The period a held session's reading is asked again on. A move from the bar
@@ -50,7 +51,7 @@ export class MementoProvider {
       keyOf,
       // Every part of the key, so two entries' events tell apart.
       fields: (s) =>
-        `sid=${JSON.stringify(s.sessionId)} project=${JSON.stringify(s.projectDir)} cwd=${JSON.stringify(s.cwd)} configDir=${JSON.stringify(s.claudeConfigDir)} env=${JSON.stringify(envOf(s))}`,
+        `sid=${valueOf(s.sessionId)} project=${valueOf(s.projectDir)} cwd=${valueOf(s.cwd)} configDir=${valueOf(s.claudeConfigDir)} env=${valueOf(JSON.stringify(envOf(s)))}`,
       read: (scope) => {
         const located = edge.locate(scope);
         return located.kind === "ok"

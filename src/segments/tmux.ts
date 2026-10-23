@@ -3,6 +3,7 @@ import type { TmuxHint } from "../tmux-hint";
 import type { Holds } from "../utils/holds";
 import { KeyedSource, type KeyedSourceStats } from "../utils/keyed-source";
 import { quietLogger, type DaemonLogger } from "../utils/logger";
+import { valueOf } from "../utils/logfmt";
 import { ABSENT, failed, ok, type Outcome } from "../utils/outcome";
 
 // The period a held pane's session name is asked again on. A pane's session
@@ -33,7 +34,7 @@ export class TmuxService {
       // is unambiguous.
       keyOf: (hint) => `${hint.socket}\n${hint.pane}`,
       fields: (hint) =>
-        `pane=${JSON.stringify(hint.pane)} socket=${JSON.stringify(hint.socket)}`,
+        `pane=${valueOf(hint.pane)} socket=${valueOf(hint.socket)}`,
       read: askSessionName,
       every: { okMs: NAME_PERIOD_MS, failedMs: NAME_PERIOD_MS },
       maxEntries: MAX_ENTRIES,

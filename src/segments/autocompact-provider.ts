@@ -5,6 +5,7 @@ import {
 } from "./autocompact.js";
 import { Refreshes, type SourceStats } from "../utils/keyed-source.js";
 import { quietLogger, type DaemonLogger } from "../utils/logger.js";
+import { valueOf } from "../utils/logfmt.js";
 import type { Outcome } from "../utils/outcome.js";
 import { stampOf } from "../utils/transcript-fs.js";
 
@@ -42,7 +43,7 @@ export class AutoCompactProvider {
     const startedAt = Date.now();
     const outcome = readAutoCompactWindow(settingsPath);
     this.refreshes.recorded(
-      `path=${JSON.stringify(settingsPath)} stamp=${stamp}`,
+      `path=${valueOf(settingsPath)} stamp=${valueOf(stamp)}`,
       "request",
       outcome,
       Date.now() - startedAt,

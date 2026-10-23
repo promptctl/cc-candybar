@@ -157,6 +157,32 @@ describe("KeyedSource", () => {
     expect(await source.read(holds, "a")).toEqual(ok("after"));
   });
 
+  // The abandoned read still ran: its event and its count say so, and a
+  // failure it met is logged although nothing stores it.
+  test("a read a supersede abandoned is still one event, marked not stored", async () => {
+    const lines: Line[] = [];
+    const f = fakeRead();
+    source = sourceOf(f.read, { lines });
+    const waiting = source.read(new Holds(), "a");
+    source.supersede("a");
+    f.answer(0, failed("layer changed under it"));
+    await settled();
+    f.answer(1, ok("after"));
+    expect(await waiting).toEqual(ok("after"));
+    expect(lines.map((l) => `${l.level} ${l.msg}`)).toEqual([
+      expect.stringMatching(
+        /^warn fake refresh key=a stored=N by=first outcome=failed reason="layer changed under it" took=\d+ms$/,
+      ),
+      expect.stringMatching(
+        /^info fake refresh key=a stored=Y by=supersede outcome=ok took=\d+ms$/,
+      ),
+    ]);
+    expect(source.stats()).toMatchObject({
+      refreshes: { first: 1, period: 0, supersede: 1 },
+      failures: 1,
+    });
+  });
+
   test("a supersede of a stored value: the next read waits on the fresh read, never the old value", async () => {
     const f = fakeRead();
     source = sourceOf(f.read);
@@ -242,7 +268,7 @@ describe("KeyedSource", () => {
       {
         level: "warn",
         msg: expect.stringMatching(
-          /^fake refresh key=a by=first outcome=failed reason="no server" took=\d+ms$/,
+          /^fake refresh key=a stored=Y by=first outcome=failed reason="no server" took=\d+ms$/,
         ),
       },
     ]);

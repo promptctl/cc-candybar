@@ -198,20 +198,19 @@ export class KeyedSource<I, T> {
     const startedAt = Date.now();
     void attempt(() => this.spec.read(entry.input))
       .then((outcome) => {
-        if (entry.flight !== flight) return;
-        entry.flight = null;
-        // [LAW:no-ambient-temporal-coupling] The period lands however the
-        // record below ends, so a held entry is always visited again.
+        // [LAW:no-silent-failure] Every read that ran is an event, one a
+        // supersede or a drop abandoned included: its answer is not stored,
+        // but it ran, and a failure it met is still a fact.
+        const stored = entry.flight === flight;
         try {
-          settle(entry, outcome);
           this.refreshes.recorded(
-            this.spec.fields(entry.input),
+            `${this.spec.fields(entry.input)} stored=${stored ? "Y" : "N"}`,
             by,
             outcome,
             Date.now() - startedAt,
           );
         } finally {
-          entry.period.landed(periodOf(this.spec.every, outcome));
+          if (stored) this.store(entry, outcome);
         }
       })
       .catch((e: unknown) => {
@@ -220,6 +219,17 @@ export class KeyedSource<I, T> {
           `${this.spec.name} refresh threw (${this.spec.fields(entry.input)}): ${String(e)}`,
         );
       });
+  }
+
+  private store(entry: Entry<I, T>, outcome: Outcome<T>): void {
+    entry.flight = null;
+    // [LAW:no-ambient-temporal-coupling] The period lands however the settle
+    // ends, so a held entry is always visited again.
+    try {
+      settle(entry, outcome);
+    } finally {
+      entry.period.landed(periodOf(this.spec.every, outcome));
+    }
   }
 
   private hold(entry: Entry<I, T>): Release {
