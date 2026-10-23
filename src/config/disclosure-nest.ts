@@ -48,20 +48,28 @@ export const NO_NEST: DisclosureNest = {
 
 const idOf = (d: Disclosure): string => `${d.key}\0${d.member}`;
 
-// The disclosures a placement is the trigger of: the body it opens, and every
-// `{{ menu }}` it hosts.
-function triggeredBy(
-  node: SegmentNode,
-  config: DslConfig,
-): readonly Disclosure[] {
-  const template = config.segments[node.name]?.template;
-  return [
-    ...(node.opens === undefined ? [] : [node.opens.ref]),
-    ...(template === undefined ? [] : hostedMenus(template, placementId(node))),
-  ];
-}
-
 export function buildDisclosureNest(config: DslConfig): DisclosureNest {
+  // Every preset places most segments again, so each placement's template is
+  // parsed once, not once per preset (the bundled presets: half the build).
+  const menus = new Map<string, readonly Disclosure[]>();
+  const hostedBy = (node: SegmentNode): readonly Disclosure[] => {
+    // An id is unique per preset tree, so two presets may give one to
+    // different segments.
+    const id = `${node.name}\0${placementId(node)}`;
+    const memo = menus.get(id);
+    if (memo !== undefined) return memo;
+    const template = config.segments[node.name]?.template;
+    const found =
+      template === undefined ? [] : hostedMenus(template, placementId(node));
+    menus.set(id, found);
+    return found;
+  };
+  // The disclosures a placement is the trigger of: the body it opens, and
+  // every `{{ menu }}` it hosts.
+  const triggeredBy = (node: SegmentNode): readonly Disclosure[] => [
+    ...(node.opens === undefined ? [] : [node.opens.ref]),
+    ...hostedBy(node),
+  ];
   const defaults = new Map<string, string>();
   const declaredWithin = new Map<string, readonly Disclosure[]>();
   for (const decl of Object.values(config.variables)) {
@@ -87,7 +95,7 @@ export function buildDisclosureNest(config: DslConfig): DisclosureNest {
       for (const child of node.children) walk(child, enclosing);
       return;
     }
-    for (const child of triggeredBy(node, config)) {
+    for (const child of triggeredBy(node)) {
       known(child);
       for (const parent of enclosing) note(parent, child);
     }
@@ -159,19 +167,21 @@ export interface StateWrite {
   readonly value: string;
 }
 
-// [LAW:single-enforcer] What a batch of session writes closes, and so what
-// else it must write: each written key that moves off the value it held
-// closes the disclosure open on that value, and every key inside it goes back
-// to its default — unless what it holds is a disclosure outside, or the batch
-// writes that key itself, which is the click's own decision.
+// [LAW:single-enforcer] What a batch of session writes closes: each written
+// key that moves off the value it held closes the disclosure open on that
+// value, and every key inside it goes back to how a fresh session finds it —
+// unless what it holds is a disclosure outside, or the batch writes that key
+// itself, which is the click's own decision. The keys to clear, not values to
+// write: a fresh session holds none, so the gate a click crosses is never
+// asked to admit a value no click sent.
 export function closeNested(
   nest: DisclosureNest,
   read: (key: string) => string | null,
   writes: readonly StateWrite[],
-): readonly StateWrite[] {
+): readonly string[] {
   const written = new Set(writes.map((w) => w.key));
   const held = (key: string): string => read(key) ?? nest.defaultOf(key);
-  const folds = new Map<string, string>();
+  const folds = new Set<string>();
   for (const { key, value } of writes) {
     const was = held(key);
     if (was === value) continue;
@@ -181,8 +191,8 @@ export function closeNested(
         now !== nest.defaultOf(nested.key) &&
         !nested.outside.has(now) &&
         !written.has(nested.key);
-      if (closes) folds.set(nested.key, nest.defaultOf(nested.key));
+      if (closes) folds.add(nested.key);
     }
   }
-  return [...folds].map(([key, value]) => ({ key, value }));
+  return [...folds];
 }

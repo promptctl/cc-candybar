@@ -87,7 +87,9 @@ function buildRuntime(src: string) {
     if (!url) throw new Error(`no affordance writing ${key}=${value} rendered`);
     click(url);
   };
-  const held = (key: string): string | null => sessionState.get(SID, key);
+  // What the session reads: a cleared key holds its state variable's default.
+  const held = (key: string): string =>
+    sessionState.get(SID, key) ?? disclosureNest(config).defaultOf(key);
   return { config, sessionState, render, clickWriting, held, logged, ctx };
 }
 
@@ -299,6 +301,6 @@ describe("cases 7–9: a config's nested groups and menus", () => {
     rt.clickWriting("groups.outer", DISCLOSURE_CLOSED);
     rt.clickWriting("groups.outer", "outer");
     expect(rt.held("groups.inner")).toBe(DISCLOSURE_CLOSED);
-    expect(rt.held("groups.middle")).toBe(null);
+    expect(rt.held("groups.middle")).toBe("middle");
   });
 });

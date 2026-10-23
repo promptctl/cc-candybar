@@ -37,6 +37,7 @@ import {
   disclosureStateVar,
 } from "../disclosure.js";
 import { EDIT_NS, reservedNamespaceCollisions } from "./reserved-namespace.js";
+import { SETTINGS_REF } from "../door.js";
 
 // [LAW:single-enforcer] The SessionState key edit mode's state lives at, and
 // the toggle action's identity member. Both edit-chrome.ts (every synthesized
@@ -155,7 +156,13 @@ export function editModeArtifacts(): {
 } {
   return {
     variables: {
-      [EDIT_MODE_KEY]: disclosureStateVar(EDIT_MODE_KEY, DISCLOSURE_CLOSED),
+      // Arranging lives inside the door: closing the menu leaves edit mode
+      // (brandon-menus-sjhy.9p6, Brandon: "I'd like edit mode to exit if we
+      // close the main menu").
+      [EDIT_MODE_KEY]: {
+        ...disclosureStateVar(EDIT_MODE_KEY, DISCLOSURE_CLOSED),
+        within: [SETTINGS_REF],
+      },
       // Configuring is a level inside arranging, so leaving edit mode by any
       // control closes it (src/config/disclosure-nest.ts).
       [EDIT_CONFIGURE_KEY]: {

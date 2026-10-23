@@ -67,11 +67,7 @@ import {
   VERDICT_OK,
   VERDICT_UNRUN,
 } from "../doctor/report.js";
-import {
-  EDIT_MODE_KEY,
-  EDIT_SWITCH,
-  editModeArtifacts,
-} from "./loader/edit-mode.js";
+import { EDIT_SWITCH, editModeArtifacts } from "./loader/edit-mode.js";
 import { presetByName, presetNames, presetRoot } from "./presets.js";
 import { quickActions } from "./quick-actions.js";
 import { commandTray } from "./command-tray.js";
@@ -79,6 +75,7 @@ import { autocompactControl } from "./autocompact-control.js";
 import { formatTokenCount } from "./format-token-count.js";
 import { confirmStep } from "./confirm-step.js";
 import { SETTINGS_NS } from "./loader/reserved-namespace.js";
+import { SETTINGS_ANCHOR, SETTINGS_OPEN, SETTINGS_REF } from "./door.js";
 import {
   SETTINGS,
   type SettingName,
@@ -112,18 +109,9 @@ import {
 } from "./lanes.js";
 import { LANE_HELP } from "../help-text.js";
 
-// [LAW:one-source-of-truth] THE anchor: one string that is simultaneously the
-// segment name an author places in `root` to choose the menu's position, the
-// name of the toggle segment the synthesis puts there, the disclosure's state
-// variable, and its cycle action. Group sugar already spans those four with one
-// `groups.<name>` string for the same reason — one name means the toggle's
-// click and the body's `when` cannot address different keys.
-export const SETTINGS_ANCHOR = `${SETTINGS_NS}menu`;
-
-// The open member of every binary disclosure this menu mints — each holds the
-// CLOSED sentinel or this. The tab key is the accordion exception: it holds
-// the open tab's name.
-export const SETTINGS_OPEN = "open";
+// The door lives in src/config/door.ts, downhill of edit mode, which sits
+// inside it.
+export { SETTINGS_ANCHOR, SETTINGS_OPEN } from "./door.js";
 
 // The body's content segments.
 const EDIT_SEG = `${SETTINGS_NS}edit`;
@@ -220,16 +208,6 @@ const THEME_DEFAULT_CELL: SegmentDecl = {
 const RESET_ALL_SEG = `${SETTINGS_NS}resetAll`;
 // The door's own open/close cycle, fired beside the disarm.
 const DOOR_TOGGLE = `${SETTINGS_ANCHOR}.toggle`;
-
-// [LAW:one-source-of-truth] The door's disclosure as a ref rather than a gate
-// string (each tab's is `tabRef`): every gate below — and every `(?)` nested
-// inside them — derives from a ref, so the toggle that writes a key and the
-// `when` that reads it cannot name different variables.
-const SETTINGS_REF: DisclosureRef = {
-  variable: SETTINGS_ANCHOR,
-  key: SETTINGS_ANCHOR,
-  member: SETTINGS_OPEN,
-};
 
 // Undo and redo step the session's one settings history
 // (src/daemon/settings-history.ts).
@@ -1054,19 +1032,9 @@ function declareSettingControls(artifacts: MenuArtifacts): void {
 // here is not an optional courtesy — the EDIT_SEG action above fires
 // EDIT_SWITCH, and that pass is demand-driven off a scan of the segments a
 // FILE declared, which cannot see a segment this pass mints later.
-//
-// Arranging lives inside the door: closing the menu leaves edit mode
-// (brandon-menus-sjhy.9p6, Brandon: "I'd like edit mode to exit if we close
-// the main menu"). The menu's artifacts land over the file's, so this is the
-// declaration every config renders with.
 function ensureEditToggle(artifacts: MenuArtifacts): void {
   const { variables, actions } = editModeArtifacts();
-  Object.assign(artifacts.variables, variables, {
-    [EDIT_MODE_KEY]: {
-      ...disclosureStateVar(EDIT_MODE_KEY, DISCLOSURE_CLOSED),
-      within: [SETTINGS_REF],
-    },
-  });
+  Object.assign(artifacts.variables, variables);
   Object.assign(artifacts.actions, actions);
 }
 
