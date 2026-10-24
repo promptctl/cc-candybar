@@ -17,13 +17,21 @@ import {
   type IComputedValue,
 } from "mobx";
 import {
+  PendingValueError,
+  readPending,
   toDocument,
   typeOf,
   type JsonValue,
   type VarType,
   type VarValue,
 } from "./types";
-import type { Reading } from "../utils/outcome.js";
+import {
+  ok,
+  PENDING,
+  type Ok,
+  type Pending,
+  type Reading,
+} from "../utils/outcome.js";
 
 // [LAW:types-are-the-program] How the store holds a derived value. A
 // `computed` keeps its answer until what it read changes. A `projection` reads
@@ -42,14 +50,20 @@ export interface VarNode {
   // [LAW:types-are-the-program] Age is a property of the node, not of an
   // external bookkeeping layer — duplicating it in a side map would let the
   // two diverge. `number` for box nodes (epoch ms of last set, including the
-  // initial-value set at construction); `null` for computed nodes, whose
-  // freshness is governed by MobX invalidation, not a single timestamp.
+  // initial-value set at construction) — `null` for one nothing has written
+  // yet; `null` for computed nodes, whose freshness is governed by MobX
+  // invalidation, not a single timestamp.
   lastUpdatedMs(): number | null;
 }
 
+// Not written yet is the one PENDING value, by identity: any other value a box
+// is handed is checked against its type.
+const unwritten = (value: VarValue | Pending): value is Pending =>
+  value === PENDING;
+
 class BoxNode implements VarNode {
   readonly kind = "box" as const;
-  private readonly cell: IObservableValue<VarValue>;
+  private readonly cell: IObservableValue<VarValue | Pending>;
   // [LAW:single-enforcer] One write path (`set`) updates both the value and
   // the timestamp; introspection reads from the same place renderers do.
   //
@@ -58,20 +72,32 @@ class BoxNode implements VarNode {
   // 1tl). Stamping every write instead reported attempts, and reported them most
   // misleadingly in the one situation where the age is consulted: a source
   // re-running with no effect.
-  private lastChangedAt: number;
+  private lastChangedAt: number | null;
 
   constructor(
     readonly name: string,
     readonly type: VarType,
-    initial: VarValue,
+    initial: VarValue | Pending,
   ) {
-    assertType(name, type, initial, "initial value");
+    // What a box holds before anything has written it, when nothing may stand
+    // in for its first value: an input before its view's first payload.
+    if (!unwritten(initial)) assertType(name, type, initial, "initial value");
     this.cell = observable.box(initial, { deep: false });
-    this.lastChangedAt = Date.now();
+    this.lastChangedAt = unwritten(initial) ? null : Date.now();
   }
 
+  // [LAW:types-are-the-program] Not written yet is not a value: it is read as
+  // THE pending signal, which every place a template is evaluated takes as its
+  // own outcome.
   read(): VarValue {
-    return this.cell.get();
+    const value = this.cell.get();
+    if (unwritten(value)) {
+      throw new PendingValueError(
+        this.name,
+        `variable "${this.name}" has no value yet: nothing has written it`,
+      );
+    }
+    return value;
   }
 
   set(value: VarValue): void {
@@ -88,7 +114,7 @@ class BoxNode implements VarNode {
     this.lastChangedAt = Date.now();
   }
 
-  lastUpdatedMs(): number {
+  lastUpdatedMs(): number | null {
     return this.lastChangedAt;
   }
 }
@@ -258,20 +284,21 @@ export interface DocumentNode {
   readonly name: string;
   readonly kind: "document";
   read(): Reading<JsonValue>;
-  lastUpdatedMs(): number;
+  // `null` until its first scan, as a box nothing has written.
+  lastUpdatedMs(): number | null;
 }
 
 class DocumentCell implements DocumentNode {
   readonly kind = "document" as const;
   private readonly cell: IObservableValue<Reading<JsonValue>>;
-  private lastChangedAt: number;
+  private lastChangedAt: number | null;
 
   constructor(
     readonly name: string,
     initial: Reading<JsonValue>,
   ) {
     this.cell = observable.box(shaped(initial), { deep: false });
-    this.lastChangedAt = Date.now();
+    this.lastChangedAt = initial.kind === "pending" ? null : Date.now();
   }
 
   read(): Reading<JsonValue> {
@@ -289,7 +316,7 @@ class DocumentCell implements DocumentNode {
     this.lastChangedAt = Date.now();
   }
 
-  lastUpdatedMs(): number {
+  lastUpdatedMs(): number | null {
     return this.lastChangedAt;
   }
 }
@@ -354,7 +381,7 @@ export class VariableStore {
     deep: false,
   });
 
-  defineBox(name: string, type: VarType, initial: VarValue): void {
+  defineBox(name: string, type: VarType, initial: VarValue | Pending): void {
     this.declare(name, new BoxNode(name, type, initial));
   }
 
@@ -464,12 +491,17 @@ export class VariableStore {
   // [LAW:one-source-of-truth] A string that changes exactly when the node's
   // value does — the ONE spelling a change-driven reaction (a `depends_on`
   // cache policy) compares, total over node kinds so a document can be
-  // depended on like a scalar. Structural for documents: every stored
-  // document has sorted keys (toDocument), so a rescan yielding the same
-  // content in another key order is not a change.
-  changeKey(name: string): string {
+  // depended on like a scalar — or pending, while the node has no value yet.
+  // Structural for documents: every stored document has sorted keys
+  // (toDocument), so a rescan yielding the same content in another key order
+  // is not a change. A failure is a key like any other, never a failed
+  // reading: a dependant re-reads when its dependency starts or stops failing.
+  changeKey(name: string): Pending | Ok<string> {
     const node = this.requireNode(name);
-    if (node.kind === "document") return documentKey(node.read());
+    if (node.kind === "document") {
+      const doc = node.read();
+      return doc.kind === "pending" ? PENDING : ok(documentKey(doc));
+    }
     // A scalar read can throw: a `template` variable with no authored `default`
     // reads as its failure (brandon-var-sources-1p6). Failing IS a change — a
     // dependant must re-run when its dependency stops producing a value — and a
@@ -477,11 +509,13 @@ export class VariableStore {
     // consecutive failures for the same reason do not. Letting the throw escape
     // would instead break the reaction that asked, which is the one consumer
     // with no way to recover. [LAW:no-silent-failure] the failure is carried in
-    // the key, not swallowed.
+    // the key, not swallowed; not answered yet is no failure, and no key.
     try {
-      return String(node.read());
+      return ok(String(node.read()));
     } catch (e) {
-      return ` failed:${e instanceof Error ? e.message : String(e)}`;
+      return readPending(e) !== undefined
+        ? PENDING
+        : ok(` failed:${e instanceof Error ? e.message : String(e)}`);
     }
   }
 

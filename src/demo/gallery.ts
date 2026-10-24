@@ -33,14 +33,15 @@ const warnings: string[] = [];
 // The argv path resolved as `check` resolves its own, so `.config_path` (the
 // demo switcher's sibling links) names the file absolutely.
 const target = process.argv[2];
+// [LAW:effects-at-boundaries] One instant for every theme, so the rows differ
+// only in the theme they wear.
+const at = instantOf(new Date());
 const prepared = await prepareConfig(
   target === undefined ? [] : [resolveUserPath(process.cwd(), target)],
   process.cwd(),
   warnings,
+  at,
 );
-// [LAW:effects-at-boundaries] One instant for every theme, so the rows differ
-// only in the theme they wear.
-const at = instantOf(new Date());
 try {
   for (const w of warnings) process.stderr.write(`warning: ${w}\n`);
   for (const theme of THEMES) {

@@ -14,6 +14,7 @@ import {
   writeValues,
 } from "../src/daemon/config-file-store";
 import { resolveDslConfig } from "../src/config/loader/discovery";
+import { instantOf } from "../src/utils/instant";
 
 let dir: string;
 let project: string;
@@ -60,7 +61,7 @@ test("a project file that places one segment renders over the user's whole confi
   expect(outcome.layers).toEqual([userFile, projectFile]);
   expect(outcome.rendered).toContain("USERSEG");
   expect(outcome.rendered).toContain("PROJSEG");
-  const prepared = await prepareConfig(outcome.layers, project, []);
+  const prepared = await prepareConfig(outcome.layers, project, [], instantOf(new Date()));
   try {
     expect(prepared.config.globals.menuGlyph).toBe("U");
   } finally {

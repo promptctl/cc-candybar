@@ -31,12 +31,8 @@ import type { Derived, VariableStore } from "../var-system/store.js";
 import type { SourceRegistry } from "../var-system/sources.js";
 import { buildScope, placementScope } from "../template-engine/scope.js";
 import { is, sameBy } from "../utils/same.js";
-import {
-  evaluateWhen,
-  gateOf,
-  resolveSegmentColors,
-} from "../template-engine/index.js";
-import type { Gate } from "../template-engine/layout.js";
+import { gateOf, resolveSegmentColors } from "../template-engine/index.js";
+import { HIDDEN, SHOWN, type Gate } from "../template-engine/layout.js";
 import {
   inSegment,
   outsideSegments,
@@ -67,6 +63,7 @@ import {
   type EvaluatedSegment,
   type PlacementParts,
   type RenderedLine,
+  type SegmentStyles,
 } from "./node-registry.js";
 import { FrameMemory } from "../render/frame-memory.js";
 import { readPending } from "../var-system/types.js";
@@ -340,11 +337,7 @@ export class ViewParts {
     if (arrangedSegment(node.name) === undefined) return false;
     if (gate.kind === "hidden") return false;
     if (gate.kind === "failed") return true;
-    try {
-      return this.placement(node).shown();
-    } catch {
-      return true;
-    }
+    return this.placement(node).gate().kind !== "hidden";
   }
 }
 
@@ -385,8 +378,8 @@ class Placement implements PlacementParts {
       open: is,
     }),
   );
-  private readonly gate: Derived<boolean>;
-  private readonly open: Derived<boolean>;
+  private readonly ownGate: Derived<Gate>;
+  private readonly open: Derived<Gate>;
   private readonly colours: Derived<Colours>;
   private readonly body: Derived<Body>;
   private readonly affixes: Derived<Affixes>;
@@ -404,17 +397,17 @@ class Placement implements PlacementParts {
     const { when, bg, fg, template } = seg;
     const { lead, trail } = node;
     const opens = node.opens?.open;
-    this.gate =
+    this.ownGate =
       when === undefined
-        ? always(true)
+        ? always<Gate>(SHOWN)
         : view.derive(`${node.id} when`, view.readsInstant(when), () =>
-            outsideSegments(ref, () => evaluateWhen(when, scope)),
+            outsideSegments(ref, () => gateOf(when, scope)),
           );
     this.open =
       opens === undefined
-        ? always(false)
+        ? always<Gate>(HIDDEN)
         : view.derive(`${node.id} body gate`, view.readsInstant(opens), () =>
-            outsideSegments(ref, () => evaluateWhen(opens, view.scope)),
+            outsideSegments(ref, () => gateOf(opens, view.scope)),
           );
     this.colours = view.derive(
       `${node.id} colours`,
@@ -454,11 +447,11 @@ class Placement implements PlacementParts {
           );
   }
 
-  shown(): boolean {
-    return this.gate.read();
+  gate(): Gate {
+    return this.ownGate.read();
   }
 
-  bodyOpen(): boolean {
+  bodyGate(): Gate {
     return this.open.read();
   }
 
@@ -468,7 +461,7 @@ class Placement implements PlacementParts {
   evaluate(palette: Palette, region: Region): EvaluatedSegment {
     this.where.set({ palette, region });
     const colours = this.colours.read();
-    this.ground.set({ colours, bodyOpen: this.open.read() });
+    this.ground.set({ colours, bodyOpen: this.open.read().kind === "shown" });
     const body = this.body.read();
     this.opened.set({ colours, open: body.open });
     return evaluated(colours, body, this.affixes.read());
@@ -636,26 +629,33 @@ function affixesOf(
 
 const NO_AFFIXES: Affixes = { lead: [], trail: [], drops: [] };
 
+// Every Style a placement coloured `colours` can wear. A band is read only
+// where one is worn: one that can never be drawn throws when it is opened,
+// never from a closed cell.
+function stylesOf(colours: Colours): SegmentStyles {
+  const { palette, drawnAt, disclosure } = colours;
+  return {
+    closed: colours.style,
+    get trigger() {
+      return stateCell(palette, bandOf(colours).state, drawnAt);
+    },
+    get band() {
+      return stateCell(palette, bandOf(colours).plane, drawnAt);
+    },
+    get close() {
+      return closeCell(palette, bandOf(colours).state, drawnAt);
+    },
+    disclosure,
+  };
+}
+
 function evaluated(
   colours: Colours,
   body: Body,
   affixes: Affixes,
 ): EvaluatedSegment {
-  const { palette, drawnAt, disclosure } = colours;
   return {
-    styles: {
-      closed: colours.style,
-      get trigger() {
-        return stateCell(palette, bandOf(colours).state, drawnAt);
-      },
-      get band() {
-        return stateCell(palette, bandOf(colours).plane, drawnAt);
-      },
-      get close() {
-        return closeCell(palette, bandOf(colours).state, drawnAt);
-      },
-      disclosure,
-    },
+    styles: stylesOf(colours),
     fragments: body.fragments,
     lead: affixes.lead,
     trail: affixes.trail,
@@ -695,25 +695,18 @@ export function evaluateOnce(
   );
 }
 
-// The closed style a placement's region deals it in `palette`, its `bg:` and
-// `fg:` unread: what a cell with no authored colours wears, and so what a
-// placement whose value is not answered yet wears — a pending value states no
-// meaning for a `bg:` to paint.
-export function decoratedStyle(
+// The styles a placement's region deals it in `palette`, its `bg:` and `fg:`
+// unread: what a cell with no authored colours wears, and so what a placement
+// whose value is not answered yet wears — a pending value states no meaning for
+// a `bg:` to paint — closed, or as the trigger of the body it hangs open.
+export function decoratedStyles(
   ref: ActiveSegmentRef,
   node: CompiledSegmentNode,
   palette: Palette,
   region: Region,
   drawnAt: ColorDepth,
-): Style {
-  return coloursOf(
-    ref,
-    node,
-    palette,
-    region,
-    drawnAt,
-    undefined,
-    undefined,
-    {},
-  ).style;
+): SegmentStyles {
+  return stylesOf(
+    coloursOf(ref, node, palette, region, drawnAt, undefined, undefined, {}),
+  );
 }

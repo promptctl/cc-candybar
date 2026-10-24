@@ -79,12 +79,10 @@ import {
 } from "../themes/index.js";
 import { ANIMATION_SPEEDS, FOLLOW_BAR } from "../themes/policy.js";
 import type { DrawnMotion } from "../render/drawn-motion.js";
-import type { Gate } from "../template-engine/layout.js";
 import {
   bindClock,
   createCcCandybarEngine,
   engineClockFunctions,
-  HIDDEN,
   SHOWN,
 } from "../template-engine/index.js";
 import {
@@ -112,7 +110,7 @@ import {
 import { segmentColorFuncs } from "../render/segment-color.js";
 import { variableScopes, type VarScope } from "./variable-scope.js";
 import {
-  decoratedStyle,
+  decoratedStyles,
   evaluateOnce,
   viewParts,
   type RuleOutcome,
@@ -146,6 +144,7 @@ import {
   nodeType,
   layoutRows,
   rowIdentities,
+  within,
   type Compiled,
   type CompiledNode,
   type CompiledSegment,
@@ -1082,18 +1081,6 @@ function provisionalName<T>(
   return selected.kind === "decided" ? selected.name : SLOT_FLOORS[slot];
 }
 
-// A node's own gate under a parent that is shown, or not answered yet. Under
-// one not answered yet, a node its own `when` hides is hidden either way, and
-// one waiting itself waits; one it shows waits on the parent, and so does one
-// whose `when` fails — no fault yet, since the parent's answer decides whether
-// it is asked at all.
-function within(parent: Visibility, own: Gate): Gate {
-  return own.kind === "shown" ||
-    (own.kind === "failed" && parent.kind === "pending")
-    ? parent
-    : own;
-}
-
 // The ids of the placements a layout node holds, its open bodies' included:
 // what names a container to its author. Its compiled `when` is edit chrome's
 // wrapping of the one they wrote and its path is a position in the synthesized
@@ -1532,8 +1519,8 @@ export function drawDsl(
   const placement = (node: CompiledSegmentNode): PlacementParts => {
     const own = parts.placement(node);
     return {
-      shown: () => own.shown(),
-      bodyOpen: () => own.bodyOpen(),
+      gate: () => own.gate(),
+      bodyGate: () => own.bodyGate(),
       evaluate: (palette, region) => collected(own.evaluate(palette, region)),
     };
   };
@@ -1598,20 +1585,15 @@ export function drawDsl(
       // trigger opens. Depth is a fact of that band — counted up by
       // `decorationFor` each time a band item opens the next — so a nested
       // `{{ menu }}` inside door → ⚙ lands at depth 2 with no walk state.
-      renderBody: (body, open, band) =>
-        renderNode(
-          body,
-          gate.kind === "shown" && open ? SHOWN : HIDDEN,
-          bandRoot(band),
-        ),
+      renderBody: (body, held, band) => renderNode(body, held, bandRoot(band)),
       // [LAW:one-source-of-truth] The row ✕ reads the session id from the
       // same store every other affordance's URL does.
       closeDisclosure: (key) => disclosureCloseFragment(store, key),
       placed: (id, lines) => record.placed(id, motion.placed(id, lines)),
       lastDrawn: (id) => last?.placements.get(id),
       waited: (variable) => waited.add(variable),
-      decoration: (node, palette) =>
-        decoratedStyle(
+      decorations: (node, palette) =>
+        decoratedStyles(
           compiled.activeSegment,
           node,
           palette,

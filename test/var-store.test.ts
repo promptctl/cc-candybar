@@ -7,7 +7,7 @@ import {
   toBool,
   typeOf,
 } from "../src/var-system";
-import { ABSENT, failed, ok } from "../src/utils/outcome";
+import { ABSENT, failed, ok, PENDING } from "../src/utils/outcome";
 
 describe("VariableStore — boxes", () => {
   it("returns the initial value", () => {
@@ -275,6 +275,17 @@ describe("VariableStore — the age records a change, not a write", () => {
     jest.useRealTimers();
   });
 
+  it("a box nothing has written has no age until its first write", () => {
+    jest.setSystemTime(1000);
+    const store = new VariableStore();
+    store.defineBox("n", "number", PENDING);
+    expect(store.getNode("n").lastUpdatedMs()).toBeNull();
+
+    jest.setSystemTime(5000);
+    store.setBox("n", 7);
+    expect(store.getNode("n").lastUpdatedMs()).toBe(5000);
+  });
+
   it("a scalar write that moves nothing leaves the age alone", () => {
     jest.setSystemTime(1000);
     const store = new VariableStore();
@@ -390,9 +401,9 @@ describe("VariableStore — documents", () => {
     store.defineDocument("d", ok({ a: 1, b: { c: "x", d: 2 } }));
     const before = store.changeKey("d");
     store.setDocument("d", ok({ b: { d: 2, c: "x" }, a: 1 }));
-    expect(store.changeKey("d")).toBe(before);
+    expect(store.changeKey("d")).toEqual(before);
     store.setDocument("d", ok({ b: { d: 2, c: "y" }, a: 1 }));
-    expect(store.changeKey("d")).not.toBe(before);
+    expect(store.changeKey("d")).not.toEqual(before);
   });
 
   it("changeKey is structural over documents and total over node kinds", () => {
@@ -401,10 +412,10 @@ describe("VariableStore — documents", () => {
     store.defineBox("n", "number", 7);
     const before = store.changeKey("d");
     store.setDocument("d", ok(doc())); // a rescan yielding the same content
-    expect(store.changeKey("d")).toBe(before);
+    expect(store.changeKey("d")).toEqual(before);
     store.setDocument("d", ok({ ...doc(), a: 2 }));
-    expect(store.changeKey("d")).not.toBe(before);
-    expect(store.changeKey("n")).toBe("7");
+    expect(store.changeKey("d")).not.toEqual(before);
+    expect(store.changeKey("n")).toEqual(ok("7"));
   });
 
   // brandon-var-system-1tl. The defect: the document box compared by Object.is
@@ -436,7 +447,7 @@ describe("VariableStore — documents", () => {
     // Real movement still wakes it.
     store.setDocument("d", ok({ ...doc(), a: 2 }));
     expect(runs).toBe(2);
-    expect(store.changeKey("d")).not.toBe(key);
+    expect(store.changeKey("d")).not.toEqual(key);
     stop();
   });
 
