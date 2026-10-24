@@ -94,9 +94,16 @@ const SUBSCRIBE_OPTIONS: GitOptions = {
 // read rather than fetched inside one.
 type GitOptions = Omit<GitInfoOptions, "showPullRequest">;
 
-// One option set's value in a repo.
+// One option set's value in a repo. [LAW:no-ambient-temporal-coupling] A pass
+// reads only the values something reads (`readers`: the homes holding it, and
+// each subscription of the subscribed set), so an option set a preset stopped
+// placing stops costing its reads; `missed` says a pass, or a change on a repo
+// nobody used, went by without it, so its next reader reads it at once while
+// taking the value stored (cmt-2bc3832b, brandon-unfiled-3248.8ro6).
 interface GitValue extends Readable<GitInfo> {
   readonly options: GitOptions;
+  readers: number;
+  missed: boolean;
 }
 
 // The branch's PR. `key` is the branch and remote the reading answers for
@@ -105,9 +112,20 @@ interface GitValue extends Readable<GitInfo> {
 // of each key looked up, so a branch switched back to is answered from its
 // own key's last lookup — never another key's — and its period resumes where
 // that lookup left off.
+// `holders` are the homes showing the PR: only they run its period, read the
+// remote and look a key up, so a PR nothing shows calls no forge and spawns no
+// `git remote` (cmt-2bc3832b) — while every pass still keys it, by the branch it
+// read and the remote last read, so a key nobody shows stays the branch's.
+// `missed` says the key is not known to answer what its reader reads: a key
+// that moved while nobody showed it, or one a hold reads beside a value a pass
+// went by without. It is pending, its period stopped, and a lookup landing then
+// is kept in `seen` alone, so it never answers for another branch; the pass the
+// hold queues keys it beside that value, from `seen` when the key did not move.
 interface PrSource extends Readable<PullRequest> {
   readonly period: Period;
   readonly seen: Map<string, PrAnswer>;
+  holders: number;
+  missed: boolean;
   key: string;
   remote: Outcome<string>;
   inFlight: { readonly key: string; readonly done: Promise<void> } | null;
@@ -120,21 +138,24 @@ interface PrAnswer {
 
 // What a pass did to the PR's key, for its refresh event: no PR source, the
 // same key, a key answered from its own last lookup, or a key looked up.
-type PrMove = "-" | "kept" | "recalled" | "looked-up";
+// `owed` is a key nobody shows, keyed once something does; `unkeyed` a pass
+// that read no branch to key it by.
+type PrMove = "-" | "kept" | "recalled" | "looked-up" | "owed" | "unkeyed";
 
 // What asked for a pass, beside the period: a watch fire, a new option set, a
-// use after a change nobody saw, the first PR ask. A pass none of these asked
-// for is the period's.
+// reader of a value a pass went by without, the first PR ask or a PR key owed
+// to whoever shows it next. A pass none of these asked for is the period's.
 type PassReason = "watch" | "first" | "resume" | "pr";
 
 // [LAW:types-are-the-program] One repo the cache knows. The watch lives as long
 // as the state does — closing and reopening it per value leaked native memory
 // on macOS (brandon-unfiled-3248.576q; src/daemon/cache/watchers.ts). Two uses
-// keep it: `holders`, the homes drawing from it, which alone run the period;
-// and `subscriptions`, the `kind: "git"` subscribers, which hear every change
-// but run no period (a config's subscription lives as long as its entry, idle
-// or not). A change on a repo nothing uses reads nothing; `changedUnused`
-// makes its next use read at once.
+// keep it: `holders`, the holds homes take on it, which alone run the period —
+// a read's, and a subscription's while its home is drawn; and
+// `subscriptions`, the `kind: "git"` subscribers, which hear every change
+// (a config's subscription lives as long as its entry, idle or not). A change
+// on a repo nothing uses reads nothing; it marks every value missed, so its
+// next use reads at once.
 interface RepoState {
   readonly root: string;
   // [LAW:single-enforcer] The repo's one serialized refresh loop, owned by its
@@ -150,7 +171,6 @@ interface RepoState {
   readonly subscribers: Set<SubscribeCallback>;
   holders: number;
   subscriptions: number;
-  changedUnused: boolean;
   // The reasons a pass was asked for since the last one began.
   readonly asked: Set<PassReason>;
   pr: PrSource | null;
@@ -166,8 +186,8 @@ interface ResolutionCacheEntry {
 }
 
 // `held` counts the repos a home holds — the ones the period visits.
-// `refreshes` counts the passes that read a repo (each reads every option set
-// of it); `changes` the watch fires that queued one.
+// `refreshes` counts the passes that read a repo (each reads the option sets
+// something reads); `changes` the watch fires that queued one.
 export interface GitCacheStats {
   size: number;
   held: number;
@@ -191,6 +211,18 @@ export interface GitSubscription {
   // subscribers read values through the callback [LAW:one-source-of-truth].
   readonly firstDelivery: Promise<void>;
   readonly unsubscribe: () => void;
+  // The subscribing home was drawn: it holds the repo (its period) again, as a
+  // read does, so the home's idle sweep releases it once it is drawn no more
+  // (cmt-113f8f1e item 2). A draw before its repo resolves is held once it
+  // resolves.
+  readonly read: () => void;
+}
+
+// [LAW:single-enforcer] What one hold holds: the repo, one option set of it,
+// and its PR when shown — so a home reading another closure takes a hold of its
+// own, and the closure it left is released by the home's sweep alone.
+function holdKey(root: string, value: string, showsPr: boolean): string {
+  return `git:${root}|${value}|${showsPr ? "pr" : "-"}`;
 }
 
 function optionsKey(options: GitOptions): string {
@@ -199,6 +231,8 @@ function optionsKey(options: GitOptions): string {
   for (const k of keys) normalized[k as string] = options[k];
   return JSON.stringify(normalized);
 }
+
+const SUBSCRIBE_KEY = optionsKey(SUBSCRIBE_OPTIONS);
 
 // `gitDir` must be the *resolved* git directory (the value
 // `GitService.resolveGitDir(repoRoot)` returns). For a normal repo that's
@@ -226,14 +260,30 @@ function watcherTargets(gitDir: string): WatchTargets {
   return { files: [], dirs };
 }
 
-// The branch the repo's values last read, from whichever answered.
-function branchOf(state: RepoState): string | undefined {
-  for (const value of state.values.values()) {
-    if (value.reading.kind === "read" && value.reading.outcome.kind === "ok") {
-      return value.reading.outcome.value.branch;
-    }
+// [LAW:one-source-of-truth] The branch one pass read, from whichever of its
+// reads answered — never a value the pass skipped, whose stored branch may be
+// one the repo has since left.
+function branchOf(
+  outcomes: ReadonlyArray<Outcome<GitInfo>>,
+): string | undefined {
+  return outcomes.find((outcome) => outcome.kind === "ok")?.value.branch;
+}
+
+// The PR's key is not known to be the branch's now (`PrSource.missed`).
+function owe(pr: PrSource): void {
+  pr.missed = true;
+  if (pr.reading.kind === "read") pr.reading = pending();
+}
+
+// [LAW:no-silent-failure] A pass that read no branch has none to key an owed
+// PR by: the PR answers what the values did, so a reader waiting on it is
+// answered, and it stays owed for the next pass that reads one. A key known
+// current keeps its answer, and a lookup in flight lands as it would.
+function unkeyedPr(pr: PrSource, failures: ReadonlySet<string>): PrMove {
+  if (pr.missed && pr.reading.kind === "pending") {
+    settle(pr, failures.size > 0 ? failed([...failures].join("; ")) : ABSENT);
   }
-  return undefined;
+  return "unkeyed";
 }
 
 function threw(label: string): (e: unknown) => Outcome<never> {
@@ -394,9 +444,13 @@ export class GitDataProvider {
     const resolved = await this.resolveEffectiveGitDir(workingDir, projectDir);
     if (resolved.kind !== "ok") return resolved;
     const state = this.repo(resolved.value);
-    holds.take(`git:${state.root}`, () => this.hold(state));
     const { showPullRequest, ...gitOptions } = options;
-    const { value, pr } = this.ask(state, gitOptions, showPullRequest === true);
+    const { value, pr } = this.ask(
+      state,
+      holds,
+      gitOptions,
+      showPullRequest === true,
+    );
     if (value.reading.kind === "pending") this.misses++;
     else this.hits++;
     const first = await outcomeOf(value);
@@ -413,12 +467,25 @@ export class GitDataProvider {
   // [LAW:dataflow-not-control-flow] Push surface for var-system. The callback
   // receives the current snapshot once (after the first read lands) and again
   // after each refresh. A subscriber keeps its repo in use — never evicted,
-  // every change read — but holds no period: only a home drawing does.
+  // every change read — and holds its period only while its home is drawn.
   // Initial delivery is asynchronous — a consumer that needs to know when it
   // happened awaits the returned `firstDelivery` rather than counting ticks.
-  subscribe(workingDir: string, callback: SubscribeCallback): GitSubscription {
+  //
+  // [LAW:dataflow-not-control-flow] `holds` is the subscribing home's: each
+  // time the home is drawn (`read`) the subscription holds the repo through it
+  // as a read does, so a subscriber whose home is drawn sees the working-tree
+  // edits only the period reads. Loading a config draws nothing, so the first
+  // delivery takes no hold.
+  subscribe(
+    holds: Holds,
+    workingDir: string,
+    callback: SubscribeCallback,
+  ): GitSubscription {
     let unsubscribed = false;
     let attached: { state: RepoState; release: Release } | null = null;
+    // The home was drawn before its repo resolved — the render that loaded
+    // the config: held once it resolves.
+    let drawn = false;
 
     const firstDelivery = (async () => {
       // The SAME resolution the read uses [LAW:one-source-of-truth]: N declared
@@ -433,15 +500,22 @@ export class GitDataProvider {
         return;
       }
       const state = this.repo(resolved.value);
+      // The subscription's own reader keeps its value read by every pass while
+      // it lives, counted before the pass that reads it first is queued.
+      const before = state.asked.size;
+      const value = this.valueOf(state, SUBSCRIBE_KEY, SUBSCRIBE_OPTIONS);
       state.subscriptions++;
-      this.used(state);
+      this.join(state, value);
+      this.queue(state, before);
+      this.evict();
       attached = {
         state,
         release: () => {
           state.subscriptions--;
+          value.readers--;
         },
       };
-      const { value } = this.ask(state, SUBSCRIBE_OPTIONS, false);
+      if (drawn) this.ask(state, holds, SUBSCRIBE_OPTIONS, false);
       const initial = await outcomeOf(value);
       if (unsubscribed) return;
       this.safeInvoke(callback, initial.kind === "ok" ? initial.value : null);
@@ -459,6 +533,14 @@ export class GitDataProvider {
         attached.release();
         attached = null;
       },
+      read: () => {
+        if (!attached) {
+          drawn = true;
+          return;
+        }
+        this.touch(attached.state);
+        this.ask(attached.state, holds, SUBSCRIBE_OPTIONS, false);
+      },
     };
   }
 
@@ -468,18 +550,24 @@ export class GitDataProvider {
     if (!state) return;
     this.changes++;
     if (!inUse(state)) {
-      state.changedUnused = true;
+      for (const value of state.values.values()) value.missed = true;
       return;
     }
     this.changedPass(state, "watch");
   }
 
+  // LRU touch: re-inserting moves the repo to the newest end. A state the
+  // cache has dropped is not put back.
+  private touch(state: RepoState): void {
+    if (this.repos.get(state.root) !== state) return;
+    this.repos.delete(state.root);
+    this.repos.set(state.root, state);
+  }
+
   private repo(root: string): RepoState {
     const existing = this.repos.get(root);
     if (existing) {
-      // LRU touch: re-inserting moves the repo to the newest end.
-      this.repos.delete(root);
-      this.repos.set(root, existing);
+      this.touch(existing);
       return existing;
     }
     const gitDir = this.inner.resolveGitDir(root);
@@ -498,7 +586,6 @@ export class GitDataProvider {
       subscribers: new Set(),
       holders: 0,
       subscriptions: 0,
-      changedUnused: false,
       asked: new Set(),
       pr: null,
     };
@@ -526,74 +613,119 @@ export class GitDataProvider {
     }
   }
 
-  private hold(state: RepoState): Release {
+  // One hold of a home: the repo, the value it reads and the PR it shows. A
+  // value or a PR key a pass went by without is read by the pass `ask` queues,
+  // while this reader takes what is stored. [LAW:one-source-of-truth] A PR read
+  // beside a value a pass went by without would answer the branch the latest
+  // pass read, not the one that value holds, so it is owed: the reader waits
+  // for the pass that reads the value and keys the PR in one turn
+  // ([LAW:single-enforcer] `movePr`).
+  private hold(
+    state: RepoState,
+    value: GitValue,
+    pr: PrSource | null,
+  ): Release {
     state.holders++;
+    if (pr !== null) {
+      pr.holders++;
+      if (value.missed) owe(pr);
+      if (pr.missed) state.asked.add("pr");
+    }
+    this.join(state, value);
     this.held(state);
-    this.used(state);
+    this.evict();
     return () => {
       state.holders--;
+      value.readers--;
+      if (pr !== null) pr.holders--;
       this.held(state);
     };
   }
 
-  // A read or a subscribe has just put `state` in use. A change it missed
-  // while unused is read now; and every state is created by such a use, so the
-  // LRU is trimmed here, where the newest state cannot be the one it picks.
-  private used(state: RepoState): void {
-    if (state.changedUnused) {
-      state.changedUnused = false;
-      this.changedPass(state, "resume");
+  // A reader joins `value`: one a pass went by without is read by the next.
+  private join(state: RepoState, value: GitValue): void {
+    value.readers++;
+    if (value.missed) state.asked.add("resume");
+  }
+
+  // Whatever an ask added to `asked` is read by ONE pass, queued once it is all
+  // in place. A new one must be read even if a pass is in flight that does not
+  // include it, so it queues a pass rather than sharing one; a reason already
+  // in `asked` means such a pass is queued, and it will see this one too.
+  private queue(state: RepoState, before: number): void {
+    if (state.asked.size > before) {
+      state.refresh.run(PASS, () => this.refreshPass(state));
     }
-    this.evict();
   }
 
   private held(state: RepoState): void {
-    const held = state.holders > 0;
-    state.period.hold(held);
-    state.pr?.period.hold(held);
+    state.period.hold(state.holders > 0);
+    state.pr?.period.hold(state.pr.holders > 0 && !state.pr.missed);
+  }
+
+  // A repo's value for one option set, created pending on its first ask.
+  private valueOf(
+    state: RepoState,
+    key: string,
+    options: GitOptions,
+  ): GitValue {
+    const known = state.values.get(key);
+    if (known !== undefined) return known;
+    const value: GitValue = {
+      options,
+      reading: pending(),
+      readers: 0,
+      missed: false,
+    };
+    state.values.set(key, value);
+    state.asked.add("first");
+    return value;
   }
 
   // What one read asks of its repo: its option set's value and, when it shows
-  // the PR, the PR source — each created pending on first ask. Whatever is new
-  // is read by ONE pass, queued once all of it is in place, so a first value
+  // the PR, the PR source — each created pending on first ask — held by `holds`
+  // before any pass is queued, so the pass sees its reader, and a first value
   // and the PR's first key ride one pass (which reads the remote beside the
-  // values). A new one must be read even if a pass is in flight that does not
-  // include it, so it queues a pass rather than sharing one. A reason already
-  // in `asked` means such a pass is queued, and it will see this one too.
+  // values).
   private ask(
     state: RepoState,
+    holds: Holds,
     options: GitOptions,
     showsPr: boolean,
   ): { readonly value: GitValue; readonly pr: PrSource | null } {
     const before = state.asked.size;
     const key = optionsKey(options);
-    let value = state.values.get(key);
-    if (value === undefined) {
-      value = { options, reading: pending() };
-      state.values.set(key, value);
-      state.asked.add("first");
-    }
+    const value = this.valueOf(state, key, options);
     if (showsPr && state.pr === null) {
       state.pr = this.prSource(state);
       state.asked.add("pr");
     }
-    if (state.asked.size > before) {
-      state.refresh.run(PASS, () => this.refreshPass(state));
-    }
-    return { value, pr: showsPr ? state.pr : null };
+    const pr = showsPr ? state.pr : null;
+    holds.take(holdKey(state.root, key, showsPr), () =>
+      this.hold(state, value, pr),
+    );
+    this.queue(state, before);
+    return { value, pr };
   }
 
-  // One pass: read every option set of the repo and its remote, store the
-  // outcomes, log each failure once, deliver to subscribers, and move the PR's
-  // key — all in one turn once the reads land, so no read sees a branch's
-  // values beside another branch's PR. Each pass that lands writes one refresh
-  // event.
+  // One pass: read every option set something reads and, for a PR something
+  // shows, the remote beside the branch they read; store the outcomes, log
+  // each failure once, deliver to subscribers, and move the PR's key — all in
+  // one turn once the reads land, so no read sees a branch's values beside
+  // another branch's PR. Each pass that lands writes one refresh event.
   private async pass(state: RepoState): Promise<void> {
     if (this.repos.get(state.root) !== state) return;
     const startedAt = Date.now();
     const by = state.asked.size === 0 ? "period" : [...state.asked].join(",");
     state.asked.clear();
-    const values = [...state.values.values()];
+    const values: GitValue[] = [];
+    // A value something reads, or something waits on, is read; the rest are
+    // missed, read by the pass their next reader queues.
+    for (const value of state.values.values()) {
+      if (value.readers > 0 || value.reading.kind === "pending") {
+        values.push(value);
+      } else value.missed = true;
+    }
     const pr = state.pr;
     const [outcomes, remote] = await Promise.all([
       Promise.all(
@@ -603,7 +735,7 @@ export class GitDataProvider {
             .catch(threw("git fetch")),
         ),
       ),
-      pr === null ? null : this.remoteOf(state),
+      pr !== null && pr.holders > 0 ? this.remoteOf(state) : null,
     ]);
     // Dropped or closed while the read was out: nothing of it is stored.
     if (this.repos.get(state.root) !== state) return;
@@ -611,6 +743,7 @@ export class GitDataProvider {
     const failures = new Set<string>();
     values.forEach((value, i) => {
       const outcome = outcomes[i]!;
+      value.missed = false;
       settle(value, outcome);
       if (outcome.kind === "failed") failures.add(outcome.reason);
       if (outcome.kind === "ok") {
@@ -626,11 +759,16 @@ export class GitDataProvider {
     // An `absent` repo — a removed worktree, a deleted `.git` — is stored as
     // absent like any outcome. A state has one lifetime rule: kept while in
     // use, and bounded by the LRU once nothing uses it.
-    const branch = branchOf(state);
+    const branch = branchOf(outcomes);
+    // A pass reading no value moves no PR; an unshown PR is keyed by the remote
+    // last read.
     const prMove: PrMove =
-      pr !== null && remote !== null && branch !== undefined
-        ? this.movePr(state, pr, branch, remote)
-        : "-";
+      pr === null || values.length === 0
+        ? "-"
+        : branch === undefined
+          ? unkeyedPr(pr, failures)
+          : this.movePr(state, pr, branch, remote ?? pr.remote);
+    this.held(state);
     this.logger(
       "info",
       `git refresh ${state.root} by=${by} values=${values.length} failed=${failures.size} pr=${prMove} took=${Date.now() - startedAt}ms`,
@@ -638,7 +776,7 @@ export class GitDataProvider {
   }
 
   private deliver(state: RepoState): void {
-    const value = state.values.get(optionsKey(SUBSCRIBE_OPTIONS));
+    const value = state.values.get(SUBSCRIBE_KEY);
     if (value === undefined || value.reading.kind !== "read") return;
     const outcome = value.reading.outcome;
     const info = outcome.kind === "ok" ? outcome.value : null;
@@ -660,12 +798,14 @@ export class GitDataProvider {
         void this.readPr(state, pr);
       }),
       seen: new Map(),
+      holders: 0,
+      // Its key is the first pass's to set.
+      missed: true,
       key: "",
       remote: ABSENT,
       reading: pending(),
       inFlight: null,
     };
-    pr.period.hold(state.holders > 0);
     return pr;
   }
 
@@ -689,18 +829,24 @@ export class GitDataProvider {
     remote: Outcome<string>,
   ): PrMove {
     const key = `${branch}|${remote.kind === "ok" ? remote.value : remote.kind}`;
-    if (key === pr.key) return "kept";
+    if (key === pr.key && !pr.missed) return "kept";
     pr.key = key;
     pr.remote = remote;
     const known = pr.seen.get(key);
     if (known !== undefined) {
       pr.seen.delete(key);
       pr.seen.set(key, known);
+      pr.missed = false;
       settle(pr, known.outcome);
       pr.period.landed(periodOf(PR_PERIOD, known.outcome), known.at);
       return "recalled";
     }
+    if (pr.holders === 0) {
+      owe(pr);
+      return "owed";
+    }
     if (pr.reading.kind === "read") pr.reading = pending();
+    pr.missed = false;
     void this.readPr(state, pr);
     return "looked-up";
   }
@@ -735,7 +881,7 @@ export class GitDataProvider {
         if (pr.seen.size <= PR_KEYS_KEPT) break;
         pr.seen.delete(oldest);
       }
-      if (pr.key !== key) return;
+      if (pr.key !== key || pr.missed) return;
       settle(pr, outcome);
       pr.period.landed(periodOf(PR_PERIOD, outcome), at);
     });
