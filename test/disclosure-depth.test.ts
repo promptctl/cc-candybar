@@ -17,8 +17,8 @@
 //   - a group's toggle is a trigger like any other: state when open, its
 //     address's tint when closed;
 //   - the closed door on the bar wears its address's tint, and the band it
-//     opens is the depth-0 `OPEN_HUE` band every bar trigger opens — the
-//     anchor of the chain.
+//     opens is the depth-0 band of the bar's lineage every bar trigger opens —
+//     the anchor of the chain.
 
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { ColorDepth, type ColorRgba } from "@promptctl/rich-js";
@@ -40,10 +40,12 @@ import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
 import {
   barRoot,
   bandFor,
+  bandItemFor,
   bandRoot,
   decorFor,
   decorationFor,
   descend,
+  DISTRIBUTIONS,
   textOn,
   type Disclosure,
   type Region,
@@ -152,10 +154,15 @@ function bodyCellsOf(root: CompiledNode, trigger: string): string[] {
 
 // [LAW:behavior-not-structure] An item's colour as the model states it, from
 // the cell's place alone — never through decorationFor, the function the walk
-// colours it with. Under the default van der Corput placement, two items are
-// dealt by the cell's index parity; a row of a vertical body is a first cell.
+// colours it with. Placed by the default van der Corput distribution, which
+// reads no count; a row of a vertical body is a first cell.
 function itemAt(palette: Palette, band: Disclosure, cellIndex: number): ColorRgba {
-  return bandFor(palette, band, ColorDepth.TRUECOLOR).items[cellIndex % 2]!;
+  return bandItemFor(
+    palette,
+    band,
+    { index: cellIndex, count: cellIndex + 1, distribution: DISTRIBUTIONS["van-der-corput"] },
+    ColorDepth.TRUECOLOR,
+  );
 }
 
 // The index of segment `name` among the cells of the row `trigger` opens.

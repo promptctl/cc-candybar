@@ -2138,7 +2138,7 @@ that row chooses the shade. A container nested inside a cell does not re-place
 the bar — everything in it wears that cell's hue and shade, so a `distribution`
 there is a load error (`sets "distribution" on a container inside a cell`).
 A disclosure body is read the same way: its items are placed along their
-rows, each cell wearing one of the band's two item colours and everything
+rows, each cell wearing one of the band's item colours and everything
 nested in a cell wearing that cell's, so a `distribution` inside a body's cell
 is the same load error. A body's rows pick nothing, so one on a vertical
 container in a body is refused too (`sets "distribution" on a vertical
