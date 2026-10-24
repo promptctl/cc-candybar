@@ -486,7 +486,7 @@ describe("GitDataProvider reads what is held", () => {
     svc.close();
   });
 
-  test("a PR nobody shows reads no remote; shown again on the same branch, it is answered from its last lookup", async () => {
+  test("a PR nobody shows reads no remote; shown again on the same branch, its stored answer is taken at once", async () => {
     jest.useFakeTimers();
     const { svc, inner, holds, logs } = makeCache();
     inner.repoRootByDir = { "/repo": "/repo" };
@@ -499,15 +499,19 @@ describe("GitDataProvider reads what is held", () => {
     await jest.advanceTimersByTimeAsync(GIT_PERIOD_MS * 2);
     expect(inner.remoteCalls).toBe(remotes);
 
+    // Every pass kept its key by the branch it read, so the stored answer is
+    // taken at once: no pass, no lookup.
+    expect(logs.at(-1)).toMatch(/ pr=kept /);
+    const passes = inner.computeCalls.length;
     const shown = svc.getGitInfo(new Holds(), "/repo", {
       showPullRequest: true,
     });
-    await jest.advanceTimersByTimeAsync(0);
     await expect(shown).resolves.toMatchObject({
       kind: "ok",
       value: { pullRequest: { kind: "ok" } },
     });
-    expect(logs.at(-1)).toMatch(/ pr=recalled /);
+    await jest.advanceTimersByTimeAsync(0);
+    expect(inner.computeCalls).toHaveLength(passes);
     expect(inner.prCalls).toHaveLength(1);
     svc.close();
   });
@@ -535,6 +539,54 @@ describe("GitDataProvider reads what is held", () => {
     await jest.advanceTimersByTimeAsync(0);
     expect(logs.at(-1)).toMatch(/ pr=looked-up /);
     expect(inner.prCalls).toHaveLength(2);
+    svc.close();
+  });
+
+  test("a PR read beside a value a pass went by without waits for the pass that reads both", async () => {
+    jest.useFakeTimers();
+    const { svc, inner } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+    const o2 = { showSha: true, showPullRequest: true };
+    const before = new Holds();
+    await svc.getGitInfo(before, "/repo", o2);
+    // A preset switch reads another option set with the PR; the first is swept.
+    await svc.getGitInfo(new Holds(), "/repo", { showPullRequest: true });
+    before.releaseUnread();
+    before.releaseUnread();
+    inner.stubInfo = { ...inner.stubInfo, branch: "feat-b" };
+    svc.changed("/repo");
+    await jest.advanceTimersByTimeAsync(0);
+    expect(inner.prCalls).toHaveLength(2);
+
+    // Switched back: the swept set still stores `main`, the PR is feat-b's.
+    const back = svc.getGitInfo(new Holds(), "/repo", o2);
+    await jest.advanceTimersByTimeAsync(0);
+    await expect(back).resolves.toMatchObject({
+      kind: "ok",
+      value: { branch: "feat-b", pullRequest: { kind: "ok" } },
+    });
+    expect(inner.prCalls).toHaveLength(2);
+    svc.close();
+  });
+
+  test("a value something waits on is read though its hold was released", async () => {
+    jest.useFakeTimers();
+    const { svc, inner } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+    inner.infoGate = deferred();
+    void svc.getGitInfo(new Holds(), "/repo", {});
+    await jest.advanceTimersByTimeAsync(0);
+    const gone = new Holds();
+    const waiting = svc.getGitInfo(gone, "/repo", { showSha: true });
+    await jest.advanceTimersByTimeAsync(0);
+    gone.close();
+    inner.infoGate.resolve();
+    inner.infoGate = null;
+    await jest.advanceTimersByTimeAsync(0);
+    let answer: Outcome<GitInfo> | "waiting" = "waiting";
+    void waiting.then((a) => (answer = a));
+    await jest.advanceTimersByTimeAsync(0);
+    expect(answer).toMatchObject({ kind: "ok" });
     svc.close();
   });
 
@@ -882,6 +934,9 @@ describe("GitDataProvider.subscribe", () => {
     const home = new Holds();
     const sub = svc.subscribe(home, "/repo", () => {});
     await sub.firstDelivery;
+    // Loaded, not drawn: no period.
+    expect(svc.getStats().held).toBe(0);
+    sub.read();
     expect(svc.getStats().held).toBe(1);
     await jest.advanceTimersByTimeAsync(GIT_PERIOD_MS);
     expect(inner.computeCalls).toHaveLength(2);

@@ -357,3 +357,26 @@ test("a hold that draws nothing leaves a git subscription to the sweep", async (
   cache.releaseIdle();
   expect(gitService.getStats().held).toBe(0);
 });
+
+test("an entry a hold that draws nothing loads holds no git period", async () => {
+  execSync("git init -q && git commit -q --allow-empty -m init", {
+    cwd: dir,
+    env: { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" },
+  });
+  fs.writeFileSync(
+    path.join(dir, ".cc-candybar.json5"),
+    JSON.stringify({
+      variables: { branch: { kind: "git", field: "branch" } },
+      segments: { where: { template: "on={{ .branch }}" } },
+      root: { h: ["where"] },
+    }),
+  );
+  const { cache, gitService } = makeCache();
+  const lane = cache.hold(dir, dir, undefined);
+  lane[Symbol.dispose]();
+  expect(await lane.state.registry.settled(5000)).toEqual([]);
+  expect(gitService.getStats().held).toBe(0);
+
+  await render(cache, "s-a");
+  expect(gitService.getStats().held).toBe(1);
+});
