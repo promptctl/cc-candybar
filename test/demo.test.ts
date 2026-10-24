@@ -80,7 +80,7 @@ describe("pnpm demo", () => {
       { CC_CANDYBAR_DEBUG: "1" },
     );
     expect(r.status).toBe(0);
-    expect(r.stderr).toContain("usageStore seed sessions=");
+    expect(r.stderr).toContain("usageStore scan dirs=");
     expect(existsSync(join(dir, "state", "cc-candybar", "daemon.log"))).toBe(
       false,
     );

@@ -118,30 +118,35 @@ export function getClaudePaths(detected: string | undefined): string[] {
 }
 
 export async function findProjectPaths(
-  claudePaths: string[],
+  claudePaths: readonly string[],
 ): Promise<string[]> {
   const projectPaths: string[] = [];
 
   for (const claudePath of claudePaths) {
     const projectsDir = join(claudePath, "projects");
-
-    if (existsSync(projectsDir)) {
-      try {
-        const entries = await readdir(projectsDir, { withFileTypes: true });
-
-        for (const entry of entries) {
-          if (entry.isDirectory()) {
-            const projectPath = join(projectsDir, entry.name);
-            projectPaths.push(projectPath);
-          }
-        }
-      } catch (error) {
-        debug(`Failed to read projects directory ${projectsDir}:`, error);
-      }
+    // [LAW:no-silent-failure] A directory with no `projects/` yet has no
+    // projects; one that cannot be listed is the caller's failure, never an
+    // empty tree.
+    const entries = await unlessGone(
+      readdir(projectsDir, { withFileTypes: true }),
+    );
+    for (const entry of entries ?? []) {
+      if (entry.isDirectory()) projectPaths.push(join(projectsDir, entry.name));
     }
   }
 
   return projectPaths;
+}
+
+// A read of something that may have gone (or never been): `undefined` on
+// ENOENT, the read's own throw otherwise.
+export async function unlessGone<T>(read: Promise<T>): Promise<T | undefined> {
+  try {
+    return await read;
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw e;
+  }
 }
 
 export async function findAgentTranscripts(

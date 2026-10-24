@@ -1252,6 +1252,7 @@ export async function replyTo(
           memento: mementoProvider.getStats(),
           autocompact: autoCompact.getStats(),
           cache: cacheExpiry.getStats(),
+          today: usageStore.scanStats(),
         },
         transcriptReads: transcriptReads(),
         renderCache: renderCache.stats,

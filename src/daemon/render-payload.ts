@@ -1118,8 +1118,8 @@ function settingsPathOf(hints: ClientHints): string {
 // [LAW:single-enforcer] A statusline request's own triggers
 // (brandon-unfiled-3248.8ro6, step 3): it refreshes every session source the
 // closure reads — the transcript's folds, the cache expiry, the speed sample,
-// the auto-compact window, today's seed — each stamp-gated by its owner, so an
-// unchanged transcript reads nothing. A frame never calls this: it draws the
+// the auto-compact window, today's first scan — each stamp-gated by its
+// owner, so an unchanged transcript reads nothing. A frame never calls this: it draws the
 // values these refreshes stored.
 //
 // [LAW:no-silent-failure] A refresh's contract is to answer, never to throw or
@@ -1149,7 +1149,12 @@ export async function refreshPayload(inputs: PayloadInputs): Promise<Threw> {
       deps.usageStore.getUsageInfo(sessionId, hookData),
     ),
     lane("today", want.today, () =>
-      deps.usageStore.getTodayInfo(hookData, hints.claudeConfigDir, at),
+      deps.usageStore.getTodayInfo(
+        deps.holds,
+        hookData,
+        hints.claudeConfigDir,
+        at,
+      ),
     ),
     lane("context", want.context, () =>
       deps.contextProvider.getContextInfo(hookData),
@@ -1258,7 +1263,12 @@ function readLanes(inputs: PayloadInputs, threw: Threw = {}): Lanes {
     today:
       threw.today ??
       read("today", want.today, () =>
-        deps.usageStore.todayOf(hookData, hints.claudeConfigDir, at),
+        deps.usageStore.todayOf(
+          deps.holds,
+          hookData,
+          hints.claudeConfigDir,
+          at,
+        ),
       ),
     context:
       threw.context ??
