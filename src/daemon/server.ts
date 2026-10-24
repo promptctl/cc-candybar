@@ -133,6 +133,7 @@ import {
   buildRenderPayload,
   payloadOf,
   renderOptionsOf,
+  gitOptionsFromClosure,
   prFactOf,
   type DrawInputs,
   type DrawnPayload,
@@ -1314,9 +1315,10 @@ export async function replyTo(
     if (checked.ok) {
       sighted(checked.req, "drawing");
       // [LAW:one-source-of-truth] A request past the checkpoint is the
-      // session's data from now on, and a followed session's frame is drawn
-      // from it at once, beside this render: its answer is its own client's,
-      // drawn for a request, and never a frame (src/daemon/frame-feed.ts).
+      // session's data from now on; a followed session's next frame is drawn
+      // from it once the request settles (answerRequest). Its answer is its
+      // own client's, drawn for a request, and never a frame
+      // (src/daemon/frame-feed.ts).
       frameFeeds.note(checked.req.hookData.session_id, checked.req, order);
     }
     const rendered: {
@@ -2103,7 +2105,11 @@ function drawRender(
   noteFacts(facts, {
     prompts: String(metrics?.messageCount ?? "-"),
     nonPrompts: String(metrics?.nonPrompts ?? "-"),
-    pr: prFactOf(payload.git),
+    pr: prFactOf(
+      payload.git,
+      gitOptionsFromClosure(setup.payloadInputs.neededInputPaths)
+        .showPullRequest === true,
+    ),
     feeds: feedsFact(payload.feeds),
   });
   // [LAW:no-silent-failure] What renderDsl had to settle for itself and could

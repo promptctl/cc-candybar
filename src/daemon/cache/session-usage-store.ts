@@ -500,11 +500,9 @@ export class SessionUsageStore {
       knownStamp,
     );
     // The session's slot records that its refresh answered — a failure kept
-    // so the draws until the next refresh show it. Empty sessionId no-ops.
-    if (sessionId) {
-      this.hold(sessionId).failure =
-        record.kind === "failed" ? record.reason : null;
-    }
+    // so the draws until the next refresh show it.
+    this.hold(sessionId).failure =
+      record.kind === "failed" ? record.reason : null;
     return record;
   }
 

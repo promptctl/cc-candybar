@@ -561,7 +561,11 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
         "a frame once the lane is on",
         SWITCHED_OFF_RETRY_MS + 3000,
       );
-      expect(seen).toEqual([expect.stringContaining("an unswitched mark")]);
+      // The first frame resumed is the bar. Later ones may follow at once —
+      // the band's own setup failing here draws its refusal on the bar — so
+      // the contract is the resumption, never a count of frames by a poll.
+      expect(seen[0]).toEqual(expect.stringContaining("an unswitched mark"));
+      expect(seen.filter((s) => /^(fault|exit): /.test(s))).toEqual([]);
     } finally {
       follower.close();
     }

@@ -155,14 +155,16 @@ describe("SessionUsageStore — session projection", () => {
     }
   });
 
-  test("empty sessionId does no work and is not cached", async () => {
+  test("empty sessionId does no work, and a draw of it is what its refresh answered", async () => {
     const store = new SessionUsageStore({ sweepIntervalMs: 0 });
     try {
-      const info = await store.getUsageInfo("", undefined);
+      const bare = { session_id: "" } as ClaudeHookData;
+      const info = await store.getUsageInfo("", bare);
       expect(info.kind).toBe("ok");
       if (info.kind !== "ok") return;
       expect(info.value.session.cost).toBeNull();
-      expect(store.getStats()).toMatchObject({ size: 0, misses: 0, hits: 0 });
+      expect(store.getStats()).toMatchObject({ misses: 0, hits: 0 });
+      expect(store.usageOf("", bare)).toEqual(info);
     } finally {
       store.close();
     }

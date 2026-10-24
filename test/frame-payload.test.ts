@@ -137,7 +137,7 @@ function counted(pr?: unknown) {
       HINTS,
       NO_CONFIG_FILE,
     );
-  return { reads, feedsAt, inputs, request };
+  return { reads, feedsAt, inputs, request, deps };
 }
 
 describe("a frame's payload", () => {
@@ -184,6 +184,18 @@ describe("a frame's payload", () => {
     ]) {
       expect(lane).toBe(PENDING);
     }
+  });
+
+  test("a lane whose read throws is that lane's failure; the rest of the frame draws", async () => {
+    const { inputs, request, deps } = counted();
+    await request();
+    deps.contextProvider.contextOf = () => {
+      throw new Error("context bug");
+    };
+    const payload = payloadOf(inputs(AT), DRAW);
+    expect(payload.context).toBeUndefined();
+    expect(payload.git).toMatchObject({ branch: "main" });
+    expect(payload.session).not.toBe(PENDING);
   });
 
   test("autocompact's controls are not answered while the context window they are capped to is not", async () => {

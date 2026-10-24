@@ -20,7 +20,7 @@ import { globalsFor } from "./helpers/selection";
 import { VALUED_FIELDS } from "../src/config/globals-fields";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import type { GitInfo, GitInfoOptions, PrState } from "../src/segments/git";
-import { ABSENT, failed, ok, type Outcome } from "../src/utils/outcome";
+import { ABSENT, PENDING, failed, ok, type Outcome } from "../src/utils/outcome";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
 import { instantOf } from "../src/utils/instant";
 import {
@@ -621,10 +621,15 @@ describe("buildRenderPayload — git PR projection", () => {
         status: "clean",
         prEarlier: state,
       });
-      expect(prFactOf(payload.git)).toBe(`earlier-${state}`);
+      expect(prFactOf(payload.git, true)).toBe(`earlier-${state}`);
       expect(logs).toEqual([]);
     },
   );
+
+  test("a render reading no PR has no PR fact, whatever git's state", () => {
+    expect(prFactOf(PENDING, false)).toBe("-");
+    expect(prFactOf(PENDING, true)).toBe("pending");
+  });
 
   test("a layout reading only git.prEarlier still asks the forge", async () => {
     const asked: GitInfoOptions[] = [];

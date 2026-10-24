@@ -167,6 +167,15 @@ describe("SourceRegistry — input: before its first payload", () => {
   // brandon-unfiled-3248.8ro6: not answered yet is its own state. An input has
   // no value until a payload writes it — never its default, which answers a
   // payload that lacks the path — so what reads it before then waits.
+  it("an input not answered yet reports no earlier read's error", () => {
+    const { registry } = make("(unset)");
+    registry.declareInput("count", "count", "number");
+    registry.applyInput({ count: "not a number" });
+    expect(registry.getLastError("count")).toBeDefined();
+    registry.applyInput({ count: PENDING });
+    expect(registry.getLastError("count")).toBeUndefined();
+  });
+
   it("is not answered yet, whatever its default", () => {
     const { store, registry } = make("(unset)");
     registry.declareInput("cwd", "cwd", "string", "/default");

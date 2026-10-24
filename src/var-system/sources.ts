@@ -1217,7 +1217,10 @@ export class SourceRegistry {
         const raw = resolvePath(payload, meta.path);
         const type = this.store.getType(name);
         if (raw === PENDING) {
+          // Not answered yet is no failure: an earlier read's error no longer
+          // stands for it.
           this.store.setBox(name, PENDING);
+          this.lastErrors.delete(name);
         } else if (raw !== undefined) {
           try {
             this.store.setBox(name, coerceToType(raw, type));

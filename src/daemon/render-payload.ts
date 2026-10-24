@@ -378,11 +378,13 @@ const PR_FIELDS: { readonly [F in keyof PrFieldTypes]: true } = {
 
 // The render event's `pr=`: the branch's PR state, `failed` when the forge
 // could not say, `earlier-<state>` when its PR was an older use of the
-// branch's name, `-` when the payload carries none (no PR, or no segment
-// reads one).
+// branch's name, `pending` when a PR the render reads is not answered yet,
+// `-` when the payload carries none (no PR, or no segment reads one).
 export function prFactOf(
   git: GitPayloadOf<Pending> | Pending | undefined,
+  readsPr: boolean,
 ): string {
+  if (!readsPr) return "-";
   if (isPending(git)) return "pending";
   const { prState, prError, prEarlier } = git ?? {};
   if (isPending(prState)) return "pending";
@@ -1222,8 +1224,17 @@ function readLanes(inputs: PayloadInputs, threw: Threw = {}): Lanes {
   const want = wanted(inputs.neededInputPaths);
   const sessionId = hookData.session_id;
   const tmuxPane = hints.tmux ?? null;
-  const read = <T>(needed: boolean, value: () => T): T | typeof ABSENT =>
-    needed ? value() : ABSENT;
+  // [LAW:no-silent-failure] A read that throws is that lane's failure, drawn
+  // where the lane is and logged with the request's failures, so one owner's
+  // bug costs its own cells, never the bar.
+  const read = <T>(needed: boolean, value: () => T): T | Outcome<never> => {
+    if (!needed) return ABSENT;
+    try {
+      return value();
+    } catch (e) {
+      return failed(`read threw: ${String(e)}`);
+    }
+  };
   return {
     git: read(want.git, () =>
       deps.gitProvider.current(
