@@ -733,24 +733,14 @@ const groundCells = (palette: Palette, ground: Ground): ColorRgba[] =>
   ground.map((entry) => decorEntryColour(palette, entry));
 
 /**
- * Whether ANY colour a terminal draws stands STATE_FLOOR off every one of
- * `cells`, as drawn. A contrast ratio reads luminance alone, and the 256 greys
- * walk the luminance axis as finely as 8-bit colour can, so some grey clears
- * exactly when some drawable colour does — answered here in the test's own
- * words, independent of any search.
- */
-const GREYS = Array.from({ length: 256 }, (_, g) => new ColorRgba(g, g, g));
-function someColourClears(cells: readonly ColorRgba[]): boolean {
-  const drawn = cells.map(drawnGround);
-  return GREYS.some((grey) => drawn.every((c) => contrastRatio(grey, c) >= STATE_FLOOR));
-}
-
-/**
  * How far the colour standing furthest off its nearest cell stands, as drawn.
  * A contrast ratio reads luminance alone, so that colour is black, white, or
  * the balance of the two cells adjacent in luminance that stand furthest
  * apart, which stands the root of their ratio off each — answered here in the
- * test's own words, independent of any search.
+ * test's own words, independent of any search. (The 256 greys were tried as
+ * the oracle and are too coarse: a chromatic 8-bit colour reaches luminances
+ * between two greys', and the search found such colours clearing rows no grey
+ * cleared.)
  */
 function furthestAnyColourStands(cells: readonly ColorRgba[]): number {
   const rising = cells.map((c) => relativeLuminance(drawnGround(c)) + 0.05).sort((x, y) => x - y);
@@ -820,7 +810,7 @@ describe("done-when: an open trigger stands STATE_FLOOR off every closed cell of
     const short: Ground[] = [];
     for (const { name, palette } of STYLED) {
       for (const { name: where, ground } of GROUNDS) {
-        const possible = someColourClears(groundCells(palette, ground));
+        const possible = furthestAnyColourStands(groundCells(palette, ground)) >= STATE_FLOOR;
         for (const hue of DEPTH_HUES) {
           const search = stateFor(palette, hue, groundCells(palette, ground), [], ColorDepth.TRUECOLOR);
           if ((search.short === null) !== possible) wrong.push(`${name} ${where} ${hue} possible=${possible}`);
@@ -847,7 +837,7 @@ describe("done-when: an open trigger stands STATE_FLOOR off every closed cell of
     const straddling = new Palette("straddling", true, roles);
     const ground: Ground = SHADES.middle.tones.map((shade) => ({ hue: "secondary", shade }));
     const cells = groundCells(straddling, ground);
-    expect(someColourClears(cells)).toBe(false);
+    expect(furthestAnyColourStands(cells)).toBeLessThan(STATE_FLOOR);
     for (const drawnAt of [ColorDepth.TRUECOLOR, ColorDepth.EIGHT_BIT]) {
       const shown = shownAt(drawnAt);
       const stands = (c: ColorRgba): number => Math.min(...cells.map((x) => contrastRatio(shown(c), shown(x))));
@@ -1060,6 +1050,39 @@ const apartOf = (palette: Palette, disclosure: Disclosure): ColorRgba[] => [
   ...(disclosure.depth === 0 ? [] : itemsOf(palette, { ...disclosure, depth: disclosure.depth - 1 })),
 ];
 
+/**
+ * What the trigger opening `disclosure` stands among in truecolor, in the
+ * test's own words: its row's closed cells, or inside a band that band's plane
+ * and the ✕ drawn in its state.
+ */
+const amongOf = (palette: Palette, disclosure: Disclosure): ColorRgba[] => {
+  if (disclosure.depth === 0) return groundCells(palette, disclosure.ground);
+  const { plane, state } = bandFor(palette, { ...disclosure, depth: disclosure.depth - 1 }, ColorDepth.TRUECOLOR);
+  return [plane, state];
+};
+
+/**
+ * Whether any colour the terminal draws along the hue's own lightness, toward
+ * white or toward black, stands STATE_FLOOR off every cell the trigger opening
+ * `disclosure` stands among and a seam off every item it is told from — the
+ * test's own walk of both rays, finer than any 8-bit step, independent of the
+ * search's steps.
+ */
+const anyColourClearsBoth = (palette: Palette, disclosure: Disclosure): boolean => {
+  const pure = paletteRole(palette, hueOf(disclosure));
+  const among = amongOf(palette, disclosure).map(drawnGround);
+  const apart = apartOf(palette, disclosure).map(drawnGround);
+  const along = (end: ColorRgba, t: number): ColorRgba =>
+    Oklch.fromRgba(pure).mixAxes(Oklch.fromRgba(end), { l: t, c: 0, h: 0, alpha: 0 }).toRgba();
+  return [new ColorRgba(255, 255, 255), new ColorRgba(0, 0, 0)].some((end) =>
+    Array.from({ length: 4097 }, (_, k) => drawnGround(along(end, k / 4096))).some(
+      (c) =>
+        among.every((cell) => contrastRatio(c, cell) >= STATE_FLOOR) &&
+        apart.every((item) => deltaE(c, item) >= SEAM_MIN_DELTA_E),
+    ),
+  );
+};
+
 describe("depth steps along the lineage", () => {
   test("each depth wears the next hue of the lineage, wrapping; a one-hue lineage keeps it", () => {
     const today: Lineage = ["accent", "primary", "secondary"];
@@ -1119,15 +1142,18 @@ describe("depth steps along the lineage", () => {
 describe("a band is a plane", () => {
   // The plane a band builds from the colour its trigger was searched to: into
   // the background, as a band always has — unless that plane would stand too
-  // near its trigger (a state the search carried to the background itself) or
-  // the plane it hangs in: then into the foreground, then each as far as the
-  // cap, then the twelfth of the way to either pole nearest the recession,
-  // the background's before the foreground's.
+  // near its trigger (a state the search carried to the background itself),
+  // the plane it hangs in, or an item that sits on it (the palette's own
+  // colour, which a dark theme's background lies the way of): then into the
+  // foreground, then each as far as the cap, then the twelfth of the way to
+  // either pole nearest the recession, the background's before the
+  // foreground's.
   const recededPlane = (
     palette: Palette,
     state: ColorRgba,
     depth: number,
     outer: readonly ColorRgba[],
+    items: readonly ColorRgba[],
   ): { readonly plane: ColorRgba; readonly background: ColorRgba } => {
     const recession = Math.min(
       BAND_RECESSION.cap,
@@ -1137,7 +1163,8 @@ describe("a band is a plane", () => {
       blendRgb(state, paletteRole(palette, pole), amount);
     const holds = (p: ColorRgba): boolean =>
       deltaE(drawnGround(state), drawnGround(p)) >= BAND_FLOORS.triggerPlane &&
-      outer.every((o) => deltaE(drawnGround(o), drawnGround(p)) >= BAND_FLOORS.nestedPlane);
+      outer.every((o) => deltaE(drawnGround(o), drawnGround(p)) >= BAND_FLOORS.nestedPlane) &&
+      items.every((item) => deltaE(drawnGround(item), drawnGround(p)) >= SEAM_MIN_DELTA_E);
     const background = toward("background", recession);
     const plane =
       [
@@ -1160,7 +1187,7 @@ describe("a band is a plane", () => {
       for (const depth of [0, 1, 2, 3, 4]) {
         const { state, plane } = bandFor(palette, { decor, depth, ground }, ColorDepth.TRUECOLOR);
         const outer = depth === 0 ? [] : [bandFor(palette, { decor, depth: depth - 1, ground }, ColorDepth.TRUECOLOR).plane];
-        const expected = recededPlane(palette, state, depth, outer);
+        const expected = recededPlane(palette, state, depth, outer, itemsOf(palette, { decor, depth, ground }));
         if (expected.plane.hex !== expected.background.hex) intoForeground++;
         expect(plane.hex).toBe(expected.plane.hex);
       }
@@ -1193,12 +1220,14 @@ describe("a band is a plane", () => {
         const disclosure: Disclosure = { decor, depth, ground };
         const anchorAt = (at: ColorDepth): ColorRgba =>
           stateFor(palette, hueOf(disclosure), among, apartOf(palette, disclosure), at).anchor;
-        const { plane } = recededPlane(palette, anchorAt(drawnAt), depth, outer);
+        const items = itemsOf(palette, disclosure);
+        const { plane } = recededPlane(palette, anchorAt(drawnAt), depth, outer, items);
         const once = shown(plane);
         const band = (d: number) => bandFor(palette, { decor, depth: d, ground }, drawnAt);
         const keepsFloors =
           deltaE(once, shown(band(depth).state)) >= BAND_FLOORS.triggerPlane &&
           contrastRatio(once, shown(band(depth + 1).state)) >= STATE_FLOOR &&
+          items.every((item) => deltaE(once, shown(item)) >= SEAM_MIN_DELTA_E) &&
           (depth === 0 || deltaE(once, shown(band(depth - 1).plane)) >= BAND_FLOORS.nestedPlane);
         if (keepsFloors) {
           checked++;
@@ -1448,27 +1477,40 @@ describe("open trigger, its band, and a nested band are mutually distinguishable
   test("in truecolor, under every bundled style, an open trigger is told from every item it leads and sits among wherever a colour both clears its row and can be; a seam between two items is the theme's own", () => {
     // The search slides the trigger along its hue's lightness until it both
     // clears what it stands among and is told from its items (`stateFor`'s
-    // `apart`); where no colour clears, it draws the one standing furthest and
-    // reports it, and a seam it then shares with an item is that shortfall's.
-    // The items are the palette's entries, so two of them under a seam is the
-    // theme's own spelling, and the plane is searched to stand off every item.
+    // `apart`), walking every drawable colour on both rays before it gives up;
+    // where no colour clears both, it draws the one standing furthest off its
+    // cells, and the seam it then shares with an item is named — by the band
+    // whose trigger it is — and unavoidable: the test's own walk of the rays
+    // (`anyColourClearsBoth`) finds no colour either. The items are the
+    // palette's entries, so two of them under a seam is the theme's own
+    // spelling, and the plane is searched to stand off every item.
     const unexplained: string[] = [];
     let explained = 0;
+    let unavoidable = 0;
     for (const { name, palette } of STYLED) {
       for (const { decor, ground } of BANDS) {
         for (const depth of DEPTHS) {
-          const band = bandFor(palette, { decor, depth, ground }, ColorDepth.TRUECOLOR);
-          const nested = bandFor(palette, { decor, depth: depth + 1, ground }, ColorDepth.TRUECOLOR);
-          const stateShort = (b: typeof band): boolean => b.shortfalls.some((line) => line.includes("no open-trigger colour"));
+          const disclosure: Disclosure = { decor, depth, ground };
+          const band = bandFor(palette, disclosure, ColorDepth.TRUECOLOR);
+          const nested = bandFor(palette, { ...disclosure, depth: depth + 1 }, ColorDepth.TRUECOLOR);
           for (const pair of seamOf(band, nested.state, ColorDepth.TRUECOLOR)) {
             const [a, b] = pair.split(" and ") as [string, string];
             const isItem = (w: string): boolean => w.startsWith("item ");
-            const ok =
-              (isItem(a) && isItem(b)) ||
-              (a === "plane" && band.shortfalls.some((line) => line.includes(`an open band's ${pair} stand`))) ||
-              (a === "trigger" && stateShort(band)) ||
-              (b === "open trigger" && stateShort(nested));
-            if (ok) explained++;
+            // The band whose trigger is in the pair names it: an open trigger's
+            // seam is the nested band's, every other the band's own.
+            const [owner, opened, words] =
+              b === "open trigger"
+                ? [nested, { ...disclosure, depth: depth + 1 }, `a trigger open in a band and that band's ${a} stand`]
+                : [band, disclosure, `an open band's ${pair} stand`];
+            const named = owner.shortfalls.some((line) => line.includes(words));
+            const explainedAs =
+              isItem(a) && isItem(b)
+                ? "the theme's own"
+                : a === "plane"
+                  ? named && "named"
+                  : named && !anyColourClearsBoth(palette, opened) && "unavoidable";
+            if (explainedAs === "unavoidable") unavoidable++;
+            if (explainedAs) explained++;
             else unexplained.push(`${name} depth ${depth}: ${pair}`);
           }
         }
@@ -1476,6 +1518,8 @@ describe("open trigger, its band, and a nested band are mutually distinguishable
     }
     expect([...new Set(unexplained)]).toEqual([]);
     expect(explained).toBeGreaterThan(0);
+    // Non-vacuous: some trigger shares a seam with an item that no colour avoids.
+    expect(unavoidable).toBeGreaterThan(0);
   });
 
   test("a nested trigger's state shortfall names the remedy that clears it: another shade or style", () => {

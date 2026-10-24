@@ -740,8 +740,12 @@ export const STATE_FLOOR = 2.2;
  */
 const STATE_STEPS = 12;
 
-/** Halvings of the ray that find a balance: far finer than any colour drawn. */
-const BALANCE_HALVINGS = 40;
+/**
+ * Halvings of a ray that find the colour drawn at a boundary — a luminance
+ * threshold, a balance, the edge of a seam — to within 2⁻²⁴ of the ray: far
+ * finer than any colour drawn.
+ */
+const EDGE_HALVINGS = 24;
 
 /**
  * The closed cells a bar trigger stands among: the entries its row's cells
@@ -906,58 +910,131 @@ function searchState(
     standsTrue(c) >= STATE_FLOOR &&
     toldFrom(shownTrue(c), told) &&
     drawnClear(c) !== undefined;
-  // Between two cells adjacent in luminance, the colour standing furthest off
-  // both is their balance: a contrast ratio multiplies, so the colour there
-  // stands the root of their ratio off each, and no other cell comes nearer
-  // to it — STATE_FLOOR off both exactly when the two stand STATE_FLOOR²
-  // apart. A balance can fall between twelfths — rows an authored
-  // distribution deals on textual-dark leave windows as narrow as .002 of
-  // luminance between its navy and its orange — so it is found on the ray
-  // toward it by halving: past it, the colour stands nearer the cell beyond
-  // it than the one it left.
-  // The ray is drawn in 8-bit steps that can be wider than half a window, so
-  // both colours either side of the balance are offered.
-  const aroundBalance = (
-    lighter: ColorRgba,
-    darker: ColorRgba,
-  ): ColorRgba[] => {
-    const leans = (c: ColorRgba): number =>
-      contrastRatio(shownTrue(c), lighter) -
-      contrastRatio(shownTrue(c), darker);
-    const end = leans(pure) < 0 ? black : white;
-    // Darkening, the colour leans further toward standing off the lighter
-    // cell; lightening, the reverse.
-    const way = end === black ? 1 : -1;
-    let [near, far] = [0, 1];
-    for (let i = 0; i < BALANCE_HALVINGS; i++) {
-      const t = (near + far) / 2;
-      if (way * leans(along(end, t)) > 0) far = t;
-      else near = t;
+  // The fine end of the search, offered once no twelfth clears: the colour
+  // drawn at every boundary a constraint draws across either ray. Along a ray
+  // the luminance moves one way, so each cell's floor is two luminance
+  // thresholds (standing STATE_FLOOR above it, or below it), the balance of
+  // two cells adjacent in luminance one more (the root of their ratio off
+  // each, as far as any colour stands off both), and the stretch within a
+  // seam of an item — a shade of the trigger's own hue, so it sits on the ray
+  // — two edges either side of it. A colour that clears can sit between
+  // twelfths: rows an authored distribution deals on textual-dark leave
+  // windows as narrow as .002 of luminance between its navy and its orange,
+  // and a balance can land on an item while the colours either side of it
+  // clear both floors (brandon-menus-sjhy.4fi). Where a colour clears, one
+  // clears at a boundary, so the boundaries are the whole search; a uniform
+  // walk of the ray stepped over knife-edge windows the halving finds, and
+  // cost a hundred times as much.
+  // The two rays as one axis through the hue: black at −1, the hue at 0, white
+  // at +1, each ray |s| of the way to its end. Lightness and luminance both
+  // rise along it, so every boundary is one crossing of it, and a stretch
+  // that straddles the hue — an item that is the hue's own colour, or sits a
+  // seam from it — has its two edges on either side of 0.
+  const at = (s: number): ColorRgba =>
+    s >= 0 ? along(white, s) : along(black, -s);
+  const lum = (c: ColorRgba): number => relativeLuminance(shownTrue(c));
+  // A seam is ΔE, which the ray's lightness moves: the ray is nearest an item
+  // at the item's own lightness, not at its luminance.
+  const lightness = (c: ColorRgba): number => Oklch.fromRgba(shownTrue(c)).l;
+  interface Edge {
+    readonly s: number;
+    readonly before: ColorRgba;
+    readonly at: ColorRgba;
+  }
+  // The colour at the first `s` from `misses` toward `clears` where `holds`
+  // (false at `misses`, true at `clears`) holds, and the one just before it.
+  const edgeAlong = (
+    misses: number,
+    clears: number,
+    holds: (c: ColorRgba) => boolean,
+  ): Edge => {
+    for (let i = 0; i < EDGE_HALVINGS; i++) {
+      const s = (misses + clears) / 2;
+      if (holds(at(s))) clears = s;
+      else misses = s;
     }
-    return [along(end, near), along(end, far)];
+    return { s: clears, before: at(misses), at: at(clears) };
   };
-  const balances = (): ColorRgba[] => {
-    const rising = [...cells].sort(
-      (a, b) => relativeLuminance(a) - relativeLuminance(b),
-    );
-    // [LAW:no-defensive-null-guards] Each cell after the first has one below it.
-    return rising
-      .slice(1)
-      .flatMap((lighter, i) => aroundBalance(lighter, rising[i]!));
+  // Where the axis crosses `theta` on `measure`, which rises along it; an end
+  // of the axis where `theta` lies beyond it (both ends are twelfths, offered
+  // already).
+  const crossing = (measure: (c: ColorRgba) => number, theta: number): Edge => {
+    const reaches = (c: ColorRgba): boolean => measure(c) >= theta;
+    if (reaches(at(-1))) return { s: -1, before: at(-1), at: at(-1) };
+    if (!reaches(at(1))) return { s: 1, before: at(1), at: at(1) };
+    return edgeAlong(-1, 1, reaches);
   };
-  // The least step that clears; where none does, the candidate standing
-  // furthest off its nearest cell, the balances between cells among them: in
-  // truecolor the furthest any colour stands is an end of the axis, which is a
-  // step, or a balance, which clears exactly where two cells leave room
-  // between them. It is measured as the terminal draws it, since where nothing
-  // clears it is what the terminal shows: a balance sits between two cells,
-  // and at 256 colours or ansi it rounds onto one of them where an end of the
-  // axis does not.
-  const chosen =
-    candidates.find(clears) ??
-    [...candidates, ...balances()].reduce((a, b) =>
+  interface Offer {
+    readonly s: number;
+    readonly colour: ColorRgba;
+  }
+  const rising = cells.map(lum).sort((a, b) => a - b);
+  // [LAW:no-defensive-null-guards] Each cell after the first has one below it.
+  const balances = rising
+    .slice(1)
+    .map((l, i) => Math.sqrt((l + 0.05) * (rising[i]! + 0.05)) - 0.05);
+  const edges = (): Offer[] => [
+    // Standing STATE_FLOOR above a cell: the first colour that does. Below it:
+    // the last colour that does.
+    ...rising.flatMap((l) => {
+      const above = crossing(lum, STATE_FLOOR * (l + 0.05) - 0.05);
+      const below = crossing(lum, (l + 0.05) / STATE_FLOOR - 0.05);
+      return [
+        { s: above.s, colour: above.at },
+        { s: below.s, colour: below.before },
+      ];
+    }),
+    // Both colours either side of a balance: the axis is drawn in 8-bit steps
+    // that can be wider than half the window it sits in.
+    ...balances.flatMap((theta) => {
+      const { s, before, at: after } = crossing(lum, theta);
+      return [
+        { s, colour: before },
+        { s, colour: after },
+      ];
+    }),
+    ...told.flatMap((item) => {
+      const toldFromItem = (c: ColorRgba): boolean =>
+        deltaE(shownTrue(c), item) >= SEAM_MIN_DELTA_E;
+      // The axis's nearest point to the item. Passing it at a seam's distance,
+      // that point is the stretch's one edge; else the stretch is stepped out
+      // of toward each end that is told from the item at all.
+      const near = crossing(lightness, lightness(item));
+      if (toldFromItem(near.at)) return [{ s: near.s, colour: near.at }];
+      return [
+        ...(toldFromItem(at(1)) ? [edgeAlong(near.s, 1, toldFromItem)] : []),
+        ...(toldFromItem(at(-1)) ? [edgeAlong(near.s, -1, toldFromItem)] : []),
+      ].map(({ s, at: out }) => ({ s, colour: out }));
+    }),
+  ];
+  // Nearest the hue first, as the twelfths are, each colour once.
+  const fine = (): ColorRgba[] => {
+    const offered = new Set(candidates.map((c) => c.hex));
+    const colours: ColorRgba[] = [];
+    for (const { colour } of edges().sort(
+      (a, b) => Math.abs(a.s) - Math.abs(b.s),
+    )) {
+      if (!offered.has(colour.hex)) {
+        offered.add(colour.hex);
+        colours.push(colour);
+      }
+    }
+    return colours;
+  };
+  // The least step that clears; where none does, the least boundary colour
+  // along either ray that does; where none at all does, the colour standing
+  // furthest off its nearest cell — an end of the axis, or the balance between
+  // two cells adjacent in luminance, which clears exactly where the two leave
+  // room between them. It is measured as the terminal draws it, since where
+  // nothing clears it is what the terminal shows: a balance sits between two
+  // cells, and at 256 colours or ansi it rounds onto one of them where an end
+  // of the axis does not.
+  const furthestOf = (offered: readonly ColorRgba[]): ColorRgba =>
+    offered.find(clears) ??
+    [...candidates, ...offered].reduce((a, b) =>
       standsAsDrawn(b) > standsAsDrawn(a) ? b : a,
     );
+  const chosen = candidates.find(clears) ?? furthestOf(fine());
   // [LAW:dataflow-not-control-flow] One path whichever was chosen: the depth
   // replaces it by the nearest colour it draws that clears every cell as
   // drawn, where one does, and the shortfall is measured on the pair the
@@ -1615,10 +1692,14 @@ function planeFloors(
   const plane = unroundedPlane(depth);
   const keptApart = (floor: number, other: ColorRgba): number =>
     deltaE(shownTrue(plane), shownTrue(other)) >= floor ? floor : 0;
-  const keptUnder =
-    contrastRatio(shownTrue(plane), shownTrue(nested.anchor)) >= STATE_FLOOR
-      ? STATE_FLOOR
-      : 0;
+  // [LAW:one-source-of-truth] Whether the nested trigger clears the plane it
+  // sits on is its own search's word: it was searched against this plane as
+  // the depth rounds it, and `short` says whether what the depth draws for it
+  // clears. The drawn plane keeps that exactly where the nested band reports
+  // it kept — measured on the unrounded pair instead, a plane repaired for
+  // another floor left a nested trigger it had cleared short of it, unreported
+  // (88 bands at ansi under the `none` style alone).
+  const keptUnder = nested.short === null ? STATE_FLOOR : 0;
   const apart =
     (other: ColorRgba, floor: number): PlaneFloor =>
     (candidate, drawn) =>
