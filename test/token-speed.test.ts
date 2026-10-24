@@ -13,12 +13,7 @@
 
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
-import {
-  mkdtempSync,
-  writeFileSync,
-  rmSync,
-  utimesSync,
-} from "node:fs";
+import { mkdtempSync, writeFileSync, rmSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -46,6 +41,14 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
 import { instantOf } from "../src/utils/instant";
+import {
+  absentOwners,
+  fakeContext,
+  fakeGit,
+  fakeMetrics,
+  fakeTmux,
+  fakeUsage,
+} from "./helpers/payload-owners";
 
 // ─── projectTokensPerSecond (pure) ───────────────────────────────────────────
 
@@ -73,11 +76,7 @@ describe("projectTokensPerSecond (pure)", () => {
 
 // ─── SessionUsageStore.observeSpeed (the prior-sample owner) ──────────────────
 
-function usageLine(
-  tag: string,
-  input: number,
-  output: number,
-): string {
+function usageLine(tag: string, input: number, output: number): string {
   return (
     JSON.stringify({
       timestamp: new Date().toISOString(),
@@ -110,7 +109,11 @@ describe("SessionUsageStore.observeSpeed — prior-sample retention", () => {
       if (first.kind !== "ok") return;
       expect(first.value.prev).toBeUndefined();
       // input folds the cache lanes (here zero) onto raw input; total = in + out.
-      expect(first.value.cur).toMatchObject({ input: 10, output: 5, total: 15 });
+      expect(first.value.cur).toMatchObject({
+        input: 10,
+        output: 5,
+        total: 15,
+      });
 
       // Transcript grows by one more turn; bump mtime so the store re-parses.
       writeFileSync(t, usageLine("a", 10, 5) + usageLine("b", 10, 5));
@@ -118,8 +121,16 @@ describe("SessionUsageStore.observeSpeed — prior-sample retention", () => {
       const second = await store.observeSpeed("S", t, 2_000);
       expect(second.kind).toBe("ok");
       if (second.kind !== "ok") return;
-      expect(second.value.prev).toMatchObject({ input: 10, output: 5, atMs: 1_000 });
-      expect(second.value.cur).toMatchObject({ input: 20, output: 10, atMs: 2_000 });
+      expect(second.value.prev).toMatchObject({
+        input: 10,
+        output: 5,
+        atMs: 1_000,
+      });
+      expect(second.value.cur).toMatchObject({
+        input: 20,
+        output: 10,
+        atMs: 2_000,
+      });
       // Δoutput = 5 over Δt = 1s ⇒ 5 tok/s when projected at the boundary.
       const rate = projectTokensPerSecond(
         second.value.prev!.output,
@@ -237,19 +248,20 @@ function depsWith(
   overrides: Partial<RenderPayloadDeps> = {},
 ): RenderPayloadDeps {
   return {
-    gitProvider: { getGitInfo: async () => ABSENT },
-    usageStore: {
-      getUsageInfo: async () => ok({ session: { cost: 1, tokens: 1500 } }),
-      getTodayInfo: async () => ABSENT,
-      observeSpeed: async () => {
+    ...absentOwners(),
+    gitProvider: fakeGit(async () => ABSENT),
+    usageStore: fakeUsage({
+      usage: async () => ok({ session: { cost: 1, tokens: 1500 } }),
+      today: async () => ABSENT,
+      speed: async () => {
         const prev = { input: 1000, output: 1000, total: 2000, atMs: 0 };
         const cur = { input: 1000, output: 1500, total: 2500, atMs: 1000 };
         return ok({ prev, cur, samples: [prev, cur] });
       },
-    },
-    contextProvider: { getContextInfo: async () => ABSENT },
-    metricsProvider: { getMetricsInfo: async () => ABSENT },
-    tmuxService: { getSessionName: async () => ABSENT },
+    }),
+    contextProvider: fakeContext(async () => ABSENT),
+    metricsProvider: fakeMetrics(async () => ABSENT),
+    tmuxService: fakeTmux(async () => ABSENT),
     log: () => {},
     history: () => EMPTY_HISTORY_DEPTH,
     navigation: () => 0,
@@ -308,14 +320,14 @@ describe("buildRenderPayload — speed lane", () => {
       hook(),
       instantOf(new Date(1000)),
       depsWith({
-        usageStore: {
-          getUsageInfo: async () => ok({ session: { cost: 1, tokens: 1500 } }),
-          getTodayInfo: async () => ABSENT,
-          observeSpeed: async () => {
+        usageStore: fakeUsage({
+          usage: async () => ok({ session: { cost: 1, tokens: 1500 } }),
+          today: async () => ABSENT,
+          speed: async () => {
             const cur = { input: 10, output: 5, total: 15, atMs: 1000 };
             return ok({ cur, samples: [cur] });
           },
-        } as unknown as RenderPayloadDeps["usageStore"],
+        }) as unknown as RenderPayloadDeps["usageStore"],
       }),
       undefined,
       SPEED_PATHS,
@@ -331,10 +343,10 @@ describe("buildRenderPayload — speed lane", () => {
       hook(),
       instantOf(new Date(1000)),
       depsWith({
-        usageStore: {
-          getUsageInfo: async () => ok({ session: { cost: 1, tokens: 1500 } }),
-          getTodayInfo: async () => ABSENT,
-          observeSpeed: async () => {
+        usageStore: fakeUsage({
+          usage: async () => ok({ session: { cost: 1, tokens: 1500 } }),
+          today: async () => ABSENT,
+          speed: async () => {
             // total/atMs: 0@0, 100@1s (+100/s), 100@2s (idle ⇒ 0), 400@3s (+300/s).
             const samples = [
               { input: 0, output: 0, total: 0, atMs: 0 },
@@ -348,7 +360,7 @@ describe("buildRenderPayload — speed lane", () => {
               samples,
             });
           },
-        } as unknown as RenderPayloadDeps["usageStore"],
+        }) as unknown as RenderPayloadDeps["usageStore"],
       }),
       undefined,
       new Set(["speed.history"]),
@@ -364,10 +376,10 @@ describe("buildRenderPayload — speed lane", () => {
       hook(),
       instantOf(new Date(1000)),
       depsWith({
-        usageStore: {
-          getUsageInfo: async () => ok({ session: { cost: 1, tokens: 1500 } }),
-          getTodayInfo: async () => ABSENT,
-          observeSpeed: async () => {
+        usageStore: fakeUsage({
+          usage: async () => ok({ session: { cost: 1, tokens: 1500 } }),
+          today: async () => ABSENT,
+          speed: async () => {
             // total/atMs: 0@0, 100@1s (+100/s, in-window), 400@30s (29s gap ⇒
             // stale, out-of-window), 410@30.005s (5ms ⇒ rapid, out-of-window).
             const samples = [
@@ -378,7 +390,7 @@ describe("buildRenderPayload — speed lane", () => {
             ];
             return ok({ prev: samples[2], cur: samples[3]!, samples });
           },
-        } as unknown as RenderPayloadDeps["usageStore"],
+        }) as unknown as RenderPayloadDeps["usageStore"],
       }),
       undefined,
       new Set(["speed.history"]),
@@ -396,14 +408,14 @@ describe("buildRenderPayload — speed lane", () => {
       hook(),
       instantOf(new Date(1000)),
       depsWith({
-        usageStore: {
-          getUsageInfo: async () => ok({ session: { cost: 1, tokens: 1500 } }),
-          getTodayInfo: async () => ABSENT,
-          observeSpeed: async () => {
+        usageStore: fakeUsage({
+          usage: async () => ok({ session: { cost: 1, tokens: 1500 } }),
+          today: async () => ABSENT,
+          speed: async () => {
             const cur = { input: 10, output: 5, total: 15, atMs: 1000 };
             return ok({ cur, samples: [cur] });
           },
-        } as unknown as RenderPayloadDeps["usageStore"],
+        }) as unknown as RenderPayloadDeps["usageStore"],
       }),
       undefined,
       new Set(["speed.history"]),
@@ -449,11 +461,21 @@ function renderSpeed(payload: Record<string, unknown>): string {
   const registry = new SourceRegistry(store, "", undefined, new SessionState());
   try {
     const compiled = registerDslConfig(cfg, registry, { cwd: "/tmp" });
-    return renderDsl(cfg, compiled, store, registry, payload, instantOf(new Date()), {
-      endcaps: "powerline",
-      colorCompatibility: "none", wrap: true, padding: 0,
-      width: Number.POSITIVE_INFINITY,
-    });
+    return renderDsl(
+      cfg,
+      compiled,
+      store,
+      registry,
+      payload,
+      instantOf(new Date()),
+      {
+        endcaps: "powerline",
+        colorCompatibility: "none",
+        wrap: true,
+        padding: 0,
+        width: Number.POSITIVE_INFINITY,
+      },
+    );
   } finally {
     registry.dispose();
   }

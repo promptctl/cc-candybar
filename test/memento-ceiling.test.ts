@@ -82,7 +82,11 @@ function runtime(memento: Record<string, unknown> | undefined) {
   sessionState.set(
     "s1",
     SESSION_RENDER_ORIGIN_KEY,
-    encodeRenderOrigin({ projectDir: "/tmp/proj", cwd: "/tmp/proj/sub", configFile: null }),
+    encodeRenderOrigin({
+      projectDir: "/tmp/proj",
+      cwd: "/tmp/proj/sub",
+      configFile: null,
+    }),
   );
   sessionState.set("s1", SESSION_CLIENT_HINTS_KEY, JSON.stringify(HINTS));
   const store = new VariableStore();
@@ -94,19 +98,32 @@ function runtime(memento: Record<string, unknown> | undefined) {
     ...(memento !== undefined && { memento }),
   };
   const raw = (): string =>
-    renderDsl(config, compiled, store, registry, payload, instantOf(new Date()), OPTS);
+    renderDsl(
+      config,
+      compiled,
+      store,
+      registry,
+      payload,
+      instantOf(new Date()),
+      OPTS,
+    );
   const moves: { scope: CeilingScope; move: CeilingMove }[] = [];
   const logged: string[] = [];
   const ctx = {
     ...testVerbContext(sessionState, undefined, config),
     dlog: (_level: string, msg: string) => logged.push(msg),
-    memento: { move: (scope: CeilingScope, move: CeilingMove) => moves.push({ scope, move }) },
+    memento: {
+      move: (scope: CeilingScope, move: CeilingMove) =>
+        moves.push({ scope, move }),
+    },
   };
   return { raw, text: () => stripAnsi(raw()), ctx, moves, logged };
 }
 
 const ceilingUrls = (raw: string): string[] =>
-  linkUrls(raw).filter((u) => effectsOf(u).some((e) => e.verb === VERB_CEILING));
+  linkUrls(raw).filter((u) =>
+    effectsOf(u).some((e) => e.verb === VERB_CEILING),
+  );
 
 describe("the ceiling segment", () => {
   test("memento absent: no cell", () => {
@@ -129,10 +146,11 @@ describe("the ceiling segment", () => {
   test("a session layer adds ↺, which clears it", () => {
     const rt = runtime({ ceiling: 450_000, off: false, session: "450000" });
     expect(rt.text()).toContain("⌈ 450.0K − + ∞ ↺");
-    expect(ceilingUrls(rt.raw()).map((u) => effectsOf(u)[0]!.args).at(-1)).toEqual([
-      "s1",
-      "clear",
-    ]);
+    expect(
+      ceilingUrls(rt.raw())
+        .map((u) => effectsOf(u)[0]!.args)
+        .at(-1),
+    ).toEqual(["s1", "clear"]);
   });
 
   test("off: says so, and offers only ↺ when this session turned it off", () => {
@@ -142,10 +160,16 @@ describe("the ceiling segment", () => {
   });
 
   test("memento's refusal is shown in the cell, with the clear that can repair it", () => {
-    const rt = runtime({ error: "memento config: /x/memento.conf line 2 sets 'ceilng'" });
-    expect(rt.text()).toContain("⌈ ⚠ memento config: /x/memento.conf line 2 sets 'ceilng' ↺");
+    const rt = runtime({
+      error: "memento config: /x/memento.conf line 2 sets 'ceilng'",
+    });
+    expect(rt.text()).toContain(
+      "⌈ ⚠ memento config: /x/memento.conf line 2 sets 'ceilng' ↺",
+    );
     const urls = ceilingUrls(rt.raw());
-    expect(urls.map((u) => effectsOf(u)[0]!.args.slice(1))).toEqual([["clear"]]);
+    expect(urls.map((u) => effectsOf(u)[0]!.args.slice(1))).toEqual([
+      ["clear"],
+    ]);
     clickUrl(urls[0]!, rt.ctx);
     expect(rt.moves.map((m) => m.move)).toEqual([{ kind: "clear" }]);
   });
@@ -154,7 +178,9 @@ describe("the ceiling segment", () => {
     const rt = runtime({ ceiling: 350_000, off: false, session: "" });
     const plus = ceilingUrls(rt.raw())[1]!;
     clickUrl(plus, rt.ctx);
-    expect(rt.moves).toEqual([{ scope: SCOPE, move: { kind: "set", to: "+100_000" } }]);
+    expect(rt.moves).toEqual([
+      { scope: SCOPE, move: { kind: "set", to: "+100_000" } },
+    ]);
     // [LAW:nothing-unseen] The daemon log names the move, the session, and
     // the Claude Code directory whose memento it ran.
     expect(rt.logged).toContain(
@@ -186,9 +212,14 @@ function plugin(name: string, withFiles = true): string {
   const root = path.join(dir, name);
   if (withFiles) {
     fs.mkdirSync(path.join(root, "lib"), { recursive: true });
-    fs.mkdirSync(path.join(root, "skills", "ceiling", "bin"), { recursive: true });
+    fs.mkdirSync(path.join(root, "skills", "ceiling", "bin"), {
+      recursive: true,
+    });
     fs.writeFileSync(path.join(root, "lib", "ceiling_config.py"), "");
-    fs.writeFileSync(path.join(root, "skills", "ceiling", "bin", "ceiling"), "");
+    fs.writeFileSync(
+      path.join(root, "skills", "ceiling", "bin", "ceiling"),
+      "",
+    );
   }
   return root;
 }
@@ -204,7 +235,10 @@ describe("locateIn", () => {
     expect(locateIn(path.join(dir, "none.json"), "/p")).toEqual(ABSENT);
     const other = plugin("other");
     expect(
-      locateIn(registry({ "memento-dev@x": [{ scope: "user", installPath: other }] }), "/p"),
+      locateIn(
+        registry({ "memento-dev@x": [{ scope: "user", installPath: other }] }),
+        "/p",
+      ),
     ).toEqual(ABSENT);
   });
 
@@ -223,16 +257,23 @@ describe("locateIn", () => {
 
   test("a project install for another project only: absent", () => {
     const file = registry({
-      "memento@m": [{ scope: "local", installPath: plugin("p"), projectPath: "/other" }],
+      "memento@m": [
+        { scope: "local", installPath: plugin("p"), projectPath: "/other" },
+      ],
     });
     expect(locateIn(file, "/p")).toEqual(ABSENT);
   });
 
   test("an install without the ceiling files fails, naming what is missing", () => {
     const bare = plugin("old", false);
-    const out = locateIn(registry({ "memento@m": [{ scope: "user", installPath: bare }] }), "/p");
+    const out = locateIn(
+      registry({ "memento@m": [{ scope: "user", installPath: bare }] }),
+      "/p",
+    );
     expect(out.kind).toBe("failed");
-    expect((out as { reason: string }).reason).toContain("lib/ceiling_config.py");
+    expect((out as { reason: string }).reason).toContain(
+      "lib/ceiling_config.py",
+    );
   });
 
   test("disabled in Claude Code's settings: absent; the project-local layer wins", () => {
@@ -242,12 +283,17 @@ describe("locateIn", () => {
     fs.mkdirSync(path.dirname(file));
     fs.writeFileSync(
       file,
-      JSON.stringify({ plugins: { "memento@memento": [{ scope: "user", installPath: user }] } }),
+      JSON.stringify({
+        plugins: { "memento@memento": [{ scope: "user", installPath: user }] },
+      }),
     );
     const project = path.join(dir, "proj");
     fs.mkdirSync(path.join(project, ".claude"), { recursive: true });
     const settings = (f: string, enabled: boolean) =>
-      fs.writeFileSync(f, JSON.stringify({ enabledPlugins: { "memento@memento": enabled } }));
+      fs.writeFileSync(
+        f,
+        JSON.stringify({ enabledPlugins: { "memento@memento": enabled } }),
+      );
     settings(path.join(dir, "settings.json"), false);
     expect(locateIn(file, project)).toEqual(ABSENT);
     settings(path.join(project, ".claude", "settings.local.json"), true);
@@ -284,7 +330,9 @@ describe("parseReading / projectMemento", () => {
 
   test("anything else fails loudly", () => {
     expect(parseReading("Traceback").kind).toBe("failed");
-    expect(parseReading('{"ceiling": -1, "session": null}').kind).toBe("failed");
+    expect(parseReading('{"ceiling": -1, "session": null}').kind).toBe(
+      "failed",
+    );
     expect(parseReading('{"ceiling": 1, "session": 3}').kind).toBe("failed");
   });
 
@@ -294,7 +342,9 @@ describe("parseReading / projectMemento", () => {
     // One bar row: a traceback projects the line naming the fault.
     expect(
       projectMemento(
-        failed('Traceback (most recent call last):\n  File "<string>", line 4\nImportError: cannot import name \'ceiling_in\'\n'),
+        failed(
+          "Traceback (most recent call last):\n  File \"<string>\", line 4\nImportError: cannot import name 'ceiling_in'\n",
+        ),
       ),
     ).toEqual({ error: "ImportError: cannot import name 'ceiling_in'" });
     expect(projectMemento(ok({ ceiling: "off", session: null }))).toEqual({
@@ -407,6 +457,23 @@ describe("MementoProvider", () => {
     expect(f.reads).toHaveLength(2);
   });
 
+  // brandon-unfiled-3248.8ro6: a frame drawn between a move and memento's
+  // answer to it draws the ceiling as not answered yet, never the reading the
+  // move made stale.
+  test("a draw after a move reads the ceiling as not answered yet until memento answers", async () => {
+    const f = fakeEdge([A, B]);
+    const p = providerOf(f.edge);
+    await p.getCeiling(holds, SCOPE);
+    expect(p.ceiling(holds, SCOPE)).toEqual(A);
+    f.holdReads();
+    p.move(SCOPE, { kind: "clear" });
+    expect(p.ceiling(holds, SCOPE).kind).toBe("pending");
+    f.release();
+    await jest.advanceTimersByTimeAsync(0);
+    expect(p.ceiling(holds, SCOPE)).toEqual(B);
+    expect(f.reads).toHaveLength(2);
+  });
+
   // brandon-client-hints-7ua: two sessions of one project under different
   // Claude Code directories are two scopes — each is located in its own
   // registry and keeps its own reading.
@@ -435,11 +502,17 @@ describe("MementoProvider", () => {
     fs.mkdirSync(path.join(withMemento, "plugins"), { recursive: true });
     fs.writeFileSync(
       path.join(withMemento, "plugins", "installed_plugins.json"),
-      JSON.stringify({ plugins: { "memento@memento": [{ scope: "user", installPath: user }] } }),
+      JSON.stringify({
+        plugins: { "memento@memento": [{ scope: "user", installPath: user }] },
+      }),
     );
     const edge = productionMementoEdge();
-    expect(edge.locate({ ...SCOPE, claudeConfigDir: withMemento })).toEqual(ok(user));
-    expect(edge.locate({ ...SCOPE, claudeConfigDir: path.join(dir, "claude-b") })).toEqual(ABSENT);
+    expect(edge.locate({ ...SCOPE, claudeConfigDir: withMemento })).toEqual(
+      ok(user),
+    );
+    expect(
+      edge.locate({ ...SCOPE, claudeConfigDir: path.join(dir, "claude-b") }),
+    ).toEqual(ABSENT);
   });
 
   test("memento not installed: the reading is absent and a move refuses", async () => {

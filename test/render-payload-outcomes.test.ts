@@ -14,17 +14,25 @@ import { join } from "node:path";
 import { buildRenderPayload, prFactOf } from "../src/daemon/render-payload";
 import { claudeConfigDir } from "../src/claude-settings";
 import type { ClientHints } from "../src/daemon/protocol";
-import type {
-  RenderPayloadDeps,
-} from "../src/daemon/render-payload";
+import type { RenderPayloadDeps } from "../src/daemon/render-payload";
 import { type EffectiveGlobals } from "../src/config/effective-globals";
 import { globalsFor } from "./helpers/selection";
 import { VALUED_FIELDS } from "../src/config/globals-fields";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import type { GitInfo, GitInfoOptions, PrState } from "../src/segments/git";
-import { ABSENT, failed, ok, type Outcome } from "../src/utils/outcome";
+import { ABSENT, PENDING, failed, ok, type Outcome } from "../src/utils/outcome";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
 import { instantOf } from "../src/utils/instant";
+import {
+  absentOwners,
+  fakeAutoCompact,
+  fakeContext,
+  fakeGit,
+  fakeMemento,
+  fakeMetrics,
+  fakeTmux,
+  fakeUsage,
+} from "./helpers/payload-owners";
 
 type LogEntry = { level: string; msg: string };
 
@@ -34,14 +42,15 @@ function depsWith(
   overrides: Record<string, unknown> = {},
 ): RenderPayloadDeps {
   return {
-    gitProvider: { getGitInfo: async () => gitOutcome },
-    usageStore: {
-      getUsageInfo: async () => ABSENT,
-      getTodayInfo: async () => ABSENT,
-    },
-    contextProvider: { getContextInfo: async () => ABSENT },
-    metricsProvider: { getMetricsInfo: async () => ABSENT },
-    tmuxService: { getSessionName: async () => ABSENT },
+    ...absentOwners(),
+    gitProvider: fakeGit(async () => gitOutcome),
+    usageStore: fakeUsage({
+      usage: async () => ABSENT,
+      today: async () => ABSENT,
+    }),
+    contextProvider: fakeContext(async () => ABSENT),
+    metricsProvider: fakeMetrics(async () => ABSENT),
+    tmuxService: fakeTmux(async () => ABSENT),
     log: (level: string, msg: string) => logs.push({ level, msg }),
     history: () => EMPTY_HISTORY_DEPTH,
     navigation: () => 0,
@@ -86,7 +95,10 @@ describe("buildRenderPayload — git outcome lane", () => {
   // logged it would repeat it on every render.
   test("whole-fetch failure: no git key, and the payload logs nothing", async () => {
     const logs: LogEntry[] = [];
-    const deps = depsWith(failed("git status --porcelain=v2 --branch: timeout"), logs);
+    const deps = depsWith(
+      failed("git status --porcelain=v2 --branch: timeout"),
+      logs,
+    );
 
     const payload = await buildRenderPayload(
       hookData("/no/such/transcript.jsonl"),
@@ -209,13 +221,13 @@ describe("buildRenderPayload — today lane", () => {
       hookData("/no/such/transcript.jsonl"),
       at,
       depsWith(ABSENT, [], {
-        usageStore: {
-          getUsageInfo: async () => ABSENT,
-          getTodayInfo: async (_hook: unknown, _dir: unknown, when: unknown) => {
+        usageStore: fakeUsage({
+          usage: async () => ABSENT,
+          today: async (_hook: unknown, _dir: unknown, when: unknown) => {
             asked.push(when);
             return ABSENT;
           },
-        },
+        }),
       }),
       undefined,
       new Set(["today.cost"]),
@@ -302,12 +314,10 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
   test("failed lanes each log one warn and project as missing fields", async () => {
     const logs: LogEntry[] = [];
     const deps = depsWith(ABSENT, logs, {
-      contextProvider: {
-        getContextInfo: async () => failed("context transcript: EACCES"),
-      },
-      metricsProvider: {
-        getMetricsInfo: async () => failed("metrics (s): boom"),
-      },
+      contextProvider: fakeContext(async () =>
+        failed("context transcript: EACCES"),
+      ),
+      metricsProvider: fakeMetrics(async () => failed("metrics (s): boom")),
     });
 
     const payload = await buildRenderPayload(
@@ -338,9 +348,9 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
   test("ok lanes project values; absent lanes are missing with nothing logged", async () => {
     const logs: LogEntry[] = [];
     const deps = depsWith(ABSENT, logs, {
-      tmuxService: { getSessionName: async () => ok("main-session") },
-      usageStore: {
-        getUsageInfo: async () =>
+      tmuxService: fakeTmux(async () => ok("main-session")),
+      usageStore: fakeUsage({
+        usage: async () =>
           ok({
             session: {
               cost: 1.25,
@@ -350,8 +360,8 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
               tokenBreakdown: null,
             },
           }),
-        getTodayInfo: async () => ABSENT,
-      },
+        today: async () => ABSENT,
+      }),
     });
 
     const payload = await buildRenderPayload(
@@ -374,12 +384,10 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
   test("a lane stub that THROWS is totalized to failed and logged with its lane name", async () => {
     const logs: LogEntry[] = [];
     const deps = depsWith(ABSENT, logs, {
-      contextProvider: {
-        getContextInfo: async () => {
-          throw new Error("stub bug");
-        },
-      },
-      tmuxService: { getSessionName: async () => failed("no server") },
+      contextProvider: fakeContext(async () => {
+        throw new Error("stub bug");
+      }),
+      tmuxService: fakeTmux(async () => failed("no server")),
     });
 
     const payload = await buildRenderPayload(
@@ -401,7 +409,9 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
     expect(payload.tmux).toEqual({ pane: "%7" });
     expect(logs.map((l) => l.level)).toEqual(["error", "warn"]);
     expect(logs[0]!.msg).toContain("context lane threw: Error: stub bug");
-    expect(logs[1]!.msg).toBe("provider fetch failed: context: Error: stub bug");
+    expect(logs[1]!.msg).toBe(
+      "provider fetch failed: context: Error: stub bug",
+    );
   });
 
   // brandon-tmux-tk7: the tmux family is the session's own client hint. With
@@ -414,12 +424,10 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
     const logs: LogEntry[] = [];
     let asked = 0;
     const deps = depsWith(ABSENT, logs, {
-      tmuxService: {
-        getSessionName: async () => {
-          asked++;
-          return ok("the-daemons-own-session");
-        },
-      },
+      tmuxService: fakeTmux(async () => {
+        asked++;
+        return ok("the-daemons-own-session");
+      }),
     });
 
     const payload = await buildRenderPayload(
@@ -441,12 +449,10 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
   test("the pane the client reported is the pane tmux is asked about", async () => {
     const asked: unknown[] = [];
     const deps = depsWith(ABSENT, [], {
-      tmuxService: {
-        getSessionName: async (_holds: unknown, hint: unknown) => {
-          asked.push(hint);
-          return ABSENT;
-        },
-      },
+      tmuxService: fakeTmux(async (_holds: unknown, hint: unknown) => {
+        asked.push(hint);
+        return ABSENT;
+      }),
     });
 
     await buildRenderPayload(
@@ -615,20 +621,26 @@ describe("buildRenderPayload — git PR projection", () => {
         status: "clean",
         prEarlier: state,
       });
-      expect(prFactOf(payload.git)).toBe(`earlier-${state}`);
+      expect(prFactOf(payload.git, true)).toBe(`earlier-${state}`);
       expect(logs).toEqual([]);
     },
   );
 
+  test("a render reading no PR has no PR fact, whatever git's state", () => {
+    expect(prFactOf(PENDING, false)).toBe("-");
+    expect(prFactOf(PENDING, true)).toBe("pending");
+  });
+
   test("a layout reading only git.prEarlier still asks the forge", async () => {
     const asked: GitInfoOptions[] = [];
     const deps = depsWith(ABSENT, [], {
-      gitProvider: {
-        getGitInfo: async (_holds: unknown, _dir: string, options: GitInfoOptions) => {
+      ...absentOwners(),
+      gitProvider: fakeGit(
+        async (_holds: unknown, _dir: string, options: GitInfoOptions) => {
           asked.push(options);
           return ABSENT;
         },
-      },
+      ),
     });
 
     await buildRenderPayload(
@@ -720,12 +732,10 @@ describe("buildRenderPayload — autocompact lane", () => {
   ) => {
     const asked: string[] = [];
     const deps = depsWith(ABSENT, logs, {
-      autoCompact: {
-        window: (settingsPath: string) => {
-          asked.push(settingsPath);
-          return read;
-        },
-      },
+      autoCompact: fakeAutoCompact((settingsPath: string) => {
+        asked.push(settingsPath);
+        return read;
+      }),
     });
     const payload = await buildRenderPayload(
       hookData("/no/such/transcript.jsonl"),
@@ -762,11 +772,10 @@ describe("buildRenderPayload — autocompact lane", () => {
   // are capped to the model's window, which only it knows.
   test("the cap comes from the context lane even when no template reads context", async () => {
     const deps = depsWith(ABSENT, [], {
-      autoCompact: { window: () => ok(800_000) },
-      contextProvider: {
-        getContextInfo: async () =>
-          ok({ totalTokens: 1, maxTokens: 200_000, contextLeftPercentage: 99 }),
-      },
+      autoCompact: fakeAutoCompact(() => ok(800_000)),
+      contextProvider: fakeContext(async () =>
+        ok({ totalTokens: 1, maxTokens: 200_000, contextLeftPercentage: 99 }),
+      ),
     });
     const payload = await buildRenderPayload(
       hookData("/no/such/transcript.jsonl"),
@@ -791,11 +800,9 @@ describe("buildRenderPayload — autocompact lane", () => {
   test("a provider that throws at once: failed in the payload, and logged", async () => {
     const logs: LogEntry[] = [];
     const deps = depsWith(ABSENT, logs, {
-      autoCompact: {
-        window: () => {
-          throw new Error("stub bug");
-        },
-      },
+      autoCompact: fakeAutoCompact(() => {
+        throw new Error("stub bug");
+      }),
     });
     const payload = await buildRenderPayload(
       hookData("/no/such/transcript.jsonl"),
@@ -817,7 +824,11 @@ describe("buildRenderPayload — autocompact lane", () => {
 
   test("a refused read: the reason in the payload, and no log of it from the render", async () => {
     const logs: LogEntry[] = [];
-    const { payload } = await run(failed("cannot read /c/settings.json: nope"), {}, logs);
+    const { payload } = await run(
+      failed("cannot read /c/settings.json: nope"),
+      {},
+      logs,
+    );
     expect(payload.autocompact).toEqual({
       error: "cannot read /c/settings.json: nope",
     });
@@ -833,19 +844,17 @@ describe("buildRenderPayload — the lanes that read a session's Claude Code", (
     const scopes: unknown[] = [];
     const seeded: unknown[] = [];
     const deps = depsWith(ABSENT, [], {
-      mementoProvider: {
-        getCeiling: async (_holds: unknown, scope: unknown) => {
-          scopes.push(scope);
-          return ABSENT;
-        },
-      },
-      usageStore: {
-        getUsageInfo: async () => ABSENT,
-        getTodayInfo: async (_hook: unknown, claudeConfigDir: unknown) => {
+      mementoProvider: fakeMemento(async (_holds: unknown, scope: unknown) => {
+        scopes.push(scope);
+        return ABSENT;
+      }),
+      usageStore: fakeUsage({
+        usage: async () => ABSENT,
+        today: async (_hook: unknown, claudeConfigDir: unknown) => {
           seeded.push(claudeConfigDir);
           return ABSENT;
         },
-      },
+      }),
     });
     await buildRenderPayload(
       hookData("/no/such/transcript.jsonl"),
@@ -878,12 +887,18 @@ describe("buildRenderPayload — the lanes that read a session's Claude Code", (
   test("a client that reports neither: the default directory, and the env left to the daemon's", async () => {
     const { scopes } = await run(["memento.ceiling"], NO_HINTS);
     expect(scopes).toEqual([
-      { ...ANCHOR, claudeConfigDir: claudeConfigDir(undefined), env: undefined },
+      {
+        ...ANCHOR,
+        claudeConfigDir: claudeConfigDir(undefined),
+        env: undefined,
+      },
     ]);
   });
 
   test("today seeds the client's directory", async () => {
-    const zai = await run(["today.cost"], { claudeConfigDir: "/home/u/.claude.zai" });
+    const zai = await run(["today.cost"], {
+      claudeConfigDir: "/home/u/.claude.zai",
+    });
     expect(zai.seeded).toEqual(["/home/u/.claude.zai"]);
     expect((await run(["today.cost"], NO_HINTS)).seeded).toEqual([undefined]);
   });
@@ -920,7 +935,9 @@ describe("buildRenderPayload — config file and resume command", () => {
     expect(
       (await build(null, { ...NO_HINTS, claudeConfigDir: "/c/.claude" }))
         .resumeCommand,
-    ).toBe("cd /tmp && CLAUDE_CONFIG_DIR=/c/.claude claude --resume test-session");
+    ).toBe(
+      "cd /tmp && CLAUDE_CONFIG_DIR=/c/.claude claude --resume test-session",
+    );
   });
 
   test("a hook with no added_dirs resumes with none rather than failing", async () => {
@@ -935,6 +952,8 @@ describe("buildRenderPayload — config file and resume command", () => {
       NO_HINTS,
       NO_CONFIG_FILE,
     );
-    expect(payload.resumeCommand).toBe("cd /tmp && claude --resume test-session");
+    expect(payload.resumeCommand).toBe(
+      "cd /tmp && claude --resume test-session",
+    );
   });
 });

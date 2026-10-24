@@ -19,9 +19,11 @@ import { TrailingEdge } from "../../utils/trailing-edge";
 import { Period, periodOf, type Every } from "../../utils/period";
 import {
   answerPending,
+  currentOf,
   outcomeOf,
   pending,
   settle,
+  type Current,
   type Readable,
 } from "../../utils/reading";
 import type { Holds, Release } from "../../utils/holds";
@@ -183,6 +185,10 @@ function inUse(state: RepoState): boolean {
 interface ResolutionCacheEntry {
   readonly dir: Promise<Outcome<string>>;
   readonly computedAt: number;
+  // What `dir` answered, once it has — or, until then, what the resolution it
+  // replaced answered: a draw reads which repo a directory is without
+  // awaiting.
+  known: Outcome<string> | undefined;
 }
 
 // `held` counts the repos a home holds — the ones the period visits.
@@ -366,6 +372,13 @@ export class GitDataProvider {
     workingDir: string,
     projectDir?: string,
   ): Promise<Outcome<string>> {
+    return this.resolution(workingDir, projectDir).dir;
+  }
+
+  private resolution(
+    workingDir: string,
+    projectDir: string | undefined,
+  ): ResolutionCacheEntry {
     const key = `${workingDir}|${projectDir ?? ""}`;
     const now = Date.now();
 
@@ -374,50 +387,72 @@ export class GitDataProvider {
       // LRU touch: the cwd being rendered every tick must survive eviction.
       this.resolutions.delete(key);
       this.resolutions.set(key, existing);
-      return existing.dir;
+      return existing;
     }
 
-    const dir = this.inner.resolveEffectiveGitDir(workingDir, projectDir);
-    this.resolutions.set(key, { dir, computedAt: now });
-    // [LAW:no-silent-failure] A failed answer is logged once, by the resolution
-    // that made it: it is believed for the window, so a read of it never logs
-    // it again. A REJECTION is a bug in the resolver, not an answer worth
-    // pinning for a window — resolveEffectiveGitDir returns outcomes by
-    // construction, so drop the entry and let the next caller re-ask. The
-    // rejection still reaches whoever awaited `dir`; this handler only evicts.
-    void dir.then(
-      (outcome) => {
-        if (outcome.kind === "failed") {
-          this.logger(
-            "warn",
-            `git resolve failed (${workingDir}): ${outcome.reason}`,
-          );
-        }
-      },
-      () => {
-        if (this.resolutions.get(key)?.dir === dir) {
-          this.resolutions.delete(key);
-        }
-      },
-    );
+    // [LAW:no-silent-failure] A THROW is a bug in the resolver, which returns
+    // outcomes by construction: it is answered as the failure it is, logged
+    // below and believed for the window like any other — so a reader waiting
+    // on the resolution is answered, never sent to ask again. The executor
+    // makes a throw before the resolver's promise a rejection too.
+    const dir = new Promise<Outcome<string>>((resolve) =>
+      resolve(this.inner.resolveEffectiveGitDir(workingDir, projectDir)),
+    ).catch((e: unknown) => failed(`resolver threw: ${String(e)}`));
+    // [LAW:one-source-of-truth] A resolution read again keeps the answer it
+    // replaces until its own lands: a draw takes the stored value, so the
+    // window ending is never a moment the repo is not known.
+    const entry: ResolutionCacheEntry = {
+      dir,
+      computedAt: now,
+      known: existing?.known,
+    };
+    this.resolutions.set(key, entry);
+    // A failed answer is logged once, by the resolution that made it: it is
+    // believed for the window, so a read of it never logs it again.
+    void dir.then((outcome) => {
+      entry.known = outcome;
+      if (outcome.kind === "failed") {
+        this.logger(
+          "warn",
+          `git resolve failed (${workingDir}): ${outcome.reason}`,
+        );
+      }
+    });
     while (this.resolutions.size > this.maxRepos) {
       const oldest = this.resolutions.keys().next().value;
       if (oldest === undefined) break;
       this.resolutions.delete(oldest);
     }
-    return dir;
+    return entry;
   }
 
-  // [LAW:single-enforcer] The one read. `holds` is the home reading: it holds
-  // the repo from this read until the home releases its holds (idle, or
-  // disposed), which is what keeps the repo on the period. A warm repo answers
-  // from its stored value at once; only a value never read is awaited, and a
-  // PR is composed from its own source.
+  // [LAW:single-enforcer] The one read: the repo's value as it stands, never
+  // awaited, so a draw takes it in the turn it draws. `holds` is the home
+  // reading: it holds the repo from this read until the home releases its
+  // holds (idle, or disposed), which is what keeps the repo on the period. A
+  // value never read is pending, its first pass queued; a PR is composed from
+  // its own source, pending on its own while its key is not answered, so the
+  // rest of the value draws as it stands.
   //
   // [LAW:no-silent-failure] Git logs its own failures — a refresh's by the
   // refresh, a resolution's by the resolution — so its caller logs none. A
   // read that THROWS is a bug none of those saw, logged here where it
-  // surfaces; the promise never rejects.
+  // surfaces, and answered as failed.
+  current(
+    holds: Holds,
+    workingDir: string,
+    options: GitInfoOptions = {},
+    projectDir?: string,
+  ): Current<GitInfo> {
+    const look = this.look(holds, workingDir, options, projectDir);
+    return look.kind === "resolving"
+      ? { kind: "pending", landed: look.dir.then(() => {}) }
+      : look.value;
+  }
+
+  // The read's answer, PR included, waited for while either is not answered
+  // yet: one ask, so one hold, then the sources' own landings. The promise
+  // never rejects.
   getGitInfo(
     holds: Holds,
     workingDir: string,
@@ -438,9 +473,6 @@ export class GitDataProvider {
     options: GitInfoOptions,
     projectDir: string | undefined,
   ): Promise<Outcome<GitInfo>> {
-    // [LAW:one-source-of-truth] The effective gitDir is the state + watch
-    // identity. An absent (not a repo) or failed resolution passes through as
-    // the read's outcome.
     const resolved = await this.resolveEffectiveGitDir(workingDir, projectDir);
     if (resolved.kind !== "ok") return resolved;
     const state = this.repo(resolved.value);
@@ -462,6 +494,47 @@ export class GitDataProvider {
     // same pass.
     const info = await outcomeOf(value);
     return info.kind === "ok" ? ok({ ...info.value, pullRequest }) : info;
+  }
+
+  // Which repo the directory is — still resolving, or resolved and its value
+  // as it stands.
+  private look(
+    holds: Holds,
+    workingDir: string,
+    options: GitInfoOptions,
+    projectDir: string | undefined,
+  ):
+    | { readonly kind: "resolving"; readonly dir: Promise<Outcome<string>> }
+    | { readonly kind: "resolved"; readonly value: Current<GitInfo> } {
+    const resolved = (value: Current<GitInfo>) =>
+      ({ kind: "resolved", value }) as const;
+    try {
+      // [LAW:one-source-of-truth] The effective gitDir is the state + watch
+      // identity. An absent (not a repo) or failed resolution is the read's
+      // outcome.
+      const resolution = this.resolution(workingDir, projectDir);
+      const dir = resolution.known;
+      if (dir === undefined) return { kind: "resolving", dir: resolution.dir };
+      if (dir.kind !== "ok") return resolved(dir);
+      const state = this.repo(dir.value);
+      const { showPullRequest, ...gitOptions } = options;
+      const { value, pr } = this.ask(
+        state,
+        holds,
+        gitOptions,
+        showPullRequest === true,
+      );
+      if (value.reading.kind === "pending") this.misses++;
+      else this.hits++;
+      const info = currentOf(value);
+      if (pr === null || info.kind !== "ok") return resolved(info);
+      // A pass stores a branch's values and moves the PR's key in one turn,
+      // so the two answer for the same pass.
+      return resolved(ok({ ...info.value, pullRequest: currentOf(pr) }));
+    } catch (e) {
+      this.logger("error", `git read threw: ${String(e)}`);
+      return resolved(failed(`git: ${String(e)}`));
+    }
   }
 
   // [LAW:dataflow-not-control-flow] Push surface for var-system. The callback

@@ -100,8 +100,10 @@ class BoxNode implements VarNode {
     return value;
   }
 
-  set(value: VarValue): void {
-    assertType(this.name, this.type, value, "set value");
+  // A box written PENDING is not answered yet again: what its payload holds
+  // is a source that has not answered (src/daemon/render-payload.ts).
+  set(value: VarValue | Pending): void {
+    if (!unwritten(value)) assertType(this.name, this.type, value, "set value");
     // [LAW:single-enforcer] ONE comparison decides both halves of a write:
     // whether observers hear about it (they do not, because an unchanged value is
     // never written) and whether the age moved. Configuring the box's own
@@ -453,7 +455,7 @@ export class VariableStore {
     mobxRunInAction(() => (node as DocumentCell).set(value));
   }
 
-  setBox(name: string, value: VarValue): void {
+  setBox(name: string, value: VarValue | Pending): void {
     const node = this.requireOwn(name);
     if (node.kind !== "box") {
       throw new TypeError(

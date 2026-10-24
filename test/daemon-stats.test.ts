@@ -50,6 +50,7 @@ describe("RuntimeStats.snapshot", () => {
           failures: 0,
         },
         autocompact: { entries: 1, refreshes: { request: 2 }, failures: 0 },
+        cache: { entries: 1, refreshes: { request: 3 }, failures: 1 },
       },
       transcriptReads: { reads: 0, bytes: 0, longLines: 0, largestLine: 0 },
       renderCache: {
@@ -120,6 +121,11 @@ describe("RuntimeStats.snapshot", () => {
       supersede: 0,
     });
     expect(snap.sources.autocompact.refreshes).toEqual({ request: 2 });
+    expect(snap.sources.cache).toEqual({
+      entries: 1,
+      refreshes: { request: 3 },
+      failures: 1,
+    });
     expect(snap.effectCache).toEqual({ sessions: 2, effects: 5 });
     expect(snap.menuIdle).toEqual({ sessions: 2, armed: 1 });
     expect(snap.sessionState).toEqual({ sessions: 2, observers: 11, revision: 7 });
@@ -236,6 +242,7 @@ describe("formatStats", () => {
           failures: 0,
         },
         autocompact: { entries: 1, refreshes: { request: 2 }, failures: 0 },
+        cache: { entries: 1, refreshes: { request: 3 }, failures: 1 },
       },
       transcriptReads: { reads: 0, bytes: 0, longLines: 0, largestLine: 0 },
       renderCache: {

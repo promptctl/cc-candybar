@@ -1,8 +1,14 @@
 import type { ParsedEntry, ClaudeHookData } from "../utils/claude";
 
 import { debug } from "../utils/logger";
-import { ABSENT, failed, ok, type Outcome } from "../utils/outcome";
-import { TranscriptFold } from "../utils/transcript-fold";
+import {
+  ABSENT,
+  failed,
+  ok,
+  type Outcome,
+  type Reading,
+} from "../utils/outcome";
+import { TranscriptFold, type FoldOutcome } from "../utils/transcript-fold";
 import type { DaemonLogger } from "../utils/logger";
 
 export interface ContextInfo {
@@ -137,7 +143,45 @@ export class ContextProvider {
     transcriptPath: string,
     contextLimit: number,
   ): Promise<Outcome<ContextInfo>> {
-    const read = await this.fold.read(sessionId, transcriptPath);
+    return this.contextFrom(
+      await this.fold.read(sessionId, transcriptPath),
+      contextLimit,
+    );
+  }
+
+  /**
+   * Get context info using native data if available, falling back to transcript parsing.
+   */
+  async getContextInfo(
+    hookData: ClaudeHookData,
+  ): Promise<Outcome<ContextInfo>> {
+    const nativeContext = this.calculateContextFromHookData(hookData);
+    if (nativeContext) {
+      return ok(nativeContext);
+    }
+    return this.calculateContextTokensFromTranscript(
+      hookData.session_id,
+      hookData.transcript_path,
+      contextLimitOf(hookData),
+    );
+  }
+
+  // The session's context as it stands, for a draw: the native data the
+  // request carried, else the fold as its last refresh left it.
+  contextOf(hookData: ClaudeHookData): Reading<ContextInfo> {
+    const nativeContext = this.calculateContextFromHookData(hookData);
+    if (nativeContext) return ok(nativeContext);
+    const answer = this.fold.answer(hookData.session_id);
+    return answer.kind === "pending"
+      ? answer
+      : this.contextFrom(answer, contextLimitOf(hookData));
+  }
+
+  // [LAW:one-source-of-truth] The one projection of the fold's answer.
+  private contextFrom(
+    read: FoldOutcome<ContextState>,
+    contextLimit: number,
+  ): Outcome<ContextInfo> {
     if (read.kind === "failed") {
       return failed(`context transcript: ${read.reason}`);
     }
@@ -155,29 +199,12 @@ export class ContextProvider {
       ...this.ratioPercentages(totalTokens, contextLimit),
     });
   }
+}
 
-  /**
-   * Get context info using native data if available, falling back to transcript parsing.
-   */
-  async getContextInfo(
-    hookData: ClaudeHookData,
-  ): Promise<Outcome<ContextInfo>> {
-    const nativeContext = this.calculateContextFromHookData(hookData);
-    if (nativeContext) {
-      return ok(nativeContext);
-    }
-
-    // [LAW:one-source-of-truth] current_usage can be null (pre-first-call or
-    // post-/compact) while context_window_size is still present and
-    // authoritative — prefer it here too, and only fall to the floor when the
-    // client omits context_window entirely.
-    const contextLimit =
-      hookData.context_window?.context_window_size ?? DEFAULT_CONTEXT_WINDOW;
-
-    return this.calculateContextTokensFromTranscript(
-      hookData.session_id,
-      hookData.transcript_path,
-      contextLimit,
-    );
-  }
+// [LAW:one-source-of-truth] current_usage can be null (pre-first-call or
+// post-/compact) while context_window_size is still present and
+// authoritative — prefer it here too, and only fall to the floor when the
+// client omits context_window entirely.
+function contextLimitOf(hookData: ClaudeHookData): number {
+  return hookData.context_window?.context_window_size ?? DEFAULT_CONTEXT_WINDOW;
 }

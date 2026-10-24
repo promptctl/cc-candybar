@@ -30,7 +30,7 @@ import { join } from "node:path";
 import { SessionUsageStore } from "../src/daemon/cache/session-usage-store";
 import type { ClaudeHookData } from "../src/utils/claude";
 import { instantOf } from "../src/utils/instant";
-import { ABSENT } from "../src/utils/outcome";
+import { ABSENT, PENDING } from "../src/utils/outcome";
 import { FOLD_WINDOW_BYTES } from "../src/utils/transcript-fs";
 
 // Count cumulative FSREQPROMISE inits (libuv fs requests) over `body`.
@@ -155,14 +155,16 @@ describe("SessionUsageStore — session projection", () => {
     }
   });
 
-  test("empty sessionId does no work and is not cached", async () => {
+  test("empty sessionId does no work, and a draw of it is what its refresh answered", async () => {
     const store = new SessionUsageStore({ sweepIntervalMs: 0 });
     try {
-      const info = await store.getUsageInfo("", undefined);
+      const bare = { session_id: "" } as ClaudeHookData;
+      const info = await store.getUsageInfo("", bare);
       expect(info.kind).toBe("ok");
       if (info.kind !== "ok") return;
       expect(info.value.session.cost).toBeNull();
-      expect(store.getStats()).toMatchObject({ size: 0, misses: 0, hits: 0 });
+      expect(store.getStats()).toMatchObject({ misses: 0, hits: 0 });
+      expect(store.usageOf("", bare)).toEqual(info);
     } finally {
       store.close();
     }
@@ -338,16 +340,42 @@ describe("SessionUsageStore — session projection", () => {
     }
   });
 
-  // Asking about a session stores nothing: a slot exists only once a record or
-  // a speed sample is stored in it.
-  test("an ask that stores nothing leaves no slot", async () => {
+  // A draw reads what the session's last refresh answered: before any refresh
+  // nothing is answered, and a refresh that finds no transcript answers the
+  // empty record — two facts a draw must not confuse.
+  test("a draw before the session's refresh is not answered; after one it is what the refresh answered", async () => {
     const store = new SessionUsageStore({ sweepIntervalMs: 0 });
     try {
+      const bare = { session_id: "H" } as ClaudeHookData;
+      expect(store.usageOf("H", bare)).toBe(PENDING);
+      const answered = await store.getUsageInfo("H", bare);
+      expect(answered.kind).toBe("ok");
+      expect(store.usageOf("H", bare)).toEqual(answered);
+      // The session-less ask stores nothing.
+      expect(await store.observeSpeed("", undefined, 1_000)).toEqual(ABSENT);
+      expect(store.getStats()).toMatchObject({ size: 1 });
       const failed = await store.getUsageInfo("G", hook("G", dir));
       expect(failed.kind).toBe("failed");
-      await store.getUsageInfo("H", { session_id: "H" } as ClaudeHookData);
-      expect(await store.observeSpeed("", undefined, 1_000)).toEqual(ABSENT);
-      expect(store.getStats()).toMatchObject({ size: 0 });
+      // A draw between requests reads the failure the last refresh met.
+      expect(store.usageOf("G", hook("G", dir))).toEqual(failed);
+      expect(store.getStats()).toMatchObject({ size: 2 });
+    } finally {
+      store.close();
+    }
+  });
+
+  test("`today` is not answered until a scan has finished over its directories, never a partial sum", async () => {
+    const t = join(dir, "A.jsonl");
+    const at = new Date();
+    writeFileSync(t, usageLine("a", at, 0.01));
+    const store = new SessionUsageStore({ sweepIntervalMs: 0 });
+    try {
+      // The session's own refresh has landed, but no scan has.
+      await store.getUsageInfo("A", hook("A", t));
+      expect(store.todayOf(hook("A", t), dir, instantOf(at))).toBe(PENDING);
+      const today = await store.getTodayInfo(hook("A", t), dir, instantOf(at));
+      expect(today.kind).toBe("ok");
+      expect(store.todayOf(hook("A", t), dir, instantOf(at))).toEqual(today);
     } finally {
       store.close();
     }

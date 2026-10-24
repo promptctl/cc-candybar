@@ -4,12 +4,18 @@
 // it forward by the 1h TTL. These assert the BEHAVIOR (which timestamp wins,
 // when the outcome is absent), not the tail-read mechanics.
 
-import { chmodSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import {
+  chmodSync,
+  mkdtempSync,
+  utimesSync,
+  writeFileSync,
+  rmSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { cacheExpiresAt } from "../src/segments/cache";
-import { ABSENT, ok } from "../src/utils/outcome";
+import { CacheExpiryProvider, cacheExpiresAt } from "../src/segments/cache";
+import { ABSENT, PENDING, ok } from "../src/utils/outcome";
 
 const TTL_SEC = 60 * 60;
 
@@ -46,7 +52,8 @@ function writeTranscript(lines: string[]): string {
 
 describe("cacheExpiresAt", () => {
   afterAll(() => {
-    for (const dir of createdDirs) rmSync(dir, { recursive: true, force: true });
+    for (const dir of createdDirs)
+      rmSync(dir, { recursive: true, force: true });
   });
 
   it("projects the LAST cache-bearing entry forward by the TTL", async () => {
@@ -101,7 +108,10 @@ describe("cacheExpiresAt", () => {
       entry({ ts: `2026-05-30T11:${String(i % 60).padStart(2, "0")}:00.000Z` }),
     );
     // One cache-bearing entry, then >64KB of zero-cache filler after it.
-    const path = writeTranscript([entry({ ts: cacheHit, cacheRead: 1 }), ...filler]);
+    const path = writeTranscript([
+      entry({ ts: cacheHit, cacheRead: 1 }),
+      ...filler,
+    ]);
     const expected = Math.floor(Date.parse(cacheHit) / 1000) + TTL_SEC;
     expect(await cacheExpiresAt(path)).toEqual(ok(expected));
   });
@@ -123,8 +133,79 @@ describe("cacheExpiresAt", () => {
         },
       },
     });
-    const path = writeTranscript([entry({ ts: realHit, cacheRead: 100 }), decoy]);
+    const path = writeTranscript([
+      entry({ ts: realHit, cacheRead: 100 }),
+      decoy,
+    ]);
     const expected = Math.floor(Date.parse(realHit) / 1000) + TTL_SEC;
     expect(await cacheExpiresAt(path)).toEqual(ok(expected));
+  });
+});
+
+// brandon-unfiled-3248.8ro6: a draw takes the expiry its session's last
+// request left, and a request reads the transcript again only when its stamp
+// (mtime:size) moved.
+describe("CacheExpiryProvider", () => {
+  const at = (iso: string): number =>
+    Math.floor(Date.parse(iso) / 1000) + TTL_SEC;
+  const A = "2026-01-01T00:00:00.000Z";
+  const B = "2026-01-01T00:00:09.000Z"; // same length as A
+
+  test("a draw before any request reads it as not answered yet", () => {
+    expect(new CacheExpiryProvider().expiryOf("s")).toBe(PENDING);
+  });
+
+  test("a failed read is read again under the same stamp, never believed", async () => {
+    // A failure says nothing about the bytes at the stamp: an unreadable file
+    // keeps its stat (and so its stamp), and becomes readable again.
+    const path = writeTranscript([entry({ ts: A, cacheRead: 1 })]);
+    const provider = new CacheExpiryProvider();
+    chmodSync(path, 0o000);
+    try {
+      expect((await provider.refresh("s", path)).kind).toBe("failed");
+    } finally {
+      chmodSync(path, 0o600);
+    }
+    expect(await provider.refresh("s", path)).toEqual(ok(at(A)));
+  });
+
+  test("each read of the tail is one refresh event; an answer believed under its stamp is none", async () => {
+    const lines: string[] = [];
+    const path = writeTranscript([entry({ ts: A, cacheRead: 1 })]);
+    const provider = new CacheExpiryProvider((level, msg) =>
+      lines.push(`${level} ${msg}`),
+    );
+    await provider.refresh("s", path);
+    await provider.refresh("s", path);
+    expect(lines).toEqual([
+      expect.stringMatching(
+        /^info cache refresh sid=s stamp=\S+ by=request outcome=ok took=\d+ms$/,
+      ),
+    ]);
+    expect(provider.getStats()).toEqual({
+      entries: 1,
+      refreshes: { request: 1 },
+      failures: 0,
+    });
+  });
+
+  test("an unchanged stamp reads nothing; a moved one reads again", async () => {
+    // A whole-second mtime, so restoring it restores the stamp exactly.
+    const MTIME = 1_700_000_000;
+    const path = writeTranscript([entry({ ts: A, cacheRead: 1 })]);
+    utimesSync(path, MTIME, MTIME);
+    const provider = new CacheExpiryProvider();
+    expect(await provider.refresh("s", path)).toEqual(ok(at(A)));
+    expect(provider.expiryOf("s")).toEqual(ok(at(A)));
+
+    // New bytes under the old stamp: the request believes the stamp.
+    writeFileSync(path, entry({ ts: B, cacheRead: 1 }) + "\n");
+    utimesSync(path, MTIME, MTIME);
+    expect(await provider.refresh("s", path)).toEqual(ok(at(A)));
+
+    // The stamp moved: read again.
+    writeFileSync(path, entry({ ts: B, cacheRead: 1 }) + "\n\n");
+    expect(await provider.refresh("s", path)).toEqual(ok(at(B)));
+    expect(provider.expiryOf("s")).toEqual(ok(at(B)));
   });
 });

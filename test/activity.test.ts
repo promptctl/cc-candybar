@@ -16,18 +16,16 @@ import { tmpdir } from "node:os";
 
 import { ActivityProvider, type ActivityInfo } from "../src/segments/activity";
 import { buildRenderPayload } from "../src/daemon/render-payload";
-import type {
-  RenderPayloadDeps,
-} from "../src/daemon/render-payload";
+import type { RenderPayloadDeps } from "../src/daemon/render-payload";
 import { type EffectiveGlobals } from "../src/config/effective-globals";
 import { globalsFor } from "./helpers/selection";
 import { ABSENT, ok } from "../src/utils/outcome";
 import { entryActivity } from "../src/utils/transcript-activity";
+import { userEntryOf, type ClaudeHookData } from "../src/utils/claude";
 import {
-  userEntryOf,
-  type ClaudeHookData,
-} from "../src/utils/claude";
-import { RAW_DEFAULT_DSL_CONFIG, DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
+  RAW_DEFAULT_DSL_CONFIG,
+  DEFAULT_DSL_CONFIG,
+} from "../src/config/default-dsl-config";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { narrowToSegment } from "./helpers/narrow-to-segment";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
@@ -36,6 +34,15 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
 import { instantOf } from "../src/utils/instant";
+import {
+  absentOwners,
+  fakeActivity,
+  fakeContext,
+  fakeGit,
+  fakeMetrics,
+  fakeTmux,
+  fakeUsage,
+} from "./helpers/payload-owners";
 
 // ─── fixtures ────────────────────────────────────────────────────────────────
 
@@ -69,7 +76,10 @@ const taskNotification = (): string =>
     type: "user",
     origin: { kind: "task-notification", producer: "session-task" },
     promptSource: "system",
-    message: { role: "user", content: "<task-notification>done</task-notification>" },
+    message: {
+      role: "user",
+      content: "<task-notification>done</task-notification>",
+    },
   });
 
 // A slash command Claude answers (a skill), as Claude Code writes it — leading
@@ -166,7 +176,8 @@ beforeEach(() => {
 // The projection as the parse site runs it: classified first, then projected.
 const project = (
   parsed: Record<string, unknown>,
-): ReturnType<typeof entryActivity> => entryActivity(parsed, userEntryOf(parsed));
+): ReturnType<typeof entryActivity> =>
+  entryActivity(parsed, userEntryOf(parsed));
 
 describe("the entry projection carries the scalars and never the content array", () => {
   test("a tool call keeps its id and name; the input is not retained", () => {
@@ -288,9 +299,7 @@ describe("the entry projection carries the scalars and never the content array",
   });
 
   test("an entry with nothing to say projects nothing at all", () => {
-    expect(
-      project(JSON.parse(userText("just a question"))),
-    ).toBeUndefined();
+    expect(project(JSON.parse(userText("just a question")))).toBeUndefined();
   });
 });
 
@@ -379,7 +388,9 @@ describe("the fold reports what is happening now", () => {
       toolUse({ id: "a", name: "Bash" }),
       toolResult("a"),
       userText("<command-name>/model</command-name>"),
-      userText("<local-command-stdout>Set model to Opus</local-command-stdout>"),
+      userText(
+        "<local-command-stdout>Set model to Opus</local-command-stdout>",
+      ),
       userText("<bash-input>ls</bash-input>"),
       userText("<bash-stdout>a</bash-stdout><bash-stderr></bash-stderr>"),
     );
@@ -424,17 +435,9 @@ describe("the fold reports what is happening now", () => {
   });
 
   test("the slash command that opened the turn is reported, and plain text clears it", async () => {
+    expect((await activityOf(skill("next"))).command).toBe("/next");
     expect(
-      (await activityOf(skill("next")))
-        .command,
-    ).toBe("/next");
-    expect(
-      (
-        await activityOf(
-          skill("next"),
-          userText("now do this"),
-        )
-      ).command,
+      (await activityOf(skill("next"), userText("now do this"))).command,
     ).toBeNull();
   });
 
@@ -520,16 +523,17 @@ describe("the fold reports what is happening now", () => {
 describe("the payload projection", () => {
   const payloadFor = async (info: ActivityInfo) => {
     const deps = {
-      gitProvider: { getGitInfo: async () => ABSENT },
-      usageStore: {
-        getUsageInfo: async () => ABSENT,
-        getTodayInfo: async () => ABSENT,
-        observeSpeed: async () => ABSENT,
-      },
-      contextProvider: { getContextInfo: async () => ABSENT },
-      metricsProvider: { getMetricsInfo: async () => ABSENT },
-      activityProvider: { getActivityInfo: async () => ok(info) },
-      tmuxService: { getSessionName: async () => ABSENT },
+      ...absentOwners(),
+      gitProvider: fakeGit(async () => ABSENT),
+      usageStore: fakeUsage({
+        usage: async () => ABSENT,
+        today: async () => ABSENT,
+        speed: async () => ABSENT,
+      }),
+      contextProvider: fakeContext(async () => ABSENT),
+      metricsProvider: fakeMetrics(async () => ABSENT),
+      activityProvider: fakeActivity(async () => ok(info)),
+      tmuxService: fakeTmux(async () => ABSENT),
       log: () => {},
       history: () => EMPTY_HISTORY_DEPTH,
       navigation: () => 0,

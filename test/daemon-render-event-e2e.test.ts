@@ -175,6 +175,14 @@ describe("every render request writes one render event, whatever its outcome", (
         cwd: projectDir,
       }),
     ).rejects.toThrow(/BAD_REQUEST/);
+    // An empty session id names no session.
+    await expect(
+      renderRequest(sockPath, {
+        hookData: hookData("", projectDir),
+        args: [],
+        cwd: projectDir,
+      }),
+    ).rejects.toThrow(/BAD_REQUEST/);
 
     // A request the helper retried after a reply timeout is logged once per
     // attempt: every attempt ended the same way, and exactly one of them is
@@ -258,6 +266,7 @@ describe("every render request writes one render event, whatever its outcome", (
     expect(refused.map((e) => field(e, "problems"))).toEqual([
       `request 'cwd' is not an absolute path: "proj"`,
       `request 'args' is not a list of strings: "x"`,
+      "field 'session_id' is empty",
     ]);
     for (const event of refused) {
       expect(event.level).toBe("warn");
