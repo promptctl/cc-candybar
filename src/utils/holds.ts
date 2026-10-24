@@ -8,8 +8,10 @@
 // longer takes it, and a disposed home closes.
 export type Release = () => void;
 
-// What one declaration changed: the holds it acquired and those it released.
-export interface Declared {
+// What one declaration changed: the holds it acquired and those it released,
+// beside what its body answered.
+export interface Declared<R> {
+  readonly result: R;
   readonly acquired: number;
   readonly released: number;
 }
@@ -34,14 +36,15 @@ export class Holds {
 
   // [LAW:no-ambient-temporal-coupling] One declaration: `body` takes every
   // hold the home's draws read, and each hold it did not take is released
-  // once it returns, so the home holds exactly what it declared. Returns how
-  // many holds it acquired and how many it released.
-  declare(body: () => void): Declared {
+  // once it returns, so the home holds exactly what it declared. Returns what
+  // the body answered, and how many holds it acquired and released.
+  declare<R>(body: () => R): Declared<R> {
     if (this.declaring !== null) throw new Error("declaration within one");
     const declaring = { taken: new Set<string>(), acquired: 0 };
     this.declaring = declaring;
+    let result: R;
     try {
-      body();
+      result = body();
     } finally {
       this.declaring = null;
     }
@@ -52,7 +55,7 @@ export class Holds {
       release();
       released++;
     }
-    return { acquired: declaring.acquired, released };
+    return { result, acquired: declaring.acquired, released };
   }
 
   // Releases every hold and refuses new ones: the home is gone.

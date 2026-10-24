@@ -38,6 +38,7 @@ import {
 } from "../../utils/outcome";
 import { quietLogger, type DaemonLogger } from "../../utils/logger";
 import { dateOf, type Instant } from "../../utils/instant";
+import { laneOutcome, type Lane } from "../../utils/reading";
 import { valueOf } from "../../utils/logfmt";
 import type { Holds } from "../../utils/holds";
 import { KeyedSource, type KeyedSourceStats } from "../../utils/keyed-source";
@@ -383,7 +384,7 @@ function daySumsOver(
 
 // A directory set's `today` state beside its scan: its roots, and its day
 // sums derived from the records.
-interface DaySet {
+export interface DaySet {
   readonly roots: readonly string[];
   readonly sums: Kept<ReadonlyMap<string, DayUsage>>;
 }
@@ -447,10 +448,6 @@ export class SessionUsageStore {
   // store's life: there are as few as the Claude Code directories rendered
   // from, and each reads only this store's own map.
   private readonly daySets = new Map<string, DaySet>();
-  // The Claude Code directories each `claudeConfigDir` hint resolved to at its
-  // last refresh (`undefined` is a client too old to say, which costs a probe
-  // of the disk): a draw reads them here, and never touches the disk.
-  private readonly pathsOfHint = new Map<string | undefined, string[]>();
   // [LAW:no-ambient-temporal-coupling] Explicit owner of observe/commit ordering
   // for the speed sample. Concurrent renders observing the SAME transcript state
   // (key = `${sessionId}:${mtime}`) share ONE observation and commit the baseline
@@ -578,66 +575,56 @@ export class SessionUsageStore {
   // over the sessions that had asked, would move with which other sessions
   // happened to have rendered.
   //
-  // A request's refresh: the active session's own record — so `today` keeps
-  // up with the cost it was sent with (short only by what a rescan's fold of
-  // the same session stores first, `ingest`) — and the directory set's first scan,
-  // the one wait, since a set no scan has answered is not answered. `holds`
-  // is the home rendering: it holds the set, which keeps it on its rescan.
-  async getTodayInfo(
-    holds: Holds,
+  // A request's refresh of `today`: the active session's own record — so
+  // `today` keeps up with the cost it was sent with (short only by what a
+  // rescan's fold of the same session stores first, `ingest`) — once the
+  // directory set's first scan, which `today`'s lane waits on, has landed.
+  async refreshToday(
+    today: Lane<DaySet>,
     hookData: ClaudeHookData | undefined,
-    claudeConfigDir: string | undefined,
-    // The instant the render is drawn at: its local date is the day summed.
-    at: Instant,
-  ): Promise<Reading<TodayInfo>> {
-    const claudePaths = this.pathsOf(claudeConfigDir);
+  ): Promise<void> {
     // [LAW:no-ambient-temporal-coupling] The scan first, then the session's
     // own refresh: run together, a seed's ingest of this session and the
     // request's are two cold parses at two stamps, and whichever lands second
     // is not stored — the request's own, newer fold among them.
-    await this.scans.read(holds, claudePaths);
+    await laneOutcome(today);
     await this.refreshed(hookData?.session_id ?? "", hookData?.transcript_path);
-    return this.todayOf(holds, hookData, claudeConfigDir, at);
   }
 
-  // A view's declaration of `today` (declareLanes in
+  // [LAW:single-enforcer] A view's declaration of `today` (declareLanes in
   // src/daemon/render-payload.ts): the directory set's scans, held, so a set
   // no scan has answered starts its first one now — before the request or the
-  // frame that reads it.
-  holdToday(holds: Holds, claudeConfigDir: string | undefined): void {
-    this.scans.current(holds, this.pathsOf(claudeConfigDir));
-  }
-
-  // The directories a client's `claudeConfigDir` hint names, kept for the
-  // draws that read them (`todayOf`).
-  private pathsOf(claudeConfigDir: string | undefined): string[] {
+  // frame that reads it. The lane answers the set's day sums once a scan has
+  // answered; which day of them is the draw's (`todayAt`).
+  declareToday(
+    holds: Holds,
+    claudeConfigDir: string | undefined,
+  ): Lane<DaySet> {
     const claudePaths = getClaudePaths(claudeConfigDir);
-    this.pathsOfHint.set(claudeConfigDir, claudePaths);
-    return claudePaths;
+    const scans = this.scans.declare(holds, claudePaths);
+    const set = this.daySet(claudePaths);
+    return {
+      current: () => {
+        const scan = scans.current();
+        return scan.kind === "ok" ? ok(set) : scan;
+      },
+    };
   }
 
   // The `today` projection as the records stand, for a draw: the directory
   // set's day sums at the day of `at`, so a frame past midnight sums the new
-  // day with no refresh. The set's last scan failing, or the active session's
-  // last ingest, is the projection's failure; a set no scan has answered is
-  // not answered, never a partial sum.
-  todayOf(
-    holds: Holds,
+  // day with no refresh. The active session's last ingest failing is the
+  // projection's failure.
+  todayAt(
+    set: DaySet,
     hookData: ClaudeHookData | undefined,
-    claudeConfigDir: string | undefined,
     at: Instant,
-  ): Reading<TodayInfo> {
-    const claudePaths = this.pathsOfHint.get(claudeConfigDir);
-    if (claudePaths === undefined) return PENDING;
-    const scan = this.scans.current(holds, claudePaths);
-    if (scan.kind === "pending") return PENDING;
-    if (scan.kind !== "ok") return scan;
+  ): Outcome<TodayInfo> {
     const active = this.sessions.get(hookData?.session_id ?? "");
     if (active?.failure != null) return failed(active.failure);
 
     const today = dayKey(dateOf(at));
     const total: DayUsage = { ...EMPTY_DAY };
-    const set = this.daySet(claudePaths);
     const inSet = set.sums.read().get(today);
     if (inSet !== undefined) addDay(total, inSet);
     // The rendering session counts wherever its transcript lives; under the

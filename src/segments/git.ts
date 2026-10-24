@@ -896,10 +896,10 @@ export class GitService {
   // different key and wire invalidation to the wrong watcher. The contract:
   // `resolveEffectiveGitDir(workingDir, projectDir)` returns exactly the
   // directory `computeGitInfo` will use as `gitDir`. Both surfaces must agree.
-  async resolveEffectiveGitDir(
+  resolveEffectiveGitDir(
     workingDir: string,
     projectDir?: string,
-  ): Promise<Outcome<string>> {
+  ): Outcome<string> {
     if (this.isWorktree(workingDir)) return ok(workingDir);
     if (projectDir && this.isGitRepo(projectDir)) return ok(projectDir);
     if (this.isGitRepo(workingDir)) return ok(workingDir);
@@ -927,11 +927,10 @@ export class GitService {
   // collapses both onto the rule the short-circuits already commit to: one
   // predicate, one spelling of a path.
   //
-  // [LAW:effects-at-boundaries] Pure fs — the shape `getOngoingOperation` and
-  // `resolveGitDir` in this same class already have. It stays `async` because
-  // that is its contract to `resolveEffectiveGitDir`, `computeGitInfo` and the
-  // test overrides in daemon-git-cache/daemon-watchers; there is simply nothing
-  // left to await. Observable effect: a session whose cwd is outside any repo
+  // [LAW:effects-at-boundaries] Pure synchronous fs — the shape
+  // `getOngoingOperation` and `resolveGitDir` in this same class already have —
+  // so a declaration knows its repo in the turn it asks (brandon-unfiled-3248.
+  // 8ro6, step 4). Observable effect: a session whose cwd is outside any repo
   // spawns no `git` at all, where before it spawned one per render forever —
   // `getGitInfo`'s `absent` is deliberately not cached, so nothing bounded it.
   //
@@ -948,7 +947,7 @@ export class GitService {
   // `absent`, which is exactly where the old non-zero `rev-parse` exit landed
   // through `classify(…, "absent")` — a state this never produced, so inventing
   // one here would be a new answer for an unchanged question.
-  async findGitRoot(workingDir: string): Promise<Outcome<string>> {
+  findGitRoot(workingDir: string): Outcome<string> {
     const root = gitRootOf(workingDir);
     return root === undefined ? ABSENT : ok(root);
   }
@@ -991,7 +990,7 @@ export class GitService {
     } else if (this.isGitRepo(workingDir)) {
       gitDir = workingDir;
     } else {
-      const foundGitRoot = await this.findGitRoot(workingDir);
+      const foundGitRoot = this.findGitRoot(workingDir);
       if (foundGitRoot.kind !== "ok") return foundGitRoot;
       gitDir = foundGitRoot.value;
     }

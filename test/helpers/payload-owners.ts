@@ -3,12 +3,13 @@
 // payload reads it with.
 //
 // A fake keeps what its reader answered as a real owner keeps its source's
-// value: a keyed lane (git, tmux, memento) is pending from its first read until
-// its reader lands, so a request waits on it as on the real one; a request lane
-// (session, today, speed, context, metrics, activity, cache, autocompact)
-// stores what its refresh's reader answered, and a draw reads that back. So a
-// test says what a lane answers, and the payload reads it the way it reads the
-// daemon's.
+// value: a keyed lane (git, tmux, memento) is declared into a lane that is
+// pending from its first read until its reader lands, so a request waits on it
+// as on the real one; a request lane (session, today, speed, context, metrics,
+// activity, cache, autocompact) stores what its refresh's reader answered, and
+// a draw reads that back. So a test says what a lane answers, and the payload
+// reads it the way it reads the daemon's. `buildRenderPayload` below declares
+// the lanes over the fakes as a view's declaration does.
 
 import type { Holds } from "../../src/utils/holds";
 import type { ClaudeHookData } from "../../src/utils/claude";
@@ -27,11 +28,19 @@ import type { AutoCompactWindow } from "../../src/segments/autocompact";
 import type { Instant } from "../../src/utils/instant";
 import {
   ABSENT,
+  ok,
   PENDING,
   type Outcome,
   type Reading,
 } from "../../src/utils/outcome";
-import { answered, type Current } from "../../src/utils/reading";
+import { settledLane, type Current, type Lane } from "../../src/utils/reading";
+import {
+  buildRenderPayload as payloadOfRequest,
+  declareLanes,
+  type KeyedOwners,
+  type RenderPayloadDeps,
+} from "../../src/daemon/render-payload";
+import { Holds as HoldsClass } from "../../src/utils/holds";
 import { CacheExpiryProvider } from "../../src/segments/cache";
 
 type Answer<T> = Outcome<T> | Promise<Outcome<T>>;
@@ -87,29 +96,23 @@ export function fakeGit(
     read,
   );
   return {
-    current: (
+    declare: (
       holds: Holds,
       workingDir: string,
       options: GitInfoOptions = {},
       projectDir?: string,
-    ): Current<GitInfo> => current(holds, workingDir, options, projectDir),
-    getGitInfo: (
-      holds: Holds,
-      workingDir: string,
-      options: GitInfoOptions = {},
-      projectDir?: string,
-    ): Promise<Outcome<GitInfo>> =>
-      answered(() => current(holds, workingDir, options, projectDir)),
+    ): Lane<GitInfo> => ({
+      current: () => current(holds, workingDir, options, projectDir),
+    }),
   };
 }
 
 export function fakeTmux(read: (holds: Holds, hint: TmuxHint) => Loose) {
   const current = keyed<[TmuxHint], string>(read);
   return {
-    sessionName: (holds: Holds, hint: TmuxHint): Current<string> =>
-      current(holds, hint),
-    getSessionName: (holds: Holds, hint: TmuxHint): Promise<Outcome<string>> =>
-      answered(() => current(holds, hint)),
+    declare: (holds: Holds, hint: TmuxHint): Lane<string> => ({
+      current: () => current(holds, hint),
+    }),
   };
 }
 
@@ -118,24 +121,28 @@ export function fakeMemento(
 ) {
   const current = keyed<[CeilingScope], CeilingReading>(read);
   return {
-    ceiling: (holds: Holds, scope: CeilingScope): Current<CeilingReading> =>
-      current(holds, scope),
-    getCeiling: (
-      holds: Holds,
-      scope: CeilingScope,
-    ): Promise<Outcome<CeilingReading>> =>
-      answered(() => current(holds, scope)),
+    declare: (holds: Holds, scope: CeilingScope): Lane<CeilingReading> => ({
+      current: () => current(holds, scope),
+    }),
   };
+}
+
+// What the fake's `today` lane answers: the directory set it was declared at,
+// standing in for that set's day sums.
+interface FakeSet {
+  readonly claudeConfigDir: string | undefined;
 }
 
 export function fakeUsage(
   readers: {
     readonly usage?: (sessionId: string, hookData?: ClaudeHookData) => Loose;
+    // The day of the set's sums a draw is at: answered at the draw, as the
+    // real store's `todayAt` is.
     readonly today?: (
       hookData: ClaudeHookData | undefined,
       claudeConfigDir: string | undefined,
       at: Instant,
-    ) => Loose;
+    ) => Outcome<unknown>;
     readonly speed?: (
       sessionId: string,
       transcriptPath: string | undefined,
@@ -144,27 +151,33 @@ export function fakeUsage(
   } = {},
 ) {
   const usage = refreshed<UsageInfo>();
-  const today = refreshed<TodayInfo>();
+  // The sessions whose request refreshed `today`: before one has, a draw
+  // reads it as not answered yet.
+  const todayRefreshed = new Set<string>();
   const speed = refreshed<SpeedObservation>();
   return {
     getUsageInfo: (sessionId: string, hookData?: ClaudeHookData) =>
       usage.store(sessionId, readers.usage?.(sessionId, hookData) ?? ABSENT),
     usageOf: (sessionId: string): Reading<UsageInfo> => usage.read(sessionId),
-    getTodayInfo: (
+    declareToday: (
       _holds: Holds,
-      hookData: ClaudeHookData | undefined,
       claudeConfigDir: string | undefined,
-      at: Instant,
-    ) =>
-      today.store(
-        hookData?.session_id ?? "",
-        readers.today?.(hookData, claudeConfigDir, at) ?? ABSENT,
-      ),
-    todayOf: (
-      _holds: Holds,
+    ): Lane<FakeSet> => settledLane(ok({ claudeConfigDir })),
+    refreshToday: async (
+      _today: Lane<FakeSet>,
       hookData: ClaudeHookData | undefined,
+    ): Promise<void> => {
+      todayRefreshed.add(hookData?.session_id ?? "");
+    },
+    todayAt: (
+      set: FakeSet,
+      hookData: ClaudeHookData | undefined,
+      at: Instant,
     ): Reading<TodayInfo> =>
-      today.read(hookData?.session_id ?? ""),
+      todayRefreshed.has(hookData?.session_id ?? "")
+        ? ((readers.today?.(hookData, set.claudeConfigDir, at) ??
+            ABSENT) as Outcome<TodayInfo>)
+        : PENDING,
     observeSpeed: (
       sessionId: string,
       transcriptPath: string | undefined,
@@ -253,4 +266,45 @@ export function absentOwners() {
     mementoProvider: fakeMemento(() => ABSENT),
     autoCompact: fakeAutoCompact(() => ABSENT),
   };
+}
+
+// A request's payload as the daemon builds one: the lanes declared over the
+// owners at the request's facts and closure, as the session's view declares
+// them (brandon-unfiled-3248.8ro6, 4a), then the request itself. Same
+// signature as the real one, `lanes` supplied.
+export function requestPayload(
+  ...[hookData, at, deps, cwd, closure, ...rest]: Parameters<
+    typeof payloadOfRequest
+  >
+): ReturnType<typeof payloadOfRequest> {
+  const { lanes } = declareLanes(
+    deps as unknown as KeyedOwners,
+    new HoldsClass(),
+    { hookData, cwd, hints: rest[1] },
+    closure,
+  );
+  return payloadOfRequest(
+    hookData,
+    at,
+    { ...deps, lanes: () => lanes } as RenderPayloadDeps,
+    cwd,
+    closure,
+    ...rest,
+  );
+}
+
+// The lanes a view declared at `facts` over `owners` and every lane read, for
+// a test that draws frames over deps it built itself.
+export function declaredLanes(
+  owners: unknown,
+  facts: Parameters<typeof declareLanes>[2],
+  closure: ReadonlySet<string>,
+): () => ReturnType<typeof declareLanes>["lanes"] {
+  const { lanes } = declareLanes(
+    owners as KeyedOwners,
+    new HoldsClass(),
+    facts,
+    closure,
+  );
+  return () => lanes;
 }

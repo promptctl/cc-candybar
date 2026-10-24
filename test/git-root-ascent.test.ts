@@ -47,11 +47,11 @@ describe("findGitRoot ascends to the nearest ancestor holding .git", () => {
     const deep = join(repo, "a", "b", "c");
     mkdirSync(deep, { recursive: true });
 
-    await expect(git.findGitRoot(repo)).resolves.toEqual({
+    expect(git.findGitRoot(repo)).toEqual({
       kind: "ok",
       value: repo,
     });
-    await expect(git.findGitRoot(deep)).resolves.toEqual({
+    expect(git.findGitRoot(deep)).toEqual({
       kind: "ok",
       value: repo,
     });
@@ -69,7 +69,7 @@ describe("findGitRoot ascends to the nearest ancestor holding .git", () => {
     const deep = join(repo, "x");
     mkdirSync(deep);
 
-    await expect(git.findGitRoot(deep)).resolves.toEqual({
+    expect(git.findGitRoot(deep)).toEqual({
       kind: "ok",
       value: repo,
     });
@@ -85,11 +85,11 @@ describe("findGitRoot ascends to the nearest ancestor holding .git", () => {
     const inside = join(worktree, "nested");
     mkdirSync(inside);
 
-    await expect(git.findGitRoot(worktree)).resolves.toEqual({
+    expect(git.findGitRoot(worktree)).toEqual({
       kind: "ok",
       value: worktree,
     });
-    await expect(git.findGitRoot(inside)).resolves.toEqual({
+    expect(git.findGitRoot(inside)).toEqual({
       kind: "ok",
       value: worktree,
     });
@@ -103,7 +103,7 @@ describe("findGitRoot ascends to the nearest ancestor holding .git", () => {
     const deep = join(inner, "src");
     mkdirSync(deep);
 
-    await expect(git.findGitRoot(deep)).resolves.toEqual({
+    expect(git.findGitRoot(deep)).toEqual({
       kind: "ok",
       value: inner,
     });
@@ -116,14 +116,14 @@ describe("findGitRoot ascends to the nearest ancestor holding .git", () => {
     mkdirSync(bare);
     run("git init -q --bare .", bare);
 
-    await expect(git.findGitRoot(bare)).resolves.toEqual({ kind: "absent" });
+    expect(git.findGitRoot(bare)).toEqual({ kind: "absent" });
   });
 
   test("a directory under no repo at all is absent", async () => {
     const plain = join(root, "not-a-repo", "deeper");
     mkdirSync(plain, { recursive: true });
 
-    await expect(git.findGitRoot(plain)).resolves.toEqual({ kind: "absent" });
+    expect(git.findGitRoot(plain)).toEqual({ kind: "absent" });
   });
 
   // The predicate follows symlinks, like the `isGitRepo` short-circuit it shares:
@@ -136,7 +136,7 @@ describe("findGitRoot ascends to the nearest ancestor holding .git", () => {
     const live = join(root, "sym-live");
     mkdirSync(live);
     symlinkSync(join(donor, ".git"), join(live, ".git"));
-    await expect(git.findGitRoot(live)).resolves.toEqual({
+    expect(git.findGitRoot(live)).toEqual({
       kind: "ok",
       value: live,
     });
@@ -144,7 +144,7 @@ describe("findGitRoot ascends to the nearest ancestor holding .git", () => {
     const dangling = join(root, "sym-dangling");
     mkdirSync(dangling);
     symlinkSync(join(root, "nothing-here"), join(dangling, ".git"));
-    await expect(git.findGitRoot(dangling)).resolves.toEqual({
+    expect(git.findGitRoot(dangling)).toEqual({
       kind: "absent",
     });
   });
@@ -158,7 +158,7 @@ describe("findGitRoot ascends to the nearest ancestor holding .git", () => {
     mkdirSync(junk);
     writeFileSync(join(junk, ".git"), "not a gitdir pointer\n");
 
-    await expect(git.findGitRoot(junk)).resolves.toEqual({
+    expect(git.findGitRoot(junk)).toEqual({
       kind: "ok",
       value: junk,
     });

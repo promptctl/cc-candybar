@@ -18,7 +18,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
-  buildRenderPayload,
   projectTokensPerSecond,
   type RenderPayloadDeps,
 } from "../src/daemon/render-payload";
@@ -48,6 +47,7 @@ import {
   fakeMetrics,
   fakeTmux,
   fakeUsage,
+  requestPayload,
 } from "./helpers/payload-owners";
 
 // ─── projectTokensPerSecond (pure) ───────────────────────────────────────────
@@ -252,7 +252,7 @@ function depsWith(
     gitProvider: fakeGit(async () => ABSENT),
     usageStore: fakeUsage({
       usage: async () => ok({ session: { cost: 1, tokens: 1500 } }),
-      today: async () => ABSENT,
+      today: () => ABSENT,
       speed: async () => {
         const prev = { input: 1000, output: 1000, total: 2000, atMs: 0 };
         const cur = { input: 1000, output: 1500, total: 2500, atMs: 1000 };
@@ -299,7 +299,7 @@ function hook(): ClaudeHookData {
 
 describe("buildRenderPayload — speed lane", () => {
   test("projectable: output/total rates land; idle input lane is absent", async () => {
-    const payload = await buildRenderPayload(
+    const payload = await requestPayload(
       hook(),
       instantOf(new Date(1000)),
       depsWith(),
@@ -316,13 +316,13 @@ describe("buildRenderPayload — speed lane", () => {
   });
 
   test("first render (no prior sample) ⇒ no speed key, never a fabricated rate", async () => {
-    const payload = await buildRenderPayload(
+    const payload = await requestPayload(
       hook(),
       instantOf(new Date(1000)),
       depsWith({
         usageStore: fakeUsage({
           usage: async () => ok({ session: { cost: 1, tokens: 1500 } }),
-          today: async () => ABSENT,
+          today: () => ABSENT,
           speed: async () => {
             const cur = { input: 10, output: 5, total: 15, atMs: 1000 };
             return ok({ cur, samples: [cur] });
@@ -339,13 +339,13 @@ describe("buildRenderPayload — speed lane", () => {
   });
 
   test("burn-rate history projects each adjacent total-lane pair; idle gaps are 0", async () => {
-    const payload = await buildRenderPayload(
+    const payload = await requestPayload(
       hook(),
       instantOf(new Date(1000)),
       depsWith({
         usageStore: fakeUsage({
           usage: async () => ok({ session: { cost: 1, tokens: 1500 } }),
-          today: async () => ABSENT,
+          today: () => ABSENT,
           speed: async () => {
             // total/atMs: 0@0, 100@1s (+100/s), 100@2s (idle ⇒ 0), 400@3s (+300/s).
             const samples = [
@@ -372,13 +372,13 @@ describe("buildRenderPayload — speed lane", () => {
   });
 
   test("history skips unmeasurable (out-of-window) pairs instead of fabricating a 0 bar", async () => {
-    const payload = await buildRenderPayload(
+    const payload = await requestPayload(
       hook(),
       instantOf(new Date(1000)),
       depsWith({
         usageStore: fakeUsage({
           usage: async () => ok({ session: { cost: 1, tokens: 1500 } }),
-          today: async () => ABSENT,
+          today: () => ABSENT,
           speed: async () => {
             // total/atMs: 0@0, 100@1s (+100/s, in-window), 400@30s (29s gap ⇒
             // stale, out-of-window), 410@30.005s (5ms ⇒ rapid, out-of-window).
@@ -404,13 +404,13 @@ describe("buildRenderPayload — speed lane", () => {
   });
 
   test("a single-sample ring yields no history (needs two samples for one bar)", async () => {
-    const payload = await buildRenderPayload(
+    const payload = await requestPayload(
       hook(),
       instantOf(new Date(1000)),
       depsWith({
         usageStore: fakeUsage({
           usage: async () => ok({ session: { cost: 1, tokens: 1500 } }),
-          today: async () => ABSENT,
+          today: () => ABSENT,
           speed: async () => {
             const cur = { input: 10, output: 5, total: 15, atMs: 1000 };
             return ok({ cur, samples: [cur] });
@@ -427,7 +427,7 @@ describe("buildRenderPayload — speed lane", () => {
   });
 
   test("gating: speed omitted from the closure ⇒ no speed key (lane not pulled)", async () => {
-    const payload = await buildRenderPayload(
+    const payload = await requestPayload(
       hook(),
       instantOf(new Date(1000)),
       depsWith(),

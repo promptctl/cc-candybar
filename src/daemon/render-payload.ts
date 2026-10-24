@@ -49,10 +49,17 @@ import {
   type Reading,
 } from "../utils/outcome.js";
 import type { CacheExpiryProvider } from "../segments/cache.js";
-import { answered, type Current, type Waiting } from "../utils/reading.js";
+import {
+  answered,
+  settledLane,
+  type Current,
+  type Lane,
+  type Waiting,
+} from "../utils/reading.js";
 import type { DaemonLogger } from "../utils/logger.js";
 import { isBundledPreset } from "./bundled-presets.js";
 import type {
+  DaySet,
   SessionUsageStore,
   SpeedObservation,
   TodayInfo,
@@ -579,9 +586,10 @@ export interface RenderPayloadDeps {
   // The session's lane feeds as they stood at an instant — FrameFeeds.feedsOf
   // in the daemon.
   readonly feeds: (sessionId: string, at: Instant) => LaneFeeds;
-  // The home this render reads for: what it reads of a shared entry (a repo)
-  // it holds until it is disposed, so the entry's owner keeps refreshing it.
-  readonly holds: Holds;
+  // The lanes the view's latest declaration handed it (`declareLanes`), read
+  // at each read: a read takes nothing, so the view holds exactly what its
+  // latest declaration took.
+  readonly lanes: () => DeclaredLanes;
 }
 
 // ─── Spend and throughput projections (pure) ──────────────────────────────────
@@ -1153,12 +1161,7 @@ export async function refreshPayload(inputs: PayloadInputs): Promise<Threw> {
       deps.usageStore.getUsageInfo(sessionId, hookData),
     ),
     lane("today", want.today, () =>
-      deps.usageStore.getTodayInfo(
-        deps.holds,
-        hookData,
-        hints.claudeConfigDir,
-        at,
-      ),
+      deps.usageStore.refreshToday(deps.lanes().today, hookData),
     ),
     lane("context", want.context, () =>
       deps.contextProvider.getContextInfo(hookData),
@@ -1209,13 +1212,13 @@ export type Threw = Readonly<
   >
 >;
 
-// Each lane's value as its owner holds it now. The keyed owners' (git, tmux,
-// memento) are `Current`: a read declares a key never read, and its pending
-// value carries the landing a request waits on.
+// Each lane's value as its owner holds it now. The keyed lanes' (git, tmux,
+// memento, today) are `Current`: a value not answered yet carries the landing
+// a request waits on.
 interface Lanes {
   readonly git: Current<GitInfo>;
   readonly usage: Reading<UsageInfo>;
-  readonly today: Reading<TodayInfo>;
+  readonly today: Current<TodayInfo>;
   readonly context: Reading<ContextInfo>;
   readonly metrics: Reading<MetricsInfo>;
   readonly activity: Reading<ActivityInfo>;
@@ -1236,8 +1239,31 @@ export type KeyedOwners = Pick<
   "gitProvider" | "tmuxService" | "mementoProvider" | "usageStore"
 >;
 
+// [LAW:types-are-the-program] What a view's declaration hands its draws: one
+// lane per keyed lane, each closed over the entry the declaration took, so
+// the key is computed once, by the declaration, and a read takes nothing.
+export interface DeclaredLanes {
+  readonly git: Lane<GitInfo>;
+  readonly tmux: Lane<string>;
+  readonly memento: Lane<CeilingReading>;
+  readonly today: Lane<DaySet>;
+}
+
+// A declaration's lanes, and what threw while it took them.
+export interface Declaration {
+  readonly lanes: DeclaredLanes;
+  readonly faults: readonly string[];
+}
+
+// Every lane answering one outcome: what a view holds before a declaration
+// has answered, or when one threw whole.
+export function settledLanes(outcome: Outcome<never>): DeclaredLanes {
+  const lane = settledLane(outcome);
+  return { git: lane, tmux: lane, memento: lane, today: lane };
+}
+
 // [LAW:one-source-of-truth] The repo a request names, at the option sets and
-// PR its closure reads — one spelling for the declaration and the draw.
+// PR its closure reads.
 function gitAt(
   { cwd, hookData }: ViewFacts,
   closure: ReadonlySet<string>,
@@ -1266,55 +1292,66 @@ function ceilingScopeOf({ hookData, cwd, hints }: ViewFacts): CeilingScope {
   );
 }
 
-// [LAW:single-enforcer] A view's declaration (brandon-unfiled-3248.8ro6, step
-// 3): every keyed entry its closure reads, at the keys its request names,
-// taken in `holds` — an entry not read yet is created and its first read
-// started. It runs when the request or the session's preset moves
-// (src/daemon/cache/render.ts), so a preset that newly places a source starts
-// its read before any draw asks for it, and one that stops placing a source
-// releases it at once (`Holds.declare`). Returns what threw.
+// [LAW:single-enforcer] A view's declaration (brandon-unfiled-3248.8ro6, steps
+// 3 and 4), the one taker of holds: every keyed entry its closure reads, at
+// the keys its request names, taken in `holds` — an entry not read yet is
+// created and its first read started — and handed back as the lanes its
+// draws read. It runs when the view opens and when the request or the
+// session's preset moves (src/daemon/cache/render.ts), so a preset that newly
+// places a source starts its read before any draw asks for it, and one that
+// stops placing a source releases it at once (`Holds.declare`).
+//
+// [LAW:dataflow-not-control-flow] Every lane is a lane: one the closure does
+// not read answers `ABSENT`, and one whose declaration threw answers that
+// failure and takes no hold.
 export function declareLanes(
   owners: KeyedOwners,
   holds: Holds,
   facts: ViewFacts,
   closure: ReadonlySet<string>,
-): readonly string[] {
+): Declaration {
   const want = wanted(closure);
   const pane = facts.hints.tmux ?? null;
   // [LAW:no-silent-failure] A lane whose declaration throws is a bug in its
-  // owner, reported to the caller, and it takes no hold — as its draw, which
-  // reads that lane as failed, reads none — while every other lane declares.
+  // owner, reported to the caller, while every other lane declares.
   const faults: string[] = [];
-  const declare = (lane: string, needed: boolean, take: () => void): void => {
-    if (!needed) return;
+  const declare = <T>(
+    lane: string,
+    needed: boolean,
+    take: () => Lane<T>,
+  ): Lane<T> => {
+    if (!needed) return settledLane(ABSENT);
     try {
-      take();
+      return take();
     } catch (e) {
       faults.push(`${lane}: ${inspect(e)}`);
+      return settledLane(failed(`${lane}: ${String(e)}`));
     }
   };
-  declare("git", want.git, () =>
-    owners.gitProvider.declare(holds, ...gitAt(facts, closure)),
-  );
-  declare("tmux", want.tmux && pane !== null, () =>
-    owners.tmuxService.sessionName(holds, pane!),
-  );
-  declare("memento", want.memento, () =>
-    owners.mementoProvider.ceiling(holds, ceilingScopeOf(facts)),
-  );
-  declare("today", want.today, () =>
-    owners.usageStore.holdToday(holds, facts.hints.claudeConfigDir),
-  );
-  return faults;
+  const lanes: DeclaredLanes = {
+    git: declare("git", want.git, () =>
+      owners.gitProvider.declare(holds, ...gitAt(facts, closure)),
+    ),
+    tmux: declare("tmux", want.tmux && pane !== null, () =>
+      owners.tmuxService.declare(holds, pane!),
+    ),
+    memento: declare("memento", want.memento, () =>
+      owners.mementoProvider.declare(holds, ceilingScopeOf(facts)),
+    ),
+    today: declare("today", want.today, () =>
+      owners.usageStore.declareToday(holds, facts.hints.claudeConfigDir),
+    ),
+  };
+  return { lanes, faults };
 }
 
 // [LAW:effects-at-boundaries] No I/O: every read takes what its owner stored,
 // or, for a lane whose refresh threw, that failure.
 function readLanes(inputs: PayloadInputs, threw: Threw = {}): Lanes {
-  const { hookData, at, deps, hints } = inputs;
+  const { hookData, at, deps } = inputs;
   const want = wanted(inputs.neededInputPaths);
   const sessionId = hookData.session_id;
-  const tmuxPane = hints.tmux ?? null;
+  const lanes = deps.lanes();
   // [LAW:no-silent-failure] A read that throws is a bug in its owner: logged
   // here, by the read that met it — a frame's included, whose failures go
   // nowhere else — and that lane's failure, so it costs its own cells, never
@@ -1332,13 +1369,10 @@ function readLanes(inputs: PayloadInputs, threw: Threw = {}): Lanes {
       return failed(`${lane}: ${String(e)}`);
     }
   };
+  // `today` is the day of the set's sums the draw is at.
+  const todaySet = lanes.today.current();
   return {
-    git: read("git", want.git, () =>
-      deps.gitProvider.current(
-        deps.holds,
-        ...gitAt(inputs, inputs.neededInputPaths),
-      ),
-    ),
+    git: lanes.git.current(),
     usage:
       threw.session ??
       read("session", want.session, () =>
@@ -1346,14 +1380,11 @@ function readLanes(inputs: PayloadInputs, threw: Threw = {}): Lanes {
       ),
     today:
       threw.today ??
-      read("today", want.today, () =>
-        deps.usageStore.todayOf(
-          deps.holds,
-          hookData,
-          hints.claudeConfigDir,
-          at,
-        ),
-      ),
+      (todaySet.kind === "ok"
+        ? read("today", true, () =>
+            deps.usageStore.todayAt(todaySet.value, hookData, at),
+          )
+        : todaySet),
     context:
       threw.context ??
       read("context", want.context, () =>
@@ -1369,27 +1400,18 @@ function readLanes(inputs: PayloadInputs, threw: Threw = {}): Lanes {
       read("activity", want.activity, () =>
         deps.activityProvider.activityOf(sessionId),
       ),
-    // The hint's three states fold to two here: a pane to address, or none
-    // ("not in tmux" and "client too old to say" both leave nothing to ask
-    // tmux about).
-    tmuxSession: read("tmux", want.tmux && tmuxPane !== null, () =>
-      deps.tmuxService.sessionName(deps.holds, tmuxPane!),
-    ),
+    tmuxSession: lanes.tmux.current(),
     cache:
       threw.cache ??
       read("cache", want.cache, () => deps.cacheExpiry.expiryOf(sessionId)),
     speed:
       threw.speed ??
       read("speed", want.speed, () => deps.usageStore.speedOf(sessionId)),
-    // The same session, anchors and environment memento's Stop hook resolves
-    // with — the last two from the client, which runs where that hook does.
-    memento: read("memento", want.memento, () =>
-      deps.mementoProvider.ceiling(deps.holds, ceilingScopeOf(inputs)),
-    ),
+    memento: lanes.memento.current(),
     autoCompact:
       threw.autocompact ??
       read("autocompact", want.autocompact, () =>
-        deps.autoCompact.stored(settingsPathOf(hints)),
+        deps.autoCompact.stored(settingsPathOf(inputs.hints)),
       ),
   };
 }
@@ -1398,7 +1420,12 @@ function readLanes(inputs: PayloadInputs, threw: Threw = {}): Lanes {
 // answered yet, the branch's PR included.
 function waitsOf(lanes: Lanes): Array<Promise<void>> {
   const waits: Array<Promise<void>> = [];
-  for (const lane of [lanes.git, lanes.tmuxSession, lanes.memento]) {
+  for (const lane of [
+    lanes.git,
+    lanes.tmuxSession,
+    lanes.memento,
+    lanes.today,
+  ]) {
     if (lane.kind === "pending") waits.push(lane.landed);
   }
   const pr = lanes.git.kind === "ok" ? lanes.git.value.pullRequest : undefined;

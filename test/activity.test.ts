@@ -15,7 +15,6 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 import { ActivityProvider, type ActivityInfo } from "../src/segments/activity";
-import { buildRenderPayload } from "../src/daemon/render-payload";
 import type { RenderPayloadDeps } from "../src/daemon/render-payload";
 import { type EffectiveGlobals } from "../src/config/effective-globals";
 import { globalsFor } from "./helpers/selection";
@@ -42,6 +41,7 @@ import {
   fakeMetrics,
   fakeTmux,
   fakeUsage,
+  requestPayload,
 } from "./helpers/payload-owners";
 
 // ─── fixtures ────────────────────────────────────────────────────────────────
@@ -527,7 +527,7 @@ describe("the payload projection", () => {
       gitProvider: fakeGit(async () => ABSENT),
       usageStore: fakeUsage({
         usage: async () => ABSENT,
-        today: async () => ABSENT,
+        today: () => ABSENT,
         speed: async () => ABSENT,
       }),
       contextProvider: fakeContext(async () => ABSENT),
@@ -539,7 +539,7 @@ describe("the payload projection", () => {
       navigation: () => 0,
       feeds: () => UNFOLLOWED_FEEDS,
     } as unknown as RenderPayloadDeps;
-    const built = await buildRenderPayload(
+    const built = await requestPayload(
       hook(join(dir, "t.jsonl"), "p"),
       instantOf(new Date()),
       deps,

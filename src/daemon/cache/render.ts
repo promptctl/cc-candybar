@@ -2,7 +2,13 @@ import path from "node:path";
 import { nearestWatchTarget } from "../../utils/watch-target.js";
 import type { RichText } from "@promptctl/rich-js";
 import { observable, reaction, runInAction } from "mobx";
-import { neededPrefixesByPreset, type ViewFacts } from "../render-payload.js";
+import {
+  neededPrefixesByPreset,
+  settledLanes,
+  type Declaration,
+  type DeclaredLanes,
+  type ViewFacts,
+} from "../render-payload.js";
 import { fileHeldSettings } from "../setting-drafts.js";
 import {
   loadConfigChain,
@@ -47,6 +53,7 @@ import type {
 } from "./watchers.js";
 import { quietLogger, type DaemonLogger } from "../../utils/logger.js";
 import { Holds } from "../../utils/holds.js";
+import { ABSENT, failed } from "../../utils/outcome.js";
 import { pluginDataVar, pluginNameOf } from "../../config/loader/plugins.js";
 import { projectionsOf } from "../../config/loader/projections.js";
 
@@ -736,6 +743,12 @@ export interface SessionView {
   // The request the view's renders draw by — the keys its declaration takes
   // its holds at. A render of the same request changes nothing.
   requested(facts: ViewFacts): void;
+  // The request the view draws by now: the one it opened with, or a later
+  // one `requested` named.
+  facts(): ViewFacts;
+  // The lanes the view's latest declaration handed it: what its draws read
+  // of the daemon's shared entries.
+  lanes(): DeclaredLanes;
   readonly lastRenderCellsBySegment: Map<string, readonly RichText[]>;
   // [LAW:single-enforcer] The view's one teardown: its holds close and its
   // registry is disposed, so no caller of openView can release one and leak
@@ -744,14 +757,17 @@ export interface SessionView {
 }
 
 // What a view declares into its holds: every keyed entry `closure` reads, at
-// the keys `facts` name. Returns what threw.
+// the keys `facts` name. Returns the lanes it took, and what threw.
 export type Declare = (
   holds: Holds,
   facts: ViewFacts,
   closure: ReadonlySet<string>,
-) => readonly string[];
+) => Declaration;
 
-export const DECLARES_NOTHING: Declare = () => [];
+export const DECLARES_NOTHING: Declare = () => ({
+  lanes: settledLanes(ABSENT),
+  faults: [],
+});
 
 // What a view reads to keep its declaration current.
 export interface ViewDeclaring {
@@ -769,12 +785,16 @@ export interface ViewDeclaring {
 // resolve to (brandon-unfiled-3248.8ro6, step 3): a request naming other keys,
 // or a click moving the preset, declares again in the turn it lands, so the
 // sources a preset newly places are read before any draw asks for them, and
-// those it stops placing are released at once. Until a request names its
-// keys, a view holds nothing.
+// those it stops placing are released at once.
+//
+// [LAW:types-are-the-program] A view is never undeclared (step 4): it opens
+// with the request it is drawn for and declares in its opening turn, so its
+// lanes always hold its latest declaration's.
 export function openView(
   state: DslRenderState,
   cwd: string,
   sessionId: string,
+  facts: ViewFacts,
   { sessionState, declare, log }: ViewDeclaring,
 ): SessionView {
   const registry = state.registry.view();
@@ -782,7 +802,12 @@ export function openView(
   // What fails to declare here failed in the load's probe (buildRenderState),
   // which reported it: a declaration reads only the config.
   declareDslVariables(state.config, registry, cwd, VIEW_SCOPE);
-  const latest = observable.box<ViewFacts | null>(null, { deep: false });
+  const latest = observable.box<ViewFacts>(facts, { deep: false });
+  // Until the first declaration below answers — which it does in this turn.
+  const lanes = observable.box<DeclaredLanes>(
+    settledLanes(failed("view not declared yet")),
+    { deep: false },
+  );
   // [LAW:no-silent-failure] Only the request and the preset are tracked: the
   // closure is computed in the effect, beside the declaration, where a throw
   // is logged — a reaction's tracked expression that throws reaches only the
@@ -796,10 +821,12 @@ export function openView(
     ([facts, preset]) => {
       try {
         const reads = state.neededInputPaths(preset);
-        let faults: readonly string[] = [];
-        const { acquired, released } = holds.declare(() => {
-          if (facts !== null) faults = declare(holds, facts, reads);
-        });
+        const {
+          result: { lanes: taken, faults },
+          acquired,
+          released,
+        } = holds.declare(() => declare(holds, facts, reads));
+        runInAction(() => lanes.set(taken));
         for (const fault of faults) {
           log(
             "error",
@@ -816,14 +843,17 @@ export function openView(
           );
         }
       } catch (e) {
-        // The view keeps what it held.
+        // The view keeps what it held, and reads what it last declared.
         log(
           "error",
           `session view declaration threw sid=${JSON.stringify(sessionId)}: ${String(e)}`,
         );
       }
     },
-    { equals: (a, b) => a[0] === b[0] && a[1] === b[1] },
+    {
+      equals: (a, b) => a[0] === b[0] && a[1] === b[1],
+      fireImmediately: true,
+    },
   );
   return {
     sessionId,
@@ -831,7 +861,9 @@ export function openView(
     store: registry.variableStore,
     registry,
     holds,
-    requested: (facts) => runInAction(() => latest.set(facts)),
+    requested: (next) => runInAction(() => latest.set(next)),
+    facts: () => latest.get(),
+    lanes: () => lanes.get(),
     lastRenderCellsBySegment: new Map<string, readonly RichText[]>(),
     dispose: () => {
       stop();
@@ -1000,17 +1032,21 @@ export class RenderCache {
   // of the state it draws with, for the same reason as `hold`: a move, a
   // reload, an eviction or an idle sweep retires the view, and the cache
   // disposes it when this hold is released.
+  //
+  // `facts` is the request the render is drawn for: a view opened here is
+  // declared with it (openView), so no view is ever drawn undeclared.
   holdSession(
     projectDir: string,
     cwd: string,
     configFile: string | undefined,
     sessionId: string,
+    facts: ViewFacts,
   ): SessionHold {
     const held = this.hold(projectDir, cwd, configFile);
     let view: SessionView;
     let lease: ViewHold;
     try {
-      view = this.viewOf(sessionId, held.entry, held.state);
+      view = this.viewOf(sessionId, held.entry, held.state, facts);
       lease = this.leaseOf(view);
     } catch (err) {
       // [LAW:no-ambient-temporal-coupling] The state hold is this call's
@@ -1041,6 +1077,7 @@ export class RenderCache {
     sessionId: string,
     entry: CacheEntry,
     state: DslRenderState,
+    facts: ViewFacts,
   ): SessionView {
     const current = this.views.get(sessionId);
     if (current?.state === state) {
@@ -1050,7 +1087,18 @@ export class RenderCache {
       return current;
     }
     if (current !== undefined) this.retireView(current, "moved");
-    const view = openView(state, entry.cwd, sessionId, {
+    return this.opened(sessionId, entry, state, facts);
+  }
+
+  // [LAW:single-enforcer] The one way the cache opens a view: declared with
+  // `facts` in this turn (openView), entered, and charged to the budget.
+  private opened(
+    sessionId: string,
+    entry: CacheEntry,
+    state: DslRenderState,
+    facts: ViewFacts,
+  ): SessionView {
+    const view = openView(state, entry.cwd, sessionId, facts, {
       sessionState: this.deps.sessionState,
       declare: this.deps.declare,
       log: this.log,
@@ -1156,7 +1204,7 @@ export class RenderCache {
   ): void {
     entry.watcher?.release();
     this.entries.delete(key);
-    this.retire(entry.state, reason);
+    this.retire(entry.state, reason, null);
   }
 
   get stats(): RenderCacheStats {
@@ -1234,12 +1282,43 @@ export class RenderCache {
   }
 
   // The cache stopped serving `state`: it left the map, or a reload
-  // replaced it. Its teardown is due — now, or at its last holder's return.
-  private retire(state: DslRenderState, reason: Teardown["reason"]): void {
+  // replaced it with `successor`. Its teardown is due — now, or at its last
+  // holder's return.
+  private retire(
+    state: DslRenderState,
+    reason: Teardown["reason"],
+    successor: {
+      readonly entry: CacheEntry;
+      readonly state: DslRenderState;
+    } | null,
+  ): void {
     // [LAW:single-enforcer] A view is a child of its state: the state going
     // retires every view of it first, so each is disposed before or with it.
+    // [LAW:no-ambient-temporal-coupling] A reload opens each view's successor
+    // over the new state first, declared with the request the old one drew by,
+    // so the session's repo, pane and memento scope stay held across it and
+    // the next frame draws a declared view (brandon-unfiled-3248.8ro6, 4a).
     for (const view of [...this.views.values()]) {
-      if (view.state === state) this.retireView(view, reason);
+      if (view.state !== state) continue;
+      if (successor !== null) {
+        // [LAW:no-silent-failure] A successor that fails to open is said, and
+        // the old view is still retired, so the reload never leaves a state
+        // half torn down; the session's next render opens its view.
+        try {
+          this.opened(
+            view.sessionId,
+            successor.entry,
+            successor.state,
+            view.facts(),
+          );
+        } catch (e) {
+          this.log(
+            "error",
+            `session view reopen failed sid=${JSON.stringify(view.sessionId)}: ${String(e)}`,
+          );
+        }
+      }
+      this.retireView(view, reason);
     }
     const hold = this.holdOf(state);
     hold.retired = { reason, held: hold.holders };
@@ -1296,7 +1375,7 @@ export class RenderCache {
       const retired = entry.state;
       entry.state = loaded.state;
       this.serve(loaded.state);
-      this.retire(retired, "reload");
+      this.retire(retired, "reload", { entry, state: loaded.state });
     }
     // A reload can move the entry onto a compile no other entry carries.
     this.fit(entry);

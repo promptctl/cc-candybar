@@ -33,6 +33,7 @@ import { VERBS } from "../src/daemon/verbs";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import { parseHandlerUrl } from "../src/install/index";
 import { parseAndValidate } from "./helpers/parse-and-validate";
+import { viewFacts } from "./helpers/view-facts";
 
 // brandon-unfiled-3248.8yp: the render cache held one 9.3 MB state per
 // directory a session rendered from, and released one only past 256 of them,
@@ -96,7 +97,7 @@ const drawnBytes = (view: SessionView): string =>
 
 // A frame of `state` through a view of its own, disposed after.
 const render = (state: ReturnType<RenderCache["getOrCreate"]>["state"]): string => {
-  const view = openView(state, dir, "s", {
+  const view = openView(state, dir, "s", viewFacts(dir, "s"), {
     sessionState: new SessionState(),
     declare: DECLARES_NOTHING,
     log: () => {},
@@ -350,7 +351,7 @@ test("an entry, a compile and a view hold no more than the cache charges for the
   const entry = (i: number) => {
     const cwd = path.join(dir, `c${i}`);
     fs.mkdirSync(cwd);
-    using held = cache.holdSession(cwd, cwd, undefined, `e${i}`);
+    using held = cache.holdSession(cwd, cwd, undefined, `e${i}`, viewFacts(cwd, `e${i}`));
     drawn(held.view);
     return held.state;
   };
@@ -366,7 +367,7 @@ test("an entry, a compile and a view hold no more than the cache charges for the
   // A further session in a directory already rendered from costs its view.
   const shared = keep[0]!;
   const view = (i: number): SessionView => {
-    using held = cache.holdSession(dir + "/c0", dir + "/c0", undefined, `v${i}`);
+    using held = cache.holdSession(dir + "/c0", dir + "/c0", undefined, `v${i}`, viewFacts(dir + "/c0", `v${i}`));
     expect(held.state).toBe(shared);
     drawn(held.view);
     return held.view;
@@ -384,7 +385,7 @@ test("an entry, a compile and a view hold no more than the cache charges for the
   // list behind the ⚙ and the preset list, and every tab.
   const walked = (i: number): SessionView => {
     const sid = `w${i}`;
-    using held = cache.holdSession(dir + "/c0", dir + "/c0", undefined, sid);
+    using held = cache.holdSession(dir + "/c0", dir + "/c0", undefined, sid, viewFacts(dir + "/c0", sid));
     recordRender(sessionState, sid);
     const ctx = testVerbContext(sessionState, undefined, held.state.config);
     let last = drawnBytes(held.view);

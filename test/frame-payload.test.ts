@@ -23,11 +23,11 @@ import { globalsFor } from "./helpers/selection";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
 import { instantOf, type Instant } from "../src/utils/instant";
 import { ABSENT, PENDING, ok } from "../src/utils/outcome";
-import { Holds } from "../src/utils/holds";
 import type { ClientHints } from "../src/daemon/protocol";
 import type { ClaudeHookData } from "../src/utils/claude";
 import {
   absentOwners,
+  declaredLanes,
   fakeActivity,
   fakeAutoCompact,
   fakeCacheExpiry,
@@ -91,9 +91,8 @@ function counted(pr?: unknown) {
       return answer;
     };
   const feedsAt: Instant[] = [];
-  const deps = {
+  const owners = {
     ...absentOwners(),
-    holds: new Holds(),
     gitProvider: fakeGit(
       count("git", ok(pr === undefined ? GIT : { ...GIT, pullRequest: pr })),
     ),
@@ -118,6 +117,16 @@ function counted(pr?: unknown) {
       feedsAt.push(at);
       return UNFOLLOWED_FEEDS;
     },
+  };
+  // The lanes the session's view declared: every frame and the request read
+  // the same handles, as the daemon's do.
+  const deps = {
+    ...owners,
+    lanes: declaredLanes(
+      owners,
+      { hookData: HOOK, cwd: undefined, hints: HINTS },
+      EVERY_LANE,
+    ),
   } as unknown as RenderPayloadDeps;
   const inputs = (at: Instant): PayloadInputs => ({
     hookData: HOOK,
@@ -164,7 +173,10 @@ describe("a frame's payload", () => {
     for (let frame = 0; frame < 5; frame++) {
       expect(payloadOf(inputs(AT), DRAW)).toEqual(drawn);
     }
-    expect(reads).toEqual(afterRequest);
+    // `today`'s reader is the day a draw picks of the sums its lane holds
+    // (`todayAt`, no I/O): every frame picks its own, since a frame may be
+    // drawn after midnight. Every other lane was read by the request alone.
+    expect(reads).toEqual({ ...afterRequest, today: afterRequest.today! + 5 });
   });
 
   test("draws every lane no request has answered as not answered yet", () => {

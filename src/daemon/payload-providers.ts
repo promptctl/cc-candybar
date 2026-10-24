@@ -25,11 +25,12 @@ import { AutoCompactProvider } from "../segments/autocompact-provider.js";
 import { CacheExpiryProvider } from "../segments/cache.js";
 
 // What a session's own history contributes (`history`, `navigation`), the
-// frames the renderer pushes it (`feeds`) and the home the render reads for
-// (`holds`) are the renderer's to supply; everything else is a provider.
+// frames the renderer pushes it (`feeds`) and the lanes the view's
+// declaration handed it (`lanes`) are the renderer's to supply; everything
+// else is a provider.
 export type PayloadProviders = Omit<
   RenderPayloadDeps,
-  "history" | "navigation" | "feeds" | "holds"
+  "history" | "navigation" | "feeds" | "lanes"
 >;
 
 export function createPayloadProviders(opts: {

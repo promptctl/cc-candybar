@@ -18,7 +18,6 @@ import { PRESET_FLOOR } from "../src/config/presets";
 import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
 import {
   buildNeededPrefixes,
-  buildRenderPayload,
   type RenderPayloadDeps,
 } from "../src/daemon/render-payload";
 import { type EffectiveGlobals } from "../src/config/effective-globals";
@@ -40,6 +39,7 @@ import {
   fakeMetrics,
   fakeTmux,
   fakeUsage,
+  requestPayload,
 } from "./helpers/payload-owners";
 
 const SID = "slash-gate";
@@ -77,7 +77,7 @@ async function bar(
     gitProvider: fakeGit(async () => ABSENT),
     usageStore: fakeUsage({
       usage: async () => ABSENT,
-      today: async () => ABSENT,
+      today: () => ABSENT,
     }),
     contextProvider: fakeContext(async () => ABSENT),
     metricsProvider: fakeMetrics(async () => ABSENT),
@@ -93,7 +93,7 @@ async function bar(
     navigation: () => 0,
     feeds: () => UNFOLLOWED_FEEDS,
   } as unknown as RenderPayloadDeps;
-  const payload = await buildRenderPayload(
+  const payload = await requestPayload(
     HOOK_DATA,
     instantOf(new Date()),
     deps,

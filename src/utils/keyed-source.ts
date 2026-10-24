@@ -5,10 +5,10 @@ import { Period, periodOf, type Every } from "./period";
 import {
   answerPending,
   currentOf,
-  outcomeOf,
   pending,
   settle,
-  type Current,
+  settledLane,
+  type Lane,
   type Readable,
 } from "./reading";
 
@@ -125,31 +125,32 @@ export class KeyedSource<I, T> {
     );
   }
 
-  // The one read: the stored value as it stands, never awaited. `holds` is the
-  // home reading: it holds the entry until a declaration of the home's takes
-  // it no more, or the home is disposed, which keeps the entry on its period. A key never read is
-  // created pending and read once, its first refresh.
+  // [LAW:single-enforcer] The one way into an entry: `holds` takes it — the
+  // home holds it until a declaration of the home's takes it no more, or the
+  // home is disposed, which keeps the entry on its period — and the lane
+  // reads it as it stands, never awaited and taking nothing. A key never read
+  // is created pending and read once, its first refresh.
   //
   // [LAW:no-silent-failure] The owner logs its own failures — each refresh's
-  // by that refresh — so its caller logs none. A read that THROWS is a bug
-  // none of those saw, logged here where it surfaces, and answered as failed.
-  current(holds: Holds, input: I): Current<T> {
+  // by that refresh — so its caller logs none. A declaration or a read that
+  // THROWS is a bug none of those saw, logged where it surfaces, and answered
+  // as failed.
+  declare(holds: Holds, input: I): Lane<T> {
+    let entry: Readable<T>;
     try {
-      return currentOf(this.ask(holds, input));
+      entry = this.ask(holds, input);
     } catch (e) {
-      return this.threw(e);
+      return settledLane(this.threw(e));
     }
-  }
-
-  // The read's answer, waited for while it is not answered yet: one ask, so
-  // one hold, then the entry's own landing — which answers a key the LRU
-  // drops meanwhile as dropped. The promise never rejects.
-  read(holds: Holds, input: I): Promise<Outcome<T>> {
-    try {
-      return outcomeOf(this.ask(holds, input));
-    } catch (e) {
-      return Promise.resolve(this.threw(e));
-    }
+    return {
+      current: () => {
+        try {
+          return currentOf(entry);
+        } catch (e) {
+          return this.threw(e);
+        }
+      },
+    };
   }
 
   private ask(holds: Holds, input: I): Readable<T> {

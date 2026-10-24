@@ -3,7 +3,7 @@ import type { TmuxHint } from "../tmux-hint";
 import type { Holds } from "../utils/holds";
 import { KeyedSource, type KeyedSourceStats } from "../utils/keyed-source";
 import { quietLogger, type DaemonLogger } from "../utils/logger";
-import type { Current } from "../utils/reading";
+import type { Lane } from "../utils/reading";
 import { valueOf } from "../utils/logfmt";
 import { ABSENT, failed, ok, type Outcome } from "../utils/outcome";
 
@@ -51,13 +51,8 @@ export class TmuxService {
   // [LAW:types-are-the-program] Takes the pane to ask about. "Not in tmux" is
   // the caller's fact (the hint is null), so there is no pane-less call to
   // answer.
-  getSessionName(holds: Holds, hint: TmuxHint): Promise<Outcome<string>> {
-    return this.names.read(holds, hint);
-  }
-
-  // The stored name as it stands, for a draw: never awaited.
-  sessionName(holds: Holds, hint: TmuxHint): Current<string> {
-    return this.names.current(holds, hint);
+  declare(holds: Holds, hint: TmuxHint): Lane<string> {
+    return this.names.declare(holds, hint);
   }
 
   getStats(): KeyedSourceStats {

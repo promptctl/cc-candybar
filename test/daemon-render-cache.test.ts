@@ -41,6 +41,7 @@ import { walkNodes, type LayoutNode } from "../src/config/dsl-types";
 import { rootNode, rootOf } from "../src/config/root";
 import { SETTINGS_NS } from "../src/config/loader/reserved-namespace";
 import { PRESET_FLOOR, presetRoot } from "../src/config/presets";
+import { viewFacts } from "./helpers/view-facts";
 
 // Flatten a layout tree to its segment names, in pre-order — the post-`root`
 // equivalent of the old `config.layout.flatMap(r => r.segments)`.
@@ -757,7 +758,7 @@ describe("RenderCache", () => {
       lines.push(msg),
     );
     try {
-      cache.holdSession("/p0", "/p0", undefined, "s0")[Symbol.dispose]();
+      cache.holdSession("/p0", "/p0", undefined, "s0", viewFacts("/p0", "s0"))[Symbol.dispose]();
       for (let i = 0; i < 5; i++)
         cache.getOrCreate(`/p${i}`, `/p${i}`, undefined);
       const evict = lines.filter((l) => l.startsWith("config disposed "));
@@ -1012,7 +1013,7 @@ describe("RenderCache idle sweep", () => {
     try {
       let released = 0;
       {
-        using hold = cache.holdSession(dir, dir, undefined, "s1");
+        using hold = cache.holdSession(dir, dir, undefined, "s1", viewFacts(dir, "s1"));
         hold.view.holds.take("repo", () => () => {
           released++;
         });
@@ -1048,11 +1049,13 @@ describe("RenderCache idle sweep", () => {
       { budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES },
     );
     try {
-      const view = openView(cache.getOrCreate(dir, dir, undefined).state, dir, "s1", {
-        sessionState: new SessionState(),
-        declare: DECLARES_NOTHING,
-        log: () => {},
-      });
+      const view = openView(
+        cache.getOrCreate(dir, dir, undefined).state,
+        dir,
+        "s1",
+        viewFacts(dir, "s1"),
+        { sessionState: new SessionState(), declare: DECLARES_NOTHING, log: () => {} },
+      );
       let released = 0;
       view.holds.take("repo", () => () => {
         released++;
@@ -1094,7 +1097,7 @@ describe("RenderCache idle sweep", () => {
           declarations.push(`${facts.cwd} ${preset}`);
           take(holds, `memento:${facts.cwd}`);
           take(holds, preset);
-          return [];
+          return DECLARES_NOTHING(holds, facts, closure);
         },
       },
       { budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES },
@@ -1112,16 +1115,14 @@ describe("RenderCache idle sweep", () => {
       hints: parseClientHints({}),
     });
     try {
+      const a = request("/a");
       const view = (() => {
-        using hold = cache.holdSession(dir, dir, undefined, "s1");
+        using hold = cache.holdSession(dir, dir, undefined, "s1", a);
         return hold.view;
       })();
-      // No request has named its keys: it holds nothing.
-      expect(view.holds.size).toBe(0);
-
-      const a = request("/a");
-      view.requested(a);
+      // A view opens declared, at the request it opens with.
       expect(declarations).toEqual(["/a closure:0"]);
+      expect(view.holds.size).toBe(2);
       // The same request — a frame drawn by it — declares nothing again.
       view.requested(a);
       expect(declarations).toHaveLength(1);

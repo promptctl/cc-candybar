@@ -8,6 +8,7 @@ import { GitService, type GitInfo } from "../src/segments/git";
 import { ok, type Outcome } from "../src/utils/outcome";
 import { Holds } from "../src/utils/holds";
 import { until } from "./helpers/until";
+import { laneOutcome } from "../src/utils/reading";
 
 function makeRepo(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "powerline-watch-"));
@@ -90,7 +91,7 @@ class StubInner extends GitService {
   constructor(private repo: string) {
     super();
   }
-  override async findGitRoot(): Promise<Outcome<string>> {
+  override findGitRoot(): Outcome<string> {
     return ok(this.repo);
   }
   override async getGitInfo(): Promise<Outcome<GitInfo>> {
@@ -111,8 +112,8 @@ describe("GitDataProvider + watchers integration", () => {
     const svc = new GitDataProvider({ inner });
     const holds = new Holds();
 
-    await svc.getGitInfo(holds, repo, {});
-    await svc.getGitInfo(holds, repo, {});
+    await laneOutcome(svc.declare(holds, repo, {}));
+    await laneOutcome(svc.declare(holds, repo, {}));
     expect(inner.calls).toBe(1);
     await new Promise((r) => setTimeout(r, 50));
 
@@ -123,7 +124,7 @@ describe("GitDataProvider + watchers integration", () => {
     expect(svc.getStats().changes).toBeGreaterThanOrEqual(1);
     // The read takes the value the change's re-read stored.
     const reads = inner.calls;
-    await svc.getGitInfo(holds, repo, {});
+    await laneOutcome(svc.declare(holds, repo, {}));
     expect(inner.calls).toBe(reads);
 
     svc.close();
@@ -136,7 +137,7 @@ describe("GitDataProvider + watchers integration", () => {
     const svc = new GitDataProvider({ inner, periodMs: 150 });
     const holds = new Holds();
 
-    await svc.getGitInfo(holds, repo, {});
+    await laneOutcome(svc.declare(holds, repo, {}));
     expect(inner.calls).toBe(1);
     await new Promise((r) => setTimeout(r, 400));
     expect(inner.calls).toBeGreaterThanOrEqual(3);
@@ -154,7 +155,7 @@ describe("GitDataProvider + watchers integration", () => {
     const repo = makeRepo();
     const inner = new StubInner(repo);
     const svc = new GitDataProvider({ inner });
-    await svc.getGitInfo(new Holds(), repo, {});
+    await laneOutcome(svc.declare(new Holds(), repo, {}));
     expect(svc.getStats().watchers).toBe(1);
     svc.close();
     expect(svc.getStats().watchers).toBe(0);

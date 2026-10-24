@@ -24,6 +24,7 @@ import { pluginRoots } from "../src/config/loader/plugin-folders";
 import { hasCacheField } from "../src/config/dsl-types";
 import { SessionState } from "../src/daemon/session-state";
 import { startBar, type Bar } from "./helpers/drive-bar";
+import { viewFacts } from "./helpers/view-facts";
 
 let dir: string;
 beforeEach(() => {
@@ -502,7 +503,7 @@ describe("an installed plugin", () => {
       const drawn = await Promise.all(
         cwds.map(async (cwd, i) => {
           // Each through a session's view of its entry, as the daemon draws.
-          using held = cache.holdSession(main, cwd, p, `s${i}`);
+          using held = cache.holdSession(main, cwd, p, `s${i}`, viewFacts(cwd, `s${i}`));
           const s = held.state;
           expect(s).toBe(states[i]);
           expect(await s.registry.settled(5000)).toEqual([]);

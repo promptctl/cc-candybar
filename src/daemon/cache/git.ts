@@ -20,10 +20,11 @@ import { Period, periodOf, type Every } from "../../utils/period";
 import {
   answerPending,
   currentOf,
-  outcomeOf,
   pending,
   settle,
+  settledLane,
   type Current,
+  type Lane,
   type Readable,
 } from "../../utils/reading";
 import type { Holds, Release } from "../../utils/holds";
@@ -43,10 +44,10 @@ export type GitProviderLogger = (
 // one owner that schedules every read of it (brandon-unfiled-3248.8ro6, step
 // 1). A read never fetches a repo the cache has read before: it takes the
 // value stored, and the stored value is refreshed by exactly two triggers —
-// the repo's watch, and one period over the repos something holds. A draw
-// reads through current(), a request through getGitInfo(); both share one
-// state per repo (keyed by the *effective git directory*), one watch, and one
-// launch category ("git").
+// the repo's watch, and one period over the repos something holds. A home
+// declares what it reads (`declare`) and reads the lane it was handed; every
+// lane of a repo shares one state (keyed by the *effective git directory*),
+// one watch, and one launch category ("git").
 //
 // [LAW:one-source-of-truth] The repo key derives from `resolveEffectiveGitDir`,
 // which returns the exact directory the shell-runner will run git in (taking
@@ -161,12 +162,8 @@ interface RepoState {
 }
 
 interface ResolutionCacheEntry {
-  readonly dir: Promise<Outcome<string>>;
+  readonly known: Outcome<string>;
   readonly computedAt: number;
-  // What `dir` answered, once it has — or, until then, what the resolution it
-  // replaced answered: a draw reads which repo a directory is without
-  // awaiting.
-  known: Outcome<string> | undefined;
 }
 
 // `held` counts the repos a home holds — the ones the period visits.
@@ -319,21 +316,16 @@ export class GitDataProvider {
   }
 
   // One TTL over ALL THREE outcome kinds [LAW:one-type-per-behavior]: being
-  // that stale about "is this a repo" promises nothing new. `failed` is the
-  // kind that matters most: a resolution that fails by TIMEOUT costs two
-  // seconds of a render, and retrying it every tick forever is the worst of
-  // the three cases, not the one to leave uncached.
-  resolveEffectiveGitDir(
-    workingDir: string,
-    projectDir?: string,
-  ): Promise<Outcome<string>> {
-    return this.resolution(workingDir, projectDir).dir;
-  }
-
+  // that stale about "is this a repo" promises nothing new. The walk is
+  // synchronous fs (`GitService.resolveEffectiveGitDir`), so a declaration
+  // knows its repo in the turn it asks and takes its hold then; the window
+  // bounds the walk to one per directory per window (brandon-git-cache-y2t),
+  // and only a declaration consults it — a draw reads the lane it was handed
+  // and never resolves.
   private resolution(
     workingDir: string,
     projectDir: string | undefined,
-  ): ResolutionCacheEntry {
+  ): Outcome<string> {
     const key = `${workingDir}|${projectDir ?? ""}`;
     const now = Date.now();
 
@@ -342,157 +334,85 @@ export class GitDataProvider {
       // LRU touch: the cwd being rendered every tick must survive eviction.
       this.resolutions.delete(key);
       this.resolutions.set(key, existing);
-      return existing;
+      return existing.known;
     }
 
     // [LAW:no-silent-failure] A THROW is a bug in the resolver, which returns
     // outcomes by construction: it is answered as the failure it is, logged
-    // below and believed for the window like any other — so a reader waiting
-    // on the resolution is answered, never sent to ask again. The executor
-    // makes a throw before the resolver's promise a rejection too.
-    const dir = new Promise<Outcome<string>>((resolve) =>
-      resolve(this.inner.resolveEffectiveGitDir(workingDir, projectDir)),
-    ).catch((e: unknown) => failed(`resolver threw: ${String(e)}`));
-    // [LAW:one-source-of-truth] A resolution read again keeps the answer it
-    // replaces until its own lands: a draw takes the stored value, so the
-    // window ending is never a moment the repo is not known.
-    const entry: ResolutionCacheEntry = {
-      dir,
-      computedAt: now,
-      known: existing?.known,
-    };
-    this.resolutions.set(key, entry);
+    // below and believed for the window like any other.
+    let known: Outcome<string>;
+    try {
+      known = this.inner.resolveEffectiveGitDir(workingDir, projectDir);
+    } catch (e) {
+      known = failed(`resolver threw: ${String(e)}`);
+    }
+    this.resolutions.set(key, { known, computedAt: now });
     // A failed answer is logged once, by the resolution that made it: it is
-    // believed for the window, so a read of it never logs it again.
-    void dir.then((outcome) => {
-      entry.known = outcome;
-      if (outcome.kind === "failed") {
-        this.logger(
-          "warn",
-          `git resolve failed (${workingDir}): ${outcome.reason}`,
-        );
-      }
-    });
+    // believed for the window, so a declaration of it never logs it again.
+    if (known.kind === "failed") {
+      this.logger(
+        "warn",
+        `git resolve failed (${workingDir}): ${known.reason}`,
+      );
+    }
     while (this.resolutions.size > this.maxRepos) {
       const oldest = this.resolutions.keys().next().value;
       if (oldest === undefined) break;
       this.resolutions.delete(oldest);
     }
-    return entry;
+    return known;
   }
 
-  // [LAW:single-enforcer] The one read: the repo's value as it stands, never
-  // awaited, so a draw takes it in the turn it draws. `holds` is the home
-  // reading: it holds the repo from this read until a declaration of the
-  // home's takes it no more, or the home is disposed, which is what keeps the
-  // repo on the period. A
-  // value never read is pending, its first pass queued; a PR is composed from
-  // its own source, pending on its own while its key is not answered, so the
-  // rest of the value draws as it stands.
+  // [LAW:single-enforcer] The one way into a repo: a home's declaration of
+  // what its draws read. `holds` takes the repo, the option set and, when
+  // shown, its PR — held until a declaration of the home's takes them no
+  // more, or the home is disposed, which is what keeps the repo on the
+  // period — and the lane reads them as they stand, never awaited and taking
+  // nothing. A value never read is pending, its first pass queued; a PR is
+  // composed from its own source, pending on its own while its key is not
+  // answered, so the rest of the value draws as it stands.
   //
   // [LAW:no-silent-failure] Git logs its own failures — a refresh's by the
   // refresh, a resolution's by the resolution — so its caller logs none. A
-  // read that THROWS is a bug none of those saw, logged here where it
-  // surfaces, and answered as failed.
-  current(
-    holds: Holds,
-    workingDir: string,
-    options: GitInfoOptions = {},
-    projectDir?: string,
-  ): Current<GitInfo> {
-    const look = this.look(holds, workingDir, options, projectDir);
-    return look.kind === "resolving"
-      ? { kind: "pending", landed: look.dir.then(() => {}) }
-      : look.value;
-  }
-
-  // The read's answer, PR included, waited for while either is not answered
-  // yet: one ask, so one hold, then the sources' own landings. The promise
-  // never rejects.
-  getGitInfo(
-    holds: Holds,
-    workingDir: string,
-    options: GitInfoOptions = {},
-    projectDir?: string,
-  ): Promise<Outcome<GitInfo>> {
-    return this.read(holds, workingDir, options, projectDir).catch(
-      (e: unknown) => {
-        this.logger("error", `git read threw: ${String(e)}`);
-        return failed(`git: ${String(e)}`);
-      },
-    );
-  }
-
-  private async read(
-    holds: Holds,
-    workingDir: string,
-    options: GitInfoOptions,
-    projectDir: string | undefined,
-  ): Promise<Outcome<GitInfo>> {
-    const resolved = await this.resolveEffectiveGitDir(workingDir, projectDir);
-    if (resolved.kind !== "ok") return resolved;
-    const state = this.repo(resolved.value);
-    const { showPullRequest, ...gitOptions } = options;
-    const { value, pr } = this.ask(
-      state,
-      holds,
-      gitOptions,
-      showPullRequest === true,
-    );
-    if (value.reading.kind === "pending") this.misses++;
-    else this.hits++;
-    const first = await outcomeOf(value);
-    if (pr === null || first.kind !== "ok") return first;
-    const pullRequest = await outcomeOf(pr);
-    // The value as it stands once the PR has landed. A pass stores a branch's
-    // values and moves the PR's key in one turn (or a pass that began before
-    // the PR's first ask queues the one that will), so the two answer for the
-    // same pass.
-    const info = await outcomeOf(value);
-    return info.kind === "ok" ? ok({ ...info.value, pullRequest }) : info;
-  }
-
-  // [LAW:single-enforcer] A home's declaration of what its draws read: the
-  // hold a read of the same keys takes, its first pass queued — a read
-  // nobody made, so it counts no hit or miss. A directory still resolving
-  // takes no hold.
+  // declaration or a read that THROWS is a bug none of those saw, logged
+  // here where it surfaces, and answered as failed.
   declare(
     holds: Holds,
     workingDir: string,
     options: GitInfoOptions = {},
     projectDir?: string,
-  ): void {
-    this.asked(holds, workingDir, options, projectDir);
-  }
-
-  // Which repo the directory is — still resolving, or resolved and its value
-  // as it stands.
-  private look(
-    holds: Holds,
-    workingDir: string,
-    options: GitInfoOptions,
-    projectDir: string | undefined,
-  ):
-    | { readonly kind: "resolving"; readonly dir: Promise<Outcome<string>> }
-    | { readonly kind: "resolved"; readonly value: Current<GitInfo> } {
-    const resolved = (value: Current<GitInfo>) =>
-      ({ kind: "resolved", value }) as const;
+  ): Lane<GitInfo> {
     try {
       const asked = this.asked(holds, workingDir, options, projectDir);
-      if (asked.kind === "resolving") return asked;
-      if (asked.kind === "not-a-repo") return resolved(asked.outcome);
+      if (asked.kind === "not-a-repo") return settledLane(asked.outcome);
       const { value, pr } = asked;
+      // A declaration finding the value stored is a hit; one that must wait
+      // for its first read is a miss. A lane's reads count nothing: a frame
+      // reads at its own rate.
       if (value.reading.kind === "pending") this.misses++;
       else this.hits++;
-      const info = currentOf(value);
-      if (pr === null || info.kind !== "ok") return resolved(info);
-      // A pass stores a branch's values and moves the PR's key in one turn,
-      // so the two answer for the same pass.
-      return resolved(ok({ ...info.value, pullRequest: currentOf(pr) }));
+      return { current: () => this.composed(value, pr) };
     } catch (e) {
-      this.logger("error", `git read threw: ${String(e)}`);
-      return resolved(failed(`git: ${String(e)}`));
+      return settledLane(this.threw(e));
     }
+  }
+
+  // A lane's read: the value as it stands, with its PR when shown. A pass
+  // stores a branch's values and moves the PR's key in one turn, so the two
+  // answer for the same pass.
+  private composed(value: GitValue, pr: PrSource | null): Current<GitInfo> {
+    try {
+      const info = currentOf(value);
+      if (pr === null || info.kind !== "ok") return info;
+      return ok({ ...info.value, pullRequest: currentOf(pr) });
+    } catch (e) {
+      return this.threw(e);
+    }
+  }
+
+  private threw(e: unknown): Outcome<never> {
+    this.logger("error", `git read threw: ${String(e)}`);
+    return failed(`git: ${String(e)}`);
   }
 
   // [LAW:one-source-of-truth] The one place a home asks a repo by directory:
@@ -504,16 +424,13 @@ export class GitDataProvider {
     options: GitInfoOptions,
     projectDir: string | undefined,
   ):
-    | { readonly kind: "resolving"; readonly dir: Promise<Outcome<string>> }
-    | { readonly kind: "not-a-repo"; readonly outcome: Current<GitInfo> }
+    | { readonly kind: "not-a-repo"; readonly outcome: Outcome<never> }
     | {
         readonly kind: "asked";
         readonly value: GitValue;
         readonly pr: PrSource | null;
       } {
-    const resolution = this.resolution(workingDir, projectDir);
-    const dir = resolution.known;
-    if (dir === undefined) return { kind: "resolving", dir: resolution.dir };
+    const dir = this.resolution(workingDir, projectDir);
     if (dir.kind !== "ok") return { kind: "not-a-repo", outcome: dir };
     const { showPullRequest, ...gitOptions } = options;
     return {
