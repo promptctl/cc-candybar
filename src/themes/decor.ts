@@ -30,7 +30,6 @@ import {
   ensureDrawn,
   drawnColour,
   ColorRgba,
-  relativeLuminance,
   SEAM_MIN_DELTA_E,
   type Palette,
 } from "@promptctl/rich-js";
@@ -741,11 +740,11 @@ export const STATE_FLOOR = 2.2;
 const STATE_STEPS = 12;
 
 /**
- * Halvings of a ray that find the colour drawn at a boundary — a luminance
- * threshold, a balance, the edge of a seam — to within 2⁻²⁴ of the ray: far
- * finer than any colour drawn.
+ * Halvings of a ray that part every pair of colours it draws: a stretch whose
+ * ends differ by more than one channel step is halved until none does, or
+ * this deep — two channels stepping within 2⁻²⁴ of one point on the ray.
  */
-const EDGE_HALVINGS = 24;
+const RAY_HALVINGS = 24;
 
 /**
  * The closed cells a bar trigger stands among: the entries its row's cells
@@ -802,10 +801,10 @@ const toldFrom = (c: ColorRgba, others: readonly ColorRgba[]): boolean =>
  * Otherwise the hue slid along its own OKLCH lightness, its angle and chroma
  * kept, the least distance that stands off every cell: toward white and toward
  * black in twelfths, a step each way in turn. Where no twelfth clears, the
- * colour standing furthest off its nearest cell as drawn: an end of the axis,
- * or the balance between two cells adjacent in luminance, which clears where
- * the twelfths stepped over a window between them. Cells that are dim take a
- * bright state and cells that are vivid a deep one, with no branch on which.
+ * nearest colour the terminal can draw along either ray that does — a window
+ * the twelfths stepped over. Where no drawable colour of the hue clears, the
+ * one standing furthest off its nearest cell as drawn. Cells that are dim take
+ * a bright state and cells that are vivid a deep one, with no branch on which.
  *
  * The floor holds on what the terminal draws at `drawnAt`: at 256 colours the
  * trigger and every cell are rounded independently, and a trigger whose
@@ -859,18 +858,17 @@ function searchState(
   const cells = among.map(shownTrue);
   const told = apart.map(shownTrue);
   const pure = paletteRole(palette, hue);
-  const black = new ColorRgba(0, 0, 0);
-  const white = new ColorRgba(255, 255, 255);
+  const black = Oklch.fromRgba(new ColorRgba(0, 0, 0));
+  const white = Oklch.fromRgba(new ColorRgba(255, 255, 255));
   // The hue `t` of the way along its lightness toward an end of the axis: its
   // angle and chroma kept (as far as the gamut holds them near black and
   // white), so every candidate is still the theme's hue. Sliding toward the
   // theme's poles instead greyed the hue, and a slide past a pole cell by cell
   // undid itself on cells straddling the middle grey.
-  const along = (end: ColorRgba, t: number): ColorRgba =>
-    Oklch.fromRgba(pure)
-      .mixAxes(Oklch.fromRgba(end), { l: t, c: 0, h: 0, alpha: 0 })
-      .toRgba();
-  const ray = (end: ColorRgba): ColorRgba[] =>
+  const hueLch = Oklch.fromRgba(pure);
+  const along = (end: Oklch, t: number): ColorRgba =>
+    hueLch.mixAxes(end, { l: t, c: 0, h: 0, alpha: 0 }).toRgba();
+  const ray = (end: Oklch): ColorRgba[] =>
     Array.from({ length: STATE_STEPS }, (_, k) =>
       along(end, (k + 1) / STATE_STEPS),
     );
@@ -910,110 +908,64 @@ function searchState(
     standsTrue(c) >= STATE_FLOOR &&
     toldFrom(shownTrue(c), told) &&
     drawnClear(c) !== undefined;
-  // The fine end of the search, offered once no twelfth clears: the colour
-  // drawn at every boundary a constraint draws across either ray. Along a ray
-  // the luminance moves one way, so each cell's floor is two luminance
-  // thresholds (standing STATE_FLOOR above it, or below it), the balance of
-  // two cells adjacent in luminance one more (the root of their ratio off
-  // each, as far as any colour stands off both), and the stretch within a
-  // seam of an item — a shade of the trigger's own hue, so it sits on the ray
-  // — two edges either side of it. A colour that clears can sit between
-  // twelfths: rows an authored distribution deals on textual-dark leave
-  // windows as narrow as .002 of luminance between its navy and its orange,
-  // and a balance can land on an item while the colours either side of it
-  // clear both floors (brandon-menus-sjhy.4fi). Where a colour clears, one
-  // clears at a boundary, so the boundaries are the whole search; a uniform
-  // walk of the ray stepped over knife-edge windows the halving finds, and
-  // cost a hundred times as much.
+  // The fine end of the search, offered once no twelfth clears: every colour
+  // the terminal can draw along either ray, nearest the hue first. A colour
+  // that clears can sit between twelfths — rows an authored distribution
+  // deals on textual-dark leave windows as narrow as .002 of luminance
+  // between its navy and its orange — and a trigger told from the items of
+  // its band can clear on one drawable colour alone, the one just past an
+  // item's seam (brandon-menus-sjhy.4fi). The drawable colours are
+  // enumerated, not sampled: rich-js clamps the ray into gamut before it
+  // rounds, so each channel is continuous in `t`, and two colours one channel
+  // step apart have no other between them — a stretch whose ends are further
+  // apart is halved until every pair is (`RAY_HALVINGS`), about two colours
+  // computed per colour drawn. Bisecting the ray for each constraint's
+  // boundary was tried instead and missed: a predicate on drawn colours is
+  // not monotone along the ray — a single blue step took a colour back under
+  // an item's seam, told, not told, told across three neighbours
+  // (catppuccin-mocha under `muted`, depth 4) — so a bisection meets
+  // whichever crossing it lands on, and the one drawable colour between was
+  // never offered.
   // The two rays as one axis through the hue: black at −1, the hue at 0, white
-  // at +1, each ray |s| of the way to its end. Lightness and luminance both
-  // rise along it, so every boundary is one crossing of it, and a stretch
-  // that straddles the hue — an item that is the hue's own colour, or sits a
-  // seam from it — has its two edges on either side of 0.
-  const at = (s: number): ColorRgba =>
-    s >= 0 ? along(white, s) : along(black, -s);
-  const lum = (c: ColorRgba): number => relativeLuminance(shownTrue(c));
-  // A seam is ΔE, which the ray's lightness moves: the ray is nearest an item
-  // at the item's own lightness, not at its luminance.
-  const lightness = (c: ColorRgba): number => Oklch.fromRgba(shownTrue(c)).l;
-  interface Edge {
-    readonly s: number;
-    readonly before: ColorRgba;
-    readonly at: ColorRgba;
-  }
-  // The colour at the first `s` from `misses` toward `clears` where `holds`
-  // (false at `misses`, true at `clears`) holds, and the one just before it.
-  const edgeAlong = (
-    misses: number,
-    clears: number,
-    holds: (c: ColorRgba) => boolean,
-  ): Edge => {
-    for (let i = 0; i < EDGE_HALVINGS; i++) {
-      const s = (misses + clears) / 2;
-      if (holds(at(s))) clears = s;
-      else misses = s;
-    }
-    return { s: clears, before: at(misses), at: at(clears) };
-  };
-  // Where the axis crosses `theta` on `measure`, which rises along it; an end
-  // of the axis where `theta` lies beyond it (both ends are twelfths, offered
-  // already).
-  const crossing = (measure: (c: ColorRgba) => number, theta: number): Edge => {
-    const reaches = (c: ColorRgba): boolean => measure(c) >= theta;
-    if (reaches(at(-1))) return { s: -1, before: at(-1), at: at(-1) };
-    if (!reaches(at(1))) return { s: 1, before: at(1), at: at(1) };
-    return edgeAlong(-1, 1, reaches);
-  };
+  // at +1, each ray |s| of the way to its end.
   interface Offer {
     readonly s: number;
     readonly colour: ColorRgba;
   }
-  const rising = cells.map(lum).sort((a, b) => a - b);
-  // [LAW:no-defensive-null-guards] Each cell after the first has one below it.
-  const balances = rising
-    .slice(1)
-    .map((l, i) => Math.sqrt((l + 0.05) * (rising[i]! + 0.05)) - 0.05);
-  const edges = (): Offer[] => [
-    // Standing STATE_FLOOR above a cell: the first colour that does. Below it:
-    // the last colour that does.
-    ...rising.flatMap((l) => {
-      const above = crossing(lum, STATE_FLOOR * (l + 0.05) - 0.05);
-      const below = crossing(lum, (l + 0.05) / STATE_FLOOR - 0.05);
-      return [
-        { s: above.s, colour: above.at },
-        { s: below.s, colour: below.before },
-      ];
-    }),
-    // Both colours either side of a balance: the axis is drawn in 8-bit steps
-    // that can be wider than half the window it sits in.
-    ...balances.flatMap((theta) => {
-      const { s, before, at: after } = crossing(lum, theta);
-      return [
-        { s, colour: before },
-        { s, colour: after },
-      ];
-    }),
-    ...told.flatMap((item) => {
-      const toldFromItem = (c: ColorRgba): boolean =>
-        deltaE(shownTrue(c), item) >= SEAM_MIN_DELTA_E;
-      // The axis's nearest point to the item. Passing it at a seam's distance,
-      // that point is the stretch's one edge; else the stretch is stepped out
-      // of toward each end that is told from the item at all.
-      const near = crossing(lightness, lightness(item));
-      if (toldFromItem(near.at)) return [{ s: near.s, colour: near.at }];
-      return [
-        ...(toldFromItem(at(1)) ? [edgeAlong(near.s, 1, toldFromItem)] : []),
-        ...(toldFromItem(at(-1)) ? [edgeAlong(near.s, -1, toldFromItem)] : []),
-      ].map(({ s, at: out }) => ({ s, colour: out }));
-    }),
-  ];
+  const stepsApart = (a: ColorRgba, b: ColorRgba): number =>
+    Math.abs(a.red - b.red) +
+    Math.abs(a.green - b.green) +
+    Math.abs(a.blue - b.blue);
+  const drawable = (end: Oklch, sign: 1 | -1): Offer[] => {
+    const start = along(end, 0);
+    const offers: Offer[] = [{ s: 0, colour: start }];
+    const walk = (
+      t0: number,
+      c0: ColorRgba,
+      t1: number,
+      c1: ColorRgba,
+      depth: number,
+    ): void => {
+      if (stepsApart(c0, c1) > 1 && depth < RAY_HALVINGS) {
+        const tm = (t0 + t1) / 2;
+        const cm = along(end, tm);
+        walk(t0, c0, tm, cm, depth + 1);
+        walk(tm, cm, t1, c1, depth + 1);
+      } else if (stepsApart(c0, c1) > 0) {
+        offers.push({ s: sign * t1, colour: c1 });
+      }
+    };
+    walk(0, start, 1, along(end, 1), 0);
+    return offers;
+  };
   // Nearest the hue first, as the twelfths are, each colour once.
   const fine = (): ColorRgba[] => {
     const offered = new Set(candidates.map((c) => c.hex));
     const colours: ColorRgba[] = [];
-    for (const { colour } of edges().sort(
-      (a, b) => Math.abs(a.s) - Math.abs(b.s),
-    )) {
+    for (const { colour } of [
+      ...drawable(white, 1),
+      ...drawable(black, -1),
+    ].sort((a, b) => Math.abs(a.s) - Math.abs(b.s))) {
       if (!offered.has(colour.hex)) {
         offered.add(colour.hex);
         colours.push(colour);
@@ -1021,14 +973,14 @@ function searchState(
     }
     return colours;
   };
-  // The least step that clears; where none does, the least boundary colour
+  // The least step that clears; where none does, the nearest drawable colour
   // along either ray that does; where none at all does, the colour standing
-  // furthest off its nearest cell — an end of the axis, or the balance between
-  // two cells adjacent in luminance, which clears exactly where the two leave
-  // room between them. It is measured as the terminal draws it, since where
-  // nothing clears it is what the terminal shows: a balance sits between two
-  // cells, and at 256 colours or ansi it rounds onto one of them where an end
-  // of the axis does not.
+  // furthest off its nearest cell — an end of the axis, or the drawable colour
+  // nearest the balance between two cells adjacent in luminance, which clears
+  // exactly where the two leave room between them. It is measured as the
+  // terminal draws it, since where nothing clears it is what the terminal
+  // shows: a balance sits between two cells, and at 256 colours or ansi it
+  // rounds onto one of them where an end of the axis does not.
   const furthestOf = (offered: readonly ColorRgba[]): ColorRgba =>
     offered.find(clears) ??
     [...candidates, ...offered].reduce((a, b) =>

@@ -751,6 +751,30 @@ function furthestAnyColourStands(cells: readonly ColorRgba[]): number {
   );
 }
 
+/**
+ * Whether any colour the terminal draws along `pure`'s own lightness, toward
+ * white or toward black, stands STATE_FLOOR off every one of `among` and a
+ * seam off every one of `apart` — the test's own walk of both rays, uniform
+ * and finer than any 8-bit step, independent of how the search enumerates
+ * them. A window the analytic bound admits can hold no drawable colour of the
+ * hue: three rows (dracula under `muted`, textual-dark under `bright`) leave
+ * windows under .002 of luminance wide that both rays step over, so the
+ * search is held to this walk, not to `furthestAnyColourStands`.
+ */
+const anyColourClears = (pure: ColorRgba, among: readonly ColorRgba[], apart: readonly ColorRgba[]): boolean => {
+  const cells = among.map(drawnGround);
+  const items = apart.map(drawnGround);
+  const along = (end: ColorRgba, t: number): ColorRgba =>
+    Oklch.fromRgba(pure).mixAxes(Oklch.fromRgba(end), { l: t, c: 0, h: 0, alpha: 0 }).toRgba();
+  return [new ColorRgba(255, 255, 255), new ColorRgba(0, 0, 0)].some((end) =>
+    Array.from({ length: 4097 }, (_, k) => drawnGround(along(end, k / 4096))).some(
+      (c) =>
+        cells.every((cell) => contrastRatio(c, cell) >= STATE_FLOOR) &&
+        items.every((item) => deltaE(c, item) >= SEAM_MIN_DELTA_E),
+    ),
+  );
+};
+
 describe("done-when: an open trigger stands STATE_FLOOR off every closed cell of the row it stands in", () => {
   // One test per depth and style: together they walk every theme × ground ×
   // depth hue, past what one test's timeout allows.
@@ -805,25 +829,37 @@ describe("done-when: an open trigger stands STATE_FLOOR off every closed cell of
     },
   );
 
-  test("the search falls short only where no colour at all stands off the row — it never gives up while one does", () => {
+  test("the search falls short only where no drawable colour of the hue stands off the row — it never gives up while one does", () => {
     const wrong: string[] = [];
     const short: Ground[] = [];
     for (const { name, palette } of STYLED) {
       for (const { name: where, ground } of GROUNDS) {
-        const possible = furthestAnyColourStands(groundCells(palette, ground)) >= STATE_FLOOR;
+        const cells = groundCells(palette, ground);
         for (const hue of DEPTH_HUES) {
-          const search = stateFor(palette, hue, groundCells(palette, ground), [], ColorDepth.TRUECOLOR);
-          if ((search.short === null) !== possible) wrong.push(`${name} ${where} ${hue} possible=${possible}`);
-          if (search.short !== null) short.push(ground);
+          const search = stateFor(palette, hue, cells, [], ColorDepth.TRUECOLOR);
+          // A state that clears is itself a drawable colour that does; one
+          // that falls short is held to the test's own walk of the rays.
+          if (search.short !== null) {
+            short.push(ground);
+            if (anyColourClears(paletteRole(palette, hue), cells, [])) {
+              wrong.push(`${name} ${where} ${hue}: short ${search.short.toFixed(6)}, a drawable colour clears`);
+            }
+          }
         }
       }
     }
     expect(wrong).toEqual([]);
-    // What cannot clear is a row turning between two roles at opposite ends of
-    // the lightness axis (textual-dark's navy and orange under `alt`): a single
-    // role's row always leaves a colour. Non-vacuous: the registry has such rows.
+    // What cannot clear is a row whose cells span too much of the lightness
+    // axis: one turning between two roles at opposite ends of it (textual-dark's
+    // navy and orange under `alt`), or one wearing a role's darken-3 and
+    // lighten-3 together (`widest`, `pair-wide`: flexoki's and solarized's
+    // secondary, rose-pine-dawn's under `bright` — 48 rows, measured). A row of
+    // a role's neighbouring rungs always leaves a colour. Non-vacuous: the
+    // registry has such rows.
+    const spansLadder = (ground: Ground): boolean =>
+      (["darken-3", "lighten-3"] as const).every((tone) => ground.some((e) => e.shade === tone));
     expect(short.length).toBeGreaterThan(0);
-    expect(short.every((ground) => new Set(ground.map((e) => e.hue)).size > 1)).toBe(true);
+    expect(short.every((ground) => new Set(ground.map((e) => e.hue)).size > 1 || spansLadder(ground))).toBe(true);
   });
 
   test("a row no colour stands off draws the colour standing furthest off its nearest cell as the terminal draws both, and says how far that is", () => {
@@ -1062,26 +1098,11 @@ const amongOf = (palette: Palette, disclosure: Disclosure): ColorRgba[] => {
 };
 
 /**
- * Whether any colour the terminal draws along the hue's own lightness, toward
- * white or toward black, stands STATE_FLOOR off every cell the trigger opening
- * `disclosure` stands among and a seam off every item it is told from — the
- * test's own walk of both rays, finer than any 8-bit step, independent of the
- * search's steps.
+ * `anyColourClears` for the trigger opening `disclosure`: off what it stands
+ * among and told from what its ✕ leads and it sits beside.
  */
-const anyColourClearsBoth = (palette: Palette, disclosure: Disclosure): boolean => {
-  const pure = paletteRole(palette, hueOf(disclosure));
-  const among = amongOf(palette, disclosure).map(drawnGround);
-  const apart = apartOf(palette, disclosure).map(drawnGround);
-  const along = (end: ColorRgba, t: number): ColorRgba =>
-    Oklch.fromRgba(pure).mixAxes(Oklch.fromRgba(end), { l: t, c: 0, h: 0, alpha: 0 }).toRgba();
-  return [new ColorRgba(255, 255, 255), new ColorRgba(0, 0, 0)].some((end) =>
-    Array.from({ length: 4097 }, (_, k) => drawnGround(along(end, k / 4096))).some(
-      (c) =>
-        among.every((cell) => contrastRatio(c, cell) >= STATE_FLOOR) &&
-        apart.every((item) => deltaE(c, item) >= SEAM_MIN_DELTA_E),
-    ),
-  );
-};
+const anyColourClearsBoth = (palette: Palette, disclosure: Disclosure): boolean =>
+  anyColourClears(paletteRole(palette, hueOf(disclosure)), amongOf(palette, disclosure), apartOf(palette, disclosure));
 
 describe("depth steps along the lineage", () => {
   test("each depth wears the next hue of the lineage, wrapping; a one-hue lineage keeps it", () => {
