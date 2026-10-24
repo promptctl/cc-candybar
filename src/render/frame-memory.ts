@@ -11,6 +11,7 @@
 // and it is no observable: writing it wakes nothing.
 
 import type { ColorRgba } from "@promptctl/rich-js";
+import type { ExpressionSlot } from "../themes/policy.js";
 
 // What a frame is drawn from. A placement appears only between two frames
 // drawn from the same config — one object per load, so a reload is another —
@@ -60,14 +61,14 @@ export interface FrameRecord<Line> {
   readonly source: FrameSource;
   readonly placements: ReadonlyMap<string, PlacementRecord<Line>>;
   // Each globals rule's settled name, by slot.
-  readonly rules: ReadonlyMap<string, string>;
+  readonly rules: ReadonlyMap<ExpressionSlot, string>;
 }
 
 // One draw's record as the walk writes it, kept only once the frame is drawn.
 export interface FrameWrite<Line> {
   // Records what the bar shows of the placement `id`, and returns it.
   readonly placed: (id: string, lines: readonly Line[]) => readonly Line[];
-  readonly rule: (slot: string, name: string) => void;
+  readonly rule: (slot: ExpressionSlot, name: string) => void;
   // [LAW:no-ambient-temporal-coupling] Called after the rows serialize: a
   // row's fill grows its cells in place, so a drawing is the width it was
   // drawn at only then, and a draw that throws part-way keeps the last.
@@ -101,7 +102,7 @@ export class FrameMemory<Line> {
     returned: (id: string, lines: readonly Line[]) => Returned<Line>,
   ): FrameWrite<Line> {
     const placements = new Map<string, PlacementRecord<Line>>();
-    const rules = new Map<string, string>();
+    const rules = new Map<ExpressionSlot, string>();
     return {
       placed: (id, lines) => {
         const { drawing } = returned(id, lines);

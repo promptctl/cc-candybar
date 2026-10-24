@@ -836,8 +836,8 @@ function drawSegment(
 export const LOADING_GLYPH = "…";
 
 // [LAW:no-silent-failure] A placement whose value is not answered yet draws
-// where it stood in the view's last frame drawn from this source, so a source
-// answering late never reflows the bar nor flashes a cell: one that drew holds
+// where it stood in the view's last frame drawn from this source, so in a view
+// that drew it a source answering late reflows nothing: one that drew holds
 // each cell it laid at the width it drew, `…` in the first, one that drew
 // nothing still draws nothing, and one never drawn (a cold view) is one cell. It wears its decoration — a pending value states no
 // meaning for a `bg:` to paint — and edit mode's buttons ride it as they ride

@@ -328,16 +328,18 @@ export class ViewParts {
   // the rows a layout lays out are drawn by: a node's `when`, then a
   // segment's own — and a segment either `when` of which throws is SHOWN,
   // because the walk draws an error cell exactly there, where a container
-  // whose `when` throws draws nothing. A `when` not answered yet is shown:
-  // the walk draws each placement under it where it stood. Edit mode's `+`/`-` and reset banner
-  // are affordances over the arrangement, not part of it, while a name label
-  // stands in for its segment (`arrangedSegment`).
+  // whose `when` throws draws nothing. A `when` not answered yet is shown,
+  // and under it a segment as its own `when` says, as the walk asks it. Edit
+  // mode's `+`/`-` and reset banner are affordances over the arrangement, not
+  // part of it, while a name label stands in for its segment
+  // (`arrangedSegment`).
   private shown(node: CompiledNode): boolean {
     const gate = this.gate(node);
     if (node.kind === "container")
       return gate.kind === "shown" || gate.kind === "pending";
     if (arrangedSegment(node.name) === undefined) return false;
-    if (gate.kind !== "shown") return gate.kind !== "hidden";
+    if (gate.kind === "hidden") return false;
+    if (gate.kind === "failed") return true;
     try {
       return this.placement(node).shown();
     } catch {

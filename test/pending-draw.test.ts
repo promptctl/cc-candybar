@@ -255,6 +255,29 @@ describe("a placement whose value is not answered yet draws where it stood", () 
     }
   });
 
+  test("the layout preview asks a placement's own `when` under a gate not answered yet, as the walk does", () => {
+    const on = renderer(
+      config(`
+        segments: {
+          left: { template: "L" },
+          value: { template: "V", when: "false" },
+          preview: { template: "[{{ layoutPreview }}]" },
+        },
+        root: { h: ["left", { seg: "value", when: "{{ .doc.show }}" }, "preview"] },
+      `),
+    );
+    try {
+      const { text, frame } = on.draw();
+      // Its own `when` hides it whatever the gate answers: nothing waits.
+      expect(frame.pending).toEqual([]);
+      expect(text).not.toContain(LOADING_GLYPH);
+      expect(text).toMatch(/\[.*left.*\]/s);
+      expect(text).not.toMatch(/\[.*value.*\]/s);
+    } finally {
+      on.dispose();
+    }
+  });
+
   test("under a container not answered yet, a `when` that fails is no fault yet: it waits on the container", () => {
     const on = renderer(
       config(`
@@ -308,6 +331,10 @@ describe("a template variable over a value not answered yet is not answered yet"
       // A read that fails — the field is missing — is answered by the default.
       expect(cellBetween(on.draw().text, "L", "R")).toBe("  DEFAULT  ");
       expect(on.registry.getLastError("label")?.message).toContain("label");
+      // Not answered again, it is no longer failing: its failure is over.
+      on.unanswer();
+      expect(on.draw().frame.pending).toEqual(["doc"]);
+      expect(on.registry.getLastError("label")).toBeUndefined();
     } finally {
       on.dispose();
     }

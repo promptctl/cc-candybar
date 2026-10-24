@@ -1043,8 +1043,12 @@ export class SourceRegistry {
         // not answered yet either — not a failure, so nothing is recorded and
         // no default answers it: a default answers a failure alone. The read
         // it rode in on is passed on whole, naming the source it waits on.
+        // Its standing failure is over, as an answer ends it.
         const pending = readPending(e);
-        if (pending !== undefined) throw pending;
+        if (pending !== undefined) {
+          this.lastErrors.delete(name);
+          throw pending;
+        }
         const message = e instanceof Error ? e.message : String(e);
         // Recorded either way, so `cc-candybar vars` names the failure even
         // when an authored default makes the read succeed.
