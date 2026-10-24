@@ -11,6 +11,8 @@ import {
   type SourceParse,
 } from "../src/var-system";
 import { SessionState } from "../src/daemon/session-state";
+import { readPending } from "../src/var-system/types";
+import { PENDING } from "../src/utils/outcome";
 import { drawingAt } from "./helpers/test-engine";
 import type { GitDataProvider } from "../src/daemon/cache/git";
 import { buildScope } from "../src/template-engine/scope";
@@ -161,29 +163,28 @@ describe("SourceRegistry — env", () => {
 
 // ─── input ───────────────────────────────────────────────────────────────────
 
-describe("SourceRegistry — input: initialization", () => {
-  it("initializes to varDefault before first applyInput", () => {
-    const { store, registry } = make();
-    registry.declareInput("cwd", "cwd", "string", "/default");
-    expect(store.read("cwd")).toBe("/default");
-  });
-
-  it("initializes to defaultEmptyValue when no varDefault", () => {
+describe("SourceRegistry — input: before its first payload", () => {
+  // brandon-unfiled-3248.8ro6: not answered yet is its own state. An input has
+  // no value until a payload writes it — never its default, which answers a
+  // payload that lacks the path — so what reads it before then waits.
+  it("is not answered yet, whatever its default", () => {
     const { store, registry } = make("(unset)");
-    registry.declareInput("cwd", "cwd", "string");
-    expect(store.read("cwd")).toBe("(unset)");
-  });
-
-  it("initializes number to 0 when defaultEmptyValue cannot coerce", () => {
-    const { store, registry } = make("not-a-number");
+    registry.declareInput("cwd", "cwd", "string", "/default");
     registry.declareInput("count", "count", "number");
+    for (const name of ["cwd", "count"]) {
+      let thrown: unknown;
+      try {
+        store.read(name);
+      } catch (e) {
+        thrown = e;
+      }
+      expect(readPending(thrown)?.variable).toBe(name);
+    }
+    expect(store.changeKey("cwd")).toEqual(PENDING);
+    expect(registry.getLastError("cwd")).toBeUndefined();
+    registry.applyInput({});
+    expect(store.read("cwd")).toBe("/default");
     expect(store.read("count")).toBe(0);
-  });
-
-  it("initializes boolean to false when defaultEmptyValue cannot coerce", () => {
-    const { store, registry } = make("not-a-bool");
-    registry.declareInput("flag", "flag", "boolean");
-    expect(store.read("flag")).toBe(false);
   });
 });
 
@@ -298,7 +299,8 @@ describe("SourceRegistry — input: runInAction batching", () => {
       return `${read("a")}:${read("b")}`;
     });
 
-    // warm the computed
+    // warm the computed over the first payload
+    registry.applyInput({});
     expect(store.read("combined")).toBe(":");
     evalCount = 0; // reset after warmup
 
@@ -336,6 +338,7 @@ describe("SourceRegistry — input boxes as computed dependencies", () => {
       return p.split("/").at(-1) ?? "";
     });
 
+    registry.applyInput({});
     expect(store.read("basename")).toBe("initial");
     registry.applyInput({ cwd: "/home/user/project" });
     expect(store.read("basename")).toBe("project");
@@ -912,6 +915,46 @@ describe("SourceRegistry — shell: watch_file cache policy", () => {
 // ─── shell — key: cache policy ────────────────────────────────────────────────
 
 describe("SourceRegistry — shell: key: cache policy", () => {
+  // brandon-unfiled-3248.8ro6: a source whose policy reads a view's inputs
+  // waits for them. Its first read is the one its first value asks for — not
+  // a read at declaration, under no value, and another when the payload
+  // arrives.
+  it.each([
+    ["key", { kind: "key", template: "{{ .pane }}" }],
+    ["depends_on", { kind: "depends_on", varNames: ["pane"] }],
+  ] as const)(
+    "a %s over an input reads once, at the view's first payload",
+    async (_policy, cache) => {
+      const { dir, cleanup } = makeTmpDir();
+      try {
+        const runs = path.join(dir, "runs");
+        const store = new VariableStore();
+        const registry = registryOver(store);
+        registry.declareInput("pane", "tmux.pane", "string");
+        registry.declareShell("val", `echo run >> ${runs}; echo ran`, {
+          cwd: process.cwd(),
+          parse: TEXT,
+          cache,
+        });
+        await ran(registry);
+        expect(fs.existsSync(runs)).toBe(false);
+        // A payload with no pane is an answer: the input's fallback.
+        registry.applyInput({});
+        await ran(registry);
+        expect(fs.readFileSync(runs, "utf8")).toBe("run\n");
+        expect(store.read("val")).toBe("ran");
+        // An unchanged payload reads nothing; a changed one reads once more.
+        registry.applyInput({});
+        await ran(registry);
+        registry.applyInput({ tmux: { pane: "%1" } });
+        await ran(registry);
+        expect(fs.readFileSync(runs, "utf8")).toBe("run\nrun\n");
+      } finally {
+        cleanup();
+      }
+    },
+  );
+
   it("re-runs shell when key template result changes", async () => {
     const { dir, cleanup } = makeTmpDir();
     try {
@@ -994,16 +1037,16 @@ describe("SourceRegistry — shell: key: cache policy", () => {
       expect(registry.getLastError("val")?.message).toMatch(fault);
       expect([...registry.cachePolicyFaults().keys()]).toEqual(["val"]);
 
-      // The first run's outcome lands later and does not clear the fault.
+      // A key that throws is no key: the source does not run under it.
       await ran(registry);
-      expect(store.read("val")).toBe("v1");
+      expect(store.read("val")).toBe("");
       expect(registry.getLastError("val")?.message).toMatch(fault);
 
-      // A key that throws again is no key change: nothing re-runs.
+      // A key that throws again is no key change: still nothing runs.
       fs.writeFileSync(dataFile, "v2");
       store.setBox("trigger", "bad again");
       await ran(registry);
-      expect(store.read("val")).toBe("v1");
+      expect(store.read("val")).toBe("");
 
       // The key evaluating again is a key: the source re-runs, the fault clears.
       store.setBox("trigger", "a");

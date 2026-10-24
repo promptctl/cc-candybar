@@ -726,19 +726,19 @@ export class SourceRegistry {
     this.store.defineDocument(name, failed(reason));
   }
 
-  // input: per-render box; initial value from fallback chain (path not yet resolved).
-  // At each render, applyInput resolves path against the payload and updates the box.
+  // input: a box each payload writes, resolving its path against it.
+  // [LAW:types-are-the-program] Before its view's first payload it holds no
+  // value: it is not answered yet, never its default, which answers a payload
+  // that lacks the path (brandon-unfiled-3248.8ro6). A draw pushes its payload
+  // before it reads anything, so only what reads it before any draw — a cache
+  // key, a depends_on — sees it pending, and waits for its first value.
   declareInput(
     name: string,
     path: string,
     type: VarType,
     varDefault?: VarValue,
   ): void {
-    // [LAW:dataflow-not-control-flow] Initialize to the fallback value so the
-    // box always holds a valid typed value — even before the first render push.
-    const initial =
-      varDefault !== undefined ? varDefault : this.defaultFor(type);
-    this.store.defineBox(name, type, initial);
+    this.store.defineBox(name, type, PENDING);
     this.inputMetas.set(name, { path, varDefault });
   }
 
@@ -785,12 +785,11 @@ export class SourceRegistry {
   }
 
   // [LAW:single-enforcer] THE user-source pipeline: read → parse → publish,
-  // once at declaration and again whenever the cache policy fires. Shell and
-  // file are two readers through this one function; text/regex/json are
-  // three parsers through it. The node always holds a valid value from
-  // declaration on (the fallback until the first run completes) — the cache
-  // policy drives WHEN it is refreshed, never whether the node exists
-  // [LAW:dataflow-not-control-flow].
+  // whenever the cache policy fires, its first read included. Shell and file
+  // are two readers through this one function; text/regex/json are three
+  // parsers through it. The node holds its fallback until the first run
+  // completes — the cache policy drives WHEN it is read, never whether the
+  // node exists [LAW:dataflow-not-control-flow].
   private declareSource(
     name: string,
     reader: SourceReader,
@@ -798,9 +797,9 @@ export class SourceRegistry {
     parse: SourceParse,
   ): void {
     const publish = this.publisherFor(name, parse, reader.where);
-    const update = () => this.runSource(name, reader, publish);
-    update(); // initial run
-    this.registerCachePolicy(name, cache, update);
+    this.registerCachePolicy(name, cache, () =>
+      this.runSource(name, reader, publish),
+    );
   }
 
   // [LAW:one-type-per-behavior] One total projection of the parser arm onto
@@ -1306,7 +1305,10 @@ export class SourceRegistry {
   // ─── Private helpers ──────────────────────────────────────────────────────
 
   // [LAW:single-enforcer] One place that maps every CachePolicy kind to its
-  // trigger mechanism.  Adding a new policy kind means adding one case here.
+  // trigger mechanism, the source's first read included: a clock, a watch or
+  // nothing reads it at declaration, and a policy over what the source reads
+  // reads it when that first answers.  Adding a new policy kind means adding
+  // one case here.
   private registerCachePolicy(
     name: string,
     policy: CachePolicy,
@@ -1314,16 +1316,18 @@ export class SourceRegistry {
   ): void {
     switch (policy.kind) {
       case "never":
-        // Initial run in declare* is the only execution.
+        update();
         break;
 
       case "ttl": {
+        update();
         const unsub = this.ttlMgr.subscribe(policy.durationMs, update);
         this.cleanups.push(unsub);
         break;
       }
 
       case "watch_file": {
+        update();
         const unsub = this.watchMgr.subscribe(policy.path, update, (message) =>
           this.notePolicy(name, failed(message)),
         );
@@ -1332,9 +1336,8 @@ export class SourceRegistry {
       }
 
       case "key": {
-        // Parse template once; reaction re-evaluates it whenever any
-        // variable it reads changes.  If the rendered key string changes,
-        // the source is recomputed.
+        // Parse template once; the reaction re-evaluates it whenever any
+        // variable it reads changes.
         // [LAW:dataflow-not-control-flow] The key template is the sole
         // selector — no manual dep declarations, no conditional checks.
         const parsedKey = this.engine.parse(policy.template);
@@ -1342,55 +1345,75 @@ export class SourceRegistry {
         // variable's standing fault until the key evaluates again, and the
         // source keeps what its last run yielded. Folding the throw into a
         // key value made a key that always throws a constant one — the
-        // source never ran again and nothing said why. A key over a value
-        // not answered yet is `pending`, not a fault: the reaction tracks
-        // that value and fires when it arrives.
-        const keyOf = (): Reading<string> => {
-          try {
-            return ok(
-              parsedKey
-                .evaluate(buildScope(this.store))
-                .map((f) => f.plain)
-                .join(""),
-            );
-          } catch (e) {
-            return readPending(e) !== undefined
-              ? PENDING
-              : failed(
-                  `cache key: ${e instanceof Error ? e.message : String(e)}`,
-                );
-          }
-        };
-        // The key the source last ran under: the declare-time run's, until a
-        // key that differs from it runs the source again. Measured against
-        // that rather than the previous evaluation, so a key that throws for a
-        // moment and comes back unchanged runs nothing.
-        const declared = keyOf();
-        this.notePolicy(name, declared);
-        let ranUnder = declared.kind === "ok" ? declared.value : undefined;
-        const disposer: IReactionDisposer = reaction(keyOf, (key) => {
-          this.notePolicy(name, key);
-          if (key.kind !== "ok" || key.value === ranUnder) return;
-          ranUnder = key.value;
-          update();
-        });
-        this.cleanups.push(disposer);
+        // source never ran again and nothing said why.
+        this.onReads(
+          name,
+          () => {
+            try {
+              return ok(
+                parsedKey
+                  .evaluate(buildScope(this.store))
+                  .map((f) => f.plain)
+                  .join(""),
+              );
+            } catch (e) {
+              return readPending(e) !== undefined
+                ? PENDING
+                : failed(
+                    `cache key: ${e instanceof Error ? e.message : String(e)}`,
+                  );
+            }
+          },
+          update,
+        );
         break;
       }
 
       case "depends_on": {
-        // [LAW:dataflow-not-control-flow] reaction re-runs update whenever
-        // any named variable changes.  Variability lives in the dep values,
-        // not in whether the update executes — the update always runs when
-        // the joined snapshot changes.
-        const disposer: IReactionDisposer = reaction(
-          () => policy.varNames.map((n) => this.store.changeKey(n)).join(","),
+        // [LAW:dataflow-not-control-flow] The source re-reads whenever any
+        // named variable changes. Variability lives in the dep values, not in
+        // whether the update executes.
+        this.onReads(
+          name,
+          (): Reading<string> => {
+            const keys = policy.varNames.map((n) => this.store.changeKey(n));
+            return keys.every((key) => key.kind === "ok")
+              ? ok(keys.map((key) => key.value).join(","))
+              : PENDING;
+          },
           update,
         );
-        this.cleanups.push(disposer);
         break;
       }
     }
+  }
+
+  // [LAW:one-type-per-behavior] Both policies over what a source reads — its
+  // key, the variables it depends on — read it when what they read answers,
+  // and again whenever that answer differs from the one it last read under.
+  // Over a value not answered yet (a view's inputs before its first payload)
+  // it waits rather than reading, so its first value is one read, not a read
+  // under no value and another when the value arrives (brandon-unfiled-3248.
+  // 8ro6). Measured against the last read's answer rather than the previous
+  // evaluation, so one that throws for a moment and comes back unchanged reads
+  // nothing.
+  private onReads(
+    name: string,
+    reads: () => Reading<string>,
+    update: () => void,
+  ): void {
+    let readUnder: string | undefined;
+    const disposer: IReactionDisposer = reaction(
+      reads,
+      (answer) => {
+        this.notePolicy(name, answer);
+        if (answer.kind !== "ok" || answer.value === readUnder) return;
+        readUnder = answer.value;
+        update();
+      },
+      { fireImmediately: true },
+    );
+    this.cleanups.push(disposer);
   }
 
   // Failure chain: per-variable default → defaultEmptyValue coerced to type → zero.
@@ -1412,15 +1435,6 @@ export class SourceRegistry {
       this.store.setBox(name, coerceToType(this.defaultEmptyValue, type));
     } catch {
       this.store.setBox(name, zeroValue(type));
-    }
-  }
-
-  // Initial value for an input box before the first render push.
-  private defaultFor(type: VarType): VarValue {
-    try {
-      return coerceToType(this.defaultEmptyValue, type);
-    } catch {
-      return zeroValue(type);
     }
   }
 

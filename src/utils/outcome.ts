@@ -36,6 +36,9 @@ export function orElse<T>(outcome: Outcome<T> | undefined, fallback: T): T {
 // or what its read answered. `pending` is not `absent`: absent says the domain
 // genuinely has nothing, pending says nobody has asked it yet — a document
 // before its first scan — and is never drawn as an answer.
-export type Reading<T> = { readonly kind: "pending" } | Outcome<T>;
+export interface Pending {
+  readonly kind: "pending";
+}
+export type Reading<T> = Pending | Outcome<T>;
 
-export const PENDING: Reading<never> = { kind: "pending" };
+export const PENDING: Pending = { kind: "pending" };

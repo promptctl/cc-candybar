@@ -401,3 +401,71 @@ describe("a globals rule over a value not answered yet decides nothing, and is n
     }
   });
 });
+
+// brandon-unfiled-3248.8ro6 step 3, part 3: not answered yet flows through the
+// walk as a value. A placement waiting on a source still hangs what is open
+// under it, so the open body is drawn, keeps the shape it drew, and its
+// placements keep their record rather than coming back cold.
+describe("what hangs open under a placement not answered yet stays open", () => {
+  test("an open group whose `when` is not answered yet draws its body, each placement in it where it stood", () => {
+    const on = renderer(
+      config(`
+        segments: {
+          left: { template: "L" },
+          inner: { template: "an inner value" },
+        },
+        root: { v: ["left", { kind: "group", name: "g", label: "group", open: true, when: "{{ .doc.show }}", children: ["inner"] }] },
+      `),
+    );
+    try {
+      on.answer({ show: true });
+      const drew = stripAnsi(on.draw().frame.text).split("\n");
+      expect(drew.join("\n")).toContain("an inner value");
+      on.unanswer();
+      const { frame, errors, warnings } = on.draw();
+      const rows = stripAnsi(frame.text).split("\n");
+      // The body's row is still there, the width it drew, its placement
+      // waiting on the gate over it.
+      expect(rows.map((row) => row.length)).toEqual(drew.map((row) => row.length));
+      expect(rows.join("\n")).not.toContain("an inner value");
+      expect(rows.filter((row) => row.includes(LOADING_GLYPH))).toHaveLength(2);
+      expect(frame.pending).toEqual(["doc"]);
+      expect(errors).toEqual([]);
+      expect(warnings).toEqual([]);
+      on.answer({ show: true });
+      expect(stripAnsi(on.draw().frame.text).split("\n")).toEqual(drew);
+    } finally {
+      on.dispose();
+    }
+  });
+
+  test("an open group whose own colour is not answered yet draws its body under its loading cell", () => {
+    const on = renderer(
+      config(`
+        segments: {
+          left: { template: "L" },
+          inner: { template: "an inner value" },
+        },
+        root: { v: ["left", { kind: "group", name: "g", label: "a group label", open: true, bg: "{{ .doc.colour }}", children: ["inner"] }] },
+      `),
+    );
+    try {
+      on.answer({ colour: "error" });
+      const drew = stripAnsi(on.draw().frame.text).split("\n");
+      expect(drew.join("\n")).toContain("a group label");
+      on.unanswer();
+      const { frame, errors } = on.draw();
+      const rows = stripAnsi(frame.text).split("\n");
+      // The toggle waits where it stood; the body it hangs open is answered,
+      // and drawn as it was.
+      expect(rows.join("\n")).not.toContain("a group label");
+      expect(rows.join("\n")).toContain(LOADING_GLYPH);
+      expect(rows.join("\n")).toContain("an inner value");
+      expect(rows.map((row) => row.length)).toEqual(drew.map((row) => row.length));
+      expect(frame.pending).toEqual(["doc"]);
+      expect(errors).toEqual([]);
+    } finally {
+      on.dispose();
+    }
+  });
+});

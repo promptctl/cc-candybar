@@ -390,9 +390,9 @@ describe("VariableStore — documents", () => {
     store.defineDocument("d", ok({ a: 1, b: { c: "x", d: 2 } }));
     const before = store.changeKey("d");
     store.setDocument("d", ok({ b: { d: 2, c: "x" }, a: 1 }));
-    expect(store.changeKey("d")).toBe(before);
+    expect(store.changeKey("d")).toEqual(before);
     store.setDocument("d", ok({ b: { d: 2, c: "y" }, a: 1 }));
-    expect(store.changeKey("d")).not.toBe(before);
+    expect(store.changeKey("d")).not.toEqual(before);
   });
 
   it("changeKey is structural over documents and total over node kinds", () => {
@@ -401,10 +401,10 @@ describe("VariableStore — documents", () => {
     store.defineBox("n", "number", 7);
     const before = store.changeKey("d");
     store.setDocument("d", ok(doc())); // a rescan yielding the same content
-    expect(store.changeKey("d")).toBe(before);
+    expect(store.changeKey("d")).toEqual(before);
     store.setDocument("d", ok({ ...doc(), a: 2 }));
-    expect(store.changeKey("d")).not.toBe(before);
-    expect(store.changeKey("n")).toBe("7");
+    expect(store.changeKey("d")).not.toEqual(before);
+    expect(store.changeKey("n")).toEqual(ok("7"));
   });
 
   // brandon-var-system-1tl. The defect: the document box compared by Object.is
@@ -436,7 +436,7 @@ describe("VariableStore — documents", () => {
     // Real movement still wakes it.
     store.setDocument("d", ok({ ...doc(), a: 2 }));
     expect(runs).toBe(2);
-    expect(store.changeKey("d")).not.toBe(key);
+    expect(store.changeKey("d")).not.toEqual(key);
     stop();
   });
 
