@@ -25,7 +25,13 @@ import {
   type VarType,
   type VarValue,
 } from "./types";
-import { ok, PENDING, type Pending, type Reading } from "../utils/outcome.js";
+import {
+  ok,
+  PENDING,
+  type Ok,
+  type Pending,
+  type Reading,
+} from "../utils/outcome.js";
 
 // [LAW:types-are-the-program] How the store holds a derived value. A
 // `computed` keeps its answer until what it read changes. A `projection` reads
@@ -488,8 +494,9 @@ export class VariableStore {
   // depended on like a scalar — or pending, while the node has no value yet.
   // Structural for documents: every stored document has sorted keys
   // (toDocument), so a rescan yielding the same content in another key order
-  // is not a change.
-  changeKey(name: string): Reading<string> {
+  // is not a change. A failure is a key like any other, never a failed
+  // reading: a dependant re-reads when its dependency starts or stops failing.
+  changeKey(name: string): Pending | Ok<string> {
     const node = this.requireNode(name);
     if (node.kind === "document") {
       const doc = node.read();

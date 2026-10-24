@@ -14,7 +14,9 @@ export type Outcome<T> =
   | { readonly kind: "absent" }
   | { readonly kind: "failed"; readonly reason: string };
 
-export function ok<T>(value: T): Outcome<T> {
+export type Ok<T> = Extract<Outcome<T>, { kind: "ok" }>;
+
+export function ok<T>(value: T): Ok<T> {
   return { kind: "ok", value };
 }
 
