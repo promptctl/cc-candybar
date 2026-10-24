@@ -44,8 +44,9 @@ export interface VarNode {
   // [LAW:types-are-the-program] Age is a property of the node, not of an
   // external bookkeeping layer — duplicating it in a side map would let the
   // two diverge. `number` for box nodes (epoch ms of last set, including the
-  // initial-value set at construction); `null` for computed nodes, whose
-  // freshness is governed by MobX invalidation, not a single timestamp.
+  // initial-value set at construction) — `null` for one nothing has written
+  // yet; `null` for computed nodes, whose freshness is governed by MobX
+  // invalidation, not a single timestamp.
   lastUpdatedMs(): number | null;
 }
 
@@ -65,7 +66,7 @@ class BoxNode implements VarNode {
   // 1tl). Stamping every write instead reported attempts, and reported them most
   // misleadingly in the one situation where the age is consulted: a source
   // re-running with no effect.
-  private lastChangedAt: number;
+  private lastChangedAt: number | null;
 
   constructor(
     readonly name: string,
@@ -76,7 +77,7 @@ class BoxNode implements VarNode {
     // in for its first value: an input before its view's first payload.
     if (!unwritten(initial)) assertType(name, type, initial, "initial value");
     this.cell = observable.box(initial, { deep: false });
-    this.lastChangedAt = Date.now();
+    this.lastChangedAt = unwritten(initial) ? null : Date.now();
   }
 
   // [LAW:types-are-the-program] Not written yet is not a value: it is read as
@@ -107,7 +108,7 @@ class BoxNode implements VarNode {
     this.lastChangedAt = Date.now();
   }
 
-  lastUpdatedMs(): number {
+  lastUpdatedMs(): number | null {
     return this.lastChangedAt;
   }
 }
@@ -277,20 +278,21 @@ export interface DocumentNode {
   readonly name: string;
   readonly kind: "document";
   read(): Reading<JsonValue>;
-  lastUpdatedMs(): number;
+  // `null` until its first scan, as a box nothing has written.
+  lastUpdatedMs(): number | null;
 }
 
 class DocumentCell implements DocumentNode {
   readonly kind = "document" as const;
   private readonly cell: IObservableValue<Reading<JsonValue>>;
-  private lastChangedAt: number;
+  private lastChangedAt: number | null;
 
   constructor(
     readonly name: string,
     initial: Reading<JsonValue>,
   ) {
     this.cell = observable.box(shaped(initial), { deep: false });
-    this.lastChangedAt = Date.now();
+    this.lastChangedAt = initial.kind === "pending" ? null : Date.now();
   }
 
   read(): Reading<JsonValue> {
@@ -308,7 +310,7 @@ class DocumentCell implements DocumentNode {
     this.lastChangedAt = Date.now();
   }
 
-  lastUpdatedMs(): number {
+  lastUpdatedMs(): number | null {
     return this.lastChangedAt;
   }
 }

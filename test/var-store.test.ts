@@ -7,7 +7,7 @@ import {
   toBool,
   typeOf,
 } from "../src/var-system";
-import { ABSENT, failed, ok } from "../src/utils/outcome";
+import { ABSENT, failed, ok, PENDING } from "../src/utils/outcome";
 
 describe("VariableStore — boxes", () => {
   it("returns the initial value", () => {
@@ -273,6 +273,17 @@ describe("VariableStore — the age records a change, not a write", () => {
   });
   afterEach(() => {
     jest.useRealTimers();
+  });
+
+  it("a box nothing has written has no age until its first write", () => {
+    jest.setSystemTime(1000);
+    const store = new VariableStore();
+    store.defineBox("n", "number", PENDING);
+    expect(store.getNode("n").lastUpdatedMs()).toBeNull();
+
+    jest.setSystemTime(5000);
+    store.setBox("n", 7);
+    expect(store.getNode("n").lastUpdatedMs()).toBe(5000);
   });
 
   it("a scalar write that moves nothing leaves the age alone", () => {

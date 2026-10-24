@@ -667,8 +667,13 @@ function drawSegment(
     if (gate.kind === "hidden") return [];
     // The gate of the body it hangs: one that fails is the placement's
     // failure; one not answered yet leaves the placement waiting on it, with
-    // nothing hung under it.
-    const bodyGate = parts.bodyGate();
+    // nothing hung under it. Under a gate not answered yet, one that fails is
+    // no fault yet, as `within` reads a `when`: it waits on that gate.
+    const ownBodyGate = parts.bodyGate();
+    const bodyGate =
+      ownBodyGate.kind === "failed" && gate.kind === "pending"
+        ? gate
+        : ownBodyGate;
     if (bodyGate.kind === "failed") {
       return brokenSegment(node, scope, ctx, bodyGate.message);
     }

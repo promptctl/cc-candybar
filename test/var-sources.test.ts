@@ -171,7 +171,8 @@ describe("SourceRegistry — input: before its first payload", () => {
     const { store, registry } = make("(unset)");
     registry.declareInput("cwd", "cwd", "string", "/default");
     registry.declareInput("count", "count", "number");
-    for (const name of ["cwd", "count"]) {
+    registry.declareInput("flag", "flag", "boolean");
+    for (const name of ["cwd", "count", "flag"]) {
       let thrown: unknown;
       try {
         store.read(name);
@@ -184,7 +185,9 @@ describe("SourceRegistry — input: before its first payload", () => {
     expect(registry.getLastError("cwd")).toBeUndefined();
     registry.applyInput({});
     expect(store.read("cwd")).toBe("/default");
+    // A default that cannot be the input's type answers as its zero.
     expect(store.read("count")).toBe(0);
+    expect(store.read("flag")).toBe(false);
   });
 });
 
