@@ -142,8 +142,7 @@ describe("GitDataProvider + watchers integration", () => {
     expect(inner.calls).toBeGreaterThanOrEqual(3);
 
     // Released, the repo costs no read on the period.
-    holds.releaseUnread();
-    holds.releaseUnread();
+    holds.declare(() => {});
     const after = inner.calls;
     await new Promise((r) => setTimeout(r, 400));
     expect(inner.calls).toBe(after);

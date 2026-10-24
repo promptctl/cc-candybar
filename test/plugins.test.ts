@@ -17,6 +17,7 @@ import {
   pluginLoadLine,
   RenderCache,
   renderCacheBudget,
+  DECLARES_NOTHING,
 } from "../src/daemon/cache/render";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { pluginRoots } from "../src/config/loader/plugin-folders";
@@ -481,7 +482,11 @@ describe("an installed plugin", () => {
       logger: () => {},
     });
     const cache = new RenderCache(
-      { sessionState: new SessionState(), watchers },
+      {
+        sessionState: new SessionState(),
+        watchers,
+        declare: DECLARES_NOTHING,
+      },
       { budgetBytes: () => renderCacheBudget(memoryLimitBytes({})) },
     );
     try {
@@ -704,7 +709,11 @@ describe("an installed plugin", () => {
       logger: () => {},
     });
     const cache = new RenderCache(
-      { sessionState: new SessionState(), watchers },
+      {
+        sessionState: new SessionState(),
+        watchers,
+        declare: DECLARES_NOTHING,
+      },
       { budgetBytes: () => renderCacheBudget(memoryLimitBytes({})) },
     );
     try {

@@ -590,8 +590,7 @@ export class SessionUsageStore {
     // The instant the render is drawn at: its local date is the day summed.
     at: Instant,
   ): Promise<Reading<TodayInfo>> {
-    const claudePaths = getClaudePaths(claudeConfigDir);
-    this.pathsOfHint.set(claudeConfigDir, claudePaths);
+    const claudePaths = this.pathsOf(claudeConfigDir);
     // [LAW:no-ambient-temporal-coupling] The scan first, then the session's
     // own refresh: run together, a seed's ingest of this session and the
     // request's are two cold parses at two stamps, and whichever lands second
@@ -599,6 +598,22 @@ export class SessionUsageStore {
     await this.scans.read(holds, claudePaths);
     await this.refreshed(hookData?.session_id ?? "", hookData?.transcript_path);
     return this.todayOf(holds, hookData, claudeConfigDir, at);
+  }
+
+  // A view's declaration of `today` (declareLanes in
+  // src/daemon/render-payload.ts): the directory set's scans, held, so a set
+  // no scan has answered starts its first one now — before the request or the
+  // frame that reads it.
+  holdToday(holds: Holds, claudeConfigDir: string | undefined): void {
+    this.scans.current(holds, this.pathsOf(claudeConfigDir));
+  }
+
+  // The directories a client's `claudeConfigDir` hint names, kept for the
+  // draws that read them (`todayOf`).
+  private pathsOf(claudeConfigDir: string | undefined): string[] {
+    const claudePaths = getClaudePaths(claudeConfigDir);
+    this.pathsOfHint.set(claudeConfigDir, claudePaths);
+    return claudePaths;
   }
 
   // The `today` projection as the records stand, for a draw: the directory

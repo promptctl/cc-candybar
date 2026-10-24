@@ -131,6 +131,7 @@ import { floorOf } from "../config/globals-fields.js";
 import type { RichText } from "@promptctl/rich-js";
 import {
   buildRenderPayload,
+  declareLanes,
   payloadOf,
   renderOptionsOf,
   gitOptionsFromClosure,
@@ -382,6 +383,8 @@ const renderCache = new RenderCache(
     sessionState,
     watchers: watcherRegistry,
     log: dlog,
+    declare: (holds, facts, closure) =>
+      declareLanes(payloadProviders, holds, facts, closure),
   },
   {
     // [LAW:no-ambient-temporal-coupling] The budget as boot established it
@@ -1988,6 +1991,10 @@ function setUpRender(
   );
   try {
     const { entry, state, view } = hold;
+    // The request this render draws by names the keys the view declares: a
+    // request's own declares again before its refresh, and a frame's — the
+    // session's latest, already declared — changes nothing.
+    view.requested(req);
     const termCols = hints.termCols;
     const width = applyClaudeCodeReserve(termCols ?? DEFAULT_TERMINAL_WIDTH);
     const rowCap = diagnosticRowCap(hints.termRows);

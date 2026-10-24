@@ -108,6 +108,20 @@ function resolveValued<K extends ValuedField>(
   );
 }
 
+// [LAW:one-source-of-truth] The active preset a session's picks resolve to —
+// the first rung of the resolution below, and what a session's view declares
+// its holds by (src/daemon/cache/render.ts openView).
+export function presetOf(
+  config: DslConfig,
+  sessionPick: (key: string) => string | null,
+): string {
+  return effectivePresetName(
+    sessionPick("preset"),
+    config.globals.preset,
+    config.presets,
+  );
+}
+
 // [LAW:one-source-of-truth] THE resolution — one function, so the precedence
 // chain has one implementation rather than one per caller. It previously stood
 // as two structurally identical struct literals (the daemon's, in server.ts,
@@ -129,11 +143,7 @@ export function resolveEffectiveGlobals(
 ): EffectiveGlobals {
   // The preset resolves FIRST: every field below reads globals, and which
   // globals is exactly what the preset decides.
-  const preset = effectivePresetName(
-    sessionPick("preset"),
-    config.globals.preset,
-    config.presets,
-  );
+  const preset = presetOf(config, sessionPick);
   const declared = presetGlobals(config, preset);
   // [LAW:dataflow-not-control-flow] The staged fragment is a VALUE, and "edit
   // mode is off" is the EMPTY value — the identity fragment, exactly as

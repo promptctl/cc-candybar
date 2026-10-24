@@ -72,6 +72,7 @@ import {
 } from "../src/daemon/verbs/config-validators";
 import { memoryLimitBytes } from "../src/daemon/limits";
 import {
+  DECLARES_NOTHING,
   RenderCache,
   renderCacheBudget,
 } from "../src/daemon/cache/render";
@@ -966,7 +967,7 @@ function makeCache(reloads?: ReloadSignal): {
   cleanups.push(() => watchers.closeAll());
   const sessionState = new SessionState();
   const cache = new RenderCache(
-    { sessionState, watchers },
+    { sessionState, watchers, declare: DECLARES_NOTHING },
     {
       budgetBytes: () => renderCacheBudget(memoryLimitBytes({})),
       ...(reloads === undefined ? {} : { observers: reloads.observers }),

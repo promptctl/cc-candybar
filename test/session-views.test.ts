@@ -1,7 +1,11 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { RenderCache, type SessionView } from "../src/daemon/cache/render";
+import {
+  DECLARES_NOTHING,
+  RenderCache,
+  type SessionView,
+} from "../src/daemon/cache/render";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { SessionState } from "../src/daemon/session-state";
 import { renderDsl } from "../src/dsl/render";
@@ -38,6 +42,7 @@ function makeCache(
     {
       sessionState: new SessionState(),
       watchers,
+      declare: DECLARES_NOTHING,
       log: (_level, line) => {
         opts.log?.(line);
         lines.push(line);
