@@ -14,6 +14,7 @@ stage's output is a document in this directory that the next stage consumes.
 | 2. Categorized | `2-categorized/` | [`four-axes.md`](2-categorized/four-axes.md) — all 44 judged on primitives, UX, uniqueness, and polished-versus-hacky, plus a licence-risk table. |
 | 3. Mechanisms | `3-mechanisms/` | Seven files, one per mechanism, each in six fixed sections: mechanism, evidence, what cc-candybar does today, the change or the case against it, cost and risk, licence verdict. |
 | 3. Widgets | `3-widgets/` | Three inventories of what 26 projects put on the bar, and [`catalogue.md`](3-widgets/catalogue.md) folding them into 37 ideas, each with a take, maybe or pass verdict. |
+| 4. Styling | `4-styling/` | How Claude Code statuslines colour their segments: 9,558 projects found, the code of 1,880 read, and [`README.md`](4-styling/README.md) counting each method and naming the projects worth reading for cc-candybar's colour system. |
 
 Stage 3 ran in two halves and has a directory for each. `3-mechanisms/` narrows further,
 reading source; `3-widgets/` deliberately widens again, going back across the surveyed
