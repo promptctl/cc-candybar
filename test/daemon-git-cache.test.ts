@@ -1161,21 +1161,46 @@ describe("GitDataProvider gitDir resolution cache", () => {
     ]);
   });
 
-  test("a rejecting resolver is not pinned for a window; each read answers failed", async () => {
+  test("a throwing resolver is answered failed, logged once, and believed for the window", async () => {
+    // A throw is the resolver's bug: answered as a failure like any other, so
+    // a request waiting on it is answered rather than sent to ask again.
     const { svc, inner, logs, holds } = makeCache();
     inner.resolveThrows = true;
 
     for (let i = 0; i < 2; i++) {
       expect(await svc.getGitInfo(holds, "/boom", {})).toEqual(
-        failed("git: Error: resolver bug"),
+        failed("resolver threw: Error: resolver bug"),
       );
     }
+    expect(svc.current(holds, "/boom")).toEqual(
+      failed("resolver threw: Error: resolver bug"),
+    );
 
-    expect(inner.resolveCalls).toHaveLength(2);
+    expect(inner.resolveCalls).toHaveLength(1);
     expect(logs).toEqual([
-      "git read threw: Error: resolver bug",
-      "git read threw: Error: resolver bug",
+      "git resolve failed (/boom): resolver threw: Error: resolver bug",
     ]);
+  });
+
+  test("a resolution read again is drawn as it stood until the new answer lands", async () => {
+    jest.useFakeTimers();
+    const { svc, inner, holds } = makeCache();
+    inner.repoRootByDir = { "/nowhere": null };
+    expect((await svc.getGitInfo(holds, "/nowhere", {})).kind).toBe("absent");
+
+    inner.repoRootByDir = { "/nowhere": "/nowhere" };
+    inner.resolveGate = deferred();
+    jest.advanceTimersByTime(30_000);
+    // The window ended: the draw re-asks, and takes the answer it replaces.
+    expect(svc.current(holds, "/nowhere").kind).toBe("absent");
+    expect(inner.resolveCalls).toHaveLength(2);
+
+    inner.resolveGate.resolve();
+    inner.resolveGate = null;
+    await jest.advanceTimersByTimeAsync(0);
+    expect((await svc.getGitInfo(holds, "/nowhere", {})).kind).toBe("ok");
+    expect(inner.resolveCalls).toHaveLength(2);
+    svc.close();
   });
 
   test("close() drops the answers instead of carrying them past shutdown", async () => {

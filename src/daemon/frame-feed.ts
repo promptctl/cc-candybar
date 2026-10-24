@@ -273,9 +273,10 @@ export class FrameFeeds<Req> {
     const feed = this.feeds.get(sessionId);
     if (feed === undefined) return;
     feed.noted++;
-    // [LAW:no-ambient-temporal-coupling] Noting draws nothing: the request's
-    // refreshes have not landed yet, so a frame drawn now would show what the
-    // request replaced. Its renderer wakes the feed once they have (`wake`).
+    // [LAW:no-ambient-temporal-coupling] Noting wakes nothing: the request's
+    // refreshes have not landed yet. Its renderer wakes the feed once the
+    // request has settled (`wake`); a frame the feed's own clock draws
+    // meanwhile reads each value as its owner holds it.
     // [LAW:one-source-of-truth] Every frame a subscriber receives is one the
     // feed drew, as a frame (`drawing.by` is "feed", and the bar shows the
     // feed's pace): the request's own answer is its client's alone.

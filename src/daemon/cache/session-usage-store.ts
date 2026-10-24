@@ -391,6 +391,9 @@ export class SessionUsageStore {
   // read awaits an already-settled promise. A rejected scan is dropped so the
   // next read seeds afresh.
   private readonly seeded = new Map<string, DaySeed>();
+  // The directory sets a scan has finished over, on any day: their records
+  // are a whole sum, so `today` is answered from them.
+  private readonly scannedDirs = new Set<string>();
   private seededDay = "";
   // Why the last seed of a directory set failed, until one succeeds: a draw
   // between requests reads `today` as failed, never as a partial sum.
@@ -471,13 +474,15 @@ export class SessionUsageStore {
   }
 
   // The `session` projection as the session's last refresh left it, for a
-  // draw: no I/O, no fold. A session the store holds nothing of is the empty
-  // record its refresh answers for it.
+  // draw: no I/O, no fold. A session no refresh has answered (or one the sweep
+  // dropped) is not answered yet; one whose refresh found no transcript is the
+  // empty record its refresh answers for it.
   usageOf(sessionId: string, hookData: ClaudeHookData): Reading<UsageInfo> {
     const slot = this.sessions.get(sessionId);
-    if (slot?.failure != null) return failed(slot.failure);
+    if (slot === undefined) return PENDING;
+    if (slot.failure !== null) return failed(slot.failure);
     return ok(
-      usageOver(slot?.record?.sessionInfo ?? EMPTY_SESSION_INFO, hookData),
+      usageOver(slot.record?.sessionInfo ?? EMPTY_SESSION_INFO, hookData),
     );
   }
 
@@ -494,13 +499,11 @@ export class SessionUsageStore {
       this.renderTally,
       knownStamp,
     );
-    // A failure is stored, so the draws until the next refresh show it; an
-    // ingest that stored nothing leaves nothing.
-    if (record.kind === "failed" && sessionId) {
-      this.hold(sessionId).failure = record.reason;
-    } else {
-      const slot = this.sessions.get(sessionId);
-      if (slot !== undefined) slot.failure = null;
+    // The session's slot records that its refresh answered — a failure kept
+    // so the draws until the next refresh show it. Empty sessionId no-ops.
+    if (sessionId) {
+      this.hold(sessionId).failure =
+        record.kind === "failed" ? record.reason : null;
     }
     return record;
   }
@@ -522,7 +525,7 @@ export class SessionUsageStore {
     claudeConfigDir: string | undefined,
     // The instant the render is drawn at: its local date is the day summed.
     at: Instant,
-  ): Promise<Outcome<TodayInfo>> {
+  ): Promise<Reading<TodayInfo>> {
     const claudePaths = getClaudePaths(claudeConfigDir);
     const key = claudePaths.join("\0");
     try {
@@ -547,16 +550,20 @@ export class SessionUsageStore {
   // The `today` projection as the records stand, for a draw: a sum over what
   // the last refreshes and scans stored, at the day of `at`, so a frame past
   // midnight sums the new day with no refresh. A seed or the active session's
-  // ingest that failed at its last refresh is the projection's failure.
+  // ingest that failed at its last refresh is the projection's failure; a
+  // directory set no seed has scanned yet is not answered, never a partial
+  // sum.
   todayOf(
     hookData: ClaudeHookData | undefined,
     claudeConfigDir: string | undefined,
     at: Instant,
-  ): Outcome<TodayInfo> {
+  ): Reading<TodayInfo> {
     const today = dayKey(dateOf(at));
     const claudePaths = getClaudePaths(claudeConfigDir);
-    const seedFailure = this.seedFailures.get(claudePaths.join("\0"));
+    const key = claudePaths.join("\0");
+    const seedFailure = this.seedFailures.get(key);
     if (seedFailure !== undefined) return failed(seedFailure);
+    if (!this.scannedDirs.has(key)) return PENDING;
     const activeFailure = this.sessions.get(
       hookData?.session_id ?? "",
     )?.failure;
@@ -865,6 +872,7 @@ export class SessionUsageStore {
     scan.then(
       () => {
         memo.scanning = undefined;
+        this.scannedDirs.add(key);
       },
       (error: unknown) => {
         this.log(

@@ -186,6 +186,16 @@ describe("a frame's payload", () => {
     }
   });
 
+  test("autocompact's controls are not answered while the context window they are capped to is not", async () => {
+    // The settings file is shared, the window is per session: another
+    // session's frame has the one answered and not the other.
+    const { inputs, request } = counted();
+    await request();
+    const other = { ...inputs(AT), hookData: { ...HOOK, session_id: "other" } };
+    expect(payloadOf(other, DRAW).autocompact).toBe(PENDING);
+    expect(payloadOf(inputs(AT), DRAW).autocompact).not.toBe(PENDING);
+  });
+
   test("a PR not answered yet draws only the PR's fields as not answered", async () => {
     const pr = { kind: "pending", landed: new Promise<void>(() => {}) };
     const { inputs } = counted(pr);

@@ -102,10 +102,14 @@ export class CacheExpiryProvider {
   ): Promise<Outcome<number>> {
     const stamp = statStamp(transcriptPath);
     const prior = this.known.get(sessionId);
-    // A stamp of "" is a transcript no stat could see: read again, never
+    // A stamp of "" is a transcript no stat could see, and a failure is no
+    // answer about the stamp it was read at: both are read again, never
     // believed unchanged.
     const outcome =
-      prior !== undefined && stamp !== "" && prior.stamp === stamp
+      prior !== undefined &&
+      stamp !== "" &&
+      prior.stamp === stamp &&
+      prior.outcome.kind !== "failed"
         ? prior.outcome
         : await cacheExpiresAt(transcriptPath);
     // LRU touch: re-inserting moves the session to the newest end.

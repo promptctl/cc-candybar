@@ -155,6 +155,20 @@ describe("CacheExpiryProvider", () => {
     expect(new CacheExpiryProvider().expiryOf("s")).toBe(PENDING);
   });
 
+  test("a failed read is read again under the same stamp, never believed", async () => {
+    // A failure says nothing about the bytes at the stamp: an unreadable file
+    // keeps its stat (and so its stamp), and becomes readable again.
+    const path = writeTranscript([entry({ ts: A, cacheRead: 1 })]);
+    const provider = new CacheExpiryProvider();
+    chmodSync(path, 0o000);
+    try {
+      expect((await provider.refresh("s", path)).kind).toBe("failed");
+    } finally {
+      chmodSync(path, 0o600);
+    }
+    expect(await provider.refresh("s", path)).toEqual(ok(at(A)));
+  });
+
   test("an unchanged stamp reads nothing; a moved one reads again", async () => {
     // A whole-second mtime, so restoring it restores the stamp exactly.
     const MTIME = 1_700_000_000;

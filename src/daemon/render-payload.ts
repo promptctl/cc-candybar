@@ -1065,7 +1065,21 @@ export interface DrawInputs {
 // [LAW:dataflow-not-control-flow] Which lanes the closure reads: every lane is
 // ONE shape — wanted, read; not wanted, ABSENT — decided here once for the
 // refresh and the draw alike.
-function wanted(neededInputPaths: ReadonlySet<string>) {
+// Memoised per closure: the cache builds each set once, and a frame asks of it
+// at every draw.
+const wantedOf = new WeakMap<ReadonlySet<string>, Wanted>();
+type Wanted = ReturnType<typeof wantsOf>;
+
+function wanted(neededInputPaths: ReadonlySet<string>): Wanted {
+  let want = wantedOf.get(neededInputPaths);
+  if (want === undefined) {
+    want = wantsOf(neededInputPaths);
+    wantedOf.set(neededInputPaths, want);
+  }
+  return want;
+}
+
+function wantsOf(neededInputPaths: ReadonlySet<string>) {
   const wants = (prefix: string): boolean =>
     anyPathStartsWith(neededInputPaths, prefix);
   return {
@@ -1345,8 +1359,10 @@ function projectPayload<P>(
     lanes.memento.kind === "pending"
       ? pending("memento")
       : projectMemento(lanes.memento);
+  // The controls are capped to the model's context window, so they are not
+  // answered while the window is not.
   const autoCompactValue =
-    lanes.autoCompact.kind === "pending"
+    lanes.autoCompact.kind === "pending" || lanes.context.kind === "pending"
       ? pending("autocompact")
       : projectAutoCompact(
           lanes.autoCompact,

@@ -117,7 +117,10 @@ async function render(
     using held = cache.holdSession(cwd, cwd, undefined, sid);
     return { text: drawn(held.view, sid, at), view: held.view };
   })();
+  // Both homes the render read: the view's sources, and the directory's — a
+  // git variable's first delivery is the directory's to wait on.
   expect(await view.registry.settled(5000)).toEqual([]);
+  expect(await view.state.registry.settled(5000)).toEqual([]);
   return { text, view };
 }
 

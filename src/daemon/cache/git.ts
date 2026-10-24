@@ -185,8 +185,9 @@ function inUse(state: RepoState): boolean {
 interface ResolutionCacheEntry {
   readonly dir: Promise<Outcome<string>>;
   readonly computedAt: number;
-  // What `dir` answered, once it has: a draw reads which repo a directory is
-  // without awaiting.
+  // What `dir` answered, once it has — or, until then, what the resolution it
+  // replaced answered: a draw reads which repo a directory is without
+  // awaiting.
   known: Outcome<string> | undefined;
 }
 
@@ -389,35 +390,34 @@ export class GitDataProvider {
       return existing;
     }
 
-    const dir = this.inner.resolveEffectiveGitDir(workingDir, projectDir);
+    // [LAW:no-silent-failure] A THROW is a bug in the resolver, which returns
+    // outcomes by construction: it is answered as the failure it is, logged
+    // below and believed for the window like any other — so a reader waiting
+    // on the resolution is answered, never sent to ask again. The executor
+    // makes a throw before the resolver's promise a rejection too.
+    const dir = new Promise<Outcome<string>>((resolve) =>
+      resolve(this.inner.resolveEffectiveGitDir(workingDir, projectDir)),
+    ).catch((e: unknown) => failed(`resolver threw: ${String(e)}`));
+    // [LAW:one-source-of-truth] A resolution read again keeps the answer it
+    // replaces until its own lands: a draw takes the stored value, so the
+    // window ending is never a moment the repo is not known.
     const entry: ResolutionCacheEntry = {
       dir,
       computedAt: now,
-      known: undefined,
+      known: existing?.known,
     };
     this.resolutions.set(key, entry);
-    // [LAW:no-silent-failure] A failed answer is logged once, by the resolution
-    // that made it: it is believed for the window, so a read of it never logs
-    // it again. A REJECTION is a bug in the resolver, not an answer worth
-    // pinning for a window — resolveEffectiveGitDir returns outcomes by
-    // construction, so drop the entry and let the next caller re-ask. The
-    // rejection still reaches whoever awaited `dir`; this handler only evicts.
-    void dir.then(
-      (outcome) => {
-        entry.known = outcome;
-        if (outcome.kind === "failed") {
-          this.logger(
-            "warn",
-            `git resolve failed (${workingDir}): ${outcome.reason}`,
-          );
-        }
-      },
-      () => {
-        if (this.resolutions.get(key)?.dir === dir) {
-          this.resolutions.delete(key);
-        }
-      },
-    );
+    // A failed answer is logged once, by the resolution that made it: it is
+    // believed for the window, so a read of it never logs it again.
+    void dir.then((outcome) => {
+      entry.known = outcome;
+      if (outcome.kind === "failed") {
+        this.logger(
+          "warn",
+          `git resolve failed (${workingDir}): ${outcome.reason}`,
+        );
+      }
+    });
     while (this.resolutions.size > this.maxRepos) {
       const oldest = this.resolutions.keys().next().value;
       if (oldest === undefined) break;
@@ -446,15 +446,7 @@ export class GitDataProvider {
   ): Current<GitInfo> {
     const look = this.look(holds, workingDir, options, projectDir);
     return look.kind === "resolving"
-      ? {
-          kind: "pending",
-          // A rejection is the resolver's bug, logged where a read awaits
-          // it (`getGitInfo`); a draw waits on nothing.
-          landed: look.dir.then(
-            () => {},
-            () => {},
-          ),
-        }
+      ? { kind: "pending", landed: look.dir.then(() => {}) }
       : look.value;
   }
 
@@ -532,6 +524,8 @@ export class GitDataProvider {
         gitOptions,
         showPullRequest === true,
       );
+      if (value.reading.kind === "pending") this.misses++;
+      else this.hits++;
       const info = currentOf(value);
       if (pr === null || info.kind !== "ok") return resolved(info);
       // A pass stores a branch's values and moves the PR's key in one turn,
