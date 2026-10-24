@@ -44,6 +44,9 @@ export interface SourceSnapshots {
   memento: KeyedSourceStats;
   autocompact: SourceStats<"request">;
   cache: SourceStats<"request">;
+  // A Claude Code directory's transcript scan: `first` its seed, `period`
+  // its rescans.
+  today: KeyedSourceStats;
 }
 
 const KEYED_SOURCE_ZERO: KeyedSourceStats = {
@@ -290,6 +293,7 @@ export class RuntimeStats {
         memento: KEYED_SOURCE_ZERO,
         autocompact: { entries: 0, refreshes: { request: 0 }, failures: 0 },
         cache: { entries: 0, refreshes: { request: 0 }, failures: 0 },
+        today: KEYED_SOURCE_ZERO,
       },
       transcriptReads: { reads: 0, bytes: 0, longLines: 0, largestLine: 0 },
       renderCache: {

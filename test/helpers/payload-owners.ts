@@ -151,6 +151,7 @@ export function fakeUsage(
       usage.store(sessionId, readers.usage?.(sessionId, hookData) ?? ABSENT),
     usageOf: (sessionId: string): Reading<UsageInfo> => usage.read(sessionId),
     getTodayInfo: (
+      _holds: Holds,
       hookData: ClaudeHookData | undefined,
       claudeConfigDir: string | undefined,
       at: Instant,
@@ -159,7 +160,10 @@ export function fakeUsage(
         hookData?.session_id ?? "",
         readers.today?.(hookData, claudeConfigDir, at) ?? ABSENT,
       ),
-    todayOf: (hookData: ClaudeHookData | undefined): Reading<TodayInfo> =>
+    todayOf: (
+      _holds: Holds,
+      hookData: ClaudeHookData | undefined,
+    ): Reading<TodayInfo> =>
       today.read(hookData?.session_id ?? ""),
     observeSpeed: (
       sessionId: string,

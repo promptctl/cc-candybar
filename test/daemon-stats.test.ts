@@ -37,6 +37,12 @@ describe("RuntimeStats.snapshot", () => {
       },
       usageCache: { size: 10, hits: 50, misses: 5, sweeps: 1 },
       sources: {
+        today: {
+          entries: 1,
+          held: 1,
+          refreshes: { first: 1, period: 4, supersede: 0 },
+          failures: 0,
+        },
         tmux: {
           entries: 2,
           held: 1,
@@ -229,6 +235,12 @@ describe("formatStats", () => {
       },
       usageCache: { size: 3, hits: 40, misses: 10, sweeps: 0 },
       sources: {
+        today: {
+          entries: 1,
+          held: 1,
+          refreshes: { first: 1, period: 4, supersede: 0 },
+          failures: 0,
+        },
         tmux: {
           entries: 2,
           held: 1,

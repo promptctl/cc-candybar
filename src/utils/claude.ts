@@ -118,7 +118,7 @@ export function getClaudePaths(detected: string | undefined): string[] {
 }
 
 export async function findProjectPaths(
-  claudePaths: string[],
+  claudePaths: readonly string[],
 ): Promise<string[]> {
   const projectPaths: string[] = [];
 

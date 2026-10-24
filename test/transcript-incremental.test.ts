@@ -32,6 +32,7 @@ import {
 } from "../src/utils/transcript-fs";
 import { SessionUsageStore } from "../src/daemon/cache/session-usage-store";
 import type { ClaudeHookData } from "../src/utils/claude";
+import { Holds } from "../src/utils/holds";
 import { instantOf } from "../src/utils/instant";
 
 let seq = 0;
@@ -494,6 +495,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
       try {
         const usage = await store.getUsageInfo("P", hook("P", t));
         const today = await store.getTodayInfo(
+          new Holds(),
           hook("P", t),
           cfgRoot,
           instantOf(new Date()),

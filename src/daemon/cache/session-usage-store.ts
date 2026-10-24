@@ -1,5 +1,7 @@
 import { dirname, join, sep } from "node:path";
 
+import { observable, runInAction } from "mobx";
+
 import {
   type SessionInfo,
   type UsageInfo,
@@ -35,6 +37,10 @@ import {
 } from "../../utils/outcome";
 import { quietLogger, type DaemonLogger } from "../../utils/logger";
 import { dateOf, type Instant } from "../../utils/instant";
+import type { Holds } from "../../utils/holds";
+import { KeyedSource, type KeyedSourceStats } from "../../utils/keyed-source";
+import type { Every } from "../../utils/period";
+import { Kept } from "../../var-system/store";
 
 // [LAW:one-source-of-truth] The daemon's single owner of per-session usage.
 // Per-session records are canonical; the `session` projection (whole-session
@@ -47,13 +53,19 @@ import { dateOf, type Instant } from "../../utils/instant";
 // [LAW:dataflow-not-control-flow] `today` stops being "recompute-if-stale"
 // (where the staleness probe — a whole-tree mtime sweep — cost as much as the
 // recompute it guarded). The aggregate is derived state maintained
-// incrementally: the whole transcript tree is scanned lazily, once a day, to
-// seed records for sessions that did work before this daemon saw them; every
-// render after that is a single-file stat plus a fold. A session that never
-// renders (headless `claude -p`, the Agent SDK) is kept current by RESCANNING
-// the tree in the background at most once per `rescanIntervalMs` — the seed
-// again, which over warm records is a stat per transcript plus the bytes
-// appended since the last scan (measured: ~75 ms over 6k transcripts).
+// incrementally: a Claude Code directory's transcript tree is scanned once
+// when a render first asks for its `today` (the seed), to make records for
+// sessions that did work before this daemon saw them; every render after that
+// is a single-file stat plus a lookup. A session that never renders (headless
+// `claude -p`, the Agent SDK) is kept current by RESCANNING the tree on the
+// directory's own period while a home holds it — the seed again, which over
+// warm records is a stat per transcript plus the bytes appended since the last
+// scan (measured: ~75 ms over 6k transcripts).
+//
+// [LAW:one-source-of-truth] `today` is derived, never summed by its reader:
+// records live in an observable map, and each directory's day sums are a kept
+// computed over it, so a frame's `today` is one lookup that changes in the
+// turn a record does (brandon-unfiled-3248.8ro6, step 3).
 
 // [LAW:types-are-the-program] An `ok` TodayInfo always carries real totals —
 // "no usage recorded today" is the `absent` outcome arm, not a bag of nulls.
@@ -121,9 +133,6 @@ interface DayUsage {
   cacheRead: number;
 }
 
-// What a record another directory's session owns contributes to `today`.
-const NO_DAYS: ReadonlyMap<string, DayUsage> = new Map();
-
 interface SessionRecord {
   // [LAW:one-source-of-truth] `files` is canonical (main transcript + agent
   // sidechains, each its own incremental FileFold); `sessionInfo`/`days` are
@@ -142,9 +151,12 @@ interface SessionRecord {
 // record and the speed ring hang off the one slot, so neither can outlive the
 // other — a session that renders before its transcript has bytes holds a ring
 // and no record, and is swept on the same clock.
+// [LAW:types-are-the-program] `record` is readonly: a record lands by
+// replacing the slot in the observable map (`stored`), the write the day sums
+// see, so a write in place — which they would not — does not compile.
 interface SessionSlot {
   lastSeenAt: number;
-  record: SessionRecord | undefined;
+  readonly record: SessionRecord | undefined;
   // [LAW:one-source-of-truth] The recent tok/s observations, a bounded ring
   // (oldest→newest). tok/s is a derivative of the SAME token totals the record
   // owns; the baseline (prior counts + time) is the ring's last element, not a
@@ -167,23 +179,23 @@ interface IngestTally {
   misses: number;
 }
 
-// One set of Claude Code directories' scans on `seededDay`.
-interface DaySeed {
-  // What a `today` render awaits: the day's first scan. A rescan never
-  // replaces it — the records it refreshes are read as each ingest lands, and
-  // an append-only fold only grows, so a render mid-rescan sums no less than
-  // the last scan did.
-  readonly done: Promise<void>;
-  // The scan in flight, the first included: at most one per directory set.
-  scanning: Promise<void> | undefined;
-  // The render instant (ms) the latest scan started at.
-  startedAtMs: number;
+// What one scan of a directory set did: the sessions recent enough to hold a
+// `today` entry, and how many of them it had to read — over warm records, the
+// ones that changed since the last scan.
+interface Scanned {
+  readonly sessions: number;
+  readonly read: number;
 }
 
 const DEFAULT_STALE_AGE_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_SWEEP_INTERVAL_MS = 5 * 60 * 1000;
-// How far behind a never-rendering session's work `today` may run.
-const DEFAULT_RESCAN_INTERVAL_MS = 60 * 1000;
+// How far behind a never-rendering session's work `today` may run, and how
+// soon a scan that failed — which is `today`'s failure until one lands — is
+// tried again.
+const DEFAULT_RESCAN: Every = { okMs: 60 * 1000, failedMs: 10 * 1000 };
+// Directory sets nothing holds whose last scan is kept: a user has few
+// Claude Code directories, and a held one is never dropped.
+const MAX_UNHELD_SCANS = 8;
 // Mirrors the transcript-fs gate width: the seed's parse fan-out is bounded by
 // the same constant as the I/O it drives, so a scan can never re-create the
 // unbounded burst gn4 exists to kill.
@@ -294,6 +306,14 @@ async function foldFile(
   return { entries: count, cost, breakdown, days };
 }
 
+function addDay(into: DayUsage, d: DayUsage): void {
+  into.cost += d.cost;
+  into.input += d.input;
+  into.output += d.output;
+  into.cacheCreation += d.cacheCreation;
+  into.cacheRead += d.cacheRead;
+}
+
 // [LAW:effects-at-boundaries] Pure merge of a session's file folds into the
 // derived record shape the read path serves. `entries === 0` across all files is
 // the empty session (all-null SessionInfo, whose fields the payload drops) — the
@@ -315,11 +335,7 @@ function mergeFolds(files: ReadonlyMap<string, Folded<FileFold>>): {
     bd.cacheRead += f.breakdown.cacheRead;
     for (const [k, v] of f.days) {
       const d = days.get(k) ?? { ...EMPTY_DAY };
-      d.cost += v.cost;
-      d.input += v.input;
-      d.output += v.output;
-      d.cacheCreation += v.cacheCreation;
-      d.cacheRead += v.cacheRead;
+      addDay(d, v);
       days.set(k, d);
     }
   }
@@ -335,6 +351,39 @@ function mergeFolds(files: ReadonlyMap<string, Folded<FileFold>>): {
     },
     days,
   };
+}
+
+// Whether a transcript path lies under one of a directory set's `projects/`
+// roots — exactly when its session's `today` is that set's.
+function under(path: string | undefined, roots: readonly string[]): boolean {
+  return path !== undefined && roots.some((root) => path.startsWith(root));
+}
+
+// [LAW:effects-at-boundaries] One directory set's day sums: each day some
+// record under its roots holds a bucket for, the sum of those buckets. Keyed
+// by the records' own days, so it reads no clock — the day `today` reads off
+// it is the frame's.
+function daySumsOver(
+  slots: Iterable<SessionSlot>,
+  roots: readonly string[],
+): ReadonlyMap<string, DayUsage> {
+  const sums = new Map<string, DayUsage>();
+  for (const { record } of slots) {
+    if (record === undefined || !under(record.transcriptPath, roots)) continue;
+    for (const [day, d] of record.days) {
+      const sum = sums.get(day) ?? { ...EMPTY_DAY };
+      addDay(sum, d);
+      sums.set(day, sum);
+    }
+  }
+  return sums;
+}
+
+// A directory set's `today` state beside its scan: its roots, and its day
+// sums derived from the records.
+interface DaySet {
+  readonly roots: readonly string[];
+  readonly sums: Kept<ReadonlyMap<string, DayUsage>>;
 }
 
 // Bounded-concurrency fan-out for the seed: at most `limit` parses in flight.
@@ -378,31 +427,31 @@ export class SessionUsageStore {
   // the day's sessions would drop work from it unseen. A record is a few
   // scalars per file and retained day, and `sweepStale` bounds the map to the
   // sessions seen within `staleAgeMs` plus those holding work done today.
-  private readonly sessions = new Map<string, SessionSlot>();
+  // Observable, shallowly: a slot replaced is the change the day sums read.
+  private readonly sessions = observable.map<string, SessionSlot>(undefined, {
+    deep: false,
+  });
   // [LAW:one-source-of-truth] Coalesces concurrent MISSES for the same
   // (session, observed stamp) onto one parse; cleared on settle (a coalescer,
   // not a cache — the records map IS the cache).
   private readonly flight = new SingleFlight();
-  // [LAW:dataflow-not-control-flow] Memo of the seed scans of `seededDay`, one
-  // per set of Claude Code directories a session's client resolves to (keyed
-  // by the directories themselves, so a default that resolves to one directory
-  // shares a scan with that directory named outright). Unlike SingleFlight
-  // this RETAINS the resolved promise, so after a seed completes every later
-  // read awaits an already-settled promise. A rejected scan is dropped so the
-  // next read seeds afresh.
-  private readonly seeded = new Map<string, DaySeed>();
-  // The directory sets a scan has finished over, on any day: their records
-  // are a whole sum, so `today` is answered from them.
-  private readonly scannedDirs = new Set<string>();
+  // [LAW:single-enforcer] The one owner of when a directory set is scanned:
+  // its first read is the seed, and its period, which runs only while a home
+  // holds the set, is the rescan. Keyed by the directories themselves, so a
+  // default that resolves to one directory shares a scan with that directory
+  // named outright. Its answer is `today`'s, a failed scan included.
+  private readonly scans: KeyedSource<readonly string[], Scanned>;
+  // Each directory set's day sums, derived from the records, kept for the
+  // store's life: there are as few as the Claude Code directories rendered
+  // from, and each reads only this store's own map.
+  private readonly daySets = new Map<string, DaySet>();
   // The Claude Code directories each `claudeConfigDir` hint resolved to at its
   // last refresh (`undefined` is a client too old to say, which costs a probe
   // of the disk): a draw reads them here, and never touches the disk.
   private readonly pathsOfHint = new Map<string | undefined, string[]>();
-  private seededDay = "";
-  // Why the last seed of a directory set failed, until one succeeds: a draw
-  // between requests reads `today` as failed, never as a partial sum.
-  private readonly seedFailures = new Map<string, string>();
-  private readonly rescanIntervalMs: number;
+  // The wall clock's day when a scan last landed: the day `today` sums, which
+  // the sweep keeps records for.
+  private scannedDay = "";
   // [LAW:no-ambient-temporal-coupling] Explicit owner of observe/commit ordering
   // for the speed sample. Concurrent renders observing the SAME transcript state
   // (key = `${sessionId}:${mtime}`) share ONE observation and commit the baseline
@@ -413,16 +462,13 @@ export class SessionUsageStore {
   private readonly log: DaemonLogger;
   private readonly renderTally: IngestTally = { hits: 0, misses: 0 };
   private sweeps = 0;
-  // Scans that completed and reported, by kind: a `seed` is a day's first (or
-  // one after a failed scan dropped its memo), a `rescan` the background one.
-  private readonly scans = { seed: 0, rescan: 0 };
   private sweepTimer: NodeJS.Timeout | null = null;
 
   constructor(
     opts: {
       staleAgeMs?: number;
       sweepIntervalMs?: number;
-      rescanIntervalMs?: number;
+      rescan?: Every;
       // [LAW:single-enforcer] One injection point, as on GitDataProvider: the
       // daemon passes `dlog`; every other consumer keeps the debug-routed
       // default and never writes daemon.log.
@@ -431,7 +477,15 @@ export class SessionUsageStore {
   ) {
     this.log = opts.logger ?? quietLogger;
     this.staleAgeMs = opts.staleAgeMs ?? DEFAULT_STALE_AGE_MS;
-    this.rescanIntervalMs = opts.rescanIntervalMs ?? DEFAULT_RESCAN_INTERVAL_MS;
+    this.scans = new KeyedSource({
+      name: "today",
+      keyOf: (paths) => paths.join("\0"),
+      fields: (paths) => `dirs=${paths.join(",")}`,
+      read: (paths) => this.scan(paths),
+      every: opts.rescan ?? DEFAULT_RESCAN,
+      maxEntries: MAX_UNHELD_SCANS,
+      logger: this.log,
+    });
     const interval = opts.sweepIntervalMs ?? DEFAULT_SWEEP_INTERVAL_MS;
     if (interval > 0) {
       this.sweepTimer = setInterval(() => this.sweepStale(), interval);
@@ -444,17 +498,19 @@ export class SessionUsageStore {
     hits: number;
     misses: number;
     sweeps: number;
-    seeds: number;
-    rescans: number;
   } {
     return {
       size: this.sessions.size,
       hits: this.renderTally.hits,
       misses: this.renderTally.misses,
       sweeps: this.sweeps,
-      seeds: this.scans.seed,
-      rescans: this.scans.rescan,
     };
+  }
+
+  // The scans as a source: the directory sets kept, those a home holds, the
+  // seeds (`first`) and rescans (`period`), and how many failed.
+  scanStats(): KeyedSourceStats {
+    return this.scans.stats();
   }
 
   // The `session` projection: whole-session totals for the active session.
@@ -511,7 +567,7 @@ export class SessionUsageStore {
   }
 
   // The `today` projection: cross-session sum of every record's today bucket.
-  // [LAW:no-silent-failure] A failed seed or a failed active-session ingest
+  // [LAW:no-silent-failure] A failed scan or a failed active-session ingest
   // makes the whole projection `failed` — a total silently missing today's
   // main work would be a confident wrong number, worse than a loud gap.
   //
@@ -522,7 +578,13 @@ export class SessionUsageStore {
   // off where its transcript lives: a sum over every directory seen so far, or
   // over the sessions that had asked, would move with which other sessions
   // happened to have rendered.
+  //
+  // A request's refresh: the active session's own record — so `today` never
+  // trails the cost it was sent with — and the directory set's first scan,
+  // the one wait, since a set no scan has answered is not answered. `holds`
+  // is the home rendering: it holds the set, which keeps it on its rescan.
   async getTodayInfo(
+    holds: Holds,
     hookData: ClaudeHookData | undefined,
     claudeConfigDir: string | undefined,
     // The instant the render is drawn at: its local date is the day summed.
@@ -530,69 +592,45 @@ export class SessionUsageStore {
   ): Promise<Reading<TodayInfo>> {
     const claudePaths = getClaudePaths(claudeConfigDir);
     this.pathsOfHint.set(claudeConfigDir, claudePaths);
-    const key = claudePaths.join("\0");
-    try {
-      await this.ensureSeeded(dayKey(dateOf(at)), claudePaths, at * 1000);
-      this.seedFailures.delete(key);
-    } catch (error) {
-      const reason = `usage seed: ${error instanceof Error ? error.message : String(error)}`;
-      this.seedFailures.set(key, reason);
-      return failed(reason);
-    }
-    // Keep the active session fresh: a scan reaches it at most once a minute,
-    // so every render's freshness for the active session comes from here (a
-    // hit when its transcript is unchanged). Empty sessionId no-ops in ingest.
-    const active = await this.refreshed(
-      hookData?.session_id ?? "",
-      hookData?.transcript_path,
-    );
-    if (active.kind === "failed") return active;
-    return this.todayOf(hookData, claudeConfigDir, at);
+    await Promise.all([
+      this.scans.read(holds, claudePaths),
+      this.refreshed(hookData?.session_id ?? "", hookData?.transcript_path),
+    ]);
+    return this.todayOf(holds, hookData, claudeConfigDir, at);
   }
 
-  // The `today` projection as the records stand, for a draw: a sum over what
-  // the last refreshes and scans stored, at the day of `at`, so a frame past
-  // midnight sums the new day with no refresh. A seed or the active session's
-  // ingest that failed at its last refresh is the projection's failure; a
-  // directory set no seed has scanned yet is not answered, never a partial
-  // sum.
+  // The `today` projection as the records stand, for a draw: the directory
+  // set's day sums at the day of `at`, so a frame past midnight sums the new
+  // day with no refresh. The set's last scan failing, or the active session's
+  // last ingest, is the projection's failure; a set no scan has answered is
+  // not answered, never a partial sum.
   todayOf(
+    holds: Holds,
     hookData: ClaudeHookData | undefined,
     claudeConfigDir: string | undefined,
     at: Instant,
   ): Reading<TodayInfo> {
-    const today = dayKey(dateOf(at));
     const claudePaths = this.pathsOfHint.get(claudeConfigDir);
     if (claudePaths === undefined) return PENDING;
-    const key = claudePaths.join("\0");
-    const seedFailure = this.seedFailures.get(key);
-    if (seedFailure !== undefined) return failed(seedFailure);
-    if (!this.scannedDirs.has(key)) return PENDING;
-    const activeFailure = this.sessions.get(
-      hookData?.session_id ?? "",
-    )?.failure;
-    if (activeFailure != null) return failed(activeFailure);
+    const scan = this.scans.current(holds, claudePaths);
+    if (scan.kind === "pending") return PENDING;
+    if (scan.kind !== "ok") return scan;
+    const active = this.sessions.get(hookData?.session_id ?? "");
+    if (active?.failure != null) return failed(active.failure);
 
-    const roots = claudePaths.map((dir) => join(dir, "projects") + sep);
+    const today = dayKey(dateOf(at));
     const total: DayUsage = { ...EMPTY_DAY };
-    let any = false;
-    for (const [sessionId, { record }] of this.sessions) {
-      const path = record?.transcriptPath ?? "";
-      const counted =
-        sessionId === hookData?.session_id ||
-        roots.some((root) => path.startsWith(root));
-      // A slot holding only a speed ring has no record, and no days.
-      const days = counted ? (record?.days ?? NO_DAYS) : NO_DAYS;
-      any = any || days.has(today);
-      const d = days.get(today) ?? EMPTY_DAY;
-      total.cost += d.cost;
-      total.input += d.input;
-      total.output += d.output;
-      total.cacheCreation += d.cacheCreation;
-      total.cacheRead += d.cacheRead;
-    }
+    const set = this.daySet(claudePaths);
+    const inSet = set.sums.read().get(today);
+    if (inSet !== undefined) addDay(total, inSet);
+    // The rendering session counts wherever its transcript lives; under the
+    // set's roots it is already in the sums.
+    const own = under(active?.record?.transcriptPath, set.roots)
+      ? undefined
+      : active?.record?.days.get(today);
+    if (own !== undefined) addDay(total, own);
 
-    if (!any) return ABSENT;
+    if (inSet === undefined && own === undefined) return ABSENT;
     return ok({
       cost: total.cost,
       tokens:
@@ -752,8 +790,16 @@ export class SessionUsageStore {
     // Store only over the record this fold started from; a sweep of that record
     // mid-flight is a change too, so its slot is not brought back.
     if (this.sessions.get(sessionId)?.record !== prior) return ok(record);
-    this.hold(sessionId).record = record;
+    this.stored(sessionId, record);
     return ok(record);
+  }
+
+  // [LAW:single-enforcer] The one write of a slot's record: the slot is
+  // replaced in the observable map, which is the change the day sums derive
+  // from.
+  private stored(sessionId: string, record: SessionRecord): void {
+    const slot = this.hold(sessionId);
+    runInAction(() => this.sessions.set(sessionId, { ...slot, record }));
   }
 
   // The one write of `lastSeenAt`: the session's slot, refreshed as seen, or
@@ -775,8 +821,24 @@ export class SessionUsageStore {
       failure: null,
       speed: undefined,
     };
-    this.sessions.set(sessionId, slot);
+    runInAction(() => this.sessions.set(sessionId, slot));
     return slot;
+  }
+
+  // A directory set's day sums, derived on first ask and kept with the store.
+  private daySet(claudePaths: readonly string[]): DaySet {
+    const key = claudePaths.join("\0");
+    const known = this.daySets.get(key);
+    if (known !== undefined) return known;
+    const roots = claudePaths.map((dir) => join(dir, "projects") + sep);
+    const set: DaySet = {
+      roots,
+      sums: new Kept(`today over ${claudePaths.join(",")}`, () =>
+        daySumsOver(this.sessions.values(), roots),
+      ),
+    };
+    this.daySets.set(key, set);
+    return set;
   }
 
   // [LAW:dataflow-not-control-flow] Re-fold ONLY the bytes appended since the
@@ -836,124 +898,74 @@ export class SessionUsageStore {
     return ok({ files: newFiles, ...mergeFolds(newFiles), mainStamp });
   }
 
-  // [LAW:no-ambient-temporal-coupling] `atMs` is the render's instant: a
-  // rescan is due by the clock the render is drawn at, and the memo owns that
-  // at most one scan per directory set runs.
-  private ensureSeeded(
-    day: string,
-    claudePaths: string[],
-    atMs: number,
-  ): Promise<void> {
-    // Drop other days' memos so the map holds only the current day's.
-    if (this.seededDay !== day) {
-      this.seeded.clear();
-      this.seededDay = day;
-    }
-    const key = claudePaths.join("\0");
-    const existing = this.seeded.get(key);
-    if (!existing) {
-      const done = this.seed(claudePaths, "seed");
-      const memo: DaySeed = { done, scanning: done, startedAtMs: atMs };
-      this.seeded.set(key, memo);
-      this.settle(key, memo, done);
-      return done;
-    }
-    if (
-      existing.scanning === undefined &&
-      atMs - existing.startedAtMs >= this.rescanIntervalMs
-    ) {
-      existing.startedAtMs = atMs;
-      existing.scanning = this.seed(claudePaths, "rescan");
-      this.settle(key, existing, existing.scanning);
-    }
-    return existing.done;
-  }
+  // The one whole-tree scan of a directory set — its seed, or a rescan:
+  // ingest every session whose transcript was touched recently enough to hold
+  // a today entry. A rescan is the same scan over warm records, so it costs a
+  // stat per transcript plus the bytes appended since the last one.
+  // [LAW:no-silent-failure] A scan that throws answers as failed, which is
+  // `today`'s failure until a scan lands — never a sum silently frozen at the
+  // last scan that worked.
+  private async scan(
+    claudePaths: readonly string[],
+  ): Promise<Outcome<Scanned>> {
+    try {
+      const cutoff = seedCutoffMs();
+      const projectPaths = await findProjectPaths(claudePaths);
+      const candidates: Array<{
+        sessionId: string;
+        path: string;
+        stamp: string;
+      }> = [];
 
-  // [LAW:no-silent-failure] A failed scan drops its memo, so the next render
-  // seeds afresh and awaits it — `today` is `failed` if that fails too, never
-  // a total silently frozen at the last scan that worked.
-  private settle(key: string, memo: DaySeed, scan: Promise<void>): void {
-    scan.then(
-      () => {
-        memo.scanning = undefined;
-        this.scannedDirs.add(key);
-      },
-      (error: unknown) => {
-        this.log(
-          "warn",
-          `usageStore scan: ${error instanceof Error ? error.message : String(error)}`,
-        );
-        if (this.seeded.get(key) === memo) this.seeded.delete(key);
-      },
-    );
-  }
-
-  // Resolves once every scan in flight has settled, whatever its outcome.
-  async scanned(): Promise<void> {
-    await Promise.allSettled(
-      [...this.seeded.values()].map((memo) => memo.scanning),
-    );
-  }
-
-  // The one whole-tree scan, per day and Claude Code directory set: ingest
-  // every session whose transcript was touched recently enough to hold a today
-  // entry. A rescan is the same scan over warm records, so it costs a stat per
-  // transcript plus the bytes appended since the last one.
-  private async seed(
-    claudePaths: string[],
-    kind: "seed" | "rescan",
-  ): Promise<void> {
-    const startedMs = Date.now();
-    const cutoff = seedCutoffMs();
-    const projectPaths = await findProjectPaths(claudePaths);
-    const candidates: Array<{
-      sessionId: string;
-      path: string;
-      stamp: string;
-    }> = [];
-
-    for (const dir of projectPaths) {
-      let files: string[];
-      try {
-        files = await gatedReaddir(dir);
-      } catch {
-        continue;
-      }
-      for (const file of files) {
-        if (!file.endsWith(".jsonl")) continue;
-        const filePath = join(dir, file);
-        let st: { mtimeMs: number; size: number };
+      for (const dir of projectPaths) {
+        let files: string[];
         try {
-          st = await gatedStat(filePath);
+          files = await gatedReaddir(dir);
         } catch {
           continue;
         }
-        if (st.mtimeMs < cutoff) continue;
-        candidates.push({
-          sessionId: file.slice(0, -".jsonl".length),
-          path: filePath,
-          stamp: stampOf(st),
-        });
+        for (const file of files) {
+          if (!file.endsWith(".jsonl")) continue;
+          const filePath = join(dir, file);
+          let st: { mtimeMs: number; size: number };
+          try {
+            st = await gatedStat(filePath);
+          } catch {
+            continue;
+          }
+          if (st.mtimeMs < cutoff) continue;
+          candidates.push({
+            sessionId: file.slice(0, -".jsonl".length),
+            path: filePath,
+            stamp: stampOf(st),
+          });
+        }
       }
-    }
 
-    // [LAW:no-silent-failure] The seed is its own effect edge (timer/lazy
-    // driven, no render boundary to carry the outcome to), so its per-session
-    // parse failures are logged here.
-    const tally: IngestTally = { hits: 0, misses: 0 };
-    await mapPool(candidates, SEED_CONCURRENCY, async (c) => {
-      const outcome = await this.ingest(c.sessionId, c.path, tally, c.stamp);
-      if (outcome.kind === "failed") {
-        this.log("warn", `usageStore ${kind}: ${outcome.reason}`);
-      }
-    });
-    // [LAW:nothing-unseen] `read` is how many of the sessions the scan had to
-    // read: over warm records, the ones that changed since the last scan.
-    this.log(
-      "info",
-      `usageStore ${kind} sessions=${candidates.length} read=${tally.misses} dirs=${claudePaths.join(",")} ms=${Date.now() - startedMs}`,
-    );
-    this.scans[kind]++;
+      // [LAW:no-silent-failure] The scan is its own effect edge (its period's,
+      // no render boundary to carry the outcome to), so its per-session parse
+      // failures are logged here.
+      const tally: IngestTally = { hits: 0, misses: 0 };
+      await mapPool(candidates, SEED_CONCURRENCY, async (c) => {
+        const outcome = await this.ingest(c.sessionId, c.path, tally, c.stamp);
+        if (outcome.kind === "failed") {
+          this.log("warn", `usageStore scan: ${outcome.reason}`);
+        }
+      });
+      // [LAW:nothing-unseen] `read` is how many of the sessions the scan had to
+      // read: over warm records, the ones that changed since the last scan. Its
+      // trigger and duration are the source's refresh event.
+      this.log(
+        "info",
+        `usageStore scan dirs=${claudePaths.join(",")} sessions=${candidates.length} read=${tally.misses}`,
+      );
+      this.scannedDay = dayKey(new Date());
+      return ok({ sessions: candidates.length, read: tally.misses });
+    } catch (error) {
+      return failed(
+        `usage scan: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 
   // Public for tests; called periodically from the timer. Drops what nothing
@@ -962,8 +974,9 @@ export class SessionUsageStore {
   // `today` sums it — a session whose transcript the scans have stopped
   // visiting is seen no more, and a day can run past `staleAgeMs` (a 25-hour
   // DST day).
-  // [LAW:one-source-of-truth] That day is `seededDay`, taken from the render's
-  // instant, not this timer's clock: which day counts is the projection's.
+  // [LAW:one-source-of-truth] That day is `scannedDay`, the wall clock's day
+  // at the last scan — the clock a frame's instant and the scan's cutoff read
+  // too — so with no `today` asked for, no record is held for it.
   sweepStale(): number {
     const now = Date.now();
     let dropped = 0;
@@ -971,16 +984,19 @@ export class SessionUsageStore {
     // Slots dropped holding no record: a session seen only before its
     // transcript had bytes, or with no transcript path at all.
     let noRecord = 0;
-    for (const [sid, { lastSeenAt, record }] of this.sessions) {
-      if (now - lastSeenAt <= this.staleAgeMs) continue;
-      if (record?.days.has(this.seededDay)) {
-        held++;
-        continue;
+    // One action: the day sums see the sweep as one change.
+    runInAction(() => {
+      for (const [sid, { lastSeenAt, record }] of [...this.sessions]) {
+        if (now - lastSeenAt <= this.staleAgeMs) continue;
+        if (record?.days.has(this.scannedDay)) {
+          held++;
+          continue;
+        }
+        this.sessions.delete(sid);
+        dropped++;
+        if (record === undefined) noRecord++;
       }
-      this.sessions.delete(sid);
-      dropped++;
-      if (record === undefined) noRecord++;
-    }
+    });
     if (dropped > 0) this.sweeps++;
     // [LAW:nothing-unseen] A sweep that held records for `today` says so.
     if (dropped > 0 || held > 0) {
@@ -997,7 +1013,11 @@ export class SessionUsageStore {
       clearInterval(this.sweepTimer);
       this.sweepTimer = null;
     }
-    this.sessions.clear();
-    this.seeded.clear();
+    this.scans.close();
+    runInAction(() => {
+      for (const { sums } of this.daySets.values()) sums.release();
+      this.sessions.clear();
+    });
+    this.daySets.clear();
   }
 }

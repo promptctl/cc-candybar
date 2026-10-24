@@ -138,8 +138,9 @@ export interface Derived<T> {
 }
 
 // A derived value that keeps its answer until what it read changes, and is
-// released with the store that holds it.
-class Kept<T> implements Derived<T> {
+// released with the store that holds it — a variable store's, or any other
+// owner's derived state (the usage store's day sums).
+export class Kept<T> implements Derived<T> {
   private readonly cell: KeepAliveComputed<T>;
 
   // `what` names the value in a refusal: `Variable "x"`, `Derived value "x"`.
