@@ -112,11 +112,13 @@ interface GitValue extends Readable<GitInfo> {
 // of each key looked up, so a branch switched back to is answered from its
 // own key's last lookup — never another key's — and its period resumes where
 // that lookup left off.
-// `holders` are the homes showing the PR: only they run its period and look a
-// new key up, so a PR nothing shows calls no forge (cmt-2bc3832b). A pass
-// still moves its key, so the key never answers for another branch; a new key
-// nobody shows is left pending and `missed`, looked up by the pass the hold
-// that next shows it queues.
+// `holders` are the homes showing the PR: only they run its period, read the
+// remote and look a key up, so a PR nothing shows calls no forge and spawns no
+// `git remote` (cmt-2bc3832b). `missed` says the key is not known to be the
+// branch's now — owed by a pass, or a change, that went by while nobody showed
+// it: its reading is pending, its period stopped and a lookup landing then is
+// kept in `seen` alone, so it never answers for another branch. The pass the
+// next hold queues keys it, from `seen` when the key did not move.
 interface PrSource extends Readable<PullRequest> {
   readonly period: Period;
   readonly seen: Map<string, PrAnswer>;
@@ -134,8 +136,9 @@ interface PrAnswer {
 
 // What a pass did to the PR's key, for its refresh event: no PR source, the
 // same key, a key answered from its own last lookup, or a key looked up.
-// `owed` is a new key nobody shows, looked up once something does.
-type PrMove = "-" | "kept" | "recalled" | "looked-up" | "owed";
+// `owed` is a key nobody shows, keyed once something does; `unkeyed` a pass
+// that read no branch to key it by.
+type PrMove = "-" | "kept" | "recalled" | "looked-up" | "owed" | "unkeyed";
 
 // What asked for a pass, beside the period: a watch fire, a new option set, a
 // reader of a value a pass went by without, the first PR ask or a PR key owed
@@ -259,6 +262,23 @@ function branchOf(
   outcomes: ReadonlyArray<Outcome<GitInfo>>,
 ): string | undefined {
   return outcomes.find((outcome) => outcome.kind === "ok")?.value.branch;
+}
+
+// The PR's key is not known to be the branch's now (`PrSource.missed`).
+function owe(pr: PrSource): void {
+  pr.missed = true;
+  if (pr.reading.kind === "read") pr.reading = pending();
+}
+
+// [LAW:no-silent-failure] A pass that read no branch has none to key an owed
+// PR by: the PR answers what the values did, so a reader waiting on it is
+// answered, and it stays owed for the next pass that reads one. A key known
+// current keeps its answer, and a lookup in flight lands as it would.
+function unkeyedPr(pr: PrSource, failures: ReadonlySet<string>): PrMove {
+  if (pr.missed && pr.reading.kind === "pending") {
+    settle(pr, failures.size > 0 ? failed([...failures].join("; ")) : ABSENT);
+  }
+  return "unkeyed";
 }
 
 function threw(label: string): (e: unknown) => Outcome<never> {
@@ -471,10 +491,11 @@ export class GitDataProvider {
         return;
       }
       const state = this.repo(resolved.value);
-      state.subscriptions++;
       // The home's hold counts a reader before any pass is queued; the
-      // subscription's own keeps the value read by every pass after it.
+      // subscription's own keeps the value read by every pass after it. Both
+      // counted only once the ask has taken its hold, so a throw leaves none.
       const { value } = this.ask(state, holds, SUBSCRIBE_OPTIONS, false);
+      state.subscriptions++;
       value.readers++;
       attached = {
         state,
@@ -501,7 +522,9 @@ export class GitDataProvider {
         attached = null;
       },
       read: () => {
-        if (attached) this.ask(attached.state, holds, SUBSCRIBE_OPTIONS, false);
+        if (!attached) return;
+        this.touch(attached.state);
+        this.ask(attached.state, holds, SUBSCRIBE_OPTIONS, false);
       },
     };
   }
@@ -513,17 +536,24 @@ export class GitDataProvider {
     this.changes++;
     if (!inUse(state)) {
       for (const value of state.values.values()) value.missed = true;
+      if (state.pr !== null) owe(state.pr);
       return;
     }
     this.changedPass(state, "watch");
   }
 
+  // LRU touch: re-inserting moves the repo to the newest end. A state the
+  // cache has dropped is not put back.
+  private touch(state: RepoState): void {
+    if (this.repos.get(state.root) !== state) return;
+    this.repos.delete(state.root);
+    this.repos.set(state.root, state);
+  }
+
   private repo(root: string): RepoState {
     const existing = this.repos.get(root);
     if (existing) {
-      // LRU touch: re-inserting moves the repo to the newest end.
-      this.repos.delete(root);
-      this.repos.set(root, existing);
+      this.touch(existing);
       return existing;
     }
     const gitDir = this.inner.resolveGitDir(root);
@@ -596,7 +626,7 @@ export class GitDataProvider {
 
   private held(state: RepoState): void {
     state.period.hold(state.holders > 0);
-    state.pr?.period.hold(state.pr.holders > 0);
+    state.pr?.period.hold(state.pr.holders > 0 && !state.pr.missed);
   }
 
   // A repo's value for one option set, created pending on its first ask.
@@ -649,11 +679,11 @@ export class GitDataProvider {
     return { value, pr };
   }
 
-  // One pass: read every option set something reads and, for the PR, the
-  // remote beside the branch they read; store the outcomes, log each failure once, deliver to subscribers, and move the PR's
-  // key — all in one turn once the reads land, so no read sees a branch's
-  // values beside another branch's PR. Each pass that lands writes one refresh
-  // event.
+  // One pass: read every option set something reads and, for a PR something
+  // shows, the remote beside the branch they read; store the outcomes, log
+  // each failure once, deliver to subscribers, and move the PR's key — all in
+  // one turn once the reads land, so no read sees a branch's values beside
+  // another branch's PR. Each pass that lands writes one refresh event.
   private async pass(state: RepoState): Promise<void> {
     if (this.repos.get(state.root) !== state) return;
     const startedAt = Date.now();
@@ -664,7 +694,12 @@ export class GitDataProvider {
       if (value.readers > 0) values.push(value);
       else value.missed = true;
     }
+    // [LAW:dataflow-not-control-flow] An unshown PR is owed as an unread value
+    // is missed, here at the start, so a hold arriving mid-pass sees it and
+    // queues the pass that keys it.
     const pr = state.pr;
+    const showsPr = pr !== null && pr.holders > 0;
+    if (pr !== null && !showsPr) owe(pr);
     const [outcomes, remote] = await Promise.all([
       Promise.all(
         values.map((value) =>
@@ -673,7 +708,7 @@ export class GitDataProvider {
             .catch(threw("git fetch")),
         ),
       ),
-      pr === null || values.length === 0 ? null : this.remoteOf(state),
+      showsPr ? this.remoteOf(state) : null,
     ]);
     // Dropped or closed while the read was out: nothing of it is stored.
     if (this.repos.get(state.root) !== state) return;
@@ -699,9 +734,14 @@ export class GitDataProvider {
     // use, and bounded by the LRU once nothing uses it.
     const branch = branchOf(outcomes);
     const prMove: PrMove =
-      pr !== null && remote !== null && branch !== undefined
-        ? this.movePr(state, pr, branch, remote)
-        : "-";
+      pr === null
+        ? "-"
+        : remote === null
+          ? "owed"
+          : branch === undefined
+            ? unkeyedPr(pr, failures)
+            : this.movePr(state, pr, branch, remote);
+    this.held(state);
     this.logger(
       "info",
       `git refresh ${state.root} by=${by} values=${values.length} failed=${failures.size} pr=${prMove} took=${Date.now() - startedAt}ms`,
@@ -732,7 +772,8 @@ export class GitDataProvider {
       }),
       seen: new Map(),
       holders: 0,
-      missed: false,
+      // Its key is the first pass's to set.
+      missed: true,
       key: "",
       remote: ABSENT,
       reading: pending(),
@@ -761,25 +802,23 @@ export class GitDataProvider {
     remote: Outcome<string>,
   ): PrMove {
     const key = `${branch}|${remote.kind === "ok" ? remote.value : remote.kind}`;
-    if (key !== pr.key) {
-      pr.key = key;
-      pr.remote = remote;
-      const known = pr.seen.get(key);
-      if (known !== undefined) {
-        pr.seen.delete(key);
-        pr.seen.set(key, known);
-        pr.missed = false;
-        settle(pr, known.outcome);
-        pr.period.landed(periodOf(PR_PERIOD, known.outcome), known.at);
-        return "recalled";
-      }
-      if (pr.reading.kind === "read") pr.reading = pending();
-      pr.missed = true;
+    if (key === pr.key && !pr.missed) return "kept";
+    pr.key = key;
+    pr.remote = remote;
+    const known = pr.seen.get(key);
+    if (known !== undefined) {
+      pr.seen.delete(key);
+      pr.seen.set(key, known);
+      pr.missed = false;
+      settle(pr, known.outcome);
+      pr.period.landed(periodOf(PR_PERIOD, known.outcome), known.at);
+      return "recalled";
     }
-    // [LAW:dataflow-not-control-flow] `missed`: the key has not been looked up
-    // since it moved — a new key, or one owed while nobody showed the PR.
-    if (!pr.missed) return "kept";
-    if (pr.holders === 0) return "owed";
+    if (pr.reading.kind === "read") pr.reading = pending();
+    if (pr.holders === 0) {
+      owe(pr);
+      return "owed";
+    }
     pr.missed = false;
     void this.readPr(state, pr);
     return "looked-up";
@@ -815,7 +854,7 @@ export class GitDataProvider {
         if (pr.seen.size <= PR_KEYS_KEPT) break;
         pr.seen.delete(oldest);
       }
-      if (pr.key !== key) return;
+      if (pr.key !== key || pr.missed) return;
       settle(pr, outcome);
       pr.period.landed(periodOf(PR_PERIOD, outcome), at);
     });

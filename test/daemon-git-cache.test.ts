@@ -50,9 +50,12 @@ class StubGitService extends GitService {
   public remoteGate: { promise: Promise<void>; resolve: () => void } | null =
     null;
 
+  public remoteCalls = 0;
+
   override async getRepoRemoteUrl(
     _workingDir: string,
   ): Promise<Outcome<string>> {
+    this.remoteCalls++;
     const remote = this.stubRemote;
     if (this.remoteGate) await this.remoteGate.promise;
     return remote;
@@ -482,6 +485,83 @@ describe("GitDataProvider reads what is held", () => {
     expect(inner.prCalls).toHaveLength(2);
     svc.close();
   });
+
+  test("a PR nobody shows reads no remote; shown again on the same branch, it is answered from its last lookup", async () => {
+    jest.useFakeTimers();
+    const { svc, inner, holds, logs } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+    await svc.getGitInfo(holds, "/repo", { showPullRequest: true });
+    const values = new Holds();
+    await svc.getGitInfo(values, "/repo", {});
+    holds.releaseUnread();
+    holds.releaseUnread();
+    const remotes = inner.remoteCalls;
+    await jest.advanceTimersByTimeAsync(GIT_PERIOD_MS * 2);
+    expect(inner.remoteCalls).toBe(remotes);
+
+    const shown = svc.getGitInfo(new Holds(), "/repo", {
+      showPullRequest: true,
+    });
+    await jest.advanceTimersByTimeAsync(0);
+    await expect(shown).resolves.toMatchObject({
+      kind: "ok",
+      value: { pullRequest: { kind: "ok" } },
+    });
+    expect(logs.at(-1)).toMatch(/ pr=recalled /);
+    expect(inner.prCalls).toHaveLength(1);
+    svc.close();
+  });
+
+  test("a PR shown again after a change while unused waits for the pass, never ticking the key the repo left", async () => {
+    jest.useFakeTimers();
+    const { svc, inner, holds, logs } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+    await svc.getGitInfo(holds, "/repo", { showPullRequest: true });
+    holds.releaseUnread();
+    holds.releaseUnread();
+    expect(svc.getStats().held).toBe(0);
+    inner.stubInfo = { ...inner.stubInfo, branch: "feature" };
+    svc.changed("/repo");
+    // Past the PR's period: a resumed period would tick at once — before the
+    // pass, held here as a real git read is, can move the key.
+    await jest.advanceTimersByTimeAsync(PR_PERIOD.okMs * 2);
+    inner.infoGate = deferred();
+
+    void svc.getGitInfo(new Holds(), "/repo", { showPullRequest: true });
+    await jest.advanceTimersByTimeAsync(0);
+    expect(inner.prCalls).toHaveLength(1);
+    inner.infoGate.resolve();
+    inner.infoGate = null;
+    await jest.advanceTimersByTimeAsync(0);
+    expect(logs.at(-1)).toMatch(/ pr=looked-up /);
+    expect(inner.prCalls).toHaveLength(2);
+    svc.close();
+  });
+
+  test("a reader waiting on an owed PR is answered when the pass reads no branch", async () => {
+    jest.useFakeTimers();
+    const { svc, inner, holds, logs } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+    await svc.getGitInfo(holds, "/repo", { showPullRequest: true });
+    const values = new Holds();
+    await svc.getGitInfo(values, "/repo", {});
+    holds.releaseUnread();
+    holds.releaseUnread();
+    inner.stubInfo = { ...inner.stubInfo, branch: "feature" };
+    svc.changed("/repo");
+    await jest.advanceTimersByTimeAsync(0);
+
+    inner.infoFailure = "git status timed out";
+    const shown = svc.getGitInfo(new Holds(), "/repo", {
+      showPullRequest: true,
+    });
+    let answer: Outcome<GitInfo> | "waiting" = "waiting";
+    void shown.then((a) => (answer = a));
+    await jest.advanceTimersByTimeAsync(0);
+    expect(logs.at(-1)).toMatch(/ pr=unkeyed /);
+    expect(answer).toMatchObject({ kind: "failed" });
+    svc.close();
+  });
 });
 
 // brandon-unfiled-3248.8ro6, step 1: a read never refreshes. A repo's value is
@@ -758,6 +838,40 @@ describe("GitDataProvider.subscribe", () => {
     expect(calls).toHaveLength(2);
     expect(calls[1]).toMatchObject({ branch: "feature" });
     sub.unsubscribe();
+  });
+
+  test("a drawn subscription keeps its repo newest in the LRU", async () => {
+    const { svc, inner } = makeCache({ maxRepos: 2 });
+    inner.repoRootByDir = {
+      "/repo": "/repo",
+      "/a": "/a",
+      "/b": "/b",
+      "/c": "/c",
+    };
+    const home = new Holds();
+    const sub = svc.subscribe(home, "/repo", () => {});
+    await sub.firstDelivery;
+    for (const dir of ["/a", "/b"]) {
+      const h = new Holds();
+      await svc.getGitInfo(h, dir, {});
+      h.releaseUnread();
+      h.releaseUnread();
+    }
+    sub.read();
+    // Its home disposed, as a registry's dispose does: unused now.
+    sub.unsubscribe();
+    home.close();
+    await svc.getGitInfo(new Holds(), "/c", {});
+
+    // The drawn repo outlived the two read before its last draw: its
+    // subscribed option set answers from what is stored.
+    const { misses } = svc.getStats();
+    await svc.getGitInfo(new Holds(), "/repo", {
+      showSha: true,
+      showStashCount: true,
+    });
+    expect(svc.getStats().misses).toBe(misses);
+    svc.close();
   });
 
   test("a subscriber hears every change; it holds the period while its home is drawn", async () => {
