@@ -364,7 +364,7 @@ describe("GitDataProvider", () => {
 
 // cmt-2bc3832b: a pass reads the option sets something reads, and the forge is
 // asked only about a PR something shows — so a closure a preset switch left
-// stops costing its reads once the home's sweep releases it.
+// stops costing its reads once the home's next declaration releases it.
 describe("GitDataProvider reads what is held", () => {
   const sets = (inner: StubGitService) =>
     inner.computeCalls.map((c) => JSON.stringify(c.options));
@@ -375,7 +375,7 @@ describe("GitDataProvider reads what is held", () => {
     inner.repoRootByDir = { "/repo": "/repo" };
     await svc.getGitInfo(holds, "/repo", { showSha: true });
 
-    // The home moves to another closure, and its sweep releases the first.
+    // The home moves to another closure, and a declaration releases the first.
     const moved = new Holds();
     await svc.getGitInfo(moved, "/repo", { showStashCount: true });
     holds.declare(() => {});
@@ -404,7 +404,7 @@ describe("GitDataProvider reads what is held", () => {
     await svc.getGitInfo(holds, "/repo", { showPullRequest: true });
     expect(inner.prCalls).toHaveLength(1);
 
-    // Only the values are read now; the PR's hold goes with the sweep.
+    // Only the values are read now; the PR's hold goes with a declaration.
     const values = new Holds();
     await svc.getGitInfo(values, "/repo", {});
     holds.declare(() => {});
@@ -539,7 +539,8 @@ describe("GitDataProvider reads what is held", () => {
     const o2 = { showSha: true, showPullRequest: true };
     const before = new Holds();
     await svc.getGitInfo(before, "/repo", o2);
-    // A preset switch reads another option set with the PR; the first is swept.
+    // A preset switch reads another option set with the PR; a declaration
+    // releases the first.
     await svc.getGitInfo(new Holds(), "/repo", { showPullRequest: true });
     before.declare(() => {});
     inner.stubInfo = { ...inner.stubInfo, branch: "feat-b" };

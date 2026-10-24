@@ -59,7 +59,12 @@ function makeCache(budgetBytes: number, maxEntries?: number) {
   cleanups.push(() => watchers.closeAll());
   const sessionState = new SessionState();
   const cache = new RenderCache(
-    { sessionState, watchers, log: (_level, line) => lines.push(line) },
+    {
+      sessionState,
+      watchers,
+      declare: DECLARES_NOTHING,
+      log: (_level, line) => lines.push(line),
+    },
     { budgetBytes: () => budgetBytes, maxEntries },
   );
   // Run first (cleanups run in reverse): every state the cache serves is torn

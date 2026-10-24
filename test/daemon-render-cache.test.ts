@@ -77,7 +77,7 @@ function makeCache(
   const sessionState = new SessionState();
   const reloads = new ReloadSignal();
   const cache = new RenderCache(
-    { sessionState, watchers, log },
+    { sessionState, watchers, log, declare: DECLARES_NOTHING },
     {
       // Room for four entries over one compile: the fifth evicts the oldest.
       budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES,
@@ -1006,7 +1006,7 @@ describe("RenderCache idle sweep", () => {
     const { dir, cleanup } = mkConfigDir();
     const watchers = new WatcherRegistry({ logger: () => {} });
     const cache = new RenderCache(
-      { sessionState: new SessionState(), watchers },
+      { sessionState: new SessionState(), watchers, declare: DECLARES_NOTHING },
       { budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES },
     );
     try {
@@ -1044,7 +1044,7 @@ describe("RenderCache idle sweep", () => {
     const { dir, cleanup } = mkConfigDir();
     const watchers = new WatcherRegistry({ logger: () => {} });
     const cache = new RenderCache(
-      { sessionState: new SessionState(), watchers },
+      { sessionState: new SessionState(), watchers, declare: DECLARES_NOTHING },
       { budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES },
     );
     try {

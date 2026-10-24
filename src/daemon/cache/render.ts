@@ -106,9 +106,9 @@ export interface RenderDeps {
   sessionState: SessionStateRW;
   watchers: WatcherRegistry;
   // What a view declares of the daemon's shared entries
-  // (src/daemon/render-payload.ts `declareLanes`). A cache given none — a test
-  // reading no built-in source — declares nothing.
-  declare?: Declare;
+  // (src/daemon/render-payload.ts `declareLanes`); a test reading no built-in
+  // source passes DECLARES_NOTHING.
+  declare: Declare;
   // Where the cache's events go — every load, every teardown. Only the
   // daemon passes `dlog`; a caller passing none logs quietly, like the
   // providers and the usage store.
@@ -1052,7 +1052,7 @@ export class RenderCache {
     if (current !== undefined) this.retireView(current, "moved");
     const view = openView(state, entry.cwd, sessionId, {
       sessionState: this.deps.sessionState,
-      declare: this.deps.declare ?? DECLARES_NOTHING,
+      declare: this.deps.declare,
       log: this.log,
     });
     this.views.set(sessionId, view);

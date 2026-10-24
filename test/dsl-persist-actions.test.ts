@@ -49,6 +49,7 @@ import { isGlobalsField } from "../src/config/loader/globals";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { memoryLimitBytes } from "../src/daemon/limits";
 import {
+  DECLARES_NOTHING,
   RenderCache,
   renderCacheBudget,
 } from "../src/daemon/cache/render";
@@ -832,7 +833,7 @@ function makeCache(): {
   const sessionState = new SessionState();
   const reloads = new ReloadSignal();
   const cache = new RenderCache(
-    { sessionState, watchers },
+    { sessionState, watchers, declare: DECLARES_NOTHING },
     { budgetBytes: () => renderCacheBudget(memoryLimitBytes({})), observers: reloads.observers },
   );
   cleanups.unshift(() => cache.close());
