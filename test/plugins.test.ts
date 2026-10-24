@@ -351,17 +351,17 @@ test("the daemon's load records the plugins it merged and dropped", () => {
     good,
     `{ plugins: ["./deploy/plugin.json5", "./q/plugin.json5"], root: { h: ["plugins.deploy.status"] } }`,
   );
+  const loaded = loadFromDisk(dir, dir, good, {
+    sessionState: new SessionState(),
+  });
   try {
-    const loaded = loadFromDisk(dir, dir, good, {
-      sessionState: new SessionState(),
-    });
     expect(loaded.state?.plugins.loaded).toEqual([path.join(dir, "deploy/plugin.json5")]);
     expect(loaded.state?.plugins.dropped.map((d) => d.path)).toEqual([
       path.join(dir, "q/plugin.json5"),
     ]);
     expect(loaded.warning ?? "").toContain("was not loaded");
-    loaded.state?.registry.dispose();
   } finally {
+    loaded.state?.registry.dispose();
   }
 });
 
@@ -442,13 +442,13 @@ describe("an installed plugin", () => {
     install("data", "lit", CHECKOUT_DEFINITION);
     fs.mkdirSync(path.join(dir, "main/.git"), { recursive: true });
     write("main/.claude/worktrees/w/.git", "gitdir: ../../../.git/worktrees/w\n");
+    const loaded = loadFromDisk(
+      path.join(dir, "main"),
+      path.join(dir, "main/.claude/worktrees/w"),
+      placing("plugins.lit.ticket"),
+      { sessionState: new SessionState() },
+    );
     try {
-      const loaded = loadFromDisk(
-        path.join(dir, "main"),
-        path.join(dir, "main/.claude/worktrees/w"),
-        placing("plugins.lit.ticket"),
-        { sessionState: new SessionState() },
-      );
       expect(loaded.error).toBeNull();
       const data = path.join(dir, "main/.claude/worktrees/w/.lit/state.json");
       expect(loaded.state?.config.variables["plugins.lit.data"]).toMatchObject({ path: data });
@@ -459,8 +459,8 @@ describe("an installed plugin", () => {
         ` +${path.join(dir, "data/cc-candybar/plugins/lit/plugin.json5")} data=${data}`,
       );
       expect(line).toContain(` checkout=git:${path.join(dir, "main/.claude/worktrees/w")} `);
-      loaded.state?.registry.dispose();
     } finally {
+      loaded.state?.registry.dispose();
     }
   });
 
@@ -543,16 +543,13 @@ describe("an installed plugin", () => {
       loaded.state?.registry.dispose();
       return pluginLoadLine(loaded.layers, loaded.state!);
     };
-    try {
-      const before = load();
-      expect(before).toContain(` checkout=dir:${path.join(dir, "outer/inner")} `);
-      expect(before).toContain(` data=${path.join(dir, "outer/inner/.lit/state.json")}`);
-      fs.mkdirSync(path.join(dir, "outer/.git"));
-      const after = load();
-      expect(after).toContain(` checkout=git:${path.join(dir, "outer")} `);
-      expect(after).toContain(` data=${path.join(dir, "outer/.lit/state.json")}`);
-    } finally {
-    }
+    const before = load();
+    expect(before).toContain(` checkout=dir:${path.join(dir, "outer/inner")} `);
+    expect(before).toContain(` data=${path.join(dir, "outer/inner/.lit/state.json")}`);
+    fs.mkdirSync(path.join(dir, "outer/.git"));
+    const after = load();
+    expect(after).toContain(` checkout=git:${path.join(dir, "outer")} `);
+    expect(after).toContain(` data=${path.join(dir, "outer/.lit/state.json")}`);
   });
 
   test("a nearer root replaces a farther one's plugin of the same name, whole", async () => {
@@ -691,11 +688,11 @@ describe("an installed plugin", () => {
     install("data", "deploy", `{ data: "./d.json", segments: { status: { template: "installed" } } }`);
     write("deploy/plugin.json5", `{ data: "./d.json", segments: { status: { template: "listed" } } }`);
     const p = write("config.json5", `{ plugins: ["./deploy/plugin.json5"], root: { h: ["plugins.deploy.status"] } }`);
+    const loaded = loadFromDisk(dir, dir, p, { sessionState: new SessionState() });
     try {
-      const loaded = loadFromDisk(dir, dir, p, { sessionState: new SessionState() });
       expect(loaded.state?.plugins.loaded).toEqual([path.join(dir, "deploy/plugin.json5")]);
-      loaded.state?.registry.dispose();
     } finally {
+      loaded.state?.registry.dispose();
     }
   });
 
@@ -753,11 +750,11 @@ describe("an installed plugin", () => {
     install("data", "deploy", `{ data: "./d.json", segments: { status: { template: "installed" } } }`);
     write("deploy/plugin.json5", `{ data: "./d.json", segments: { status: { template: "{{ if }}" } } }`);
     const p = write("config.json5", `{ plugins: ["./deploy/plugin.json5"], root: { h: ["plugins.deploy.status"] } }`);
+    const loaded = loadFromDisk(dir, dir, p, { sessionState: new SessionState() });
     try {
-      const loaded = loadFromDisk(dir, dir, p, { sessionState: new SessionState() });
       expect(loaded.state?.plugins.loaded).toEqual([]);
-      loaded.state?.registry.dispose();
     } finally {
+      loaded.state?.registry.dispose();
     }
   });
 
@@ -801,12 +798,12 @@ describe("an installed plugin", () => {
   test("a drop is reached by its definition, not by its notice", () => {
     const def = install("data", "lit", `{ data: "./d.json", segments: { s: { template: "{{ if }}" } } }`);
     const p = placing("plugins.lit.s");
+    const loaded = loadFromDisk(dir, dir, p, { sessionState: new SessionState() });
     try {
-      const loaded = loadFromDisk(dir, dir, p, { sessionState: new SessionState() });
       expect([...(loaded.state?.plugins.reached ?? [])]).toEqual([def]);
       expect(loaded.state?.plugins.dropped.map((d) => d.path)).toEqual([def]);
-      loaded.state?.registry.dispose();
     } finally {
+      loaded.state?.registry.dispose();
     }
   });
 });

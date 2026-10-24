@@ -23,6 +23,7 @@ import {
   type CacheEntry,
   type Hold,
   type RenderCacheObservers,
+  type SessionView,
   ENTRY_BYTES,
   COMPILE_BYTES,
 } from "../src/daemon/cache/render";
@@ -985,10 +986,10 @@ describe("RenderCache", () => {
   });
 });
 
-// brandon-unfiled-3248.8ro6: what an entry's state holds of the daemon's shared
+// brandon-unfiled-3248.8ro6: what a session's view holds of the daemon's shared
 // entries (a repo, a pane, a memento reading) keeps their owners' periods
-// running, so a hold the entry's renders have not read across a whole sweep is
-// released — whether or not the entry is still drawn — and the next render that
+// running, so a hold the view's renders have not read across a whole sweep is
+// released — whether or not the view is still drawn — and the next render that
 // reads it takes it back.
 describe("RenderCache idle sweep", () => {
   // A cache nobody closes keeps its sweep armed, and the sweep keeps the cache
@@ -1006,8 +1007,8 @@ describe("RenderCache idle sweep", () => {
     try {
       let released = 0;
       {
-        using hold = cache.hold(dir, dir, undefined);
-        hold.state.registry.holds.take("repo", () => () => {
+        using hold = cache.holdSession(dir, dir, undefined, "s1");
+        hold.view.holds.take("repo", () => () => {
           released++;
         });
       }
@@ -1046,19 +1047,17 @@ describe("RenderCache idle sweep", () => {
     );
     const released: string[] = [];
     try {
-      // One render of the entry, reading the keys it names.
-      const render = (...keys: string[]): void => {
-        using hold = cache.hold(dir, dir, undefined);
+      // One render of the session, reading the keys it names; its view.
+      const render = (...keys: string[]): SessionView => {
+        using hold = cache.holdSession(dir, dir, undefined, "s1");
         for (const key of keys) {
-          hold.state.registry.holds.take(key, () => () => {
+          hold.view.holds.take(key, () => () => {
             released.push(key);
           });
         }
+        return hold.view;
       };
-      render("repo", "memento:ended-session");
-      expect(
-        cache.getOrCreate(dir, dir, undefined).state.registry.holds.size,
-      ).toBe(2);
+      expect(render("repo", "memento:ended-session").holds.size).toBe(2);
 
       // Read since the last sweep: kept.
       cache.releaseIdle();
@@ -1071,14 +1070,13 @@ describe("RenderCache idle sweep", () => {
       expect(released).toEqual(["memento:ended-session"]);
       expect(logs).toContain("render-cache idle released=1 entries=1");
 
-      // Nothing drawn across a whole sweep: the repo goes too.
+      // Nothing drawn across a whole sweep: the view closes, and the repo
+      // goes with it.
       cache.releaseIdle();
       expect(released).toEqual(["memento:ended-session", "repo"]);
 
       // The next render that reads it takes it back.
-      render("repo");
-      const state = cache.getOrCreate(dir, dir, undefined).state;
-      expect(state.registry.holds.size).toBe(1);
+      expect(render("repo").holds.size).toBe(1);
       cache.releaseIdle();
       expect(released).toHaveLength(2);
     } finally {

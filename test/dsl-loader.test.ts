@@ -223,12 +223,18 @@ describe("loadDslConfig — globals", () => {
   ];
   const WHERE: ReadonlyArray<readonly [string, (body: string) => string]> = [
     ["globals", (body) => `{ globals: { ${body} } }`],
-    ["presets.p.globals", (body) => `{ presets: { p: { globals: { ${body} } } } }`],
+    [
+      "presets.p.globals",
+      (body) => `{ presets: { p: { globals: { ${body} } } } }`,
+    ],
     ["editGlobals", (body) => `{ editGlobals: { ${body} } }`],
   ];
   test.each(
     WHERE.flatMap(([at, wrap]) =>
-      REMOVED.map(([key, pointer]) => [`${at}.${key}`, wrap(`${key}: "x"`), pointer] as const),
+      REMOVED.map(
+        ([key, pointer]) =>
+          [`${at}.${key}`, wrap(`${key}: "x"`), pointer] as const,
+      ),
     ),
   )("%s is refused with its pointer", (path, src, pointer) => {
     const err = expectError(src);
@@ -240,12 +246,15 @@ describe("loadDslConfig — globals", () => {
     expect(issue.line).toBe(1);
   });
 
-  test.each(WHERE)("%s: an unknown key does not offer a removed one", (_at, wrap) => {
-    const err = expectError(wrap(`mystery: "x"`));
-    const message = err.issues[0]!.message;
-    expect(message).toContain('"mystery". Expected one of:');
-    for (const [key] of REMOVED) expect(message).not.toContain(key);
-  });
+  test.each(WHERE)(
+    "%s: an unknown key does not offer a removed one",
+    (_at, wrap) => {
+      const err = expectError(wrap(`mystery: "x"`));
+      const message = err.issues[0]!.message;
+      expect(message).toContain('"mystery". Expected one of:');
+      for (const [key] of REMOVED) expect(message).not.toContain(key);
+    },
+  );
 
   test("autoWrap accepts a boolean", () => {
     const cfg = parseAndValidate(FILE, `{ globals: { autoWrap: false } }`);
@@ -276,7 +285,9 @@ describe("loadDslConfig — globals", () => {
   });
 
   test("a non-ASCII separator loads", () => {
-    expect(() => parseAndValidate(FILE, `{ globals: { default_separator: " │ " } }`)).not.toThrow();
+    expect(() =>
+      parseAndValidate(FILE, `{ globals: { default_separator: " │ " } }`),
+    ).not.toThrow();
   });
 
   test("colorCompatibility accepts each closed-enum member", () => {
@@ -485,12 +496,16 @@ describe("loadDslConfig — variable source kinds", () => {
       `{ variables: { "block.etaMinutes": { kind: "input", path: "block.etaMinutes", type: "number", default: -2 } } }`,
       {
         path: "variables.block.etaMinutes.path",
-        message: '"block.etaMinutes" is no longer in the payload: the bundled template variable',
+        message:
+          '"block.etaMinutes" is no longer in the payload: the bundled template variable',
       },
     );
     expectIssue(
       `{ variables: { age: { kind: "input", path: "git.timeSinceCommit", type: "number" } } }`,
-      { path: "variables.age.path", message: '"git.committedAt" (epoch seconds)' },
+      {
+        path: "variables.age.path",
+        message: '"git.committedAt" (epoch seconds)',
+      },
     );
   });
 
@@ -616,20 +631,42 @@ describe("loadDslConfig — variable source kinds", () => {
   });
 
   // [LAW:one-type-per-behavior] Every git fact is an input over the payload's
-  // git lane; the retired kind names the read that replaces it.
-  test("git: the retired kind is refused with the input that reads the same fact", () => {
-    expectIssue(`{ variables: { b: { kind: "git", field: "dirty" } } }`, {
-      path: "variables.b.kind",
-      message:
-        'kind "git" is retired: every git fact is an input over the payload\'s git lane, which the bundled default already declares — drop this declaration and read (ne .git.status "clean") where it was read, or declare { kind: "input", path: "git.<fact>" } under a name of your own',
-    });
+  // git lane; the retired kind names the read that replaces it, and a
+  // declaration that, copied out of the message, loads as the value the kind
+  // gave — an input typed as the bundled default's own (brandon-unfiled-3248.8ro6).
+  test.each(["branch", "sha", "dirty", "ahead", "behind", "stash"])(
+    "git: the retired kind's field %s is refused with a declaration that loads",
+    (field) => {
+      const issue = expectError(
+        `{ variables: { b: { kind: "git", field: "${field}" } } }`,
+      ).issues.find((i) => i.path === "variables.b.kind");
+      expect(issue?.message).toMatch(/^kind "git" is retired: /);
+      const declared = / or declare (\{.*\}) under a name of your own$/.exec(
+        issue!.message,
+      );
+      expect(declared).not.toBeNull();
+      const { variables } = validateAgainstDefault(
+        `{ variables: { mine: ${declared![1]} } }`,
+      );
+      const mine = variables.mine!;
+      if (mine.kind === "input") {
+        expect(mine).toEqual(variables[mine.path]);
+      } else {
+        expect(mine).toMatchObject({ kind: "template", type: "boolean" });
+      }
+    },
+  );
+
+  test("git: the retired kind says how its branch reads off a branch, and lists every read without a field", () => {
     expectIssue(`{ variables: { b: { kind: "git", field: "branch" } } }`, {
       path: "variables.b.kind",
-      message: 'read ".git.branch" (it reads "detached" off a branch)',
+      message:
+        'read .git.branch where it was read (when HEAD is on no branch it reads "detached", where this kind read "")',
     });
     expectIssue(`{ variables: { b: { kind: "git" } } }`, {
       path: "variables.b.kind",
-      message: 'read the bundled input variables "git.branch"',
+      message:
+        'read whichever of .git.branch, .git.sha, (ne .git.status "clean"), .git.ahead, .git.behind or .git.stash it stood for, where it was read',
     });
   });
 
@@ -2204,15 +2241,14 @@ describe("templateReads", () => {
   });
 
   test("dotted ref", () => {
-    expect([...refsOf("{{ .session.id }}")]).toEqual([
-      "session.id",
-    ]);
+    expect([...refsOf("{{ .session.id }}")]).toEqual(["session.id"]);
   });
 
   test("a `}}` inside a string literal does not close the block", () => {
-    expect([
-      ...refsOf('{{ print "a}} .x" `b}} .z` .y }}{{ .w }}'),
-    ]).toEqual(["y", "w"]);
+    expect([...refsOf('{{ print "a}} .x" `b}} .z` .y }}{{ .w }}')]).toEqual([
+      "y",
+      "w",
+    ]);
   });
 
   test("a comment is neither code nor the start of a literal", () => {
@@ -2229,9 +2265,7 @@ describe("templateReads", () => {
   });
 
   test("strips string literals", () => {
-    expect([...refsOf(`{{ printf ".not.a.ref" .real }}`)]).toEqual(
-      ["real"],
-    );
+    expect([...refsOf(`{{ printf ".not.a.ref" .real }}`)]).toEqual(["real"]);
   });
 
   test("ignores text outside {{ }}", () => {
@@ -2239,9 +2273,10 @@ describe("templateReads", () => {
   });
 
   test("numeric literals don't match", () => {
-    expect([
-      ...refsOf("{{ if gt .x 1.5 }}{{ .y }}{{ end }}"),
-    ]).toEqual(["x", "y"]);
+    expect([...refsOf("{{ if gt .x 1.5 }}{{ .y }}{{ end }}")]).toEqual([
+      "x",
+      "y",
+    ]);
   });
 
   test("function calls aren't refs (no leading dot)", () => {
@@ -2258,9 +2293,9 @@ describe("templateReads", () => {
     });
 
     test("a path argument puts the helper's refs under that path", () => {
-      expect(readsOf('{{ template "h" .git }}', { h: "{{ .branch }}" })).toEqual(
-        { git: null, "git.branch": "h" },
-      );
+      expect(
+        readsOf('{{ template "h" .git }}', { h: "{{ .branch }}" }),
+      ).toEqual({ git: null, "git.branch": "h" });
     });
 
     test("a dict argument reads the dict, not the root", () => {
@@ -2317,18 +2352,28 @@ describe("templateReads", () => {
 
     test("`$` hands a helper the root; inside a helper, `$` is its argument", () => {
       expect(
-        readsOf('{{ range .items }}{{ template "h" $ }}{{ end }}{{ template "g" .git }}', {
-          h: "{{ .a }}",
-          g: "{{ range .list }}{{ $.b }}{{ end }}",
-        }),
-      ).toEqual({ items: null, a: "h", git: null, "git.list": "g", "git.b": "g" });
+        readsOf(
+          '{{ range .items }}{{ template "h" $ }}{{ end }}{{ template "g" .git }}',
+          {
+            h: "{{ .a }}",
+            g: "{{ range .list }}{{ $.b }}{{ end }}",
+          },
+        ),
+      ).toEqual({
+        items: null,
+        a: "h",
+        git: null,
+        "git.list": "g",
+        "git.b": "g",
+      });
     });
 
     test("a helper reached at one path through two callers is walked once", () => {
       const helpers: Record<string, string> = { leaf: "{{ .x }}" };
       for (let i = 0; i < 40; i++) {
         const next = i === 0 ? "leaf" : `h${i - 1}`;
-        helpers[`h${i}`] = `{{ template "${next}" . }}{{ template "${next}" . }}`;
+        helpers[`h${i}`] =
+          `{{ template "${next}" . }}{{ template "${next}" . }}`;
       }
       expect(readsOf('{{ template "h39" . }}', helpers)).toEqual({ x: "leaf" });
     });
@@ -2399,7 +2444,11 @@ describe("loadConfig — editability advisory", () => {
 
   test("a duplicate key loads with the last value and earns one advisory naming the file, key and line", () => {
     const file = write("dup.json5", DUPLICATE);
-    const { config, warnings } = loadConfig(file, DEFAULT_DSL_CONFIG, NO_PROJECT);
+    const { config, warnings } = loadConfig(
+      file,
+      DEFAULT_DSL_CONFIG,
+      NO_PROJECT,
+    );
     expect(config.globals.padding).toBe(2);
     expect(warnings).toEqual([
       `${file}:4: duplicate key "padding" — the settings menu cannot edit this file until it is fixed`,
@@ -2419,14 +2468,18 @@ describe("loadConfig — editability advisory", () => {
   test("a document the editor accepts earns no advisory", () => {
     const clean = `{ globals: { padding: 1 } }`;
     const file = write("clean.json5", clean);
-    expect(loadConfig(file, DEFAULT_DSL_CONFIG, NO_PROJECT).warnings).toEqual([]);
+    expect(loadConfig(file, DEFAULT_DSL_CONFIG, NO_PROJECT).warnings).toEqual(
+      [],
+    );
     expect(setValue(clean, ["globals", "padding"], "3", JSON5_DIALECT)).toBe(
       `{ globals: { padding: 3 } }`,
     );
   });
 
   test("no file earns no advisory", () => {
-    expect(loadConfig(null, DEFAULT_DSL_CONFIG, NO_PROJECT).warnings).toEqual([]);
+    expect(loadConfig(null, DEFAULT_DSL_CONFIG, NO_PROJECT).warnings).toEqual(
+      [],
+    );
   });
 });
 

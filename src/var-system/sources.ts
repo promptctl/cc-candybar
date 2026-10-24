@@ -48,7 +48,6 @@ import {
 import { readPending, type JsonValue } from "./types.js";
 import type { SessionStateReader } from "../daemon/session-state.js";
 import { TrailingEdge } from "../utils/trailing-edge.js";
-import { Holds } from "../utils/holds.js";
 
 // How long text that is not a document may be a write still in progress
 // before it shows as the failure it is (documentPublisher).
@@ -552,11 +551,6 @@ export class SourceRegistry {
   // all key: template compilations.
   // [LAW:one-source-of-truth] One engine per registry, not one per variable.
   private readonly engine = createCcCandybarEngine({ drawnAt: this.drawnAt });
-
-  // [LAW:single-enforcer] What this home holds of the daemon's shared entries
-  // (a repo it reads), so their owners' periods visit them while it lives and
-  // stop when it is disposed (brandon-unfiled-3248.8ro6, step 1).
-  readonly holds = new Holds();
 
   // [LAW:locality-or-seam] sessionState is injected (not constructed here)
   // so tests can substitute a fake and the daemon shares its singleton.
@@ -1114,7 +1108,6 @@ export class SourceRegistry {
     this.reads.clear();
     this.watchMgr.dispose();
     this.ttlMgr.dispose();
-    this.holds.close();
     // The store's computeds are the last handles outward: a keepAlive computed
     // stays subscribed to the daemon-wide SessionState atom until released, and
     // that subscription held every disposed config's store for the life of the

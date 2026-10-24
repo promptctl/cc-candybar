@@ -44,6 +44,7 @@ import type {
   WatchTargets,
 } from "./watchers.js";
 import { quietLogger, type DaemonLogger } from "../../utils/logger.js";
+import { Holds } from "../../utils/holds.js";
 import { pluginDataVar, pluginNameOf } from "../../config/loader/plugins.js";
 import { projectionsOf } from "../../config/loader/projections.js";
 
@@ -706,6 +707,11 @@ const VIEW_SCOPE: ReadonlySet<VarScope> = new Set(["view"]);
 // renders through its own, so a request writes only its own session's values
 // and no other session's render re-runs, reads, or reports them.
 //
+// `holds` is what the session's renders read of the daemon's shared entries (a
+// repo, a pane, a memento reading), so their owners' periods visit them while
+// the view lives and stop when it is disposed; the directory home reads none
+// itself, so it holds none (brandon-unfiled-3248.8ro6).
+//
 // `lastRenderCellsBySegment` is the per-segment StripCell sink that renderDsl
 // writes on each render — pre-layout cells, NOT serialized ANSI. Storing cells
 // (not strings) keeps the hot path free of the per-segment renderStripCells
@@ -719,6 +725,7 @@ export interface SessionView {
   readonly state: DslRenderState;
   readonly store: VariableStore;
   readonly registry: SourceRegistry;
+  readonly holds: Holds;
   readonly lastRenderCellsBySegment: Map<string, readonly RichText[]>;
 }
 
@@ -739,18 +746,19 @@ export function openView(
     state,
     store: registry.variableStore,
     registry,
+    holds: new Holds(),
     lastRenderCellsBySegment: new Map<string, readonly RichText[]>(),
   };
 }
 
 // [LAW:no-ambient-temporal-coupling] The cache's one timer, armed by the first
-// render and stopped with the last entry: every interval it releases each
-// hold an entry's renders have not read since the interval before
-// (`Holds.releaseUnread`), so an owner's period stops visiting a repo, pane
-// or memento reading 2.5 to 5 minutes after the last render that read it —
-// a session that ended, or left for another directory, while the entry is
-// still drawn included (brandon-unfiled-3248.8ro6). The next read takes the
-// hold back, and a period resumed after a gap reads at once.
+// render and stopped with the last entry: every interval it closes each view
+// no render read since the interval before, and releases each hold a view's
+// renders have not read since then (`Holds.releaseUnread`), so an owner's
+// period stops visiting a repo, pane or memento reading 2.5 to 5 minutes after
+// the last render that read it — a memento scope the session's renders stopped
+// naming included (brandon-unfiled-3248.8ro6). The next read takes the hold
+// back, and a period resumed after a gap reads at once.
 export const HOLD_SWEEP_MS = 150_000;
 
 export class RenderCache {
@@ -987,6 +995,7 @@ export class RenderCache {
   private reclaimView(view: SessionView, lease: ViewHold): void {
     if (lease.retired === null || lease.holders > 0) return;
     this.viewHolds.delete(view);
+    view.holds.close();
     this.log(
       "info",
       `session view closed sid=${JSON.stringify(view.sessionId)} reason=${lease.retired.reason} released=${view.registry.dispose()} held=${lease.retired.held} views=${this.views.size}`,
@@ -1009,11 +1018,8 @@ export class RenderCache {
       else this.retireView(view, "idle");
     }
     let released = 0;
-    for (const entry of this.entries.values()) {
-      released += entry.state.registry.holds.releaseUnread();
-    }
     for (const view of this.views.values()) {
-      released += view.registry.holds.releaseUnread();
+      released += view.holds.releaseUnread();
     }
     if (released > 0) {
       this.log(
@@ -1161,8 +1167,8 @@ export class RenderCache {
 
   // [LAW:single-enforcer] The one place a state is disposed: once it is
   // retired AND unheld, from whichever of the two transitions came last. The
-  // registry owns timers, fs watchers, MobX reactions, and git subscriptions
-  // — dropping it without dispose leaks every handle the config declared.
+  // registry owns timers, fs watchers and MobX reactions — dropping it
+  // without dispose leaks every handle the config declared.
   private reclaim(state: DslRenderState, hold: StateHold): void {
     if (hold.retired === null || hold.holders > 0) return;
     this.holds.delete(state);
@@ -1195,7 +1201,7 @@ export class RenderCache {
   // new DslConfig retires the old state, and `reclaim` disposes its
   // SourceRegistry — at once when no render holds it, else when the last
   // one returns. Dropping the reference without that would leak every
-  // timer, watcher, MobX reaction and git subscription it owns.
+  // timer, watcher and MobX reaction it owns.
   //
   // [LAW:single-enforcer] One publish point for "this reload completed":
   // straight-line, so the signal structurally cannot be skipped by whichever

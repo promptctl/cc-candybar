@@ -30,9 +30,8 @@ import type { Holds, Release } from "../../utils/holds";
 
 // Logger callable for cache refresh / eviction events.
 // Daemon passes `dlog` so these land in daemon.log at the right level for
-// ops/debugging; non-daemon consumers (var-system in tests, future library use)
-// take the default debug-routed logger so var-system module load never touches
-// daemon log files.
+// ops/debugging; a test constructing the provider alone takes the default
+// debug-routed logger, which touches no daemon log file.
 // [LAW:no-defensive-null-guards] Default is non-null; injection replaces
 // the implementation, never adds a "no logger" mode.
 export type GitProviderLogger = (
@@ -294,8 +293,8 @@ export class GitDataProvider {
       this.watchers = opts.watchers;
       this.ownsWatchers = false;
     } else {
-      // Auto-constructed registry shares the same logger so daemon ops see
-      // both cache and watcher events; var-system's default stays quiet.
+      // Auto-constructed registry shares the same logger, so cache and watcher
+      // events land together; with the default logger both stay quiet.
       this.watchers = new WatcherRegistry({ logger: this.logger });
       this.ownsWatchers = true;
     }
