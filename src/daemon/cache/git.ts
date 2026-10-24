@@ -452,6 +452,19 @@ export class GitDataProvider {
     return info.kind === "ok" ? ok({ ...info.value, pullRequest }) : info;
   }
 
+  // [LAW:single-enforcer] A home's declaration of what its draws read: the
+  // hold a read of the same keys takes, its first pass queued — a read
+  // nobody made, so it counts no hit or miss. A directory still resolving
+  // takes no hold.
+  declare(
+    holds: Holds,
+    workingDir: string,
+    options: GitInfoOptions = {},
+    projectDir?: string,
+  ): void {
+    this.asked(holds, workingDir, options, projectDir);
+  }
+
   // Which repo the directory is — still resolving, or resolved and its value
   // as it stands.
   private look(
@@ -465,21 +478,10 @@ export class GitDataProvider {
     const resolved = (value: Current<GitInfo>) =>
       ({ kind: "resolved", value }) as const;
     try {
-      // [LAW:one-source-of-truth] The effective gitDir is the state + watch
-      // identity. An absent (not a repo) or failed resolution is the read's
-      // outcome.
-      const resolution = this.resolution(workingDir, projectDir);
-      const dir = resolution.known;
-      if (dir === undefined) return { kind: "resolving", dir: resolution.dir };
-      if (dir.kind !== "ok") return resolved(dir);
-      const state = this.repo(dir.value);
-      const { showPullRequest, ...gitOptions } = options;
-      const { value, pr } = this.ask(
-        state,
-        holds,
-        gitOptions,
-        showPullRequest === true,
-      );
+      const asked = this.asked(holds, workingDir, options, projectDir);
+      if (asked.kind === "resolving") return asked;
+      if (asked.kind === "not-a-repo") return resolved(asked.outcome);
+      const { value, pr } = asked;
       if (value.reading.kind === "pending") this.misses++;
       else this.hits++;
       const info = currentOf(value);
@@ -491,6 +493,38 @@ export class GitDataProvider {
       this.logger("error", `git read threw: ${String(e)}`);
       return resolved(failed(`git: ${String(e)}`));
     }
+  }
+
+  // [LAW:one-source-of-truth] The one place a home asks a repo by directory:
+  // the effective gitDir is the state + watch identity, and an absent (not a
+  // repo) or failed resolution is the answer.
+  private asked(
+    holds: Holds,
+    workingDir: string,
+    options: GitInfoOptions,
+    projectDir: string | undefined,
+  ):
+    | { readonly kind: "resolving"; readonly dir: Promise<Outcome<string>> }
+    | { readonly kind: "not-a-repo"; readonly outcome: Current<GitInfo> }
+    | {
+        readonly kind: "asked";
+        readonly value: GitValue;
+        readonly pr: PrSource | null;
+      } {
+    const resolution = this.resolution(workingDir, projectDir);
+    const dir = resolution.known;
+    if (dir === undefined) return { kind: "resolving", dir: resolution.dir };
+    if (dir.kind !== "ok") return { kind: "not-a-repo", outcome: dir };
+    const { showPullRequest, ...gitOptions } = options;
+    return {
+      kind: "asked",
+      ...this.ask(
+        this.repo(dir.value),
+        holds,
+        gitOptions,
+        showPullRequest === true,
+      ),
+    };
   }
 
   // A watch fire: the repo changed since any read in flight began.

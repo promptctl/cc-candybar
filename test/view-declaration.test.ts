@@ -21,6 +21,7 @@ import {
   type ViewFacts,
 } from "../src/daemon/render-payload";
 import { GitService, type GitInfo, type PullRequest } from "../src/segments/git";
+import { Holds } from "../src/utils/holds";
 import { ok, type Outcome } from "../src/utils/outcome";
 
 const REPO = "/repo";
@@ -135,6 +136,8 @@ test("a preset click that newly places the PR starts its lookup with no draw; sw
   await jest.advanceTimersByTimeAsync(0);
   expect(git.getStats().held).toBe(1);
   expect(inner.prLookups).toBe(0);
+  // A declaration is no read: the cache's hit rate counts the draws alone.
+  expect(git.getStats()).toMatchObject({ hits: 0, misses: 0 });
 
   // The click alone: no request, no frame.
   sessionState.set("s1", "preset", "pr");
@@ -153,4 +156,52 @@ test("a preset click that newly places the PR starts its lookup with no draw; sw
   }
   expect(inner.prLookups).toBe(1);
   expect(git.getStats().held).toBe(1);
+});
+
+test("a lane whose declaration throws is reported, takes no hold, and stops no other lane", () => {
+  const holds = new Holds();
+  const taken: string[] = [];
+  const released: string[] = [];
+  const take = (key: string) =>
+    holds.take(key, () => {
+      taken.push(key);
+      return () => released.push(key);
+    });
+  const owners = {
+    gitProvider: {
+      declare: () => {
+        throw new Error("resolver bug");
+      },
+    },
+    tmuxService: { sessionName: () => take("tmux") },
+    mementoProvider: { ceiling: () => take("memento") },
+    usageStore: { holdToday: () => take("today") },
+  } as unknown as KeyedOwners;
+  const facts: ViewFacts = {
+    hookData: {
+      hook_event_name: "Status",
+      session_id: "s1",
+      transcript_path: "/t.jsonl",
+      cwd: "/w",
+      model: { id: "m", display_name: "M" },
+      workspace: { current_dir: "/w", project_dir: "/w" },
+    },
+    cwd: "/w",
+    hints: parseClientHints({ tmux: { socket: "/s", pane: "%1", truecolor: null } }),
+  };
+  // The git hold an earlier declaration took goes with the one that threw.
+  holds.declare(() => take("git"));
+  let faults: readonly string[] = [];
+  const declared = holds.declare(() => {
+    faults = declareLanes(
+      owners,
+      holds,
+      facts,
+      new Set(["git.branch", "tmux.session", "memento.ceiling", "today.cost"]),
+    );
+  });
+  expect(faults).toEqual([expect.stringMatching(/^git: .*resolver bug/)]);
+  expect(taken).toEqual(["git", "tmux", "memento", "today"]);
+  expect(released).toEqual(["git"]);
+  expect(declared).toEqual({ acquired: 3, released: 1 });
 });

@@ -33,11 +33,8 @@ import {
 import { mb } from "../limits.js";
 import { stateGate } from "../verbs/state-validators.js";
 import { configGate } from "../verbs/config-validators.js";
-import {
-  effectivePresetName,
-  presetNames,
-  presetRoot,
-} from "../../config/presets.js";
+import { presetNames, presetRoot } from "../../config/presets.js";
+import { presetOf } from "../../config/effective-globals.js";
 import { unusedDeclarations, type UnusedDecl } from "../../config/unused.js";
 import { VariableStore } from "../../var-system/store.js";
 import { SourceRegistry } from "../../var-system/sources.js";
@@ -747,14 +744,14 @@ export interface SessionView {
 }
 
 // What a view declares into its holds: every keyed entry `closure` reads, at
-// the keys `facts` name.
+// the keys `facts` name. Returns what threw.
 export type Declare = (
   holds: Holds,
   facts: ViewFacts,
   closure: ReadonlySet<string>,
-) => void;
+) => readonly string[];
 
-export const DECLARES_NOTHING: Declare = () => {};
+export const DECLARES_NOTHING: Declare = () => [];
 
 // What a view reads to keep its declaration current.
 export interface ViewDeclaring {
@@ -786,26 +783,29 @@ export function openView(
   // which reported it: a declaration reads only the config.
   declareDslVariables(state.config, registry, cwd, VIEW_SCOPE);
   const latest = observable.box<ViewFacts | null>(null, { deep: false });
-  // [LAW:one-source-of-truth] The preset a render of this session resolves
-  // (resolveEffectiveGlobals reads the same rungs).
-  const closure = (): ReadonlySet<string> =>
-    state.neededInputPaths(
-      effectivePresetName(
-        sessionState.get(sessionId, "preset"),
-        state.config.globals.preset,
-        state.config.presets,
-      ),
-    );
+  // [LAW:no-silent-failure] Only the request and the preset are tracked: the
+  // closure is computed in the effect, beside the declaration, where a throw
+  // is logged — a reaction's tracked expression that throws reaches only the
+  // console MobX prints to, which nobody reads in a detached daemon.
   const stop = reaction(
-    () => [latest.get(), closure()] as const,
-    // [LAW:no-silent-failure] A reaction's throw reaches no caller — MobX
-    // prints it to a console nobody reads in a detached daemon — so it is
-    // logged here, where it surfaces, and the view keeps what it held.
-    ([facts, reads]) => {
+    () =>
+      [
+        latest.get(),
+        presetOf(state.config, (key) => sessionState.get(sessionId, key)),
+      ] as const,
+    ([facts, preset]) => {
       try {
+        const reads = state.neededInputPaths(preset);
+        let faults: readonly string[] = [];
         const { acquired, released } = holds.declare(() => {
-          if (facts !== null) declare(holds, facts, reads);
+          if (facts !== null) faults = declare(holds, facts, reads);
         });
+        for (const fault of faults) {
+          log(
+            "error",
+            `session view declaration threw sid=${JSON.stringify(sessionId)} ${fault}`,
+          );
+        }
         // [LAW:verifiable-goals] A declaration that moved a hold — a preset
         // click, a request naming another key — says so; one that kept what
         // the view held, every other request's, writes nothing.
@@ -816,6 +816,7 @@ export function openView(
           );
         }
       } catch (e) {
+        // The view keeps what it held.
         log(
           "error",
           `session view declaration threw sid=${JSON.stringify(sessionId)}: ${String(e)}`,

@@ -1236,20 +1236,21 @@ export type KeyedOwners = Pick<
   "gitProvider" | "tmuxService" | "mementoProvider" | "usageStore"
 >;
 
-// [LAW:one-source-of-truth] The repo a request names, read at the option sets
-// and PR its closure reads — one spelling for the declaration and the draw.
-function gitOf(
-  owners: KeyedOwners,
-  holds: Holds,
+// [LAW:one-source-of-truth] The repo a request names, at the option sets and
+// PR its closure reads — one spelling for the declaration and the draw.
+function gitAt(
   { cwd, hookData }: ViewFacts,
   closure: ReadonlySet<string>,
-): Current<GitInfo> {
-  return owners.gitProvider.current(
-    holds,
+): readonly [
+  workingDir: string,
+  options: GitInfoOptions,
+  projectDir: string | undefined,
+] {
+  return [
     cwd ?? hookData.workspace?.current_dir,
     gitOptionsFromClosure(closure),
     hookData.workspace?.project_dir,
-  );
+  ];
 }
 
 // The same session, anchors and environment memento's Stop hook resolves
@@ -1271,21 +1272,40 @@ function ceilingScopeOf({ hookData, cwd, hints }: ViewFacts): CeilingScope {
 // started. It runs when the request or the session's preset moves
 // (src/daemon/cache/render.ts), so a preset that newly places a source starts
 // its read before any draw asks for it, and one that stops placing a source
-// releases it at once (`Holds.declare`).
+// releases it at once (`Holds.declare`). Returns what threw.
 export function declareLanes(
   owners: KeyedOwners,
   holds: Holds,
   facts: ViewFacts,
   closure: ReadonlySet<string>,
-): void {
+): readonly string[] {
   const want = wanted(closure);
   const pane = facts.hints.tmux ?? null;
-  if (want.git) gitOf(owners, holds, facts, closure);
-  if (want.tmux && pane !== null) owners.tmuxService.sessionName(holds, pane);
-  if (want.memento)
-    owners.mementoProvider.ceiling(holds, ceilingScopeOf(facts));
-  if (want.today)
-    owners.usageStore.holdToday(holds, facts.hints.claudeConfigDir);
+  // [LAW:no-silent-failure] A lane whose declaration throws is a bug in its
+  // owner, reported to the caller, and it takes no hold — as its draw, which
+  // reads that lane as failed, reads none — while every other lane declares.
+  const faults: string[] = [];
+  const declare = (lane: string, needed: boolean, take: () => void): void => {
+    if (!needed) return;
+    try {
+      take();
+    } catch (e) {
+      faults.push(`${lane}: ${inspect(e)}`);
+    }
+  };
+  declare("git", want.git, () =>
+    owners.gitProvider.declare(holds, ...gitAt(facts, closure)),
+  );
+  declare("tmux", want.tmux && pane !== null, () =>
+    owners.tmuxService.sessionName(holds, pane!),
+  );
+  declare("memento", want.memento, () =>
+    owners.mementoProvider.ceiling(holds, ceilingScopeOf(facts)),
+  );
+  declare("today", want.today, () =>
+    owners.usageStore.holdToday(holds, facts.hints.claudeConfigDir),
+  );
+  return faults;
 }
 
 // [LAW:effects-at-boundaries] No I/O: every read takes what its owner stored,
@@ -1314,7 +1334,10 @@ function readLanes(inputs: PayloadInputs, threw: Threw = {}): Lanes {
   };
   return {
     git: read("git", want.git, () =>
-      gitOf(deps, deps.holds, inputs, inputs.neededInputPaths),
+      deps.gitProvider.current(
+        deps.holds,
+        ...gitAt(inputs, inputs.neededInputPaths),
+      ),
     ),
     usage:
       threw.session ??

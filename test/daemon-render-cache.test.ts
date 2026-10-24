@@ -1094,6 +1094,7 @@ describe("RenderCache idle sweep", () => {
           declarations.push(`${facts.cwd} ${preset}`);
           take(holds, `memento:${facts.cwd}`);
           take(holds, preset);
+          return [];
         },
       },
       { budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES },
