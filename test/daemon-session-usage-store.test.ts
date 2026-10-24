@@ -772,6 +772,29 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
     }
   });
 
+  // The same at the top of the tree: a `projects/` that cannot be listed is a
+  // failed scan, never an empty tree summing to nothing.
+  test("a projects directory the scan cannot list is today's failure", async () => {
+    const tree = mkdtempSync(join(tmpdir(), "cc-candybar-store-noprojects-"));
+    const projects = join(tree, "projects");
+    const store = new SessionUsageStore({
+      sweepIntervalMs: 0,
+      rescan: { okMs: 60_000, failedMs: 60_000 },
+    });
+    try {
+      mkdirSync(projects);
+      chmodSync(projects, 0o000);
+      const info = await store.getTodayInfo(holds, hook("active", join(projects, "p", "active.jsonl")), tree, instantOf(new Date()));
+      expect(info.kind).toBe("failed");
+      if (info.kind !== "failed") return;
+      expect(info.reason).toMatch(/^usage scan: .*EACCES.*projects/);
+    } finally {
+      store.close();
+      chmodSync(projects, 0o755);
+      rmSync(tree, { recursive: true, force: true });
+    }
+  });
+
   // `today` is the day sums at the frame's own day: past local midnight, with
   // no record changed and nothing read, it is the new day's — nothing spent.
   test("a frame past midnight reads the new day with no refresh", async () => {

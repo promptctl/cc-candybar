@@ -14,6 +14,7 @@ import {
   findAgentTranscripts,
   foldAppended,
   longLineLog,
+  unlessGone,
   type ClaudeHookData,
   type Folded,
   type ParsedEntry,
@@ -360,17 +361,6 @@ function under(path: string | undefined, roots: readonly string[]): boolean {
   return path !== undefined && roots.some((root) => path.startsWith(root));
 }
 
-// A scan's read of something its listing named: `undefined` when it has gone
-// since (ENOENT), the read's own throw otherwise.
-async function unlessGone<T>(read: Promise<T>): Promise<T | undefined> {
-  try {
-    return await read;
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === "ENOENT") return undefined;
-    throw e;
-  }
-}
-
 // [LAW:effects-at-boundaries] One directory set's day sums: each day some
 // record under its roots holds a bucket for, the sum of those buckets. Keyed
 // by the records' own days, so it reads no clock — the day `today` reads off
@@ -588,8 +578,9 @@ export class SessionUsageStore {
   // over the sessions that had asked, would move with which other sessions
   // happened to have rendered.
   //
-  // A request's refresh: the active session's own record — so `today` never
-  // trails the cost it was sent with — and the directory set's first scan,
+  // A request's refresh: the active session's own record — so `today` keeps
+  // up with the cost it was sent with (short only by what a rescan's fold of
+  // the same session stores first, `ingest`) — and the directory set's first scan,
   // the one wait, since a set no scan has answered is not answered. `holds`
   // is the home rendering: it holds the set, which keeps it on its rescan.
   async getTodayInfo(
