@@ -494,8 +494,19 @@
               "template": {
                 "type": "string"
               },
+              "type": {
+                "enum": [
+                  "string",
+                  "number",
+                  "boolean"
+                ]
+              },
               "default": {
-                "type": "string"
+                "type": [
+                  "string",
+                  "number",
+                  "boolean"
+                ]
               }
             },
             "required": [
@@ -1968,8 +1979,19 @@
                   "template": {
                     "type": "string"
                   },
+                  "type": {
+                    "enum": [
+                      "string",
+                      "number",
+                      "boolean"
+                    ]
+                  },
                   "default": {
-                    "type": "string"
+                    "type": [
+                      "string",
+                      "number",
+                      "boolean"
+                    ]
                   }
                 },
                 "required": [
@@ -2558,8 +2580,19 @@
                   "template": {
                     "type": "string"
                   },
+                  "type": {
+                    "enum": [
+                      "string",
+                      "number",
+                      "boolean"
+                    ]
+                  },
                   "default": {
-                    "type": "string"
+                    "type": [
+                      "string",
+                      "number",
+                      "boolean"
+                    ]
                   }
                 },
                 "required": [

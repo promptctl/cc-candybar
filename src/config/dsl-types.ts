@@ -622,10 +622,13 @@ export type SourceDefault = Exclude<JsonValue, null>;
 
 // [LAW:types-are-the-program] No `cache`: a template variable is a computed
 // that tracks every variable it reads, so it changes exactly when they do.
+// `type` is what its text is read as, as an input's is, so a derived number
+// (an age, an ETA) compares and ramps like the input it replaces.
 export interface TemplateVarDecl {
   readonly kind: "template";
   readonly template: string;
-  readonly default?: string;
+  readonly type?: "string" | "number" | "boolean";
+  readonly default?: string | number | boolean;
 }
 
 // [LAW:types-are-the-program] No `cache`: a time variable is the instant its

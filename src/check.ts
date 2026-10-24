@@ -144,7 +144,7 @@ export function checkPayload(
       stash: 1,
       status: "dirty",
       operation: "rebase",
-      timeSinceCommit: 780,
+      committedAt: nowSec - 780,
     },
     session: { cost: 0.39, tokens: 241400 },
     today: { cost: 12.5, tokens: 3_400_000 },

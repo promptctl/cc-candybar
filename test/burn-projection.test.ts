@@ -1,6 +1,7 @@
 // Burn-rate + cap-projection segment (brandon-usage-4be). Three layers:
-//   1. the pure projection math (projectEtaMinutes / projectCostPerHour),
-//   2. buildRenderPayload folding it into the payload under the closure gate,
+//   1. the pure projection math (etaMinutes / projectCostPerHour),
+//   2. buildRenderPayload folding the burn rate into the payload under the
+//      closure gate (the ETAs are the draw's, from the windows' instants),
 //   3. the burnrate segment formatting it — including the "—" absence path.
 //
 // [LAW:no-silent-failure] The headline assertion across all three: a window or
@@ -12,7 +13,6 @@ import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
 import {
   buildRenderPayload,
   projectCostPerHour,
-  projectEtaMinutes,
   type RenderPayloadDeps,
 } from "../src/daemon/render-payload";
 import { type EffectiveGlobals } from "../src/config/effective-globals";
@@ -32,31 +32,32 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
 import { instantOf } from "../src/utils/instant";
+import { etaMinutes } from "../src/template-engine/funcs";
 
-const FIVE_HOUR_MS = 5 * 60 * 60 * 1000;
+const FIVE_HOURS_MIN = 5 * 60;
 const NOW_MS = 1_700_000_000_000; // fixed instant; NOW_MS / 1000 is whole seconds
 const NOW_SEC = NOW_MS / 1000;
 
-describe("projectEtaMinutes (pure)", () => {
+describe("etaMinutes (pure)", () => {
   test("linear extrapolation: 20% used, 1h elapsed of a 5h window → 4h to cap", () => {
     // Resets in 4h ⇒ 1h elapsed ⇒ 20%/h ⇒ 80% headroom ⇒ 240 minutes.
     const resetsAt = NOW_SEC + 4 * 3600;
-    expect(projectEtaMinutes(20, resetsAt, FIVE_HOUR_MS, NOW_MS)).toBe(240);
+    expect(etaMinutes(20, resetsAt, FIVE_HOURS_MIN, NOW_MS)).toBe(240);
   });
 
-  test("too young to project (under the 5-minute floor) → undefined", () => {
+  test("too young to project (under the 5-minute floor) → -1", () => {
     const resetsAt = NOW_SEC + (5 * 3600 - 120); // 2 minutes elapsed
-    expect(projectEtaMinutes(5, resetsAt, FIVE_HOUR_MS, NOW_MS)).toBeUndefined();
+    expect(etaMinutes(5, resetsAt, FIVE_HOURS_MIN, NOW_MS)).toBe(-1);
   });
 
-  test("no usage yet (0%) → undefined (cannot divide by a zero rate)", () => {
+  test("no usage yet (0%) → -1 (cannot divide by a zero rate)", () => {
     const resetsAt = NOW_SEC + 1 * 3600; // 4h elapsed, plenty of time
-    expect(projectEtaMinutes(0, resetsAt, FIVE_HOUR_MS, NOW_MS)).toBeUndefined();
+    expect(etaMinutes(0, resetsAt, FIVE_HOURS_MIN, NOW_MS)).toBe(-1);
   });
 
   test("already at the cap (100%) → clamped to 0, never negative", () => {
     const resetsAt = NOW_SEC + 4 * 3600;
-    expect(projectEtaMinutes(100, resetsAt, FIVE_HOUR_MS, NOW_MS)).toBe(0);
+    expect(etaMinutes(100, resetsAt, FIVE_HOURS_MIN, NOW_MS)).toBe(0);
   });
 });
 
@@ -126,10 +127,8 @@ const BURN_PATHS = new Set([
   "burn.costPerHour",
   "block.nativeUtilization",
   "block.resetsAt",
-  "block.etaMinutes",
   "weekly.percentage",
   "weekly.resetsAt",
-  "weekly.etaMinutes",
 ]);
 
 // The daemon-resolved effective globals; these burn-lane tests don't exercise
@@ -142,7 +141,7 @@ const NO_HINTS: ClientHints = {};
 const EFFECTIVE_GLOBALS: EffectiveGlobals = globalsFor(DEFAULT_DSL_CONFIG);
 
 describe("buildRenderPayload — burn projection lane", () => {
-  test("projectable: burn rate + block & weekly ETAs land in the payload", async () => {
+  test("projectable: the burn rate and both windows' instants land in the payload", async () => {
     const payload = await buildRenderPayload(
       hookWithWindows(),
       instantOf(new Date(NOW_MS)),
@@ -154,26 +153,16 @@ describe("buildRenderPayload — burn projection lane", () => {
       NO_CONFIG_FILE,
     );
     expect(payload.burn?.costPerHour).toBe(12);
-    expect(payload.block?.etaMinutes).toBe(240);
-    expect(payload.weekly?.etaMinutes).toBeGreaterThan(0);
-  });
-
-  test("young window: block keeps its util/reset but ETA is ABSENT, not 0", async () => {
-    const hook = hookWithWindows();
-    // 2 minutes into the 5h window — under the projection floor.
-    hook.rate_limits.five_hour.resets_at = NOW_SEC + (5 * 3600 - 120);
-    const payload = await buildRenderPayload(
-      hook,
-      instantOf(new Date(NOW_MS)),
-      depsWith(),
-      undefined,
-      BURN_PATHS,
-      EFFECTIVE_GLOBALS,
-      NO_HINTS,
-      NO_CONFIG_FILE,
-    );
-    expect(payload.block?.nativeUtilization).toBe(20);
-    expect(payload.block?.etaMinutes).toBeUndefined();
+    // [LAW:one-source-of-truth] Instants, never the ETA a later frame would
+    // read stale: what they say relative to now is the draw's.
+    expect(payload.block).toEqual({
+      nativeUtilization: 20,
+      resetsAt: NOW_SEC + 4 * 3600,
+    });
+    expect(payload.weekly).toEqual({
+      percentage: 14,
+      resetsAt: NOW_SEC + 6 * 86400,
+    });
   });
 
   test("gating: burn omitted from the closure ⇒ no burn key (lanes not pulled)", async () => {
@@ -195,7 +184,10 @@ describe("buildRenderPayload — burn projection lane", () => {
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
-function renderBurnrate(payload: Record<string, unknown>): string {
+function renderBurnrate(
+  payload: Record<string, unknown>,
+  atMs: number = NOW_MS,
+): string {
   const raw = parseDslConfig(
     "<test>",
     `{ root: { h: ["burnrate"] } }`,
@@ -215,7 +207,7 @@ function renderBurnrate(payload: Record<string, unknown>): string {
   const registry = new SourceRegistry(store, "", undefined, new SessionState());
   try {
     const compiled = registerDslConfig(cfg, registry, { cwd: "/tmp" });
-    return renderDsl(cfg, compiled, store, registry, payload, instantOf(new Date()), {
+    return renderDsl(cfg, compiled, store, registry, payload, instantOf(new Date(atMs)), {
       endcaps: "powerline",
       colorCompatibility: "none", wrap: true, padding: 0,
       width: Number.POSITIVE_INFINITY,
@@ -238,8 +230,8 @@ describe("burnrate segment render", () => {
     const line = renderBurnrate({
       ...SEG_BASE,
       burn: { costPerHour: 12 },
-      block: { nativeUtilization: 20, resetsAt: NOW_SEC + 4 * 3600, etaMinutes: 240 },
-      weekly: { percentage: 14, resetsAt: NOW_SEC + 6 * 86400, etaMinutes: 8846 },
+      block: { nativeUtilization: 20, resetsAt: NOW_SEC + 4 * 3600 },
+      weekly: { percentage: 14, resetsAt: NOW_SEC + 6 * 86400 },
     });
     expect(line).toContain("$12.00/hr");
     expect(line).toContain("4h to 5h");
@@ -248,16 +240,30 @@ describe("burnrate segment render", () => {
   });
 
   test("absent projections render '—' (the -1 default), never a fake number", () => {
-    // Window active (so the segment shows) but nothing projectable: burn,
-    // block.eta and weekly.eta fall to their -1 default.
+    // Window active (so the segment shows) but nothing projectable: no burn
+    // rate, and both windows two minutes old, under the projection floor.
     const line = renderBurnrate({
       ...SEG_BASE,
-      block: { nativeUtilization: 2, resetsAt: NOW_SEC + 4 * 3600 },
-      weekly: { percentage: 1, resetsAt: NOW_SEC + 6 * 86400 },
+      block: { nativeUtilization: 2, resetsAt: NOW_SEC + (5 * 3600 - 120) },
+      weekly: { percentage: 1, resetsAt: NOW_SEC + (7 * 86400 - 120) },
     });
     expect(line).toContain("—/hr");
     expect(line).toContain("—");
     expect(line).not.toMatch(/\$\d/); // no dollar figure
+  });
+
+  test("the ETA is the instant's the frame is drawn at, from one payload", () => {
+    // 20% used an hour into the window: 240 minutes to the cap. Drawn an hour
+    // later with nothing re-read, the same use over two hours: 480 minutes.
+    const payload = {
+      ...SEG_BASE,
+      block: { nativeUtilization: 20, resetsAt: NOW_SEC + 4 * 3600 },
+      weekly: { percentage: 14, resetsAt: NOW_SEC + 6 * 86400 },
+    };
+    expect(renderBurnrate(payload)).toContain("4h to 5h");
+    expect(renderBurnrate(payload, NOW_MS + 3600 * 1000)).toContain(
+      "8h to 5h",
+    );
   });
 
   test("hidden when no rate-limit window is active", () => {

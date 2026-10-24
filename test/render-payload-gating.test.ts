@@ -371,7 +371,7 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
       "git.behind",
       "git.upstream",
       "git.stash",
-      "git.timeSinceCommit",
+      "git.committedAt",
     ]) {
       expect([path, needed.has(path)]).toEqual([path, true]);
     }

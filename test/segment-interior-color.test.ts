@@ -38,7 +38,7 @@ const GIT_PAYLOAD = {
     upstream: "origin/main",
     operation: "",
     stash: 0,
-    timeSinceCommit: 0,
+    committedAt: 0,
   },
 };
 

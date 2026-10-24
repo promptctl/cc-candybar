@@ -329,11 +329,21 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     },
     "git.status": { kind: "input", path: "git.status", default: "clean" },
     "git.operation": { kind: "input", path: "git.operation", default: "" },
-    "git.timeSinceCommit": {
+    // The last commit's date, epoch seconds; 0 when git could not read it.
+    "git.committedAt": {
       kind: "input",
-      path: "git.timeSinceCommit",
+      path: "git.committedAt",
       type: "number",
       default: 0,
+    },
+    // [LAW:one-source-of-truth] Its age in seconds, against the instant the
+    // frame is drawn at — a projection, so a frame between two git reads shows
+    // the age it is drawn at. 0 when the date is unknown.
+    "git.timeSinceCommit": {
+      kind: "template",
+      type: "number",
+      template:
+        "{{ if gt .git.committedAt 0 }}{{ sub (int (unixEpoch now)) .git.committedAt }}{{ else }}0{{ end }}",
     },
     // The palette role each git fact is painted in — data a user overrides one
     // fact at a time (`"git.color.behind": { kind: "literal", value: "error" }`).
@@ -440,28 +450,29 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       default: 0,
     },
 
-    // Burn rate + cap projection — daemon-derived (see render-payload.ts).
-    // Each projection is ABSENT when not projectable; the var-system fills the
-    // -1 default, a structurally-impossible value the burnrate helpers read as
-    // "—" [LAW:no-silent-failure] (0 minutes / $0-per-hr are real, displayable
-    // values, so they cannot double as the absence marker).
+    // Burn rate — daemon-derived (see render-payload.ts). ABSENT when not
+    // projectable; the var-system fills the -1 default, a structurally-
+    // impossible value the burnrate helpers read as "—" [LAW:no-silent-failure]
+    // ($0/hr is a real, displayable value, so it cannot double as the absence
+    // marker).
     "burn.costPerHour": {
       kind: "input",
       path: "burn.costPerHour",
       type: "number",
       default: -1,
     },
+    // Minutes until each window's use reaches its cap at the rate it has run
+    // since it opened (5 h and 7 d windows), against the instant the frame is
+    // drawn at; -1 when too young to project or unused.
     "block.etaMinutes": {
-      kind: "input",
-      path: "block.etaMinutes",
+      kind: "template",
       type: "number",
-      default: -1,
+      template: "{{ etaMinutes .block.nativeUtilization .block.resetsAt 300 }}",
     },
     "weekly.etaMinutes": {
-      kind: "input",
-      path: "weekly.etaMinutes",
+      kind: "template",
       type: "number",
-      default: -1,
+      template: "{{ etaMinutes .weekly.percentage .weekly.resetsAt 10080 }}",
     },
 
     // Token throughput for the active turn — daemon-derived tok/s on three lanes
@@ -850,9 +861,9 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     },
     // Burn rate + cap projection: "$X/hr · Nm to 5h · Nd to wk". The headline
     // number of a usage monitor — how fast you are spending and when you hit
-    // the wall. All math is daemon-side (render-payload.ts); the template only
-    // formats. Heats as the 5h cap NEARS — the ramp runs over minutes-to-cap,
-    // smaller = hotter, the inverse of block's fuller-is-hotter — and the -1
+    // the wall. The rate is daemon-side (render-payload.ts), the ETAs the
+    // draw's (`block.etaMinutes`); the template only formats. Heats as the 5h
+    // cap NEARS — the ramp runs over minutes-to-cap, smaller = hotter, the inverse of block's fuller-is-hotter — and the -1
     // "cannot project" sentinel sits calm at the first stop. Shown when either
     // rate-limit window is active — the same signal block/weekly gate on.
     burnrate: {
@@ -1593,7 +1604,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     gitStash:
       '{{ if and .settings.stash (gt .git.stash 0) }} {{ template "gitPaint" (dict "color" .git.color.stash "text" (printf "(%v stashed)" .git.stash)) }}{{ end }}',
     gitAge:
-      '{{ if and .settings.age (gt .git.timeSinceCommit 0) }} ◷ {{ template "formatTimeSince" .git.timeSinceCommit }}{{ end }}',
+      '{{ $age := .git.timeSinceCommit }}{{ if and .settings.age (gt $age 0) }} ◷ {{ template "formatTimeSince" $age }}{{ end }}',
 
     // Cost: under a cent reads "<$0.01"; otherwise "$" + two decimals. (Null is
     // unrepresentable through the var-system — type:number with a numeric default
@@ -1627,8 +1638,8 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // so the dollar policy has one home.
     formatRate:
       '{{ if lt . 0 }}—/hr{{ else }}{{ template "formatCost" . }}/hr{{ end }}',
-    // ETA to a rate-limit cap: humanized minutes when projectable, "—" when the
-    // daemon could not project (-1 sentinel). Reuses the long-remaining cascade.
+    // ETA to a rate-limit cap: humanized minutes when projectable, "—" when it
+    // cannot be projected (-1 sentinel). Reuses the long-remaining cascade.
     formatEta:
       '{{ if lt . 0 }}—{{ else }}{{ template "formatLongTimeRemaining" . }}{{ end }}',
     // Token throughput: "N/s" (K/M-scaled, rounded) when measured (>= 0), "—"

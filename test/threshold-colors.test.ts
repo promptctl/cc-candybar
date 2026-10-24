@@ -37,6 +37,22 @@ import { instantOf } from "../src/utils/instant";
 const SERIALIZED = JSON.stringify(RAW_DEFAULT_DSL_CONFIG);
 const PALETTES = ["textual-dark", "textual-light"] as const;
 const RESETS_AT = 4_102_444_800; // 2100-01-01 — `when: gt .resetsAt 0` fires
+// The instant every case is drawn at.
+const AT_SEC = 1_700_000_000;
+
+// A 5 h window an hour old whose use reaches its cap in `eta` minutes at the
+// rate it has run (`etaMinutes`), drawn at AT_SEC; -1 is a window with no use,
+// which projects nothing.
+function blockWithEta(eta: number): {
+  nativeUtilization: number;
+  resetsAt: number;
+} {
+  const elapsed = 60;
+  return {
+    nativeUtilization: eta < 0 ? 0 : (100 * elapsed) / (eta + elapsed),
+    resetsAt: AT_SEC + (300 - elapsed) * 60,
+  };
+}
 
 const OPTS = {
   endcaps: "powerline" as const,
@@ -149,7 +165,7 @@ const CASES: readonly Case[] = [
     settings: { warnWithin: 60, errorWithin: 30 },
     payload: (v: number) => ({
       burn: { costPerHour: 1 },
-      block: { etaMinutes: v, resetsAt: RESETS_AT },
+      block: blockWithEta(v),
     }),
     rows: ETA_HEAT,
   },
@@ -206,7 +222,7 @@ function renderOne(
       store,
       registry,
       { ...HOOK, ...c.payload(value) },
-      instantOf(new Date()),
+      instantOf(new Date(AT_SEC * 1000)),
       OPTS,
       { onSegmentError },
       selectionFor(one, {}, picked({ theme: themeName })),

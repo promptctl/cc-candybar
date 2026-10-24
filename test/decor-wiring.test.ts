@@ -355,6 +355,10 @@ const ALERT_ROLE: Record<SemanticRole, true> = {
   warning: true,
 };
 
+// Each window an hour from its reset at 95%: minutes from its cap at the
+// rate it has run, whenever in this run it is drawn.
+const HOT_NOW_SEC = Math.floor(Date.now() / 1000);
+
 /** A payload that trips every bundled threshold and reveals every alert. */
 const HOT = {
   workspace: { current_dir: "/w/p", project_dir: "/w/p" },
@@ -362,8 +366,8 @@ const HOT = {
   git: { branch: "main", repoName: "p" },
   host: { ssh: true, user: "u", name: "h" },
   context: { totalTokens: 1000, contextLeft: 10 },
-  block: { nativeUtilization: 95, resetsAt: 1, etaMinutes: 1 },
-  weekly: { percentage: 95, resetsAt: 1, etaMinutes: 1 },
+  block: { nativeUtilization: 95, resetsAt: HOT_NOW_SEC + 3600 },
+  weekly: { percentage: 95, resetsAt: HOT_NOW_SEC + 3600 },
 };
 
 // `burnrate` is declared but opt-in (not in the bundled root); a third row

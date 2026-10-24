@@ -129,7 +129,9 @@ export interface FileOptions {
 }
 
 export interface TemplateOptions {
-  readonly varDefault?: string;
+  // What the template's text is read as.
+  readonly type: VarType;
+  readonly varDefault?: VarValue;
   // Whether the template reads the instant: the projection fold's answer
   // (src/config/loader/projections.ts), never the registry's guess.
   readonly derivation: Derivation;
@@ -972,6 +974,7 @@ export class SourceRegistry {
     const parsedTpl = this.engine.parse(template);
     this.declareDerived(
       name,
+      opts.type,
       opts.derivation,
       () =>
         parsedTpl
@@ -991,6 +994,7 @@ export class SourceRegistry {
     const scope = { layout: opts.format };
     this.declareDerived(
       name,
+      "string",
       "projection",
       () =>
         parsedTpl
@@ -1009,13 +1013,18 @@ export class SourceRegistry {
   // refuse (validateNoCycles) [LAW:single-enforcer].
   private declareDerived(
     name: string,
+    type: VarType,
     derivation: Derivation,
     derive: () => string,
-    varDefault: string | undefined,
+    // Of the variable's type: the loader's `default` spec pairs the two.
+    fallback: VarValue | undefined,
   ): void {
-    this.store.defineDerived(name, "string", derivation, () => {
+    this.store.defineDerived(name, type, derivation, () => {
       try {
-        const result = derive();
+        // [LAW:single-enforcer] The text is cast by the rule an input's
+        // payload value is, so a template that renders no number fails as a
+        // failed derivation, never as a zero.
+        const result = coerceToType(derive(), type);
         this.lastErrors.delete(name);
         return result;
       } catch (e) {
@@ -1044,12 +1053,12 @@ export class SourceRegistry {
         // this loudness back off for every template in the config.
         // A derivation over a value that is not there yet is itself not there
         // yet, so whatever waits on it can wait on this variable too.
-        if (varDefault === undefined) {
+        if (fallback === undefined) {
           throw readAbsentValue(e)
             ? new AbsentValueError(name, `variable "${name}": ${message}`)
             : new Error(`variable "${name}": ${message}`);
         }
-        return varDefault;
+        return fallback;
       }
     });
   }

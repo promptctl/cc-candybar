@@ -448,6 +448,52 @@ describe("loadDslConfig — variable source kinds", () => {
     });
   });
 
+  test("template: a type is one an input may have", () => {
+    const ok = parseAndValidate(
+      FILE,
+      `{ variables: { age: { kind: "template", type: "number", template: "{{ 1 }}" } } }`,
+    );
+    expect(ok.variables.age).toEqual({
+      kind: "template",
+      type: "number",
+      template: "{{ 1 }}",
+    });
+    expectIssue(
+      `{ variables: { age: { kind: "template", type: "date", template: "{{ 1 }}" } } }`,
+      { path: "variables.age.type", message: "variables.age.type" },
+    );
+  });
+
+  test("template: its default is of its type, as an input's is", () => {
+    const ok = parseAndValidate(
+      FILE,
+      `{ variables: { eta: { kind: "template", type: "number", template: "{{ 1 }}", default: -1 } } }`,
+    );
+    expect(ok.variables.eta).toMatchObject({ type: "number", default: -1 });
+    expectIssue(
+      `{ variables: { eta: { kind: "template", type: "number", template: "{{ 1 }}", default: "never" } } }`,
+      { path: "variables.eta.default", message: "default must be a number" },
+    );
+    expectIssue(
+      `{ variables: { eta: { kind: "template", template: "{{ 1 }}", default: -1 } } }`,
+      { path: "variables.eta.default", message: "default must be a string" },
+    );
+  });
+
+  test("input: a path the payload no longer carries is refused, naming what replaced it", () => {
+    expectIssue(
+      `{ variables: { "block.etaMinutes": { kind: "input", path: "block.etaMinutes", type: "number", default: -2 } } }`,
+      {
+        path: "variables.block.etaMinutes.path",
+        message: '"block.etaMinutes" is no longer in the payload: the bundled template variable',
+      },
+    );
+    expectIssue(
+      `{ variables: { age: { kind: "input", path: "git.timeSinceCommit", type: "number" } } }`,
+      { path: "variables.age.path", message: '"git.committedAt" (epoch seconds)' },
+    );
+  });
+
   test("time: requires layout", () => {
     expectIssue(`{ variables: { now: { kind: "time" } } }`, {
       path: "variables.now.layout",

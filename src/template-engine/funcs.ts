@@ -181,10 +181,11 @@ export function ccCandybarFuncs(): FuncMap {
 // expression — the bdi migration is complete. Do NOT migrate these to DSL
 // helpers; each one is retained for a load-bearing reason:
 //
-//   minutesUntilReset — returns a NUMBER for comparisons and arithmetic
-//     (`le (minutesUntilReset .x) 8`). A template helper writes to output
-//     and cannot return a value, so a helper form would duplicate the formula
-//     across every comparison site [LAW:one-source-of-truth].
+//   minutesUntilReset, etaMinutes — return a NUMBER for
+//     comparisons and arithmetic (`le (minutesUntilReset .x) 8`). A template
+//     helper writes to output and cannot return a value, so a helper form
+//     would duplicate the formula across every comparison site
+//     [LAW:one-source-of-truth].
 //
 //   formatInteger — locale-aware grouping via toLocaleString(). A regex
 //     helper would be locale-blind (always comma+3), a second divergent
@@ -202,11 +203,35 @@ export function ccCandybarFuncs(): FuncMap {
 // The display-formatting families moved to DSL helpers in DEFAULT_DSL_CONFIG:
 // cost/token/budget (bdi.3), duration/time-remaining (bdi.4).
 //
-// [LAW:single-enforcer] minutesUntilReset reads "now" from the engine's one
-// clock: it is a clock factory (template-engine/engine.ts), so the engine hands
-// it the instant of the draw in progress and records its name among the clock
-// functions, which a template calling it is a projection for.
-export const minutesUntilResetFuncs: ClockFactory = (clock) => ({
+// Below this much elapsed in a window, a linear projection from one early data
+// point is noise — no ETA rather than a confidently-wrong number.
+const MIN_PROJECTABLE_ELAPSED_MS = 5 * 60 * 1000;
+
+// [LAW:effects-at-boundaries] Pure: minutes until a rate-limit window's use
+// reaches 100%, extrapolated linearly from what it has used since it opened
+// `windowMinutes` before `resetsAtSec`. -1 when it cannot be projected — too
+// young, or no use yet — the absence the burnrate helpers read as "—"
+// [LAW:no-silent-failure]: 0 minutes is a real answer (already at the cap).
+export function etaMinutes(
+  usedPercentage: number,
+  resetsAtSec: number,
+  windowMinutes: number,
+  nowMs: number,
+): number {
+  const elapsedMs = windowMinutes * 60000 - (resetsAtSec * 1000 - nowMs);
+  if (elapsedMs < MIN_PROJECTABLE_ELAPSED_MS || usedPercentage <= 0) return -1;
+  const pctPerMs = usedPercentage / elapsedMs;
+  return Math.max(0, Math.round((100 - usedPercentage) / pctPerMs / 60000));
+}
+
+// [LAW:single-enforcer] Stored instants read relative to now read "now" from
+// the engine's one clock: this is a clock factory (template-engine/engine.ts),
+// so the engine hands it the instant of the draw in progress and records its
+// names among the clock functions, which a template calling one is a
+// projection for. The payload stores instants (epoch seconds: a reset, a
+// commit), so a frame drawn between two reads reads them against its own
+// instant.
+export const relativeTimeFuncs: ClockFactory = (clock) => ({
   // Epoch-seconds → whole minutes until that instant, clamped at 0 for a past
   // expiry: round(max(0, epoch*1000 − now)/60000). Consumed by the
   // `formatResetCountdown` helper (block/weekly, which adds the minute in
@@ -220,6 +245,14 @@ export const minutesUntilResetFuncs: ClockFactory = (clock) => ({
     // [LAW:types-are-the-program] An epoch is integer-valued; `int` rejects a
     // fractional or precision-losing carrier at the gate.
     argTypes: ["int"],
+    arity: { kind: "exact" },
+  },
+  // `etaMinutes <used %> <resets at, epoch s> <window minutes>` — the bundled
+  // `block.etaMinutes`/`weekly.etaMinutes` variables.
+  etaMinutes: {
+    fn: (used: number, resetsAt: number, windowMinutes: number) =>
+      etaMinutes(used, resetsAt, windowMinutes, clock.now().getTime()),
+    argTypes: ["float", "int", "int"],
     arity: { kind: "exact" },
   },
 });

@@ -118,8 +118,8 @@ export interface GitInfo {
   sha?: Outcome<string>;
   operation?: Outcome<string>;
   tag?: Outcome<string>;
-  // The last commit's committer date, ms since the epoch — a fact of the repo;
-  // its age is a fact of the render that subtracts it.
+  // The last commit's committer date, epoch seconds — a fact of the repo;
+  // its age is a fact of the draw that subtracts it.
   committedAt?: Outcome<number>;
   stashCount?: Outcome<number>;
   upstream?: Outcome<string>;
@@ -158,7 +158,7 @@ const READ_FIELD_NAMES: Record<ReadField, string> = {
   sha: "sha",
   operation: "operation",
   tag: "tag",
-  committedAt: "timeSinceCommit",
+  committedAt: "committedAt",
   stashCount: "stash",
   upstream: "upstream",
   repoName: "repoName",
@@ -187,7 +187,7 @@ export interface GitInfoOptions {
   showWorkingTree?: boolean;
   showOperation?: boolean;
   showTag?: boolean;
-  showTimeSinceCommit?: boolean;
+  showCommittedAt?: boolean;
   showStashCount?: boolean;
   showUpstream?: boolean;
   showRepoName?: boolean;
@@ -1027,7 +1027,7 @@ export class GitService {
     if (options.showTag) {
       result.tag = await this.getNearestTagAsync(gitDir);
     }
-    if (options.showTimeSinceCommit) {
+    if (options.showCommittedAt) {
       result.committedAt = await this.committedAt(gitDir, core.value.oid);
     }
 
@@ -1143,7 +1143,7 @@ export class GitService {
     oid: Outcome<string>,
   ): Promise<Outcome<number>> {
     if (oid.kind !== "ok") return oid;
-    return this.commitTimestampMs(gitDir, oid.value);
+    return this.commitTimestamp(gitDir, oid.value);
   }
 
   // [LAW:one-source-of-truth] exception: the class header rules out a cache here,
@@ -1162,7 +1162,7 @@ export class GitService {
   // What it buys: `git log -1` fired once per cache miss — once per 30 s TTL
   // window on an active repo — to answer a question that had not changed since the
   // last commit. It now fires once per commit. The age is this timestamp
-  // subtracted from each render's instant, which is why splitting that
+  // subtracted from each draw's instant, which is why splitting that
   // derivation out is what made this cacheable at all.
   //
   // Only `ok` is stored: `absent`/`failed` are transient (a commit the status call
@@ -1171,7 +1171,7 @@ export class GitService {
   // coalescing are one fact.
   private readonly commitTimes = new Map<string, Promise<Outcome<number>>>();
 
-  private async commitTimestampMs(
+  private async commitTimestamp(
     gitDir: string,
     oid: string,
   ): Promise<Outcome<number>> {
@@ -1182,7 +1182,7 @@ export class GitService {
       this.commitTimes.set(oid, hit);
       return hit;
     }
-    const pending = this.readCommitTimestampMs(gitDir, oid);
+    const pending = this.readCommitTimestamp(gitDir, oid);
     this.commitTimes.set(oid, pending);
     void pending.then(
       (outcome) => {
@@ -1209,7 +1209,7 @@ export class GitService {
   // had: HEAD could move between the status call that reported the oid and this
   // one, so the timestamp could describe a different commit than the sha shown
   // beside it.
-  private async readCommitTimestampMs(
+  private async readCommitTimestamp(
     gitDir: string,
     oid: string,
   ): Promise<Outcome<number>> {
@@ -1227,7 +1227,7 @@ export class GitService {
     );
     if (r.kind !== "ok") return r;
 
-    const committedAt = parseInt(r.value, 10) * 1000;
+    const committedAt = parseInt(r.value, 10);
     if (Number.isNaN(committedAt)) {
       return failed(`git log -1: unparseable timestamp "${r.value}"`);
     }

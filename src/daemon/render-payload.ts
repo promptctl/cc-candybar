@@ -310,7 +310,10 @@ interface GitFacts {
   readonly stash?: number;
   readonly status?: string;
   readonly operation?: string;
-  readonly timeSinceCommit?: number;
+  // The last commit's committer date, epoch seconds — an instant, like
+  // `block.resetsAt`, so a frame drawn after the read that stored it reads its
+  // age against its own instant (the bundled `git.timeSinceCommit`).
+  readonly committedAt?: number;
 }
 
 // Forge PR/MR. [LAW:no-silent-failure] Unlike every other git field (where
@@ -435,22 +438,19 @@ export interface SpeedPayload {
   readonly history?: string;
 }
 
+// A rate-limit window's facts as Claude Code reported them: how much of it is
+// used, and the instant it resets. What they say relative to now — the reset
+// countdown, the ETA to the cap — is the draw's to compute against its own
+// instant (`minutesUntilReset`, `etaMinutes`), never a stored value a frame
+// drawn later would read stale.
 export interface BlockPayload {
   readonly nativeUtilization: number;
   readonly resetsAt: number;
-  // [LAW:types-are-the-program] Linear projection of nativeUtilization → 100%
-  // at the current rate, in whole minutes. Absent (not 0, not a sentinel
-  // in the type) when the window is too young or shows no usage to project
-  // from — the ETA's "we cannot say" state is unrepresentable as a number,
-  // so it travels as a missing field to the DSL default. [LAW:no-silent-failure]
-  readonly etaMinutes?: number;
 }
 
 export interface WeeklyPayload {
   readonly percentage: number;
   readonly resetsAt: number;
-  // Same projection as BlockPayload.etaMinutes over the seven-day window.
-  readonly etaMinutes?: number;
 }
 
 // Prompt-cache warmth. One field — the epoch-seconds expiry instant —
@@ -546,21 +546,13 @@ export interface RenderPayloadDeps {
   readonly holds: Holds;
 }
 
-// ─── Rate-limit projection (pure) ──────────────────────────────────────────────
+// ─── Spend and throughput projections (pure) ──────────────────────────────────
 //
-// [LAW:effects-at-boundaries] The math is pure — utilization, reset instant,
-// window length and `now` in; minutes-to-cap out. The only effect (reading the
-// clock) stays in buildRenderPayload; these stay testable in isolation.
+// [LAW:effects-at-boundaries] The math is pure — cost, duration and token
+// samples in; rates out. These stay testable in isolation.
 
-// Window lengths are facts of Claude's rate-limit cadence, not config: the
-// five-hour block and the seven-day window.
-const FIVE_HOUR_MS = 5 * 60 * 60 * 1000;
-const SEVEN_DAY_MS = 7 * 24 * 60 * 60 * 1000;
-// Below this much elapsed in a window, a linear projection from one early data
-// point is noise — surface no ETA rather than a confidently-wrong number.
-const MIN_PROJECTABLE_ELAPSED_MS = 5 * 60 * 1000;
-// The same floor for the spend rate: under a minute of session wall-clock,
-// $/hr is dominated by a single turn rather than a sustained burn.
+// Under a minute of session wall-clock, $/hr is dominated by a single turn
+// rather than a sustained burn.
 const MIN_BURN_SECONDS = 60;
 
 // tok/s is a delta between two successive render observations. The wall-time
@@ -571,28 +563,6 @@ const MIN_BURN_SECONDS = 60;
 // on the next render) rather than a misleading number. [LAW:no-silent-failure]
 const MIN_SPEED_SAMPLE_MS = 50;
 const MAX_SPEED_SAMPLE_MS = 10 * 1000;
-
-/**
- * Linearly extrapolate a rate-limit window's utilization to its 100% cap.
- * The window started `windowMs` before `resetsAtSec`; elapsed time and the
- * used-% give a rate, and the remaining headroom divided by that rate is the
- * minutes-to-cap. Returns undefined when the window is too young to project
- * or shows no usage yet — the caller drops the field and the segment renders
- * "—" rather than a fabricated ETA. [LAW:no-silent-failure]
- */
-export function projectEtaMinutes(
-  usedPercentage: number,
-  resetsAtSec: number,
-  windowMs: number,
-  nowMs: number,
-): number | undefined {
-  const elapsedMs = windowMs - (resetsAtSec * 1000 - nowMs);
-  if (elapsedMs < MIN_PROJECTABLE_ELAPSED_MS || usedPercentage <= 0)
-    return undefined;
-  const pctPerMs = usedPercentage / elapsedMs;
-  const etaMs = (100 - usedPercentage) / pctPerMs;
-  return Math.max(0, Math.round(etaMs / 60000));
-}
 
 /**
  * Session spend rate in dollars per hour: cost over wall-clock duration.
@@ -985,7 +955,7 @@ export function gitOptionsFromClosure(
     ...(has("git.repoName") && { showRepoName: true }),
     ...(has("git.repoUrl") && { showRepoUrl: true }),
     ...(has("git.operation") && { showOperation: true }),
-    ...(has("git.timeSinceCommit") && { showTimeSinceCommit: true }),
+    ...(has("git.committedAt") && { showCommittedAt: true }),
     // Any PR field laid out turns on the (network) forge lookup.
     ...(Object.keys(PR_FIELDS).some((f) => has(`git.${f}`)) && {
       showPullRequest: true,
@@ -1033,8 +1003,9 @@ export type ConfigFileFacts = SettingCounts & {
 export async function buildRenderPayload(
   hookData: ClaudeHookData,
   // [LAW:one-source-of-truth] The instant the render this payload feeds is
-  // drawn at — the one renderDsl publishes to the template engine, so an ETA
-  // here and the `minutesUntilReset` countdown beside it agree on "now".
+  // drawn at — the one renderDsl publishes to the template engine, so the day
+  // `today` sums and the speed lane's sample agree with every clock read the
+  // draw makes. The payload stores no value relative to it (BlockPayload).
   at: Instant,
   deps: RenderPayloadDeps,
   cwd: string | undefined,
@@ -1065,9 +1036,7 @@ export async function buildRenderPayload(
   const wants = (prefix: string): boolean =>
     anyPathStartsWith(neededInputPaths, prefix);
 
-  // [LAW:single-enforcer] One clock read feeds every projection this render —
-  // the ETA extrapolations below AND the tok/s sample window in the speed lane,
-  // so an ETA, a reset countdown, and a throughput figure all agree on "now".
+  // The instant the speed lane samples the session's token count at.
   const nowMs = dateOf(at).getTime();
 
   // The hint's three states fold to two here: a pane to address, or none
@@ -1213,7 +1182,7 @@ export async function buildRenderPayload(
   // src/segments/autocompact-provider.ts): their values are stored, so
   // logging one here would repeat a failure on every render. Their failures
   // reach the payload as values; a lane that threw was logged by `lane`.
-  const gitProjection = projectGitInfo(gitOutcome, nowMs);
+  const gitProjection = projectGitInfo(gitOutcome);
   // Ungated, like `home` below: two syscalls and a hint already in hand, so a
   // `wants` gate would add a branch and save nothing.
   const hostProjection = readHost(hints);
@@ -1231,28 +1200,11 @@ export async function buildRenderPayload(
     contextValue?.maxTokens,
   );
   for (const f of failures) deps.log("warn", `provider fetch failed: ${f}`);
-  // [LAW:dataflow-not-control-flow] block.* reads straight from hookData
-  // alongside weekly. (The prior dedicated provider only re-derived
-  // `minutesUntilReset(resets_at)`, which the DSL template composes via
-  // the formatter func — a duplicate code path was retired.)
+  // [LAW:dataflow-not-control-flow] block.* and weekly.* read straight from
+  // hookData's rate-limit windows; what they say relative to now is the
+  // draw's (BlockPayload).
   const fiveHour = hookData.rate_limits?.five_hour;
   const sevenDay = hookData.rate_limits?.seven_day;
-  const blockEta = fiveHour
-    ? projectEtaMinutes(
-        fiveHour.used_percentage,
-        fiveHour.resets_at,
-        FIVE_HOUR_MS,
-        nowMs,
-      )
-    : undefined;
-  const weeklyEta = sevenDay
-    ? projectEtaMinutes(
-        sevenDay.used_percentage,
-        sevenDay.resets_at,
-        SEVEN_DAY_MS,
-        nowMs,
-      )
-    : undefined;
   // [LAW:dataflow-not-control-flow] Gated by `wants("burn")` so the rate is
   // computed only when a layout segment reads it; absent cost/duration (lane
   // skipped or provider empty) yields no rate, never a fabricated one.
@@ -1376,14 +1328,12 @@ export async function buildRenderPayload(
           // projection rule, two segments.
           nativeUtilization: fiveHour.used_percentage,
           resetsAt: fiveHour.resets_at,
-          ...(blockEta !== undefined && { etaMinutes: blockEta }),
         },
       }),
     ...(sevenDay !== undefined && {
       weekly: {
         percentage: sevenDay.used_percentage,
         resetsAt: sevenDay.resets_at,
-        ...(weeklyEta !== undefined && { etaMinutes: weeklyEta }),
       },
     }),
     ...(cacheValue !== undefined && {
@@ -1531,10 +1481,9 @@ function posixify(s: string | undefined): string | undefined {
 // fallback chain fills the declared default and records a last_error). It
 // performs no effect ([LAW:effects-at-boundaries]): the git refresh that read a
 // failure is what logged it.
-function projectGitInfo(
-  outcome: Outcome<GitInfo>,
-  nowMs: number,
-): { readonly git?: GitPayload } {
+function projectGitInfo(outcome: Outcome<GitInfo>): {
+  readonly git?: GitPayload;
+} {
   if (outcome.kind !== "ok") return {};
 
   const info = outcome.value;
@@ -1544,13 +1493,7 @@ function projectGitInfo(
   const aheadBehind = field(info.aheadBehind);
   const sha = field(info.sha);
   const operation = field(info.operation);
-  // [LAW:one-source-of-truth] The age is the commit's date subtracted from the
-  // render's instant — the "now" every other time read in this render sees.
   const committedAt = field(info.committedAt);
-  const timeSinceCommit =
-    committedAt === undefined
-      ? undefined
-      : Math.floor((nowMs - committedAt) / 1000);
   const stash = field(info.stashCount);
   const upstream = field(info.upstream);
   const tracking =
@@ -1606,7 +1549,7 @@ function projectGitInfo(
       }),
       ...(sha !== undefined && { sha }),
       ...(operation !== undefined && { operation }),
-      ...(timeSinceCommit !== undefined && { timeSinceCommit }),
+      ...(committedAt !== undefined && { committedAt }),
       ...(stash !== undefined && { stash }),
       ...(upstream !== undefined && { upstream }),
       ...(tracking !== undefined && { tracking }),
