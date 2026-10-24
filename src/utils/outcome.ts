@@ -44,3 +44,9 @@ export interface Pending {
 export type Reading<T> = Pending | Outcome<T>;
 
 export const PENDING: Pending = { kind: "pending" };
+
+// [LAW:single-enforcer] The one test for the pending spelling a value carries
+// where any value may stand (a payload field): PENDING itself.
+export function isPending(value: unknown): value is Pending {
+  return value === PENDING;
+}

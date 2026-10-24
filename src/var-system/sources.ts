@@ -539,10 +539,14 @@ interface InputMeta {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 // Recursively resolves a dotted path through a plain object.
-// Returns undefined if any segment is absent or the traversed value is not an object.
+// Returns undefined if any segment is absent or the traversed value is not an
+// object. [LAW:types-are-the-program] A PENDING node is a source that has not
+// answered yet, so every path through it is pending too: one `git: PENDING`
+// is every `git.*` input not answered, never each one's default.
 function resolvePath(obj: unknown, path: string): unknown {
   let cur: unknown = obj;
   for (const part of path.split(".")) {
+    if (cur === PENDING) return PENDING;
     if (cur == null || typeof cur !== "object") return undefined;
     cur = (cur as Record<string, unknown>)[part];
   }
@@ -1212,7 +1216,9 @@ export class SourceRegistry {
       for (const [name, meta] of this.inputMetas) {
         const raw = resolvePath(payload, meta.path);
         const type = this.store.getType(name);
-        if (raw !== undefined) {
+        if (raw === PENDING) {
+          this.store.setBox(name, PENDING);
+        } else if (raw !== undefined) {
           try {
             this.store.setBox(name, coerceToType(raw, type));
             this.lastErrors.delete(name);

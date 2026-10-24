@@ -4,9 +4,11 @@ import type { Holds, Release } from "./holds";
 import { Period, periodOf, type Every } from "./period";
 import {
   answerPending,
+  currentOf,
   outcomeOf,
   pending,
   settle,
+  type Current,
   type Readable,
 } from "./reading";
 
@@ -123,24 +125,43 @@ export class KeyedSource<I, T> {
     );
   }
 
-  // The one read. `holds` is the home reading: it holds the entry until it
-  // releases its holds (idle, or disposed), which keeps the entry on its
-  // period.
+  // The one read: the stored value as it stands, never awaited. `holds` is the
+  // home reading: it holds the entry until it releases its holds (idle, or
+  // disposed), which keeps the entry on its period. A key never read is
+  // created pending and read once, its first refresh.
   //
   // [LAW:no-silent-failure] The owner logs its own failures — each refresh's
   // by that refresh — so its caller logs none. A read that THROWS is a bug
-  // none of those saw, logged here where it surfaces; the promise never
-  // rejects.
+  // none of those saw, logged here where it surfaces, and answered as failed.
+  current(holds: Holds, input: I): Current<T> {
+    try {
+      return currentOf(this.ask(holds, input));
+    } catch (e) {
+      return this.threw(e);
+    }
+  }
+
+  // The read's answer, waited for while it is not answered yet: one ask, so
+  // one hold, then the entry's own landing — which answers a key the LRU
+  // drops meanwhile as dropped. The promise never rejects.
   read(holds: Holds, input: I): Promise<Outcome<T>> {
     try {
-      const key = this.spec.keyOf(input);
-      const entry = this.touched(key) ?? this.created(key, input);
-      holds.take(`${this.spec.name}:${key}`, () => this.hold(entry));
-      return outcomeOf(entry);
+      return outcomeOf(this.ask(holds, input));
     } catch (e) {
-      this.spec.logger("error", `${this.spec.name} read threw: ${String(e)}`);
-      return Promise.resolve(failed(`${this.spec.name}: ${String(e)}`));
+      return Promise.resolve(this.threw(e));
     }
+  }
+
+  private ask(holds: Holds, input: I): Readable<T> {
+    const key = this.spec.keyOf(input);
+    const entry = this.touched(key) ?? this.created(key, input);
+    holds.take(`${this.spec.name}:${key}`, () => this.hold(entry));
+    return entry;
+  }
+
+  private threw(e: unknown): Outcome<never> {
+    this.spec.logger("error", `${this.spec.name} read threw: ${String(e)}`);
+    return failed(`${this.spec.name}: ${String(e)}`);
   }
 
   // The daemon itself changed what this key reads (a memento move): the read

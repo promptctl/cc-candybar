@@ -28,6 +28,7 @@ import {
 } from "./claude";
 import { statStamp } from "./transcript-fs";
 import { quietLogger, type DaemonLogger } from "./logger";
+import { PENDING, type Pending } from "./outcome";
 
 // [LAW:types-are-the-program] Never `absent`: a session with no transcript yet
 // is a real empty fold, so the caller has exactly two arms.
@@ -39,10 +40,19 @@ export type FoldOutcome<S> =
 // map must not grow without bound. LRU by insertion order, evicting past the cap.
 const MAX_SESSIONS = 256;
 
+// One session's fold: the state its cursor covers (none until the transcript
+// has bytes), and what the last read answered — which a draw takes as it
+// stands, so it reads a failure the last refresh met rather than a fold from
+// before it.
+interface Session<S> {
+  readonly folded: Folded<S> | undefined;
+  readonly answer: FoldOutcome<S>;
+}
+
 export class TranscriptFold<S> {
   // [LAW:no-shared-mutable-globals] Single owner, hard cap, LRU eviction. One
   // instance per projection per daemon.
-  private readonly states = new Map<string, Folded<S>>();
+  private readonly sessions = new Map<string, Session<S>>();
 
   constructor(
     private readonly empty: S,
@@ -51,19 +61,20 @@ export class TranscriptFold<S> {
     private readonly maxSessions: number = MAX_SESSIONS,
   ) {}
 
+  // [LAW:effects-at-boundaries] The session's refresh: folds what was
+  // appended since its last read, and stores what it answered.
   async read(
     sessionId: string,
     transcriptPath: string,
   ): Promise<FoldOutcome<S>> {
-    const prior = this.states.get(sessionId);
+    const prior = this.sessions.get(sessionId)?.folded;
     const stamp = statStamp(transcriptPath);
     // [LAW:no-ambient-temporal-coupling] Fast hit: the transcript has not moved
     // since we last folded it, so the prior state stands. Re-ordering on the HIT
     // makes eviction reflect read recency, so an active session whose transcript
     // is momentarily unchanged is not evicted ahead of idle ones.
     if (prior && stamp !== "" && prior.cursor.stamp === stamp) {
-      this.touch(sessionId, prior);
-      return { kind: "ok", value: prior.value };
+      return this.store(sessionId, prior, { kind: "ok", value: prior.value });
     }
 
     const read = await foldAppended(
@@ -72,26 +83,39 @@ export class TranscriptFold<S> {
       this.empty,
       (state, entries) => entries.reduce(this.step, state),
     );
-    if (read.kind === "failed") return read;
+    if (read.kind === "failed") return this.store(sessionId, prior, read);
     if (read.kind === "absent") {
       // No transcript yet (a fresh session). Keep whatever we had and cache NO
       // cursor, so the next render retries the moment the file appears.
-      return { kind: "ok", value: prior?.value ?? this.empty };
+      return this.store(sessionId, prior, {
+        kind: "ok",
+        value: prior?.value ?? this.empty,
+      });
     }
 
     const { folded, longLines } = read.value;
     for (const line of longLineLog(longLines)) this.log("info", line);
-    this.touch(sessionId, folded);
-    while (this.states.size > this.maxSessions) {
-      const oldest = this.states.keys().next().value;
-      if (oldest === undefined) break;
-      this.states.delete(oldest);
-    }
-    return { kind: "ok", value: folded.value };
+    return this.store(sessionId, folded, { kind: "ok", value: folded.value });
   }
 
-  private touch(sessionId: string, state: Folded<S>): void {
-    this.states.delete(sessionId);
-    this.states.set(sessionId, state);
+  // What the session's last read answered, as it stands: never read is
+  // pending, its first read the next request's.
+  answer(sessionId: string): FoldOutcome<S> | Pending {
+    return this.sessions.get(sessionId)?.answer ?? PENDING;
+  }
+
+  private store(
+    sessionId: string,
+    folded: Folded<S> | undefined,
+    answer: FoldOutcome<S>,
+  ): FoldOutcome<S> {
+    this.sessions.delete(sessionId);
+    this.sessions.set(sessionId, { folded, answer });
+    while (this.sessions.size > this.maxSessions) {
+      const oldest = this.sessions.keys().next().value;
+      if (oldest === undefined) break;
+      this.sessions.delete(oldest);
+    }
+    return answer;
   }
 }

@@ -22,14 +22,15 @@ import {
   buildRenderPayload,
   shortHostname,
 } from "../src/daemon/render-payload";
-import type {
-  RenderPayloadDeps,
-} from "../src/daemon/render-payload";
+import type { RenderPayloadDeps } from "../src/daemon/render-payload";
 import { type EffectiveGlobals } from "../src/config/effective-globals";
 import { globalsFor } from "./helpers/selection";
 import type { ClientHints } from "../src/daemon/protocol";
 import { ABSENT } from "../src/utils/outcome";
-import { RAW_DEFAULT_DSL_CONFIG, DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
+import {
+  RAW_DEFAULT_DSL_CONFIG,
+  DEFAULT_DSL_CONFIG,
+} from "../src/config/default-dsl-config";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
@@ -37,23 +38,33 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
 import { instantOf } from "../src/utils/instant";
+import {
+  absentOwners,
+  fakeActivity,
+  fakeContext,
+  fakeGit,
+  fakeMetrics,
+  fakeTmux,
+  fakeUsage,
+} from "./helpers/payload-owners";
 
 const EFFECTIVE_GLOBALS: EffectiveGlobals = globalsFor(DEFAULT_DSL_CONFIG);
 
 const DEPS = {
-  gitProvider: { getGitInfo: async () => ABSENT },
-  usageStore: {
-    getUsageInfo: async () => ABSENT,
-    getTodayInfo: async () => ABSENT,
-  },
-  contextProvider: { getContextInfo: async () => ABSENT },
-  metricsProvider: { getMetricsInfo: async () => ABSENT },
-  activityProvider: { getActivityInfo: async () => ABSENT },
-  tmuxService: { getSessionName: async () => ABSENT },
+  ...absentOwners(),
+  gitProvider: fakeGit(async () => ABSENT),
+  usageStore: fakeUsage({
+    usage: async () => ABSENT,
+    today: async () => ABSENT,
+  }),
+  contextProvider: fakeContext(async () => ABSENT),
+  metricsProvider: fakeMetrics(async () => ABSENT),
+  activityProvider: fakeActivity(async () => ABSENT),
+  tmuxService: fakeTmux(async () => ABSENT),
   log: () => {},
   history: () => EMPTY_HISTORY_DEPTH,
-    navigation: () => 0,
-    feeds: () => UNFOLLOWED_FEEDS,
+  navigation: () => 0,
+  feeds: () => UNFOLLOWED_FEEDS,
 } as unknown as RenderPayloadDeps;
 
 const HOOK = {
@@ -65,7 +76,16 @@ const HOOK = {
 } as never;
 
 const payloadWith = (hints: ClientHints) =>
-  buildRenderPayload(HOOK, instantOf(new Date()), DEPS, "/tmp", new Set(), EFFECTIVE_GLOBALS, hints, NO_CONFIG_FILE);
+  buildRenderPayload(
+    HOOK,
+    instantOf(new Date()),
+    DEPS,
+    "/tmp",
+    new Set(),
+    EFFECTIVE_GLOBALS,
+    hints,
+    NO_CONFIG_FILE,
+  );
 
 describe("shortHostname", () => {
   test("takes everything before the first dot — zsh's %m, not %M", () => {
@@ -135,7 +155,12 @@ describe("the bundled host segment", () => {
 
   function render(host: Record<string, unknown>): string {
     const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", undefined, new SessionState());
+    const registry = new SourceRegistry(
+      store,
+      "",
+      undefined,
+      new SessionState(),
+    );
     try {
       const compiled = registerDslConfig(CONFIG, registry, {
         cwd: "/tmp",
@@ -168,9 +193,9 @@ describe("the bundled host segment", () => {
 
   // [LAW:dataflow-not-control-flow] Presence IS the signal — no mode, no flag.
   test("is entirely absent on a local session", () => {
-    expect(render({ name: "bigbox", user: "brandon", ssh: false })).not.toContain(
-      "bigbox",
-    );
+    expect(
+      render({ name: "bigbox", user: "brandon", ssh: false }),
+    ).not.toContain("bigbox");
   });
 
   test("is absent when the client never reported, matching pre-feature output", () => {

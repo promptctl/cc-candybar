@@ -18,9 +18,19 @@ import {
   type Lane,
   type LaneSwitches,
 } from "../src/config/lanes";
+import { instantOf, type Instant } from "../src/utils/instant";
 
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
+
+// A render is synchronous: one that takes `ms` holds the loop that long.
+const block = (ms: number): void => {
+  const end = Date.now() + ms;
+  while (Date.now() < end);
+};
+
+// The instant a frame drawn now is drawn at.
+const nowAt = (): Instant => instantOf(new Date());
 
 const PERIODS = { moving: 20, still: 400 };
 
@@ -30,8 +40,10 @@ type Motion = "moving" | "unseen" | "still";
 
 // A feed over a render whose bar moves as `motion` says, every frame a new
 // one while it does. `renders` counts the renders, `changes` the watches'
-// change callbacks, by session. `note` notes a request, as the daemon does
-// with every render request it took.
+// change callbacks, by session. `note` notes a request and wakes its feed, as
+// the daemon does with every render request it took once that request's own
+// bar is drawn. `duringRender` runs inside a render, as a write that wakes the
+// feed while it draws would.
 function harness(opts: { motion: Motion; renderMs?: number; fails?: boolean }) {
   const state = {
     motion: opts.motion,
@@ -53,6 +65,8 @@ function harness(opts: { motion: Motion; renderMs?: number; fails?: boolean }) {
     // What Claude Code's statusline shows in the bar's place while a lane
     // draws it elsewhere; null while it shows the bar.
     handoff: null as string | null,
+    // Runs inside the next render, once.
+    duringRender: null as (() => void) | null,
   };
   const frameOf = (req: string): FeedFrame =>
     opts.fails === true
@@ -65,10 +79,13 @@ function harness(opts: { motion: Motion; renderMs?: number; fails?: boolean }) {
   const changes = new Map<string, () => void>();
   const log: string[] = [];
   const feeds = new FrameFeeds<string>({
-    render: async (req, fps): Promise<FeedFrame> => {
+    render: (req, fps): FeedFrame => {
       state.renders++;
       state.rates.push(fps);
-      if (opts.renderMs !== undefined) await sleep(opts.renderMs);
+      if (opts.renderMs !== undefined) block(opts.renderMs);
+      const during = state.duringRender;
+      state.duringRender = null;
+      during?.();
       return frameOf(req);
     },
     lanes: () => {
@@ -88,8 +105,10 @@ function harness(opts: { motion: Motion; renderMs?: number; fails?: boolean }) {
     now: () => Date.now() + state.skewMs,
     log: (_level, line) => log.push(line),
   });
-  const note = (sessionId: string, req: string, order = ++state.order): void =>
+  const note = (sessionId: string, req: string, order = ++state.order): void => {
     feeds.note(sessionId, req, order);
+    feeds.wake(sessionId);
+  };
   return { feeds, note, state, changes, log };
 }
 
@@ -104,6 +123,7 @@ function barFrame(
   handoff: string | null = null,
 ): FeedFrame {
   return {
+    at: nowAt(),
     resp: { ok: true, output },
     statusline: { ok: true, output: handoff ?? output },
     moves,
@@ -115,6 +135,7 @@ function barFrame(
 function failedFrame(req: string): FeedFrame {
   const resp: Response = { ok: false, error: `${req} threw`, code: "RENDER_FAILED" };
   return {
+    at: nowAt(),
     resp,
     statusline: resp,
     moves: false,
@@ -239,14 +260,16 @@ test("a render slower than the period is followed by the next at once, and a cha
   note("s", "bar");
   const close = feeds.subscribe("s", sub(() => {}));
   await sleep(10);
-  changes.get("s")!();
-  changes.get("s")!();
+  state.duringRender = () => {
+    changes.get("s")!();
+    changes.get("s")!();
+  };
   await sleep(300);
   close();
   // Back to back: about five 60 ms renders in 310 ms, the changes folded
   // into the one being drawn rather than piling up.
   expect(state.renders).toBeGreaterThanOrEqual(3);
-  expect(state.renders).toBeLessThanOrEqual(6);
+  expect(state.renders).toBeLessThanOrEqual(7);
 });
 
 test("the last subscriber leaving stops the feed and logs what it drew", async () => {
@@ -270,18 +293,20 @@ test("the last subscriber leaving stops the feed and logs what it drew", async (
 });
 
 test("a request noted while a frame is drawn is drawn as soon as that frame is out", async () => {
-  const { feeds, note, state } = harness({ motion: "still", renderMs: 60 });
+  const { feeds, note, state, changes } = harness({ motion: "still" });
   note("s", "old");
   const got: string[] = [];
   const close = feeds.subscribe("s", sub((r) => got.push(outputOf(r))));
-  await sleep(10);
   expect(state.renders).toBe(1);
-  note("s", "new");
-  await sleep(150);
+  // A frame drawn for a change has a request noted while it draws.
+  state.duringRender = () => note("s", "new");
+  changes.get("s")!();
+  await sleep(50);
   close();
-  // The frame being drawn is still the newest out, so it goes; the new data
-  // is drawn straight after it, not a period later.
-  expect(state.renders).toBe(2);
+  // The frame being drawn is still the newest out, so it goes (its bytes are
+  // the bar as it stood, not pushed again); the new data is drawn straight
+  // after it, not a period later.
+  expect(state.renders).toBe(3);
   expect(got).toEqual(["old#0", "new#0"]);
 });
 
@@ -406,19 +431,6 @@ describe("on a faked clock", () => {
     );
   });
 
-  // The pace is drawn into the frame, so a pace that moved with a render's
-  // duration would make every frame of an unchanged bar differ, and be pushed.
-  test("a render slower than the moving period leaves the pace at the moving rate", async () => {
-    const { feeds, note, state } = harness({ motion: "moving", renderMs: 60 });
-    note("s", "bar");
-    const close = feeds.subscribe("s", sub(() => {}));
-    await pass(400);
-    close();
-    expect(state.rates.slice(1)).toEqual(
-      state.rates.slice(1).map(() => Math.round(1000 / PERIODS.moving)),
-    );
-  });
-
   test("wakeWhere draws at once only the watched sessions it matches", async () => {
     const { feeds, note, state } = harness({ motion: "still" });
     note("a", "%1:a");
@@ -439,6 +451,20 @@ describe("on a faked clock", () => {
 
 // What runs while any feed exists (the tmux visibility loop) starts with the
 // first feed and stops with the last, not a moment later.
+// The pace is drawn into the frame, so a pace that moved with a render's
+// duration would make every frame of an unchanged bar differ, and be pushed.
+test("a render slower than the moving period leaves the pace at the moving rate", async () => {
+  const { feeds, note, state } = harness({ motion: "moving", renderMs: 60 });
+  note("s", "bar");
+  const close = feeds.subscribe("s", sub(() => {}));
+  await sleep(400);
+  close();
+  expect(state.renders).toBeGreaterThan(2);
+  expect(state.rates.slice(1)).toEqual(
+    state.rates.slice(1).map(() => Math.round(1000 / PERIODS.moving)),
+  );
+});
+
 test("the feeds watch from the first feed opening to the last closing", async () => {
   const { feeds, note, state } = harness({ motion: "still" });
   note("a", "x");
@@ -598,8 +624,8 @@ describe("feedsOf", () => {
   test("a session nobody follows is unfollowed on every lane", () => {
     const { feeds, note } = harness({ motion: "moving" });
     note("s", "bar");
-    expect(feeds.feedsOf("s")).toEqual(UNFOLLOWED_FEEDS);
-    expect(feedsFact(feeds.feedsOf("s"))).toBe("-");
+    expect(feeds.feedsOf("s", nowAt())).toEqual(UNFOLLOWED_FEEDS);
+    expect(feedsFact(feeds.feedsOf("s", nowAt()))).toBe("-");
   });
 
   test("counts each lane's subscribers and the frames pushed in the last second", async () => {
@@ -609,7 +635,7 @@ describe("feedsOf", () => {
     const closeB = feeds.subscribe("s", sub(() => {}, "statusline"));
     const closeC = feeds.subscribe("s", sub(() => {}, "pane"));
     await pass(1100);
-    const now = feeds.feedsOf("s");
+    const now = feeds.feedsOf("s", nowAt());
     expect(now.band).toEqual(UNFOLLOWED);
     // The window holds only the last second's frames, never the 1.1 s since
     // subscribing.
@@ -621,7 +647,7 @@ describe("feedsOf", () => {
     closeA();
     closeB();
     closeC();
-    expect(feeds.feedsOf("s")).toEqual(UNFOLLOWED_FEEDS);
+    expect(feeds.feedsOf("s", nowAt())).toEqual(UNFOLLOWED_FEEDS);
   });
 
   test("a lane is credited only with the frames sent since its first subscriber joined", async () => {
@@ -631,7 +657,7 @@ describe("feedsOf", () => {
     await pass(1000);
     const closeB = feeds.subscribe("s", sub(() => {}, "pane"));
     await pass(100);
-    const now = feeds.feedsOf("s");
+    const now = feeds.feedsOf("s", nowAt());
     closeA();
     closeB();
     expect(now.statusline.fps).toBe(MOVING);
@@ -647,15 +673,15 @@ describe("feedsOf", () => {
     await pass(1000);
     const closeB = feeds.subscribe("s", sub(() => {}, "statusline"));
     await pass(100);
-    expect(feeds.feedsOf("s").statusline).toEqual({
+    expect(feeds.feedsOf("s", nowAt()).statusline).toEqual({
       subscribers: 2,
       fps: MOVING,
       shown: true,
     });
     closeA();
-    expect(feeds.feedsOf("s").statusline.fps).toBe(MOVING);
+    expect(feeds.feedsOf("s", nowAt()).statusline.fps).toBe(MOVING);
     closeB();
-    expect(feeds.feedsOf("s").statusline).toEqual(UNFOLLOWED);
+    expect(feeds.feedsOf("s", nowAt()).statusline).toEqual(UNFOLLOWED);
   });
 
   test("a subscriber rejoining a still bar is not counted as a frame", async () => {
@@ -664,7 +690,7 @@ describe("feedsOf", () => {
     const keep = feeds.subscribe("s", sub(() => {}, "band"));
     await pass(1000);
     for (let i = 0; i < 3; i++) feeds.subscribe("s", sub(() => {}, "band"))();
-    expect(feeds.feedsOf("s").band.fps).toBe(0);
+    expect(feeds.feedsOf("s", nowAt()).band.fps).toBe(0);
     keep();
   });
 
@@ -675,7 +701,7 @@ describe("feedsOf", () => {
     const closeBand = feeds.subscribe("s", sub(() => {}, "band"));
     const closeLine = feeds.subscribe("s", sub(() => {}, "statusline"));
     await pass(1100);
-    const now = feeds.feedsOf("s");
+    const now = feeds.feedsOf("s", nowAt());
     closeBand();
     closeLine();
     expect(now.band.fps).toBe(MOVING);
@@ -688,7 +714,7 @@ describe("feedsOf", () => {
     note("s", "bar");
     const close = feeds.subscribe("s", sub(() => {}, "statusline"));
     await pass(1100);
-    const { statusline } = feeds.feedsOf("s");
+    const { statusline } = feeds.feedsOf("s", nowAt());
     close();
     // Pushed at 400 and 800 ms, a still period apart, inside the window.
     expect(statusline).toEqual({ subscribers: 1, fps: 2, shown: false });

@@ -9,10 +9,16 @@ import type { ClaudeHookData, ParsedEntry, UserEntry } from "../utils/claude";
 // full re-parse here would have re-inherited the very stall that fix removed.
 // The fold machinery itself moved out when the activity provider became its
 // second instance (brandon-activity-ue7): what is left here is the projection.
-import { TranscriptFold } from "../utils/transcript-fold";
+import { TranscriptFold, type FoldOutcome } from "../utils/transcript-fold";
 import type { DaemonLogger } from "../utils/logger";
 import { debug } from "../utils/logger";
-import { ABSENT, failed, ok, type Outcome } from "../utils/outcome";
+import {
+  ABSENT,
+  failed,
+  ok,
+  type Outcome,
+  type Reading,
+} from "../utils/outcome";
 
 // [LAW:types-are-the-program] An `ok` MetricsInfo carries real values — "no
 // cost data at all" is the `absent` outcome arm, not a bag of nulls. The one
@@ -111,24 +117,44 @@ export class MetricsProvider {
     hookData: ClaudeHookData,
   ): Promise<Outcome<MetricsInfo>> {
     debug(`Getting metrics from hook data for session: ${sessionId}`);
-
-    if (!hookData.cost) {
-      return ABSENT;
-    }
-
-    const folded = await this.fold.read(sessionId, hookData.transcript_path);
-    if (folded.kind === "failed") {
-      return failed(`metrics (${sessionId}): ${folded.reason}`);
-    }
-
-    return ok({
-      responseTime: hookData.cost.total_api_duration_ms / 1000,
-      lastResponseTime: lastResponseTime(folded.value.recent),
-      sessionDuration: hookData.cost.total_duration_ms / 1000,
-      messageCount: folded.value.messageCount,
-      nonPrompts: folded.value.nonPrompts,
-      linesAdded: hookData.cost.total_lines_added,
-      linesRemoved: hookData.cost.total_lines_removed,
-    });
+    const cost = hookData.cost;
+    if (!cost) return ABSENT;
+    return metricsFrom(
+      sessionId,
+      cost,
+      await this.fold.read(sessionId, hookData.transcript_path),
+    );
   }
+
+  // The session's metrics as its last refresh left them, for a draw.
+  metricsOf(sessionId: string, hookData: ClaudeHookData): Reading<MetricsInfo> {
+    const cost = hookData.cost;
+    if (!cost) return ABSENT;
+    const answer = this.fold.answer(sessionId);
+    return answer.kind === "pending"
+      ? answer
+      : metricsFrom(sessionId, cost, answer);
+  }
+}
+
+// [LAW:one-source-of-truth] The one projection of a fold's answer, whether a
+// refresh just made it or a draw reads it as it stands. The hookData fields
+// are the request's own, always fresh.
+function metricsFrom(
+  sessionId: string,
+  cost: NonNullable<ClaudeHookData["cost"]>,
+  folded: FoldOutcome<MetricsState>,
+): Outcome<MetricsInfo> {
+  if (folded.kind === "failed") {
+    return failed(`metrics (${sessionId}): ${folded.reason}`);
+  }
+  return ok({
+    responseTime: cost.total_api_duration_ms / 1000,
+    lastResponseTime: lastResponseTime(folded.value.recent),
+    sessionDuration: cost.total_duration_ms / 1000,
+    messageCount: folded.value.messageCount,
+    nonPrompts: folded.value.nonPrompts,
+    linesAdded: cost.total_lines_added,
+    linesRemoved: cost.total_lines_removed,
+  });
 }

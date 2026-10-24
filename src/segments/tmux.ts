@@ -3,6 +3,7 @@ import type { TmuxHint } from "../tmux-hint";
 import type { Holds } from "../utils/holds";
 import { KeyedSource, type KeyedSourceStats } from "../utils/keyed-source";
 import { quietLogger, type DaemonLogger } from "../utils/logger";
+import type { Current } from "../utils/reading";
 import { valueOf } from "../utils/logfmt";
 import { ABSENT, failed, ok, type Outcome } from "../utils/outcome";
 
@@ -52,6 +53,11 @@ export class TmuxService {
   // answer.
   getSessionName(holds: Holds, hint: TmuxHint): Promise<Outcome<string>> {
     return this.names.read(holds, hint);
+  }
+
+  // The stored name as it stands, for a draw: never awaited.
+  sessionName(holds: Holds, hint: TmuxHint): Current<string> {
+    return this.names.current(holds, hint);
   }
 
   getStats(): KeyedSourceStats {

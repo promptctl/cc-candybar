@@ -6,7 +6,7 @@ import {
 import { Refreshes, type SourceStats } from "../utils/keyed-source.js";
 import { quietLogger, type DaemonLogger } from "../utils/logger.js";
 import { valueOf } from "../utils/logfmt.js";
-import type { Outcome } from "../utils/outcome.js";
+import { PENDING, type Outcome, type Reading } from "../utils/outcome.js";
 import { stampOf } from "../utils/transcript-fs.js";
 
 // How many settings files keep their last reading: one per Claude Code
@@ -54,6 +54,12 @@ export class AutoCompactProvider {
       this.known.delete(oldest);
     }
     return outcome;
+  }
+
+  // The window as the last request left it, for a draw: the file is not
+  // touched.
+  stored(settingsPath: string): Reading<AutoCompactWindow> {
+    return this.known.get(settingsPath)?.outcome ?? PENDING;
   }
 
   getStats(): SourceStats<"request"> {

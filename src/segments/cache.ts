@@ -21,8 +21,14 @@
 // boundary, the one place that logs it — there is no "0 means hidden"
 // ambiguity to defend against downstream, and no failure dressed as absence.
 
-import { ABSENT, ok, type Outcome } from "../utils/outcome.js";
-import { readTail } from "../utils/transcript-fs.js";
+import {
+  ABSENT,
+  ok,
+  PENDING,
+  type Outcome,
+  type Reading,
+} from "../utils/outcome.js";
+import { readTail, statStamp } from "../utils/transcript-fs.js";
 
 // Anthropic prompt cache TTL. A const, not a knob: it is a property of the
 // upstream cache, not of this renderer. If a future cache tier ships a
@@ -71,6 +77,51 @@ function cacheActivityTs(line: string): number | null {
   if (!positive) return null;
   const ms = parsed.timestamp != null ? Date.parse(parsed.timestamp) : NaN;
   return Number.isNaN(ms) ? null : ms;
+}
+
+// One entry per session that rendered; bounded like the transcript folds.
+const MAX_SESSIONS = 256;
+
+interface Known {
+  readonly stamp: string;
+  readonly outcome: Outcome<number>;
+}
+
+// [LAW:single-enforcer] The one owner of each session's cache expiry
+// (brandon-unfiled-3248.8ro6, step 3): a statusline request re-reads the
+// transcript's tail only when its stamp moved — a frame between requests, or
+// a request over an unchanged transcript, reads nothing — and a draw takes
+// the expiry as the last request left it.
+export class CacheExpiryProvider {
+  private readonly known = new Map<string, Known>();
+
+  // The session's refresh, which its statusline request makes.
+  async refresh(
+    sessionId: string,
+    transcriptPath: string,
+  ): Promise<Outcome<number>> {
+    const stamp = statStamp(transcriptPath);
+    const prior = this.known.get(sessionId);
+    // A stamp of "" is a transcript no stat could see: read again, never
+    // believed unchanged.
+    const outcome =
+      prior !== undefined && stamp !== "" && prior.stamp === stamp
+        ? prior.outcome
+        : await cacheExpiresAt(transcriptPath);
+    // LRU touch: re-inserting moves the session to the newest end.
+    this.known.delete(sessionId);
+    this.known.set(sessionId, { stamp, outcome });
+    for (const oldest of this.known.keys()) {
+      if (this.known.size <= MAX_SESSIONS) break;
+      this.known.delete(oldest);
+    }
+    return outcome;
+  }
+
+  // The expiry as the session's last refresh left it, for a draw.
+  expiryOf(sessionId: string): Reading<number> {
+    return this.known.get(sessionId)?.outcome ?? PENDING;
+  }
 }
 
 /**

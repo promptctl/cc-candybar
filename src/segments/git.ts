@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { launch, type LaunchResult } from "../proc/launch";
 import { ABSENT, failed, ok, type Outcome } from "../utils/outcome";
+import type { Current } from "../utils/reading";
 import { debug } from "../utils/logger";
 import { gitRootOf, holdsGit } from "../utils/git-root";
 
@@ -135,7 +136,9 @@ export interface GitInfo {
   // answer" (auth, network, API error). The render boundary surfaces `failed`
   // as a VISIBLE marker — collapsing it to `absent` would make a transient
   // outage look like the PR vanished. Undefined = `showPullRequest` was off.
-  pullRequest?: Outcome<PullRequest>;
+  // `pending` = the branch's key is not answered yet (a branch just checked
+  // out): never another key's answer, and never drawn as one.
+  pullRequest?: Current<PullRequest>;
 }
 
 // The fields of one git read that carry an outcome. The PR is its own source,

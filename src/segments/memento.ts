@@ -10,6 +10,7 @@ import { KeyedSource, type KeyedSourceStats } from "../utils/keyed-source.js";
 import { quietLogger, type DaemonLogger } from "../utils/logger.js";
 import { valueOf } from "../utils/logfmt.js";
 import type { Outcome } from "../utils/outcome.js";
+import type { Current } from "../utils/reading.js";
 
 // The period a held session's reading is asked again on. A move from the bar
 // supersedes the reading at once (`move` below); this bounds only how late the
@@ -75,6 +76,12 @@ export class MementoProvider {
     scope: CeilingScope,
   ): Promise<Outcome<CeilingReading>> {
     return this.readings.read(holds, scope);
+  }
+
+  // The stored reading as it stands, for a draw: never awaited, so a frame
+  // after a move draws the ceiling as not answered yet until memento answers.
+  ceiling(holds: Holds, scope: CeilingScope): Current<CeilingReading> {
+    return this.readings.current(holds, scope);
   }
 
   // [LAW:no-silent-failure] Memento absent is a refusal here, not a no-op: a

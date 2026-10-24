@@ -340,14 +340,17 @@ describe("SessionUsageStore — session projection", () => {
 
   // Asking about a session stores nothing: a slot exists only once a record or
   // a speed sample is stored in it.
-  test("an ask that stores nothing leaves no slot", async () => {
+  test("an ask that stores nothing leaves no slot; a failed one keeps its failure for the draws", async () => {
     const store = new SessionUsageStore({ sweepIntervalMs: 0 });
     try {
-      const failed = await store.getUsageInfo("G", hook("G", dir));
-      expect(failed.kind).toBe("failed");
       await store.getUsageInfo("H", { session_id: "H" } as ClaudeHookData);
       expect(await store.observeSpeed("", undefined, 1_000)).toEqual(ABSENT);
       expect(store.getStats()).toMatchObject({ size: 0 });
+      const failed = await store.getUsageInfo("G", hook("G", dir));
+      expect(failed.kind).toBe("failed");
+      // A draw between requests reads the failure the last refresh met.
+      expect(store.usageOf("G", hook("G", dir))).toEqual(failed);
+      expect(store.getStats()).toMatchObject({ size: 1 });
     } finally {
       store.close();
     }

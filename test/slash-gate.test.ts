@@ -30,6 +30,17 @@ import { effectsOf } from "./helpers/click";
 import { linkUrls, stripAnsi } from "./helpers/ansi";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
 import { instantOf } from "../src/utils/instant";
+import {
+  absentOwners,
+  fakeActivity,
+  fakeAutoCompact,
+  fakeContext,
+  fakeGit,
+  fakeMemento,
+  fakeMetrics,
+  fakeTmux,
+  fakeUsage,
+} from "./helpers/payload-owners";
 
 const SID = "slash-gate";
 const OPTS = {
@@ -62,22 +73,21 @@ async function bar(
   );
   let sessionLookups = 0;
   const deps = {
-    gitProvider: { getGitInfo: async () => ABSENT },
-    usageStore: {
-      getUsageInfo: async () => ABSENT,
-      getTodayInfo: async () => ABSENT,
-    },
-    contextProvider: { getContextInfo: async () => ABSENT },
-    metricsProvider: { getMetricsInfo: async () => ABSENT },
-    activityProvider: { getActivityInfo: async () => ABSENT },
-    mementoProvider: { getCeiling: async () => ABSENT },
-    tmuxService: {
-      getSessionName: async () => {
-        sessionLookups++;
-        return ok("work");
-      },
-    },
-    autoCompact: { window: () => ok(400_000) },
+    ...absentOwners(),
+    gitProvider: fakeGit(async () => ABSENT),
+    usageStore: fakeUsage({
+      usage: async () => ABSENT,
+      today: async () => ABSENT,
+    }),
+    contextProvider: fakeContext(async () => ABSENT),
+    metricsProvider: fakeMetrics(async () => ABSENT),
+    activityProvider: fakeActivity(async () => ABSENT),
+    mementoProvider: fakeMemento(async () => ABSENT),
+    tmuxService: fakeTmux(async () => {
+      sessionLookups++;
+      return ok("work");
+    }),
+    autoCompact: fakeAutoCompact(() => ok(400_000)),
     log: () => {},
     history: () => EMPTY_HISTORY_DEPTH,
     navigation: () => 0,
@@ -99,7 +109,15 @@ async function bar(
   const registry = new SourceRegistry(store, "", undefined, sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
   const render = (): string =>
-    renderDsl(config, compiled, store, registry, payload, instantOf(new Date()), OPTS);
+    renderDsl(
+      config,
+      compiled,
+      store,
+      registry,
+      payload,
+      instantOf(new Date()),
+      OPTS,
+    );
   // Open the door by the write its own link carries, so the menu's session
   // tab — and its tray — is on the bar too.
   const door = linkUrls(render())
@@ -143,15 +161,18 @@ describe("slash controls and the session's tmux pane", () => {
   test.each<[string, ClientHints]>([
     ["not in tmux", { tmux: null }],
     ["a client too old to say", {}],
-  ])("%s: no slash control anywhere, and the window still reads", async (_name, hints) => {
-    const { text, lines } = await bar(hints);
-    expect(text).toContain("🎨 look");
-    expect(lines).toEqual([]);
-    expect(text).not.toContain("/compact");
-    expect(text).not.toContain("/clear");
-    expect(text).toContain("⇲ 400.0K");
-    expect(text).not.toMatch(/⇲ 400\.0K\s*[−+↺]/);
-  });
+  ])(
+    "%s: no slash control anywhere, and the window still reads",
+    async (_name, hints) => {
+      const { text, lines } = await bar(hints);
+      expect(text).toContain("🎨 look");
+      expect(lines).toEqual([]);
+      expect(text).not.toContain("/compact");
+      expect(text).not.toContain("/clear");
+      expect(text).toContain("⇲ 400.0K");
+      expect(text).not.toMatch(/⇲ 400\.0K\s*[−+↺]/);
+    },
+  );
 
   test("gating on the pane asks tmux nothing", async () => {
     expect((await bar({ tmux: PANE })).sessionLookups).toBe(0);

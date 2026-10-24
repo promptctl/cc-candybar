@@ -25,7 +25,14 @@ import {
   stampOf,
 } from "../../utils/transcript-fs";
 import { SingleFlight } from "../../utils/single-flight";
-import { ABSENT, failed, ok, type Outcome } from "../../utils/outcome";
+import {
+  ABSENT,
+  failed,
+  ok,
+  PENDING,
+  type Outcome,
+  type Reading,
+} from "../../utils/outcome";
 import { quietLogger, type DaemonLogger } from "../../utils/logger";
 import { dateOf, type Instant } from "../../utils/instant";
 
@@ -145,6 +152,11 @@ interface SessionSlot {
   // folds over its final pair. One call to observeSpeed appends; the pure delta
   // math is render-payload's.
   readonly ring: SpeedSample[];
+  // What the session's last request's refreshes answered, which a draw reads
+  // as they stand: the record's ingest — `null` when it worked, else why it
+  // failed — and the speed observation it took.
+  failure: string | null;
+  speed: Outcome<SpeedObservation> | undefined;
 }
 
 // What one caller's ingests did. Renders share the store's running tally — the
@@ -344,6 +356,23 @@ async function mapPool<T>(
   await Promise.all(Array.from({ length: width }, worker));
 }
 
+// The `session` projection's last step, shared by a request's refresh and a
+// draw. [LAW:one-source-of-truth] Claude's reported total_cost_usd is the
+// authoritative cost of the active session. base.cost (transcript entries
+// priced by PricingService against a hand-maintained rate table) is a
+// reimplementation — kept ONLY as a fallback for clients that omit cost, and
+// to feed the cross-session `today` total, which has no native source (past
+// sessions expose only their transcripts, not a live cost figure). The native
+// cost is overlaid at READ time, not frozen into the stamp-keyed record,
+// because it changes every render while the transcript total moves only when
+// the file does.
+function usageOver(base: SessionInfo, hookData?: ClaudeHookData): UsageInfo {
+  const officialCost = hookData?.cost?.total_cost_usd ?? null;
+  return {
+    session: { ...base, cost: officialCost ?? base.cost, officialCost },
+  };
+}
+
 export class SessionUsageStore {
   // No count cap: `today` is a fold over every record, so a cap smaller than
   // the day's sessions would drop work from it unseen. A record is a few
@@ -363,6 +392,9 @@ export class SessionUsageStore {
   // next read seeds afresh.
   private readonly seeded = new Map<string, DaySeed>();
   private seededDay = "";
+  // Why the last seed of a directory set failed, until one succeeds: a draw
+  // between requests reads `today` as failed, never as a partial sum.
+  private readonly seedFailures = new Map<string, string>();
   private readonly rescanIntervalMs: number;
   // [LAW:no-ambient-temporal-coupling] Explicit owner of observe/commit ordering
   // for the speed sample. Concurrent renders observing the SAME transcript state
@@ -428,27 +460,49 @@ export class SessionUsageStore {
     sessionId: string,
     hookData?: ClaudeHookData,
   ): Promise<Outcome<UsageInfo>> {
+    const record = await this.refreshed(sessionId, hookData?.transcript_path);
+    if (record.kind === "failed") return record;
+    return ok(
+      usageOver(
+        record.kind === "ok" ? record.value.sessionInfo : EMPTY_SESSION_INFO,
+        hookData,
+      ),
+    );
+  }
+
+  // The `session` projection as the session's last refresh left it, for a
+  // draw: no I/O, no fold. A session the store holds nothing of is the empty
+  // record its refresh answers for it.
+  usageOf(sessionId: string, hookData: ClaudeHookData): Reading<UsageInfo> {
+    const slot = this.sessions.get(sessionId);
+    if (slot?.failure != null) return failed(slot.failure);
+    return ok(
+      usageOver(slot?.record?.sessionInfo ?? EMPTY_SESSION_INFO, hookData),
+    );
+  }
+
+  // A request's ingest of its own session, whose outcome the session's slot
+  // keeps for the draws until the next one.
+  private async refreshed(
+    sessionId: string,
+    transcriptPath: string | undefined,
+    knownStamp?: string,
+  ): Promise<Outcome<SessionRecord>> {
     const record = await this.ingest(
       sessionId,
-      hookData?.transcript_path,
+      transcriptPath,
       this.renderTally,
+      knownStamp,
     );
-    if (record.kind === "failed") return record;
-    const base =
-      record.kind === "ok" ? record.value.sessionInfo : EMPTY_SESSION_INFO;
-    // [LAW:one-source-of-truth] Claude's reported total_cost_usd is the
-    // authoritative cost of the active session. base.cost (transcript entries
-    // priced by PricingService against a hand-maintained rate table) is a
-    // reimplementation — kept ONLY as a fallback for clients that omit cost,
-    // and to feed the cross-session `today` total, which has no native source
-    // (past sessions expose only their transcripts, not a live cost figure).
-    // The native cost is overlaid at READ time, not frozen into the stamp-keyed
-    // record, because it changes every render while the transcript total moves
-    // only when the file does.
-    const officialCost = hookData?.cost?.total_cost_usd ?? null;
-    return ok({
-      session: { ...base, cost: officialCost ?? base.cost, officialCost },
-    });
+    // A failure is stored, so the draws until the next refresh show it; an
+    // ingest that stored nothing leaves nothing.
+    if (record.kind === "failed" && sessionId) {
+      this.hold(sessionId).failure = record.reason;
+    } else {
+      const slot = this.sessions.get(sessionId);
+      if (slot !== undefined) slot.failure = null;
+    }
+    return record;
   }
 
   // The `today` projection: cross-session sum of every record's today bucket.
@@ -469,24 +523,44 @@ export class SessionUsageStore {
     // The instant the render is drawn at: its local date is the day summed.
     at: Instant,
   ): Promise<Outcome<TodayInfo>> {
-    const today = dayKey(dateOf(at));
     const claudePaths = getClaudePaths(claudeConfigDir);
+    const key = claudePaths.join("\0");
     try {
-      await this.ensureSeeded(today, claudePaths, at * 1000);
+      await this.ensureSeeded(dayKey(dateOf(at)), claudePaths, at * 1000);
+      this.seedFailures.delete(key);
     } catch (error) {
-      return failed(
-        `usage seed: ${error instanceof Error ? error.message : String(error)}`,
-      );
+      const reason = `usage seed: ${error instanceof Error ? error.message : String(error)}`;
+      this.seedFailures.set(key, reason);
+      return failed(reason);
     }
     // Keep the active session fresh: a scan reaches it at most once a minute,
     // so every render's freshness for the active session comes from here (a
     // hit when its transcript is unchanged). Empty sessionId no-ops in ingest.
-    const active = await this.ingest(
+    const active = await this.refreshed(
       hookData?.session_id ?? "",
       hookData?.transcript_path,
-      this.renderTally,
     );
     if (active.kind === "failed") return active;
+    return this.todayOf(hookData, claudeConfigDir, at);
+  }
+
+  // The `today` projection as the records stand, for a draw: a sum over what
+  // the last refreshes and scans stored, at the day of `at`, so a frame past
+  // midnight sums the new day with no refresh. A seed or the active session's
+  // ingest that failed at its last refresh is the projection's failure.
+  todayOf(
+    hookData: ClaudeHookData | undefined,
+    claudeConfigDir: string | undefined,
+    at: Instant,
+  ): Outcome<TodayInfo> {
+    const today = dayKey(dateOf(at));
+    const claudePaths = getClaudePaths(claudeConfigDir);
+    const seedFailure = this.seedFailures.get(claudePaths.join("\0"));
+    if (seedFailure !== undefined) return failed(seedFailure);
+    const activeFailure = this.sessions.get(
+      hookData?.session_id ?? "",
+    )?.failure;
+    if (activeFailure != null) return failed(activeFailure);
 
     const roots = claudePaths.map((dir) => join(dir, "projects") + sep);
     const total: DayUsage = { ...EMPTY_DAY };
@@ -545,13 +619,11 @@ export class SessionUsageStore {
     if (!sessionId) return ABSENT;
     const stamp = statStamp(transcriptPath);
     return this.speedFlight.run(`${sessionId}:${stamp}`, async () => {
-      const record = await this.ingest(
-        sessionId,
-        transcriptPath,
-        this.renderTally,
-        stamp,
-      );
-      if (record.kind === "failed") return record;
+      const record = await this.refreshed(sessionId, transcriptPath, stamp);
+      if (record.kind === "failed") {
+        this.hold(sessionId).speed = record;
+        return record;
+      }
       const breakdown =
         record.kind === "ok" ? record.value.sessionInfo.tokenBreakdown : null;
       const cur = speedSampleOf(breakdown, nowMs);
@@ -576,12 +648,21 @@ export class SessionUsageStore {
       // Drop oldest (smallest atMs ⇒ ring[0]) beyond the cap — a tail window,
       // not an archive.
       if (ring.length > SPEED_RING_CAPACITY) ring.shift();
-      return ok({
+      const observed = ok({
         ...(prev !== undefined && { prev }),
         cur,
         samples: [...ring],
       });
+      this.hold(sessionId).speed = observed;
+      return observed;
     });
+  }
+
+  // The session's speed as its last request observed it, for a draw: a frame
+  // takes no sample, so how often the bar is drawn moves no rate.
+  speedOf(sessionId: string): Reading<SpeedObservation> {
+    if (!sessionId) return ABSENT;
+    return this.sessions.get(sessionId)?.speed ?? PENDING;
   }
 
   // stamp-gated, coalesced re-parse of ONE session. `ok` is its record,
@@ -680,6 +761,8 @@ export class SessionUsageStore {
       lastSeenAt: Date.now(),
       record: undefined,
       ring: [],
+      failure: null,
+      speed: undefined,
     };
     this.sessions.set(sessionId, slot);
     return slot;

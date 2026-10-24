@@ -22,6 +22,7 @@ import { TmuxService } from "../segments/tmux.js";
 import { MementoProvider } from "../segments/memento.js";
 import { productionMementoEdge } from "../memento/edge.js";
 import { AutoCompactProvider } from "../segments/autocompact-provider.js";
+import { CacheExpiryProvider } from "../segments/cache.js";
 
 // What a session's own history contributes (`history`, `navigation`), the
 // frames the renderer pushes it (`feeds`) and the home the render reads for
@@ -49,6 +50,7 @@ export function createPayloadProviders(opts: {
       logger: opts.logger,
     }),
     autoCompact: new AutoCompactProvider(opts.logger),
+    cacheExpiry: new CacheExpiryProvider(),
     log: opts.logger,
   };
 }

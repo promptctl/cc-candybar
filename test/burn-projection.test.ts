@@ -33,6 +33,14 @@ import { SessionState } from "../src/daemon/session-state";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
 import { instantOf } from "../src/utils/instant";
 import { etaMinutes } from "../src/template-engine/funcs";
+import {
+  absentOwners,
+  fakeContext,
+  fakeGit,
+  fakeMetrics,
+  fakeTmux,
+  fakeUsage,
+} from "./helpers/payload-owners";
 
 const FIVE_HOURS_MIN = 5 * 60;
 const NOW_MS = 1_700_000_000_000; // fixed instant; NOW_MS / 1000 is whole seconds
@@ -81,24 +89,24 @@ function depsWith(
   overrides: Partial<RenderPayloadDeps> = {},
 ): RenderPayloadDeps {
   return {
-    gitProvider: { getGitInfo: async () => ABSENT },
-    usageStore: {
-      getUsageInfo: async () => ok({ session: { cost: 6, tokens: 1000 } }),
-      getTodayInfo: async () => ABSENT,
-    },
-    contextProvider: { getContextInfo: async () => ABSENT },
-    metricsProvider: {
-      getMetricsInfo: async () =>
-        ok({
-          responseTime: 0,
-          lastResponseTime: null,
-          sessionDuration: 1800,
-          messageCount: 0,
-          linesAdded: 0,
-          linesRemoved: 0,
-        }),
-    },
-    tmuxService: { getSessionName: async () => ABSENT },
+    ...absentOwners(),
+    gitProvider: fakeGit(async () => ABSENT),
+    usageStore: fakeUsage({
+      usage: async () => ok({ session: { cost: 6, tokens: 1000 } }),
+      today: async () => ABSENT,
+    }),
+    contextProvider: fakeContext(async () => ABSENT),
+    metricsProvider: fakeMetrics(async () =>
+      ok({
+        responseTime: 0,
+        lastResponseTime: null,
+        sessionDuration: 1800,
+        messageCount: 0,
+        linesAdded: 0,
+        linesRemoved: 0,
+      }),
+    ),
+    tmuxService: fakeTmux(async () => ABSENT),
     log: () => {},
     history: () => EMPTY_HISTORY_DEPTH,
     navigation: () => 0,
@@ -207,11 +215,21 @@ function renderBurnrate(
   const registry = new SourceRegistry(store, "", undefined, new SessionState());
   try {
     const compiled = registerDslConfig(cfg, registry, { cwd: "/tmp" });
-    return renderDsl(cfg, compiled, store, registry, payload, instantOf(new Date(atMs)), {
-      endcaps: "powerline",
-      colorCompatibility: "none", wrap: true, padding: 0,
-      width: Number.POSITIVE_INFINITY,
-    });
+    return renderDsl(
+      cfg,
+      compiled,
+      store,
+      registry,
+      payload,
+      instantOf(new Date(atMs)),
+      {
+        endcaps: "powerline",
+        colorCompatibility: "none",
+        wrap: true,
+        padding: 0,
+        width: Number.POSITIVE_INFINITY,
+      },
+    );
   } finally {
     registry.dispose();
   }
@@ -261,9 +279,7 @@ describe("burnrate segment render", () => {
       weekly: { percentage: 14, resetsAt: NOW_SEC + 6 * 86400 },
     };
     expect(renderBurnrate(payload)).toContain("4h to 5h");
-    expect(renderBurnrate(payload, NOW_MS + 3600 * 1000)).toContain(
-      "8h to 5h",
-    );
+    expect(renderBurnrate(payload, NOW_MS + 3600 * 1000)).toContain("8h to 5h");
   });
 
   test("hidden when no rate-limit window is active", () => {

@@ -22,9 +22,9 @@
 
 import type { ClaudeHookData, ParsedEntry } from "../utils/claude";
 import type { ToolCall, TodoItem } from "../utils/transcript-activity";
-import { TranscriptFold } from "../utils/transcript-fold";
+import { TranscriptFold, type FoldOutcome } from "../utils/transcript-fold";
 import type { DaemonLogger } from "../utils/logger";
-import { failed, ok, type Outcome } from "../utils/outcome";
+import { failed, ok, type Outcome, type Reading } from "../utils/outcome";
 
 export type { TodoItem } from "../utils/transcript-activity";
 
@@ -160,10 +160,24 @@ export class ActivityProvider {
     sessionId: string,
     hookData: ClaudeHookData,
   ): Promise<Outcome<ActivityInfo>> {
-    const folded = await this.fold.read(sessionId, hookData.transcript_path);
-    if (folded.kind === "failed") {
-      return failed(`activity (${sessionId}): ${folded.reason}`);
-    }
-    return ok(report(folded.value));
+    return activityFrom(
+      sessionId,
+      await this.fold.read(sessionId, hookData.transcript_path),
+    );
   }
+
+  // The session's activity as its last refresh left it, for a draw.
+  activityOf(sessionId: string): Reading<ActivityInfo> {
+    const answer = this.fold.answer(sessionId);
+    return answer.kind === "pending" ? answer : activityFrom(sessionId, answer);
+  }
+}
+
+function activityFrom(
+  sessionId: string,
+  folded: FoldOutcome<ActivityState>,
+): Outcome<ActivityInfo> {
+  return folded.kind === "failed"
+    ? failed(`activity (${sessionId}): ${folded.reason}`)
+    : ok(report(folded.value));
 }

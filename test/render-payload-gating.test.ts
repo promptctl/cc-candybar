@@ -10,9 +10,7 @@ import {
   buildNeededPrefixes,
 } from "../src/daemon/render-payload";
 import type { ClientHints } from "../src/daemon/protocol";
-import type {
-  RenderPayloadDeps,
-} from "../src/daemon/render-payload";
+import type { RenderPayloadDeps } from "../src/daemon/render-payload";
 import { type EffectiveGlobals } from "../src/config/effective-globals";
 import { globalsFor } from "./helpers/selection";
 import type { DslConfig, Root } from "../src/config/dsl-types";
@@ -23,6 +21,15 @@ import { listResolvablePaletteNames } from "../src/themes/policy";
 import { PRESET_FLOOR } from "../src/config/presets";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
 import { instantOf } from "../src/utils/instant";
+import {
+  absentOwners,
+  fakeActivity,
+  fakeContext,
+  fakeGit,
+  fakeMetrics,
+  fakeTmux,
+  fakeUsage,
+} from "./helpers/payload-owners";
 
 // One vertical container holding one horizontal container of segment refs — the
 // canonical root for a single row.
@@ -57,46 +64,37 @@ function buildMockDeps(): { deps: RenderPayloadDeps; counts: CallCounts } {
     tmux: 0,
   };
   const deps = {
-    gitProvider: {
-      getGitInfo: async () => {
-        counts.git++;
-        return ABSENT;
-      },
-    },
-    usageStore: {
-      getUsageInfo: async () => {
+    ...absentOwners(),
+    gitProvider: fakeGit(async () => {
+      counts.git++;
+      return ABSENT;
+    }),
+    usageStore: fakeUsage({
+      usage: async () => {
         counts.usage++;
         return ABSENT;
       },
-      getTodayInfo: async () => {
+      today: async () => {
         counts.today++;
         return ABSENT;
       },
-    },
-    contextProvider: {
-      getContextInfo: async () => {
-        counts.context++;
-        return ABSENT;
-      },
-    },
-    metricsProvider: {
-      getMetricsInfo: async () => {
-        counts.metrics++;
-        return ABSENT;
-      },
-    },
-    activityProvider: {
-      getActivityInfo: async () => {
-        counts.activity++;
-        return ABSENT;
-      },
-    },
-    tmuxService: {
-      getSessionName: async () => {
-        counts.tmux++;
-        return ABSENT;
-      },
-    },
+    }),
+    contextProvider: fakeContext(async () => {
+      counts.context++;
+      return ABSENT;
+    }),
+    metricsProvider: fakeMetrics(async () => {
+      counts.metrics++;
+      return ABSENT;
+    }),
+    activityProvider: fakeActivity(async () => {
+      counts.activity++;
+      return ABSENT;
+    }),
+    tmuxService: fakeTmux(async () => {
+      counts.tmux++;
+      return ABSENT;
+    }),
     log: () => {},
     history: () => EMPTY_HISTORY_DEPTH,
     navigation: () => 0,
@@ -143,7 +141,11 @@ const SHARED_VARIABLES: DslConfig["variables"] = {
 };
 
 const SHARED_SEGMENTS: DslConfig["segments"] = {
-  directory: { template: " {{ .current_dir }} ", bg: "surface", fg: "foreground" },
+  directory: {
+    template: " {{ .current_dir }} ",
+    bg: "surface",
+    fg: "foreground",
+  },
   git: {
     template: " {{ .git.branch }} ",
     bg: "panel",
@@ -283,7 +285,7 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
       segments: SHARED_SEGMENTS,
       root: {
         rows: { main: { kind: "segment", name: "directory" } },
-        when: '{{ gt (int .metrics.sessionDuration) 0 }}',
+        when: "{{ gt (int .metrics.sessionDuration) 0 }}",
       },
       actions: {},
       styles: {},
@@ -307,7 +309,8 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
     // otherwise the rule evaluates against unfilled defaults and never switches.
     const config: DslConfig = {
       globals: {
-        palette: "{{ if gt (int .metrics.sessionDuration) 0 }}nord{{ else }}dracula{{ end }}",
+        palette:
+          "{{ if gt (int .metrics.sessionDuration) 0 }}nord{{ else }}dracula{{ end }}",
       },
       variables: SHARED_VARIABLES,
       segments: SHARED_SEGMENTS,
