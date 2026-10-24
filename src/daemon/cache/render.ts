@@ -894,6 +894,8 @@ export class RenderCache {
     const { state } = entry;
     const hold = this.holdOf(state);
     hold.holders++;
+    // A render draws the directory home: what it subscribes to is read.
+    state.registry.readSubscriptions();
     this.armSweep();
     let released = false;
     return {

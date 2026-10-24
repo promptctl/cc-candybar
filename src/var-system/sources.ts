@@ -29,7 +29,7 @@ import {
 import { VariableStore, type Derivation } from "./store.js";
 import { createCcCandybarEngine } from "../template-engine/engine.js";
 import { buildScope } from "../template-engine/scope.js";
-import { GitDataProvider } from "../daemon/cache/git.js";
+import { GitDataProvider, type GitSubscription } from "../daemon/cache/git.js";
 import type { GitInfo } from "../segments/git.js";
 import {
   ok,
@@ -598,7 +598,10 @@ export class SourceRegistry {
   // [LAW:single-enforcer] One subscription per cwd — every git variable
   // pointing at the same working directory shares one GitDataProvider
   // subscription, and the provider in turn shares one watcher + one cache
-  // entry across N subscribers in the same repo.
+  // entry across N subscribers in the same repo. The subscription's first
+  // delivery is kept because every field declared for this cwd — including
+  // ones declared after the subscription was opened — registers it as its own
+  // in-flight work. One promise, N names.
   private readonly gitSubscriptions = new Map<
     string,
     {
@@ -606,12 +609,7 @@ export class SourceRegistry {
         GitField,
         Array<{ name: string; varDefault: VarValue | undefined }>
       >;
-      // The subscription's first delivery, kept because every field declared
-      // for this cwd — including ones declared after the subscription was
-      // opened — registers it as its own in-flight work. One promise, N names.
-      firstDelivery: Promise<void>;
-      unsubscribe: () => void;
-    }
+    } & GitSubscription
   >();
   // Collects all cleanup callbacks (TTL unsubscribes, watch unsubscribes,
   // MobX reaction disposers) so dispose() tears everything down in one call.
@@ -653,6 +651,12 @@ export class SourceRegistry {
   // (a repo it reads), so their owners' periods visit them while it lives and
   // stop when it is disposed (brandon-unfiled-3248.8ro6, step 1).
   readonly holds = new Holds();
+
+  // This home was drawn: what it subscribes to is read, so its holds stand
+  // through the next sweep (`Holds`), as a read's do.
+  readSubscriptions(): void {
+    for (const sub of this.gitSubscriptions.values()) sub.read();
+  }
   // [LAW:locality-or-seam] sessionState is injected (not constructed here)
   // so tests can substitute a fake and the daemon shares its singleton.
   // Absent in non-daemon contexts; declareState() rejects loudly in that case
@@ -1106,30 +1110,30 @@ export class SourceRegistry {
         GitField,
         Array<{ name: string; varDefault: VarValue | undefined }>
       >();
-      const subscription = this.gitProvider.subscribe(opts.cwd, (info) => {
-        // [LAW:dataflow-not-control-flow] One runInAction per delivery; the
-        // snapshot value decides each box's content, not whether code runs.
-        this.store.runInAction(() => {
-          for (const [field, subs] of fieldSubs) {
-            for (const { name: subName, varDefault } of subs) {
-              this.store.setBox(
-                subName,
-                projectGitField(
-                  info,
-                  field,
-                  varDefault,
-                  this.defaultEmptyValue,
-                ),
-              );
+      const subscription = this.gitProvider.subscribe(
+        this.holds,
+        opts.cwd,
+        (info) => {
+          // [LAW:dataflow-not-control-flow] One runInAction per delivery; the
+          // snapshot value decides each box's content, not whether code runs.
+          this.store.runInAction(() => {
+            for (const [field, subs] of fieldSubs) {
+              for (const { name: subName, varDefault } of subs) {
+                this.store.setBox(
+                  subName,
+                  projectGitField(
+                    info,
+                    field,
+                    varDefault,
+                    this.defaultEmptyValue,
+                  ),
+                );
+              }
             }
-          }
-        });
-      });
-      sub = {
-        fieldSubs,
-        firstDelivery: subscription.firstDelivery,
-        unsubscribe: subscription.unsubscribe,
-      };
+          });
+        },
+      );
+      sub = { fieldSubs, ...subscription };
       this.gitSubscriptions.set(opts.cwd, sub);
     }
 
