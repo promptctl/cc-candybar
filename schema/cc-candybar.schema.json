@@ -538,32 +538,6 @@
             "type": "object",
             "properties": {
               "kind": {
-                "const": "git"
-              },
-              "field": {
-                "enum": [
-                  "branch",
-                  "sha",
-                  "dirty",
-                  "ahead",
-                  "behind",
-                  "stash"
-                ]
-              },
-              "default": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "kind",
-              "field"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "kind": {
                 "const": "state"
               },
               "key": {
@@ -2023,32 +1997,6 @@
                 "type": "object",
                 "properties": {
                   "kind": {
-                    "const": "git"
-                  },
-                  "field": {
-                    "enum": [
-                      "branch",
-                      "sha",
-                      "dirty",
-                      "ahead",
-                      "behind",
-                      "stash"
-                    ]
-                  },
-                  "default": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "kind",
-                  "field"
-                ],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "kind": {
                     "const": "state"
                   },
                   "key": {
@@ -2617,32 +2565,6 @@
                 "required": [
                   "kind",
                   "layout"
-                ],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "const": "git"
-                  },
-                  "field": {
-                    "enum": [
-                      "branch",
-                      "sha",
-                      "dirty",
-                      "ahead",
-                      "behind",
-                      "stash"
-                    ]
-                  },
-                  "default": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "kind",
-                  "field"
                 ],
                 "additionalProperties": false
               },

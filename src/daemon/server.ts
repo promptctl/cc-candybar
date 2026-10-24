@@ -379,7 +379,6 @@ function tmuxServersOf({
 const diagnosticDump = new DiagnosticDump(diagnosticsDir());
 const renderCache = new RenderCache(
   {
-    gitService,
     sessionState,
     watchers: watcherRegistry,
     log: dlog,
@@ -2033,7 +2032,7 @@ function setUpRender(
       deps: {
         ...payloadDeps,
         // The session's view is the home this render reads for.
-        holds: view.registry.holds,
+        holds: view.holds,
         // Measured against the gate of the config this render draws with.
         navigation: (sessionId: string) =>
           navigationHistory.depth(

@@ -79,7 +79,7 @@ function renderer(
   readonly dispose: () => void;
 } {
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", undefined, new SessionState());
+  const registry = new SourceRegistry(store, "", new SessionState());
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
   const opts = {
     endcaps: "powerline" as const,

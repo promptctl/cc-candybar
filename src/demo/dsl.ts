@@ -105,10 +105,7 @@ function loadState(): ReturnType<typeof buildRenderState> {
       cwd,
       { layers: [configPath], home: configPath, projectDir: cwd },
       advisories,
-      {
-        gitService: providers.gitProvider,
-        sessionState,
-      },
+      { sessionState },
     );
   } catch (err) {
     if (err instanceof ConfigError) advisories.push(...err.warnings);
@@ -147,7 +144,7 @@ async function renderFrames(): Promise<void> {
         at,
         {
           ...providers,
-          holds: view.registry.holds,
+          holds: view.holds,
           history: () => EMPTY_HISTORY_DEPTH,
           navigation: () => 0,
           feeds: () => UNFOLLOWED_FEEDS,
@@ -183,7 +180,7 @@ async function renderFrames(): Promise<void> {
 
     process.stdout.write("\n");
   } finally {
-    view.registry.dispose();
+    view.dispose();
     state.registry.dispose();
   }
 }

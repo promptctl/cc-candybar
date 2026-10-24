@@ -224,30 +224,27 @@
     },
 
     // ── 8. git ──────────────────────────────────────────────────────────────
-    // Native git source. Covers 6 fields: branch, sha, dirty, ahead, behind, stash.
-    // The default config uses kind:"input" instead for the full 12-field
-    // GitInfo surface; kind:"git" is the lighter alternative when you only
-    // need one field. It takes no cache: the daemon's git cache watches the
-    // repository and republishes the value when it changes.
-    "demo.git.branch": {
-      kind: "git",
-      field: "branch",
-      default: "",
-    },
+    // Every git fact is an input over the payload's git lane — the same read
+    // the bundled `gitaculous` segment draws from. The bundled default already
+    // declares all of them as "git.<fact>"; these re-declare four under names
+    // of their own to show the shape. "dirty" is a template over the status.
+    "demo.git.branch": { kind: "input", path: "git.branch", default: "" },
     "demo.git.ahead": {
-      kind: "git",
-      field: "ahead",
-      default: "0",
+      kind: "input",
+      path: "git.ahead",
+      type: "number",
+      default: 0,
     },
     "demo.git.dirty": {
-      kind: "git",
-      field: "dirty",
-      default: "false",
+      kind: "template",
+      type: "boolean",
+      template: '{{ ne .git.status "clean" }}',
     },
     "demo.git.stash": {
-      kind: "git",
-      field: "stash",
-      default: "0",
+      kind: "input",
+      path: "git.stash",
+      type: "number",
+      default: 0,
     },
 
     // ── 9. state ────────────────────────────────────────────────────────────
@@ -330,9 +327,8 @@
       bg: "surface",
     },
 
-    // ── Git (native kind) vs input kind ──────────────────────────────────
-    // kind:"git" fields used here; the default config's `gitaculous` segment uses
-    // kind:"input" for the full 12-field payload surface.
+    // ── Git ──────────────────────────────────────────────────────────────
+    // The git inputs above; the bundled `gitaculous` segment reads all twelve.
     demoGit: {
       template: ' ⎇ {{ .demo.git.branch }}{{ if .demo.git.dirty }} ●{{ end }}{{ if .demo.git.ahead }} ↑{{ .demo.git.ahead }}{{ end }}{{ if gt (int .demo.git.stash) 0 }} ⧇{{ .demo.git.stash }}{{ end }} ',
       bg: "surface-active",

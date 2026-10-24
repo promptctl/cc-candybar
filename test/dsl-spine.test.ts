@@ -76,7 +76,7 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
   function buildRuntime(cwd: string) {
     const config = parseAndValidate("<test>", FIXTURE_SOURCE, ALLOWED_PALETTES);
     const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", undefined, new SessionState());
+    const registry = new SourceRegistry(store, "", new SessionState());
     const compiled = registerDslConfig(config, registry, { cwd });
     return { config, compiled, store, registry };
   }
@@ -226,7 +226,7 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
         new Set(["textual-dark"]),
       );
       const store = new VariableStore();
-      const registry = new SourceRegistry(store, "", undefined, new SessionState());
+      const registry = new SourceRegistry(store, "", new SessionState());
       const compiled = registerDslConfig(config, registry, {
         cwd: HOOK_DATA.workspace.current_dir,
       });

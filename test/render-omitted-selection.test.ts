@@ -49,7 +49,7 @@ const SRC = `{
 test("an omitted selection renders the declared preset and style, not the floors", () => {
   const config = parseAndValidate("<omitted>", SRC, new Set([THEME_FLOOR]));
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", undefined, new SessionState());
+  const registry = new SourceRegistry(store, "", new SessionState());
   try {
     const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
     const at = instantOf(new Date());

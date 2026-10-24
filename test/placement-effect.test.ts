@@ -72,7 +72,7 @@ function renderer(
   const store = new VariableStore();
   const session = new SessionState();
   for (const [key, value] of Object.entries(state)) session.set("s", key, value);
-  const registry = new SourceRegistry(store, "", undefined, session);
+  const registry = new SourceRegistry(store, "", session);
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
   const opts = {
     endcaps: "powerline" as const,

@@ -42,7 +42,7 @@ function render() {
     new Set(listResolvablePaletteNames()),
   );
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", undefined, new SessionState());
+  const registry = new SourceRegistry(store, "", new SessionState());
   const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
   const sink = new Map<string, readonly RichText[]>();
   const out = renderDsl(

@@ -310,7 +310,7 @@ function forEachStage(
   );
   const sessionState = new SessionState();
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", undefined, sessionState);
+  const registry = new SourceRegistry(store, "", sessionState);
   recordRender(sessionState, "s1");
   try {
     const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });

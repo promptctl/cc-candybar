@@ -59,7 +59,7 @@ function renderer(cfg: ValidatedConfig) {
   const compiled = compileDslConfig(compileInputOf(cfg));
   const store = new VariableStore();
   const session = new SessionState();
-  const registry = new SourceRegistry(store, "", undefined, session);
+  const registry = new SourceRegistry(store, "", session);
   declareDslVariables(cfg, registry, "/tmp", EVERY_SCOPE);
   const drawn = lastBinding(compiled.menuRuntime.action);
   return {

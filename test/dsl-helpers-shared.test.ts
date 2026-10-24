@@ -38,7 +38,7 @@ function registerStdlib() {
     "<default>",
   );
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", undefined, new SessionState());
+  const registry = new SourceRegistry(store, "", new SessionState());
   return { registry, compiled: registerDslConfig(config, registry, { cwd: "/tmp" }) };
 }
 

@@ -902,7 +902,7 @@ function inputClosure(
           frontier.push(r);
         }
       }
-      // Other kinds (literal/env/file/shell/time/git/state) declare their
+      // Other kinds (literal/env/file/shell/time/state) declare their
       // own box without reading a payload path — they need no provider
       // gating because the daemon's payload builder is the only thing
       // this gates.

@@ -256,7 +256,7 @@ const SID = "theme-defaults";
 function cellBg(source: string): { daemon: string; compileOnly: string } {
   const config = load(source);
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", undefined, new SessionState());
+  const registry = new SourceRegistry(store, "", new SessionState());
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
   const sink = new Map<string, readonly RichText[]>();
   const bg = (): string => {

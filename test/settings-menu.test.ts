@@ -112,7 +112,7 @@ function buildRuntime(
   const config = parseAndValidate("<user>", src, ALLOWED, dflt);
   const sessionState = new SessionState();
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", undefined, sessionState);
+  const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
   // Each segment's cells from the last render, by name.
   const sink = new Map<string, readonly RichText[]>();
@@ -1042,7 +1042,6 @@ describe("the menu is chrome-exempt", () => {
       new SourceRegistry(
         new VariableStore(),
         "",
-        undefined,
         new SessionState(),
       ),
       { cwd: "/tmp/proj" },

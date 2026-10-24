@@ -29,8 +29,6 @@ import {
 import { VariableStore, type Derivation } from "./store.js";
 import { createCcCandybarEngine } from "../template-engine/engine.js";
 import { buildScope } from "../template-engine/scope.js";
-import { GitDataProvider, type GitSubscription } from "../daemon/cache/git.js";
-import type { GitInfo } from "../segments/git.js";
 import {
   ok,
   failed,
@@ -50,7 +48,6 @@ import {
 import { readPending, type JsonValue } from "./types.js";
 import type { SessionStateReader } from "../daemon/session-state.js";
 import { TrailingEdge } from "../utils/trailing-edge.js";
-import { Holds } from "../utils/holds.js";
 
 // How long text that is not a document may be a write still in progress
 // before it shows as the failure it is (documentPublisher).
@@ -119,7 +116,7 @@ export function parseDuration(s: string): number {
 // that arm's output domain.
 export interface ShellOptions {
   // [LAW:types-are-the-program] Where the command runs: the render entry's
-  // cwd, like GitOptions.cwd. Required, because the daemon is detached — its
+  // cwd. Required, because the daemon is detached — its
   // own cwd is whichever shell spawned it, never the session's.
   readonly cwd: string;
   readonly cache: CachePolicy;
@@ -150,23 +147,6 @@ export interface TimeOptions {
   // Reference time: Mon Jan 2 15:04:05 MST 2006
   readonly format: string;
   readonly varDefault?: string;
-}
-
-// [LAW:one-type-per-behavior] Six git fields — each has a fixed inferred type.
-// branch/sha are strings; dirty is boolean; ahead/behind/stash are numbers.
-export type GitField =
-  | "branch"
-  | "sha"
-  | "dirty"
-  | "ahead"
-  | "behind"
-  | "stash";
-
-export interface GitOptions {
-  readonly field: GitField;
-  // Working directory whose git repo to query.  Resolved at declaration time.
-  readonly cwd: string;
-  readonly varDefault?: VarValue;
 }
 
 // [LAW:one-source-of-truth] state vars read through to SessionState; the
@@ -264,67 +244,6 @@ function parsed<V>(
 // The publish half of a source, closed over its store node: takes what the
 // reader yielded, parses it, and writes the node — value or fallback.
 type Publish = (read: Outcome<string>) => void;
-
-// ─── Git helpers ─────────────────────────────────────────────────────────────
-
-// [LAW:one-source-of-truth] One type map; the field discriminator determines
-// the box type at declaration time — no runtime coercion needed.
-const GIT_FIELD_TYPE: Readonly<Record<GitField, VarType>> = {
-  branch: "string",
-  sha: "string",
-  dirty: "boolean",
-  ahead: "number",
-  behind: "number",
-  stash: "number",
-};
-
-// [LAW:one-source-of-truth] Git data flows through GitDataProvider. The
-// projection below is the only mapping from GitInfo (segments' shape) to
-// var-system's six-field model. Pre-kz8.3 var-system maintained its own
-// parallel fleet (execGit + fetchGitSnapshot + GitPoller + WatchManager
-// subscriptions); the provider now owns the cache, the watcher, and the
-// single launch category "git".
-
-// Project a GitInfo snapshot down to a single var-system GitField value.
-// Returns the typed fallback when info is null (not a repo or unresolved).
-function projectGitField(
-  info: GitInfo | null,
-  field: GitField,
-  varDefault: VarValue | undefined,
-  defaultEmptyValue: VarValue,
-): VarValue {
-  if (info === null) {
-    if (varDefault !== undefined) return varDefault;
-    const type = GIT_FIELD_TYPE[field];
-    try {
-      return coerceToType(defaultEmptyValue, type);
-    } catch {
-      return zeroValue(type);
-    }
-  }
-  switch (field) {
-    case "branch":
-      // GitService emits the literal "detached" when HEAD is not on a
-      // branch; var-system's prior contract was empty string in that case.
-      // (Caveat: a branch literally named "detached" would also map to "" —
-      // preserving the pre-kz8.3 behavior, which had the same ambiguity in
-      // a different shape.)
-      return info.branch === "detached" ? "" : info.branch;
-    // [LAW:dataflow-not-control-flow] Outcome fields fold via orElse: this
-    // surface only renders values, so absent and failed both collapse to the
-    // typed zero (the provider's delivery edge already logged any failure).
-    case "sha":
-      return orElse(info.sha, "");
-    case "dirty":
-      return info.status !== "clean";
-    case "ahead":
-      return orElse(info.aheadBehind, { ahead: 0, behind: 0 }).ahead;
-    case "behind":
-      return orElse(info.aheadBehind, { ahead: 0, behind: 0 }).behind;
-    case "stash":
-      return orElse(info.stashCount, 0);
-  }
-}
 
 // ─── WatchManager ─────────────────────────────────────────────────────────────
 
@@ -599,22 +518,6 @@ export class SourceRegistry {
   // Triggers for shell/file cache policies and the time source's tick:
   private readonly watchMgr = new WatchManager();
   private readonly ttlMgr = new TtlBucketManager();
-  // [LAW:single-enforcer] One subscription per cwd — every git variable
-  // pointing at the same working directory shares one GitDataProvider
-  // subscription, and the provider in turn shares one watcher + one cache
-  // entry across N subscribers in the same repo. The subscription's first
-  // delivery is kept because every field declared for this cwd — including
-  // ones declared after the subscription was opened — registers it as its own
-  // in-flight work. One promise, N names.
-  private readonly gitSubscriptions = new Map<
-    string,
-    {
-      fieldSubs: Map<
-        GitField,
-        Array<{ name: string; varDefault: VarValue | undefined }>
-      >;
-    } & GitSubscription
-  >();
   // Collects all cleanup callbacks (TTL unsubscribes, watch unsubscribes,
   // MobX reaction disposers) so dispose() tears everything down in one call.
   private readonly cleanups: Array<() => void> = [];
@@ -649,18 +552,6 @@ export class SourceRegistry {
   // [LAW:one-source-of-truth] One engine per registry, not one per variable.
   private readonly engine = createCcCandybarEngine({ drawnAt: this.drawnAt });
 
-  private readonly gitProvider: GitDataProvider;
-  private readonly ownsGitProvider: boolean;
-  // [LAW:single-enforcer] What this home holds of the daemon's shared entries
-  // (a repo it reads), so their owners' periods visit them while it lives and
-  // stop when it is disposed (brandon-unfiled-3248.8ro6, step 1).
-  readonly holds = new Holds();
-
-  // This home was drawn: what it subscribes to is read, so its holds stand
-  // through the next sweep (`Holds`), as a read's do.
-  readSubscriptions(): void {
-    for (const sub of this.gitSubscriptions.values()) sub.read();
-  }
   // [LAW:locality-or-seam] sessionState is injected (not constructed here)
   // so tests can substitute a fake and the daemon shares its singleton.
   // Absent in non-daemon contexts; declareState() rejects loudly in that case
@@ -670,28 +561,16 @@ export class SourceRegistry {
   // defaultEmptyValue is the global fallback of last resort — the config-level
   // `default_empty_value` from the proposal. Defaults to empty string.
   //
-  // gitProvider lets the daemon inject its shared instance; when omitted (e.g.
-  // in tests, or pre-daemon-wired runtimes), a private one is constructed so
-  // the registry remains self-contained.
-  //
   // sessionState lets the daemon inject its singleton so state-kind variables
   // share one MobX atom and one disk-persistence layer with the click verbs.
   // Omitted in tests that don't exercise state vars.
   constructor(
     private readonly store: VariableStore,
     private readonly defaultEmptyValue: VarValue = "",
-    gitProvider?: GitDataProvider,
     sessionState?: SessionStateReader,
     // The directory home a session's view reads through to (`view()`).
     private readonly parent: SourceRegistry | null = null,
   ) {
-    if (gitProvider) {
-      this.gitProvider = gitProvider;
-      this.ownsGitProvider = false;
-    } else {
-      this.gitProvider = new GitDataProvider();
-      this.ownsGitProvider = true;
-    }
     this.sessionState = sessionState;
   }
 
@@ -701,13 +580,12 @@ export class SourceRegistry {
   // declared there, so its inputs, its state and its derivations are its own,
   // and what its sources fail with is recorded there; a directory value it
   // reads is this home's one node, and its failure this home's one record. It
-  // shares the daemon's git provider and session state, and is disposed on its
+  // shares the daemon's session state, and is disposed on its
   // own: a session leaving the directory disposes nothing of it.
   view(): SourceRegistry {
     return new SourceRegistry(
       new VariableStore(this.store),
       this.defaultEmptyValue,
-      this.gitProvider,
       this.sessionState,
       this,
     );
@@ -938,8 +816,6 @@ export class SourceRegistry {
   // [LAW:single-enforcer] The one writer of `inFlight`: an async source's
   // pending work enters here and leaves when it completes, so "which sources
   // are still out" has a single mechanism rather than one per source kind.
-  // Several names may share one promise (every git field of a cwd rides one
-  // subscription); each gets its own entry and clears independently.
   private track(name: string, work: Promise<void>): void {
     // The identity check is the same one SingleFlight makes, for the same
     // reason: `TrailingEdge` releases a key before this `finally` runs, so a
@@ -953,8 +829,7 @@ export class SourceRegistry {
   }
 
   // [LAW:no-ambient-temporal-coupling] Resolves when every async source's
-  // pending work — a shell/file run, a git subscription's first delivery, and
-  // every run one of them triggered (a `depends_on` reaction fires inside a
+  // pending work — a shell/file run, and every run one of them triggered (a `depends_on` reaction fires inside a
   // publish) — has completed, or at the deadline. The value is the names still
   // in flight: empty when all settled. This is the state a one-shot render
   // (`cc-candybar check`) awaits so it renders what those sources yielded,
@@ -1085,76 +960,6 @@ export class SourceRegistry {
         return fallback;
       }
     });
-  }
-
-  // git: first-class git fields delivered by the shared GitDataProvider.
-  // All git boxes for the same cwd ride one provider subscription; the
-  // provider in turn collapses N subscribers in the same repo onto one
-  // watcher + one cache entry.
-  // [LAW:dataflow-not-control-flow] Box always holds a valid typed value;
-  // the provider's watcher (HEAD + index under the resolved gitDir, plus
-  // refs/heads/ when it exists — see src/daemon/cache/git.ts:watcherTargets)
-  // drives when the snapshot is refreshed.
-  declareGit(name: string, opts: GitOptions): void {
-    const type = GIT_FIELD_TYPE[opts.field];
-    // [LAW:single-enforcer] Coerce the user-supplied default to the field's
-    // native type — same logic projectGitField already applies to the
-    // defaultEmptyValue fallback. The schema constrains `default` to string,
-    // so `"0"` is the only legal form for number fields; coerce it here so
-    // defineBox receives a type-correct initial value.
-    const initial =
-      opts.varDefault !== undefined
-        ? coerceToType(opts.varDefault, type)
-        : zeroValue(type);
-    this.store.defineBox(name, type, initial);
-
-    let sub = this.gitSubscriptions.get(opts.cwd);
-    if (!sub) {
-      const fieldSubs = new Map<
-        GitField,
-        Array<{ name: string; varDefault: VarValue | undefined }>
-      >();
-      const subscription = this.gitProvider.subscribe(
-        this.holds,
-        opts.cwd,
-        (info) => {
-          // [LAW:dataflow-not-control-flow] One runInAction per delivery; the
-          // snapshot value decides each box's content, not whether code runs.
-          this.store.runInAction(() => {
-            for (const [field, subs] of fieldSubs) {
-              for (const { name: subName, varDefault } of subs) {
-                this.store.setBox(
-                  subName,
-                  projectGitField(
-                    info,
-                    field,
-                    varDefault,
-                    this.defaultEmptyValue,
-                  ),
-                );
-              }
-            }
-          });
-        },
-      );
-      sub = { fieldSubs, ...subscription };
-      this.gitSubscriptions.set(opts.cwd, sub);
-    }
-
-    let fieldList = sub.fieldSubs.get(opts.field);
-    if (!fieldList) {
-      fieldList = [];
-      sub.fieldSubs.set(opts.field, fieldList);
-    }
-    fieldList.push({ name, varDefault: opts.varDefault });
-    // [LAW:one-source-of-truth] `inFlight` is the one answer to "is any source
-    // still working", so a git box's first delivery belongs in it exactly as a
-    // shell run does — otherwise `settled()` is total over one KIND of async
-    // source and silently partial over the other, which is what made
-    // `cc-candybar check` print a branchless bar and report nothing pending.
-    // The box already holds a valid typed value, so this changes no render: it
-    // only makes the wait honest.
-    this.track(name, sub.firstDelivery);
   }
 
   // state: read-through to SessionState. The computed reads two deps — the
@@ -1288,8 +1093,8 @@ export class SourceRegistry {
 
   // ─── Lifecycle ────────────────────────────────────────────────────────────
 
-  // Tear down all TTL timers, fs watchers, MobX reactions, git
-  // subscriptions, and in-flight reads registered by async source kinds.
+  // Tear down all TTL timers, fs watchers, MobX reactions, and in-flight
+  // reads registered by async source kinds.
   // Call when the registry is no longer needed (e.g. on daemon shutdown or
   // config hot-reload). Returns how many computeds the store released, for
   // the caller's log line.
@@ -1297,16 +1102,12 @@ export class SourceRegistry {
     this.abort.abort();
     for (const cleanup of this.cleanups) cleanup();
     this.cleanups.length = 0;
-    for (const sub of this.gitSubscriptions.values()) sub.unsubscribe();
-    this.gitSubscriptions.clear();
     // A trigger queued while a read was in flight must not be honoured after
     // teardown: the abort above cancels the read that is out, and this drops the
     // re-read it would otherwise have asked for.
     this.reads.clear();
     this.watchMgr.dispose();
     this.ttlMgr.dispose();
-    this.holds.close();
-    if (this.ownsGitProvider) this.gitProvider.close();
     // The store's computeds are the last handles outward: a keepAlive computed
     // stays subscribed to the daemon-wide SessionState atom until released, and
     // that subscription held every disposed config's store for the life of the

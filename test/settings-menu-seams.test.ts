@@ -45,7 +45,7 @@ function menuSeams(
   );
   const session = new SessionState();
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", undefined, session);
+  const registry = new SourceRegistry(store, "", session);
   const compiled = registerDslConfig(config, registry, { cwd: "/home/tester/code/project" });
   const render = (): string[] => {
     const effective = resolveEffectiveGlobals(config, (key) => session.get(SID, key) ?? null, () => false);

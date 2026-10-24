@@ -59,7 +59,7 @@ function renderedEntry(
     DEFAULT_DSL_CONFIG,
   );
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", undefined, sessionState);
+  const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
   if (drawn) {
     renderDsl(
@@ -133,7 +133,7 @@ describe("VariableStore.dispose releases every computed's subscriptions", () => 
   it("a never-rendered registry subscribes nothing, and its dispose changes nothing", () => {
     const sessionState = new SessionState();
     const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", undefined, sessionState);
+    const registry = new SourceRegistry(store, "", sessionState);
     registerDslConfig(
       parseAndValidate(
         "<test>",

@@ -1,3 +1,5 @@
+import type { InputVarDecl, TemplateVarDecl } from "../dsl-types.js";
+
 // [LAW:one-source-of-truth] The bundled variables that became per-placement
 // settings: old variable name → the segment and setting that replaced it. A
 // user file merges on top of the bundled default, so a file that still
@@ -71,3 +73,92 @@ export const RETIRED_INPUT_PATHS: ReadonlyMap<string, string> = new Map([
     'the bundled template variable "weekly.etaMinutes" computes it at the draw: drop this declaration',
   ],
 ]);
+
+// [LAW:one-type-per-behavior] The retired `kind: "git"`, field → what reads it
+// now: every git fact is an input over the payload's git lane, which the
+// bundled default declares under these names (brandon-unfiled-3248.8ro6). The
+// git variable was a second path to the same fact — a subscription pushing a
+// six-field subset into boxes, resolving the repo without the session's
+// project directory — so it could name a different repo than the bar's own
+// git cells did. Each field carries the read and the declaration that give the
+// value it gave, typed as it was; `test/dsl-loader.test.ts` holds each input
+// declaration to the bundled default's (the loader cannot import it: the
+// default is built on the loader).
+interface RetiredGitField {
+  readonly read: string;
+  readonly declare: InputVarDecl | TemplateVarDecl;
+  readonly note?: string;
+}
+
+export const RETIRED_GIT_FIELDS: ReadonlyMap<string, RetiredGitField> = new Map<
+  string,
+  RetiredGitField
+>([
+  [
+    "branch",
+    {
+      read: ".git.branch",
+      declare: { kind: "input", path: "git.branch", default: "" },
+      note: 'when HEAD is on no branch it reads "detached", where this kind read ""',
+    },
+  ],
+  [
+    "sha",
+    {
+      read: ".git.sha",
+      declare: { kind: "input", path: "git.sha", default: "" },
+    },
+  ],
+  [
+    "dirty",
+    {
+      read: '(ne .git.status "clean")',
+      declare: {
+        kind: "template",
+        template: '{{ ne .git.status "clean" }}',
+        type: "boolean",
+      },
+    },
+  ],
+  ...(["ahead", "behind", "stash"] as const).map(
+    (field): [string, RetiredGitField] => [
+      field,
+      {
+        read: `.git.${field}`,
+        declare: {
+          kind: "input",
+          path: `git.${field}`,
+          type: "number",
+          default: 0,
+        },
+      },
+    ],
+  ),
+]);
+
+// A declaration as an author writes it in JSON5.
+function json5Of(decl: RetiredGitField["declare"]): string {
+  const value = (v: unknown): string =>
+    typeof v === "string" && v.includes('"') && !v.includes("'")
+      ? `'${v}'`
+      : JSON.stringify(v);
+  return `{ ${Object.entries(decl)
+    .map(([k, v]) => `${k}: ${value(v)}`)
+    .join(", ")} }`;
+}
+
+export function retiredGitKindMessage(
+  raw: Readonly<Record<string, unknown>>,
+): string {
+  const head = `kind "git" is retired: every git fact is an input over the payload's git lane, which the bundled default already declares — drop this declaration and`;
+  const field =
+    typeof raw.field === "string"
+      ? RETIRED_GIT_FIELDS.get(raw.field)
+      : undefined;
+  if (field === undefined) {
+    const reads = [...RETIRED_GIT_FIELDS.values()].map(({ read }) => read);
+    return `${head} read whichever of ${reads.slice(0, -1).join(", ")} or ${reads.at(-1)} it stood for, where it was read`;
+  }
+  const note = field.note === undefined ? "" : ` (${field.note})`;
+  return `${head} read ${field.read} where it was read${note}, or declare ${json5Of(field.declare)} under a name of your own`;
+}

@@ -65,7 +65,7 @@ function render(src: string, opts: BuildLineOptions): string {
   const config = parseAndValidate("<test>", src, ALLOWED);
   const sessionState = new SessionState();
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", undefined, sessionState);
+  const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
   return renderDsl(config, compiled, store, registry, {}, instantOf(new Date()), opts);
 }

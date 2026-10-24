@@ -470,6 +470,12 @@ export interface TaggedUnionSchema<T, K extends string> {
   // phrasing whichever section they typo in.
   readonly memberNoun: string;
   readonly arms: TaggedArmMap<T, K>;
+  // [LAW:no-silent-failure] Tag values the union once had: each is refused with
+  // what to write instead, read off the declaration it refuses, so an author
+  // meets the replacement rather than "Unknown source kind".
+  readonly retired: Readonly<
+    Record<string, (raw: Readonly<Record<string, unknown>>) => string>
+  >;
 }
 
 // [LAW:dataflow-not-control-flow] The tag-by-field-value interpreter: the same
@@ -507,10 +513,15 @@ export function taggedUnion<T, K extends string>(
   }
 
   const arms = schema.arms as Readonly<Record<string, TaggedArm<T>>>;
-  if (!(tagValue in arms)) {
+  // Own keys only: a tag spelling an Object.prototype member ("constructor")
+  // names no arm.
+  if (!Object.hasOwn(arms, tagValue)) {
+    const message = Object.hasOwn(schema.retired, tagValue)
+      ? schema.retired[tagValue]!(raw)
+      : `Unknown ${schema.noun} "${tagValue}". Expected one of: ${Object.keys(arms).join(", ")}`;
     ctx.issues.push({
       path: `${path}.${schema.tag}`,
-      message: `Unknown ${schema.noun} "${tagValue}". Expected one of: ${Object.keys(arms).join(", ")}`,
+      message,
       line: findKeyLine(ctx.source, [...path.split("."), schema.tag]),
     });
     return null;

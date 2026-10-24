@@ -89,7 +89,7 @@ function renderer(
   compiled: CompiledConfig = compileDslConfig(compileInputOf(cfg)),
 ) {
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", undefined, session);
+  const registry = new SourceRegistry(store, "", session);
   declareDslVariables(cfg, registry, "/tmp", EVERY_SCOPE);
   const opts = {
     endcaps: "powerline" as const,

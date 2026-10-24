@@ -458,7 +458,7 @@ function renderSpeed(payload: Record<string, unknown>): string {
   // SessionState is required to declare it (matching every other
   // DEFAULT_DSL_CONFIG-based render helper) or it silently fails to declare
   // and speed's own `when` renders an unrelated ⚠ error cell.
-  const registry = new SourceRegistry(store, "", undefined, new SessionState());
+  const registry = new SourceRegistry(store, "", new SessionState());
   try {
     const compiled = registerDslConfig(cfg, registry, { cwd: "/tmp" });
     return renderDsl(

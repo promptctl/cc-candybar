@@ -101,7 +101,7 @@ export function introspectVars(
     const value = valueOf(node);
     const err = registry.getLastError(name);
     // A read CAN throw, and the premise that it could not no longer holds:
-    // declareShell/declareFile/declareGit still write a typed fallback, but an
+    // declareShell/declareFile still write a typed fallback, but an
     // input reads as not answered yet until its view's first payload, and a
     // `template` variable with no authored `default` reads as its failure since
     // brandon-var-sources-1p6. `valueOf` renders that

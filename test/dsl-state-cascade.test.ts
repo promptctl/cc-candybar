@@ -58,7 +58,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const config = parseAndValidate("<test>", CONFIG_SRC, ALLOWED_PALETTES);
     const sessionState = new SessionState();
     const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", undefined, sessionState);
+    const registry = new SourceRegistry(store, "", sessionState);
     const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
     const basePalette = getThemePalette("textual-dark"!);
     const render = () =>
@@ -108,7 +108,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     );
     const sessionState = new SessionState();
     const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", undefined, sessionState);
+    const registry = new SourceRegistry(store, "", sessionState);
     const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
     // Mirror the daemon's per-render theme resolution. Without this the two
     // renders below would BOTH be the floor theme and the test would assert
@@ -214,7 +214,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     );
     const sessionState = new SessionState();
     const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", undefined, sessionState);
+    const registry = new SourceRegistry(store, "", sessionState);
     registerDslConfig(config, registry, { cwd: process.cwd() });
     registry.applyInput(HOOK_DATA);
 
@@ -428,7 +428,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     recordRender(sessionState, SESSION_ID);
     sessionState.set(SESSION_ID, "toolbar-expanded", "1");
     const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", undefined, sessionState);
+    const registry = new SourceRegistry(store, "", sessionState);
     registerDslConfig(config, registry, { cwd: process.cwd() });
     registry.applyInput(HOOK_DATA);
 
@@ -547,7 +547,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     );
     expect(config.variables["session.id"]).toEqual(PAYLOAD_INPUTS["session.id"]);
     const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", undefined, new SessionState());
+    const registry = new SourceRegistry(store, "", new SessionState());
     const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
     const out = renderDsl(config, compiled, store, registry, { session_id: "s1" }, instantOf(new Date()), {
       endcaps: "powerline",
@@ -579,7 +579,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     );
     const sessionState = new SessionState();
     const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", undefined, sessionState);
+    const registry = new SourceRegistry(store, "", sessionState);
     const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
     const basePalette = getThemePalette("textual-dark"!);
     const render = () =>

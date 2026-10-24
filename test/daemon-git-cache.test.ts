@@ -639,10 +639,8 @@ describe("GitDataProvider refreshes on its own triggers", () => {
   test("a change mid-read queues one re-read after it, so the last change lands (brandon-unfiled-3248.xjma)", async () => {
     const { svc, inner, holds } = makeCache();
     inner.repoRootByDir = { "/repo": "/repo" };
-    const delivered: Array<string | undefined> = [];
     inner.infoGate = deferred();
 
-    const sub = svc.subscribe(new Holds(), "/repo", (info) => delivered.push(info?.branch));
     const read = svc.getGitInfo(holds, "/repo", {});
     await tick();
     expect(inner.computeCalls).toHaveLength(1); // the first read is out
@@ -654,16 +652,14 @@ describe("GitDataProvider refreshes on its own triggers", () => {
     inner.infoGate = null;
     gate.resolve();
 
-    await sub.firstDelivery;
-    await read;
+    expect(await read).toMatchObject({ kind: "ok", value: { branch: "main" } });
     await tick();
 
-    // Both the stored value and the subscriber end on a value read after the
-    // change, never on the one read before it.
-    expect(delivered).toEqual(["main", "feature"]);
+    // The stored value ends on a value read after the change, never on the one
+    // read before it.
+    expect(inner.computeCalls).toHaveLength(2);
     const now = await svc.getGitInfo(holds, "/repo", {});
     expect(now).toMatchObject({ kind: "ok", value: { branch: "feature" } });
-    sub.unsubscribe();
   });
 
   test("a read during a refresh takes the stored value at once; the value stands until the re-read lands", async () => {
@@ -707,24 +703,18 @@ describe("GitDataProvider refreshes on its own triggers", () => {
   });
 
   test("rapid changes coalesce into at most two refreshes", async () => {
-    const { svc, inner } = makeCache();
+    const { svc, inner, holds } = makeCache();
     inner.repoRootByDir = { "/repo": "/repo" };
-
-    const calls: Array<GitInfo | null> = [];
-    const sub = svc.subscribe(new Holds(), "/repo", (info) => calls.push(info));
-    await sub.firstDelivery;
-    expect(calls).toHaveLength(1); // initial
+    await svc.getGitInfo(holds, "/repo", {});
     const initialComputeCalls = inner.computeCalls.length;
 
     // The first starts a refresh; the rest collapse into one trailing re-read.
     for (let i = 0; i < 10; i++) svc.changed("/repo");
     await tick(10);
 
-    expect(calls.length - 1).toBeLessThanOrEqual(2);
     expect(inner.computeCalls.length - initialComputeCalls).toBeLessThanOrEqual(
       2,
     );
-    sub.unsubscribe();
   });
 
   test("a held repo is re-read every period; released, it costs no read", async () => {
@@ -842,218 +832,28 @@ describe("GitDataProvider refreshes on its own triggers", () => {
   });
 });
 
-// [LAW:no-ambient-temporal-coupling] The first delivery is awaited through the
-// subscription's own `firstDelivery`, never through a count of setImmediates;
-// `tick()` survives only where the wait is for a delivery the provider does
-// NOT promise — a refresh a watch fire started.
-describe("GitDataProvider.subscribe", () => {
-  test("delivers initial snapshot once", async () => {
-    const { svc, inner } = makeCache();
-    inner.repoRootByDir = { "/repo": "/repo" };
-
-    const calls: Array<GitInfo | null> = [];
-    const sub = svc.subscribe(new Holds(), "/repo", (info) => calls.push(info));
-    await sub.firstDelivery;
-    await tick();
-
-    expect(calls).toHaveLength(1);
-    expect(calls[0]).toMatchObject({ branch: "main", status: "clean" });
-    sub.unsubscribe();
-  });
-
-  test("delivers null once for non-repo cwd; no watcher held", async () => {
-    const { svc, inner } = makeCache();
+describe("GitDataProvider watches", () => {
+  test("a directory in no repo reads absent and holds no watcher", async () => {
+    const { svc, inner, holds } = makeCache();
     inner.repoRootByDir = { "/nowhere": null };
 
-    const calls: Array<GitInfo | null> = [];
-    const sub = svc.subscribe(new Holds(), "/nowhere", (info) => calls.push(info));
-    await sub.firstDelivery;
-
-    expect(calls).toEqual([null]);
+    expect((await svc.getGitInfo(holds, "/nowhere", {})).kind).toBe("absent");
     expect(svc.getStats().watchers).toBe(0);
-    sub.unsubscribe();
   });
 
-  test("a change refreshes subscribers", async () => {
-    const { svc, inner } = makeCache();
-    inner.repoRootByDir = { "/repo": "/repo" };
-
-    const calls: Array<GitInfo | null> = [];
-    const sub = svc.subscribe(new Holds(), "/repo", (info) => calls.push(info));
-    await sub.firstDelivery;
-    expect(calls).toHaveLength(1);
-
-    inner.stubInfo = { ...inner.stubInfo, branch: "feature" };
-    svc.changed("/repo");
-    await tick();
-
-    expect(calls).toHaveLength(2);
-    expect(calls[1]).toMatchObject({ branch: "feature" });
-    sub.unsubscribe();
-  });
-
-  test("a drawn subscription keeps its repo newest in the LRU", async () => {
-    const { svc, inner } = makeCache({ maxRepos: 2 });
-    inner.repoRootByDir = {
-      "/repo": "/repo",
-      "/a": "/a",
-      "/b": "/b",
-      "/c": "/c",
-    };
-    const home = new Holds();
-    const sub = svc.subscribe(home, "/repo", () => {});
-    await sub.firstDelivery;
-    for (const dir of ["/a", "/b"]) {
-      const h = new Holds();
-      await svc.getGitInfo(h, dir, {});
-      h.releaseUnread();
-      h.releaseUnread();
-    }
-    sub.read();
-    // Its home disposed, as a registry's dispose does: unused now.
-    sub.unsubscribe();
-    home.close();
-    await svc.getGitInfo(new Holds(), "/c", {});
-
-    // The drawn repo outlived the two read before its last draw: its
-    // subscribed option set answers from what is stored.
-    const { misses } = svc.getStats();
-    await svc.getGitInfo(new Holds(), "/repo", {
-      showSha: true,
-      showStashCount: true,
-    });
-    expect(svc.getStats().misses).toBe(misses);
-    svc.close();
-  });
-
-  test("a subscriber hears every change; it holds the period while its home is drawn", async () => {
-    jest.useFakeTimers();
-    const { svc, inner } = makeCache({ maxRepos: 1 });
-    inner.repoRootByDir = { "/repo": "/repo", "/other": "/other" };
-
-    const home = new Holds();
-    const sub = svc.subscribe(home, "/repo", () => {});
-    await sub.firstDelivery;
-    // Loaded, not drawn: no period.
-    expect(svc.getStats().held).toBe(0);
-    sub.read();
-    expect(svc.getStats().held).toBe(1);
-    await jest.advanceTimersByTimeAsync(GIT_PERIOD_MS);
-    expect(inner.computeCalls).toHaveLength(2);
-
-    // Not drawn across a whole sweep: released, so the period stops.
-    home.releaseUnread();
-    home.releaseUnread();
-    expect(svc.getStats().held).toBe(0);
-    await jest.advanceTimersByTimeAsync(GIT_PERIOD_MS * 3);
-    expect(inner.computeCalls).toHaveLength(2);
-
-    // Still in use, so never evicted, and a change reaches it.
-    await svc.getGitInfo(new Holds(), "/other", {});
-    expect(svc.getStats().size).toBe(2);
-    svc.changed("/repo");
-    await jest.advanceTimersByTimeAsync(0);
-    expect(inner.computeCalls.map((c) => c.workingDir)).toEqual([
-      "/repo",
-      "/repo",
-      "/other",
-      "/repo",
-    ]);
-
-    // Drawn again: held, and on the period.
-    sub.read();
-    expect(svc.getStats().held).toBe(2);
-    await jest.advanceTimersByTimeAsync(GIT_PERIOD_MS);
-    expect(
-      inner.computeCalls.filter((c) => c.workingDir === "/repo"),
-    ).toHaveLength(4);
-    sub.unsubscribe();
-    svc.close();
-  });
-
-  test("multiple subscribers in same repo share one watcher slot", async () => {
-    const { svc, inner } = makeCache();
+  test("two directories of one repo share one watcher slot", async () => {
+    const { svc, inner, holds } = makeCache();
     inner.repoRootByDir = { "/repo/a": "/repo", "/repo/b": "/repo" };
 
-    const subA = svc.subscribe(new Holds(), "/repo/a", () => {});
-    const subB = svc.subscribe(new Holds(), "/repo/b", () => {});
-    await Promise.all([subA.firstDelivery, subB.firstDelivery]);
-
+    await svc.getGitInfo(holds, "/repo/a", {});
+    await svc.getGitInfo(holds, "/repo/b", {});
     expect(svc.getStats().watchers).toBe(1);
-    subA.unsubscribe();
-    subB.unsubscribe();
-  });
-
-  test("unsubscribe before delivery suppresses the callback", async () => {
-    const { svc, inner } = makeCache();
-    inner.repoRootByDir = { "/repo": "/repo" };
-
-    const calls: Array<GitInfo | null> = [];
-    const sub = svc.subscribe(new Holds(), "/repo", (info) => calls.push(info));
-    sub.unsubscribe();
-    // A suppressed delivery still SETTLES — nothing is left outstanding once the
-    // subscriber is gone, which is what lets `settled()` clear its name.
-    await sub.firstDelivery;
-
-    expect(calls).toHaveLength(0);
-  });
-
-  test("subscriber throwing in initial delivery does not crash", async () => {
-    const { svc, inner } = makeCache();
-    inner.repoRootByDir = { "/repo": "/repo" };
-
-    const goodCalls: Array<GitInfo | null> = [];
-    const bad = svc.subscribe(new Holds(), "/repo", () => {
-      throw new Error("bad subscriber");
-    });
-    const good = svc.subscribe(new Holds(), "/repo", (info) => goodCalls.push(info));
-    await Promise.all([bad.firstDelivery, good.firstDelivery]);
-
-    expect(goodCalls).toHaveLength(1);
-    expect(goodCalls[0]).toMatchObject({ branch: "main" });
-    bad.unsubscribe();
-    good.unsubscribe();
-  });
-
-  test("subscriber throwing on null delivery does not crash", async () => {
-    const { svc, inner } = makeCache();
-    inner.repoRootByDir = { "/nowhere": null };
-
-    const bad = svc.subscribe(new Holds(), "/nowhere", () => {
-      throw new Error("bad subscriber");
-    });
-    const seen: Array<GitInfo | null> = [];
-    const good = svc.subscribe(new Holds(), "/nowhere", (info) => seen.push(info));
-    await Promise.all([bad.firstDelivery, good.firstDelivery]);
-
-    expect(seen).toEqual([null]);
-    bad.unsubscribe();
-    good.unsubscribe();
-  });
-
-  test("unsubscribe during a refresh prevents stale delivery", async () => {
-    const { svc, inner } = makeCache();
-    inner.repoRootByDir = { "/repo": "/repo" };
-
-    const calls: Array<GitInfo | null> = [];
-    const sub = svc.subscribe(new Holds(), "/repo", (info) => calls.push(info));
-    await sub.firstDelivery;
-    expect(calls).toHaveLength(1); // initial
-
-    inner.stubInfo = { ...inner.stubInfo, branch: "feature" };
-    svc.changed("/repo");
-    sub.unsubscribe();
-    await tick();
-
-    expect(calls).toHaveLength(1); // no post-unsubscribe delivery
   });
 
   test("a refresh does not re-resolve the repo", async () => {
-    const { svc, inner } = makeCache();
+    const { svc, inner, holds } = makeCache();
     inner.repoRootByDir = { "/repo": "/repo" };
-
-    const sub = svc.subscribe(new Holds(), "/repo", () => {});
-    await sub.firstDelivery;
+    await svc.getGitInfo(holds, "/repo", {});
     expect(inner.resolveCalls.length).toBe(1);
 
     svc.changed("/repo");
@@ -1061,7 +861,6 @@ describe("GitDataProvider.subscribe", () => {
     await tick(10);
 
     expect(inner.resolveCalls.length).toBe(1);
-    sub.unsubscribe();
   });
 });
 
@@ -1111,9 +910,8 @@ describe("GitDataProvider gitDir resolution cache", () => {
   });
 
   test("concurrent callers share one resolution", async () => {
-    // registerDslConfig calls subscribe() once per declared `kind: "git"`
-    // variable inside ONE synchronous loop, so the concurrent case is the real
-    // one: six variables in a non-repo cwd must not be six rev-parse spawns.
+    // Requests for one directory arriving before its resolution lands must
+    // not be one rev-parse spawn each.
     const { svc, inner, holds } = makeCache();
     inner.repoRootByDir = { "/nowhere": null };
     inner.resolveGate = deferred();
@@ -1129,16 +927,14 @@ describe("GitDataProvider gitDir resolution cache", () => {
     expect(inner.resolveCalls).toHaveLength(1);
   });
 
-  test("the read and subscribe surfaces share one resolution", async () => {
+  test("a request's read and a draw's share one resolution", async () => {
     const { svc, inner, holds } = makeCache();
     inner.repoRootByDir = { "/repo": "/repo" };
 
     await svc.getGitInfo(holds, "/repo", {});
-    const sub = svc.subscribe(new Holds(), "/repo", () => {});
-    await sub.firstDelivery;
+    expect(svc.current(new Holds(), "/repo")).toMatchObject({ kind: "ok" });
 
     expect(inner.resolveCalls).toHaveLength(1);
-    sub.unsubscribe();
   });
 
   test("projectDir is part of the key, so it cannot be answered by the wrong entry", async () => {
@@ -1394,7 +1190,7 @@ describe("GitDataProvider owns its failures and its PR's timing", () => {
         failed("git rev-parse: timeout"),
       );
     }
-    svc.subscribe(new Holds(), "/slow", () => {});
+    svc.current(new Holds(), "/slow");
     await tick();
     expect(logs).toEqual(["git resolve failed (/slow): git rev-parse: timeout"]);
   });

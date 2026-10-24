@@ -11,7 +11,6 @@ import {
   VIEW_BYTES,
   type SessionView,
 } from "../src/daemon/cache/render";
-import { GitDataProvider } from "../src/daemon/cache/git";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { SessionState } from "../src/daemon/session-state";
 import {
@@ -56,11 +55,10 @@ function makeCache(budgetBytes: number, maxEntries?: number) {
     counters: { watchersOpened: 0, watchersClosed: 0 },
     logger: () => {},
   });
-  const gitService = new GitDataProvider({ logger: () => {} });
-  cleanups.push(() => watchers.closeAll(), () => gitService.close());
+  cleanups.push(() => watchers.closeAll());
   const sessionState = new SessionState();
   const cache = new RenderCache(
-    { gitService, sessionState, watchers, log: (_level, line) => lines.push(line) },
+    { sessionState, watchers, log: (_level, line) => lines.push(line) },
     { budgetBytes: () => budgetBytes, maxEntries },
   );
   // Run first (cleanups run in reverse): every state the cache serves is torn
@@ -96,7 +94,7 @@ const render = (state: ReturnType<RenderCache["getOrCreate"]>["state"]): string 
   try {
     return drawn(view);
   } finally {
-    view.registry.dispose();
+    view.dispose();
   }
 };
 
@@ -105,7 +103,7 @@ const render = (state: ReturnType<RenderCache["getOrCreate"]>["state"]): string 
 // so a caller can watch whether anything still holds it.
 const drawAlone = (config: ValidatedConfig, compiled: CompiledConfig): VariableStore => {
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", undefined, new SessionState());
+  const registry = new SourceRegistry(store, "", new SessionState());
   declareDslVariables(config, registry, dir, EVERY_SCOPE);
   renderDsl(
     config,

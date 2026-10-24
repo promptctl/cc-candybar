@@ -37,7 +37,6 @@ import { unusedDeclarations, type UnusedDecl } from "../../config/unused.js";
 import { VariableStore } from "../../var-system/store.js";
 import { SourceRegistry } from "../../var-system/sources.js";
 import type { VarScope } from "../../dsl/variable-scope.js";
-import type { GitDataProvider } from "./git.js";
 import type { SessionStateRW } from "../session-state.js";
 import type {
   WatcherRegistry,
@@ -45,6 +44,7 @@ import type {
   WatchTargets,
 } from "./watchers.js";
 import { quietLogger, type DaemonLogger } from "../../utils/logger.js";
+import { Holds } from "../../utils/holds.js";
 import { pluginDataVar, pluginNameOf } from "../../config/loader/plugins.js";
 import { projectionsOf } from "../../config/loader/projections.js";
 
@@ -89,20 +89,18 @@ export function renderCacheBudget(memoryLimitBytes: number): number {
 }
 
 // The count ceiling beside the byte budget: every entry holds a
-// SourceRegistry (fs watchers, TTL timers, git subscriptions) and a config
+// SourceRegistry (fs watchers, TTL timers) and a config
 // watcher, a resource the byte budget does not see. At the default memory limit
 // the bytes bind long before this; it is what bounds watchers when
 // CC_CANDYBAR_RSS_LIMIT_MB is raised.
 export const MAX_ENTRIES = 256;
 
-// [LAW:single-enforcer] These are the cache-and-registry deps — git data
-// (for declareGit subscriptions), session state (for declareState atoms),
-// and the watcher registry (for hot-reload's config file watcher). Daemon-
+// [LAW:single-enforcer] These are the cache-and-registry deps — session state
+// (for declareState atoms) and the watcher registry (for hot-reload's config file watcher). Daemon-
 // owned data providers like the SessionUsageStore/git provider/etc. live in
 // `payloadDeps` (server.ts) and feed `buildRenderPayload`; they are not
 // part of cache identity or lifecycle.
 export interface RenderDeps {
-  gitService: GitDataProvider;
   sessionState: SessionStateRW;
   watchers: WatcherRegistry;
   // Where the cache's events go — every load, every teardown. Only the
@@ -111,11 +109,8 @@ export interface RenderDeps {
   log?: DaemonLogger;
 }
 
-// What building one config's state needs. The git provider is optional
-// because a SourceRegistry stands up its own when handed none — what a
-// one-shot load outside the daemon (`cc-candybar doctor`) wants.
+// What building one config's state needs.
 export interface StateDeps {
-  readonly gitService?: GitDataProvider;
   readonly sessionState: SessionStateRW;
   // The compile for a config's compile key. A cache shares one between every
   // entry whose config compiles alike (RenderCache's table); a one-shot load
@@ -519,10 +514,7 @@ export function buildRenderState(
   const homeRaw = layers.find((l) => l.path === chain.home)?.raw ?? {};
 
   const store = new VariableStore();
-  // [LAW:single-enforcer] Inject the daemon's shared GitDataProvider so
-  // every config's `kind: "git"` declarations route through one cache +
-  // watcher pool (rather than each registry standing up its own). The
-  // sessionState injection makes `kind: "state"` variables read/write the
+  // The sessionState injection makes `kind: "state"` variables read/write the
   // same per-session store the click verbs mutate. `default_empty_value`
   // is honored from globals — it's the fallback used by input/env/etc.
   // sources when neither the path resolves nor the declaration carries
@@ -531,7 +523,6 @@ export function buildRenderState(
   const registry = new SourceRegistry(
     store,
     config.globals.default_empty_value ?? "",
-    deps.gitService,
     deps.sessionState,
   );
 
@@ -716,6 +707,11 @@ const VIEW_SCOPE: ReadonlySet<VarScope> = new Set(["view"]);
 // renders through its own, so a request writes only its own session's values
 // and no other session's render re-runs, reads, or reports them.
 //
+// `holds` is what the session's renders read of the daemon's shared entries (a
+// repo, a pane, a memento reading), so their owners' periods visit them while
+// the view lives and stop when it is disposed; the directory home reads none
+// itself, so it holds none (brandon-unfiled-3248.8ro6).
+//
 // `lastRenderCellsBySegment` is the per-segment StripCell sink that renderDsl
 // writes on each render — pre-layout cells, NOT serialized ANSI. Storing cells
 // (not strings) keeps the hot path free of the per-segment renderStripCells
@@ -729,7 +725,12 @@ export interface SessionView {
   readonly state: DslRenderState;
   readonly store: VariableStore;
   readonly registry: SourceRegistry;
+  readonly holds: Holds;
   readonly lastRenderCellsBySegment: Map<string, readonly RichText[]>;
+  // [LAW:single-enforcer] The view's one teardown: its holds close and its
+  // registry is disposed, so no caller of openView can release one and leak
+  // the other. Returns how many computeds the registry's store released.
+  dispose(): number;
 }
 
 // [LAW:single-enforcer] The one way a view is built: the state's directory
@@ -741,6 +742,7 @@ export function openView(
   sessionId: string,
 ): SessionView {
   const registry = state.registry.view();
+  const holds = new Holds();
   // What fails to declare here failed in the load's probe (buildRenderState),
   // which reported it: a declaration reads only the config.
   declareDslVariables(state.config, registry, cwd, VIEW_SCOPE);
@@ -749,18 +751,23 @@ export function openView(
     state,
     store: registry.variableStore,
     registry,
+    holds,
     lastRenderCellsBySegment: new Map<string, readonly RichText[]>(),
+    dispose: () => {
+      holds.close();
+      return registry.dispose();
+    },
   };
 }
 
 // [LAW:no-ambient-temporal-coupling] The cache's one timer, armed by the first
-// render and stopped with the last entry: every interval it releases each
-// hold an entry's renders have not read since the interval before
-// (`Holds.releaseUnread`), so an owner's period stops visiting a repo, pane
-// or memento reading 2.5 to 5 minutes after the last render that read it —
-// a session that ended, or left for another directory, while the entry is
-// still drawn included (brandon-unfiled-3248.8ro6). The next read takes the
-// hold back, and a period resumed after a gap reads at once.
+// render and stopped with the last entry: every interval it closes each view
+// no render read since the interval before, and releases each hold a view's
+// renders have not read since then (`Holds.releaseUnread`), so an owner's
+// period stops visiting a repo, pane or memento reading 2.5 to 5 minutes after
+// the last render that read it — a memento scope the session's renders stopped
+// naming included (brandon-unfiled-3248.8ro6). The next read takes the hold
+// back, and a period resumed after a gap reads at once.
 export const HOLD_SWEEP_MS = 150_000;
 
 export class RenderCache {
@@ -926,11 +933,6 @@ export class RenderCache {
     try {
       view = this.viewOf(sessionId, held.entry, held.state);
       lease = this.leaseOf(view);
-      // A session draws the directory home through its view: what the home
-      // subscribes to is read, as the view is (`lease.read`). A hold that
-      // draws nothing — a lane check reading the session's settings — reads
-      // neither.
-      held.state.registry.readSubscriptions();
     } catch (err) {
       // [LAW:no-ambient-temporal-coupling] The state hold is this call's
       // until the returned hold carries it: a throw before then releases it,
@@ -1004,7 +1006,7 @@ export class RenderCache {
     this.viewHolds.delete(view);
     this.log(
       "info",
-      `session view closed sid=${JSON.stringify(view.sessionId)} reason=${lease.retired.reason} released=${view.registry.dispose()} held=${lease.retired.held} views=${this.views.size}`,
+      `session view closed sid=${JSON.stringify(view.sessionId)} reason=${lease.retired.reason} released=${view.dispose()} held=${lease.retired.held} views=${this.views.size}`,
     );
   }
 
@@ -1024,16 +1026,13 @@ export class RenderCache {
       else this.retireView(view, "idle");
     }
     let released = 0;
-    for (const entry of this.entries.values()) {
-      released += entry.state.registry.holds.releaseUnread();
-    }
     for (const view of this.views.values()) {
-      released += view.registry.holds.releaseUnread();
+      released += view.holds.releaseUnread();
     }
     if (released > 0) {
       this.log(
         "info",
-        `render-cache idle released=${released} entries=${this.entries.size}`,
+        `render-cache idle released=${released} views=${this.views.size}`,
       );
     }
     if (this.entries.size === 0 && this.sweep !== null) {
@@ -1176,8 +1175,8 @@ export class RenderCache {
 
   // [LAW:single-enforcer] The one place a state is disposed: once it is
   // retired AND unheld, from whichever of the two transitions came last. The
-  // registry owns timers, fs watchers, MobX reactions, and git subscriptions
-  // — dropping it without dispose leaks every handle the config declared.
+  // registry owns timers, fs watchers and MobX reactions — dropping it
+  // without dispose leaks every handle the config declared.
   private reclaim(state: DslRenderState, hold: StateHold): void {
     if (hold.retired === null || hold.holders > 0) return;
     this.holds.delete(state);
@@ -1210,7 +1209,7 @@ export class RenderCache {
   // new DslConfig retires the old state, and `reclaim` disposes its
   // SourceRegistry — at once when no render holds it, else when the last
   // one returns. Dropping the reference without that would leak every
-  // timer, watcher, MobX reaction and git subscription it owns.
+  // timer, watcher and MobX reaction it owns.
   //
   // [LAW:single-enforcer] One publish point for "this reload completed":
   // straight-line, so the signal structurally cannot be skipped by whichever

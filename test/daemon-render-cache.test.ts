@@ -23,10 +23,11 @@ import {
   type CacheEntry,
   type Hold,
   type RenderCacheObservers,
+  type SessionView,
+  openView,
   ENTRY_BYTES,
   COMPILE_BYTES,
 } from "../src/daemon/cache/render";
-import { GitDataProvider } from "../src/daemon/cache/git";
 import { SessionState } from "../src/daemon/session-state";
 import { stateGate } from "../src/daemon/verbs/state-validators";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
@@ -57,7 +58,6 @@ function makeCache(
 ): {
   cache: RenderCache;
   cleanups: Array<() => void>;
-  gitService: GitDataProvider;
   reloads: ReloadSignal;
   watchers: WatcherRegistry;
 } {
@@ -70,14 +70,10 @@ function makeCache(
     logger: () => {},
   });
   cleanups.push(() => watchers.closeAll());
-  const gitService = new GitDataProvider({
-    logger: () => {},
-  });
-  cleanups.push(() => gitService.close());
   const sessionState = new SessionState();
   const reloads = new ReloadSignal();
   const cache = new RenderCache(
-    { gitService, sessionState, watchers, log },
+    { sessionState, watchers, log },
     {
       // Room for four entries over one compile: the fifth evicts the oldest.
       budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES,
@@ -85,7 +81,7 @@ function makeCache(
     },
   );
   cleanups.unshift(() => cache.close());
-  return { cache, cleanups, gitService, reloads, watchers };
+  return { cache, cleanups, reloads, watchers };
 }
 
 function mkConfigDir(): { dir: string; cleanup: () => void } {
@@ -991,10 +987,10 @@ describe("RenderCache", () => {
   });
 });
 
-// brandon-unfiled-3248.8ro6: what an entry's state holds of the daemon's shared
+// brandon-unfiled-3248.8ro6: what a session's view holds of the daemon's shared
 // entries (a repo, a pane, a memento reading) keeps their owners' periods
-// running, so a hold the entry's renders have not read across a whole sweep is
-// released — whether or not the entry is still drawn — and the next render that
+// running, so a hold the view's renders have not read across a whole sweep is
+// released — whether or not the view is still drawn — and the next render that
 // reads it takes it back.
 describe("RenderCache idle sweep", () => {
   // A cache nobody closes keeps its sweep armed, and the sweep keeps the cache
@@ -1005,16 +1001,15 @@ describe("RenderCache idle sweep", () => {
     jest.useFakeTimers();
     const { dir, cleanup } = mkConfigDir();
     const watchers = new WatcherRegistry({ logger: () => {} });
-    const gitService = new GitDataProvider({ logger: () => {} });
     const cache = new RenderCache(
-      { gitService, sessionState: new SessionState(), watchers },
+      { sessionState: new SessionState(), watchers },
       { budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES },
     );
     try {
       let released = 0;
       {
-        using hold = cache.hold(dir, dir, undefined);
-        hold.state.registry.holds.take("repo", () => () => {
+        using hold = cache.holdSession(dir, dir, undefined, "s1");
+        hold.view.holds.take("repo", () => () => {
           released++;
         });
       }
@@ -1034,7 +1029,33 @@ describe("RenderCache idle sweep", () => {
     } finally {
       cache.close();
       jest.useRealTimers();
-      gitService.close();
+      watchers.closeAll();
+      cleanup();
+    }
+  });
+
+  // [LAW:single-enforcer] A view opened outside the cache (the demo, a tool)
+  // is torn down by its one dispose, which releases what its renders held.
+  test("a view's dispose releases its holds and refuses new ones", () => {
+    const { dir, cleanup } = mkConfigDir();
+    const watchers = new WatcherRegistry({ logger: () => {} });
+    const cache = new RenderCache(
+      { sessionState: new SessionState(), watchers },
+      { budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES },
+    );
+    try {
+      const view = openView(cache.getOrCreate(dir, dir, undefined).state, dir, "s1");
+      let released = 0;
+      view.holds.take("repo", () => () => {
+        released++;
+      });
+      view.dispose();
+      expect(released).toBe(1);
+      expect(() => view.holds.take("repo", () => () => {})).toThrow(
+        "hold taken after close: repo",
+      );
+    } finally {
+      cache.close();
       watchers.closeAll();
       cleanup();
     }
@@ -1043,11 +1064,9 @@ describe("RenderCache idle sweep", () => {
   test("a hold no render read across a whole sweep is released; a render takes it back", () => {
     const { dir, cleanup } = mkConfigDir();
     const watchers = new WatcherRegistry({ logger: () => {} });
-    const gitService = new GitDataProvider({ logger: () => {} });
     const logs: string[] = [];
     const cache = new RenderCache(
       {
-        gitService,
         sessionState: new SessionState(),
         watchers,
         log: (_level, message) => logs.push(message),
@@ -1056,19 +1075,17 @@ describe("RenderCache idle sweep", () => {
     );
     const released: string[] = [];
     try {
-      // One render of the entry, reading the keys it names.
-      const render = (...keys: string[]): void => {
-        using hold = cache.hold(dir, dir, undefined);
+      // One render of the session, reading the keys it names; its view.
+      const render = (...keys: string[]): SessionView => {
+        using hold = cache.holdSession(dir, dir, undefined, "s1");
         for (const key of keys) {
-          hold.state.registry.holds.take(key, () => () => {
+          hold.view.holds.take(key, () => () => {
             released.push(key);
           });
         }
+        return hold.view;
       };
-      render("repo", "memento:ended-session");
-      expect(
-        cache.getOrCreate(dir, dir, undefined).state.registry.holds.size,
-      ).toBe(2);
+      expect(render("repo", "memento:ended-session").holds.size).toBe(2);
 
       // Read since the last sweep: kept.
       cache.releaseIdle();
@@ -1079,21 +1096,19 @@ describe("RenderCache idle sweep", () => {
       render("repo");
       cache.releaseIdle();
       expect(released).toEqual(["memento:ended-session"]);
-      expect(logs).toContain("render-cache idle released=1 entries=1");
+      expect(logs).toContain("render-cache idle released=1 views=1");
 
-      // Nothing drawn across a whole sweep: the repo goes too.
+      // Nothing drawn across a whole sweep: the view closes, and the repo
+      // goes with it.
       cache.releaseIdle();
       expect(released).toEqual(["memento:ended-session", "repo"]);
 
       // The next render that reads it takes it back.
-      render("repo");
-      const state = cache.getOrCreate(dir, dir, undefined).state;
-      expect(state.registry.holds.size).toBe(1);
+      expect(render("repo").holds.size).toBe(1);
       cache.releaseIdle();
       expect(released).toHaveLength(2);
     } finally {
       cache.close();
-      gitService.close();
       watchers.closeAll();
       cleanup();
     }

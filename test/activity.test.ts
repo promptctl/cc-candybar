@@ -633,7 +633,6 @@ describe("the bundled activity segment renders the payload", () => {
     const registry = new SourceRegistry(
       store,
       "",
-      undefined,
       new SessionState(),
     );
     try {

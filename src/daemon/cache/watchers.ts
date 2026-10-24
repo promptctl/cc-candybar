@@ -20,7 +20,7 @@ const defaultLogger: WatcherLogger = (_level, message) => debug(message);
 //
 // [LAW:single-enforcer] It shares and refcounts; it bounds nothing. Each
 // consumer bounds what it holds (the git cache's entries, the render cache's
-// MAX_ENTRIES, a git subscription dying with its render state), so a slot
+// MAX_ENTRIES), so a slot
 // closes only when its last holder releases it — never under a holder that
 // still holds it (brandon-unfiled-3248.576q: an LRU cap here closed watches
 // whose holders kept handles to nothing).

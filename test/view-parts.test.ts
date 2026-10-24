@@ -39,7 +39,7 @@ const B = instantOf(new Date(2026, 5, 4, 12, 34, 57));
 // A view of `config`: its store and registry, and the compile it draws with.
 function viewOf(config: ValidatedConfig, sessionState = new SessionState()) {
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", undefined, sessionState);
+  const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
   const errors: string[] = [];
   const warnings: RenderWarning[] = [];

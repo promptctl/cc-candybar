@@ -31,8 +31,6 @@ export {
   type ReadMode,
   type TemplateOptions,
   type TimeOptions,
-  type GitField,
-  type GitOptions,
   type StateOptions,
   type LastError,
 } from "./sources";

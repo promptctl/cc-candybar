@@ -351,7 +351,7 @@ export function childrenOf(node: LayoutNode): readonly LayoutNode[] {
 // daemon's own lifetime boundary made into a type.
 //
 // One RenderCache entry is keyed by (projectDir, cwd) and serves MANY sessions.
-// Its SourceRegistry (timers, fs watchers, git subscriptions) is built ONCE,
+// Its SourceRegistry (timers, fs watchers) is built ONCE,
 // in buildState, and its click gate (stateGate) is derived once per config. A preset, by contrast, is a per-SESSION pick. So a
 // preset carrying `variables` would need a per-session registry, and one
 // carrying `actions` would need a per-session wire gate — or a gate that is the
@@ -526,7 +526,6 @@ export type AuthoredVariableDecl =
   | ShellVarDecl
   | TemplateVarDecl
   | TimeVarDecl
-  | GitVarDecl
   | StateVarDecl;
 
 // [LAW:no-silent-failure] A plugin's data variable when the plugin did not
@@ -639,15 +638,6 @@ export interface TimeVarDecl {
   readonly default?: string;
 }
 
-// [LAW:types-are-the-program] No `cache`: a git variable refreshes through the
-// daemon's git cache, which watches the repository, so there is no policy for
-// an author to choose and the loader refuses one.
-export interface GitVarDecl {
-  readonly kind: "git";
-  readonly field: GitField;
-  readonly default?: string;
-}
-
 // [LAW:one-source-of-truth] A `state` variable reads through to the daemon's
 // SessionState (the canonical store for per-session toggles, random picks,
 // click-mutated values). Reactivity is wired by SessionState's internal MobX
@@ -672,14 +662,6 @@ export interface StateVarDecl {
   // like `SegmentNode.opens`: the loader's variable schema does not list it.
   readonly within?: readonly DisclosureRef[];
 }
-
-export type GitField =
-  | "branch"
-  | "sha"
-  | "dirty"
-  | "ahead"
-  | "behind"
-  | "stash";
 
 // [LAW:dataflow-not-control-flow] The discriminator is "which key is present"
 // in the user's JSON — not a `kind` field. Encoded as a 5-arm union so the
@@ -716,7 +698,6 @@ export const SOURCE_KINDS = [
   "shell",
   "template",
   "time",
-  "git",
   "state",
 ] as const;
 export type SourceKind = (typeof SOURCE_KINDS)[number];
@@ -733,15 +714,6 @@ export function hasCacheField(v: VariableDecl): v is VariableDeclWithCache {
   // (a tombstone's `dropped`) has no cache until it is listed here.
   return v.kind === "file" || v.kind === "shell";
 }
-
-export const GIT_FIELDS: readonly GitField[] = [
-  "branch",
-  "sha",
-  "dirty",
-  "ahead",
-  "behind",
-  "stash",
-];
 
 export interface SegmentDecl {
   readonly template: string;

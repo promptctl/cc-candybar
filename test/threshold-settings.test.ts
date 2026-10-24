@@ -61,7 +61,7 @@ function buildRuntime(src: string, utilization: number) {
   const sessionState = new SessionState();
   durable.seedOrigin(sessionState, SID);
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", undefined, sessionState);
+  const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
   const render = (): string =>
     renderDsl(

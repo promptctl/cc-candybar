@@ -206,7 +206,6 @@ describe("a fill segment fills wherever the walk places it", () => {
     const registry = new SourceRegistry(
       store,
       "",
-      undefined,
       new SessionState(),
     );
     const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });

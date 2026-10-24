@@ -76,8 +76,8 @@ import {
 const CHECK_WIDTH = 200;
 
 // How long the verdict waits for an async source's first run — a shell or file
-// read, a git subscription's first delivery — before rendering with whatever it
-// holds (and naming the stragglers as a warning). Generous against a slow
+// read — before rendering with whatever it holds (and naming the stragglers as
+// a warning). Generous against a slow
 // `uptime`, short against a hung command.
 const SOURCE_SETTLE_MS = 5000;
 
@@ -383,7 +383,6 @@ export async function prepareConfig(
   const registry = new SourceRegistry(
     store,
     config.globals.default_empty_value ?? "",
-    undefined,
     new SessionState(),
   );
   try {
@@ -405,12 +404,11 @@ export async function prepareConfig(
       ),
     );
     // [LAW:no-ambient-temporal-coupling] An async source's first run — a shell
-    // or file read, a git subscription's first delivery — completes after
-    // registration or that push; the verdict renders what the sources YIELDED,
-    // not their pre-scan fallbacks (a json document with no default draws its
-    // loading cell until it is scanned). The registry owns the
-    // "every run complete" state; a source still out at the deadline is named
-    // and the render proceeds on what it holds.
+    // or file read — completes after registration; the verdict renders what
+    // the sources YIELDED, not their pre-scan fallbacks (a json document with
+    // no default draws its loading cell until it is scanned). The registry owns
+    // the "every run complete" state; a source still out at the deadline is
+    // named and the render proceeds on what it holds.
     const pending = await registry.settled(SOURCE_SETTLE_MS);
     if (pending.length > 0) {
       warnings.push(
@@ -660,7 +658,7 @@ async function loadRegisterRender(
     return bar;
   } finally {
     // [LAW:single-enforcer] The registry owns every async handle the config
-    // declared (timers, fs watchers, git subscriptions); a one-shot check must
+    // declared (timers, fs watchers); a one-shot check must
     // not leak them past the verdict.
     prepared.registry.dispose();
   }

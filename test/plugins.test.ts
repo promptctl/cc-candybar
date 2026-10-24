@@ -21,7 +21,6 @@ import {
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { pluginRoots } from "../src/config/loader/plugin-folders";
 import { hasCacheField } from "../src/config/dsl-types";
-import { GitDataProvider } from "../src/daemon/cache/git";
 import { SessionState } from "../src/daemon/session-state";
 import { startBar, type Bar } from "./helpers/drive-bar";
 
@@ -352,20 +351,17 @@ test("the daemon's load records the plugins it merged and dropped", () => {
     good,
     `{ plugins: ["./deploy/plugin.json5", "./q/plugin.json5"], root: { h: ["plugins.deploy.status"] } }`,
   );
-  const gitService = new GitDataProvider({ logger: () => {} });
+  const loaded = loadFromDisk(dir, dir, good, {
+    sessionState: new SessionState(),
+  });
   try {
-    const loaded = loadFromDisk(dir, dir, good, {
-      gitService,
-      sessionState: new SessionState(),
-    });
     expect(loaded.state?.plugins.loaded).toEqual([path.join(dir, "deploy/plugin.json5")]);
     expect(loaded.state?.plugins.dropped.map((d) => d.path)).toEqual([
       path.join(dir, "q/plugin.json5"),
     ]);
     expect(loaded.warning ?? "").toContain("was not loaded");
-    loaded.state?.registry.dispose();
   } finally {
-    gitService.close();
+    loaded.state?.registry.dispose();
   }
 });
 
@@ -446,14 +442,13 @@ describe("an installed plugin", () => {
     install("data", "lit", CHECKOUT_DEFINITION);
     fs.mkdirSync(path.join(dir, "main/.git"), { recursive: true });
     write("main/.claude/worktrees/w/.git", "gitdir: ../../../.git/worktrees/w\n");
-    const gitService = new GitDataProvider({ logger: () => {} });
+    const loaded = loadFromDisk(
+      path.join(dir, "main"),
+      path.join(dir, "main/.claude/worktrees/w"),
+      placing("plugins.lit.ticket"),
+      { sessionState: new SessionState() },
+    );
     try {
-      const loaded = loadFromDisk(
-        path.join(dir, "main"),
-        path.join(dir, "main/.claude/worktrees/w"),
-        placing("plugins.lit.ticket"),
-        { gitService, sessionState: new SessionState() },
-      );
       expect(loaded.error).toBeNull();
       const data = path.join(dir, "main/.claude/worktrees/w/.lit/state.json");
       expect(loaded.state?.config.variables["plugins.lit.data"]).toMatchObject({ path: data });
@@ -464,9 +459,8 @@ describe("an installed plugin", () => {
         ` +${path.join(dir, "data/cc-candybar/plugins/lit/plugin.json5")} data=${data}`,
       );
       expect(line).toContain(` checkout=git:${path.join(dir, "main/.claude/worktrees/w")} `);
-      loaded.state?.registry.dispose();
     } finally {
-      gitService.close();
+      loaded.state?.registry.dispose();
     }
   });
 
@@ -486,9 +480,8 @@ describe("an installed plugin", () => {
       counters: { watchersOpened: 0, watchersClosed: 0 },
       logger: () => {},
     });
-    const gitService = new GitDataProvider({ logger: () => {} });
     const cache = new RenderCache(
-      { gitService, sessionState: new SessionState(), watchers },
+      { sessionState: new SessionState(), watchers },
       { budgetBytes: () => renderCacheBudget(memoryLimitBytes({})) },
     );
     try {
@@ -527,7 +520,6 @@ describe("an installed plugin", () => {
     } finally {
       cache.close();
       watchers.closeAll();
-      gitService.close();
     }
   });
 
@@ -544,26 +536,20 @@ describe("an installed plugin", () => {
     install("data", "lit", CHECKOUT_DEFINITION);
     fs.mkdirSync(path.join(dir, "outer/inner"), { recursive: true });
     const p = placing("plugins.lit.ticket");
-    const gitService = new GitDataProvider({ logger: () => {} });
     const load = (): string => {
       const loaded = loadFromDisk(dir, path.join(dir, "outer/inner"), p, {
-        gitService,
         sessionState: new SessionState(),
       });
       loaded.state?.registry.dispose();
       return pluginLoadLine(loaded.layers, loaded.state!);
     };
-    try {
-      const before = load();
-      expect(before).toContain(` checkout=dir:${path.join(dir, "outer/inner")} `);
-      expect(before).toContain(` data=${path.join(dir, "outer/inner/.lit/state.json")}`);
-      fs.mkdirSync(path.join(dir, "outer/.git"));
-      const after = load();
-      expect(after).toContain(` checkout=git:${path.join(dir, "outer")} `);
-      expect(after).toContain(` data=${path.join(dir, "outer/.lit/state.json")}`);
-    } finally {
-      gitService.close();
-    }
+    const before = load();
+    expect(before).toContain(` checkout=dir:${path.join(dir, "outer/inner")} `);
+    expect(before).toContain(` data=${path.join(dir, "outer/inner/.lit/state.json")}`);
+    fs.mkdirSync(path.join(dir, "outer/.git"));
+    const after = load();
+    expect(after).toContain(` checkout=git:${path.join(dir, "outer")} `);
+    expect(after).toContain(` data=${path.join(dir, "outer/.lit/state.json")}`);
   });
 
   test("a nearer root replaces a farther one's plugin of the same name, whole", async () => {
@@ -702,13 +688,11 @@ describe("an installed plugin", () => {
     install("data", "deploy", `{ data: "./d.json", segments: { status: { template: "installed" } } }`);
     write("deploy/plugin.json5", `{ data: "./d.json", segments: { status: { template: "listed" } } }`);
     const p = write("config.json5", `{ plugins: ["./deploy/plugin.json5"], root: { h: ["plugins.deploy.status"] } }`);
-    const gitService = new GitDataProvider({ logger: () => {} });
+    const loaded = loadFromDisk(dir, dir, p, { sessionState: new SessionState() });
     try {
-      const loaded = loadFromDisk(dir, dir, p, { gitService, sessionState: new SessionState() });
       expect(loaded.state?.plugins.loaded).toEqual([path.join(dir, "deploy/plugin.json5")]);
-      loaded.state?.registry.dispose();
     } finally {
-      gitService.close();
+      loaded.state?.registry.dispose();
     }
   });
 
@@ -719,9 +703,8 @@ describe("an installed plugin", () => {
       counters: { watchersOpened: 0, watchersClosed: 0 },
       logger: () => {},
     });
-    const gitService = new GitDataProvider({ logger: () => {} });
     const cache = new RenderCache(
-      { gitService, sessionState: new SessionState(), watchers },
+      { sessionState: new SessionState(), watchers },
       { budgetBytes: () => renderCacheBudget(memoryLimitBytes({})) },
     );
     try {
@@ -734,7 +717,6 @@ describe("an installed plugin", () => {
     } finally {
       cache.close();
       watchers.closeAll();
-      gitService.close();
     }
   });
   test("a `do` member naming a dropped plugin's action stands in", async () => {
@@ -768,13 +750,11 @@ describe("an installed plugin", () => {
     install("data", "deploy", `{ data: "./d.json", segments: { status: { template: "installed" } } }`);
     write("deploy/plugin.json5", `{ data: "./d.json", segments: { status: { template: "{{ if }}" } } }`);
     const p = write("config.json5", `{ plugins: ["./deploy/plugin.json5"], root: { h: ["plugins.deploy.status"] } }`);
-    const gitService = new GitDataProvider({ logger: () => {} });
+    const loaded = loadFromDisk(dir, dir, p, { sessionState: new SessionState() });
     try {
-      const loaded = loadFromDisk(dir, dir, p, { gitService, sessionState: new SessionState() });
       expect(loaded.state?.plugins.loaded).toEqual([]);
-      loaded.state?.registry.dispose();
     } finally {
-      gitService.close();
+      loaded.state?.registry.dispose();
     }
   });
 
@@ -818,14 +798,12 @@ describe("an installed plugin", () => {
   test("a drop is reached by its definition, not by its notice", () => {
     const def = install("data", "lit", `{ data: "./d.json", segments: { s: { template: "{{ if }}" } } }`);
     const p = placing("plugins.lit.s");
-    const gitService = new GitDataProvider({ logger: () => {} });
+    const loaded = loadFromDisk(dir, dir, p, { sessionState: new SessionState() });
     try {
-      const loaded = loadFromDisk(dir, dir, p, { gitService, sessionState: new SessionState() });
       expect([...(loaded.state?.plugins.reached ?? [])]).toEqual([def]);
       expect(loaded.state?.plugins.dropped.map((d) => d.path)).toEqual([def]);
-      loaded.state?.registry.dispose();
     } finally {
-      gitService.close();
+      loaded.state?.registry.dispose();
     }
   });
 });

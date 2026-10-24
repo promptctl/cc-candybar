@@ -86,7 +86,7 @@ printf '%s\n' '{"period": "September", "spent": 42.5, "limit": 120, "spentPct": 
 ```
 
 The command runs under `/bin/sh -c` in the directory Claude Code started the
-statusline in — the same directory `git` variables read — so a command that
+statusline in — the directory the bar's git facts are read in — so a command that
 asks about "this repo" answers for the session's repo. It runs with the daemon's environment, so the script
 is either on the daemon's `PATH` or spelled as an absolute path. A command the
 shell cannot find fails its run with `exited with code 127`, and

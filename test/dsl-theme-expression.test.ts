@@ -103,7 +103,7 @@ function buildRuntime(source = src(RULE)): Runtime {
   const config = parseAndValidate("<theme-expr>", source, ALLOWED);
   const sessionState = new SessionState();
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", undefined, sessionState);
+  const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
   const warnings: RenderWarning[] = [];
   const sink = new Map<string, readonly RichText[]>();
@@ -337,7 +337,6 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
     const registry = new SourceRegistry(
       store,
       "",
-      undefined,
       new SessionState(),
     );
     try {
@@ -367,7 +366,6 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
     const registry = new SourceRegistry(
       store,
       "",
-      undefined,
       new SessionState(),
     );
     try {
@@ -434,7 +432,6 @@ describe("globals.palette as an expression — loader", () => {
     const registry = new SourceRegistry(
       store,
       "",
-      undefined,
       new SessionState(),
     );
     try {
@@ -560,7 +557,7 @@ describe("a rule inside a preset's globals", () => {
   ): R => {
     const config = parseAndValidate("<theme-expr-preset>", source, ALLOWED);
     const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", undefined, new SessionState());
+    const registry = new SourceRegistry(store, "", new SessionState());
     try {
       return body(config, registry, store);
     } finally {

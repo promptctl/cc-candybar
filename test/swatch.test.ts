@@ -53,7 +53,7 @@ function rig(template: string) {
     DEFAULT_DSL_CONFIG,
   );
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", undefined, new SessionState());
+  const registry = new SourceRegistry(store, "", new SessionState());
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
   const sink = new Map<string, readonly RichText[]>();
   const rendered = renderDsl(
