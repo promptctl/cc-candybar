@@ -316,7 +316,7 @@ function shaped(outcome: Reading<JsonValue>): Reading<JsonValue> {
 
 // [LAW:one-type-per-behavior] Every node the store holds. `read`'s result type
 // is the discriminator's payload: a VarNode reads a VarValue, a DocumentNode
-// an Reading<JsonValue>; a consumer that must be total over both (the scope
+// a Reading<JsonValue>; a consumer that must be total over both (the scope
 // proxy, debug introspection) switches on `kind` once.
 export type StoreNode = VarNode | DocumentNode;
 

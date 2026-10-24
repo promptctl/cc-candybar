@@ -79,9 +79,21 @@ export interface FrameWrite<Line> {
 export class FrameMemory<Line> {
   private last: FrameRecord<Line> | null = null;
 
-  // The last frame drawn, or none in a view that has drawn none.
-  get recorded(): FrameRecord<Line> | null {
-    return this.last;
+  // [LAW:single-enforcer] The last frame drawn from `source`, or none. A frame
+  // drawn from another config, preset, state revision or width says nothing of
+  // where a placement stands in this one — its ids may name other placements,
+  // its rows were sized for another width, and a write to the session's state
+  // shows what it reveals at once — so it is no frame to draw from or compare
+  // against.
+  from(source: FrameSource): FrameRecord<Line> | null {
+    const { last } = this;
+    return last !== null &&
+      last.source.config === source.config &&
+      last.source.preset === source.preset &&
+      last.source.revision === source.revision &&
+      last.source.width === source.width
+      ? last
+      : null;
   }
 
   begin(

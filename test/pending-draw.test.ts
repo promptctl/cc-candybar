@@ -65,11 +65,12 @@ function renderer(cfg: ValidatedConfig) {
   return {
     store,
     registry,
+    session,
     // The base palette the latest frame wore.
     palette: () => drawn().look!.basePalette,
     answer: (value: JsonValue) => store.setDocument("doc", ok(value)),
     unanswer: () => store.setDocument("doc", PENDING),
-    draw: (): Drawn => {
+    draw: (width = 160): Drawn => {
       const errors: string[] = [];
       const warnings: RenderWarning[] = [];
       const frame = drawDsl(
@@ -84,7 +85,7 @@ function renderer(cfg: ValidatedConfig) {
           colorCompatibility: "truecolor",
           wrap: true,
           padding: 1,
-          width: 160,
+          width,
         },
         {
           onSegmentError: (id, message) => errors.push(`${id}: ${message}`),
@@ -154,6 +155,62 @@ describe("a placement whose value is not answered yet draws where it stood", () 
     }
   });
 
+  test("drawn at another width, it stands where a cold view's does: its last frame was sized for that width", () => {
+    const on = renderer(config(ROW));
+    try {
+      on.answer({ label: "a wide value", show: true });
+      on.draw(160);
+      on.unanswer();
+      expect(cellBetween(on.draw(120).text, "L", "R")).toBe(`  ${LOADING_GLYPH}  `);
+    } finally {
+      on.dispose();
+    }
+  });
+
+  test("with edit mode's buttons beside it, every row keeps the width it drew", () => {
+    const on = renderer(config(ROW));
+    try {
+      on.session.set("s", "edit.mode", "arrange");
+      on.session.set("s", "edit.live", "open");
+      on.answer({ label: "a wide value", show: true });
+      const drew = stripAnsi(on.draw().frame.text).split("\n");
+      expect(drew.join("\n")).toContain("a wide value");
+      on.unanswer();
+      const { frame, errors } = on.draw();
+      const rows = stripAnsi(frame.text).split("\n");
+      expect(rows.join("\n")).toContain(LOADING_GLYPH);
+      expect(rows.map((row) => row.length)).toEqual(drew.map((row) => row.length));
+      expect(errors).toEqual([]);
+    } finally {
+      on.dispose();
+    }
+  });
+
+  test("one that drew several rows holds every one of them", () => {
+    const on = renderer(
+      config(`
+        segments: {
+          value: { template: "{{ .doc.top }}\\n{{ .doc.bottom }}" },
+        },
+        root: { h: ["value"] },
+      `),
+    );
+    try {
+      on.answer({ top: "a top row", bottom: "and a longer bottom row" });
+      const drew = stripAnsi(on.draw().frame.text).split("\n");
+      expect(drew).toHaveLength(2);
+      on.unanswer();
+      const rows = stripAnsi(on.draw().frame.text).split("\n");
+      expect(rows.map((row) => row.length)).toEqual(drew.map((row) => row.length));
+      // The settings door leads the first row.
+      expect(rows[0]!.trimEnd().endsWith(`|  ${LOADING_GLYPH}`)).toBe(true);
+      expect(drew[1]!.trim()).toBe("and a longer bottom row");
+      expect(rows[1]!.trim()).toBe("");
+    } finally {
+      on.dispose();
+    }
+  });
+
   test("one that drew nothing still draws nothing, and no `…`", () => {
     const on = renderer(config(ROW));
     try {
@@ -193,6 +250,36 @@ describe("a placement whose value is not answered yet draws where it stood", () 
       expect(text.length).toBe(drew.length);
       expect(cellBetween(text, "L", "R").trim()).toBe(LOADING_GLYPH);
       expect(warnings).toEqual([]);
+    } finally {
+      on.dispose();
+    }
+  });
+
+  test("under a container not answered yet, a `when` that fails is no fault yet: it waits on the container", () => {
+    const on = renderer(
+      config(`
+        segments: {
+          left: { template: "L" },
+          value: { template: "V", when: '{{ fail "only asked once shown" }}' },
+          nested: { template: "N" },
+          right: { template: "R" },
+        },
+        root: { h: ["left", { h: ["value", { h: ["nested"], when: '{{ fail "only asked once shown" }}' }], when: "{{ .doc.show }}" }, "right"] },
+      `),
+    );
+    try {
+      on.answer({ show: true });
+      // Answered, the container shows what it holds, and their `when`s fail:
+      // each is the fault it is.
+      const answered = on.draw();
+      expect(answered.errors).toHaveLength(1);
+      expect(answered.warnings.map((w) => w.kind)).toEqual(["when"]);
+      on.unanswer();
+      const { text, errors, warnings, frame } = on.draw();
+      expect(text).toContain(LOADING_GLYPH);
+      expect(errors).toEqual([]);
+      expect(warnings).toEqual([]);
+      expect(frame.pending).toEqual(["doc"]);
     } finally {
       on.dispose();
     }

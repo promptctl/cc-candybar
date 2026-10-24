@@ -1082,9 +1082,16 @@ function provisionalName<T>(
   return selected.kind === "decided" ? selected.name : SLOT_FLOORS[slot];
 }
 
-// A node's own gate under a parent that is shown, or not answered yet.
+// A node's own gate under a parent that is shown, or not answered yet. Under
+// one not answered yet, a node its own `when` hides is hidden either way, and
+// one waiting itself waits; one it shows waits on the parent, and so does one
+// whose `when` fails — no fault yet, since the parent's answer decides whether
+// it is asked at all.
 function within(parent: Visibility, own: Gate): Gate {
-  return own.kind === "shown" ? parent : own;
+  return own.kind === "shown" ||
+    (own.kind === "failed" && parent.kind === "pending")
+    ? parent
+    : own;
 }
 
 // The ids of the placements a layout node holds, its open bodies' included:
@@ -1400,9 +1407,10 @@ export function drawDsl(
     width: opts.width,
   };
   const record = parts.memory.begin(source, returnedBy);
+  const last = parts.memory.from(source);
   const waited = new Set<string>();
   const ruleFrame: RuleFrame = {
-    held: (slot) => parts.memory.recorded?.rules.get(slot),
+    held: (slot) => last?.rules.get(slot),
     waited: (variable) => waited.add(variable),
     settled: record.rule,
   };
@@ -1501,7 +1509,7 @@ export function drawDsl(
     {
       transitions,
       source,
-      last: parts.memory.recorded,
+      last,
       returned: returnedBy,
       hold: heldLine,
     },
@@ -1543,9 +1551,8 @@ export function drawDsl(
     parent: Visibility,
     region: Region,
   ): RenderedLines => {
-    // A hidden parent's child is hidden without its `when` being asked. Under
-    // a parent not answered yet a child is as its own `when` says, except
-    // that shown waits on the parent: it is not answered yet either.
+    // A hidden parent's child is hidden without its `when` being asked; under
+    // a parent not answered yet it is as `within` says.
     const evaluated =
       parent.kind === "hidden" ? parent : within(parent, parts.gate(node));
     const gate: NodeGate =
@@ -1601,7 +1608,7 @@ export function drawDsl(
       // same store every other affordance's URL does.
       closeDisclosure: (key) => disclosureCloseFragment(store, key),
       placed: (id, lines) => record.placed(id, motion.placed(id, lines)),
-      lastDrawn: (id) => parts.memory.recorded?.placements.get(id),
+      lastDrawn: (id) => last?.placements.get(id),
       waited: (variable) => waited.add(variable),
       decoration: (node, palette) =>
         decoratedStyle(

@@ -23,7 +23,7 @@ export function framed<Line>(
   const motion = fx.motion(
     name,
     clock,
-    { ...given, last: memory.recorded },
+    { ...given, last: memory.from(given.source) },
     flash,
   );
   return {

@@ -70,7 +70,8 @@ export interface RowItem {
 
 // What one render asks of its transitions: whether placements pass through
 // them at all (globals.transitions), what the frame is drawn from, the view's
-// record of the last frame it drew (`FrameMemory`), how the lines a placement
+// record of the last frame it drew from that same source (`FrameMemory.from`,
+// none when the last was drawn from another), how the lines a placement
 // returned divide (`Returned`), and how a placement that leaves replays one of
 // its rows.
 export interface FrameTransitions<Line> {
@@ -445,12 +446,7 @@ export class SessionEffects<Line> {
     // value: the last frame's placements, or none to compare at all.
     const basis: FadeBasis = !given.transitions
       ? "off"
-      : inFlight !== null &&
-          last !== null &&
-          last.source.config === given.source.config &&
-          last.source.preset === given.source.preset &&
-          last.source.revision === given.source.revision &&
-          last.source.width === given.source.width
+      : inFlight !== null && last !== null
         ? "compared"
         : "fresh";
     // [LAW:one-source-of-truth] What a placement last drew is the view's

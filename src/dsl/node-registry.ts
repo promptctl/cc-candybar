@@ -780,11 +780,7 @@ function drawSegment(
         : { lead: [], stays: inlineLines };
     const holdLead = openLead.flatMap((cell) =>
       leadCell(
-        new RichText(
-          " ".repeat(
-            cellParts(cell).reduce((w, part) => w + part.cellLength, 0),
-          ),
-        ),
+        new RichText(" ".repeat(cellsWidth(cellParts(cell)))),
         styles.trigger,
         0,
       ),
@@ -824,8 +820,11 @@ function drawSegment(
     return [...laidLines, ...ledBody];
   } catch (err) {
     // [LAW:single-enforcer] Not answered yet is no failure, and `readPending`
-    // is the one thing that tells them apart.
-    const pending = readPending(err);
+    // is the one thing that tells them apart. Under a gate not answered yet,
+    // the placement's own `when` failing is no fault yet either: the parent's
+    // answer decides whether it is asked at all, so it waits on that.
+    const pending =
+      readPending(err) ?? (ctx.gate.kind === "pending" ? ctx.gate : undefined);
     return pending !== undefined
       ? loadingSegment(node, scope, ctx, pending.variable)
       : brokenSegment(node, scope, ctx, (err as Error).message ?? String(err));
@@ -837,10 +836,10 @@ function drawSegment(
 export const LOADING_GLYPH = "…";
 
 // [LAW:no-silent-failure] A placement whose value is not answered yet draws
-// where it stood in the view's last frame, so a source answering late never
-// reflows its row nor flashes a cell: one that drew is `…` at the width it
-// drew, one that drew nothing still draws nothing, and one never drawn (a cold
-// view) is one cell. It wears its decoration — a pending value states no
+// where it stood in the view's last frame drawn from this source, so a source
+// answering late never reflows the bar nor flashes a cell: one that drew holds
+// each cell it laid at the width it drew, `…` in the first, one that drew
+// nothing still draws nothing, and one never drawn (a cold view) is one cell. It wears its decoration — a pending value states no
 // meaning for a `bg:` to paint — and edit mode's buttons ride it as they ride
 // any cell, so it stays configurable and removable.
 function loadingSegment(
@@ -859,14 +858,23 @@ function loadingSegment(
     errorAffix(node.trail, node, scope, ctx),
     style,
   );
-  const drew = last === undefined ? 0 : drawnWidth(last.drawing.own);
-  const affixes = cellsWidth(lead) + cellsWidth(trail);
-  return [
-    {
-      cells: applySegmentLayout(
-        fragmentsToCells([new RichText(LOADING_GLYPH)], style),
+  // [LAW:one-source-of-truth] The shape it drew, cell for cell: each laid
+  // cell's content — padding included, fill grown in place, measured once its
+  // row serialized — is the width `applySegmentLayout` sizes content to, beside
+  // the lead and trail it lays around it.
+  const rows: ReadonlyArray<ReadonlyArray<number | "auto">> =
+    last === undefined
+      ? [["auto"]]
+      : last.drawing.own.map((line) =>
+          line.cells.map((cell) => cell.text.cellLength),
+        );
+  return rows.map((widths, row) => ({
+    cells: widths.flatMap((width, i) => {
+      const first = row === 0 && i === 0;
+      return applySegmentLayout(
+        fragmentsToCells([new RichText(first ? LOADING_GLYPH : " ")], style),
         {
-          width: drew > affixes ? drew - affixes : "auto",
+          width,
           justify: "left",
           truncate: "right",
           baseStyle: style,
@@ -876,23 +884,14 @@ function loadingSegment(
             effect: node.settings.effect,
             ground: groundOf(palette),
           },
-          lead,
-          trail,
+          lead: first ? lead : [],
+          trail: first ? trail : [],
         },
-      ),
-      band: "own",
-      place: "flow",
-    },
-  ];
-}
-
-// The columns the widest of a placement's rows took as its frame drew them:
-// its cells, fill grown in place, measured once the row has serialized.
-function drawnWidth(lines: RenderedLines): number {
-  return Math.max(
-    0,
-    ...lines.map((line) => cellsWidth(line.cells.flatMap(cellParts))),
-  );
+      );
+    }),
+    band: "own",
+    place: "flow",
+  }));
 }
 
 function cellsWidth(cells: readonly RichText[]): number {
@@ -944,7 +943,8 @@ function brokenSegment(
 // A broken segment stays configurable and removable: edit mode's buttons ride
 // its ⚠ cell as they ride any cell. Each is entered as a body of its own, so
 // one that fails too is one more reported error beside the first, never a
-// bar-wide throw.
+// bar-wide throw; one not answered yet is no error, and draws nothing until it
+// is.
 function errorAffix(
   affix: Template<RichText> | undefined,
   node: CompiledSegmentNode,
@@ -955,7 +955,10 @@ function errorAffix(
   try {
     return ctx.evaluateOnce(node, scope, ctx.palette, affix).fragments;
   } catch (err) {
-    ctx.onSegmentError?.(node.id, (err as Error).message ?? String(err));
+    // [LAW:single-enforcer] `readPending` is the one thing that tells them apart.
+    const pending = readPending(err);
+    if (pending !== undefined) ctx.waited(pending.variable);
+    else ctx.onSegmentError?.(node.id, (err as Error).message ?? String(err));
     return [];
   }
 }
