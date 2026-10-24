@@ -2234,7 +2234,7 @@ describe("SourceRegistry — parse seam", () => {
   it("before the first scan lands, a read says so; settled() is the state a one-shot render awaits", async () => {
     const { store, registry } = make();
     registry.declareShell("doc", `sleep 0.3; echo '{"a": 1}'`, { cwd: process.cwd(), parse: json(), cache: { kind: "never" } });
-    expect(store.readDocument("doc")).toEqual({ kind: "absent" });
+    expect(store.readDocument("doc")).toEqual({ kind: "pending" });
     expect(() => doc(store, "doc")).toThrow(
       'variable "doc" has no value yet: its source has not completed a scan',
     );

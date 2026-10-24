@@ -23,7 +23,7 @@ import {
   type VarType,
   type VarValue,
 } from "./types";
-import type { Outcome } from "../utils/outcome.js";
+import type { Reading } from "../utils/outcome.js";
 
 // [LAW:types-are-the-program] How the store holds a derived value. A
 // `computed` keeps its answer until what it read changes. A `projection` reads
@@ -238,9 +238,9 @@ class ProjectionNode implements VarNode {
 }
 
 // [LAW:types-are-the-program] A document node: the namespace a `parse: { json }`
-// source publishes. It holds an Outcome, never a bare document — "not yet
-// scanned" (absent) and "the scan failed: <why>" (failed) are states a
-// template read must see, so the failure travels WITH the value to the one
+// source publishes. It holds a Reading, never a bare document — "not yet
+// scanned" (pending), "nothing to read" (absent) and "the scan failed: <why>"
+// (failed) are states a template read must see, so each travels WITH the value to the one
 // place that unwraps it (the scope proxy, src/template-engine/scope.ts) and
 // surfaces there naming the variable. A scalar box has no such states: its
 // fallback is a string. Every ok value is shaped by toDocument on the way IN —
@@ -257,28 +257,28 @@ class ProjectionNode implements VarNode {
 export interface DocumentNode {
   readonly name: string;
   readonly kind: "document";
-  read(): Outcome<JsonValue>;
+  read(): Reading<JsonValue>;
   lastUpdatedMs(): number;
 }
 
 class DocumentCell implements DocumentNode {
   readonly kind = "document" as const;
-  private readonly cell: IObservableValue<Outcome<JsonValue>>;
+  private readonly cell: IObservableValue<Reading<JsonValue>>;
   private lastChangedAt: number;
 
   constructor(
     readonly name: string,
-    initial: Outcome<JsonValue>,
+    initial: Reading<JsonValue>,
   ) {
     this.cell = observable.box(shaped(initial), { deep: false });
     this.lastChangedAt = Date.now();
   }
 
-  read(): Outcome<JsonValue> {
+  read(): Reading<JsonValue> {
     return this.cell.get();
   }
 
-  set(value: Outcome<JsonValue>): void {
+  set(value: Reading<JsonValue>): void {
     const next = shaped(value);
     // [LAW:single-enforcer] As in BoxNode: one comparison, and not writing IS
     // the notification rule. An unchanged rescan reaches no observer because the
@@ -298,17 +298,17 @@ class DocumentCell implements DocumentNode {
 // document box's equality, its age, and `changeKey` are all this one expression.
 // Canonical because every stored document has sorted keys and null prototypes
 // (toDocument), so a rescan that produced the same content in another key order
-// keys identically; total because the non-ok arms are values too (two failures
+// keys identically; total because the other arms are values too (two failures
 // for the same reason are not a change, a new reason is).
-export function documentKey(outcome: Outcome<JsonValue>): string {
+export function documentKey(outcome: Reading<JsonValue>): string {
   return JSON.stringify(outcome);
 }
 
-function sameDocument(a: Outcome<JsonValue>, b: Outcome<JsonValue>): boolean {
+function sameDocument(a: Reading<JsonValue>, b: Reading<JsonValue>): boolean {
   return documentKey(a) === documentKey(b);
 }
 
-function shaped(outcome: Outcome<JsonValue>): Outcome<JsonValue> {
+function shaped(outcome: Reading<JsonValue>): Reading<JsonValue> {
   return outcome.kind === "ok"
     ? { kind: "ok", value: toDocument(outcome.value) }
     : outcome;
@@ -316,7 +316,7 @@ function shaped(outcome: Outcome<JsonValue>): Outcome<JsonValue> {
 
 // [LAW:one-type-per-behavior] Every node the store holds. `read`'s result type
 // is the discriminator's payload: a VarNode reads a VarValue, a DocumentNode
-// an Outcome<JsonValue>; a consumer that must be total over both (the scope
+// a Reading<JsonValue>; a consumer that must be total over both (the scope
 // proxy, debug introspection) switches on `kind` once.
 export type StoreNode = VarNode | DocumentNode;
 
@@ -358,7 +358,7 @@ export class VariableStore {
     this.declare(name, new BoxNode(name, type, initial));
   }
 
-  defineDocument(name: string, initial: Outcome<JsonValue>): void {
+  defineDocument(name: string, initial: Reading<JsonValue>): void {
     this.declare(name, new DocumentCell(name, initial));
   }
 
@@ -406,7 +406,7 @@ export class VariableStore {
     return this.requireVar(name).read();
   }
 
-  readDocument(name: string): Outcome<JsonValue> {
+  readDocument(name: string): Reading<JsonValue> {
     const node = this.requireNode(name);
     if (node.kind !== "document") {
       throw new TypeError(
@@ -416,7 +416,7 @@ export class VariableStore {
     return node.read();
   }
 
-  setDocument(name: string, value: Outcome<JsonValue>): void {
+  setDocument(name: string, value: Reading<JsonValue>): void {
     const node = this.requireOwn(name);
     if (node.kind !== "document") {
       throw new TypeError(

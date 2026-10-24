@@ -66,7 +66,10 @@ import {
   type CompiledSegments,
   type EvaluatedSegment,
   type PlacementParts,
+  type RenderedLine,
 } from "./node-registry.js";
+import { FrameMemory } from "../render/frame-memory.js";
+import { readPending } from "../var-system/types.js";
 
 // What of a compile its parts are evaluated from.
 export interface PartsSource {
@@ -88,9 +91,11 @@ export interface DrawFacts {
   readonly preset: string;
 }
 
-// What a globals rule evaluated to: the name it wrote, or why it threw.
+// What a globals rule evaluated to: the name it wrote, not yet — it reads
+// `variable`, whose source has not answered — or why it threw.
 export type RuleOutcome =
   | { readonly kind: "named"; readonly name: string }
+  | { readonly kind: "pending"; readonly variable: string }
   | { readonly kind: "failed"; readonly error: string };
 
 // A derivation's answer, its throw included: a part that throws throws again
@@ -132,6 +137,8 @@ export class ViewParts {
   // How many parts have derived since the view's first draw: what one draw
   // adds is how many of its parts it evaluated.
   evaluated = 0;
+  // What the view's last drawn frame showed: the one thing a draw writes.
+  readonly memory = new FrameMemory<RenderedLine>();
   // [LAW:one-source-of-truth] The view's one scope. Its names are the
   // store's when it is built, at the view's first draw: a view declares
   // every variable before it is drawn.
@@ -266,10 +273,13 @@ export class ViewParts {
                 .join(""),
             };
           } catch (e) {
-            return {
-              kind: "failed",
-              error: e instanceof Error ? e.message : String(e),
-            };
+            const pending = readPending(e);
+            return pending !== undefined
+              ? { kind: "pending", variable: pending.variable }
+              : {
+                  kind: "failed",
+                  error: e instanceof Error ? e.message : String(e),
+                };
           } finally {
             this.phase.ruling = false;
           }
@@ -318,14 +328,18 @@ export class ViewParts {
   // the rows a layout lays out are drawn by: a node's `when`, then a
   // segment's own — and a segment either `when` of which throws is SHOWN,
   // because the walk draws an error cell exactly there, where a container
-  // whose `when` throws draws nothing. Edit mode's `+`/`-` and reset banner
-  // are affordances over the arrangement, not part of it, while a name label
-  // stands in for its segment (`arrangedSegment`).
+  // whose `when` throws draws nothing. A `when` not answered yet is shown,
+  // and under it a segment as its own `when` says, as the walk asks it. Edit
+  // mode's `+`/`-` and reset banner are affordances over the arrangement, not
+  // part of it, while a name label stands in for its segment
+  // (`arrangedSegment`).
   private shown(node: CompiledNode): boolean {
     const gate = this.gate(node);
-    if (node.kind === "container") return gate.kind === "shown";
+    if (node.kind === "container")
+      return gate.kind === "shown" || gate.kind === "pending";
     if (arrangedSegment(node.name) === undefined) return false;
-    if (gate.kind !== "shown") return gate.kind === "failed";
+    if (gate.kind === "hidden") return false;
+    if (gate.kind === "failed") return true;
     try {
       return this.placement(node).shown();
     } catch {
@@ -679,4 +693,27 @@ export function evaluateOnce(
     bodyOf(ref, node, colours, body, false, scope),
     NO_AFFIXES,
   );
+}
+
+// The closed style a placement's region deals it in `palette`, its `bg:` and
+// `fg:` unread: what a cell with no authored colours wears, and so what a
+// placement whose value is not answered yet wears — a pending value states no
+// meaning for a `bg:` to paint.
+export function decoratedStyle(
+  ref: ActiveSegmentRef,
+  node: CompiledSegmentNode,
+  palette: Palette,
+  region: Region,
+  drawnAt: ColorDepth,
+): Style {
+  return coloursOf(
+    ref,
+    node,
+    palette,
+    region,
+    drawnAt,
+    undefined,
+    undefined,
+    {},
+  ).style;
 }

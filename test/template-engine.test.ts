@@ -7,8 +7,8 @@ import { buildScope } from "../src/template-engine/scope";
 import { ccCandybarFuncs } from "../src/template-engine/funcs";
 import { VariableStore } from "../src/var-system/store";
 import { MissingFieldError, ParseError } from "@promptctl/go-template-js";
-import { ABSENT, failed, ok } from "../src/utils/outcome";
-import { toDocument } from "../src/var-system/types";
+import { ABSENT, PENDING, failed, ok } from "../src/utils/outcome";
+import { readPending, toDocument } from "../src/var-system/types";
 
 // Helper: evaluate a template against a plain-object scope, return joined text.
 function evalText(source: string, scope: object): string {
@@ -401,10 +401,31 @@ describe("documents in scope", () => {
     expect(store.readDocument("budget")).toEqual({ kind: "ok", value: { spent: 1 } });
   });
 
-  test("a document not yet scanned reads as an error naming the variable", () => {
-    const store = docStore(ABSENT);
-    expect(() => evalStore("{{ .budget.spent }}", store)).toThrow(
+  test("a document not yet scanned reads as the pending signal naming the variable", () => {
+    const store = docStore(PENDING);
+    let thrown: unknown;
+    try {
+      evalStore("{{ .budget.spent }}", store);
+    } catch (e) {
+      thrown = e;
+    }
+    expect(readPending(thrown)?.variable).toBe("budget");
+    expect(String(thrown)).toContain(
       'variable "budget" has no value yet: its source has not completed a scan',
+    );
+  });
+
+  test("a document with nothing to read and no default reads as an error naming the variable", () => {
+    const store = docStore(ABSENT);
+    let thrown: unknown;
+    try {
+      evalStore("{{ .budget.spent }}", store);
+    } catch (e) {
+      thrown = e;
+    }
+    expect(readPending(thrown)).toBeUndefined();
+    expect(String(thrown)).toContain(
+      'variable "budget": no document, and no default',
     );
   });
 

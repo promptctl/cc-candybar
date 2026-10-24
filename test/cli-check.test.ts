@@ -176,7 +176,9 @@ describe("checkConfig — explicit target", () => {
     );
   });
 
-  it("a json document with no default still unscanned at the deadline is a fatal segment error naming it", async () => {
+  // brandon-unfiled-3248.8ro6: not answered yet is no fault in the config — the
+  // segment draws its loading cell and the warning names the source.
+  it("a json document with no default still unscanned at the deadline is a warning naming it, not a failure", async () => {
     const p = write(
       "slow-doc.json5",
       `{
@@ -187,8 +189,13 @@ describe("checkConfig — explicit target", () => {
         root: { h: ["a"] },
       }`,
     );
-    const message = expectFatal(await checkConfig(p, dir));
-    expect(message).toContain('variable "slow2" has no value yet');
+    const outcome = await checkConfig(p, dir);
+    if (outcome.kind !== "clean")
+      throw new Error(`expected clean, got ${outcome.kind}`);
+    expect(outcome.warnings).toContain(
+      "source still running after 5000 ms, rendered with fallback values: slow2",
+    );
+    expect(checkPlan(outcome).code).toBe(0);
   }, 15000);
 
   it("reports a structurally invalid config with the loader's message", async () => {

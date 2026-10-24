@@ -1086,8 +1086,10 @@ export const RAW_DEFAULT_DSL_CONFIG = {
   // active rate-limit window → block/weekly drop; no cache activity → cacheTimer
   // drops). A row therefore only ever shows the segments that have real data —
   // the layout is chosen by the data, not by branches — so the default never
-  // paints an empty or placeholder cell. The directory has no `when`, so row
-  // 1 always anchors the bar.
+  // paints an empty or placeholder cell, but for one: a value whose source has
+  // not answered yet draws `…`, and only at the width its placement already
+  // held (src/dsl/node-registry.ts, loadingSegment). The directory has no
+  // `when`, so row 1 always anchors the bar.
   root: {
     rows: {
       identity: {

@@ -100,11 +100,12 @@ export function toBool(v: VarValue): boolean {
   );
 }
 
-// [LAW:types-are-the-program] A read of a variable that has no value yet — a
-// document whose source has not completed a scan — thrown as its own type so
-// a consumer that waits on it (a cache key) can tell "not yet" (`Outcome`'s
-// `absent`) from a failure, which a message string cannot carry.
-export class AbsentValueError extends Error {
+// [LAW:types-are-the-program] THE pending signal: a read of a variable whose
+// source has not answered yet (`Reading`'s `pending` — a document before its
+// first scan), thrown as its own type so every place a template is evaluated
+// can tell "not yet" from a failure, which a message string cannot carry.
+// `variable` names the source, so a draw can say which ones it waited on.
+export class PendingValueError extends Error {
   constructor(
     readonly variable: string,
     message: string,
@@ -113,12 +114,12 @@ export class AbsentValueError extends Error {
   }
 }
 
-// Whether `e`, or what it was raised from, is a read of a variable with no
-// value yet: the template engine re-raises a throw from inside a function call
-// with the original as its `cause`.
-export function readAbsentValue(e: unknown): boolean {
-  return (
-    e instanceof AbsentValueError ||
-    (e instanceof Error && e.cause !== undefined && readAbsentValue(e.cause))
-  );
+// [LAW:single-enforcer] The one classifier of a throw as pending: the read
+// that raised it, or none. The template engine re-raises a throw from inside a
+// function call with the original as its `cause`, so the chain is walked.
+export function readPending(e: unknown): PendingValueError | undefined {
+  if (e instanceof PendingValueError) return e;
+  return e instanceof Error && e.cause !== undefined
+    ? readPending(e.cause)
+    : undefined;
 }

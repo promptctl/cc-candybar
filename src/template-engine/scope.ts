@@ -9,8 +9,8 @@
 // proxy must define a `has` trap as well as `get`.
 
 import type { VariableStore } from "../var-system/store.js";
-import { AbsentValueError, type JsonValue } from "../var-system/types.js";
-import type { Outcome } from "../utils/outcome.js";
+import { PendingValueError, type JsonValue } from "../var-system/types.js";
+import type { Reading } from "../utils/outcome.js";
 
 // Build the scope object the engine receives as `.` (dot).
 // Call once per render; the returned object is a read-only view of the store
@@ -80,20 +80,23 @@ export function placementScope(scope: object, settings: object): object {
   });
 }
 
-// [LAW:no-silent-failure] THE place a document's non-value states become an
-// error: a read of a document that has not been scanned, or whose scan
-// failed, throws naming the variable and the reason. The segment reading it
-// renders that message as its ⚠ cell (and `cc-candybar check` fails on it);
-// a document never reads as an empty value.
-function unwrapDocument(name: string, doc: Outcome<JsonValue>): JsonValue {
+// [LAW:no-silent-failure] THE place a document's non-value states become a
+// throw naming the variable: one not scanned yet throws the pending signal, which
+// every place a template is evaluated draws as not answered yet; one with
+// nothing to read (blank text, no default) or whose scan failed throws its
+// reason, which the segment reading it renders as its ⚠ cell (and `cc-candybar
+// check` fails on). A document never reads as an empty value.
+function unwrapDocument(name: string, doc: Reading<JsonValue>): JsonValue {
   switch (doc.kind) {
     case "ok":
       return doc.value;
-    case "absent":
-      throw new AbsentValueError(
+    case "pending":
+      throw new PendingValueError(
         name,
         `variable "${name}" has no value yet: its source has not completed a scan`,
       );
+    case "absent":
+      throw new Error(`variable "${name}": no document, and no default`);
     case "failed":
       throw new Error(`variable "${name}": ${doc.reason}`);
   }

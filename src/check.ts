@@ -389,8 +389,8 @@ export async function prepareConfig(
     // [LAW:no-ambient-temporal-coupling] An async source's first run — a shell
     // or file read, a git subscription's first delivery — completes after
     // registration; the verdict renders what the sources YIELDED, not their pre-scan
-    // fallbacks (a json document with no default is an error cell until it is
-    // scanned — exactly what an author must see). The registry owns the
+    // fallbacks (a json document with no default draws its loading cell until
+    // it is scanned). The registry owns the
     // "every run complete" state; a source still out at the deadline is named
     // and the render proceeds on what it holds.
     const pending = await registry.settled(SOURCE_SETTLE_MS);

@@ -45,8 +45,10 @@ jest.setTimeout(30_000);
 // `drawn` draws a bar. `broken` gates a row on a `when` that fails when it is
 // evaluated, which costs that row and warns. `held` reads the tmux session name, which the
 // payload awaits from a `tmux` spawn (src/segments/tmux.ts) — the stub below.
+// `waiting` reads a document whose source never answers while the test runs.
 const CONFIGS = {
   drawn: `{ segments: { mark: { template: 'mark' } }, root: { h: ['mark'] } }`,
+  waiting: `{ variables: { doc: { kind: 'shell', command: 'sleep 60', parse: { json: true }, cache: { never: true } } }, segments: { mark: { template: '{{ .doc.x }}' } }, root: { h: ['mark'] } }`,
   broken: `{ segments: { mark: { template: 'mark' } }, root: { h: ['mark'], when: '{{ fail "the gate broke" }}' } }`,
   held: `{ segments: { mark: { template: '{{ .tmux.session }}' } }, root: { h: ['mark'] } }`,
 };
@@ -194,6 +196,16 @@ describe("every render request writes one render event, whatever its outcome", (
     expect(field(drawn, "client")).toBe("unreported");
     // Which animation lanes the session's settings switch on: none by default.
     expect(field(drawn, "lanes")).toBe("-");
+    // The sources a render drew as not answered yet: none on a bar whose
+    // values are all in, the source's name where one is not
+    // (brandon-unfiled-3248.8ro6).
+    expect(field(drawn, "pending")).toBe("-");
+    const waiting = stripAnsi(
+      await render(sockPath, "ev-pending", projectDir, hints, configFlag("waiting")),
+    );
+    expect(waiting).toContain("…");
+    expect(waiting).not.toContain("⚠");
+    expect(field(attempts("ev-pending", "ok", "info"), "pending")).toBe("doc");
     // How many of its view's parts a render evaluated: all of them cold, and
     // only those whose inputs moved when the session draws the same data
     // again (brandon-unfiled-3248.8ro6).

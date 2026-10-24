@@ -21,6 +21,7 @@ import type { Style } from "@promptctl/rich-js";
 import type { Template } from "@promptctl/go-template-js";
 import type { CellPlacement } from "../render/effect.js";
 import { resolvedStyle } from "../render/rich-theme.js";
+import { readPending } from "../var-system/types.js";
 
 export type JustifyMode = "left" | "center" | "right";
 export type TruncateMode = "right" | "left" | "middle";
@@ -85,19 +86,22 @@ export function evaluateWhen(
 }
 
 // [LAW:types-are-the-program] What a layout node's own `when` decided: shown,
-// hidden, or neither — its template threw, and `message` says why. What a
+// hidden, not yet — it reads `variable`, whose source has not answered — or
+// neither: its template threw, and `message` says why. What a pending or a
 // failed gate costs is the node type's to say (brandon-unfiled-3248.ryf).
 export type Gate =
   | { readonly kind: "shown" }
   | { readonly kind: "hidden" }
+  | { readonly kind: "pending"; readonly variable: string }
   | { readonly kind: "failed"; readonly message: string };
 
-export const HIDDEN: Gate = { kind: "hidden" };
-const SHOWN: Gate = { kind: "shown" };
+export const HIDDEN = { kind: "hidden" } as const satisfies Gate;
+export const SHOWN = { kind: "shown" } as const satisfies Gate;
 
 // [LAW:no-silent-failure] evaluateWhen with its throw as a value: a gate that
 // fails is one node's fault, so it reaches that node rather than unwinding the
-// walk and taking every other node with it.
+// walk and taking every other node with it. A gate over a value not answered
+// yet is not a failure, and `readPending` is the one thing that says so.
 export function gateOf(
   template: Template<RichText> | undefined,
   scope: object,
@@ -105,10 +109,13 @@ export function gateOf(
   try {
     return evaluateWhen(template, scope) ? SHOWN : HIDDEN;
   } catch (e) {
-    return {
-      kind: "failed",
-      message: e instanceof Error ? e.message : String(e),
-    };
+    const pending = readPending(e);
+    return pending !== undefined
+      ? { kind: "pending", variable: pending.variable }
+      : {
+          kind: "failed",
+          message: e instanceof Error ? e.message : String(e),
+        };
   }
 }
 

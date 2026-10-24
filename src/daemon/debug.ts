@@ -126,8 +126,9 @@ export function introspectVars(
 
 // [LAW:one-type-per-behavior] One total projection of a store node onto the
 // snapshot's (type, value) pair: a scalar node reads its typed value; a
-// document reads as its JSON text, or — before its first scan / after a
-// failed one — as the state a template read of it would surface.
+// document reads as its JSON text, or — before its first scan, after one with
+// nothing to read, or after a failed one — as the state a template read of it
+// would surface.
 function valueOf(node: StoreNode): Pick<VarSnapshot, "type" | "value"> {
   // A projection has a value only at a frame's instant, and a snapshot is no
   // frame: it says so rather than reading it, and the error its last draw
@@ -157,8 +158,10 @@ function valueOf(node: StoreNode): Pick<VarSnapshot, "type" | "value"> {
   switch (doc.kind) {
     case "ok":
       return { type: "document", value: JSON.stringify(doc.value) };
-    case "absent":
+    case "pending":
       return { type: "document", value: "(not yet scanned)" };
+    case "absent":
+      return { type: "document", value: "(nothing to read, and no default)" };
     case "failed":
       return { type: "document", value: doc.reason };
   }

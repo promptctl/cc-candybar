@@ -6,7 +6,13 @@ export {
 export { buildScope, placementScope } from "./scope.js";
 export { ccCandybarFuncs } from "./funcs.js";
 export { fragmentsToCells } from "./cells.js";
-export { evaluateWhen, gateOf, HIDDEN, applySegmentLayout } from "./layout.js";
+export {
+  evaluateWhen,
+  gateOf,
+  HIDDEN,
+  SHOWN,
+  applySegmentLayout,
+} from "./layout.js";
 export type {
   SegmentLayoutOptions,
   JustifyMode,
