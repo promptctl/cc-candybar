@@ -86,7 +86,6 @@ import {
   addableSegmentDomains,
   ADDABLE_DOMAIN,
 } from "../src/config/edit-chrome";
-import { GitDataProvider } from "../src/daemon/cache/git";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { encodeLayoutOp, type LayoutOp } from "../src/config/layout-ops";
 import {
@@ -540,7 +539,7 @@ function buildLayoutRuntime(src: string, sessionId = "s1") {
   const sessionState = new SessionState();
   durable.seedOrigin(sessionState, sessionId);
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", undefined, sessionState);
+  const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
   const basePalette = getThemePalette("textual-dark"!);
   const render = (): string =>
@@ -859,7 +858,7 @@ describe('the reset-layout banner survives quote/backslash preset names', () => 
     // preset customized, so the render below opens edit mode for "s1".
     const sessionState = new SessionState();
     sessionState.set("s1", EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
-    const registry = new SourceRegistry(store, "", undefined, sessionState);
+    const registry = new SourceRegistry(store, "", sessionState);
     let compiled: ReturnType<typeof registerDslConfig>;
     expect(() => {
       compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
@@ -914,7 +913,7 @@ describe("a preset root's own top-level `when` hides content, not the menu or ba
     sessionState.set("s1", EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
     // Live output, not names: the subject is whether the CONTENT follows the gate.
     sessionState.set("s1", EDIT_LIVE_KEY, "open");
-    const registry = new SourceRegistry(store, "", undefined, sessionState);
+    const registry = new SourceRegistry(store, "", sessionState);
     try {
       const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
       const basePalette = getThemePalette("textual-dark"!);
@@ -965,13 +964,9 @@ function makeCache(reloads?: ReloadSignal): {
     logger: () => {},
   });
   cleanups.push(() => watchers.closeAll());
-  const gitService = new GitDataProvider({
-    logger: () => {},
-  });
-  cleanups.push(() => gitService.close());
   const sessionState = new SessionState();
   const cache = new RenderCache(
-    { gitService, sessionState, watchers },
+    { sessionState, watchers },
     {
       budgetBytes: () => renderCacheBudget(memoryLimitBytes({})),
       ...(reloads === undefined ? {} : { observers: reloads.observers }),
@@ -1295,7 +1290,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
   });
 
   // [LAW:verifiable-goals] "The change survives a daemon restart" — a fresh
-  // RenderCache/GitDataProvider/WatcherRegistry (exactly what a real restart
+  // RenderCache/WatcherRegistry (exactly what a real restart
   // rebuilds), reading nothing but the config file on disk.
   test("the edit survives a restart", () => {
     durable.write(userConfigBody);

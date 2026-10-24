@@ -52,7 +52,6 @@ import {
   RenderCache,
   renderCacheBudget,
 } from "../src/daemon/cache/render";
-import { GitDataProvider } from "../src/daemon/cache/git";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { PRESET_FLOOR, presetGlobals } from "../src/config/presets";
 import { linkUrls } from "./helpers/ansi";
@@ -403,7 +402,7 @@ function buildPersistRuntime(
   const sessionState = new SessionState();
   durable.seedOrigin(sessionState, sessionId);
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", undefined, sessionState);
+  const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
   const basePalette = getThemePalette("textual-dark"!);
   const render = (width = Number.POSITIVE_INFINITY): string =>
@@ -555,7 +554,7 @@ describe("persist action click → the config file", () => {
     const sessionState = new SessionState();
     durable.seedOrigin(sessionState, "s1");
     const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", undefined, sessionState);
+    const registry = new SourceRegistry(store, "", sessionState);
     const compiled = registerDslConfig(config, registry, {
       cwd: process.cwd(),
     });
@@ -830,14 +829,10 @@ function makeCache(): {
     logger: () => {},
   });
   cleanups.push(() => watchers.closeAll());
-  const gitService = new GitDataProvider({
-    logger: () => {},
-  });
-  cleanups.push(() => gitService.close());
   const sessionState = new SessionState();
   const reloads = new ReloadSignal();
   const cache = new RenderCache(
-    { gitService, sessionState, watchers },
+    { sessionState, watchers },
     { budgetBytes: () => renderCacheBudget(memoryLimitBytes({})), observers: reloads.observers },
   );
   cleanups.unshift(() => cache.close());
@@ -925,7 +920,7 @@ describe("RenderCache: the config file is the durable store", () => {
   // a retry (fs.watch has no ready signal — see reload-signal.ts) re-touches
   // the file with the bytes the click left, so every application ends in the
   // same on-disk state and emits an event. Then a REAL restart (a brand-new
-  // RenderCache + GitDataProvider + WatcherRegistry — exactly what the daemon
+  // RenderCache + WatcherRegistry — exactly what the daemon
   // process rebuilds from scratch, reading nothing but the file on disk)
   // sees the same value: the write survives because the file IS the write.
   test("a set-config click edits globals.palette in the file, the live cache reloads it, and a restart reads it back", async () => {

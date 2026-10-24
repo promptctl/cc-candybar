@@ -67,7 +67,7 @@ function renderDirRaw(paths: DirPaths): string {
     root: dirOnlyRoot,
   };
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", undefined, new SessionState());
+  const registry = new SourceRegistry(store, "", new SessionState());
   try {
     const compiled = registerDslConfig(parsed, registry, {
       cwd: paths.current_dir,
@@ -200,7 +200,7 @@ describe("configurability seam: user template override restores full path", () =
       }),
     };
     const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", undefined, new SessionState());
+    const registry = new SourceRegistry(store, "", new SessionState());
     try {
       const compiled = registerDslConfig(overridden, registry, {
         cwd: "/Users/bmf/code/cc-candybar",

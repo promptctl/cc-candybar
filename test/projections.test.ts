@@ -17,7 +17,6 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { loadFromDisk, pluginLoadLine } from "../src/daemon/cache/render";
-import { GitDataProvider } from "../src/daemon/cache/git";
 import { SessionState } from "../src/daemon/session-state";
 
 const config = (variables: string, helpers = "{}") =>
@@ -165,12 +164,10 @@ test("a projection is derived at each draw; a derived template is cached", () =>
 // draw, so a variable evaluated per frame is named in the daemon's log.
 test("the config load line names the load's projections", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-projections-"));
-  const gitService = new GitDataProvider({ logger: () => {} });
   const line = (variables: string, segments = "{}"): string => {
     const file = path.join(dir, "config.json5");
     fs.writeFileSync(file, `{ variables: ${variables}, segments: ${segments} }`);
     const loaded = loadFromDisk(dir, dir, file, {
-      gitService,
       sessionState: new SessionState(),
     });
     expect(loaded.error).toBeNull();
@@ -209,7 +206,6 @@ test("the config load line names the load's projections", () => {
       templates(line("{}", `{ stamp: { template: "{{ unixEpoch now }}" } }`)),
     ).toBe(templates(line("{}")) + 1);
   } finally {
-    gitService.close();
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });

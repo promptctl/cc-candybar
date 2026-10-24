@@ -314,7 +314,7 @@ of them are similarly load-bearing.
 ### F6 — **Low / dead-code surface.** `SourceRegistry` shell-source is unwired
 
 **Where:** `src/var-system/sources.ts` (`SourceRegistry` class with
-`declareShell` / `declareFile` / `declareTime` / `declareGit`).
+`declareShell` / `declareFile` / `declareTime`).
 
 **Status:** Defined and unit-tested but **not currently consumed by the
 daemon or any segment renderer** (grep for `new SourceRegistry` returns only

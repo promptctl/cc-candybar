@@ -379,7 +379,6 @@ function tmuxServersOf({
 const diagnosticDump = new DiagnosticDump(diagnosticsDir());
 const renderCache = new RenderCache(
   {
-    gitService,
     sessionState,
     watchers: watcherRegistry,
     log: dlog,

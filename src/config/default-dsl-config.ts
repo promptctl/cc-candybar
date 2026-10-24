@@ -270,9 +270,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     },
 
     // Git — every field flows from the daemon's projected GitInfo payload.
-    // The DSL's native `kind: "git"` source covers a 6-field subset
-    // (branch/sha/dirty/ahead/behind/stash); using `input` here gives the
-    // full 12-field surface uniformly via the augmented payload.
     "git.repoName": {
       kind: "input",
       path: "git.repoName",

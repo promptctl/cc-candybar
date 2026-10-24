@@ -101,7 +101,7 @@ function buildPopulatedState(): DaemonDslState {
     new Set<string>(), // no palette validation needed — segments don't set one
   );
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", undefined, new SessionState());
+  const registry = new SourceRegistry(store, "", new SessionState());
   const compiled = registerDslConfig(config, registry, {
     cwd: process.cwd(),
   });

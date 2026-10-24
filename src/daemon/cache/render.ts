@@ -37,7 +37,6 @@ import { unusedDeclarations, type UnusedDecl } from "../../config/unused.js";
 import { VariableStore } from "../../var-system/store.js";
 import { SourceRegistry } from "../../var-system/sources.js";
 import type { VarScope } from "../../dsl/variable-scope.js";
-import type { GitDataProvider } from "./git.js";
 import type { SessionStateRW } from "../session-state.js";
 import type {
   WatcherRegistry,
@@ -89,20 +88,18 @@ export function renderCacheBudget(memoryLimitBytes: number): number {
 }
 
 // The count ceiling beside the byte budget: every entry holds a
-// SourceRegistry (fs watchers, TTL timers, git subscriptions) and a config
+// SourceRegistry (fs watchers, TTL timers) and a config
 // watcher, a resource the byte budget does not see. At the default memory limit
 // the bytes bind long before this; it is what bounds watchers when
 // CC_CANDYBAR_RSS_LIMIT_MB is raised.
 export const MAX_ENTRIES = 256;
 
-// [LAW:single-enforcer] These are the cache-and-registry deps — git data
-// (for declareGit subscriptions), session state (for declareState atoms),
-// and the watcher registry (for hot-reload's config file watcher). Daemon-
+// [LAW:single-enforcer] These are the cache-and-registry deps — session state
+// (for declareState atoms) and the watcher registry (for hot-reload's config file watcher). Daemon-
 // owned data providers like the SessionUsageStore/git provider/etc. live in
 // `payloadDeps` (server.ts) and feed `buildRenderPayload`; they are not
 // part of cache identity or lifecycle.
 export interface RenderDeps {
-  gitService: GitDataProvider;
   sessionState: SessionStateRW;
   watchers: WatcherRegistry;
   // Where the cache's events go — every load, every teardown. Only the
@@ -111,11 +108,8 @@ export interface RenderDeps {
   log?: DaemonLogger;
 }
 
-// What building one config's state needs. The git provider is optional
-// because a SourceRegistry stands up its own when handed none — what a
-// one-shot load outside the daemon (`cc-candybar doctor`) wants.
+// What building one config's state needs.
 export interface StateDeps {
-  readonly gitService?: GitDataProvider;
   readonly sessionState: SessionStateRW;
   // The compile for a config's compile key. A cache shares one between every
   // entry whose config compiles alike (RenderCache's table); a one-shot load
@@ -519,10 +513,7 @@ export function buildRenderState(
   const homeRaw = layers.find((l) => l.path === chain.home)?.raw ?? {};
 
   const store = new VariableStore();
-  // [LAW:single-enforcer] Inject the daemon's shared GitDataProvider so
-  // every config's `kind: "git"` declarations route through one cache +
-  // watcher pool (rather than each registry standing up its own). The
-  // sessionState injection makes `kind: "state"` variables read/write the
+  // The sessionState injection makes `kind: "state"` variables read/write the
   // same per-session store the click verbs mutate. `default_empty_value`
   // is honored from globals — it's the fallback used by input/env/etc.
   // sources when neither the path resolves nor the declaration carries
@@ -531,7 +522,6 @@ export function buildRenderState(
   const registry = new SourceRegistry(
     store,
     config.globals.default_empty_value ?? "",
-    deps.gitService,
     deps.sessionState,
   );
 
@@ -926,11 +916,6 @@ export class RenderCache {
     try {
       view = this.viewOf(sessionId, held.entry, held.state);
       lease = this.leaseOf(view);
-      // A session draws the directory home through its view: what the home
-      // subscribes to is read, as the view is (`lease.read`). A hold that
-      // draws nothing — a lane check reading the session's settings — reads
-      // neither.
-      held.state.registry.readSubscriptions();
     } catch (err) {
       // [LAW:no-ambient-temporal-coupling] The state hold is this call's
       // until the returned hold carries it: a throw before then releases it,

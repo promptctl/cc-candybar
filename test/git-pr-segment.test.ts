@@ -60,7 +60,7 @@ function renderGitPr(git: Record<string, unknown>): string {
     },
   };
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", undefined, new SessionState());
+  const registry = new SourceRegistry(store, "", new SessionState());
   try {
     const compiled = registerDslConfig(parsed, registry, { cwd: "/tmp" });
     const payload = {

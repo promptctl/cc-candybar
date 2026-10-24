@@ -64,7 +64,7 @@ function buildRuntime(source: string) {
   const config = parseAndValidate("<edit-look>", source, ALLOWED);
   const sessionState = new SessionState();
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", undefined, sessionState);
+  const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
   // [LAW:single-enforcer] The real gate is the one this session's config
   // derives — the sole authority on what a click may write. Recording the

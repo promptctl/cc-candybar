@@ -142,7 +142,7 @@ function buildRuntime(
   const clients = new RenderSightings();
   clients.see("s1", renderSaid(client.hint, sessionAt()), instantOf(new Date()), 0);
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", undefined, sessionState);
+  const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
   const render = (): string =>
     stripAnsi(

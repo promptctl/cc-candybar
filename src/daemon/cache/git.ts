@@ -28,7 +28,7 @@ import {
 } from "../../utils/reading";
 import type { Holds, Release } from "../../utils/holds";
 
-// Logger callable for cache refresh / eviction / subscriber-error events.
+// Logger callable for cache refresh / eviction events.
 // Daemon passes `dlog` so these land in daemon.log at the right level for
 // ops/debugging; non-daemon consumers (var-system in tests, future library use)
 // take the default debug-routed logger so var-system module load never touches
@@ -44,10 +44,10 @@ export type GitProviderLogger = (
 // one owner that schedules every read of it (brandon-unfiled-3248.8ro6, step
 // 1). A read never fetches a repo the cache has read before: it takes the
 // value stored, and the stored value is refreshed by exactly two triggers —
-// the repo's watch, and one period over the repos something holds. Segments
-// read through getGitInfo(); var-system's `kind: "git"` variables are pushed
-// each refresh through subscribe(). Both share one state per repo (keyed by
-// the *effective git directory*), one watch, and one launch category ("git").
+// the repo's watch, and one period over the repos something holds. A draw
+// reads through current(), a request through getGitInfo(); both share one
+// state per repo (keyed by the *effective git directory*), one watch, and one
+// launch category ("git").
 //
 // [LAW:one-source-of-truth] The repo key derives from `resolveEffectiveGitDir`,
 // which returns the exact directory the shell-runner will run git in (taking
@@ -81,24 +81,12 @@ export const PR_PERIOD: Every = { okMs: 5 * 60_000, failedMs: 45_000 };
 // switches between, each answered from its own last lookup on the way back.
 const PR_KEYS_KEPT = 16;
 
-// Options applied to subscribe()'s value. var-system's six GitField values
-// (branch, sha, dirty, ahead, behind, stash) all project from these flags —
-// keep them in lockstep with the projection in src/var-system/sources.ts.
-// Anything not asked for here is undefined on the snapshot delivered to
-// subscribers, which makes the projection's missing-field paths reachable and
-// tested.
-const SUBSCRIBE_OPTIONS: GitOptions = {
-  showSha: true,
-  showStashCount: true,
-};
-
 // Every toggle but the PR: the PR is its own source (above), composed onto a
 // read rather than fetched inside one.
 type GitOptions = Omit<GitInfoOptions, "showPullRequest">;
 
 // One option set's value in a repo. [LAW:no-ambient-temporal-coupling] A pass
-// reads only the values something reads (`readers`: the homes holding it, and
-// each subscription of the subscribed set), so an option set a preset stopped
+// reads only the values something reads (`readers`: the homes holding it), so an option set a preset stopped
 // placing stops costing its reads; `missed` says a pass, or a change on a repo
 // nobody used, went by without it, so its next reader reads it at once while
 // taking the value stored (cmt-2bc3832b, brandon-unfiled-3248.8ro6).
@@ -151,13 +139,10 @@ type PassReason = "watch" | "first" | "resume" | "pr";
 
 // [LAW:types-are-the-program] One repo the cache knows. The watch lives as long
 // as the state does — closing and reopening it per value leaked native memory
-// on macOS (brandon-unfiled-3248.576q; src/daemon/cache/watchers.ts). Two uses
-// keep it: `holders`, the holds homes take on it, which alone run the period —
-// a read's, and a subscription's while its home is drawn; and
-// `subscriptions`, the `kind: "git"` subscribers, which hear every change
-// (a config's subscription lives as long as its entry, idle or not). A change
-// on a repo nothing uses reads nothing; it marks every value missed, so its
-// next use reads at once.
+// on macOS (brandon-unfiled-3248.576q; src/daemon/cache/watchers.ts). Its one
+// use is `holders`, the holds homes' reads take on it, which run the period and
+// keep it from eviction. A change on a repo nothing holds reads nothing; it
+// marks every value missed, so its next read reads at once.
 interface RepoState {
   readonly root: string;
   // [LAW:single-enforcer] The repo's one serialized refresh loop, owned by its
@@ -170,16 +155,10 @@ interface RepoState {
   readonly watcher: WatcherHandle;
   readonly period: Period;
   readonly values: Map<string, GitValue>;
-  readonly subscribers: Set<SubscribeCallback>;
   holders: number;
-  subscriptions: number;
   // The reasons a pass was asked for since the last one began.
   readonly asked: Set<PassReason>;
   pr: PrSource | null;
-}
-
-function inUse(state: RepoState): boolean {
-  return state.holders > 0 || state.subscriptions > 0;
 }
 
 interface ResolutionCacheEntry {
@@ -204,26 +183,6 @@ export interface GitCacheStats {
   watchers: number;
 }
 
-type SubscribeCallback = (info: GitInfo | null) => void;
-
-// [LAW:types-are-the-program] subscribe() starts work that finishes later, so
-// what it returns carries both facts about that work: how to stop listening, and
-// when the first snapshot has actually landed (brandon-check-settle-dt7).
-export interface GitSubscription {
-  // Resolves once the first delivery is done — after gitDir resolution and the
-  // first read, and equally after the single `null` delivery for a cwd that is
-  // not a repo, or immediately if the caller unsubscribed before either. It is
-  // the *completion* of that delivery, never a promise of the snapshot:
-  // subscribers read values through the callback [LAW:one-source-of-truth].
-  readonly firstDelivery: Promise<void>;
-  readonly unsubscribe: () => void;
-  // The subscribing home was drawn: it holds the repo (its period) again, as a
-  // read does, so the home's idle sweep releases it once it is drawn no more
-  // (cmt-113f8f1e item 2). A draw before its repo resolves is held once it
-  // resolves.
-  readonly read: () => void;
-}
-
 // [LAW:single-enforcer] What one hold holds: the repo, one option set of it,
 // and its PR when shown — so a home reading another closure takes a hold of its
 // own, and the closure it left is released by the home's sweep alone.
@@ -237,8 +196,6 @@ function optionsKey(options: GitOptions): string {
   for (const k of keys) normalized[k as string] = options[k];
   return JSON.stringify(normalized);
 }
-
-const SUBSCRIBE_KEY = optionsKey(SUBSCRIBE_OPTIONS);
 
 // `gitDir` must be the *resolved* git directory (the value
 // `GitService.resolveGitDir(repoRoot)` returns). For a normal repo that's
@@ -303,9 +260,8 @@ export class GitDataProvider {
   // (if any) a directory belongs to, which `repos` cannot: a state exists only
   // once something asks for its repo. Untracked, the question is re-asked on
   // every render — a walk to the filesystem root outside a repo
-  // (brandon-git-cache-y2t, -y9h) — and it coalesces the burst of concurrent
-  // resolutions `registerDslConfig` starts for a config's `kind: "git"`
-  // variables.
+  // (brandon-git-cache-y2t, -y9h) — and it coalesces concurrent resolutions
+  // of one directory into one.
   private readonly resolutions = new Map<string, ResolutionCacheEntry>();
   private hits = 0;
   private misses = 0;
@@ -537,92 +493,12 @@ export class GitDataProvider {
     }
   }
 
-  // [LAW:dataflow-not-control-flow] Push surface for var-system. The callback
-  // receives the current snapshot once (after the first read lands) and again
-  // after each refresh. A subscriber keeps its repo in use — never evicted,
-  // every change read — and holds its period only while its home is drawn.
-  // Initial delivery is asynchronous — a consumer that needs to know when it
-  // happened awaits the returned `firstDelivery` rather than counting ticks.
-  //
-  // [LAW:dataflow-not-control-flow] `holds` is the subscribing home's: each
-  // time the home is drawn (`read`) the subscription holds the repo through it
-  // as a read does, so a subscriber whose home is drawn sees the working-tree
-  // edits only the period reads. Loading a config draws nothing, so the first
-  // delivery takes no hold.
-  subscribe(
-    holds: Holds,
-    workingDir: string,
-    callback: SubscribeCallback,
-  ): GitSubscription {
-    let unsubscribed = false;
-    let attached: { state: RepoState; release: Release } | null = null;
-    // The home was drawn before its repo resolved — the render that loaded
-    // the config: held once it resolves.
-    let drawn = false;
-
-    const firstDelivery = (async () => {
-      // The SAME resolution the read uses [LAW:one-source-of-truth]: N declared
-      // git variables in a non-repo cwd are one resolution, not N.
-      const resolved = await this.resolveEffectiveGitDir(workingDir);
-      if (unsubscribed) return;
-
-      if (resolved.kind !== "ok") {
-        // Not in a git repo (absent) or resolution failed (logged by the
-        // resolution): deliver null once. No watch, no follow-up.
-        this.safeInvoke(callback, null);
-        return;
-      }
-      const state = this.repo(resolved.value);
-      // The subscription's own reader keeps its value read by every pass while
-      // it lives, counted before the pass that reads it first is queued.
-      const before = state.asked.size;
-      const value = this.valueOf(state, SUBSCRIBE_KEY, SUBSCRIBE_OPTIONS);
-      state.subscriptions++;
-      this.join(state, value);
-      this.queue(state, before);
-      this.evict();
-      attached = {
-        state,
-        release: () => {
-          state.subscriptions--;
-          value.readers--;
-        },
-      };
-      if (drawn) this.ask(state, holds, SUBSCRIBE_OPTIONS, false);
-      const initial = await outcomeOf(value);
-      if (unsubscribed) return;
-      this.safeInvoke(callback, initial.kind === "ok" ? initial.value : null);
-      // Joined only now, so the refresh that delivered `initial` to the others
-      // does not deliver it to this one a second time.
-      state.subscribers.add(callback);
-    })();
-
-    return {
-      firstDelivery,
-      unsubscribe: () => {
-        unsubscribed = true;
-        if (!attached) return;
-        attached.state.subscribers.delete(callback);
-        attached.release();
-        attached = null;
-      },
-      read: () => {
-        if (!attached) {
-          drawn = true;
-          return;
-        }
-        this.touch(attached.state);
-        this.ask(attached.state, holds, SUBSCRIBE_OPTIONS, false);
-      },
-    };
-  }
-
   // A watch fire: the repo changed since any read in flight began.
   changed(root: string): void {
     const state = this.repos.get(root);
     if (!state) return;
     this.changes++;
-    if (!inUse(state)) {
+    if (state.holders === 0) {
       for (const value of state.values.values()) value.missed = true;
       return;
     }
@@ -656,9 +532,7 @@ export class GitDataProvider {
         void state.refresh.share(PASS, () => this.refreshPass(state));
       }),
       values: new Map(),
-      subscribers: new Set(),
       holders: 0,
-      subscriptions: 0,
       asked: new Set(),
       pr: null,
     };
@@ -704,7 +578,9 @@ export class GitDataProvider {
       if (value.missed) owe(pr);
       if (pr.missed) state.asked.add("pr");
     }
-    this.join(state, value);
+    // A value a pass went by without is read by the next.
+    value.readers++;
+    if (value.missed) state.asked.add("resume");
     this.held(state);
     this.evict();
     return () => {
@@ -713,12 +589,6 @@ export class GitDataProvider {
       if (pr !== null) pr.holders--;
       this.held(state);
     };
-  }
-
-  // A reader joins `value`: one a pass went by without is read by the next.
-  private join(state: RepoState, value: GitValue): void {
-    value.readers++;
-    if (value.missed) state.asked.add("resume");
   }
 
   // Whatever an ask added to `asked` is read by ONE pass, queued once it is all
@@ -783,7 +653,7 @@ export class GitDataProvider {
 
   // One pass: read every option set something reads and, for a PR something
   // shows, the remote beside the branch they read; store the outcomes, log
-  // each failure once, deliver to subscribers, and move the PR's key — all in
+  // each failure once, and move the PR's key — all in
   // one turn once the reads land, so no read sees a branch's values beside
   // another branch's PR. Each pass that lands writes one refresh event.
   private async pass(state: RepoState): Promise<void> {
@@ -828,7 +698,6 @@ export class GitDataProvider {
     for (const f of failures) {
       this.logger("warn", `git refresh failed (${state.root}): ${f}`);
     }
-    this.deliver(state);
     // An `absent` repo — a removed worktree, a deleted `.git` — is stored as
     // absent like any outcome. A state has one lifetime rule: kept while in
     // use, and bounded by the LRU once nothing uses it.
@@ -846,20 +715,6 @@ export class GitDataProvider {
       "info",
       `git refresh ${state.root} by=${by} values=${values.length} failed=${failures.size} pr=${prMove} took=${Date.now() - startedAt}ms`,
     );
-  }
-
-  private deliver(state: RepoState): void {
-    const value = state.values.get(SUBSCRIBE_KEY);
-    if (value === undefined || value.reading.kind !== "read") return;
-    const outcome = value.reading.outcome;
-    const info = outcome.kind === "ok" ? outcome.value : null;
-    // [LAW:dataflow-not-control-flow] Membership checked at call time: a
-    // subscriber that unsubscribed during an earlier callback in this same
-    // delivery must not receive it.
-    for (const cb of [...state.subscribers]) {
-      if (!state.subscribers.has(cb)) continue;
-      this.safeInvoke(cb, info);
-    }
   }
 
   // The branch's PR source, pending until the pass its first ask queues gives
@@ -962,17 +817,6 @@ export class GitDataProvider {
     return done;
   }
 
-  private safeInvoke(cb: SubscribeCallback, info: GitInfo | null): void {
-    try {
-      cb(info);
-    } catch (e) {
-      this.logger(
-        "warn",
-        `git subscriber threw: ${(e as Error).message ?? String(e)}`,
-      );
-    }
-  }
-
   private drop(state: RepoState): void {
     // [LAW:no-silent-failure] A reader waiting on a first value of a dropped
     // state is answered, never left waiting on a pass that will store nothing.
@@ -986,12 +830,12 @@ export class GitDataProvider {
     state.pr?.period.dispose();
   }
 
-  // The LRU bounds the repos nothing uses; a repo in use is never evicted, so
-  // those are bounded by their users (the render cache's budget).
+  // The LRU bounds the repos nothing holds; a held repo is never evicted, so
+  // those are bounded by their holders (the render cache's budget).
   private evict(): void {
     for (const state of this.repos.values()) {
       if (this.repos.size <= this.maxRepos) return;
-      if (inUse(state)) continue;
+      if (state.holders > 0) continue;
       this.drop(state);
       this.logger("info", `gitCache evict ${state.root}`);
     }

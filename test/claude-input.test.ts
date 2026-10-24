@@ -223,7 +223,7 @@ function runtime(tmux: TmuxHint | null) {
   );
   sessionState.set("s1", SESSION_CLIENT_HINTS_KEY, JSON.stringify({ tmux }));
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", undefined, sessionState);
+  const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
   const raw = renderDsl(config, compiled, store, registry, { session_id: "s1" }, instantOf(new Date()), OPTS);
   const logged: string[] = [];
@@ -357,7 +357,7 @@ function tray(tmux: TmuxHint | null, drawnIn: TmuxHint | null = tmux) {
   );
   sessionState.set("s1", SESSION_CLIENT_HINTS_KEY, JSON.stringify({ tmux }));
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", undefined, sessionState);
+  const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
   const ctx = {
     ...testVerbContext(sessionState, undefined, config),

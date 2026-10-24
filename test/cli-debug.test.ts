@@ -15,7 +15,7 @@ describe("formatDebug", () => {
       vars: [
         {
           name: "git.branch",
-          source: "git",
+          source: "input",
           type: "string",
           value: "main",
           lastError: null,
@@ -26,7 +26,7 @@ describe("formatDebug", () => {
     const out = formatDebug(snap);
     expect(out).toContain("variables (1)");
     expect(out).toContain("git.branch");
-    expect(out).toContain("git");
+    expect(out).toContain("input");
     expect(out).toContain("main");
   });
 

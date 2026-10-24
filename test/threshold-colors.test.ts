@@ -213,7 +213,7 @@ function renderOne(
     : narrowed.segments;
   const one = { ...narrowed, segments };
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", undefined, new SessionState());
+  const registry = new SourceRegistry(store, "", new SessionState());
   try {
     const compiled = registerDslConfig(one, registry, { cwd: process.cwd() });
     return renderDsl(

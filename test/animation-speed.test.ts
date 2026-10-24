@@ -170,7 +170,6 @@ describe("a template's frames run at the session's animation speed; realtimeFram
     const registry = new SourceRegistry(
       store,
       "",
-      undefined,
       new SessionState(),
     );
     const compiled = registerDslConfig(CONFIG, registry, { cwd: "/tmp" });

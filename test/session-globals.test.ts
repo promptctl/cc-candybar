@@ -79,7 +79,7 @@ function buildRuntime(padding: number = CONFIG_PADDING) {
   const config = parseAndValidate("<session-globals>", src(padding), ALLOWED);
   const sessionState = new SessionState();
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", undefined, sessionState);
+  const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
   // [LAW:one-source-of-truth] Resolve both fields per render exactly as
   // server.ts does — the session's clicked value over the config default over

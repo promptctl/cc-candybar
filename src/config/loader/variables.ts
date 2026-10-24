@@ -1,5 +1,5 @@
 // [LAW:types-are-the-program] The variable schema: a AuthoredVariableDecl is discriminated
-// by `kind` (literal / input / env / file / shell / template / time / git / state),
+// by `kind` (literal / input / env / file / shell / template / time / state),
 // declared as DATA (VARIABLE_SCHEMA) and interpreted by the tag-by-field-value
 // engine (taggedUnion). Each arm is a `fields` schema over its member's non-`kind`
 // fields, except `input`, whose `default` must match its `type` — a genuine
@@ -7,14 +7,11 @@
 // kind's shape changes; adding a kind is one new arm here plus its runtime impl.
 
 import {
-  GIT_FIELDS,
-  type GitField,
   type ParseDecl,
   type SourceDefault,
   type EnvVarDecl,
   type FileVarDecl,
   type InputVarDecl,
-  type GitVarDecl,
   type LiteralVarDecl,
   type ShellVarDecl,
   type StateVarDecl,
@@ -51,7 +48,10 @@ import {
   type ValidateCtx,
 } from "./validate-core.js";
 import { requireCacheSpec } from "./cache.js";
-import { RETIRED_INPUT_PATHS } from "./retired-variables.js";
+import {
+  RETIRED_INPUT_PATHS,
+  retiredGitKindMessage,
+} from "./retired-variables.js";
 
 export function validateVariables(
   ctx: ValidateCtx,
@@ -103,30 +103,6 @@ function literalValueSpec(): FieldSpec<string | number | boolean> {
         return undefined;
       }
       return value;
-    },
-  };
-}
-
-// [LAW:types-are-the-program] `field` is a required member of the closed GitField
-// set with a bespoke one-of message — a custom spec for the same reason.
-function gitFieldSpec(): FieldSpec<GitField> {
-  return {
-    required: true,
-    json: { enum: [...GIT_FIELDS] },
-    parse: (ctx, path, _field, raw) => {
-      const field = raw.field;
-      if (
-        typeof field !== "string" ||
-        !GIT_FIELDS.includes(field as GitField)
-      ) {
-        ctx.issues.push({
-          path: `${path}.field`,
-          message: `git field must be one of: ${GIT_FIELDS.join(", ")}, got ${JSON.stringify(field)}`,
-          line: findKeyLine(ctx.source, [...path.split("."), "field"]),
-        });
-        return undefined;
-      }
-      return field as GitField;
     },
   };
 }
@@ -399,16 +375,6 @@ const TIME_FIELDS: FieldSpecMap<Omit<TimeVarDecl, "kind">> = {
 const TIME_VAR_REMOVED = noCachePolicy(
   "a time variable reads the instant its render is drawn at",
 );
-const GIT_VAR_FIELDS: FieldSpecMap<Omit<GitVarDecl, "kind">> = {
-  field: gitFieldSpec(),
-  default: optionalStringSpec(),
-};
-// [LAW:no-silent-failure] A git variable refreshes through the daemon's git
-// cache, which watches the repository itself; a `cache:` here was required and
-// then never read, so a ttl or a watched path changed nothing.
-const GIT_VAR_REMOVED = noCachePolicy(
-  "a git variable is refreshed by the daemon's own watch on the repository",
-);
 // `within` is synthesis-only: no file may author it.
 const STATE_FIELDS: FieldSpecMap<Omit<StateVarDecl, "kind" | "within">> = {
   key: requireStringSpec(),
@@ -472,9 +438,9 @@ const VARIABLE_SCHEMA: TaggedUnionSchema<AuthoredVariableDecl, "kind"> = {
     shell: arm("shell", SHELL_FIELDS),
     template: arm("template", TEMPLATE_FIELDS, TEMPLATE_VAR_REMOVED),
     time: arm("time", TIME_FIELDS, TIME_VAR_REMOVED),
-    git: arm("git", GIT_VAR_FIELDS, GIT_VAR_REMOVED),
     state: arm("state", STATE_FIELDS),
   },
+  retired: { git: retiredGitKindMessage },
 };
 
 // [LAW:one-source-of-truth] One AuthoredVariableDecl's schema, derived from the SAME

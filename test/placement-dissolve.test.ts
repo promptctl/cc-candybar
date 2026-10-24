@@ -70,7 +70,7 @@ interface Frame {
 // drawn until it reloads.
 function renderer(cfg: ValidatedConfig, session = new SessionState()) {
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", undefined, session);
+  const registry = new SourceRegistry(store, "", session);
   const compiled = registerDslConfig(cfg, registry, { cwd: "/tmp" });
   const opts = {
     endcaps: "powerline" as const,

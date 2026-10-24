@@ -42,11 +42,7 @@ import { configOptionDomains } from "../config/edit-chrome.js";
 import { EDIT_NS } from "../config/loader/reserved-namespace.js";
 import type { Derivation, VariableStore } from "../var-system/store.js";
 import type { SourceRegistry } from "../var-system/sources.js";
-import {
-  parseDuration,
-  type CachePolicy,
-  type GitField,
-} from "../var-system/sources.js";
+import { parseDuration, type CachePolicy } from "../var-system/sources.js";
 import type { SourceParse } from "../var-system/parse.js";
 import type { JsonValue } from "../var-system/types.js";
 import type { BuildLineOptions } from "../render/strip.js";
@@ -348,14 +344,6 @@ function declareOne(
       });
       break;
 
-    case "git":
-      registry.declareGit(name, {
-        field: decl.field as GitField,
-        cwd,
-        varDefault: decl.default,
-      });
-      break;
-
     case "state":
       registry.declareState(name, {
         key: decl.key,
@@ -441,8 +429,8 @@ function compileHelpers(
 export function registerDslConfig(
   config: ValidatedConfig,
   registry: SourceRegistry,
-  // [LAW:no-silent-failure] `cwd` is required: it is the directory `git`
-  // and `shell` sources run in, and the daemon's own process.cwd() is
+  // [LAW:no-silent-failure] `cwd` is required: it is the directory `shell`
+  // sources run in, and the daemon's own process.cwd() is
   // whichever shell spawned it — a default here would be that wrong answer.
   opts: { cwd: string },
 ): RegisteredConfig {

@@ -182,7 +182,7 @@ function buildEditRuntime(src: string, sessionId = "s1") {
   const sessionState = new SessionState();
   durable.seedOrigin(sessionState, sessionId);
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", undefined, sessionState);
+  const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
   const basePalette = getThemePalette("textual-dark"!);
   // The daemon publishes the session's history depth into every render's
@@ -820,7 +820,7 @@ describe("edit chrome is ordinary segment data — no special-cased render path"
     const config = parseAndValidate("<test>", BASE, ALLOWED);
     const sessionState = new SessionState();
     const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", undefined, sessionState);
+    const registry = new SourceRegistry(store, "", sessionState);
     const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
     const basePalette = getThemePalette("textual-dark"!);
     sessionState.set("s1", EDIT_MODE_KEY, EDIT_MODE_ARRANGE);

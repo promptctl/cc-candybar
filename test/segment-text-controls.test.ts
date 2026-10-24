@@ -35,7 +35,7 @@ const CONFIG = parseAndValidate(
 
 function render(s: string): string {
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", undefined, new SessionState());
+  const registry = new SourceRegistry(store, "", new SessionState());
   try {
     const compiled = registerDslConfig(CONFIG, registry, { cwd: "/tmp" });
     return renderDsl(CONFIG, compiled, store, registry, { s }, instantOf(new Date()), OPTS);

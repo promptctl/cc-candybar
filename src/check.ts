@@ -383,7 +383,6 @@ export async function prepareConfig(
   const registry = new SourceRegistry(
     store,
     config.globals.default_empty_value ?? "",
-    undefined,
     new SessionState(),
   );
   try {
@@ -660,7 +659,7 @@ async function loadRegisterRender(
     return bar;
   } finally {
     // [LAW:single-enforcer] The registry owns every async handle the config
-    // declared (timers, fs watchers, git subscriptions); a one-shot check must
+    // declared (timers, fs watchers); a one-shot check must
     // not leak them past the verdict.
     prepared.registry.dispose();
   }

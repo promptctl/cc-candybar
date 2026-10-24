@@ -204,7 +204,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
     const registry = new SourceRegistry(
       store,
       "",
-      undefined,
       new SessionState(),
     );
     try {
@@ -279,7 +278,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const registry = new SourceRegistry(
         store,
         "",
-        undefined,
         new SessionState(),
       );
       const compiled = registerDslConfig(config, registry, {
@@ -528,7 +526,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     const parsed = parseAndValidate("<default>", SERIALIZED);
     const sessionState = new SessionState();
     const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", undefined, sessionState);
+    const registry = new SourceRegistry(store, "", sessionState);
     const compiled = registerDslConfig(parsed, registry, { cwd: "/tmp" });
     // A click is gated by the config its session renders: record the render
     // and hand the click that config, so the clicks below pass through the
@@ -655,7 +653,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const registry = new SourceRegistry(
         store,
         "",
-        undefined,
         new SessionState(),
       );
       try {
@@ -720,7 +717,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const registry = new SourceRegistry(
         store,
         "",
-        undefined,
         new SessionState(),
       );
       try {
@@ -779,7 +775,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const registry = new SourceRegistry(
         store,
         "",
-        undefined,
         new SessionState(),
       );
       try {
@@ -810,7 +805,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const registry = new SourceRegistry(
         store,
         "",
-        undefined,
         new SessionState(),
       );
       try {
@@ -917,7 +911,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const registry = new SourceRegistry(
         store,
         "",
-        undefined,
         new SessionState(),
       );
       try {
@@ -1127,7 +1120,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         variables: { ...narrowed.variables, ...variables },
       };
       const store = new VariableStore();
-      const registry = new SourceRegistry(store, "", undefined, sessionState);
+      const registry = new SourceRegistry(store, "", sessionState);
       try {
         const compiled = registerDslConfig(cfg, registry, { cwd: "/tmp" });
         const basePalette = paletteForThemeName(
@@ -1452,7 +1445,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const registry = new SourceRegistry(
         store,
         "",
-        undefined,
         new SessionState(),
       );
       try {
@@ -1544,7 +1536,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
         const registry = new SourceRegistry(
           store,
           "",
-          undefined,
           new SessionState(),
         );
         try {
@@ -1623,7 +1614,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const registry = new SourceRegistry(
         store,
         "",
-        undefined,
         new SessionState(),
       );
       try {
@@ -1770,7 +1760,7 @@ describe("bundled preset library renders clean at every width — brandon-preset
     // the `state` vars the templates read (edit.mode gating the chrome, the
     // ↺ banner) and the globals resolved above answer from one session, not
     // from a fresh SessionState that disagrees with it about edit mode.
-    const registry = new SourceRegistry(store, "", undefined, {
+    const registry = new SourceRegistry(store, "", {
       get: (_sessionId, key) => sessionPick(key, name),
       revision: () => 0,
     });

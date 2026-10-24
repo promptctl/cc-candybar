@@ -64,7 +64,7 @@ function renderPair(
     sessionState.set(SESSION, key, value);
   }
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", undefined, sessionState);
+  const registry = new SourceRegistry(store, "", sessionState);
   const sink = new Map<string, readonly RichText[]>();
   try {
     const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });

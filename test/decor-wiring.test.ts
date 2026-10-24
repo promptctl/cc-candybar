@@ -82,7 +82,7 @@ function build(src: string, look?: ThemeKey, dflt?: DslConfig) {
   const config = parseAndValidate("<test>", src, ALLOWED, dflt);
   const store = new VariableStore();
   const sessionState = new SessionState();
-  const registry = new SourceRegistry(store, "", undefined, sessionState);
+  const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
   const sink = new Map<string, readonly RichText[]>();
   const render = (payload: object = {}, variation?: VariationName, shade?: ShadeName): string =>
@@ -618,7 +618,7 @@ describe("an open trigger on a row no colour stands off", () => {
       ALLOWED,
     );
     const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", undefined, new SessionState());
+    const registry = new SourceRegistry(store, "", new SessionState());
     const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
     const errors: string[] = [];
     const warnings: RenderWarning[] = [];
@@ -678,7 +678,7 @@ describe("an open band whose plane stands on its trigger", () => {
       ALLOWED,
     );
     const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", undefined, new SessionState());
+    const registry = new SourceRegistry(store, "", new SessionState());
     const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
     const errors: string[] = [];
     const warnings: RenderWarning[] = [];

@@ -105,10 +105,7 @@ function loadState(): ReturnType<typeof buildRenderState> {
       cwd,
       { layers: [configPath], home: configPath, projectDir: cwd },
       advisories,
-      {
-        gitService: providers.gitProvider,
-        sessionState,
-      },
+      { sessionState },
     );
   } catch (err) {
     if (err instanceof ConfigError) advisories.push(...err.warnings);

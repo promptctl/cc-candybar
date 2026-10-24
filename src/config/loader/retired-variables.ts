@@ -71,3 +71,30 @@ export const RETIRED_INPUT_PATHS: ReadonlyMap<string, string> = new Map([
     'the bundled template variable "weekly.etaMinutes" computes it at the draw: drop this declaration',
   ],
 ]);
+
+// [LAW:one-type-per-behavior] The retired `kind: "git"`, field → what reads it
+// now: every git fact is an input over the payload's git lane, which the
+// bundled default declares under these names (brandon-unfiled-3248.8ro6). The
+// git variable was a second path to the same fact — a subscription pushing a
+// six-field subset into boxes, resolving the repo without the session's
+// project directory — so it could name a different repo than the bar's own
+// git cells did.
+const RETIRED_GIT_FIELDS: ReadonlyMap<string, string> = new Map([
+  ["branch", 'read ".git.branch" (it reads "detached" off a branch)'],
+  ["sha", 'read ".git.sha"'],
+  ["dirty", 'read (ne .git.status "clean")'],
+  ["ahead", 'read ".git.ahead"'],
+  ["behind", 'read ".git.behind"'],
+  ["stash", 'read ".git.stash"'],
+]);
+
+export function retiredGitKindMessage(
+  raw: Readonly<Record<string, unknown>>,
+): string {
+  const field = typeof raw.field === "string" ? raw.field : undefined;
+  const read =
+    field !== undefined && RETIRED_GIT_FIELDS.has(field)
+      ? RETIRED_GIT_FIELDS.get(field)!
+      : `read the bundled input variables "git.branch", "git.sha", "git.status", "git.ahead", "git.behind" or "git.stash"`;
+  return `kind "git" is retired: every git fact is an input over the payload's git lane, which the bundled default already declares — drop this declaration and ${read} where it was read, or declare { kind: "input", path: "git.<fact>" } under a name of your own`;
+}

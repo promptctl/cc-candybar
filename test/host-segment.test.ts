@@ -158,7 +158,6 @@ describe("the bundled host segment", () => {
     const registry = new SourceRegistry(
       store,
       "",
-      undefined,
       new SessionState(),
     );
     try {

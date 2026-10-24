@@ -26,7 +26,6 @@ import {
   ENTRY_BYTES,
   COMPILE_BYTES,
 } from "../src/daemon/cache/render";
-import { GitDataProvider } from "../src/daemon/cache/git";
 import { SessionState } from "../src/daemon/session-state";
 import { stateGate } from "../src/daemon/verbs/state-validators";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
@@ -57,7 +56,6 @@ function makeCache(
 ): {
   cache: RenderCache;
   cleanups: Array<() => void>;
-  gitService: GitDataProvider;
   reloads: ReloadSignal;
   watchers: WatcherRegistry;
 } {
@@ -70,14 +68,10 @@ function makeCache(
     logger: () => {},
   });
   cleanups.push(() => watchers.closeAll());
-  const gitService = new GitDataProvider({
-    logger: () => {},
-  });
-  cleanups.push(() => gitService.close());
   const sessionState = new SessionState();
   const reloads = new ReloadSignal();
   const cache = new RenderCache(
-    { gitService, sessionState, watchers, log },
+    { sessionState, watchers, log },
     {
       // Room for four entries over one compile: the fifth evicts the oldest.
       budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES,
@@ -85,7 +79,7 @@ function makeCache(
     },
   );
   cleanups.unshift(() => cache.close());
-  return { cache, cleanups, gitService, reloads, watchers };
+  return { cache, cleanups, reloads, watchers };
 }
 
 function mkConfigDir(): { dir: string; cleanup: () => void } {
@@ -1005,9 +999,8 @@ describe("RenderCache idle sweep", () => {
     jest.useFakeTimers();
     const { dir, cleanup } = mkConfigDir();
     const watchers = new WatcherRegistry({ logger: () => {} });
-    const gitService = new GitDataProvider({ logger: () => {} });
     const cache = new RenderCache(
-      { gitService, sessionState: new SessionState(), watchers },
+      { sessionState: new SessionState(), watchers },
       { budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES },
     );
     try {
@@ -1034,7 +1027,6 @@ describe("RenderCache idle sweep", () => {
     } finally {
       cache.close();
       jest.useRealTimers();
-      gitService.close();
       watchers.closeAll();
       cleanup();
     }
@@ -1043,11 +1035,9 @@ describe("RenderCache idle sweep", () => {
   test("a hold no render read across a whole sweep is released; a render takes it back", () => {
     const { dir, cleanup } = mkConfigDir();
     const watchers = new WatcherRegistry({ logger: () => {} });
-    const gitService = new GitDataProvider({ logger: () => {} });
     const logs: string[] = [];
     const cache = new RenderCache(
       {
-        gitService,
         sessionState: new SessionState(),
         watchers,
         log: (_level, message) => logs.push(message),
@@ -1093,7 +1083,6 @@ describe("RenderCache idle sweep", () => {
       expect(released).toHaveLength(2);
     } finally {
       cache.close();
-      gitService.close();
       watchers.closeAll();
       cleanup();
     }

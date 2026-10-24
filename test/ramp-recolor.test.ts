@@ -74,7 +74,7 @@ function buildRuntime() {
   const config = parseAndValidate("<ramp-recolor>", SRC, ALLOWED);
   const sessionState = new SessionState();
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", undefined, sessionState);
+  const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
   registries.push(registry);
   // The click gate is the config this session renders, so the theme and style

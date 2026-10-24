@@ -92,7 +92,7 @@ function rig(
   );
   const sessionState = new SessionState();
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", undefined, sessionState);
+  const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
   recordRender(sessionState, SID);
   const ctx = testVerbContext(sessionState, undefined, config);
@@ -711,7 +711,7 @@ function previewLabels(rendered: string): string[][] {
 describe("the preset control's list carries the layout beneath it", () => {
   test("every bundled preset's rows, from its resolved root", () => {
     const config = parseAndValidate("<user>", "{}", ALLOWED, DEFAULT_DSL_CONFIG);
-    const registry = new SourceRegistry(new VariableStore(), "", undefined);
+    const registry = new SourceRegistry(new VariableStore(), "");
     const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
     // Every segment but edit mode's chrome, which edit mode alone shows.
     const content = (node: CompiledNode): boolean =>

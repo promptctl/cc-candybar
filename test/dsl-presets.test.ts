@@ -194,7 +194,6 @@ describe("preset compile diagnostics name the authored path", () => {
       const registry = new SourceRegistry(
         new VariableStore(),
         "",
-        undefined,
         new SessionState(),
       );
       registerDslConfig(config, registry, { cwd: process.cwd() });
@@ -295,7 +294,7 @@ describe("preset selection — the arrangement the bar renders", () => {
     const config = parseAndValidate("<presets>", src, ALLOWED);
     const sessionState = new SessionState();
     const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", undefined, sessionState);
+    const registry = new SourceRegistry(store, "", sessionState);
     const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
     // A click is gated by the config its session renders; record the render so
     // the click below resolves this config and passes through its real gate.

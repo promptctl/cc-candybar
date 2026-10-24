@@ -1,9 +1,7 @@
-import { execSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { RenderCache, type SessionView } from "../src/daemon/cache/render";
-import { GitDataProvider } from "../src/daemon/cache/git";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { SessionState } from "../src/daemon/session-state";
 import { renderDsl } from "../src/dsl/render";
@@ -35,11 +33,9 @@ function makeCache(
     counters: { watchersOpened: 0, watchersClosed: 0 },
     logger: () => {},
   });
-  const gitService = new GitDataProvider({ logger: () => {} });
-  cleanups.push(() => watchers.closeAll(), () => gitService.close());
+  cleanups.push(() => watchers.closeAll());
   const cache = new RenderCache(
     {
-      gitService,
       sessionState: new SessionState(),
       watchers,
       log: (_level, line) => {
@@ -50,7 +46,7 @@ function makeCache(
     { budgetBytes: () => opts.budgetBytes ?? 1024 * 1024 * 1024 },
   );
   cleanups.push(() => cache.close());
-  return { cache, lines, gitService };
+  return { cache, lines };
 }
 
 // Each run of a shell appends a line naming it, so the file counts its runs.
@@ -117,8 +113,7 @@ async function render(
     using held = cache.holdSession(cwd, cwd, undefined, sid);
     return { text: drawn(held.view, sid, at), view: held.view };
   })();
-  // Both homes the render read: the view's sources, and the directory's — a
-  // git variable's first delivery is the directory's to wait on.
+  // Both homes the render read: the view's sources, and the directory's.
   expect(await view.registry.settled(5000)).toEqual([]);
   expect(await view.state.registry.settled(5000)).toEqual([]);
   return { text, view };
@@ -300,86 +295,3 @@ test("views the served entry alone carries past the budget are said, not hidden"
   );
 });
 
-// cmt-113f8f1e item 2: a `kind: "git"` variable lives in the directory home, and
-// its subscription holds the repo's period while that directory is drawn — so a
-// config reading git only through variables still sees working-tree edits —
-// and the cache's sweep releases it once nothing draws the directory.
-test("a git variable's subscription holds its repo while its directory renders, until a sweep finds it undrawn", async () => {
-  execSync("git init -q && git commit -q --allow-empty -m init", {
-    cwd: dir,
-    env: { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" },
-  });
-  fs.writeFileSync(
-    path.join(dir, ".cc-candybar.json5"),
-    JSON.stringify({
-      variables: { branch: { kind: "git", field: "branch" } },
-      segments: { where: { template: "on={{ .branch }}" } },
-      root: { h: ["where"] },
-    }),
-  );
-  const { cache, gitService } = makeCache();
-  await render(cache, "s-a");
-  expect(gitService.getStats().held).toBe(1);
-
-  // Drawn within the sweep: still held.
-  cache.releaseIdle();
-  await render(cache, "s-a");
-  cache.releaseIdle();
-  expect(gitService.getStats().held).toBe(1);
-
-  // A whole sweep undrawn: released, the repo off its period.
-  cache.releaseIdle();
-  expect(gitService.getStats().held).toBe(0);
-
-  // Drawn again: held again.
-  await render(cache, "s-a");
-  expect(gitService.getStats().held).toBe(1);
-});
-
-// A hold that draws nothing — the lane check a subscribe or a pushed frame
-// makes over the session's settings — does not count as drawing the directory.
-test("a hold that draws nothing leaves a git subscription to the sweep", async () => {
-  execSync("git init -q && git commit -q --allow-empty -m init", {
-    cwd: dir,
-    env: { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" },
-  });
-  fs.writeFileSync(
-    path.join(dir, ".cc-candybar.json5"),
-    JSON.stringify({
-      variables: { branch: { kind: "git", field: "branch" } },
-      segments: { where: { template: "on={{ .branch }}" } },
-      root: { h: ["where"] },
-    }),
-  );
-  const { cache, gitService } = makeCache();
-  await render(cache, "s-a");
-  expect(gitService.getStats().held).toBe(1);
-
-  cache.releaseIdle();
-  cache.hold(dir, dir, undefined)[Symbol.dispose]();
-  cache.releaseIdle();
-  expect(gitService.getStats().held).toBe(0);
-});
-
-test("an entry a hold that draws nothing loads holds no git period", async () => {
-  execSync("git init -q && git commit -q --allow-empty -m init", {
-    cwd: dir,
-    env: { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" },
-  });
-  fs.writeFileSync(
-    path.join(dir, ".cc-candybar.json5"),
-    JSON.stringify({
-      variables: { branch: { kind: "git", field: "branch" } },
-      segments: { where: { template: "on={{ .branch }}" } },
-      root: { h: ["where"] },
-    }),
-  );
-  const { cache, gitService } = makeCache();
-  const lane = cache.hold(dir, dir, undefined);
-  lane[Symbol.dispose]();
-  expect(await lane.state.registry.settled(5000)).toEqual([]);
-  expect(gitService.getStats().held).toBe(0);
-
-  await render(cache, "s-a");
-  expect(gitService.getStats().held).toBe(1);
-});

@@ -124,7 +124,7 @@ function buildRuntime(root: string) {
   );
   const sessionState = new SessionState();
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", undefined, sessionState);
+  const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
   // No theme handed in: renderDsl resolves it from `globals.palette`, so these
   // bytes are the bundled default's own declared theme (tokyo-night) — the ones

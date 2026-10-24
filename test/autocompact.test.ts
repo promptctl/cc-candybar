@@ -65,7 +65,7 @@ function runtime(
   );
   sessionState.set("s1", SESSION_CLIENT_HINTS_KEY, JSON.stringify({ tmux: HINT }));
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", undefined, sessionState);
+  const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
   const payload = {
     session_id: "s1",

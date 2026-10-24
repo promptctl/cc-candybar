@@ -177,7 +177,7 @@ function build(src: string, withDefault = false) {
   );
   const sessionState = new SessionState();
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", undefined, sessionState);
+  const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
   const palette = getThemePalette(THEME);
   const sink = new Map<string, readonly RichText[]>();

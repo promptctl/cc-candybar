@@ -299,7 +299,6 @@ describe('from: "styles" — rendered options and the derived gate share the con
     const registry = new SourceRegistry(
       store,
       "",
-      undefined,
       new SessionState(),
     );
     const compiled = registerDslConfig(config, registry, {
@@ -352,7 +351,7 @@ describe("style click — live whole-bar recolor over the active theme", () => {
     const config = parseAndValidate("<looks>", SRC, ALLOWED);
     const sessionState = new SessionState();
     const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", undefined, sessionState);
+    const registry = new SourceRegistry(store, "", sessionState);
     const compiled = registerDslConfig(config, registry, {
       cwd: process.cwd(),
     });
@@ -492,7 +491,7 @@ describe("globals.style as an expression — a style chosen by data", () => {
     const config = parseAndValidate("<looks-expr>", src, ALLOWED);
     const sessionState = new SessionState();
     const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", undefined, sessionState);
+    const registry = new SourceRegistry(store, "", sessionState);
     const compiled = registerDslConfig(config, registry, {
       cwd: process.cwd(),
     });
@@ -721,7 +720,6 @@ describe("globals.style as an expression — a style chosen by data", () => {
     const registry = new SourceRegistry(
       store,
       "",
-      undefined,
       new SessionState(),
     );
     try {

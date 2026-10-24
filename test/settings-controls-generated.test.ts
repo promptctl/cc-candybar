@@ -210,7 +210,7 @@ describe("a global the menu has never seen gets its control from the generator",
     }`);
     const sessionState = new SessionState();
     const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", undefined, sessionState);
+    const registry = new SourceRegistry(store, "", sessionState);
     const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
     const render = () =>
       renderDsl(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), OPTS);

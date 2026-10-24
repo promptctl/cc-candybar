@@ -63,7 +63,6 @@ import {
   RenderCache,
   renderCacheBudget,
 } from "../src/daemon/cache/render";
-import { GitDataProvider } from "../src/daemon/cache/git";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { ReloadSignal } from "./helpers/reload-signal";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
@@ -277,7 +276,7 @@ function buildRuntime(src: string, sessionId = "s1", dflt?: DslConfig) {
   const sessionState = new SessionState();
   durable.seedOrigin(sessionState, sessionId);
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", undefined, sessionState);
+  const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
   const render = (width = Number.POSITIVE_INFINITY): string =>
     renderDsl(
@@ -486,14 +485,10 @@ function makeCache(): {
     logger: () => {},
   });
   cleanups.push(() => watchers.closeAll());
-  const gitService = new GitDataProvider({
-    logger: () => {},
-  });
-  cleanups.push(() => gitService.close());
   const sessionState = new SessionState();
   const reloads = new ReloadSignal();
   const cache = new RenderCache(
-    { gitService, sessionState, watchers },
+    { sessionState, watchers },
     { budgetBytes: () => renderCacheBudget(memoryLimitBytes({})), observers: reloads.observers },
   );
   cleanups.unshift(() => cache.close());

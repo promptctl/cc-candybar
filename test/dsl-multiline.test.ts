@@ -32,7 +32,7 @@ const OPTS = {
 function buildRuntime(source: string) {
   const config = parseAndValidate("<test>", source, ALLOWED_PALETTES);
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", undefined, new SessionState());
+  const registry = new SourceRegistry(store, "", new SessionState());
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
   return { config, compiled, store, registry };
 }

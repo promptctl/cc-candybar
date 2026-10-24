@@ -9,7 +9,7 @@
 // - a derivation (`template`, `time`) is the view's: it reads the session's
 //   values, the depth its view draws at, and — a projection — the instant of
 //   a draw, and only a view is drawn;
-// - a value the directory alone decides (`literal`, `env`, `git`, a dropped
+// - a value the directory alone decides (`literal`, `env`, a dropped
 //   plugin's document) is the directory's;
 // - a `shell` or `file` source is the directory's unless its cache policy —
 //   the key it re-runs on, or the variables it depends on — reads a view's
@@ -65,7 +65,6 @@ const KIND_SCOPE: Readonly<
   time: "view",
   literal: "directory",
   env: "directory",
-  git: "directory",
   dropped: "directory",
 };
 

@@ -48,7 +48,7 @@ function renderer(): {
   readonly dispose: () => void;
 } {
   const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", undefined, new SessionState());
+  const registry = new SourceRegistry(store, "", new SessionState());
   const compiled = registerDslConfig(CONFIG, registry, { cwd: "/tmp" });
   return {
     render: (at) =>
@@ -123,7 +123,6 @@ describe("a stored instant is read against the frame's instant", () => {
     const registry = new SourceRegistry(
       store,
       "",
-      undefined,
       new SessionState(),
     );
     try {
@@ -154,7 +153,6 @@ describe("a stored instant is read against the frame's instant", () => {
     const registry = new SourceRegistry(
       store,
       "",
-      undefined,
       new SessionState(),
     );
     try {
