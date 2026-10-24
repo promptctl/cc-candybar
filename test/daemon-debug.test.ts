@@ -34,7 +34,7 @@ import { rootOf } from "../src/config/root";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
-import { ABSENT, failed, ok } from "../src/utils/outcome";
+import { ABSENT, PENDING, failed, ok } from "../src/utils/outcome";
 import { drawingAt } from "./helpers/test-engine";
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
@@ -261,6 +261,7 @@ describe("introspectVars — documents", () => {
   test("a document snapshots as its canonical JSON text, or the state a template read would surface", () => {
     const state = buildPopulatedState();
     state.store.defineDocument("doc.ok", ok({ b: 2, a: { c: 1 } }));
+    state.store.defineDocument("doc.pending", PENDING);
     state.store.defineDocument("doc.absent", ABSENT);
     state.store.defineDocument("doc.failed", failed("JSON parse failed: x"));
     const byName = new Map(introspectVars(state).map((v) => [v.name, v]));
@@ -268,9 +269,13 @@ describe("introspectVars — documents", () => {
       type: "document",
       value: '{"a":{"c":1},"b":2}',
     });
-    expect(byName.get("doc.absent")).toMatchObject({
+    expect(byName.get("doc.pending")).toMatchObject({
       type: "document",
       value: "(not yet scanned)",
+    });
+    expect(byName.get("doc.absent")).toMatchObject({
+      type: "document",
+      value: "(nothing to read, and no default)",
     });
     expect(byName.get("doc.failed")).toMatchObject({
       type: "document",

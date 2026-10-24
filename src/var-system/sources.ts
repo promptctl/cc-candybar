@@ -31,7 +31,15 @@ import { createCcCandybarEngine } from "../template-engine/engine.js";
 import { buildScope } from "../template-engine/scope.js";
 import { GitDataProvider } from "../daemon/cache/git.js";
 import type { GitInfo } from "../segments/git.js";
-import { ok, failed, orElse, ABSENT, type Outcome } from "../utils/outcome.js";
+import {
+  ok,
+  failed,
+  orElse,
+  ABSENT,
+  PENDING,
+  type Outcome,
+  type Reading,
+} from "../utils/outcome.js";
 import {
   jsonParser,
   regexParser,
@@ -39,7 +47,7 @@ import {
   type Parser,
   type SourceParse,
 } from "./parse.js";
-import { AbsentValueError, readAbsentValue, type JsonValue } from "./types.js";
+import { readPending, type JsonValue } from "./types.js";
 import type { SessionStateReader } from "../daemon/session-state.js";
 import { TrailingEdge } from "../utils/trailing-edge.js";
 import { Holds } from "../utils/holds.js";
@@ -834,10 +842,11 @@ export class SourceRegistry {
   }
 
   // A document's fallback is the declared default, or NO document: without a
-  // default the node holds the failure itself (absent until the first scan,
-  // failed with its reason after a bad one), which the scope proxy surfaces
-  // as an error naming the variable [LAW:no-silent-failure] — a document has
-  // no honest empty value the way a string has "".
+  // default the node is pending until its first scan, then holds what the scan
+  // found — absent when it had nothing to read, failed with its reason after a
+  // bad one — which the scope proxy surfaces naming the variable
+  // [LAW:no-silent-failure]: a document has no honest empty value the way a
+  // string has "".
   //
   // The default stands in for a run that had nothing to READ — a missing
   // file, a command that failed, blank output — never for text that was read and is not a
@@ -847,7 +856,7 @@ export class SourceRegistry {
   // [LAW:no-ambient-temporal-coupling] A writer rewriting a file in place
   // (truncate, then write) is caught mid-update by any read that lands
   // between the two, and the text it sees is not a document. Text that does
-  // not parse is therefore PENDING while a document is showing: the document
+  // not parse is therefore held back while a document is showing: the document
   // stays, and the failure is published only if no read replaces it within
   // TORN_WRITE_SETTLE_MS — the writer's own final write is an event that
   // re-reads and supersedes it. A writer that is truly broken shows ⚠ after
@@ -857,15 +866,17 @@ export class SourceRegistry {
     varDefault: JsonValue | undefined,
     where: string,
   ): Publish {
-    const fallback: Outcome<JsonValue> =
-      varDefault === undefined ? ABSENT : ok(varDefault);
+    // What the node holds before its first scan, and — with a default — what
+    // stands in for a run that had nothing to read.
+    const fallback: Reading<JsonValue> =
+      varDefault === undefined ? PENDING : ok(varDefault);
     this.store.defineDocument(name, fallback);
-    let pending: ReturnType<typeof setTimeout> | undefined;
+    let settling: ReturnType<typeof setTimeout> | undefined;
     // Whether the document showing was READ (not the default standing in).
     let showingRead = false;
-    this.cleanups.push(() => clearTimeout(pending));
+    this.cleanups.push(() => clearTimeout(settling));
     return (raw) => {
-      clearTimeout(pending);
+      clearTimeout(settling);
       // Blank text is nothing to read — a command that printed nothing, a
       // file only touched — exactly as a missing file is.
       const read: Outcome<string> =
@@ -882,7 +893,7 @@ export class SourceRegistry {
         this.store.setDocument(name, next);
       };
       if (torn) {
-        pending = setTimeout(show, TORN_WRITE_SETTLE_MS);
+        settling = setTimeout(show, TORN_WRITE_SETTLE_MS);
       } else {
         show();
       }
@@ -1028,6 +1039,12 @@ export class SourceRegistry {
         this.lastErrors.delete(name);
         return result;
       } catch (e) {
+        // [LAW:single-enforcer] A derivation over a value not answered yet is
+        // not answered yet either — not a failure, so nothing is recorded and
+        // no default answers it: a default answers a failure alone. The read
+        // it rode in on is passed on whole, naming the source it waits on.
+        const pending = readPending(e);
+        if (pending !== undefined) throw pending;
         const message = e instanceof Error ? e.message : String(e);
         // Recorded either way, so `cc-candybar vars` names the failure even
         // when an authored default makes the read succeed.
@@ -1051,12 +1068,8 @@ export class SourceRegistry {
         // global cosmetic floor for absent values, and letting it stand in for a
         // per-variable `default` would let one unrelated global silently switch
         // this loudness back off for every template in the config.
-        // A derivation over a value that is not there yet is itself not there
-        // yet, so whatever waits on it can wait on this variable too.
         if (fallback === undefined) {
-          throw readAbsentValue(e)
-            ? new AbsentValueError(name, `variable "${name}": ${message}`)
-            : new Error(`variable "${name}": ${message}`);
+          throw new Error(`variable "${name}": ${message}`);
         }
         return fallback;
       }
@@ -1326,10 +1339,9 @@ export class SourceRegistry {
         // source keeps what its last run yielded. Folding the throw into a
         // key value made a key that always throws a constant one — the
         // source never ran again and nothing said why. A key over a value
-        // that is not there yet is `absent`, not a fault: the reaction
-        // tracks that value and fires when it arrives, and the value's own
-        // variable says why it is missing.
-        const keyOf = (): Outcome<string> => {
+        // not answered yet is `pending`, not a fault: the reaction tracks
+        // that value and fires when it arrives.
+        const keyOf = (): Reading<string> => {
           try {
             return ok(
               parsedKey
@@ -1338,8 +1350,8 @@ export class SourceRegistry {
                 .join(""),
             );
           } catch (e) {
-            return readAbsentValue(e)
-              ? ABSENT
+            return readPending(e) !== undefined
+              ? PENDING
               : failed(
                   `cache key: ${e instanceof Error ? e.message : String(e)}`,
                 );
@@ -1422,7 +1434,7 @@ export class SourceRegistry {
 
   // The one fold from a policy's own outcome — whether it can fire — to the
   // variable's standing fault.
-  private notePolicy(name: string, outcome: Outcome<unknown>): void {
+  private notePolicy(name: string, outcome: Reading<unknown>): void {
     if (outcome.kind === "failed")
       this.policyFaults.set(name, {
         timestamp: Date.now(),

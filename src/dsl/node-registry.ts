@@ -60,10 +60,12 @@ import {
 import {
   cellParts,
   heldCell,
+  HIDDEN,
   type Gate,
   type LaidCell,
 } from "../template-engine/layout.js";
-import type { Returned } from "../render/effect.js";
+import type { PlacementRecord, Returned } from "../render/frame-memory.js";
+import { readPending } from "../var-system/types.js";
 
 // ─── Compiled node shapes ──────────────────────────────────────────────────────
 
@@ -207,6 +209,15 @@ export type NodeGate =
   | Exclude<Gate, { kind: "failed" }>
   | (Extract<Gate, { kind: "failed" }> & { report(): void });
 
+// [LAW:dataflow-not-control-flow] What a node's gate makes of the nodes it
+// holds, threaded down the walk as a value: shown (each asks its own `when`),
+// hidden, or not answered yet — each placement under it draws where it stood.
+// A gate that failed decides nothing, so what it holds is hidden.
+export type Visibility = Exclude<Gate, { kind: "failed" }>;
+
+const visibilityOf = (gate: NodeGate): Visibility =>
+  gate.kind === "failed" ? HIDDEN : gate;
+
 // [LAW:single-enforcer] The render-time context. `gate` is THIS node's own
 // `when` as the driver evaluated it — hidden, unevaluated, under a parent that
 // is not shown. renderChild continues the walk.
@@ -257,11 +268,11 @@ export interface NodeRenderCtx {
   // Resolve a segment name to its declaration (the driver closes over
   // config.segments).
   lookupSegment(name: string): SegmentDecl | undefined;
-  // Continue the walk into a child node (parentVisible = this node's
-  // visibility; step = which child of how many, extending the address).
+  // Continue the walk into a child node (held = what this node's gate makes
+  // of it; step = which child of how many, extending the address).
   renderChild(
     node: CompiledNode,
-    parentVisible: boolean,
+    held: Visibility,
     step: AddressStep,
   ): RenderedLines;
   // Continue the walk into the body a segment opens: rendered at the root of
@@ -283,15 +294,21 @@ export interface NodeRenderCtx {
   // rows it last drew in place of its own (`SessionEffects.motion`,
   // brandon-effects-2gka.3vt).
   placed(id: string, lines: RenderedLines): RenderedLines;
+  // What the view's last drawn frame showed of the placement `id`: none in a
+  // view that has drawn none, or where the walk never reached it.
+  lastDrawn(id: string): PlacementRecord<RenderedLine> | undefined;
+  // A source whose value this frame drew as not answered yet.
+  waited(variable: string): void;
+  // The closed style the placement's region deals it in `palette`, its
+  // authored colours unread.
+  decoration(node: CompiledSegmentNode, palette: Palette): Style;
 }
 
 // [LAW:one-source-of-truth] The lines the placement `id` returned, divided as
-// the session's effect record reads them, in one pass: what it drew — the rows
-// it would replay leaving and the ground its cells fade from — or nothing,
-// when it laid no cell, and the rows of the deeper bands hung under it. A
-// placement with a menu dropped or a body open under it would replay its row
-// in the open trigger's colour over nothing, so it replays none: it goes at
-// once, with what it opened.
+// the view's frame record keeps them, in one pass: what it drew — its own
+// rows, whether it opened anything under them, and the ground its cells fade
+// from — or nothing, when it laid no cell, and the rows of the deeper bands
+// hung under it.
 export function returnedBy(
   id: string,
   lines: RenderedLines,
@@ -306,9 +323,7 @@ export function returnedBy(
   }
   return {
     drawing:
-      ground === undefined
-        ? null
-        : { own: deeper.length === 0 ? own : [], ground },
+      ground === undefined ? null : { own, opened: deeper.length > 0, ground },
     deeper,
   };
 }
@@ -530,11 +545,7 @@ const containerType: NodeType<"container"> = {
     return composeBlocks(
       node.direction,
       node.children.map((child, index) =>
-        ctx.renderChild(
-          child,
-          ctx.gate.kind === "shown",
-          childStep(node, index),
-        ),
+        ctx.renderChild(child, visibilityOf(ctx.gate), childStep(node, index)),
       ),
     );
   },
@@ -636,6 +647,11 @@ function drawSegment(
   try {
     const parts = ctx.placement(node);
     if (!parts.shown()) return [];
+    // Its gate not answered yet, a placement its own `when` shows draws where
+    // it stood, as its own templates waiting do.
+    if (ctx.gate.kind === "pending") {
+      return loadingSegment(node, scope, ctx, ctx.gate.variable);
+    }
 
     // [LAW:dataflow-not-control-flow] The per-placement variability is
     // WHICH palette, and it is a value: this placement's `theme` setting,
@@ -807,13 +823,80 @@ function drawSegment(
     // then the disclosure body, in the order they hang under the trigger.
     return [...laidLines, ...ledBody];
   } catch (err) {
-    return brokenSegment(
-      node,
-      scope,
-      ctx,
-      (err as Error).message ?? String(err),
-    );
+    // [LAW:single-enforcer] Not answered yet is no failure, and `readPending`
+    // is the one thing that tells them apart.
+    const pending = readPending(err);
+    return pending !== undefined
+      ? loadingSegment(node, scope, ctx, pending.variable)
+      : brokenSegment(node, scope, ctx, (err as Error).message ?? String(err));
   }
+}
+
+// The glyph a placement whose value is not answered yet draws: the marker a
+// truncated cell already ends in.
+export const LOADING_GLYPH = "…";
+
+// [LAW:no-silent-failure] A placement whose value is not answered yet draws
+// where it stood in the view's last frame, so a source answering late never
+// reflows its row nor flashes a cell: one that drew is `…` at the width it
+// drew, one that drew nothing still draws nothing, and one never drawn (a cold
+// view) is one cell. It wears its decoration — a pending value states no
+// meaning for a `bg:` to paint — and edit mode's buttons ride it as they ride
+// any cell, so it stays configurable and removable.
+function loadingSegment(
+  node: CompiledSegmentNode,
+  scope: object,
+  ctx: NodeRenderCtx,
+  variable: string,
+): RenderedLines {
+  ctx.waited(variable);
+  const last = ctx.lastDrawn(node.id);
+  if (last?.kind === "hidden") return [];
+  const palette = placementPalette(node.settings.theme, ctx.palette);
+  const style = ctx.decoration(node, palette);
+  const lead = fragmentsToCells(errorAffix(node.lead, node, scope, ctx), style);
+  const trail = fragmentsToCells(
+    errorAffix(node.trail, node, scope, ctx),
+    style,
+  );
+  const drew = last === undefined ? 0 : drawnWidth(last.drawing.own);
+  const affixes = cellsWidth(lead) + cellsWidth(trail);
+  return [
+    {
+      cells: applySegmentLayout(
+        fragmentsToCells([new RichText(LOADING_GLYPH)], style),
+        {
+          width: drew > affixes ? drew - affixes : "auto",
+          justify: "left",
+          truncate: "right",
+          baseStyle: style,
+          padding: ctx.padding,
+          placement: {
+            id: node.id,
+            effect: node.settings.effect,
+            ground: groundOf(palette),
+          },
+          lead,
+          trail,
+        },
+      ),
+      band: "own",
+      place: "flow",
+    },
+  ];
+}
+
+// The columns the widest of a placement's rows took as its frame drew them:
+// its cells, fill grown in place, measured once the row has serialized.
+function drawnWidth(lines: RenderedLines): number {
+  return Math.max(
+    0,
+    ...lines.map((line) => cellsWidth(line.cells.flatMap(cellParts))),
+  );
+}
+
+function cellsWidth(cells: readonly RichText[]): number {
+  return cells.reduce((width, cell) => width + cell.cellLength, 0);
 }
 
 // The ⚠ cell a broken placement draws in place of everything it would have.

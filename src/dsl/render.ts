@@ -79,11 +79,13 @@ import {
 } from "../themes/index.js";
 import { ANIMATION_SPEEDS, FOLLOW_BAR } from "../themes/policy.js";
 import type { DrawnMotion } from "../render/drawn-motion.js";
+import type { Gate } from "../template-engine/layout.js";
 import {
   bindClock,
   createCcCandybarEngine,
   engineClockFunctions,
   HIDDEN,
+  SHOWN,
 } from "../template-engine/index.js";
 import {
   compileActions,
@@ -109,7 +111,13 @@ import {
 } from "../render/active-segment.js";
 import { segmentColorFuncs } from "../render/segment-color.js";
 import { variableScopes, type VarScope } from "./variable-scope.js";
-import { evaluateOnce, viewParts, type ViewParts } from "./parts.js";
+import {
+  decoratedStyle,
+  evaluateOnce,
+  viewParts,
+  type RuleOutcome,
+  type ViewParts,
+} from "./parts.js";
 import { declaredVariables } from "../config/loader/refs.js";
 import {
   projectionNamesOf,
@@ -149,6 +157,7 @@ import {
   type NodeCompileCtx,
   type NodeGate,
   type NodeRenderCtx,
+  type Visibility,
   type EvaluatedSegment,
   type PlacementParts,
 } from "./node-registry.js";
@@ -1003,24 +1012,50 @@ function compiledRule(
   return rule;
 }
 
+// What a draw keeps of its globals rules: the name each slot settled on in
+// the view's last frame, and where this frame's go.
+interface RuleFrame {
+  readonly held: (slot: ExpressionSlot) => string | undefined;
+  readonly waited: (variable: string) => void;
+  readonly settled: (slot: ExpressionSlot, name: string) => void;
+}
+
 // [LAW:single-enforcer] THE reading of a globals rule: the name it wrote, or —
 // when its template threw (a `fail`, a missing field) — its slot's floor,
 // reported. Thrown on, a rule's own fault would take the whole statusline away
 // (brandon-unfiled-3248.2gq), where a failing segment costs one ⚠ cell; a
 // globals slot has no cell of its own, so the strip is where it says so
-// [LAW:no-silent-failure]. The floor is a NAME, so each slot's `decide` turns
-// it into that slot's floor value exactly as it would a rule naming it. The
-// rule itself is a part of the view (`ViewParts.rule`).
+// [LAW:no-silent-failure]. A rule reading a value not answered yet decides
+// nothing and is no fault: the slot keeps the name this view last settled on,
+// or its floor in a view that has settled none, and nothing is reported. The
+// floor is a NAME, so each slot's `decide` turns it into that slot's floor
+// value exactly as it would a rule naming it. The rule itself is a part of the
+// view (`ViewParts.rule`).
 function evalRule(
   slot: ExpressionSlot,
   rule: CompiledRule,
   parts: ViewParts,
   warn: (warning: RenderWarning) => void,
+  frame: RuleFrame,
 ): string {
-  const outcome = parts.rule(rule.template);
+  const name = ruleName(slot, rule, parts.rule(rule.template), warn, frame);
+  frame.settled(slot, name);
+  return name;
+}
+
+function ruleName(
+  slot: ExpressionSlot,
+  rule: CompiledRule,
+  outcome: RuleOutcome,
+  warn: (warning: RenderWarning) => void,
+  frame: RuleFrame,
+): string {
   switch (outcome.kind) {
     case "named":
       return outcome.name;
+    case "pending":
+      frame.waited(outcome.variable);
+      return frame.held(slot) ?? SLOT_FLOORS[slot];
     case "failed":
       warn({
         kind: "rule",
@@ -1045,6 +1080,11 @@ function provisionalName<T>(
   slot: ExpressionSlot,
 ): string {
   return selected.kind === "decided" ? selected.name : SLOT_FLOORS[slot];
+}
+
+// A node's own gate under a parent that is shown, or not answered yet.
+function within(parent: Visibility, own: Gate): Gate {
+  return own.kind === "shown" ? parent : own;
 }
 
 // The ids of the placements a layout node holds, its open bodies' included:
@@ -1153,6 +1193,8 @@ export interface DrawnFrame {
   // How many of the view's parts this frame evaluated (src/dsl/parts.ts):
   // between data changes, only those that read the instant.
   readonly evaluated: number;
+  // The sources whose values this frame drew as not answered yet, by name.
+  readonly pending: readonly string[];
 }
 
 // [LAW:types-are-the-program] What a render could not honour, by what failed:
@@ -1348,6 +1390,22 @@ export function drawDsl(
       provisionalName(selectedEffect, "effect"),
     ),
   );
+  // The view's record of this frame, kept once its rows serialize, and the
+  // sources whose values it drew as not answered yet. The session's state
+  // revision is read through the session id the push above wrote.
+  const source = {
+    config,
+    preset,
+    revision: registry.stateRevision(),
+    width: opts.width,
+  };
+  const record = parts.memory.begin(source, returnedBy);
+  const waited = new Set<string>();
+  const ruleFrame: RuleFrame = {
+    held: (slot) => parts.memory.recorded?.rules.get(slot),
+    waited: (variable) => waited.add(variable),
+    settled: record.rule,
+  };
   // The other half of each fold, which could only ever happen here: a rule reads
   // the store the push above just filled with this render's values. A decided
   // selection returns ITSELF, so the republish below is skipped by identity
@@ -1361,20 +1419,32 @@ export function drawDsl(
     // channel to the caller: a result naming no installed theme renders the floor
     // and says so, rather than throwing away the whole bar.
     return decideThemeName(
-      evalRule("palette", rule, parts, warn),
+      evalRule("palette", rule, parts, warn, ruleFrame),
       rule.where,
       (message) => warn({ kind: "rule", slot: "palette", message }),
     );
   });
   const style = finishSelection(selectedStyle, (source) =>
     decideStyleName(
-      evalRule("style", compiledRule(compiled, "style", source), parts, warn),
+      evalRule(
+        "style",
+        compiledRule(compiled, "style", source),
+        parts,
+        warn,
+        ruleFrame,
+      ),
       config.styles,
     ),
   );
   const effect = finishSelection(selectedEffect, (source) =>
     decideEffectName(
-      evalRule("effect", compiledRule(compiled, "effect", source), parts, warn),
+      evalRule(
+        "effect",
+        compiledRule(compiled, "effect", source),
+        parts,
+        warn,
+        ruleFrame,
+      ),
     ),
   );
   // [LAW:no-silent-failure] A rule arm learned a name the push above could not
@@ -1430,12 +1500,8 @@ export function drawDsl(
     clock,
     {
       transitions,
-      source: {
-        config,
-        preset,
-        revision: registry.stateRevision(),
-        width: opts.width,
-      },
+      source,
+      last: parts.memory.recorded,
       returned: returnedBy,
       hold: heldLine,
     },
@@ -1474,11 +1540,14 @@ export function drawDsl(
   // deeper tree is more recursion, not more code.
   const renderNode = (
     node: CompiledNode,
-    parentVisible: boolean,
+    parent: Visibility,
     region: Region,
   ): RenderedLines => {
-    // A hidden parent's child is hidden without its `when` being asked.
-    const evaluated = parentVisible ? parts.gate(node) : HIDDEN;
+    // A hidden parent's child is hidden without its `when` being asked. Under
+    // a parent not answered yet a child is as its own `when` says, except
+    // that shown waits on the parent: it is not answered yet either.
+    const evaluated =
+      parent.kind === "hidden" ? parent : within(parent, parts.gate(node));
     const gate: NodeGate =
       evaluated.kind === "failed"
         ? {
@@ -1516,18 +1585,32 @@ export function drawDsl(
           ),
         ),
       lookupSegment,
-      renderChild: (child, childVisible, step: AddressStep) =>
-        renderNode(child, childVisible, descend(region, step)),
+      renderChild: (child, held, step: AddressStep) =>
+        renderNode(child, held, descend(region, step)),
       // A disclosure body starts a NEW region: the root of the band its
       // trigger opens. Depth is a fact of that band — counted up by
       // `decorationFor` each time a band item opens the next — so a nested
       // `{{ menu }}` inside door → ⚙ lands at depth 2 with no walk state.
       renderBody: (body, open, band) =>
-        renderNode(body, gate.kind === "shown" && open, bandRoot(band)),
+        renderNode(
+          body,
+          gate.kind === "shown" && open ? SHOWN : HIDDEN,
+          bandRoot(band),
+        ),
       // [LAW:one-source-of-truth] The row ✕ reads the session id from the
       // same store every other affordance's URL does.
       closeDisclosure: (key) => disclosureCloseFragment(store, key),
-      placed: motion.placed,
+      placed: (id, lines) => record.placed(id, motion.placed(id, lines)),
+      lastDrawn: (id) => parts.memory.recorded?.placements.get(id),
+      waited: (variable) => waited.add(variable),
+      decoration: (node, palette) =>
+        decoratedStyle(
+          compiled.activeSegment,
+          node,
+          palette,
+          region,
+          registry.drawnAt(),
+        ),
     };
     return nodeType(node.kind).render(node, ctx);
   };
@@ -1552,7 +1635,7 @@ export function drawDsl(
         `(have: ${[...compiled.roots.keys()].join(", ")})`,
     );
   }
-  const rendered = rowIdentities(renderNode(root, true, barRoot(decor)))
+  const rendered = rowIdentities(renderNode(root, SHOWN, barRoot(decor)))
     // A row's fill demands resolve here and nowhere else: this is the one place a
     // composed row and the width it must fit are both in hand (brandon-layout-0c2).
     // [LAW:one-source-of-truth] A row's motion follows the row, not its line
@@ -1573,6 +1656,7 @@ export function drawDsl(
       };
     });
   motion.drawn();
+  record.commit();
   const menuRows = rendered.filter((row) => row.kind === "menu").length;
   // What the frame arms under the settings in force, drawn or not: an open
   // menu, which flashes before it closes on its own, an effect rule, fades, or a placement of this preset — hidden by its `when` or a
@@ -1605,5 +1689,6 @@ export function drawDsl(
     motion: frameMotion,
     menuRows,
     evaluated: parts.evaluated - evaluatedBefore,
+    pending: [...waited].sort(),
   };
 }

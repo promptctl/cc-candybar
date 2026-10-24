@@ -31,3 +31,11 @@ export function failed(reason: string): Outcome<never> {
 export function orElse<T>(outcome: Outcome<T> | undefined, fallback: T): T {
   return outcome?.kind === "ok" ? outcome.value : fallback;
 }
+
+// [LAW:types-are-the-program] A source's value as it stands: not answered yet,
+// or what its read answered. `pending` is not `absent`: absent says the domain
+// genuinely has nothing, pending says nobody has asked it yet — a document
+// before its first scan — and is never drawn as an answer.
+export type Reading<T> = { readonly kind: "pending" } | Outcome<T>;
+
+export const PENDING: Reading<never> = { kind: "pending" };

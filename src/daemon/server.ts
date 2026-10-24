@@ -2174,6 +2174,8 @@ async function renderChecked(
     // How many of the view's parts it evaluated: between data changes, only
     // those that read the instant (src/dsl/parts.ts).
     evaluated: String(frame.evaluated),
+    // The sources it drew as not answered yet; `-` for none.
+    pending: frame.pending.join(",") || "-",
     err: combinedError ? "Y" : "N",
     clickError: clickHold.kind === "none" ? "-" : clickHold.kind,
     upd: String(updates.length),

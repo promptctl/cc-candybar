@@ -173,8 +173,10 @@ the parser sees. A file that does not exist yet reads as its `default`:
 ```
 
 The `default` is not optional in practice. A `json` source with no `default`
-whose run fails — the script is missing, exits non-zero — has no document to
-read, and every segment reading it renders a `⚠` cell that `check` fails on.
+draws `…` in every segment reading it until its first run lands — not answered
+yet, which is no fault — and one whose run fails or prints nothing — the script
+is missing, exits non-zero — has no document to read, and every segment
+reading it renders a `⚠` cell that `check` fails on.
 Output that is not JSON is that `⚠` even with a `default`: a broken writer
 is not an empty one. A `text`/`regex` source with no `default`
 reads as the empty string instead, silently. Give every source a `default`,
@@ -1435,7 +1437,7 @@ setting "theme" is one every placement already has
 
 1. `cc-candybar check <path>` exits 0, and stderr shows no warning you have
    not read — a `source still running after 5000 ms` warning means the bar
-   rendered your `default`, not your data.
+   rendered your `default`, or `…` where you declared none, not your data.
 2. You ran the real script by hand: one JSON object on stdout, exit 0,
    numbers unquoted, and the daemon can find it by the `command` you wrote.
 3. The `default` carries every field any template reads, with placeholder
