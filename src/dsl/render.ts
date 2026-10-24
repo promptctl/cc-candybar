@@ -1520,7 +1520,7 @@ export function drawDsl(
     const own = parts.placement(node);
     return {
       gate: () => own.gate(),
-      bodyOpen: () => own.bodyOpen(),
+      bodyGate: () => own.bodyGate(),
       evaluate: (palette, region) => collected(own.evaluate(palette, region)),
     };
   };

@@ -31,12 +31,8 @@ import type { Derived, VariableStore } from "../var-system/store.js";
 import type { SourceRegistry } from "../var-system/sources.js";
 import { buildScope, placementScope } from "../template-engine/scope.js";
 import { is, sameBy } from "../utils/same.js";
-import {
-  evaluateWhen,
-  gateOf,
-  resolveSegmentColors,
-} from "../template-engine/index.js";
-import { SHOWN, type Gate } from "../template-engine/layout.js";
+import { gateOf, resolveSegmentColors } from "../template-engine/index.js";
+import { HIDDEN, SHOWN, type Gate } from "../template-engine/layout.js";
 import {
   inSegment,
   outsideSegments,
@@ -383,7 +379,7 @@ class Placement implements PlacementParts {
     }),
   );
   private readonly ownGate: Derived<Gate>;
-  private readonly open: Derived<boolean>;
+  private readonly open: Derived<Gate>;
   private readonly colours: Derived<Colours>;
   private readonly body: Derived<Body>;
   private readonly affixes: Derived<Affixes>;
@@ -409,9 +405,9 @@ class Placement implements PlacementParts {
           );
     this.open =
       opens === undefined
-        ? always(false)
+        ? always<Gate>(HIDDEN)
         : view.derive(`${node.id} body gate`, view.readsInstant(opens), () =>
-            outsideSegments(ref, () => evaluateWhen(opens, view.scope)),
+            outsideSegments(ref, () => gateOf(opens, view.scope)),
           );
     this.colours = view.derive(
       `${node.id} colours`,
@@ -455,7 +451,7 @@ class Placement implements PlacementParts {
     return this.ownGate.read();
   }
 
-  bodyOpen(): boolean {
+  bodyGate(): Gate {
     return this.open.read();
   }
 
@@ -465,7 +461,7 @@ class Placement implements PlacementParts {
   evaluate(palette: Palette, region: Region): EvaluatedSegment {
     this.where.set({ palette, region });
     const colours = this.colours.read();
-    this.ground.set({ colours, bodyOpen: this.open.read() });
+    this.ground.set({ colours, bodyOpen: this.open.read().kind === "shown" });
     const body = this.body.read();
     this.opened.set({ colours, open: body.open });
     return evaluated(colours, body, this.affixes.read());

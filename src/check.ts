@@ -365,6 +365,9 @@ export async function prepareConfig(
   layers: readonly string[],
   cwd: string,
   warnings: string[],
+  // The instant the view's first payload is stamped at: the one its renders
+  // are drawn at.
+  at: Instant,
 ): Promise<PreparedConfig> {
   // Each file's own advisories (an editability notice naming a duplicate key)
   // land before its validation, so a fatal outcome still carries them.
@@ -386,11 +389,26 @@ export async function prepareConfig(
   try {
     const compiled = registerDslConfig(config, registry, { cwd });
     warnings.push(...compiled.loadWarnings);
+    // A view's inputs are pending until its first payload, and a source whose
+    // `key` or `depends_on` reads one first runs when it answers — so the
+    // payload a fresh session's render pushes is pushed before the wait, or
+    // those sources would not have started.
+    registry.applyInput(
+      checkPayload(
+        resolveEffectiveGlobals(
+          config,
+          () => null,
+          () => false,
+        ),
+        layers.at(-1) ?? null,
+        at,
+      ),
+    );
     // [LAW:no-ambient-temporal-coupling] An async source's first run — a shell
     // or file read, a git subscription's first delivery — completes after
-    // registration; the verdict renders what the sources YIELDED, not their pre-scan
-    // fallbacks (a json document with no default draws its loading cell until
-    // it is scanned). The registry owns the
+    // registration or that push; the verdict renders what the sources YIELDED,
+    // not their pre-scan fallbacks (a json document with no default draws its
+    // loading cell until it is scanned). The registry owns the
     // "every run complete" state; a source still out at the deadline is named
     // and the render proceeds on what it holds.
     const pending = await registry.settled(SOURCE_SETTLE_MS);
@@ -506,11 +524,11 @@ async function loadRegisterRender(
   cwd: string,
   warnings: string[],
 ): Promise<string> {
-  const prepared = await prepareConfig(layers, cwd, warnings);
-  const { config } = prepared;
   // [LAW:effects-at-boundaries] One instant for every pass, so the passes
   // differ only in the preset they render.
   const at = instantOf(new Date());
+  const prepared = await prepareConfig(layers, cwd, warnings, at);
+  const { config } = prepared;
   try {
     // The gates the daemon derives when it loads this config, over the keys
     // its own links hold: an action table that cannot gate fails here as it

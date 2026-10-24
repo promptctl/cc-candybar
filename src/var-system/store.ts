@@ -49,6 +49,11 @@ export interface VarNode {
   lastUpdatedMs(): number | null;
 }
 
+// Not written yet is the one PENDING value, by identity: any other value a box
+// is handed is checked against its type.
+const unwritten = (value: VarValue | Pending): value is Pending =>
+  value === PENDING;
+
 class BoxNode implements VarNode {
   readonly kind = "box" as const;
   private readonly cell: IObservableValue<VarValue | Pending>;
@@ -69,9 +74,7 @@ class BoxNode implements VarNode {
   ) {
     // What a box holds before anything has written it, when nothing may stand
     // in for its first value: an input before its view's first payload.
-    if (typeof initial !== "object") {
-      assertType(name, type, initial, "initial value");
-    }
+    if (!unwritten(initial)) assertType(name, type, initial, "initial value");
     this.cell = observable.box(initial, { deep: false });
     this.lastChangedAt = Date.now();
   }
@@ -81,7 +84,7 @@ class BoxNode implements VarNode {
   // own outcome.
   read(): VarValue {
     const value = this.cell.get();
-    if (typeof value === "object") {
+    if (unwritten(value)) {
       throw new PendingValueError(
         this.name,
         `variable "${this.name}" has no value yet: nothing has written it`,

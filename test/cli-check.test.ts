@@ -112,6 +112,29 @@ describe("checkConfig — explicit target", () => {
     expect(checkPlan(outcome).code).toBe(0);
   }, 15000);
 
+  // brandon-unfiled-3248.8ro6: an input is pending until the view's first
+  // payload, and a source keyed on one first runs when it answers — so check
+  // pushes that payload before it waits, and renders what the source yielded.
+  it("a source whose key reads an input renders what it yielded, not its fallback", async () => {
+    const p = write(
+      "keyed.json5",
+      `{
+        variables: {
+          sid: { kind: "input", path: "session_id", default: "" },
+          stamp: { kind: "shell", command: "echo yielded", parse: { text: true }, cache: { key: "{{ .sid }}" }, default: "fallback" },
+        },
+        segments: { a: { template: "{{ .stamp }}" } },
+        root: { h: ["a"] },
+      }`,
+    );
+    const outcome = await checkConfig(p, dir);
+    if (outcome.kind !== "clean")
+      throw new Error(`expected clean, got ${outcome.kind}`);
+    expect(stripAnsi(outcome.rendered)).toContain("yielded");
+    expect(stripAnsi(outcome.rendered)).not.toContain("fallback");
+    expect(outcome.warnings).toEqual([]);
+  });
+
   // brandon-config-16g: the same advisory the daemon puts on the strip, so an
   // authoring agent sees the duplicate before a durable click refuses it.
   it("a duplicate object key is a clean verdict with a warning naming the key and its line", async () => {
