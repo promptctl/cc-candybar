@@ -28,6 +28,9 @@ import {
   type Outcome,
   type Reading,
 } from "../utils/outcome.js";
+import { Refreshes, type SourceStats } from "../utils/keyed-source.js";
+import { valueOf } from "../utils/logfmt.js";
+import { quietLogger, type DaemonLogger } from "../utils/logger.js";
 import { readTail, statStamp } from "../utils/transcript-fs.js";
 
 // Anthropic prompt cache TTL. A const, not a knob: it is a property of the
@@ -94,6 +97,13 @@ interface Known {
 // the expiry as the last request left it.
 export class CacheExpiryProvider {
   private readonly known = new Map<string, Known>();
+  // [LAW:no-silent-failure] Each read of the tail is one event, a failed one at
+  // warn; an answer believed under its stamp reads nothing, and logs nothing.
+  private readonly refreshes: Refreshes<"request">;
+
+  constructor(logger: DaemonLogger = quietLogger) {
+    this.refreshes = new Refreshes("cache", ["request"], logger);
+  }
 
   // The session's refresh, which its statusline request makes.
   async refresh(
@@ -111,7 +121,7 @@ export class CacheExpiryProvider {
       prior.stamp === stamp &&
       prior.outcome.kind !== "failed"
         ? prior.outcome
-        : await cacheExpiresAt(transcriptPath);
+        : await this.read(sessionId, transcriptPath, stamp);
     // LRU touch: re-inserting moves the session to the newest end.
     this.known.delete(sessionId);
     this.known.set(sessionId, { stamp, outcome });
@@ -125,6 +135,26 @@ export class CacheExpiryProvider {
   // The expiry as the session's last refresh left it, for a draw.
   expiryOf(sessionId: string): Reading<number> {
     return this.known.get(sessionId)?.outcome ?? PENDING;
+  }
+
+  getStats(): SourceStats<"request"> {
+    return this.refreshes.stats(this.known.size);
+  }
+
+  private async read(
+    sessionId: string,
+    transcriptPath: string,
+    stamp: string,
+  ): Promise<Outcome<number>> {
+    const startedAt = Date.now();
+    const outcome = await cacheExpiresAt(transcriptPath);
+    this.refreshes.recorded(
+      `sid=${valueOf(sessionId)} stamp=${valueOf(stamp)}`,
+      "request",
+      outcome,
+      Date.now() - startedAt,
+    );
+    return outcome;
   }
 }
 

@@ -44,9 +44,21 @@ export function answerPending<T>(
 // answered yet with the landing to wait for. A draw takes it as it stands (a
 // `Reading` of src/utils/outcome.ts: the landing is the waiter's, never the
 // draw's); a reader that must have an answer waits it out (`answered`).
-export type Current<T> =
-  | Outcome<T>
-  | { readonly kind: "pending"; readonly landed: Promise<void> };
+export type Current<T> = Outcome<T> | Waiting;
+
+// Not answered yet, with the landing to wait for.
+export interface Waiting {
+  readonly kind: "pending";
+  readonly landed: Promise<void>;
+}
+
+function isWaiting<A>(current: A | Waiting): current is Waiting {
+  return (
+    typeof current === "object" &&
+    current !== null &&
+    (current as { readonly kind?: unknown }).kind === "pending"
+  );
+}
 
 export function currentOf<T>(source: Readable<T>): Current<T> {
   const reading = source.reading;
@@ -56,10 +68,10 @@ export function currentOf<T>(source: Readable<T>): Current<T> {
 // [LAW:one-source-of-truth] The one wait for an answer: the read itself, asked
 // again once what it waited on lands, so a value made pending again while a
 // reader waits (a new key, a superseding move) is waited out too.
-export async function answered<T>(read: () => Current<T>): Promise<Outcome<T>> {
+export async function answered<A>(read: () => A | Waiting): Promise<A> {
   for (;;) {
     const current = read();
-    if (current.kind !== "pending") return current;
+    if (!isWaiting(current)) return current;
     await current.landed;
   }
 }

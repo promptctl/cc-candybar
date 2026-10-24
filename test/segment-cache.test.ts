@@ -169,6 +169,26 @@ describe("CacheExpiryProvider", () => {
     expect(await provider.refresh("s", path)).toEqual(ok(at(A)));
   });
 
+  test("each read of the tail is one refresh event; an answer believed under its stamp is none", async () => {
+    const lines: string[] = [];
+    const path = writeTranscript([entry({ ts: A, cacheRead: 1 })]);
+    const provider = new CacheExpiryProvider((level, msg) =>
+      lines.push(`${level} ${msg}`),
+    );
+    await provider.refresh("s", path);
+    await provider.refresh("s", path);
+    expect(lines).toEqual([
+      expect.stringMatching(
+        /^info cache refresh sid=s stamp=\S+ by=request outcome=ok took=\d+ms$/,
+      ),
+    ]);
+    expect(provider.getStats()).toEqual({
+      entries: 1,
+      refreshes: { request: 1 },
+      failures: 0,
+    });
+  });
+
   test("an unchanged stamp reads nothing; a moved one reads again", async () => {
     // A whole-second mtime, so restoring it restores the stamp exactly.
     const MTIME = 1_700_000_000;

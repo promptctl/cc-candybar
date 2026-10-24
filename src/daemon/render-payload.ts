@@ -49,7 +49,7 @@ import {
   type Reading,
 } from "../utils/outcome.js";
 import type { CacheExpiryProvider } from "../segments/cache.js";
-import type { Current } from "../utils/reading.js";
+import { answered, type Current, type Waiting } from "../utils/reading.js";
 import type { DaemonLogger } from "../utils/logger.js";
 import { isBundledPreset } from "./bundled-presets.js";
 import type {
@@ -1224,19 +1224,25 @@ function readLanes(inputs: PayloadInputs, threw: Threw = {}): Lanes {
   const want = wanted(inputs.neededInputPaths);
   const sessionId = hookData.session_id;
   const tmuxPane = hints.tmux ?? null;
-  // [LAW:no-silent-failure] A read that throws is that lane's failure, drawn
-  // where the lane is and logged with the request's failures, so one owner's
-  // bug costs its own cells, never the bar.
-  const read = <T>(needed: boolean, value: () => T): T | Outcome<never> => {
+  // [LAW:no-silent-failure] A read that throws is a bug in its owner: logged
+  // here, by the read that met it — a frame's included, whose failures go
+  // nowhere else — and that lane's failure, so it costs its own cells, never
+  // the bar.
+  const read = <T>(
+    lane: string,
+    needed: boolean,
+    value: () => T,
+  ): T | Outcome<never> => {
     if (!needed) return ABSENT;
     try {
       return value();
     } catch (e) {
-      return failed(`read threw: ${String(e)}`);
+      deps.log("error", `${lane} read threw: ${inspect(e)}`);
+      return failed(`${lane}: ${String(e)}`);
     }
   };
   return {
-    git: read(want.git, () =>
+    git: read("git", want.git, () =>
       deps.gitProvider.current(
         deps.holds,
         cwd ?? hookData.workspace?.current_dir,
@@ -1246,37 +1252,44 @@ function readLanes(inputs: PayloadInputs, threw: Threw = {}): Lanes {
     ),
     usage:
       threw.session ??
-      read(want.session, () => deps.usageStore.usageOf(sessionId, hookData)),
+      read("session", want.session, () =>
+        deps.usageStore.usageOf(sessionId, hookData),
+      ),
     today:
       threw.today ??
-      read(want.today, () =>
+      read("today", want.today, () =>
         deps.usageStore.todayOf(hookData, hints.claudeConfigDir, at),
       ),
     context:
       threw.context ??
-      read(want.context, () => deps.contextProvider.contextOf(hookData)),
+      read("context", want.context, () =>
+        deps.contextProvider.contextOf(hookData),
+      ),
     metrics:
       threw.metrics ??
-      read(want.metrics, () =>
+      read("metrics", want.metrics, () =>
         deps.metricsProvider.metricsOf(sessionId, hookData),
       ),
     activity:
       threw.activity ??
-      read(want.activity, () => deps.activityProvider.activityOf(sessionId)),
+      read("activity", want.activity, () =>
+        deps.activityProvider.activityOf(sessionId),
+      ),
     // The hint's three states fold to two here: a pane to address, or none
     // ("not in tmux" and "client too old to say" both leave nothing to ask
     // tmux about).
-    tmuxSession: read(want.tmux && tmuxPane !== null, () =>
+    tmuxSession: read("tmux", want.tmux && tmuxPane !== null, () =>
       deps.tmuxService.sessionName(deps.holds, tmuxPane!),
     ),
     cache:
       threw.cache ??
-      read(want.cache, () => deps.cacheExpiry.expiryOf(sessionId)),
+      read("cache", want.cache, () => deps.cacheExpiry.expiryOf(sessionId)),
     speed:
-      threw.speed ?? read(want.speed, () => deps.usageStore.speedOf(sessionId)),
+      threw.speed ??
+      read("speed", want.speed, () => deps.usageStore.speedOf(sessionId)),
     // The same session, anchors and environment memento's Stop hook resolves
     // with — the last two from the client, which runs where that hook does.
-    memento: read(want.memento, () =>
+    memento: read("memento", want.memento, () =>
       deps.mementoProvider.ceiling(
         deps.holds,
         ceilingScope(
@@ -1291,7 +1304,7 @@ function readLanes(inputs: PayloadInputs, threw: Threw = {}): Lanes {
     ),
     autoCompact:
       threw.autocompact ??
-      read(want.autocompact, () =>
+      read("autocompact", want.autocompact, () =>
         deps.autoCompact.stored(settingsPathOf(hints)),
       ),
   };
@@ -1373,7 +1386,8 @@ function projectPayload<P>(
   // The controls are capped to the model's context window, so they are not
   // answered while the window is not.
   const autoCompactValue =
-    lanes.autoCompact.kind === "pending" || lanes.context.kind === "pending"
+    lanes.autoCompact.kind === "pending" ||
+    (want.autocompact && lanes.context.kind === "pending")
       ? pending("autocompact")
       : projectAutoCompact(
           lanes.autoCompact,
@@ -1568,26 +1582,27 @@ export async function buildRenderPayload(
     hints,
   };
   const threw = await refreshPayload(inputs);
-  for (;;) {
-    const lanes = readLanes(inputs, threw);
-    const waits = waitsOf(lanes);
-    if (waits.length > 0) {
-      await Promise.all(waits);
-      continue;
-    }
-    const { payload, failures } = projectPayload(
-      inputs,
-      { effective, configFacts },
-      lanes,
-      (lane): never => {
-        // [LAW:no-silent-failure] A session lane the refresh above just
-        // answered cannot be pending: one that is is a bug in its owner.
-        throw new Error(`${lane} is not answered after its refresh`);
-      },
-    );
-    for (const f of failures) deps.log("warn", `provider fetch failed: ${f}`);
-    return payload;
-  }
+  // [LAW:one-source-of-truth] The one wait for an answer: the lanes read
+  // again once every landing they waited on has landed.
+  const lanes = await answered((): Lanes | Waiting => {
+    const read = readLanes(inputs, threw);
+    const waits = waitsOf(read);
+    return waits.length > 0
+      ? { kind: "pending", landed: Promise.all(waits).then(() => {}) }
+      : read;
+  });
+  const { payload, failures } = projectPayload(
+    inputs,
+    { effective, configFacts },
+    lanes,
+    (lane): never => {
+      // [LAW:no-silent-failure] A session lane the refresh above just
+      // answered cannot be pending: one that is is a bug in its owner.
+      throw new Error(`${lane} is not answered after its refresh`);
+    },
+  );
+  for (const f of failures) deps.log("warn", `provider fetch failed: ${f}`);
+  return payload;
 }
 
 // [LAW:effects-at-boundaries] Pure: the settings read and the model's context

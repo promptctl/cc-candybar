@@ -394,6 +394,10 @@ export class SessionUsageStore {
   // The directory sets a scan has finished over, on any day: their records
   // are a whole sum, so `today` is answered from them.
   private readonly scannedDirs = new Set<string>();
+  // The Claude Code directories each `claudeConfigDir` hint resolved to at its
+  // last refresh (`undefined` is a client too old to say, which costs a probe
+  // of the disk): a draw reads them here, and never touches the disk.
+  private readonly pathsOfHint = new Map<string | undefined, string[]>();
   private seededDay = "";
   // Why the last seed of a directory set failed, until one succeeds: a draw
   // between requests reads `today` as failed, never as a partial sum.
@@ -525,6 +529,7 @@ export class SessionUsageStore {
     at: Instant,
   ): Promise<Reading<TodayInfo>> {
     const claudePaths = getClaudePaths(claudeConfigDir);
+    this.pathsOfHint.set(claudeConfigDir, claudePaths);
     const key = claudePaths.join("\0");
     try {
       await this.ensureSeeded(dayKey(dateOf(at)), claudePaths, at * 1000);
@@ -557,7 +562,8 @@ export class SessionUsageStore {
     at: Instant,
   ): Reading<TodayInfo> {
     const today = dayKey(dateOf(at));
-    const claudePaths = getClaudePaths(claudeConfigDir);
+    const claudePaths = this.pathsOfHint.get(claudeConfigDir);
+    if (claudePaths === undefined) return PENDING;
     const key = claudePaths.join("\0");
     const seedFailure = this.seedFailures.get(key);
     if (seedFailure !== undefined) return failed(seedFailure);

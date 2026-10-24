@@ -246,6 +246,7 @@ const {
   tmuxService,
   mementoProvider,
   autoCompact,
+  cacheExpiry,
 } = payloadProviders;
 // [LAW:locality-or-seam] Constructed ephemeral so importing this module (CLI
 // relay, subcommands) does no disk I/O. The daemon binds the file-backed
@@ -1250,6 +1251,7 @@ export async function replyTo(
           tmux: tmuxService.getStats(),
           memento: mementoProvider.getStats(),
           autocompact: autoCompact.getStats(),
+          cache: cacheExpiry.getStats(),
         },
         transcriptReads: transcriptReads(),
         renderCache: renderCache.stats,
@@ -1842,6 +1844,12 @@ function checkRenderRequest(
   for (const { path, expected, got } of report.typeMismatches) {
     wireProblems.push(`field '${path}' expected ${expected}, got ${got}`);
   }
+  // [LAW:parse-dont-validate] A session id names a session: an empty one
+  // names none, refused here as a subscribe refuses it, so no owner keyed by
+  // session ever holds "" as one.
+  if (req.hookData?.session_id === "") {
+    wireProblems.push("field 'session_id' is empty");
+  }
   // [LAW:parse-dont-validate] Absolute, not merely non-empty: the
   // request's cwd anchors a relative `--config` (parseRenderArgs), and a
   // relative anchor would resolve against the daemon's own cwd
@@ -2378,8 +2386,10 @@ async function answerRequest(
     // drawn once this request has settled — its refreshes landed and its own
     // bar drawn, or its failure thrown — so the frame shows what the request
     // carried, at an instant after it, and a request that fails leaves no
-    // feed waiting on it.
-    frameFeeds.wake(req.hookData.session_id);
+    // feed waiting on it. Deferred, so the frame's draw is never a cost of
+    // the request's own answer.
+    const sessionId = req.hookData.session_id;
+    setImmediate(() => frameFeeds.wake(sessionId));
   }
 }
 

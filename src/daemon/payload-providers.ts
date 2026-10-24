@@ -50,7 +50,7 @@ export function createPayloadProviders(opts: {
       logger: opts.logger,
     }),
     autoCompact: new AutoCompactProvider(opts.logger),
-    cacheExpiry: new CacheExpiryProvider(),
+    cacheExpiry: new CacheExpiryProvider(opts.logger),
     log: opts.logger,
   };
 }

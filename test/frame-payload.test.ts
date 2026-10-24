@@ -83,6 +83,7 @@ const GIT = {
 // Every lane over a counted reader; `pr` is the PR the git value carries.
 function counted(pr?: unknown) {
   const reads: Record<string, number> = {};
+  const logs: string[] = [];
   const count =
     <T>(lane: string, answer: T) =>
     (): T => {
@@ -110,7 +111,7 @@ function counted(pr?: unknown) {
     activityProvider: fakeActivity(count("activity", ABSENT)),
     cacheExpiry: fakeCacheExpiry(count("cache", ok(1_700_003_600))),
     autoCompact: fakeAutoCompact(count("autocompact", ok(400_000))),
-    log: () => {},
+    log: (level: string, msg: string) => logs.push(`${level} ${msg}`),
     history: () => EMPTY_HISTORY_DEPTH,
     navigation: () => 0,
     feeds: (_sessionId: string, at: Instant) => {
@@ -137,7 +138,7 @@ function counted(pr?: unknown) {
       HINTS,
       NO_CONFIG_FILE,
     );
-  return { reads, feedsAt, inputs, request, deps };
+  return { reads, feedsAt, inputs, request, deps, logs };
 }
 
 describe("a frame's payload", () => {
@@ -187,7 +188,7 @@ describe("a frame's payload", () => {
   });
 
   test("a lane whose read throws is that lane's failure; the rest of the frame draws", async () => {
-    const { inputs, request, deps } = counted();
+    const { inputs, request, deps, logs } = counted();
     await request();
     deps.contextProvider.contextOf = () => {
       throw new Error("context bug");
@@ -196,6 +197,21 @@ describe("a frame's payload", () => {
     expect(payload.context).toBeUndefined();
     expect(payload.git).toMatchObject({ branch: "main" });
     expect(payload.session).not.toBe(PENDING);
+    // Logged by the frame's read, which no request's failures reach.
+    expect(logs).toContainEqual(
+      expect.stringMatching(/^error context read threw: Error: context bug/),
+    );
+  });
+
+  test("a frame reading the context window and no autocompact draws no autocompact", () => {
+    const { inputs } = counted();
+    const contextOnly = {
+      ...inputs(AT),
+      neededInputPaths: new Set(["context.contextLeft"]),
+    };
+    const payload = payloadOf(contextOnly, DRAW);
+    expect(payload.context).toBe(PENDING);
+    expect(payload.autocompact).toBeUndefined();
   });
 
   test("autocompact's controls are not answered while the context window they are capped to is not", async () => {

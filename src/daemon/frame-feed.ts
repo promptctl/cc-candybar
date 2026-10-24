@@ -178,12 +178,13 @@ export function feedsFact(feeds: LaneFeeds): string {
   );
 }
 
-// Note a frame going out to a lane at `now`, forgetting those older than the
-// rate window, so a lane holds at most one window's worth however long it runs.
-function noteSent(rate: Instant[], at: Instant): void {
-  rate.push(at);
-  const kept = rate.findIndex((sent) => sent > at - RATE_WINDOW_S);
-  rate.splice(0, kept);
+// Note a frame going out to a lane at `at`, keeping only the sends of the
+// window ending there, so a lane holds at most one window's worth however long
+// it runs — and a wall clock stepped back, which leaves earlier sends stamped
+// after `at`, cannot grow it.
+export function noteSent(rate: Instant[], at: Instant): void {
+  const kept = rate.filter((sent) => sent > at - RATE_WINDOW_S && sent <= at);
+  rate.splice(0, rate.length, ...kept, at);
 }
 
 interface Sent {

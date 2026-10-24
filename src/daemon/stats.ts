@@ -43,6 +43,7 @@ export interface SourceSnapshots {
   tmux: KeyedSourceStats;
   memento: KeyedSourceStats;
   autocompact: SourceStats<"request">;
+  cache: SourceStats<"request">;
 }
 
 const KEYED_SOURCE_ZERO: KeyedSourceStats = {
@@ -288,6 +289,7 @@ export class RuntimeStats {
         tmux: KEYED_SOURCE_ZERO,
         memento: KEYED_SOURCE_ZERO,
         autocompact: { entries: 0, refreshes: { request: 0 }, failures: 0 },
+        cache: { entries: 0, refreshes: { request: 0 }, failures: 0 },
       },
       transcriptReads: { reads: 0, bytes: 0, longLines: 0, largestLine: 0 },
       renderCache: {

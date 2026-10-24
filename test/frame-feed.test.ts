@@ -7,6 +7,7 @@
 import {
   feedsFact,
   FrameFeeds,
+  noteSent,
   type FeedFrame,
   type Refusal,
   type Subscriber,
@@ -614,6 +615,18 @@ test("newestWhere finds the session of the newest request it matches, and counts
 });
 
 // On a faked clock, so each lane's frame count is exact.
+describe("noteSent", () => {
+  test("a lane's log holds the sends of the window ending at this one, a wall clock stepped back included", () => {
+    const at = (ms: number): Instant => instantOf(new Date(ms));
+    const rate: Instant[] = [];
+    for (const ms of [100_000, 100_500, 100_900, 101_200]) noteSent(rate, at(ms));
+    expect(rate).toEqual([at(100_500), at(100_900), at(101_200)]);
+    // An hour back: every earlier send is stamped after this one.
+    noteSent(rate, at(101_200 - 3_600_000));
+    expect(rate).toEqual([at(101_200 - 3_600_000)]);
+  });
+});
+
 describe("feedsOf", () => {
   beforeEach(() => jest.useFakeTimers());
   afterEach(() => jest.useRealTimers());
