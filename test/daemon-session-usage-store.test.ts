@@ -17,6 +17,7 @@
 
 import { createHook } from "node:async_hooks";
 import {
+  chmodSync,
   mkdtempSync,
   mkdirSync,
   writeFileSync,
@@ -281,16 +282,17 @@ describe("SessionUsageStore — session projection", () => {
     }
   });
 
-  // The day held is the one `today` summed: with no render asking for `today`,
-  // nothing reads the record, so a bucket for the wall clock's day holds nothing.
-  test("sweepStale drops a stale record when no render has summed `today`", async () => {
+  // The day held is the sweep's own: a record holding work done on the wall
+  // clock's day is held whether or not a render has asked for `today` yet.
+  test("sweepStale holds a stale record with today's work before any `today` is asked", async () => {
     const t = join(dir, "A.jsonl");
     writeFileSync(t, usageLine("a", new Date(), 0.01));
     const store = new SessionUsageStore({ sweepIntervalMs: 0, staleAgeMs: 1 });
     try {
       await store.getUsageInfo("A", hook("A", t));
       await new Promise((r) => setTimeout(r, 10));
-      expect(store.sweepStale()).toBe(1);
+      expect(store.sweepStale()).toBe(0);
+      expect(store.getStats()).toMatchObject({ size: 1 });
     } finally {
       store.close();
     }
@@ -330,8 +332,10 @@ describe("SessionUsageStore — session projection", () => {
   test("a render with no transcript path keeps its session seen", async () => {
     const a = join(dir, "A.jsonl");
     const b = join(dir, "B.jsonl");
-    writeFileSync(a, usageLine("a", new Date(), 0.01));
-    writeFileSync(b, usageLine("b", new Date(), 0.01));
+    // Last week's work: no bucket for today holds either record.
+    const lastWeek = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    writeFileSync(a, usageLine("a", lastWeek, 0.01));
+    writeFileSync(b, usageLine("b", lastWeek, 0.01));
     let now = Date.now();
     const clock = jest.spyOn(Date, "now").mockImplementation(() => now);
     const store = new SessionUsageStore({
@@ -517,6 +521,20 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
     }
   });
 
+  // The seed runs before the request's own refresh, so a cold request reads
+  // its session once — the seed's — and its refresh takes that record: run
+  // together they were two cold parses, and whichever landed second, the
+  // request's newer fold among them, was not stored.
+  test("a cold request's own session is read once, by the seed", async () => {
+    const store = new SessionUsageStore({ sweepIntervalMs: 0 });
+    try {
+      await store.getTodayInfo(holds, hook("sess-0-0", activePath), root, instantOf(new Date()));
+      expect(store.getStats()).toMatchObject({ hits: 1, misses: 0 });
+    } finally {
+      store.close();
+    }
+  });
+
   // brandon-usage-store-x2e0: the store once capped its records at 256, and a
   // seed ingesting more sessions evicted the oldest out of `today` unseen.
   test("today sums every session the seed ingests, however many", async () => {
@@ -590,7 +608,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
       // The rescan read only the two sessions that moved, and its event is
       // the source's: trigger and duration on the refresh, counts on the scan.
       expect(lines).toContain(
-        `info usageStore scan dirs=${tree} sessions=3 read=2`,
+        `info usageStore scan dirs=${tree} sessions=3 read=2 failed=0`,
       );
       expect(lines).toEqual(
         expect.arrayContaining([
@@ -669,6 +687,87 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
       });
     } finally {
       store.close();
+      rmSync(tree, { recursive: true, force: true });
+    }
+  });
+
+  // A session the scan found and could not read is the scan's failure, so
+  // `today` is failed rather than a confident sum without that session.
+  test("a session the scan cannot read is today's failure until it reads", async () => {
+    const tree = mkdtempSync(join(tmpdir(), "cc-candybar-store-unread-"));
+    const pdir = join(tree, "projects", "proj");
+    const headless = join(pdir, "headless.jsonl");
+    const store = new SessionUsageStore({
+      sweepIntervalMs: 0,
+      rescan: { okMs: 60_000, failedMs: 50 },
+    });
+    try {
+      mkdirSync(pdir, { recursive: true });
+      const active = join(pdir, "active.jsonl");
+      const noon = new Date();
+      noon.setHours(12, 0, 0, 0);
+      writeFileSync(active, usageLine("active", noon, 1));
+      writeFileSync(headless, usageLine("headless", noon, 4));
+      chmodSync(headless, 0o000);
+      const hd = hook("active", active);
+
+      const first = await store.getTodayInfo(holds, hd, tree, instantOf(noon));
+      expect(first.kind).toBe("failed");
+      if (first.kind !== "failed") return;
+      expect(first.reason).toMatch(
+        /^usage scan: 1 of 2 sessions could not be read — .*EACCES/,
+      );
+
+      chmodSync(headless, 0o644);
+      await until(
+        () => store.todayOf(holds, hd, tree, instantOf(noon)).kind === "ok",
+        "the retried scan reading the session",
+      );
+      const info = store.todayOf(holds, hd, tree, instantOf(noon));
+      expect(info.kind === "ok" && info.value.cost).toBeCloseTo(5, 5);
+    } finally {
+      store.close();
+      chmodSync(headless, 0o644);
+      rmSync(tree, { recursive: true, force: true });
+    }
+  });
+
+  // Only a file or directory gone since its listing is absence: a project the
+  // scan cannot list fails it, named in the refresh event, whose directories
+  // — what a client reported — are one logfmt value however they are spelled.
+  test("a project directory the scan cannot list is today's failure", async () => {
+    const tree = mkdtempSync(join(tmpdir(), "cc candybar store unlisted-"));
+    const locked = join(tree, "projects", "locked");
+    const lines: string[] = [];
+    const store = new SessionUsageStore({
+      sweepIntervalMs: 0,
+      rescan: { okMs: 60_000, failedMs: 60_000 },
+      logger: (level, msg) => lines.push(`${level} ${msg}`),
+    });
+    try {
+      const pdir = join(tree, "projects", "proj");
+      mkdirSync(pdir, { recursive: true });
+      mkdirSync(locked);
+      const active = join(pdir, "active.jsonl");
+      writeFileSync(active, usageLine("active", new Date(), 1));
+      chmodSync(locked, 0o000);
+
+      const info = await store.getTodayInfo(holds, hook("active", active), tree, instantOf(new Date()));
+      expect(info.kind).toBe("failed");
+      if (info.kind !== "failed") return;
+      expect(info.reason).toMatch(/^usage scan: .*EACCES.*locked/);
+      expect(lines).toEqual(
+        expect.arrayContaining([
+          expect.stringMatching(
+            new RegExp(
+              `^warn today refresh dirs=${escaped(JSON.stringify(tree))} stored=Y by=first outcome=failed `,
+            ),
+          ),
+        ]),
+      );
+    } finally {
+      store.close();
+      chmodSync(locked, 0o755);
       rmSync(tree, { recursive: true, force: true });
     }
   });

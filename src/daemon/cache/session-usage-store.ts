@@ -37,6 +37,7 @@ import {
 } from "../../utils/outcome";
 import { quietLogger, type DaemonLogger } from "../../utils/logger";
 import { dateOf, type Instant } from "../../utils/instant";
+import { valueOf } from "../../utils/logfmt";
 import type { Holds } from "../../utils/holds";
 import { KeyedSource, type KeyedSourceStats } from "../../utils/keyed-source";
 import type { Every } from "../../utils/period";
@@ -359,6 +360,17 @@ function under(path: string | undefined, roots: readonly string[]): boolean {
   return path !== undefined && roots.some((root) => path.startsWith(root));
 }
 
+// A scan's read of something its listing named: `undefined` when it has gone
+// since (ENOENT), the read's own throw otherwise.
+async function unlessGone<T>(read: Promise<T>): Promise<T | undefined> {
+  try {
+    return await read;
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw e;
+  }
+}
+
 // [LAW:effects-at-boundaries] One directory set's day sums: each day some
 // record under its roots holds a bucket for, the sum of those buckets. Keyed
 // by the records' own days, so it reads no clock — the day `today` reads off
@@ -449,9 +461,6 @@ export class SessionUsageStore {
   // last refresh (`undefined` is a client too old to say, which costs a probe
   // of the disk): a draw reads them here, and never touches the disk.
   private readonly pathsOfHint = new Map<string | undefined, string[]>();
-  // The wall clock's day when a scan last landed: the day `today` sums, which
-  // the sweep keeps records for.
-  private scannedDay = "";
   // [LAW:no-ambient-temporal-coupling] Explicit owner of observe/commit ordering
   // for the speed sample. Concurrent renders observing the SAME transcript state
   // (key = `${sessionId}:${mtime}`) share ONE observation and commit the baseline
@@ -480,7 +489,7 @@ export class SessionUsageStore {
     this.scans = new KeyedSource({
       name: "today",
       keyOf: (paths) => paths.join("\0"),
-      fields: (paths) => `dirs=${paths.join(",")}`,
+      fields: (paths) => `dirs=${valueOf(paths.join(","))}`,
       read: (paths) => this.scan(paths),
       every: opts.rescan ?? DEFAULT_RESCAN,
       maxEntries: MAX_UNHELD_SCANS,
@@ -592,10 +601,12 @@ export class SessionUsageStore {
   ): Promise<Reading<TodayInfo>> {
     const claudePaths = getClaudePaths(claudeConfigDir);
     this.pathsOfHint.set(claudeConfigDir, claudePaths);
-    await Promise.all([
-      this.scans.read(holds, claudePaths),
-      this.refreshed(hookData?.session_id ?? "", hookData?.transcript_path),
-    ]);
+    // [LAW:no-ambient-temporal-coupling] The scan first, then the session's
+    // own refresh: run together, a seed's ingest of this session and the
+    // request's are two cold parses at two stamps, and whichever lands second
+    // is not stored — the request's own, newer fold among them.
+    await this.scans.read(holds, claudePaths);
+    await this.refreshed(hookData?.session_id ?? "", hookData?.transcript_path);
     return this.todayOf(holds, hookData, claudeConfigDir, at);
   }
 
@@ -902,9 +913,11 @@ export class SessionUsageStore {
   // ingest every session whose transcript was touched recently enough to hold
   // a today entry. A rescan is the same scan over warm records, so it costs a
   // stat per transcript plus the bytes appended since the last one.
-  // [LAW:no-silent-failure] A scan that throws answers as failed, which is
-  // `today`'s failure until a scan lands — never a sum silently frozen at the
-  // last scan that worked.
+  // [LAW:no-silent-failure] A scan that throws, or that could not read a
+  // session it found, answers as failed, which is `today`'s failure until a
+  // scan lands — never a sum silently missing the sessions it did not reach.
+  // Only a file or directory gone between the listing and its read (ENOENT) is
+  // absence.
   private async scan(
     claudePaths: readonly string[],
   ): Promise<Outcome<Scanned>> {
@@ -918,22 +931,12 @@ export class SessionUsageStore {
       }> = [];
 
       for (const dir of projectPaths) {
-        let files: string[];
-        try {
-          files = await gatedReaddir(dir);
-        } catch {
-          continue;
-        }
-        for (const file of files) {
+        const files = await unlessGone(gatedReaddir(dir));
+        for (const file of files ?? []) {
           if (!file.endsWith(".jsonl")) continue;
           const filePath = join(dir, file);
-          let st: { mtimeMs: number; size: number };
-          try {
-            st = await gatedStat(filePath);
-          } catch {
-            continue;
-          }
-          if (st.mtimeMs < cutoff) continue;
+          const st = await unlessGone(gatedStat(filePath));
+          if (st === undefined || st.mtimeMs < cutoff) continue;
           candidates.push({
             sessionId: file.slice(0, -".jsonl".length),
             path: filePath,
@@ -943,12 +946,14 @@ export class SessionUsageStore {
       }
 
       // [LAW:no-silent-failure] The scan is its own effect edge (its period's,
-      // no render boundary to carry the outcome to), so its per-session parse
-      // failures are logged here.
+      // no render boundary to carry each outcome to), so each session it could
+      // not read is logged here, and the first answers for them all.
+      const failures: string[] = [];
       const tally: IngestTally = { hits: 0, misses: 0 };
       await mapPool(candidates, SEED_CONCURRENCY, async (c) => {
         const outcome = await this.ingest(c.sessionId, c.path, tally, c.stamp);
         if (outcome.kind === "failed") {
+          failures.push(outcome.reason);
           this.log("warn", `usageStore scan: ${outcome.reason}`);
         }
       });
@@ -957,9 +962,13 @@ export class SessionUsageStore {
       // trigger and duration are the source's refresh event.
       this.log(
         "info",
-        `usageStore scan dirs=${claudePaths.join(",")} sessions=${candidates.length} read=${tally.misses}`,
+        `usageStore scan dirs=${valueOf(claudePaths.join(","))} sessions=${candidates.length} read=${tally.misses} failed=${failures.length}`,
       );
-      this.scannedDay = dayKey(new Date());
+      if (failures.length > 0) {
+        return failed(
+          `usage scan: ${failures.length} of ${candidates.length} sessions could not be read — ${failures[0]}`,
+        );
+      }
       return ok({ sessions: candidates.length, read: tally.misses });
     } catch (error) {
       return failed(
@@ -969,16 +978,15 @@ export class SessionUsageStore {
   }
 
   // Public for tests; called periodically from the timer. Drops what nothing
-  // reads any more: a session unseen for `staleAgeMs` holding no bucket for the
-  // day `today` last summed. A stale record holding one is `held`, since
-  // `today` sums it — a session whose transcript the scans have stopped
-  // visiting is seen no more, and a day can run past `staleAgeMs` (a 25-hour
-  // DST day).
-  // [LAW:one-source-of-truth] That day is `scannedDay`, the wall clock's day
-  // at the last scan — the clock a frame's instant and the scan's cutoff read
-  // too — so with no `today` asked for, no record is held for it.
+  // reads any more: a session unseen for `staleAgeMs` holding no bucket for
+  // today. A stale record holding one is `held`, since `today` sums it — a
+  // session whose transcript the scans have stopped visiting is seen no more,
+  // and a day can run past `staleAgeMs` (a 25-hour DST day).
+  // [LAW:one-source-of-truth] Today is the day of the sweep's own `now`: the
+  // wall clock a frame's instant and the scan's cutoff read too.
   sweepStale(): number {
     const now = Date.now();
+    const today = dayKey(new Date(now));
     let dropped = 0;
     let held = 0;
     // Slots dropped holding no record: a session seen only before its
@@ -988,7 +996,7 @@ export class SessionUsageStore {
     runInAction(() => {
       for (const [sid, { lastSeenAt, record }] of [...this.sessions]) {
         if (now - lastSeenAt <= this.staleAgeMs) continue;
-        if (record?.days.has(this.scannedDay)) {
+        if (record?.days.has(today)) {
           held++;
           continue;
         }
