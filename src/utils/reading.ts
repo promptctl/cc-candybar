@@ -76,11 +76,6 @@ export async function answered<A>(read: () => A | Waiting): Promise<A> {
   }
 }
 
-// A source's outcome once it has one.
-export function outcomeOf<T>(source: Readable<T>): Promise<Outcome<T>> {
-  return answered(() => currentOf(source));
-}
-
 // [LAW:types-are-the-program] What a declaration hands its reader: the entry
 // it took, read as it stands. The key was computed once, by the declaration,
 // and reading takes nothing, so a read can neither re-derive the key nor take

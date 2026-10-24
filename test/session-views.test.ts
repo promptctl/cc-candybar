@@ -1,15 +1,18 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { runInAction } from "mobx";
 import {
   DECLARES_NOTHING,
   RenderCache,
+  type Declare,
   type SessionView,
 } from "../src/daemon/cache/render";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { SessionState } from "../src/daemon/session-state";
 import { renderDsl } from "../src/dsl/render";
 import { instantOf } from "../src/utils/instant";
+import { ABSENT } from "../src/utils/outcome";
 import { stripAnsi } from "./helpers/ansi";
 import { viewFacts } from "./helpers/view-facts";
 
@@ -31,7 +34,11 @@ afterEach(() => {
 });
 
 function makeCache(
-  opts: { budgetBytes?: number; log?: (line: string) => void } = {},
+  opts: {
+    budgetBytes?: number;
+    log?: (line: string) => void;
+    declare?: Declare;
+  } = {},
 ) {
   const lines: string[] = [];
   const watchers = new WatcherRegistry({
@@ -43,7 +50,7 @@ function makeCache(
     {
       sessionState: new SessionState(),
       watchers,
-      declare: DECLARES_NOTHING,
+      declare: opts.declare ?? DECLARES_NOTHING,
       log: (_level, line) => {
         opts.log?.(line);
         lines.push(line);
@@ -202,6 +209,52 @@ test("a view no render reads across a whole sweep closes; one read stays", async
   // The session's next render opens its view again.
   expect((await render(cache, "s-a")).text).toContain("who=s-a");
   expect(cache.stats.views).toBe(2);
+});
+
+test("a reload keeps whether the session's view was read: a view idle before it still closes at the next sweep", async () => {
+  configure(dir);
+  const { cache, lines } = makeCache();
+  await render(cache, "s-a");
+  // A sweep with no render since: the view is unread, and kept once more.
+  cache.releaseIdle();
+  expect(cache.stats.views).toBe(1);
+  cache.reload(dir, dir, undefined);
+  cache.releaseIdle();
+  expect(cache.stats.views).toBe(0);
+  expect(lines).toContainEqual(
+    expect.stringMatching(/^session view closed sid="s-a" reason=idle /),
+  );
+});
+
+// [LAW:no-ambient-temporal-coupling] MobX holds a reaction created inside a
+// batch until the batch ends: a frame drawn from a feed's reaction, opening a
+// view, must still draw it declared.
+test("a view opened inside a MobX batch is declared before it is handed back", () => {
+  configure(dir);
+  const { cache } = makeCache();
+  const answer = runInAction(() => {
+    using held = cache.holdSession(dir, dir, undefined, "s-a", viewFacts(dir, "s-a"));
+    return held.view.lanes().git.current();
+  });
+  // DECLARES_NOTHING's answer, not the view's want of one.
+  expect(answer).toEqual(ABSENT);
+});
+
+test("a view whose declaration throws answers that failure on its lanes", () => {
+  configure(dir);
+  const { cache, lines } = makeCache({
+    declare: () => {
+      throw new Error("closure exploded");
+    },
+  });
+  using held = cache.holdSession(dir, dir, undefined, "s-a", viewFacts(dir, "s-a"));
+  expect(held.view.lanes().git.current()).toEqual({
+    kind: "failed",
+    reason: expect.stringContaining("closure exploded"),
+  });
+  expect(lines).toContainEqual(
+    expect.stringMatching(/^session view declaration threw sid="s-a": .*closure exploded/),
+  );
 });
 
 test("a view held by a render in flight is disposed only when the render returns", () => {

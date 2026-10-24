@@ -803,57 +803,64 @@ export function openView(
   // which reported it: a declaration reads only the config.
   declareDslVariables(state.config, registry, cwd, VIEW_SCOPE);
   const latest = observable.box<ViewFacts>(facts, { deep: false });
-  // Until the first declaration below answers — which it does in this turn.
-  const lanes = observable.box<DeclaredLanes>(
-    settledLanes(failed("view not declared yet")),
-    { deep: false },
-  );
-  // [LAW:no-silent-failure] Only the request and the preset are tracked: the
-  // closure is computed in the effect, beside the declaration, where a throw
-  // is logged — a reaction's tracked expression that throws reaches only the
-  // console MobX prints to, which nobody reads in a detached daemon.
-  const stop = reaction(
-    () =>
-      [
-        latest.get(),
-        presetOf(state.config, (key) => sessionState.get(sessionId, key)),
-      ] as const,
-    ([facts, preset]) => {
-      try {
-        const reads = state.neededInputPaths(preset);
-        const {
-          result: { lanes: taken, faults },
-          acquired,
-          released,
-        } = holds.declare(() => declare(holds, facts, reads));
-        runInAction(() => lanes.set(taken));
-        for (const fault of faults) {
-          log(
-            "error",
-            `session view declaration threw sid=${JSON.stringify(sessionId)} ${fault}`,
-          );
-        }
-        // [LAW:verifiable-goals] A declaration that moved a hold — a preset
-        // click, a request naming another key — says so; one that kept what
-        // the view held, every other request's, writes nothing.
-        if (acquired + released > 0) {
-          log(
-            "info",
-            `session view declared sid=${JSON.stringify(sessionId)} acquired=${acquired} released=${released} held=${holds.size}`,
-          );
-        }
-      } catch (e) {
-        // The view keeps what it held, and reads what it last declared.
+  const presetNow = () =>
+    presetOf(state.config, (key) => sessionState.get(sessionId, key));
+  // [LAW:no-silent-failure] The closure is computed here, beside the
+  // declaration, where a throw is logged — a reaction's tracked expression
+  // that throws reaches only the console MobX prints to, which nobody reads in
+  // a detached daemon. A declaration that throws keeps the holds it had, and
+  // its lanes answer its failure, so the bar names the cause.
+  const declared = (facts: ViewFacts, preset: string): DeclaredLanes => {
+    try {
+      const reads = state.neededInputPaths(preset);
+      const {
+        result: { lanes: taken, faults },
+        acquired,
+        released,
+      } = holds.declare(() => declare(holds, facts, reads));
+      for (const fault of faults) {
         log(
           "error",
-          `session view declaration threw sid=${JSON.stringify(sessionId)}: ${String(e)}`,
+          `session view declaration threw sid=${JSON.stringify(sessionId)} ${fault}`,
         );
       }
+      // [LAW:verifiable-goals] A declaration that moved a hold — a preset
+      // click, a request naming another key — says so; one that kept what
+      // the view held, every other request's, writes nothing.
+      if (acquired + released > 0) {
+        log(
+          "info",
+          `session view declared sid=${JSON.stringify(sessionId)} acquired=${acquired} released=${released} held=${holds.size}`,
+        );
+      }
+      return taken;
+    } catch (e) {
+      log(
+        "error",
+        `session view declaration threw sid=${JSON.stringify(sessionId)}: ${String(e)}`,
+      );
+      return settledLanes(failed(`view declaration threw: ${String(e)}`));
+    }
+  };
+  // [LAW:no-ambient-temporal-coupling] The opening declaration runs here, in
+  // this call, not as the reaction's first run: MobX holds a reaction created
+  // inside a batch (a reaction's effect, an action) until the batch ends, and
+  // a frame drawn in that batch would read a view nothing has declared yet.
+  let last: readonly [ViewFacts, string] = [facts, presetNow()];
+  const lanes = observable.box<DeclaredLanes>(declared(...last), {
+    deep: false,
+  });
+  // [LAW:single-enforcer] Only the request and the preset are tracked, and a
+  // pair is declared once: the reaction's first run, whenever it comes,
+  // declares only what moved since the opening one.
+  const stop = reaction(
+    () => [latest.get(), presetNow()] as const,
+    (next) => {
+      if (next[0] === last[0] && next[1] === last[1]) return;
+      last = next;
+      runInAction(() => lanes.set(declared(...next)));
     },
-    {
-      equals: (a, b) => a[0] === b[0] && a[1] === b[1],
-      fireImmediately: true,
-    },
+    { fireImmediately: true },
   );
   return {
     sessionId,
@@ -1087,16 +1094,22 @@ export class RenderCache {
       return current;
     }
     if (current !== undefined) this.retireView(current, "moved");
-    return this.opened(sessionId, entry, state, facts);
+    const view = this.opened(sessionId, entry, state, facts, false);
+    // A view is charged to the budget like an entry.
+    this.fit(entry);
+    return view;
   }
 
   // [LAW:single-enforcer] The one way the cache opens a view: declared with
-  // `facts` in this turn (openView), entered, and charged to the budget.
+  // `facts` in this turn (openView) and entered — `read` whether a render
+  // read the session's view since the last sweep. Its caller charges it to
+  // the budget, once however many it opens.
   private opened(
     sessionId: string,
     entry: CacheEntry,
     state: DslRenderState,
     facts: ViewFacts,
+    read: boolean,
   ): SessionView {
     const view = openView(state, entry.cwd, sessionId, facts, {
       sessionState: this.deps.sessionState,
@@ -1104,13 +1117,11 @@ export class RenderCache {
       log: this.log,
     });
     this.views.set(sessionId, view);
-    this.viewHolds.set(view, { holders: 0, retired: null, read: true });
+    this.viewHolds.set(view, { holders: 0, retired: null, read });
     this.log(
       "info",
       `session view opened sid=${JSON.stringify(sessionId)} cwd=${entry.cwd} views=${this.views.size}`,
     );
-    // A view is charged to the budget like an entry.
-    this.fit(entry);
     return view;
   }
 
@@ -1305,11 +1316,14 @@ export class RenderCache {
         // the old view is still retired, so the reload never leaves a state
         // half torn down; the session's next render opens its view.
         try {
+          // The successor is the session's view going on: a session no
+          // render read since the last sweep is still closed by the next.
           this.opened(
             view.sessionId,
             successor.entry,
             successor.state,
             view.facts(),
+            this.leaseOf(view).read,
           );
         } catch (e) {
           this.log(
@@ -1377,7 +1391,8 @@ export class RenderCache {
       this.serve(loaded.state);
       this.retire(retired, "reload", { entry, state: loaded.state });
     }
-    // A reload can move the entry onto a compile no other entry carries.
+    // A reload can move the entry onto a compile no other entry carries, and
+    // charges the views it reopened, once their predecessors are retired.
     this.fit(entry);
     // Rebinds to the broken file (and its sibling candidates) too, so an
     // in-place save OR a higher-precedence file appearing recovers.
