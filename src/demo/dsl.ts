@@ -180,7 +180,7 @@ async function renderFrames(): Promise<void> {
 
     process.stdout.write("\n");
   } finally {
-    view.registry.dispose();
+    view.dispose();
     state.registry.dispose();
   }
 }

@@ -94,7 +94,7 @@ const render = (state: ReturnType<RenderCache["getOrCreate"]>["state"]): string 
   try {
     return drawn(view);
   } finally {
-    view.registry.dispose();
+    view.dispose();
   }
 };
 

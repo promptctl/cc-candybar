@@ -24,6 +24,7 @@ import {
   type Hold,
   type RenderCacheObservers,
   type SessionView,
+  openView,
   ENTRY_BYTES,
   COMPILE_BYTES,
 } from "../src/daemon/cache/render";
@@ -1033,6 +1034,33 @@ describe("RenderCache idle sweep", () => {
     }
   });
 
+  // [LAW:single-enforcer] A view opened outside the cache (the demo, a tool)
+  // is torn down by its one dispose, which releases what its renders held.
+  test("a view's dispose releases its holds and refuses new ones", () => {
+    const { dir, cleanup } = mkConfigDir();
+    const watchers = new WatcherRegistry({ logger: () => {} });
+    const cache = new RenderCache(
+      { sessionState: new SessionState(), watchers },
+      { budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES },
+    );
+    try {
+      const view = openView(cache.getOrCreate(dir, dir, undefined).state, dir, "s1");
+      let released = 0;
+      view.holds.take("repo", () => () => {
+        released++;
+      });
+      view.dispose();
+      expect(released).toBe(1);
+      expect(() => view.holds.take("repo", () => () => {})).toThrow(
+        "hold taken after close: repo",
+      );
+    } finally {
+      cache.close();
+      watchers.closeAll();
+      cleanup();
+    }
+  });
+
   test("a hold no render read across a whole sweep is released; a render takes it back", () => {
     const { dir, cleanup } = mkConfigDir();
     const watchers = new WatcherRegistry({ logger: () => {} });
@@ -1068,7 +1096,7 @@ describe("RenderCache idle sweep", () => {
       render("repo");
       cache.releaseIdle();
       expect(released).toEqual(["memento:ended-session"]);
-      expect(logs).toContain("render-cache idle released=1 entries=1");
+      expect(logs).toContain("render-cache idle released=1 views=1");
 
       // Nothing drawn across a whole sweep: the view closes, and the repo
       // goes with it.

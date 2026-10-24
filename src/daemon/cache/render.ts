@@ -727,6 +727,10 @@ export interface SessionView {
   readonly registry: SourceRegistry;
   readonly holds: Holds;
   readonly lastRenderCellsBySegment: Map<string, readonly RichText[]>;
+  // [LAW:single-enforcer] The view's one teardown: its holds close and its
+  // registry is disposed, so no caller of openView can release one and leak
+  // the other. Returns how many computeds the registry's store released.
+  dispose(): number;
 }
 
 // [LAW:single-enforcer] The one way a view is built: the state's directory
@@ -738,6 +742,7 @@ export function openView(
   sessionId: string,
 ): SessionView {
   const registry = state.registry.view();
+  const holds = new Holds();
   // What fails to declare here failed in the load's probe (buildRenderState),
   // which reported it: a declaration reads only the config.
   declareDslVariables(state.config, registry, cwd, VIEW_SCOPE);
@@ -746,8 +751,12 @@ export function openView(
     state,
     store: registry.variableStore,
     registry,
-    holds: new Holds(),
+    holds,
     lastRenderCellsBySegment: new Map<string, readonly RichText[]>(),
+    dispose: () => {
+      holds.close();
+      return registry.dispose();
+    },
   };
 }
 
@@ -995,10 +1004,9 @@ export class RenderCache {
   private reclaimView(view: SessionView, lease: ViewHold): void {
     if (lease.retired === null || lease.holders > 0) return;
     this.viewHolds.delete(view);
-    view.holds.close();
     this.log(
       "info",
-      `session view closed sid=${JSON.stringify(view.sessionId)} reason=${lease.retired.reason} released=${view.registry.dispose()} held=${lease.retired.held} views=${this.views.size}`,
+      `session view closed sid=${JSON.stringify(view.sessionId)} reason=${lease.retired.reason} released=${view.dispose()} held=${lease.retired.held} views=${this.views.size}`,
     );
   }
 
@@ -1024,7 +1032,7 @@ export class RenderCache {
     if (released > 0) {
       this.log(
         "info",
-        `render-cache idle released=${released} entries=${this.entries.size}`,
+        `render-cache idle released=${released} views=${this.views.size}`,
       );
     }
     if (this.entries.size === 0 && this.sweep !== null) {
