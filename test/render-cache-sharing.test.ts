@@ -5,6 +5,7 @@ import v8 from "node:v8";
 import vm from "node:vm";
 import {
   COMPILE_BYTES,
+  DECLARES_NOTHING,
   ENTRY_BYTES,
   openView,
   RenderCache,
@@ -90,7 +91,11 @@ const drawnBytes = (view: SessionView): string =>
 
 // A frame of `state` through a view of its own, disposed after.
 const render = (state: ReturnType<RenderCache["getOrCreate"]>["state"]): string => {
-  const view = openView(state, dir, "s");
+  const view = openView(state, dir, "s", {
+    sessionState: new SessionState(),
+    declare: DECLARES_NOTHING,
+    log: () => {},
+  });
   try {
     return drawn(view);
   } finally {

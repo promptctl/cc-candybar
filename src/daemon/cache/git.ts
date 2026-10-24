@@ -184,7 +184,7 @@ export interface GitCacheStats {
 
 // [LAW:single-enforcer] What one hold holds: the repo, one option set of it,
 // and its PR when shown — so a home reading another closure takes a hold of its
-// own, and the closure it left is released by the home's sweep alone.
+// own, and the closure it left is released by the home's next declaration.
 function holdKey(root: string, value: string, showsPr: boolean): string {
   return `git:${root}|${value}|${showsPr ? "pr" : "-"}`;
 }
@@ -383,8 +383,9 @@ export class GitDataProvider {
 
   // [LAW:single-enforcer] The one read: the repo's value as it stands, never
   // awaited, so a draw takes it in the turn it draws. `holds` is the home
-  // reading: it holds the repo from this read until the home releases its
-  // holds (idle, or disposed), which is what keeps the repo on the period. A
+  // reading: it holds the repo from this read until a declaration of the
+  // home's takes it no more, or the home is disposed, which is what keeps the
+  // repo on the period. A
   // value never read is pending, its first pass queued; a PR is composed from
   // its own source, pending on its own while its key is not answered, so the
   // rest of the value draws as it stands.

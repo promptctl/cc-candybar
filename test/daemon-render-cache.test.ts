@@ -24,11 +24,15 @@ import {
   type Hold,
   type RenderCacheObservers,
   type SessionView,
+  DECLARES_NOTHING,
   openView,
   ENTRY_BYTES,
   COMPILE_BYTES,
 } from "../src/daemon/cache/render";
 import { SessionState } from "../src/daemon/session-state";
+import { parseClientHints } from "../src/daemon/protocol";
+import type { ViewFacts } from "../src/daemon/render-payload";
+import type { Holds } from "../src/utils/holds";
 import { stateGate } from "../src/daemon/verbs/state-validators";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import type { DaemonLogger } from "../src/utils/logger";
@@ -1044,7 +1048,11 @@ describe("RenderCache idle sweep", () => {
       { budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES },
     );
     try {
-      const view = openView(cache.getOrCreate(dir, dir, undefined).state, dir, "s1");
+      const view = openView(cache.getOrCreate(dir, dir, undefined).state, dir, "s1", {
+        sessionState: new SessionState(),
+        declare: DECLARES_NOTHING,
+        log: () => {},
+      });
       let released = 0;
       view.holds.take("repo", () => () => {
         released++;
@@ -1061,52 +1069,101 @@ describe("RenderCache idle sweep", () => {
     }
   });
 
-  test("a hold no render read across a whole sweep is released; a render takes it back", () => {
+  test("a view holds what its declaration takes: a request naming other keys, or the session's preset moving, declares again at once", () => {
     const { dir, cleanup } = mkConfigDir();
     const watchers = new WatcherRegistry({ logger: () => {} });
+    const sessionState = new SessionState();
+    // Each declaration takes one hold per key its request names and one per
+    // closure, so what it holds says which request and which preset it read.
+    const closures: Array<ReadonlySet<string>> = [];
+    const declarations: string[] = [];
+    const released: string[] = [];
+    const take = (holds: Holds, key: string): void =>
+      holds.take(key, () => () => {
+        released.push(key);
+      });
     const logs: string[] = [];
     const cache = new RenderCache(
       {
-        sessionState: new SessionState(),
+        sessionState,
         watchers,
         log: (_level, message) => logs.push(message),
+        declare: (holds, facts, closure) => {
+          if (!closures.includes(closure)) closures.push(closure);
+          const preset = `closure:${closures.indexOf(closure)}`;
+          declarations.push(`${facts.cwd} ${preset}`);
+          take(holds, `memento:${facts.cwd}`);
+          take(holds, preset);
+        },
       },
       { budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES },
     );
-    const released: string[] = [];
+    const request = (cwd: string): ViewFacts => ({
+      hookData: {
+        hook_event_name: "Status",
+        session_id: "s1",
+        transcript_path: join(dir, "t.jsonl"),
+        cwd,
+        model: { id: "m", display_name: "M" },
+        workspace: { current_dir: cwd, project_dir: dir },
+      },
+      cwd,
+      hints: parseClientHints({}),
+    });
     try {
-      // One render of the session, reading the keys it names; its view.
-      const render = (...keys: string[]): SessionView => {
+      const view = (() => {
         using hold = cache.holdSession(dir, dir, undefined, "s1");
-        for (const key of keys) {
-          hold.view.holds.take(key, () => () => {
-            released.push(key);
-          });
-        }
         return hold.view;
-      };
-      expect(render("repo", "memento:ended-session").holds.size).toBe(2);
+      })();
+      // No request has named its keys: it holds nothing.
+      expect(view.holds.size).toBe(0);
 
-      // Read since the last sweep: kept.
-      cache.releaseIdle();
-      expect(released).toEqual([]);
+      const a = request("/a");
+      view.requested(a);
+      expect(declarations).toEqual(["/a closure:0"]);
+      // The same request — a frame drawn by it — declares nothing again.
+      view.requested(a);
+      expect(declarations).toHaveLength(1);
 
-      // The entry is still drawn, but no render reads the session that ended:
-      // its hold goes at the next sweep, the repo's stays.
-      render("repo");
-      cache.releaseIdle();
-      expect(released).toEqual(["memento:ended-session"]);
-      expect(logs).toContain("render-cache idle released=1 views=1");
+      // A request naming another key: the one it no longer names goes now.
+      view.requested(request("/b"));
+      expect(declarations).toEqual(["/a closure:0", "/b closure:0"]);
+      expect(released).toEqual(["memento:/a"]);
 
-      // Nothing drawn across a whole sweep: the view closes, and the repo
-      // goes with it.
-      cache.releaseIdle();
-      expect(released).toEqual(["memento:ended-session", "repo"]);
+      // A pick of another session's, or of this one's that moves no preset,
+      // declares nothing.
+      sessionState.set("s2", "preset", "compact");
+      sessionState.set("s1", "theme", "nord");
+      expect(declarations).toHaveLength(2);
 
-      // The next render that reads it takes it back.
-      expect(render("repo").holds.size).toBe(1);
+      // The session's preset moving declares its closure, with no render.
+      sessionState.set("s1", "preset", "compact");
+      expect(declarations).toEqual([
+        "/a closure:0",
+        "/b closure:0",
+        "/b closure:1",
+      ]);
+      expect(released).toEqual(["memento:/a", "closure:0"]);
+      expect(view.holds.size).toBe(2);
+      // Each declaration that moved a hold says so; the repeat of `a` and the
+      // picks that moved no preset wrote nothing.
+      expect(logs.filter((l) => l.startsWith("session view declared"))).toEqual([
+        'session view declared sid="s1" acquired=2 released=0 held=2',
+        'session view declared sid="s1" acquired=1 released=1 held=2',
+        'session view declared sid="s1" acquired=1 released=1 held=2',
+      ]);
+
+      // Closing the view stops its declarations and releases what it held.
       cache.releaseIdle();
-      expect(released).toHaveLength(2);
+      cache.releaseIdle();
+      expect(released).toEqual([
+        "memento:/a",
+        "closure:0",
+        "memento:/b",
+        "closure:1",
+      ]);
+      sessionState.set("s1", "preset", "verbose");
+      expect(declarations).toHaveLength(3);
     } finally {
       cache.close();
       watchers.closeAll();

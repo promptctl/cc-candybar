@@ -420,8 +420,7 @@ describe("MementoProvider", () => {
     const f = fakeEdge([A, B]);
     const p = providerOf(f.edge);
     await p.getCeiling(holds, SCOPE);
-    holds.releaseUnread();
-    holds.releaseUnread();
+    holds.declare(() => {});
     await jest.advanceTimersByTimeAsync(READING_PERIOD_MS * 3);
     expect(f.reads).toHaveLength(1);
   });

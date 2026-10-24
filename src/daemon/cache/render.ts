@@ -1,7 +1,8 @@
 import path from "node:path";
 import { nearestWatchTarget } from "../../utils/watch-target.js";
 import type { RichText } from "@promptctl/rich-js";
-import { neededPrefixesByPreset } from "../render-payload.js";
+import { observable, reaction, runInAction } from "mobx";
+import { neededPrefixesByPreset, type ViewFacts } from "../render-payload.js";
 import { fileHeldSettings } from "../setting-drafts.js";
 import {
   loadConfigChain,
@@ -32,12 +33,16 @@ import {
 import { mb } from "../limits.js";
 import { stateGate } from "../verbs/state-validators.js";
 import { configGate } from "../verbs/config-validators.js";
-import { presetNames, presetRoot } from "../../config/presets.js";
+import {
+  effectivePresetName,
+  presetNames,
+  presetRoot,
+} from "../../config/presets.js";
 import { unusedDeclarations, type UnusedDecl } from "../../config/unused.js";
 import { VariableStore } from "../../var-system/store.js";
 import { SourceRegistry } from "../../var-system/sources.js";
 import type { VarScope } from "../../dsl/variable-scope.js";
-import type { SessionStateRW } from "../session-state.js";
+import type { SessionStateReader, SessionStateRW } from "../session-state.js";
 import type {
   WatcherRegistry,
   WatcherHandle,
@@ -103,6 +108,10 @@ export const MAX_ENTRIES = 256;
 export interface RenderDeps {
   sessionState: SessionStateRW;
   watchers: WatcherRegistry;
+  // What a view declares of the daemon's shared entries
+  // (src/daemon/render-payload.ts `declareLanes`). A cache given none — a test
+  // reading no built-in source — declares nothing.
+  declare?: Declare;
   // Where the cache's events go — every load, every teardown. Only the
   // daemon passes `dlog`; a caller passing none logs quietly, like the
   // providers and the usage store.
@@ -708,9 +717,10 @@ const VIEW_SCOPE: ReadonlySet<VarScope> = new Set(["view"]);
 // and no other session's render re-runs, reads, or reports them.
 //
 // `holds` is what the session's renders read of the daemon's shared entries (a
-// repo, a pane, a memento reading), so their owners' periods visit them while
-// the view lives and stop when it is disposed; the directory home reads none
-// itself, so it holds none (brandon-unfiled-3248.8ro6).
+// repo, a pane, a memento reading), as the view's declaration takes them
+// (openView), so their owners' periods visit them while the view's preset and
+// request name them and stop when it is disposed; the directory home reads
+// none itself, so it holds none (brandon-unfiled-3248.8ro6).
 //
 // `lastRenderCellsBySegment` is the per-segment StripCell sink that renderDsl
 // writes on each render — pre-layout cells, NOT serialized ANSI. Storing cells
@@ -726,6 +736,9 @@ export interface SessionView {
   readonly store: VariableStore;
   readonly registry: SourceRegistry;
   readonly holds: Holds;
+  // The request the view's renders draw by — the keys its declaration takes
+  // its holds at. A render of the same request changes nothing.
+  requested(facts: ViewFacts): void;
   readonly lastRenderCellsBySegment: Map<string, readonly RichText[]>;
   // [LAW:single-enforcer] The view's one teardown: its holds close and its
   // registry is disposed, so no caller of openView can release one and leak
@@ -733,27 +746,94 @@ export interface SessionView {
   dispose(): number;
 }
 
+// What a view declares into its holds: every keyed entry `closure` reads, at
+// the keys `facts` name.
+export type Declare = (
+  holds: Holds,
+  facts: ViewFacts,
+  closure: ReadonlySet<string>,
+) => void;
+
+export const DECLARES_NOTHING: Declare = () => {};
+
+// What a view reads to keep its declaration current.
+export interface ViewDeclaring {
+  readonly sessionState: SessionStateReader;
+  readonly declare: Declare;
+  readonly log: DaemonLogger;
+}
+
 // [LAW:single-enforcer] The one way a view is built: the state's directory
 // registry opens a view registry, and the config's view-scoped variables are
 // declared into it, in `cwd` — the entry's, where its shells run.
+//
+// [LAW:no-ambient-temporal-coupling] Its holds are declared by one reaction,
+// over the request its renders draw by and the preset the session's picks
+// resolve to (brandon-unfiled-3248.8ro6, step 3): a request naming other keys,
+// or a click moving the preset, declares again in the turn it lands, so the
+// sources a preset newly places are read before any draw asks for them, and
+// those it stops placing are released at once. Until a request names its
+// keys, a view holds nothing.
 export function openView(
   state: DslRenderState,
   cwd: string,
   sessionId: string,
+  { sessionState, declare, log }: ViewDeclaring,
 ): SessionView {
   const registry = state.registry.view();
   const holds = new Holds();
   // What fails to declare here failed in the load's probe (buildRenderState),
   // which reported it: a declaration reads only the config.
   declareDslVariables(state.config, registry, cwd, VIEW_SCOPE);
+  const latest = observable.box<ViewFacts | null>(null, { deep: false });
+  // [LAW:one-source-of-truth] The preset a render of this session resolves
+  // (resolveEffectiveGlobals reads the same rungs).
+  const closure = (): ReadonlySet<string> =>
+    state.neededInputPaths(
+      effectivePresetName(
+        sessionState.get(sessionId, "preset"),
+        state.config.globals.preset,
+        state.config.presets,
+      ),
+    );
+  const stop = reaction(
+    () => [latest.get(), closure()] as const,
+    // [LAW:no-silent-failure] A reaction's throw reaches no caller — MobX
+    // prints it to a console nobody reads in a detached daemon — so it is
+    // logged here, where it surfaces, and the view keeps what it held.
+    ([facts, reads]) => {
+      try {
+        const { acquired, released } = holds.declare(() => {
+          if (facts !== null) declare(holds, facts, reads);
+        });
+        // [LAW:verifiable-goals] A declaration that moved a hold — a preset
+        // click, a request naming another key — says so; one that kept what
+        // the view held, every other request's, writes nothing.
+        if (acquired + released > 0) {
+          log(
+            "info",
+            `session view declared sid=${JSON.stringify(sessionId)} acquired=${acquired} released=${released} held=${holds.size}`,
+          );
+        }
+      } catch (e) {
+        log(
+          "error",
+          `session view declaration threw sid=${JSON.stringify(sessionId)}: ${String(e)}`,
+        );
+      }
+    },
+    { equals: (a, b) => a[0] === b[0] && a[1] === b[1] },
+  );
   return {
     sessionId,
     state,
     store: registry.variableStore,
     registry,
     holds,
+    requested: (facts) => runInAction(() => latest.set(facts)),
     lastRenderCellsBySegment: new Map<string, readonly RichText[]>(),
     dispose: () => {
+      stop();
       holds.close();
       return registry.dispose();
     },
@@ -762,12 +842,10 @@ export function openView(
 
 // [LAW:no-ambient-temporal-coupling] The cache's one timer, armed by the first
 // render and stopped with the last entry: every interval it closes each view
-// no render read since the interval before, and releases each hold a view's
-// renders have not read since then (`Holds.releaseUnread`), so an owner's
-// period stops visiting a repo, pane or memento reading 2.5 to 5 minutes after
-// the last render that read it — a memento scope the session's renders stopped
-// naming included (brandon-unfiled-3248.8ro6). The next read takes the hold
-// back, and a period resumed after a gap reads at once.
+// no render read since the interval before, which releases the view's holds,
+// so an owner's period stops visiting a repo, pane or memento reading 2.5 to 5
+// minutes after the session's last render. A view still drawn holds what its
+// declaration takes (openView), and a period resumed after a gap reads at once.
 export const HOLD_SWEEP_MS = 150_000;
 
 export class RenderCache {
@@ -971,7 +1049,11 @@ export class RenderCache {
       return current;
     }
     if (current !== undefined) this.retireView(current, "moved");
-    const view = openView(state, entry.cwd, sessionId);
+    const view = openView(state, entry.cwd, sessionId, {
+      sessionState: this.deps.sessionState,
+      declare: this.deps.declare ?? DECLARES_NOTHING,
+      log: this.log,
+    });
     this.views.set(sessionId, view);
     this.viewHolds.set(view, { holders: 0, retired: null, read: true });
     this.log(
@@ -1024,16 +1106,6 @@ export class RenderCache {
       if (lease.retired !== null) continue;
       if (lease.read) lease.read = false;
       else this.retireView(view, "idle");
-    }
-    let released = 0;
-    for (const view of this.views.values()) {
-      released += view.holds.releaseUnread();
-    }
-    if (released > 0) {
-      this.log(
-        "info",
-        `render-cache idle released=${released} views=${this.views.size}`,
-      );
     }
     if (this.entries.size === 0 && this.sweep !== null) {
       clearInterval(this.sweep);

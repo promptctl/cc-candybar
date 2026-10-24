@@ -37,6 +37,7 @@ import { createPayloadProviders } from "../daemon/payload-providers.js";
 import { parseClientHints } from "../daemon/protocol.js";
 import {
   buildRenderPayload,
+  declareLanes,
   renderOptionsOf,
 } from "../daemon/render-payload.js";
 import { resolveEffectiveGlobals } from "../config/effective-globals.js";
@@ -118,7 +119,14 @@ function loadState(): ReturnType<typeof buildRenderState> {
 async function renderFrames(): Promise<void> {
   const state = loadState();
   // The session's view of the state, as the daemon opens one per session.
-  const view = openView(state, cwd, sessionId);
+  const view = openView(state, cwd, sessionId, {
+    sessionState,
+    declare: (holds, facts, closure) =>
+      declareLanes(providers, holds, facts, closure),
+    log,
+  });
+  // The one request the demo's frames draw by: the view declares its keys.
+  view.requested({ hookData, cwd, hints });
   try {
     const effective = resolveEffectiveGlobals(
       state.config,

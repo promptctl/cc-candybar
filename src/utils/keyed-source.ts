@@ -126,8 +126,8 @@ export class KeyedSource<I, T> {
   }
 
   // The one read: the stored value as it stands, never awaited. `holds` is the
-  // home reading: it holds the entry until it releases its holds (idle, or
-  // disposed), which keeps the entry on its period. A key never read is
+  // home reading: it holds the entry until a declaration of the home's takes
+  // it no more, or the home is disposed, which keeps the entry on its period. A key never read is
   // created pending and read once, its first refresh.
   //
   // [LAW:no-silent-failure] The owner logs its own failures — each refresh's
