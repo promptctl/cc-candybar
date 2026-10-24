@@ -894,8 +894,6 @@ export class RenderCache {
     const { state } = entry;
     const hold = this.holdOf(state);
     hold.holders++;
-    // A render draws the directory home: what it subscribes to is read.
-    state.registry.readSubscriptions();
     this.armSweep();
     let released = false;
     return {
@@ -928,6 +926,11 @@ export class RenderCache {
     try {
       view = this.viewOf(sessionId, held.entry, held.state);
       lease = this.leaseOf(view);
+      // A session draws the directory home through its view: what the home
+      // subscribes to is read, as the view is (`lease.read`). A hold that
+      // draws nothing — a lane check reading the session's settings — reads
+      // neither.
+      held.state.registry.readSubscriptions();
     } catch (err) {
       // [LAW:no-ambient-temporal-coupling] The state hold is this call's
       // until the returned hold carries it: a throw before then releases it,

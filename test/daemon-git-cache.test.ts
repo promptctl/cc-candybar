@@ -432,6 +432,56 @@ describe("GitDataProvider reads what is held", () => {
     });
     svc.close();
   });
+
+  test("the PR is keyed by the branch the pass read, never by a value it skipped", async () => {
+    jest.useFakeTimers();
+    const { svc, inner, holds, logs } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+    // The first option set, then a preset showing the PR over another.
+    await svc.getGitInfo(holds, "/repo", { showSha: true });
+    const shown = new Holds();
+    await svc.getGitInfo(shown, "/repo", { showPullRequest: true });
+    expect(inner.prCalls).toHaveLength(1);
+    holds.releaseUnread();
+    holds.releaseUnread();
+
+    // The skipped set still stores `main`; the pass reads `feature`.
+    inner.stubInfo = { ...inner.stubInfo, branch: "feature" };
+    svc.changed("/repo");
+    await jest.advanceTimersByTimeAsync(0);
+    expect(logs.at(-1)).toMatch(/^git refresh \/repo by=watch values=1 .* pr=looked-up /);
+    expect(inner.prCalls).toHaveLength(2);
+    svc.close();
+  });
+
+  test("an owed PR shown on a repo that changed unused is looked up once, on the key the pass reads", async () => {
+    jest.useFakeTimers();
+    const { svc, inner, holds, logs } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+    await svc.getGitInfo(holds, "/repo", { showPullRequest: true });
+    const values = new Holds();
+    await svc.getGitInfo(values, "/repo", {});
+    holds.releaseUnread();
+    holds.releaseUnread();
+    inner.stubInfo = { ...inner.stubInfo, branch: "feature" };
+    svc.changed("/repo");
+    await jest.advanceTimersByTimeAsync(0);
+    expect(logs.at(-1)).toMatch(/ pr=owed /);
+
+    // Nothing uses the repo, and the branch moves again unseen.
+    values.releaseUnread();
+    values.releaseUnread();
+    expect(svc.getStats().held).toBe(0);
+    inner.stubInfo = { ...inner.stubInfo, branch: "third" };
+    svc.changed("/repo");
+
+    // Shown again: one lookup, for `third` — none for the owed `feature`.
+    void svc.getGitInfo(new Holds(), "/repo", { showPullRequest: true });
+    await jest.advanceTimersByTimeAsync(0);
+    expect(logs.at(-1)).toMatch(/ pr=looked-up /);
+    expect(inner.prCalls).toHaveLength(2);
+    svc.close();
+  });
 });
 
 // brandon-unfiled-3248.8ro6, step 1: a read never refreshes. A repo's value is

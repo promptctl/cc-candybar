@@ -332,3 +332,28 @@ test("a git variable's subscription holds its repo while its directory renders, 
   await render(cache, "s-a");
   expect(gitService.getStats().held).toBe(1);
 });
+
+// A hold that draws nothing — the lane check a subscribe or a pushed frame
+// makes over the session's settings — does not count as drawing the directory.
+test("a hold that draws nothing leaves a git subscription to the sweep", async () => {
+  execSync("git init -q && git commit -q --allow-empty -m init", {
+    cwd: dir,
+    env: { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" },
+  });
+  fs.writeFileSync(
+    path.join(dir, ".cc-candybar.json5"),
+    JSON.stringify({
+      variables: { branch: { kind: "git", field: "branch" } },
+      segments: { where: { template: "on={{ .branch }}" } },
+      root: { h: ["where"] },
+    }),
+  );
+  const { cache, gitService } = makeCache();
+  await render(cache, "s-a");
+  expect(gitService.getStats().held).toBe(1);
+
+  cache.releaseIdle();
+  cache.hold(dir, dir, undefined)[Symbol.dispose]();
+  cache.releaseIdle();
+  expect(gitService.getStats().held).toBe(0);
+});
