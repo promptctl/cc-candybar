@@ -118,15 +118,20 @@ function loadState(): ReturnType<typeof buildRenderState> {
 
 async function renderFrames(): Promise<void> {
   const state = loadState();
-  // The session's view of the state, as the daemon opens one per session.
-  const view = openView(state, cwd, sessionId, {
-    sessionState,
-    declare: (holds, facts, closure) =>
-      declareLanes(providers, holds, facts, closure),
-    log,
-  });
-  // The one request the demo's frames draw by: the view declares its keys.
-  view.requested({ hookData, cwd, hints });
+  // The session's view of the state, as the daemon opens one per session,
+  // declared with the one request the demo's frames draw by.
+  const view = openView(
+    state,
+    cwd,
+    sessionId,
+    { hookData, cwd, hints },
+    {
+      sessionState,
+      declare: (holds, facts, closure) =>
+        declareLanes(providers, holds, facts, closure),
+      log,
+    },
+  );
   try {
     const effective = resolveEffectiveGlobals(
       state.config,
@@ -152,7 +157,7 @@ async function renderFrames(): Promise<void> {
         at,
         {
           ...providers,
-          holds: view.holds,
+          lanes: view.lanes,
           history: () => EMPTY_HISTORY_DEPTH,
           navigation: () => 0,
           feeds: () => UNFOLLOWED_FEEDS,

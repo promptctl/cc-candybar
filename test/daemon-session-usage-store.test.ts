@@ -35,6 +35,7 @@ import { instantOf } from "../src/utils/instant";
 import { ABSENT, PENDING } from "../src/utils/outcome";
 import { FOLD_WINDOW_BYTES } from "../src/utils/transcript-fs";
 import { until } from "./helpers/until";
+import { todayInfo, todayNow } from "./helpers/today";
 
 // Count cumulative FSREQPROMISE inits (libuv fs requests) over `body`.
 async function countFsOps(body: () => Promise<unknown>): Promise<number> {
@@ -272,7 +273,7 @@ describe("SessionUsageStore — session projection", () => {
       logger: (_level, msg) => lines.push(msg),
     });
     try {
-      await store.getTodayInfo(holds, hook("A", t), dir, instantOf(at));
+      await todayInfo(store, holds, hook("A", t), dir, instantOf(at));
       await new Promise((r) => setTimeout(r, 10));
       expect(store.sweepStale()).toBe(0);
       expect(store.getStats()).toMatchObject({ sweeps: 0, size: 1 });
@@ -392,10 +393,10 @@ describe("SessionUsageStore — session projection", () => {
     try {
       // The session's own refresh has landed, but no scan has.
       await store.getUsageInfo("A", hook("A", t));
-      expect(store.todayOf(holds, hook("A", t), dir, instantOf(at))).toBe(PENDING);
-      const today = await store.getTodayInfo(holds, hook("A", t), dir, instantOf(at));
+      expect(todayNow(store, holds, hook("A", t), dir, instantOf(at))).toBe(PENDING);
+      const today = await todayInfo(store, holds, hook("A", t), dir, instantOf(at));
       expect(today.kind).toBe("ok");
-      expect(store.todayOf(holds, hook("A", t), dir, instantOf(at))).toEqual(today);
+      expect(todayNow(store, holds, hook("A", t), dir, instantOf(at))).toEqual(today);
     } finally {
       store.close();
     }
@@ -480,13 +481,13 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
       writeFileSync(join(odir, "other-1.jsonl"), usageLine("other-1", new Date(), 7));
       const all = PROJECTS * FILES_PER_PROJECT * COST_PER_FILE;
 
-      const first = await store.getTodayInfo(holds, hook("sess-0-0", activePath), root, instantOf(new Date()));
+      const first = await todayInfo(store, holds, hook("sess-0-0", activePath), root, instantOf(new Date()));
       expect(first.kind === "ok" && first.value.cost).toBeCloseTo(all, 5);
-      const second = await store.getTodayInfo(holds, hook("other-0", opath), other, instantOf(new Date()));
+      const second = await todayInfo(store, holds, hook("other-0", opath), other, instantOf(new Date()));
       expect(second.kind === "ok" && second.value.cost).toBeCloseTo(12, 5);
       // Each directory is scanned once; a later render of either re-scans none
       // and reads the sum it read before the other was seen.
-      const again = await store.getTodayInfo(holds, hook("sess-0-0", activePath), root, instantOf(new Date()));
+      const again = await todayInfo(store, holds, hook("sess-0-0", activePath), root, instantOf(new Date()));
       expect(again.kind === "ok" && again.value.cost).toBeCloseTo(all, 5);
       expect(store.scanStats().refreshes.first).toBe(2);
 
@@ -495,9 +496,9 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
       const late = join(odir, "other-late.jsonl");
       writeFileSync(late, usageLine("other-late", new Date(), 3));
       await store.getUsageInfo("other-late", hook("other-late", late));
-      const joined = await store.getTodayInfo(holds, hook("other-0", opath), other, instantOf(new Date()));
+      const joined = await todayInfo(store, holds, hook("other-0", opath), other, instantOf(new Date()));
       expect(joined.kind === "ok" && joined.value.cost).toBeCloseTo(15, 5);
-      const apart = await store.getTodayInfo(holds, hook("sess-0-0", activePath), root, instantOf(new Date()));
+      const apart = await todayInfo(store, holds, hook("sess-0-0", activePath), root, instantOf(new Date()));
       expect(apart.kind === "ok" && apart.value.cost).toBeCloseTo(all, 5);
     } finally {
       store.close();
@@ -508,7 +509,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
   test("seed aggregates today cost across every session", async () => {
     const store = new SessionUsageStore({ sweepIntervalMs: 0 });
     try {
-      const info = await store.getTodayInfo(holds, hook("sess-0-0", activePath), root, instantOf(new Date()));
+      const info = await todayInfo(store, holds, hook("sess-0-0", activePath), root, instantOf(new Date()));
       expect(info.kind).toBe("ok");
       if (info.kind !== "ok") return;
       expect(info.value.cost).toBeCloseTo(
@@ -528,7 +529,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
   test("a cold request's own session is read once, by the seed", async () => {
     const store = new SessionUsageStore({ sweepIntervalMs: 0 });
     try {
-      await store.getTodayInfo(holds, hook("sess-0-0", activePath), root, instantOf(new Date()));
+      await todayInfo(store, holds, hook("sess-0-0", activePath), root, instantOf(new Date()));
       expect(store.getStats()).toMatchObject({ hits: 1, misses: 0 });
     } finally {
       store.close();
@@ -548,7 +549,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
       for (let s = 0; s < SESSIONS; s++) {
         writeFileSync(join(pdir, `many-${s}.jsonl`), usageLine(`many-${s}`, at, 1));
       }
-      const info = await store.getTodayInfo(holds, hook("many-0", join(pdir, "many-0.jsonl")),
+      const info = await todayInfo(store, holds, hook("many-0", join(pdir, "many-0.jsonl")),
         many,
         instantOf(at),
       );
@@ -590,11 +591,11 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
       utimesSync(ongoing, tick, tick);
       const hd = hook("active", active);
       const cost = () => {
-        const info = store.todayOf(holds, hd, tree, instantOf(noon));
+        const info = todayNow(store, holds, hd, tree, instantOf(noon));
         return info.kind === "ok" ? info.value.cost : info.kind;
       };
 
-      const seeded = await store.getTodayInfo(holds, hd, tree, instantOf(noon));
+      const seeded = await todayInfo(store, holds, hd, tree, instantOf(noon));
       expect(seeded.kind === "ok" && seeded.value.cost).toBeCloseTo(3, 5);
       writeFileSync(join(pdir, "headless.jsonl"), usageLine("headless", noon, 4));
       appendFileSync(ongoing, usageLine("ongoing-1", noon, 8));
@@ -662,9 +663,9 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
       writeFileSync(join(pdir, "headless.jsonl"), usageLine("headless", noon, 4));
       const hd = hook("active", active);
 
-      const first = await store.getTodayInfo(holds, hd, tree, instantOf(noon));
+      const first = await todayInfo(store, holds, hd, tree, instantOf(noon));
       expect(first).toEqual({ kind: "failed", reason: "usage scan: scan broke" });
-      expect(store.todayOf(holds, hd, tree, instantOf(noon))).toEqual(first);
+      expect(todayNow(store, holds, hd, tree, instantOf(noon))).toEqual(first);
       expect(lines).toEqual(
         expect.arrayContaining([
           expect.stringMatching(
@@ -676,10 +677,10 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
       );
 
       await until(
-        () => store.todayOf(holds, hd, tree, instantOf(noon)).kind === "ok",
+        () => todayNow(store, holds, hd, tree, instantOf(noon)).kind === "ok",
         "the retried scan landing",
       );
-      const info = store.todayOf(holds, hd, tree, instantOf(noon));
+      const info = todayNow(store, holds, hd, tree, instantOf(noon));
       expect(info.kind === "ok" && info.value.cost).toBeCloseTo(5, 5);
       expect(store.scanStats()).toMatchObject({
         failures: 1,
@@ -711,7 +712,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
       chmodSync(headless, 0o000);
       const hd = hook("active", active);
 
-      const first = await store.getTodayInfo(holds, hd, tree, instantOf(noon));
+      const first = await todayInfo(store, holds, hd, tree, instantOf(noon));
       expect(first.kind).toBe("failed");
       if (first.kind !== "failed") return;
       expect(first.reason).toMatch(
@@ -720,10 +721,10 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
 
       chmodSync(headless, 0o644);
       await until(
-        () => store.todayOf(holds, hd, tree, instantOf(noon)).kind === "ok",
+        () => todayNow(store, holds, hd, tree, instantOf(noon)).kind === "ok",
         "the retried scan reading the session",
       );
-      const info = store.todayOf(holds, hd, tree, instantOf(noon));
+      const info = todayNow(store, holds, hd, tree, instantOf(noon));
       expect(info.kind === "ok" && info.value.cost).toBeCloseTo(5, 5);
     } finally {
       store.close();
@@ -752,7 +753,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
       writeFileSync(active, usageLine("active", new Date(), 1));
       chmodSync(locked, 0o000);
 
-      const info = await store.getTodayInfo(holds, hook("active", active), tree, instantOf(new Date()));
+      const info = await todayInfo(store, holds, hook("active", active), tree, instantOf(new Date()));
       expect(info.kind).toBe("failed");
       if (info.kind !== "failed") return;
       expect(info.reason).toMatch(/^usage scan: .*EACCES.*locked/);
@@ -784,7 +785,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
     try {
       mkdirSync(projects);
       chmodSync(projects, 0o000);
-      const info = await store.getTodayInfo(holds, hook("active", join(projects, "p", "active.jsonl")), tree, instantOf(new Date()));
+      const info = await todayInfo(store, holds, hook("active", join(projects, "p", "active.jsonl")), tree, instantOf(new Date()));
       expect(info.kind).toBe("failed");
       if (info.kind !== "failed") return;
       expect(info.reason).toMatch(/^usage scan: .*EACCES.*projects/);
@@ -802,14 +803,14 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
     try {
       const hd = hook("sess-0-0", activePath);
       const now = new Date();
-      const answered = await store.getTodayInfo(holds, hd, root, instantOf(now));
+      const answered = await todayInfo(store, holds, hd, root, instantOf(now));
       expect(answered.kind).toBe("ok");
       const tomorrow = new Date(now);
       tomorrow.setDate(tomorrow.getDate() + 1);
       tomorrow.setHours(0, 0, 1, 0);
       const ops = await countFsOps(async () => {
-        expect(store.todayOf(holds, hd, root, instantOf(tomorrow))).toBe(ABSENT);
-        expect(store.todayOf(holds, hd, root, instantOf(now))).toEqual(answered);
+        expect(todayNow(store, holds, hd, root, instantOf(tomorrow))).toBe(ABSENT);
+        expect(todayNow(store, holds, hd, root, instantOf(now))).toEqual(answered);
       });
       expect(ops).toBe(0);
       expect(store.scanStats().refreshes).toEqual({
@@ -826,13 +827,13 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
     const store = new SessionUsageStore({ sweepIntervalMs: 0 });
     try {
       const hd = hook("sess-0-0", activePath);
-      const seedOps = await countFsOps(() => store.getTodayInfo(holds, hd, root, instantOf(new Date())));
+      const seedOps = await countFsOps(() => todayInfo(store, holds, hd, root, instantOf(new Date())));
       expect(seedOps).toBeGreaterThan(0); // the one whole-tree scan
 
       // 20 further renders: seed is memoized, active mtime unchanged → the only
       // freshness check is a sync statSync. No async fs ops at all.
       const steadyOps = await countFsOps(async () => {
-        for (let i = 0; i < 20; i++) await store.getTodayInfo(holds, hd, root, instantOf(new Date()));
+        for (let i = 0; i < 20; i++) await todayInfo(store, holds, hd, root, instantOf(new Date()));
       });
       expect(steadyOps).toBe(0);
       // Never re-seeded, and no render rescans.
@@ -846,12 +847,12 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
     const store = new SessionUsageStore({ sweepIntervalMs: 0 });
     try {
       const hd = hook("sess-0-0", activePath);
-      const seedOps = await countFsOps(() => store.getTodayInfo(holds, hd, root, instantOf(new Date())));
+      const seedOps = await countFsOps(() => todayInfo(store, holds, hd, root, instantOf(new Date())));
 
       // Advance only the active session's mtime, then render once.
       const future = Math.floor(Date.now() / 1000) + 3600;
       utimesSync(activePath, future, future);
-      const reparseOps = await countFsOps(() => store.getTodayInfo(holds, hd, root, instantOf(new Date())));
+      const reparseOps = await countFsOps(() => todayInfo(store, holds, hd, root, instantOf(new Date())));
 
       // One session's re-parse is a tiny fraction of a whole-tree scan, and the
       // seed never runs again.

@@ -1,6 +1,7 @@
 import { KeyedSource } from "../src/utils/keyed-source";
 import { Holds } from "../src/utils/holds";
 import { failed, ok, type Outcome } from "../src/utils/outcome";
+import { laneOutcome } from "../src/utils/reading";
 
 // [LAW:behavior-not-structure] The contract of a keyed source, through its
 // read and its supersede alone (brandon-unfiled-3248.8ro6, step 1): a read
@@ -62,13 +63,13 @@ describe("KeyedSource", () => {
     const f = fakeRead();
     source = sourceOf(f.read);
     const holds = new Holds();
-    const first = source.read(holds, "a");
-    const second = source.read(holds, "a");
+    const first = laneOutcome(source.declare(holds, "a"));
+    const second = laneOutcome(source.declare(holds, "a"));
     expect(f.calls).toHaveLength(1);
     f.answer(0, ok("A"));
     expect(await first).toEqual(ok("A"));
     expect(await second).toEqual(ok("A"));
-    expect(await source.read(holds, "a")).toEqual(ok("A"));
+    expect(await laneOutcome(source.declare(holds, "a"))).toEqual(ok("A"));
     expect(f.calls).toHaveLength(1);
   });
 
@@ -76,7 +77,7 @@ describe("KeyedSource", () => {
     const f = fakeRead();
     source = sourceOf(f.read);
     const holds = new Holds();
-    const first = source.read(holds, "a");
+    const first = laneOutcome(source.declare(holds, "a"));
     await jest.advanceTimersByTimeAsync(400);
     f.answer(0, ok("A"));
     await first;
@@ -85,17 +86,17 @@ describe("KeyedSource", () => {
     await jest.advanceTimersByTimeAsync(1);
     expect(f.calls).toHaveLength(2);
     // The stored value stands while the period's read is out.
-    expect(await source.read(holds, "a")).toEqual(ok("A"));
+    expect(await laneOutcome(source.declare(holds, "a"))).toEqual(ok("A"));
     f.answer(1, ok("B"));
     await settled();
-    expect(await source.read(holds, "a")).toEqual(ok("B"));
+    expect(await laneOutcome(source.declare(holds, "a"))).toEqual(ok("B"));
   });
 
   test("a failed read is retried on the failed period", async () => {
     const f = fakeRead();
     source = sourceOf(f.read);
     const holds = new Holds();
-    const first = source.read(holds, "a");
+    const first = laneOutcome(source.declare(holds, "a"));
     f.answer(0, failed("down"));
     expect(await first).toEqual(failed("down"));
     await jest.advanceTimersByTimeAsync(EVERY.failedMs);
@@ -106,7 +107,7 @@ describe("KeyedSource", () => {
     const f = fakeRead();
     source = sourceOf(f.read);
     const holds = new Holds();
-    const first = source.read(holds, "a");
+    const first = laneOutcome(source.declare(holds, "a"));
     f.answer(0, ok("A"));
     await first;
     holds.declare(() => {});
@@ -114,7 +115,7 @@ describe("KeyedSource", () => {
     expect(f.calls).toHaveLength(1);
     // The next read takes the stored value and its hold back; the period,
     // long overdue, reads at once.
-    expect(await source.read(holds, "a")).toEqual(ok("A"));
+    expect(await laneOutcome(source.declare(holds, "a"))).toEqual(ok("A"));
     await settled();
     expect(f.calls).toHaveLength(2);
   });
@@ -124,8 +125,8 @@ describe("KeyedSource", () => {
     source = sourceOf(f.read);
     const a = new Holds();
     const b = new Holds();
-    const first = source.read(a, "k");
-    void source.read(b, "k");
+    const first = laneOutcome(source.declare(a, "k"));
+    void laneOutcome(source.declare(b, "k"));
     f.answer(0, ok("K"));
     await first;
     a.declare(() => {});
@@ -143,7 +144,7 @@ describe("KeyedSource", () => {
     const f = fakeRead();
     source = sourceOf(f.read);
     const holds = new Holds();
-    const waiting = source.read(holds, "a");
+    const waiting = laneOutcome(source.declare(holds, "a"));
     source.supersede("a");
     expect(f.calls).toHaveLength(2);
     // The read from before the supersede lands first and is never stored.
@@ -151,7 +152,7 @@ describe("KeyedSource", () => {
     await settled();
     f.answer(1, ok("after"));
     expect(await waiting).toEqual(ok("after"));
-    expect(await source.read(holds, "a")).toEqual(ok("after"));
+    expect(await laneOutcome(source.declare(holds, "a"))).toEqual(ok("after"));
   });
 
   // The abandoned read still ran: its event and its count say so, and a
@@ -160,7 +161,7 @@ describe("KeyedSource", () => {
     const lines: Line[] = [];
     const f = fakeRead();
     source = sourceOf(f.read, { lines });
-    const waiting = source.read(new Holds(), "a");
+    const waiting = laneOutcome(source.declare(new Holds(), "a"));
     source.supersede("a");
     f.answer(0, failed("layer changed under it"));
     await settled();
@@ -184,11 +185,11 @@ describe("KeyedSource", () => {
     const f = fakeRead();
     source = sourceOf(f.read);
     const holds = new Holds();
-    const first = source.read(holds, "a");
+    const first = laneOutcome(source.declare(holds, "a"));
     f.answer(0, ok("before"));
     await first;
     source.supersede("a");
-    const next = source.read(holds, "a");
+    const next = laneOutcome(source.declare(holds, "a"));
     f.answer(1, ok("after"));
     expect(await next).toEqual(ok("after"));
     expect(source.stats().refreshes).toEqual({
@@ -202,7 +203,7 @@ describe("KeyedSource", () => {
     const f = fakeRead();
     source = sourceOf(f.read);
     const holds = new Holds();
-    const first = source.read(holds, "a");
+    const first = laneOutcome(source.declare(holds, "a"));
     f.answer(0, ok("A"));
     await first;
     await jest.advanceTimersByTimeAsync(EVERY.okMs - 1);
@@ -223,18 +224,18 @@ describe("KeyedSource", () => {
     source = sourceOf(f.read, { maxEntries: 1 });
     const held = new Holds();
     const loose = new Holds();
-    void source.read(held, "kept");
-    void source.read(loose, "a");
+    void laneOutcome(source.declare(held, "kept"));
+    void laneOutcome(source.declare(loose, "a"));
     loose.declare(() => {});
-    void source.read(loose, "b");
+    void laneOutcome(source.declare(loose, "b"));
     // "kept" is held, so the bound falls on "a": two entries, one held.
     expect(source.stats()).toMatchObject({ entries: 2, held: 2 });
     loose.declare(() => {});
-    void source.read(new Holds(), "c");
+    void laneOutcome(source.declare(new Holds(), "c"));
     expect(source.stats().entries).toBe(2);
     // "kept" is still the stored entry: read again, it asks nothing.
     const reads = f.calls.length;
-    void source.read(held, "kept");
+    void laneOutcome(source.declare(held, "kept"));
     expect(f.calls).toHaveLength(reads);
   });
 
@@ -242,9 +243,9 @@ describe("KeyedSource", () => {
     const f = fakeRead();
     source = sourceOf(f.read, { maxEntries: 0 });
     const holds = new Holds();
-    const waiting = source.read(holds, "a");
+    const waiting = laneOutcome(source.declare(holds, "a"));
     holds.declare(() => {});
-    void source.read(new Holds(), "b");
+    void laneOutcome(source.declare(new Holds(), "b"));
     expect(await waiting).toEqual(failed("fake entry dropped"));
   });
 
@@ -253,11 +254,11 @@ describe("KeyedSource", () => {
     const f = fakeRead();
     source = sourceOf(f.read, { lines });
     const holds = new Holds();
-    const first = source.read(holds, "a");
+    const first = laneOutcome(source.declare(holds, "a"));
     f.answer(0, failed("no server"));
     await first;
-    await source.read(holds, "a");
-    await source.read(holds, "a");
+    await laneOutcome(source.declare(holds, "a"));
+    await laneOutcome(source.declare(holds, "a"));
     expect(lines).toEqual([
       {
         level: "warn",
@@ -280,34 +281,29 @@ describe("KeyedSource", () => {
       { lines },
     );
     const holds = new Holds();
-    const out = await source.read(holds, "a");
+    const out = await laneOutcome(source.declare(holds, "a"));
     expect(out).toEqual(failed("read threw: Error: boom"));
     await jest.advanceTimersByTimeAsync(EVERY.failedMs);
     expect(calls).toBe(2);
     expect(lines[0]).toMatchObject({ level: "warn" });
   });
 
-  test("a read on a closed home never rejects: it is logged where it surfaces", async () => {
-    const lines: Line[] = [];
+  test("a declaration into a closed home throws, for the view's declaration to report", () => {
     const f = fakeRead();
-    source = sourceOf(f.read, { lines });
+    const closing = sourceOf(f.read);
+    source = closing;
     const holds = new Holds();
     holds.close();
-    const out = await source.read(holds, "a");
-    expect(out.kind).toBe("failed");
-    expect(lines).toEqual([
-      {
-        level: "error",
-        msg: "fake read threw: Error: hold taken after close: fake:a",
-      },
-    ]);
+    expect(() => closing.declare(holds, "a")).toThrow(
+      "hold taken after close: fake:a",
+    );
   });
 
   test("close ends every period", async () => {
     const f = fakeRead();
     source = sourceOf(f.read);
     const holds = new Holds();
-    const first = source.read(holds, "a");
+    const first = laneOutcome(source.declare(holds, "a"));
     f.answer(0, ok("A"));
     await first;
     source.close();

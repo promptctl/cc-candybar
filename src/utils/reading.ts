@@ -76,7 +76,21 @@ export async function answered<A>(read: () => A | Waiting): Promise<A> {
   }
 }
 
-// A source's outcome once it has one.
-export function outcomeOf<T>(source: Readable<T>): Promise<Outcome<T>> {
-  return answered(() => currentOf(source));
+// [LAW:types-are-the-program] What a declaration hands its reader: the entry
+// it took, read as it stands. The key was computed once, by the declaration,
+// and reading takes nothing, so a read can neither re-derive the key nor take
+// back a hold a later declaration released (brandon-unfiled-3248.8ro6, step 4).
+export interface Lane<T> {
+  current(): Current<T>;
+}
+
+// A lane answering one outcome for good: a lane the closure does not read
+// (`ABSENT`), or one whose declaration threw.
+export function settledLane<T>(outcome: Outcome<T>): Lane<T> {
+  return { current: () => outcome };
+}
+
+// A lane's answer, waited for while it is not answered yet.
+export function laneOutcome<T>(lane: Lane<T>): Promise<Outcome<T>> {
+  return answered(() => lane.current());
 }

@@ -11,7 +11,7 @@ import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { buildRenderPayload, prFactOf } from "../src/daemon/render-payload";
+import { prFactOf } from "../src/daemon/render-payload";
 import { claudeConfigDir } from "../src/claude-settings";
 import type { ClientHints } from "../src/daemon/protocol";
 import type { RenderPayloadDeps } from "../src/daemon/render-payload";
@@ -32,6 +32,7 @@ import {
   fakeMetrics,
   fakeTmux,
   fakeUsage,
+  requestPayload,
 } from "./helpers/payload-owners";
 
 type LogEntry = { level: string; msg: string };
@@ -46,7 +47,7 @@ function depsWith(
     gitProvider: fakeGit(async () => gitOutcome),
     usageStore: fakeUsage({
       usage: async () => ABSENT,
-      today: async () => ABSENT,
+      today: () => ABSENT,
     }),
     contextProvider: fakeContext(async () => ABSENT),
     metricsProvider: fakeMetrics(async () => ABSENT),
@@ -100,7 +101,7 @@ describe("buildRenderPayload — git outcome lane", () => {
       logs,
     );
 
-    const payload = await buildRenderPayload(
+    const payload = await requestPayload(
       hookData("/no/such/transcript.jsonl"),
       instantOf(new Date()),
       deps,
@@ -119,7 +120,7 @@ describe("buildRenderPayload — git outcome lane", () => {
     const logs: LogEntry[] = [];
     const deps = depsWith(ABSENT, logs);
 
-    const payload = await buildRenderPayload(
+    const payload = await requestPayload(
       hookData("/no/such/transcript.jsonl"),
       instantOf(new Date()),
       deps,
@@ -149,7 +150,7 @@ describe("buildRenderPayload — git outcome lane", () => {
       logs,
     );
 
-    const payload = await buildRenderPayload(
+    const payload = await requestPayload(
       hookData("/no/such/transcript.jsonl"),
       instantOf(new Date()),
       deps,
@@ -196,7 +197,7 @@ describe("buildRenderPayload — git outcome lane", () => {
     );
     const storedAt = async (secondsLater: number) =>
       (
-        await buildRenderPayload(
+        await requestPayload(
           hookData("/no/such/transcript.jsonl"),
           instantOf(new Date((committedAt + secondsLater) * 1000)),
           deps,
@@ -217,13 +218,13 @@ describe("buildRenderPayload — today lane", () => {
   test("asks the usage store for the day of the render's instant", async () => {
     const at = instantOf(new Date(Date.UTC(2031, 0, 2, 12, 0, 0)));
     const asked: unknown[] = [];
-    await buildRenderPayload(
+    await requestPayload(
       hookData("/no/such/transcript.jsonl"),
       at,
       depsWith(ABSENT, [], {
         usageStore: fakeUsage({
           usage: async () => ABSENT,
-          today: async (_hook: unknown, _dir: unknown, when: unknown) => {
+          today: (_hook: unknown, _dir: unknown, when: unknown) => {
             asked.push(when);
             return ABSENT;
           },
@@ -250,7 +251,7 @@ describe("buildRenderPayload — cache outcome lane", () => {
 
     const logs: LogEntry[] = [];
     const deps = depsWith(ABSENT, logs);
-    const payload = await buildRenderPayload(
+    const payload = await requestPayload(
       hookData(transcript),
       instantOf(new Date()),
       deps,
@@ -282,7 +283,7 @@ describe("buildRenderPayload — cache outcome lane", () => {
 
     const logs: LogEntry[] = [];
     const deps = depsWith(ABSENT, logs);
-    const payload = await buildRenderPayload(
+    const payload = await requestPayload(
       hookData(transcript),
       instantOf(new Date()),
       deps,
@@ -320,7 +321,7 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
       metricsProvider: fakeMetrics(async () => failed("metrics (s): boom")),
     });
 
-    const payload = await buildRenderPayload(
+    const payload = await requestPayload(
       hookData("/no/such/transcript.jsonl"),
       instantOf(new Date()),
       deps,
@@ -360,11 +361,11 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
               tokenBreakdown: null,
             },
           }),
-        today: async () => ABSENT,
+        today: () => ABSENT,
       }),
     });
 
-    const payload = await buildRenderPayload(
+    const payload = await requestPayload(
       hookData("/no/such/transcript.jsonl"),
       instantOf(new Date()),
       deps,
@@ -390,7 +391,7 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
       tmuxService: fakeTmux(async () => failed("no server")),
     });
 
-    const payload = await buildRenderPayload(
+    const payload = await requestPayload(
       hookData("/no/such/transcript.jsonl"),
       instantOf(new Date()),
       deps,
@@ -430,7 +431,7 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
       }),
     });
 
-    const payload = await buildRenderPayload(
+    const payload = await requestPayload(
       hookData("/no/such/transcript.jsonl"),
       instantOf(new Date()),
       deps,
@@ -455,7 +456,7 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
       }),
     });
 
-    await buildRenderPayload(
+    await requestPayload(
       hookData("/no/such/transcript.jsonl"),
       instantOf(new Date()),
       deps,
@@ -491,7 +492,7 @@ describe("buildRenderPayload — effective globals projection", () => {
       experimentalPane: true,
     };
     const logs: LogEntry[] = [];
-    const payload = await buildRenderPayload(
+    const payload = await requestPayload(
       hookData("/no/such/transcript.jsonl"),
       instantOf(new Date()),
       depsWith(ABSENT, logs),
@@ -558,7 +559,7 @@ describe("buildRenderPayload — git PR projection", () => {
       logs,
     );
 
-    const payload = await buildRenderPayload(
+    const payload = await requestPayload(
       hookData("/no/such/transcript.jsonl"),
       instantOf(new Date()),
       deps,
@@ -605,7 +606,7 @@ describe("buildRenderPayload — git PR projection", () => {
         logs,
       );
 
-      const payload = await buildRenderPayload(
+      const payload = await requestPayload(
         hookData("/no/such/transcript.jsonl"),
         instantOf(new Date()),
         deps,
@@ -643,7 +644,7 @@ describe("buildRenderPayload — git PR projection", () => {
       ),
     });
 
-    await buildRenderPayload(
+    await requestPayload(
       hookData("/no/such/transcript.jsonl"),
       instantOf(new Date()),
       deps,
@@ -670,7 +671,7 @@ describe("buildRenderPayload — git PR projection", () => {
       logs,
     );
 
-    const payload = await buildRenderPayload(
+    const payload = await requestPayload(
       hookData("/no/such/transcript.jsonl"),
       instantOf(new Date()),
       deps,
@@ -700,7 +701,7 @@ describe("buildRenderPayload — git PR projection", () => {
       logs,
     );
 
-    const payload = await buildRenderPayload(
+    const payload = await requestPayload(
       hookData("/no/such/transcript.jsonl"),
       instantOf(new Date()),
       deps,
@@ -737,7 +738,7 @@ describe("buildRenderPayload — autocompact lane", () => {
         return read;
       }),
     });
-    const payload = await buildRenderPayload(
+    const payload = await requestPayload(
       hookData("/no/such/transcript.jsonl"),
       instantOf(new Date()),
       deps,
@@ -777,7 +778,7 @@ describe("buildRenderPayload — autocompact lane", () => {
         ok({ totalTokens: 1, maxTokens: 200_000, contextLeftPercentage: 99 }),
       ),
     });
-    const payload = await buildRenderPayload(
+    const payload = await requestPayload(
       hookData("/no/such/transcript.jsonl"),
       instantOf(new Date()),
       deps,
@@ -804,7 +805,7 @@ describe("buildRenderPayload — autocompact lane", () => {
         throw new Error("stub bug");
       }),
     });
-    const payload = await buildRenderPayload(
+    const payload = await requestPayload(
       hookData("/no/such/transcript.jsonl"),
       instantOf(new Date()),
       deps,
@@ -850,13 +851,13 @@ describe("buildRenderPayload — the lanes that read a session's Claude Code", (
       }),
       usageStore: fakeUsage({
         usage: async () => ABSENT,
-        today: async (_hook: unknown, claudeConfigDir: unknown) => {
+        today: (_hook: unknown, claudeConfigDir: unknown) => {
           seeded.push(claudeConfigDir);
           return ABSENT;
         },
       }),
     });
-    await buildRenderPayload(
+    await requestPayload(
       hookData("/no/such/transcript.jsonl"),
       instantOf(new Date()),
       deps,
@@ -910,7 +911,7 @@ describe("buildRenderPayload — the lanes that read a session's Claude Code", (
 // configuration directory from the client's hint.
 describe("buildRenderPayload — config file and resume command", () => {
   const build = (configPath: string | null, hints: typeof NO_HINTS) =>
-    buildRenderPayload(
+    requestPayload(
       hookData("/no/such/transcript.jsonl"),
       instantOf(new Date()),
       depsWith(ABSENT, []),
@@ -942,7 +943,7 @@ describe("buildRenderPayload — config file and resume command", () => {
 
   test("a hook with no added_dirs resumes with none rather than failing", async () => {
     const { added_dirs: _, ...workspace } = hookData("/x").workspace;
-    const payload = await buildRenderPayload(
+    const payload = await requestPayload(
       { ...hookData("/no/such/transcript.jsonl"), workspace },
       instantOf(new Date()),
       depsWith(ABSENT, []),

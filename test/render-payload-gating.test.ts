@@ -6,7 +6,6 @@
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
 import {
-  buildRenderPayload,
   buildNeededPrefixes,
 } from "../src/daemon/render-payload";
 import type { ClientHints } from "../src/daemon/protocol";
@@ -29,6 +28,7 @@ import {
   fakeMetrics,
   fakeTmux,
   fakeUsage,
+  requestPayload,
 } from "./helpers/payload-owners";
 
 // One vertical container holding one horizontal container of segment refs — the
@@ -74,7 +74,7 @@ function buildMockDeps(): { deps: RenderPayloadDeps; counts: CallCounts } {
         counts.usage++;
         return ABSENT;
       },
-      today: async () => {
+      today: () => {
         counts.today++;
         return ABSENT;
       },
@@ -198,7 +198,7 @@ const CONFIG_WITH_METRICS: DslConfig = {
 describe("buildRenderPayload — layout-driven provider gating", () => {
   test("providers whose payload prefix is not reachable from layout do not fire", async () => {
     const { deps, counts } = buildMockDeps();
-    await buildRenderPayload(
+    await requestPayload(
       HOOK_DATA,
       instantOf(new Date()),
       deps,
@@ -221,7 +221,7 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
 
   test("adding a segment to layout brings its provider online", async () => {
     const { deps, counts } = buildMockDeps();
-    await buildRenderPayload(
+    await requestPayload(
       HOOK_DATA,
       instantOf(new Date()),
       deps,

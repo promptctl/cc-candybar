@@ -34,6 +34,7 @@ import { SessionUsageStore } from "../src/daemon/cache/session-usage-store";
 import type { ClaudeHookData } from "../src/utils/claude";
 import { Holds } from "../src/utils/holds";
 import { instantOf } from "../src/utils/instant";
+import { todayInfo, todayNow } from "./helpers/today";
 
 let seq = 0;
 // One newline-terminated usage line. Unique tags keep every entry distinct.
@@ -494,7 +495,7 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
       const store = new SessionUsageStore({ sweepIntervalMs: 0 });
       try {
         const usage = await store.getUsageInfo("P", hook("P", t));
-        const today = await store.getTodayInfo(
+        const today = await todayInfo(store, 
           new Holds(),
           hook("P", t),
           cfgRoot,

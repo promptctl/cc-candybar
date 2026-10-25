@@ -11,7 +11,6 @@
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
 import {
-  buildRenderPayload,
   projectCostPerHour,
   type RenderPayloadDeps,
 } from "../src/daemon/render-payload";
@@ -40,6 +39,7 @@ import {
   fakeMetrics,
   fakeTmux,
   fakeUsage,
+  requestPayload,
 } from "./helpers/payload-owners";
 
 const FIVE_HOURS_MIN = 5 * 60;
@@ -93,7 +93,7 @@ function depsWith(
     gitProvider: fakeGit(async () => ABSENT),
     usageStore: fakeUsage({
       usage: async () => ok({ session: { cost: 6, tokens: 1000 } }),
-      today: async () => ABSENT,
+      today: () => ABSENT,
     }),
     contextProvider: fakeContext(async () => ABSENT),
     metricsProvider: fakeMetrics(async () =>
@@ -150,7 +150,7 @@ const EFFECTIVE_GLOBALS: EffectiveGlobals = globalsFor(DEFAULT_DSL_CONFIG);
 
 describe("buildRenderPayload — burn projection lane", () => {
   test("projectable: the burn rate and both windows' instants land in the payload", async () => {
-    const payload = await buildRenderPayload(
+    const payload = await requestPayload(
       hookWithWindows(),
       instantOf(new Date(NOW_MS)),
       depsWith(),
@@ -174,7 +174,7 @@ describe("buildRenderPayload — burn projection lane", () => {
   });
 
   test("gating: burn omitted from the closure ⇒ no burn key (lanes not pulled)", async () => {
-    const payload = await buildRenderPayload(
+    const payload = await requestPayload(
       hookWithWindows(),
       instantOf(new Date(NOW_MS)),
       depsWith(),

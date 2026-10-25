@@ -22,15 +22,19 @@ import {
 } from "../src/daemon/render-payload";
 import { GitService, type GitInfo, type PullRequest } from "../src/segments/git";
 import { Holds } from "../src/utils/holds";
-import { ok, type Outcome } from "../src/utils/outcome";
+import { ABSENT, failed, ok, type Outcome } from "../src/utils/outcome";
+import { settledLane, type Lane } from "../src/utils/reading";
+import { viewFacts } from "./helpers/view-facts";
 
 const REPO = "/repo";
 
 // The one repo every directory resolves to, its PR looked up by count.
 class OneRepo extends GitService {
   prLookups = 0;
+  resolutions = 0;
 
-  override async resolveEffectiveGitDir(): Promise<Outcome<string>> {
+  override resolveEffectiveGitDir(): Outcome<string> {
+    this.resolutions++;
     return ok(REPO);
   }
 
@@ -97,9 +101,9 @@ test("a preset click that newly places the PR starts its lookup with no draw; sw
   // owners that hold nothing.
   const owners = {
     gitProvider: git,
-    tmuxService: { sessionName: () => undefined },
-    mementoProvider: { ceiling: () => undefined },
-    usageStore: { holdToday: () => undefined },
+    tmuxService: { declare: () => settledLane(ABSENT) },
+    mementoProvider: { declare: () => settledLane(ABSENT) },
+    usageStore: { declareToday: () => settledLane(ABSENT) },
   } as unknown as KeyedOwners;
   const cache = new RenderCache(
     {
@@ -124,20 +128,18 @@ test("a preset click that newly places the PR starts its lookup with no draw; sw
     cwd: dir,
     hints: parseClientHints({}),
   };
+  // The view opens declared at the session's request: its repo is held in
+  // the opening turn (brandon-unfiled-3248.8ro6, 4a/4b).
   const view = (() => {
-    using hold = cache.holdSession(dir, dir, undefined, "s1");
+    using hold = cache.holdSession(dir, dir, undefined, "s1", facts);
     return hold.view;
   })();
-  // The session's request names the repo; its declaration resolves it, and
-  // the next declares it at the repo it resolved to.
-  view.requested(facts);
-  await jest.advanceTimersByTimeAsync(0);
-  view.requested({ ...facts });
-  await jest.advanceTimersByTimeAsync(0);
   expect(git.getStats().held).toBe(1);
+  await jest.advanceTimersByTimeAsync(0);
+  // The next request declares again, and finds the repo's value stored.
+  view.requested({ ...facts });
+  expect(git.getStats()).toMatchObject({ held: 1, hits: 1, misses: 1 });
   expect(inner.prLookups).toBe(0);
-  // A declaration is no read: the cache's hit rate counts the draws alone.
-  expect(git.getStats()).toMatchObject({ hits: 0, misses: 0 });
 
   // The click alone: no request, no frame.
   sessionState.set("s1", "preset", "pr");
@@ -151,7 +153,7 @@ test("a preset click that newly places the PR starts its lookup with no draw; sw
   expect(git.getStats().held).toBe(1);
   for (let minute = 0; minute < (PR_PERIOD.okMs * 3) / 60_000; minute++) {
     await jest.advanceTimersByTimeAsync(60_000);
-    using drawn = cache.holdSession(dir, dir, undefined, "s1");
+    using drawn = cache.holdSession(dir, dir, undefined, "s1", facts);
     expect(drawn.view).toBe(view);
   }
   expect(inner.prLookups).toBe(1);
@@ -162,20 +164,22 @@ test("a lane whose declaration throws is reported, takes no hold, and stops no o
   const holds = new Holds();
   const taken: string[] = [];
   const released: string[] = [];
-  const take = (key: string) =>
+  const take = (key: string): Lane<never> => {
     holds.take(key, () => {
       taken.push(key);
       return () => released.push(key);
     });
+    return settledLane(ABSENT);
+  };
   const owners = {
     gitProvider: {
       declare: () => {
         throw new Error("resolver bug");
       },
     },
-    tmuxService: { sessionName: () => take("tmux") },
-    mementoProvider: { ceiling: () => take("memento") },
-    usageStore: { holdToday: () => take("today") },
+    tmuxService: { declare: () => take("tmux") },
+    mementoProvider: { declare: () => take("memento") },
+    usageStore: { declareToday: () => take("today") },
   } as unknown as KeyedOwners;
   const facts: ViewFacts = {
     hookData: {
@@ -191,17 +195,97 @@ test("a lane whose declaration throws is reported, takes no hold, and stops no o
   };
   // The git hold an earlier declaration took goes with the one that threw.
   holds.declare(() => take("git"));
-  let faults: readonly string[] = [];
-  const declared = holds.declare(() => {
-    faults = declareLanes(
+  const declared = holds.declare(() =>
+    declareLanes(
       owners,
       holds,
       facts,
       new Set(["git.branch", "tmux.session", "memento.ceiling", "today.cost"]),
-    );
-  });
-  expect(faults).toEqual([expect.stringMatching(/^git: .*resolver bug/)]);
+    ),
+  );
+  expect(declared.result.faults).toEqual([
+    expect.stringMatching(/^git: .*resolver bug/),
+  ]);
+  // The lane that threw answers its failure; the others answer their own.
+  expect(declared.result.lanes.git.current()).toEqual(
+    failed("git: Error: resolver bug"),
+  );
+  expect(declared.result.lanes.tmux.current()).toEqual(ABSENT);
   expect(taken).toEqual(["git", "tmux", "memento", "today"]);
   expect(released).toEqual(["git"]);
-  expect(declared).toEqual({ acquired: 3, released: 1 });
+  expect(declared).toMatchObject({ acquired: 3, released: 1 });
+});
+
+// One directory showing its branch, read through a cache whose git owner is
+// real and whose other keyed owners hold nothing.
+function gitCache() {
+  fs.writeFileSync(
+    path.join(dir, ".cc-candybar.json5"),
+    JSON.stringify({ root: { h: ["gitaculous"] } }),
+  );
+  const inner = new OneRepo();
+  const git = new GitDataProvider({ inner, logger: () => {} });
+  cleanups.push(() => git.close());
+  const watchers = new WatcherRegistry({ logger: () => {} });
+  cleanups.push(() => watchers.closeAll());
+  const owners = {
+    gitProvider: git,
+    tmuxService: { declare: () => settledLane(ABSENT) },
+    mementoProvider: { declare: () => settledLane(ABSENT) },
+    usageStore: { declareToday: () => settledLane(ABSENT) },
+  } as unknown as KeyedOwners;
+  const cache = new RenderCache(
+    {
+      sessionState: new SessionState(),
+      watchers,
+      declare: (holds, facts, closure) =>
+        declareLanes(owners, holds, facts, closure),
+    },
+    { budgetBytes: () => 1024 * 1024 * 1024 },
+  );
+  cleanups.push(() => cache.close());
+  const view = (() => {
+    using hold = cache.holdSession(dir, dir, undefined, "s1", viewFacts(dir));
+    return hold.view;
+  })();
+  return { inner, git, cache, view };
+}
+
+test("a reload under a view no request reaches opens its successor declared: git draws as git, held once", async () => {
+  const { git, cache, view } = gitCache();
+  await jest.advanceTimersByTimeAsync(0);
+  expect(git.getStats().held).toBe(1);
+
+  // A config edit while a feed draws the session and Claude Code sends
+  // nothing: no request will declare the new view.
+  cache.reload(dir, dir, undefined);
+  const successor = cache.latestView()!;
+  expect(successor).not.toBe(view);
+  expect(successor.lanes().git.current()).toMatchObject({
+    kind: "ok",
+    value: { branch: "main" },
+  });
+  // The successor took the repo before the old view let it go.
+  expect(git.getStats().held).toBe(1);
+});
+
+test("frames on an open view neither resolve a directory nor take a hold", async () => {
+  const { inner, view } = gitCache();
+  await jest.advanceTimersByTimeAsync(0);
+  const resolutions = inner.resolutions;
+  const take = jest.spyOn(Holds.prototype, "take");
+  try {
+    // Each frame reads the lanes its view declared, as `readLanes` does,
+    // across more than the resolution window.
+    for (let frame = 0; frame < 120; frame++) {
+      expect(view.lanes().git.current()).toMatchObject({ kind: "ok" });
+      await jest.advanceTimersByTimeAsync(1000 / 30);
+    }
+    jest.advanceTimersByTime(60_000);
+    expect(view.lanes().git.current()).toMatchObject({ kind: "ok" });
+    expect(inner.resolutions).toBe(resolutions);
+    expect(take).not.toHaveBeenCalled();
+  } finally {
+    take.mockRestore();
+  }
 });

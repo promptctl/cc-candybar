@@ -19,7 +19,6 @@ import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
 import os from "node:os";
 
 import {
-  buildRenderPayload,
   shortHostname,
 } from "../src/daemon/render-payload";
 import type { RenderPayloadDeps } from "../src/daemon/render-payload";
@@ -46,6 +45,7 @@ import {
   fakeMetrics,
   fakeTmux,
   fakeUsage,
+  requestPayload,
 } from "./helpers/payload-owners";
 
 const EFFECTIVE_GLOBALS: EffectiveGlobals = globalsFor(DEFAULT_DSL_CONFIG);
@@ -55,7 +55,7 @@ const DEPS = {
   gitProvider: fakeGit(async () => ABSENT),
   usageStore: fakeUsage({
     usage: async () => ABSENT,
-    today: async () => ABSENT,
+    today: () => ABSENT,
   }),
   contextProvider: fakeContext(async () => ABSENT),
   metricsProvider: fakeMetrics(async () => ABSENT),
@@ -76,7 +76,7 @@ const HOOK = {
 } as never;
 
 const payloadWith = (hints: ClientHints) =>
-  buildRenderPayload(
+  requestPayload(
     HOOK,
     instantOf(new Date()),
     DEPS,

@@ -40,6 +40,7 @@ import { projectMemento } from "../src/daemon/render-payload";
 import { ABSENT, failed, ok, type Outcome } from "../src/utils/outcome";
 import { linkUrls, stripAnsi } from "./helpers/ansi";
 import { instantOf } from "../src/utils/instant";
+import { laneOutcome } from "../src/utils/reading";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const OPTS = {
@@ -406,20 +407,20 @@ describe("MementoProvider", () => {
   test("a held reading is asked again on its period; a render never waits on it", async () => {
     const f = fakeEdge([A, B]);
     const p = providerOf(f.edge);
-    expect(await p.getCeiling(holds, SCOPE)).toEqual(A);
+    expect(await laneOutcome(p.declare(holds, SCOPE))).toEqual(A);
     await jest.advanceTimersByTimeAsync(READING_PERIOD_MS - 1);
-    expect(await p.getCeiling(holds, SCOPE)).toEqual(A);
+    expect(await laneOutcome(p.declare(holds, SCOPE))).toEqual(A);
     expect(f.reads).toHaveLength(1);
     await jest.advanceTimersByTimeAsync(1);
     expect(f.reads).toHaveLength(2);
-    expect(await p.getCeiling(holds, SCOPE)).toEqual(B);
+    expect(await laneOutcome(p.declare(holds, SCOPE))).toEqual(B);
     expect(f.reads).toHaveLength(2);
   });
 
   test("a reading nobody holds is not asked again", async () => {
     const f = fakeEdge([A, B]);
     const p = providerOf(f.edge);
-    await p.getCeiling(holds, SCOPE);
+    await laneOutcome(p.declare(holds, SCOPE));
     holds.declare(() => {});
     await jest.advanceTimersByTimeAsync(READING_PERIOD_MS * 3);
     expect(f.reads).toHaveLength(1);
@@ -428,12 +429,12 @@ describe("MementoProvider", () => {
   test("a move supersedes the reading: the next render reads what it left", async () => {
     const f = fakeEdge([A, B]);
     const p = providerOf(f.edge);
-    await p.getCeiling(holds, SCOPE);
+    await laneOutcome(p.declare(holds, SCOPE));
     p.move(SCOPE, { kind: "set", to: "+100_000" });
     expect(f.moves).toEqual([{ kind: "set", to: "+100_000" }]);
     // The click already asked memento; the render waits on that read.
     expect(f.reads).toHaveLength(2);
-    expect(await p.getCeiling(holds, SCOPE)).toEqual(B);
+    expect(await laneOutcome(p.declare(holds, SCOPE))).toEqual(B);
     expect(f.reads).toHaveLength(2);
     expect(p.getStats().refreshes).toEqual({
       first: 1,
@@ -446,13 +447,13 @@ describe("MementoProvider", () => {
     const f = fakeEdge([A, B]);
     const p = providerOf(f.edge);
     f.holdReads();
-    const waiting = p.getCeiling(holds, SCOPE);
+    const waiting = laneOutcome(p.declare(holds, SCOPE));
     p.move(SCOPE, { kind: "clear" });
     // The read from before the move lands after the move's own read.
     expect(await waiting).toEqual(B);
     f.release();
     await jest.advanceTimersByTimeAsync(0);
-    expect(await p.getCeiling(holds, SCOPE)).toEqual(B);
+    expect(await laneOutcome(p.declare(holds, SCOPE))).toEqual(B);
     expect(f.reads).toHaveLength(2);
   });
 
@@ -462,14 +463,14 @@ describe("MementoProvider", () => {
   test("a draw after a move reads the ceiling as not answered yet until memento answers", async () => {
     const f = fakeEdge([A, B]);
     const p = providerOf(f.edge);
-    await p.getCeiling(holds, SCOPE);
-    expect(p.ceiling(holds, SCOPE)).toEqual(A);
+    await laneOutcome(p.declare(holds, SCOPE));
+    expect(p.declare(holds, SCOPE).current()).toEqual(A);
     f.holdReads();
     p.move(SCOPE, { kind: "clear" });
-    expect(p.ceiling(holds, SCOPE).kind).toBe("pending");
+    expect(p.declare(holds, SCOPE).current().kind).toBe("pending");
     f.release();
     await jest.advanceTimersByTimeAsync(0);
-    expect(p.ceiling(holds, SCOPE)).toEqual(B);
+    expect(p.declare(holds, SCOPE).current()).toEqual(B);
     expect(f.reads).toHaveLength(2);
   });
 
@@ -488,10 +489,10 @@ describe("MementoProvider", () => {
     };
     const p = providerOf(edge);
     const zai = { ...SCOPE, claudeConfigDir: "/home/u/.claude.zai", env: {} };
-    expect(await p.getCeiling(holds, SCOPE)).toEqual(A);
-    expect(await p.getCeiling(holds, zai)).toEqual(B);
+    expect(await laneOutcome(p.declare(holds, SCOPE))).toEqual(A);
+    expect(await laneOutcome(p.declare(holds, zai))).toEqual(B);
     expect(located).toEqual([SCOPE, zai]);
-    expect(await p.getCeiling(holds, SCOPE)).toEqual(A);
+    expect(await laneOutcome(p.declare(holds, SCOPE))).toEqual(A);
     expect(f.reads).toEqual([SCOPE, zai]);
   });
 
@@ -525,7 +526,7 @@ describe("MementoProvider", () => {
       },
     };
     const p = providerOf(edge);
-    expect(await p.getCeiling(holds, SCOPE)).toEqual(ABSENT);
+    expect(await laneOutcome(p.declare(holds, SCOPE))).toEqual(ABSENT);
     expect(() => p.move(SCOPE, { kind: "clear" })).toThrow(/not installed/);
   });
 });

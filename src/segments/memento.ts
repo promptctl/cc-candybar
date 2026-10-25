@@ -9,8 +9,7 @@ import type { Holds } from "../utils/holds.js";
 import { KeyedSource, type KeyedSourceStats } from "../utils/keyed-source.js";
 import { quietLogger, type DaemonLogger } from "../utils/logger.js";
 import { valueOf } from "../utils/logfmt.js";
-import type { Outcome } from "../utils/outcome.js";
-import type { Current } from "../utils/reading.js";
+import type { Lane } from "../utils/reading.js";
 
 // The period a held session's reading is asked again on. A move from the bar
 // supersedes the reading at once (`move` below); this bounds only how late the
@@ -68,20 +67,10 @@ export class MementoProvider {
   // absent — memento is not installed (or not enabled) for this project;
   // failed — memento refused (an unreadable layer: the very state that
   // switches its gate off). A python spawn does not fit in a render's budget,
-  // so a render takes the stored reading and waits on one only where there
-  // is none to take: a scope never read (a new session, or a new directory),
-  // or one a move superseded.
-  getCeiling(
-    holds: Holds,
-    scope: CeilingScope,
-  ): Promise<Outcome<CeilingReading>> {
-    return this.readings.read(holds, scope);
-  }
-
-  // The stored reading as it stands, for a draw: never awaited, so a frame
-  // after a move draws the ceiling as not answered yet until memento answers.
-  ceiling(holds: Holds, scope: CeilingScope): Current<CeilingReading> {
-    return this.readings.current(holds, scope);
+  // so a draw takes the stored reading; after a move it reads the ceiling as
+  // not answered yet until memento answers.
+  declare(holds: Holds, scope: CeilingScope): Lane<CeilingReading> {
+    return this.readings.declare(holds, scope);
   }
 
   // [LAW:no-silent-failure] Memento absent is a refusal here, not a no-op: a

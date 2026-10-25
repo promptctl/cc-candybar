@@ -1619,7 +1619,7 @@ function serializeSegmentCells(
 
 // [LAW:single-enforcer] The payload-builder dependency bundle. One value
 // passed through every render — the data the daemon brings to each tick.
-const payloadDeps: Omit<RenderPayloadDeps, "navigation" | "holds"> = {
+const payloadDeps: Omit<RenderPayloadDeps, "navigation" | "lanes"> = {
   // [LAW:single-enforcer] The providers carry `dlog` as `log`:
   // buildRenderPayload is the one log site for the outcome-carrying provider
   // lanes read per render (cache, …); git logs the refreshes it makes.
@@ -1988,13 +1988,10 @@ function setUpRender(
     origin.cwd,
     origin.configFile ?? undefined,
     sessionId,
+    req,
   );
   try {
     const { entry, state, view } = hold;
-    // The request this render draws by names the keys the view declares: a
-    // request's own declares again before its refresh, and a frame's — the
-    // session's latest, already declared — changes nothing.
-    view.requested(req);
     const termCols = hints.termCols;
     const width = applyClaudeCodeReserve(termCols ?? DEFAULT_TERMINAL_WIDTH);
     const rowCap = diagnosticRowCap(hints.termRows);
@@ -2038,8 +2035,9 @@ function setUpRender(
       at,
       deps: {
         ...payloadDeps,
-        // The session's view is the home this render reads for.
-        holds: view.holds,
+        // The lanes the session's view declared: what this render reads of
+        // the daemon's shared entries.
+        lanes: view.lanes,
         // Measured against the gate of the config this render draws with.
         navigation: (sessionId: string) =>
           navigationHistory.depth(
