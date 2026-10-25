@@ -176,6 +176,33 @@ test("a session's render from another directory replaces its view", async () => 
   expect(b.view.state).toBe(first.view.state);
 });
 
+test("a move to another directory declares the new view before the old releases what it held", () => {
+  configure(dir);
+  const other = path.join(dir, "sub");
+  fs.mkdirSync(other);
+  configure(other);
+  // One owner entry both views hold, as two directories of one repo do.
+  let holders = 0;
+  let dropsToZero = 0;
+  const { cache } = makeCache({
+    declare: (holds, facts, closure) => {
+      holds.take("repo", () => {
+        holders++;
+        return () => {
+          holders--;
+          if (holders === 0) dropsToZero++;
+        };
+      });
+      return DECLARES_NOTHING(holds, facts, closure);
+    },
+  });
+  cache.holdSession(dir, dir, undefined, "s-a", viewFacts(dir, "s-a"))[Symbol.dispose]();
+  cache.holdSession(other, other, undefined, "s-a", viewFacts(other, "s-a"))[Symbol.dispose]();
+  expect(cache.stats.views).toBe(1);
+  expect(holders).toBe(1);
+  expect(dropsToZero).toBe(0);
+});
+
 test("a reload opens each of the entry's views anew on the new state, and retires the old", async () => {
   configure(dir);
   const { cache, lines } = makeCache();

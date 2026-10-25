@@ -1,7 +1,7 @@
 import path from "node:path";
 import { nearestWatchTarget } from "../../utils/watch-target.js";
 import type { RichText } from "@promptctl/rich-js";
-import { observable, reaction, runInAction } from "mobx";
+import { reaction } from "mobx";
 import {
   neededPrefixesByPreset,
   settledLanes,
@@ -802,15 +802,14 @@ export function openView(
   // What fails to declare here failed in the load's probe (buildRenderState),
   // which reported it: a declaration reads only the config.
   declareDslVariables(state.config, registry, cwd, VIEW_SCOPE);
-  const latest = observable.box<ViewFacts>(facts, { deep: false });
   const presetNow = () =>
     presetOf(state.config, (key) => sessionState.get(sessionId, key));
   // [LAW:no-silent-failure] The closure is computed here, beside the
   // declaration, where a throw is logged — a reaction's tracked expression
   // that throws reaches only the console MobX prints to, which nobody reads in
   // a detached daemon. A declaration that throws keeps the holds it had, and
-  // its lanes answer its failure, so the bar names the cause.
-  const declared = (facts: ViewFacts, preset: string): DeclaredLanes => {
+  // its lanes answer its failure, naming the cause.
+  const lanesFor = (facts: ViewFacts, preset: string): DeclaredLanes => {
     try {
       const reads = state.neededInputPaths(preset);
       const {
@@ -847,21 +846,22 @@ export function openView(
   // reaction inside a batch (a reaction's effect, an action) until the batch
   // ends, and a frame drawn in that batch would read a view declared for a
   // request it is not drawn for.
-  let last: readonly [ViewFacts, string] = [facts, presetNow()];
-  const lanes = observable.box<DeclaredLanes>(declared(...last), {
-    deep: false,
-  });
+  //
+  // [LAW:one-source-of-truth] The view's one record of what it is declared
+  // for, and the lanes that declaration handed it.
+  const declaration = (facts: ViewFacts, preset: string) =>
+    ({ facts, preset, lanes: lanesFor(facts, preset) }) as const;
+  let declared = declaration(facts, presetNow());
   // [LAW:single-enforcer] A (request, preset) pair is declared once.
-  const redeclare = (next: readonly [ViewFacts, string]): void => {
-    if (next[0] === last[0] && next[1] === last[1]) return;
-    last = next;
-    runInAction(() => lanes.set(declared(...next)));
+  const redeclare = (facts: ViewFacts, preset: string): void => {
+    if (facts === declared.facts && preset === declared.preset) return;
+    declared = declaration(facts, preset);
   };
   // The preset moves with the session's picks, which the reaction tracks: its
   // first run, whenever it comes, declares only a preset moved since.
   const stop = reaction(
     presetNow,
-    (preset) => redeclare([latest.get(), preset]),
+    (preset) => redeclare(declared.facts, preset),
     { fireImmediately: true },
   );
   return {
@@ -870,13 +870,9 @@ export function openView(
     store: registry.variableStore,
     registry,
     holds,
-    requested: (next) =>
-      runInAction(() => {
-        latest.set(next);
-        redeclare([next, presetNow()]);
-      }),
-    facts: () => latest.get(),
-    lanes: () => lanes.get(),
+    requested: (next) => redeclare(next, presetNow()),
+    facts: () => declared.facts,
+    lanes: () => declared.lanes,
     lastRenderCellsBySegment: new Map<string, readonly RichText[]>(),
     dispose: () => {
       stop();
@@ -1103,8 +1099,13 @@ export class RenderCache {
       current.requested(facts);
       return current;
     }
-    if (current !== undefined) this.retireView(current, "moved");
+    // [LAW:no-ambient-temporal-coupling] The new view is declared before the
+    // old one is retired, as a reload's successor is, so a move between two
+    // directories of one repo keeps the repo held across it. It enters at the
+    // end, the most recently used, as a kept view moves there.
+    this.views.delete(sessionId);
     const view = this.opened(sessionId, entry, state, facts, false);
+    if (current !== undefined) this.retireView(current, "moved");
     // A view is charged to the budget like an entry.
     this.fit(entry);
     return view;
