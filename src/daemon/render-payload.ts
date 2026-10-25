@@ -1,8 +1,8 @@
 // [LAW:single-enforcer] The single place where the daemon assembles every
 // data field the DSL templates can read. The output of this function — the
-// `RenderPayload` — is fed verbatim to `registry.applyInput(...)` (inside
-// renderDsl), and every `kind: "input"` variable in the default DSL
-// config resolves its `path` against exactly this shape.
+// view's payload (`payloadOf`) — is what a session view's inputs derive from
+// (`bindView`, src/dsl/parts.ts), and every `kind: "input"` variable in the
+// default DSL config resolves its `path` against exactly this shape.
 //
 // [LAW:dataflow-not-control-flow] Variability lives in the values flowing
 // through here, not in hand-coded branches. The set of providers actually
@@ -23,7 +23,11 @@ import { inspect } from "node:util";
 import type { ClaudeHookData } from "../utils/claude.js";
 import type { ClientHints } from "./protocol.js";
 import type { DslConfig, VariableDecl } from "../config/dsl-types.js";
-import type { BuildLineOptions } from "../render/strip.js";
+import {
+  DEFAULT_TERMINAL_WIDTH,
+  type BuildLineOptions,
+} from "../render/strip.js";
+import { applyClaudeCodeReserve } from "../utils/terminal-width.js";
 import type { SettingName } from "../config/setting-projections.js";
 import type { EffectiveGlobals } from "../config/effective-globals.js";
 import type { LaneFeeds } from "../config/lanes.js";
@@ -95,6 +99,7 @@ import {
   type ValuedGlobals,
 } from "../config/globals-fields.js";
 import { dateOf, type Instant } from "../utils/instant.js";
+import type { RefreshFaults, RefreshLane } from "./refresh-faults.js";
 
 // The resolved globals as the options renderDsl's joiner and cells read (its
 // selection is the resolution itself — RenderSelection is a Pick of it).
@@ -256,6 +261,9 @@ export interface RenderPayloadOf<P> extends ClaudeHookData, ValuedInputs {
   // The shell command that resumes this session (src/claude-resume.ts) —
   // what the menu's `⎘ resume` copies.
   readonly resumeCommand: string;
+  // The width the bar is drawn to (`renderWidth`): the client's measure less
+  // Claude Code's reserve.
+  readonly term: { readonly cols: number };
 
   // Usage-family. Each provider returns null when it has no data (no
   // transcript yet, no rate-limit window active, etc.); we drop the field
@@ -263,7 +271,7 @@ export interface RenderPayloadOf<P> extends ClaudeHookData, ValuedInputs {
   // `default`. Individual fields inside each sub-object are ALSO optional —
   // "we have a metrics object but messageCount couldn't be computed" is
   // representable distinct from "metrics object zeroed because we had to
-  // satisfy a non-optional type." Absence flows through `applyInput`'s
+  // satisfy a non-optional type." Absence flows through an input's
   // fallback chain (which writes both the default value AND a last_error)
   // exactly like a missing top-level field.
   readonly session?: SessionPayload | P;
@@ -288,6 +296,16 @@ export interface RenderPayloadOf<P> extends ClaudeHookData, ValuedInputs {
 export type RenderPayload = RenderPayloadOf<never>;
 // What a frame draws: every value as it stands.
 export type DrawnPayload = RenderPayloadOf<Pending>;
+// [LAW:types-are-the-program] What a view keeps of it: everything but the
+// facts of the draw's own instant (DRAW_PROJECTIONS, which each draw hands
+// its binding), so no stored value moves with the clock.
+export type ViewPayload = Omit<DrawnPayload, "feeds" | "today">;
+// A view's payload, and what it projected as missing fields — a failed
+// lane — for the request that draws it to log.
+export interface ViewPayloadOf {
+  readonly payload: ViewPayload;
+  readonly failures: readonly string[];
+}
 
 // The control's facts (src/segments/autocompact.ts) — or the refusal that the
 // settings file could not be read, carried as text like memento's, so the
@@ -574,18 +592,13 @@ export interface RenderPayloadDeps {
   // Each session's prompt-cache expiry, read off its transcript's tail.
   readonly cacheExpiry: CacheExpiryProvider;
   // [LAW:single-enforcer] The log capability for the provider lanes whose
-  // owner does not log: buildRenderPayload is the ONE place their failures
-  // are logged. Git, tmux, memento and autocompact are not among them: each
+  // owner does not log: the request drawing a view's payload is the ONE
+  // place their failures are logged (its `failures`). Git, tmux, memento and autocompact are not among them: each
   // owner refreshes on its own triggers and logs each refresh that failed,
   // so a failure stored there is logged once, never once per render.
   readonly log: DaemonLogger;
-  // The session's undo/redo depth — SettingsHistory.depth in the daemon.
-  readonly history: (sessionId: string) => HistoryDepth;
-  // The session's back depth — NavigationHistory.depth in the daemon.
-  readonly navigation: (sessionId: string) => number;
-  // The session's lane feeds as they stood at an instant — FrameFeeds.feedsOf
-  // in the daemon.
-  readonly feeds: (sessionId: string, at: Instant) => LaneFeeds;
+  // Each session lane whose refresh threw, until one runs clean.
+  readonly faults: RefreshFaults;
   // The lanes the view's latest declaration handed it (`declareLanes`), read
   // at each read: a read takes nothing, so the view holds exactly what its
   // latest declaration took.
@@ -1050,11 +1063,6 @@ export type ConfigFileFacts = SettingCounts & {
 // facts and the closure its config reads.
 export interface PayloadInputs {
   readonly hookData: ClaudeHookData;
-  // [LAW:one-source-of-truth] The instant the render this payload feeds is
-  // drawn at — the one renderDsl publishes to the template engine, so the day
-  // `today` sums agrees with every clock read the draw makes. The payload
-  // stores no value relative to it (BlockPayload).
-  readonly at: Instant;
   readonly deps: RenderPayloadDeps;
   readonly cwd: string | undefined;
   // [LAW:single-enforcer] The cache pre-computes the closure once at
@@ -1066,14 +1074,17 @@ export interface PayloadInputs {
   readonly hints: ClientHints;
 }
 
-// What a draw reads besides the sources: every globals field a menu/stepper
-// can persist, resolved ONCE by the daemon (server.ts) and used for BOTH the
-// render AND these payload fields — so a trigger label can never disagree with
-// what was rendered — and the save cell's counts (src/daemon/setting-drafts.ts)
-// with the config file they count against.
+// What a view's payload reads of its session besides the sources: every
+// globals field a menu/stepper can persist, resolved ONCE per change of the
+// session's picks (src/daemon/session-source.ts) and read by BOTH the draw AND
+// these payload fields — so a trigger label can never disagree with what was
+// drawn — the save cell's counts (src/daemon/setting-drafts.ts) with the
+// config file they count against, and the depths of the session's histories.
 export interface DrawInputs {
   readonly effective: EffectiveGlobals;
   readonly configFacts: ConfigFileFacts;
+  readonly history: HistoryDepth;
+  readonly back: number;
 }
 
 // [LAW:dataflow-not-control-flow] Which lanes the closure reads: every lane is
@@ -1120,6 +1131,13 @@ function wantsOf(neededInputPaths: ReadonlySet<string>) {
   };
 }
 
+// [LAW:one-source-of-truth] The width a session's bar is drawn to: what its
+// client measured, else the default, less Claude Code's reserve — the one
+// value the payload's `term.cols` and the draw's options both carry.
+export function renderWidth(hints: ClientHints): number {
+  return applyClaudeCodeReserve(hints.termCols ?? DEFAULT_TERMINAL_WIDTH);
+}
+
 // The settings file of THIS session's Claude Code, from the client's
 // `claudeConfigDir` hint — never the daemon's own env, which answers for
 // whichever session spawned it. [LAW:single-enforcer]
@@ -1136,25 +1154,32 @@ function settingsPathOf(hints: ClientHints): string {
 //
 // [LAW:no-silent-failure] A refresh's contract is to answer, never to throw or
 // reject, so a throw — the owner's or the lane's own code around it — is a
-// bug, logged here where it is caught. The request that made the refresh
-// reads that lane as failed; the owner's stored value stands for the frames.
-export async function refreshPayload(inputs: PayloadInputs): Promise<Threw> {
-  const { hookData, at, deps, hints } = inputs;
+// bug, logged here where it is caught and stored as that lane's failure
+// (RefreshFaults) until a refresh of it runs clean, so the view's payload,
+// derived from what is stored, reads it failed rather than not answered.
+//
+// `at` is the request's arrival, the instant its speed sample is taken at.
+export async function refreshPayload(
+  inputs: PayloadInputs,
+  at: Instant,
+): Promise<void> {
+  const { hookData, deps, hints } = inputs;
   const want = wanted(inputs.neededInputPaths);
   const sessionId = hookData.session_id;
-  const threw: { -readonly [K in keyof Threw]: Threw[K] } = {};
   const lane = async (
-    name: keyof Threw,
+    name: RefreshLane,
     needed: boolean,
     run: () => Promise<unknown>,
   ): Promise<void> => {
     if (!needed) return;
+    let threw: string | null = null;
     try {
       await run();
     } catch (e) {
       deps.log("error", `${name} lane threw: ${inspect(e)}`);
-      threw[name] = failed(`${name}: ${String(e)}`);
+      threw = `${name}: ${String(e)}`;
     }
+    deps.faults.refreshed(sessionId, name, threw);
   };
   await Promise.all([
     lane("session", want.session, () =>
@@ -1191,34 +1216,15 @@ export async function refreshPayload(inputs: PayloadInputs): Promise<Threw> {
       deps.autoCompact.window(settingsPathOf(hints)),
     ),
   ]);
-  return threw;
 }
 
-// The lanes whose refresh threw, each its failure, by lane: the request that
-// made the refresh reads them so, never as values not answered.
-export type Threw = Readonly<
-  Partial<
-    Record<
-      | "session"
-      | "today"
-      | "context"
-      | "metrics"
-      | "activity"
-      | "cache"
-      | "speed"
-      | "autocompact",
-      Outcome<never>
-    >
-  >
->;
-
 // Each lane's value as its owner holds it now. The keyed lanes' (git, tmux,
-// memento, today) are `Current`: a value not answered yet carries the landing
-// a request waits on.
+// memento) are `Current`: a value not answered yet carries its landing.
+// `today` is no lane of the payload: the day it sums is the draw's
+// (`todayOf`).
 interface Lanes {
   readonly git: Current<GitInfo>;
   readonly usage: Reading<UsageInfo>;
-  readonly today: Current<TodayInfo>;
   readonly context: Reading<ContextInfo>;
   readonly metrics: Reading<MetricsInfo>;
   readonly activity: Reading<ActivityInfo>;
@@ -1345,23 +1351,26 @@ export function declareLanes(
   return { lanes, faults };
 }
 
-// [LAW:effects-at-boundaries] No I/O: every read takes what its owner stored,
-// or, for a lane whose refresh threw, that failure.
-function readLanes(inputs: PayloadInputs, threw: Threw = {}): Lanes {
-  const { hookData, at, deps } = inputs;
+// [LAW:effects-at-boundaries] No I/O, and no write: every read takes what its
+// owner stored, so the view's payload computed over it is recomputed in the
+// turn an owner stores a new value.
+function readLanes(inputs: PayloadInputs): Lanes {
+  const { hookData, deps } = inputs;
   const want = wanted(inputs.neededInputPaths);
   const sessionId = hookData.session_id;
   const lanes = deps.lanes();
   // [LAW:no-silent-failure] A read that throws is a bug in its owner: logged
   // here, by the read that met it — a frame's included, whose failures go
   // nowhere else — and that lane's failure, so it costs its own cells, never
-  // the bar.
+  // the bar. A lane whose refresh threw is that failure (RefreshFaults).
   const read = <T>(
-    lane: string,
+    lane: RefreshLane,
     needed: boolean,
     value: () => T,
   ): T | Outcome<never> => {
     if (!needed) return ABSENT;
+    const fault = deps.faults.of(sessionId, lane);
+    if (fault !== undefined) return fault;
     try {
       return value();
     } catch (e) {
@@ -1369,82 +1378,60 @@ function readLanes(inputs: PayloadInputs, threw: Threw = {}): Lanes {
       return failed(`${lane}: ${String(e)}`);
     }
   };
-  // `today` is the day of the set's sums the draw is at.
-  const todaySet = lanes.today.current();
   return {
     git: lanes.git.current(),
-    usage:
-      threw.session ??
-      read("session", want.session, () =>
-        deps.usageStore.usageOf(sessionId, hookData),
-      ),
-    today:
-      threw.today ??
-      (todaySet.kind === "ok"
-        ? read("today", true, () =>
-            deps.usageStore.todayAt(todaySet.value, hookData, at),
-          )
-        : todaySet),
-    context:
-      threw.context ??
-      read("context", want.context, () =>
-        deps.contextProvider.contextOf(hookData),
-      ),
-    metrics:
-      threw.metrics ??
-      read("metrics", want.metrics, () =>
-        deps.metricsProvider.metricsOf(sessionId, hookData),
-      ),
-    activity:
-      threw.activity ??
-      read("activity", want.activity, () =>
-        deps.activityProvider.activityOf(sessionId),
-      ),
+    usage: read("session", want.session, () =>
+      deps.usageStore.usageOf(sessionId, hookData),
+    ),
+    context: read("context", want.context, () =>
+      deps.contextProvider.contextOf(hookData),
+    ),
+    metrics: read("metrics", want.metrics, () =>
+      deps.metricsProvider.metricsOf(sessionId, hookData),
+    ),
+    activity: read("activity", want.activity, () =>
+      deps.activityProvider.activityOf(sessionId),
+    ),
     tmuxSession: lanes.tmux.current(),
-    cache:
-      threw.cache ??
-      read("cache", want.cache, () => deps.cacheExpiry.expiryOf(sessionId)),
-    speed:
-      threw.speed ??
-      read("speed", want.speed, () => deps.usageStore.speedOf(sessionId)),
+    cache: read("cache", want.cache, () =>
+      deps.cacheExpiry.expiryOf(sessionId),
+    ),
+    speed: read("speed", want.speed, () => deps.usageStore.speedOf(sessionId)),
     memento: lanes.memento.current(),
-    autoCompact:
-      threw.autocompact ??
-      read("autocompact", want.autocompact, () =>
-        deps.autoCompact.stored(settingsPathOf(inputs.hints)),
-      ),
+    autoCompact: read("autocompact", want.autocompact, () =>
+      deps.autoCompact.stored(settingsPathOf(inputs.hints)),
+    ),
   };
 }
 
-// The landings a request waits on before it draws: every keyed lane not
+// The landings a request waits on before it draws: every declared lane not
 // answered yet, the branch's PR included.
-function waitsOf(lanes: Lanes): Array<Promise<void>> {
+function waitsOf(lanes: DeclaredLanes): Array<Promise<void>> {
   const waits: Array<Promise<void>> = [];
+  const git = lanes.git.current();
   for (const lane of [
-    lanes.git,
-    lanes.tmuxSession,
-    lanes.memento,
-    lanes.today,
+    git,
+    lanes.tmux.current(),
+    lanes.memento.current(),
+    lanes.today.current(),
   ]) {
     if (lane.kind === "pending") waits.push(lane.landed);
   }
-  const pr = lanes.git.kind === "ok" ? lanes.git.value.pullRequest : undefined;
+  const pr = git.kind === "ok" ? git.value.pullRequest : undefined;
   if (pr?.kind === "pending") waits.push(pr.landed);
   return waits;
 }
 
 // [LAW:effects-at-boundaries] The projections are pure folds returning data
 // (payload fragment + failure descriptions); the log effect is the caller's.
-// `pending` is how a value not answered yet is spelled in the payload: a
-// frame's PENDING, or a request's refusal, since a request draws only once
-// every value has answered.
-function projectPayload<P>(
+// A value not answered yet is PENDING, which the draw takes as its own
+// outcome.
+function projectPayload(
   inputs: PayloadInputs,
   draw: DrawInputs,
   lanes: Lanes,
-  pending: (lane: string) => P,
-): { payload: RenderPayloadOf<P>; failures: string[] } {
-  const { hookData, deps, hints } = inputs;
+): ViewPayloadOf {
+  const { hookData, hints } = inputs;
   const { effective, configFacts } = draw;
   const { configPath, ...settingCounts } = configFacts;
   const want = wanted(inputs.neededInputPaths);
@@ -1453,13 +1440,12 @@ function projectPayload<P>(
   // log, pending → the payload's pending spelling.
   const failures: string[] = [];
   const over = <T, U>(
-    lane: string,
     reading: Reading<T>,
     project: (value: T) => U | undefined,
-  ): U | P | undefined => {
+  ): U | Pending | undefined => {
     switch (reading.kind) {
       case "pending":
-        return pending(lane);
+        return PENDING;
       case "failed":
         failures.push(reading.reason);
         return undefined;
@@ -1480,26 +1466,22 @@ function projectPayload<P>(
   // reach the payload as values.
   const git =
     lanes.git.kind === "pending"
-      ? pending("git")
-      : projectGitInfo(lanes.git, pending);
+      ? PENDING
+      : projectGitInfo(lanes.git, () => PENDING);
   // Ungated, like `home` below: two syscalls and a hint already in hand, so a
   // `wants` gate would add a branch and save nothing.
   const hostProjection = readHost(hints);
   failures.push(...hostProjection.failures);
   const tmuxValue =
-    lanes.tmuxSession.kind === "pending"
-      ? pending("tmux")
-      : valueOf(lanes.tmuxSession);
+    lanes.tmuxSession.kind === "pending" ? PENDING : valueOf(lanes.tmuxSession);
   const mementoValue =
-    lanes.memento.kind === "pending"
-      ? pending("memento")
-      : projectMemento(lanes.memento);
+    lanes.memento.kind === "pending" ? PENDING : projectMemento(lanes.memento);
   // The controls are capped to the model's context window, so they are not
   // answered while the window is not.
   const autoCompactValue =
     lanes.autoCompact.kind === "pending" ||
     (want.autocompact && lanes.context.kind === "pending")
-      ? pending("autocompact")
+      ? PENDING
       : projectAutoCompact(
           lanes.autoCompact,
           valueOf(lanes.context)?.maxTokens,
@@ -1514,10 +1496,10 @@ function projectPayload<P>(
   // skipped or provider empty) yields no rate, never a fabricated one, and a
   // rate over a value not answered yet is not answered either. Its two lanes'
   // failures are theirs to report, below.
-  const burn: BurnPayload | P | undefined = !want.burn
+  const burn: BurnPayload | Pending | undefined = !want.burn
     ? undefined
     : lanes.usage.kind === "pending" || lanes.metrics.kind === "pending"
-      ? pending("burn")
+      ? PENDING
       : burnOf(
           valueOf(lanes.usage)?.session.cost,
           valueOf(lanes.metrics)?.sessionDuration,
@@ -1528,19 +1510,15 @@ function projectPayload<P>(
   // idle-after-burst session has a history but no current rate). Merge
   // whatever each yields; the whole `speed` key drops only when both are
   // absent.
-  const speedPayload = over("speed", lanes.speed, speedPayloadOf);
+  const speedPayload = over(lanes.speed, speedPayloadOf);
   // [LAW:types-are-the-program] Partial projections so absent provider data
-  // travels as missing fields all the way to applyInput. Each provider's
-  // null sub-fields become absent keys here; applyInput's fallback chain
+  // travels as missing fields all the way to the inputs. Each provider's
+  // null sub-fields become absent keys here; an input's fallback chain
   // fills in the declared DSL default and records a last_error per field.
-  const sessionPayload = over("session", lanes.usage, (usage) =>
+  const sessionPayload = over(lanes.usage, (usage) =>
     pickNonNull({ cost: usage.session.cost, tokens: usage.session.tokens }),
   );
-  const todayPayload = over("today", lanes.today, (today) => ({
-    cost: today.cost,
-    tokens: today.tokens,
-  }));
-  const metricsPayload = over("metrics", lanes.metrics, (metrics) =>
+  const metricsPayload = over(lanes.metrics, (metrics) =>
     pickNonNull({
       lastResponseTime: metrics.lastResponseTime,
       responseTime: metrics.responseTime,
@@ -1551,12 +1529,12 @@ function projectPayload<P>(
       linesRemoved: metrics.linesRemoved,
     }),
   );
-  const activityPayload = over("activity", lanes.activity, projectActivity);
-  const contextPayload = over("context", lanes.context, (context) => ({
+  const activityPayload = over(lanes.activity, projectActivity);
+  const contextPayload = over(lanes.context, (context) => ({
     totalTokens: context.totalTokens,
     contextLeft: context.contextLeftPercentage,
   }));
-  const cachePayload = over("cache", lanes.cache, (expiresAt) => ({
+  const cachePayload = over(lanes.cache, (expiresAt) => ({
     expiresAt,
   }));
 
@@ -1583,7 +1561,7 @@ function projectPayload<P>(
 
   const sessionId = hookData.session_id;
 
-  const payload: RenderPayloadOf<P> = {
+  const payload: ViewPayload = {
     ...hookData,
     ...(workspace !== undefined && { workspace }),
     ...(home !== undefined && { home }),
@@ -1600,16 +1578,15 @@ function projectPayload<P>(
     // are those exact values. No `wants` gate: each costs nothing (already in
     // hand) and a config reading e.g. `.padding.effective` must always find it.
     ...effectiveInputs(effective),
-    history: deps.history(sessionId),
-    navigation: { back: deps.navigation(sessionId) },
-    // [LAW:one-source-of-truth] Counted against the draw's own instant, so a
-    // frame reads the lanes as they stood when it was drawn.
-    feeds: deps.feeds(sessionId, inputs.at),
+    history: draw.history,
+    navigation: { back: draw.back },
+    // [LAW:one-source-of-truth] The width the bar is drawn to, as the client
+    // measured it (`renderWidth`), the one value the draw's options carry.
+    term: { cols: renderWidth(hints) },
     ...settingCounts,
     ...(configPath !== null && { configPath }),
     resumeCommand: resumeCommand(workspace, sessionId, hints.claudeConfigDir),
     ...(sessionPayload !== undefined && { session: sessionPayload }),
-    ...(todayPayload !== undefined && { today: todayPayload }),
     ...(burn !== undefined && { burn }),
     ...(speedPayload !== undefined && { speed: speedPayload }),
     ...(want.block &&
@@ -1658,62 +1635,72 @@ function speedPayloadOf(obs: SpeedObservation): SpeedPayload | undefined {
     : undefined;
 }
 
-// [LAW:one-source-of-truth] The one assembly of a frame's payload: every
+// [LAW:one-source-of-truth] The one assembly of a view's payload: every
 // source as its owner holds it now, a value not answered yet as PENDING —
-// which the draw takes as its own outcome (the placement's loading cell).
-// Performs no I/O and refreshes nothing; a key a preset switch newly reads is
-// declared, and its first value wakes nothing yet.
+// which the draw takes as its own outcome (the placement's loading cell) —
+// and the failures it projected as missing fields. Performs no I/O, refreshes
+// nothing and reads no instant, so the session's view keeps it as one computed
+// (src/daemon/session-source.ts), recomputed in the turn a fact it reads moves.
 export function payloadOf(
   inputs: PayloadInputs,
   draw: DrawInputs,
-): DrawnPayload {
-  return projectPayload(inputs, draw, readLanes(inputs), () => PENDING).payload;
+): ViewPayloadOf {
+  return projectPayload(inputs, draw, readLanes(inputs));
 }
 
-// A statusline request's payload (rule 1 of the model): it refreshes what its
-// arrival triggers, waits for the first value of every keyed source the draw
-// reads that has not answered yet, and is assembled from what they stored —
-// the same values a frame drawn after it reads.
-export async function buildRenderPayload(
+// [LAW:one-source-of-truth] `today` at a draw's instant: the day of the
+// declared set's sums the draw is at. A projection of the draw, never of the
+// view's payload, since the day turns over at midnight with no source moving
+// (DRAW_PROJECTIONS, src/config/payload-inputs.ts). A failed scan is logged
+// by its owner, the usage store.
+export function todayOf(
+  {
+    usageStore,
+    faults,
+    log,
+  }: Pick<RenderPayloadDeps, "usageStore" | "faults" | "log">,
+  lane: Lane<DaySet>,
   hookData: ClaudeHookData,
   at: Instant,
-  deps: RenderPayloadDeps,
-  cwd: string | undefined,
-  neededInputPaths: ReadonlySet<string>,
-  effective: EffectiveGlobals,
-  hints: ClientHints,
-  configFacts: ConfigFileFacts,
-): Promise<RenderPayload> {
-  const inputs: PayloadInputs = {
-    hookData,
-    at,
-    deps,
-    cwd,
-    neededInputPaths,
-    hints,
+): TodayPayload | Pending | undefined {
+  if (faults.of(hookData.session_id, "today") !== undefined) return undefined;
+  const set = lane.current();
+  if (set.kind === "pending") return PENDING;
+  if (set.kind !== "ok") return undefined;
+  const read = (): Reading<TodayInfo> => {
+    try {
+      return usageStore.todayAt(set.value, hookData, at);
+    } catch (e) {
+      log("error", `today read threw: ${inspect(e)}`);
+      return ABSENT;
+    }
   };
-  const threw = await refreshPayload(inputs);
-  // [LAW:one-source-of-truth] The one wait for an answer: the lanes read
-  // again once every landing they waited on has landed.
-  const lanes = await answered((): Lanes | Waiting => {
-    const read = readLanes(inputs, threw);
-    const waits = waitsOf(read);
+  const today = read();
+  if (today.kind === "pending") return PENDING;
+  return today.kind === "ok"
+    ? { cost: today.value.cost, tokens: today.value.tokens }
+    : undefined;
+}
+
+// A statusline request's wait (rule 1 of the model): it refreshes what its
+// arrival triggers, then waits for the first value of every keyed lane its
+// view declared that has not answered yet. The answer is then drawn from the
+// view's payload, which those landings moved — the same values a frame drawn
+// after it reads.
+export async function settlePayload(
+  inputs: PayloadInputs,
+  at: Instant,
+): Promise<void> {
+  await refreshPayload(inputs, at);
+  // [LAW:one-source-of-truth] The one wait for an answer: the lanes the view
+  // declares now, read again once every landing they waited on has landed —
+  // so a lane a move made pending again is waited out too.
+  await answered((): true | Waiting => {
+    const waits = waitsOf(inputs.deps.lanes());
     return waits.length > 0
       ? { kind: "pending", landed: Promise.all(waits).then(() => {}) }
-      : read;
+      : true;
   });
-  const { payload, failures } = projectPayload(
-    inputs,
-    { effective, configFacts },
-    lanes,
-    (lane): never => {
-      // [LAW:no-silent-failure] A session lane the refresh above just
-      // answered cannot be pending: one that is is a bug in its owner.
-      throw new Error(`${lane} is not answered after its refresh`);
-    },
-  );
-  for (const f of failures) deps.log("warn", `provider fetch failed: ${f}`);
-  return payload;
 }
 
 // [LAW:effects-at-boundaries] Pure: the settings read and the model's context

@@ -1,7 +1,8 @@
 // [LAW:one-source-of-truth] Source kinds are the bridge between external
 // data (render payload, environment, static config) and the VariableStore.
-// All payload ingestion goes through applyInput — there is no other path
-// that writes input-kind boxes during a render.
+// An input is a derived value of its path in the view's bound InputSource
+// (brandon-unfiled-3248.8ro6, step 4): nothing writes one, so no draw can
+// start a cache policy that reads one.
 //
 // Two concerns deliberately separated:
 // - VariableStore: reactivity primitives (boxes, computeds, MobX scheduling)
@@ -16,8 +17,13 @@ import { realpathSync, statSync } from "fs";
 import path from "path";
 import { nearestWatchTarget } from "../utils/watch-target.js";
 import { setInterval, clearInterval } from "timers";
-import { observable, reaction, type IReactionDisposer } from "mobx";
-import { ColorDepth } from "@promptctl/rich-js";
+import {
+  observable,
+  reaction,
+  runInAction,
+  type IReactionDisposer,
+} from "mobx";
+import type { ColorDepth } from "@promptctl/rich-js";
 import {
   typeOf,
   toString,
@@ -45,7 +51,7 @@ import {
   type Parser,
   type SourceParse,
 } from "./parse.js";
-import { readPending, type JsonValue } from "./types.js";
+import { PendingValueError, readPending, type JsonValue } from "./types.js";
 import type { SessionStateReader } from "../daemon/session-state.js";
 import { TrailingEdge } from "../utils/trailing-edge.js";
 
@@ -450,10 +456,29 @@ export interface LastError {
   readonly message: string;
 }
 
-interface InputMeta {
-  readonly path: string;
-  readonly varDefault: VarValue | undefined;
+// [LAW:types-are-the-program] What a view's inputs are derived from: the value
+// at each payload path as it stands — PENDING while its source has not
+// answered — and the depth the view's renders draw at, which every contrast
+// floor reads. A read is tracked, so an input moves in the turn its value
+// does, and nothing else moves it.
+export interface InputSource {
+  read(path: string): unknown;
+  drawnAt(): ColorDepth;
 }
+
+// A registry no view source is bound to: a directory's, which reads no
+// payload, or a view's before its source is bound — every input not answered,
+// and its depth neither, so a key measuring a floor waits for the view's
+// rather than running once at a depth no draw is at.
+const UNBOUND: InputSource = {
+  read: () => PENDING,
+  drawnAt: () => {
+    throw new PendingValueError(
+      "colorCompatibility.effective",
+      "the drawn depth has no value yet: no view source is bound",
+    );
+  },
+};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -462,7 +487,7 @@ interface InputMeta {
 // object. [LAW:types-are-the-program] A PENDING node is a source that has not
 // answered yet, so every path through it is pending too: one `git: PENDING`
 // is every `git.*` input not answered, never each one's default.
-function resolvePath(obj: unknown, path: string): unknown {
+export function resolvePath(obj: unknown, path: string): unknown {
   let cur: unknown = obj;
   for (const part of path.split(".")) {
     if (cur === PENDING) return PENDING;
@@ -506,7 +531,6 @@ function zeroValue(type: VarType): VarValue {
 // duplicate box definitions for input-kind variables.
 
 export class SourceRegistry {
-  private readonly inputMetas = new Map<string, InputMeta>();
   private readonly lastErrors = new Map<string, LastError>();
   // A cache policy that cannot fire is a STANDING fault, not a read's
   // outcome: a read that succeeds afterwards says nothing about whether the
@@ -538,15 +562,17 @@ export class SourceRegistry {
   // run cannot outlive the registry that started it (RenderCache's
   // dispose-before-swap contract reaches the children too).
   private readonly abort = new AbortController();
-  // [LAW:one-source-of-truth] The depth the terminal draws this view's renders
-  // at — the one depth every contrast floor reads, in this registry's variable
-  // templates and in the render engine alike. Observable, because the depth is
-  // the session's setting (edit mode stages it over the config's own): a
-  // template variable whose `readableOn` read it recomputes when it moves rather
-  // than keeping the answer it measured at the previous depth. A render
-  // publishing the depth it already holds moves nothing (MobX compares).
-  private readonly drawn = observable.box(ColorDepth.TRUECOLOR);
-  readonly drawnAt = (): ColorDepth => this.drawn.get();
+  // [LAW:one-source-of-truth] What this registry's inputs are derived from
+  // (`bindInputs`), and so the depth the terminal draws this view's renders at
+  // — the one depth every contrast floor reads, in this registry's variable
+  // templates and in the render engine alike. Derived from the view's own
+  // settings, so a template variable whose `readableOn` read it recomputes in
+  // the turn the setting moves (edit mode staging a depth included), never at
+  // a draw.
+  private readonly inputs = observable.box<InputSource>(UNBOUND, {
+    deep: false,
+  });
+  readonly drawnAt = (): ColorDepth => this.inputs.get().drawnAt();
   // Shared engine instance — parse() is expensive; the engine is reused for
   // all key: template compilations.
   // [LAW:one-source-of-truth] One engine per registry, not one per variable.
@@ -612,20 +638,61 @@ export class SourceRegistry {
     this.store.defineDocument(name, failed(reason));
   }
 
-  // input: a box each payload writes, resolving its path against it.
-  // [LAW:types-are-the-program] Before its view's first payload it holds no
+  // input: a derived value of its path in the bound InputSource, cast to its
+  // type. [LAW:types-are-the-program] Before its source answers it holds no
   // value: it is not answered yet, never its default, which answers a payload
-  // that lacks the path (brandon-unfiled-3248.8ro6). A draw pushes its payload
-  // before it reads anything, so only what reads it before any draw — a cache
-  // key, a depends_on — sees it pending, and waits for its first value.
+  // that lacks the path (brandon-unfiled-3248.8ro6). A path the draw's own
+  // instant answers (DRAW_PROJECTIONS) is a projection, read by each draw.
   declareInput(
     name: string,
     path: string,
     type: VarType,
-    varDefault?: VarValue,
+    varDefault: VarValue | undefined,
+    derivation: Derivation,
   ): void {
-    this.store.defineBox(name, type, PENDING);
-    this.inputMetas.set(name, { path, varDefault });
+    this.store.defineDerived(name, type, derivation, () =>
+      this.inputAt(name, path, type, varDefault),
+    );
+  }
+
+  // [LAW:single-enforcer] The one reading of an input: its path's value cast
+  // to its type, else the fallback chain with the failure recorded.
+  private inputAt(
+    name: string,
+    path: string,
+    type: VarType,
+    varDefault: VarValue | undefined,
+  ): VarValue {
+    const raw = this.inputs.get().read(path);
+    if (raw === PENDING) {
+      // Not answered yet is no failure: an earlier read's error no longer
+      // stands for it.
+      this.lastErrors.delete(name);
+      throw new PendingValueError(
+        name,
+        `variable "${name}" has no value yet: its source has not answered`,
+      );
+    }
+    if (raw === undefined) {
+      return this.fallbackOf(
+        name,
+        type,
+        varDefault,
+        `input path "${path}" not found in payload`,
+      );
+    }
+    try {
+      const value = coerceToType(raw, type);
+      this.lastErrors.delete(name);
+      return value;
+    } catch (e) {
+      return this.fallbackOf(
+        name,
+        type,
+        varDefault,
+        e instanceof Error ? e.message : String(e),
+      );
+    }
   }
 
   // env: resolved once at declaration from process.env; box written once, never again.
@@ -1010,51 +1077,15 @@ export class SourceRegistry {
       : 0;
   }
 
-  // ─── Render-cycle driver ──────────────────────────────────────────────────
+  // ─── The view's source ────────────────────────────────────────────────────
 
-  // Called at the start of each render request. Pushes all input-kind boxes in
-  // a single runInAction so their dependents invalidate exactly once.
-  // [LAW:dataflow-not-control-flow] Variability lives in the payload values,
-  // not in whether the update runs — every input box is refreshed every render.
-  applyInput(payload: unknown): void {
-    this.store.runInAction(() => {
-      for (const [name, meta] of this.inputMetas) {
-        const raw = resolvePath(payload, meta.path);
-        const type = this.store.getType(name);
-        if (raw === PENDING) {
-          // Not answered yet is no failure: an earlier read's error no longer
-          // stands for it.
-          this.store.setBox(name, PENDING);
-          this.lastErrors.delete(name);
-        } else if (raw !== undefined) {
-          try {
-            this.store.setBox(name, coerceToType(raw, type));
-            this.lastErrors.delete(name);
-          } catch (e) {
-            this.applyFallback(
-              name,
-              type,
-              meta.varDefault,
-              e instanceof Error ? e.message : String(e),
-            );
-          }
-        } else {
-          this.applyFallback(
-            name,
-            type,
-            meta.varDefault,
-            `input path "${meta.path}" not found in payload`,
-          );
-        }
-      }
-    });
-  }
-
-  // Called by the render beside applyInput: the depth this render draws at,
-  // into this registry alone. A directory reads no depth: a source whose key
-  // reads one is a view's (src/dsl/variable-scope.ts).
-  drawAt(depth: ColorDepth): void {
-    this.store.runInAction(() => this.drawn.set(depth));
+  // [LAW:single-enforcer] What this registry's inputs, and the depth, are
+  // derived from: bound once by the view that owns the registry, whose source
+  // reads its payload as it stands. A directory binds none: it reads no
+  // payload and no depth — a source whose key reads one is a view's
+  // (src/dsl/variable-scope.ts).
+  bindInputs(source: InputSource): void {
+    runInAction(() => this.inputs.set(source));
   }
 
   // ─── Diagnostics ─────────────────────────────────────────────────────────
@@ -1234,21 +1265,18 @@ export class SourceRegistry {
   // [LAW:no-defensive-null-guards] Each fallback level is deliberate; the zero
   // backstop is the only "silent" path and exists because the caller has already
   // recorded the error — downstream reads get a safe typed value, not an exception.
-  private applyFallback(
+  private fallbackOf(
     name: string,
     type: VarType,
     varDefault: VarValue | undefined,
     errorMessage: string,
-  ): void {
+  ): VarValue {
     this.recordError(name, errorMessage);
-    if (varDefault !== undefined) {
-      this.store.setBox(name, varDefault);
-      return;
-    }
+    if (varDefault !== undefined) return varDefault;
     try {
-      this.store.setBox(name, coerceToType(this.defaultEmptyValue, type));
+      return coerceToType(this.defaultEmptyValue, type);
     } catch {
-      this.store.setBox(name, zeroValue(type));
+      return zeroValue(type);
     }
   }
 

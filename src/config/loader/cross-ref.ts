@@ -56,10 +56,12 @@ import {
   describeControlDomain,
 } from "../setting-control.js";
 import {
+  EXPRESSION_SLOTS,
   isExpression,
   isStyleEraEndcaps,
   retiredThemeNote,
 } from "../../themes/policy.js";
+import { SLOT_PATHS, slotAt } from "../payload-inputs.js";
 import { endcapsNameMessage } from "./styles.js";
 import { parsePersistTarget } from "./persist-target.js";
 import { presetNames, presetRoot } from "../presets.js";
@@ -86,10 +88,12 @@ import { SYNTAX_ENGINE } from "./syntax-engine.js";
 import { type ValidateCtx } from "./validate-core.js";
 import { instantReadOf, projectionsOf } from "./projections.js";
 import {
+  declaredVariables,
   templateActionRefs,
   templateReads,
   refResolves,
   templateScopeOf,
+  variableRead,
   type TemplateScope,
 } from "./refs.js";
 
@@ -841,6 +845,74 @@ function checkPolicyInstant(
   }
 }
 
+// [LAW:no-ambient-temporal-coupling] A selection's `.effective` (theme, style,
+// effect) is the name its node decides — the rule's answer, or the decided
+// name — and a rule reads the payload, so a rule reading any of them reads its
+// own answer or another slot's: a cycle with no first value. Refused at the
+// rule's path, naming the read that closes it (brandon-unfiled-3248.8ro6).
+function checkRuleSlotReads(ctx: ValidateCtx, cfg: DslConfig): void {
+  const declared = new Map(declaredVariables(cfg));
+  const names = new Set(declared.keys());
+  // The read through which a template reaches a slot's `.effective`, as a load
+  // error says it; null for none. A namespace read (`.style`) reaches every
+  // name under it.
+  const slotRead = (template: string, seen: Set<string>): string | null => {
+    for (const path of templateReads(template, cfg.helpers).keys()) {
+      // A read at a slot's payload path is that slot's name whoever declares
+      // the input there — the settings menu's synthesis declares
+      // `theme.effective` after this check runs.
+      const atSlot = EXPRESSION_SLOTS.find(
+        (slot) =>
+          SLOT_PATHS[slot] === path || SLOT_PATHS[slot].startsWith(`${path}.`),
+      );
+      if (atSlot !== undefined)
+        return `reads "${SLOT_PATHS[atSlot]}", the ${atSlot}'s own name`;
+      const exact = variableRead(path, names);
+      const reached =
+        exact !== null
+          ? [exact]
+          : [...names].filter((name) => name.startsWith(`${path}.`));
+      for (const name of reached) {
+        if (seen.has(name)) continue;
+        seen.add(name);
+        const decl = declared.get(name)!;
+        const slot = decl.kind === "input" ? slotAt(decl.path) : undefined;
+        if (slot !== undefined)
+          return `reads "${name}", the ${slot}'s own name`;
+        if (decl.kind !== "template") continue;
+        const through = slotRead(decl.template, seen);
+        if (through !== null) return `reads "${name}", which ${through}`;
+      }
+    }
+    return null;
+  };
+  const fragments: ReadonlyArray<
+    readonly [
+      readonly string[],
+      Partial<Record<(typeof EXPRESSION_SLOTS)[number], string>>,
+    ]
+  > = [
+    [["globals"], cfg.globals],
+    ...Object.entries(cfg.presets ?? {}).map(
+      ([name, preset]) =>
+        [["presets", name, "globals"], preset.globals ?? {}] as const,
+    ),
+  ];
+  for (const [at, globals] of fragments) {
+    for (const slot of EXPRESSION_SLOTS) {
+      const rule = globals[slot];
+      if (!isExpression(rule)) continue;
+      const why = slotRead(rule, new Set());
+      if (why === null) continue;
+      ctx.issues.push({
+        path: [...at, slot].join("."),
+        message: `${[...at, slot].join(".")} ${why}: a rule decides that name, so it cannot read it — read the data the rule is about instead`,
+        line: findKeyLine(ctx.source, [...at, slot]),
+      });
+    }
+  }
+}
+
 // [LAW:no-silent-failure] A malformed `when` in an authored tree is a load
 // error at its position in that tree, before any synthesis. The compile would
 // catch it too, but it
@@ -1371,6 +1443,7 @@ export function validateDeclarations(
     checkDependsOn(ctx, `variables.${name}`, v, templateScope);
     checkPolicyInstant(ctx, `variables.${name}`, v, cfg);
   }
+  checkRuleSlotReads(ctx, cfg);
   for (const [segName, seg] of subjects(cfg.segments, subject)) {
     if (!seg.vars) continue;
     for (const [vName, vDecl] of Object.entries(seg.vars)) {

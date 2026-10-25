@@ -33,6 +33,7 @@ import {
   fakeTmux,
   fakeUsage,
   requestPayload,
+  settled,
 } from "./helpers/payload-owners";
 
 type LogEntry = { level: string; msg: string };
@@ -197,7 +198,9 @@ describe("buildRenderPayload — git outcome lane", () => {
     );
     const storedAt = async (secondsLater: number) =>
       (
-        await requestPayload(
+        settled(
+          (
+            await requestPayload(
           hookData("/no/such/transcript.jsonl"),
           instantOf(new Date((committedAt + secondsLater) * 1000)),
           deps,
@@ -206,8 +209,10 @@ describe("buildRenderPayload — git outcome lane", () => {
           EFFECTIVE_GLOBALS,
           NO_HINTS,
           NO_CONFIG_FILE,
-        )
-      ).git?.committedAt;
+            )
+          ).git,
+        ) as { committedAt?: number } | undefined
+      )?.committedAt;
 
     expect(await storedAt(90.5)).toBe(committedAt);
     expect(await storedAt(3600)).toBe(committedAt);
@@ -682,7 +687,7 @@ describe("buildRenderPayload — git PR projection", () => {
       NO_CONFIG_FILE,
     );
 
-    expect(payload.git!.prError).toBe("gh pr view: non-zero, exit 1, HTTP 401");
+    expect(settled(payload.git)!.prError).toBe("gh pr view: non-zero, exit 1, HTTP 401");
     expect("prNumber" in payload.git!).toBe(false);
     expect("prUrl" in payload.git!).toBe(false);
     expect(logs).toEqual([]);

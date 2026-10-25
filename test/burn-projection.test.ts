@@ -40,6 +40,7 @@ import {
   fakeTmux,
   fakeUsage,
   requestPayload,
+  settled,
 } from "./helpers/payload-owners";
 
 const FIVE_HOURS_MIN = 5 * 60;
@@ -160,7 +161,7 @@ describe("buildRenderPayload — burn projection lane", () => {
       NO_HINTS,
       NO_CONFIG_FILE,
     );
-    expect(payload.burn?.costPerHour).toBe(12);
+    expect(settled(payload.burn)?.costPerHour).toBe(12);
     // [LAW:one-source-of-truth] Instants, never the ETA a later frame would
     // read stale: what they say relative to now is the draw's.
     expect(payload.block).toEqual({

@@ -18,7 +18,7 @@
 // reads a projection part is one — a body reads its segment's colours, and its
 // lead and trail read whether the body opened.
 
-import { observable, runInAction } from "mobx";
+import { observable, runInAction, type IObservableValue } from "mobx";
 import type {
   ColorDepth,
   ColorRgba,
@@ -28,7 +28,7 @@ import type {
 } from "@promptctl/rich-js";
 import type { Template } from "@promptctl/go-template-js";
 import type { Derived, VariableStore } from "../var-system/store.js";
-import type { SourceRegistry } from "../var-system/sources.js";
+import { resolvePath, type SourceRegistry } from "../var-system/sources.js";
 import { buildScope, placementScope } from "../template-engine/scope.js";
 import { is, sameBy } from "../utils/same.js";
 import { gateOf, resolveSegmentColors } from "../template-engine/index.js";
@@ -38,14 +38,31 @@ import {
   outsideSegments,
   type ActiveSegmentRef,
 } from "../render/active-segment.js";
-import type {
-  PreviewRows,
-  RenderBinding,
-  RenderLook,
+import {
+  bindRender,
+  type ActionRuntime,
+  type PreviewRows,
+  type RenderBinding,
+  type RenderLook,
 } from "../render/action.js";
 import { closeCell, stateCell } from "../render/band-style.js";
 import { arrangedSegment } from "../config/edit-chrome.js";
 import { placementPalette } from "../themes/index.js";
+import {
+  decideEffectName,
+  decideStyleName,
+  drawnDepth,
+  isColorCompatibility,
+  ruleFloorMessage,
+  SLOT_FLOORS,
+  type ColorCompatibility,
+  type ExpressionSlot,
+} from "../themes/policy.js";
+import { decideThemeName } from "../themes/palette-resolvers.js";
+import type { ThemeKey } from "@promptctl/rich-js";
+import { drawProjectionAt, slotAt } from "../config/payload-inputs.js";
+import { CONFIG_KEY_TO_EFFECTIVE_VAR } from "../config/setting-projections.js";
+import type { Selections, ViewSource } from "./view-source.js";
 import {
   bandFor,
   decorationFor,
@@ -68,6 +85,13 @@ import {
 import { FrameMemory } from "../render/frame-memory.js";
 import { readPending } from "../var-system/types.js";
 
+// A globals rule as the compile parsed it: the paths it was written at, and
+// its template.
+export interface CompiledRule {
+  readonly where: string;
+  readonly template: Template<RichText>;
+}
+
 // What of a compile its parts are evaluated from.
 export interface PartsSource {
   readonly segments: CompiledSegments;
@@ -76,7 +100,50 @@ export interface PartsSource {
   // The templates that read the instant, and whether the layout does.
   readonly instant: ReadonlySet<Template<RichText>>;
   readonly layoutReadsInstant: boolean;
+  // Each slot's rules, by source, and the styles a style rule may name.
+  readonly globalExpressions: ReadonlyMap<
+    ExpressionSlot,
+    ReadonlyMap<string, CompiledRule>
+  >;
+  readonly styles: Readonly<Record<string, ThemeKey>>;
+  // The runtime the compile's template functions read the render through.
+  readonly runtime: ActionRuntime;
 }
+
+// [LAW:types-are-the-program] What a selection slot holds in a view: the
+// name it settled on — a decided name, or the answer of a rule that reads no
+// instant, kept until what it read changes — with the `rule` warning a
+// failure carries and the variable a pending answer waits on; or a rule that
+// reads the instant, which each draw evaluates (`per-draw`).
+export type SlotState =
+  | {
+      readonly kind: "settled";
+      readonly name: string;
+      readonly warning: string | null;
+      readonly waited: string | null;
+    }
+  | { readonly kind: "per-draw"; readonly rule: CompiledRule };
+
+// The selection each slot reads.
+const SELECTION_OF: Readonly<Record<ExpressionSlot, keyof Selections>> = {
+  palette: "theme",
+  style: "style",
+  effect: "effect",
+};
+
+// Where the depth every contrast floor reads is set.
+const COLOR_PATH = CONFIG_KEY_TO_EFFECTIVE_VAR.get("colorCompatibility")!;
+const COLOR_FLOOR: ColorCompatibility = "truecolor";
+
+// What a view's parts read of the draw before its first: nothing a part may
+// read outside a draw, so any value serves.
+const UNDRAWN: DrawFacts = {
+  width: 0,
+  chromeCols: 0,
+  padding: 0,
+  seamCols: 0,
+  preset: "",
+};
 
 // The draw's own facts a part may read beside the store: the strip's geometry,
 // and the preset whose rows a layout lays out.
@@ -156,15 +223,41 @@ export class ViewParts {
   private readonly gates = new Map<CompiledNode, Derived<Gate>>();
   private readonly placements = new Map<CompiledSegmentNode, Placement>();
   private readonly rules = new Map<Template<RichText>, Derived<RuleOutcome>>();
+  private readonly slots = new Map<ExpressionSlot, Derived<SlotState>>();
+  // [LAW:one-source-of-truth] What the view draws from (`bind`): its inputs
+  // and its slots read it as it stands, never a copy a draw wrote.
+  private readonly view: IObservableValue<ViewSource>;
+  // The draw in progress's own facts — the payload fields its instant answers
+  // (DRAW_PROJECTIONS) — and the names its per-draw rules settled on: read by
+  // the projections over them, which only a draw reads.
+  private projected: unknown = undefined;
+  private readonly drawnSlots = new Map<ExpressionSlot, string>();
 
   constructor(
     private readonly store: VariableStore,
-    readonly registry: Pick<SourceRegistry, "drawnAt">,
+    readonly registry: SourceRegistry,
     readonly source: PartsSource,
-    facts: DrawFacts,
+    view: ViewSource,
   ) {
+    this.view = observable.box(view, { deep: false });
     this.scope = buildScope(store);
-    const drawn = observable(facts, undefined, { deep: false });
+    // [LAW:one-source-of-truth] The depth the view draws at: kept over its
+    // payload's `colorCompatibility.effective`, so a part measuring a floor
+    // moves when the setting does — edit mode's staged depth included — and
+    // never when a source is rebound with the same one.
+    this.depth = store.derive("drawn depth", "computed", () => {
+      const said = this.inputAt(COLOR_PATH);
+      return typeof said === "string" && isColorCompatibility(said)
+        ? said
+        : COLOR_FLOOR;
+    });
+    // [LAW:single-enforcer] The registry's inputs, and its depth, are derived
+    // through the view's one source.
+    registry.bindInputs({
+      read: (path) => this.inputAt(path),
+      drawnAt: () => drawnDepth(this.colorCompatibility()),
+    });
+    const drawn = observable(UNDRAWN, undefined, { deep: false });
     this.facts = drawn;
     const look = this.look;
     const phase = this.phase;
@@ -214,10 +307,116 @@ export class ViewParts {
     });
   }
 
-  // The draw's facts, before it reads a part.
-  draw(facts: DrawFacts): void {
+  // What the view draws from: a session view's source is bound once; a caller
+  // drawing a fixed payload binds each.
+  bind(view: ViewSource): void {
+    runInAction(() => this.view.set(view));
+  }
+
+  // The selections in force.
+  selections(): Selections {
+    return this.view.get().selections();
+  }
+
+  // The draw's facts, before it reads a part, and the payload fields its own
+  // instant answers.
+  draw(facts: DrawFacts, projected: unknown): void {
     this.draws++;
+    this.projected = projected;
+    this.drawnSlots.clear();
     runInAction(() => Object.assign(this.facts, facts));
+  }
+
+  // [LAW:dataflow-not-control-flow] The value at a payload path, by who
+  // answers it: a selection's `.effective` its slot, a field of the instant
+  // the draw in progress, every other the view's payload.
+  private inputAt(path: string): unknown {
+    const slot = slotAt(path);
+    if (slot !== undefined) return this.slotName(slot);
+    if (drawProjectionAt(path) !== undefined)
+      return resolvePath(this.projected, path);
+    return resolvePath(this.view.get().payload(), path);
+  }
+
+  // The depth the view's colour setting draws at: its floor while the payload
+  // has not said, or says something no depth is.
+  private readonly depth: Derived<ColorCompatibility>;
+  colorCompatibility(): ColorCompatibility {
+    return this.depth.read();
+  }
+
+  // [LAW:one-source-of-truth] A selection slot's node: the decided name, or
+  // the rule's answer. A rule that reads no instant is kept: settled in the
+  // turn what it reads changes, so a cache policy over the slot's
+  // `.effective` re-runs then, never at a draw. A pending answer keeps the
+  // name last settled (the floor before any); a failure is the floor with
+  // its warning, which every draw reading the slot reports.
+  slot(slot: ExpressionSlot): SlotState {
+    let node = this.slots.get(slot);
+    if (node === undefined) {
+      let last: string | undefined;
+      const settle = (): SlotState => {
+        const selection = this.selections()[SELECTION_OF[slot]];
+        if (selection.kind === "decided")
+          return settled(selection.name, null, null);
+        const rule = compiledRule(this.source, slot, selection.source);
+        if (this.source.instant.has(rule.template))
+          return { kind: "per-draw", rule };
+        const outcome = this.rule(rule.template);
+        switch (outcome.kind) {
+          case "named": {
+            let warning: string | null = null;
+            last = decideSlot(
+              this.source,
+              slot,
+              outcome.name,
+              rule.where,
+              (m) => {
+                warning = m;
+              },
+            );
+            return settled(last, warning, null);
+          }
+          case "pending":
+            return settled(last ?? SLOT_FLOORS[slot], null, outcome.variable);
+          case "failed":
+            return settled(
+              SLOT_FLOORS[slot],
+              ruleFloorMessage(
+                rule.where,
+                slot,
+                `the rule failed — ${outcome.error}`,
+              ),
+              null,
+            );
+        }
+      };
+      // [LAW:one-source-of-truth] A state equal to the one held IS that one:
+      // a source rebound with the same selections (a fixed payload drawn
+      // again) moves no reader of the slot.
+      let held: SlotState | undefined;
+      node = this.store.derive(`slot ${slot}`, "computed", (): SlotState => {
+        const next = settle();
+        if (held === undefined || !sameSlot(held, next)) held = next;
+        return held;
+      });
+      this.slots.set(slot, node);
+    }
+    return node.read();
+  }
+
+  // The name a slot's `.effective` reads: its settled name, or what this
+  // draw's rule settled on.
+  slotName(slot: ExpressionSlot): string {
+    const state = this.slot(slot);
+    return state.kind === "settled"
+      ? state.name
+      : (this.drawnSlots.get(slot) ?? SLOT_FLOORS[slot]);
+  }
+
+  // What a per-draw rule settled on in the draw in progress.
+  drawnSlot(slot: ExpressionSlot, name: string): void {
+    this.drawnSlots.set(slot, name);
   }
 
   // Which draw is in progress: a part that reads the instant answers once in it.
@@ -261,6 +460,13 @@ export class ViewParts {
         this.readsInstant(template),
         (): RuleOutcome => {
           this.phase.ruling = true;
+          // [LAW:no-ambient-temporal-coupling] A kept rule settles outside any
+          // draw, in the turn what it read changes: the compile's functions
+          // read this view's binding there too, as they do in its draw.
+          const unbound = this.source.runtime.bound === undefined;
+          const bound = unbound
+            ? bindRender(this.source.runtime, this.binding)
+            : null;
           try {
             return {
               kind: "named",
@@ -278,6 +484,7 @@ export class ViewParts {
                   error: e instanceof Error ? e.message : String(e),
                 };
           } finally {
+            bound?.[Symbol.dispose]();
             this.phase.ruling = false;
           }
         },
@@ -341,22 +548,93 @@ export class ViewParts {
   }
 }
 
-// The view's parts for the compile `source` drawing from `store`, made at its
-// first draw and kept in the compile's `views`.
-export function viewParts(
-  source: PartsSource & {
-    readonly views: WeakMap<VariableStore, ViewParts>;
-  },
+type ViewsOf = PartsSource & {
+  readonly views: WeakMap<VariableStore, ViewParts>;
+};
+
+// [LAW:single-enforcer] The one way a store becomes a view of the compile
+// `source`: its parts are made at its first bind, after every variable is
+// declared, and kept in the compile's `views`; each bind names what the view
+// draws from.
+export function bindView(
+  source: ViewsOf,
   store: VariableStore,
-  registry: Pick<SourceRegistry, "drawnAt">,
-  facts: DrawFacts,
+  registry: SourceRegistry,
+  view: ViewSource,
 ): ViewParts {
-  let parts = source.views.get(store);
+  const parts = source.views.get(store);
+  if (parts !== undefined) {
+    parts.bind(view);
+    return parts;
+  }
+  const made = new ViewParts(store, registry, source, view);
+  source.views.set(store, made);
+  return made;
+}
+
+// The view's parts for a store a source was bound to.
+// [LAW:no-silent-failure] A store drawn before anything said what it draws
+// from has no inputs to read: a caller bug, named.
+export function partsOf(source: ViewsOf, store: VariableStore): ViewParts {
+  const parts = source.views.get(store);
   if (parts === undefined) {
-    parts = new ViewParts(store, registry, source, facts);
-    source.views.set(store, parts);
+    throw new Error(
+      "a store was drawn before its view was bound (bindView): its inputs have no source",
+    );
   }
   return parts;
+}
+
+const settled = (
+  name: string,
+  warning: string | null,
+  waited: string | null,
+): SlotState => ({ kind: "settled", name, warning, waited });
+
+const sameSlot = (a: SlotState, b: SlotState): boolean =>
+  a.kind === "settled"
+    ? b.kind === "settled" &&
+      a.name === b.name &&
+      a.warning === b.warning &&
+      a.waited === b.waited
+    : b.kind === "per-draw" && a.rule === b.rule;
+
+// [LAW:no-defensive-null-guards] The compile parses every rule the resolution
+// can hand a view; a miss is drift between the two readers of `isExpression`.
+export function compiledRule(
+  source: Pick<PartsSource, "globalExpressions">,
+  slot: ExpressionSlot,
+  rule: string,
+): CompiledRule {
+  const compiled = source.globalExpressions.get(slot)?.get(rule);
+  if (compiled === undefined) {
+    throw new Error(
+      `the ${slot} rule ${JSON.stringify(rule)} reached the view but no compiled ` +
+        `template exists — the compile and the resolution disagree about isExpression`,
+    );
+  }
+  return compiled;
+}
+
+// [LAW:one-type-per-behavior] The name a rule wrote, decided in its slot's
+// domain: a theme naming nothing installed is the floor, reported; a style or
+// an effect naming nothing declared collapses to its floor in silence, its
+// floor being the identity.
+export function decideSlot(
+  source: Pick<PartsSource, "styles">,
+  slot: ExpressionSlot,
+  name: string,
+  where: string,
+  warn: (message: string) => void,
+): string {
+  switch (slot) {
+    case "palette":
+      return decideThemeName(name, where, warn).name;
+    case "style":
+      return decideStyleName(name, source.styles).name;
+    case "effect":
+      return decideEffectName(name).name;
+  }
 }
 
 // One placement's parts in a view.

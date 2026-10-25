@@ -35,6 +35,31 @@ test("every name a clock factory returns makes a template calling it a projectio
   }
 });
 
+// The projections a config's own variables make: every config also has the
+// draw's own facts (DRAW_PROJECTIONS — `today`, `feeds`, `drawing`) as
+// projections, through the payload inputs its menu reads.
+const DRAWN_REASON = /^reads the draw's "/;
+const own = (projections: ReadonlyMap<string, string>): Map<string, string> =>
+  new Map([...projections].filter(([, why]) => !DRAWN_REASON.test(why)));
+
+test("every input at a path the draw answers is a projection", () => {
+  const projections = projectionsOf(
+    config(`{
+      spent: { kind: "input", path: "today.cost" },
+      rate: { kind: "input", path: "feeds.band.fps" },
+      by: { kind: "input", path: "drawing.by" },
+      sid: { kind: "input", path: "session_id" },
+    }`),
+  );
+  expect(projections.has("sid")).toBe(false);
+  for (const name of ["spent", "rate", "by"]) {
+    expect([name, projections.get(name)]).toEqual([
+      name,
+      expect.stringMatching(DRAWN_REASON),
+    ]);
+  }
+});
+
 test("a date function of its arguments alone reads no clock", () => {
   const pure = [
     "date",
@@ -53,7 +78,7 @@ test("a date function of its arguments alone reads no clock", () => {
     took: { kind: "template", template: "{{ duration 90 }}" },
     day: { kind: "template", template: '{{ date "2006-01-02" (int .stamp) }}' },
   }`);
-  expect([...projectionsOf(cfg).keys()]).toEqual([]);
+  expect([...own(projectionsOf(cfg)).keys()]).toEqual([]);
   const store = new VariableStore();
   const registry = new SourceRegistry(store);
   try {
@@ -120,7 +145,7 @@ test("the set is closed upward: whatever reads a projection is one", () => {
       `{ stamp: "{{ unixEpoch now }}" }`,
     ),
   );
-  expect(Object.fromEntries(projections)).toEqual({
+  expect(Object.fromEntries(own(projections))).toEqual({
     clock: "is a time variable",
     viaVar: 'reads "clock", which is a time variable',
     viaHelper: 'calls "now"',
@@ -174,20 +199,36 @@ test("the config load line names the load's projections", () => {
     loaded.state!.registry.dispose();
     return pluginLoadLine(loaded.layers, loaded.state!);
   };
+  // The projections the line names, less the draw's own facts every config
+  // has (DRAW_PROJECTIONS).
+  const named = (text: string): string[] =>
+    /: projections=(\S+) /
+      .exec(text)![1]!
+      .split(",")
+      .filter((name) => !/^(today|feeds|drawing)\./.test(name));
   try {
     expect(
-      line(`{
+      named(
+        line(`{
         clock: { kind: "time", layout: "15:04" },
         shown: { kind: "template", template: "{{ .clock }}" },
       }`),
-    ).toContain(
-      ": projections=clock,git.timeSinceCommit,block.etaMinutes,weekly.etaMinutes,shown instantSegments=",
-    );
+      ),
+    ).toEqual([
+      "clock",
+      "git.timeSinceCommit",
+      "block.etaMinutes",
+      "weekly.etaMinutes",
+      "shown",
+    ]);
     // The bundled default's: what its stored instants say relative to now
     // (brandon-unfiled-3248.8ro6 step 3).
-    expect(line("{}")).toContain(
-      ": projections=git.timeSinceCommit,block.etaMinutes,weekly.etaMinutes instantSegments=",
-    );
+    expect(named(line("{}"))).toEqual([
+      "git.timeSinceCommit",
+      "block.etaMinutes",
+      "weekly.etaMinutes",
+    ]);
+    expect(line("{}")).toMatch(/ projections=\S*today\.cost\b/);
     // brandon-unfiled-3248.8ro6 step 6: and which segments it draws at every
     // frame, the bundled default's among them.
     const segments = (text: string): string[] =>

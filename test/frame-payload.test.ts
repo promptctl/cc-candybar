@@ -1,27 +1,29 @@
 // brandon-unfiled-3248.8ro6, step 3: sources refresh on their own triggers,
 // and a frame only reads. A statusline request refreshes what its arrival
-// triggers and draws from what that left; a feed's frame (`payloadOf`) reads
-// every owner's stored value as it stands — no I/O, no refresh — and a value
-// not answered yet crosses as PENDING, which the draw takes as its loading
-// cell.
+// triggers (`settlePayload`) and draws from what that left; the view's payload
+// (`payloadOf`), which every frame draws, reads every owner's stored value as
+// it stands — no I/O, no refresh, no instant — and a value not answered yet
+// crosses as PENDING, which the draw takes as its loading cell. What moves
+// with the instant (`today`, the feeds) is the draw's own projection.
 //
 // [LAW:behavior-not-structure] Each owner is a fake over a counted reader
 // (test/helpers/payload-owners.ts), so "refreshes nothing" is a count of the
 // reads its source made, and "reads what the request stored" is the payload
 // a frame draws beside the one the request drew.
 
-import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
 import {
-  buildRenderPayload,
   payloadOf,
+  renderWidth,
+  settlePayload,
+  todayOf,
   type PayloadInputs,
   type RenderPayloadDeps,
 } from "../src/daemon/render-payload";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { globalsFor } from "./helpers/selection";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
-import { instantOf, type Instant } from "../src/utils/instant";
+import { instantOf } from "../src/utils/instant";
 import { ABSENT, PENDING, ok } from "../src/utils/outcome";
 import type { ClientHints } from "../src/daemon/protocol";
 import type { ClaudeHookData } from "../src/utils/claude";
@@ -40,7 +42,12 @@ import {
 } from "./helpers/payload-owners";
 
 const EFFECTIVE = globalsFor(DEFAULT_DSL_CONFIG);
-const DRAW = { effective: EFFECTIVE, configFacts: NO_CONFIG_FILE };
+const DRAW = {
+  effective: EFFECTIVE,
+  configFacts: NO_CONFIG_FILE,
+  history: EMPTY_HISTORY_DEPTH,
+  back: 0,
+};
 const PANE = { socket: "/tmp/tmux.sock", pane: "%7", truecolor: null };
 const HINTS: ClientHints = { tmux: PANE };
 const AT = instantOf(new Date(1_700_000_000_000));
@@ -90,7 +97,6 @@ function counted(pr?: unknown) {
       reads[lane] = (reads[lane] ?? 0) + 1;
       return answer;
     };
-  const feedsAt: Instant[] = [];
   const owners = {
     ...absentOwners(),
     gitProvider: fakeGit(
@@ -111,12 +117,6 @@ function counted(pr?: unknown) {
     cacheExpiry: fakeCacheExpiry(count("cache", ok(1_700_003_600))),
     autoCompact: fakeAutoCompact(count("autocompact", ok(400_000))),
     log: (level: string, msg: string) => logs.push(`${level} ${msg}`),
-    history: () => EMPTY_HISTORY_DEPTH,
-    navigation: () => 0,
-    feeds: (_sessionId: string, at: Instant) => {
-      feedsAt.push(at);
-      return UNFOLLOWED_FEEDS;
-    },
   };
   // The lanes the session's view declared: every frame and the request read
   // the same handles, as the daemon's do.
@@ -128,32 +128,29 @@ function counted(pr?: unknown) {
       EVERY_LANE,
     ),
   } as unknown as RenderPayloadDeps;
-  const inputs = (at: Instant): PayloadInputs => ({
+  const inputs = (): PayloadInputs => ({
     hookData: HOOK,
-    at,
     deps,
     cwd: undefined,
     neededInputPaths: EVERY_LANE,
     hints: HINTS,
   });
-  const request = () =>
-    buildRenderPayload(
-      HOOK,
-      AT,
-      deps,
-      undefined,
-      EVERY_LANE,
-      EFFECTIVE,
-      HINTS,
-      NO_CONFIG_FILE,
-    );
-  return { reads, feedsAt, inputs, request, deps, logs };
+  // A request: its refresh and wait, then the view's payload it draws.
+  const request = async () => {
+    await settlePayload(inputs(), AT);
+    return payloadOf(inputs(), DRAW).payload;
+  };
+  // `today` as a draw at `at` projects it.
+  const today = (at = AT) =>
+    todayOf(deps, deps.lanes().today, HOOK, at);
+  return { reads, inputs, request, today, deps, logs };
 }
 
 describe("a frame's payload", () => {
   test("reads what the request's refresh stored, and refreshes nothing", async () => {
-    const { reads, inputs, request } = counted();
+    const { reads, inputs, request, today } = counted();
     const drawn = await request();
+    today();
     const afterRequest = { ...reads };
     expect(Object.keys(afterRequest).sort()).toEqual(
       [
@@ -171,7 +168,8 @@ describe("a frame's payload", () => {
       ].sort(),
     );
     for (let frame = 0; frame < 5; frame++) {
-      expect(payloadOf(inputs(AT), DRAW)).toEqual(drawn);
+      expect(payloadOf(inputs(), DRAW).payload).toEqual(drawn);
+      expect(today()).toEqual({ cost: 5, tokens: 50 });
     }
     // `today`'s reader is the day a draw picks of the sums its lane holds
     // (`todayAt`, no I/O): every frame picks its own, since a frame may be
@@ -180,14 +178,14 @@ describe("a frame's payload", () => {
   });
 
   test("draws every lane no request has answered as not answered yet", () => {
-    const { inputs } = counted();
-    const payload = payloadOf(inputs(AT), DRAW);
+    const { inputs, today } = counted();
+    const { payload } = payloadOf(inputs(), DRAW);
+    expect(today()).toBe(PENDING);
     expect(payload.git).toBe(PENDING);
     expect(payload.tmux).toEqual({ pane: "%7", session: PENDING });
     expect(payload.memento).toBe(PENDING);
     for (const lane of [
       payload.session,
-      payload.today,
       payload.speed,
       payload.context,
       payload.metrics,
@@ -205,7 +203,7 @@ describe("a frame's payload", () => {
     deps.contextProvider.contextOf = () => {
       throw new Error("context bug");
     };
-    const payload = payloadOf(inputs(AT), DRAW);
+    const { payload } = payloadOf(inputs(), DRAW);
     expect(payload.context).toBeUndefined();
     expect(payload.git).toMatchObject({ branch: "main" });
     expect(payload.session).not.toBe(PENDING);
@@ -218,10 +216,10 @@ describe("a frame's payload", () => {
   test("a frame reading the context window and no autocompact draws no autocompact", () => {
     const { inputs } = counted();
     const contextOnly = {
-      ...inputs(AT),
+      ...inputs(),
       neededInputPaths: new Set(["context.contextLeft"]),
     };
-    const payload = payloadOf(contextOnly, DRAW);
+    const { payload } = payloadOf(contextOnly, DRAW);
     expect(payload.context).toBe(PENDING);
     expect(payload.autocompact).toBeUndefined();
   });
@@ -231,9 +229,9 @@ describe("a frame's payload", () => {
     // session's frame has the one answered and not the other.
     const { inputs, request } = counted();
     await request();
-    const other = { ...inputs(AT), hookData: { ...HOOK, session_id: "other" } };
-    expect(payloadOf(other, DRAW).autocompact).toBe(PENDING);
-    expect(payloadOf(inputs(AT), DRAW).autocompact).not.toBe(PENDING);
+    const other = { ...inputs(), hookData: { ...HOOK, session_id: "other" } };
+    expect(payloadOf(other, DRAW).payload.autocompact).toBe(PENDING);
+    expect(payloadOf(inputs(), DRAW).payload.autocompact).not.toBe(PENDING);
   });
 
   test("a PR not answered yet draws only the PR's fields as not answered", async () => {
@@ -241,9 +239,9 @@ describe("a frame's payload", () => {
     const { inputs } = counted(pr);
     // The frame that first reads the repo queues its read; the next one draws
     // what it stored.
-    payloadOf(inputs(AT), DRAW);
+    payloadOf(inputs(), DRAW);
     await new Promise((resolve) => setImmediate(resolve));
-    const { git } = payloadOf(inputs(AT), DRAW);
+    const { git } = payloadOf(inputs(), DRAW).payload;
     expect(git).toMatchObject({ branch: "main", sha: "abc1234" });
     expect(git).toMatchObject({
       prNumber: PENDING,
@@ -254,11 +252,41 @@ describe("a frame's payload", () => {
     });
   });
 
-  test("asks the feeds at the instant the frame is drawn at", () => {
-    const { feedsAt, inputs } = counted();
-    const later = instantOf(new Date(1_700_000_001_500));
-    payloadOf(inputs(AT), DRAW);
-    payloadOf(inputs(later), DRAW);
-    expect(feedsAt).toEqual([AT, later]);
+  test("carries no fact of the draw's instant, and the width it is drawn to", () => {
+    // [LAW:no-ambient-temporal-coupling] `today` and the feeds move with the
+    // clock, so they are each draw's projections (DRAW_PROJECTIONS), never a
+    // stored value of the view's payload.
+    const { inputs } = counted();
+    const { payload } = payloadOf(inputs(), DRAW);
+    expect(payload).not.toHaveProperty("today");
+    expect(payload).not.toHaveProperty("feeds");
+    expect(payload.term).toEqual({ cols: renderWidth(HINTS) });
+  });
+
+  test("a lane whose refresh threw is its failure on every frame, until a refresh runs clean", async () => {
+    const { inputs, request, deps } = counted();
+    const getContextInfo = deps.contextProvider.getContextInfo;
+    deps.contextProvider.getContextInfo = () => {
+      throw new Error("refresh bug");
+    };
+    await request();
+    for (let frame = 0; frame < 2; frame++) {
+      const drawn = payloadOf(inputs(), DRAW);
+      expect(drawn.payload.context).toBeUndefined();
+      expect(drawn.failures).toEqual(["context: Error: refresh bug"]);
+    }
+    deps.contextProvider.getContextInfo = getContextInfo;
+    await request();
+    expect(payloadOf(inputs(), DRAW).failures).toEqual([]);
+  });
+
+  test("a failed lane is the payload's failure, for the request to log", async () => {
+    const { inputs, request, deps } = counted();
+    await request();
+    deps.contextProvider.contextOf = () => ({
+      kind: "failed",
+      reason: "context: no window",
+    });
+    expect(payloadOf(inputs(), DRAW).failures).toEqual(["context: no window"]);
   });
 });

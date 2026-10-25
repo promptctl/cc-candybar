@@ -11,6 +11,7 @@
 // a pure function over the DSL state bundle, so tests drive it with
 // constructed state and read the result.
 
+import { feedInputs } from "./helpers/inputs";
 import { SessionState } from "../src/daemon/session-state";
 import { ownDeclNames } from "./helpers/ambient-chrome";
 import {
@@ -106,7 +107,7 @@ function buildPopulatedState(): DaemonDslState {
     cwd: process.cwd(),
   });
   // Apply a known payload so the 'session.id' input has a value.
-  registry.applyInput({ session_id: "abc-123-def" });
+  feedInputs(registry, { session_id: "abc-123-def" });
   return {
     store,
     registry,
@@ -212,15 +213,16 @@ describe("introspectVars with populated state", () => {
     expect(byName.get("derived")?.lastError).toBeNull();
   });
 
-  test("ageMs is a non-negative number for box vars, null for computed", () => {
+  test("ageMs is a non-negative number for box vars, null for derived ones", () => {
     const state = buildPopulatedState();
     const vars = introspectVars(state);
     const byName = new Map(vars.map((v) => [v.name, v]));
-    // Literals, inputs, envs are all boxes — they have a real age.
+    // Literals and envs are boxes — they have a real age.
     expect(byName.get("greeting")?.ageMs).toBeGreaterThanOrEqual(0);
-    expect(byName.get("session.id")?.ageMs).toBeGreaterThanOrEqual(0);
     expect(byName.get("user_path")?.ageMs).toBeGreaterThanOrEqual(0);
-    // 'derived' is a template → computed → age is null.
+    // An input is derived from its view's payload, and a template is
+    // computed: neither has one moment it was written.
+    expect(byName.get("session.id")?.ageMs).toBeNull();
     expect(byName.get("derived")?.ageMs).toBeNull();
   });
 

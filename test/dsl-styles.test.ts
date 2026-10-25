@@ -660,24 +660,27 @@ describe("globals.style as an expression — a style chosen by data", () => {
   // expression itself, so the documented answer for a self-reference — the floor,
   // i.e. what naming nothing would give you — is pinned here rather than asserted
   // in a comment.
-  test("a style expression reading .style.effective sees the floor, not a stale name", () => {
-    const { sessionState, render, dispose } = buildRuntime(
-      SRC.replace(
-        /style: '\{\{[^']*\}\}',/,
-        `style: '{{ if eq .style.effective "none" }}inverted{{ else }}washed{{ end }}',`,
-      ),
-    );
-    try {
-      expect(bgOf(render(0), "◆ here")).toBe(byName("inverted"));
-      expect(stripAnsi(render(0))).toContain("L=inverted");
-      // Still the floor on the NEXT render, not the previous render's answer —
-      // the provisional is a constant, not a carried-over value.
-      expect(bgOf(render(0), "◆ here")).toBe(byName("inverted"));
-      // And a session pick still wins, so the expression is not even consulted.
-      sessionState.set(SID, "style", "washed");
-      expect(bgOf(render(0), "◆ here")).toBe(byName("washed"));
-    } finally {
-      dispose();
+  test("a style rule reading any slot's .effective is refused at load", () => {
+    // [LAW:types-are-the-program] Its own name, or another slot's: either
+    // closes a cycle through the payload a rule reads
+    // (brandon-unfiled-3248.8ro6, 4e).
+    for (const [read, slot] of [
+      ["style", "style"],
+      ["theme", "palette"],
+      ["effect", "effect"],
+    ] as const) {
+      expect(() =>
+        buildRuntime(
+          SRC.replace(
+            /style: '\{\{[^']*\}\}',/,
+            `style: '{{ if eq .${read}.effective "none" }}inverted{{ else }}washed{{ end }}',`,
+          ),
+        ),
+      ).toThrow(
+        new RegExp(
+          `globals\\.style reads "${read}\\.effective", the ${slot}'s own name`,
+        ),
+      );
     }
   });
 
