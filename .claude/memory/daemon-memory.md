@@ -1,0 +1,37 @@
+# Daemon memory: the limit, the cache budget, disposal
+
+## The limit judges what the platform charges
+
+The memory backstop measures what the OS charges the process: the physical footprint on macOS, RSS on Linux. It avoids RSS on macOS because macOS RSS includes pages malloc has freed and marked reusable. A backstop that judges by that RSS kills daemons whose real footprint is far under the limit.
+
+On macOS the footprint comes from a subprocess. It is read asynchronously once a minute, and each reading is scheduled only after the previous one answers. When a reading fails, RSS stands in, minus the gap between RSS and the footprint at the last good reading. That gap holds steady from minute to minute, and judging a failed reading on raw RSS kills healthy daemons too. A host whose footprint has never been read has no gap and is judged on RSS.
+
+The env override for the limit keeps "RSS" in its name. It's a published contract, so don't rename it.
+
+## A breach leaves two post-mortems
+
+On a breach the daemon writes the platform's own memory attribution first, then a V8 heap snapshot, under one shared identity, and exits. The attribution is needed because a heap snapshot describes only V8's half. The breaches that trip the limit are the ones where RSS and the heap disagree: V8's own mappings, malloc, page tables and file-backed code, part of which no eviction can reach. Rotation keeps the newest few breaches, with both files for each.
+
+## The render cache has a byte budget
+
+The render cache gets a fixed share of the memory budget. It evicts the least-recently-used entries (never the one being served) while its accounted bytes exceed that share. The costs per entry, per compile and per view are measured, and a test fails if real heap use exceeds any of them. Re-measure when you change what an entry, a compile or a view holds.
+
+Entries share one compile when their configs compile alike. A new entry appears for every directory a session renders from: every worktree, every cd. With one compile per entry, that exhausted the memory limit several times a day. So a compile captures nothing that differs per directory: no store, no registry, no variables. A checkout-relative plugin path resolves into the variables, so a compile that read them would differ per worktree. A compile's template functions reach the render in progress through one binding. It is bound for the synchronous walk and unbound on every exit, so a shared compile keeps nothing from whoever drew last. A read with nothing bound throws.
+
+## Retire, then reclaim when unheld
+
+A render in flight holds the state it draws with. Eviction and reload swap the map at once and retire the state they no longer serve. One place disposes states, and only once a state is retired and no render holds it. So a render always finishes on the state it took its payload from, never on one disposed while it awaited the payload. A reload builds the new state completely before swapping, so a broken config keeps the last good one.
+
+In the stats, a retired count that climbs while the cache size holds steady means a render never returned.
+
+## Dispose releases every MobX subscription
+
+Disposing a store has to release its computeds' subscriptions. A keepAlive computed never unsubscribes on its own. If it read session state, it stays among the observers of the daemon-wide session-state atom for the daemon's lifetime, and it keeps the whole disposed store alive. The stats report that atom's observer count beside the session count. An observer count that climbs while the cache size holds steady is this leak. A test checks that the count drops back after a dispose.
+
+## There is always a bar
+
+Each cache entry starts with the bundled default's state. A config that fails its very first load still renders a bar, settings menu included, under the error strip.
+
+## Tests
+
+The cache's idle sweep is an interval armed on the first hold. A cache a test builds must be closed, or it and every compile it serves live as long as the Jest worker.
