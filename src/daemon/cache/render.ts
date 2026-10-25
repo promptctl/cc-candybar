@@ -1103,9 +1103,15 @@ export class RenderCache {
     // old one is retired, as a reload's successor is, so a move between two
     // directories of one repo keeps the repo held across it. It enters at the
     // end, the most recently used, as a kept view moves there.
+    // The old view is retired whether or not the new one opens: the session's
+    // render resolved to another entry either way.
     this.views.delete(sessionId);
-    const view = this.opened(sessionId, entry, state, facts, false);
-    if (current !== undefined) this.retireView(current, "moved");
+    let view: SessionView;
+    try {
+      view = this.opened(sessionId, entry, state, facts, false);
+    } finally {
+      if (current !== undefined) this.retireView(current, "moved");
+    }
     // A view is charged to the budget like an entry.
     this.fit(entry);
     return view;

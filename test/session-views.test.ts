@@ -384,6 +384,28 @@ test("debug introspection samples the most recently rendered session's view", as
   expect(cache.latestView()?.sessionId).toBe("s-a");
 });
 
+test("a move whose new view fails to open still retires the view it replaces", () => {
+  configure(dir);
+  const other = path.join(dir, "sub");
+  fs.mkdirSync(other);
+  configure(other);
+  let opens = 0;
+  const { cache, lines } = makeCache({
+    log: (line) => {
+      if (line.startsWith("session view opened") && ++opens === 2)
+        throw new Error("log boom");
+    },
+  });
+  cache.holdSession(dir, dir, undefined, "s-a", viewFacts(dir, "s-a"))[Symbol.dispose]();
+  expect(() =>
+    cache.holdSession(other, other, undefined, "s-a", viewFacts(other, "s-a")),
+  ).toThrow("log boom");
+  expect(lines).toContainEqual(
+    expect.stringMatching(/^session view closed sid="s-a" reason=moved /),
+  );
+  expect(cache.stats.retiredViews).toBe(0);
+});
+
 test("a view that fails to open releases the state hold it was opened under", () => {
   configure(dir);
   let boom = true;
