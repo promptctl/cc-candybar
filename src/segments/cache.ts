@@ -21,6 +21,7 @@
 // boundary, the one place that logs it — there is no "0 means hidden"
 // ambiguity to defend against downstream, and no failure dressed as absence.
 
+import { observable, runInAction } from "mobx";
 import {
   ABSENT,
   ok,
@@ -96,7 +97,11 @@ interface Known {
 // a request over an unchanged transcript, reads nothing — and a draw takes
 // the expiry as the last request left it.
 export class CacheExpiryProvider {
-  private readonly known = new Map<string, Known>();
+  // Observable, so a view's payload over an expiry is recomputed in the turn
+  // it is stored.
+  private readonly known = observable.map<string, Known>(undefined, {
+    deep: false,
+  });
   // [LAW:no-silent-failure] Each read of the tail is one event, a failed one at
   // warn; an answer believed under its stamp reads nothing, and logs nothing.
   private readonly refreshes: Refreshes<"request">;
@@ -123,12 +128,14 @@ export class CacheExpiryProvider {
         ? prior.outcome
         : await this.read(sessionId, transcriptPath, stamp);
     // LRU touch: re-inserting moves the session to the newest end.
-    this.known.delete(sessionId);
-    this.known.set(sessionId, { stamp, outcome });
-    for (const oldest of this.known.keys()) {
-      if (this.known.size <= MAX_SESSIONS) break;
-      this.known.delete(oldest);
-    }
+    runInAction(() => {
+      this.known.delete(sessionId);
+      this.known.set(sessionId, { stamp, outcome });
+      for (const oldest of [...this.known.keys()]) {
+        if (this.known.size <= MAX_SESSIONS) break;
+        this.known.delete(oldest);
+      }
+    });
     return outcome;
   }
 

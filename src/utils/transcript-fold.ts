@@ -29,6 +29,7 @@ import {
 import { statStamp } from "./transcript-fs";
 import { quietLogger, type DaemonLogger } from "./logger";
 import { PENDING, type Pending } from "./outcome";
+import { observable, runInAction } from "mobx";
 
 // [LAW:types-are-the-program] Never `absent`: a session with no transcript yet
 // is a real empty fold, so the caller has exactly two arms.
@@ -51,8 +52,11 @@ interface Session<S> {
 
 export class TranscriptFold<S> {
   // [LAW:no-shared-mutable-globals] Single owner, hard cap, LRU eviction. One
-  // instance per projection per daemon.
-  private readonly sessions = new Map<string, Session<S>>();
+  // instance per projection per daemon. Observable, so a view's payload over
+  // an answer is recomputed in the turn the answer is stored.
+  private readonly sessions = observable.map<string, Session<S>>(undefined, {
+    deep: false,
+  });
 
   constructor(
     private readonly empty: S,
@@ -109,13 +113,15 @@ export class TranscriptFold<S> {
     folded: Folded<S> | undefined,
     answer: FoldOutcome<S>,
   ): FoldOutcome<S> {
-    this.sessions.delete(sessionId);
-    this.sessions.set(sessionId, { folded, answer });
-    while (this.sessions.size > this.maxSessions) {
-      const oldest = this.sessions.keys().next().value;
-      if (oldest === undefined) break;
-      this.sessions.delete(oldest);
-    }
+    runInAction(() => {
+      this.sessions.delete(sessionId);
+      this.sessions.set(sessionId, { folded, answer });
+      while (this.sessions.size > this.maxSessions) {
+        const oldest = this.sessions.keys().next().value;
+        if (oldest === undefined) break;
+        this.sessions.delete(oldest);
+      }
+    });
     return answer;
   }
 }

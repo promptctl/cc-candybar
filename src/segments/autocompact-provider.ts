@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { observable, runInAction } from "mobx";
 import {
   readAutoCompactWindow,
   type AutoCompactWindow,
@@ -24,7 +25,11 @@ interface Known {
 // `/autocompact`, so the session's next request reads what it wrote, and two
 // sessions sharing one Claude Code directory read it once between them.
 export class AutoCompactProvider {
-  private readonly known = new Map<string, Known>();
+  // Observable, so a view's payload over a window is recomputed in the turn
+  // it is stored.
+  private readonly known = observable.map<string, Known>(undefined, {
+    deep: false,
+  });
   private readonly refreshes: Refreshes<"request">;
 
   constructor(logger: DaemonLogger = quietLogger) {
@@ -34,10 +39,12 @@ export class AutoCompactProvider {
   window(settingsPath: string): Outcome<AutoCompactWindow> {
     const stamp = stampAt(settingsPath);
     const known = this.known.get(settingsPath);
-    // LRU touch: re-inserting moves the file to the newest end.
-    this.known.delete(settingsPath);
     if (known !== undefined && known.stamp === stamp) {
-      this.known.set(settingsPath, known);
+      // LRU touch: re-inserting moves the file to the newest end.
+      runInAction(() => {
+        this.known.delete(settingsPath);
+        this.known.set(settingsPath, known);
+      });
       return known.outcome;
     }
     const startedAt = Date.now();
@@ -48,11 +55,14 @@ export class AutoCompactProvider {
       outcome,
       Date.now() - startedAt,
     );
-    this.known.set(settingsPath, { stamp, outcome });
-    for (const oldest of this.known.keys()) {
-      if (this.known.size <= MAX_FILES) break;
-      this.known.delete(oldest);
-    }
+    runInAction(() => {
+      this.known.delete(settingsPath);
+      this.known.set(settingsPath, { stamp, outcome });
+      for (const oldest of [...this.known.keys()]) {
+        if (this.known.size <= MAX_FILES) break;
+        this.known.delete(oldest);
+      }
+    });
     return outcome;
   }
 
