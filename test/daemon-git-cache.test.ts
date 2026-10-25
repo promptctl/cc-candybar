@@ -1175,16 +1175,13 @@ describe("GitDataProvider owns its failures and its PR's timing", () => {
     expect(logs).toEqual(["git resolve failed (/slow): git rev-parse: timeout"]);
   });
 
-  test("a read that throws is logged by the provider and answers failed", async () => {
-    const { svc, inner, logs, holds } = makeCache();
+  test("a declaration into a closed home throws, for the view's declaration to report", () => {
+    const { svc, inner, holds } = makeCache();
     inner.repoRootByDir = { "/repo": "/repo" };
     holds.close();
-
-    const out = await gitOf(svc, holds, "/repo", {});
-    expect(out.kind).toBe("failed");
-    expect(logs.filter((l) => l.startsWith("git "))).toEqual([
-      "git read threw: Error: hold taken after close: git:/repo|{}|-",
-    ]);
+    expect(() => svc.declare(holds, "/repo", {})).toThrow(
+      "hold taken after close: git:/repo|{}|-",
+    );
   });
 
   test("a branch switch never pairs the new branch with the old branch's PR", async () => {

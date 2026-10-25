@@ -7,7 +7,6 @@ import {
   currentOf,
   pending,
   settle,
-  settledLane,
   type Lane,
   type Readable,
 } from "./reading";
@@ -132,37 +131,13 @@ export class KeyedSource<I, T> {
   // is created pending and read once, its first refresh.
   //
   // [LAW:no-silent-failure] The owner logs its own failures — each refresh's
-  // by that refresh — so its caller logs none. A declaration or a read that
-  // THROWS is a bug none of those saw, logged where it surfaces, and answered
-  // as failed.
+  // by that refresh — so its caller logs none. A declaration that THROWS is a
+  // bug none of those saw, reported by the view's declaration (declareLanes).
   declare(holds: Holds, input: I): Lane<T> {
-    let entry: Readable<T>;
-    try {
-      entry = this.ask(holds, input);
-    } catch (e) {
-      return settledLane(this.threw(e));
-    }
-    return {
-      current: () => {
-        try {
-          return currentOf(entry);
-        } catch (e) {
-          return this.threw(e);
-        }
-      },
-    };
-  }
-
-  private ask(holds: Holds, input: I): Readable<T> {
     const key = this.spec.keyOf(input);
     const entry = this.touched(key) ?? this.created(key, input);
     holds.take(`${this.spec.name}:${key}`, () => this.hold(entry));
-    return entry;
-  }
-
-  private threw(e: unknown): Outcome<never> {
-    this.spec.logger("error", `${this.spec.name} read threw: ${String(e)}`);
-    return failed(`${this.spec.name}: ${String(e)}`);
+    return { current: () => currentOf(entry) };
   }
 
   // The daemon itself changed what this key reads (a memento move): the read

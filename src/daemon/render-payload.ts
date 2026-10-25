@@ -1255,8 +1255,8 @@ export interface Declaration {
   readonly faults: readonly string[];
 }
 
-// Every lane answering one outcome: what a view holds before a declaration
-// has answered, or when one threw whole.
+// Every lane answering one outcome: a view's when its declaration threw
+// whole, or a caller's that declares nothing.
 export function settledLanes(outcome: Outcome<never>): DeclaredLanes {
   const lane = settledLane(outcome);
   return { git: lane, tmux: lane, memento: lane, today: lane };

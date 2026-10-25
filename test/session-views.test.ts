@@ -8,6 +8,7 @@ import {
   type Declare,
   type SessionView,
 } from "../src/daemon/cache/render";
+import type { ViewFacts } from "../src/daemon/render-payload";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { SessionState } from "../src/daemon/session-state";
 import { renderDsl } from "../src/dsl/render";
@@ -238,6 +239,29 @@ test("a view opened inside a MobX batch is declared before it is handed back", (
   });
   // DECLARES_NOTHING's answer, not the view's want of one.
   expect(answer).toEqual(ABSENT);
+});
+
+test("a kept view is declared with each request holdSession is given, inside a batch too", () => {
+  configure(dir);
+  const declaredFor: ViewFacts[] = [];
+  const { cache } = makeCache({
+    declare: (holds, facts, closure) => {
+      declaredFor.push(facts);
+      return DECLARES_NOTHING(holds, facts, closure);
+    },
+  });
+  const first = viewFacts(dir, "s-a");
+  cache.holdSession(dir, dir, undefined, "s-a", first)[Symbol.dispose]();
+  const next = viewFacts(dir, "s-a");
+  runInAction(() => {
+    using held = cache.holdSession(dir, dir, undefined, "s-a", next);
+    // Declared before the batch ends: this request's lanes, not the last's.
+    expect(declaredFor).toEqual([first, next]);
+    // A frame's facts, the request already declared, declare nothing again.
+    cache.holdSession(dir, dir, undefined, "s-a", next)[Symbol.dispose]();
+    expect(held.view).toBeDefined();
+  });
+  expect(declaredFor).toHaveLength(2);
 });
 
 test("a view whose declaration throws answers that failure on its lanes", () => {

@@ -288,20 +288,15 @@ describe("KeyedSource", () => {
     expect(lines[0]).toMatchObject({ level: "warn" });
   });
 
-  test("a read on a closed home never rejects: it is logged where it surfaces", async () => {
-    const lines: Line[] = [];
+  test("a declaration into a closed home throws, for the view's declaration to report", () => {
     const f = fakeRead();
-    source = sourceOf(f.read, { lines });
+    const closing = sourceOf(f.read);
+    source = closing;
     const holds = new Holds();
     holds.close();
-    const out = await laneOutcome(source.declare(holds, "a"));
-    expect(out.kind).toBe("failed");
-    expect(lines).toEqual([
-      {
-        level: "error",
-        msg: "fake read threw: Error: hold taken after close: fake:a",
-      },
-    ]);
+    expect(() => closing.declare(holds, "a")).toThrow(
+      "hold taken after close: fake:a",
+    );
   });
 
   test("close ends every period", async () => {

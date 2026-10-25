@@ -1992,10 +1992,6 @@ function setUpRender(
   );
   try {
     const { entry, state, view } = hold;
-    // The request this render draws by names the keys the view declares: a
-    // request's own declares again before its refresh, and a frame's — the
-    // session's latest, already declared — changes nothing.
-    view.requested(req);
     const termCols = hints.termCols;
     const width = applyClaudeCodeReserve(termCols ?? DEFAULT_TERMINAL_WIDTH);
     const rowCap = diagnosticRowCap(hints.termRows);

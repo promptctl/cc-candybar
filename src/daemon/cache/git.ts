@@ -245,6 +245,15 @@ function unkeyedPr(pr: PrSource, failures: ReadonlySet<string>): PrMove {
   return "unkeyed";
 }
 
+// A lane's read: the value as it stands, with its PR when shown. A pass
+// stores a branch's values and moves the PR's key in one turn, so the two
+// answer for the same pass.
+function composed(value: GitValue, pr: PrSource | null): Current<GitInfo> {
+  const info = currentOf(value);
+  if (pr === null || info.kind !== "ok") return info;
+  return ok({ ...info.value, pullRequest: currentOf(pr) });
+}
+
 function threw(label: string): (e: unknown) => Outcome<never> {
   return (e) => failed(`${label} threw: ${String(e)}`);
 }
@@ -374,45 +383,23 @@ export class GitDataProvider {
   //
   // [LAW:no-silent-failure] Git logs its own failures — a refresh's by the
   // refresh, a resolution's by the resolution — so its caller logs none. A
-  // declaration or a read that THROWS is a bug none of those saw, logged
-  // here where it surfaces, and answered as failed.
+  // declaration that THROWS is a bug none of those saw, reported by the view's
+  // declaration (declareLanes).
   declare(
     holds: Holds,
     workingDir: string,
     options: GitInfoOptions = {},
     projectDir?: string,
   ): Lane<GitInfo> {
-    try {
-      const asked = this.asked(holds, workingDir, options, projectDir);
-      if (asked.kind === "not-a-repo") return settledLane(asked.outcome);
-      const { value, pr } = asked;
-      // A declaration finding the value stored is a hit; one that must wait
-      // for its first read is a miss. A lane's reads count nothing: a frame
-      // reads at its own rate.
-      if (value.reading.kind === "pending") this.misses++;
-      else this.hits++;
-      return { current: () => this.composed(value, pr) };
-    } catch (e) {
-      return settledLane(this.threw(e));
-    }
-  }
-
-  // A lane's read: the value as it stands, with its PR when shown. A pass
-  // stores a branch's values and moves the PR's key in one turn, so the two
-  // answer for the same pass.
-  private composed(value: GitValue, pr: PrSource | null): Current<GitInfo> {
-    try {
-      const info = currentOf(value);
-      if (pr === null || info.kind !== "ok") return info;
-      return ok({ ...info.value, pullRequest: currentOf(pr) });
-    } catch (e) {
-      return this.threw(e);
-    }
-  }
-
-  private threw(e: unknown): Outcome<never> {
-    this.logger("error", `git read threw: ${String(e)}`);
-    return failed(`git: ${String(e)}`);
+    const asked = this.asked(holds, workingDir, options, projectDir);
+    if (asked.kind === "not-a-repo") return settledLane(asked.outcome);
+    const { value, pr } = asked;
+    // A declaration finding the value stored is a hit; one that must wait
+    // for its first read is a miss. A lane's reads count nothing: a frame
+    // reads at its own rate.
+    if (value.reading.kind === "pending") this.misses++;
+    else this.hits++;
+    return { current: () => composed(value, pr) };
   }
 
   // [LAW:one-source-of-truth] The one place a home asks a repo by directory:
@@ -798,8 +785,6 @@ export class GitDataProvider {
     // honoured after this (drop clears each loop).
     for (const state of this.repos.values()) this.drop(state);
     this.repos.clear();
-    // In-flight resolutions resolve naturally; clearing the map means a fresh
-    // provider re-asks rather than inheriting this one's answers.
     this.resolutions.clear();
     if (this.ownsWatchers) this.watchers.closeAll();
   }

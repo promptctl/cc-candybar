@@ -842,24 +842,26 @@ export function openView(
       return settledLanes(failed(`view declaration threw: ${String(e)}`));
     }
   };
-  // [LAW:no-ambient-temporal-coupling] The opening declaration runs here, in
-  // this call, not as the reaction's first run: MobX holds a reaction created
-  // inside a batch (a reaction's effect, an action) until the batch ends, and
-  // a frame drawn in that batch would read a view nothing has declared yet.
+  // [LAW:no-ambient-temporal-coupling] The opening declaration, and each
+  // request's, runs in its own call, never as a reaction's run: MobX holds a
+  // reaction inside a batch (a reaction's effect, an action) until the batch
+  // ends, and a frame drawn in that batch would read a view declared for a
+  // request it is not drawn for.
   let last: readonly [ViewFacts, string] = [facts, presetNow()];
   const lanes = observable.box<DeclaredLanes>(declared(...last), {
     deep: false,
   });
-  // [LAW:single-enforcer] Only the request and the preset are tracked, and a
-  // pair is declared once: the reaction's first run, whenever it comes,
-  // declares only what moved since the opening one.
+  // [LAW:single-enforcer] A (request, preset) pair is declared once.
+  const redeclare = (next: readonly [ViewFacts, string]): void => {
+    if (next[0] === last[0] && next[1] === last[1]) return;
+    last = next;
+    runInAction(() => lanes.set(declared(...next)));
+  };
+  // The preset moves with the session's picks, which the reaction tracks: its
+  // first run, whenever it comes, declares only a preset moved since.
   const stop = reaction(
-    () => [latest.get(), presetNow()] as const,
-    (next) => {
-      if (next[0] === last[0] && next[1] === last[1]) return;
-      last = next;
-      runInAction(() => lanes.set(declared(...next)));
-    },
+    presetNow,
+    (preset) => redeclare([latest.get(), preset]),
     { fireImmediately: true },
   );
   return {
@@ -868,7 +870,11 @@ export function openView(
     store: registry.variableStore,
     registry,
     holds,
-    requested: (next) => runInAction(() => latest.set(next)),
+    requested: (next) =>
+      runInAction(() => {
+        latest.set(next);
+        redeclare([next, presetNow()]);
+      }),
     facts: () => latest.get(),
     lanes: () => lanes.get(),
     lastRenderCellsBySegment: new Map<string, readonly RichText[]>(),
@@ -1040,8 +1046,9 @@ export class RenderCache {
   // reload, an eviction or an idle sweep retires the view, and the cache
   // disposes it when this hold is released.
   //
-  // `facts` is the request the render is drawn for: a view opened here is
-  // declared with it (openView), so no view is ever drawn undeclared.
+  // [LAW:single-enforcer] `facts` is the request the render is drawn for: the
+  // view is declared with it here, opened (openView) or kept (`requested`),
+  // so no view is drawn declared for another request.
   holdSession(
     projectDir: string,
     cwd: string,
@@ -1091,6 +1098,9 @@ export class RenderCache {
       // Move to end (most recently used), as getOrCreate does an entry.
       this.views.delete(sessionId);
       this.views.set(sessionId, current);
+      // A request declares again before its refresh; a frame's facts, the
+      // session's latest request, are already declared and change nothing.
+      current.requested(facts);
       return current;
     }
     if (current !== undefined) this.retireView(current, "moved");
