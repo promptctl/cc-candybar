@@ -1638,8 +1638,9 @@ function projectPayload(
 
 // [LAW:nothing-unseen] The render event's `sources=` and `sourcesPending=`:
 // how many plugin sources the view declared, and those not answered yet as
-// the draw reads them (`-` for none), so a source that never lands is told
-// from one nothing declared.
+// the draw reads them, each with why (`<name>:unread` or `<name>:superseded`;
+// `-` for none), so a source that never lands is told from one nothing
+// declared, and a run's superseded source from a wait that left one out.
 export function sourcesFactOf(sources: ReadonlyMap<string, Lane<JsonValue>>): {
   readonly sources: string;
   readonly sourcesPending: string;
@@ -1648,8 +1649,10 @@ export function sourcesFactOf(sources: ReadonlyMap<string, Lane<JsonValue>>): {
     sources: String(sources.size),
     sourcesPending:
       [...sources]
-        .filter(([, lane]) => lane.current().kind === "pending")
-        .map(([name]) => name)
+        .flatMap(([name, lane]) => {
+          const reading = lane.current();
+          return reading.kind === "pending" ? [`${name}:${reading.why}`] : [];
+        })
         .join(",") || "-",
   };
 }
@@ -1751,7 +1754,8 @@ export async function settlePayload(
   await refreshPayload(inputs, at);
   // [LAW:one-source-of-truth] The one wait for an answer: the lanes the view
   // declares now, read again once every landing they waited on has landed —
-  // so a lane a move made pending again is waited out too.
+  // so a lane that turns unread again (a new key) is waited out too, and a
+  // superseded one never is (waitsOf).
   await answered((): true | Waiting => {
     const waits = waitsOf(inputs.deps.lanes());
     return waits.length > 0

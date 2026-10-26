@@ -127,11 +127,13 @@ export async function renderRequest(
     }
     let event = "";
     await until(
-      () =>
-        (event = answeredEvents(log, sessionId)[before] ?? "") !== "",
+      () => (event = answeredEvents(log, sessionId)[before] ?? "") !== "",
       `the render event of ${sessionId}'s answer`,
     );
     if (/ pending=-(?: |$)/.test(event)) return resp.output;
+    // A source a run superseded is drawn pending by design: no request waits
+    // on it (the run may outlast the deadline), so this answer is the one.
+    if (drewOnlySuperseded(event)) return resp.output;
     // [LAW:no-silent-failure] Only a wait its deadline ended may draw
     // pending: one that answered yet drew a value not answered means the wait
     // left out something the request started (rule 1), and asking again would
@@ -145,6 +147,22 @@ export async function renderRequest(
         `render still drew pending after ${attempt} asks: ${event}`,
       );
   }
+}
+
+// Whether every value a render event drew pending is a plugin source a run
+// superseded, as its `sourcesPending=` names them.
+function drewOnlySuperseded(event: string): boolean {
+  const field = (name: string): string[] =>
+    (new RegExp(` ${name}=(\\S+)`).exec(event)?.[1] ?? "-")
+      .split(",")
+      .filter((v) => v !== "-");
+  const superseded = new Set(
+    field("sourcesPending")
+      .filter((v) => v.endsWith(":superseded"))
+      .map((v) => v.slice(0, -":superseded".length)),
+  );
+  const pending = field("pending");
+  return pending.length > 0 && pending.every((name) => superseded.has(name));
 }
 
 // The body of a status-line render request, as Claude Code's client sends it.
@@ -275,7 +293,6 @@ export function urlWriting(
   }
   return url;
 }
-
 
 // Stop the daemon and wait for it to be gone.
 //

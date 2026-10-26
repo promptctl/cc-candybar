@@ -180,7 +180,11 @@ function draw(view: SessionView<SessionSource>): {
 }
 
 // The view of session `sid`, held as a render holds it, released at cleanup.
-function viewOf(r: Rig, configFile: string, sid = "s1"): SessionView<SessionSource> {
+function viewOf(
+  r: Rig,
+  configFile: string,
+  sid = "s1",
+): SessionView<SessionSource> {
   const held = r.cache.holdSession(dir, dir, configFile, viewFacts(dir, sid));
   cleanups.push(() => held[Symbol.dispose]());
   return held.view;
@@ -190,7 +194,10 @@ const storageOf = (folder = path.join(dir, "p")): string =>
   path.join(fs.realpathSync(folder), "session");
 
 // The source's lane has answered its first read.
-async function answered(view: SessionView<SessionSource>, name = STATUS): Promise<void> {
+async function answered(
+  view: SessionView<SessionSource>,
+  name = STATUS,
+): Promise<void> {
   await until(
     () => view.lanes().sources.get(name)?.current().kind !== "pending",
     `${name}'s first read`,
@@ -217,15 +224,20 @@ async function writeUntilShown(
 
 describe("a source's declaration", () => {
   function clean(o: CheckOutcome): string {
-    if (o.kind !== "clean") throw new Error(`expected clean, got ${JSON.stringify(o)}`);
+    if (o.kind !== "clean")
+      throw new Error(`expected clean, got ${JSON.stringify(o)}`);
     return stripAnsi(o.rendered);
   }
   function fatal(o: CheckOutcome): string {
-    if (o.kind !== "fatal") throw new Error(`expected fatal, got ${JSON.stringify(o)}`);
+    if (o.kind !== "fatal")
+      throw new Error(`expected fatal, got ${JSON.stringify(o)}`);
     return [o.message, ...o.warnings].join("\n");
   }
   const listing = (sources: string, extra = ""): string => {
-    write("p/plugin.json5", `{ sources: ${sources}, segments: { s: { template: "s" } }, ${extra} }`);
+    write(
+      "p/plugin.json5",
+      `{ sources: ${sources}, segments: { s: { template: "s" } }, ${extra} }`,
+    );
     return write(
       "config.json5",
       `{ plugins: ["./p/plugin.json5"], segments: { mine: { template: "mine" } }, root: { h: ["mine"] } }`,
@@ -250,32 +262,72 @@ describe("a source's declaration", () => {
         [STATUS, { folder: path.join(dir, "p", "session"), generation: 0 }],
       ]);
       // The build created the folder, so the program has somewhere to write.
-      expect(fs.statSync(path.join(dir, "p", "session")).isDirectory()).toBe(true);
+      expect(fs.statSync(path.join(dir, "p", "session")).isDirectory()).toBe(
+        true,
+      );
     } finally {
       loaded.state?.registry.dispose();
     }
   });
 
   test.each([
-    ["another scope", `{ scope: "repo", refresh: { watch: true }, read: { file: { json: true } } }`, "sources.status.scope"],
-    ["another trigger", `{ scope: "session", refresh: { period: "10s" }, read: { file: { json: true } } }`, "sources.status.refresh.period"],
-    ["no trigger", `{ scope: "session", read: { file: { json: true } } }`, "sources.status.refresh"],
-    ["another reader", `{ scope: "session", refresh: { watch: true }, read: { module: "./read.mjs" } }`, "sources.status.read.module"],
-    ["a text read", `{ scope: "session", refresh: { watch: true }, read: { file: { text: true } } }`, "sources.status.read.file.text"],
-    ["a file path", `{ scope: "session", refresh: { watch: true }, read: { file: { json: true, path: "./x.json" } } }`, "sources.status.read.file.path"],
-    ["a field no source has", `{ scope: "session", refresh: { watch: true }, read: { file: { json: true } }, key: "x" }`, "sources.status.key"],
-  ])("%s drops the plugin, naming the field and what is built", async (_what, source, field) => {
-    const message = fatal(await checkConfig(listing(`{ status: ${source} }`), dir));
-    expect(message).toContain(`plugin ${path.join(dir, "p/plugin.json5")} was not loaded`);
-    expect(message).toContain(field);
-    expect(message).toContain(
-      `what is built is a source {"scope":"session","refresh":{"watch":true},"read":{"file":{"json":true}}}`,
-    );
-  });
+    [
+      "another scope",
+      `{ scope: "repo", refresh: { watch: true }, read: { file: { json: true } } }`,
+      "sources.status.scope",
+    ],
+    [
+      "another trigger",
+      `{ scope: "session", refresh: { period: "10s" }, read: { file: { json: true } } }`,
+      "sources.status.refresh.period",
+    ],
+    [
+      "no trigger",
+      `{ scope: "session", read: { file: { json: true } } }`,
+      "sources.status.refresh",
+    ],
+    [
+      "another reader",
+      `{ scope: "session", refresh: { watch: true }, read: { module: "./read.mjs" } }`,
+      "sources.status.read.module",
+    ],
+    [
+      "a text read",
+      `{ scope: "session", refresh: { watch: true }, read: { file: { text: true } } }`,
+      "sources.status.read.file.text",
+    ],
+    [
+      "a file path",
+      `{ scope: "session", refresh: { watch: true }, read: { file: { json: true, path: "./x.json" } } }`,
+      "sources.status.read.file.path",
+    ],
+    [
+      "a field no source has",
+      `{ scope: "session", refresh: { watch: true }, read: { file: { json: true } }, key: "x" }`,
+      "sources.status.key",
+    ],
+  ])(
+    "%s drops the plugin, naming the field and what is built",
+    async (_what, source, field) => {
+      const message = fatal(
+        await checkConfig(listing(`{ status: ${source} }`), dir),
+      );
+      expect(message).toContain(
+        `plugin ${path.join(dir, "p/plugin.json5")} was not loaded`,
+      );
+      expect(message).toContain(field);
+      expect(message).toContain(
+        `what is built is a source {"scope":"session","refresh":{"watch":true},"read":{"file":{"json":true}}}`,
+      );
+    },
+  );
 
   test("a dropped plugin declares no sources: no folder made, no watch held", () => {
     const r = rig();
-    write("p/plugin.json5", `{ sources: { status: ${SOURCE} }, segments: { s: { template: "{{ " } } }`);
+    write(
+      "p/plugin.json5",
+      `{ sources: { status: ${SOURCE} }, segments: { s: { template: "{{ " } } }`,
+    );
     const p = write(
       "config.json5",
       `{ plugins: ["./p/plugin.json5"], segments: { mine: { template: "mine" } }, root: { h: ["mine"] } }`,
@@ -296,40 +348,61 @@ describe("a source's declaration", () => {
   });
 
   test("a source's name is one identifier", async () => {
-    const message = fatal(await checkConfig(listing(`{ "a.b": ${SOURCE} }`), dir));
+    const message = fatal(
+      await checkConfig(listing(`{ "a.b": ${SOURCE} }`), dir),
+    );
     expect(message).toContain(`source name "a.b" is not one identifier`);
   });
 
   test("a source and a variable of the same name is a load error naming both", async () => {
     const message = fatal(
       await checkConfig(
-        listing(`{ status: ${SOURCE} }`, `variables: { status: { kind: "literal", value: 1 } }`),
+        listing(
+          `{ status: ${SOURCE} }`,
+          `variables: { status: { kind: "literal", value: 1 } }`,
+        ),
         dir,
       ),
     );
-    expect(message).toContain(`source "status" and variable "status" are one name`);
+    expect(message).toContain(
+      `source "status" and variable "status" are one name`,
+    );
   });
 
   // [LAW:one-source-of-truth] A session's file is one document: two sources
   // reading it would be two names for it.
   test("two sources reading the same session file drop the plugin, naming both and the file", async () => {
-    const message = fatal(await checkConfig(listing(`{ status: ${SOURCE}, other: ${SOURCE} }`), dir));
-    expect(message).toContain(`plugin ${path.join(dir, "p/plugin.json5")} was not loaded`);
+    const message = fatal(
+      await checkConfig(
+        listing(`{ status: ${SOURCE}, other: ${SOURCE} }`),
+        dir,
+      ),
+    );
+    expect(message).toContain(
+      `plugin ${path.join(dir, "p/plugin.json5")} was not loaded`,
+    );
     expect(message).toContain(
       `sources.status: sources .plugins.p.status and .plugins.p.other read the same file, ${path.join(dir, "p", "session", "<session id>.json")}: a session's file is one document, read by one source`,
     );
   });
 
   test("another plugin whose folder is the same real folder is dropped, naming both sources and the file", async () => {
-    write("p/plugin.json5", `{ sources: { status: ${SOURCE} }, segments: { s: { template: "s" } } }`);
+    write(
+      "p/plugin.json5",
+      `{ sources: { status: ${SOURCE} }, segments: { s: { template: "s" } } }`,
+    );
     fs.symlinkSync(path.join(dir, "p"), path.join(dir, "q"));
     const p = write(
       "config.json5",
       `{ plugins: ["./p/plugin.json5", "./q/plugin.json5"], segments: { mine: { template: "mine" } }, root: { h: ["mine", "plugins.p.s", "plugins.q.s"] } }`,
     );
     const message = fatal(await checkConfig(p, dir));
-    expect(message).toContain(`plugin ${path.join(dir, "q/plugin.json5")} was not loaded`);
-    expect(message).not.toContain(`plugin ${path.join(dir, "p/plugin.json5")} was not loaded`);
+    expect(message).toContain(
+      `plugin ${path.join(dir, "q/plugin.json5")} was not loaded`,
+    );
+    expect(message).not.toContain(
+      `plugin ${path.join(dir, "p/plugin.json5")} was not loaded`,
+    );
     expect(message).toContain(
       `sources .plugins.p.status and .plugins.q.status read the same file, ${path.join(dir, "p", "session", "<session id>.json")}`,
     );
@@ -345,7 +418,9 @@ describe("a source's declaration", () => {
       `{ plugins: ["./p/plugin.json5"], segments: { mine: { template: "mine" } }, root: { h: ["mine"] } }`,
     );
     const message = fatal(await checkConfig(p, dir));
-    expect(message).toContain(`plugin ${path.join(dir, "p/plugin.json5")} was not loaded`);
+    expect(message).toContain(
+      `plugin ${path.join(dir, "p/plugin.json5")} was not loaded`,
+    );
     expect(message).toContain("variables.status.kind");
   });
 
@@ -355,7 +430,10 @@ describe("a source's declaration", () => {
   test("the load event counts sources apart from plugin variables", () => {
     const r = rig();
     write("q/plugin.json5", `{ sources: { other: ${SOURCE} } }`);
-    write("p/plugin.json5", `{ sources: { status: ${SOURCE} }, variables: { v: { kind: "literal", value: 1 } } }`);
+    write(
+      "p/plugin.json5",
+      `{ sources: { status: ${SOURCE} }, variables: { v: { kind: "literal", value: 1 } } }`,
+    );
     const p = write(
       "config.json5",
       `{ plugins: ["./p/plugin.json5", "./q/plugin.json5"], segments: { mine: { template: "mine" } }, root: { h: ["mine"] } }`,
@@ -390,7 +468,9 @@ describe("`cc-candybar check` on a source", () => {
     const outcome = await checkConfig(config(["mine", "plugins.p.bare"]), dir);
     if (outcome.kind !== "fatal") throw new Error(JSON.stringify(outcome));
     expect(outcome.message).toContain('segment "plugins.p.bare"');
-    expect(outcome.message).toContain('field "plugins.p.status.home" not found on receiver');
+    expect(outcome.message).toContain(
+      'field "plugins.p.status.home" not found on receiver',
+    );
   });
 });
 
@@ -450,7 +530,8 @@ describe("a session reads its source", () => {
     await answered(view);
     expect(view.lanes().sources.has(STATUS)).toBe(true);
     expect(r.providers.managedStorage.stats().held).toBe(1);
-    const runs = (): number => Number(/runs=(\d+)/.exec(draw(view).text)?.[1] ?? 0);
+    const runs = (): number =>
+      Number(/runs=(\d+)/.exec(draw(view).text)?.[1] ?? 0);
     // Before the write the key has nothing to read, so the shell has not run.
     expect(runs()).toBe(0);
     await writeUntilShown(
@@ -473,14 +554,26 @@ describe("a source's document", () => {
     const store = new VariableStore();
     const registry = new SourceRegistry(store);
     registry.declareSourceDocument(STATUS);
-    registry.bindInputs({ read: (p) => resolvePath(payload(), p), drawnAt: () => { throw new Error("no depth is read"); } });
+    registry.bindInputs({
+      read: (p) => resolvePath(payload(), p),
+      drawnAt: () => {
+        throw new Error("no depth is read");
+      },
+    });
     cleanups.push(() => registry.dispose());
     return () => store.readDocument(STATUS);
   }
 
   test("reads the payload's reading at its own name: pending, ok, absent, failed", () => {
-    for (const reading of [PENDING, ok({ home: "/h" }), ABSENT, { kind: "failed", reason: "bad json" }]) {
-      expect(sourceDoc(() => ({ plugins: { p: { status: reading } } }))()).toEqual(reading);
+    for (const reading of [
+      PENDING,
+      ok({ home: "/h" }),
+      ABSENT,
+      { kind: "failed", reason: "bad json" },
+    ]) {
+      expect(
+        sourceDoc(() => ({ plugins: { p: { status: reading } } }))(),
+      ).toEqual(reading);
     }
   });
 
@@ -520,9 +613,16 @@ describe("the view declares the sources its preset reads", () => {
 
   // [LAW:nothing-unseen] The render event's fields.
   test("the render event counts the declared sources and names the pending ones", () => {
-    expect(sourcesFactOf(new Map())).toEqual({ sources: "0", sourcesPending: "-" });
+    expect(sourcesFactOf(new Map())).toEqual({
+      sources: "0",
+      sourcesPending: "-",
+    });
     const unread = {
-      current: () => ({ kind: "pending" as const, why: "unread" as const, landed: new Promise<void>(() => {}) }),
+      current: () => ({
+        kind: "pending" as const,
+        why: "unread" as const,
+        landed: new Promise<void>(() => {}),
+      }),
     };
     expect(
       sourcesFactOf(
@@ -530,9 +630,22 @@ describe("the view declares the sources its preset reads", () => {
           ["plugins.a.s", settledLane(ok({}))],
           ["plugins.b.s", unread],
           ["plugins.c.s", settledLane(ABSENT)],
+          [
+            "plugins.d.s",
+            {
+              current: () => ({
+                kind: "pending" as const,
+                why: "superseded" as const,
+                landed: new Promise<void>(() => {}),
+              }),
+            },
+          ],
         ]),
       ),
-    ).toEqual({ sources: "3", sourcesPending: "plugins.b.s" });
+    ).toEqual({
+      sources: "4",
+      sourcesPending: "plugins.b.s:unread,plugins.d.s:superseded",
+    });
     expect(PENDING.kind).toBe("pending");
   });
 });
@@ -580,7 +693,11 @@ describe("a storage folder's watch", () => {
     const before = entry.state.sources.get(STATUS)!;
     await until(
       () => {
-        if (fs.existsSync(storage) && entry.state.sources.get(STATUS) !== before) return true;
+        if (
+          fs.existsSync(storage) &&
+          entry.state.sources.get(STATUS) !== before
+        )
+          return true;
         fs.rmSync(storage, { recursive: true, force: true });
         return false;
       },
@@ -588,7 +705,9 @@ describe("a storage folder's watch", () => {
       10_000,
     );
     expect(fs.statSync(storage).isDirectory()).toBe(true);
-    expect(entry.state.sources.get(STATUS)!.generation).toBeGreaterThan(before.generation);
+    expect(entry.state.sources.get(STATUS)!.generation).toBeGreaterThan(
+      before.generation,
+    );
     const view = viewOf(r, file);
     await answered(view);
     await writeUntilShown(
@@ -615,7 +734,15 @@ describe("a storage folder's watch", () => {
       () => fs.chmodSync(storage, 0o700),
       () => fs.utimesSync(storage, new Date(), new Date()),
       ...(process.platform === "darwin"
-        ? [() => void execFileSync("xattr", ["-w", "com.ccb.test", String(Date.now()), storage])]
+        ? [
+            () =>
+              void execFileSync("xattr", [
+                "-w",
+                "com.ccb.test",
+                String(Date.now()),
+                storage,
+              ]),
+          ]
         : []),
     ];
     for (const touch of touches) touch();
@@ -627,7 +754,9 @@ describe("a storage folder's watch", () => {
       "the write after the touches",
     );
     expect(r.counters.watchersOpened).toBe(opened);
-    expect(r.cache.getOrCreate(dir, dir, file).state.sources.get(STATUS)).toEqual(key);
+    expect(
+      r.cache.getOrCreate(dir, dir, file).state.sources.get(STATUS),
+    ).toEqual(key);
     expect(r.providers.managedStorage.stats().lost).toBe(0);
     expect(draw(view).errors).toEqual([]);
   });
@@ -645,14 +774,20 @@ describe("an installed plugin's storage", () => {
   });
   const root = (): string => path.join(dir, "data", "cc-candybar", "plugins");
   const placing = (): string =>
-    write("config.json5", `{ segments: { mine: { template: "mine" } }, root: { h: ["mine", "plugins.p.gated"] } }`);
+    write(
+      "config.json5",
+      `{ segments: { mine: { template: "mine" } }, root: { h: ["mine", "plugins.p.gated"] } }`,
+    );
 
   test("uninstalling it closes its watch once its states are reclaimed, and does not recreate its folder", async () => {
     const r = rig();
     plugin("", path.join(root(), "p"));
     // Placing none of its segments: a config that placed one would fail to
     // load without it, and keep the state that holds the folder.
-    const file = write("config.json5", `{ segments: { mine: { template: "mine" } }, root: { h: ["mine"] } }`);
+    const file = write(
+      "config.json5",
+      `{ segments: { mine: { template: "mine" } }, root: { h: ["mine"] } }`,
+    );
     const held = r.cache.holdSession(dir, dir, file, viewFacts(dir, "s1"));
     held[Symbol.dispose]();
     // The state holds the folder its config declares, read by a view or not.
@@ -662,7 +797,9 @@ describe("an installed plugin's storage", () => {
     await until(
       () => {
         fs.rmSync(folder, { recursive: true, force: true });
-        return Object.keys(entry.state.config.variables).every((n) => !n.startsWith("plugins.p."));
+        return Object.keys(entry.state.config.variables).every(
+          (n) => !n.startsWith("plugins.p."),
+        );
       },
       "the reload that drops the uninstalled plugin",
       10_000,
@@ -688,7 +825,10 @@ describe("an installed plugin's storage", () => {
     // The repo the install copies from.
     const repo = path.join(dir, "repo");
     fs.mkdirSync(path.join(repo, REPO_PLUGIN_DIR, "p"), { recursive: true });
-    fs.copyFileSync(path.join(dev, "plugin.json5"), path.join(repo, REPO_PLUGIN_DIR, "p", "plugin.json5"));
+    fs.copyFileSync(
+      path.join(dev, "plugin.json5"),
+      path.join(repo, REPO_PLUGIN_DIR, "p", "plugin.json5"),
+    );
     const entry = r.cache.getOrCreate(dir, dir, file);
     const installed = path.join(fs.realpathSync(root()), "p", "session");
     expect(installFromRepo(repo, root(), "repo")).toEqual([
