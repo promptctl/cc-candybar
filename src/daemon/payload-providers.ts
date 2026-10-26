@@ -24,10 +24,15 @@ import { productionMementoEdge } from "../memento/edge.js";
 import { AutoCompactProvider } from "../segments/autocompact-provider.js";
 import { CacheExpiryProvider } from "../segments/cache.js";
 import { RefreshFaults } from "./refresh-faults.js";
+import { ManagedStorage } from "./cache/managed-storage.js";
 
 // The lanes the view's declaration handed it (`lanes`) are the view's to
-// supply; everything else is a provider.
-export type PayloadProviders = Omit<RenderPayloadDeps, "lanes">;
+// supply; everything else is a provider. The managed storage owner serves
+// every plugin source: render states hold its folders' watches and views its
+// session files.
+export type PayloadProviders = Omit<RenderPayloadDeps, "lanes"> & {
+  readonly managedStorage: ManagedStorage;
+};
 
 export function createPayloadProviders(opts: {
   readonly watchers: WatcherRegistry;
@@ -48,6 +53,10 @@ export function createPayloadProviders(opts: {
     }),
     autoCompact: new AutoCompactProvider(opts.logger),
     cacheExpiry: new CacheExpiryProvider(opts.logger),
+    managedStorage: new ManagedStorage({
+      watchers: opts.watchers,
+      logger: opts.logger,
+    }),
     faults: new RefreshFaults(),
     log: opts.logger,
   };

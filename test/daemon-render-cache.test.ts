@@ -73,6 +73,8 @@ function makeCache(
     counters: {
       watchersOpened: 0,
       watchersClosed: 0,
+      watchRefusals: 0,
+      watchErrors: 0,
     },
     logger: () => {},
   });

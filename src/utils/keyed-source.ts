@@ -65,9 +65,15 @@ export class Refreshes<Trigger extends string> {
   }
 }
 
-// What asks a keyed source to read: a key's first read, its period's tick,
-// or a supersede (the daemon itself changed what the key reads).
-export type KeyedTrigger = "first" | "period" | "supersede";
+// What asks a keyed source to read: a key's first read, its period's tick, a
+// change (the world moved under the key: a watched file was written, or a hold
+// returned to an entry of a source with no period), or a supersede's resume
+// (the daemon itself changed what the key reads).
+export type KeyedTrigger = "first" | "period" | "change" | "supersede";
+
+// Ends one supersede of a key. The last of a key's outstanding supersedes to
+// resume starts its one fresh read. Calling it again does nothing.
+export type Resume = () => void;
 
 // A keyed source's stats add the entries a home holds — the ones its period
 // visits.
@@ -76,7 +82,8 @@ export interface KeyedSourceStats extends SourceStats<KeyedTrigger> {
 }
 
 // [LAW:one-type-per-behavior] Everything one keyed source varies by, as data:
-// a tmux pane's session name and memento's ceiling reading are two instances.
+// a tmux pane's session name, memento's ceiling reading and a plugin's
+// session file are instances.
 export interface KeyedSourceSpec<I, T> {
   // Names the source in its hold keys, its refresh events and its stats.
   readonly name: string;
@@ -85,7 +92,11 @@ export interface KeyedSourceSpec<I, T> {
   // The entry's logfmt fields on a refresh event.
   readonly fields: (input: I) => string;
   readonly read: (input: I) => Promise<Outcome<T>>;
-  readonly every: Every;
+  // [LAW:types-are-the-program] The source's refresh, as data: a period, on
+  // which a held entry is read again and which a hold's return resumes; or
+  // none (`null`), when only a change reads an entry again, and a hold's
+  // return to a kept entry re-reads it once.
+  readonly every: Every | null;
   // How many entries nothing holds are kept, least recently read first out.
   readonly maxEntries: number;
   readonly logger: DaemonLogger;
@@ -94,25 +105,32 @@ export interface KeyedSourceSpec<I, T> {
 interface Entry<I, T> extends Readable<T> {
   readonly key: string;
   readonly input: I;
-  readonly period: Period;
+  readonly revisit: Revisit;
   holders: number;
   // The read whose answer will be stored, or none out. A read superseded or
   // dropped finds another token here and stores nothing.
   flight: object | null;
+  // A change arrived while a read was out: one re-read follows its landing.
+  changed: boolean;
+  // Supersedes of this key not resumed yet. While any is out, every trigger
+  // is held back.
+  superseding: number;
 }
 
 // [LAW:single-enforcer] The one owner of a keyed source's reads
 // (brandon-unfiled-3248.8ro6, step 1). A read never refreshes: it takes the
 // stored value, and only a value not read yet is awaited. The stored value is
 // refreshed by the entry's period, which runs only while a home holds the
-// entry, so an entry nobody draws costs nothing; the LRU bounds the entries
-// nobody holds.
+// entry, or by a change; the LRU bounds the entries nobody holds.
 //
-// What a trigger does while a read is out is decided by its kind: a first
-// read or a tick ASKS for a reading, and shares the one in flight, which
-// answers it; a supersede says the read in flight describes a world the
-// daemon has since changed, so it is abandoned and the value is pending until
-// a fresh read lands.
+// What a trigger does while a read is out is decided by its kind, one rule
+// for every source (SOURCES-AND-FRAMES.md, "Refresh"): a first read or a tick
+// ASKS for a reading, and shares the one in flight, which answers it; a
+// change says the world moved since the read began, so it queues exactly one
+// re-read after it and the last change always lands; a supersede says the
+// daemon itself changed what the key reads, so the read in flight is
+// abandoned, the value is pending, and the key reads again only once every
+// supersede of it has resumed.
 export class KeyedSource<I, T> {
   private readonly entries = new Map<string, Entry<I, T>>();
   private readonly refreshes: Refreshes<KeyedTrigger>;
@@ -120,14 +138,14 @@ export class KeyedSource<I, T> {
   constructor(private readonly spec: KeyedSourceSpec<I, T>) {
     this.refreshes = new Refreshes(
       spec.name,
-      ["first", "period", "supersede"],
+      ["first", "period", "change", "supersede"],
       spec.logger,
     );
   }
 
   // [LAW:single-enforcer] The one way into an entry: `holds` takes it — the
   // home holds it until a declaration of the home's takes it no more, or the
-  // home is disposed, which keeps the entry on its period — and the lane
+  // home is disposed, which keeps the entry for its next hold — and the lane
   // reads it as it stands, never awaited and taking nothing. A key never read
   // is created pending and read once, its first refresh.
   //
@@ -136,21 +154,54 @@ export class KeyedSource<I, T> {
   // bug none of those saw, reported by the view's declaration (declareLanes).
   declare(holds: Holds, input: I): Lane<T> {
     const key = this.spec.keyOf(input);
-    const entry = this.touched(key) ?? this.created(key, input);
+    const entry = this.touched(key) ?? this.firstRead(this.created(key, input));
     holds.take(`${this.spec.name}:${key}`, () => this.hold(entry));
     return { current: () => currentOf(entry) };
   }
 
-  // The daemon itself changed what this key reads (a memento move): the read
-  // in flight is abandoned, and the value is pending until a fresh read
-  // lands — never the reading from before. A key never read has nothing to
-  // supersede; its first read is its reader's.
-  supersede(input: I): void {
-    const entry = this.entries.get(this.spec.keyOf(input));
-    if (entry === undefined) return;
-    renew(entry);
+  // [LAW:one-source-of-truth] The one supersede rule (SOURCES-AND-FRAMES.md):
+  // the daemon itself is changing what this key reads (a click's move). The
+  // value is pending (`superseded`) and the read in flight is abandoned, so no
+  // draw after the click shows the value from before it. Every trigger of the
+  // key is held back until every supersede of it has resumed, so no read
+  // during the move stores the world from before it; the last resume starts
+  // one fresh read. A key never read is created for it, and its first read is
+  // that resume's.
+  supersede(input: I): Resume {
+    const key = this.spec.keyOf(input);
+    const entry = this.touched(key) ?? this.created(key, input);
+    entry.superseding++;
+    renew(entry, "superseded");
     entry.flight = null;
-    this.refresh(entry, "supersede");
+    entry.changed = false;
+    let resumed = false;
+    return () => {
+      if (resumed) return;
+      resumed = true;
+      entry.superseding--;
+      // A dropped entry has nothing left to read for.
+      if (this.entries.get(entry.key) === entry)
+        this.refresh(entry, "supersede");
+    };
+  }
+
+  // The world changed under every held entry `affected` names (a watched file
+  // was written): each is read again, after the read in flight when one is
+  // out. An entry nobody holds is read when a hold returns to it.
+  changed(affected: (input: I) => boolean): void {
+    for (const entry of this.entries.values()) {
+      if (entry.holders > 0 && affected(entry.input)) {
+        this.refresh(entry, "change");
+      }
+    }
+  }
+
+  // Whether some home holds an entry `match` names now.
+  isHeld(match: (input: I) => boolean): boolean {
+    for (const entry of this.entries.values()) {
+      if (entry.holders > 0 && match(entry.input)) return true;
+    }
+    return false;
   }
 
   stats(): KeyedSourceStats {
@@ -174,7 +225,7 @@ export class KeyedSource<I, T> {
     return entry;
   }
 
-  // In place first, then read: the read's answer finds its entry stored.
+  // In place before any read, so a read's answer finds its entry stored.
   private created(key: string, input: I): Entry<I, T> {
     const entry: Entry<I, T> = {
       key,
@@ -182,15 +233,32 @@ export class KeyedSource<I, T> {
       reading: unread(),
       holders: 0,
       flight: null,
-      period: new Period(() => this.refresh(entry, "period")),
+      changed: false,
+      superseding: 0,
+      revisit: revisitOf(this.spec.every, {
+        period: () => this.refresh(entry, "period"),
+        holdReturned: () => this.refresh(entry, "change"),
+      }),
     };
     this.entries.set(key, entry);
+    return entry;
+  }
+
+  private firstRead(entry: Entry<I, T>): Entry<I, T> {
     this.refresh(entry, "first");
     return entry;
   }
 
   private refresh(entry: Entry<I, T>, by: KeyedTrigger): void {
-    if (entry.flight !== null) return;
+    // [LAW:no-ambient-temporal-coupling] Held back while a supersede is out:
+    // its last resume starts the one read that answers this trigger too.
+    if (entry.superseding > 0) return;
+    if (entry.flight !== null) {
+      // [LAW:dataflow-not-control-flow] The trigger's kind is the one branch:
+      // a change queues one re-read, a first read or a tick shares the read.
+      entry.changed ||= by === "change";
+      return;
+    }
     const flight = {};
     entry.flight = flight;
     const startedAt = Date.now();
@@ -221,22 +289,27 @@ export class KeyedSource<I, T> {
 
   private store(entry: Entry<I, T>, outcome: Outcome<T>): void {
     entry.flight = null;
-    // [LAW:no-ambient-temporal-coupling] The period lands however the settle
-    // ends, so a held entry is always visited again.
+    // [LAW:no-ambient-temporal-coupling] The revisit lands and a queued
+    // change re-reads however the settle ends, so a held entry is always
+    // visited again and the last change always lands.
     try {
       settle(entry, outcome);
     } finally {
-      entry.period.landed(periodOf(this.spec.every, outcome));
+      entry.revisit.landed(outcome);
+      if (entry.changed) {
+        entry.changed = false;
+        this.refresh(entry, "change");
+      }
     }
   }
 
   private hold(entry: Entry<I, T>): Release {
     entry.holders++;
-    entry.period.hold(true);
+    entry.revisit.hold(true);
     this.evict();
     return () => {
       entry.holders--;
-      entry.period.hold(entry.holders > 0);
+      entry.revisit.hold(entry.holders > 0);
     };
   }
 
@@ -252,8 +325,58 @@ export class KeyedSource<I, T> {
   private drop(entry: Entry<I, T>): void {
     this.entries.delete(entry.key);
     entry.flight = null;
-    entry.period.dispose();
+    entry.revisit.dispose();
     answerPending(entry, failed(`${this.spec.name} entry dropped`));
+  }
+}
+
+// What visits a kept entry again, by the source's refresh. The hold path is
+// one for both (`hold`): a period resumes where it left off, and a source with
+// no period re-reads.
+interface Revisit {
+  landed(outcome: Outcome<unknown>): void;
+  hold(held: boolean): void;
+  dispose(): void;
+}
+
+function revisitOf(
+  every: Every | null,
+  read: { readonly period: () => void; readonly holdReturned: () => void },
+): Revisit {
+  if (every === null) return new HoldReturn(read.holdReturned);
+  const period = new Period(read.period);
+  return {
+    landed: (outcome) => period.landed(periodOf(every, outcome)),
+    hold: (held) => period.hold(held),
+    dispose: () => period.dispose(),
+  };
+}
+
+// [LAW:no-ambient-temporal-coupling] A source with no period: nothing visits
+// an entry while nobody holds it, so a file written while a session was away
+// would never reach its bar. A hold's return to an entry that has answered
+// re-reads it once, and the entry keeps its value while that read is out — a
+// session back from idle draws its last value while it is re-read. An entry
+// never answered has its first read out already.
+class HoldReturn implements Revisit {
+  private state: "released" | "held" | "disposed" = "released";
+  private answered = false;
+
+  constructor(private readonly reread: () => void) {}
+
+  landed(): void {
+    this.answered = true;
+  }
+
+  hold(held: boolean): void {
+    if (this.state === "disposed") return;
+    const returned = held && this.state === "released" && this.answered;
+    this.state = held ? "held" : "released";
+    if (returned) this.reread();
+  }
+
+  dispose(): void {
+    this.state = "disposed";
   }
 }
 

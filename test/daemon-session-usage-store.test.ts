@@ -816,6 +816,7 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
       expect(store.scanStats().refreshes).toEqual({
         first: 1,
         period: 0,
+        change: 0,
         supersede: 0,
       });
     } finally {

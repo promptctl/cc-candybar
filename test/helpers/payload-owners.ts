@@ -76,7 +76,7 @@ function keyed<A extends unknown[], T>(
         values.set(key, outcome);
       },
     );
-    const pending: Current<T> = { kind: "pending", landed };
+    const pending: Current<T> = { kind: "pending", why: "unread", landed };
     values.set(key, pending);
     return pending;
   };

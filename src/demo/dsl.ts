@@ -211,5 +211,6 @@ try {
   providers.usageStore.close();
   providers.tmuxService.close();
   providers.mementoProvider.close();
+  providers.managedStorage.close();
   watchers.closeAll();
 }

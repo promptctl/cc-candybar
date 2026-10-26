@@ -55,7 +55,7 @@ afterEach(() => {
 function makeCache(budgetBytes: number, maxEntries?: number) {
   const lines: string[] = [];
   const watchers = new WatcherRegistry({
-    counters: { watchersOpened: 0, watchersClosed: 0 },
+    counters: { watchersOpened: 0, watchersClosed: 0, watchRefusals: 0, watchErrors: 0 },
     logger: () => {},
   });
   cleanups.push(() => watchers.closeAll());

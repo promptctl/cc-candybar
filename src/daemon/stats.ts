@@ -9,6 +9,7 @@ import type { FeedStats } from "./frame-feed";
 import type { RenderCacheStats } from "./cache/render";
 import type { GitCacheStats } from "./cache/git";
 import type { KeyedSourceStats, SourceStats } from "../utils/keyed-source";
+import type { ManagedStorageStats } from "./cache/managed-storage";
 import type { ProbeArrival } from "../doctor/handler-probe";
 import type { RenderSighting } from "./render-sightings";
 import type { ServingDaemon } from "./limits";
@@ -47,13 +48,24 @@ export interface SourceSnapshots {
   // A Claude Code directory's transcript scan: `first` its seed, `period`
   // its rescans.
   today: KeyedSourceStats;
+  // Every plugin's managed storage: its session files' entries and
+  // refreshes, the folders watched now, watch faults by cause, and folders
+  // found gone or replaced.
+  pluginStorage: ManagedStorageStats;
 }
 
 const KEYED_SOURCE_ZERO: KeyedSourceStats = {
   entries: 0,
   held: 0,
-  refreshes: { first: 0, period: 0, supersede: 0 },
+  refreshes: { first: 0, period: 0, change: 0, supersede: 0 },
   failures: 0,
+};
+
+const MANAGED_STORAGE_ZERO: ManagedStorageStats = {
+  ...KEYED_SOURCE_ZERO,
+  folders: 0,
+  faults: { refused: 0, error: 0 },
+  lost: 0,
 };
 
 export interface StatsSnapshot {
@@ -126,10 +138,14 @@ export interface StatsSnapshot {
   // The tmux status line lane's writes (src/daemon/tmux-status.ts): sessions
   // it draws, status lines it has laid out, tmux invocations, failed ones.
   tmuxStatus: TmuxStatusStats;
+  // Watch slots: open now, opened with every target watched, closed, opened
+  // with a target the OS refused, and errors watches reported after opening.
   watchers: {
     active: number;
     opened: number;
     closed: number;
+    refused: number;
+    errors: number;
   };
   subprocesses: {
     total: number;
@@ -167,6 +183,8 @@ export class RuntimeStats {
 
   watchersOpened = 0;
   watchersClosed = 0;
+  watchRefusals = 0;
+  watchErrors = 0;
 
   // [LAW:dataflow-not-control-flow] Subprocess metering. Every launch carries
   // its category through one boundary; the per-category state below is a
@@ -294,6 +312,7 @@ export class RuntimeStats {
         autocompact: { entries: 0, refreshes: { request: 0 }, failures: 0 },
         cache: { entries: 0, refreshes: { request: 0 }, failures: 0 },
         today: KEYED_SOURCE_ZERO,
+        pluginStorage: MANAGED_STORAGE_ZERO,
       },
       transcriptReads: { reads: 0, bytes: 0, longLines: 0, largestLine: 0 },
       renderCache: {
@@ -389,6 +408,8 @@ export class RuntimeStats {
         active: extras.watchersActive,
         opened: this.watchersOpened,
         closed: this.watchersClosed,
+        refused: this.watchRefusals,
+        errors: this.watchErrors,
       },
       subprocesses: this.snapshotSubprocesses(),
       nextRestartReason: extras.nextRestartReason ?? null,

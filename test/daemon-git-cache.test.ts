@@ -1210,6 +1210,12 @@ describe("GitDataProvider owns its failures and its PR's timing", () => {
     // Stored, b's values wait for b's PR rather than wear a's.
     inner.remoteGate.resolve();
     await tick();
+    // b's PR is a key never answered, which a request waits for.
+    const now = svc.declare(holds, "/repo", { showPullRequest: true }).current();
+    expect(now.kind === "ok" && now.value.pullRequest).toMatchObject({
+      kind: "pending",
+      why: "unread",
+    });
     let read: Outcome<GitInfo> | null = null;
     void gitOf(svc, holds, "/repo", { showPullRequest: true }).then(
       (out) => (read = out),
@@ -1356,7 +1362,12 @@ describe("GitDataProvider PR keys, drops and refresh events", () => {
 describe("GitDataProvider holds a repo's watch across its values", () => {
   function counted(opts: { maxRepos?: number } = {}) {
     const inner = new StubGitService();
-    const counters = { watchersOpened: 0, watchersClosed: 0 };
+    const counters = {
+      watchersOpened: 0,
+      watchersClosed: 0,
+      watchRefusals: 0,
+      watchErrors: 0,
+    };
     const logs: string[] = [];
     const logger = (_level: string, message: string) => logs.push(message);
     const watchers = new WatcherRegistry({ counters, logger });
@@ -1376,7 +1387,13 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
     }
 
     expect(inner.computeCalls).toHaveLength(6);
-    expect(counters).toEqual({ watchersOpened: 1, watchersClosed: 0 });
+    // The stub repo has no folder on disk, so its one slot is a refused one.
+    expect(counters).toEqual({
+      watchersOpened: 0,
+      watchersClosed: 0,
+      watchRefusals: 1,
+      watchErrors: 0,
+    });
     expect(watchers.size()).toBe(1);
     svc.close();
   });
@@ -1414,7 +1431,12 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
         replace(name, String(i + 1));
         await changedTo(i + 1);
       }
-      expect(counters).toEqual({ watchersOpened: 1, watchersClosed: 0 });
+      expect(counters).toEqual({
+        watchersOpened: 1,
+        watchersClosed: 0,
+        watchRefusals: 0,
+        watchErrors: 0,
+      });
     } finally {
       svc.close();
       fs.rmSync(repo, { recursive: true, force: true });
@@ -1430,7 +1452,13 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
     holdsA.declare(() => {});
     await gitOf(svc, new Holds(), "/b", {}); // evicts /a, its watch's only holder
 
-    expect(counters).toEqual({ watchersOpened: 2, watchersClosed: 1 });
+    // Neither stub repo is on disk: two refused slots, one closed.
+    expect(counters).toEqual({
+      watchersOpened: 0,
+      watchersClosed: 1,
+      watchRefusals: 2,
+      watchErrors: 0,
+    });
     svc.close();
     expect(counters.watchersClosed).toBe(2);
   });
@@ -1448,7 +1476,12 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
 
     expect(gone.kind).toBe("absent");
     expect(svc.getStats().size).toBe(1);
-    expect(counters).toEqual({ watchersOpened: 1, watchersClosed: 0 });
+    expect(counters).toEqual({
+      watchersOpened: 0,
+      watchersClosed: 0,
+      watchRefusals: 1,
+      watchErrors: 0,
+    });
     svc.close();
   });
 });

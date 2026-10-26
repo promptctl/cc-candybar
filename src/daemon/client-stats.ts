@@ -191,6 +191,10 @@ export function formatStats(s: StatsSnapshot): string {
       `  ${name.padEnd(12)}  entries=${source.entries}${held} failures=${source.failures} refreshes ${refreshes}`,
     );
   }
+  const storage = s.sources.pluginStorage;
+  lines.push(
+    `  ${"".padEnd(12)}  folders=${storage.folders} lost=${storage.lost} faults refused:${storage.faults.refused} error:${storage.faults.error}`,
+  );
   lines.push(``);
   lines.push(`transcriptReads`);
   lines.push(`  reads         ${s.transcriptReads.reads}`);
@@ -226,6 +230,8 @@ export function formatStats(s: StatsSnapshot): string {
   lines.push(`  active        ${s.watchers.active}`);
   lines.push(`  opened        ${s.watchers.opened}`);
   lines.push(`  closed        ${s.watchers.closed}`);
+  lines.push(`  refused       ${s.watchers.refused}`);
+  lines.push(`  errors        ${s.watchers.errors}`);
   lines.push(``);
   lines.push(`subprocesses`);
   lines.push(`  total         ${s.subprocesses.total}`);

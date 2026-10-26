@@ -252,6 +252,7 @@ const {
   mementoProvider,
   autoCompact,
   cacheExpiry,
+  managedStorage,
 } = payloadProviders;
 // [LAW:locality-or-seam] Constructed ephemeral so importing this module (CLI
 // relay, subcommands) does no disk I/O. The daemon binds the file-backed
@@ -879,6 +880,7 @@ function shutdown(code: number): void {
     ["usageStore close", () => usageStore.close()],
     ["tmuxService close", () => tmuxService.close()],
     ["mementoProvider close", () => mementoProvider.close()],
+    ["managedStorage close", () => managedStorage.close()],
     ["watcherRegistry close", () => watcherRegistry.closeAll()],
     ["sessionState flush", () => sessionState.flush()],
   ];
@@ -1274,6 +1276,7 @@ export async function replyTo(
           autocompact: autoCompact.getStats(),
           cache: cacheExpiry.getStats(),
           today: usageStore.scanStats(),
+          pluginStorage: managedStorage.stats(),
         },
         transcriptReads: transcriptReads(),
         renderCache: renderCache.stats,

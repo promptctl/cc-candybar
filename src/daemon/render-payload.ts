@@ -1346,22 +1346,24 @@ function readLanes(inputs: PayloadInputs): Lanes {
   };
 }
 
-// The landings a request waits on before it draws: every declared lane not
-// answered yet, the branch's PR included.
+// The landings a request waits on before it draws: every declared lane whose
+// key has never answered, the branch's PR included. A lane the daemon itself
+// superseded (a click's move) is not waited on: it draws its loading cell, and
+// its landing reaches the next frame.
 function waitsOf(lanes: DeclaredLanes): Array<Promise<void>> {
-  const waits: Array<Promise<void>> = [];
   const git = lanes.git.current();
-  for (const lane of [
+  const pr = git.kind === "ok" ? git.value.pullRequest : undefined;
+  // [LAW:dataflow-not-control-flow] One test over every lane: why it is
+  // pending decides, never which lane it is.
+  return [
     git,
     lanes.tmux.current(),
     lanes.memento.current(),
     lanes.today.current(),
-  ]) {
-    if (lane.kind === "pending") waits.push(lane.landed);
-  }
-  const pr = git.kind === "ok" ? git.value.pullRequest : undefined;
-  if (pr?.kind === "pending") waits.push(pr.landed);
-  return waits;
+    ...(pr === undefined ? [] : [pr]),
+  ].flatMap((lane) =>
+    lane.kind === "pending" && lane.why === "unread" ? [lane.landed] : [],
+  );
 }
 
 // [LAW:effects-at-boundaries] The projections are pure folds returning data
@@ -1640,7 +1642,11 @@ export async function settlePayload(
   await answered((): true | Waiting => {
     const waits = waitsOf(inputs.deps.lanes());
     return waits.length > 0
-      ? { kind: "pending", landed: Promise.all(waits).then(() => {}) }
+      ? {
+          kind: "pending",
+          why: "unread",
+          landed: Promise.all(waits).then(() => {}),
+        }
       : true;
   });
 }

@@ -439,6 +439,7 @@ describe("MementoProvider", () => {
     expect(p.getStats().refreshes).toEqual({
       first: 1,
       period: 0,
+      change: 0,
       supersede: 1,
     });
   });
