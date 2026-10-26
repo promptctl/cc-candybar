@@ -78,13 +78,7 @@ import type {
   ToolTally,
 } from "../segments/activity.js";
 import type { TmuxService } from "../segments/tmux.js";
-import type { MementoProvider } from "../segments/memento.js";
 import type { AutoCompactProvider } from "../segments/autocompact-provider.js";
-import {
-  ceilingScope,
-  type CeilingReading,
-  type CeilingScope,
-} from "../memento/edge.js";
 import {
   autoCompactControls,
   type AutoCompactControls,
@@ -290,9 +284,6 @@ export interface RenderPayloadOf<P> extends ClaudeHookData, ValuedInputs {
   readonly metrics?: MetricsPayload | P;
   // The one non-quantity family (brandon-activity-ue7): what Claude is DOING.
   readonly activity?: ActivityPayload | P;
-  // The memento plugin's context ceiling for this session; missing when
-  // memento is not installed for the project.
-  readonly memento?: MementoPayload | P;
   // Claude Code's auto-compact window, as its `/autocompact` last wrote it.
   readonly autocompact?: AutoCompactPayload | P;
   // [LAW:types-are-the-program] Each plugin source the view declared, by
@@ -324,24 +315,10 @@ export interface ViewPayloadOf {
 }
 
 // The control's facts (src/segments/autocompact.ts) — or the refusal that the
-// settings file could not be read, carried as text like memento's, so the
-// control says why it cannot show the window.
+// settings file could not be read, carried as text, so the control says why
+// it cannot show the window.
 export type AutoCompactPayload =
   | AutoCompactControls
-  | { readonly error: string };
-
-// [LAW:no-silent-failure] Two shapes, never mixed: memento's reading, or its
-// refusal. A refusal is the state in which memento's Stop hook is failing too
-// — its gate off for this session with nothing else to say so — so it
-// travels to the bar as text, never as a missing field.
-export type MementoPayload =
-  | {
-      // Tokens; 0 when a layer turned the ceiling off.
-      readonly ceiling: number;
-      readonly off: boolean;
-      // The session's own layer as written, "" when it has none.
-      readonly session: string;
-    }
   | { readonly error: string };
 
 // Flattened projection of GitInfo: every field shape the parity bindings
@@ -601,7 +578,6 @@ export interface RenderPayloadDeps {
   readonly metricsProvider: MetricsProvider;
   readonly activityProvider: ActivityProvider;
   readonly tmuxService: TmuxService;
-  readonly mementoProvider: MementoProvider;
   // [LAW:single-enforcer] The one owner of every plugin's session files: a
   // view's declaration holds each source it reads there, and a render state's
   // build holds the folders its config declares.
@@ -613,7 +589,7 @@ export interface RenderPayloadDeps {
   readonly cacheExpiry: CacheExpiryProvider;
   // [LAW:single-enforcer] The log capability for the provider lanes whose
   // owner does not log: the request drawing a view's payload is the ONE
-  // place their failures are logged (its `failures`). Git, tmux, memento and autocompact are not among them: each
+  // place their failures are logged (its `failures`). Git, tmux and autocompact are not among them: each
   // owner refreshes on its own triggers and logs each refresh that failed,
   // so a failure stored there is logged once, never once per render.
   readonly log: DaemonLogger;
@@ -1078,7 +1054,6 @@ function wantsOf(neededInputPaths: ReadonlySet<string>) {
     tmux: wants("tmux.session"),
     cache: wants("cache"),
     speed: wants("speed"),
-    memento: wants("memento"),
     autocompact: wants("autocompact"),
     block: wants("block"),
   };
@@ -1171,8 +1146,8 @@ export async function refreshPayload(
   ]);
 }
 
-// Each lane's value as its owner holds it now. The keyed lanes' (git, tmux,
-// memento) are `Current`: a value not answered yet carries its landing.
+// Each lane's value as its owner holds it now. The keyed lanes' (git, tmux)
+// are `Current`: a value not answered yet carries its landing.
 // `today` is no lane of the payload: the day it sums is the draw's
 // (`todayOf`).
 interface Lanes {
@@ -1184,7 +1159,6 @@ interface Lanes {
   readonly tmuxSession: Current<string>;
   readonly cache: Reading<number>;
   readonly speed: Reading<SpeedObservation>;
-  readonly memento: Current<CeilingReading>;
   readonly autoCompact: Reading<AutoCompactWindow>;
   readonly sources: ReadonlyMap<string, Current<JsonValue>>;
 }
@@ -1199,11 +1173,7 @@ export type ViewFacts = Pick<PayloadInputs, "hookData" | "cwd" | "hints"> & {
 // The owners of the keyed lanes, which a declaration takes its holds in.
 export type KeyedOwners = Pick<
   RenderPayloadDeps,
-  | "gitProvider"
-  | "tmuxService"
-  | "mementoProvider"
-  | "usageStore"
-  | "managedStorage"
+  "gitProvider" | "tmuxService" | "usageStore" | "managedStorage"
 >;
 
 // [LAW:types-are-the-program] What a view's declaration hands its draws: one
@@ -1212,7 +1182,6 @@ export type KeyedOwners = Pick<
 export interface DeclaredLanes {
   readonly git: Lane<GitInfo>;
   readonly tmux: Lane<string>;
-  readonly memento: Lane<CeilingReading>;
   readonly today: Lane<DaySums>;
   // [LAW:dataflow-not-control-flow] One lane per plugin source the preset
   // reads, by the source variable's name: no fixed list — the set is what the
@@ -1250,7 +1219,6 @@ export function settledLanes(
   return {
     git: lane,
     tmux: lane,
-    memento: lane,
     today: lane,
     sources: new Map(sources.map((name) => [name, lane])),
   };
@@ -1271,24 +1239,6 @@ function gitAt(
     gitOptionsFromClosure(closure),
     hookData.workspace?.project_dir,
   ];
-}
-
-// The same session, anchors and environment memento's Stop hook resolves
-// with — the last two from the client, which runs where that hook does.
-function ceilingScopeOf({
-  sessionId,
-  hookData,
-  cwd,
-  hints,
-}: ViewFacts): CeilingScope {
-  return ceilingScope(
-    {
-      sessionId,
-      projectDir: hookData.workspace?.project_dir ?? "",
-      cwd: cwd ?? hookData.workspace?.current_dir ?? "",
-    },
-    hints,
-  );
 }
 
 // [LAW:single-enforcer] A view's declaration (brandon-unfiled-3248.8ro6, steps
@@ -1334,9 +1284,6 @@ export function declareLanes(
     ),
     tmux: declare("tmux", want.tmux && pane !== null, () =>
       owners.tmuxService.declare(holds, pane!),
-    ),
-    memento: declare("memento", want.memento, () =>
-      owners.mementoProvider.declare(holds, ceilingScopeOf(facts)),
     ),
     today: declare("today", want.today, () =>
       owners.usageStore.declareToday(holds, facts.hints.claudeConfigDir),
@@ -1405,7 +1352,6 @@ function readLanes(inputs: PayloadInputs): Lanes {
       deps.cacheExpiry.expiryOf(sessionId),
     ),
     speed: read("speed", want.speed, () => deps.usageStore.speedOf(sessionId)),
-    memento: lanes.memento.current(),
     autoCompact: read("autocompact", want.autocompact, () =>
       deps.autoCompact.stored(settingsPathOf(inputs.hints)),
     ),
@@ -1427,7 +1373,6 @@ function waitsOf(lanes: DeclaredLanes): Array<Promise<void>> {
   return [
     git,
     lanes.tmux.current(),
-    lanes.memento.current(),
     lanes.today.current(),
     ...[...lanes.sources.values()].map((lane) => lane.current()),
     ...(pr === undefined ? [] : [pr]),
@@ -1473,7 +1418,7 @@ function projectPayload(
     reading.kind === "ok" ? reading.value : undefined;
 
   const tmuxPane = hints.tmux ?? null;
-  // Git, tmux, memento and autocompact log their own failures — once per
+  // Git, tmux and autocompact log their own failures — once per
   // refresh that failed (src/daemon/cache/git.ts, src/utils/keyed-source.ts,
   // src/segments/autocompact-provider.ts): their values are stored, so
   // logging one here would repeat a failure on every render. Their failures
@@ -1488,8 +1433,6 @@ function projectPayload(
   failures.push(...hostProjection.failures);
   const tmuxValue =
     lanes.tmuxSession.kind === "pending" ? PENDING : valueOf(lanes.tmuxSession);
-  const mementoValue =
-    lanes.memento.kind === "pending" ? PENDING : projectMemento(lanes.memento);
   // The controls are capped to the model's context window, so they are not
   // answered while the window is not.
   const autoCompactValue =
@@ -1624,7 +1567,6 @@ function projectPayload(
     ...(contextPayload !== undefined && { context: contextPayload }),
     ...(metricsPayload !== undefined && { metrics: metricsPayload }),
     ...(activityPayload !== undefined && { activity: activityPayload }),
-    ...(mementoValue !== undefined && { memento: mementoValue }),
     ...(autoCompactValue !== undefined && { autocompact: autoCompactValue }),
     // The storage owner logs each read that failed: a failure here is a value,
     // drawn by the template reading it.
@@ -1782,33 +1724,6 @@ export function projectAutoCompact(
       return { error: outcome.reason };
     case "ok":
       return autoCompactControls(outcome.value, contextWindow);
-  }
-}
-
-// [LAW:effects-at-boundaries] Pure: memento's outcome in, the payload shape
-// out. Absent (not installed) drops the family, so its segment hides.
-const lastLine = (text: string): string =>
-  text.trim().split("\n").at(-1)!.trim();
-
-export function projectMemento(
-  outcome: Outcome<CeilingReading>,
-): MementoPayload | undefined {
-  switch (outcome.kind) {
-    case "absent":
-      return undefined;
-    case "failed":
-      // A bar cell is one line; a refusal may be a Python traceback. The last
-      // line names the fault (memento's own refusals are one sentence; Python
-      // puts the exception last) — the whole text is in the daemon log.
-      return { error: lastLine(outcome.reason) };
-    case "ok": {
-      const { ceiling, session } = outcome.value;
-      return {
-        ceiling: ceiling === "off" ? 0 : ceiling,
-        off: ceiling === "off",
-        session: session ?? "",
-      };
-    }
   }
 }
 

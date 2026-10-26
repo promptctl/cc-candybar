@@ -321,7 +321,6 @@ describe("lane B, statusline", () => {
           "CC_CANDYBAR_CONFIG=/u/lab.json5",
           "ANTHROPIC_API_KEY=sk-secret",
           "CLAUDE_CODE_OAUTH_TOKEN=oauth-secret",
-          "MEMENTO_CONFIG_HOME=/u/m",
           "CLAUDECODE=1",
         ],
       }),
@@ -329,7 +328,7 @@ describe("lane B, statusline", () => {
     await finished(LANE_SETUP.statusline.on(session(), HOST, edge));
     expect(did.join("\n")).not.toContain("secret");
     expect(did).toContain(
-      `shell cd /work && CLAUDE_CONFIG_DIR='/u/.claude zai' CC_CANDYBAR_CONFIG=/u/lab.json5 MEMENTO_CONFIG_HOME=/u/m BUN_OPTIONS='--preload /opt/candybar/dist/attach-preload.cjs' claude --worktree feat/tree --dangerously-skip-permissions --resume ${SID}`,
+      `shell cd /work && CLAUDE_CONFIG_DIR='/u/.claude zai' CC_CANDYBAR_CONFIG=/u/lab.json5 BUN_OPTIONS='--preload /opt/candybar/dist/attach-preload.cjs' claude --worktree feat/tree --dangerously-skip-permissions --resume ${SID}`,
     );
   });
 

@@ -292,7 +292,7 @@ https://github.com/jiwoong-choi/claude-code-gauge — stars 0
 ## jkubo/context-gauge
 https://github.com/jkubo/context-gauge — stars 0
 1. By state (five bands) only. `context_gauge.py` L149-153 and `hooks/register.tsx` L35-41: GREEN `\033[32m`, YELLOW `33`, ORANGE `38;5;208` (mod: `#ff8700`), RED `1;31` bold, BLACK `1;97;41` (bold bright-white on red bg). The band is picked from the "reasoning working set" token count (absolute ceilings, or ratio ceilings when the window is known, `BANDS` L132-139); the colour applies to the whole `⛽ 🟢 GREEN 85k` segment and the "NN% of 1M" text.
-2. Themes: not present. Band thresholds are configurable ceilings (memento-style `active_ceilings`).
+2. Themes: not present. Band thresholds are configurable ceilings (`active_ceilings`).
 3. Colour spec: ANSI 16 plus one 256 index in the CLI (`208`), hex `#ff8700` in the mod; no detection, NO_COLOR not found.
 4. Fill: foreground only, except BLACK band which uses a red background for emphasis.
 5. Separators: dim ` · ` (`SEP`, `gauge.ts` L346).

@@ -105,7 +105,6 @@ test("a preset click that newly places the PR starts its lookup with no draw; sw
   const owners = {
     gitProvider: git,
     tmuxService: { declare: () => settledLane(ABSENT) },
-    mementoProvider: { declare: () => settledLane(ABSENT) },
     usageStore: { declareToday: () => settledLane(ABSENT) },
   } as unknown as KeyedOwners;
   const cache = new RenderCache(
@@ -183,7 +182,6 @@ test("a lane whose declaration throws is reported, takes no hold, and stops no o
       },
     },
     tmuxService: { declare: () => take("tmux") },
-    mementoProvider: { declare: () => take("memento") },
     usageStore: { declareToday: () => take("today") },
   } as unknown as KeyedOwners;
   const facts: ViewFacts = {
@@ -206,7 +204,7 @@ test("a lane whose declaration throws is reported, takes no hold, and stops no o
       owners,
       holds,
       facts,
-      new Set(["git.branch", "tmux.session", "memento.ceiling", "today.cost"]),
+      new Set(["git.branch", "tmux.session", "today.cost"]),
       new Map(),
     ),
   );
@@ -218,9 +216,9 @@ test("a lane whose declaration throws is reported, takes no hold, and stops no o
     failed("git: Error: resolver bug"),
   );
   expect(declared.result.lanes.tmux.current()).toEqual(ABSENT);
-  expect(taken).toEqual(["git", "tmux", "memento", "today"]);
+  expect(taken).toEqual(["git", "tmux", "today"]);
   expect(released).toEqual(["git"]);
-  expect(declared).toMatchObject({ acquired: 3, released: 1 });
+  expect(declared).toMatchObject({ acquired: 2, released: 1 });
 });
 
 // One directory showing its branch, read through a cache whose git owner is
@@ -238,7 +236,6 @@ function gitCache() {
   const owners = {
     gitProvider: git,
     tmuxService: { declare: () => settledLane(ABSENT) },
-    mementoProvider: { declare: () => settledLane(ABSENT) },
     usageStore: { declareToday: () => settledLane(ABSENT) },
   } as unknown as KeyedOwners;
   const cache = new RenderCache(

@@ -162,7 +162,8 @@ export async function startBar(opts: BarOptions): Promise<Bar> {
       [PARENT_PID_ENV]: String(process.pid),
       // No update notice reaches the network: the registry is a closed port.
       CC_CANDYBAR_REGISTRY_URL: "http://127.0.0.1:1",
-      // An empty Claude Code config dir, so the daemon wears no host memento.
+      // An empty Claude Code config dir, so the daemon reads none of the host's
+      // Claude Code settings or transcripts.
       CLAUDE_CONFIG_DIR: claudeConfigDir,
       NODE_OPTIONS: withStamp(process.env.NODE_OPTIONS),
     });

@@ -119,7 +119,6 @@ const TS_CLIENT_HINTS = "src/client-hints.ts";
 const TS_CLI_FLAGS = "src/cli-flags.ts";
 const TS_TMUX_HINT = "src/tmux-hint.ts";
 const TS_CONFIG_HINT = "src/config-hint.ts";
-const TS_MEMENTO_HINT = "src/memento-hint.ts";
 const TS_TERMINAL_HINT = "src/terminal-hint.ts";
 const TS_CLIENT_HINT = "src/client-hint.ts";
 const TS_CLAUDE_SETTINGS = "src/claude-settings.ts";
@@ -413,23 +412,6 @@ const CHECKS = [
     rust: memberSet(
       RS_MAIN,
       /const CLAUDE_CONFIG_DIR_ENV: &str = "[A-Z_]+";/,
-      /"([A-Z_]+)"/g,
-    ),
-  },
-  // Which env vars move memento's config home. Same drift hazard: a variable
-  // one runtime stops reporting would not fail — the daemon would drop it from
-  // memento's spawn, and the session's ceiling would read another directory's
-  // layers under whichever client rendered last.
-  {
-    label: "memento env vocabulary",
-    ts: memberSet(
-      TS_MEMENTO_HINT,
-      /export const MEMENTO_ENV_VARS = \[[\s\S]+?\] as const;/,
-      /"([A-Z_]+)"/g,
-    ),
-    rust: memberSet(
-      RS_MAIN,
-      /const MEMENTO_ENV_VARS: \[&str; \d+\] = \[[\s\S]+?\];/,
       /"([A-Z_]+)"/g,
     ),
   },

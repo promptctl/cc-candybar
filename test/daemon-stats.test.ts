@@ -51,12 +51,6 @@ describe("RuntimeStats.snapshot", () => {
           refreshes: { first: 2, period: 7, change: 0, supersede: 0 },
           failures: 1,
         },
-        memento: {
-          entries: 1,
-          held: 1,
-          refreshes: { first: 1, period: 3, change: 0, supersede: 1 },
-          failures: 0,
-        },
         autocompact: { entries: 1, refreshes: { request: 2 }, failures: 0 },
         cache: { entries: 1, refreshes: { request: 3 }, failures: 1 },
         pluginStorage: {
@@ -274,12 +268,6 @@ describe("formatStats", () => {
           held: 1,
           refreshes: { first: 2, period: 7, change: 0, supersede: 0 },
           failures: 1,
-        },
-        memento: {
-          entries: 0,
-          held: 0,
-          refreshes: { first: 0, period: 0, change: 0, supersede: 0 },
-          failures: 0,
         },
         autocompact: { entries: 1, refreshes: { request: 2 }, failures: 0 },
         cache: { entries: 1, refreshes: { request: 3 }, failures: 1 },

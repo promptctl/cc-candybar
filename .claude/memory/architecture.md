@@ -12,7 +12,7 @@ The protocol lives in TypeScript and is copied into the Rust client as literal c
 
 ## The daemon is detached: session facts come from the client
 
-The daemon's environment belongs to whichever shell happened to spawn it, so the daemon never reads its own env for anything about a session. That covers the config path, Claude Code's config directory, the tmux pane, memento's config home and the terminal. The client inherits Claude Code's exact environment, so it observes those facts and sends them as hints on every render request. A click carries no hints, so it works from the hints recorded at the session's last render.
+The daemon's environment belongs to whichever shell happened to spawn it, so the daemon never reads its own env for anything about a session. That covers the config path, Claude Code's config directory, the tmux pane and the terminal. The client inherits Claude Code's exact environment, so it observes those facts and sends them as hints on every render request. A click carries no hints, so it works from the hints recorded at the session's last render.
 
 The temptation: the daemon's `process.env` has `CLAUDE_CONFIG_DIR` right there, and reading it works on your machine. But it answers for whichever session spawned the daemon and is wrong for every other session.
 

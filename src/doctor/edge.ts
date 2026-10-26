@@ -39,7 +39,6 @@ import {
   type ForgeName,
 } from "../segments/git.js";
 import { gitRootOf } from "../utils/git-root.js";
-import { locateMemento } from "../memento/edge.js";
 import { dataNeeds, type DataNeeds } from "./data-needs.js";
 import type {
   RateLimitsSeen,
@@ -244,11 +243,6 @@ export interface DoctorEdge {
   // Whether the forge CLI the checkout's remote names is installed and logged
   // in to its host — null when it names no forge (`forgeLogin`).
   readonly forge: (cwd: string) => Asked<ForgeLogin | null>;
-  // Where memento is installed for a project in a Claude Code directory.
-  readonly memento: (
-    claudeConfigDir: string,
-    projectDir: string,
-  ) => Outcome<string>;
   // The tail of a session's transcript, read as the bar reads it — absent
   // when no file is at the path (`readTranscriptWindow`).
   readonly transcript: (path: string) => Outcome<TranscriptWindow>;
@@ -463,7 +457,6 @@ export function productionEdge(
     install: productionInstallEdge,
     daemons,
     forge: forgeLogin,
-    memento: locateMemento,
     transcript: readTranscriptWindow,
   };
 }
@@ -806,16 +799,11 @@ function segmentDataFacts(
   edge: DoctorEdge,
   needs: DataNeeds,
   origin: ConfigOrigin,
-  configDir: string,
   rateLimits: Asked<readonly RateLimitsSeen[]>,
 ): SegmentDataFacts {
   return {
     pullRequests: need(needs.pullRequests, () => edge.forge(origin.cwd)),
     rateLimits: need(needs.rateLimits, () => rateLimits),
-    memento: need(needs.memento, () => ({
-      located: edge.memento(configDir, origin.projectDir),
-      claudeConfigDir: configDir,
-    })),
   };
 }
 
@@ -929,7 +917,6 @@ export function gatherFacts(
       edge,
       dataNeeds(load.config, globals.preset),
       origin,
-      claudeConfigDir(hints.claudeConfigDir),
       rateLimits,
     ),
     transcripts: transcriptReads(edge, transcripts),

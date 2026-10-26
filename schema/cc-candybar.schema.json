@@ -619,9 +619,6 @@
         "context": {
           "$ref": "#/definitions/SegmentDelta"
         },
-        "ceiling": {
-          "$ref": "#/definitions/SegmentDelta"
-        },
         "autocompact": {
           "$ref": "#/definitions/SegmentDelta"
         },
@@ -1126,34 +1123,6 @@
               "doctor",
               "check",
               "mark"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "ceiling": {
-                "const": "set"
-              },
-              "to": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "ceiling",
-              "to"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "ceiling": {
-                "const": "clear"
-              }
-            },
-            "required": [
-              "ceiling"
             ],
             "additionalProperties": false
           },

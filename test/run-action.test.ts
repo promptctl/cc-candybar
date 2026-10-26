@@ -188,7 +188,6 @@ function rig(timeoutMs?: number): Rig {
     providers.gitProvider.close();
     providers.usageStore.close();
     providers.tmuxService.close();
-    providers.mementoProvider.close();
     providers.managedStorage.close();
     watchers.closeAll();
   });

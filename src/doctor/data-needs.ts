@@ -1,7 +1,6 @@
 // Which placed segments need which data cc-candybar fetches from outside
 // itself (brandon-doctor-v62x.onf): the open PR, which a forge CLI answers;
-// the rate-limit windows, which only Claude Code's hook payload carries; and
-// memento's context ceiling, which only an installed memento answers.
+// and the rate-limit windows, which only Claude Code's hook payload carries.
 //
 // [LAW:one-source-of-truth] A segment needs a source exactly when the render
 // would fetch it for that segment alone: the payload paths it reads come from
@@ -23,7 +22,7 @@ import {
   segmentInputPaths,
 } from "../daemon/render-payload.js";
 
-export const DATA_SOURCES = ["pullRequests", "rateLimits", "memento"] as const;
+export const DATA_SOURCES = ["pullRequests", "rateLimits"] as const;
 export type DataSource = (typeof DATA_SOURCES)[number];
 
 const READS: Readonly<
@@ -33,7 +32,6 @@ const READS: Readonly<
     gitOptionsFromClosure(paths).showPullRequest === true,
   rateLimits: (paths) =>
     anyPathStartsWith(paths, "block") || anyPathStartsWith(paths, "weekly"),
-  memento: (paths) => anyPathStartsWith(paths, "memento"),
 };
 
 // Per source, the segments of `preset` that read it and count its absence as
@@ -65,6 +63,5 @@ export function dataNeeds(config: DslConfig, preset: string): DataNeeds {
   return {
     pullRequests: needs("pullRequests"),
     rateLimits: needs("rateLimits"),
-    memento: needs("memento"),
   };
 }

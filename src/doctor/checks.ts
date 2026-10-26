@@ -445,12 +445,6 @@ export interface SegmentDataFacts {
   readonly pullRequests: DataNeed<Asked<ForgeLogin | null>>;
   // What each recent render's payload said of the rate-limit windows.
   readonly rateLimits: DataNeed<Asked<readonly RateLimitsSeen[]>>;
-  // The installed memento's root, or absent (not installed, or disabled), in
-  // `claudeConfigDir`.
-  readonly memento: DataNeed<{
-    readonly located: Outcome<string>;
-    readonly claudeConfigDir: string;
-  }>;
 }
 
 // The last TRANSCRIPT_WINDOW_BYTES of a transcript, read as the bar's parse
@@ -1652,23 +1646,6 @@ function rateLimitProblems(
     : [];
 }
 
-function mementoProblems(need: SegmentDataFacts["memento"]): string[] {
-  if (need.kind === "unneeded") return [];
-  const { segments, fact } = need;
-  switch (fact.located.kind) {
-    case "ok":
-      return [];
-    case "absent":
-      return [
-        `${named(segments)}: memento is not installed (or is disabled) for ${fact.claudeConfigDir} — install the memento plugin, ${optOut(segments)}`,
-      ];
-    case "failed":
-      return [
-        `${named(segments)}: whether memento is installed could not be read: ${fact.located.reason}`,
-      ];
-  }
-}
-
 // "Segments have their data" (brandon-doctor-v62x.onf): every placed segment
 // whose `missingData` is "fail" gets the outside data it reads. No fix:
 // installing a CLI, logging in, or a subscription is the user's to do.
@@ -1680,7 +1657,6 @@ const segmentData: Check = {
     problemsVerdict([
       ...pullRequestProblems(data.pullRequests),
       ...rateLimitProblems(data.rateLimits, sighted),
-      ...mementoProblems(data.memento),
     ]),
 };
 

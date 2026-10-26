@@ -81,7 +81,7 @@ the wire is derived from the same declarations, so a template cannot smuggle an
 un-gated write.
 
 An action declares exactly one of `set` / `persist` / `copy` / `open` /
-`reset` / `undo` / `redo` / `save` / `doctor` / `ceiling` / `slash` / `do`. A `set` or a `persist`
+`reset` / `undo` / `redo` / `save` / `doctor` / `slash` / `run` / `do`. A `set` or a `persist`
 declares exactly one value source:
 
 | declaration | click effect |
@@ -106,8 +106,6 @@ declares exactly one value source:
 | `{ doctor: "run" }` | run every doctor check over the facts the session's last render reported and write the report into SessionState (the settings menu's `🩺 doctor` button) |
 | `{ doctor: "fix", check: "tmuxTruecolor" }` | re-probe that ONE check at click time and perform the fix its fresh verdict carries; refused loudly when there is nothing left to fix. `check` must name a bundled check — any other name is a load error |
 | `{ doctor: "mark", check: "nerdFont", mark: "drawn" }` | record what you saw of the glyphs that check's fresh verdict shows — `"drawn"` (shapes) or `"boxes"` — then re-run; refused loudly when the verdict shows nothing to look at. Only a check that takes a mark (`nerdFont`) may be named. The mark is kept for good — later sessions and `cc-candybar doctor` read it — and holds for that terminal, the font it was read to draw with, and those glyphs only |
-| `{ ceiling: "set", to: "+100_000" }` | move this session's context ceiling in the memento plugin — `to` is memento's own value grammar (`350000`, `+100_000`, `-100_000`, `off`), handed to its `ceiling set session` and judged only by memento; its refusal is the click's error. A click is honoured only as a move the config declares |
-| `{ ceiling: "clear" }` | drop this session's own ceiling layer (memento's `ceiling clear session`), so the project's or user's ceiling applies again |
 | `{ slash: "/compact" }` | type the slash command into THIS session's Claude Code prompt and submit it, through its tmux pane. The line is `/` then a command name, one line, no control characters — anything else is a load error. A draft in the prompt is stashed and comes back after; mid-turn, Claude Code runs the command or queues it. The click is refused in the bar, typing nothing, outside tmux, while a dialog or picker is open, while you hold a ctrl+s stash, or while the pane is in tmux copy mode. A click is honoured only as a line the config declares |
 | `{ run: ["<program>", "<arg>", …], env: { NAME: "template" }, refreshes: ["<source>"] }` | run the program with the arguments and environment the bar drew — no shell — after the click returns; each source in `refreshes` reads as loading until the program exits, then shows what it wrote. A failure, or a link the daemon did not draw, is the click's error in the bar — see below |
 

@@ -1000,7 +1000,7 @@ describe("RenderCache", () => {
 });
 
 // brandon-unfiled-3248.8ro6: what a session's view holds of the daemon's shared
-// entries (a repo, a pane, a memento reading) keeps their owners' periods
+// entries (a repo, a pane, a plugin's session file) keeps their owners' periods
 // running, so a hold the view's renders have not read across a whole sweep is
 // released — whether or not the view is still drawn — and the next render that
 // reads it takes it back.
@@ -1102,7 +1102,7 @@ describe("RenderCache idle sweep", () => {
           if (!closures.includes(closure)) closures.push(closure);
           const preset = `closure:${closures.indexOf(closure)}`;
           declarations.push(`${facts.cwd} ${preset}`);
-          take(holds, `memento:${facts.cwd}`);
+          take(holds, `repo:${facts.cwd}`);
           take(holds, preset);
           return DECLARES_NOTHING(holds, facts, closure, sources);
         },
@@ -1138,7 +1138,7 @@ describe("RenderCache idle sweep", () => {
       // A request naming another key: the one it no longer names goes now.
       view.requested(request("/b"));
       expect(declarations).toEqual(["/a closure:0", "/b closure:0"]);
-      expect(released).toEqual(["memento:/a"]);
+      expect(released).toEqual(["repo:/a"]);
 
       // A pick of another session's, or of this one's that moves no preset,
       // declares nothing.
@@ -1153,7 +1153,7 @@ describe("RenderCache idle sweep", () => {
         "/b closure:0",
         "/b closure:1",
       ]);
-      expect(released).toEqual(["memento:/a", "closure:0"]);
+      expect(released).toEqual(["repo:/a", "closure:0"]);
       expect(view.holds.size).toBe(2);
       // Each declaration that moved a hold says so; the repeat of `a` and the
       // picks that moved no preset wrote nothing.
@@ -1167,9 +1167,9 @@ describe("RenderCache idle sweep", () => {
       cache.releaseIdle();
       cache.releaseIdle();
       expect(released).toEqual([
-        "memento:/a",
+        "repo:/a",
         "closure:0",
-        "memento:/b",
+        "repo:/b",
         "closure:1",
       ]);
       sessionState.set("s1", "preset", "verbose");

@@ -798,7 +798,7 @@ export interface SegmentDecl {
   readonly settings?: Readonly<Record<string, SettingDecl>>;
   // Whether the doctor counts this segment's missing data as a failure
   // (brandon-doctor-v62x.onf): a forge CLI that is not installed or logged in,
-  // a payload with no rate limits, memento not installed. Absent is "fail";
+  // a payload with no rate limits. Absent is "fail";
   // read only through `missingDataOf`.
   readonly missingData?: MissingData;
 }

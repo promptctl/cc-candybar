@@ -28,11 +28,7 @@ import type { VariableStore } from "../var-system/store.js";
 import type { SourceRegistry } from "../var-system/sources.js";
 import { toString as varToString } from "../var-system/types.js";
 import { buildScope } from "../template-engine/scope.js";
-import {
-  ceilingMoveArgs,
-  runDeclaration,
-  type ActionDecl,
-} from "../config/action.js";
+import { runDeclaration, type ActionDecl } from "../config/action.js";
 import {
   resolveOptionDomain,
   type DomainLibrary,
@@ -67,7 +63,6 @@ import {
   VERB_DOCTOR_RUN,
   VERB_DOCTOR_FIX,
   VERB_DOCTOR_MARK,
-  VERB_CEILING,
   VERB_SLASH,
   VERB_RUN,
   type EvaluatedRun,
@@ -239,8 +234,6 @@ export type CompiledActionDecl =
       readonly check: string;
       readonly mark: GlyphMark;
     }
-  // The memento ceiling move, compiled in from the declaration.
-  | { readonly kind: "ceiling"; readonly args: readonly string[] }
   // The declared slash command, compiled in from the declaration.
   | { readonly kind: "slash"; readonly line: string }
   // [LAW:one-source-of-truth] A `run`: its program, arguments and environment
@@ -598,12 +591,6 @@ function compileAction(
         return { kind: "doctor-mark", check: action.check, mark: action.mark };
     }
   }
-  if ("ceiling" in action) {
-    return {
-      kind: "ceiling",
-      args: ceilingMoveArgs(action),
-    };
-  }
   if ("slash" in action) return { kind: "slash", line: action.slash };
   if ("run" in action) {
     return {
@@ -692,7 +679,6 @@ export function bindsTemplateValue(c: CompiledActionDecl): boolean {
     case "doctor-run":
     case "doctor-fix":
     case "doctor-mark":
-    case "ceiling":
     case "slash":
     case "run":
     case "do":
@@ -1012,13 +998,6 @@ export function realize(
         effects: [
           { verb: VERB_DOCTOR_MARK, args: [sessionId, c.check, c.mark] },
         ],
-        active: false,
-      };
-    // Never "active": a move is a one-shot trigger; the ceiling it leaves is
-    // what the segment's own label reads back from memento.
-    case "ceiling":
-      return {
-        effects: [{ verb: VERB_CEILING, args: [sessionId, ...c.args] }],
         active: false,
       };
     // Never "active": typing a command is a one-shot trigger.

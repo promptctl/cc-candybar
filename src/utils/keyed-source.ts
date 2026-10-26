@@ -82,8 +82,7 @@ export interface KeyedSourceStats extends SourceStats<KeyedTrigger> {
 }
 
 // [LAW:one-type-per-behavior] Everything one keyed source varies by, as data:
-// a tmux pane's session name, memento's ceiling reading and a plugin's
-// session file are instances.
+// a tmux pane's session name and a plugin's session file are instances.
 export interface KeyedSourceSpec<I, T> {
   // Names the source in its hold keys, its refresh events and its stats.
   readonly name: string;

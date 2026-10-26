@@ -73,7 +73,6 @@ export const ACTION_KEYS = [
   "preset",
   "themeDefault",
   "doctor",
-  "ceiling",
   "slash",
   "run",
   "do",
@@ -256,15 +255,6 @@ export type ActionDecl =
       readonly check: string;
       readonly mark: GlyphMark;
     }
-  // [LAW:one-source-of-truth] The memento plugin's context ceiling for the
-  // clicked session: `set` hands `to` — memento's own value grammar, `+100_000`
-  // / `400000` / `off` — to memento's `ceiling set session`, `clear` removes
-  // the session's layer. Nothing here parses `to`: memento is the one judge
-  // of its grammar, and refuses at the click (src/memento/edge.ts). The
-  // declared moves are also the verb's allow-list, so a URL can make only the
-  // moves the session's config offers.
-  | { readonly ceiling: "set"; readonly to: string }
-  | { readonly ceiling: "clear" }
   // [LAW:parse-dont-validate] Type a slash command into the clicked session's
   // Claude Code prompt (src/claude-input/edge.ts). The line is a `SlashLine`,
   // proved at load, and a click is honoured only as a line some declared
@@ -300,15 +290,7 @@ export function runDeclaration(a: RunAction): string {
   return JSON.stringify([a.run, Object.entries(a.env), a.cwd, a.refreshes]);
 }
 
-export type CeilingAction = Extract<ActionDecl, { readonly ceiling: string }>;
 export type SlashAction = Extract<ActionDecl, { readonly slash: string }>;
-
-// [LAW:one-source-of-truth] A ceiling move as the click wire carries it after
-// the session id — the one spelling the renderer emits and the verb compares
-// a click against the config's declared moves with.
-export function ceilingMoveArgs(a: CeilingAction): readonly string[] {
-  return a.ceiling === "set" ? ["set", a.to] : ["clear"];
-}
 
 // [LAW:one-source-of-truth] The templates an action's own text holds, by
 // field: `copy`'s and `open`'s text, a preset delete's `name`, and a `run`'s

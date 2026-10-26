@@ -49,13 +49,6 @@ export function claudeSettingsPath(configDir: string): string {
   return path.join(configDir, "settings.json");
 }
 
-// Claude Code's record of the plugins installed for this user — where each
-// one's files live, at which scope. Read to find the memento plugin
-// (src/memento/edge.ts), whose context ceiling the bar shows and moves.
-export function claudeInstalledPluginsPath(configDir: string): string {
-  return path.join(configDir, "plugins", "installed_plugins.json");
-}
-
 // A settings file's bytes and the file they came from, or null for no file.
 // [LAW:no-silent-failure] Only a missing file is absence: one the daemon
 // cannot read (EACCES, ELOOP, a FIFO) is a file Claude Code may still run

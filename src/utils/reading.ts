@@ -10,7 +10,7 @@ import type { Outcome } from "./outcome";
 // or the latest outcome (brandon-unfiled-3248.8ro6, step 1). `pending` carries
 // the promise its read resolves, so a reader that must wait for a value waits
 // on the read itself, never on a poll. Every owner of a shared source (git's
-// repos, tmux's panes, memento's readings) holds its values in this one shape.
+// repos, tmux's panes, plugins' session files) holds its values in this one shape.
 export type Reading<T> =
   | {
       readonly kind: "pending";

@@ -19,8 +19,6 @@ import { ContextProvider } from "../segments/context.js";
 import { MetricsProvider } from "../segments/metrics.js";
 import { ActivityProvider } from "../segments/activity.js";
 import { TmuxService } from "../segments/tmux.js";
-import { MementoProvider } from "../segments/memento.js";
-import { productionMementoEdge } from "../memento/edge.js";
 import { AutoCompactProvider } from "../segments/autocompact-provider.js";
 import { CacheExpiryProvider } from "../segments/cache.js";
 import { RefreshFaults } from "./refresh-faults.js";
@@ -44,9 +42,6 @@ export function createPayloadProviders(opts: {
     metricsProvider: new MetricsProvider({ logger: opts.logger }),
     activityProvider: new ActivityProvider({ logger: opts.logger }),
     tmuxService: new TmuxService({ logger: opts.logger }),
-    mementoProvider: new MementoProvider(productionMementoEdge(), {
-      logger: opts.logger,
-    }),
     autoCompact: new AutoCompactProvider(opts.logger),
     cacheExpiry: new CacheExpiryProvider(opts.logger),
     managedStorage: new ManagedStorage({

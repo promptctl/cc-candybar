@@ -24,7 +24,6 @@ import { sendDaemonRequest, waitForExit } from "./daemon-wire";
 import type { RunningDaemon } from "./spawn-isolated-daemon";
 import { linkUrls } from "./ansi";
 import { detectClaudeConfigDir } from "../../src/claude-settings";
-import { detectMementoEnv } from "../../src/memento-hint";
 import { PACKAGE_VERSION } from "../../src/version";
 import { logLines } from "../../src/daemon/log";
 import { logPath } from "../../src/daemon/paths";
@@ -184,7 +183,6 @@ export function renderBody(
     // points CLAUDE_CONFIG_DIR at an empty dir, so no test daemon reads the
     // host's Claude Code settings. A case's own hints win.
     claudeConfigDir: detectClaudeConfigDir(process.env, cwd),
-    mementoEnv: detectMementoEnv(process.env, cwd),
     ...hints,
   };
 }
