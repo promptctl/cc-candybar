@@ -142,7 +142,14 @@ export function renderCarousel(
     const known = urls.get(offset);
     if (known !== undefined) return known;
     const made = effectsUrl(
-      realize(declared, ring(offset), ring(offset), store, sessionId).effects,
+      realize(
+        declared,
+        ring(offset),
+        ring(offset),
+        store,
+        sessionId,
+        runtime.signer,
+      ).effects,
     );
     urls.set(offset, made);
     return made;
@@ -185,6 +192,7 @@ export function renderCarousel(
               undefined,
               store,
               sessionId,
+              runtime.signer,
             ).effects,
           ),
         );

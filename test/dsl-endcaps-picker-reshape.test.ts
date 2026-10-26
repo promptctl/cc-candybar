@@ -12,6 +12,7 @@
 // resolveEffectiveGlobals the daemon calls. No parallel rig, no hand-built
 // joiner.
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -51,7 +52,7 @@ function buildRuntime() {
   const sessionState = new SessionState();
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
+  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   const basePalette = paletteForThemeName(BASE_THEME);
 
   // [LAW:one-source-of-truth] Resolve the strip style per render the SAME way the

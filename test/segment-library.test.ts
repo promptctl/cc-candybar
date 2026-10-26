@@ -5,6 +5,7 @@
 // copied list, so a segment added anywhere either lands in the library or fails
 // a test loudly.
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -72,7 +73,7 @@ function rig(width: number, userSegments = "") {
   const sessionState = new SessionState();
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
+  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   sessionState.set(SID, EDIT_MODE_KEY, "arrange");
   const render = (): string =>
     renderDsl(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), {

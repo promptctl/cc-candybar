@@ -6,6 +6,7 @@
 // the hyperlink onto the rest of the terminal).
 
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import { RAW_DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -62,7 +63,7 @@ function renderGitPr(git: Record<string, unknown>): string {
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", new SessionState());
   try {
-    const compiled = registerDslConfig(parsed, registry, { cwd: "/tmp" });
+    const compiled = registerDslConfig(parsed, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
     const payload = {
       hook_event_name: "Status",
       session_id: "deadbeef-1234-5678-9abc-def012345678",

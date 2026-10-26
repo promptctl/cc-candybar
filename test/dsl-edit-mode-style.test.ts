@@ -16,6 +16,7 @@
 // parallel rig and no hand-built joiner — a test that restated the chain would
 // pass while the daemon diverged, which is the whole failure this ticket closes.
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -65,7 +66,7 @@ function buildRuntime(source: string) {
   const sessionState = new SessionState();
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
+  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   // [LAW:single-enforcer] The real gate is the one this session's config
   // derives — the sole authority on what a click may write. Recording the
   // render and the config it rendered with is what makes the set-state calls

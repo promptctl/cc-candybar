@@ -18,6 +18,7 @@
 // which makes FlexStrip FOLD THE LINE at the empty cell and report the width of the
 // first fragment instead of the row.
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import { DEFAULT_TERMINAL_THEME, cellLen, RichText } from "@promptctl/rich-js";
 
 import { resolveFill } from "../src/render/fill";
@@ -208,7 +209,7 @@ describe("a fill segment fills wherever the walk places it", () => {
       "",
       new SessionState(),
     );
-    const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
+    const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
     const errors: string[] = [];
     const out = renderDsl(
       config,

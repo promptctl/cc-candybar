@@ -118,9 +118,16 @@ import {
   VERB_DOCTOR_PROBE,
   VERB_CEILING,
   VERB_SLASH,
+  VERB_RUN,
+  type EvaluatedRun,
 } from "../../click/wire";
+import type { LinkSigner } from "../../click/link-signer";
+import type { Runs, RunRequest } from "../runs";
+import type { DeclaredSources } from "../render-payload";
+import { sessionEnv } from "../session-env";
 import {
   ceilingMoveArgs,
+  runDeclaration,
   type CeilingAction,
   type SlashAction,
 } from "../../config/action";
@@ -214,6 +221,15 @@ export interface DaemonContext {
   // Reload that config from disk now, so the next render reads what a click
   // just wrote rather than waiting on the file watcher.
   readonly reloadConfig: (origin: RenderOrigin) => void;
+  // The storage key of each source that config declares, from the same
+  // render state: what a `run` supersedes.
+  readonly sourcesFor: (origin: RenderOrigin) => DeclaredSources;
+  // [LAW:single-enforcer] The signer every `run` link was drawn with: a link
+  // is honoured only if it verifies here.
+  readonly links: LinkSigner;
+  // [LAW:no-ambient-temporal-coupling] The one owner of runs in flight: a
+  // `run` click hands its program over and is answered at once.
+  readonly runs: Pick<Runs, "start" | "refused">;
   // [LAW:effects-at-boundaries] A session's animation-lane switches over the
   // config it renders with (`of`, looked up like `configFor`), and what
   // follows a click of that session (`clicked`): the click path measures
@@ -259,20 +275,17 @@ export type ClickContext = Journaled<VerbContext>;
 export type VerbHandler = (value: string, ctx: ClickContext) => void;
 
 import { BadVerbArgs } from "../verb-error";
+import { parseSessionId, type SessionId } from "../session-id";
 export { BadVerbArgs };
 
 // ─── Argument decoders ───────────────────────────────────────────────────────
 
-// [LAW:single-enforcer] One place that validates "this string is a usable
-// session id." A session id has come from an untrusted URL; rejecting `/`
-// and `..` keeps it usable as a key in the SessionState map and forbids
-// path-traversal through any downstream code that ever joins it with fs
-// paths (the legacy flag-file path, now removed, was the original reason).
-function requireSessionId(value: string): string {
-  if (!value) throw new BadVerbArgs("session id is required");
-  if (value.includes("/") || value.includes(".."))
-    throw new BadVerbArgs(`invalid session id "${value}"`);
-  return value;
+// [LAW:single-enforcer] A click's session id crosses the one session-id
+// checkpoint (parseSessionId); a refusal is the click's bad arguments.
+function requireSessionId(value: string): SessionId {
+  const parsed = parseSessionId(value);
+  if (!parsed.ok) throw new BadVerbArgs(`session id ${parsed.problem}`);
+  return parsed.id;
 }
 
 // [LAW:types-are-the-program] A single-argument verb (copy/open/toolbar/show-
@@ -1522,6 +1535,90 @@ const slash: VerbHandler = (value, ctx) => {
   ctx.dlog("info", `slash: typed ${line} into ${result.pane} (session=${sid})`);
 };
 
+// ─── Run (a `run` action) ───────────────────────────────────────────────────
+
+// [LAW:parse-dont-validate] A run link is honoured only when it names a `run`
+// action the session's config declares and its mac verifies — it was drawn by
+// this daemon's key, for this session, from that declaration as it stands
+// now, with exactly the program, arguments and environment it carries. The
+// directory the program runs in and the sources it refreshes come from that
+// declaration, never from the link. Any web page can open a `cc-candybar://`
+// link, so either check failing refuses the click before anything runs.
+function runOf(
+  [sessionId = "", action = "", evaluated = "", mac = ""]: readonly string[],
+  ctx: VerbContext,
+): RunRequest {
+  const sid = requireSessionId(sessionId);
+  const origin = sessionOrigin(ctx, sid);
+  const actions = ctx.configFor(origin).actions;
+  const decl = Object.hasOwn(actions, action) ? actions[action] : undefined;
+  if (decl === undefined || !("run" in decl)) {
+    throw new BadVerbArgs(
+      `"${action}" is not a run action this session's config declares`,
+    );
+  }
+  const declaration = runDeclaration(decl);
+  if (
+    !ctx.links.verify({ sessionId: sid, action, declaration, evaluated }, mac)
+  ) {
+    throw new BadVerbArgs(
+      "the link's signature does not match what it carries: it was not drawn by this daemon, or its action has been edited since it was drawn",
+    );
+  }
+  // Signed, so it is what a draw wrote: the JSON of an EvaluatedRun.
+  let drawn: EvaluatedRun;
+  try {
+    drawn = JSON.parse(evaluated) as EvaluatedRun;
+  } catch {
+    throw new BadVerbArgs(`run ${action}: what the link carries is not JSON`);
+  }
+  const [program, ...args] = drawn.run;
+  if (program === undefined || program === "") {
+    throw new BadVerbArgs(`run ${action}: the program evaluated to nothing`);
+  }
+  const sources = ctx.sourcesFor(origin);
+  return {
+    sessionId: sid,
+    action,
+    argv: [program, ...args],
+    // [LAW:single-enforcer] The session's process environment, the action's
+    // own variables over it.
+    env: {
+      ...sessionEnv(process.env, {
+        sessionId: sid,
+        projectDir: origin.projectDir,
+        claudeConfigDir: sessionHints(ctx, sid).claudeConfigDir,
+      }),
+      ...drawn.env,
+    },
+    cwd: decl.cwd,
+    // The loader proved every name a declared source of this config, whose
+    // state holds its key.
+    refreshes: decl.refreshes.map((name) => ({
+      name,
+      storage: sources.get(name)!,
+    })),
+  };
+}
+
+const run: VerbHandler = (value, ctx) => {
+  let named = { sessionId: "-", action: "-" };
+  let request: RunRequest;
+  try {
+    const parts = decodeWire(() => decodeSegments(value));
+    named = { sessionId: parts[0] || "-", action: parts[1] || "-" };
+    request = runOf(parts, ctx);
+  } catch (e) {
+    // [LAW:nothing-unseen] Every refused link is the owner's event and count;
+    // the dispatch shows it in the session's bar.
+    if (e instanceof BadVerbArgs) {
+      ctx.runs.refused(named.sessionId, named.action, e.message);
+    }
+    throw e;
+  }
+  ctx.runs.start(request);
+};
+
 // ─── Registry ───────────────────────────────────────────────────────────────
 
 // [LAW:one-source-of-truth] The LEAF verbs — every click effect that does real
@@ -1602,6 +1699,7 @@ const LEAF_VERBS = new Map<string, VerbHandler>([
   [VERB_DOCTOR_PROBE, doctorProbe],
   [VERB_CEILING, ceiling],
   [VERB_SLASH, slash],
+  [VERB_RUN, run],
 ]);
 
 // [LAW:one-source-of-truth] The verbs whose handler splits its value into
@@ -1626,6 +1724,7 @@ export const SEGMENTED_VERBS: ReadonlySet<string> = new Set([
   VERB_DOCTOR_MARK,
   VERB_CEILING,
   VERB_SLASH,
+  VERB_RUN,
 ]);
 
 // [LAW:one-source-of-truth] The verbs whose FIRST wire segment is the session
@@ -1654,6 +1753,7 @@ const SESSION_FIRST_VERBS: ReadonlySet<string> = new Set([
   VERB_DOCTOR_MARK,
   VERB_CEILING,
   VERB_SLASH,
+  VERB_RUN,
   VERB_LOAD_CONFIG,
 ]);
 

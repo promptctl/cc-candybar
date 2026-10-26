@@ -141,6 +141,7 @@ describe("TmuxService", () => {
     expect(svc.getStats().refreshes).toEqual({
       first: 1,
       period: 1,
+      change: 0,
       supersede: 0,
     });
   });

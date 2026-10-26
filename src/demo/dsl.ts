@@ -22,6 +22,7 @@
 // is not branching — it lets the config's own timed sources (shell, time)
 // populate, exactly as the daemon re-renders on each status-line tick.
 
+import { linkSignerFromKeyFile } from "../daemon/link-key.js";
 import { UNFOLLOWED_FEEDS } from "../config/lanes.js";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
@@ -31,7 +32,11 @@ import { setTimeout as sleep } from "node:timers/promises";
 
 import { detectClientHints } from "../client-hints.js";
 import { ConfigError } from "../config/loader/diagnostics.js";
-import { buildRenderState, openView } from "../daemon/cache/render.js";
+import {
+  buildRenderState,
+  openView,
+  UNOWNED_STORAGE,
+} from "../daemon/cache/render.js";
 import { WatcherRegistry } from "../daemon/cache/watchers.js";
 import type { DaemonLogger } from "../utils/logger.js";
 import { createPayloadProviders } from "../daemon/payload-providers.js";
@@ -43,6 +48,7 @@ import {
   settlePayload,
   todayOf,
 } from "../daemon/render-payload.js";
+import { sessionIdOf } from "../daemon/session-id.js";
 import { sessionSource } from "../daemon/session-source.js";
 import { SessionState } from "../daemon/session-state.js";
 import { EMPTY_HISTORY_DEPTH } from "../daemon/settings-history.js";
@@ -59,7 +65,7 @@ const FRAME_INTERVAL_MS = 450;
 const here = dirname(fileURLToPath(import.meta.url));
 const cwd = process.cwd();
 const configPath = resolve(process.argv[2] ?? join(here, "statusline.json5"));
-const sessionId = "demo0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b";
+const sessionId = sessionIdOf("demo0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b");
 
 // One Claude Code hook event, faked. A session that has never run has no
 // transcript, so the path names no file — a missing transcript is an empty
@@ -104,7 +110,11 @@ function loadState(): ReturnType<typeof buildRenderState> {
       cwd,
       { layers: [configPath], home: configPath, projectDir: cwd },
       advisories,
-      { sessionState },
+      {
+        sessionState,
+        storage: UNOWNED_STORAGE,
+        signer: linkSignerFromKeyFile(),
+      },
     );
   } catch (err) {
     if (err instanceof ConfigError) advisories.push(...err.warnings);
@@ -121,12 +131,11 @@ async function renderFrames(): Promise<void> {
   const view = openView(
     state,
     cwd,
-    sessionId,
-    { hookData, cwd, hints },
+    { sessionId, hookData, cwd, hints },
     {
       sessionState,
-      declare: (holds, facts, closure) =>
-        declareLanes(providers, holds, facts, closure),
+      declare: (holds, facts, closure, sources) =>
+        declareLanes(providers, holds, facts, closure, sources),
       source: sessionSource({
         providers,
         sessionState,
@@ -210,5 +219,6 @@ try {
   providers.usageStore.close();
   providers.tmuxService.close();
   providers.mementoProvider.close();
+  providers.managedStorage.close();
   watchers.closeAll();
 }

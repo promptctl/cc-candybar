@@ -1,3 +1,4 @@
+import { TEST_SIGNER } from "./helpers/link-signer";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -35,6 +36,7 @@ import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import { parseHandlerUrl } from "../src/install/index";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { viewFacts } from "./helpers/view-facts";
+import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 
 // brandon-unfiled-3248.8yp: the render cache held one 9.3 MB state per
 // directory a session rendered from, and released one only past 256 of them,
@@ -55,13 +57,13 @@ afterEach(() => {
 function makeCache(budgetBytes: number, maxEntries?: number) {
   const lines: string[] = [];
   const watchers = new WatcherRegistry({
-    counters: { watchersOpened: 0, watchersClosed: 0 },
+    counters: { watchersOpened: 0, watchersClosed: 0, watchRefusals: 0, watchErrors: 0 },
     logger: () => {},
   });
   cleanups.push(() => watchers.closeAll());
   const sessionState = new SessionState();
   const cache = new RenderCache(
-    {
+    { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER,
       sessionState,
       watchers,
       source: SOURCES_NOTHING,
@@ -99,7 +101,7 @@ const drawnBytes = (view: SessionView): string =>
 
 // A frame of `state` through a view of its own, disposed after.
 const render = (state: ReturnType<RenderCache["getOrCreate"]>["state"]): string => {
-  const view = openView(state, dir, "s", viewFacts(dir, "s"), {
+  const view = openView(state, dir, viewFacts(dir, "s"), {
     sessionState: new SessionState(),
     source: SOURCES_NOTHING,
     declare: DECLARES_NOTHING,
@@ -293,6 +295,7 @@ test("a compile's clock is the draw's: read outside one, it refuses", () => {
         `{ segments: { clock: { template: '{{ now | date "15:04" }}' } }, root: { h: ["clock"] } }`,
       ),
     ),
+    TEST_SIGNER,
   );
   expect(() => compiled.segments["clock"]!.template.evaluate({})).toThrow(
     /the clock was read outside a draw/,
@@ -306,7 +309,7 @@ test("a compile's clock is the draw's: read outside one, it refuses", () => {
 test("a compile keeps nothing of a render once it returns", async () => {
   const gc = exposeGc();
   const config = parseAndValidate("<test>", carouselConfig("mode", "alpha"));
-  const compiled = compileDslConfig(compileInputOf(config));
+  const compiled = compileDslConfig(compileInputOf(config), TEST_SIGNER);
   const drawn = new WeakRef(drawAlone(config, compiled));
   // A WeakRef holds its target until the job that made it ends.
   await new Promise((resolve) => setImmediate(resolve));
@@ -336,7 +339,7 @@ test("an entry, a compile and a view hold no more than the cache charges for the
   // allocations, which are no compile's, so a second is measured.
   const orphan = (): CompiledConfig => {
     const config = parseAndValidate("<test>", "{}", undefined, DEFAULT_DSL_CONFIG);
-    const compiled = compileDslConfig(compileInputOf(config));
+    const compiled = compileDslConfig(compileInputOf(config), TEST_SIGNER);
     drawAlone(config, compiled);
     return compiled;
   };
@@ -354,7 +357,7 @@ test("an entry, a compile and a view hold no more than the cache charges for the
   const entry = (i: number) => {
     const cwd = path.join(dir, `c${i}`);
     fs.mkdirSync(cwd);
-    using held = cache.holdSession(cwd, cwd, undefined, `e${i}`, viewFacts(cwd, `e${i}`));
+    using held = cache.holdSession(cwd, cwd, undefined, viewFacts(cwd, `e${i}`));
     drawn(held.view);
     return held.state;
   };
@@ -370,7 +373,7 @@ test("an entry, a compile and a view hold no more than the cache charges for the
   // A further session in a directory already rendered from costs its view.
   const shared = keep[0]!;
   const view = (i: number): SessionView => {
-    using held = cache.holdSession(dir + "/c0", dir + "/c0", undefined, `v${i}`, viewFacts(dir + "/c0", `v${i}`));
+    using held = cache.holdSession(dir + "/c0", dir + "/c0", undefined, viewFacts(dir + "/c0", `v${i}`));
     expect(held.state).toBe(shared);
     drawn(held.view);
     return held.view;
@@ -388,7 +391,7 @@ test("an entry, a compile and a view hold no more than the cache charges for the
   // list behind the ⚙ and the preset list, and every tab.
   const walked = (i: number): SessionView => {
     const sid = `w${i}`;
-    using held = cache.holdSession(dir + "/c0", dir + "/c0", undefined, sid, viewFacts(dir + "/c0", sid));
+    using held = cache.holdSession(dir + "/c0", dir + "/c0", undefined, viewFacts(dir + "/c0", sid));
     recordRender(sessionState, sid);
     const ctx = testVerbContext(sessionState, undefined, held.state.config);
     let last = drawnBytes(held.view);

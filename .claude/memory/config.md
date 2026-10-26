@@ -12,6 +12,10 @@ User files merge over the bundled default by name. Segments and presets merge by
 
 JSON5 tolerates duplicate keys (the last one wins), but the file editor refuses the whole document. So loading runs the editor's own scanner and warns. With one detector, the warning and the refusal can't disagree.
 
+## Names never nest
+
+No variable is declared under another. The draw lands a read on the first declared name it reaches and the load's walks on the longest, so the two agree only when nothing nests. The check runs over the names after every synthesis pass, because synthesized names are built from authored ones: a user variable `theme` is refused because the settings menu declares `theme.effective`, and a new synthesis that derives names from authored input can make a config that loaded stop loading.
+
 ## The config file is the durable store
 
 There's no daemon-side overrides layer. A click that persists something edits the user's config file in place: it splices one value span and keeps every other byte, comments included. The daemon reloads through the same watcher a hand edit trips. A value written by the menu looks the same as a hand-edited one.

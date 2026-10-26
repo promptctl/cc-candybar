@@ -415,8 +415,11 @@ describe("documents in scope", () => {
     );
   });
 
-  test("a document with nothing to read and no default reads as an error naming the variable", () => {
+  // Absent is a missing field, for every document: a gate reads it as no
+  // key, and an unguarded read is the missing-field error any field is.
+  test("a document with nothing to read is a missing field: hasKey reads false, and a read is the missing-field error", () => {
     const store = docStore(ABSENT);
+    expect(evalStore('{{ hasKey . "budget" }}', store)).toBe("false");
     let thrown: unknown;
     try {
       evalStore("{{ .budget.spent }}", store);
@@ -424,9 +427,8 @@ describe("documents in scope", () => {
       thrown = e;
     }
     expect(readPending(thrown)).toBeUndefined();
-    expect(String(thrown)).toContain(
-      'variable "budget": no document, and no default',
-    );
+    expect((thrown as Error).name).toBe("MissingFieldError");
+    expect(String(thrown)).toContain('field "budget.spent" not found on receiver');
   });
 
   test("a failed scan reads as an error carrying the variable and the reason", () => {

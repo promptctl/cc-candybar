@@ -84,13 +84,16 @@ export class MementoProvider {
           : "memento is not installed or not enabled for this project",
       );
     }
+    // [LAW:one-source-of-truth] The keyed source's one supersede: pending from
+    // before the command, no read stored while it runs, and one fresh read
+    // once it returns — even when memento refused, since the refusal may name
+    // a layer that changed under it, which the next render should show as it
+    // now stands.
+    const resume = this.readings.supersede(scope);
     try {
       this.edge.move(located.value, scope, m);
     } finally {
-      // Superseded even when memento refused: the refusal may name a layer
-      // that changed under it, which the next render should show as it now
-      // stands.
-      this.readings.supersede(scope);
+      resume();
     }
   }
 

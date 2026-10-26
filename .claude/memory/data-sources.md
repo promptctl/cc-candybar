@@ -6,6 +6,10 @@ Each shared source has one owner that schedules its reads: git state, PR lookups
 
 A render request waits for what its arrival started: the refreshes it triggers, the first value of every keyed source its view declares, and every run of its session's or its directory's sources that answers a key the source has no answer under yet: a first value, or a key or dependency that moved. A period's or a watch's re-read is not waited for, since it keeps the answer it has standing, and another session may have started it. It waits only until its client's deadline, less what the draw needs, and whatever has not answered then is drawn as pending. The client states the deadline because only the client knows when it hangs up: the native client counts its budget from before it connects, the Node client from after, and under load the daemon reads a request late. A config's first request compiles in its arrival turn, and that compile can spend the whole deadline, so the first bar from a new directory or config can be mostly pending. A frame waits for nothing, and anything not answered yet is drawn as pending.
 
+A value the daemon itself made stale (a click's move) is pending too, but no request waits on it: the move may take as long as the program it ran, and a wait for it would end at the deadline with the bar from before the click. So a pending value says whether its key was never answered or was superseded, and a request waits only on the first.
+
+A supersede holds back every other trigger of its key until it resumes, and overlapping supersedes need every resume, so no read that ran during a move stores the world from before it.
+
 ## Periods run only while something holds the key
 
 Each session view declares the keys its preset reads, using the keys its request names: which repo, which pane, which memento scope, which Claude Code directory. Those declarations are the holds. A period runs only while its key is held. It measures from the last read that landed, and resumes where it left off. A preset switch takes the holds it newly needs before any draw and releases the old ones at once. Each source's LRU evicts only unheld keys. So data the old preset read costs nothing once released, and a daemon with no subscribers keeps no timer and makes no external call.
@@ -41,6 +45,14 @@ A fold keeps a byte cursor and running sums for each file and reads only the byt
 ## Activity: the turn boundary is a prompt
 
 Activity facts come from message content, which the transcript parse otherwise drops, so they are reduced to bounded scalars at the one parse site. The turn boundary is a human prompt, recognised from the marks Claude Code writes. An entry with a non-human origin is another turn of the same prompt. The interrupt marker, built-in command tags, local command output, shell command tags, meta entries and compact-summary entries are not prompts. An entry with no mark at all is a prompt, so SDK input and older Claude Code versions (which write no origin) still count. Per-turn facts reset only at a prompt, the todo list never resets, and an interrupt clears only what was running. Tool call ids are kept only to pair a result with its call, and they never cross into the payload.
+
+## Plugin storage
+
+One daemon-wide owner reads every plugin's session files. A plugin source has no period: its folder's watch is its only trigger, so a folder that can't be created, a refused watch, or one that errors on a folder still there, is a standing failure of every source in the folder, never a silent stale value, and never the whole config's failure, since one plugin's folder must not take down the bar. The owner doesn't retry, because the OS refusing a watch (limits, permissions) refuses an immediate retry the same way. With no period, nothing visits an entry while no view holds it, so a hold returning to a kept entry re-reads it, drawing the kept value meanwhile; otherwise a file written while a session was away never reaches its bar.
+
+A folder's watch is held by what declares the folder, never by a view, because opening or closing a directory watch leaks on macOS. A folder is keyed by its path and a generation the owner moves on every loss, because an install replaces folders by rename and ext4 reuses a freed inode number; birth time sits beside device and inode in a folder's identity for the same reason. An event naming the folder itself is checked against the disk, because a chmod, a utimes or an xattr reports the same name as a removal. A removed storage folder recovers by reloading the config through the watch that already follows the plugin's folder for its definition, because the watch registry follows nothing: the reload's build recreates the folder under a new generation, and a spurious fire reloads into the same key and opens nothing. Until then the lost folder's held files are re-read from the path, so no draw shows a value from a folder that is gone.
+
+Only the daemon's storage owner creates, watches or sweeps a storage folder. A build outside the daemon, such as the doctor's or the demo's, holds none of the daemon's sessions, so a sweep there would remove files they hold.
 
 ## Memento's ceiling
 

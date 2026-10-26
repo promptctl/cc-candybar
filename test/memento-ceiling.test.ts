@@ -6,6 +6,7 @@
 // (grammar, atomic write, read-back refusal) is driven for real in
 // test/memento-integration.test.ts.
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -92,7 +93,7 @@ function runtime(memento: Record<string, unknown> | undefined) {
   sessionState.set("s1", SESSION_CLIENT_HINTS_KEY, JSON.stringify(HINTS));
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
+  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   const payload = {
     session_id: "s1",
     workspace: { current_dir: "/tmp/proj/sub", project_dir: "/tmp/proj" },
@@ -439,6 +440,7 @@ describe("MementoProvider", () => {
     expect(p.getStats().refreshes).toEqual({
       first: 1,
       period: 0,
+      change: 0,
       supersede: 1,
     });
   });

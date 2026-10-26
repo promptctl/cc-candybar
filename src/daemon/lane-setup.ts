@@ -37,6 +37,7 @@ import {
   type LaneSwitches,
 } from "../config/lanes.js";
 import { holdClickError } from "./click-error.js";
+import type { SessionFacts } from "./session-env.js";
 import type { SessionStateRW } from "./session-state.js";
 import type { Instant } from "../utils/instant.js";
 import type { ClientHints } from "./protocol.js";
@@ -121,11 +122,11 @@ export interface LaneEdge {
     env: Readonly<Record<string, string>>,
   ) => string;
   readonly closePane: (tmux: TmuxHint, pane: string) => void;
-  // Run the `claude` CLI under the session's Claude Code directory; rejects
-  // with its own words when it fails.
+  // Run the `claude` CLI in the session's process environment; rejects with
+  // its own words when it fails.
   readonly claude: (
     args: readonly string[],
-    claudeConfigDir: string | undefined,
+    session: SessionFacts,
   ) => Promise<void>;
   readonly fileExists: (file: string) => boolean;
   readonly presence: (file: string) => Presence;
@@ -335,9 +336,13 @@ async function installBand(
   checkout: string,
   edge: LaneEdge,
 ): Promise<string> {
-  const dir = session.hints.claudeConfigDir;
-  await edge.claude(["plugin", "marketplace", "add", checkout], dir);
-  await edge.claude(["plugin", "install", BAND_PLUGIN], dir);
+  const facts: SessionFacts = {
+    sessionId: session.sessionId,
+    projectDir: session.origin.projectDir,
+    claudeConfigDir: session.hints.claudeConfigDir,
+  };
+  await edge.claude(["plugin", "marketplace", "add", checkout], facts);
+  await edge.claude(["plugin", "install", BAND_PLUGIN], facts);
   const typed = typeSlash(edge.claudeInput, session.hints.tmux, RELOAD_PLUGINS);
   if (typed.kind === "refused") {
     throw new Error(

@@ -1,4 +1,6 @@
 import fs from "node:fs";
+import { linkSignerFromKeyFile } from "./link-key.js";
+import { Runs } from "./runs.js";
 import net from "node:net";
 import v8 from "node:v8";
 import process from "node:process";
@@ -64,6 +66,7 @@ import type {
   Response,
   SubscribeRequest,
 } from "./protocol";
+import { parseSessionId, type SessionId } from "./session-id";
 import { createPayloadProviders } from "./payload-providers";
 import {
   RenderCache,
@@ -114,7 +117,7 @@ import {
   type RateLimitsSeen,
 } from "./render-sightings";
 import { claudeConfigDir } from "../claude-settings";
-import { launchSync, setLaunchStats } from "../proc/launch";
+import { launch, launchSync, setLaunchStats } from "../proc/launch";
 import { buildDebugSnapshot } from "./debug";
 import { DEBUG_WHATS, isDebugWhat } from "./debug-types";
 import { drawDsl, type RenderWarning } from "../dsl/render.js";
@@ -132,6 +135,7 @@ import {
   renderWidth,
   gitOptionsFromClosure,
   prFactOf,
+  sourcesFactOf,
   settlePayload,
   todayOf,
   type PayloadInputs,
@@ -251,6 +255,7 @@ const {
   mementoProvider,
   autoCompact,
   cacheExpiry,
+  managedStorage,
 } = payloadProviders;
 // [LAW:locality-or-seam] Constructed ephemeral so importing this module (CLI
 // relay, subcommands) does no disk I/O. The daemon binds the file-backed
@@ -273,6 +278,19 @@ const menuIdle = new MenuIdle({
       "error",
       `menu-idle: close failed (session=${sessionId}): ${inspect(error)}`,
     ),
+});
+// [LAW:single-enforcer] The one signer of every `run` link this daemon draws
+// and the one that verifies them on the click, over the state directory's key.
+const linkSigner = linkSignerFromKeyFile();
+// [LAW:no-ambient-temporal-coupling] The one owner of every `run` program in
+// flight (src/daemon/runs.ts), closed with the daemon.
+const runs = new Runs({
+  supersede: (storage, sessionId) =>
+    managedStorage.supersede(storage, sessionId),
+  launch,
+  state: sessionState,
+  log: dlog,
+  now: () => instantOf(new Date()),
 });
 // How this daemon's node runs its bundle: what a bar pane runs, and what a
 // click in a tmux status line runs to hand the click back.
@@ -387,8 +405,10 @@ const renderCache = new RenderCache<SessionSource>(
     sessionState,
     watchers: watcherRegistry,
     log: dlog,
-    declare: (holds, facts, closure) =>
-      declareLanes(payloadProviders, holds, facts, closure),
+    storage: managedStorage,
+    signer: linkSigner,
+    declare: (holds, facts, closure, sources) =>
+      declareLanes(payloadProviders, holds, facts, closure, sources),
     // [LAW:single-enforcer] What every session's view draws from: its payload
     // derived over its declaration, its picks and its histories' depths.
     source: sessionSource({
@@ -879,6 +899,10 @@ function shutdown(code: number): void {
     ["usageStore close", () => usageStore.close()],
     ["tmuxService close", () => tmuxService.close()],
     ["mementoProvider close", () => mementoProvider.close()],
+    // Before the storage it resumes: an aborted run resumes its sources once
+    // its program is gone.
+    ["runs close", () => runs.close()],
+    ["managedStorage close", () => managedStorage.close()],
     ["watcherRegistry close", () => watcherRegistry.closeAll()],
     ["sessionState flush", () => sessionState.flush()],
   ];
@@ -1100,7 +1124,7 @@ const NOTHING_DELIVERED = (): void => {};
 // the connection boundary turns its socket over to the session's feed.
 type HandledRequest =
   | ({ kind: "reply" } & Reply)
-  | { kind: "subscribe"; sessionId: string; lane: Lane };
+  | { kind: "subscribe"; sessionId: SessionId; lane: Lane };
 
 const stay = (resp: Response): Reply => ({
   resp,
@@ -1143,11 +1167,9 @@ const refuse = (
 // [LAW:parse-dont-validate] Trust boundary: the session id and the lane are
 // untrusted JSON; the id keys the feed and the lane is what its toggle gates.
 function subscription(req: SubscribeRequest): HandledRequest {
-  if (typeof req.sessionId !== "string" || req.sessionId === "")
-    return refuse(
-      "BAD_REQUEST",
-      "subscribe needs a non-empty string sessionId",
-    );
+  const sessionId = parseSessionId(req.sessionId);
+  if (!sessionId.ok)
+    return refuse("BAD_REQUEST", `subscribe's sessionId ${sessionId.problem}`);
   // A subscribe that names no lane speaks the contract from before the
   // lane toggles: VERSION_MISMATCH, which every older client reads as "this
   // client is out of date" and stops on, rather than BAD_REQUEST, which it
@@ -1163,7 +1185,7 @@ function subscription(req: SubscribeRequest): HandledRequest {
       "BAD_REQUEST",
       `subscribe needs a lane, one of ${LANE_NAMES.join(", ")}: got ${JSON.stringify(req.lane)}`,
     );
-  return { kind: "subscribe", sessionId: req.sessionId, lane };
+  return { kind: "subscribe", sessionId: sessionId.id, lane };
 }
 
 export async function handleRequest(
@@ -1276,7 +1298,9 @@ export async function replyTo(
           autocompact: autoCompact.getStats(),
           cache: cacheExpiry.getStats(),
           today: usageStore.scanStats(),
+          pluginStorage: managedStorage.stats(),
         },
+        runs: runs.stats(),
         transcriptReads: transcriptReads(),
         renderCache: renderCache.stats,
         effectCache: effectSessions.getStats(),
@@ -1327,7 +1351,7 @@ export async function replyTo(
     // frame drew — both stamped with the instant and order it arrived in.
     const sighted = (req: CheckedRenderRequest, frame: FrameSeen): void =>
       renderSightings.see(
-        req.hookData.session_id,
+        req.sessionId,
         {
           client: req.hints.client ?? null,
           termCols: req.hints.termCols ?? null,
@@ -1347,7 +1371,7 @@ export async function replyTo(
       // from it once the request settles (answerRequest). Its answer is its
       // own client's, drawn for a request, and never a frame
       // (src/daemon/frame-feed.ts).
-      frameFeeds.note(checked.req.hookData.session_id, checked.req, order);
+      frameFeeds.note(checked.req.sessionId, checked.req, order);
     }
     // [LAW:no-ambient-temporal-coupling] When the request's wait ends, fixed
     // at its arrival: early enough before its client hangs up to draw
@@ -1386,7 +1410,7 @@ export async function replyTo(
                   : () =>
                       answeredClickError(
                         sessionState,
-                        checked.req.hookData.session_id,
+                        checked.req.sessionId,
                         clickShown,
                       ),
             };
@@ -1610,6 +1634,15 @@ const verbCtx = {
       origin.cwd,
       origin.configFile ?? undefined,
     ),
+  // The storage keys of the same entry `configFor` reads the config of.
+  sourcesFor: (origin: RenderOrigin) =>
+    renderCache.getOrCreate(
+      origin.projectDir,
+      origin.cwd,
+      origin.configFile ?? undefined,
+    ).state.sources,
+  links: linkSigner,
+  runs,
   lanes: { of: lanesAt, clicked: laneClicked },
 };
 
@@ -1760,11 +1793,8 @@ function renderFrame(req: CheckedRenderRequest, fps: number): FeedFrame {
     // [LAW:effects-at-boundaries] A frame only draws: the dump is the
     // session's requests' to write, and the frame links it only when it holds
     // this frame's text.
-    const link = diagnosticDump.linkFor(
-      req.hookData.session_id,
-      dumpTextOf(drawn),
-    );
-    const sessionId = req.hookData.session_id;
+    const link = diagnosticDump.linkFor(req.sessionId, dumpTextOf(drawn));
+    const sessionId = req.sessionId;
     const output = composeBar(drawn, link);
     return {
       at,
@@ -1823,7 +1853,7 @@ function sessionGlobals(
 // config, as the render cache holds it for the inputs the request named, under
 // its session's picks.
 function lanesOf(req: CheckedRenderRequest): LaneSwitches {
-  const sessionId = req.hookData.session_id;
+  const sessionId = req.sessionId;
   return lanesAt(
     sessionRenderOrigin(req.requested, sessionState, sessionId),
     sessionId,
@@ -1852,6 +1882,7 @@ function lanesAt(origin: RenderOrigin, sessionId: string): LaneSwitches {
 declare const CHECKED: unique symbol;
 type CheckedRenderRequest = Omit<RenderRequest, "deadline"> & {
   readonly deadline: ClientDeadline;
+  readonly sessionId: SessionId;
   readonly hints: ClientHints;
   readonly rateLimits: RateLimitsSeen;
   readonly requested: RenderOrigin;
@@ -1891,11 +1922,11 @@ function checkRenderRequest(
   for (const { path, expected, got } of report.typeMismatches) {
     wireProblems.push(`field '${path}' expected ${expected}, got ${got}`);
   }
-  // [LAW:parse-dont-validate] A session id names a session: an empty one
-  // names none, refused here as a subscribe refuses it, so no owner keyed by
-  // session ever holds "" as one.
-  if (req.hookData?.session_id === "") {
-    wireProblems.push("field 'session_id' is empty");
+  // [LAW:single-enforcer] The session id crosses the one session-id
+  // checkpoint, as a subscribe's and a click's do.
+  const sessionId = parseSessionId(req.hookData?.session_id);
+  if (!sessionId.ok) {
+    wireProblems.push(`field 'session_id' ${sessionId.problem}`);
   }
   // [LAW:parse-dont-validate] Absolute, not merely non-empty: the
   // request's cwd anchors a relative `--config` (parseRenderArgs), and a
@@ -1924,7 +1955,8 @@ function checkRenderRequest(
   );
   if (deadline.kind === "refused")
     return { ok: false, problems: [...wireProblems, deadline.problem] };
-  if (wireProblems.length > 0) return { ok: false, problems: wireProblems };
+  if (wireProblems.length > 0 || !sessionId.ok)
+    return { ok: false, problems: wireProblems };
   const hints = parseClientHints(req);
   // [LAW:dataflow-not-control-flow] The *request's* cwd, not the daemon's
   // process.cwd(), so config resolution depends only on request data — the
@@ -1935,6 +1967,7 @@ function checkRenderRequest(
     req: {
       ...req,
       deadline,
+      sessionId: sessionId.id,
       hints,
       rateLimits: rateLimitsSeen(req.hookData),
       requested: {
@@ -1968,7 +2001,7 @@ interface RenderSetup extends Disposable {
   readonly req: CheckedRenderRequest;
   readonly at: Instant;
   readonly facts: RenderFacts;
-  readonly sessionId: string;
+  readonly sessionId: SessionId;
   readonly entry: CacheEntry;
   readonly state: DslRenderState;
   readonly view: SessionView<SessionSource>;
@@ -1983,10 +2016,10 @@ function setUpRender(
   facts: RenderFacts,
 ): RenderSetup {
   noteFacts(facts, {
-    sid: req.hookData.session_id,
+    sid: req.sessionId,
     at: at.toFixed(3),
   });
-  const sessionId = req.hookData.session_id;
+  const sessionId = req.sessionId;
   // [LAW:parse-dont-validate] The ONE checkpoint for everything the client
   // observed and the daemon cannot. Raw `req.*` hint fields are not read
   // past this line; `hints` is the stamped type the render path consumes.
@@ -2029,7 +2062,6 @@ function setUpRender(
     origin.projectDir,
     origin.cwd,
     origin.configFile ?? undefined,
-    sessionId,
     req,
   );
   try {
@@ -2126,6 +2158,7 @@ function drawRender(
     ),
   };
   const metrics = isPending(payload.metrics) ? undefined : payload.metrics;
+  noteFacts(facts, sourcesFactOf(view.lanes().sources));
   noteFacts(facts, {
     prompts: String(metrics?.messageCount ?? "-"),
     nonPrompts: String(metrics?.nonPrompts ?? "-"),
@@ -2349,7 +2382,7 @@ function dumpTextOf(drawn: DrawnBar): string | null {
 // unconditional per-request write would invalidate every state-driven
 // computed each render.
 function recordRequest(req: CheckedRenderRequest): void {
-  const sessionId = req.hookData.session_id;
+  const sessionId = req.sessionId;
   // [LAW:one-source-of-truth] The STAMPED hints: a click arrives with no
   // hints of its own, so the doctor (verbs/index.ts) reads the facts of this
   // session's last request from here, re-parsed through the same checkpoint.
@@ -2404,7 +2437,7 @@ async function answerRequest(
     // request carried, at an instant after it, and a request that fails
     // leaves no feed waiting on it. Deferred, so the frame's draw is never a cost of
     // the request's own answer.
-    const sessionId = req.hookData.session_id;
+    const sessionId = req.sessionId;
     setImmediate(() => frameFeeds.wake(sessionId));
   }
 }
@@ -2518,7 +2551,7 @@ async function drawAnswer(
     dlog("warn", `provider fetch failed: ${f}`);
   const { drawn, motion, clickShown, lanes } = drawRender(setup, ANSWERING);
   const { link, failure } = diagnosticDump.sync(
-    req.hookData.session_id,
+    req.sessionId,
     order,
     dumpTextOf(drawn),
   );
@@ -2528,7 +2561,7 @@ async function drawAnswer(
     dumpFailed: failure === null ? "-" : JSON.stringify(failure),
   });
   const output = composeBar(drawn, link);
-  const sessionId = req.hookData.session_id;
+  const sessionId = req.sessionId;
   const elsewhere = handedOffTo(lanes, frameFeeds.following(sessionId));
   const statusline = statuslineOf(sessionId, drawn, link, output, elsewhere);
   // A `frames` display draws the bar itself; Claude Code's statusline hands

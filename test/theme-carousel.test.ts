@@ -15,6 +15,7 @@
 //      (and under that style): the closed cells' tints, the open state and its
 //      plane, the alerts.
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import { ColorDepth, getThemePalette, transposePalette } from "@promptctl/rich-js";
@@ -93,7 +94,7 @@ function rig(
   const sessionState = new SessionState();
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
+  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
   recordRender(sessionState, SID);
   const ctx = testVerbContext(sessionState, undefined, config);
   const sink = new Map<string, readonly RichText[]>();
@@ -712,7 +713,7 @@ describe("the preset control's list carries the layout beneath it", () => {
   test("every bundled preset's rows, from its resolved root", () => {
     const config = parseAndValidate("<user>", "{}", ALLOWED, DEFAULT_DSL_CONFIG);
     const registry = new SourceRegistry(new VariableStore(), "");
-    const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
+    const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
     // Every segment but edit mode's chrome, which edit mode alone shows.
     const content = (node: CompiledNode): boolean =>
       node.kind === "container" || !node.name.startsWith(EDIT_NS);

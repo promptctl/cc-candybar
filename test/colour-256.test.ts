@@ -14,6 +14,7 @@
 // At ansi no ratio exists, and the one floor that does is measured instead:
 // nothing is drawn on its own ground's index.
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import {
   listThemePalettes,
   Oklch,
@@ -313,7 +314,7 @@ function forEachStage(
   const registry = new SourceRegistry(store, "", sessionState);
   recordRender(sessionState, "s1");
   try {
-    const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
+    const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
     const ctx = testVerbContext(sessionState, undefined, config);
     const render = (colorCompatibility: ColorCompatibility) =>
       renderDsl(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), { ...OPTS, colorCompatibility });

@@ -9,7 +9,7 @@
 // the artifacts read, never a hand-kept list, so a read a later control adds
 // is ensured with no second place to update.
 
-import type { ActionDecl } from "./action.js";
+import { actionTemplates, type ActionDecl } from "./action.js";
 import {
   walkNodes,
   type DslConfig,
@@ -69,8 +69,8 @@ function synthesisReads(
   }
   for (const a of Object.values(artifacts.actions)) {
     reads.add(SESSION_ID_VAR_NAME);
-    if ("copy" in a) add(a.copy);
-    if ("open" in a) add(a.open);
+    // [LAW:one-source-of-truth] Every arm's text, as the one walker lists it.
+    for (const [, source] of actionTemplates(a)) add(source);
     const setBack =
       "set" in a ? SESSION_KEY_TO_EFFECTIVE_VAR.get(a.set) : undefined;
     const persistBack =

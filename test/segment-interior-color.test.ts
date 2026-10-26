@@ -7,6 +7,7 @@
 // segment could pass while the SHIPPED gitaculous regresses.
 
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -118,7 +119,7 @@ function render(): string {
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", new SessionState());
   try {
-    const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
+    const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
     return renderDsl(config, compiled, store, registry, GIT_PAYLOAD, instantOf(new Date()), {
       endcaps: "powerline",
       colorCompatibility: "truecolor", wrap: true, padding: 0,

@@ -4,6 +4,7 @@
 // effects does this click apply" rather than the exact wire encoding.
 
 import { HEALTHY_BUNDLE } from "./doctor-facts";
+import { TEST_SIGNER } from "./link-signer";
 import { NavigationHistory } from "../../src/daemon/navigation-history";
 import { HEALTHY_INSTALL_EDGE, HEALTHY_SERVING, noManagedSettings } from "./doctor-facts";
 import { parseHandlerUrl } from "../../src/install/index";
@@ -154,6 +155,20 @@ export function testVerbContext(
     // cache hands in its own — test/settings-config-menu.test.ts records each
     // reload to pin write → reload → release.
     reloadConfig: () => {},
+    // A test that drives a run click hands in its own run owner and the
+    // storage keys of its config's sources.
+    sourcesFor: () => {
+      throw new Error("sourcesFor: this test handed in no sources");
+    },
+    links: TEST_SIGNER,
+    runs: {
+      start: () => {
+        throw new Error("run: no run owner in this test");
+      },
+      refused: () => {
+        throw new Error("run: no run owner in this test");
+      },
+    },
     // A click of a session that has rendered measures its lane switches over
     // that same config, as the daemon's does; a test that handed in none
     // switches no lane on. No lane owner runs here: a test that reads what a

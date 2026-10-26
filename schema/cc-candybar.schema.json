@@ -1173,6 +1173,38 @@
           {
             "type": "object",
             "properties": {
+              "run": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 1
+              },
+              "env": {
+                "type": "object",
+                "propertyNames": {
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                },
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "refreshes": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            "required": [
+              "run"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
               "do": {
                 "type": "array",
                 "items": {
@@ -2737,7 +2769,7 @@
             "id": {
               "type": "string",
               "minLength": 1,
-              "pattern": "^(?!groups\\.|menus\\.|edit\\.|candybar\\.)[^:/]+$"
+              "pattern": "^(?!groups\\.|menus\\.|menupages\\.|edit\\.|candybar\\.)[^:/]+$"
             },
             "settings": {
               "type": "object",
@@ -2837,7 +2869,7 @@
             "id": {
               "type": "string",
               "minLength": 1,
-              "pattern": "^(?!groups\\.|menus\\.|edit\\.|candybar\\.)[^:/]+$"
+              "pattern": "^(?!groups\\.|menus\\.|menupages\\.|edit\\.|candybar\\.)[^:/]+$"
             },
             "settings": {
               "type": "object",

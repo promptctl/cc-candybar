@@ -6,6 +6,7 @@
 //
 // - a session's own values — its `input`s (the request's facts), its `state`
 //   reads — are the view's;
+// - a plugin's `source` is the view's: each session reads its own file;
 // - a derivation (`template`, `time`) is the view's: it reads the session's
 //   values, the depth its view draws at, and — a projection — the instant of
 //   a draw, and only a view is drawn;
@@ -21,39 +22,33 @@
 // The command and the path read nothing (plain strings), so a source with a
 // `ttl`, `watch_file` or `never` policy runs once per directory.
 
-import {
-  declaredVariables,
-  templateFunctions,
-  templateReads,
-  variableRead,
-} from "../config/loader/refs.js";
+import { declaredVariables } from "../config/loader/refs.js";
+import { valueReadsOf, type ValueReads } from "../config/loader/value-reads.js";
 import type { ValidatedConfig, VariableDecl } from "../config/dsl-types.js";
 import { DEPTH_FUNCTIONS } from "../template-engine/engine.js";
 
 export type VarScope = "directory" | "view";
 
-// What a source's cache policy reads — the variables whose change re-runs it,
-// and a `null` for a read only a view answers: a variable nothing declares, or
-// the depth a depth function (`readableOn`) floors at.
+// What a source's cache policy reads (value-reads.ts) — the variables whose
+// change re-runs it, and a `null` for a read only a view answers: a read of
+// nothing declared, or the depth a depth function (`readableOn`) floors at.
 function policyReads(
   decl: VariableDecl,
-  names: ReadonlySet<string>,
-  helpers: Readonly<Record<string, string>>,
+  fold: ValueReads,
 ): ReadonlyArray<string | null> {
   if (decl.kind !== "shell" && decl.kind !== "file") return [];
-  const { cache } = decl;
-  if ("depends_on" in cache) return cache.depends_on;
-  if ("key" in cache) {
-    return [
-      ...[...templateReads(cache.key, helpers).keys()].map((path) =>
-        variableRead(path, names),
+  const readsDepth =
+    "key" in decl.cache &&
+    [...fold.calls(decl.cache.key)].some((name) => DEPTH_FUNCTIONS.has(name));
+  return [
+    ...fold
+      .ofVariable(decl)
+      .flatMap(
+        ({ reaches }): ReadonlyArray<string | null> =>
+          reaches.length === 0 ? [null] : reaches,
       ),
-      ...[...templateFunctions(cache.key, helpers)]
-        .filter((name) => DEPTH_FUNCTIONS.has(name))
-        .map(() => null),
-    ];
-  }
-  return [];
+    ...(readsDepth ? [null] : []),
+  ];
 }
 
 const KIND_SCOPE: Readonly<
@@ -66,6 +61,9 @@ const KIND_SCOPE: Readonly<
   literal: "directory",
   env: "directory",
   dropped: "directory",
+  // A plugin source is read per session: its reading is the session's own
+  // file, which reaches the view through its payload.
+  source: "view",
 };
 
 // A config's scopes, computed once per config object: every view a session
@@ -89,7 +87,7 @@ export function variableScopes(
 // answer it — and a source a moved source's policy reads moves it too.
 function scopesOf(config: ValidatedConfig): ReadonlyMap<string, VarScope> {
   const declared = new Map(declaredVariables(config));
-  const names = new Set(declared.keys());
+  const fold = valueReadsOf(config);
   const scopes = new Map<string, VarScope>(
     [...declared].map(([name, decl]) => [
       name,
@@ -99,10 +97,7 @@ function scopesOf(config: ValidatedConfig): ReadonlyMap<string, VarScope> {
     ]),
   );
   const reads = new Map(
-    [...declared].map(([name, decl]) => [
-      name,
-      policyReads(decl, names, config.helpers),
-    ]),
+    [...declared].map(([name, decl]) => [name, policyReads(decl, fold)]),
   );
   for (let moved = true; moved; ) {
     moved = false;

@@ -8,6 +8,7 @@
 // src/daemon/verbs/index.ts directly. That is the same handler the daemon
 // invokes for a wire-level click; no duplication.
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import { feedInputs } from "./helpers/inputs";
 import { selectionFor } from "./helpers/selection";
 import { autorun } from "mobx";
@@ -39,11 +40,11 @@ const CONFIG_SRC = `{
   globals: {},
   variables: {
     'session.id': { kind: 'input', path: 'session_id', default: '' },
-    theme: { kind: 'state', key: 'theme', default: '(unset)' },
+    themePick: { kind: 'state', key: 'theme', default: '(unset)' },
   },
   segments: {
     themeSeg: {
-      template: ' theme={{ .theme }} ',
+      template: ' theme={{ .themePick }} ',
       bg: 'surface',
       fg: 'foreground',
     },
@@ -60,7 +61,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const sessionState = new SessionState();
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "", sessionState);
-    const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
+    const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     const basePalette = getThemePalette("textual-dark"!);
     const render = () =>
       stripAnsi(renderDsl(config, compiled, store, registry, HOOK_DATA, instantOf(new Date()), OPTS));
@@ -110,7 +111,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const sessionState = new SessionState();
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "", sessionState);
-    const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
+    const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     // Mirror the daemon's per-render theme resolution. Without this the two
     // renders below would BOTH be the floor theme and the test would assert
     // that two identical strings differ — vacuous rather than merely weaker.
@@ -153,7 +154,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     //       re-derives through the dep graph (the intended contract); or
     //   (b) the computed's keepAlive cache was bypassed for some other
     //       reason (e.g. an unobserved-computed re-derive on access).
-    // Wrapping store.read("theme") in an `autorun` forces (a) to be the
+    // Wrapping store.read("themePick") in an `autorun` forces (a) to be the
     // only path that can produce a second observation: autoruns fire only
     // when a tracked dep invalidates. If SessionState.set ever stops
     // calling atom.reportChanged(), this test stalls at one observation.
@@ -162,7 +163,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
 
     const observed: string[] = [];
     const dispose = autorun(() => {
-      observed.push(String(store.read("theme")));
+      observed.push(String(store.read("themePick")));
     });
     // [LAW:no-defensive-null-guards] try/finally is not defensive — it is
     // the type-level guarantee that the autorun cannot outlive this test
@@ -202,11 +203,11 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
         globals: {},
         variables: {
           'session.id': { kind: 'input', path: 'session_id', default: '' },
-          theme: { kind: 'state', key: 'theme', default: '(unset)' },
+          themePick: { kind: 'state', key: 'theme', default: '(unset)' },
           expanded: { kind: 'state', key: 'toolbar-expanded', default: '' },
         },
         segments: {
-          themeSeg: { template: '{{ .theme }}', bg: 'surface', fg: 'foreground' },
+          themeSeg: { template: '{{ .themePick }}', bg: 'surface', fg: 'foreground' },
           tbSeg: { template: '{{ .expanded }}', bg: 'surface', fg: 'foreground' },
         },
         root: { h: ['themeSeg', 'tbSeg'] },
@@ -216,13 +217,13 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const sessionState = new SessionState();
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "", sessionState);
-    registerDslConfig(config, registry, { cwd: process.cwd() });
+    registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     feedInputs(registry, HOOK_DATA);
 
     const themeObs: string[] = [];
     const expandedObs: string[] = [];
     const disposeTheme = autorun(() => {
-      themeObs.push(String(store.read("theme")));
+      themeObs.push(String(store.read("themePick")));
     });
     const disposeExp = autorun(() => {
       expandedObs.push(String(store.read("expanded")));
@@ -415,11 +416,11 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
         globals: {},
         variables: {
           'session.id': { kind: 'input', path: 'session_id', default: '' },
-          theme: { kind: 'state', key: 'theme', default: '(unset)' },
+          themePick: { kind: 'state', key: 'theme', default: '(unset)' },
           expanded: { kind: 'state', key: 'toolbar-expanded', default: '' },
         },
         segments: {
-          s: { template: '{{ .theme }}', bg: 'surface', fg: 'foreground' },
+          s: { template: '{{ .themePick }}', bg: 'surface', fg: 'foreground' },
         },
         root: 's',
       }`,
@@ -430,7 +431,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     sessionState.set(SESSION_ID, "toolbar-expanded", "1");
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "", sessionState);
-    registerDslConfig(config, registry, { cwd: process.cwd() });
+    registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     feedInputs(registry, HOOK_DATA);
 
     // Observer reads BOTH state vars in one tracked frame — the kind
@@ -438,7 +439,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const snapshots: Array<{ theme: string; expanded: string }> = [];
     const dispose = autorun(() => {
       snapshots.push({
-        theme: String(store.read("theme")),
+        theme: String(store.read("themePick")),
         expanded: String(store.read("expanded")),
       });
     });
@@ -537,10 +538,10 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
       `{
         globals: {},
         variables: {
-          theme: { kind: 'state', key: 'theme', default: 'calm' },
+          themePick: { kind: 'state', key: 'theme', default: 'calm' },
         },
         segments: {
-          s: { template: '{{ .theme }}', bg: 'surface', fg: 'foreground' },
+          s: { template: '{{ .themePick }}', bg: 'surface', fg: 'foreground' },
         },
         root: 's',
       }`,
@@ -549,7 +550,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     expect(config.variables["session.id"]).toEqual(PAYLOAD_INPUTS["session.id"]);
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "", new SessionState());
-    const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
+    const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     const out = renderDsl(config, compiled, store, registry, { session_id: "s1" }, instantOf(new Date()), {
       endcaps: "powerline",
       colorCompatibility: "truecolor",
@@ -581,7 +582,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const sessionState = new SessionState();
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "", sessionState);
-    const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
+    const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     const basePalette = getThemePalette("textual-dark"!);
     const render = () =>
       stripAnsi(renderDsl(config, compiled, store, registry, HOOK_DATA, instantOf(new Date()), OPTS));

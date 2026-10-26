@@ -67,6 +67,10 @@ export const LAUNCH_CATEGORIES = [
   "tmux",
   "click.pbcopy",
   "click.open",
+  // A `run` action's program (src/daemon/runs.ts), on a click: one child per
+  // click, async, each with its own timeout. Not rate-limited, so a second
+  // click on a stepper runs a second move rather than being refused.
+  "click.run",
   // The doctor's tmux query — click-driven like the verbs above, and its own
   // category so the cap never reaches the tmux SEGMENT's cache-driven spawns.
   "doctor.tmux",

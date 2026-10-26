@@ -515,7 +515,10 @@ export type Globals = GlobalsOf<GlobalFieldRows>;
 // [LAW:one-type-per-behavior] One discriminated union covers every source
 // kind. Adding a new kind = code change here + matching runtime support in
 // var-system. There is no "extension" path that bypasses this list.
-export type VariableDecl = AuthoredVariableDecl | DroppedVarDecl;
+export type VariableDecl =
+  | AuthoredVariableDecl
+  | DroppedVarDecl
+  | SourceVarDecl;
 
 // What a config may write under `variables:`.
 export type AuthoredVariableDecl =
@@ -538,6 +541,20 @@ export interface DroppedVarDecl {
   readonly reason: string;
   // The path of the definition that dropped: the drop's identity.
   readonly definition: string;
+}
+
+// [LAW:one-type-per-behavior] A plugin's source (design-docs/PLUGIN-API.md):
+// a DOCUMENT read, per session, from the plugin's managed storage — the file
+// `<storage>/<session id>.json` its program writes. Its reading reaches the
+// view through the payload, at the variable's own name, so it is declared by
+// the view a session's declaration holds it for. Synthesized by the plugin
+// loader from a definition's `sources:`, never authored — the variable loader
+// accepts no `kind: "source"`.
+export interface SourceVarDecl {
+  readonly kind: "source";
+  // The folder the plugin's program writes its session files into: the
+  // plugin folder's real path, then `session`.
+  readonly storage: string;
 }
 
 export interface LiteralVarDecl {
@@ -713,6 +730,19 @@ export function hasCacheField(v: VariableDecl): v is VariableDeclWithCache {
   // [LAW:types-are-the-program] Named positively: a kind added to the union
   // (a tombstone's `dropped`) has no cache until it is listed here.
   return v.kind === "file" || v.kind === "shell";
+}
+
+// [LAW:one-source-of-truth] The templates a variable's declaration carries,
+// by field: a template variable's body and a source's cache key.
+export function variableTemplates(
+  v: VariableDecl,
+): ReadonlyArray<readonly [field: "template" | "cache.key", template: string]> {
+  return [
+    ...(v.kind === "template" ? [["template", v.template] as const] : []),
+    ...(hasCacheField(v) && "key" in v.cache
+      ? [["cache.key", v.cache.key] as const]
+      : []),
+  ];
 }
 
 export interface SegmentDecl {

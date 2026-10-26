@@ -2,7 +2,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execSync } from "node:child_process";
-import { WatcherRegistry } from "../src/daemon/cache/watchers";
+import { EventEmitter } from "node:events";
+import {
+  WatcherRegistry,
+  type Invalidation,
+} from "../src/daemon/cache/watchers";
 import { GitDataProvider } from "../src/daemon/cache/git";
 import { GitService, type GitInfo } from "../src/segments/git";
 import { ok, type Outcome } from "../src/utils/outcome";
@@ -58,7 +62,7 @@ describe("WatcherRegistry", () => {
   // brandon-unfiled-3248.576q: the registry bounds nothing — its consumers do.
   // An LRU cap here closed watches under holders that still held them.
   test("a slot closes only when its last holder releases it, however many are open", () => {
-    const counters = { watchersOpened: 0, watchersClosed: 0 };
+    const counters = { watchersOpened: 0, watchersClosed: 0, watchRefusals: 0, watchErrors: 0 };
     const reg = new WatcherRegistry({ counters });
     const fired: string[] = [];
     const handles = Array.from({ length: 300 }, (_, i) =>
@@ -66,13 +70,104 @@ describe("WatcherRegistry", () => {
     );
 
     expect(reg.size()).toBe(300);
-    expect(counters).toEqual({ watchersOpened: 300, watchersClosed: 0 });
+    expect(counters).toEqual({
+      watchersOpened: 300,
+      watchersClosed: 0,
+      watchRefusals: 0,
+      watchErrors: 0,
+    });
     expect(fired).toEqual([]);
 
     handles[0]!.release();
     expect(reg.size()).toBe(299);
     expect(counters.watchersClosed).toBe(1);
     reg.closeAll();
+  });
+
+  test("hands its consumer the basenames that fired in the window", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "watch-names-"));
+    const reg = new WatcherRegistry();
+    const seen: Invalidation[] = [];
+    reg.acquire(dir, { files: [], dirs: [{ path: dir }] }, (inv) =>
+      seen.push(inv),
+    );
+    await new Promise((r) => setTimeout(r, 50));
+    fs.writeFileSync(path.join(dir, "a.json"), "1");
+    fs.writeFileSync(path.join(dir, "b.json"), "2");
+    // FSEvents may also report the folder's own creation late, under its
+    // name: the names are what fired, whatever else did.
+    const names = () =>
+      seen.flatMap((inv) => (inv.kind === "changed" ? [...inv.names] : []));
+    await until(
+      () => names().includes("a.json") && names().includes("b.json"),
+      "both files' names",
+    );
+    expect(seen.every((inv) => inv.kind === "changed")).toBe(true);
+    reg.closeAll();
+    rmrf(dir);
+  });
+
+  test("a refused target comes back on the handle and in the stats, never as opened", () => {
+    const counters = {
+      watchersOpened: 0,
+      watchersClosed: 0,
+      watchRefusals: 0,
+      watchErrors: 0,
+    };
+    const reg = new WatcherRegistry({ counters, logger: () => {} });
+    const missing = path.join(os.tmpdir(), "watch-refused-no-such-folder");
+    const handle = reg.acquire(
+      "k",
+      { files: [], dirs: [{ path: missing }] },
+      () => {},
+    );
+    expect(handle.refused).toEqual([
+      { path: missing, reason: expect.stringContaining("ENOENT") },
+    ]);
+    // A second holder of the slot is told the same.
+    expect(reg.acquire("k", { files: [], dirs: [] }, () => {}).refused).toEqual(
+      handle.refused,
+    );
+    expect(counters).toEqual({
+      watchersOpened: 0,
+      watchersClosed: 0,
+      watchRefusals: 1,
+      watchErrors: 0,
+    });
+    // Its release is counted like any slot's: opened plus refusals less
+    // closed is what is held now.
+    reg.closeAll();
+    expect(counters.watchersClosed).toBe(1);
+  });
+
+  test("an error after open reaches the consumer and the stats", async () => {
+    const fake = new EventEmitter() as EventEmitter & { close(): void };
+    fake.close = () => {};
+    const watch = jest
+      .spyOn(fs, "watch")
+      .mockImplementation((() => fake) as unknown as typeof fs.watch);
+    try {
+      const counters = {
+        watchersOpened: 0,
+        watchersClosed: 0,
+        watchRefusals: 0,
+        watchErrors: 0,
+      };
+      const reg = new WatcherRegistry({ counters, logger: () => {} });
+      const seen: Invalidation[] = [];
+      reg.acquire("k", { files: [], dirs: [{ path: "/w" }] }, (inv) =>
+        seen.push(inv),
+      );
+      fake.emit("error", new Error("EMFILE: too many open files"));
+      await until(() => seen.length > 0, "the error's invalidation");
+      expect(seen).toEqual([
+        { kind: "failed", reason: "/w: EMFILE: too many open files" },
+      ]);
+      expect(counters).toMatchObject({ watchersOpened: 1, watchErrors: 1 });
+      reg.closeAll();
+    } finally {
+      watch.mockRestore();
+    }
   });
 
   test("closeAll closes every watcher", () => {

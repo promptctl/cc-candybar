@@ -28,6 +28,7 @@
 //      SAME padding/style pipeline as hand-authored segments, no
 //      special-cased chrome path.
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import { withoutSettingsLinks } from "./helpers/ambient-chrome";
 import { getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -183,7 +184,7 @@ function buildEditRuntime(src: string, sessionId = "s1") {
   durable.seedOrigin(sessionState, sessionId);
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
+  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   const basePalette = getThemePalette("textual-dark"!);
   // The daemon publishes the session's history depth into every render's
   // payload (`history.sinceEdit` is what edit mode's save cell counts).
@@ -821,7 +822,7 @@ describe("edit chrome is ordinary segment data — no special-cased render path"
     const sessionState = new SessionState();
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "", sessionState);
-    const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
+    const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     const basePalette = getThemePalette("textual-dark"!);
     sessionState.set("s1", EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
     const renderWith = (padding: number): string =>

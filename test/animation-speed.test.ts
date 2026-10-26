@@ -3,6 +3,7 @@
 // template's `frames` — runs that many times faster than at 1x, a change of
 // speed moves no loop to another phase, and a readout of real time
 // (`realtimeFrames`) keeps real time.
+import { TEST_SIGNER } from "./helpers/link-signer";
 import { DEFAULT_TERMINAL_THEME, RichText } from "@promptctl/rich-js";
 
 import { selectionFor } from "./helpers/selection";
@@ -172,7 +173,7 @@ describe("a template's frames run at the session's animation speed; realtimeFram
       "",
       new SessionState(),
     );
-    const compiled = registerDslConfig(CONFIG, registry, { cwd: "/tmp" });
+    const compiled = registerDslConfig(CONFIG, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
     const effects = new SessionEffects<RenderedLine>("s");
     try {
       return seconds

@@ -54,23 +54,64 @@ export interface WatchTargets {
   dirs: readonly DirTarget[];
 }
 
+// [LAW:types-are-the-program] What one debounce window of a slot's watches
+// says: the basenames that fired (`changed`), or that the OS named none of
+// them (`unknown`), or that a watch reported an error after it opened
+// (`failed`). One window folds into one value, the strongest of what it saw.
+export type Invalidation =
+  | { readonly kind: "changed"; readonly names: ReadonlySet<string> }
+  | { readonly kind: "unknown" }
+  | { readonly kind: "failed"; readonly reason: string };
+
+// A target the OS refused to watch, and why.
+export interface Refusal {
+  readonly path: string;
+  readonly reason: string;
+}
+
 interface WatcherSlot {
   key: string;
   watchers: fs.FSWatcher[];
   refcount: number;
-  debounceTimer: NodeJS.Timeout | null;
-  onInvalidate: () => void;
+  // The debounce window open now, and what it has seen so far.
+  debounce: { readonly timer: NodeJS.Timeout; window: Invalidation } | null;
+  onInvalidate: (invalidation: Invalidation) => void;
   targets: WatchTargets;
+  refused: readonly Refusal[];
 }
 
+// [LAW:no-silent-failure] A handle says which of its targets the OS refused,
+// so a consumer whose only refresh is the watch can show the fault.
 export interface WatcherHandle {
   release(): void;
+  readonly refused: readonly Refusal[];
 }
 
+// `watchersOpened` counts slots whose every target opened, `watchRefusals`
+// slots with a target refused, and `watchErrors` errors watches reported after
+// they opened — so a refused or failed watch is never counted as a working
+// one. `watchersClosed` counts every slot released, refused or not, so the
+// slots held now are opened plus refusals less closed.
 export interface WatcherCounters {
   watchersOpened: number;
   watchersClosed: number;
+  watchRefusals: number;
+  watchErrors: number;
 }
+
+// The window's fold: a failure outranks everything, an unnamed event outranks
+// names, and names gather.
+function folded(window: Invalidation, next: Invalidation): Invalidation {
+  if (next.kind === "failed") return next;
+  if (window.kind !== "changed") return window;
+  if (next.kind === "unknown") return next;
+  return { kind: "changed", names: new Set([...window.names, ...next.names]) };
+}
+
+const namedOf = (filename: string | null): Invalidation =>
+  filename === null
+    ? { kind: "unknown" }
+    : { kind: "changed", names: new Set([filename]) };
 
 export class WatcherRegistry {
   private readonly slots = new Map<string, WatcherSlot>();
@@ -99,82 +140,112 @@ export class WatcherRegistry {
   // a single cache module whose callback is a stable closure over the cache map.
   // `targets` from the first acquire wins; subsequent acquires keep the
   // original target set (consumers must use a fresh key if they need different
-  // targets).
+  // targets). A consumer that needs no more than "something changed" ignores
+  // the invalidation's value.
   acquire(
     key: string,
     targets: WatchTargets,
-    onInvalidate: () => void,
+    onInvalidate: (invalidation: Invalidation) => void,
   ): WatcherHandle {
     if (this.closed) {
-      // Registry already shut down; return a no-op handle so callers don't
-      // crash mid-shutdown.
-      return { release: () => {} };
+      // Registry already shut down: nothing is watched, and the handle says
+      // so; releasing it is a no-op, so callers don't crash mid-shutdown.
+      return {
+        release: () => {},
+        refused: [...targets.files, ...targets.dirs.map((d) => d.path)].map(
+          (path) => ({ path, reason: "the watcher registry is closed" }),
+        ),
+      };
     }
 
     const existing = this.slots.get(key);
     if (existing) {
       existing.refcount++;
       existing.onInvalidate = onInvalidate;
-      return this.makeHandle(key);
+      return this.makeHandle(existing);
     }
 
     const slot: WatcherSlot = {
       key,
       watchers: [],
       refcount: 1,
-      debounceTimer: null,
+      debounce: null,
       onInvalidate,
       targets,
+      refused: [],
     };
     this.openWatchers(slot);
     this.slots.set(key, slot);
-    if (this.counters) this.counters.watchersOpened++;
-    return this.makeHandle(key);
+    if (this.counters) {
+      if (slot.refused.length === 0) this.counters.watchersOpened++;
+      else this.counters.watchRefusals++;
+    }
+    return this.makeHandle(slot);
   }
 
-  private makeHandle(key: string): WatcherHandle {
+  private makeHandle(slot: WatcherSlot): WatcherHandle {
     let released = false;
     return {
+      refused: slot.refused,
       release: () => {
         if (released) return;
         released = true;
-        const slot = this.slots.get(key);
-        if (!slot) return;
+        if (this.slots.get(slot.key) !== slot) return;
         slot.refcount = Math.max(0, slot.refcount - 1);
         if (slot.refcount === 0) {
           this.closeSlot(slot);
-          this.slots.delete(key);
+          this.slots.delete(slot.key);
         }
       },
     };
   }
 
   private openWatchers(slot: WatcherSlot): void {
-    const fire = () => {
-      if (slot.debounceTimer) return; // already pending
-      slot.debounceTimer = setTimeout(() => {
-        slot.debounceTimer = null;
-        try {
-          slot.onInvalidate();
-        } catch (e) {
-          this.logger(
-            "warn",
-            `watcher invalidate threw: ${(e as Error).message}`,
-          );
-        }
-      }, DEBOUNCE_MS);
-      slot.debounceTimer.unref();
+    const fire = (invalidation: Invalidation) => {
+      if (slot.debounce !== null) {
+        slot.debounce.window = folded(slot.debounce.window, invalidation);
+        return;
+      }
+      const debounce = {
+        window: invalidation,
+        timer: setTimeout(() => {
+          slot.debounce = null;
+          try {
+            slot.onInvalidate(debounce.window);
+          } catch (e) {
+            this.logger(
+              "warn",
+              `watcher invalidate threw: ${(e as Error).message}`,
+            );
+          }
+        }, DEBOUNCE_MS),
+      };
+      debounce.timer.unref();
+      slot.debounce = debounce;
+    };
+    // [LAW:no-silent-failure] An error after open reaches the consumer and the
+    // stats, not only the log: the watch behind it may deliver nothing more.
+    const failedAt = (target: string) => (e: Error) => {
+      this.logger("warn", `watcher error ${target}: ${e.message}`);
+      if (this.counters) this.counters.watchErrors++;
+      fire({ kind: "failed", reason: `${target}: ${e.message}` });
+    };
+    const refused: Refusal[] = [];
+    const refuse = (target: string, e: unknown) => {
+      const reason = (e as Error).message;
+      this.logger("warn", `watch failed ${target}: ${reason}`);
+      refused.push({ path: target, reason });
     };
 
     for (const target of slot.targets.files) {
       try {
-        const w = fs.watch(target, { persistent: false }, fire);
-        w.on("error", (e) => {
-          this.logger("warn", `watcher error ${target}: ${e.message}`);
-        });
+        const w = fs.watch(target, { persistent: false }, (_evt, filename) =>
+          fire(namedOf(filename)),
+        );
+        w.on("error", failedAt(target));
         slot.watchers.push(w);
       } catch (e) {
-        this.logger("warn", `watch failed ${target}: ${(e as Error).message}`);
+        refuse(target, e);
       }
     }
 
@@ -185,26 +256,22 @@ export class WatcherRegistry {
           // [LAW:dataflow-not-control-flow] Filter is a value (Set) — same
           // code path every event; the Set's .has() decides whether to fire.
           if (filterSet && (!filename || !filterSet.has(filename))) return;
-          fire();
+          fire(namedOf(filename));
         };
         const w = fs.watch(target.path, { persistent: false }, onDirEvent);
-        w.on("error", (e) => {
-          this.logger("warn", `watcher error ${target.path}: ${e.message}`);
-        });
+        w.on("error", failedAt(target.path));
         slot.watchers.push(w);
       } catch (e) {
-        this.logger(
-          "warn",
-          `watch failed ${target.path}: ${(e as Error).message}`,
-        );
+        refuse(target.path, e);
       }
     }
+    slot.refused = refused;
   }
 
   private closeSlot(slot: WatcherSlot): void {
-    if (slot.debounceTimer) {
-      clearTimeout(slot.debounceTimer);
-      slot.debounceTimer = null;
+    if (slot.debounce !== null) {
+      clearTimeout(slot.debounce.timer);
+      slot.debounce = null;
     }
     for (const w of slot.watchers) {
       try {

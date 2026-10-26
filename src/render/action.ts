@@ -28,7 +28,11 @@ import type { VariableStore } from "../var-system/store.js";
 import type { SourceRegistry } from "../var-system/sources.js";
 import { toString as varToString } from "../var-system/types.js";
 import { buildScope } from "../template-engine/scope.js";
-import { ceilingMoveArgs, type ActionDecl } from "../config/action.js";
+import {
+  ceilingMoveArgs,
+  runDeclaration,
+  type ActionDecl,
+} from "../config/action.js";
 import {
   resolveOptionDomain,
   type DomainLibrary,
@@ -65,8 +69,11 @@ import {
   VERB_DOCTOR_MARK,
   VERB_CEILING,
   VERB_SLASH,
+  VERB_RUN,
+  type EvaluatedRun,
   type Effect,
 } from "../click/wire.js";
+import type { LinkSigner } from "../click/link-signer.js";
 
 // ─── Compiled shapes ───────────────────────────────────────────────────────────
 
@@ -236,6 +243,19 @@ export type CompiledActionDecl =
   | { readonly kind: "ceiling"; readonly args: readonly string[] }
   // The declared slash command, compiled in from the declaration.
   | { readonly kind: "slash"; readonly line: string }
+  // [LAW:one-source-of-truth] A `run`: its program, arguments and environment
+  // values pre-parsed, evaluated by the draw into the link it signs. It
+  // carries its own name and its declaration, which the link signs: the click
+  // looks the declaration up by name and verifies it is the one drawn.
+  | {
+      readonly kind: "run";
+      readonly name: string;
+      readonly declaration: string;
+      readonly argv: ReadonlyArray<Template<RichText>>;
+      readonly env: ReadonlyArray<
+        readonly [name: string, value: Template<RichText>]
+      >;
+    }
   // [LAW:composability] Several compiled actions fired by one click. `head` is
   // the one the region presents as — its display rule, its current-state mark,
   // and the value a template binds — and `rest` ride along behind it.
@@ -262,6 +282,10 @@ export interface ActionRuntime {
   // render bound rather than answering from whichever entry drew last.
   bound: RenderBinding | undefined;
   compiled: CompiledActions;
+  // [LAW:single-enforcer] What signs every `run` link this compile draws: the
+  // daemon's, check's and the demo's from the key file, a test's from a fixed
+  // key. There is one render path, and it always signs.
+  readonly signer: LinkSigner;
 }
 
 /** The look a render draws in, as that render resolved it. */
@@ -581,6 +605,18 @@ function compileAction(
     };
   }
   if ("slash" in action) return { kind: "slash", line: action.slash };
+  if ("run" in action) {
+    return {
+      kind: "run",
+      name,
+      declaration: runDeclaration(action),
+      argv: action.run.map((item) => parseActionTemplate(parse, item, name)),
+      env: Object.entries(action.env).map(
+        ([variable, value]) =>
+          [variable, parseActionTemplate(parse, value, name)] as const,
+      ),
+    };
+  }
   if ("undo" in action) return { kind: "undo" };
   if ("redo" in action) return { kind: "redo" };
   if ("back" in action) return { kind: "back" };
@@ -658,6 +694,7 @@ export function bindsTemplateValue(c: CompiledActionDecl): boolean {
     case "doctor-mark":
     case "ceiling":
     case "slash":
+    case "run":
     case "do":
       return false;
   }
@@ -781,6 +818,7 @@ export function realize(
   boundValue: string | undefined,
   store: VariableStore,
   sessionId: string,
+  signer: LinkSigner,
 ): { effects: readonly Effect[]; active: boolean } {
   switch (c.kind) {
     case "set-literal": {
@@ -989,6 +1027,34 @@ export function realize(
         effects: [{ verb: VERB_SLASH, args: [sessionId, c.line] }],
         active: false,
       };
+    // [LAW:one-source-of-truth] The one evaluation of a run: here, in the
+    // draw, as copy's text is. The link carries what was evaluated and its
+    // mac, so the click runs what the bar showed and nothing a URL made up.
+    // Never "active": a run is a one-shot trigger.
+    case "run": {
+      const scope = buildScope(store);
+      const evaluated = JSON.stringify({
+        run: c.argv.map((item) => evalTemplate(item, scope)),
+        env: Object.fromEntries(
+          c.env.map(([variable, value]) => [
+            variable,
+            evalTemplate(value, scope),
+          ]),
+        ),
+      } satisfies EvaluatedRun);
+      const mac = signer.sign({
+        sessionId,
+        action: c.name,
+        declaration: c.declaration,
+        evaluated,
+      });
+      return {
+        effects: [
+          { verb: VERB_RUN, args: [sessionId, c.name, evaluated, mac] },
+        ],
+        active: false,
+      };
+    }
     // [LAW:one-source-of-truth] The op is fixed at compile time (see
     // compileAction) — the click just delivers it. `apply-layout-op`'s
     // handler does read-current-append-write (see verbs/index.ts), unlike
@@ -1012,12 +1078,20 @@ export function realize(
       // displayed. Nothing here makes them one transaction — the daemon's
       // dispatch joins adjacent session writes into one batch, for this
       // producer and every other.
-      const head = realize(c.head, display, boundValue, store, sessionId);
+      const head = realize(
+        c.head,
+        display,
+        boundValue,
+        store,
+        sessionId,
+        signer,
+      );
       return {
         effects: [
           ...head.effects,
           ...c.rest.flatMap(
-            (m) => realize(m, display, undefined, store, sessionId).effects,
+            (m) =>
+              realize(m, display, undefined, store, sessionId, signer).effects,
           ),
         ],
         active: head.active,
@@ -1119,6 +1193,7 @@ export function renderAction(
     boundValue,
     store,
     sessionId,
+    runtime.signer,
   );
   return linkOver(display, effectsUrl(effects), active);
 }

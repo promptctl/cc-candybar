@@ -2,6 +2,7 @@
 // shows (brandon-segment-settings-i4n.u36). Each case places the segment twice
 // on one bar — a bare copy on every default and a copy with one setting off —
 // so it pins both the setting's effect and that two copies never share a value.
+import { TEST_SIGNER } from "./helpers/link-signer";
 import type { RichText } from "@promptctl/rich-js";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -67,7 +68,7 @@ function renderPair(
   const registry = new SourceRegistry(store, "", sessionState);
   const sink = new Map<string, readonly RichText[]>();
   try {
-    const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
+    const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
     renderDsl(
       config,
       compiled,

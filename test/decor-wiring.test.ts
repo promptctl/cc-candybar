@@ -14,6 +14,7 @@
 //   - the render's style reaches the tint, because the tint is read from the
 //     one transposed palette every unpinned segment colours from.
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import { ColorRgba, getThemePalette, Palette, transposePalette } from "@promptctl/rich-js";
 import type { RichText, ThemeKey } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -83,7 +84,7 @@ function build(src: string, look?: ThemeKey, dflt?: DslConfig) {
   const store = new VariableStore();
   const sessionState = new SessionState();
   const registry = new SourceRegistry(store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
+  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   const sink = new Map<string, readonly RichText[]>();
   const render = (payload: object = {}, variation?: VariationName, shade?: ShadeName): string =>
     renderDsl(
@@ -619,7 +620,7 @@ describe("an open trigger on a row no colour stands off", () => {
     );
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "", new SessionState());
-    const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
+    const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     const errors: string[] = [];
     const warnings: RenderWarning[] = [];
     const out = renderDsl(
@@ -679,7 +680,7 @@ describe("an open band whose plane stands on its trigger", () => {
     );
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "", new SessionState());
-    const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
+    const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     const errors: string[] = [];
     const warnings: RenderWarning[] = [];
     const out = renderDsl(

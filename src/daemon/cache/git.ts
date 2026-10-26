@@ -232,7 +232,7 @@ function branchOf(
 // The PR's key is not known to be the branch's now (`PrSource.missed`).
 function owe(pr: PrSource): void {
   pr.missed = true;
-  renew(pr);
+  renew(pr, "unread");
 }
 
 // [LAW:no-silent-failure] A pass that read no branch has none to key an owed
@@ -712,7 +712,7 @@ export class GitDataProvider {
       owe(pr);
       return "owed";
     }
-    renew(pr);
+    renew(pr, "unread");
     pr.missed = false;
     void this.readPr(state, pr);
     return "looked-up";

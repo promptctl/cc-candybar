@@ -15,6 +15,7 @@
 //   3. It is declared as every `(?)` is: one `declareHelp` call.
 //   4. Width, mechanically, at 80 and 120 columns.
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import { RichText } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -73,7 +74,7 @@ function buildRuntime(src: string = TWO_SEGMENT_ROOT) {
   const sessionState = new SessionState();
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
+  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   recordRender(sessionState, SID);
 
   // [LAW:one-source-of-truth] The daemon's own globals resolution, called the

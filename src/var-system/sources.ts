@@ -498,6 +498,32 @@ export function resolvePath(obj: unknown, path: string): unknown {
   return cur;
 }
 
+// [LAW:parse-dont-validate] What a view's payload holds at a source's name,
+// as the document's reading: the source's own outcome, PENDING while it has
+// not answered, and a failure for anything else.
+function sourceReading(name: string, raw: unknown): Reading<JsonValue> {
+  if (raw === PENDING) return PENDING;
+  if (raw === undefined) {
+    return failed(
+      `variable "${name}": the view's payload has no "${name}": its declaration did not take the source the preset reads`,
+    );
+  }
+  const kind =
+    typeof raw === "object" && raw !== null
+      ? (raw as { kind?: unknown }).kind
+      : undefined;
+  switch (kind) {
+    case "ok":
+    case "absent":
+    case "failed":
+      return raw as Reading<JsonValue>;
+    default:
+      return failed(
+        `variable "${name}": the view's payload holds no source reading at "${name}"`,
+      );
+  }
+}
+
 // Coerces an external primitive to a typed VarValue using the cast helpers
 // from types.ts. Throws for non-primitive runtypes or impossible casts.
 function coerceToType(raw: unknown, type: VarType): VarValue {
@@ -648,6 +674,26 @@ export class SourceRegistry {
   // A document that is a known failure for as long as it is declared.
   declareFailedDocument(name: string, reason: string): void {
     this.store.defineDocument(name, failed(reason));
+  }
+
+  // A plugin's source: a document derived from the reading its view's payload
+  // carries at the source's own name — ok, absent or failed as the storage
+  // owner read the session's file, or pending while it has not answered.
+  // [LAW:no-silent-failure] A payload with nothing there is a declaration
+  // that did not take the source the preset reads: a bug, read as a failure
+  // naming the variable, never as absent.
+  declareSourceDocument(name: string): void {
+    this.store.defineDerivedDocument(name, () =>
+      sourceReading(name, this.inputs.get().read(name)),
+    );
+  }
+
+  // [LAW:single-enforcer] A handle the registry's owner holds for as long as
+  // the registry lives — a render state's hold on a plugin's storage folder —
+  // released by the registry's one teardown (`dispose`), with everything else
+  // it holds.
+  own(release: () => void): void {
+    this.cleanups.push(release);
   }
 
   // input: a derived value of its path in the bound InputSource, cast to its

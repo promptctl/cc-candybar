@@ -21,6 +21,7 @@ import {
 import { lineage, processTable } from "../proc/process-table.js";
 import { pidAlive } from "./parent-watchdog.js";
 import { presence } from "../utils/presence.js";
+import { sessionEnv } from "./session-env.js";
 import { canonical, executableOn, regularFileWith } from "../path-search.js";
 import { launcherNode } from "../attach-preload.js";
 import {
@@ -228,19 +229,6 @@ async function paneClaude(hint: TmuxHint): Promise<PaneClaude> {
   };
 }
 
-// The `claude` CLI's environment for a session: the daemon's, under the
-// Claude Code directory the session's client reported — an absent hint is the
-// default directory, never the CLAUDE_CONFIG_DIR of whichever shell spawned
-// this detached daemon (src/daemon/protocol.ts).
-export function claudeEnv(
-  claudeConfigDir: string | undefined,
-): NodeJS.ProcessEnv {
-  const { CLAUDE_CONFIG_DIR: _daemons, ...env } = process.env;
-  return claudeConfigDir === undefined
-    ? env
-    : { ...env, CLAUDE_CONFIG_DIR: claudeConfigDir };
-}
-
 // How often the wait for a lane's subscriber looks again.
 const FOLLOW_POLL_MS = 200;
 
@@ -284,13 +272,16 @@ export function productionLaneEdge(
       return opened;
     },
     closePane: (hint, pane) => void tmux(hint, ["kill-pane", "-t", pane]),
-    claude: async (args, claudeConfigDir) =>
+    // [LAW:single-enforcer] The session's process environment: the
+    // session's facts, never those of whichever shell spawned this detached
+    // daemon.
+    claude: async (args, session) =>
       void ran(
         `claude ${args.join(" ")}`,
         await launch({
           bin: "claude",
           args: [...args],
-          env: claudeEnv(claudeConfigDir),
+          env: sessionEnv(process.env, session),
           timeoutMs: 30_000,
           category: "lane.claude",
         }),

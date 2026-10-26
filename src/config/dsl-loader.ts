@@ -68,7 +68,11 @@ import {
   reservedNamespaceCollisions,
   SETTINGS_NS,
 } from "./loader/reserved-namespace.js";
-import { validateActions } from "./loader/actions.js";
+import {
+  actionHomeOf,
+  validateActions,
+  type ActionHome,
+} from "./loader/actions.js";
 import { validateStyles } from "./loader/styles.js";
 import { validatePresets } from "./loader/presets.js";
 import { validateHelpers } from "./loader/helpers.js";
@@ -76,8 +80,9 @@ import {
   validateCrossReferences,
   validateDeclarations,
 } from "./loader/cross-ref.js";
-import { templateScopeOf } from "./loader/refs.js";
+import { declarationsAt, templateScopeOf } from "./loader/refs.js";
 import { validateNoCycles } from "./loader/cycles.js";
+import { validateNoNesting } from "./loader/nesting.js";
 import {
   applyPlugins,
   ownedBy,
@@ -534,6 +539,7 @@ function checkPlugin(
   };
   validateDeclarations(ctx, config, templateScopeOf(config), owned);
   validateNoCycles(ctx, config, owned);
+  validateNoNesting(ctx, config, { checked: owned, authored: owned });
   if (issues.length > 0) throw new ConfigError(filePath, issues);
 }
 
@@ -604,6 +610,23 @@ export function validateConfig(
   // full ordering argument lives in settings-menu.ts's header, beside the pass
   // it governs.
   const withChrome = synthesizeEditChrome(synthesizeSettingsMenu(withMenus));
+  // [LAW:single-enforcer] Over the names the store is declared from, every
+  // synthesized one included (nesting.ts).
+  const authored = new Set(
+    [
+      ...declarationsAt({
+        variables: raw.variables ?? {},
+        segments: raw.segments ?? {},
+      }),
+    ].map(([name]) => name),
+  );
+  validateNoNesting(ctx, withChrome, {
+    checked: () => true,
+    authored: (name) => authored.has(name),
+  });
+  if (issues.length > 0) {
+    throw new ConfigError(filePath, issues);
+  }
   return withChrome as ValidatedConfig;
 }
 
@@ -695,7 +718,7 @@ function parseDslFile<L>(
       : (validatePluginRefs({ ...ctx, issues: [] }, json.plugins) ?? []),
     isPlainObject(json.segments) ? Object.keys(json.segments) : [],
   );
-  const raw = validateTopLevel(ctx, json, inherited);
+  const raw = validateTopLevel(ctx, json, inherited, actionHomeOf(filePath));
 
   if (issues.length > 0) {
     throw new ConfigError(filePath, issues, warnings);
@@ -737,6 +760,8 @@ function validateTopLevel(
   ctx: ValidateCtx,
   raw: Record<string, unknown>,
   inheritedSegments: ReadonlySet<string>,
+  // Where the file's actions are declared: a `run` runs in its directory.
+  home: ActionHome,
 ): RawDslConfig {
   for (const key of Object.keys(raw)) {
     if (!TOP_LEVEL_KEYS.has(key)) {
@@ -771,7 +796,7 @@ function validateTopLevel(
   if (raw.root !== undefined)
     out.root = validateRootFragment(ctx, "root", raw.root);
   if (raw.actions !== undefined)
-    out.actions = validateActions(ctx, raw.actions);
+    out.actions = validateActions(ctx, raw.actions, home);
   // [LAW:no-silent-failure] `looks:` was renamed `styles:` (brandon-menu-ia-
   // q30.xuz). Refused by name, like `layout:` above, so the author is told the
   // new key rather than handed a bare unknown-key message.

@@ -5,7 +5,7 @@
 // (the helper IS the trigger): one `state` var per menu state key (default
 // "closed"), one `cycle` action per (state key, member), AND — bn5.6 — the
 // picker body's page cursor (a `state` var + int action named by menuPageKey)
-// per state key, all under the reserved `menus.` namespace, so
+// per state key, all under the reserved `menus.` and `menupages.` namespaces, so
 // `deriveActionValidators(config.actions)` derives the click gates from them
 // through the ONE existing path — a menu toggle and its page cursor are gated
 // like every other set, no parallel verb. [LAW:single-enforcer]
@@ -63,6 +63,7 @@ import type { ConfigIssue } from "./diagnostics.js";
 import { findKeyLine } from "./diagnostics.js";
 import {
   MENU_NS,
+  MENU_PAGE_NS,
   reservedNamespaceCollisions,
   reservedNamespaceOf,
 } from "./reserved-namespace.js";
@@ -278,6 +279,7 @@ export function checkMenuDecls(
   // return so a `menus.*` user name can never load silently. The check is the
   // disclosure primitive's shared enforcer (mirroring group sugar's `groups.`).
   reservedNamespaceCollisions(ctx, out, MENU_NS, "{{ menu }} helpers");
+  reservedNamespaceCollisions(ctx, out, MENU_PAGE_NS, "{{ menu }} helpers");
 
   // [LAW:no-silent-failure] A menu derives its identity from the SEGMENT it sits
   // in (the published segment name) plus its own apply arg; a `{{ define }}`

@@ -6,6 +6,7 @@
 // every bundled slash control on the bar: the `commands` tray, `autocompact`,
 // and the settings menu's own tray, its door open.
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -107,7 +108,7 @@ async function bar(
   const sessionState = new SessionState();
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
+  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
   const render = (): string =>
     renderDsl(
       config,

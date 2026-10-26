@@ -12,6 +12,7 @@
 // (resolveStyleSelection), the clicks driven through the real
 // wire (effectsUrl → clickUrl → VERBS). No parallel rig.
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import { selectionFor } from "./helpers/selection";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -46,7 +47,7 @@ const SRC = `{
   styles: { none: {}, ${PICKED_STYLE}: { chromaScale: 1.6, lightnessShift: 0.08 } },
   variables: {
     'session.id': { kind: 'input', path: 'session_id', default: '' },
-    theme: { kind: 'state', key: 'theme', default: '${BASE_THEME}' },
+    themePick: { kind: 'state', key: 'theme', default: '${BASE_THEME}' },
     look: { kind: 'state', key: 'style', default: 'none' },
     pct: { kind: 'input', path: 'pct', type: 'number', default: 0 },
     stop: { kind: 'input', path: 'stop', default: 'panel' },
@@ -75,7 +76,7 @@ function buildRuntime() {
   const sessionState = new SessionState();
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
+  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   registries.push(registry);
   // The click gate is the config this session renders, so the theme and style
   // clicks travel the road a real click travels.

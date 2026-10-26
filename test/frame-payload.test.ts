@@ -26,6 +26,7 @@ import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
 import { instantOf } from "../src/utils/instant";
 import { ABSENT, PENDING, ok } from "../src/utils/outcome";
 import type { ClientHints } from "../src/daemon/protocol";
+import { sessionIdOf } from "../src/daemon/session-id";
 import type { ClaudeHookData } from "../src/utils/claude";
 import {
   absentOwners,
@@ -124,7 +125,7 @@ function counted(pr?: unknown) {
     ...owners,
     lanes: declaredLanes(
       owners,
-      { hookData: HOOK, cwd: undefined, hints: HINTS },
+      { sessionId: sessionIdOf(HOOK.session_id), hookData: HOOK, cwd: undefined, hints: HINTS },
       EVERY_LANE,
     ),
   } as unknown as RenderPayloadDeps;

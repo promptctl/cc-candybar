@@ -22,20 +22,13 @@ import {
   drawProjectionAt,
   slotAt,
 } from "../payload-inputs.js";
-import { actionTemplates, type ActionDecl } from "../action.js";
 import { CLOCK_FUNCTIONS } from "../../template-engine/engine.js";
-import {
-  bindsComputedAction,
-  declaredVariables,
-  templateActionRefs,
-  templateFunctions,
-  templateReads,
-  variableRead,
-} from "./refs.js";
+import { declaredVariables } from "./refs.js";
+import { payloadPathOf, valueReadsOf, type ValueReads } from "./value-reads.js";
 
 export type ProjectionConfig = Pick<
   DslConfig,
-  "variables" | "segments" | "helpers" | "globals" | "presets"
+  "variables" | "segments" | "helpers" | "actions" | "globals" | "presets"
 >;
 
 // Each projection, with why it reads the instant, as a load error says it:
@@ -43,27 +36,29 @@ export type ProjectionConfig = Pick<
 export type Projections = ReadonlyMap<string, string>;
 
 // [LAW:one-source-of-truth] What a template's instant reads are told against,
-// beside its text: the helpers it may call, the declared variable names (a read
-// lands on the longest it starts with), the projections among them, and the
-// clock functions of the engine that evaluates it.
+// beside its text: the one fold of what it reads and calls (value-reads.ts),
+// the projections among the names it reads, and the clock functions of the
+// engine that evaluates it.
 export interface InstantBasis {
-  readonly helpers: Readonly<Record<string, string>>;
-  readonly names: ReadonlySet<string>;
+  readonly reads: ValueReads;
   readonly projections: Projections;
   readonly clock: ReadonlySet<string>;
 }
 
 // Why a template reads the instant, against the projections known so far:
-// the first clock function it calls, else the first projection it reads.
-// Null for a template that reads no instant.
+// the first clock function its draw calls, else the first projection it
+// reads — the actions it binds included, since an `{{ action }}` realizes its
+// `copy`/`open` text inside the template that binds it. Null for a template
+// that reads no instant.
 function instantRead(template: string, basis: InstantBasis): string | null {
-  for (const name of templateFunctions(template, basis.helpers)) {
+  for (const name of basis.reads.calls(template)) {
     if (basis.clock.has(name)) return `calls "${name}"`;
   }
-  for (const path of templateReads(template, basis.helpers).keys()) {
-    const read = variableRead(path, basis.names);
-    const why = read === null ? undefined : basis.projections.get(read);
-    if (why !== undefined) return `reads "${read}", which ${why}`;
+  for (const { reaches } of basis.reads.ofTemplate(template)) {
+    for (const name of reaches) {
+      const why = basis.projections.get(name);
+      if (why !== undefined) return `reads "${name}", which ${why}`;
+    }
   }
   return null;
 }
@@ -72,8 +67,8 @@ function instantRead(template: string, basis: InstantBasis): string | null {
 // starts as a projection, and a template variable joins once its template
 // reads the instant through anything already in. Computed once per config
 // object: the loader's check and every declaration read the same answer.
-// The answer is the basis it was told against, declared names included: a
-// cache key is read against the same basis the fold read
+// The answer is the basis it was told against, its reads included: a cache
+// key is read against the same basis the fold read
 // [LAW:one-source-of-truth].
 const FOLDS = new WeakMap<ProjectionConfig, InstantBasis>();
 
@@ -92,17 +87,16 @@ export function projectionsOf(config: ProjectionConfig): Projections {
 
 function foldProjections(config: ProjectionConfig): InstantBasis {
   const declared = new Map(declaredVariables(config));
-  const names = new Set(declared.keys());
   const projections = new Map<string, string>();
   const basis: InstantBasis = {
-    helpers: config.helpers,
-    names,
+    reads: valueReadsOf(config),
     projections,
     clock: CLOCK_FUNCTIONS,
   };
   for (const [name, decl] of declared) {
     if (decl.kind === "time") projections.set(name, "is a time variable");
-    const drawn = decl.kind === "input" ? drawProjectionAt(decl.path) : null;
+    const at = payloadPathOf(name, decl);
+    const drawn = at === undefined ? null : drawProjectionAt(at);
     if (drawn)
       projections.set(
         name,
@@ -134,8 +128,9 @@ function foldProjections(config: ProjectionConfig): InstantBasis {
       }
     }
     for (const [name, decl] of declared) {
-      if (decl.kind !== "input" || projections.has(name)) continue;
-      const slot = slotAt(decl.path);
+      const at = payloadPathOf(name, decl);
+      if (at === undefined || projections.has(name)) continue;
+      const slot = slotAt(at);
       const why = slot === undefined ? undefined : slotReads.get(slot);
       if (why === undefined) continue;
       projections.set(name, `reads the ${slot} rule, which ${why}`);
@@ -200,77 +195,15 @@ export function instantReadOf(
 }
 
 // [LAW:single-enforcer] Which of a compile's templates read the instant — a
-// segment's parts, a layout node's `when`, a globals rule, an action's text:
-// those that read it as a variable's template would, and those that bind an
-// action whose own text reads it, since an `{{ action }}` realizes its
-// `copy`/`open` text inside the template that binds it. `clock` is the clock
-// functions of the compile's engine, which may add its own to the engine's.
-// A template this answers false for is kept as a derived value of the view it
-// is drawn in (src/dsl/parts.ts), so the answer must cover every way a
-// template reaches the clock: one it misses throws at its first draw
-// (template-engine/engine.ts, drawInProgress).
+// segment's parts, a layout node's `when`, a globals rule, an action's text.
+// `clock` is the clock functions of the compile's engine, which may add its
+// own to the engine's. A template this answers false for is kept as a derived
+// value of the view it is drawn in (src/dsl/parts.ts), so the answer must
+// cover every way a template reaches the clock: one it misses throws at its
+// first draw (template-engine/engine.ts, drawInProgress). The fold's edges are
+// the draw's, so it does.
 export function templateInstants(
   basis: InstantBasis,
-  actions: Readonly<Record<string, ActionDecl>>,
 ): (template: string) => boolean {
-  const actionReads = new Map<string, boolean>();
-  const actionReadsInstant = (name: string): boolean => {
-    const known = actionReads.get(name);
-    if (known !== undefined) return known;
-    // A `do` names its members, never itself or a nested `do` (cross-ref), so
-    // the walk ends; the entry guards it while it runs.
-    actionReads.set(name, false);
-    // [LAW:no-silent-failure] An action no declaration names binds nothing,
-    // so nothing of its reads the instant: the template that names it fails
-    // where it binds it, as it would kept or projected. cross-ref refuses one
-    // in a segment's or a layout node's templates; a globals rule, or an
-    // action's own text, is checked only where it is evaluated.
-    const decl = actions[name];
-    if (decl === undefined) return false;
-    const reads =
-      [...actionTemplates(decl)].some(
-        ([, source]) => instantRead(source, basis) !== null,
-      ) ||
-      ("do" in decl && decl.do.some(actionReadsInstant));
-    actionReads.set(name, reads);
-    return reads;
-  };
-  // A name the template computes may be any declared action's.
-  let anyReads: boolean | undefined;
-  const anyActionReadsInstant = (): boolean =>
-    (anyReads ??= Object.keys(actions).some(actionReadsInstant));
-  // One answer per source: a gate's text recurs at every node of every
-  // preset that edit chrome wraps alike.
-  const answers = new Map<string, boolean>();
-  return (template) => {
-    let reads = answers.get(template);
-    if (reads === undefined) {
-      reads =
-        instantRead(template, basis) !== null ||
-        templateActionRefs(template, basis.helpers).some((ref) =>
-          actionReadsInstant(ref.name),
-        ) ||
-        (bindsComputedAction(template, basis.helpers) &&
-          anyActionReadsInstant());
-      answers.set(template, reads);
-    }
-    return reads;
-  };
-}
-
-// [LAW:one-source-of-truth] The declared names that decide whether a read
-// lands on a projection: each projection, and every name nested under one. A
-// read lands on the longest declared name it starts with, so whatever lies
-// outside these resolves a read no differently — a compile keyed on them alone
-// is shared by configs that declare other variables differently.
-export function projectionNamesOf(config: ProjectionConfig): string[] {
-  const { names, projections } = foldOf(config);
-  return [...names]
-    .filter((name) =>
-      [...projections.keys()].some(
-        (projection) =>
-          name === projection || name.startsWith(`${projection}.`),
-      ),
-    )
-    .sort();
+  return (template) => instantRead(template, basis) !== null;
 }

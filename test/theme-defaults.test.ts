@@ -16,6 +16,7 @@
 // [LAW:single-enforcer] Everything runs the real spine: parse → merge →
 // validate, resolveEffectiveGlobals, registerDslConfig + renderDsl.
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import type { RichText } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
@@ -257,7 +258,7 @@ function cellBg(source: string): { daemon: string; compileOnly: string } {
   const config = load(source);
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", new SessionState());
-  const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
+  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
   const sink = new Map<string, readonly RichText[]>();
   const bg = (): string => {
     const cells = sink.get("cell");

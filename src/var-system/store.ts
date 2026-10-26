@@ -144,7 +144,12 @@ export class Kept<T> implements Derived<T> {
   private readonly cell: KeepAliveComputed<T>;
 
   // `what` names the value in a refusal: `Variable "x"`, `Derived value "x"`.
-  constructor(what: string, deriver: () => T) {
+  // `equals` is what counts as a change: MobX's own comparison unless given.
+  constructor(
+    what: string,
+    deriver: () => T,
+    equals?: (a: T, b: T) => boolean,
+  ) {
     // [LAW:one-source-of-truth] keepAlive caches the value across reads
     // so `.get()` re-runs the deriver only when a tracked dep
     // invalidates — without it, MobX treats an unobserved computed as
@@ -153,6 +158,7 @@ export class Kept<T> implements Derived<T> {
     // reactive-cache contract the proposal promises.
     this.cell = computed(deriver, {
       keepAlive: true,
+      ...(equals !== undefined && { equals }),
     }) as KeepAliveComputed<T>;
     // [LAW:no-silent-failure] A MobX whose computed no longer tears itself
     // down this way — or guards the teardown by another flag, so lifting this
@@ -324,6 +330,40 @@ class DocumentCell implements DocumentNode {
   }
 }
 
+// [LAW:one-type-per-behavior] A document derived from what the store reads —
+// a plugin source's reading, as its view's payload carries it — rather than
+// written by a scan. Kept until what it read changes, and compared by content
+// exactly as a written document is, so a payload recomputed with the same
+// reading wakes nobody.
+class DerivedDocument implements DocumentNode {
+  readonly kind = "document" as const;
+  private readonly cell: Kept<Reading<JsonValue>>;
+
+  constructor(
+    readonly name: string,
+    deriver: () => Reading<JsonValue>,
+  ) {
+    this.cell = new Kept(
+      `Variable "${name}"`,
+      () => shaped(deriver()),
+      sameDocument,
+    );
+  }
+
+  read(): Reading<JsonValue> {
+    return this.cell.read();
+  }
+
+  release(): void {
+    this.cell.release();
+  }
+
+  lastUpdatedMs(): null {
+    // Derived: its freshness is what it read, as a computed's is.
+    return null;
+  }
+}
+
 // [LAW:one-source-of-truth] THE answer to "are these the same document" — the
 // document box's equality, its age, and `changeKey` are all this one expression.
 // Canonical because every stored document has sorted keys and null prototypes
@@ -392,6 +432,11 @@ export class VariableStore {
     this.declare(name, new DocumentCell(name, initial));
   }
 
+  // A document whose reading the deriver computes from what it reads.
+  defineDerivedDocument(name: string, deriver: () => Reading<JsonValue>): void {
+    this.declare(name, new DerivedDocument(name, deriver));
+  }
+
   // Computed deriver receives a `read` function that returns the value
   // of any variable in the store. Calling `read(other)` from inside the
   // deriver is what registers the dependency with MobX — the deriver's
@@ -448,12 +493,14 @@ export class VariableStore {
 
   setDocument(name: string, value: Reading<JsonValue>): void {
     const node = this.requireOwn(name);
-    if (node.kind !== "document") {
+    if (!(node instanceof DocumentCell)) {
       throw new TypeError(
-        `Variable "${name}" is a ${node.kind}, not a document (use defineDocument to create one)`,
+        node.kind === "document"
+          ? `Variable "${name}" is a derived document: what it reads decides it, and nothing writes it`
+          : `Variable "${name}" is a ${node.kind}, not a document (use defineDocument to create one)`,
       );
     }
-    mobxRunInAction(() => (node as DocumentCell).set(value));
+    mobxRunInAction(() => node.set(value));
   }
 
   setBox(name: string, value: VarValue | Pending): void {
@@ -578,7 +625,7 @@ export class VariableStore {
     let released = 0;
     mobxRunInAction(() => {
       for (const node of this.nodes.values()) {
-        if (node instanceof ComputedNode) {
+        if (node instanceof ComputedNode || node instanceof DerivedDocument) {
           node.release();
           released++;
         }

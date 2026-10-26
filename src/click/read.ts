@@ -12,6 +12,7 @@ import {
   parseEffects,
   URL_SCHEME,
   VERB_APPLY_UPDATE,
+  VERB_RUN,
   VERB_COPY,
   VERB_DISPATCH,
   VERB_LOAD_CONFIG,
@@ -169,4 +170,5 @@ export const HOST_VERBS: ReadonlyMap<string, string> = new Map([
   [VERB_SHOW_CONFIG_ERROR, "copies the config error"],
   [VERB_SHOW_CONFIG_WARNING, "copies the config warning"],
   [VERB_APPLY_UPDATE, "rebuilds cc-candybar"],
+  [VERB_RUN, "runs a program the config declares"],
 ]);

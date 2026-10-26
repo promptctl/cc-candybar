@@ -1,3 +1,4 @@
+import { TEST_SIGNER } from "./helpers/link-signer";
 import v8 from "node:v8";
 import vm from "node:vm";
 import {
@@ -39,7 +40,7 @@ function registerStdlib() {
   );
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", new SessionState());
-  return { registry, compiled: registerDslConfig(config, registry, { cwd: "/tmp" }) };
+  return { registry, compiled: registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" }) };
 }
 
 test("a registered stdlib config costs megabytes, not tens of them, helpers included", () => {

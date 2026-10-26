@@ -23,6 +23,9 @@ import { findKeyLine } from "./diagnostics.js";
 // reach up into a pass that already imports this module [LAW:one-way-deps].
 export const GROUP_NS = "groups.";
 export const MENU_NS = "menus.";
+// A menu's page cursor (menu-keys.ts), reserved by the menu pass beside
+// `menus.` so no authored name is overwritten by one.
+export const MENU_PAGE_NS = "menupages.";
 export const EDIT_NS = "edit.";
 // `candybar.`, not `settings.`: `.settings` in a segment's templates is its
 // placement's own settings (brandon-segment-settings-i4n), so no variable may
@@ -32,6 +35,7 @@ export const SETTINGS_NS = "candybar.";
 export const RESERVED_NAMESPACES = [
   GROUP_NS,
   MENU_NS,
+  MENU_PAGE_NS,
   EDIT_NS,
   SETTINGS_NS,
 ] as const;

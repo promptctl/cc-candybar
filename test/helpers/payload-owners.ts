@@ -13,6 +13,7 @@
 
 import type { Holds } from "../../src/utils/holds";
 import type { ClaudeHookData } from "../../src/utils/claude";
+import { sessionIdOf } from "../../src/daemon/session-id";
 import type { GitInfo, GitInfoOptions } from "../../src/segments/git";
 import type { TmuxHint } from "../../src/tmux-hint";
 import type { CeilingReading, CeilingScope } from "../../src/memento/edge";
@@ -75,7 +76,7 @@ function keyed<A extends unknown[], T>(
         values.set(key, outcome);
       },
     );
-    const pending: Current<T> = { kind: "pending", landed };
+    const pending: Current<T> = { kind: "pending", why: "unread", landed };
     values.set(key, pending);
     return pending;
   };
@@ -298,8 +299,9 @@ export async function requestPayload(
   const { lanes } = declareLanes(
     deps as unknown as KeyedOwners,
     new HoldsClass(),
-    { hookData, cwd, hints },
+    { sessionId: sessionIdOf(hookData.session_id), hookData, cwd, hints },
     closure,
+    new Map(),
   );
   const inputs: PayloadInputs = {
     hookData,
@@ -342,6 +344,7 @@ export function declaredLanes(
     new HoldsClass(),
     facts,
     closure,
+    new Map(),
   );
   return () => lanes;
 }

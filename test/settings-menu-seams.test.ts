@@ -6,6 +6,7 @@
 // real loader, `resolveEffectiveGlobals` and `renderDsl`, under every bundled
 // theme, with every tab and the theme's ⚙ open.
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import { listThemePalettes } from "@promptctl/rich-js";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
@@ -13,7 +14,7 @@ import { sharedMenuStateKey } from "../src/config/menu-keys";
 import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/settings-menu";
 import { SETTINGS_NS } from "../src/config/loader/reserved-namespace";
 import { perSetting } from "../src/config/setting-projections";
-import { checkPayload } from "../src/check";
+import { CHECK_TODAY, checkPayload } from "../src/check";
 import { renderOptionsOf } from "../src/daemon/render-payload";
 import { SessionState } from "../src/daemon/session-state";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
@@ -46,12 +47,13 @@ function menuSeams(
   const session = new SessionState();
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", session);
-  const compiled = registerDslConfig(config, registry, { cwd: "/home/tester/code/project" });
+  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/home/tester/code/project" });
   const render = (): string[] => {
     const effective = resolveEffectiveGlobals(config, (key) => session.get(SID, key) ?? null, () => false);
     const at = instantOf(new Date());
     const payload = {
-      ...checkPayload(effective, null, at),
+      ...checkPayload(config, effective, null, at),
+      today: CHECK_TODAY,
       resettable: perSetting(() => false),
       unsaved: 0,
       history: { undo: 0, redo: 0 },

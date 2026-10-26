@@ -431,7 +431,8 @@ export function renderPicker(
   const closeEffects = close.kind === "own" && close.onPick ? closeWrite : [];
   const optionUrl = (option: string): string =>
     effectsUrl([
-      ...realize(declared, option, option, store, sessionId).effects,
+      ...realize(declared, option, option, store, sessionId, runtime.signer)
+        .effects,
       ...closeEffects,
     ]);
 
@@ -456,7 +457,8 @@ export function renderPicker(
       linkFragment(
         glyph,
         effectsUrl([
-          ...realize(declared, option, option, store, sessionId).effects,
+          ...realize(declared, option, option, store, sessionId, runtime.signer)
+            .effects,
           {
             verb: VERB_SET_STATE,
             args: [

@@ -13,6 +13,7 @@
 // itself here (handler-probe.ts), the click that asked there — and the fold
 // is one function either way.
 
+import { linkSignerFromKeyFile } from "../daemon/link-key.js";
 import { openSync } from "node:fs";
 import process from "node:process";
 import { WriteStream } from "node:tty";
@@ -61,7 +62,11 @@ import {
 } from "./handler-probe.js";
 import { detectConfigEnv } from "../config-hint.js";
 import { explicitConfigPath } from "../utils/user-path.js";
-import { fallbackState, loadFromDisk } from "../daemon/cache/render.js";
+import {
+  fallbackState,
+  loadFromDisk,
+  UNOWNED_STORAGE,
+} from "../daemon/cache/render.js";
 import { SessionState } from "../daemon/session-state.js";
 import { claudeConfigDir } from "../claude-settings.js";
 import type {
@@ -96,7 +101,11 @@ function reportLine({ check, verdict }: CheckReport): string {
 // state, keeps the outcome, and releases the sources the state started. A
 // load that failed reads the bar a fresh daemon would draw under the error.
 export function loadConfigOnce(origin: ConfigOrigin): ConfigLoad {
-  const deps = { sessionState: new SessionState() };
+  const deps = {
+    sessionState: new SessionState(),
+    storage: UNOWNED_STORAGE,
+    signer: linkSignerFromKeyFile(),
+  };
   const loaded = loadFromDisk(
     origin.projectDir,
     origin.cwd,

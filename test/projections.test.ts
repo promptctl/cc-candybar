@@ -2,6 +2,7 @@
 // what the store does with its answer: a projection is derived again by every
 // read, at the draw in progress; anything else is cached.
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import { projectionsOf } from "../src/config/loader/projections";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { CLOCK_FUNCTIONS } from "../src/template-engine/engine";
@@ -18,6 +19,7 @@ import os from "node:os";
 import path from "node:path";
 import { loadFromDisk, pluginLoadLine } from "../src/daemon/cache/render";
 import { SessionState } from "../src/daemon/session-state";
+import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 
 const config = (variables: string, helpers = "{}") =>
   parseAndValidate(
@@ -192,7 +194,7 @@ test("the config load line names the load's projections", () => {
   const line = (variables: string, segments = "{}"): string => {
     const file = path.join(dir, "config.json5");
     fs.writeFileSync(file, `{ variables: ${variables}, segments: ${segments} }`);
-    const loaded = loadFromDisk(dir, dir, file, {
+    const loaded = loadFromDisk(dir, dir, file, { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER,
       sessionState: new SessionState(),
     });
     expect(loaded.error).toBeNull();
@@ -251,9 +253,9 @@ test("the config load line names the load's projections", () => {
   }
 });
 
-// A compile reads of the variables only what decides whether a read lands on a
-// projection, so configs declaring other variables differently share one.
-test("a compile is keyed on the names that decide a projection read", () => {
+// A compile reads of the variables only the projections, so configs declaring
+// other variables differently share one.
+test("a compile is keyed on the projections alone", () => {
   const key = (variables: string, read = ".clock") =>
     compileKey(
       compileInputOf(
@@ -267,9 +269,10 @@ test("a compile is keyed on the names that decide a projection read", () => {
   expect(key(`{ ${clock}, a: { kind: "literal", value: "1" } }`)).toBe(
     key(`{ ${clock}, b: { kind: "literal", value: "2" } }`),
   );
-  // A name nested under a projection decides what a read under it lands on.
+  // No name is declared under another, so none can change where a read of a
+  // projection lands.
   const nested = `"clock.at": { kind: "literal", value: "1" }`;
-  expect(key(`{ ${clock}, ${nested} }`)).not.toBe(
-    key(`{ ${clock}, a: { kind: "literal", value: "1" } }`),
+  expect(() => key(`{ ${clock}, ${nested} }`)).toThrow(
+    /"clock\.at" is declared under the variable "clock"/,
   );
 });

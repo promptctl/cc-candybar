@@ -23,6 +23,12 @@ import type { GitInfo, GitInfoOptions, PrState } from "../src/segments/git";
 import { ABSENT, PENDING, failed, ok, type Outcome } from "../src/utils/outcome";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
 import { instantOf } from "../src/utils/instant";
+import { MementoProvider } from "../src/segments/memento";
+import type {
+  CeilingReading,
+  CeilingScope,
+  MementoEdge,
+} from "../src/memento/edge";
 import {
   absentOwners,
   fakeAutoCompact,
@@ -961,5 +967,49 @@ describe("payloadOf — config file and resume command", () => {
     expect(payload.resumeCommand).toBe(
       "cd /tmp && claude --resume test-session",
     );
+  });
+});
+
+// A request waits only for first answers. A value the daemon itself made
+// stale (a click's move) may take as long as the program the click ran, so a
+// request after it draws the loading cell at once rather than waiting out its
+// deadline.
+describe("settlePayload — what a request waits on", () => {
+  const A = ok({ ceiling: 350_000, session: null });
+
+  test("a superseded lane is not waited on: the request after a move draws it pending at once", async () => {
+    const scopes: CeilingScope[] = [];
+    const hung = new Promise<Outcome<CeilingReading>>(() => {});
+    const edge: MementoEdge = {
+      locate: () => ok("/plugin"),
+      read: (_root, scope) => {
+        scopes.push(scope);
+        return scopes.length === 1 ? Promise.resolve(A) : hung;
+      },
+      move: () => {},
+    };
+    const memento = new MementoProvider(edge);
+    const deps = depsWith(ABSENT, [], { mementoProvider: memento });
+    const request = () =>
+      requestPayload(
+        hookData("/no/such/transcript.jsonl"),
+        instantOf(new Date()),
+        deps,
+        undefined,
+        new Set(["memento.ceiling"]),
+        EFFECTIVE_GLOBALS,
+        NO_HINTS,
+        NO_CONFIG_FILE,
+      );
+    try {
+      // The key's first read is waited on.
+      expect((await request()).memento).toMatchObject({ ceiling: 350_000 });
+      memento.move(scopes[0]!, { kind: "clear" });
+      expect(scopes).toHaveLength(2);
+      // The read the move started never lands; the request draws at once.
+      expect((await request()).memento).toBe(PENDING);
+    } finally {
+      memento.close();
+    }
   });
 });

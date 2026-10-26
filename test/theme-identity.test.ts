@@ -21,6 +21,7 @@
 // name every accent alike, as Textual draws them — and fact 1 is what holds
 // a bar to its theme.
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import {
   ColorDepth,
   ColorRgba,
@@ -31,7 +32,7 @@ import {
   SEAM_MIN_DELTA_E,
 } from "@promptctl/rich-js";
 
-import { checkPayload } from "../src/check";
+import { CHECK_TODAY, checkPayload } from "../src/check";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { unauthored, validateConfig } from "../src/config/dsl-loader";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
@@ -146,7 +147,7 @@ const CALM = {
 // render, so the renders differ only in the pick.
 const STORE = new VariableStore();
 const REGISTRY = new SourceRegistry(STORE, "", new SessionState());
-const COMPILED = registerDslConfig(CONFIG, REGISTRY, { cwd: process.cwd() });
+const COMPILED = registerDslConfig(CONFIG, REGISTRY, { signer: TEST_SIGNER, cwd: process.cwd() });
 const AT = instantOf(new Date());
 afterAll(() => REGISTRY.dispose());
 
@@ -165,7 +166,10 @@ function render(theme: string, calm: boolean, { variation, shade, look }: Varian
               : null,
     () => false,
   );
-  const hot = checkPayload(e, null, AT) as Record<string, Record<string, unknown>>;
+  const hot = {
+    ...checkPayload(CONFIG, e, null, AT),
+    today: CHECK_TODAY,
+  } as unknown as Record<string, Record<string, unknown>>;
   const payload = calm
     ? Object.fromEntries(
         Object.entries(hot).map(([k, v]) => [

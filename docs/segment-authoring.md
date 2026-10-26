@@ -197,9 +197,9 @@ dotted path on a variable that is *not* one (`.budget.spentPct` when
 
 A knob that belongs with the document lives **outside** its namespace. The
 threshold below is `budgetWarnAt`, not `budget.warnAt`: with `budget` a
-document, `.budget.warnAt` is a field read, and a sibling variable spelled
-`budget.warnAt` is accepted by the loader and unreachable at render (Mistakes,
-below).
+document, `.budget.warnAt` is a field read, and a variable spelled
+`budget.warnAt` is refused at load: no variable is declared under another
+(Mistakes, below).
 
 ```json5 check:pass
 {
@@ -801,7 +801,8 @@ What the definition can say, and what follows from it:
   `{{ template "plugins.deploy.state" }}`. A plugin replaces, whole, any
   plugin of its name beneath it (a listed one replaces an installed one);
   listing one name twice is refused.
-- **The data is `.plugins.<plugin>.data`.** It is a `file` source with
+- **The data is `.plugins.<plugin>.data`.** `data` is optional; a
+  definition without it has no data variable. It is a `file` source with
   `parse: { json: true }`, watched: a rewrite redraws the bar, nothing is
   re-read per render. A data file that does not exist yet reads as no fields,
   so gate the segment with `when: '{{ hasKey .plugins.<plugin>.data "<field>" }}'`;
@@ -813,37 +814,175 @@ What the definition can say, and what follows from it:
   own, a session in no checkout reading from its working directory — so one
   installed definition shows each checkout's own data. The plugin lit
   installs reads lit's state this way.
-- **Only `data`, `segments`, `helpers` and `actions`.** A definition
-  declares no sources of its own (so loading one from a cloned repository runs
-  nothing) and never edits `root` — placing a segment is your choice. A
-  segment's `vars` may hold only `state` variables, for the same reason: a
-  `state` variable reads what the session's own clicks wrote, so a segment can
+- **`data`, `sources`, `variables`, `segments`, `helpers` and `actions`,
+  each optional.** A definition never edits `root` — placing a segment is your
+  choice. Its `variables` are a config's `variables:`, every kind, checked the
+  same way, and named under the plugin: `greeting` is read as
+  `.plugins.<plugin>.greeting`. A segment's `vars` may be of any kind too; a
+  `state` one reads what the session's own clicks wrote, so a segment can
   open a detail row of its own (`{ kind: "state", key, default }` beside a
-  `{ set: key, cycle: [...] }` action, read as `.plugins.<plugin>.<segment>.<var>`),
-  and any other kind is a source. The `key` and the action's `set` are written
+  `{ set: key, cycle: [...] }` action, read as `.plugins.<plugin>.<segment>.<var>`).
+  A `state` variable's `key` and an action's `set` are written
   bare and meet under `plugins.<plugin>.` — a plugin's session keys are
   namespaced as its names are, so none can clash with the bar's or your file's.
+  No variable or source may be named `data`, the data file's name.
   The plugin name is one lowercase identifier.
 - **Merge order is bundled < installed plugins < listed plugins < your
   file**, so your file can
   retune a plugin's segment by its full name, one field at a time
   (`segments: { "plugins.deploy.status": { bg: "error" } }`).
 
+A plugin with no data file derives what it shows from variables of its own:
+
+```json5 file:hello/plugin.json5
+{
+  variables: {
+    model: { kind: "input", path: "model.display_name" },
+    greeting: { kind: "template", template: "hello, {{ .plugins.hello.model }}" },
+  },
+  segments: {
+    greeting: { template: "{{ .plugins.hello.greeting }}" },
+  },
+}
+```
+
+```json5 check:pass
+{
+  plugins: ["./hello/plugin.json5"],
+  root: { rows: { status: { h: ["model", "plugins.hello.greeting"] } } },
+}
+```
+
+### A value per session: `sources` and managed storage
+
+When what the program knows differs per Claude Code session — the ticket a
+session works on, a limit set for one session — the plugin declares a
+**source**, and cc-candybar gives each session a file of its own in the
+plugin's folder:
+
+```
+<plugin folder>/session/<session id>.json
+```
+
+```json5 file:focus/plugin.json5
+{
+  sources: {
+    status: { scope: "session", refresh: { watch: true }, read: { file: { json: true } } },
+  },
+  segments: {
+    ticket: {
+      description: "The ticket this session works on",
+      when: '{{ hasKey .plugins.focus "status" }}',
+      template: '◎ {{ .plugins.focus.status.ticket }}',
+    },
+  },
+}
+```
+
+```json5 check:pass
+{
+  plugins: ["./focus/plugin.json5"],
+  root: { rows: { status: { h: ["model", "context", "plugins.focus.ticket"] } } },
+}
+```
+
+- **The source is the session's document.** A template reads it as
+  `.plugins.<plugin>.<source>`, its fields by dotted path. The one source
+  built is the one above — `scope: "session"`, `refresh: { watch: true }`,
+  `read: { file: { json: true } }`, with no path — and anything else drops
+  the plugin with an error naming the field and what is built. Its name is
+  one identifier, and no variable of the plugin may share it.
+- **The program writes the whole file, then renames it into place.** Write
+  the document to a temporary file in the same `session` folder and rename
+  it over `<session id>.json`, every time what it knows changes. The rename
+  is atomic, so the bar never reads half a document; a file written in
+  place can be read half-written, which is not JSON and draws `⚠`. The
+  session id is the `session_id` Claude Code hands the program's hooks, and
+  `{{ .session.id }}` in an action. cc-candybar creates the folder when it
+  loads the plugin, re-reads a session's file when it changes, and only
+  while a session's bar reads the source.
+- **Old files are removed.** A `*.json` file in the folder that nobody has
+  written for 30 days belongs to a session that is gone, and is deleted —
+  unless a session's bar holds it now.
+- **Until the program writes, there is nothing to read.** No file, or a
+  blank one, reads as absent: `hasKey .plugins.<plugin> "<source>"` is
+  false, so a segment gated on it hides. That gate is the only safe read
+  before the first write. An unguarded read is the missing-field error —
+  the segment draws `⚠` and `check` fails — and a file that is not JSON
+  draws `⚠` with the reason and the path.
+- **`check` reads every source as absent.** It runs no plugin program and has
+  no session, so it draws what a session draws before the first write: the
+  gated segment above is hidden under `check`, and the unguarded read below
+  fails it.
+- **One file, one source.** A plugin's session file is one document, so a
+  plugin declares one source for it and reads its fields. Two sources
+  reading the same file drop the plugin, naming both.
+
+```json5 file:bare/plugin.json5
+{
+  sources: {
+    status: { scope: "session", refresh: { watch: true }, read: { file: { json: true } } },
+  },
+  segments: {
+    ticket: { template: '◎ {{ .plugins.bare.status.ticket }}' },
+  },
+}
+```
+
+```json5 check:fail
+{
+  plugins: ["./bare/plugin.json5"],
+  root: { rows: { status: { h: ["model", "plugins.bare.ticket"] } } },
+}
+```
+
+```error
+segment "plugins.bare.ticket": field "plugins.bare.status.ticket" not found on receiver
+```
+
+```json5 file:twice/plugin.json5
+{
+  sources: {
+    ticket: { scope: "session", refresh: { watch: true }, read: { file: { json: true } } },
+    title: { scope: "session", refresh: { watch: true }, read: { file: { json: true } } },
+  },
+  segments: { ticket: { template: '◎ {{ .plugins.twice.ticket.id }}' } },
+}
+```
+
+```json5 check:fail
+{
+  plugins: ["./twice/plugin.json5"],
+  root: { rows: { status: { h: ["model", "plugins.twice.ticket"] } } },
+}
+```
+
+```error
+sources .plugins.twice.ticket and .plugins.twice.title read the same file
+```
+
+A program the bar runs from a click — to move a value, then show it — is a
+`run` action ([interaction-authoring.md](interaction-authoring.md)): its
+`refreshes` names the source the program rewrites, so the segment reads as
+loading until the program exits, and then shows what it wrote.
+
 A definition that does not load — a missing file, a syntax error, a field it
 may not declare, a template that does not parse or names something nothing
 declares — drops **that plugin only**: the rest of your config renders, a
-template reading its data, calling its helper or binding its action shows `⚠` naming the
-drop — a segment of it you placed or retuned stands in as that cell — the
-bar's diagnostic strip names the definition and the reason, and `check`
-fails. An INSTALLED plugin that does not load is your config's problem only
-where it reaches it (a placement, a retune, a helper call or an action
-binding): one nothing reaches is neither on the strip nor in `check`. A
+template reading its data, a source or a variable, calling its helper or
+binding its action shows `⚠` naming the drop — a segment of it you placed or
+retuned stands in as that cell — a `run` of yours that refreshes one of its
+sources still runs, with nothing of it to refresh, the bar's diagnostic strip
+names the definition and the reason, and `check` fails. An INSTALLED plugin
+that does not load is your config's problem only where it reaches it (a
+placement, a retune, a helper call, an action binding or a `refreshes`): one
+nothing reaches is neither on the strip nor in `check`. A
 listed definition is a folder's `plugin.json5`, the folder naming the plugin.
 A definition is watched like your config file, so fixing or installing it
 reloads the bar:
 
 ```json file:broken/plugin.json5
-{ "data": "./state.json", "segments": {}, "variables": {} }
+{ "data": "./state.json", "segments": {}, "root": {} }
 ```
 
 ```json5 check:fail
@@ -853,7 +992,7 @@ reloads the bar:
 ```
 
 ```error
-was not loaded: a plugin definition may not declare "variables"
+was not loaded: a plugin definition may not declare "root"
 ```
 
 ### Installing a plugin instead of listing it
@@ -1182,10 +1321,10 @@ segment "budget": field "budget.period" not found on receiver
 
 ### A knob declared inside the document's namespace
 
-`budget.warnAt` is a legal variable name and the loader accepts it, but with
-`budget` a document, `.budget.warnAt` is a read of the document's `warnAt`
-field, which the script does not print. Move the knob out of the namespace
-(`budgetWarnAt`):
+With `budget` a document, `.budget.warnAt` would name two things: the variable
+`budget.warnAt` and the document's own `warnAt` field. No variable may be
+declared under another, so the loader refuses the config and names both. Move
+the knob out of the namespace (`budgetWarnAt`):
 
 ```json5 check:fail
 {
@@ -1210,7 +1349,7 @@ field, which the script does not print. Move the knob out of the namespace
 ```
 
 ```error
-segment "budget": field "budget.warnAt" not found on receiver
+variable "budget.warnAt" is declared under the variable "budget"
 ```
 
 ### A threshold declared as a string

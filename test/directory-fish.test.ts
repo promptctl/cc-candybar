@@ -6,6 +6,7 @@
 // spine (registerDslConfig + renderDsl), the same two functions the daemon and
 // demo call — not a synthetic in-process transform.
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import { RAW_DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
@@ -70,6 +71,7 @@ function renderDirRaw(paths: DirPaths): string {
   const registry = new SourceRegistry(store, "", new SessionState());
   try {
     const compiled = registerDslConfig(parsed, registry, {
+      signer: TEST_SIGNER,
       cwd: paths.current_dir,
     });
     const basePalette = getThemePalette("textual-dark"!);
@@ -203,6 +205,7 @@ describe("configurability seam: user template override restores full path", () =
     const registry = new SourceRegistry(store, "", new SessionState());
     try {
       const compiled = registerDslConfig(overridden, registry, {
+        signer: TEST_SIGNER,
         cwd: "/Users/bmf/code/cc-candybar",
       });
       const basePalette = getThemePalette("textual-dark"!);

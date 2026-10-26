@@ -150,6 +150,22 @@ export const VERB_CEILING = "ceiling";
 // be one a `slash` action in the session's config declares.
 export const VERB_SLASH = "slash";
 
+// [LAW:effects-at-boundaries] Run a `run` action's program for a session.
+// Args: `[sessionId, action, evaluated, mac]` — `evaluated` is the JSON of the
+// program, arguments and environment the draw evaluated (EvaluatedRun), and
+// `mac` signs the first three (src/click/link-signer.ts). The action must be
+// a `run` the session's config declares; the directory it runs in and the
+// sources it refreshes come from that declaration, never the URL.
+export const VERB_RUN = "run";
+
+// [LAW:types-are-the-program] What a `run` link carries of the draw's
+// evaluation: the argv, program first, and the variables laid over the
+// session's process environment.
+export interface EvaluatedRun {
+  readonly run: readonly string[];
+  readonly env: Readonly<Record<string, string>>;
+}
+
 // A click on one of the ranges the daemon draws in a tmux status line (lane
 // C, src/daemon/tmux-status.ts), as the server's MouseDown1Status binding
 // sends it. Args: `[socket, pane number, range]` — the daemon looks the range

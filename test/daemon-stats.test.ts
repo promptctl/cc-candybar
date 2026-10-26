@@ -24,6 +24,8 @@ describe("RuntimeStats.snapshot", () => {
     stats.inFlight = 1;
     stats.watchersOpened = 5;
     stats.watchersClosed = 3;
+    stats.watchRefusals = 1;
+    stats.watchErrors = 2;
 
     const snap = stats.snapshot({
       gitCache: {
@@ -40,23 +42,32 @@ describe("RuntimeStats.snapshot", () => {
         today: {
           entries: 1,
           held: 1,
-          refreshes: { first: 1, period: 4, supersede: 0 },
+          refreshes: { first: 1, period: 4, change: 0, supersede: 0 },
           failures: 0,
         },
         tmux: {
           entries: 2,
           held: 1,
-          refreshes: { first: 2, period: 7, supersede: 0 },
+          refreshes: { first: 2, period: 7, change: 0, supersede: 0 },
           failures: 1,
         },
         memento: {
           entries: 1,
           held: 1,
-          refreshes: { first: 1, period: 3, supersede: 1 },
+          refreshes: { first: 1, period: 3, change: 0, supersede: 1 },
           failures: 0,
         },
         autocompact: { entries: 1, refreshes: { request: 2 }, failures: 0 },
         cache: { entries: 1, refreshes: { request: 3 }, failures: 1 },
+        pluginStorage: {
+          entries: 2,
+          held: 1,
+          refreshes: { first: 2, period: 0, change: 3, supersede: 1 },
+          failures: 0,
+          folders: 1,
+          faults: { unusable: 0, refused: 1, error: 0 },
+          lost: 1,
+        },
       },
       transcriptReads: { reads: 0, bytes: 0, longLines: 0, largestLine: 0 },
       renderCache: {
@@ -71,6 +82,7 @@ describe("RuntimeStats.snapshot", () => {
       },
       effectCache: { sessions: 2, effects: 5 },
       menuIdle: { sessions: 2, armed: 1 },
+      runs: { started: 3, failed: 1, timedOut: 1, refused: 2, running: 0 },
       sessionState: { sessions: 2, observers: 11, revision: 7 },
       frameFeeds: { feeds: 0, subscribers: 0, drawn: 0, pushed: 0, refused: 0, lookups: 0, found: 0 },
       tmuxStatus: { sessions: 0, layouts: 0, writes: 0, failedWrites: 0 },
@@ -124,7 +136,13 @@ describe("RuntimeStats.snapshot", () => {
     expect(snap.sources.tmux.refreshes).toEqual({
       first: 2,
       period: 7,
+      change: 0,
       supersede: 0,
+    });
+    expect(snap.sources.pluginStorage).toMatchObject({
+      folders: 1,
+      faults: { unusable: 0, refused: 1, error: 0 },
+      lost: 1,
     });
     expect(snap.sources.autocompact.refreshes).toEqual({ request: 2 });
     expect(snap.sources.cache).toEqual({
@@ -134,11 +152,20 @@ describe("RuntimeStats.snapshot", () => {
     });
     expect(snap.effectCache).toEqual({ sessions: 2, effects: 5 });
     expect(snap.menuIdle).toEqual({ sessions: 2, armed: 1 });
+    expect(snap.runs).toEqual({
+      started: 3,
+      failed: 1,
+      timedOut: 1,
+      refused: 2,
+      running: 0,
+    });
     expect(snap.sessionState).toEqual({ sessions: 2, observers: 11, revision: 7 });
     expect(snap.watchers).toEqual({
       active: 2,
       opened: 5,
       closed: 3,
+      refused: 1,
+      errors: 2,
     });
     expect(snap.uptimeSec).toBeGreaterThanOrEqual(0);
     expect(snap.pid).toBe(process.pid);
@@ -238,23 +265,32 @@ describe("formatStats", () => {
         today: {
           entries: 1,
           held: 1,
-          refreshes: { first: 1, period: 4, supersede: 0 },
+          refreshes: { first: 1, period: 4, change: 0, supersede: 0 },
           failures: 0,
         },
         tmux: {
           entries: 2,
           held: 1,
-          refreshes: { first: 2, period: 7, supersede: 0 },
+          refreshes: { first: 2, period: 7, change: 0, supersede: 0 },
           failures: 1,
         },
         memento: {
           entries: 0,
           held: 0,
-          refreshes: { first: 0, period: 0, supersede: 0 },
+          refreshes: { first: 0, period: 0, change: 0, supersede: 0 },
           failures: 0,
         },
         autocompact: { entries: 1, refreshes: { request: 2 }, failures: 0 },
         cache: { entries: 1, refreshes: { request: 3 }, failures: 1 },
+        pluginStorage: {
+          entries: 2,
+          held: 1,
+          refreshes: { first: 2, period: 0, change: 3, supersede: 1 },
+          failures: 0,
+          folders: 1,
+          faults: { unusable: 0, refused: 1, error: 0 },
+          lost: 1,
+        },
       },
       transcriptReads: { reads: 0, bytes: 0, longLines: 0, largestLine: 0 },
       renderCache: {
@@ -269,10 +305,11 @@ describe("formatStats", () => {
       },
       effectCache: { sessions: 2, effects: 3 },
       menuIdle: { sessions: 2, armed: 1 },
+      runs: { started: 3, failed: 1, timedOut: 1, refused: 2, running: 0 },
       sessionState: { sessions: 2, observers: 11, revision: 7 },
       frameFeeds: { feeds: 0, subscribers: 0, drawn: 0, pushed: 0, refused: 0, lookups: 0, found: 0 },
       tmuxStatus: { sessions: 0, layouts: 0, writes: 0, failedWrites: 0 },
-      watchers: { active: 5, opened: 7, closed: 2 },
+      watchers: { active: 5, opened: 7, closed: 2, refused: 1, errors: 3 },
       subprocesses: {
         total: 0,
         inFlight: 0,
@@ -294,11 +331,17 @@ describe("formatStats", () => {
     expect(out).toContain("held          2");
     expect(out).toContain("hit rate      80.0%");
     expect(out).toContain(
-      "tmux          entries=2 held=1 failures=1 refreshes first:2 period:7 supersede:0",
+      "tmux          entries=2 held=1 failures=1 refreshes first:2 period:7 change:0 supersede:0",
     );
     expect(out).toContain(
       "autocompact   entries=1 failures=0 refreshes request:2",
     );
+    expect(out).toContain(
+      "pluginStorage  entries=2 held=1 failures=0 refreshes first:2 period:0 change:3 supersede:1",
+    );
+    expect(out).toContain("folders=1 lost=1 faults unusable:0 refused:1 error:0");
+    expect(out).toContain("refused       1");
+    expect(out).toContain("errors        3");
     expect(out).toContain("active        5");
     expect(out).toContain("effects       3");
     expect(out).toContain("armed         1");
@@ -346,10 +389,11 @@ describe("formatStats", () => {
       },
       effectCache: { sessions: 0, effects: 0 },
       menuIdle: { sessions: 0, armed: 0 },
+      runs: { started: 0, failed: 0, timedOut: 0, refused: 0, running: 0 },
       sessionState: { sessions: 0, observers: 0, revision: 0 },
       frameFeeds: { feeds: 0, subscribers: 0, drawn: 0, pushed: 0, refused: 0, lookups: 0, found: 0 },
       tmuxStatus: { sessions: 0, layouts: 0, writes: 0, failedWrites: 0 },
-      watchers: { active: 0, opened: 0, closed: 0 },
+      watchers: { active: 0, opened: 0, closed: 0, refused: 0, errors: 0 },
       subprocesses: {
         total: 0,
         inFlight: 0,
