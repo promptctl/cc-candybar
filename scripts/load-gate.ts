@@ -852,16 +852,18 @@ function pct(sorted: readonly number[], p: number): number {
 // failing run keeps its root (the daemon's log is in it) and says where.
 // A gate that hangs (a daemon that stopped answering its inspector, a render
 // that never settles) ends here, with its root kept, before CI cancels it.
-// Counted from the process's start, the fixture's building included.
-const GATE_DEADLINE_MS = 3 * 60_000;
+// Counted from the process's start, the fixture's building included: the
+// steady phase asked for, and two minutes for everything around it (under one
+// minute measured at 100 sessions).
+// [LAW:one-source-of-truth] Derived from the steady phase, so a longer run
+// asked for is a longer deadline, never a failure.
+const GATE_DEADLINE_MS = STEADY_MS + 2 * 60_000;
 let passed = false;
 try {
   const { checks, facts } = await Promise.race([
     run(),
     sleep(GATE_DEADLINE_MS - performance.now()).then(() => {
-      throw new Error(
-        `the gate ran past its ${GATE_DEADLINE_MS / 60_000} minutes`,
-      );
+      throw new Error(`the gate ran past its ${GATE_DEADLINE_MS / 1000} s`);
     }),
   ]);
   passed = checks.every((c) => c.pass);
