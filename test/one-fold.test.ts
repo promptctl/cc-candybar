@@ -12,6 +12,7 @@ import {
   validateConfig,
 } from "../src/config/dsl-loader";
 import { declaredVariables } from "../src/config/loader/refs";
+import { ConfigError } from "../src/config/loader/diagnostics";
 import type { DslConfig } from "../src/config/dsl-types";
 import { PRESET_FLOOR } from "../src/config/presets";
 import { buildNeededPrefixes } from "../src/daemon/render-payload";
@@ -107,12 +108,24 @@ describe("no declared name sits under another", () => {
     );
   });
 
-  test("a user variable above a name the settings menu declares is refused", () => {
-    expect(() =>
+  test("a user variable above a name the settings menu declares is refused at the user's own name", () => {
+    let thrown: unknown;
+    try {
       overDefault(
         `{ variables: { theme: { kind: "state", key: "theme", default: "nord" } } }`,
-      ),
-    ).toThrow(/"theme\.effective" is declared under the variable "theme"/);
+      );
+    } catch (e) {
+      thrown = e;
+    }
+    expect(thrown).toBeInstanceOf(ConfigError);
+    expect((thrown as ConfigError).issues).toEqual([
+      expect.objectContaining({
+        path: "variables.theme",
+        message: expect.stringMatching(
+          /"theme\.effective" is declared under the variable "theme" .* "theme\.effective" is declared outside this file .*, so rename "theme"\.$/,
+        ),
+      }),
+    ]);
   });
 
   test("a user's own nested names are refused, naming both", () => {
@@ -123,7 +136,9 @@ describe("no declared name sits under another", () => {
           "status.home": { kind: "literal", value: "y" },
         },
       }`),
-    ).toThrow(/"status\.home" is declared under the variable "status"/);
+    ).toThrow(
+      /"status\.home" is declared under the variable "status" .* Rename one so neither name starts with the other\./,
+    );
     expect(() =>
       overDefault(`{
         segments: { s: { template: "s", vars: {

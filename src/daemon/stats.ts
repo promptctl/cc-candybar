@@ -65,7 +65,7 @@ const KEYED_SOURCE_ZERO: KeyedSourceStats = {
 const MANAGED_STORAGE_ZERO: ManagedStorageStats = {
   ...KEYED_SOURCE_ZERO,
   folders: 0,
-  faults: { refused: 0, error: 0 },
+  faults: { unusable: 0, refused: 0, error: 0 },
   lost: 0,
 };
 

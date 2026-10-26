@@ -62,11 +62,12 @@ import {
 } from "./handler-probe.js";
 import { detectConfigEnv } from "../config-hint.js";
 import { explicitConfigPath } from "../utils/user-path.js";
-import { fallbackState, loadFromDisk } from "../daemon/cache/render.js";
+import {
+  fallbackState,
+  loadFromDisk,
+  type PluginStorage,
+} from "../daemon/cache/render.js";
 import { SessionState } from "../daemon/session-state.js";
-import { WatcherRegistry } from "../daemon/cache/watchers.js";
-import { ManagedStorage } from "../daemon/cache/managed-storage.js";
-import { quietLogger } from "../utils/logger.js";
 import { claudeConfigDir } from "../claude-settings.js";
 import type {
   RateLimitsSeen,
@@ -100,37 +101,37 @@ function reportLine({ check, verdict }: CheckReport): string {
 // state, keeps the outcome, and releases the sources the state started. A
 // load that failed reads the bar a fresh daemon would draw under the error.
 export function loadConfigOnce(origin: ConfigOrigin): ConfigLoad {
-  // The load holds the storage folders its plugins declare, as the daemon's
-  // does, and releases them with the state.
-  const watchers = new WatcherRegistry();
-  const storage = new ManagedStorage({ watchers, logger: quietLogger });
   const deps = {
     sessionState: new SessionState(),
-    storage,
+    storage: UNREAD_STORAGE,
     signer: linkSignerFromKeyFile(),
   };
-  try {
-    const loaded = loadFromDisk(
-      origin.projectDir,
-      origin.cwd,
-      origin.configFile ?? undefined,
-      deps,
-    );
-    const state =
-      loaded.state ?? fallbackState(origin.cwd, origin.projectDir, deps);
-    state.registry.dispose();
-    return {
-      layers: loaded.layers,
-      error: loaded.error,
-      warning: loaded.warning,
-      unused: state.unused,
-      config: state.config,
-    };
-  } finally {
-    storage.close();
-    watchers.closeAll();
-  }
+  const loaded = loadFromDisk(
+    origin.projectDir,
+    origin.cwd,
+    origin.configFile ?? undefined,
+    deps,
+  );
+  const state =
+    loaded.state ?? fallbackState(origin.cwd, origin.projectDir, deps);
+  state.registry.dispose();
+  return {
+    layers: loaded.layers,
+    error: loaded.error,
+    warning: loaded.warning,
+    unused: state.unused,
+    config: state.config,
+  };
 }
+
+// [LAW:single-enforcer] A one-shot load reads no session's file, so it
+// creates, watches and sweeps no storage folder: the daemon's storage owner is
+// the one process that does, and the only one that knows which files its
+// sessions hold. The keys it hands out are never read.
+const UNREAD_STORAGE: PluginStorage = {
+  keyFor: (folder) => ({ folder, generation: 0 }),
+  watch: () => () => {},
+};
 
 // The install facts of the daemon's answer: the clients that drew the scope's
 // bars, and the bundle the daemon runs.

@@ -1068,8 +1068,10 @@ Your own config may declare one too. It names a source by its full name:
   the result.
 - **It runs in the directory of the file that declares it**: the plugin's
   folder, or your config file's directory. A relative program (`./limit`)
-  resolves there, and a bare name (`limit`) is looked up on `PATH`. The
-  session's directories reach the program only through its environment.
+  resolves there, and a bare name (`limit`) is looked up on the daemon's
+  `PATH`, which is whatever shell started the daemon had. So a plugin names
+  its program relative to its folder or by absolute path. The session's
+  directories reach the program only through its environment.
 - **It runs after the click returns, for at most 10 seconds.** A non-zero
   exit, a timeout, or a program that cannot start puts its stderr, trimmed —
   or the reason, when it printed nothing — in the bar where a refused click's

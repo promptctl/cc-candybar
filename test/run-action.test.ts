@@ -662,6 +662,23 @@ describe("the link key", () => {
     // Another process over the same file verifies the first one's links.
     expect(linkSignerFromKeyFile(file).verify(fields, mac)).toBe(true);
     expect(linkSigner(TEST_LINK_KEY).verify(fields, mac)).toBe(false);
+    // Each maker's own file is gone once the key landed.
+    expect(fs.readdirSync(path.dirname(file))).toEqual(["link.key"]);
+  });
+
+  test("a maker that dies writing leaves no key, and the next one makes it whole", () => {
+    const file = path.join(dir, "state", "link.key");
+    const fields = { sessionId: SID, action: "a", evaluated: "{}" };
+    const write = fs.writeFileSync;
+    jest.spyOn(fs, "writeFileSync").mockImplementationOnce((target, data, opts) => {
+      write(target, (data as Buffer).subarray(0, 3), opts as fs.WriteFileOptions);
+      throw new Error("killed mid-write");
+    });
+    expect(() => linkSignerFromKeyFile(file).sign(fields)).toThrow("killed mid-write");
+    expect(fs.existsSync(file)).toBe(false);
+    jest.restoreAllMocks();
+    linkSignerFromKeyFile(file).sign(fields);
+    expect(fs.readFileSync(file)).toHaveLength(32);
   });
 
   test("a key file of the wrong length is refused, naming it", () => {

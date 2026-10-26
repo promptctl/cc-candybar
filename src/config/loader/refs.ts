@@ -375,7 +375,13 @@ export function templateHelperCalls(
 // config path that declares it.
 // [LAW:one-source-of-truth] The one spelling of a segment variable's store name.
 export function* declarationsAt(
-  config: Pick<DslConfig, "variables" | "segments">,
+  // What it reads: a config's variables and its segments' own vars, so an
+  // authored file's sections answer as a built config's do.
+  config: Pick<DslConfig, "variables"> & {
+    readonly segments: Readonly<
+      Record<string, Pick<DslConfig["segments"][string], "vars">>
+    >;
+  },
 ): IterableIterator<
   readonly [name: string, decl: VariableDecl, at: readonly string[]]
 > {

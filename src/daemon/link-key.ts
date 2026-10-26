@@ -30,21 +30,28 @@ export function linkSignerFromKeyFile(file?: string): LinkSigner {
   };
 }
 
-// [LAW:no-ambient-temporal-coupling] The first process to need a key creates
-// it with `wx`, so two that race both end on the one that landed. Readable by
-// this user alone: whoever holds it can forge a link that runs a program.
+// [LAW:no-ambient-temporal-coupling] The first process to need a key writes
+// it whole to a file of its own, then links that file into place: a link lands
+// whole or fails because a key already did, so a racer never reads a key half
+// written, and a crash mid-write leaves only its own temporary file. Every
+// racer ends on the key that landed. Readable by this user alone: whoever
+// holds it can forge a link that runs a program.
 // [LAW:no-silent-failure] A key file of the wrong length is refused loudly,
 // naming the file, never replaced: a replaced key silently voids every link
 // already drawn.
 function readOrCreate(file: string): LinkSigner {
   fs.mkdirSync(path.dirname(file), { recursive: true });
+  const written = `${file}.${process.pid}.${randomBytes(6).toString("hex")}`;
+  fs.writeFileSync(written, randomBytes(LINK_KEY_BYTES), {
+    mode: 0o600,
+    flag: "wx",
+  });
   try {
-    fs.writeFileSync(file, randomBytes(LINK_KEY_BYTES), {
-      mode: 0o600,
-      flag: "wx",
-    });
+    fs.linkSync(written, file);
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
+  } finally {
+    fs.unlinkSync(written);
   }
   const key = fs.readFileSync(file);
   if (key.length !== LINK_KEY_BYTES) {

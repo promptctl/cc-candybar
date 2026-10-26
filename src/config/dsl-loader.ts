@@ -80,7 +80,7 @@ import {
   validateCrossReferences,
   validateDeclarations,
 } from "./loader/cross-ref.js";
-import { templateScopeOf } from "./loader/refs.js";
+import { declarationsAt, templateScopeOf } from "./loader/refs.js";
 import { validateNoCycles } from "./loader/cycles.js";
 import { validateNoNesting } from "./loader/nesting.js";
 import {
@@ -539,7 +539,7 @@ function checkPlugin(
   };
   validateDeclarations(ctx, config, templateScopeOf(config), owned);
   validateNoCycles(ctx, config, owned);
-  validateNoNesting(ctx, config, owned);
+  validateNoNesting(ctx, config, { checked: owned, authored: owned });
   if (issues.length > 0) throw new ConfigError(filePath, issues);
 }
 
@@ -612,7 +612,18 @@ export function validateConfig(
   const withChrome = synthesizeEditChrome(synthesizeSettingsMenu(withMenus));
   // [LAW:single-enforcer] Over the names the store is declared from, every
   // synthesized one included (nesting.ts).
-  validateNoNesting(ctx, withChrome);
+  const authored = new Set(
+    [
+      ...declarationsAt({
+        variables: raw.variables ?? {},
+        segments: raw.segments ?? {},
+      }),
+    ].map(([name]) => name),
+  );
+  validateNoNesting(ctx, withChrome, {
+    checked: () => true,
+    authored: (name) => authored.has(name),
+  });
   if (issues.length > 0) {
     throw new ConfigError(filePath, issues);
   }

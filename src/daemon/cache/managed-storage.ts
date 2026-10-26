@@ -60,9 +60,10 @@ export const statIdentity: IdentityRead = (folder) => {
 const sameIdentity = (a: FolderIdentity, b: FolderIdentity): boolean =>
   a.dev === b.dev && a.ino === b.ino && a.birthtimeNs === b.birthtimeNs;
 
-// The faults a folder's watch can stand in, by cause: the OS refused to open
-// it, or it reported an error after it opened on a folder still there.
-export type FaultCause = "refused" | "error";
+// The faults a folder can stand in, by cause: it could not be created or read,
+// the OS refused to open its watch, or the watch reported an error after it
+// opened on a folder still there.
+export type FaultCause = "unusable" | "refused" | "error";
 
 export interface ManagedStorageStats extends KeyedSourceStats {
   // Folders watched now.
@@ -97,6 +98,9 @@ interface Folder {
   // Gone, replaced, or its watch faulted: the next key request moves the
   // generation.
   lost: boolean;
+  // Why the last key request could not create or read the folder, or null:
+  // its generation's standing fault, set when the watch opens.
+  unusable: string | null;
 }
 
 // One generation's watch, held by the render states that declare the folder.
@@ -128,6 +132,7 @@ export class ManagedStorage {
   // A faulted generation's standing failure, read by every source in it.
   private readonly faults = new Map<string, string>();
   private readonly faultCounts: Record<FaultCause, number> = {
+    unusable: 0,
     refused: 0,
     error: 0,
   };
@@ -164,11 +169,19 @@ export class ManagedStorage {
   // session reads it, and stats it. The generation moves when the folder was
   // marked lost or is no longer the folder its watch opened on; so whichever
   // of a removal's events comes first, a recreated folder is a new key.
-  // Throws when the folder cannot be created or judged: the build fails loud.
+  // [LAW:no-silent-failure] A folder that cannot be created or read is its
+  // generation's standing fault, read by every source in it, never a throw:
+  // one plugin's folder fails only that plugin's sources, not the build.
   keyFor(folder: string): StorageKey {
-    fs.mkdirSync(folder, { recursive: true });
-    const now = this.identityOf(folder);
     const known = this.folders.get(folder) ?? this.recorded(folder);
+    let now: FolderIdentity | "gone" = "gone";
+    known.unusable = null;
+    try {
+      fs.mkdirSync(folder, { recursive: true });
+      now = this.identityOf(folder);
+    } catch (e) {
+      known.unusable = `could not be created or read: ${(e as Error).message}`;
+    }
     const moved =
       known.lost ||
       (known.identity !== null &&
@@ -231,7 +244,12 @@ export class ManagedStorage {
   }
 
   private recorded(folder: string): Folder {
-    const known: Folder = { generation: 0, identity: null, lost: false };
+    const known: Folder = {
+      generation: 0,
+      identity: null,
+      lost: false,
+      unusable: null,
+    };
     this.folders.set(folder, known);
     return known;
   }
@@ -243,7 +261,9 @@ export class ManagedStorage {
     if (folder === undefined) {
       throw new Error(`plugin storage: no key was asked for ${key.folder}`);
     }
-    const identity = this.identityOf(key.folder);
+    const unusable =
+      key.generation === folder.generation ? folder.unusable : null;
+    const identity = unusable === null ? this.identityOf(key.folder) : "gone";
     if (key.generation === folder.generation) {
       folder.identity = identity === "gone" ? null : identity;
     }
@@ -266,6 +286,9 @@ export class ManagedStorage {
     for (const refusal of watched.handle.refused) {
       this.faulted(watched, "refused", refusal.reason);
     }
+    // Last, so its reason is the one the sources read: a folder that could
+    // not be made refuses its watch too.
+    if (unusable !== null) this.faulted(watched, "unusable", unusable);
     void this.sweep(key);
     return watched;
   }
@@ -310,7 +333,9 @@ export class ManagedStorage {
   // [LAW:one-source-of-truth] Whether the folder is gone is the disk's to
   // say: a chmod, a utimes or an xattr reports the folder's own name exactly
   // as a removal does. Lost only if the path is gone or holds another folder;
-  // otherwise `present` runs.
+  // otherwise `present` runs. A lost folder's held files are re-read from the
+  // path, so no draw shows a value from a folder no longer there while the
+  // config's reload opens the next generation.
   private judged(watched: Watched, present: () => void): void {
     const { key, folder } = watched;
     let now: FolderIdentity | "gone";
@@ -334,6 +359,7 @@ export class ManagedStorage {
       "info",
       `plugin storage lost folder=${valueOf(key.folder)} generation=${key.generation} now=${now === "gone" ? "gone" : "replaced"}`,
     );
+    this.sessions.changed((f) => sameKey(f.storage, key));
   }
 
   // [LAW:no-silent-failure] A watch the OS refused, or one that errored on a

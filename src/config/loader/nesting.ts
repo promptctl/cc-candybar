@@ -18,22 +18,41 @@ import type { ValidateCtx } from "./validate-core.js";
 export function validateNoNesting(
   ctx: ValidateCtx,
   cfg: Pick<DslConfig, "variables" | "segments">,
-  subject: (name: string) => boolean = () => true,
+  names: {
+    // The nestings this check reports: those with a name in it.
+    readonly checked: (name: string) => boolean;
+    // The names the file being checked declares, which are its to rename.
+    readonly authored: (name: string) => boolean;
+  },
 ): void {
   // Each store name, at the config path that declares it.
   const declaredAt = new Map(
     [...declarationsAt(cfg)].map(([name, , at]) => [name, at] as const),
   );
-  for (const [inner, at] of declaredAt) {
+  for (const [inner, innerAt] of declaredAt) {
     const parts = inner.split(".");
     for (let n = 1; n < parts.length; n++) {
       const outer = parts.slice(0, n).join(".");
-      if (!declaredAt.has(outer) || !(subject(inner) || subject(outer))) {
+      const outerAt = declaredAt.get(outer);
+      if (
+        outerAt === undefined ||
+        !(names.checked(inner) || names.checked(outer))
+      ) {
         continue;
       }
+      // [LAW:no-silent-failure] The error points at a name the file can
+      // rename: when only one of the two is the file's, the other is the
+      // bundled default's, a plugin's or a control the bar builds.
+      const [mine, theirs, at] = names.authored(inner)
+        ? ([inner, outer, innerAt] as const)
+        : ([outer, inner, outerAt] as const);
+      const fix =
+        names.authored(inner) === names.authored(outer)
+          ? "Rename one so neither name starts with the other."
+          : `"${theirs}" is declared outside this file (the bundled default, a plugin, or a control the bar builds), so rename "${mine}".`;
       ctx.issues.push({
         path: at.join("."),
-        message: `variable "${inner}" is declared under the variable "${outer}" — a read of ".${inner}" would name both, "${inner}" and a field of "${outer}". Rename one so neither name starts with the other.`,
+        message: `variable "${inner}" is declared under the variable "${outer}" — a read of ".${inner}" would name both, "${inner}" and a field of "${outer}". ${fix}`,
         line: findKeyLine(ctx.source, [...at]),
       });
     }

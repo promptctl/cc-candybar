@@ -329,7 +329,7 @@ describe("ManagedStorage watches", () => {
     expect(r.storage.keyFor(r.folder)).toEqual(key);
     expect(r.storage.stats()).toMatchObject({
       lost: 0,
-      faults: { refused: 0, error: 0 },
+      faults: { unusable: 0, refused: 0, error: 0 },
     });
     expect(r.counters.watchersOpened).toBe(1);
   });
@@ -348,6 +348,52 @@ describe("ManagedStorage watches", () => {
       ok("fresh"),
     );
     expect(r.counters.watchersOpened).toBe(2);
+  });
+
+  test("a held file whose folder is removed reads what the path holds now, not its last value", async () => {
+    const watches = fakeWatches();
+    const r = rig();
+    const key = r.storage.keyFor(r.folder);
+    r.storage.watch(key);
+    r.write(A, '"a"');
+    const lane = r.storage.declare(new Holds(), key, A);
+    expect(await answered(lane)).toEqual(ok("a"));
+    fs.rmSync(r.folder, { recursive: true });
+    watches[0]!.listener("rename", path.basename(r.folder));
+    await until(() => r.storage.stats().lost === 1, "the loss");
+    await until(() => lane.current().kind !== "ok", "the re-read");
+    expect(await answered(lane)).toEqual(ABSENT);
+  });
+
+  test("a folder that cannot be created is a standing fault of its sources, not a throw; the next key request tries again", async () => {
+    const r = rig();
+    // A file where the folder's parent should be: mkdir fails ENOTDIR.
+    fs.writeFileSync(path.dirname(r.folder), "");
+    const key = r.storage.keyFor(r.folder);
+    r.storage.watch(key);
+    const lane = r.storage.declare(new Holds(), key, A);
+    expect(await answered(lane)).toEqual({
+      kind: "failed",
+      reason: expect.stringMatching(
+        new RegExp(
+          `^cannot refresh: ${r.folder} could not be created or read: ENOTDIR: .*; reload the config or restart the daemon$`,
+        ),
+      ),
+    });
+    expect(r.storage.stats().faults).toMatchObject({ unusable: 1 });
+    expect(r.lines).toContainEqual(
+      expect.stringMatching(
+        /^warn plugin storage fault folder=\S+ generation=0 cause=unusable reason=/,
+      ),
+    );
+    fs.rmSync(path.dirname(r.folder));
+    const next = r.storage.keyFor(r.folder);
+    expect(next.generation).toBe(1);
+    r.storage.watch(next);
+    r.write(A, '"a"');
+    expect(await answered(r.storage.declare(new Holds(), next, A))).toEqual(
+      ok("a"),
+    );
   });
 
   // ext4 reuses a freed inode number: a folder deleted and created again can
@@ -408,7 +454,11 @@ describe("ManagedStorage watches", () => {
       reason: `cannot refresh: ${r0.folder} EMFILE: too many open files, watch '${r0.folder}'; reload the config or restart the daemon`,
     });
     expect(r0.counters.watchRefusals).toBe(1);
-    expect(r0.storage.stats().faults).toEqual({ refused: 1, error: 0 });
+    expect(r0.storage.stats().faults).toEqual({
+      unusable: 0,
+      refused: 1,
+      error: 0,
+    });
     jest.restoreAllMocks();
     const next = r0.storage.keyFor(r0.folder);
     expect(next.generation).toBe(1);
@@ -433,7 +483,11 @@ describe("ManagedStorage watches", () => {
       reason: `cannot refresh: ${r.folder} ${r.folder}: EIO: i/o error; reload the config or restart the daemon`,
     });
     expect(r.counters.watchErrors).toBe(1);
-    expect(r.storage.stats().faults).toEqual({ refused: 0, error: 1 });
+    expect(r.storage.stats().faults).toEqual({
+      unusable: 0,
+      refused: 0,
+      error: 1,
+    });
     expect(r.lines).toContainEqual(
       expect.stringMatching(
         /^warn plugin storage fault folder=\S+ generation=0 cause=error reason=/,

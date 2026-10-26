@@ -65,7 +65,7 @@ describe("RuntimeStats.snapshot", () => {
           refreshes: { first: 2, period: 0, change: 3, supersede: 1 },
           failures: 0,
           folders: 1,
-          faults: { refused: 1, error: 0 },
+          faults: { unusable: 0, refused: 1, error: 0 },
           lost: 1,
         },
       },
@@ -141,7 +141,7 @@ describe("RuntimeStats.snapshot", () => {
     });
     expect(snap.sources.pluginStorage).toMatchObject({
       folders: 1,
-      faults: { refused: 1, error: 0 },
+      faults: { unusable: 0, refused: 1, error: 0 },
       lost: 1,
     });
     expect(snap.sources.autocompact.refreshes).toEqual({ request: 2 });
@@ -288,7 +288,7 @@ describe("formatStats", () => {
           refreshes: { first: 2, period: 0, change: 3, supersede: 1 },
           failures: 0,
           folders: 1,
-          faults: { refused: 1, error: 0 },
+          faults: { unusable: 0, refused: 1, error: 0 },
           lost: 1,
         },
       },
@@ -339,7 +339,7 @@ describe("formatStats", () => {
     expect(out).toContain(
       "pluginStorage  entries=2 held=1 failures=0 refreshes first:2 period:0 change:3 supersede:1",
     );
-    expect(out).toContain("folders=1 lost=1 faults refused:1 error:0");
+    expect(out).toContain("folders=1 lost=1 faults unusable:0 refused:1 error:0");
     expect(out).toContain("refused       1");
     expect(out).toContain("errors        3");
     expect(out).toContain("active        5");

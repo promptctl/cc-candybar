@@ -192,8 +192,11 @@ export function formatStats(s: StatsSnapshot): string {
     );
   }
   const storage = s.sources.pluginStorage;
+  const faults = Object.entries(storage.faults)
+    .map(([cause, n]) => `${cause}:${n}`)
+    .join(" ");
   lines.push(
-    `  ${"".padEnd(12)}  folders=${storage.folders} lost=${storage.lost} faults refused:${storage.faults.refused} error:${storage.faults.error}`,
+    `  ${"".padEnd(12)}  folders=${storage.folders} lost=${storage.lost} faults ${faults}`,
   );
   lines.push(``);
   lines.push(`transcriptReads`);

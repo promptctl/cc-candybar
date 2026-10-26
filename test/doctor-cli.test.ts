@@ -348,6 +348,35 @@ describe("doctorPlan over a real config", () => {
   const plan = (env: Record<string, string> = {}) =>
     doctorPlan(REAL, NO_HANDLER, DAEMON, inDir(env), project, () => ({ columns: 120 }));
 
+  test("a load of a config whose plugin declares sources makes, watches and sweeps no storage", async () => {
+    const plugin = path.join(project, "p");
+    const storage = path.join(plugin, "session");
+    fs.mkdirSync(storage, { recursive: true });
+    fs.writeFileSync(
+      path.join(plugin, "plugin.json5"),
+      `{ sources: { status: { scope: "session", refresh: { watch: true }, read: { file: { json: true } } } },
+         segments: { s: { template: "{{ .plugins.p.status }}" } } }`,
+    );
+    // A session's file nobody has written for 31 days.
+    const old = path.join(storage, "s.json");
+    fs.writeFileSync(old, "{}");
+    const at = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000);
+    fs.utimesSync(old, at, at);
+    fs.writeFileSync(
+      projectConfig(),
+      `{ plugins: ["./p/plugin.json5"], root: { h: ["plugins.p.s"] } }`,
+    );
+    const load = loadConfigOnce({ projectDir: project, cwd: project, configFile: null });
+    expect(load.error).toBeNull();
+    expect(Object.keys(load.config.variables)).toContain("plugins.p.status");
+    // Long enough for a sweep the load started to have unlinked it.
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(fs.existsSync(old)).toBe(true);
+    fs.rmSync(storage, { recursive: true });
+    loadConfigOnce({ projectDir: project, cwd: project, configFile: null });
+    expect(fs.existsSync(storage)).toBe(false);
+  });
+
   test("no config file anywhere: the bundled default is correct", async () => {
     expect((await plan()).stdout).toBe("✓ config\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width — 120 columns, as this command's terminal measured\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n✓ session data\n");
   });
