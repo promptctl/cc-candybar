@@ -35,6 +35,7 @@ import { daemonArgs } from "../src/daemon/acquire.js";
 import { tryRenderViaDaemon } from "../src/daemon/client.js";
 import { fetchStats } from "../src/daemon/client-stats.js";
 import { mb, memoryLimitBytes } from "../src/daemon/limits.js";
+import { logFiles } from "../src/daemon/log.js";
 import { chargeProbe } from "../src/daemon/memory-report.js";
 import { PARENT_PID_ENV } from "../src/daemon/parent-watchdog.js";
 import type { StatsSnapshot } from "../src/daemon/stats.js";
@@ -379,11 +380,17 @@ const daemon = spawn(
   { env, stdio: ["ignore", "ignore", "pipe"] },
 );
 const inspectorUrl = new Promise<string>((resolve) => {
-  let text = "";
+  // The banner, until its URL is read; nothing after it is kept.
+  let banner: string | null = "";
   daemon.stderr.on("data", (chunk: Buffer) => {
-    text += chunk.toString();
-    const url = /Debugger listening on (ws:\S+)/.exec(text)?.[1];
-    if (url !== undefined) resolve(url);
+    if (banner !== null) {
+      banner += chunk.toString();
+      const url = /Debugger listening on (ws:\S+)/.exec(banner)?.[1];
+      if (url !== undefined) {
+        banner = null;
+        resolve(url);
+      }
+    }
     // Everything but the inspector's own banner is the daemon's to say.
     for (const line of chunk.toString().split("\n")) {
       if (line !== "" && !/Debugger listening|For help, see/.test(line))
@@ -412,6 +419,10 @@ interface Render {
   readonly outcome: string;
 }
 const renders: Render[] = [];
+// Every session's timer: stopped when the run ends, however it ends, before
+// anything removes what the sessions write into.
+const timers: NodeJS.Timeout[] = [];
+const stopSessions = (): void => timers.forEach((t) => clearInterval(t));
 let phase: Render["phase"] = "warm";
 const inFlight = new Set<Promise<void>>();
 
@@ -588,13 +599,15 @@ async function run(): Promise<{
     );
   }
 
-  const timers = sessions.map((s) =>
-    setTimeout(
-      () => {
-        tick(s);
-        timers[s.index] = setInterval(() => tick(s), SESSION_PERIOD_MS);
-      },
-      (s.index * SESSION_PERIOD_MS) / SESSIONS,
+  sessions.forEach((s) =>
+    timers.push(
+      setTimeout(
+        () => {
+          tick(s);
+          timers[s.index] = setInterval(() => tick(s), SESSION_PERIOD_MS);
+        },
+        (s.index * SESSION_PERIOD_MS) / SESSIONS,
+      ),
     ),
   );
   const warmStarted = Date.now();
@@ -625,7 +638,7 @@ async function run(): Promise<{
   phase = "after";
   await Promise.all(inFlight);
   const heapAfter = await liveHeap();
-  for (const t of timers) clearInterval(t);
+  stopSessions();
   await Promise.all(inFlight);
   // The first and last samples each follow a collection.
   await sample(steadyStarted);
@@ -786,7 +799,7 @@ async function daemonRenders(
 ): Promise<Record<"took" | "waited", Record<string, number>>> {
   const log = path.join(dirs.state, "cc-candybar", "daemon.log");
   const stamped = (): Array<{ at: number; line: string }> =>
-    [`${log}.3`, `${log}.2`, `${log}.1`, log]
+    logFiles(log)
       .filter((f) => fs.existsSync(f))
       .flatMap((f) => fs.readFileSync(f, "utf8").split("\n"))
       .map((line) => ({ at: Date.parse(line.slice(0, 24)), line }));
@@ -851,6 +864,7 @@ try {
 } catch (e) {
   console.error(`FAIL  ${e instanceof Error ? e.message : String(e)}`);
 } finally {
+  stopSessions();
   // The daemon ends through its own shutdown, so its log holds every line it
   // logged, and is killed if it does not; the root goes once nothing writes
   // into it.
@@ -863,8 +877,15 @@ try {
     daemon.kill("SIGKILL");
     await Promise.race([gone, sleep(3000)]);
   }
-  const remove = (dir: string) =>
-    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5 });
+  // [LAW:no-silent-failure] A removal that fails is said, and the verdict
+  // still stands.
+  const remove = (dir: string) => {
+    try {
+      fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5 });
+    } catch (e) {
+      console.error(`could not remove ${dir}: ${(e as Error).message}`);
+    }
+  };
   if (passed) remove(root);
   else {
     // The checkouts and transcripts are the fixture, half a gigabyte of it;

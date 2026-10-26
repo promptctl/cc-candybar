@@ -5,6 +5,18 @@ import type { LogLevel } from "../utils/logger";
 
 export const MAX_BYTES = 5 * 1024 * 1024;
 const KEEP_GENERATIONS = 3;
+
+// The log's files, oldest first: the rotated generations, then the live one.
+// [LAW:one-source-of-truth] Whatever reads the whole log reads these.
+export function logFiles(filePath: string): string[] {
+  return [
+    ...Array.from(
+      { length: KEEP_GENERATIONS },
+      (_, i) => `${filePath}.${KEEP_GENERATIONS - i}`,
+    ),
+    filePath,
+  ];
+}
 // The bytes the log holds waiting for the disk. Past this the oldest waiting
 // lines are dropped and counted, and the count is logged ahead of the lines
 // kept, so a stalled disk costs lines the log says it lost, never the daemon's
@@ -223,7 +235,10 @@ async function append(filePath: string, batch: Batch): Promise<void> {
   batch.state = { kind: "landed" };
   if (endsAt >= MAX_BYTES) {
     close();
-    await rotate(held.path);
+    // Only while the path is still the file that filled: another daemon may
+    // have rotated it and started a fresh one there.
+    const now = await fs.promises.stat(held.path).catch(() => null);
+    if (now !== null && idOf(now) === held.id) await rotate(held.path);
   }
 }
 
@@ -267,6 +282,12 @@ function writeWaitingSync(finishing: boolean, waitMs: number): void {
         stillOut = { fd, endsAt };
       }
     } catch (e) {
+      // Where the write stands cannot be asked: on the way out it is written
+      // again — doubled at worst, never lost.
+      if (finishing) {
+        first = out.bytes;
+        out.state = { kind: "landed" };
+      }
       unwritable(out.bytes.toString(), e);
     }
   }
@@ -300,11 +321,13 @@ function writeWaitingSync(finishing: boolean, waitMs: number): void {
 // The file's size once it reaches `endsAt`, or as it stands when the wait is
 // over. Blocking: only a caller that cannot yield waits here.
 function sizeOnceLanded(fd: number, endsAt: number, waitMs: number): number {
-  const until = Date.now() + waitMs;
+  // Monotonic: a clock stepped while this thread blocks neither stretches the
+  // wait nor ends it early.
+  const until = performance.now() + waitMs;
   const nap = new Int32Array(new SharedArrayBuffer(4));
   for (;;) {
     const { size } = fs.fstatSync(fd);
-    if (size >= endsAt || Date.now() >= until) return size;
+    if (size >= endsAt || performance.now() >= until) return size;
     Atomics.wait(nap, 0, 0, 1);
   }
 }
