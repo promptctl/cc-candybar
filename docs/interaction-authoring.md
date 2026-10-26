@@ -5,6 +5,8 @@
     ```json5 check:pass   — a COMPLETE config file; must exit 0 under `cc-candybar check`.
     ```json5 check:fail   — a COMPLETE config file; must exit 1, and the next
     ```error              — block must quote a substring of check's actual stderr.
+    ```json5 file:<path>  — a file written verbatim at <path>, relative to every
+                            config snippet, before any snippet runs.
   Every ```json5 block in this file MUST carry one of the two annotations.
   Do not edit a snippet or a quoted error without running the test — the quoted
   strings are asserted against the real loader, not transcribed.
@@ -107,6 +109,7 @@ declares exactly one value source:
 | `{ ceiling: "set", to: "+100_000" }` | move this session's context ceiling in the memento plugin — `to` is memento's own value grammar (`350000`, `+100_000`, `-100_000`, `off`), handed to its `ceiling set session` and judged only by memento; its refusal is the click's error. A click is honoured only as a move the config declares |
 | `{ ceiling: "clear" }` | drop this session's own ceiling layer (memento's `ceiling clear session`), so the project's or user's ceiling applies again |
 | `{ slash: "/compact" }` | type the slash command into THIS session's Claude Code prompt and submit it, through its tmux pane. The line is `/` then a command name, one line, no control characters — anything else is a load error. A draft in the prompt is stashed and comes back after; mid-turn, Claude Code runs the command or queues it. The click is refused in the bar, typing nothing, outside tmux, while a dialog or picker is open, while you hold a ctrl+s stash, or while the pane is in tmux copy mode. A click is honoured only as a line the config declares |
+| `{ run: ["<program>", "<arg>", …], env: { NAME: "template" }, refreshes: ["<source>"] }` | run the program with the arguments and environment the bar drew — no shell — after the click returns; each source in `refreshes` reads as loading until the program exits, then shows what it wrote. A failure, or a link the daemon did not draw, is the click's error in the bar — see below |
 
 A `set` action writing SessionState needs a matching `state` **variable** to
 read the value back into templates: `{ kind: "state", key: "<same key>",
@@ -999,6 +1002,112 @@ your own project slash command included — is one `slash` action and one
   there; the bundled trays and `autocompact`'s controls gate the same way. An
   ungated button still types nothing outside tmux and says why in the bar,
   like every refusal in the table above.
+
+### Running a program: `run`
+
+A button that runs a program — another tool's own command, to move a value it
+keeps — is a `run` action. A plugin that shows a per-session value
+([segment-authoring.md](segment-authoring.md), "A value per session")
+declares the program that moves it beside the source it reads:
+
+```json5 file:limit/plugin.json5
+{
+  sources: {
+    status: { scope: "session", refresh: { watch: true }, read: { file: { json: true } } },
+  },
+  segments: {
+    limit: {
+      when: '{{ hasKey .plugins.limit "status" }}',
+      template: 'limit {{ .plugins.limit.status.value }} {{ action "plugins.limit.raise" "[+]" }}',
+    },
+  },
+  actions: {
+    raise: {
+      run: ["./limit", "raise", "--session", "{{ .session.id }}"],
+      env: { LIMIT_HOME: "{{ .plugins.limit.status.home }}" },
+      refreshes: ["status"],
+    },
+  },
+}
+```
+
+Your own config may declare one too. It names a source by its full name:
+
+```json5 check:pass
+{
+  plugins: ["./limit/plugin.json5"],
+  actions: {
+    resetLimit: { run: ["limit", "reset", "--session", "{{ .session.id }}"], refreshes: ["plugins.limit.status"] },
+  },
+  segments: { limitReset: { template: '{{ action "resetLimit" "⟲ limit" }}' } },
+  root: { rows: { status: { h: ["model", "plugins.limit.limit", "limitReset"] } } },
+}
+```
+
+- **`run` is the program, then its arguments — no shell.** Each item is a
+  template; nothing is split, globbed or expanded. A shell is a program like
+  any other (`["sh", "-c", "…"]`). `env` maps variable names to templates.
+- **`refreshes` names the sources the program rewrites.** A plugin names its
+  own sources bare (`"status"`); your file names one by its full name
+  (`"plugins.limit.status"`). A name that is not a declared source is a load
+  error.
+- **The draw evaluates it, and the click runs what was drawn.** The
+  arguments and `env` are evaluated as the bar draws the button, as a
+  `copy`'s text is, and the link carries the result, signed with a key only
+  the daemon holds. A click runs exactly what the button showed, evaluating
+  nothing of its own. A link the daemon did not draw — edited, forged, or
+  naming a run the session's config does not declare — runs nothing, and the
+  refusal shows in the bar.
+- **The program gets the session's environment.** It is the daemon's own
+  environment with every variable that states a session fact replaced:
+  `CLAUDE_CODE_SESSION_ID` is the clicked session's id,
+  `CLAUDE_PROJECT_DIR` its project directory, and `CLAUDE_CONFIG_DIR` its
+  Claude Code directory (unset when that is the default). The daemon was
+  started by some other session's shell, so its own values of these never
+  reach the program. `TMUX` and `TMUX_PANE` are unset. `env` is laid over
+  the result.
+- **It runs in the directory of the file that declares it**: the plugin's
+  folder, or your config file's directory. A relative program (`./limit`)
+  resolves there, and a bare name (`limit`) is looked up on `PATH`. The
+  session's directories reach the program only through its environment.
+- **It runs after the click returns, for at most 10 seconds.** A non-zero
+  exit, a timeout, or a program that cannot start puts its stderr, trimmed —
+  or the reason, when it printed nothing — in the bar where a refused click's
+  error shows.
+- **A refreshed source reads as loading until the program exits.** From the
+  click until the program ends, each source in `refreshes` is pending: a
+  segment reading it draws its loading cell, never the value from before the
+  click. When the program ends, the source is read again and the bar shows
+  what the program wrote.
+
+The arguments are a list:
+
+```json5 check:fail
+{
+  actions: { deploy: { run: "make deploy" } },
+  segments: { deployButton: { template: '{{ action "deploy" "⇪ deploy" }}' } },
+  root: { rows: { status: { h: ["model", "deployButton"] } } },
+}
+```
+
+```error
+run must list the program and its arguments, each a template string, the program first and not empty, got "make deploy"
+```
+
+and `refreshes` names only sources:
+
+```json5 check:fail
+{
+  variables: { limit: { kind: "literal", value: 3 } },
+  actions: { bump: { run: ["limit", "bump"], refreshes: ["limit"] } },
+  segments: { bumpButton: { template: '{{ action "bump" "+" }}' } },
+  root: { rows: { status: { h: ["model", "bumpButton"] } } },
+}
+```
+
+```error
+actions.bump refreshes "limit", which is a literal variable: a run refreshes only a declared source
+```
 
 ## Edit mode: `+`/`-` chrome for free
 

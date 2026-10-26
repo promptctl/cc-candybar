@@ -13,6 +13,7 @@ import { ABSENT, failed, type Outcome } from "../../utils/outcome";
 import type { DaemonLogger } from "../../utils/logger";
 import { valueOf } from "../../utils/logfmt";
 import { jsonParser } from "../../var-system/parse";
+import { sessionFileName } from "../../config/loader/plugins";
 import type { JsonValue } from "../../var-system/types";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -79,7 +80,7 @@ interface SessionFile {
 
 // [LAW:types-are-the-program] A `SessionId` is a safe file name, so the path
 // needs no check of its own.
-const fileName = (sessionId: SessionId): string => `${sessionId}.json`;
+const fileName = (sessionId: SessionId): string => sessionFileName(sessionId);
 const fileOf = (f: SessionFile): string =>
   path.join(f.storage.folder, fileName(f.sessionId));
 const keyString = (key: StorageKey): string =>

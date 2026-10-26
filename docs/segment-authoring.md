@@ -814,8 +814,8 @@ What the definition can say, and what follows from it:
   own, a session in no checkout reading from its working directory — so one
   installed definition shows each checkout's own data. The plugin lit
   installs reads lit's state this way.
-- **`data`, `variables`, `segments`, `helpers` and `actions`, each
-  optional.** A definition never edits `root` — placing a segment is your
+- **`data`, `sources`, `variables`, `segments`, `helpers` and `actions`,
+  each optional.** A definition never edits `root` — placing a segment is your
   choice. Its `variables` are a config's `variables:`, every kind, checked the
   same way, and named under the plugin: `greeting` is read as
   `.plugins.<plugin>.greeting`. A segment's `vars` may be of any kind too; a
@@ -825,7 +825,7 @@ What the definition can say, and what follows from it:
   A `state` variable's `key` and an action's `set` are written
   bare and meet under `plugins.<plugin>.` — a plugin's session keys are
   namespaced as its names are, so none can clash with the bar's or your file's.
-  No variable may be named `data`, the data file's name.
+  No variable or source may be named `data`, the data file's name.
   The plugin name is one lowercase identifier.
 - **Merge order is bundled < installed plugins < listed plugins < your
   file**, so your file can
@@ -852,6 +852,119 @@ A plugin with no data file derives what it shows from variables of its own:
   root: { rows: { status: { h: ["model", "plugins.hello.greeting"] } } },
 }
 ```
+
+### A value per session: `sources` and managed storage
+
+When what the program knows differs per Claude Code session — the ticket a
+session works on, a limit set for one session — the plugin declares a
+**source**, and cc-candybar gives each session a file of its own in the
+plugin's folder:
+
+```
+<plugin folder>/session/<session id>.json
+```
+
+```json5 file:focus/plugin.json5
+{
+  sources: {
+    status: { scope: "session", refresh: { watch: true }, read: { file: { json: true } } },
+  },
+  segments: {
+    ticket: {
+      description: "The ticket this session works on",
+      when: '{{ hasKey .plugins.focus "status" }}',
+      template: '◎ {{ .plugins.focus.status.ticket }}',
+    },
+  },
+}
+```
+
+```json5 check:pass
+{
+  plugins: ["./focus/plugin.json5"],
+  root: { rows: { status: { h: ["model", "context", "plugins.focus.ticket"] } } },
+}
+```
+
+- **The source is the session's document.** A template reads it as
+  `.plugins.<plugin>.<source>`, its fields by dotted path. The one source
+  built is the one above — `scope: "session"`, `refresh: { watch: true }`,
+  `read: { file: { json: true } }`, with no path — and anything else drops
+  the plugin with an error naming the field and what is built. Its name is
+  one identifier, and no variable of the plugin may share it.
+- **The program writes the whole file, then renames it into place.** Write
+  the document to a temporary file in the same `session` folder and rename
+  it over `<session id>.json`, every time what it knows changes. The rename
+  is atomic, so the bar never reads half a document; a file written in
+  place can be read half-written, which is not JSON and draws `⚠`. The
+  session id is the `session_id` Claude Code hands the program's hooks, and
+  `{{ .session.id }}` in an action. cc-candybar creates the folder when it
+  loads the plugin, re-reads a session's file when it changes, and only
+  while a session's bar reads the source.
+- **Old files are removed.** A `*.json` file in the folder that nobody has
+  written for 30 days belongs to a session that is gone, and is deleted —
+  unless a session's bar holds it now.
+- **Until the program writes, there is nothing to read.** No file, or a
+  blank one, reads as absent: `hasKey .plugins.<plugin> "<source>"` is
+  false, so a segment gated on it hides. That gate is the only safe read
+  before the first write. An unguarded read is the missing-field error —
+  the segment draws `⚠` and `check` fails — and a file that is not JSON
+  draws `⚠` with the reason and the path.
+- **`check` reads every source as absent.** It runs no plugin program and has
+  no session, so it draws what a session draws before the first write: the
+  gated segment above is hidden under `check`, and the unguarded read below
+  fails it.
+- **One file, one source.** A plugin's session file is one document, so a
+  plugin declares one source for it and reads its fields. Two sources
+  reading the same file drop the plugin, naming both.
+
+```json5 file:bare/plugin.json5
+{
+  sources: {
+    status: { scope: "session", refresh: { watch: true }, read: { file: { json: true } } },
+  },
+  segments: {
+    ticket: { template: '◎ {{ .plugins.bare.status.ticket }}' },
+  },
+}
+```
+
+```json5 check:fail
+{
+  plugins: ["./bare/plugin.json5"],
+  root: { rows: { status: { h: ["model", "plugins.bare.ticket"] } } },
+}
+```
+
+```error
+segment "plugins.bare.ticket": field "plugins.bare.status.ticket" not found on receiver
+```
+
+```json5 file:twice/plugin.json5
+{
+  sources: {
+    ticket: { scope: "session", refresh: { watch: true }, read: { file: { json: true } } },
+    title: { scope: "session", refresh: { watch: true }, read: { file: { json: true } } },
+  },
+  segments: { ticket: { template: '◎ {{ .plugins.twice.ticket.id }}' } },
+}
+```
+
+```json5 check:fail
+{
+  plugins: ["./twice/plugin.json5"],
+  root: { rows: { status: { h: ["model", "plugins.twice.ticket"] } } },
+}
+```
+
+```error
+sources .plugins.twice.ticket and .plugins.twice.title read the same file
+```
+
+A program the bar runs from a click — to move a value, then show it — is a
+`run` action ([interaction-authoring.md](interaction-authoring.md)): its
+`refreshes` names the source the program rewrites, so the segment reads as
+loading until the program exits, and then shows what it wrote.
 
 A definition that does not load — a missing file, a syntax error, a field it
 may not declare, a template that does not parse or names something nothing

@@ -310,6 +310,31 @@ describe("a source's declaration", () => {
     expect(message).toContain(`source "status" and variable "status" are one name`);
   });
 
+  // [LAW:one-source-of-truth] A session's file is one document: two sources
+  // reading it would be two names for it.
+  test("two sources reading the same session file drop the plugin, naming both and the file", async () => {
+    const message = fatal(await checkConfig(listing(`{ status: ${SOURCE}, other: ${SOURCE} }`), dir));
+    expect(message).toContain(`plugin ${path.join(dir, "p/plugin.json5")} was not loaded`);
+    expect(message).toContain(
+      `sources.status: sources .plugins.p.status and .plugins.p.other read the same file, ${path.join(dir, "p", "session", "<session id>.json")}: a session's file is one document, read by one source`,
+    );
+  });
+
+  test("another plugin whose folder is the same real folder is dropped, naming both sources and the file", async () => {
+    write("p/plugin.json5", `{ sources: { status: ${SOURCE} }, segments: { s: { template: "s" } } }`);
+    fs.symlinkSync(path.join(dir, "p"), path.join(dir, "q"));
+    const p = write(
+      "config.json5",
+      `{ plugins: ["./p/plugin.json5", "./q/plugin.json5"], segments: { mine: { template: "mine" } }, root: { h: ["mine", "plugins.p.s", "plugins.q.s"] } }`,
+    );
+    const message = fatal(await checkConfig(p, dir));
+    expect(message).toContain(`plugin ${path.join(dir, "q/plugin.json5")} was not loaded`);
+    expect(message).not.toContain(`plugin ${path.join(dir, "p/plugin.json5")} was not loaded`);
+    expect(message).toContain(
+      `sources .plugins.p.status and .plugins.q.status read the same file, ${path.join(dir, "p", "session", "<session id>.json")}`,
+    );
+  });
+
   test("`variables:` cannot author a source", async () => {
     write(
       "p/plugin.json5",
@@ -329,7 +354,12 @@ describe("a source's declaration", () => {
   // declared, never a source's synthesized variable.
   test("the load event counts sources apart from plugin variables", () => {
     const r = rig();
-    const p = listing(`{ status: ${SOURCE}, other: ${SOURCE} }`, `variables: { v: { kind: "literal", value: 1 } }`);
+    write("q/plugin.json5", `{ sources: { other: ${SOURCE} } }`);
+    write("p/plugin.json5", `{ sources: { status: ${SOURCE} }, variables: { v: { kind: "literal", value: 1 } } }`);
+    const p = write(
+      "config.json5",
+      `{ plugins: ["./p/plugin.json5", "./q/plugin.json5"], segments: { mine: { template: "mine" } }, root: { h: ["mine"] } }`,
+    );
     const loaded = loadFromDisk(dir, dir, p, {
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
@@ -337,7 +367,7 @@ describe("a source's declaration", () => {
     });
     try {
       expect(pluginLoadLine(loaded.layers, loaded.state!)).toContain(
-        " plugins loaded=1 sources=2 pluginVariables=1 dropped=0 ",
+        " plugins loaded=2 sources=2 pluginVariables=1 dropped=0 ",
       );
     } finally {
       loaded.state?.registry.dispose();

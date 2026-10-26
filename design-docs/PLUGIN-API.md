@@ -74,7 +74,7 @@ A program that wants to show something per session should not have to invent a f
 <plugin folder>/session/<session id>.json
 ```
 
-The plugin's program writes that file, whole, by writing a temporary file beside it and renaming it into place, whenever what it knows changes. cc-candybar does the rest. It creates the scope's folder when it installs or first loads the plugin, watches the folder once for the whole daemon, reads only the file that changed and only if a session holds it, and removes files that have gone untouched for 30 days. A `file` source with no path reads this file.
+The plugin's program writes that file, whole, by writing a temporary file beside it and renaming it into place, whenever what it knows changes. cc-candybar does the rest. It creates the scope's folder when it first loads the plugin, watches the folder once for as long as a loaded config declares the plugin, reads only the file that changed and only if a session holds it, and removes files that have gone untouched for 30 days and that no session holds. A `file` source with no path reads this file.
 
 `session` is the scope the API stores first. The other scopes store the same way when a plugin needs one: a key that is not a safe file name is stored under the hex SHA-256 of the key.
 
@@ -90,7 +90,7 @@ A plugin's names live under `.plugins.<plugin>.`. A bundled plugin's live at the
 
 ## Actions
 
-A plugin has the user config's actions (`set`, `copy`, `open`, `slash` and the rest) and one more that any config may use:
+A plugin has the user config's actions (`set`, `copy`, `open`, `slash` and the rest) and one more that any config file may use:
 
 ```json5
 actions: {
@@ -103,9 +103,9 @@ actions: {
 ```
 
 - **The draw evaluates it.** The argument list and `env` are templates the draw evaluates, as it evaluates `copy`'s text. A click runs exactly what the glyph promised, and nothing is evaluated at click time.
-- **No shell.** The list is the program and its arguments.
+- **No shell.** The list is the program and its arguments. It runs in the directory of the file that declares it, so a config with no file, such as the bundled default, declares none.
 - **The link is signed.** A `cc-candybar://` link can be opened by any web page, so a `run` link carries its session, its action name and its evaluated arguments signed with a key only the daemon holds. A link that fails the signature, or names an action the session's config doesn't declare, is refused.
-- **It runs off the click.** The click returns at once and the program runs asynchronously, bounded by one timeout. A non-zero exit, a timeout or a failed launch shows its stderr in the session's click-error slot.
+- **It runs off the click.** The click returns at once and the program runs asynchronously, bounded by one timeout. A non-zero exit, a timeout or a failed launch shows its stderr, or the reason when it printed none, in the session's click-error slot.
 - **`refreshes` names what it makes stale.** Each named source is superseded: its value reads pending, any read in flight is abandoned, and a fresh read starts once the program exits. No draw after the click shows the value from before it.
 
 ## Trust

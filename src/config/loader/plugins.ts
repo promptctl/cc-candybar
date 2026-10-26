@@ -144,6 +144,12 @@ export function pluginDataVar(plugin: string): string {
 // `<folder>/<session id>.json` there.
 export const STORAGE_FOLDER = "session";
 
+// [LAW:one-source-of-truth] The name of a session's file in a storage folder:
+// the loader names it in its errors, the storage owner reads it.
+export function sessionFileName(sessionId: string): string {
+  return `${sessionId}.json`;
+}
+
 type Attempt<T> =
   | { readonly ok: true; readonly value: T }
   | { readonly ok: false; readonly reason: string };
@@ -255,6 +261,7 @@ export function applyPlugins(
           ),
           under,
         );
+        requireOneSourcePerFile(file, plugin, config);
         validate(config, plugin, under !== layer.config);
         return config;
       });
@@ -825,6 +832,40 @@ function sourcesOf(
     if (wrong.length === 0) lowered[name] = { kind: "source", storage };
   }
   return lowered;
+}
+
+// [LAW:one-source-of-truth] [LAW:types-are-the-program] A session's file in a
+// storage folder is one document, so it has one name. Sources that would read
+// the same file — two of one plugin's, or another plugin's whose folder is the
+// same real folder — drop the plugin that brings the second name, naming every
+// source and the file. The rule is over the file each source resolves to, not
+// a count per plugin.
+function requireOneSourcePerFile(
+  file: string,
+  plugin: string,
+  config: DslConfig,
+): void {
+  const readers = Object.entries(config.variables).reduce(
+    (byFile, [name, v]) => {
+      if (v.kind !== "source") return byFile;
+      const read = sourceFileOf(v);
+      return byFile.set(read, [...(byFile.get(read) ?? []), name]);
+    },
+    new Map<string, readonly string[]>(),
+  );
+  const owned = ownedBy(plugin);
+  const issues = [...readers]
+    .filter(([, names]) => names.length > 1 && names.some(owned))
+    .map(([read, names]) => ({
+      path: `sources.${names.find(owned)!.slice(`${PLUGIN_NS}${plugin}.`.length)}`,
+      message: `sources ${names.map((n) => `.${n}`).join(" and ")} read the same file, ${read}: a session's file is one document, read by one source`,
+    }));
+  if (issues.length > 0) throw new ConfigError(file, issues);
+}
+
+// The file a source reads, spelled for any session.
+function sourceFileOf(source: SourceVarDecl): string {
+  return path.join(source.storage, sessionFileName("<session id>"));
 }
 
 // Every field where `authored` departs from `built`, at its deepest: a field
