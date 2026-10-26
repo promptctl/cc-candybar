@@ -243,20 +243,17 @@ export type ClickContext = Journaled<VerbContext>;
 export type VerbHandler = (value: string, ctx: ClickContext) => void;
 
 import { BadVerbArgs } from "../verb-error";
+import { parseSessionId, type SessionId } from "../session-id";
 export { BadVerbArgs };
 
 // ─── Argument decoders ───────────────────────────────────────────────────────
 
-// [LAW:single-enforcer] One place that validates "this string is a usable
-// session id." A session id has come from an untrusted URL; rejecting `/`
-// and `..` keeps it usable as a key in the SessionState map and forbids
-// path-traversal through any downstream code that ever joins it with fs
-// paths (the legacy flag-file path, now removed, was the original reason).
-function requireSessionId(value: string): string {
-  if (!value) throw new BadVerbArgs("session id is required");
-  if (value.includes("/") || value.includes(".."))
-    throw new BadVerbArgs(`invalid session id "${value}"`);
-  return value;
+// [LAW:single-enforcer] A click's session id crosses the one session-id
+// checkpoint (parseSessionId); a refusal is the click's bad arguments.
+function requireSessionId(value: string): SessionId {
+  const parsed = parseSessionId(value);
+  if (!parsed.ok) throw new BadVerbArgs(`session id ${parsed.problem}`);
+  return parsed.id;
 }
 
 // [LAW:types-are-the-program] A single-argument verb (copy/open/toolbar/show-

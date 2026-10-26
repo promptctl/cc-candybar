@@ -143,10 +143,22 @@ describe("a plugin that does not load is dropped alone", () => {
     expect(message).toContain(expected);
   }
 
-  test("a definition declaring a source of its own", () =>
+  test("a variable named data, the data file's name", () =>
     dropped(
-      `{ data: "./d.json", segments: {}, variables: { y: { kind: "shell", command: "true", cache: { never: true } } } }`,
-      `a plugin definition may not declare "variables"`,
+      `{ variables: { data: { kind: "literal", value: "x" } } }`,
+      `"data" names the plugin's data file (.plugins.x.data)`,
+    ));
+
+  test("a variable the shared validator refuses", () =>
+    dropped(
+      `{ variables: { y: { kind: "shell", command: "true" } } }`,
+      "variables.y",
+    ));
+
+  test("a variable template that does not parse", () =>
+    dropped(
+      `{ variables: { y: { kind: "template", template: "{{ if .z }}" } } }`,
+      "Template parse error in variables.plugins.x.y.template",
     ));
 
   test("a definition editing root", () =>
@@ -168,10 +180,10 @@ describe("a plugin that does not load is dropped alone", () => {
       `references unknown action "nope"`,
     ));
 
-  test("a segment declaring a var that is a source", () =>
+  test("a segment var template that does not parse", () =>
     dropped(
-      `{ data: "./d.json", segments: { s: { template: "x", vars: { p: { kind: "shell", command: "true", cache: { never: true } } } } } }`,
-      `segments.s.vars.p: a plugin segment's vars may declare only state variables (kind: "state"), never a source such as "shell"`,
+      `{ segments: { s: { template: "x", vars: { p: { kind: "template", template: "{{ end }}" } } } } }`,
+      "Template parse error in segments.plugins.x.s.vars.p.template",
     ));
 
   test("a template that does not parse", () =>
@@ -185,7 +197,7 @@ describe("a plugin that does not load is dropped alone", () => {
 });
 
 test("the user's config still renders beside a dropped plugin", async () => {
-  write("x/plugin.json5", `{}`);
+  write("x/plugin.json5", `{ root: {} }`);
   const p = write(
     "config.json5",
     `{ plugins: ["./x/plugin.json5"], segments: { mine: { template: "mine-here" } }, root: { h: ["mine"] } }`,
@@ -349,7 +361,7 @@ test("plugins must be a list of paths", async () => {
 // dropped — the record the daemon logs on every load.
 test("the daemon's load records the plugins it merged and dropped", () => {
   const good = config();
-  write("q/plugin.json5", `{}`);
+  write("q/plugin.json5", `{ root: {} }`);
   fs.writeFileSync(
     good,
     `{ plugins: ["./deploy/plugin.json5", "./q/plugin.json5"], root: { h: ["plugins.deploy.status"] } }`,
@@ -366,6 +378,118 @@ test("the daemon's load records the plugins it merged and dropped", () => {
   } finally {
     loaded.state?.registry.dispose();
   }
+});
+
+// Every key of a definition is optional, `data` included, and a definition may
+// declare variables in a config's own vocabulary, named under the plugin.
+describe("a plugin's own variables", () => {
+  const HELLO = `{
+    variables: {
+      who: { kind: "literal", value: "world" },
+      greeting: { kind: "template", template: "hello, {{ .plugins.hello.who }}" },
+      open: { kind: "state", key: "open", default: "no" },
+    },
+    segments: {
+      s: {
+        template: "{{ .plugins.hello.greeting }} {{ .plugins.hello.s.n }} {{ .plugins.hello.s.out }} open={{ .plugins.hello.open }}",
+        vars: {
+          n: { kind: "literal", value: 7 },
+          out: { kind: "shell", command: "printf ran", cache: { never: true } },
+        },
+      },
+    },
+  }`;
+  const listing = (definition: string): string => {
+    write("hello/plugin.json5", definition);
+    return write(
+      "config.json5",
+      `{ plugins: ["./hello/plugin.json5"], root: { h: ["plugins.hello.s"] } }`,
+    );
+  };
+
+  test("a definition without data loads, and declares no data variable", async () => {
+    const p = listing(`{ segments: { s: { template: "no data here" } } }`);
+    const { rendered, warnings } = clean(await checkConfig(p, dir));
+    expect(rendered).toContain("no data here");
+    expect(warnings).toEqual([]);
+    const loaded = loadFromDisk(dir, dir, p, { sessionState: new SessionState() });
+    try {
+      expect(loaded.state?.plugins.loaded).toEqual([path.join(dir, "hello/plugin.json5")]);
+      expect(Object.keys(loaded.state!.config.variables).filter((v) => v.startsWith("plugins.hello."))).toEqual([]);
+      expect(pluginLoadLine(loaded.layers, loaded.state!)).toContain(
+        ` +${path.join(dir, "hello/plugin.json5")} data=none`,
+      );
+    } finally {
+      loaded.state?.registry.dispose();
+    }
+  });
+
+  test("an empty definition loads", async () => {
+    write("hello/plugin.json5", `{}`);
+    const p = write("config.json5", `{ plugins: ["./hello/plugin.json5"], root: { h: ["model"] } }`);
+    expect(clean(await checkConfig(p, dir)).warnings).toEqual([]);
+  });
+
+  test("are named under the plugin, and its segment's vars of any kind load and draw", async () => {
+    const p = listing(HELLO);
+    const { rendered, warnings } = clean(await checkConfig(p, dir));
+    expect(warnings).toEqual([]);
+    expect(rendered).toContain("hello, world 7 ran open=no");
+    const loaded = loadFromDisk(dir, dir, p, { sessionState: new SessionState() });
+    try {
+      const vars = loaded.state!.config.variables;
+      expect(Object.keys(vars).filter((v) => v.startsWith("plugins.hello."))).toEqual([
+        "plugins.hello.who",
+        "plugins.hello.greeting",
+        "plugins.hello.open",
+      ]);
+      expect(vars.who).toBeUndefined();
+      expect(vars.greeting).toBeUndefined();
+      // A state variable's session key lives under the plugin as its name does.
+      expect(vars["plugins.hello.open"]).toMatchObject({ kind: "state", key: "plugins.hello.open" });
+    } finally {
+      loaded.state?.registry.dispose();
+    }
+  });
+
+  test("a template reading one by its bare name is a drop", async () => {
+    const p = listing(`{
+      variables: { who: { kind: "literal", value: "world" } },
+      segments: { s: { template: "{{ .who }}" } },
+    }`);
+    const message = fatal(await checkConfig(p, dir));
+    expect(message).toContain(`plugin ${path.join(dir, "hello/plugin.json5")} was not loaded`);
+    expect(message).toContain("who");
+  });
+
+  // [LAW:nothing-unseen] The config-load event counts the variables the loaded
+  // plugins declared: the data file is not one, a dropped plugin's are not.
+  test("the daemon's load line counts them", () => {
+    const p = listing(HELLO);
+    write("d/plugin.json5", `{ data: "./d.json", variables: { a: { kind: "literal", value: 1 } } }`);
+    write("q/plugin.json5", `{ root: {}, variables: { b: { kind: "literal", value: 1 } } }`);
+    fs.writeFileSync(
+      p,
+      `{ plugins: ["./hello/plugin.json5", "./d/plugin.json5", "./q/plugin.json5"], root: { h: ["plugins.hello.s"] } }`,
+    );
+    const loaded = loadFromDisk(dir, dir, p, { sessionState: new SessionState() });
+    try {
+      expect(pluginLoadLine(loaded.layers, loaded.state!)).toContain(
+        " plugins loaded=2 pluginVariables=4 dropped=1 ",
+      );
+    } finally {
+      loaded.state?.registry.dispose();
+    }
+  });
+
+  test("none declared counts zero", () => {
+    const loaded = loadFromDisk(dir, dir, config(), { sessionState: new SessionState() });
+    try {
+      expect(pluginLoadLine(loaded.layers, loaded.state!)).toContain(" pluginVariables=0 ");
+    } finally {
+      loaded.state?.registry.dispose();
+    }
+  });
 });
 
 // brandon-plugins-ktag.5zv: a plugin an app installs by dropping a folder,

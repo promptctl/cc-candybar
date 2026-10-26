@@ -59,7 +59,11 @@ import type {
 import { quietLogger, type DaemonLogger } from "../../utils/logger.js";
 import { Holds } from "../../utils/holds.js";
 import { ABSENT, failed, PENDING } from "../../utils/outcome.js";
-import { pluginDataVar, pluginNameOf } from "../../config/loader/plugins.js";
+import {
+  ownedBy,
+  pluginDataVar,
+  pluginNameOf,
+} from "../../config/loader/plugins.js";
 import { projectionsOf } from "../../config/loader/projections.js";
 
 // [LAW:one-source-of-truth] Each cache entry owns the live DSL state for a
@@ -251,8 +255,8 @@ export interface ConfigChain {
   readonly projectDir: string | null;
 }
 
-// [LAW:nothing-unseen] Which plugins a daemon load merged, the data file each
-// merged one reads, the checkout a `{ checkout }` path resolved against —
+// [LAW:nothing-unseen] Which plugins a daemon load merged, how many variables
+// they declare between them, the data file each merged one reads, the checkout a `{ checkout }` path resolved against —
 // `git:<root>`, or `dir:<cwd>` for a directory in no checkout, `-` with no
 // session — and which it dropped: a drop is also on the strip, but the rest is
 // said nowhere else. The daemon's own sink — buildRenderState is shared with
@@ -276,8 +280,20 @@ export function pluginLoadLine(
       name === undefined ? undefined : config.variables[pluginDataVar(name)];
     return data?.kind === "file" ? data.path : "none";
   };
+  // The variables a merged plugin's `variables:` declared: every name under
+  // its namespace but the data file's.
+  const pluginVariables = loaded
+    .flatMap((definition) => {
+      const name = pluginNameOf(definition);
+      return name === undefined ? [] : [name];
+    })
+    .flatMap((name) =>
+      Object.keys(config.variables).filter(
+        (v) => ownedBy(name)(v) && v !== pluginDataVar(name),
+      ),
+    ).length;
   return (
-    `config load ${layers.join(" < ") || "<default>"}: projections=${[...projectionsOf(config).keys()].join(",") || "-"} instantSegments=${instantSegments(compiled).join(",") || "-"} instantTemplates=${compiled.instant.size} plugins loaded=${loaded.length} dropped=${dropped.length} unplaced=${unreached.length} checkout=${checkoutField}` +
+    `config load ${layers.join(" < ") || "<default>"}: projections=${[...projectionsOf(config).keys()].join(",") || "-"} instantSegments=${instantSegments(compiled).join(",") || "-"} instantTemplates=${compiled.instant.size} plugins loaded=${loaded.length} pluginVariables=${pluginVariables} dropped=${dropped.length} unplaced=${unreached.length} checkout=${checkoutField}` +
     loaded.map((p) => ` +${p} data=${dataOf(p)}`).join("") +
     dropped.map((d) => ` -${d.path} (${d.reason})`).join("") +
     unreached.map((d) => ` ~${d.path} (${d.reason})`).join("")

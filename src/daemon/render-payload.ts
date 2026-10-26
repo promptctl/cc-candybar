@@ -100,6 +100,7 @@ import {
 } from "../config/globals-fields.js";
 import { dateOf, type Instant } from "../utils/instant.js";
 import type { RefreshFaults, RefreshLane } from "./refresh-faults.js";
+import type { SessionId } from "./session-id.js";
 
 // The resolved globals as the options renderDsl's joiner and cells read (its
 // selection is the resolution itself — RenderSelection is a Pick of it).
@@ -1237,8 +1238,11 @@ interface Lanes {
 }
 
 // What a view's declaration reads of the request its renders draw by: the
-// keys every keyed lane is read at.
-export type ViewFacts = Pick<PayloadInputs, "hookData" | "cwd" | "hints">;
+// keys every keyed lane is read at, and the session as the checkpoint parsed
+// it.
+export type ViewFacts = Pick<PayloadInputs, "hookData" | "cwd" | "hints"> & {
+  readonly sessionId: SessionId;
+};
 
 // The owners of the keyed lanes, which a declaration takes its holds in.
 export type KeyedOwners = Pick<
@@ -1288,10 +1292,15 @@ function gitAt(
 
 // The same session, anchors and environment memento's Stop hook resolves
 // with — the last two from the client, which runs where that hook does.
-function ceilingScopeOf({ hookData, cwd, hints }: ViewFacts): CeilingScope {
+function ceilingScopeOf({
+  sessionId,
+  hookData,
+  cwd,
+  hints,
+}: ViewFacts): CeilingScope {
   return ceilingScope(
     {
-      sessionId: hookData.session_id,
+      sessionId,
       projectDir: hookData.workspace?.project_dir ?? "",
       cwd: cwd ?? hookData.workspace?.current_dir ?? "",
     },

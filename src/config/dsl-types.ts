@@ -715,6 +715,19 @@ export function hasCacheField(v: VariableDecl): v is VariableDeclWithCache {
   return v.kind === "file" || v.kind === "shell";
 }
 
+// [LAW:one-source-of-truth] The templates a variable's declaration carries,
+// by field: a template variable's body and a source's cache key.
+export function variableTemplates(
+  v: VariableDecl,
+): ReadonlyArray<readonly [field: string, template: string]> {
+  return [
+    ...(v.kind === "template" ? [["template", v.template] as const] : []),
+    ...(hasCacheField(v) && "key" in v.cache
+      ? [["cache.key", v.cache.key] as const]
+      : []),
+  ];
+}
+
 export interface SegmentDecl {
   readonly template: string;
   // What this segment SHOWS, for an author choosing between them — authoring

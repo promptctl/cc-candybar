@@ -15,6 +15,7 @@ import { SOURCES_NOTHING, RenderCache } from "../src/daemon/cache/render";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { SessionState } from "../src/daemon/session-state";
 import { parseClientHints } from "../src/daemon/protocol";
+import { sessionIdOf } from "../src/daemon/session-id";
 import {
   declareLanes,
   type KeyedOwners,
@@ -118,6 +119,7 @@ test("a preset click that newly places the PR starts its lookup with no draw; sw
   cleanups.push(() => cache.close());
 
   const facts: ViewFacts = {
+    sessionId: sessionIdOf("s1"),
     hookData: {
       hook_event_name: "Status",
       session_id: "s1",
@@ -183,6 +185,7 @@ test("a lane whose declaration throws is reported, takes no hold, and stops no o
     usageStore: { declareToday: () => take("today") },
   } as unknown as KeyedOwners;
   const facts: ViewFacts = {
+    sessionId: sessionIdOf("s1"),
     hookData: {
       hook_event_name: "Status",
       session_id: "s1",

@@ -9,6 +9,7 @@
 import {
   describeSettingDomain,
   hasCacheField,
+  variableTemplates,
   inSettingDomain,
   rangeOf,
   settingOrderProblems,
@@ -758,13 +759,8 @@ function checkVarRefs(
   scope: TemplateScope,
   segCtx?: string,
 ): void {
-  if (v.kind === "template") {
-    checkTemplateRefs(ctx, `${declPath}.template`, v.template, scope, {
-      segCtx,
-    });
-  }
-  if (hasCacheField(v) && "key" in v.cache) {
-    checkTemplateRefs(ctx, `${declPath}.cache.key`, v.cache.key, scope, {
+  for (const [field, template] of variableTemplates(v)) {
+    checkTemplateRefs(ctx, `${declPath}.${field}`, template, scope, {
       segCtx,
     });
   }

@@ -33,6 +33,7 @@ import {
 import { SessionState } from "../src/daemon/session-state";
 import { parseClientHints } from "../src/daemon/protocol";
 import type { ViewFacts } from "../src/daemon/render-payload";
+import { sessionIdOf } from "../src/daemon/session-id";
 import type { Holds } from "../src/utils/holds";
 import { stateGate } from "../src/daemon/verbs/state-validators";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
@@ -1105,6 +1106,7 @@ describe("RenderCache idle sweep", () => {
       { budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES },
     );
     const request = (cwd: string): ViewFacts => ({
+      sessionId: sessionIdOf("s1"),
       hookData: {
         hook_event_name: "Status",
         session_id: "s1",

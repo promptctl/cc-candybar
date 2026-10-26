@@ -801,7 +801,8 @@ What the definition can say, and what follows from it:
   `{{ template "plugins.deploy.state" }}`. A plugin replaces, whole, any
   plugin of its name beneath it (a listed one replaces an installed one);
   listing one name twice is refused.
-- **The data is `.plugins.<plugin>.data`.** It is a `file` source with
+- **The data is `.plugins.<plugin>.data`.** `data` is optional; a
+  definition without it has no data variable. It is a `file` source with
   `parse: { json: true }`, watched: a rewrite redraws the bar, nothing is
   re-read per render. A data file that does not exist yet reads as no fields,
   so gate the segment with `when: '{{ hasKey .plugins.<plugin>.data "<field>" }}'`;
@@ -813,21 +814,44 @@ What the definition can say, and what follows from it:
   own, a session in no checkout reading from its working directory — so one
   installed definition shows each checkout's own data. The plugin lit
   installs reads lit's state this way.
-- **Only `data`, `segments`, `helpers` and `actions`.** A definition
-  declares no sources of its own (so loading one from a cloned repository runs
-  nothing) and never edits `root` — placing a segment is your choice. A
-  segment's `vars` may hold only `state` variables, for the same reason: a
-  `state` variable reads what the session's own clicks wrote, so a segment can
+- **`data`, `variables`, `segments`, `helpers` and `actions`, each
+  optional.** A definition never edits `root` — placing a segment is your
+  choice. Its `variables` are a config's `variables:`, every kind, checked the
+  same way, and named under the plugin: `greeting` is read as
+  `.plugins.<plugin>.greeting`. A segment's `vars` may be of any kind too; a
+  `state` one reads what the session's own clicks wrote, so a segment can
   open a detail row of its own (`{ kind: "state", key, default }` beside a
-  `{ set: key, cycle: [...] }` action, read as `.plugins.<plugin>.<segment>.<var>`),
-  and any other kind is a source. The `key` and the action's `set` are written
+  `{ set: key, cycle: [...] }` action, read as `.plugins.<plugin>.<segment>.<var>`).
+  A `state` variable's `key` and an action's `set` are written
   bare and meet under `plugins.<plugin>.` — a plugin's session keys are
   namespaced as its names are, so none can clash with the bar's or your file's.
+  No variable may be named `data`, the data file's name.
   The plugin name is one lowercase identifier.
 - **Merge order is bundled < installed plugins < listed plugins < your
   file**, so your file can
   retune a plugin's segment by its full name, one field at a time
   (`segments: { "plugins.deploy.status": { bg: "error" } }`).
+
+A plugin with no data file derives what it shows from variables of its own:
+
+```json5 file:hello/plugin.json5
+{
+  variables: {
+    model: { kind: "input", path: "model.display_name" },
+    greeting: { kind: "template", template: "hello, {{ .plugins.hello.model }}" },
+  },
+  segments: {
+    greeting: { template: "{{ .plugins.hello.greeting }}" },
+  },
+}
+```
+
+```json5 check:pass
+{
+  plugins: ["./hello/plugin.json5"],
+  root: { rows: { status: { h: ["model", "plugins.hello.greeting"] } } },
+}
+```
 
 A definition that does not load — a missing file, a syntax error, a field it
 may not declare, a template that does not parse or names something nothing
@@ -843,7 +867,7 @@ A definition is watched like your config file, so fixing or installing it
 reloads the bar:
 
 ```json file:broken/plugin.json5
-{ "data": "./state.json", "segments": {}, "variables": {} }
+{ "data": "./state.json", "segments": {}, "root": {} }
 ```
 
 ```json5 check:fail
@@ -853,7 +877,7 @@ reloads the bar:
 ```
 
 ```error
-was not loaded: a plugin definition may not declare "variables"
+was not loaded: a plugin definition may not declare "root"
 ```
 
 ### Installing a plugin instead of listing it

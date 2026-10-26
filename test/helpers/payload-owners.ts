@@ -13,6 +13,7 @@
 
 import type { Holds } from "../../src/utils/holds";
 import type { ClaudeHookData } from "../../src/utils/claude";
+import { sessionIdOf } from "../../src/daemon/session-id";
 import type { GitInfo, GitInfoOptions } from "../../src/segments/git";
 import type { TmuxHint } from "../../src/tmux-hint";
 import type { CeilingReading, CeilingScope } from "../../src/memento/edge";
@@ -298,7 +299,7 @@ export async function requestPayload(
   const { lanes } = declareLanes(
     deps as unknown as KeyedOwners,
     new HoldsClass(),
-    { hookData, cwd, hints },
+    { sessionId: sessionIdOf(hookData.session_id), hookData, cwd, hints },
     closure,
   );
   const inputs: PayloadInputs = {

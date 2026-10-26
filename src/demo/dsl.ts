@@ -43,6 +43,7 @@ import {
   settlePayload,
   todayOf,
 } from "../daemon/render-payload.js";
+import { sessionIdOf } from "../daemon/session-id.js";
 import { sessionSource } from "../daemon/session-source.js";
 import { SessionState } from "../daemon/session-state.js";
 import { EMPTY_HISTORY_DEPTH } from "../daemon/settings-history.js";
@@ -59,7 +60,7 @@ const FRAME_INTERVAL_MS = 450;
 const here = dirname(fileURLToPath(import.meta.url));
 const cwd = process.cwd();
 const configPath = resolve(process.argv[2] ?? join(here, "statusline.json5"));
-const sessionId = "demo0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b";
+const sessionId = sessionIdOf("demo0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b");
 
 // One Claude Code hook event, faked. A session that has never run has no
 // transcript, so the path names no file — a missing transcript is an empty
@@ -122,7 +123,7 @@ async function renderFrames(): Promise<void> {
     state,
     cwd,
     sessionId,
-    { hookData, cwd, hints },
+    { sessionId, hookData, cwd, hints },
     {
       sessionState,
       declare: (holds, facts, closure) =>
