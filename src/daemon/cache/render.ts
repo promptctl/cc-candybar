@@ -427,18 +427,29 @@ export interface Hold extends Disposable {
 
 // A render's hold on the session's view it draws through, and the state the
 // view is of — both released by the one `using`.
-export interface SessionHold<S extends ViewSource = ViewSource> extends Hold {
-  readonly view: SessionView<S>;
+export interface SessionHold<
+  S extends ViewSource = ViewSource,
+  F extends ViewFacts = ViewFacts,
+> extends Hold {
+  readonly view: SessionView<S, F>;
 }
 
+// What opened a view: a request, a reload's successor, or a click that moved
+// the session's origin (`follow`). Never a frame (`holdView`).
+export type ViewOpening = "request" | "reload" | "click";
+
 // Why a view stopped being served: its state did (reload, evict, close), its
-// session's latest render resolved to another entry (`moved`), or no render
-// read it across a whole sweep (`idle`).
+// session's latest render resolved to another entry (`moved`), or no request
+// read it across a whole sweep while no feed pinned its session (`idle`).
 export type ViewClose = Teardown["reason"] | "moved" | "idle";
 
-// A view's lifetime, as a state's (StateHold), and whether a render read it
-// since the last sweep.
+// A view's lifetime, as a state's (StateHold), the entry it opened over, and
+// whether a request read it since the last sweep.
 interface ViewHold {
+  // [LAW:one-source-of-truth] The entry whose state the view is of: an entry
+  // whose state changes or that is dropped retires its views first
+  // (`retire`), so a served view's entry is this one.
+  readonly entry: CacheEntry;
   holders: number;
   retired: { readonly reason: ViewClose; readonly held: number } | null;
   read: boolean;
@@ -456,6 +467,8 @@ export interface RenderCacheStats {
   readonly compiles: number;
   // Sessions' views served now: one per session at most.
   readonly views: number;
+  // Sessions an open feed pins (`pin`).
+  readonly pinned: number;
   // Views retired but not yet disposed because a render still holds one: as
   // `retired` is for states, climbing while `views` holds is a render that
   // never returned.
@@ -854,7 +867,10 @@ const VIEW_SCOPE: ReadonlySet<VarScope> = new Set(["view"]);
 // lifetime; renderDsl clears + repopulates it in place. A segment hidden by
 // `when` is absent from the map — its presence in the keys is the "this
 // segment rendered" signal.
-export interface SessionView<S extends ViewSource = ViewSource> {
+export interface SessionView<
+  S extends ViewSource = ViewSource,
+  F extends ViewFacts = ViewFacts,
+> {
   readonly sessionId: SessionId;
   readonly state: DslRenderState;
   readonly store: VariableStore;
@@ -862,10 +878,10 @@ export interface SessionView<S extends ViewSource = ViewSource> {
   readonly holds: Holds;
   // The request the view's renders draw by — the keys its declaration takes
   // its holds at. A render of the same request changes nothing.
-  requested(facts: ViewFacts): void;
+  requested(facts: F): void;
   // The request the view draws by now: the one it opened with, or a later
   // one `requested` named.
-  facts(): ViewFacts;
+  facts(): F;
   // The lanes the view's latest declaration handed it: what its draws read
   // of the daemon's shared entries.
   lanes(): DeclaredLanes;
@@ -908,8 +924,8 @@ export const DECLARES_NOTHING: Declare = (
 // lanes that declaration handed it — one record, written whole by each
 // declaration, so a reader never joins one declaration's facts to another's
 // lanes.
-export interface ViewDeclared {
-  readonly facts: ViewFacts;
+export interface ViewDeclared<F extends ViewFacts = ViewFacts> {
+  readonly facts: F;
   readonly preset: string;
   readonly lanes: DeclaredLanes;
 }
@@ -963,12 +979,12 @@ export interface ViewDeclaring<S extends ViewSource = ViewSource> {
 // [LAW:types-are-the-program] A view is never undeclared (step 4): it opens
 // with the request it is drawn for and declares in its opening turn, so its
 // lanes always hold its latest declaration's.
-export function openView<S extends ViewSource>(
+export function openView<S extends ViewSource, F extends ViewFacts>(
   state: DslRenderState,
   cwd: string,
-  facts: ViewFacts,
+  facts: F,
   { sessionState, declare, source: sourceOf, changed, log }: ViewDeclaring<S>,
-): SessionView<S> {
+): SessionView<S, F> {
   // [LAW:one-source-of-truth] The session is the one the request's checkpoint
   // parsed: a later request of the view's names the same one.
   const { sessionId } = facts;
@@ -1027,7 +1043,7 @@ export function openView<S extends ViewSource>(
   // [LAW:one-source-of-truth] The view's one record of what it is declared
   // for, and the lanes that declaration handed it (ViewDeclared): observable,
   // so the view's payload is derived again in the turn a declaration lands.
-  const declaration = (facts: ViewFacts, preset: string): ViewDeclared => ({
+  const declaration = (facts: F, preset: string): ViewDeclared<F> => ({
     facts,
     preset,
     lanes: lanesFor(facts, preset),
@@ -1036,7 +1052,7 @@ export function openView<S extends ViewSource>(
     deep: false,
   });
   // [LAW:single-enforcer] A (request, preset) pair is declared once.
-  const redeclare = (facts: ViewFacts, preset: string): void => {
+  const redeclare = (facts: F, preset: string): void => {
     const now = declared.get();
     if (facts === now.facts && preset === now.preset) return;
     const next = declaration(facts, preset);
@@ -1115,13 +1131,17 @@ export function openView<S extends ViewSource>(
 
 // [LAW:no-ambient-temporal-coupling] The cache's one timer, armed by the first
 // render and stopped with the last entry: every interval it closes each view
-// no render read since the interval before, which releases the view's holds,
-// so an owner's period stops visiting a repo, pane or memento reading 2.5 to 5
-// minutes after the session's last render. A view still drawn holds what its
-// declaration takes (openView), and a period resumed after a gap reads at once.
+// no request read since the interval before and no open feed pins, which
+// releases the view's holds, so an owner's period stops visiting a repo, pane
+// or memento reading 2.5 to 5 minutes after the session's last request. A view
+// still drawn holds what its declaration takes (openView), and a period
+// resumed after a gap reads at once.
 export const HOLD_SWEEP_MS = 150_000;
 
-export class RenderCache<S extends ViewSource = ViewSource> {
+export class RenderCache<
+  S extends ViewSource = ViewSource,
+  F extends ViewFacts = ViewFacts,
+> {
   private readonly entries = new Map<string, CacheEntry>();
   private sweep: ReturnType<typeof setInterval> | null = null;
   private closed = false;
@@ -1129,9 +1149,23 @@ export class RenderCache<S extends ViewSource = ViewSource> {
   private readonly holds = new Map<DslRenderState, StateHold>();
   // [LAW:one-source-of-truth] Each session's ONE view: of the entry its latest
   // render resolved to. A render from another entry replaces it.
-  private readonly views = new Map<string, SessionView<S>>();
+  private readonly views = new Map<string, SessionView<S, F>>();
   // Every view the cache serves or served, until reclaimed.
-  private readonly viewHolds = new Map<SessionView<S>, ViewHold>();
+  private readonly viewHolds = new Map<SessionView<S, F>, ViewHold>();
+  // [LAW:no-ambient-temporal-coupling] The sessions an open feed draws, by
+  // how many pins each holds: their views are never closed idle and their
+  // entries never evicted (`fit`), for as long as the feed is open — the fact
+  // itself, not frames happening to read the view within each sweep.
+  private readonly pins = new Map<string, number>();
+  // [LAW:no-silent-failure] Each session whose view last failed to open, by
+  // the error and the request the opening was for, until a view opens for
+  // it: a frame draws that error, never the last bar it pushed, and a click
+  // that moves the origin retries by that request (`follow`). Written only by
+  // `opened`, which sets either this or the session's view, never both.
+  private readonly openFailures = new Map<
+    string,
+    { readonly error: unknown; readonly facts: F }
+  >();
   // [LAW:one-source-of-truth] One compile per compile key, shared by every
   // state carrying that key, and dropped with the last of them (reclaim).
   private readonly compiles = new Map<string, CompiledConfig>();
@@ -1250,7 +1284,11 @@ export class RenderCache<S extends ViewSource = ViewSource> {
   // every exit, a throw included.
   hold(projectDir: string, cwd: string, configFile: string | undefined): Hold {
     const entry = this.getOrCreate(projectDir, cwd, configFile);
-    const { state } = entry;
+    return this.holdState(entry, entry.state);
+  }
+
+  // The hold on `entry`'s state that `hold` and `holdView` hand out.
+  private holdState(entry: CacheEntry, state: DslRenderState): Hold {
     const hold = this.holdOf(state);
     hold.holders++;
     this.armSweep();
@@ -1281,13 +1319,13 @@ export class RenderCache<S extends ViewSource = ViewSource> {
     projectDir: string,
     cwd: string,
     configFile: string | undefined,
-    facts: ViewFacts,
-  ): SessionHold<S> {
+    facts: F,
+  ): SessionHold<S, F> {
     const held = this.hold(projectDir, cwd, configFile);
-    let view: SessionView<S>;
+    let view: SessionView<S, F>;
     let lease: ViewHold;
     try {
-      view = this.viewOf(held.entry, held.state, facts);
+      view = this.viewOf(held.entry, held.state, facts, "request");
       lease = this.leaseOf(view);
     } catch (err) {
       // [LAW:no-ambient-temporal-coupling] The state hold is this call's
@@ -1296,8 +1334,37 @@ export class RenderCache<S extends ViewSource = ViewSource> {
       held[Symbol.dispose]();
       throw err;
     }
-    lease.holders++;
     lease.read = true;
+    return this.holdViewOf(held, view, lease);
+  }
+
+  // [LAW:single-enforcer] A frame's door: the session's current view, held
+  // for its synchronous draw as `holdSession` holds one, or none. It creates
+  // nothing — no entry, no view, no declaration — so a frame performs no I/O
+  // (brandon-unfiled-3248.8ro6, 5a); only an event opens a view
+  // (ViewOpening). A frame is no request, so it leaves the view's `read`
+  // alone: an open feed keeps its view by its pin.
+  holdView(sessionId: string): SessionHold<S, F> | null {
+    const view = this.views.get(sessionId);
+    if (view === undefined) return null;
+    // Taken before the state hold, so a throw leaves nothing held.
+    const lease = this.leaseOf(view);
+    // [LAW:one-source-of-truth] The state held is the one the view is of.
+    return this.holdViewOf(
+      this.holdState(lease.entry, view.state),
+      view,
+      lease,
+    );
+  }
+
+  // `held` with `lease` on `view` beside it, both released by the one
+  // `using`. Nothing in it throws, so `held` is never stranded.
+  private holdViewOf(
+    held: Hold,
+    view: SessionView<S, F>,
+    lease: ViewHold,
+  ): SessionHold<S, F> {
+    lease.holders++;
     let released = false;
     return {
       entry: held.entry,
@@ -1313,20 +1380,69 @@ export class RenderCache<S extends ViewSource = ViewSource> {
     };
   }
 
+  // Why the session has no view, when its last opening threw: what a frame
+  // draws in place of the view `holdView` found none of.
+  openFailure(sessionId: string): { readonly error: unknown } | null {
+    return this.openFailures.get(sessionId) ?? null;
+  }
+
+  // [LAW:single-enforcer] A click that moved the session's origin — a
+  // load-config pick, or a history step restoring one — moves its view to the
+  // origin's entry, declared with the request the view draws by, as a
+  // request from there would (`journaled`, src/daemon/verbs/index.ts). A
+  // session whose last opening failed opens by the request that opening was
+  // for, so a pick that fixes it shows with no request after it. A session
+  // with neither has nothing to move: no feed draws it, and its next request
+  // opens one. A click that left the origin alone finds the view already on
+  // its entry and changes nothing, its use order included, so the latest
+  // rendered session stays the one that rendered.
+  follow(
+    sessionId: string,
+    projectDir: string,
+    cwd: string,
+    configFile: string | undefined,
+  ): void {
+    const current = this.views.get(sessionId);
+    // Read before the hold: building the origin's entry may evict the one
+    // the current view is of, which retires the view.
+    const facts = current?.facts() ?? this.openFailures.get(sessionId)?.facts;
+    if (facts === undefined) return;
+    const origin = this.entries.get(cacheKey(projectDir, cwd, configFile));
+    if (current !== undefined && origin?.state === current.state) return;
+    using held = this.hold(projectDir, cwd, configFile);
+    this.viewOf(held.entry, held.state, facts, "click");
+  }
+
+  // [LAW:no-ambient-temporal-coupling] An open feed's pin on its session,
+  // from the feed's open to its close (src/daemon/frame-feed.ts). Keyed by
+  // session, so it follows the view wherever a request, a reload or a click
+  // moves it.
+  pin(sessionId: string): () => void {
+    this.pins.set(sessionId, (this.pins.get(sessionId) ?? 0) + 1);
+    let released = false;
+    return () => {
+      if (released) throw new Error("render-cache pin released twice");
+      released = true;
+      const left = (this.pins.get(sessionId) ?? 0) - 1;
+      if (left > 0) this.pins.set(sessionId, left);
+      else this.pins.delete(sessionId);
+    };
+  }
+
   // The session's view of `state`: the one it has, or a new one replacing it.
   private viewOf(
     entry: CacheEntry,
     state: DslRenderState,
-    facts: ViewFacts,
-  ): SessionView<S> {
+    facts: F,
+    by: ViewOpening,
+  ): SessionView<S, F> {
     const { sessionId } = facts;
     const current = this.views.get(sessionId);
     if (current?.state === state) {
       // Move to end (most recently used), as getOrCreate does an entry.
       this.views.delete(sessionId);
       this.views.set(sessionId, current);
-      // A request declares again before its refresh; a frame's facts, the
-      // session's latest request, are already declared and change nothing.
+      // A request declares again before its refresh.
       current.requested(facts);
       return current;
     }
@@ -1336,10 +1452,14 @@ export class RenderCache<S extends ViewSource = ViewSource> {
     // end, the most recently used, as a kept view moves there.
     // The old view is retired whether or not the new one opens: the session's
     // render resolved to another entry either way.
+    // The successor is the session's view going on, as a reload's is: a
+    // session no request read since the last sweep is still closed by the
+    // next.
     this.views.delete(sessionId);
-    let view: SessionView<S>;
+    const read = current !== undefined && this.leaseOf(current).read;
+    let view: SessionView<S, F>;
     try {
-      view = this.opened(entry, state, facts, false);
+      view = this.opened(entry, state, facts, read, by);
     } finally {
       if (current !== undefined) this.retireView(current, "moved");
     }
@@ -1355,27 +1475,35 @@ export class RenderCache<S extends ViewSource = ViewSource> {
   private opened(
     entry: CacheEntry,
     state: DslRenderState,
-    facts: ViewFacts,
+    facts: F,
     read: boolean,
-  ): SessionView<S> {
+    by: ViewOpening,
+  ): SessionView<S, F> {
     const { sessionId } = facts;
-    const view = openView(state, entry.cwd, facts, {
-      sessionState: this.deps.sessionState,
-      declare: this.deps.declare,
-      source: this.deps.source,
-      changed: (sid) => this.observers.onViewChanged?.(sid),
-      log: this.log,
-    });
+    let view: SessionView<S, F>;
+    try {
+      view = openView(state, entry.cwd, facts, {
+        sessionState: this.deps.sessionState,
+        declare: this.deps.declare,
+        source: this.deps.source,
+        changed: (sid) => this.observers.onViewChanged?.(sid),
+        log: this.log,
+      });
+    } catch (error) {
+      this.openFailures.set(sessionId, { error, facts });
+      throw error;
+    }
+    this.openFailures.delete(sessionId);
     this.views.set(sessionId, view);
-    this.viewHolds.set(view, { holders: 0, retired: null, read });
+    this.viewHolds.set(view, { entry, holders: 0, retired: null, read });
     this.log(
       "info",
-      `session view opened sid=${JSON.stringify(sessionId)} cwd=${entry.cwd} views=${this.views.size}`,
+      `session view opened sid=${JSON.stringify(sessionId)} by=${by} cwd=${entry.cwd} views=${this.views.size}`,
     );
     return view;
   }
 
-  private leaseOf(view: SessionView<S>): ViewHold {
+  private leaseOf(view: SessionView<S, F>): ViewHold {
     const lease = this.viewHolds.get(view);
     // [LAW:no-silent-failure] As holdOf: every view handed out was entered.
     if (lease === undefined) throw new Error("render-cache view never served");
@@ -1384,7 +1512,7 @@ export class RenderCache<S extends ViewSource = ViewSource> {
 
   // The cache stopped serving `view`; its teardown is due now, or when the
   // last render holding it returns.
-  private retireView(view: SessionView<S>, reason: ViewClose): void {
+  private retireView(view: SessionView<S, F>, reason: ViewClose): void {
     if (this.views.get(view.sessionId) === view)
       this.views.delete(view.sessionId);
     view.retire();
@@ -1394,7 +1522,7 @@ export class RenderCache<S extends ViewSource = ViewSource> {
   }
 
   // [LAW:single-enforcer] The one place a view is disposed: retired and unheld.
-  private reclaimView(view: SessionView<S>, lease: ViewHold): void {
+  private reclaimView(view: SessionView<S, F>, lease: ViewHold): void {
     if (lease.retired === null || lease.holders > 0) return;
     this.viewHolds.delete(view);
     this.log(
@@ -1411,13 +1539,18 @@ export class RenderCache<S extends ViewSource = ViewSource> {
 
   // One sweep. Public so a test can run it at an instant it chose.
   releaseIdle(): void {
-    // A view no render read across the whole interval is closed: its session
-    // ended, or draws from another daemon's bar no more.
+    // A view no request read across the whole interval, whose session no
+    // open feed pins, is closed: its session ended, or draws from another
+    // daemon's bar no more.
     for (const [view, lease] of this.viewHolds) {
-      if (lease.retired !== null) continue;
+      if (lease.retired !== null || this.pins.has(view.sessionId)) continue;
       if (lease.read) lease.read = false;
       else this.retireView(view, "idle");
     }
+    // A failure no open feed shows has no frame to draw it in: the session's
+    // next request reports its own.
+    for (const sessionId of this.openFailures.keys())
+      if (!this.pins.has(sessionId)) this.openFailures.delete(sessionId);
     if (this.entries.size === 0 && this.sweep !== null) {
       clearInterval(this.sweep);
       this.sweep = null;
@@ -1486,6 +1619,7 @@ export class RenderCache<S extends ViewSource = ViewSource> {
       retired,
       compiles: this.compiles.size,
       views: this.views.size,
+      pinned: this.pins.size,
       retiredViews,
       accountedBytes: this.accountedBytes(),
       budgetBytes: this.budgetBytes(),
@@ -1501,17 +1635,26 @@ export class RenderCache<S extends ViewSource = ViewSource> {
     const fits = (): boolean =>
       this.entries.size <= this.maxEntries &&
       this.accountedBytes() <= this.budgetBytes();
+    // [LAW:no-ambient-temporal-coupling] An entry a pinned session's view is
+    // of is drawn by an open feed, which a frame never rebuilds (`holdView`).
+    const pinned = new Set(
+      [...this.pins.keys()].flatMap((sessionId) => {
+        const view = this.views.get(sessionId);
+        return view === undefined ? [] : [view.state];
+      }),
+    );
     for (const [key, evicted] of this.entries) {
       if (fits()) return;
-      if (evicted === served) continue;
+      if (evicted === served || pinned.has(evicted.state)) continue;
       this.drop(key, evicted, "evict");
     }
-    // [LAW:no-silent-failure] Nothing left to evict: the entry served and its
-    // sessions' views alone exceed the budget.
+    // [LAW:no-silent-failure] Nothing left to evict: the entry served, the
+    // entries open feeds draw, and their sessions' views alone exceed the
+    // budget.
     if (!fits())
       this.log(
         "warn",
-        `render-cache over budget entries=${this.entries.size} views=${this.views.size} accounted=${mb(this.accountedBytes())}/${mb(this.budgetBytes())}MB`,
+        `render-cache over budget entries=${this.entries.size} views=${this.views.size} pinned=${pinned.size} accounted=${mb(this.accountedBytes())}/${mb(this.budgetBytes())}MB`,
       );
   }
 
@@ -1574,6 +1717,7 @@ export class RenderCache<S extends ViewSource = ViewSource> {
             successor.state,
             view.facts(),
             this.leaseOf(view).read,
+            "reload",
           );
         } catch (e) {
           this.log(
@@ -1713,7 +1857,7 @@ export class RenderCache<S extends ViewSource = ViewSource> {
   // The most recently rendered session's, since `views` is kept in use order.
   // Null while no session's view is open; debug responses are empty in that
   // case by construction.
-  latestView(): SessionView<S> | null {
+  latestView(): SessionView<S, F> | null {
     return [...this.views.values()].at(-1) ?? null;
   }
 }

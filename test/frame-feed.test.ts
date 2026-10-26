@@ -42,7 +42,9 @@ type Motion = "moving" | "unseen" | "still";
 // A feed over a render whose bar moves as `motion` says, every frame a new
 // one while it does. `renders` counts the renders, `changes` the watches'
 // change callbacks, by session. `note` notes a request and wakes its feed, as
-// the daemon's view of the session does when the request is declared.
+// the daemon's view of the session does when the request is declared. The
+// session's view is its latest noted request: a session with none has no view
+// to draw, and its frames wait. `pins` counts each session's pins.
 // `duringRender` runs inside a render, as a write that wakes the feed while
 // it draws would.
 function harness(opts: { motion: Motion; renderMs?: number; fails?: boolean }) {
@@ -68,6 +70,7 @@ function harness(opts: { motion: Motion; renderMs?: number; fails?: boolean }) {
     handoff: null as string | null,
     // Runs inside the next render, once.
     duringRender: null as (() => void) | null,
+    pins: new Map<string, number>(),
   };
   const frameOf = (req: string): FeedFrame =>
     opts.fails === true
@@ -79,8 +82,10 @@ function harness(opts: { motion: Motion; renderMs?: number; fails?: boolean }) {
         );
   const changes = new Map<string, () => void>();
   const log: string[] = [];
-  const feeds = new FrameFeeds<string>({
-    render: (req, fps): FeedFrame => {
+  const feeds: FrameFeeds<string> = new FrameFeeds<string>({
+    render: (sessionId, fps): FeedFrame | null => {
+      const req = feeds.latest(sessionId);
+      if (req === null) return null;
       state.renders++;
       state.rates.push(fps);
       if (opts.renderMs !== undefined) block(opts.renderMs);
@@ -89,9 +94,17 @@ function harness(opts: { motion: Motion; renderMs?: number; fails?: boolean }) {
       during?.();
       return frameOf(req);
     },
-    lanes: () => {
+    lanes: (sessionId) => {
       if (state.gateThrows) throw new Error("the gate broke");
-      return state.lanes;
+      return feeds.latest(sessionId) === null ? null : state.lanes;
+    },
+    pin: (sessionId) => {
+      state.pins.set(sessionId, (state.pins.get(sessionId) ?? 0) + 1);
+      return () => {
+        const left = (state.pins.get(sessionId) ?? 0) - 1;
+        if (left > 0) state.pins.set(sessionId, left);
+        else state.pins.delete(sessionId);
+      };
     },
     shown: () => state.motion !== "unseen",
     watching: () => {
@@ -291,7 +304,7 @@ test("the last subscriber leaving stops the feed and logs what it drew", async (
   expect(changes.has("s")).toBe(false);
   expect(feeds.getStats()).toMatchObject({ feeds: 0, subscribers: 0 });
   expect(log.at(-1)).toMatch(
-    /^feed sid="s" closed subscribers=0 .* drawn=(\d+) noted=0 moving=\1 unseen=0 failed=0 pushed=\d+/,
+    /^feed sid="s" closed subscribers=0 .* drawn=(\d+) noted=0 noView=0 moving=\1 unseen=0 failed=0 pushed=\d+/,
   );
   // A request noted for a session nobody watches draws nothing.
   note("s", "again");
@@ -307,7 +320,7 @@ test("a bar that moves where nobody can see it is drawn at the still rate, and i
   close();
   // Drawn at 0 and 400 ms: the still period, not the 20 ms a moving bar gets.
   expect(state.renders).toBe(2);
-  expect(log.at(-1)).toMatch(/ drawn=2 noted=0 moving=0 unseen=2 failed=0 /);
+  expect(log.at(-1)).toMatch(/ drawn=2 noted=0 noView=0 moving=0 unseen=2 failed=0 /);
 });
 
 test("a noted request is drawn at once, and the next frame falls due a period after that one", async () => {
@@ -321,7 +334,7 @@ test("a noted request is drawn at once, and the next frame falls due a period af
   close();
   expect(state.renders).toBe(1);
   expect(got).toEqual(["bar#0"]);
-  expect(log.at(-1)).toMatch(/ drawn=1 noted=1 moving=0 unseen=0 failed=0 pushed=1 /);
+  expect(log.at(-1)).toMatch(/ drawn=1 noted=1 noView=0 moving=0 unseen=0 failed=0 pushed=1 /);
 });
 
 test("a request that arrived before the one held is not the session's data, however late its render finishes", async () => {
@@ -480,14 +493,33 @@ describe("on a faked clock", () => {
     );
   });
 
-  // A feed opened before the session's first request has no timer: noting
-  // the request sets its first frame, whether or not anything else wakes it.
-  test("a feed waiting for its first request draws once one is noted", async () => {
-    const { feeds, state } = harness({ motion: "still" });
+  // A feed whose session has no view has no timer: a frame opens no view,
+  // so it waits for the event that does. Noting a request wakes nothing; the
+  // view the request opens says so (the harness's `note`), and that draws.
+  test("a feed waiting for a view draws once the view that opens wakes it", async () => {
+    const { feeds, note, state, log } = harness({ motion: "still" });
     const close = feeds.subscribe("s", sub(() => {}));
     await pass(PERIODS.still * 2);
     expect(state.renders).toBe(0);
     feeds.note("s", "bar", 1);
+    await pass(PERIODS.still * 2);
+    expect(state.renders).toBe(0);
+    note("s", "bar", 2);
+    await pass(1);
+    close();
+    expect(state.renders).toBe(1);
+    // The one frame due before any view found none, and waited.
+    expect(log.at(-1)).toContain(" noView=1 ");
+  });
+
+  // A draw that found no view drew nothing, so it spaces nothing: an unseen
+  // feed's first frame is not held a still period behind it.
+  test("the frame a view's opening wakes is drawn at once, not spaced from a draw that found no view", async () => {
+    const { feeds, note, state } = harness({ motion: "unseen" });
+    const close = feeds.subscribe("s", sub(() => {}));
+    await pass(PERIODS.still / 8);
+    expect(state.renders).toBe(0);
+    note("s", "bar");
     await pass(1);
     close();
     expect(state.renders).toBe(1);
@@ -592,8 +624,8 @@ describe("a subscription's lane", () => {
     expect(feeds.getStats()).toMatchObject({ feeds: 1, subscribers: 1, refused: 1 });
     // Each subscribe names its lane; the running summary names the lanes still
     // subscribed when it is written.
-    expect(log).toContain('feed sid="s" subscribed lane=band subscribers=1 data=Y');
-    expect(log).toContain('feed sid="s" subscribed lane=pane subscribers=2 data=Y');
+    expect(log).toContain('feed sid="s" subscribed lane=band subscribers=1 view=Y');
+    expect(log).toContain('feed sid="s" subscribed lane=pane subscribers=2 view=Y');
     state.skewMs = 60_000;
     changes.get("s")!();
     await sleep(30);

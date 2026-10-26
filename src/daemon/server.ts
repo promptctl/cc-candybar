@@ -73,6 +73,7 @@ import {
   renderCacheBudget,
   type CacheEntry,
   type DslRenderState,
+  type SessionHold,
   type SessionView,
 } from "./cache/render";
 import { WatcherRegistry } from "./cache/watchers";
@@ -343,13 +344,14 @@ const tmuxStatusLines: TmuxStatusLines = new TmuxStatusLines({
 // (candybar-animation-wbxz.jmm.usl). A change to the session's own state — a
 // click — brings its next frame forward.
 const frameFeeds: FrameFeeds<CheckedRenderRequest> = new FrameFeeds({
-  render: (req, fps) => renderFrame(req, fps),
+  render: (sessionId, fps) => renderFrame(sessionId, fps),
   // [LAW:no-ambient-temporal-coupling] A wake only moves the feed's timer,
   // which fires in a later turn, so a click's whole run of writes and its
   // journal commit land before a frame of it is drawn.
   watch: (sessionId, onChange) =>
     reaction(() => sessionState.revision(sessionId), onChange),
-  lanes: (req) => lanesOf(req),
+  lanes: (sessionId) => viewLanes(sessionId),
+  pin: (sessionId) => renderCache.pin(sessionId),
   shown: (req) => paneVisibility.shown(req.hints.tmux),
   watching: () => paneVisibility.follow(),
   periods: FEED_PERIODS,
@@ -401,7 +403,7 @@ function tmuxServersOf({
 const diagnosticDump = new DiagnosticDump(diagnosticsDir(), (sessionId) =>
   frameFeeds.wake(sessionId, "data"),
 );
-const renderCache = new RenderCache<SessionSource>(
+const renderCache = new RenderCache<SessionSource, CheckedRenderRequest>(
   {
     sessionState,
     watchers: watcherRegistry,
@@ -1654,6 +1656,15 @@ const verbCtx = {
   links: linkSigner,
   runs,
   lanes: { of: lanesAt, clicked: laneClicked },
+  views: {
+    follow: (sessionId: string, origin: RenderOrigin) =>
+      renderCache.follow(
+        sessionId,
+        origin.projectDir,
+        origin.cwd,
+        origin.configFile ?? undefined,
+      ),
+  },
 };
 
 /**
@@ -1782,20 +1793,23 @@ function statusLineClick(value: string): Response {
 // One frame of a subscribed session, drawn from its latest request at this
 // instant, by the render a request gets. The response is the one that request
 // would be answered with, and the bar moves when its effects say it does.
-// [LAW:parse-dont-validate] The request crossed the checkpoint when it was
-// noted, so a frame renders it without asking again.
+// [LAW:parse-dont-validate] The request the session's view is declared with
+// crossed the checkpoint when it arrived, so a frame draws by it without
+// asking again. Null while the session has no view: a frame opens none.
 // [LAW:nothing-unseen] A frame that throws carries the render event a throwing
 // request writes, for the feed to log when that failure is first pushed; the
 // feed summarizes the frames that render.
 // [LAW:effects-at-boundaries] Synchronous by type: a frame reads every value
 // as its owner stored it (the view's payload), so it performs no I/O and
-// refreshes no source — the request it is drawn from made those refreshes.
-function renderFrame(req: CheckedRenderRequest, fps: number): FeedFrame {
+// refreshes no source — the request it is drawn from made those refreshes,
+// and an event, never a frame, opened the view it draws.
+function renderFrame(sessionId: string, fps: number): FeedFrame | null {
   const started = new Date();
   const at = instantOf(started);
   const facts: RenderFacts = [];
   try {
-    using setup = setUpRender(req, at, facts);
+    using setup = setUpFrame(sessionId, at, facts);
+    if (setup === null) return null;
     const { drawn, motion, evaluated, lanes } = drawRender(setup, {
       by: "feed",
       fps,
@@ -1803,8 +1817,7 @@ function renderFrame(req: CheckedRenderRequest, fps: number): FeedFrame {
     // [LAW:effects-at-boundaries] A frame only draws: the dump is the
     // session's requests' to write, and the frame links it only when it holds
     // this frame's text.
-    const link = diagnosticDump.linkFor(req.sessionId, dumpTextOf(drawn));
-    const sessionId = req.sessionId;
+    const link = diagnosticDump.linkFor(sessionId, dumpTextOf(drawn));
     const output = composeBar(drawn, link);
     return {
       at,
@@ -1859,15 +1872,12 @@ function sessionGlobals(
   );
 }
 
-// The lanes the settings of the session `req` is from switch on now: its
-// config, as the render cache holds it for the inputs the request named, under
-// its session's picks.
-function lanesOf(req: CheckedRenderRequest): LaneSwitches {
-  const sessionId = req.sessionId;
-  return lanesAt(
-    sessionRenderOrigin(req.requested, sessionState, sessionId),
-    sessionId,
-  );
+// The lanes the session's settings switch on now, as its view draws them, or
+// null while it has no view: a pure read of the view a frame finds, which
+// opens nothing (`holdView`).
+function viewLanes(sessionId: string): LaneSwitches | null {
+  using hold = renderCache.holdView(sessionId);
+  return hold === null ? null : laneSwitches(hold.view.source.effective());
 }
 
 // The lanes `sessionId`'s settings switch on over the config `origin`
@@ -2020,16 +2030,17 @@ interface RenderSetup extends Disposable {
   readonly payloadInputs: PayloadInputs;
 }
 
-function setUpRender(
+// What a render notes of the request it draws by, and the strip's line for
+// the hints that request refused.
+function requestFacts(
   req: CheckedRenderRequest,
   at: Instant,
   facts: RenderFacts,
-): RenderSetup {
+): string | null {
   noteFacts(facts, {
     sid: req.sessionId,
     at: at.toFixed(3),
   });
-  const sessionId = req.sessionId;
   // [LAW:parse-dont-validate] The ONE checkpoint for everything the client
   // observed and the daemon cannot. Raw `req.*` hint fields are not read
   // past this line; `hints` is the stamped type the render path consumes.
@@ -2054,6 +2065,16 @@ function setUpRender(
     // doctor's segment-data check reads (RenderSightings).
     rateLimits: req.rateLimits,
   });
+  return hintsError;
+}
+
+function setUpRender(
+  req: CheckedRenderRequest,
+  at: Instant,
+  facts: RenderFacts,
+): RenderSetup {
+  const sessionId = req.sessionId;
+  const hintsError = requestFacts(req, at, facts);
   // [LAW:one-source-of-truth] The explicit config path has three
   // spellings and ONE precedence: a load-config pick (sessionRenderOrigin)
   // over the `--config` flag over the client's `CC_CANDYBAR_CONFIG` hint
@@ -2074,8 +2095,48 @@ function setUpRender(
     origin.configFile ?? undefined,
     req,
   );
+  return setUpDraw(hold, req, hintsError, at, facts);
+}
+
+// [LAW:effects-at-boundaries] A frame's setup: the session's view as it finds
+// it, drawn by the request the view is declared with, or null while the
+// session has no view. It opens nothing (`holdView`).
+function setUpFrame(
+  sessionId: string,
+  at: Instant,
+  facts: RenderFacts,
+): RenderSetup | null {
+  const hold = renderCache.holdView(sessionId);
+  if (hold === null) {
+    // [LAW:no-silent-failure] A view that failed to open draws its error, as
+    // the render that threw it did, never the last bar the feed pushed.
+    const failed = renderCache.openFailure(sessionId);
+    if (failed !== null) throw failed.error;
+    return null;
+  }
+  const req = hold.view.facts();
+  let hintsError: string | null;
+  try {
+    hintsError = requestFacts(req, at, facts);
+  } catch (e) {
+    hold[Symbol.dispose]();
+    throw e;
+  }
+  return setUpDraw(hold, req, hintsError, at, facts);
+}
+
+// The setup over a held view, which owns the hold from here: a throw before
+// it is returned releases it.
+function setUpDraw(
+  hold: SessionHold<SessionSource, CheckedRenderRequest>,
+  req: CheckedRenderRequest,
+  hintsError: string | null,
+  at: Instant,
+  facts: RenderFacts,
+): RenderSetup {
   try {
     const { entry, state, view } = hold;
+    const { sessionId, hints } = req;
     // [LAW:dataflow-not-control-flow] One composition every render: the
     // entry always holds a renderable state (the bundled default until a
     // config loads — src/daemon/cache/render.ts), so body = drawDsl(state)

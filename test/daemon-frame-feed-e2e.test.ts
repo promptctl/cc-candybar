@@ -390,6 +390,46 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     expect(await closedSummary(sid)).toMatch(/,reload:[1-9]\d*,/u);
   });
 
+  // brandon-unfiled-3248.8ro6 §5: a frame opens no view. A load-config pick
+  // moves the session's view itself, after its commit, so a feed drawing the
+  // session shows the picked config with no request after the click — and
+  // clearing the pick moves it back.
+  test("a load-config pick under an open feed is pushed with no request after it, and the click opened the view", async () => {
+    const sid = "feed-load-config";
+    const picked = path.join(projectDir, "picked.json5");
+    writeFileSync(
+      picked,
+      `{ globals: { experimentalStatusline: true }, segments: { mark: { template: 'the picked mark' } }, root: { h: ['mark'] } }`,
+    );
+    await render(sockPath, sid, projectDir, {}, args("still"));
+    const pick = (file: string): Promise<void> =>
+      click(
+        sockPath,
+        `cc-candybar://${VERB_LOAD_CONFIG}/${encodeURIComponent(sid)}/${encodeURIComponent(file)}`,
+      );
+    const frames = await framesOf(sid, async ({ received, waitFor }) => {
+      await waitFor(() => received.length > 0, "the bar before the pick");
+      await pick(picked);
+      await waitFor(
+        () => outputs(received).some((o) => stripAnsi(o).includes("the picked mark")),
+        "the picked bar",
+      );
+      await pick("");
+      await waitFor(
+        () => stripAnsi(outputs(received).at(-1)!).includes("a still mark"),
+        "the bar the request named, once the pick is cleared",
+      );
+    });
+    const shown = outputs(frames).map(stripAnsi);
+    expect(shown[0]).toContain("a still mark");
+    expect(shown.some((text) => text.includes("the picked mark"))).toBe(true);
+    const opened = readFileSync(daemonLog, "utf8")
+      .split("\n")
+      .filter((l) => l.includes(`session view opened sid=${JSON.stringify(sid)} `))
+      .map((l) => / by=(\w+) /.exec(l)?.[1]);
+    expect(opened).toEqual(["request", "click", "click"]);
+  });
+
   test("a subscriber that arrives before the session's first render receives it", async () => {
     const frames = await framesOf("feed-early", async ({ received, waitFor }) => {
       await sleep(200);

@@ -30,6 +30,7 @@ import {
   openView,
   ENTRY_BYTES,
   COMPILE_BYTES,
+  VIEW_BYTES,
 } from "../src/daemon/cache/render";
 import { SessionState } from "../src/daemon/session-state";
 import { parseClientHints } from "../src/daemon/protocol";
@@ -1177,6 +1178,255 @@ describe("RenderCache idle sweep", () => {
       cache.close();
       watchers.closeAll();
       cleanup();
+    }
+  });
+});
+
+// [LAW:effects-at-boundaries] A frame's door into the cache (brandon-unfiled-
+// 3248.8ro6, step 5): `holdView` only finds the session's view, an open feed's
+// pin keeps that view and its entry, and a click that moved the session's
+// config moves its view (`follow`). Only an event opens a view.
+describe("RenderCache frames and pins", () => {
+  function pinCache() {
+    const watchers = new WatcherRegistry({ logger: () => {} });
+    const logs: string[] = [];
+    const cache = new RenderCache(
+      { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, sessionState: new SessionState(), watchers, log: (_level, line) => logs.push(line), source: SOURCES_NOTHING, declare: DECLARES_NOTHING },
+      // Room for four entries over one compile, and the view of one.
+      { budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES + VIEW_BYTES },
+    );
+    const dirs = [0, 1, 2, 3, 4, 5].map(() => mkConfigDir());
+    const close = (): void => {
+      cache.close();
+      watchers.closeAll();
+      for (const d of dirs) d.cleanup();
+    };
+    const request = (sessionId: string, dir: string): SessionView => {
+      using hold = cache.holdSession(dir, dir, undefined, viewFacts(dir, sessionId));
+      return hold.view;
+    };
+    const opened = (): string[] =>
+      logs.filter((l) => l.startsWith("session view opened"));
+    return { cache, logs, dirs: dirs.map((d) => d.dir), close, request, opened };
+  }
+
+  test("holdView opens nothing: no entry, no view, before or after a session's request", () => {
+    const { cache, dirs, close, request, logs } = pinCache();
+    try {
+      expect(cache.holdView("s1")).toBeNull();
+      expect(cache.size).toBe(0);
+      expect(cache.stats.views).toBe(0);
+      const view = request("s1", dirs[0]!);
+      const before = logs.length;
+      for (let i = 0; i < 5; i++) {
+        using hold = cache.holdView("s1");
+        expect(hold?.view).toBe(view);
+        expect(hold?.entry.cwd).toBe(dirs[0]);
+      }
+      // A frame wrote no line: it opened no view, built no entry, declared
+      // nothing.
+      expect(logs.slice(before)).toEqual([]);
+      expect(cache.holdView("s2")).toBeNull();
+      expect(cache.size).toBe(1);
+    } finally {
+      close();
+    }
+  });
+
+  test("a pinned session's entry is never evicted, and its view never closed idle, while the pin is held", () => {
+    const { cache, dirs, close, request } = pinCache();
+    try {
+      const view = request("s1", dirs[0]!);
+      const unpin = cache.pin("s1");
+      expect(cache.stats.pinned).toBe(1);
+      // Other directories push the cache over its budget: the least recently
+      // used entry is the pinned session's, and it is passed over.
+      for (const dir of dirs.slice(1)) cache.getOrCreate(dir, dir, undefined);
+      expect(cache.size).toBeLessThan(dirs.length);
+      {
+        using hold = cache.holdView("s1");
+        expect(hold?.view).toBe(view);
+        expect(hold?.entry.cwd).toBe(dirs[0]);
+      }
+      // No request across three sweeps: the pin keeps the view.
+      cache.releaseIdle();
+      cache.releaseIdle();
+      cache.releaseIdle();
+      expect(cache.holdView("s1")?.view).toBe(view);
+      // The feed closed: frames no longer drawing it, and a frame's hold is no
+      // request, so two sweeps close it.
+      unpin();
+      expect(cache.stats.pinned).toBe(0);
+      {
+        using _frame = cache.holdView("s1");
+      }
+      cache.releaseIdle();
+      cache.releaseIdle();
+      expect(cache.holdView("s1")).toBeNull();
+      expect(() => unpin()).toThrow("render-cache pin released twice");
+    } finally {
+      close();
+    }
+  });
+
+  test("without a pin, the same pressure evicts the session's entry and its view with it", () => {
+    const { cache, dirs, close, request } = pinCache();
+    try {
+      request("s1", dirs[0]!);
+      for (const dir of dirs.slice(1)) cache.getOrCreate(dir, dir, undefined);
+      expect(cache.holdView("s1")).toBeNull();
+    } finally {
+      close();
+    }
+  });
+
+  test("follow moves a session's view to the config its origin resolves to, and opens none for a session without one", () => {
+    const { cache, dirs, close, request, opened } = pinCache();
+    try {
+      const view = request("s1", dirs[0]!);
+      request("s3", dirs[0]!);
+      cache.follow("s1", dirs[0]!, dirs[0]!, undefined);
+      // Its origin did not move: nothing opened, and the click is no render,
+      // so the latest rendered session is still the one that rendered.
+      expect(opened()).toHaveLength(2);
+      expect(cache.holdView("s1")?.view).toBe(view);
+      expect(cache.latestView()?.sessionId).toBe("s3");
+      cache.follow("s1", dirs[1]!, dirs[1]!, undefined);
+      expect(opened().at(-1)).toMatch(/^session view opened sid="s1" by=click /);
+      {
+        using hold = cache.holdView("s1");
+        expect(hold?.entry.cwd).toBe(dirs[1]);
+        // Declared with the request the view drew by.
+        expect(hold?.view.facts()).toBe(view.facts());
+      }
+      // A session with no view has nothing to move, and gets no view.
+      const size = cache.size;
+      cache.follow("s2", dirs[2]!, dirs[2]!, undefined);
+      expect(cache.holdView("s2")).toBeNull();
+      expect(cache.size).toBe(size);
+    } finally {
+      close();
+    }
+  });
+
+  test("a reload whose successor view fails to open leaves the session with no view and its error, which a frame does not reopen", () => {
+    const watchers = new WatcherRegistry({ logger: () => {} });
+    const logs: string[] = [];
+    const { dir, cleanup } = mkConfigDir();
+    let opens = 0;
+    const cache = new RenderCache(
+      { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, sessionState: new SessionState(), watchers, log: (_level, line) => logs.push(line), declare: DECLARES_NOTHING,
+        // The second view built over the entry, the reload's successor, fails.
+        source: (view) => {
+          if (++opens === 2) throw new Error("the successor broke");
+          return SOURCES_NOTHING(view);
+        },
+      },
+      { budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES + VIEW_BYTES },
+    );
+    try {
+      {
+        using _request = cache.holdSession(dir, dir, undefined, viewFacts(dir, "s1"));
+      }
+      const unpin = cache.pin("s1");
+      cache.reload(dir, dir, undefined);
+      expect(logs).toContainEqual(
+        expect.stringMatching(/^session view reopen failed sid="s1": Error: the successor broke/),
+      );
+      // Frames find nothing, and open nothing; they find the error instead,
+      // which a pin keeps across a sweep.
+      expect(cache.holdView("s1")).toBeNull();
+      expect(cache.holdView("s1")).toBeNull();
+      expect(opens).toBe(2);
+      cache.releaseIdle();
+      expect(String(cache.openFailure("s1")?.error)).toBe("Error: the successor broke");
+      // The session's next request opens its view, and the error goes.
+      {
+        using _request = cache.holdSession(dir, dir, undefined, viewFacts(dir, "s1"));
+      }
+      expect(cache.holdView("s1")).not.toBeNull();
+      expect(cache.openFailure("s1")).toBeNull();
+      unpin();
+    } finally {
+      cache.close();
+      watchers.closeAll();
+      cleanup();
+    }
+  });
+
+  // A failure no open feed shows has no frame to draw it in, so a sweep
+  // forgets it.
+  test("an unpinned session's open failure is forgotten by the next sweep", () => {
+    const watchers = new WatcherRegistry({ logger: () => {} });
+    const { dir, cleanup } = mkConfigDir();
+    const cache = new RenderCache(
+      { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, sessionState: new SessionState(), watchers, log: () => {}, declare: DECLARES_NOTHING,
+        source: () => {
+          throw new Error("the view broke");
+        },
+      },
+      { budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES + VIEW_BYTES },
+    );
+    try {
+      expect(() => cache.holdSession(dir, dir, undefined, viewFacts(dir, "s1"))).toThrow("the view broke");
+      expect(cache.openFailure("s1")).not.toBeNull();
+      cache.releaseIdle();
+      expect(cache.openFailure("s1")).toBeNull();
+    } finally {
+      cache.close();
+      watchers.closeAll();
+      cleanup();
+    }
+  });
+
+  // A click that moves the origin of a session whose opening failed opens
+  // by the request that opening was for, so a pick that fixes it shows with
+  // no request after it.
+  test("follow retries a failed opening by its request, and the error goes", () => {
+    const watchers = new WatcherRegistry({ logger: () => {} });
+    const first = mkConfigDir();
+    const second = mkConfigDir();
+    let opens = 0;
+    const cache = new RenderCache(
+      { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, sessionState: new SessionState(), watchers, log: () => {}, declare: DECLARES_NOTHING,
+        source: (view) => {
+          if (++opens === 1) throw new Error("the view broke");
+          return SOURCES_NOTHING(view);
+        },
+      },
+      { budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES + VIEW_BYTES },
+    );
+    try {
+      const facts = viewFacts(first.dir, "s1");
+      expect(() => cache.holdSession(first.dir, first.dir, undefined, facts)).toThrow("the view broke");
+      const unpin = cache.pin("s1");
+      cache.follow("s1", second.dir, second.dir, undefined);
+      {
+        using hold = cache.holdView("s1");
+        expect(hold?.entry.cwd).toBe(second.dir);
+        expect(hold?.view.facts()).toBe(facts);
+      }
+      expect(cache.openFailure("s1")).toBeNull();
+      unpin();
+    } finally {
+      cache.close();
+      watchers.closeAll();
+      first.cleanup();
+      second.cleanup();
+    }
+  });
+
+  test("a view says what opened it", () => {
+    const { cache, dirs, close, request, opened } = pinCache();
+    try {
+      request("s1", dirs[0]!);
+      cache.reload(dirs[0]!, dirs[0]!, undefined);
+      expect(opened().map((l) => l.match(/ by=(\w+) /)?.[1])).toEqual([
+        "request",
+        "reload",
+      ]);
+    } finally {
+      close();
     }
   });
 });
