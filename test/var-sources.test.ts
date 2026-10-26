@@ -2049,11 +2049,19 @@ describe("SourceRegistry — parse seam", () => {
   });
 
   it("settled() names the sources still in flight at its deadline", async () => {
-    const { registry } = make();
-    registry.declareShell("slow", `sleep 1; echo x`, { cwd: process.cwd(), parse: TEXT, cache: { kind: "never" } });
-    registry.declareShell("fast", `echo y`, { cwd: process.cwd(), parse: TEXT, cache: { kind: "never" } });
-    expect(await registry.settled(100)).toEqual(["slow"]);
-    expect(await registry.settled(3000)).toEqual([]);
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const gate = shellGate(path.join(dir, "gate"));
+      gate.close();
+      const { registry } = make();
+      registry.declareShell("slow", `${gate.hold}; echo x`, { cwd: process.cwd(), parse: TEXT, cache: { kind: "never" } });
+      registry.declareShell("fast", `echo y`, { cwd: process.cwd(), parse: TEXT, cache: { kind: "never" } });
+      expect(await registry.settled(1000)).toEqual(["slow"]);
+      gate.open();
+      expect(await registry.settled(3000)).toEqual([]);
+    } finally {
+      cleanup();
+    }
   });
 
   it("a file source takes the same json parser", async () => {
@@ -2172,16 +2180,20 @@ describe("SourceRegistry — in-flight runs", () => {
     const { dir, cleanup } = makeTmpDir();
     try {
       const spawns = path.join(dir, "spawns");
+      const gate = shellGate(path.join(dir, "gate"));
+      gate.close();
       const { registry: home } = make();
       const view = home.view();
       live.add(view);
       const period = { kind: "ttl", durationMs: MIN_SHELL_TTL_MS } as const;
-      const counted = (out: string) => `echo x >> ${spawns}; sleep 0.3; echo ${out}`;
+      const counted = (out: string) => `echo x >> ${spawns}; ${gate.hold}; echo ${out}`;
       home.declareShell("dir", counted("d"), { cwd: process.cwd(), parse: TEXT, cache: period });
       view.declareShell("own", counted("o"), { cwd: process.cwd(), parse: TEXT, cache: period });
       expect([...(await view.settled(50))].sort()).toEqual(["dir", "own"]);
+      gate.open();
       expect(await view.settled(3000)).toEqual([]);
-      // Both periods' re-runs out: a re-read keeps the answer it has.
+      gate.close();
+      // Both periods' re-runs held out: a re-read keeps the answer it has.
       const spawned = (): number => fs.readFileSync(spawns, "utf8").split("\n").length - 1;
       const rerunBy = Date.now() + 3000;
       while (spawned() < 4 && Date.now() < rerunBy) {
@@ -2190,7 +2202,7 @@ describe("SourceRegistry — in-flight runs", () => {
       expect(spawned()).toBeGreaterThanOrEqual(4);
       const asked = Date.now();
       expect(await view.settled(3000)).toEqual([]);
-      expect(Date.now() - asked).toBeLessThan(150);
+      expect(Date.now() - asked).toBeLessThan(1000);
     } finally {
       cleanup();
     }

@@ -10,8 +10,8 @@ export function shellGate(file: string) {
   open();
   return {
     // The run is spawned detached, so a worker killed before it opens the gate
-    // never disposes it. The wait gives up after about ten seconds and fails
-    // the run rather than poll forever.
+    // never disposes it. The wait gives up after at least ten seconds and
+    // fails the run rather than poll forever.
     hold: `i=0; until [ -e '${file}' ]; do [ $i -lt 1000 ] || exit 1; sleep 0.01; i=$((i+1)); done`,
     open,
     close: () => fs.rmSync(file),
