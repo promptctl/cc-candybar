@@ -98,7 +98,9 @@ export async function answered<A>(read: () => A | Waiting): Promise<A> {
 export type WaitEnd = "answered" | "deadline";
 
 // [LAW:no-ambient-temporal-coupling][LAW:single-enforcer] The one bounded
-// wait: `work`, or `ms`, whichever ends first. `work` is handed the wait's
+// wait over work that does not end at a signal of its own (a wait that does,
+// as `SourceRegistry.inFlight` does, is bounded by the signal it is given):
+// `work`, or `ms`, whichever ends first. `work` is handed the wait's
 // signal, aborted when the wait ends on either arm, with its timer cleared:
 // what it listens on through the signal stops with the wait, so a wait leaves
 // nothing behind. What it does not, a run it started, goes on, and a failure

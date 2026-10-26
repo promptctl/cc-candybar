@@ -26,6 +26,7 @@ import {
   TOTAL_BUDGET_MS,
 } from "../src/daemon/protocol";
 import { stateDir } from "../src/daemon/paths";
+import { REQUEST_TIMEOUT_MS } from "../src/daemon/request-deadline";
 import {
   hookData,
   killAndWait,
@@ -490,6 +491,34 @@ describe("every render request writes one render event, whatever its outcome", (
   // answers only once the test opens the gate, so the source provably
   // outlives the deadline — an ordering the test owns, not a bet on how slow a
   // render is.
+  // The connection's backstop answers TIMEOUT whatever the render is still
+  // doing. A wait ends before it, so what outlives it is a synchronous turn:
+  // here the first request's compile of a config big enough to take several
+  // times the backstop. The render's event says the client read another
+  // reply, and the hold it drew under is released when it ends.
+  test("a render that outlives its request timeout writes timedOut=Y", async () => {
+    const segments = Object.fromEntries(
+      Array.from({ length: 600 }, (_, i) => [`s${i}`, { template: `{{ .session.id }} ${i}` }]),
+    );
+    const config = path.join(projectDir, "heavy.json5");
+    writeFileSync(config, JSON.stringify({ segments, root: { h: Object.keys(segments) } }));
+    await expect(
+      sendDaemonRequest(sockPath, {
+        v: PROTOCOL_VERSION,
+        kind: "render",
+        ...renderBody("ev-backstop", projectDir, {}, ["cc-candybar", "--config", config]),
+        deadline: Date.now() + TOTAL_BUDGET_MS,
+      }),
+    ).resolves.toMatchObject({ ok: false, code: "TIMEOUT" });
+    const late = only(await eventsOf("ev-backstop"));
+    expect(field(late, "outcome")).toBe("ok");
+    expect(field(late, "timedOut")).toBe("Y");
+    expect(Number(field(late, "took")?.replace(/ms$/u, ""))).toBeGreaterThan(REQUEST_TIMEOUT_MS);
+    await expect(
+      sendDaemonRequest(sockPath, { v: PROTOCOL_VERSION, kind: "stats" }),
+    ).resolves.toMatchObject({ ok: true, stats: { renderCache: { held: 0 } } });
+  });
+
   test("a source that outlives its client's deadline draws pending, and lands for the next render", async () => {
     const tmuxBody = (sid: string, pane: string) =>
       renderBody(
@@ -566,9 +595,9 @@ describe("every render request writes one render event, whatever its outcome", (
       "answered",
     );
 
-    // A client too old to state its deadline is answered by the budget the
-    // Node client gives up at, counted from the accept: within its whole
-    // budget, the connect included.
+    // A client too old to state its deadline is answered by the earliest an
+    // old client gives up at — the native client's, whose budget runs from
+    // before its connect — so within its whole budget, the connect included.
     rmSync(path.join(tmuxDir, "asked"));
     const sent = Date.now();
     await expect(

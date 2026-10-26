@@ -75,10 +75,18 @@ describe("the draw's reserve", () => {
     const tag = path.basename(dir);
     await ask(`${tag}-warm`);
     for (let i = 0; i < SAMPLES; i++) await ask(`${tag}-${i}`);
-    const drew = (lines: readonly string[]) =>
-      lines
-        .filter((l) => new RegExp(`render sid=${tag}-\\d+ `).test(l))
-        .map((l) => Number(l.match(/ drew=(\d+)ms /)![1]));
+    // A session's first draw alone: an ask the helper repeated, because the
+    // first drew pending, draws warm.
+    const drew = (lines: readonly string[]): number[] => {
+      const first = new Map<string, number>();
+      for (const line of lines) {
+        const m = line.match(
+          new RegExp(`render sid=(${tag}-\\d+) .* drew=(\\d+)ms `),
+        );
+        if (m !== null && !first.has(m[1]!)) first.set(m[1]!, Number(m[2]));
+      }
+      return [...first.values()];
+    };
     const samples = drew(
       await loggedWhen(
         env,

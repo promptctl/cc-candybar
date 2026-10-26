@@ -132,9 +132,14 @@ export async function renderRequest(
       `the render event of ${sessionId}'s answer`,
     );
     if (/ pending=-(?: |$)/.test(event)) return resp.output;
-    // [LAW:no-silent-failure] A value still pending after every ask is the
-    // failure, named by the event that drew it, never a bar a later assertion
-    // trips over.
+    // [LAW:no-silent-failure] Only a wait its deadline ended may draw
+    // pending: one that answered yet drew a value not answered means the wait
+    // left out something the request started (rule 1), and asking again would
+    // hide it. A value still pending after every ask is the failure too.
+    // Both are named by the event that drew them, never a bar a later
+    // assertion trips over.
+    if (!/ ended=deadline(?: |$)/.test(event))
+      throw new Error(`render drew pending though its wait answered: ${event}`);
     if (attempt >= PENDING_RETRY_BUDGET)
       throw new Error(
         `render still drew pending after ${attempt} asks: ${event}`,

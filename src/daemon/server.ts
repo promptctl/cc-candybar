@@ -2418,7 +2418,8 @@ async function answerRequest(
 
 // A request's wait, fixed at its arrival: whether its client stated its
 // deadline, the milliseconds the wait had then, and when it ends, on the
-// monotonic clock.
+// monotonic clock. Both, because the render notes the first on its event
+// after the session's id leads it, and has no arrival instant to derive it.
 interface RequestWait {
   readonly stated: ClientDeadline["kind"];
   readonly ms: number;
