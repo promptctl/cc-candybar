@@ -13,7 +13,7 @@ import {
 import os from "node:os";
 import path from "node:path";
 
-import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
+import { effectsUrl, VERB_LOAD_CONFIG, VERB_SET_STATE } from "../src/click/wire";
 import { LANES, type Lane } from "../src/config/lanes";
 import type { ClientHints } from "../src/daemon/protocol";
 import { click, killAndWait, render } from "./helpers/daemon-e2e";
@@ -147,6 +147,49 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
     await renderedAgain(sid);
     expect(statusLines(sid, "holding")).toHaveLength(1);
     expect(statusLines(sid, "released")).toHaveLength(1);
+  });
+
+  // Taken by another session's request, the pane is released at the next
+  // answer from its server; the click only remembers it.
+  test("a click that leaves the status line's switch alone re-takes no status line released since", async () => {
+    const sid = "lane-taken";
+    await renderIn(sid);
+    await switchLanes(sid, true, "tmuxStatus");
+    await until(() => statusLines(sid, "holding").length > 0, "the status line's hold");
+    await render(sockPath, "lane-taker", projectDir, inTmux(sid), args());
+    await until(() => statusLines(sid, "released").length > 0, "the taken pane's release");
+    expect(statusLines(sid, "released")).toEqual([
+      expect.stringContaining(`pane taken by sid="lane-taker"`),
+    ]);
+    // The band's setup runs in the turn after its click: anything the click
+    // held was logged before it.
+    await switchLanes(sid, true, "band");
+    await until(
+      () => laneLines(sid).some((l) => l.includes("lane: band on")),
+      "the band's setup",
+    );
+    expect(statusLines(sid, "holding")).toHaveLength(1);
+  });
+
+  test("a load-config pick of a config that switches a lane on sets it up, as the session's click", async () => {
+    const sid = "lane-load";
+    await renderIn(sid);
+    const picked = path.join(projectDir, "tmux-on.json5");
+    writeFileSync(
+      picked,
+      `{ globals: { experimentalTmuxStatus: true }, segments: { mark: { template: 'a lane mark' } }, root: { h: ['mark'] } }`,
+    );
+    await click(
+      sockPath,
+      `cc-candybar://${VERB_LOAD_CONFIG}/${encodeURIComponent(sid)}/${encodeURIComponent(picked)}`,
+    );
+    await until(() => laneLines(sid).length > 0, "the pick's setup");
+    expect(laneLines(sid)).toEqual([
+      expect.stringContaining(
+        `lane: tmuxStatus on — the daemon draws %7's bar in its status line by=click (session=${sid})`,
+      ),
+    ]);
+    await until(() => statusLines(sid, "holding").length > 0, "the status line's hold");
   });
 
   // The daemon before a restart drew the bar the toggle is clicked on: this

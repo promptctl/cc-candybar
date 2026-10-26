@@ -857,14 +857,14 @@ describe("LaneSetups", () => {
     setups.clicked(SID, null, switches({}), switches({ pane: true }));
     await settle();
     expect(did).toEqual([]);
-    setups.noted(session());
+    setups.noted(session(), switches({ pane: true }));
     await settle();
     expect(did).toEqual([OPENED]);
     expect(logs).toEqual([
       `info lane: pane on — opened bar pane %9 under %7 by=owed (session=${SID})`,
     ]);
     // Owed once: the next request starts nothing.
-    setups.noted(session());
+    setups.noted(session(), switches({ pane: true }));
     await settle();
     expect(did).toHaveLength(1);
   });
@@ -875,7 +875,34 @@ describe("LaneSetups", () => {
     setups.clicked(SID, null, switches({}), switches({ pane: true, band: true }));
     setups.clicked(SID, null, switches({ pane: true, band: true }), switches({ band: true }));
     setups.clicked(SID, null, switches({ band: true }), switches({}));
-    setups.noted(session());
+    setups.noted(session(), switches({}));
+    await settle();
+    expect(did).toEqual([]);
+    expect(logs).toEqual([]);
+  });
+
+  // Another session's save to the file both read, or a hand edit, between the
+  // click and the request.
+  test("an owed lane whose switch is back where it stood by the first request owes nothing", async () => {
+    const { edge, did } = fakeEdge();
+    const { setups, logs, settle } = owner(edge);
+    setups.clicked(SID, null, switches({}), switches({ pane: true }));
+    setups.noted(session(), switches({}));
+    await settle();
+    expect(did).toEqual([]);
+    expect(logs).toEqual([]);
+  });
+
+  // A request noted for its feed whose draw failed before its arrival settled
+  // anything: the session's next click is the first event that can.
+  test("a click once the session's request is held settles what earlier clicks owed", async () => {
+    const { edge, did } = fakeEdge();
+    const { setups, logs, settle } = owner(edge);
+    setups.clicked(SID, null, switches({}), switches({ pane: true }));
+    setups.clicked(SID, session(), switches({ pane: true }), switches({}));
+    // Nothing is owed after it: a switch moved later by anything but a click
+    // sets nothing up.
+    setups.noted(session(), switches({ pane: true }));
     await settle();
     expect(did).toEqual([]);
     expect(logs).toEqual([]);

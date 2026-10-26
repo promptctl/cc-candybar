@@ -676,13 +676,20 @@ function sessionOrigin(ctx: VerbContext, sid: string): RenderOrigin {
   return origin;
 }
 
+// The origin the session's last request recorded, as it named it; null for a
+// session that has never rendered.
+function requestedOrigin(ctx: DaemonContext, sid: string): RenderOrigin | null {
+  const raw = ctx.sessionState.get(sid, SESSION_RENDER_ORIGIN_KEY);
+  return raw === null ? null : parseRenderOrigin(raw);
+}
+
 // The origin the session's last request recorded, under its load-config
 // pick; null for a session that has never rendered.
 function recordedOrigin(ctx: DaemonContext, sid: string): RenderOrigin | null {
-  const raw = ctx.sessionState.get(sid, SESSION_RENDER_ORIGIN_KEY);
-  return raw === null
+  const requested = requestedOrigin(ctx, sid);
+  return requested === null
     ? null
-    : sessionRenderOrigin(parseRenderOrigin(raw), ctx.sessionState, sid);
+    : sessionRenderOrigin(requested, ctx.sessionState, sid);
 }
 
 // [LAW:no-ambient-temporal-coupling] A history step that rewrote the file this
@@ -717,11 +724,10 @@ interface LaneMeter {
 }
 
 function laneMeter(ctx: DaemonContext, sid: string): LaneMeter | null {
-  const raw = ctx.sessionState.get(sid, SESSION_RENDER_ORIGIN_KEY);
-  if (raw === null) return null;
-  const rendered = parseRenderOrigin(raw);
+  const requested = requestedOrigin(ctx, sid);
+  if (requested === null) return null;
   const read = (): LaneSwitches =>
-    ctx.lanes.of(sessionRenderOrigin(rendered, ctx.sessionState, sid), sid);
+    ctx.lanes.of(sessionRenderOrigin(requested, ctx.sessionState, sid), sid);
   return { sessionId: sid, before: read(), read };
 }
 
@@ -1647,6 +1653,7 @@ const SESSION_FIRST_VERBS: ReadonlySet<string> = new Set([
   VERB_DOCTOR_MARK,
   VERB_CEILING,
   VERB_SLASH,
+  VERB_LOAD_CONFIG,
 ]);
 
 // [LAW:dataflow-not-control-flow] One click is an ordered list of effects; the

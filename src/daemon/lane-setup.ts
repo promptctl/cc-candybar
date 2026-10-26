@@ -613,12 +613,10 @@ const MAX_SESSIONS_OWED = 1024;
 // a click this daemon could not set up then.
 type SetupCause = "click" | "owed";
 
-// A lane a session's clicks moved before this daemon held a request of it:
-// where its switch stood before the first of them, and where it stands now.
-interface Owed {
-  readonly from: boolean;
-  readonly to: boolean;
-}
+// The lanes a session's clicks moved and no setup has brought in line yet,
+// each by where its switch stood before the first of those clicks: what the
+// lane runs, as far as this daemon knows.
+type Owed = Map<Lane, boolean>;
 
 // [LAW:single-enforcer] The one owner of lane setup. What a lane runs follows
 // the session's own clicks on its switch, whatever control moved it — the
@@ -633,14 +631,16 @@ interface Owed {
 // Code on the machine for one session's save. A setup needs the session as
 // its latest request reported it; a click before this daemon holds one (a
 // toggle on a bar the daemon before a restart drew) owes its setups to the
-// session's first request, net of the lanes toggled back. One session's
-// setups run one at a time, each after the last has finished — two restarts
-// of one pane would type over each other. How each setup ends is logged, and
-// a failure is held on the bar as a click's failure is
-// (src/daemon/click-error.ts).
+// session's next click or request, whichever comes first. What is owed is
+// settled against the switches as that event finds them, so a lane whose
+// switch is back where it stood — toggled back, or moved back by another
+// session's save — owes nothing. One session's setups run one at a time,
+// each after the last has finished — two restarts of one pane would type over
+// each other. How each setup ends is logged, and a failure is held on the bar
+// as a click's failure is (src/daemon/click-error.ts).
 export class LaneSetups {
   // Each session's owed lanes, least recently owed first.
-  private readonly owed = new Map<string, Map<Lane, Owed>>();
+  private readonly owed = new Map<string, Owed>();
   // Each session's setups still to run, while one runs.
   private readonly queued = new Map<string, Array<() => Promise<void>>>();
 
@@ -667,23 +667,20 @@ export class LaneSetups {
     before: LaneSwitches,
     after: LaneSwitches,
   ): void {
-    const moved = LANE_NAMES.filter((lane) => before[lane] !== after[lane]);
-    if (moved.length === 0) return;
+    // [LAW:one-source-of-truth] The click's moves join what the session
+    // already owes: a lane owed before keeps where it stood then.
+    const owed = this.take(sessionId);
+    for (const lane of LANE_NAMES)
+      if (before[lane] !== after[lane] && !owed.has(lane))
+        owed.set(lane, before[lane]);
     if (session !== null) {
-      for (const lane of moved) this.start(session, lane, after[lane], "click");
+      this.settle(session, owed, after, "click");
       return;
     }
-    // [LAW:dataflow-not-control-flow] Owed net: a lane toggled back to where
-    // it stood owes nothing.
-    const owed = this.owed.get(sessionId) ?? new Map<Lane, Owed>();
-    for (const lane of moved) {
-      const from = owed.get(lane)?.from ?? before[lane];
+    for (const [lane, from] of owed)
       if (from === after[lane]) owed.delete(lane);
-      else owed.set(lane, { from, to: after[lane] });
-    }
     // [LAW:carrying-cost] Bounded like the daemon's other per-session
     // memories: least recently owed dropped first, and said.
-    this.owed.delete(sessionId);
     if (owed.size > 0) this.owed.set(sessionId, owed);
     for (const [oldest, lanes] of this.owed) {
       if (this.owed.size <= MAX_SESSIONS_OWED) break;
@@ -695,12 +692,28 @@ export class LaneSetups {
     }
   }
 
-  // A request of `session` arrived: the setups its clicks owe start now.
-  noted(session: LaneSession): void {
-    const owed = this.owed.get(session.sessionId);
-    if (owed === undefined) return;
-    this.owed.delete(session.sessionId);
-    for (const [lane, { to }] of owed) this.start(session, lane, to, "owed");
+  // A request of `session` arrived, finding its switches at `switches`: the
+  // setups its clicks owe start now.
+  noted(session: LaneSession, switches: LaneSwitches): void {
+    this.settle(session, this.take(session.sessionId), switches, "owed");
+  }
+
+  private take(sessionId: string): Owed {
+    const owed = this.owed.get(sessionId) ?? new Map<Lane, boolean>();
+    this.owed.delete(sessionId);
+    return owed;
+  }
+
+  // [LAW:dataflow-not-control-flow] Each owed lane is brought to its switch
+  // `now`, unless the switch stands where the lane already is.
+  private settle(
+    session: LaneSession,
+    owed: Owed,
+    now: LaneSwitches,
+    by: SetupCause,
+  ): void {
+    for (const [lane, from] of owed)
+      if (now[lane] !== from) this.start(session, lane, now[lane], by);
   }
 
   private start(

@@ -2418,7 +2418,7 @@ async function answerRequest(
 // session's save turned off is never re-taken from a remembered switch. No
 // draw starts either.
 function arrived(req: CheckedRenderRequest, lanes: LaneSwitches): void {
-  laneSetups.noted(laneSessionOf(req));
+  laneSetups.noted(laneSessionOf(req), lanes);
   tmuxStatusLines.observe(
     req.hookData.session_id,
     req.hints.tmux,
@@ -2442,8 +2442,10 @@ function laneSessionOf(req: CheckedRenderRequest): LaneSession {
 // What follows a click of `sessionId` that found its lane switches at
 // `before` and left them at `after`: each lane it moved is set up for the
 // session as its latest request reported it, or owed to its first request;
-// and its tmux status line follows its switch, in the pane that request
-// reported.
+// and a tmux status line switch it moved is followed in the pane that request
+// reported. A click that left that switch alone holds nothing: the pane is
+// only remembered, and `answered` may have released it to the session that
+// took it since.
 function laneClicked(
   sessionId: string,
   before: LaneSwitches,
@@ -2456,7 +2458,7 @@ function laneClicked(
     before,
     after,
   );
-  if (latest !== null)
+  if (latest !== null && before.tmuxStatus !== after.tmuxStatus)
     tmuxStatusLines.observe(sessionId, latest.hints.tmux, after.tmuxStatus);
 }
 
