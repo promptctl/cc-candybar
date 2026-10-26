@@ -1,0 +1,35 @@
+{
+  // The load gate's full config: a maintainer's live config, the bundled
+  // default with a theme picker and lit's checkout-relative ticket segment.
+  // Everything else not declared here stays the bundled default.
+
+  // Theme picker: one action + one {{ menu }} — the loader synthesizes the
+  // open/closed state, the page cursor, and the click gates. The trigger's
+  // text is authored here, one display per state (closed, open); the runtime
+  // appends no glyph of its own.
+  actions: {
+    applyTheme: { set: "theme", from: "themes" },
+  },
+
+  segments: {
+    themeControl: {
+      template: '🎨 {{ .theme.effective }} {{ menu "applyTheme" "▸" "▾" }}',
+      bg: "surface",
+      fg: "foreground",
+    },
+  },
+
+  root: {
+    v: [
+      { h: ["directory", "gitaculous", "toolbar"] },
+      { h: ["model", "context", "cacheTimer", "block", "weekly", "themeControl", "plugins.lit.ticket"] },
+    ],
+  },
+  themeDefaults: {
+    "tokyo-night": {
+      shade: "middle",
+      variation: "alt",
+      style: "none",
+    },
+  },
+}

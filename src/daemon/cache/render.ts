@@ -36,7 +36,7 @@ import {
   type CompiledConfig,
   type Registration,
 } from "../../dsl/render.js";
-import { mb } from "../limits.js";
+import { mb, NEAR_LIMIT } from "../limits.js";
 import { stateGate } from "../verbs/state-validators.js";
 import { configGate } from "../verbs/config-validators.js";
 import { presetNames, presetRoot } from "../../config/presets.js";
@@ -85,23 +85,35 @@ export const COMPILE_BYTES = 10 * 1024 * 1024;
 // with headroom for a user config's further placements.
 export const VIEW_BYTES = 2.5 * 1024 * 1024;
 
-// The render cache's share of the daemon's memory limit: a quarter, leaving the
-// rest to V8's own mappings, the code, the other caches, and the heap's growth
-// room. At the default 512 MB that is ~39 entries on one compile, against a
-// working set of 19 directories in the production daemon's first 2.3 hours
-// (2026-10-20). A larger share buys entries with RSS: rendering 100 worktree
-// directories, RSS ended at 329 / 390 / 424 MB under a quarter / three
-// eighths / half — the larger two past the 75% line `approachingLimit` warns
-// at.
+// The render cache's share of the daemon's memory limit: what is left under
+// the line the doctor calls near the limit once the rest of the daemon is
+// reserved — so a share full at its charges, which a test holds real heap
+// under and so are the most the cache can cost, never puts the daemon past
+// that line, whatever the limit. The reserve is the ~60 MB a daemon serving
+// one session is charged; the charges' own headroom over what entries hold is
+// the heap's growth room, so reserving more would starve the cache at a
+// lowered limit for nothing. At the default limit the share is 704 MB: ~126
+// sessions on one compile, each an entry and a view, against a working set of
+// ~20 directories in the production daemon.
+// Measured, a full share costs less than its charges: serving 100 sessions,
+// the daemon is charged ~430 MB in all with 560 MB of the share accounted.
+const RENDER_CACHE_RESERVE_BYTES = 64 * 1024 * 1024;
+// Never less than a quarter of the limit, which a small limit has always had:
+// there the reserve would leave the cache too little to hold two sessions.
 export function renderCacheBudget(memoryLimitBytes: number): number {
-  return Math.floor(memoryLimitBytes / 4);
+  return Math.floor(
+    Math.max(
+      memoryLimitBytes / 4,
+      memoryLimitBytes * NEAR_LIMIT - RENDER_CACHE_RESERVE_BYTES,
+    ),
+  );
 }
 
 // The count ceiling beside the byte budget: every entry holds a
 // SourceRegistry (fs watchers, TTL timers) and a config
 // watcher, a resource the byte budget does not see. At the default memory limit
-// the bytes bind long before this; it is what bounds watchers when
-// CC_CANDYBAR_RSS_LIMIT_MB is raised.
+// the bytes bind just short of it (~230 entries with no view); it is what
+// bounds watchers above it, when CC_CANDYBAR_RSS_LIMIT_MB is raised.
 export const MAX_ENTRIES = 256;
 
 // [LAW:single-enforcer] These are the cache-and-registry deps — session state

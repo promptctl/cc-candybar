@@ -49,6 +49,7 @@ import { sendDaemonRequest } from "./helpers/daemon-wire";
 import { links } from "./helpers/ansi";
 import { HANDOFF_BUTTON } from "../src/daemon/lane-handoff";
 import { until } from "./helpers/until";
+import { renderLines } from "./helpers/daemon-log";
 import {
   effectsUrl,
   VERB_LOAD_CONFIG,
@@ -96,6 +97,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   let sockPath: string;
   let removeTmpDirs: () => void;
   let daemonLog: string;
+  let env: NodeJS.ProcessEnv;
   let projectDir: string;
   let daemon: RunningDaemon | undefined;
 
@@ -189,7 +191,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
 
   beforeAll(async () => {
     const prepared = prepareIsolatedDaemonEnv("cc-candybar-feed-e2e");
-    ({ sockPath, removeTmpDirs } = prepared);
+    ({ sockPath, removeTmpDirs, env } = prepared);
     daemonLog = path.join(prepared.env.XDG_STATE_HOME!, "cc-candybar", "daemon.log");
     projectDir = mkdtempSync(path.join(os.tmpdir(), "cc-candybar-feed-e2e-"));
     for (const [name, text] of Object.entries(CONFIGS))
@@ -256,9 +258,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       await sleep(1000);
       await render(sockPath, "feed-rate", projectDir, {}, args("turning"));
     });
-    const events = readFileSync(daemonLog, "utf8")
-      .split("\n")
-      .filter((l) => l.includes("render sid=feed-rate "));
+    const events = await renderLines(env, "feed-rate", 2);
     expect(events[0]).toContain(" feeds=- ");
     const fps = /feeds=statusline:1sub\/(\d+)fps\/shown /u.exec(events.at(-1)!);
     expect(fps).not.toBeNull();

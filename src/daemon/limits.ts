@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import v8 from "node:v8";
 import { daemonDir } from "./paths";
-import { dlog } from "./log";
+import { dlog, writeWaitingNow } from "./log";
 import { type DaemonLogger } from "../utils/logger";
 import {
   chargeProbe,
@@ -19,8 +19,8 @@ import {
 //
 // How much of the budget is even reachable by eviction was measured rather than
 // assumed (brandon-daemon-limits-inw): on the live daemon roughly 50 MB of memory is
-// clean file-backed code plus kernel page tables that no cache can release, so a
-// 512 MB budget is about 460 MB of controllable memory. The same measurement is
+// clean file-backed code plus kernel page tables that no cache can release, so
+// that much of any budget is out of eviction's reach. The same measurement is
 // why a breach records more than a heap snapshot — see check.
 //
 // The limit is on what the PLATFORM charges the process (MemoryCharge,
@@ -54,8 +54,16 @@ import {
 // platform's charge: users set the variable, and the Rust client and
 // check-protocol name the constants, so renaming them for wording alone would
 // break that contract for no change in meaning.
+//
+// The default is sized from what a daemon serving a hundred sessions, each
+// drawing from its own checkout, is charged: ~430 MB, about 40% of it, so a
+// leak trips the backstop while it is still a leak. The render cache's share
+// of it holds those hundred (render.ts). Below that the cache cannot hold the
+// directories being rendered from, every render misses, and a miss's config
+// load is longer than the client waits, so every render fails rather than some
+// (the load gate, scripts/load-gate.ts, serves that hundred).
 export const RSS_LIMIT_ENV = "CC_CANDYBAR_RSS_LIMIT_MB";
-export const DEFAULT_RSS_LIMIT_MB = 512;
+export const DEFAULT_RSS_LIMIT_MB = 1024;
 export const HEAP_CAP_OVER_RSS = 2;
 
 // [LAW:parse-dont-validate] Absent → default; a positive integer → that; present
@@ -192,9 +200,11 @@ export function readCharge(
 }
 
 // [LAW:single-enforcer] THE judgment of "near the limit": the restart
-// forecast in daemon-stats and the doctor's daemon row both ask it.
+// forecast in daemon-stats and the doctor's daemon row both ask it, and the
+// render cache's share is sized under it.
+export const NEAR_LIMIT = 0.75;
 export function approachingLimit(bytes: number, limit: number): boolean {
-  return bytes > limit * 0.75;
+  return bytes > limit * NEAR_LIMIT;
 }
 
 function artifactFile(
@@ -249,6 +259,8 @@ export interface LimitsDeps {
   captureMemoryReport: () => string;
   writeMemoryReport: (filePath: string, text: string) => void;
   writeHeapSnapshot: (filePath: string) => string;
+  // What the log holds, written before the loop blocks (log.ts).
+  writeLogNow: () => void;
   // Every artifact a breach leaves behind, for rotation — both kinds.
   listArtifacts: () => string[];
   removeFile: (filePath: string) => void;
@@ -326,6 +338,10 @@ export function makeLimits(deps: LimitsDeps): LimitsHandle {
       deps.log("info", `memory report written: ${file}`);
     });
     attempt(deps.log, "heap snapshot", () => {
+      // [LAW:no-ambient-temporal-coupling] The snapshot holds the loop for
+      // seconds and can double the heap, which can draw the OS's kill with no
+      // exit event: what the log holds about this breach is on disk first.
+      deps.writeLogNow();
       const file = artifactFile(deps.snapshotDir, "heapSnapshot", identity);
       deps.log(
         "info",
@@ -497,6 +513,7 @@ export function realLimitsDeps(
     writeMemoryReport: (file, text) =>
       fs.writeFileSync(file, text, { mode: 0o600 }),
     writeHeapSnapshot: (file) => v8.writeHeapSnapshot(file),
+    writeLogNow: writeWaitingNow,
     // [LAW:no-silent-failure] A directory not yet made holds no breaches;
     // one that cannot be read is said so — never read as "none".
     listArtifacts: () => {

@@ -17,7 +17,7 @@ import {
   VERB_LOAD_CONFIG,
   VERB_SET_CONFIG,
 } from "../src/click/wire";
-import { logPath } from "../src/daemon/paths";
+import { renderLines } from "./helpers/daemon-log";
 import {
   click,
   hookData,
@@ -241,18 +241,15 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
       {},
       configFlag(override),
     );
-    const badArgsOf = (sid: string) =>
-      readFileSync(logPath(env), "utf8")
-        .split("\n")
-        .filter((l) => l.includes(`render sid=${sid} `))
-        .map((l) => l.match(/ badArgs=(\S+) /)?.[1]);
-    expect(badArgsOf("cfg-flag-bare")).toEqual(["--config:no-value"]);
-    expect(badArgsOf("cfg-flag-last-bare")).toEqual(["--config:no-value"]);
-    expect(badArgsOf("cfg-flag-unknown")).toEqual(["--bogus:unknown"]);
-    expect(badArgsOf("cfg-flag-positional")).toEqual([
+    const badArgsOf = async (sid: string) =>
+      (await renderLines(env, sid)).map((l) => l.match(/ badArgs=(\S+) /)?.[1]);
+    expect(await badArgsOf("cfg-flag-bare")).toEqual(["--config:no-value"]);
+    expect(await badArgsOf("cfg-flag-last-bare")).toEqual(["--config:no-value"]);
+    expect(await badArgsOf("cfg-flag-unknown")).toEqual(["--bogus:unknown"]);
+    expect(await badArgsOf("cfg-flag-positional")).toEqual([
       "stray.json5:positional",
     ]);
-    expect(badArgsOf("cfg-flag-clean")).toEqual(["-"]);
+    expect(await badArgsOf("cfg-flag-clean")).toEqual(["-"]);
   });
 
   // brandon-config-nuq6: `--config` arrives as the client's raw argv, so a
@@ -288,13 +285,10 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
     await render(sockPath, "cfg-env-taken", projectDir, {
       configEnv: override,
     });
-    const refusedOf = (sid: string) =>
-      readFileSync(logPath(env), "utf8")
-        .split("\n")
-        .filter((l) => l.includes(`render sid=${sid} `))
-        .map((l) => l.match(/ refused=(\S+) /)?.[1]);
-    expect(refusedOf("cfg-env-stale-client")).toEqual(["configEnv"]);
-    expect(refusedOf("cfg-env-taken")).toEqual(["-"]);
+    const refusedOf = async (sid: string) =>
+      (await renderLines(env, sid)).map((l) => l.match(/ refused=(\S+) /)?.[1]);
+    expect(await refusedOf("cfg-env-stale-client")).toEqual(["configEnv"]);
+    expect(await refusedOf("cfg-env-taken")).toEqual(["-"]);
   });
 
   // The request's cwd anchors a relative --config, so a relative cwd is a

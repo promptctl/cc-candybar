@@ -890,14 +890,17 @@ function shutdown(code: number): void {
       (p) => fs.unlinkSync(p),
     );
   }
-  // Every dlog above was a synchronous append (log.ts), so the death line is
-  // already on disk; nothing to flush before exit.
+  // The log writes every line still waiting as the process exits (log.ts), so
+  // the death line lands without a flush here.
   process.exit(code);
 }
 
 // --- per-connection handler ---
 
 function handleConnection(sock: net.Socket): void {
+  // [LAW:effects-at-boundaries] When the connection was accepted, on the
+  // monotonic clock: a render says how long it waited from here to begin.
+  const accepted = performance.now();
   inFlight++;
   stats.inFlight = inFlight;
   let responded = false;
@@ -990,7 +993,7 @@ function handleConnection(sock: net.Socket): void {
 
   const reader = makeFrameReader(
     (frame) => {
-      void handleRequest(frame as Request, () => timedOut)
+      void handleRequest(frame as Request, () => timedOut, accepted)
         .then((r) =>
           r.kind === "reply"
             ? respond(r.resp, r.exitAfterFlush, r.delivered)
@@ -1150,6 +1153,7 @@ function subscription(req: SubscribeRequest): HandledRequest {
 export async function handleRequest(
   req: Request,
   timedOut: () => boolean,
+  accepted: number,
 ): Promise<HandledRequest> {
   if (
     !req ||
@@ -1202,7 +1206,7 @@ export async function handleRequest(
   // kinds it is typed for.
   if (typeof req.kind !== "string" || !Object.hasOwn(REPLY_KINDS, req.kind))
     return refuse("BAD_REQUEST", "unknown kind");
-  return replied(await replyTo(req, timedOut));
+  return replied(await replyTo(req, timedOut, accepted));
 }
 
 // The reply to a request of any kind but a subscribe, past the connection's
@@ -1210,6 +1214,7 @@ export async function handleRequest(
 export async function replyTo(
   req: ReplyRequest,
   timedOut: () => boolean,
+  accepted: number,
 ): Promise<Reply> {
   if (req.kind === "shutdown") {
     return {
@@ -1279,12 +1284,14 @@ export async function replyTo(
   }
 
   if (req.kind === "render") {
-    // [LAW:effects-at-boundaries] The one clock read of a render request: the
-    // instant the bar is drawn at (every time read in the render reads it) and
-    // the start its duration is measured from.
+    // [LAW:effects-at-boundaries] The render request's two clock reads: the
+    // instant the bar is drawn at (every time read in the render reads it),
+    // and the monotonic start its wait and duration are measured from, so a
+    // clock stepped meanwhile moves neither.
     const started = new Date();
     const at = instantOf(started);
-    const t0 = started.getTime();
+    const t0 = performance.now();
+    const waitedMs = Math.round(t0 - accepted);
     // [LAW:nothing-unseen] One render event per render request, written here
     // on every exit — a refusal and a throw included — from the facts the
     // render reached, so a failing render is described like any other.
@@ -1362,12 +1369,18 @@ export async function replyTo(
           },
         );
     if (rendered.outcome.kind !== "ok") stats.requestsErrored++;
-    // Whether the client was already told TIMEOUT while this render ran on.
-    noteFacts(facts, { timedOut: timedOut() ? "Y" : "N" });
+    // Whether the client was already told TIMEOUT while this render ran on,
+    // and how long the request waited, from the connection's accept, before
+    // it began: the daemon's own delay and the client's sending of its frame
+    // both count, so a round trip longer than `took` is time spent there.
+    noteFacts(facts, {
+      timedOut: timedOut() ? "Y" : "N",
+      waited: `${waitedMs}ms`,
+    });
     const { level, line } = renderEvent(
       facts,
       rendered.outcome,
-      Date.now() - t0,
+      Math.round(performance.now() - t0),
     );
     dlog(level, line);
     return {
