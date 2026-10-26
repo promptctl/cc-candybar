@@ -1,6 +1,7 @@
 import { reaction } from "mobx";
 import { ColorDepth, ensureContrast, parseRgbHex } from "@promptctl/rich-js";
 import { feedInputs } from "./helpers/inputs";
+import { shellGate } from "./helpers/shell-gate";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -2196,18 +2197,26 @@ describe("SourceRegistry — in-flight runs", () => {
   });
 
   it("a wait is for a run its key moved", async () => {
-    const store = new VariableStore();
-    const registry = registryOver(store);
-    store.defineBox("trigger", "string", "a");
-    registry.declareShell("val", "sleep 0.3; echo v", {
-      cwd: process.cwd(),
-      parse: TEXT,
-      cache: { kind: "key", template: "{{ .trigger }}" },
-    });
-    expect(await registry.settled(3000)).toEqual([]);
-    store.setBox("trigger", "b");
-    expect(await registry.settled(50)).toEqual(["val"]);
-    expect(await registry.settled(3000)).toEqual([]);
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const gate = shellGate(path.join(dir, "gate"));
+      const store = new VariableStore();
+      const registry = registryOver(store);
+      store.defineBox("trigger", "string", "a");
+      registry.declareShell("val", `${gate.hold}; echo v`, {
+        cwd: process.cwd(),
+        parse: TEXT,
+        cache: { kind: "key", template: "{{ .trigger }}" },
+      });
+      expect(await registry.settled(3000)).toEqual([]);
+      gate.close();
+      store.setBox("trigger", "b");
+      expect(await registry.settled(50)).toEqual(["val"]);
+      gate.open();
+      expect(await registry.settled(3000)).toEqual([]);
+    } finally {
+      cleanup();
+    }
   });
 
   it("inFlight() lets go of a run that never ends when its signal aborts", async () => {
