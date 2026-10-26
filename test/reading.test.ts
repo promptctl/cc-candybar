@@ -28,7 +28,7 @@ test("a read that found what is stored, by structure, moves nothing derived from
   expect(moves).toEqual(["read", "read", "read"]);
   // A renewed value is pending, and the read after it lands even when it
   // found what was stored before.
-  renew(source);
+  renew(source, "unread");
   settle(source, failed("git exited 128"));
   expect(moves).toEqual(["read", "read", "read", "pending", "read"]);
   stop();

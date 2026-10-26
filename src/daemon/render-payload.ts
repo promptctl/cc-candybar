@@ -64,7 +64,7 @@ import {
 import type { DaemonLogger } from "../utils/logger.js";
 import { isBundledPreset } from "./bundled-presets.js";
 import type {
-  DaySet,
+  DaySums,
   SessionUsageStore,
   SpeedObservation,
   TodayInfo,
@@ -1213,7 +1213,7 @@ export interface DeclaredLanes {
   readonly git: Lane<GitInfo>;
   readonly tmux: Lane<string>;
   readonly memento: Lane<CeilingReading>;
-  readonly today: Lane<DaySet>;
+  readonly today: Lane<DaySums>;
   // [LAW:dataflow-not-control-flow] One lane per plugin source the preset
   // reads, by the source variable's name: no fixed list — the set is what the
   // loaded plugins declare and the closure reaches.
@@ -1719,7 +1719,7 @@ export function todayOf(
     faults,
     log,
   }: Pick<RenderPayloadDeps, "usageStore" | "faults" | "log">,
-  lane: Lane<DaySet>,
+  lane: Lane<DaySums>,
   hookData: ClaudeHookData,
   at: Instant,
 ): TodayPayload | Pending | undefined {

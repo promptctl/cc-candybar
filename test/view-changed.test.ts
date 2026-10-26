@@ -14,6 +14,8 @@ import {
 } from "../src/daemon/cache/render";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { SessionState } from "../src/daemon/session-state";
+import { TEST_SIGNER } from "./helpers/link-signer";
+import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { viewFacts } from "./helpers/view-facts";
 import { until } from "./helpers/until";
 
@@ -56,7 +58,12 @@ function setUp() {
     );
   writeConfig("{{ .status }}");
   const watchers = new WatcherRegistry({
-    counters: { watchersOpened: 0, watchersClosed: 0 },
+    counters: {
+      watchersOpened: 0,
+      watchersClosed: 0,
+      watchRefusals: 0,
+      watchErrors: 0,
+    },
     logger: () => {},
   });
   cleanups.push(() => watchers.closeAll());
@@ -65,6 +72,8 @@ function setUp() {
   const reloads: Array<readonly string[]> = [];
   const cache = new RenderCache(
     {
+      storage: NO_PLUGIN_STORAGE,
+      signer: TEST_SIGNER,
       sessionState: new SessionState(),
       watchers,
       source: SOURCES_NOTHING,
@@ -80,7 +89,7 @@ function setUp() {
   );
   cleanups.push(() => cache.close());
   const open = (sid: string) =>
-    cache.holdSession(dir, dir, configFile, sid, viewFacts(dir, sid));
+    cache.holdSession(dir, dir, configFile, viewFacts(dir, sid));
   const reload = (): void => cache.reload(dir, dir, configFile);
   return { status, changed, reloads, writeConfig, reload, open };
 }

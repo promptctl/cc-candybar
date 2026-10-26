@@ -1,3 +1,4 @@
+import { reaction } from "mobx";
 // [LAW:verifiable-goals] The architectural fix (brandon-daemon-memory-leak-5qh):
 // the `today` aggregate is a fold over daemon-owned per-session records, NOT a
 // per-render whole-tree scan. These tests pin that contract.
@@ -597,6 +598,11 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
 
       const seeded = await todayInfo(store, holds, hd, tree, instantOf(noon));
       expect(seeded.kind === "ok" && seeded.value.cost).toBeCloseTo(3, 5);
+      // The lane answers the sums, so what tracks it (a view's one reaction)
+      // moves when the rescan's records land.
+      let moved = 0;
+      const lane = store.declareToday(holds, tree);
+      const stop = reaction(() => lane.current(), () => moved++);
       writeFileSync(join(pdir, "headless.jsonl"), usageLine("headless", noon, 4));
       appendFileSync(ongoing, usageLine("ongoing-1", noon, 8));
       utimesSync(ongoing, tick, tick);
@@ -604,6 +610,8 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
       // No request comes: the held set's period rescans it, and the draw's
       // lookup sees both sessions in the turn their records land.
       await until(() => cost() === 15, "the rescan counting both sessions");
+      expect(moved).toBeGreaterThan(0);
+      stop();
       expect(store.scanStats().refreshes.first).toBe(1);
       expect(store.scanStats().refreshes.period).toBeGreaterThanOrEqual(1);
       // The rescan read only the two sessions that moved, and its event is

@@ -1,3 +1,4 @@
+import { reaction } from "mobx";
 import { ColorDepth, ensureContrast, parseRgbHex } from "@promptctl/rich-js";
 import { feedInputs } from "./helpers/inputs";
 import fs from "fs";
@@ -9,6 +10,7 @@ import {
   SourceRegistry,
   parseDuration,
   MIN_SHELL_TTL_MS,
+  type Published,
   type SourceParse,
 } from "../src/var-system";
 import { SessionState } from "../src/daemon/session-state";
@@ -1054,6 +1056,12 @@ describe("SourceRegistry — shell: key: cache policy", () => {
       const fault = /^cache key: .*no key/;
       expect(registry.getLastError("val")?.message).toMatch(fault);
       expect([...registry.cachePolicyFaults().keys()]).toEqual(["val"]);
+      // The fault is published, as a stored value is: what a view reacts to.
+      const published: Published[] = [];
+      const stop = reaction(() => registry.published(), (p) => published.push(p));
+      expect(registry.published().faults).toEqual([
+        { timestamp: expect.any(Number), message: expect.stringMatching(fault) },
+      ]);
 
       // A key that throws is no key: the source does not run under it.
       await ran(registry);
@@ -1065,6 +1073,8 @@ describe("SourceRegistry — shell: key: cache policy", () => {
       store.setBox("trigger", "bad again");
       await ran(registry);
       expect(store.read("val")).toBe("");
+      // The same fault standing again publishes nothing.
+      expect(published).toEqual([]);
 
       // The key evaluating again is a key: the source re-runs, the fault clears.
       store.setBox("trigger", "a");
@@ -1072,6 +1082,8 @@ describe("SourceRegistry — shell: key: cache policy", () => {
       expect(store.read("val")).toBe("v2");
       expect(registry.getLastError("val")).toBeUndefined();
       expect(registry.cachePolicyFaults().size).toBe(0);
+      expect(published.at(-1)).toEqual({ values: ["v2"], faults: [] });
+      stop();
     } finally {
       cleanup();
     }

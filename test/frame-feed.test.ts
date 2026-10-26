@@ -480,6 +480,19 @@ describe("on a faked clock", () => {
     );
   });
 
+  // A feed opened before the session's first request has no timer: noting
+  // the request sets its first frame, whether or not anything else wakes it.
+  test("a feed waiting for its first request draws once one is noted", async () => {
+    const { feeds, state } = harness({ motion: "still" });
+    const close = feeds.subscribe("s", sub(() => {}));
+    await pass(PERIODS.still * 2);
+    expect(state.renders).toBe(0);
+    feeds.note("s", "bar", 1);
+    await pass(1);
+    close();
+    expect(state.renders).toBe(1);
+  });
+
   test("wakeWhere draws at once only the watched sessions it matches", async () => {
     const { feeds, note, state } = harness({ motion: "still" });
     note("a", "%1:a");

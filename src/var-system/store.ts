@@ -61,6 +61,9 @@ export interface VarNode {
 const unwritten = (value: VarValue | Pending): value is Pending =>
   value === PENDING;
 
+// What a written node holds: a box's value, or a document's reading.
+export type StoredValue = VarValue | Pending | Reading<JsonValue>;
+
 class BoxNode implements VarNode {
   readonly kind = "box" as const;
   private readonly cell: IObservableValue<VarValue | Pending>;
@@ -118,6 +121,11 @@ class BoxNode implements VarNode {
 
   lastUpdatedMs(): number | null {
     return this.lastChangedAt;
+  }
+
+  // The cell as written, pending included: what `stored` reads.
+  stored(): VarValue | Pending {
+    return this.cell.get();
   }
 }
 
@@ -489,6 +497,20 @@ export class VariableStore {
       );
     }
     return node.read();
+  }
+
+  // A written node's value as stored, pending included and nothing
+  // serialized: a box's value or a document's reading. Read in a reaction, it
+  // moves exactly when the node is written, which its own compare decides.
+  stored(name: string): StoredValue {
+    const node = this.requireNode(name);
+    if (node.kind === "document") return node.read();
+    if (node.kind !== "box") {
+      throw new TypeError(
+        `Variable "${name}" is a ${node.kind}, not a written node`,
+      );
+    }
+    return (node as BoxNode).stored();
   }
 
   setDocument(name: string, value: Reading<JsonValue>): void {

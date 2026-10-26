@@ -296,6 +296,10 @@ export class FrameFeeds<Req> {
     // [LAW:one-source-of-truth] Every frame a subscriber receives is one the
     // feed drew, as a frame (`drawing.by` is "feed", and the bar shows the
     // feed's pace): the request's own answer is its client's alone.
+    // [LAW:no-ambient-temporal-coupling] A feed waiting has no timer: the
+    // request it waited for is noted, so its first frame falls due, whether
+    // or not the request's render opens a view that says so.
+    if (feed.phase.kind === "waiting") this.hasten(feed);
   }
 
   // [LAW:single-enforcer] The one gate on the lanes: a subscription whose

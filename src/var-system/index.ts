@@ -33,4 +33,5 @@ export {
   type TimeOptions,
   type StateOptions,
   type LastError,
+  type Published,
 } from "./sources";

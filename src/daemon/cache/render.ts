@@ -1059,20 +1059,28 @@ export function openView<S extends ViewSource>(
   });
   bindView(state.compiled, registry.variableStore, registry, source);
   // [LAW:single-enforcer] The view's one say that what it draws from moved:
-  // its payload (every lane it declared, its request, its picks), its
-  // selections, or a value its own or its directory's sources published. Told
+  // its payload (its request, its picks), every lane it declared, plugin
+  // sources included (`today`'s day sums, which only a draw's projection
+  // reads, among them), its
+  // selections, or what its own or its directory's sources published. Told
   // as it opens, since a view opening is what its session's bar draws from
   // changing. The draw writes none of these (step 4e), so no frame wakes the
   // next one.
   // [LAW:no-silent-failure] A tracked read that throws is logged: a reaction
   // that let it go would reach only the console MobX prints to.
   const stopChanged = reaction(
-    () => [
-      source.payload(),
-      source.selections(),
-      registry.published(),
-      state.registry.published(),
-    ],
+    () => {
+      const { sources, ...keyed } = declared.get().lanes;
+      return [
+        source.payload(),
+        source.selections(),
+        registry.published(),
+        state.registry.published(),
+        ...[...Object.values(keyed), ...sources.values()].map((lane) =>
+          lane.current(),
+        ),
+      ];
+    },
     () => changed(sessionId),
     {
       equals: compareShallow,
@@ -1227,7 +1235,8 @@ export class RenderCache<S extends ViewSource = ViewSource> {
       `render-cache entry projectDir=${projectDir} cwd=${cwd} compile=${entry.state.compileKey.slice(0, 12)} entries=${this.entries.size} compiles=${this.compiles.size} accounted=${mb(this.accountedBytes())}/${mb(this.budgetBytes())}MB`,
     );
     this.refreshWatcher(entry, loaded);
-    this.observers.onReload?.(entry, this.sessionsOn(entry));
+    // An entry just created was drawn by no session.
+    this.observers.onReload?.(entry, []);
 
     return entry;
   }
