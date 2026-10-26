@@ -812,8 +812,8 @@ describe("LaneSetups", () => {
       now: () => instantOf(new Date(0)),
       defer: (run) => void deferred.push(run),
     });
-    // Run what the renders deferred, as the daemon's next turn does, and the
-    // setups queued behind them.
+    // Run what the clicks and requests deferred, as the daemon's next turn
+    // does, and the setups queued behind them.
     const settle = async (): Promise<void> => {
       deferred.splice(0).forEach((run) => run());
       await new Promise((r) => setImmediate(r));
@@ -828,64 +828,65 @@ describe("LaneSetups", () => {
     ...on,
   });
 
-  test("a session's first render is where it starts: nothing is set up", async () => {
+  const OPENED = `open under %7: /usr/bin/node /opt/candybar/dist/index.mjs bar-pane %7 {"CC_CANDYBAR_SOCKET":"/tmp/cc-candybar-1/socket"}`;
+
+  // Whatever control moved the switch — the toggle, ↺, ↶ undo, a preset, a
+  // save — reaches the setup the same way: the click measured before and
+  // after its commit (journaled, src/daemon/verbs/index.ts).
+  test("a click that moves a switch sets its lane up in the turn after, and only its lane", async () => {
     const { edge, did } = fakeEdge();
     const { setups, logs, settle } = owner(edge);
-    setups.observe(session(), switches({ pane: true }), 0);
+    setups.clicked(SID, session(), switches({}), switches({ pane: true }));
+    expect(did).toEqual([]);
+    await settle();
+    expect(did).toEqual([OPENED]);
+    expect(logs).toEqual([
+      `info lane: pane on — opened bar pane %9 under %7 by=click (session=${SID})`,
+    ]);
+    // A click that moves no switch sets nothing up.
+    setups.clicked(SID, session(), switches({ pane: true }), switches({ pane: true }));
+    await settle();
+    expect(did).toHaveLength(1);
+  });
+
+  // A daemon restarted under a bar the old one drew: the toggle is clicked
+  // before this daemon holds a request of the session.
+  test("a click before the session's first request owes its setup to that request", async () => {
+    const { edge, did } = fakeEdge();
+    const { setups, logs, settle } = owner(edge);
+    setups.clicked(SID, null, switches({}), switches({ pane: true }));
+    await settle();
+    expect(did).toEqual([]);
+    setups.noted(session());
+    await settle();
+    expect(did).toEqual([OPENED]);
+    expect(logs).toEqual([
+      `info lane: pane on — opened bar pane %9 under %7 by=owed (session=${SID})`,
+    ]);
+    // Owed once: the next request starts nothing.
+    setups.noted(session());
+    await settle();
+    expect(did).toHaveLength(1);
+  });
+
+  test("a lane toggled on and off again before the session's first request owes nothing", async () => {
+    const { edge, did } = fakeEdge();
+    const { setups, logs, settle } = owner(edge);
+    setups.clicked(SID, null, switches({}), switches({ pane: true, band: true }));
+    setups.clicked(SID, null, switches({ pane: true, band: true }), switches({ band: true }));
+    setups.clicked(SID, null, switches({ band: true }), switches({}));
+    setups.noted(session());
     await settle();
     expect(did).toEqual([]);
     expect(logs).toEqual([]);
   });
 
-  // Whatever moved the switch — the toggle, ↺, ↶ undo, a preset, a hand edit
-  // — reaches the setup the same way: a render that draws by it.
-  test("a switch that moves between renders sets its lane up after the render, and only its lane", async () => {
-    const { edge, did } = fakeEdge();
-    const { setups, logs, settle } = owner(edge);
-    setups.observe(session(), switches({}), 1);
-    setups.observe(session(), switches({ pane: true }), 2);
-    expect(did).toEqual([]);
-    await settle();
-    expect(did).toEqual([
-      `open under %7: /usr/bin/node /opt/candybar/dist/index.mjs bar-pane %7 {"CC_CANDYBAR_SOCKET":"/tmp/cc-candybar-1/socket"}`,
-    ]);
-    expect(logs).toEqual([
-      `info lane: pane on — opened bar pane %9 under %7 (session=${SID})`,
-    ]);
-    // Renders that draw by the same switches set nothing up again.
-    setups.observe(session(), switches({ pane: true }), 3);
-    await settle();
-    expect(did).toHaveLength(1);
-  });
-
-  // Another session's save, or a hand edit, moves the switch in every session
-  // reading the file; setting each of them up would restart every idle Claude
-  // Code on the machine for one session's save.
-  test("a switch moved only by the config file sets nothing up; the session's own next move does", async () => {
-    const { edge, did } = fakeEdge();
-    const { setups, settle } = owner(edge);
-    setups.observe(session(), switches({}), 4);
-    setups.observe(session(), switches({ pane: true }), 4);
-    await settle();
-    expect(did).toEqual([]);
-    setups.observe(session(), switches({}), 4);
-    setups.observe(session(), switches({ pane: true }), 5);
-    await settle();
-    expect(did).toEqual([
-      `open under %7: /usr/bin/node /opt/candybar/dist/index.mjs bar-pane %7 {"CC_CANDYBAR_SOCKET":"/tmp/cc-candybar-1/socket"}`,
-    ]);
-  });
-
-  // A daemon restarted under a bar the old one drew: the toggle is clicked
-  // before this daemon has rendered the session.
-  test("a session first seen after it moved a setting here sets up the lanes switched on", async () => {
-    const { edge, did } = fakeEdge();
-    const { setups, settle } = owner(edge);
-    setups.observe(session(), switches({ pane: true }), 3);
-    await settle();
-    expect(did).toEqual([
-      `open under %7: /usr/bin/node /opt/candybar/dist/index.mjs bar-pane %7 {"CC_CANDYBAR_SOCKET":"/tmp/cc-candybar-1/socket"}`,
-    ]);
+  test("owed setups are kept for 1024 sessions; the oldest is dropped, and said", async () => {
+    const { edge } = fakeEdge();
+    const { setups, logs } = owner(edge);
+    for (let i = 0; i <= 1024; i++)
+      setups.clicked(`s${i}`, null, switches({}), switches({ pane: true }));
+    expect(logs).toEqual([`warn lane: owed dropped sid="s0" lanes=pane`]);
   });
 
   // Toggled on, off and on again inside one restart: a second restart of the
@@ -896,10 +897,9 @@ describe("LaneSetups", () => {
       exited: () => new Promise((r) => (exit = r)),
     });
     const { setups, settle } = owner(edge);
-    setups.observe(session(), switches({}), 0);
-    setups.observe(session(), switches({ statusline: true }), 1);
-    setups.observe(session(), switches({}), 2);
-    setups.observe(session(), switches({ statusline: true }), 3);
+    setups.clicked(SID, session(), switches({}), switches({ statusline: true }));
+    setups.clicked(SID, session(), switches({ statusline: true }), switches({}));
+    setups.clicked(SID, session(), switches({}), switches({ statusline: true }));
     await settle();
     // The first restart waits for Claude Code to exit; nothing else has run.
     expect(did.filter((d) => d.startsWith("terminate"))).toEqual(["terminate 4242"]);
@@ -912,8 +912,7 @@ describe("LaneSetups", () => {
   test("a switch turned off brings the lane down", async () => {
     const { edge, did } = fakeEdge({ barPanes: () => ["%9"] });
     const { setups, settle } = owner(edge);
-    setups.observe(session(), switches({ pane: true }), 1);
-    setups.observe(session(), switches({}), 2);
+    setups.clicked(SID, session(), switches({ pane: true }), switches({}));
     await settle();
     expect(did).toEqual(["close %9"]);
   });
@@ -927,21 +926,19 @@ describe("LaneSetups", () => {
   test("a setup refused at once is logged and held on the bar like a click's failure", async () => {
     const { edge, did } = fakeEdge();
     const { setups, state, logs, settle } = owner(edge);
-    const noTmux = session({ tmux: null });
-    setups.observe(noTmux, switches({}), 1);
-    setups.observe(noTmux, switches({ pane: true }), 2);
+    setups.clicked(SID, session({ tmux: null }), switches({}), switches({ pane: true }));
     await settle();
     expect(did).toEqual([]);
     expect(logs).toEqual([
       expect.stringMatching(/^warn lane: pane on: .*not running inside tmux/),
     ]);
     expect(state.get(SID, "click.error")).toBe(
-      held(logs[0]!.replace(/^warn /, "").replace(` (session=${SID})`, "")),
+      held(logs[0]!.replace(/^warn /, "").replace(` by=click (session=${SID})`, "")),
     );
   });
 
-  test("a restart that fails after the render is logged and held on the bar like a click's failure", async () => {
-    // The wait reports its outcome only once the render has returned.
+  test("a restart that fails after the click is logged and held on the bar like a click's failure", async () => {
+    // The wait reports its outcome only once the click has returned.
     let gone!: (v: boolean) => void;
     let asked!: () => void;
     const waiting = new Promise<void>((r) => (asked = r));
@@ -952,18 +949,17 @@ describe("LaneSetups", () => {
       },
     });
     const { setups, state, logs, settle } = owner(edge);
-    setups.observe(session(), switches({}), 1);
-    setups.observe(session(), switches({ statusline: true }), 2);
+    setups.clicked(SID, session(), switches({}), switches({ statusline: true }));
     await settle();
     await waiting;
     expect(logs).toEqual([
-      `info lane: statusline on — restarting Claude Code in %7 under the attach launcher (session=${SID})`,
+      `info lane: statusline on — restarting Claude Code in %7 under the attach launcher by=click (session=${SID})`,
     ]);
     gone(false);
     await new Promise((r) => setImmediate(r));
     expect(logs.at(-1)).toMatch(/^warn lane: statusline on: Claude Code in %7 did not exit/);
     expect(state.get(SID, "click.error")).toBe(
-      held(logs.at(-1)!.replace(/^warn /, "").replace(` (session=${SID})`, "")),
+      held(logs.at(-1)!.replace(/^warn /, "").replace(` by=click (session=${SID})`, "")),
     );
   });
 });

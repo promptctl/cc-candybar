@@ -18,7 +18,9 @@ The Node and native followers share their reconnect decisions through one fixtur
 
 A lane's switch is read at the moment it's needed, never copied onto a frame. A subscribe to a lane that's off is refused before any feed opens.
 
-A lane is set up or torn down only when the session's own settings revision moved along with its switch. A switch moved by the config file alone (another session's save, a hand edit) sets nothing up, because that would restart every idle Claude Code reading the file. A daemon restart doesn't set anything up by itself either.
+A lane is set up or torn down only by the session's own click that moved its switch, measured around the click (before the handler, after the commit) rather than inferred at a draw. A switch moved by anything else (another session's save, a hand edit, a restart, a cd) sets nothing up, because that would restart every idle Claude Code reading the file. A click on a bar from before a daemon restart has no request to set the lane up with yet, so it is owed to the session's first request.
+
+The tmux status line is held at a request's arrival and a click's commit, never at a draw. Between requests nothing re-takes a status line that was released, because a re-take from a remembered switch would re-take one another session's save turned off.
 
 While a lane that draws the bar somewhere else is on and actually followed, Claude Code's own statusline shows one handoff line instead of a second bar. Turning the switch on alone draws nothing.
 

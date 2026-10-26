@@ -606,43 +606,41 @@ function endingLoses(snapshot: PaneSnapshot): string | null {
   return null;
 }
 
-// How many sessions' last reports LaneSetups keeps.
-const MAX_SESSIONS_SEEN = 1024;
-// A session this daemon has not seen: no lane running, no setting moved.
-const UNSEEN = {
-  switches: Object.fromEntries(
-    LANE_NAMES.map((lane) => [lane, false]),
-  ) as LaneSwitches,
-  revision: 0,
-};
+// How many sessions' owed setups LaneSetups keeps.
+const MAX_SESSIONS_OWED = 1024;
+
+// What started a setup: the session's own click, or its first request after
+// a click this daemon could not set up then.
+type SetupCause = "click" | "owed";
+
+// A lane a session's clicks moved before this daemon held a request of it:
+// where its switch stood before the first of them, and where it stands now.
+interface Owed {
+  readonly from: boolean;
+  readonly to: boolean;
+}
 
 // [LAW:single-enforcer] The one owner of lane setup. What a lane runs follows
-// its switch as the session's renders resolve it, whatever in the session
-// moved the switch — the menu's toggle, its ↺, ↶ undo, a preset picked — so no
-// control carries the setup itself (review of brandon-menus-sjhy.amf). Every
-// render reports the switches it drew by and the revision of the session's own
-// setting moves (SettingsHistory.revision — a reset that only deletes the
-// file's value moves it, a render rewriting the session's client hints does
-// not); a lane whose switch differs from the session's previous report is
-// brought in line, off the render, when the session's own moves moved with it.
-// A switch moved only by the config file — another session's save, a hand
-// edit — changes what every session reading that file renders by, and setting
-// up a lane in each of them would restart every idle Claude Code on the
-// machine for one session's save: such a session's lanes are brought in line
-// with its switches at its own next setting move, whichever setting it moves.
-// A session this daemon has not seen runs no lane as far as it knows, at
-// revision 0: its first report sets up the lanes switched on only when it has
-// already moved a setting here (a toggle clicked on a bar the daemon before a
-// restart drew), so a daemon restart re-runs no setup of its own accord. One
-// session's setups run one at a time, each after the last has finished — two
-// restarts of one pane would type over each other. How each setup ends is
-// logged, and a failure is held on the bar as a click's failure is
+// the session's own clicks on its switch, whatever control moved it — the
+// menu's toggle, its ↺, ↶ undo, a preset picked, a save — so no control
+// carries the setup itself (review of brandon-menus-sjhy.amf). The click path
+// measures the session's switches before the click and after its commit
+// (`journaled`, src/daemon/verbs/index.ts), and each lane that differs is
+// brought in line once, after the click. A switch moved by anything but the
+// session's own click — another session's save, a hand edit, a restart, a
+// `cd` — sets nothing up: it changes what every session reading that file
+// renders by, and setting a lane up in each would restart every idle Claude
+// Code on the machine for one session's save. A setup needs the session as
+// its latest request reported it; a click before this daemon holds one (a
+// toggle on a bar the daemon before a restart drew) owes its setups to the
+// session's first request, net of the lanes toggled back. One session's
+// setups run one at a time, each after the last has finished — two restarts
+// of one pane would type over each other. How each setup ends is logged, and
+// a failure is held on the bar as a click's failure is
 // (src/daemon/click-error.ts).
 export class LaneSetups {
-  private readonly seen = new Map<
-    string,
-    { readonly switches: LaneSwitches; readonly revision: number }
-  >();
+  // Each session's owed lanes, least recently owed first.
+  private readonly owed = new Map<string, Map<Lane, Owed>>();
   // Each session's setups still to run, while one runs.
   private readonly queued = new Map<string, Array<() => Promise<void>>>();
 
@@ -653,36 +651,67 @@ export class LaneSetups {
       readonly state: SessionStateRW;
       readonly log: (level: "info" | "warn", msg: string) => void;
       readonly now: () => Instant;
-      // [LAW:effects-at-boundaries] Runs a setup after the render that saw
-      // its switch move has returned: a render writes no session state.
+      // [LAW:effects-at-boundaries] Runs a setup in the turn after the click
+      // or request that started it: the click's journal has committed, and
+      // lane C's tmux calls are synchronous.
       readonly defer: (run: () => void) => void;
     },
   ) {}
 
-  // The switches a render of `session` drew by, at `revision` of its own
-  // setting moves.
-  observe(
-    session: LaneSession,
-    switches: LaneSwitches,
-    revision: number,
+  // A click of `sessionId` moved its switches from `before` to `after`.
+  // `session` is the session as its latest request reported it, or null when
+  // this daemon holds none yet.
+  clicked(
+    sessionId: string,
+    session: LaneSession | null,
+    before: LaneSwitches,
+    after: LaneSwitches,
   ): void {
-    const before = this.seen.get(session.sessionId) ?? UNSEEN;
-    // [LAW:carrying-cost] Bounded like the daemon's other per-session
-    // memories: least recently rendered forgotten first.
-    this.seen.delete(session.sessionId);
-    this.seen.set(session.sessionId, { switches, revision });
-    for (const [oldest] of this.seen) {
-      if (this.seen.size <= MAX_SESSIONS_SEEN) break;
-      this.seen.delete(oldest);
+    const moved = LANE_NAMES.filter((lane) => before[lane] !== after[lane]);
+    if (moved.length === 0) return;
+    if (session !== null) {
+      for (const lane of moved) this.start(session, lane, after[lane], "click");
+      return;
     }
-    if (before.revision === revision) return;
-    for (const lane of LANE_NAMES) {
-      if (before.switches[lane] === switches[lane]) continue;
-      const on = switches[lane];
-      this.deps.defer(() =>
-        this.enqueue(session.sessionId, () => this.sync(session, lane, on)),
+    // [LAW:dataflow-not-control-flow] Owed net: a lane toggled back to where
+    // it stood owes nothing.
+    const owed = this.owed.get(sessionId) ?? new Map<Lane, Owed>();
+    for (const lane of moved) {
+      const from = owed.get(lane)?.from ?? before[lane];
+      if (from === after[lane]) owed.delete(lane);
+      else owed.set(lane, { from, to: after[lane] });
+    }
+    // [LAW:carrying-cost] Bounded like the daemon's other per-session
+    // memories: least recently owed dropped first, and said.
+    this.owed.delete(sessionId);
+    if (owed.size > 0) this.owed.set(sessionId, owed);
+    for (const [oldest, lanes] of this.owed) {
+      if (this.owed.size <= MAX_SESSIONS_OWED) break;
+      this.owed.delete(oldest);
+      this.deps.log(
+        "warn",
+        `lane: owed dropped sid=${JSON.stringify(oldest)} lanes=${[...lanes.keys()].join(",")}`,
       );
     }
+  }
+
+  // A request of `session` arrived: the setups its clicks owe start now.
+  noted(session: LaneSession): void {
+    const owed = this.owed.get(session.sessionId);
+    if (owed === undefined) return;
+    this.owed.delete(session.sessionId);
+    for (const [lane, { to }] of owed) this.start(session, lane, to, "owed");
+  }
+
+  private start(
+    session: LaneSession,
+    lane: Lane,
+    on: boolean,
+    by: SetupCause,
+  ): void {
+    this.deps.defer(() =>
+      this.enqueue(session.sessionId, () => this.sync(session, lane, on, by)),
+    );
   }
 
   // [LAW:no-ambient-temporal-coupling] Runs `setup` now when none of the
@@ -705,8 +734,13 @@ export class LaneSetups {
   }
 
   // Resolves once the setup has finished, however it ended.
-  private sync(session: LaneSession, lane: Lane, on: boolean): Promise<void> {
-    const where = `(session=${session.sessionId})`;
+  private sync(
+    session: LaneSession,
+    lane: Lane,
+    on: boolean,
+    by: SetupCause,
+  ): Promise<void> {
+    const where = `by=${by} (session=${session.sessionId})`;
     const failed = (error: unknown): void => {
       const text = `lane: ${lane} ${on ? "on" : "off"}: ${error instanceof Error ? error.message : String(error)}`;
       this.deps.log("warn", `${text} ${where}`);

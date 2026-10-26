@@ -30,6 +30,7 @@ import {
   type DisclosureNest,
 } from "../../config/disclosure-nest";
 import { DISCLOSURE_CLOSED } from "../../config/disclosure";
+import type { LaneSwitches } from "../../config/lanes";
 import { closingView } from "../closing-view";
 import { configGate, configKeySeed } from "./config-validators";
 import type { Gate, RangeParams } from "./validator-registry";
@@ -212,6 +213,20 @@ export interface DaemonContext {
   // Reload that config from disk now, so the next render reads what a click
   // just wrote rather than waiting on the file watcher.
   readonly reloadConfig: (origin: RenderOrigin) => void;
+  // [LAW:effects-at-boundaries] A session's animation-lane switches over the
+  // config it renders with (`of`, looked up like `configFor`), and what
+  // follows a click of that session (`clicked`): the click path measures
+  // them before each click and after its commit (`journaled`), and the
+  // daemon hands both to the one owner of lane setup
+  // (src/daemon/lane-setup.ts) and of the tmux status line.
+  readonly lanes: {
+    readonly of: (origin: RenderOrigin, sessionId: string) => LaneSwitches;
+    readonly clicked: (
+      sessionId: string,
+      before: LaneSwitches,
+      after: LaneSwitches,
+    ) => void;
+  };
 }
 
 export interface VerbContext extends DaemonContext {
@@ -689,6 +704,25 @@ function reloadIfWritten(ctx: VerbContext, sid: string, step: Step): void {
 // merge of every config the daemon holds.
 function sessionConfig(ctx: VerbContext, sid: string): DslConfig {
   return ctx.configFor(sessionOrigin(ctx, sid));
+}
+
+// A session's lane switches as a click found them, and their read over the
+// config it renders with now — under its load-config pick as it stands at
+// each read, which a click can move. Null for a session that has never
+// rendered, which has no config to switch them.
+interface LaneMeter {
+  readonly sessionId: string;
+  readonly before: LaneSwitches;
+  readonly read: () => LaneSwitches;
+}
+
+function laneMeter(ctx: DaemonContext, sid: string): LaneMeter | null {
+  const raw = ctx.sessionState.get(sid, SESSION_RENDER_ORIGIN_KEY);
+  if (raw === null) return null;
+  const rendered = parseRenderOrigin(raw);
+  const read = (): LaneSwitches =>
+    ctx.lanes.of(sessionRenderOrigin(rendered, ctx.sessionState, sid), sid);
+  return { sessionId: sid, before: read(), read };
 }
 
 // What the session's config nests; a session that has never rendered has no
@@ -1650,7 +1684,10 @@ export function clickSessionOf(verb: string, value: string): string | null {
 
 function sessionOfEffects(effects: readonly ParsedEffect[]): string | null {
   const bearing = effects.find((e) => SESSION_FIRST_VERBS.has(e.verb));
-  const [sid = ""] = bearing === undefined ? [] : decodeSegments(bearing.value);
+  const [sid = ""] =
+    bearing === undefined
+      ? []
+      : decodeWire(() => decodeSegments(bearing.value));
   return sid === "" ? null : sid;
 }
 
@@ -1696,10 +1733,19 @@ const dispatch: VerbHandler = (rawValue, ctx) => {
 // before the throw is real, so it is recorded. [LAW:no-silent-failure] A
 // commit that fails too never hides the handler's own error: the click
 // reports both.
+//
+// [LAW:single-enforcer] It is also where every click of a session passes, so
+// it measures that session's lane switches (`sessionOf` names it): before the
+// handler, and after the commit — after any reload the handler made, since a
+// reload is synchronous. What a lane runs follows the difference, which no
+// render, frame or other session's write can make.
 function journaled<C extends DaemonContext>(
   handler: (value: string, ctx: Journaled<C>) => void,
+  sessionOf: (value: string) => string | null,
 ): (value: string, ctx: C) => void {
   return (value, ctx) => {
+    const sid = sessionOf(value);
+    const lanes = sid === null ? null : laneMeter(ctx, sid);
     const journal = ctx.history.begin();
     const navigation = ctx.navigation.begin(journal.sessionState);
     const failures: unknown[] = [];
@@ -1727,6 +1773,13 @@ function journaled<C extends DaemonContext>(
     } catch (e) {
       failures.push(e);
     }
+    if (lanes !== null) {
+      try {
+        ctx.lanes.clicked(lanes.sessionId, lanes.before, lanes.read());
+      } catch (e) {
+        failures.push(e);
+      }
+    }
     if (failures.length === 1) throw failures[0];
     if (failures.length > 1) {
       throw new Error(
@@ -1744,7 +1797,11 @@ export const VERBS: ReadonlyMap<
   (value: string, ctx: VerbContext) => void
 > = new Map(
   [...LEAF_VERBS, [VERB_DISPATCH, dispatch] as const].map(
-    ([verb, handler]) => [verb, journaled(handler)] as const,
+    ([verb, handler]) =>
+      [
+        verb,
+        journaled(handler, (value) => clickSessionOf(verb, value)),
+      ] as const,
   ),
 );
 
@@ -1769,18 +1826,21 @@ export function closeIdleMenus(
   idle: IdleClose,
   ctx: DaemonContext,
 ): void {
-  journaled<DaemonContext>((_value, c) => {
-    const roots = openRoots(nestOf(c, sid), (key) =>
-      c.navigating.get(sid, key),
-    );
-    c.navigating.setBatch(
-      sid,
-      roots.map(({ key }) => ({ key, value: DISCLOSURE_CLOSED })),
-    );
-    c.dlog(
-      "info",
-      `menu-idle: closed=${roots.map(({ key }) => key).join(",") || "-"} ` +
-        `idle=${idle.idleS.toFixed(1)}s timeout=${idle.timeoutS}s (session=${sid})`,
-    );
-  })("", ctx);
+  journaled<DaemonContext>(
+    (_value, c) => {
+      const roots = openRoots(nestOf(c, sid), (key) =>
+        c.navigating.get(sid, key),
+      );
+      c.navigating.setBatch(
+        sid,
+        roots.map(({ key }) => ({ key, value: DISCLOSURE_CLOSED })),
+      );
+      c.dlog(
+        "info",
+        `menu-idle: closed=${roots.map(({ key }) => key).join(",") || "-"} ` +
+          `idle=${idle.idleS.toFixed(1)}s timeout=${idle.timeoutS}s (session=${sid})`,
+      );
+    },
+    () => sid,
+  )("", ctx);
 }

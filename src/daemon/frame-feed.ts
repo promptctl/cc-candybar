@@ -358,6 +358,12 @@ export class FrameFeeds<Req> {
     return newest?.sessionId ?? null;
   }
 
+  // The latest request the daemon holds of `sessionId`, or null when it
+  // holds none.
+  latest(sessionId: string): Req | null {
+    return this.requests.get(sessionId)?.req ?? null;
+  }
+
   // The latest request of every session someone is watching, by session.
   watched(): Array<{ readonly sessionId: string; readonly req: Req }> {
     return [...this.feeds.keys()].flatMap((sessionId) => {
