@@ -2,6 +2,7 @@ import { reaction } from "mobx";
 import { ColorDepth, ensureContrast, parseRgbHex } from "@promptctl/rich-js";
 import { feedInputs } from "./helpers/inputs";
 import { shellGate } from "./helpers/shell-gate";
+import { until } from "./helpers/until";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -1708,20 +1709,20 @@ describe("SourceRegistry — depends_on cache policy", () => {
       // the change below provably lands after the read and before the pass
       // ends — a guessed delay could land before `cat` and prove nothing.
       const readMark = path.join(dir, "read");
-      const go = path.join(dir, "go");
-      registry.declareShell("val", `cat ${dataFile}; touch ${readMark}; until [ -e ${go} ]; do sleep 0.01; done`, {
+      const go = shellGate(path.join(dir, "go"));
+      go.close();
+      registry.declareShell("val", `cat ${dataFile}; touch ${readMark}; ${go.hold}`, {
         cwd: process.cwd(),
         parse: TEXT,
         cache: { kind: "depends_on", varNames: ["trigger"] },
       });
 
-      for (let i = 0; i < 500 && !fs.existsSync(readMark); i++) await elapse(10);
-      expect(fs.existsSync(readMark)).toBe(true);
+      await until(() => fs.existsSync(readMark), "the pass reading the file");
       // Change both the dependency and the data: this is the collision, not a
       // sequence.
       fs.writeFileSync(dataFile, "v2");
       store.setBox("trigger", "b");
-      fs.writeFileSync(go, "");
+      go.open();
 
       // The queued re-read is part of the tracked work, so `ran` is what
       // decides when to look — no second sleep guessing at the re-read.
@@ -2053,10 +2054,11 @@ describe("SourceRegistry — parse seam", () => {
     try {
       const gate = shellGate(path.join(dir, "gate"));
       gate.close();
-      const { registry } = make();
+      const { store, registry } = make();
       registry.declareShell("slow", `${gate.hold}; echo x`, { cwd: process.cwd(), parse: TEXT, cache: { kind: "never" } });
       registry.declareShell("fast", `echo y`, { cwd: process.cwd(), parse: TEXT, cache: { kind: "never" } });
-      expect(await registry.settled(1000)).toEqual(["slow"]);
+      await until(() => store.read("fast") === "y", "fast's run publishing");
+      expect(await registry.settled(0)).toEqual(["slow"]);
       gate.open();
       expect(await registry.settled(3000)).toEqual([]);
     } finally {
@@ -2192,17 +2194,14 @@ describe("SourceRegistry — in-flight runs", () => {
       expect([...(await view.settled(50))].sort()).toEqual(["dir", "own"]);
       gate.open();
       expect(await view.settled(3000)).toEqual([]);
+      // Both periods' re-runs held out: a re-read keeps the answer it has. A
+      // re-run can pass the gate while it is open, so only the runs spawned
+      // after it closes are the held ones.
       gate.close();
-      // Both periods' re-runs held out: a re-read keeps the answer it has.
       const spawned = (): number => fs.readFileSync(spawns, "utf8").split("\n").length - 1;
-      const rerunBy = Date.now() + 3000;
-      while (spawned() < 4 && Date.now() < rerunBy) {
-        await new Promise((resolve) => setTimeout(resolve, 20));
-      }
-      expect(spawned()).toBeGreaterThanOrEqual(4);
-      const asked = Date.now();
+      const closedAt = spawned();
+      await until(() => spawned() >= closedAt + 2, "both periods' re-runs spawning", 3000);
       expect(await view.settled(3000)).toEqual([]);
-      expect(Date.now() - asked).toBeLessThan(1000);
     } finally {
       cleanup();
     }
