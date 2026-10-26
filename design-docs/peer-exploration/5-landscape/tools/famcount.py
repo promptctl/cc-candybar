@@ -1,10 +1,12 @@
 """Join classifier labels to items: per-family project counts, and the `other` bucket."""
 import json, glob, re
+import os
+RUN = os.environ.get('CCLAND_RUN', '/tmp/ccland')  # the top-1,000 run, or t2 for the wider read
 from collections import defaultdict, Counter
 
-items = json.load(open('/tmp/ccland/items.json'))
+items = json.load(open(RUN + '/items.json'))
 lab = {}
-for f in sorted(glob.glob('/tmp/ccland/cls/out-*.tsv')):
+for f in sorted(glob.glob(RUN + '/cls/out-*.tsv')):
     for l in open(f):
         if '\t' in l:
             i, c = l.rstrip('\n').split('\t', 1)
@@ -24,8 +26,8 @@ names = {l.split(' ', 1)[0]: l.split(' ', 1)[1].strip() for l in open('/tmp/ccla
 for k, v in sorted(fam.items(), key=lambda kv: -len(kv[1])):
     print('%4d %s %s' % (len(v), k, names[k][:95]))
 print('other items', len(other), 'projects', len({p for p, _, _ in other}))
-json.dump({k: sorted(v) for k, v in fam.items()}, open('/tmp/ccland/fam.json', 'w'))
-json.dump(names, open('/tmp/ccland/famnames.json', 'w'))
-json.dump(other, open('/tmp/ccland/other.json', 'w'))
+json.dump({k: sorted(v) for k, v in fam.items()}, open(RUN + '/fam.json', 'w'))
+json.dump(names, open(RUN + '/famnames.json', 'w'))
+json.dump(other, open(RUN + '/other.json', 'w'))
 oc = Counter(re.sub(r'^other:\s*', '', c).lower() for _, c, _ in other)
 print(oc.most_common(50))

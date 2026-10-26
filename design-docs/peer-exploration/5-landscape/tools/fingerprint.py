@@ -1,6 +1,6 @@
 """Measure each downloaded project and find shared code across them (MOSS-style winnowing).
 
-Outputs /tmp/ccland/measure.json: per slug, repo source LOC, statusline-file LOC, the
+Outputs measure.json (or the path in argv[1]): per slug, repo source LOC, statusline-file LOC, the
 statusline files, the projects it shares most code with, and its overlap with the
 Claude Code docs examples.
 """
@@ -108,5 +108,5 @@ for s, fp in fps.items():
             rel.append((o, n, round(n / len(fp), 2), round(n / len(fps[o]), 2)))
     rel.sort(key=lambda x: -x[1])
     m['shares'] = rel[:10]
-json.dump(meas, open('/tmp/ccland/measure.json', 'w'))
+json.dump(meas, open(sys.argv[1] if len(sys.argv) > 1 else '/tmp/ccland/measure.json', 'w'))
 print(len(meas), 'projects measured', file=sys.stderr)

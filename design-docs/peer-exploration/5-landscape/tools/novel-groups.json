@@ -6,12 +6,10 @@
   "asyrafhussin/claude-code-statusline",
   "axfinn/ccday",
   "barnuri/harness-status-line",
-  "bestes206/claude-whereami",
   "bllshttng/fno",
   "darkwing4/statusline-rs-cc",
   "div0011/frontend-pipeline",
   "dkstm95/claude-recall",
-  "dousea/context-lens",
   "dpep/claude",
   "dreamiurg/claude-session-topics",
   "englader/purrgotchi",
@@ -81,15 +79,23 @@
  "reads mood, fatigue or personality": [
   "baeseokjae/claude-code-cockpit",
   "jcsoftlabs/civora-backend",
-  "kumamaki/claude-code-personalities",
   "li-xingxiao/sbti-buddy-skill",
-  "thousandflowers/canary",
-  "v4l3r10/emobar",
-  "vibe-log/vibe-log-cli"
+  "v4l3r10/emobar"
  ],
  "turns the bar into another medium (game, reader)": [
   "alanmarcero/claude-statusline-arcade-roulette",
   "alrightlad/custom-claude-code-terminal",
   "lukelandis3-sketch/claude-and-prejudice"
+ ],
+ "grades the prompt or the reply": [
+  "bestes206/claude-whereami",
+  "div0011/frontend-pipeline",
+  "dousea/context-lens",
+  "kumamaki/claude-code-personalities",
+  "thousandflowers/canary",
+  "vibe-log/vibe-log-cli"
+ ],
+ "shows friends or other users": [
+  "alrightlad/custom-claude-code-terminal"
  ]
 }

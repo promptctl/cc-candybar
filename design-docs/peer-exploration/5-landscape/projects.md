@@ -1,6 +1,6 @@
 # The 1,000 most-committed Claude Code statuslines, one section each
 
-Ranked by commits (a fork counts only the commits it added over its parent). Each section was written by a haiku agent from the project's downloaded source on 2026-10-25; anchors point into that source. How the list was chosen and what the fields mean: [README.md](README.md).
+Ranked by commits (a fork counts only the commits it added over its parent). Each section was written by a haiku agent from the project's downloaded source on 2026-10-25; anchors point into that source. How the list was chosen and what the fields mean: [README.md](README.md). The less-committed projects read afterwards are in [projects-tail.md](projects-tail.md).
 
 ## 1. bllshttng/fno
 31995 commits (28016 in the last 90 days), 2 stars, last commit 2026-10-26

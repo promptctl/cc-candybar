@@ -1,188 +1,249 @@
-# The 1,000 most-committed Claude Code statuslines: clones, new ideas, and why there are so many
+# 4,002 Claude Code statuslines: clones, new ideas, and why there are so many
 
-**Clones?** Mostly not, at least not at this level of activity. Code fingerprinting finds 101 of the 1,000 sharing most of their statusline code with another project in the set. Agents reading each project found about 15% to be forks, copies or ports. The copying runs almost entirely from two parents, claude-hud and ccstatusline. What the field does share is a design, not code: model, directory, git branch, a context bar that turns green, yellow then red, cost, and the 5-hour and 7-day limits. Nearly every project draws that baseline and writes its own code to do it. None of the 1,000 is built on the example scripts in Claude Code's statusline docs.
+Haiku agents read 4,002 statusline projects: the 1,000 with the most commits and 3,002 from below them. Code fingerprinting covered 7,046, every project whose source could be downloaded.
 
-**New ideas?** A few dozen, and they cluster. The common extras are already a second baseline: quota fetched from the OAuth usage endpoint (228 projects), burn-rate and run-out forecasts (214), live tool and agent activity read from the transcript (189), spend history (170) and prompt-cache timers (158). The genuinely new work, in 73 projects, does one of these:
-- feeds the bar's numbers back into Claude: blocking tools at a quota, resuming the session when a limit resets
-- runs an LLM to write about the session
-- reads the session's mood or failures
-- turns the bar into something else entirely, such as Doom, a golf game, or a book read one line per tick
+**Clones?** No. About one project in ten has half or more of its statusline code copied from one other project, and that share barely moves down the activity scale. It is 12% in the top 1,000, 7% to 10% in the middle and 15% among projects with 0 or 1 commits. The copying runs through a few dozen parents:
+- daniel3303/ClaudeCodeStatusLine, with 57 copies
+- claude-hud, with 74 re-uploads over two generations of its code
+- ccstatusline, with 27
+- CCometixLine, with 26
 
-**Why so many?** Four reasons, in order of weight:
-1. The statusline command is the one place Claude Code hands a program its live session data, rate limits included. So orchestrators, usage trackers, companions and menu-bar apps all ship a statusline to get that feed. 388 of the 894 real statuslines here sit inside a larger tool, and 62 wrap or chain someone else's bar because there is only one slot.
-2. A statusline is small and Claude will write one for you, so people publish their own setup (136 projects).
-3. Plan limits are the itch most of them scratch.
-4. The rest are rewrites into another language, forks for Chinese users and regional providers, and toys.
+Only 14 of the 7,046 are mostly the example scripts from Claude Code's statusline docs. What the field shares is a design, not code. Nearly every project draws the same facts from the same stdin JSON: model, directory, git branch, a context bar that turns green, yellow then red, cost, and the 5-hour and 7-day limits. Most of them write their own code to do it.
 
-## How the 1,000 were chosen
+**New ideas?** Some, and they cluster. 211 of the 4,002 (5%) do something a statusline reader would not expect. The share falls from 7% in the top 1,000 to about 4% below it. The largest cluster, in 90 projects, feeds the bar's numbers back into Claude: hooks that deny tool calls at a quota, block the end of a turn until a handoff is written, or resume the session when a limit resets. Next come an LLM writing about the session (56 projects) and the bar turned into a game (18, most of them in the tail). The tail adds ideas the top 1,000 lacks:
+- finish-time estimates trained on the machine's own run history
+- spaced-repetition flashcards and language drills
+- a whole card game played through the prompt
+- a cluster of tools that patch the installed Claude Code to remove its "Context low" warning
 
-The input was the 9,558 projects in [../4-styling/all-projects.md](../4-styling/all-projects.md). A script fetched commit counts and dates for every one with a git history: GitHub repos and gists, GitLab, Codeberg. It then dropped four groups:
-- 1,876 projects the styling survey's scanner had marked as not statuslines
+**Why so many?** The statusline command is the one place Claude Code hands a program its live session data, rate limits included. So any tool that wants that data has to own the statusline slot. That reason dominates the top. There, 43% of the statuslines sit inside a larger tool such as an orchestrator, a usage tracker or a plugin. Below the top 1,000 that share drops to 12% to 30%. The tail is mostly people publishing their own bar (14% to 19% of each band), rewriting one in another language (6% to 8%) or retargeting one for another language or a regional provider (5% to 9%). Seeing plan limits is the itch in every band, at about 11%. A statusline is small, Claude will write one on request, and plugin marketplaces make publishing it one step more.
+
+## How the projects were chosen
+
+The input was the 9,558 projects in [../4-styling/all-projects.md](../4-styling/all-projects.md). A script fetched commit counts and dates for every one with a git history: GitHub repos and gists, GitLab, Codeberg. It dropped:
+- the 1,876 the styling survey's scanner had marked as not statuslines
 - 463 with no history (npm pages, blog posts)
 - 109 that were gone
-- 1,896 with fewer than 5 commits and none in the last 90 days
+- 39 URLs that led to a repo already counted
 
-A fork counts only the commits it added over its parent, since its history otherwise includes the parent's. That left 5,173 projects. The top 1,000 by commit count have at least 45 commits each. cc-candybar itself was left out.
+A fork counts only the commits it added over its parent. cc-candybar itself was left out.
 
-Each project's source was downloaded. Fingerprinting (MOSS-style winnowing over the files that mention Claude's statusline fields) measured code overlap between every pair, and against the docs examples. Fifty haiku agents then read the code and wrote one section per project ([projects.md](projects.md)): what it is, its size, its shape, its data sources, its lineage, why it exists, and what it does beyond the baseline. Further haiku passes sorted the 4,368 beyond-baseline features into 34 families and the 1,000 stated reasons into 16 motives. A last pass screened the features that fit no family for genuinely new ideas. Every count below comes from those labels.
+That left 7,069 projects ranked by commits, and 7,046 of them downloaded. The first pass read the 1,000 with the most commits, which have at least 45 each. The second pass read 3,002 of the rest:
+- all 1,920 with 10 to 44 commits, counting six tied at 45 that fell just outside the top 1,000
+- 1,023 of the 3,021 with 2 to 9 commits: those with at least 200 lines of statusline code that are not 70% or more a copy of a project already read
+- 59 of the 1,128 with 0 or 1 commits: those with at least 400 such lines
 
-The ranking shapes the picture, so read the shares with that in mind. Projects with 45 or more commits are the substantial ones: only 54 of the 894 statuslines are plain field printers that read stdin and print it. The thousands of 20-line scripts live in the long tail this list leaves out.
+So the 10-44 bands are complete, and the 2-9 and 0-1 bands are their larger, original projects. Shares in those bands describe that subset, not the band.
 
-| what the project is | count |
-|---|---|
-| a dedicated statusline | 477 |
-| a statusline inside a larger tool (orchestrator, plugin, router, usage tracker) | 388 |
-| a config for, or wrapper around, another statusline | 22 |
-| a personal dotfiles repo | 7 |
-| not a statusline after all (tmux bars, KDE widgets, menu-bar apps that never use the statusLine setting) | 99 |
-| unreadable | 7 |
+Fingerprinting is MOSS-style winnowing over the files that mention Claude's statusline fields. It measured code overlap between every pair of projects and against the docs examples. Each agent read one project's code and wrote a section on it: what it is, its size, its shape, its data sources, its lineage, why it exists, and what it does beyond the baseline ([projects.md](projects.md), [projects-tail.md](projects-tail.md)). Further haiku passes did three things:
+- sorted the 16,695 beyond-baseline features into 34 families
+- sorted each project's stated reason into one of 16 motives
+- screened the features that fit no family for genuinely new ideas
 
-| shape, of the 894 statuslines | count |
-|---|---|
-| rich: computes or fetches what stdin doesn't give (transcript parsing, usage API, caches, background processes, history) | 558 |
-| engine: other people configure it (segments, layouts, themes, configurators) | 193 |
-| standard: the baseline done thoroughly | 88 |
-| field printer | 54 |
+Every count below comes from those labels or from the fingerprints.
 
-Most were written recently and fast. Of the 1,000, 164 were created in the last 60 days. The median project gains 0.8 commits a day, and a quarter gain more than 2, a rate that suggests Claude is writing much of the code. Primary languages are TypeScript 225, Python 191, Shell 162, JavaScript 151, Rust 107, Go 83 and Swift 27; the Swift projects are mostly menu-bar apps.
+## Down the tail
+
+Commit bands, left to right from the most active. Rows marked "all downloaded" cover every fingerprinted project in the band; the rest cover the projects read.
+
+| | 45+ | 20-44 | 10-19 | 5-9 | 2-4 | 0-1 |
+|---|---|---|---|---|---|---|
+| projects read | 1000 | 863 | 1057 | 524 | 499 | 59 |
+| statuslines among them | 894 | 789 | 977 | 511 | 495 | 58 |
+| median lines of statusline code (all downloaded) | 720 | 408 | 275 | 196 | 138 | 123 |
+| half or more copied from one other project (all downloaded) | 12% | 8% | 7% | 9% | 10% | 15% |
+| statusline inside a larger tool | 43% | 30% | 23% | 13% | 12% | 14% |
+| shape: rich | 62% | 70% | 62% | 70% | 68% | 72% |
+| shape: engine | 22% | 12% | 9% | 9% | 6% | 10% |
+| shape: standard | 10% | 12% | 18% | 17% | 19% | 17% |
+| shape: field printer | 6% | 7% | 11% | 4% | 7% | 0% |
+| at least one genuinely new idea | 7% | 6% | 4% | 4% | 4% | 5% |
+
+The shapes, as the agents applied them:
+- **Rich:** computes or fetches what stdin doesn't give, such as transcript parsing, the usage API, caches, background processes or history.
+- **Engine:** other people configure it, with segments, layouts, themes or a configurator.
+- **Standard:** the baseline done thoroughly.
+- **Field printer:** reads stdin and prints fields.
+
+Four things change down the tail and three don't.
+- **Projects get smaller.** The median statusline shrinks from 720 lines to 123.
+- **Statuslines leave larger products.** The share inside a larger tool falls from 43% to about 13%.
+- **Frameworks thin out.** Engines fall from 22% to about 10% or less, and so do the features that make a bar a product: extension points, configurators, update checks, wrapping other bars.
+- **New ideas get rarer.** The share falls from 7% to about 4%.
+
+What doesn't change:
+- **The copy rate** stays at about one in ten.
+- **Rich bars stay the majority** in every band.
+- **Field printers stay rare.** Even in the two complete bands, 20-44 and 10-19 commits, only 7% and 11% of the statuslines just print stdin fields.
+
+The long tail is not a pile of 20-line scripts either. Of the 5,323 projects below the top 1,000 with any statusline code, 464 have under 50 lines of it. Even at 0 or 1 commits, only 14% are that small.
 
 ## Clones and lineage
 
-Two measures agree that the active end of the field is mostly independent code.
+**Code overlap.** Across all 7,046 projects, 703 fall into 203 families in which one member's statusline code is at least half contained in another's. A family needs at least a fifth of each member's code in common. Without that floor, monorepos that vendor several bars chain unrelated families into one. The families are listed in `tools/families-all.json` with their members' commit counts. The largest:
+- **daniel3303/ClaudeCodeStatusLine, 57 projects,** only 4 of them in the top 1,000. Most of its copies sit in the tail.
+- **claude-hud, 74 projects in two families of 44 and 30.** They are re-uploads, not GitHub forks: claude-hud-cn, claude-hud-glm, claude-hud-zhipu, claude-hud-bedrock, claude-hud-cubence and many plain `claude-hud` copies. The variants mostly retarget it at Chinese users or at the GLM, Zhipu, Kimi or Bedrock providers. The current jarrodwatts/claude-hud has drifted from both and fingerprints into a family of six.
+- **ccstatusline, 27 projects,** including ccstatusline-zh, ccstatusline-zh-tw and ccstatusline-gradient.
+- **CCometixLine, 26 projects,** Rust copies, most still named CCometixLine, along with rebrands such as CCstatus, hazline and EFlowCodeLine.
+- **Three families that never reached the top 1,000:** nilbuild/claude-statusline (25), kunaltulsidasani/claude-reimagined (19) and danielmackay/claude-code-statusline (14).
 
-**Code overlap.** 101 projects fall into 24 families in which one member's statusline code is at least half contained in another's (`families.json` in tools, members listed in [projects.tsv](projects.tsv) under `clones_of`). Three families account for more than half:
-- **claude-hud, 33 projects.** They are re-uploads, not GitHub forks: claude-hud-cn, claude-hub-glm, claude-hud-bedrock, cometix-hud, claude-hud-plus and many plain `claude-hud` copies. The variants mostly retarget it at Chinese users, the GLM, Kimi or Bedrock providers, or a local proxy. The current jarrodwatts/claude-hud has drifted from the code they copied, so it fingerprints into a separate family of three.
-- **ccstatusline, 15 projects,** among them ccstatusline-zh, ccstatusline-zh-tw, ccstatusline-gradient, ccstatusline-usage and ccstatusline-desktop.
-- **daniel3303/ClaudeCodeStatusLine, 8 projects,** including statuslin.es.
+The rest are pairs and triples: a project and its mirror on another forge, a fork with a few patches, or one author's two repos.
 
-The rest are pairs: a project and its mirror on another forge, a fork with a few patches, or one author's two repos.
+**What the agents found.** Of the 3,724 statuslines read, 71% show no lineage at all. The rest:
+- 338 credit another project as inspiration without sharing code.
+- 211 wrap or configure another statusline.
+- 205 copy code from a named project.
+- 165 are forks.
+- 156 port one to another language.
 
-**What the agents found.** Of the 894 statuslines, 658 show no lineage at all. The rest:
-- 67 are forks.
-- 38 copy code from a named project.
-- 26 port one to another language.
-- 31 wrap or configure another statusline.
-- 111 credit another project as inspiration without sharing code.
+Starship and Powerlevel10k turn up only as credited inspiration.
 
-Across those relations claude-hud is named about 45 times and ccstatusline about 38, then ccusage 9, claude-powerline 7 and CCometixLine 5. Starship and Powerlevel10k turn up only as credited inspiration.
-
-**The docs template.** No project in the 1,000 shares more than 6% of its fingerprints with the docs examples. Whatever copies the docs scripts has fewer than 45 commits.
-
-So the sameness is convergence. Everyone reads the same stdin JSON and draws the same handful of facts from it, and most arrive at the same layout independently. The baseline every agent was told to treat as unremarkable held for nearly every project it read.
+So the sameness is convergence. Everyone reads the same stdin JSON and draws the same handful of facts from it, and most arrive at the same layout on their own.
 
 ## What is common beyond the baseline
 
-These feature families each appear in dozens to hundreds of projects. They are the field's second layer, not new ideas. Counts are projects, out of 918 with at least one feature beyond the baseline.
+These families are the field's second layer, not new ideas. Shares are of the statuslines in each band; the first column counts projects across all 4,002.
 
-| family | projects |
-|---|---|
-| plan quota fetched outside stdin: the OAuth usage endpoint, with the token read from the keychain or credentials file | 228 |
-| burn rate, pace against the window, or a forecast of when a limit or the context runs out | 214 |
-| live activity from the transcript or hooks: running tools, subagents, todos | 189 |
-| spend or usage history across sessions: daily, weekly or monthly totals, per-project or per-model | 170 |
-| prompt-cache TTL countdown, warm or cold, hit rate | 158 |
-| other AI CLIs supported (Codex, Gemini, Copilot, opencode) | 124 |
-| git beyond branch and dirty: worktrees, stash, diff against main | 106 |
-| cost priced from transcript tokens | 102 |
-| theming beyond plain colours: gradients, light/dark detection, palettes taken from Claude's theme | 96 |
-| installers, settings.json patching, rollback, doctor commands | 95 |
-| Claude Code state: effort, permission or sandbox mode, plan mode | 88 |
-| several sessions or agents at once | 86 |
-| extension points: custom commands, plugins, template languages | 86 |
-| PR, CI or deploy status | 81 |
-| compaction: context measured against the autocompact point | 78 |
-| width-adaptive layout | 74 |
-| update checks | 71 |
-| an interactive configurator (TUI, wizard, web) | 70 |
-| wraps or composes another statusline | 62 |
-| background refresh: detached fetches, daemons, caches off the render path | 59 |
-| mascots, pets and animation | 58 |
-| several Claude accounts | 55 |
-| timers, idle detection, response latency | 53 |
-| machine metrics (CPU, memory, battery) | 50 |
-| sounds and desktop notifications | 48 |
-| shown outside the terminal (menu bar, widgets, hardware) | 38 |
-| tips, coaching, rotating messages | 37 |
-| weather, clocks, markets, news | 34 |
-| Anthropic service status | 23 |
-| OSC 8 links | 19 |
-| language and environment detection | 19 |
-| telemetry export (OpenTelemetry) | 17 |
-| tmux | 15 |
-| localisation | 12 |
+| family | projects | 45+ | 20-44 | 10-19 | 5-9 | 2-4 | 0-1 |
+|---|---|---|---|---|---|---|---|
+| plan quota fetched outside stdin: the OAuth usage endpoint, with the token read from the keychain or credentials file | 796 | 24% | 24% | 18% | 20% | 21% | 22% |
+| burn rate, pace against the window, or a forecast of when a limit or the context runs out | 721 | 23% | 20% | 17% | 21% | 15% | 22% |
+| live activity from the transcript or hooks: running tools, subagents, todos | 590 | 20% | 16% | 13% | 14% | 14% | 19% |
+| prompt-cache TTL countdown, warm or cold, hit rate | 532 | 17% | 16% | 12% | 13% | 14% | 17% |
+| spend or usage history across sessions | 529 | 18% | 15% | 12% | 12% | 14% | 10% |
+| Claude Code state: effort, permission or sandbox mode, plan mode | 478 | 9% | 16% | 12% | 15% | 15% | 10% |
+| theming beyond plain colours: gradients, light/dark detection, palettes taken from Claude's theme | 437 | 10% | 9% | 13% | 15% | 12% | 17% |
+| other AI CLIs supported (Codex, Gemini, Copilot, opencode) | 427 | 13% | 13% | 10% | 11% | 9% | 7% |
+| width-adaptive layout | 366 | 8% | 11% | 7% | 12% | 12% | 17% |
+| git beyond branch and dirty: worktrees, stash, diff against main | 360 | 11% | 11% | 8% | 9% | 9% | 12% |
+| cost priced from transcript tokens | 358 | 11% | 11% | 7% | 9% | 11% | 7% |
+| installers, settings.json patching, rollback, doctor commands | 344 | 10% | 10% | 8% | 9% | 8% | 16% |
+| compaction: context measured against the autocompact point | 279 | 8% | 8% | 7% | 7% | 5% | 5% |
+| PR, CI or deploy status | 275 | 9% | 8% | 6% | 8% | 7% | 5% |
+| timers, idle detection, response latency | 261 | 6% | 8% | 5% | 9% | 8% | 10% |
+| several sessions or agents at once | 254 | 8% | 8% | 5% | 7% | 5% | 9% |
+| mascots, pets and animation | 248 | 6% | 7% | 7% | 7% | 5% | 10% |
+| background refresh: detached fetches, daemons, caches off the render path | 223 | 6% | 7% | 5% | 4% | 7% | 7% |
+| extension points: custom commands, plugins, template languages | 222 | 10% | 7% | 5% | 4% | 3% | 2% |
+| update checks | 201 | 8% | 8% | 3% | 3% | 4% | 3% |
+| several Claude accounts | 180 | 6% | 6% | 4% | 4% | 3% | 7% |
+| an interactive configurator (TUI, wizard, web) | 178 | 8% | 6% | 4% | 3% | 2% | 9% |
+| wraps or composes another statusline | 172 | 7% | 6% | 3% | 3% | 2% | 2% |
+| machine metrics (CPU, memory, battery) | 160 | 5% | 5% | 3% | 5% | 3% | 7% |
+| weather, clocks, markets, news | 141 | 4% | 4% | 4% | 3% | 3% | 7% |
+| tips, coaching, rotating messages | 137 | 4% | 4% | 4% | 3% | 3% | 3% |
+| language and environment detection | 126 | 2% | 5% | 2% | 4% | 5% | 3% |
+| sounds and desktop notifications | 121 | 4% | 4% | 3% | 2% | 2% | 3% |
+| shown outside the terminal (menu bar, widgets, hardware) | 114 | 3% | 3% | 3% | 2% | 2% | 5% |
+| OSC 8 links | 77 | 2% | 2% | 2% | 2% | 2% | 3% |
+| localisation | 65 | 1% | 2% | 2% | 1% | 2% | 0% |
+| Anthropic service status | 49 | 2% | 1% | 1% | 1% | 0% | 2% |
+| tmux | 47 | 1% | 2% | 1% | 1% | 0% | 2% |
+| telemetry export (OpenTelemetry) | 40 | 2% | 2% | 1% | 1% | 0% | 0% |
 
-The weight sits on one question: will I run out? Quota, pace, cost and cache timers are the top five.
+The weight sits on one question in every band: will I run out? Quota, pace, cache timers and spend lead throughout, each in roughly a fifth of the bars, a little less in the 10-19 band. The 0-1 column holds only 58 statuslines, so its shares swing.
 
 ## The new ideas
 
-Haiku screened the 1,250 features that fit no family and marked 101 of them, from 73 projects, as ideas a statusline reader would not expect. I checked several against the source; the ones quoted here hold up.
+Haiku screened the 4,797 features that fit no family and marked 285 of them, from 211 projects, as ideas a statusline reader would not expect. A script then sorted those into groups by keyword, so the group counts are approximate. I checked every example quoted here against its source.
 
-**Feeding the bar back into Claude (about 26 projects).** These stop treating the statusline as a display for the person and use its numbers to steer the agent:
-- funhunter7/claude-limit-guard blocks Claude from ending its turn once per reset window after a limit breach, so it writes a handoff.
-- bellwether-ai/btc-claude-plugins, pepsi133/skill-bazaar and victorrentea/victor-statusline deny tool calls or park prompts past a quota percentage.
-- jonyfs/astrolabe holds new subagents back.
-- moiri-gamboni/session, noambrand/launchpad-cli, jordanallenlewis/ccrig and mturley/agent-handler resume the session or type "continue" when the limit resets.
-- team-maro/cc-statusline exposes the bar's state to Claude as an MCP server, and tyejcoleman/tokenroom writes a state file that hooks and an MCP tool read, "so the agent sees the same numbers the human sees".
-- marcel-bich's marketplace and makingaipractical/brain-drain tell the agent its own context fill.
+| idea | projects | 45+ | 20-44 | 10-19 | 5-9 | 2-4 | 0-1 |
+|---|---|---|---|---|---|---|---|
+| feeds the bar's numbers back to Claude or gates it | 90 | 26 | 30 | 15 | 8 | 11 | 0 |
+| an LLM writes about the session | 56 | 27 | 12 | 8 | 5 | 2 | 2 |
+| the bar becomes a game or a reader | 18 | 3 | 2 | 8 | 1 | 4 | 0 |
+| grades the prompt or the reply | 15 | 6 | 2 | 2 | 2 | 2 | 1 |
+| detects a failure mode in the session | 12 | 5 | 6 | 0 | 0 | 1 | 0 |
+| patches Claude Code itself or its traffic | 9 | 3 | 1 | 3 | 1 | 1 | 0 |
+| reads mood or fatigue | 7 | 4 | 1 | 0 | 1 | 1 | 0 |
+| predicts how long the work will take | 5 | 0 | 2 | 2 | 1 | 0 | 0 |
+| shows friends or other users | 3 | 1 | 0 | 2 | 0 | 0 | 0 |
+| practice or study in the bar | 2 | 0 | 1 | 0 | 0 | 1 | 0 |
+| single ideas that fit no group | 19 | 6 | 4 | 4 | 5 | 0 | 0 |
 
-**An LLM writing about the session (about 29 projects).** The usual form is a session title or topic written by a background `claude -p --model haiku` call from a Stop hook: dreamiurg/claude-session-topics, dkstm95/claude-recall, maxtomachine/claude-monitor, mquinnv/claudemux, omriariav/claude-pulse. Others go further:
-- nadav-fux/claude-2x-statusline has a narrator.
+**Feeding the bar back into Claude (90 projects).** These use the bar's numbers to steer the agent, not just to inform the person. Unlike LLM commentary, it does not thin out below the top 1,000: the 20-44 band has 30 such projects to the top's 26. They exist because only the statusline sees the rate limits. alexanderleitch/claude-usage-guard's README says so: hook payloads do not carry the rate limits, and no hook fires on an approaching limit, so its status line command writes the numbers to a per-session cache file for its hook to read. Examples from the top 1,000:
+- funhunter7/claude-limit-guard blocks the end of a turn once per reset window after a limit breach, so Claude writes a handoff.
+- moiri-gamboni/session and noambrand/launchpad-cli resume the session when the limit resets.
+- team-maro/cc-statusline exposes the bar's state to Claude as an MCP server.
+
+Examples from the tail:
+- alexanderleitch/claude-usage-guard's Stop hook blocks the turn at 98% with a reason asking Claude to commit and write a handoff note.
+- aaronl725/cc-quota-guard denies tool calls once the 5-hour window reaches 95%.
+- sunnywlad/claude-tokens_in_sessions locks every tool and prompt at a context size until the user types `unlock:`.
+- eales/claude-code-cockpit sleeps until the reset, then exits with code 2 to wake the same session.
+- caridina-ai/continue-claude re-prompts idle Windows sessions by writing keystrokes into the console with `WriteConsoleInputW`.
+- jkubo/context-gauge injects the context band into the model's context on every prompt.
+
+**An LLM writing about the session (56 projects).** The usual form is a session title or topic written by a background `claude -p --model haiku` call from a hook: dreamiurg/claude-session-topics, dkstm95/claude-recall, mjquinlan2000/claude-statusline. Others go further:
 - bllshttng/fno revives Claude Code's removed buddy and has Haiku write its speech each turn.
-- bestes206/claude-whereami scores drift between the session's goal and what it is doing now.
-- kam-l/claude-coach runs Sonnet over the transcript for reflections, capped at $0.05, and injects the advice.
-- ahmadbilal227/pair-polymath runs a planner and critic per "lens" with gpt-5-mini and injects the surviving observations into the next prompt.
-- tlogben/common-dev-plugin predicts three follow-up prompts as buttons.
-- asyrafhussin/claude-code-statusline has Haiku write a commit message from a button.
+- kam-l/claude-coach runs Sonnet over the transcript for reflections and injects the advice.
+- richardvt/ccmud is a text adventure in which a background Haiku call recasts each work prompt as an in-story activity: debugging becomes study, writing code becomes calligraphy.
+- meyer-coder/claude-code-eta asks Haiku how long each task will take and counts down.
 
-**Reading the session's mood or health (about 12 projects).**
-- v4l3r10/emobar parses an emotion self-report the assistant writes into each reply, scores behavioural signals in the text, and reports where the two diverge.
-- jcsoftlabs/civora-backend and Div0011/Frontend-Pipeline share code that has Haiku classify each turn's behaviour, warning "DESPERATE" with a macOS sound.
-- thousandflowers/canary computes a fatigue score from minutes worked, failed tool calls and repeated commands, adjusted for the hour of day.
-- li-xingxiao/sbti-buddy-skill types the user into one of 27 personalities from their prompt history.
+**Finish-time estimates (5 projects, all in the tail).**
+- ben564885/claude-eta logs every run. Once 50 runs are logged, it fits quantile-regression models to them, and mid-run it revises the estimate with survival analysis conditioned on the run still going.
+- akkijp/baro corrects its step estimates with ratios learned from the machine's own history.
+- siller/supermod takes the median of completed tasks.
 
-Failure detectors are the practical cousin:
-- pnjegan/burnctl flags retry loops: five or more sessions in ten minutes, a minute or less apart.
-- dancemonk/token-damage names waste patterns such as re-reads.
-- baeseokjae/claude-code-cockpit flags rule violations in tool results.
-- vladimir-ks/ai-agile-claude-code-statusline scans the transcript for secrets.
+**Practice in the bar (2 projects).**
+- adriendesola/flashcards shows spaced-repetition flashcards, scheduled by SM-2 and answered with one character at the prompt.
+- alantouchard/statusline-polyglotte drills French vocabulary in Leitner boxes, answered with Hammerspoon hotkeys.
 
-**The bar as another medium (4 projects).**
-- ezequielmm/claude-doom runs doomgeneric as WebAssembly in a detached daemon and draws its latest frame in the statusline, in half-blocks or kitty graphics.
-- alrightlad/custom-claude-code-terminal generates a golf course from the session id, with subagents as rival golfers.
-- alanmarcero/claude-statusline-arcade-roulette picks a game per session and scores it by lines changed.
-- lukelandis3-sketch/claude-and-prejudice streams a book one line per tick at a chosen words-per-minute.
+**Grading the user or the work, or reading their mood (about 20 projects).**
+- james-m-swyftx/claude-prompt-rater grades the last prompt on five dimensions, including specificity and success criteria, and shows a letter grade with a trend arrow.
+- philparkinson1204/nice-to-claude counts the pleases and thank-yous in the prompt history.
+- tanerincode/jedi-statusline runs a judge after every turn. It awards XP for clean, tested work, and its alignment score drifts toward the dark side for skipped tests, reckless commands and claims that tests ran when they didn't.
+- annaluizando/claude-tamagotchi scores frustration from swearing, capitals and screams in Portuguese, English and Spanish.
 
-**Reaching into Claude Code itself (3 projects).** zigizhujian/cc-companion rewrites a salt constant in the Claude Code binary and re-signs it. zleo-ai/line patches the installed Claude Code with tree-sitter. supadll/deepseek-hud patches `https.request` in Node to read the API traffic directly.
+**Failure detectors (12 projects).**
+- link-start/my-claude-hud plants a canary ID in a file the session reads and reports when Claude has lost it from context.
+- huaxueye/claude-code-statusline flags a tool call repeated three times in the last five.
+- From the top 1,000: pnjegan/burnctl flags retry loops, and vladimir-ks/ai-agile-claude-code-statusline scans the transcript for secrets.
+
+**Friends in the bar (3 projects).**
+- trevorstenson/campfire-cli holds a WebSocket to a hosted server and shows friends' presence on a second line.
+- mishoku/cc-presence shows a cohort count, a streak and a night flag from a daemon that pings a presence server.
+- limone-eth/terminally.social, which the screen did not flag, runs a token-burn leaderboard among friends.
+
+**The bar as another medium (18 projects).** This is commoner below the top 1,000 than in it: 15 of the 18 are in the tail, mostly games driven by Claude's activity.
+- ezequielmm/claude-doom, from the top 1,000, runs doomgeneric in a daemon and draws its frames in the statusline.
+- jackpas23/claude-euchre plays a full game of Euchre against computer seats, with moves typed as `!euc` commands.
+- jystervinou/claude-code-arcade runs Ms. Pac-Man, R-Type and Frogger, driven by Claude's activity, with function keys as a joystick.
+- lukelandis3-sketch/claude-and-prejudice streams a book one line per tick.
+
+**Patching Claude Code (9 projects).** In the tail this is a small genre of its own: hollegjx/uucode, leo919cc/cclinebar, dengshuit/cclinepro and mengfanlu1/opendoor-statusline all rewrite the installed Claude Code bundle to remove its "Context low" warning. dengshuit/cclinepro does it with tree-sitter. In the top 1,000, zigizhujian/cc-companion rewrites a salt constant in the Claude Code binary and re-signs it, and supadll/deepseek-hud patches Node's `https.request` to read the API traffic.
 
 ## Why there are so many
 
-The motive labels, one per project:
+The motive labels, one per project read, as shares of each band:
 
-| motive | projects |
-|---|---|
-| a component of a larger product, showing that product's own state | 149 |
-| the author's own setup, published | 136 |
-| see plan quota and limits | 104 |
-| a particular look | 58 |
-| track money | 51 |
-| one bar for several AI CLIs | 49 |
-| show Claude Code's state outside the terminal | 47 |
-| a framework for others to configure | 44 |
-| a faster or smaller rewrite, or a port | 43 |
-| several sessions or agents at once | 41 |
-| a customised fork of an existing bar | 40 |
-| fun: a mascot, pet or game | 38 |
-| localisation or a regional provider | 36 |
-| watch the context window | 20 |
-| learning or a demo | 6 |
-| other (mostly "a general info bar") or not a statusline | 88 |
+| motive | projects | 45+ | 20-44 | 10-19 | 5-9 | 2-4 | 0-1 |
+|---|---|---|---|---|---|---|---|
+| the author's own setup, published | 647 | 14% | 18% | 16% | 16% | 19% | 14% |
+| see plan quota and limits | 455 | 10% | 12% | 11% | 13% | 12% | 12% |
+| a component of a larger product, showing that product's own state | 332 | 15% | 8% | 7% | 4% | 3% | 5% |
+| a faster or smaller rewrite, or a port | 256 | 4% | 7% | 6% | 8% | 8% | 8% |
+| localisation or a regional provider | 231 | 4% | 5% | 6% | 6% | 9% | 5% |
+| a particular look | 218 | 6% | 3% | 5% | 7% | 6% | 14% |
+| track money | 199 | 5% | 5% | 5% | 5% | 6% | 0% |
+| fun: a mascot, pet or game | 179 | 4% | 5% | 5% | 3% | 4% | 7% |
+| a framework for others to configure | 169 | 4% | 4% | 4% | 4% | 3% | 8% |
+| one bar for several AI CLIs | 164 | 5% | 4% | 4% | 4% | 4% | 0% |
+| a customised fork of an existing bar | 128 | 4% | 3% | 3% | 2% | 3% | 3% |
+| show Claude Code's state outside the terminal | 128 | 5% | 4% | 2% | 2% | 2% | 5% |
+| watch the context window | 118 | 2% | 2% | 5% | 3% | 2% | 5% |
+| several sessions or agents at once | 109 | 4% | 3% | 2% | 3% | 2% | 0% |
+| learning or a demo | 28 | 1% | 1% | 1% | 1% | 1% | 0% |
+| not a statusline, or unreadable | 161 | 2% | 7% | 6% | 2% | 1% | 0% |
+| other, mostly "a general info bar" | 480 | 11% | 9% | 11% | 15% | 16% | 14% |
 
-The largest group explains the shape of the field. The statusline command receives live session JSON, rate limits included, on every tick. rogvid/agent-sidebar's tap exists "because Claude Code passes rate limits only to the statusline command". Any tool that wants that feed has to own the statusline slot. That is why so many orchestrators, routers, memory plugins and usage trackers carry one, and why there is a whole genre of composition: taps that save the feed and then run your real statusline (agent-sidebar, tokenops `--wrap`, fno's buddy), and installers that rewrite `settings.json` and keep a copy of your old line for rollback. Many statuslines exist because the slot is the only door to the data, not because their authors wanted a statusline.
+The top and the tail exist for different reasons. At the top, the largest group is products that need the statusline slot. The statusline command receives live session JSON, rate limits included, on every tick, and hooks do not. rogvid/agent-sidebar's tap exists "because Claude Code passes rate limits only to the statusline command". So orchestrators, routers, memory plugins and usage trackers each carry a statusline. A genre of composition follows: taps that save the feed and then run your real statusline, and installers that rewrite `settings.json` and keep your old line for rollback.
 
-The second group is the cheapest kind of software to publish. A personal bar is a few hundred lines that Claude writes on request, and plugin marketplaces make publishing it one more step. The third is a shared anxiety: plan limits. It drives the usage-endpoint fetching, the burn-rate forecasts and the guards that stop work at 95%. After that come the ordinary reasons any tool gets rewritten: a different language or a faster binary, a Chinese-language or GLM/Kimi/Bedrock fork, a look, or a joke.
+Below the top 1,000 those products thin out, and personal bars take their place. A personal bar is a few hundred lines that Claude writes on request, so publishing one costs almost nothing. Next come the ordinary reasons any tool gets rewritten: another language or a faster binary, a Chinese-language or GLM, Kimi or Bedrock fork, or a look. Plan limits hold steady at about one project in nine in every band.
 
 ## Files
 
-- [projects.md](projects.md): one section per project in rank order. Detail follows what the code does: one sentence for a field printer, up to six for a rich bar or an engine, anchored to files.
-- [projects.tsv](projects.tsv): the same 1,000 as a table, with commits, dates, stars, language, kind, shape, motive, feature-family codes ([families.md](families.md)), statusline code size and the closest code overlaps.
-- [tools/](tools/): the scripts and agent briefs that produced all of this. They read from and write to `/tmp/ccland`. The downloaded sources (about 3 GB) are not kept.
+- [projects.md](projects.md): one section per project for the top 1,000, in rank order.
+- [projects-tail.md](projects-tail.md): one section for each of the 3,002 read from below them, grouped by commit band. In both files, detail follows what the code does: one sentence for a field printer, up to six for a rich bar or an engine, anchored to files.
+- [projects.tsv](projects.tsv): all 4,002 as a table. Ranks run over all 7,069 projects by commits, so gaps in the tail are projects not read. Columns: commit band, commits, dates, stars, language, kind, shape, motive, feature-family codes ([families.md](families.md)), statusline code size, and the closest code overlaps among all 7,046.
+- [tools/](tools/): the scripts and agent briefs that produced all of this, including `families-all.json`. They read from and write to `/tmp/ccland`. The downloaded sources (about 5 GB) are not kept.

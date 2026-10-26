@@ -12,7 +12,7 @@ Anything the code does beyond this list goes under `beyond baseline`.
 </baseline>
 
 <batch>
-Each entry gives: the project, its URL, stars, total commits / commits in the last 90 days / last commit date, fork parent if any, the local directory holding its downloaded source, the source files that mention Claude statusline fields (with non-blank, non-comment line counts), the share of its statusline code found in the official Claude Code docs examples, and other surveyed projects whose statusline code overlaps it ("shares N fingerprints: X% of this project, Y% of theirs"), measured by code fingerprinting across 1,000 projects.
+Each entry gives: the project, its URL, stars, total commits / commits in the last 90 days / last commit date, fork parent if any, the local directory holding its downloaded source, the source files that mention Claude statusline fields (with non-blank, non-comment line counts), the share of its statusline code found in the official Claude Code docs examples, and other surveyed projects whose statusline code overlaps it ("shares N fingerprints: X% of this project, Y% of theirs"), measured by code fingerprinting across {{CORPUS}} projects.
 
 {{BATCH}}
 </batch>

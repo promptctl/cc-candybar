@@ -97,7 +97,7 @@ def one(p):
     return p['slug'], 'ok'
 
 
-sel = json.load(open('/tmp/ccland/selected.json'))
+sel = json.load(open(sys.argv[1] if len(sys.argv) > 1 else '/tmp/ccland/selected.json'))
 os.makedirs(SRC, exist_ok=True)
 with cf.ThreadPoolExecutor(10) as ex:
     for n, (s, st) in enumerate(ex.map(one, sel)):

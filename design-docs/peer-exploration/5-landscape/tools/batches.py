@@ -1,17 +1,25 @@
-"""Split selected projects into agent batches and render each prompt from brief.md."""
+"""Split selected projects into agent batches and render each prompt from brief.md.
+
+usage: batches.py [SIZE] [SELECTION] [MEASURE] [PROMPT_DIR] [OUT_DIR]
+Defaults are the top-1,000 run's files.
+"""
 import json, os, sys
 
-SIZE = int(sys.argv[1]) if len(sys.argv) > 1 else 20
-sel = json.load(open('/tmp/ccland/selected.json'))
-meas = json.load(open('/tmp/ccland/measure.json'))
-brief = open('/tmp/ccland/brief.md').read()
-by_slug = {q['slug']: q for q in sel}
+arg = lambda i, d: sys.argv[i] if len(sys.argv) > i else d
+SIZE = int(arg(1, 20))
+sel = json.load(open(arg(2, '/tmp/ccland/selected.json')))
+meas = json.load(open(arg(3, '/tmp/ccland/measure.json')))
+PROMPTS, OUT = arg(4, '/tmp/ccland/prompts'), arg(5, '/tmp/ccland/out')
+brief = open('/tmp/ccland/brief.md').read().replace('{{CORPUS}}', '{:,}'.format(len(meas)))
+# overlap names resolve against every project ever selected, not just this run's
+names = {q['slug']: q['repo'] for f in ['/tmp/ccland/selected.json', '/tmp/ccland/t2/all.json'] if os.path.exists(f)
+         for q in json.load(open(f))}
 nb = (len(sel) + SIZE - 1) // SIZE
 batches = [[] for _ in range(nb)]
 for i, q in enumerate(sel):  # round-robin so each batch mixes large and small projects
     batches[i % nb].append(q)
-os.makedirs('/tmp/ccland/prompts', exist_ok=True)
-os.makedirs('/tmp/ccland/out', exist_ok=True)
+os.makedirs(PROMPTS, exist_ok=True)
+os.makedirs(OUT, exist_ok=True)
 
 
 def entry(q):
@@ -34,13 +42,13 @@ def entry(q):
     lines.append('docs-example overlap: %d%%' % round(100 * m['docs_overlap']))
     if m['shares']:
         lines.append('overlaps: ' + '; '.join('%s shares %d fingerprints: %d%% of this project, %d%% of theirs (/tmp/ccland/src/%s/)' % (
-            by_slug[o]['repo'] if o in by_slug else o, n, 100 * a, 100 * b, o) for o, n, a, b in m['shares'][:5]))
+            names.get(o, o), n, 100 * a, 100 * b, o) for o, n, a, b in m['shares'][:5]))
     return '\n'.join(lines)
 
 
 for i, b in enumerate(batches, 1):
-    out = '/tmp/ccland/out/batch-%02d.md' % i
+    out = os.path.join(OUT, 'batch-%03d.md' % i if nb > 99 else 'batch-%02d.md' % i)
     p = brief.replace('{{COUNT}}', str(len(b))).replace('{{OUTFILE}}', out).replace(
         '{{BATCH}}', '\n\n'.join(entry(q) for q in b))
-    open('/tmp/ccland/prompts/batch-%02d.txt' % i, 'w').write(p)
+    open(os.path.join(PROMPTS, os.path.basename(out)[:-3] + '.txt'), 'w').write(p)
 print(nb, 'batches written')

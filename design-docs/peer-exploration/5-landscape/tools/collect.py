@@ -1,18 +1,20 @@
 """Parse every out/batch-*.md into rows.json and report missing/malformed sections."""
 import glob, json, re, sys
+import os
+RUN = os.environ.get('CCLAND_RUN', '/tmp/ccland')  # the top-1,000 run, or t2 for the wider read
 
 FIELDS = ['url', 'what', 'size', 'shape', 'data sources', 'lineage', 'why it exists', 'beyond baseline', 'summary']
-sel = json.load(open('/tmp/ccland/selected.json'))
+sel = json.load(open(RUN + '/selected.json'))
 want = {q['repo'].lower() for q in sel}
 rows, bad = {}, []
-for f in sorted(glob.glob('/tmp/ccland/out/batch-*.md')):
+for f in sorted(glob.glob(RUN + '/out/batch-*.md')):
     text = open(f).read()
     for sec in re.split(r'^## ', text, flags=re.M)[1:]:
         head, _, body = sec.partition('\n')
         repo = head.strip().strip('`')
         r = {'batch': f.rsplit('/', 1)[1], 'repo': repo}
         for fld in FIELDS:
-            pat = {'why it exists': r'why(?: it exists)?', 'beyond baseline': r'beyond(?: baseline)?'}.get(fld, re.escape(fld))
+            pat = {'why it exists': r'why(?: it)?(?: exists)?', 'beyond baseline': r'beyond(?: baseline)?'}.get(fld, re.escape(fld))
             m = re.search(r'^- %s:\s*(.*?)(?=^- [a-z ]+:|\Z)' % pat, body, re.M | re.S)
             r[fld] = m.group(1).strip() if m else None
         miss = [k for k in FIELDS if not r[k]]
@@ -24,7 +26,7 @@ for f in sorted(glob.glob('/tmp/ccland/out/batch-*.md')):
             if len(m2) == 1:
                 key = m2[0]; r['repo'] = key
         rows[key] = r
-json.dump(rows, open('/tmp/ccland/rows.json', 'w'), indent=1)
+json.dump(rows, open(RUN + '/rows.json', 'w'), indent=1)
 got = set(rows)
 print(len(rows), 'sections;', len(bad), 'malformed;', len(want - got), 'selected projects without a section;',
       len(got - want), 'sections not matching a selected repo')
