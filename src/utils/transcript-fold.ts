@@ -29,7 +29,7 @@ import {
 import { statStamp } from "./transcript-fs";
 import { quietLogger, type DaemonLogger } from "./logger";
 import { PENDING, type Pending } from "./outcome";
-import { observable, runInAction } from "mobx";
+import { ObservableLru } from "./observable-lru";
 
 // [LAW:types-are-the-program] Never `absent`: a session with no transcript yet
 // is a real empty fold, so the caller has exactly two arms.
@@ -54,16 +54,16 @@ export class TranscriptFold<S> {
   // [LAW:no-shared-mutable-globals] Single owner, hard cap, LRU eviction. One
   // instance per projection per daemon. Observable, so a view's payload over
   // an answer is recomputed in the turn the answer is stored.
-  private readonly sessions = observable.map<string, Session<S>>(undefined, {
-    deep: false,
-  });
+  private readonly sessions: ObservableLru<string, Session<S>>;
 
   constructor(
     private readonly empty: S,
     private readonly step: (state: S, entry: ParsedEntry) => S,
     private readonly log: DaemonLogger = quietLogger,
-    private readonly maxSessions: number = MAX_SESSIONS,
-  ) {}
+    maxSessions: number = MAX_SESSIONS,
+  ) {
+    this.sessions = new ObservableLru(maxSessions);
+  }
 
   // [LAW:effects-at-boundaries] The session's refresh: folds what was
   // appended since its last read, and stores what it answered.
@@ -71,14 +71,21 @@ export class TranscriptFold<S> {
     sessionId: string,
     transcriptPath: string,
   ): Promise<FoldOutcome<S>> {
-    const prior = this.sessions.get(sessionId)?.folded;
+    const held = this.sessions.get(sessionId);
+    const prior = held?.folded;
     const stamp = statStamp(transcriptPath);
     // [LAW:no-ambient-temporal-coupling] Fast hit: the transcript has not moved
-    // since we last folded it, so the prior state stands. Re-ordering on the HIT
-    // makes eviction reflect read recency, so an active session whose transcript
-    // is momentarily unchanged is not evicted ahead of idle ones.
-    if (prior && stamp !== "" && prior.cursor.stamp === stamp) {
-      return this.store(sessionId, prior, { kind: "ok", value: prior.value });
+    // since we last folded it, so the prior state stands. The hit counts as a
+    // use, so an active session whose transcript is momentarily unchanged is
+    // not evicted ahead of idle ones; an answer already standing is not
+    // stored again, so no view reading it wakes.
+    if (held?.folded && stamp !== "" && held.folded.cursor.stamp === stamp) {
+      const { folded, answer } = held;
+      if (answer.kind === "ok" && answer.value === folded.value) {
+        this.sessions.touch(sessionId);
+        return answer;
+      }
+      return this.store(sessionId, folded, { kind: "ok", value: folded.value });
     }
 
     const read = await foldAppended(
@@ -113,15 +120,7 @@ export class TranscriptFold<S> {
     folded: Folded<S> | undefined,
     answer: FoldOutcome<S>,
   ): FoldOutcome<S> {
-    runInAction(() => {
-      this.sessions.delete(sessionId);
-      this.sessions.set(sessionId, { folded, answer });
-      while (this.sessions.size > this.maxSessions) {
-        const oldest = this.sessions.keys().next().value;
-        if (oldest === undefined) break;
-        this.sessions.delete(oldest);
-      }
-    });
+    this.sessions.set(sessionId, { folded, answer });
     return answer;
   }
 }

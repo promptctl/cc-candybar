@@ -20,7 +20,6 @@ import type {
   ValidatedConfig,
   VariableDecl,
   CacheDecl,
-  Globals,
   LayoutNode,
   ParseDecl,
   SegmentNode,
@@ -65,7 +64,6 @@ import {
   ruleFloorMessage,
   EXPRESSION_SLOTS,
   type ExpressionSlot,
-  isExpression,
   SLOT_FLOORS,
   EFFECT_FLOOR,
   transposedPalette,
@@ -116,6 +114,7 @@ import {
 import { fixedSource, type Selections } from "./view-source.js";
 import { declaredVariables } from "../config/loader/refs.js";
 import {
+  authoredRules,
   projectionNamesOf,
   projectionsOf,
   templateInstants,
@@ -870,27 +869,16 @@ export function compileDslConfig({
   const globalExpressions = new Map(
     EXPRESSION_SLOTS.map((slot) => [slot, new Map<string, CompiledRule>()]),
   );
-  const fragments: ReadonlyArray<readonly [string, Partial<Globals>]> = [
-    ["globals", config.globals],
-    ...Object.entries(config.presets).map(
-      ([name, preset]) =>
-        [`presets.${name}.globals`, preset.globals ?? {}] as const,
-    ),
-  ];
-  for (const [path, globals] of fragments) {
-    for (const slot of EXPRESSION_SLOTS) {
-      const authored = globals[slot];
-      if (!isExpression(authored)) continue;
-      const where = `${path}.${slot}`;
-      const rules = globalExpressions.get(slot)!;
-      const seen = rules.get(authored);
-      rules.set(
-        authored,
-        seen === undefined
-          ? { where, template: parseExpressionSlot(parse, where, authored) }
-          : { where: `${seen.where}, ${where}`, template: seen.template },
-      );
-    }
+  for (const { at, slot, rule: authored } of authoredRules(config)) {
+    const where = at.join(".");
+    const rules = globalExpressions.get(slot)!;
+    const seen = rules.get(authored);
+    rules.set(
+      authored,
+      seen === undefined
+        ? { where, template: parseExpressionSlot(parse, where, authored) }
+        : { where: `${seen.where}, ${where}`, template: seen.template },
+    );
   }
 
   // [LAW:single-enforcer] Which of these templates read the instant

@@ -125,7 +125,8 @@ export function renderOptionsOf(
 // `<field>.effective`, the value the render resolved, typed by its row
 // (src/config/globals-fields.ts) — so a setting declared there is published
 // with no edit here. `theme`, `style` and `effect` are not valued fields:
-// renderDsl injects them, because under a rule only it knows the answer.
+// the payload never carries them, since a rule may decide them; a read of
+// their `.effective` is answered by the view's slot (src/dsl/parts.ts).
 export type ValuedInputs = {
   readonly [K in ValuedField]: { readonly effective: ValuedGlobals[K] };
 };

@@ -145,22 +145,44 @@ function foldProjections(config: ProjectionConfig): InstantBasis {
   return basis;
 }
 
-// Every rule each selection slot may hold: the config's globals and each
-// preset's, as the config-default rung reads them.
+// A globals rule as authored: the slot it decides, its text, and the config
+// path it was written at.
+export interface AuthoredRule {
+  readonly at: readonly string[];
+  readonly slot: ExpressionSlot;
+  readonly rule: string;
+}
+
+// [LAW:one-source-of-truth] Every rule a selection slot may hold: the
+// config's globals and each preset's, as the config-default rung reads them.
+// The load checks, the projection fold and the compile all read this one
+// enumeration, so a new place to author a rule is one edit here.
+export function authoredRules(
+  config: Pick<DslConfig, "globals" | "presets">,
+): readonly AuthoredRule[] {
+  const fragments: ReadonlyArray<
+    readonly [readonly string[], DslConfig["globals"]]
+  > = [
+    [["globals"], config.globals],
+    ...Object.entries(config.presets ?? {}).map(
+      ([name, preset]) =>
+        [["presets", name, "globals"], preset.globals ?? {}] as const,
+    ),
+  ];
+  return fragments.flatMap(([at, globals]) =>
+    EXPRESSION_SLOTS.flatMap((slot) => {
+      const rule = globals[slot];
+      return isExpression(rule) ? [{ at: [...at, slot], slot, rule }] : [];
+    }),
+  );
+}
+
 function rulesOf(
   config: ProjectionConfig,
 ): Readonly<Record<ExpressionSlot, readonly string[]>> {
-  const fragments = [
-    config.globals,
-    ...Object.values(config.presets ?? {}).map(
-      (preset) => preset.globals ?? {},
-    ),
-  ];
+  const rules = authoredRules(config);
   const rulesIn = (slot: ExpressionSlot): readonly string[] =>
-    fragments.flatMap((globals) => {
-      const authored = globals[slot];
-      return isExpression(authored) ? [authored] : [];
-    });
+    rules.flatMap((r) => (r.slot === slot ? [r.rule] : []));
   return {
     style: rulesIn("style"),
     palette: rulesIn("palette"),

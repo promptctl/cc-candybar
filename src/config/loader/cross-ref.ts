@@ -86,7 +86,7 @@ import {
 } from "./retired-variables.js";
 import { SYNTAX_ENGINE } from "./syntax-engine.js";
 import { type ValidateCtx } from "./validate-core.js";
-import { instantReadOf, projectionsOf } from "./projections.js";
+import { authoredRules, instantReadOf, projectionsOf } from "./projections.js";
 import {
   declaredVariables,
   templateActionRefs,
@@ -908,30 +908,15 @@ function checkRuleSlotReads(ctx: ValidateCtx, cfg: DslConfig): void {
     }
     return null;
   };
-  const fragments: ReadonlyArray<
-    readonly [
-      readonly string[],
-      Partial<Record<(typeof EXPRESSION_SLOTS)[number], string>>,
-    ]
-  > = [
-    [["globals"], cfg.globals],
-    ...Object.entries(cfg.presets ?? {}).map(
-      ([name, preset]) =>
-        [["presets", name, "globals"], preset.globals ?? {}] as const,
-    ),
-  ];
-  for (const [at, globals] of fragments) {
-    for (const slot of EXPRESSION_SLOTS) {
-      const rule = globals[slot];
-      if (!isExpression(rule)) continue;
-      const why = slotRead(rule, new Set());
-      if (why === null) continue;
-      ctx.issues.push({
-        path: [...at, slot].join("."),
-        message: `${[...at, slot].join(".")} ${why}: a rule decides that name, so it cannot read it — read the data the rule is about instead`,
-        line: findKeyLine(ctx.source, [...at, slot]),
-      });
-    }
+  for (const { at, rule } of authoredRules(cfg)) {
+    const why = slotRead(rule, new Set());
+    if (why === null) continue;
+    const path = at.join(".");
+    ctx.issues.push({
+      path,
+      message: `${path} ${why}: a rule decides that name, so it cannot read it — read the data the rule is about instead`,
+      line: findKeyLine(ctx.source, [...at]),
+    });
   }
 }
 

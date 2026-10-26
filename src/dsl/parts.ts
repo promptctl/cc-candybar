@@ -467,11 +467,13 @@ export class ViewParts {
           this.phase.ruling = true;
           // [LAW:no-ambient-temporal-coupling] A kept rule settles outside any
           // draw, in the turn what it read changes: the compile's functions
-          // read this view's binding there too, as they do in its draw.
-          const unbound = this.source.runtime.bound === undefined;
-          const bound = unbound
-            ? bindRender(this.source.runtime, this.binding)
-            : null;
+          // read this view's binding there too, as they do in its draw. Inside
+          // its own draw the binding is already its own; while another view's
+          // draw holds the compile, binding throws, by name.
+          const bound =
+            this.source.runtime.bound === this.binding
+              ? null
+              : bindRender(this.source.runtime, this.binding);
           try {
             return {
               kind: "named",

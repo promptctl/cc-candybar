@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import { observable, runInAction } from "mobx";
+import { ObservableLru } from "../utils/observable-lru.js";
 import {
   readAutoCompactWindow,
   type AutoCompactWindow,
@@ -11,8 +11,7 @@ import { PENDING, type Outcome, type Reading } from "../utils/outcome.js";
 import { stampOf } from "../utils/transcript-fs.js";
 
 // How many settings files keep their last reading: one per Claude Code
-// directory a session reported, which a user has few of. The oldest read goes
-// first; one still in use is read again on its session's next request.
+// directory a session reported, which a user has few of.
 const MAX_FILES = 64;
 
 interface Known {
@@ -28,9 +27,7 @@ interface Known {
 export class AutoCompactProvider {
   // Observable, so a view's payload over a window is recomputed in the turn
   // it is stored.
-  private readonly known = observable.map<string, Known>(undefined, {
-    deep: false,
-  });
+  private readonly known = new ObservableLru<string, Known>(MAX_FILES);
   private readonly refreshes: Refreshes<"request">;
 
   constructor(logger: DaemonLogger = quietLogger) {
@@ -40,9 +37,12 @@ export class AutoCompactProvider {
   window(settingsPath: string): Outcome<AutoCompactWindow> {
     const stamp = stampAt(settingsPath);
     const known = this.known.get(settingsPath);
-    // [LAW:no-ambient-temporal-coupling] A hit writes nothing: a view's
-    // payload over the window recomputes only when a read stored a new one.
-    if (known !== undefined && known.stamp === stamp) return known.outcome;
+    // [LAW:no-ambient-temporal-coupling] A hit is a use, which wakes no view:
+    // a payload over the window recomputes only when a read stored a new one.
+    if (known !== undefined && known.stamp === stamp) {
+      this.known.touch(settingsPath);
+      return known.outcome;
+    }
     const startedAt = Date.now();
     const outcome = readAutoCompactWindow(settingsPath);
     this.refreshes.recorded(
@@ -51,14 +51,7 @@ export class AutoCompactProvider {
       outcome,
       Date.now() - startedAt,
     );
-    runInAction(() => {
-      this.known.delete(settingsPath);
-      this.known.set(settingsPath, { stamp, outcome });
-      for (const oldest of [...this.known.keys()]) {
-        if (this.known.size <= MAX_FILES) break;
-        this.known.delete(oldest);
-      }
-    });
+    this.known.set(settingsPath, { stamp, outcome });
     return outcome;
   }
 
