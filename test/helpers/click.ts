@@ -186,6 +186,8 @@ export function testVerbContext(
             ),
       clicked: () => {},
     },
+    // No render cache here, so no session has a view to move.
+    views: { follow: () => {} },
   };
 }
 

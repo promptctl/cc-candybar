@@ -8,7 +8,9 @@ A feed runs at 30 fps while its last frame moved in a pane someone can see, and 
 
 A feed has one timer, and nothing that wakes it draws: a value its bar draws from moving, the session's state, a config reload, or a pane coming into view only brings that timer forward, to a moving period after the last frame started while its pane is shown and a still period while not. So no cause sets the draw rate, and an unseen feed woken every millisecond still draws once a second. A frame is never drawn in the turn that woke it, so a click's writes and its journal commit land first, and a subscribe draws nothing in its caller's turn.
 
-A view reports that its data moved from one reaction over everything it draws from, and a draw writes none of that. A frame is drawn in one synchronous turn, so a wake while it draws can only be the draw's own, such as a view it reopened, and it is coalesced into that frame, which already reads what moved. Were it drawn again, a draw that reopens a view would redraw at the moving rate for as long as the cache keeps evicting it.
+A view reports that its data moved from one reaction over everything it draws from, and a draw writes none of that. A frame is drawn in one synchronous turn and opens nothing, so a wake while it draws can only be the draw's own, and it is coalesced into that frame, which already reads what moved. Drawing again for it would let a draw set its own next frame.
+
+A frame only finds its session's view; it never builds a cache entry or opens a view, because either is I/O on the frame path. Only an event opens one: a request, a reload's successor, or a click that moved the session's config. So an open feed pins its session in the render cache, and its entry is never evicted nor its view closed idle while the feed is open. A feed whose session has no view waits until the event that opens one wakes it.
 
 The fps a frame shows is the feed's pace (1000 / its period), never a measurement. The number is drawn into the frame, so a measured value would make otherwise unchanged frames differ, and they would all get pushed.
 

@@ -244,6 +244,13 @@ export interface DaemonContext {
       after: LaneSwitches,
     ) => void;
   };
+  // [LAW:single-enforcer] Brings the session's view, if it has one, to the
+  // config `origin` resolves to: what a click that moved its load-config pick
+  // does after its commit (`journaled`), so a feed drawing the session shows
+  // the pick on its next frame with no request after it.
+  readonly views: {
+    readonly follow: (sessionId: string, origin: RenderOrigin) => void;
+  };
 }
 
 export interface VerbContext extends DaemonContext {
@@ -1849,7 +1856,8 @@ const dispatch: VerbHandler = (rawValue, ctx) => {
 // it measures that session's lane switches (`sessionOf` names it): before the
 // handler, and after the commit — after any reload the handler made, since a
 // reload is synchronous. What a lane runs follows the difference, which no
-// render, frame or other session's write can make.
+// render, frame or other session's write can make. After the commit it also
+// brings the session's view to the config its origin now resolves to.
 function journaled<C extends DaemonContext>(
   handler: (value: string, ctx: Journaled<C>) => void,
   sessionOf: (value: string) => string | null,
@@ -1887,6 +1895,19 @@ function journaled<C extends DaemonContext>(
     if (lanes !== null) {
       try {
         ctx.lanes.clicked(lanes.sessionId, lanes.before, lanes.read());
+      } catch (e) {
+        failures.push(e);
+      }
+    }
+    // [LAW:single-enforcer] Every click passes here, so here is where a
+    // click that moved the session's origin — a load-config pick, or a
+    // history step restoring or clearing one — moves its view: a frame opens
+    // none (src/daemon/cache/render.ts `holdView`).
+    // A session that has never rendered has no origin, and no view.
+    if (sid !== null) {
+      try {
+        const origin = recordedOrigin(ctx, sid);
+        if (origin !== null) ctx.views.follow(sid, origin);
       } catch (e) {
         failures.push(e);
       }
