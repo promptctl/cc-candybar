@@ -46,11 +46,14 @@ jest.setTimeout(30_000);
 // evaluated, which costs that row and warns. `held` reads the tmux session name, which the
 // payload awaits from a `tmux` spawn (src/segments/tmux.ts) — the stub below.
 // `waiting` reads a document whose source never answers while the test runs.
+// `ruled` chooses its style by a rule over the session, and its effect by one
+// over the clock.
 const CONFIGS = {
   drawn: `{ segments: { mark: { template: 'mark' } }, root: { h: ['mark'] } }`,
   waiting: `{ variables: { doc: { kind: 'shell', command: 'sleep 60', parse: { json: true }, cache: { never: true } } }, segments: { mark: { template: '{{ .doc.x }}' } }, root: { h: ['mark'] } }`,
   broken: `{ segments: { mark: { template: 'mark' } }, root: { h: ['mark'], when: '{{ fail "the gate broke" }}' } }`,
   held: `{ segments: { mark: { template: '{{ .tmux.session }}' } }, root: { h: ['mark'] } }`,
+  ruled: `{ globals: { style: '{{ if eq .session.id "x" }}vivid{{ else }}none{{ end }}', effect: '{{ if eq (mod (unixEpoch now) 2) 0 }}none{{ else }}none{{ end }}' }, segments: { mark: { template: 'mark' } }, root: { h: ['mark'] } }`,
 };
 
 // [LAW:no-ambient-temporal-coupling] The `tmux` on the daemon's PATH: it holds
@@ -232,6 +235,14 @@ describe("every render request writes one render event, whatever its outcome", (
     // render began: whole milliseconds. Its size is the machine's, not the
     // daemon's to promise.
     expect(field(drawn, "waited")).toMatch(/^\d+ms$/u);
+    // How each globals rule settled: none on a bar that names its look, and
+    // per slot where rules choose it — kept outside the draw, or evaluated at
+    // the frame's instant (brandon-unfiled-3248.8ro6, 4e).
+    expect(field(drawn, "rules")).toBe("-");
+    await render(sockPath, "ev-ruled", projectDir, hints, configFlag("ruled"));
+    expect(field(await attempts("ev-ruled", "ok", "info"), "rules")).toBe(
+      "style:kept,effect:per-draw",
+    );
     const waiting = stripAnsi(
       await render(sockPath, "ev-pending", projectDir, hints, configFlag("waiting")),
     );

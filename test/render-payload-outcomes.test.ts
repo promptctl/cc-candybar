@@ -1,6 +1,6 @@
 // Boundary contract for the provider lanes — every lane carries a typed
-// Outcome and buildRenderPayload is the ONE log site for the failures of the
-// lanes it reads per render (git logs its own refreshes);
+// Outcome, and payloadOf collects the failures of the lanes it reads, which a
+// request's answer logs (git logs its own refreshes);
 // `absent` and `failed` both project as MISSING payload fields — distinct
 // from a real 0/"" — so the DSL input fallback chain (default + last_error)
 // fires. [LAW:no-silent-failure][LAW:single-enforcer][LAW:one-type-per-behavior]
@@ -33,6 +33,7 @@ import {
   fakeTmux,
   fakeUsage,
   requestPayload,
+  settled,
 } from "./helpers/payload-owners";
 
 type LogEntry = { level: string; msg: string };
@@ -90,7 +91,7 @@ function hookData(transcriptPath: string) {
   };
 }
 
-describe("buildRenderPayload — git outcome lane", () => {
+describe("payloadOf — git outcome lane", () => {
   // A git failure is logged by the refresh that read it (src/daemon/cache/git.ts,
   // test/daemon-git-cache.test.ts): the value is stored, so a payload that
   // logged it would repeat it on every render.
@@ -197,7 +198,9 @@ describe("buildRenderPayload — git outcome lane", () => {
     );
     const storedAt = async (secondsLater: number) =>
       (
-        await requestPayload(
+        settled(
+          (
+            await requestPayload(
           hookData("/no/such/transcript.jsonl"),
           instantOf(new Date((committedAt + secondsLater) * 1000)),
           deps,
@@ -206,15 +209,17 @@ describe("buildRenderPayload — git outcome lane", () => {
           EFFECTIVE_GLOBALS,
           NO_HINTS,
           NO_CONFIG_FILE,
-        )
-      ).git?.committedAt;
+            )
+          ).git,
+        ) as { committedAt?: number } | undefined
+      )?.committedAt;
 
     expect(await storedAt(90.5)).toBe(committedAt);
     expect(await storedAt(3600)).toBe(committedAt);
   });
 });
 
-describe("buildRenderPayload — today lane", () => {
+describe("payloadOf — today lane", () => {
   test("asks the usage store for the day of the render's instant", async () => {
     const at = instantOf(new Date(Date.UTC(2031, 0, 2, 12, 0, 0)));
     const asked: unknown[] = [];
@@ -240,7 +245,7 @@ describe("buildRenderPayload — today lane", () => {
   });
 });
 
-describe("buildRenderPayload — cache outcome lane", () => {
+describe("payloadOf — cache outcome lane", () => {
   const CACHE_PATHS = new Set(["cache.expiresAt"]);
 
   test("unreadable transcript: no cache key, one warn log", async () => {
@@ -303,7 +308,7 @@ describe("buildRenderPayload — cache outcome lane", () => {
 
 // The five lanes migrated after PR #96 (session/today/context/metrics/tmux)
 // share the exact same contract as git/cache — one behavior, one type.
-describe("buildRenderPayload — migrated lanes share the outcome contract", () => {
+describe("payloadOf — migrated lanes share the outcome contract", () => {
   const LANE_PATHS = new Set([
     "session.cost",
     "today.cost",
@@ -473,10 +478,10 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
 
 // [LAW:one-source-of-truth] candybar-config-engine-71o.3: style/
 // colorCompatibility/autoWrap/padding are style's twins — this pins
-// that buildRenderPayload projects the EffectiveGlobals struct into the
+// that payloadOf projects the EffectiveGlobals struct into the
 // payload verbatim (no name typo, no dropped field, unconditionally present
 // with no `wants` gate — unlike theme/style, which renderDsl produces).
-describe("buildRenderPayload — effective globals projection", () => {
+describe("payloadOf — effective globals projection", () => {
   test("every template-facing EffectiveGlobals field lands under its own *.effective payload key, unconditionally; the two renderDsl-produced fields have none", async () => {
     // The bundled default's globals with every kind of valued field moved
     // off its floor: a word, a flag, an integer, a config-only depth, a lane.
@@ -528,7 +533,7 @@ describe("buildRenderPayload — effective globals projection", () => {
   });
 });
 
-describe("buildRenderPayload — git PR projection", () => {
+describe("payloadOf — git PR projection", () => {
   // [LAW:no-silent-failure] The PR field is the one git field whose `failed`
   // does NOT collapse to a missing key: it surfaces as `prError` (a visible
   // render value) AND logs, so a forge outage is distinct from "no PR".
@@ -682,7 +687,7 @@ describe("buildRenderPayload — git PR projection", () => {
       NO_CONFIG_FILE,
     );
 
-    expect(payload.git!.prError).toBe("gh pr view: non-zero, exit 1, HTTP 401");
+    expect(settled(payload.git)!.prError).toBe("gh pr view: non-zero, exit 1, HTTP 401");
     expect("prNumber" in payload.git!).toBe(false);
     expect("prUrl" in payload.git!).toBe(false);
     expect(logs).toEqual([]);
@@ -724,7 +729,7 @@ describe("buildRenderPayload — git PR projection", () => {
 // daemon's own env — and its refusal is carried into the payload as text the
 // segment shows. The refusal is logged by its owner, once per read that
 // failed (test/autocompact-provider.test.ts), never by the render.
-describe("buildRenderPayload — autocompact lane", () => {
+describe("payloadOf — autocompact lane", () => {
   const AUTOCOMPACT_PATHS = new Set(["autocompact.window"]);
   const run = async (
     read: Outcome<number | "auto">,
@@ -840,7 +845,7 @@ describe("buildRenderPayload — autocompact lane", () => {
 // brandon-client-hints-7ua: the memento and today lanes answer for the Claude
 // Code THIS render's client runs under — its config directory and the
 // variables memento resolves its config home from — never the daemon's env.
-describe("buildRenderPayload — the lanes that read a session's Claude Code", () => {
+describe("payloadOf — the lanes that read a session's Claude Code", () => {
   const run = async (paths: string[], hints: ClientHints) => {
     const scopes: unknown[] = [];
     const seeded: unknown[] = [];
@@ -909,7 +914,7 @@ describe("buildRenderPayload — the lanes that read a session's Claude Code", (
 // `↗ config` — the config file's path rides the payload exactly while the
 // session renders from one, and the resume command carries the session's
 // configuration directory from the client's hint.
-describe("buildRenderPayload — config file and resume command", () => {
+describe("payloadOf — config file and resume command", () => {
   const build = (configPath: string | null, hints: typeof NO_HINTS) =>
     requestPayload(
       hookData("/no/such/transcript.jsonl"),

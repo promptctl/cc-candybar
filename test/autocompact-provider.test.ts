@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { autorun } from "mobx";
 import { AutoCompactProvider } from "../src/segments/autocompact-provider";
 import { ok } from "../src/utils/outcome";
 
@@ -54,6 +55,25 @@ describe("AutoCompactProvider", () => {
       refreshes: { request: 2 },
       failures: 0,
     });
+  });
+
+  test("a request whose stamp did not move wakes no reader of the window", () => {
+    write(JSON.stringify({ autoCompactWindow: 400_000 }), 1_000);
+    provider.window(settings);
+    let reads = 0;
+    const stop = autorun(() => {
+      provider.stored(settings);
+      reads++;
+    });
+    try {
+      for (let request = 0; request < 3; request++) provider.window(settings);
+      expect(reads).toBe(1);
+      write(JSON.stringify({ autoCompactWindow: 1_000_000 }), 2_000);
+      provider.window(settings);
+      expect(reads).toBe(2);
+    } finally {
+      stop();
+    }
   });
 
   test("a refusal is logged once, by the read that found it", () => {

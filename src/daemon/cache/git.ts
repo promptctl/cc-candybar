@@ -20,9 +20,10 @@ import { Period, periodOf, type Every } from "../../utils/period";
 import {
   answerPending,
   currentOf,
-  pending,
+  renew,
   settle,
   settledLane,
+  unread,
   type Current,
   type Lane,
   type Readable,
@@ -231,7 +232,7 @@ function branchOf(
 // The PR's key is not known to be the branch's now (`PrSource.missed`).
 function owe(pr: PrSource): void {
   pr.missed = true;
-  if (pr.reading.kind === "read") pr.reading = pending();
+  renew(pr);
 }
 
 // [LAW:no-silent-failure] A pass that read no branch has none to key an owed
@@ -239,7 +240,7 @@ function owe(pr: PrSource): void {
 // answered, and it stays owed for the next pass that reads one. A key known
 // current keeps its answer, and a lookup in flight lands as it would.
 function unkeyedPr(pr: PrSource, failures: ReadonlySet<string>): PrMove {
-  if (pr.missed && pr.reading.kind === "pending") {
+  if (pr.missed && pr.reading.get().kind === "pending") {
     settle(pr, failures.size > 0 ? failed([...failures].join("; ")) : ABSENT);
   }
   return "unkeyed";
@@ -397,7 +398,7 @@ export class GitDataProvider {
     // A declaration finding the value stored is a hit; one that must wait
     // for its first read is a miss. A lane's reads count nothing: a frame
     // reads at its own rate.
-    if (value.reading.kind === "pending") this.misses++;
+    if (value.reading.get().kind === "pending") this.misses++;
     else this.hits++;
     return { current: () => composed(value, pr) };
   }
@@ -554,7 +555,7 @@ export class GitDataProvider {
     if (known !== undefined) return known;
     const value: GitValue = {
       options,
-      reading: pending(),
+      reading: unread(),
       readers: 0,
       missed: false,
     };
@@ -603,7 +604,7 @@ export class GitDataProvider {
     // A value something reads, or something waits on, is read; the rest are
     // missed, read by the pass their next reader queues.
     for (const value of state.values.values()) {
-      if (value.readers > 0 || value.reading.kind === "pending") {
+      if (value.readers > 0 || value.reading.get().kind === "pending") {
         values.push(value);
       } else value.missed = true;
     }
@@ -669,7 +670,7 @@ export class GitDataProvider {
       missed: true,
       key: "",
       remote: ABSENT,
-      reading: pending(),
+      reading: unread(),
       inFlight: null,
     };
     return pr;
@@ -711,7 +712,7 @@ export class GitDataProvider {
       owe(pr);
       return "owed";
     }
-    if (pr.reading.kind === "read") pr.reading = pending();
+    renew(pr);
     pr.missed = false;
     void this.readPr(state, pr);
     return "looked-up";

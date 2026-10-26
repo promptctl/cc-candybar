@@ -203,8 +203,8 @@ export const DEPTH_FUNCTIONS: ReadonlySet<string> = new Set(
 // `clockFuncs` the injected clock factories (the swatch row's). The generic
 // engine never imports a specific feature — the caller hands it the capability
 // as data, so the dependency runs caller → engine, never engine → feature.
-// `drawnAt` is the depth `readableOn` floors text at: the registry's, which a
-// render publishes (SourceRegistry.drawAt). Required, so no engine floors at a
+// `drawnAt` is the depth `readableOn` floors text at: the registry's, derived
+// from its view's colour setting (SourceRegistry.drawnAt). Required, so no engine floors at a
 // depth nobody stated. It carries no terminal: the detached daemon cannot see
 // the client's.
 export function createCcCandybarEngine(opts: {

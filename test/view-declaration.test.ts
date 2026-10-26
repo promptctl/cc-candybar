@@ -11,7 +11,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { GitDataProvider, PR_PERIOD } from "../src/daemon/cache/git";
-import { RenderCache } from "../src/daemon/cache/render";
+import { SOURCES_NOTHING, RenderCache } from "../src/daemon/cache/render";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { SessionState } from "../src/daemon/session-state";
 import { parseClientHints } from "../src/daemon/protocol";
@@ -109,6 +109,7 @@ test("a preset click that newly places the PR starts its lookup with no draw; sw
     {
       sessionState,
       watchers,
+      source: SOURCES_NOTHING,
       declare: (holds, facts, closure) =>
         declareLanes(owners, holds, facts, closure),
     },
@@ -238,6 +239,7 @@ function gitCache() {
     {
       sessionState: new SessionState(),
       watchers,
+      source: SOURCES_NOTHING,
       declare: (holds, facts, closure) =>
         declareLanes(owners, holds, facts, closure),
     },

@@ -36,7 +36,7 @@ The render-hot-path call chain (daemon side, per request):
 ```
 handleRequest (server.ts)
   └─ renderCache.getOrCreate(...)        — cache HIT in steady state, no work
-  └─ buildRenderPayload(...)             — reads provider snapshots, no spawn
+  └─ settlePayload / payloadOf          — reads provider snapshots, no spawn
   └─ renderDsl(...)                  — pure CPU
   └─ diagnosticDump.sync(...)            — the one synchronous fs write, taken only when the diagnostic text changed
   └─ composeWithDiagnostics(...)         — string assembly

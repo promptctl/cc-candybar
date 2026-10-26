@@ -1,6 +1,6 @@
 // Burn-rate + cap-projection segment (brandon-usage-4be). Three layers:
 //   1. the pure projection math (etaMinutes / projectCostPerHour),
-//   2. buildRenderPayload folding the burn rate into the payload under the
+//   2. payloadOf folding the burn rate into the payload under the
 //      closure gate (the ETAs are the draw's, from the windows' instants),
 //   3. the burnrate segment formatting it — including the "—" absence path.
 //
@@ -40,6 +40,7 @@ import {
   fakeTmux,
   fakeUsage,
   requestPayload,
+  settled,
 } from "./helpers/payload-owners";
 
 const FIVE_HOURS_MIN = 5 * 60;
@@ -83,7 +84,7 @@ describe("projectCostPerHour (pure)", () => {
   });
 });
 
-// ─── buildRenderPayload integration ────────────────────────────────────────────
+// ─── payloadOf integration ────────────────────────────────────────────
 
 function depsWith(
   overrides: Partial<RenderPayloadDeps> = {},
@@ -148,7 +149,7 @@ const NO_HINTS: ClientHints = {};
 
 const EFFECTIVE_GLOBALS: EffectiveGlobals = globalsFor(DEFAULT_DSL_CONFIG);
 
-describe("buildRenderPayload — burn projection lane", () => {
+describe("payloadOf — burn projection lane", () => {
   test("projectable: the burn rate and both windows' instants land in the payload", async () => {
     const payload = await requestPayload(
       hookWithWindows(),
@@ -160,7 +161,7 @@ describe("buildRenderPayload — burn projection lane", () => {
       NO_HINTS,
       NO_CONFIG_FILE,
     );
-    expect(payload.burn?.costPerHour).toBe(12);
+    expect(settled(payload.burn)?.costPerHour).toBe(12);
     // [LAW:one-source-of-truth] Instants, never the ETA a later frame would
     // read stale: what they say relative to now is the draw's.
     expect(payload.block).toEqual({

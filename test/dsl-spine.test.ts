@@ -115,7 +115,7 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
     expect(result.length).toBeGreaterThan(0);
   });
 
-  test("renderDsl drives payload through applyInput (input vars reflect payload)", () => {
+  test("renderDsl reads its input vars from the payload it binds", () => {
     const { config, compiled, store, registry } = buildRuntime(
       HOOK_DATA.workspace.current_dir,
     );

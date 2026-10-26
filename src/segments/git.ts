@@ -1132,7 +1132,7 @@ export class GitService {
   // one commit forever — while "how long ago" is that timestamp minus a clock
   // read. Split apart, the repo fact becomes cacheable with no TTL at all (the
   // daemon's GitDataProvider keys it on the oid) and the clock read belongs to
-  // the render: buildRenderPayload subtracts this from the instant the bar is
+  // the render: `git.timeSinceCommit`, a projection, subtracts this from the instant the bar is
   // drawn at, so a GitInfo cached for a whole TTL window never carries an age
   // frozen at its fetch. Folded together, the spawn could only ever be cached
   // for as long as the answer was allowed to be wrong.

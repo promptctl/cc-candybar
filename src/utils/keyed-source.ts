@@ -5,8 +5,9 @@ import { Period, periodOf, type Every } from "./period";
 import {
   answerPending,
   currentOf,
-  pending,
+  renew,
   settle,
+  unread,
   type Lane,
   type Readable,
 } from "./reading";
@@ -147,7 +148,7 @@ export class KeyedSource<I, T> {
   supersede(input: I): void {
     const entry = this.entries.get(this.spec.keyOf(input));
     if (entry === undefined) return;
-    if (entry.reading.kind === "read") entry.reading = pending();
+    renew(entry);
     entry.flight = null;
     this.refresh(entry, "supersede");
   }
@@ -178,7 +179,7 @@ export class KeyedSource<I, T> {
     const entry: Entry<I, T> = {
       key,
       input,
-      reading: pending(),
+      reading: unread(),
       holders: 0,
       flight: null,
       period: new Period(() => this.refresh(entry, "period")),

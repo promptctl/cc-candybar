@@ -4,6 +4,7 @@ import path from "node:path";
 import { runInAction } from "mobx";
 import {
   DECLARES_NOTHING,
+  SOURCES_NOTHING,
   RenderCache,
   type Declare,
   type SessionView,
@@ -51,6 +52,7 @@ function makeCache(
     {
       sessionState: new SessionState(),
       watchers,
+      source: SOURCES_NOTHING,
       declare: opts.declare ?? DECLARES_NOTHING,
       log: (_level, line) => {
         opts.log?.(line);

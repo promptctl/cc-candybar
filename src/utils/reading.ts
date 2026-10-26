@@ -1,3 +1,4 @@
+import { observable, runInAction, type IObservableValue } from "mobx";
 import type { Outcome } from "./outcome";
 
 // [LAW:types-are-the-program] What a source holds for one key: nothing yet,
@@ -13,8 +14,17 @@ export type Reading<T> =
     }
   | { readonly kind: "read"; readonly outcome: Outcome<T> };
 
+// [LAW:no-ambient-temporal-coupling] A source's stored value, observable, so a
+// derivation over it — a view's payload (brandon-unfiled-3248.8ro6, step 4) —
+// is recomputed in the turn the value lands, never read stale. Only `settle`
+// and `renew` write it.
 export interface Readable<T> {
-  reading: Reading<T>;
+  readonly reading: IObservableValue<Reading<T>>;
+}
+
+// A source's stored value before its first read.
+export function unread<T>(): IObservableValue<Reading<T>> {
+  return observable.box<Reading<T>>(pending(), { deep: false });
 }
 
 export function pending<T>(): Reading<T> {
@@ -26,9 +36,17 @@ export function pending<T>(): Reading<T> {
 }
 
 export function settle<T>(source: Readable<T>, outcome: Outcome<T>): void {
-  const prior = source.reading;
-  source.reading = { kind: "read", outcome };
+  const prior = source.reading.get();
+  runInAction(() => source.reading.set({ kind: "read", outcome }));
   if (prior.kind === "pending") prior.land();
+}
+
+// The stored value no longer answers what its source reads (a new key, a
+// superseding move): it is pending until a fresh read lands. A value already
+// pending keeps the landing its readers wait on.
+export function renew<T>(source: Readable<T>): void {
+  if (source.reading.get().kind === "read")
+    runInAction(() => source.reading.set(pending()));
 }
 
 // A source its owner is dropping: a reader waiting on its pending value is
@@ -37,7 +55,7 @@ export function answerPending<T>(
   source: Readable<T>,
   outcome: Outcome<never>,
 ): void {
-  if (source.reading.kind === "pending") settle(source, outcome);
+  if (source.reading.get().kind === "pending") settle(source, outcome);
 }
 
 // [LAW:types-are-the-program] A read as it stands now: its outcome, or not
@@ -61,7 +79,7 @@ function isWaiting<A>(current: A | Waiting): current is Waiting {
 }
 
 export function currentOf<T>(source: Readable<T>): Current<T> {
-  const reading = source.reading;
+  const reading = source.reading.get();
   return reading.kind === "read" ? reading.outcome : reading;
 }
 

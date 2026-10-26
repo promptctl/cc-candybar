@@ -1,4 +1,5 @@
 import { ColorDepth, ensureContrast, parseRgbHex } from "@promptctl/rich-js";
+import { feedInputs } from "./helpers/inputs";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -167,19 +168,22 @@ describe("SourceRegistry — input: before its first payload", () => {
   // no value until a payload writes it — never its default, which answers a
   // payload that lacks the path — so what reads it before then waits.
   it("an input not answered yet reports no earlier read's error", () => {
-    const { registry } = make("(unset)");
-    registry.declareInput("count", "count", "number");
-    registry.applyInput({ count: "not a number" });
+    const { store, registry } = make("(unset)");
+    registry.declareInput("count", "count", "number", undefined, "computed");
+    feedInputs(registry, { count: "not a number" });
+    // An input is derived: its error is recorded when it is read.
+    expect(store.read("count")).toBe(0);
     expect(registry.getLastError("count")).toBeDefined();
-    registry.applyInput({ count: PENDING });
+    feedInputs(registry, { count: PENDING });
+    expect(() => store.read("count")).toThrow(/no value yet/);
     expect(registry.getLastError("count")).toBeUndefined();
   });
 
   it("is not answered yet, whatever its default", () => {
     const { store, registry } = make("(unset)");
-    registry.declareInput("cwd", "cwd", "string", "/default");
-    registry.declareInput("count", "count", "number");
-    registry.declareInput("flag", "flag", "boolean");
+    registry.declareInput("cwd", "cwd", "string", "/default", "computed");
+    registry.declareInput("count", "count", "number", undefined, "computed");
+    registry.declareInput("flag", "flag", "boolean", undefined, "computed");
     for (const name of ["cwd", "count", "flag"]) {
       let thrown: unknown;
       try {
@@ -191,7 +195,7 @@ describe("SourceRegistry — input: before its first payload", () => {
     }
     expect(store.changeKey("cwd")).toEqual(PENDING);
     expect(registry.getLastError("cwd")).toBeUndefined();
-    registry.applyInput({});
+    feedInputs(registry, {});
     expect(store.read("cwd")).toBe("/default");
     // A default that cannot be the input's type answers as its zero.
     expect(store.read("count")).toBe(0);
@@ -202,47 +206,49 @@ describe("SourceRegistry — input: before its first payload", () => {
 describe("SourceRegistry — input: round-trip", () => {
   it("resolves a top-level path and updates the box", () => {
     const { store, registry } = make();
-    registry.declareInput("cwd", "cwd", "string");
-    registry.applyInput({ cwd: "/home/user/project" });
+    registry.declareInput("cwd", "cwd", "string", undefined, "computed");
+    feedInputs(registry, { cwd: "/home/user/project" });
     expect(store.read("cwd")).toBe("/home/user/project");
   });
 
   it("resolves a nested dotted path", () => {
     const { store, registry } = make();
-    registry.declareInput("session_id", "session_id", "string");
-    registry.applyInput({ session_id: "abc123" });
+    registry.declareInput("session_id", "session_id", "string", undefined, "computed");
+    feedInputs(registry, { session_id: "abc123" });
     expect(store.read("session_id")).toBe("abc123");
   });
 
   it("resolves deeply nested paths", () => {
     const { store, registry } = make();
-    registry.declareInput("model_name", "model.display_name", "string");
-    registry.applyInput({ model: { display_name: "claude-opus-4" } });
+    registry.declareInput("model_name", "model.display_name", "string", undefined, "computed");
+    feedInputs(registry, { model: { display_name: "claude-opus-4" } });
     expect(store.read("model_name")).toBe("claude-opus-4");
   });
 
   it("resolves a number field", () => {
     const { store, registry } = make();
-    registry.declareInput("tokens", "context_window.total_input_tokens", "number");
-    registry.applyInput({ context_window: { total_input_tokens: 5000 } });
+    registry.declareInput("tokens", "context_window.total_input_tokens", "number", undefined, "computed");
+    feedInputs(registry, { context_window: { total_input_tokens: 5000 } });
     expect(store.read("tokens")).toBe(5000);
   });
 
   it("resolves a boolean field", () => {
     const { store, registry } = make();
-    registry.declareInput("expanded", "state.toolbarExpanded", "boolean");
-    registry.applyInput({ state: { toolbarExpanded: true } });
+    registry.declareInput("expanded", "state.toolbarExpanded", "boolean", undefined, "computed");
+    feedInputs(registry, { state: { toolbarExpanded: true } });
     expect(store.read("expanded")).toBe(true);
   });
 
   it("clears last_error on successful resolution", () => {
-    const { registry } = make();
-    registry.declareInput("cwd", "cwd", "string");
-    // First push fails
-    registry.applyInput({});
+    const { store, registry } = make();
+    registry.declareInput("cwd", "cwd", "string", undefined, "computed");
+    // First payload fails
+    feedInputs(registry, {});
+    store.read("cwd");
     expect(registry.getLastError("cwd")).toBeDefined();
-    // Second push succeeds — error cleared
-    registry.applyInput({ cwd: "/now/present" });
+    // Second payload succeeds — error cleared
+    feedInputs(registry, { cwd: "/now/present" });
+    store.read("cwd");
     expect(registry.getLastError("cwd")).toBeUndefined();
   });
 });
@@ -250,16 +256,17 @@ describe("SourceRegistry — input: round-trip", () => {
 describe("SourceRegistry — input: missing path fallback chain", () => {
   it("uses varDefault when path is missing", () => {
     const { store, registry } = make();
-    registry.declareInput("cwd", "cwd", "string", "/fallback");
-    registry.applyInput({});
+    registry.declareInput("cwd", "cwd", "string", "/fallback", "computed");
+    feedInputs(registry, {});
     expect(store.read("cwd")).toBe("/fallback");
   });
 
   it("records last_error when path is missing", () => {
-    const { registry } = make();
+    const { store, registry } = make();
     const before = Date.now();
-    registry.declareInput("cwd", "cwd", "string");
-    registry.applyInput({});
+    registry.declareInput("cwd", "cwd", "string", undefined, "computed");
+    feedInputs(registry, {});
+    store.read("cwd");
     const err = registry.getLastError("cwd");
     expect(err).toBeDefined();
     expect(err!.message).toMatch(/not found in payload/);
@@ -268,29 +275,29 @@ describe("SourceRegistry — input: missing path fallback chain", () => {
 
   it("uses defaultEmptyValue when path missing and no varDefault (string)", () => {
     const { store, registry } = make("(none)");
-    registry.declareInput("cwd", "cwd", "string");
-    registry.applyInput({});
+    registry.declareInput("cwd", "cwd", "string", undefined, "computed");
+    feedInputs(registry, {});
     expect(store.read("cwd")).toBe("(none)");
   });
 
   it("uses zero value when path missing, no varDefault, defaultEmptyValue incompatible (number)", () => {
     const { store, registry } = make("not-a-number");
-    registry.declareInput("count", "count", "number");
-    registry.applyInput({});
+    registry.declareInput("count", "count", "number", undefined, "computed");
+    feedInputs(registry, {});
     expect(store.read("count")).toBe(0);
   });
 
   it("uses zero value for boolean type when all fallbacks fail", () => {
     const { store, registry } = make("not-a-bool");
-    registry.declareInput("flag", "flag", "boolean");
-    registry.applyInput({});
+    registry.declareInput("flag", "flag", "boolean", undefined, "computed");
+    feedInputs(registry, {});
     expect(store.read("flag")).toBe(false);
   });
 
   it("returns undefined for missing intermediate path segment", () => {
     const { store, registry } = make();
-    registry.declareInput("name", "model.display_name", "string", "default-name");
-    registry.applyInput({ model: null });
+    registry.declareInput("name", "model.display_name", "string", "default-name", "computed");
+    feedInputs(registry, { model: null });
     expect(store.read("name")).toBe("default-name");
   });
 });
@@ -301,8 +308,8 @@ describe("SourceRegistry — input: runInAction batching", () => {
     const registry = registryOver(store);
     let evalCount = 0;
 
-    registry.declareInput("a", "a", "string");
-    registry.declareInput("b", "b", "string");
+    registry.declareInput("a", "a", "string", undefined, "computed");
+    registry.declareInput("b", "b", "string", undefined, "computed");
 
     // computed that reads both input boxes
     store.defineComputed("combined", "string", (read) => {
@@ -311,12 +318,12 @@ describe("SourceRegistry — input: runInAction batching", () => {
     });
 
     // warm the computed over the first payload
-    registry.applyInput({});
+    feedInputs(registry, {});
     expect(store.read("combined")).toBe(":");
     evalCount = 0; // reset after warmup
 
     // Apply both inputs together — computed should re-evaluate at most once
-    registry.applyInput({ a: "hello", b: "world" });
+    feedInputs(registry, { a: "hello", b: "world" });
     expect(store.read("combined")).toBe("hello:world");
 
     // MobX batching: keepAlive computed re-runs on first access after invalidation,
@@ -324,14 +331,14 @@ describe("SourceRegistry — input: runInAction batching", () => {
     expect(evalCount).toBe(1);
   });
 
-  it("updates independently across multiple applyInput calls", () => {
+  it("updates independently across multiple payloads fed in turn", () => {
     const { store, registry } = make();
-    registry.declareInput("cwd", "cwd", "string");
+    registry.declareInput("cwd", "cwd", "string", undefined, "computed");
 
-    registry.applyInput({ cwd: "/first" });
+    feedInputs(registry, { cwd: "/first" });
     expect(store.read("cwd")).toBe("/first");
 
-    registry.applyInput({ cwd: "/second" });
+    feedInputs(registry, { cwd: "/second" });
     expect(store.read("cwd")).toBe("/second");
   });
 });
@@ -343,15 +350,15 @@ describe("SourceRegistry — input boxes as computed dependencies", () => {
     const store = new VariableStore();
     const registry = registryOver(store);
 
-    registry.declareInput("cwd", "cwd", "string", "/initial");
+    registry.declareInput("cwd", "cwd", "string", "/initial", "computed");
     store.defineComputed("basename", "string", (read) => {
       const p = String(read("cwd"));
       return p.split("/").at(-1) ?? "";
     });
 
-    registry.applyInput({});
+    feedInputs(registry, {});
     expect(store.read("basename")).toBe("initial");
-    registry.applyInput({ cwd: "/home/user/project" });
+    feedInputs(registry, { cwd: "/home/user/project" });
     expect(store.read("basename")).toBe("project");
   });
 
@@ -941,7 +948,7 @@ describe("SourceRegistry — shell: key: cache policy", () => {
         const runs = path.join(dir, "runs");
         const store = new VariableStore();
         const registry = registryOver(store);
-        registry.declareInput("pane", "tmux.pane", "string");
+        registry.declareInput("pane", "tmux.pane", "string", undefined, "computed");
         registry.declareShell("val", `echo run >> ${runs}; echo ran`, {
           cwd: process.cwd(),
           parse: TEXT,
@@ -950,14 +957,14 @@ describe("SourceRegistry — shell: key: cache policy", () => {
         await ran(registry);
         expect(fs.existsSync(runs)).toBe(false);
         // A payload with no pane is an answer: the input's fallback.
-        registry.applyInput({});
+        feedInputs(registry, {});
         await ran(registry);
         expect(fs.readFileSync(runs, "utf8")).toBe("run\n");
         expect(store.read("val")).toBe("ran");
         // An unchanged payload reads nothing; a changed one reads once more.
-        registry.applyInput({});
+        feedInputs(registry, {});
         await ran(registry);
-        registry.applyInput({ tmux: { pane: "%1" } });
+        feedInputs(registry, { tmux: { pane: "%1" } });
         await ran(registry);
         expect(fs.readFileSync(runs, "utf8")).toBe("run\nrun\n");
       } finally {
@@ -1435,10 +1442,13 @@ describe("SourceRegistry — template: basic", () => {
     const at = (d: ColorDepth) => ensureContrast(fg, bg, 4.5, d).hex;
     expect(at(ColorDepth.EIGHT_BIT)).not.toBe(at(ColorDepth.TRUECOLOR));
 
+    // Before a view source is bound, the depth is not answered yet.
+    expect(() => store.read("ink")).toThrow(/no value yet|no view source/);
+    feedInputs(registry, {});
     expect(store.read("ink")).toBe(at(ColorDepth.TRUECOLOR));
-    registry.drawAt(ColorDepth.EIGHT_BIT);
+    feedInputs(registry, {}, ColorDepth.EIGHT_BIT);
     expect(store.read("ink")).toBe(at(ColorDepth.EIGHT_BIT));
-    registry.drawAt(ColorDepth.TRUECOLOR);
+    feedInputs(registry, {}, ColorDepth.TRUECOLOR);
     expect(store.read("ink")).toBe(at(ColorDepth.TRUECOLOR));
   });
 
@@ -1807,15 +1817,15 @@ describe("SourceRegistry — state: read-through to SessionState", () => {
     const store = new VariableStore();
     const registry = registryOver(store, "", sessionState);
     // session.id is the conventional source for "which session am I in" —
-    // input boxes refresh per render via applyInput.
-    registry.declareInput("session.id", "session_id", "string");
+    // inputs derive from the payload the view is bound to.
+    registry.declareInput("session.id", "session_id", "string", undefined, "computed");
     return { store, registry, sessionState };
   }
 
   test("returns default when SessionState has no entry for the key", () => {
     const { store, registry } = makeWithState();
     registry.declareState("toolbarExpanded", { key: "toolbar-expanded" });
-    registry.applyInput({ session_id: "s1" });
+    feedInputs(registry, { session_id: "s1" });
     expect(store.read("toolbarExpanded")).toBe("");
   });
 
@@ -1823,14 +1833,14 @@ describe("SourceRegistry — state: read-through to SessionState", () => {
     const { store, registry, sessionState } = makeWithState();
     sessionState.set("s1", "toolbar-expanded", "1");
     registry.declareState("toolbarExpanded", { key: "toolbar-expanded" });
-    registry.applyInput({ session_id: "s1" });
+    feedInputs(registry, { session_id: "s1" });
     expect(store.read("toolbarExpanded")).toBe("1");
   });
 
   test("varDefault wins when SessionState key is absent", () => {
     const { store, registry } = makeWithState();
     registry.declareState("theme", { key: "theme", varDefault: "ocean" });
-    registry.applyInput({ session_id: "s1" });
+    feedInputs(registry, { session_id: "s1" });
     expect(store.read("theme")).toBe("ocean");
   });
 
@@ -1840,7 +1850,7 @@ describe("SourceRegistry — state: read-through to SessionState", () => {
     // sees the new value without re-reading disk.
     const { store, registry, sessionState } = makeWithState();
     registry.declareState("theme", { key: "theme" });
-    registry.applyInput({ session_id: "s1" });
+    feedInputs(registry, { session_id: "s1" });
     expect(store.read("theme")).toBe("");
 
     sessionState.set("s1", "theme", "ember");
@@ -1856,10 +1866,10 @@ describe("SourceRegistry — state: read-through to SessionState", () => {
     sessionState.set("b", "theme", "ember");
     registry.declareState("theme", { key: "theme" });
 
-    registry.applyInput({ session_id: "a" });
+    feedInputs(registry, { session_id: "a" });
     expect(store.read("theme")).toBe("ocean");
 
-    registry.applyInput({ session_id: "b" });
+    feedInputs(registry, { session_id: "b" });
     expect(store.read("theme")).toBe("ember");
   });
 

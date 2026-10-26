@@ -19,6 +19,7 @@
 // the step refuses loudly, applies nothing, and drops those changes from both
 // stacks. The session's other changes stay steppable.
 
+import { observable, runInAction } from "mobx";
 import fs from "node:fs";
 import path from "node:path";
 import { SETTING_PROJECTIONS } from "../config/setting-projections";
@@ -152,7 +153,21 @@ const identity = (c: Change): string =>
   c.kind === "session" ? `session:${c.key}` : `file:${c.file}`;
 
 export class SettingsHistory {
-  private state: Map<string, SessionHistory> = new Map();
+  // [LAW:no-ambient-temporal-coupling] Observable, so a view's payload over a
+  // session's depth (`↶`/`↷`) is recomputed in the turn a step lands — a
+  // refused `↶` that drops steps included, which moves no pick. Per key: a
+  // whole next state is adopted by `replace`, which keeps its order (the
+  // recency) and moves only the sessions whose history changed, so one
+  // session's click recomputes no other session's payload.
+  private readonly held = observable.map<string, SessionHistory>(undefined, {
+    deep: false,
+  });
+  private get state(): ReadonlyMap<string, SessionHistory> {
+    return this.held;
+  }
+  private set state(next: Map<string, SessionHistory>) {
+    runInAction(() => this.held.replace(next));
+  }
   // When each session last moved a setting, on this history's own count of
   // moves — every one lands in `put`, whichever control made it.
   private readonly moves = new Map<string, number>();

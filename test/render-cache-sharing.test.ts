@@ -6,6 +6,7 @@ import vm from "node:vm";
 import {
   COMPILE_BYTES,
   DECLARES_NOTHING,
+  SOURCES_NOTHING,
   ENTRY_BYTES,
   openView,
   RenderCache,
@@ -63,6 +64,7 @@ function makeCache(budgetBytes: number, maxEntries?: number) {
     {
       sessionState,
       watchers,
+      source: SOURCES_NOTHING,
       declare: DECLARES_NOTHING,
       log: (_level, line) => lines.push(line),
     },
@@ -99,6 +101,7 @@ const drawnBytes = (view: SessionView): string =>
 const render = (state: ReturnType<RenderCache["getOrCreate"]>["state"]): string => {
   const view = openView(state, dir, "s", viewFacts(dir, "s"), {
     sessionState: new SessionState(),
+    source: SOURCES_NOTHING,
     declare: DECLARES_NOTHING,
     log: () => {},
   });

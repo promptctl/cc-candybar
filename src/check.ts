@@ -46,6 +46,8 @@ import {
   type CompiledConfig,
   type RenderWarning,
 } from "./dsl/render.js";
+import { bindView } from "./dsl/parts.js";
+import { fixedSource } from "./dsl/view-source.js";
 import { stateGate } from "./daemon/verbs/state-validators.js";
 import { configGate } from "./daemon/verbs/config-validators.js";
 import { reserveUpdateKeys } from "./daemon/update-notice.js";
@@ -388,19 +390,23 @@ export async function prepareConfig(
   try {
     const compiled = registerDslConfig(config, registry, { cwd });
     warnings.push(...compiled.loadWarnings);
-    // A view's inputs are pending until its first payload, and a source whose
-    // `key` or `depends_on` reads one first runs when it answers — so the
-    // payload a fresh session's render pushes is pushed before the wait, or
-    // those sources would not have started.
-    registry.applyInput(
-      checkPayload(
-        resolveEffectiveGlobals(
-          config,
-          () => null,
-          () => false,
-        ),
-        layers.at(-1) ?? null,
-        at,
+    // A view's inputs are pending until its source answers, and a source
+    // whose `key` or `depends_on` reads one first runs when it answers — so
+    // the payload a fresh session draws from is bound before the wait, or
+    // those sources would not have started: the constant this check draws by,
+    // through the seam a session's view reads.
+    const effective = resolveEffectiveGlobals(
+      config,
+      () => null,
+      () => false,
+    );
+    bindView(
+      compiled,
+      store,
+      registry,
+      fixedSource(
+        checkPayload(effective, layers.at(-1) ?? null, at),
+        effective,
       ),
     );
     // [LAW:no-ambient-temporal-coupling] An async source's first run — a shell

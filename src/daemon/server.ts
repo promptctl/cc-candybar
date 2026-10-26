@@ -99,7 +99,6 @@ import {
   sessionRenderOrigin,
   type RenderOrigin,
 } from "./verbs";
-import { settingCounts } from "./setting-drafts";
 import { validateHookData } from "../utils/schema-validator.js";
 import { transcriptReads } from "../utils/transcript-fs.js";
 import { fileStores, productionEdge, readStores } from "../doctor/edge";
@@ -122,25 +121,22 @@ import { drawDsl, type RenderWarning } from "../dsl/render.js";
 import type { DrawnMotion } from "../render/drawn-motion.js";
 import {
   renderStripCells,
-  DEFAULT_TERMINAL_WIDTH,
   type BuildLineOptions,
   type ColorCompatibility,
 } from "../render/strip.js";
-import { applyClaudeCodeReserve } from "../utils/terminal-width.js";
 import { floorOf } from "../config/globals-fields.js";
 import type { RichText } from "@promptctl/rich-js";
 import {
-  buildRenderPayload,
   declareLanes,
-  payloadOf,
   renderOptionsOf,
+  renderWidth,
   gitOptionsFromClosure,
   prFactOf,
-  type DrawInputs,
-  type DrawnPayload,
+  settlePayload,
+  todayOf,
   type PayloadInputs,
-  type RenderPayloadDeps,
 } from "./render-payload.js";
+import { sessionSource, type SessionSource } from "./session-source.js";
 import { isPending } from "../utils/outcome.js";
 import {
   laneSwitches,
@@ -378,13 +374,26 @@ function tmuxServersOf({
 // free; the daemon wipes it in onListening() (reset), once the bind is
 // won, and is the only writer.
 const diagnosticDump = new DiagnosticDump(diagnosticsDir());
-const renderCache = new RenderCache(
+const renderCache = new RenderCache<SessionSource>(
   {
     sessionState,
     watchers: watcherRegistry,
     log: dlog,
     declare: (holds, facts, closure) =>
       declareLanes(payloadProviders, holds, facts, closure),
+    // [LAW:single-enforcer] What every session's view draws from: its payload
+    // derived over its declaration, its picks and its histories' depths.
+    source: sessionSource({
+      // [LAW:single-enforcer] The providers carry `dlog` as `log`: the view's
+      // payload projects the outcome-carrying lanes' failures, which the
+      // request drawing it logs; git logs the refreshes it makes.
+      providers: payloadProviders,
+      sessionState,
+      history: (sessionId) => settingsHistory.depth(sessionId),
+      // Measured against the gate of the config the view draws with.
+      navigation: (sessionId, config) =>
+        navigationHistory.depth(sessionId, sessionState, stateGate(config)),
+    }),
   },
   {
     // [LAW:no-ambient-temporal-coupling] The budget as boot established it
@@ -1630,17 +1639,6 @@ function serializeSegmentCells(
   return out;
 }
 
-// [LAW:single-enforcer] The payload-builder dependency bundle. One value
-// passed through every render — the data the daemon brings to each tick.
-const payloadDeps: Omit<RenderPayloadDeps, "navigation" | "lanes"> = {
-  // [LAW:single-enforcer] The providers carry `dlog` as `log`:
-  // buildRenderPayload is the one log site for the outcome-carrying provider
-  // lanes read per render (cache, …); git logs the refreshes it makes.
-  ...payloadProviders,
-  history: (sessionId: string) => settingsHistory.depth(sessionId),
-  feeds: (sessionId: string, at: Instant) => frameFeeds.feedsOf(sessionId, at),
-};
-
 function handleClick(
   verb: string,
   value: string,
@@ -1722,19 +1720,18 @@ function statusLineClick(value: string): Response {
 // request writes, for the feed to log when that failure is first pushed; the
 // feed summarizes the frames that render.
 // [LAW:effects-at-boundaries] Synchronous by type: a frame reads every value
-// as its owner stored it (`payloadOf`), so it performs no I/O and refreshes no
-// source — the request it is drawn from made those refreshes.
+// as its owner stored it (the view's payload), so it performs no I/O and
+// refreshes no source — the request it is drawn from made those refreshes.
 function renderFrame(req: CheckedRenderRequest, fps: number): FeedFrame {
   const started = new Date();
   const at = instantOf(started);
   const facts: RenderFacts = [];
   try {
     using setup = setUpRender(req, at, facts);
-    const { drawn, motion, evaluated, lanes } = drawRender(
-      setup,
-      payloadOf(setup.payloadInputs, setup.drawInputs),
-      { by: "feed", fps },
-    );
+    const { drawn, motion, evaluated, lanes } = drawRender(setup, {
+      by: "feed",
+      fps,
+    });
     // [LAW:effects-at-boundaries] A frame only draws: the dump is the
     // session's requests' to write, and the frame links it only when it holds
     // this frame's text.
@@ -1934,14 +1931,10 @@ interface RenderSetup extends Disposable {
   readonly sessionId: string;
   readonly entry: CacheEntry;
   readonly state: DslRenderState;
-  readonly view: SessionView;
-  readonly width: number;
-  readonly rowCap: number;
-  readonly effective: EffectiveGlobals;
-  readonly lanes: LaneSwitches;
+  readonly view: SessionView<SessionSource>;
   readonly hintsError: string | null;
+  // What the request's refresh and wait read (settlePayload).
   readonly payloadInputs: PayloadInputs;
-  readonly drawInputs: DrawInputs;
 }
 
 function setUpRender(
@@ -1963,10 +1956,6 @@ function setUpRender(
   // spawned it. We do NOT consult getTerminalWidth's env/stderr fallbacks
   // for width, and we do NOT consult SSH_* for remoteness — both would
   // describe a different session than the one being rendered.
-  // [LAW:one-source-of-truth] Both branches feed raw cols through
-  // applyClaudeCodeReserve, so `width` always means "usable cells
-  // post-reserve" with no semantic split between wire-supplied and
-  // fallback values.
   const hints = req.hints;
   const refused = refusedHints(req, hints);
   const hintsError = refusedHintsError(refused);
@@ -2005,29 +1994,15 @@ function setUpRender(
   );
   try {
     const { entry, state, view } = hold;
-    const termCols = hints.termCols;
-    const width = applyClaudeCodeReserve(termCols ?? DEFAULT_TERMINAL_WIDTH);
-    const rowCap = diagnosticRowCap(hints.termRows);
-    noteFacts(facts, { width: String(width) });
     // [LAW:dataflow-not-control-flow] One composition every render: the
     // entry always holds a renderable state (the bundled default until a
     // config loads — src/daemon/cache/render.ts), so body = drawDsl(state)
     // and output = diagnostics + body, with no "did the config load" branch.
-    // [LAW:one-source-of-truth] Every globals field resolved ONCE per
-    // render, here — before the payload build, so the same struct feeds
-    // BOTH the payload's `*.effective` fields (what a trigger label says)
-    // AND renderOpts below (what actually renders). One resolution, two
-    // readers, so a label can never disagree with the bar. The precedence
-    // the resolver applies, and why each rung sits where it does, lives
-    // with the chain (resolveEffectiveGlobals, and src/config/presets.ts).
-    const sessionPick = (key: string): string | null =>
-      sessionState.get(req.hookData.session_id, key);
-    const effective: EffectiveGlobals = sessionGlobals(sessionId, state);
+    // The picks as the request arrived: what its refresh reads and its lane
+    // setups follow. The draw settles its own (drawRender).
+    const effective: EffectiveGlobals = view.source.effective();
     // Which animation lanes this session's settings switch on.
     const lanes = laneSwitches(effective);
-    noteFacts(facts, {
-      lanes: LANE_NAMES.filter((lane) => lanes[lane]).join(",") || "-",
-    });
     // [LAW:dataflow-not-control-flow] What a lane runs follows the switch every
     // render draws by, as the session's own setting moves moved it
     // (src/daemon/lane-setup.ts).
@@ -2045,33 +2020,15 @@ function setUpRender(
     tmuxStatusLines.observe(sessionId, hints.tmux, lanes.tmuxStatus);
     const payloadInputs: PayloadInputs = {
       hookData: req.hookData,
-      at,
       deps: {
-        ...payloadDeps,
+        ...payloadProviders,
         // The lanes the session's view declared: what this render reads of
         // the daemon's shared entries.
         lanes: view.lanes,
-        // Measured against the gate of the config this render draws with.
-        navigation: (sessionId: string) =>
-          navigationHistory.depth(
-            sessionId,
-            sessionState,
-            stateGate(state.config),
-          ),
       },
       cwd: req.cwd,
       neededInputPaths: state.neededInputPaths(effective.preset),
       hints,
-    };
-    const drawInputs: DrawInputs = {
-      effective,
-      configFacts: {
-        ...settingCounts(state.config, state.fileHeldSettings, sessionPick),
-        // The file the menu's saves and resets edit, once it exists.
-        configPath: entry.configLayers.includes(entry.configHome)
-          ? entry.configHome
-          : null,
-      },
     };
     return {
       req,
@@ -2081,13 +2038,8 @@ function setUpRender(
       entry,
       state,
       view,
-      width,
-      rowCap,
-      effective,
-      lanes,
       hintsError,
       payloadInputs,
-      drawInputs,
       [Symbol.dispose]: () => hold[Symbol.dispose](),
     };
   } catch (e) {
@@ -2103,7 +2055,6 @@ function setUpRender(
 // the caller's to record.
 function drawRender(
   setup: RenderSetup,
-  payload: DrawnPayload,
   drawing: Drawing,
 ): {
   drawn: DrawnBar;
@@ -2113,20 +2064,44 @@ function drawRender(
   // Which animation lanes the session's settings switch on, as drawn.
   lanes: LaneSwitches;
 } {
-  const {
-    req,
-    at,
-    facts,
-    sessionId,
-    entry,
-    state,
-    view,
-    width,
-    rowCap,
-    effective,
-    lanes,
-    hintsError,
-  } = setup;
+  const { req, at, facts, sessionId, entry, state, view, hintsError } = setup;
+  // [LAW:no-ambient-temporal-coupling] The picks this draw settles in its own
+  // turn, the one its slots and payload are read in: a pick that moved during
+  // a request's wait is drawn as one snapshot of the new one.
+  // [LAW:one-source-of-truth] Every globals field as the session's view
+  // resolved it (src/daemon/session-source.ts) — the same struct its
+  // payload's `*.effective` fields (what a trigger label says) are read
+  // from, and renderOpts below (what actually renders). One resolution, two
+  // readers, so a label can never disagree with the bar. The precedence
+  // the resolver applies, and why each rung sits where it does, lives
+  // with the chain (resolveEffectiveGlobals, and src/config/presets.ts).
+  const effective = view.source.effective();
+  // Which animation lanes this session's settings switch on, as drawn.
+  const lanes = laneSwitches(effective);
+  noteFacts(facts, {
+    lanes: LANE_NAMES.filter((lane) => lanes[lane]).join(",") || "-",
+  });
+  // [LAW:one-source-of-truth] The width is `renderWidth` of the hints the
+  // view draws by — the client's cols, else the default, less Claude Code's
+  // reserve — the same request its payload carries as `term.cols`.
+  const { hints } = view.facts();
+  const width = renderWidth(hints);
+  const rowCap = diagnosticRowCap(hints.termRows);
+  noteFacts(facts, { width: String(width) });
+  // [LAW:one-source-of-truth] What the view keeps, and the facts of this
+  // draw's own instant (DRAW_PROJECTIONS): who it is for, the frames each
+  // lane was sent in the second up to it, and the day `today` sums.
+  const payload = view.source.payload();
+  const projected = {
+    drawing,
+    feeds: frameFeeds.feedsOf(sessionId, at),
+    today: todayOf(
+      payloadProviders,
+      view.lanes().today,
+      view.facts().hookData,
+      at,
+    ),
+  };
   const metrics = isPending(payload.metrics) ? undefined : payload.metrics;
   noteFacts(facts, {
     prompts: String(metrics?.messageCount ?? "-"),
@@ -2136,7 +2111,7 @@ function drawRender(
       gitOptionsFromClosure(setup.payloadInputs.neededInputPaths)
         .showPullRequest === true,
     ),
-    feeds: feedsFact(payload.feeds),
+    feeds: feedsFact(projected.feeds),
   });
   // [LAW:no-silent-failure] What renderDsl had to settle for itself and could
   // not honour (`RenderWarning`). Collected per render into a local, so there
@@ -2152,24 +2127,19 @@ function drawRender(
   const renderOpts = renderOptionsOf(effective, width);
   const effects = effectSessions.of(sessionId);
   const idleSince = menuIdle.since(sessionId, at);
-  // [LAW:single-enforcer] renderDsl internally calls
-  // `registry.applyInput(payload)` as its first step (see step 1 in
-  // src/dsl/render.ts). The daemon must not pre-apply — doing so
-  // would run the MobX action twice per render and clear last_error
-  // diagnostics on the round trip.
+  // [LAW:single-enforcer] The view's inputs read its source (`bindView`, at
+  // its opening): the draw hands only its own instant's facts.
   const frame = drawDsl(
     state.config,
     state.compiled,
     view.store,
     view.registry,
-    // [LAW:one-source-of-truth] Who the render is for is the render's own
-    // fact, beside what the providers assembled.
-    { ...payload, drawing },
+    projected,
     at,
     renderOpts,
     // [LAW:single-enforcer] The per-segment StripCell sink for the
     // `debug segments` projection. Its identity stays stable for the
-    // view's lifetime; renderDsl clears + repopulates it
+    // view's lifetime; drawDsl clears + repopulates it
     // in place. Cells are cheap (already computed during the render);
     // the per-segment ANSI serialization happens lazily inside the
     // debug handler so normal renders pay no extra serializer cost.
@@ -2177,10 +2147,10 @@ function drawRender(
       perSegmentSink: view.lastRenderCellsBySegment,
       onRenderWarning: (warning) => renderWarnings.push(warning),
     },
-    // [LAW:one-source-of-truth] The theme crosses as the SELECTION, palette
-    // and name together, so renderDsl publishes the `theme.effective` the
-    // bar was actually painted from. No separate basePalette argument: one
-    // would be a second clock free to disagree with that name.
+    // [LAW:one-source-of-truth] The draw's own settings and the session's
+    // effect memory. The theme, style and effect are not among them: the
+    // view's slots settle those names (src/dsl/parts.ts), the same ones its
+    // payload's `.effective` fields read.
     { ...effective, effects, idleSince },
   );
   // What this frame drew is what the session's close timer follows.
@@ -2289,6 +2259,10 @@ function drawRender(
     evaluated: String(frame.evaluated),
     // The sources it drew as not answered yet; `-` for none.
     pending: frame.pending.join(",") || "-",
+    // Each globals rule in force, as its slot settled it: `kept` outside the
+    // draw, `per-draw` at this frame's instant; `-` for none.
+    rules:
+      [...frame.rules].map(([slot, how]) => `${slot}:${how}`).join(",") || "-",
     err: combinedError ? "Y" : "N",
     clickError: clickHold.kind === "none" ? "-" : clickHold.kind,
     upd: String(updates.length),
@@ -2418,25 +2392,16 @@ async function drawAnswer(
   facts: RenderFacts,
 ): Promise<RequestAnswer> {
   using setup = setUpRender(req, at, facts);
-  const { payloadInputs: inputs, drawInputs: draw } = setup;
   // Rule 1 of the model: the answer shows what this request carried, so it
   // waits for the refreshes its arrival triggers — and for the first value of
-  // every keyed source its draw reads — before it draws.
-  const payload = await buildRenderPayload(
-    inputs.hookData,
-    inputs.at,
-    inputs.deps,
-    inputs.cwd,
-    inputs.neededInputPaths,
-    draw.effective,
-    inputs.hints,
-    draw.configFacts,
-  );
-  const { drawn, motion, clickShown, lanes } = drawRender(
-    setup,
-    payload,
-    ANSWERING,
-  );
+  // every keyed lane its view declared — before it draws.
+  await settlePayload(setup.payloadInputs, at);
+  // [LAW:no-silent-failure] Each lane the view's payload projected as a
+  // missing field, once per request: a frame draws the same payload and
+  // logs nothing of it.
+  for (const f of setup.view.source.failures())
+    dlog("warn", `provider fetch failed: ${f}`);
+  const { drawn, motion, clickShown, lanes } = drawRender(setup, ANSWERING);
   const { link, failure } = diagnosticDump.sync(
     req.hookData.session_id,
     order,

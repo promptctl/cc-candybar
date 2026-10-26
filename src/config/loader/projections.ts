@@ -9,10 +9,19 @@
 //
 // A value is a projection when it reads the instant itself — a `time`
 // variable, a template calling a clock function (CLOCK_FUNCTIONS: the names the
-// engine's clock factories return) — or reads a projection. The set is closed
-// upward: whatever reads a projection is one.
+// engine's clock factories return), an input at a field the draw's instant
+// answers (DRAW_PROJECTIONS), an input at a selection slot's `.effective` whose
+// rule reads the instant — or reads a projection. The set is closed upward:
+// whatever reads a projection is one.
 
 import type { DslConfig } from "../dsl-types.js";
+import { EXPRESSION_SLOTS, isExpression } from "../../themes/policy.js";
+import type { ExpressionSlot } from "../../themes/policy.js";
+import {
+  DRAW_PROJECTIONS,
+  drawProjectionAt,
+  slotAt,
+} from "../payload-inputs.js";
 import { actionTemplates, type ActionDecl } from "../action.js";
 import { CLOCK_FUNCTIONS } from "../../template-engine/engine.js";
 import {
@@ -26,7 +35,7 @@ import {
 
 export type ProjectionConfig = Pick<
   DslConfig,
-  "variables" | "segments" | "helpers"
+  "variables" | "segments" | "helpers" | "globals" | "presets"
 >;
 
 // Each projection, with why it reads the instant, as a load error says it:
@@ -93,7 +102,17 @@ function foldProjections(config: ProjectionConfig): InstantBasis {
   };
   for (const [name, decl] of declared) {
     if (decl.kind === "time") projections.set(name, "is a time variable");
+    const drawn = decl.kind === "input" ? drawProjectionAt(decl.path) : null;
+    if (drawn)
+      projections.set(
+        name,
+        `reads the draw's "${drawn}" (${DRAW_PROJECTIONS[drawn]})`,
+      );
   }
+  // [LAW:one-source-of-truth] A slot's rule decides the name its `.effective`
+  // reads, so a rule reading the instant makes every input at that path one.
+  const rules = rulesOf(config);
+  const slotReads = new Map<ExpressionSlot, string>();
   for (let grew = true; grew; ) {
     grew = false;
     for (const [name, decl] of declared) {
@@ -104,8 +123,71 @@ function foldProjections(config: ProjectionConfig): InstantBasis {
         grew = true;
       }
     }
+    for (const slot of EXPRESSION_SLOTS) {
+      if (slotReads.has(slot)) continue;
+      for (const rule of rules[slot]) {
+        const why = instantRead(rule, basis);
+        if (why === null) continue;
+        slotReads.set(slot, why);
+        grew = true;
+        break;
+      }
+    }
+    for (const [name, decl] of declared) {
+      if (decl.kind !== "input" || projections.has(name)) continue;
+      const slot = slotAt(decl.path);
+      const why = slot === undefined ? undefined : slotReads.get(slot);
+      if (why === undefined) continue;
+      projections.set(name, `reads the ${slot} rule, which ${why}`);
+      grew = true;
+    }
   }
   return basis;
+}
+
+// A globals rule as authored: the slot it decides, its text, and the config
+// path it was written at.
+export interface AuthoredRule {
+  readonly at: readonly string[];
+  readonly slot: ExpressionSlot;
+  readonly rule: string;
+}
+
+// [LAW:one-source-of-truth] Every rule a selection slot may hold: the
+// config's globals and each preset's, as the config-default rung reads them.
+// The load checks, the projection fold and the compile all read this one
+// enumeration, so a new place to author a rule is one edit here.
+export function authoredRules(
+  config: Pick<DslConfig, "globals" | "presets">,
+): readonly AuthoredRule[] {
+  const fragments: ReadonlyArray<
+    readonly [readonly string[], DslConfig["globals"]]
+  > = [
+    [["globals"], config.globals],
+    ...Object.entries(config.presets ?? {}).map(
+      ([name, preset]) =>
+        [["presets", name, "globals"], preset.globals ?? {}] as const,
+    ),
+  ];
+  return fragments.flatMap(([at, globals]) =>
+    EXPRESSION_SLOTS.flatMap((slot) => {
+      const rule = globals[slot];
+      return isExpression(rule) ? [{ at: [...at, slot], slot, rule }] : [];
+    }),
+  );
+}
+
+function rulesOf(
+  config: ProjectionConfig,
+): Readonly<Record<ExpressionSlot, readonly string[]>> {
+  const rules = authoredRules(config);
+  const rulesIn = (slot: ExpressionSlot): readonly string[] =>
+    rules.flatMap((r) => (r.slot === slot ? [r.rule] : []));
+  return {
+    style: rulesIn("style"),
+    palette: rulesIn("palette"),
+    effect: rulesIn("effect"),
+  };
 }
 
 // Why a template reads the instant, through the config's projections; null

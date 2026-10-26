@@ -8,6 +8,7 @@
 // src/daemon/verbs/index.ts directly. That is the same handler the daemon
 // invokes for a wire-level click; no duplication.
 
+import { feedInputs } from "./helpers/inputs";
 import { selectionFor } from "./helpers/selection";
 import { autorun } from "mobx";
 import { getThemePalette } from "@promptctl/rich-js";
@@ -157,7 +158,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     // when a tracked dep invalidates. If SessionState.set ever stops
     // calling atom.reportChanged(), this test stalls at one observation.
     const { config, store, registry, sessionState } = buildRuntime();
-    registry.applyInput(HOOK_DATA);
+    feedInputs(registry, HOOK_DATA);
 
     const observed: string[] = [];
     const dispose = autorun(() => {
@@ -216,7 +217,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "", sessionState);
     registerDslConfig(config, registry, { cwd: process.cwd() });
-    registry.applyInput(HOOK_DATA);
+    feedInputs(registry, HOOK_DATA);
 
     const themeObs: string[] = [];
     const expandedObs: string[] = [];
@@ -430,7 +431,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "", sessionState);
     registerDslConfig(config, registry, { cwd: process.cwd() });
-    registry.applyInput(HOOK_DATA);
+    feedInputs(registry, HOOK_DATA);
 
     // Observer reads BOTH state vars in one tracked frame — the kind
     // of cross-key correlation a Menu rendering would do.
