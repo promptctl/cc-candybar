@@ -267,12 +267,21 @@ describe("every render request writes one render event, whatever its outcome", (
       "style:kept,effect:per-draw",
     );
     // One request, the answer it got: a source that never answers draws
-    // pending however often it is asked.
+    // pending however often it is asked. The config's entry is compiled
+    // first, by another session's request: a compile is its arrival turn's,
+    // and on a slow machine outlives the backstop.
+    await sendDaemonRequest(sockPath, {
+      v: PROTOCOL_VERSION,
+      kind: "render",
+      ...renderBody("ev-pending-warm", projectDir, hints, configFlag("waiting")),
+    });
+    await eventsOf("ev-pending-warm");
     const asked = await sendDaemonRequest(sockPath, {
       v: PROTOCOL_VERSION,
       kind: "render",
       ...renderBody("ev-pending", projectDir, hints, configFlag("waiting")),
     });
+    expect(asked).toMatchObject({ ok: true });
     const waiting = stripAnsi((asked as { output: string }).output);
     expect(waiting).toContain("…");
     expect(waiting).not.toContain("⚠");
@@ -491,34 +500,6 @@ describe("every render request writes one render event, whatever its outcome", (
   // answers only once the test opens the gate, so the source provably
   // outlives the deadline — an ordering the test owns, not a bet on how slow a
   // render is.
-  // The connection's backstop answers TIMEOUT whatever the render is still
-  // doing. A wait ends before it, so what outlives it is a synchronous turn:
-  // here the first request's compile of a config big enough to take several
-  // times the backstop. The render's event says the client read another
-  // reply, and the hold it drew under is released when it ends.
-  test("a render that outlives its request timeout writes timedOut=Y", async () => {
-    const segments = Object.fromEntries(
-      Array.from({ length: 600 }, (_, i) => [`s${i}`, { template: `{{ .session.id }} ${i}` }]),
-    );
-    const config = path.join(projectDir, "heavy.json5");
-    writeFileSync(config, JSON.stringify({ segments, root: { h: Object.keys(segments) } }));
-    await expect(
-      sendDaemonRequest(sockPath, {
-        v: PROTOCOL_VERSION,
-        kind: "render",
-        ...renderBody("ev-backstop", projectDir, {}, ["cc-candybar", "--config", config]),
-        deadline: Date.now() + TOTAL_BUDGET_MS,
-      }),
-    ).resolves.toMatchObject({ ok: false, code: "TIMEOUT" });
-    const late = only(await eventsOf("ev-backstop"));
-    expect(field(late, "outcome")).toBe("ok");
-    expect(field(late, "timedOut")).toBe("Y");
-    expect(Number(field(late, "took")?.replace(/ms$/u, ""))).toBeGreaterThan(REQUEST_TIMEOUT_MS);
-    await expect(
-      sendDaemonRequest(sockPath, { v: PROTOCOL_VERSION, kind: "stats" }),
-    ).resolves.toMatchObject({ ok: true, stats: { renderCache: { held: 0 } } });
-  });
-
   test("a source that outlives its client's deadline draws pending, and lands for the next render", async () => {
     const tmuxBody = (sid: string, pane: string) =>
       renderBody(
@@ -617,5 +598,34 @@ describe("every render request writes one render event, whatever its outcome", (
       "the second render asked tmux",
     );
     await openGate();
+  });
+
+  // The connection's backstop answers TIMEOUT whatever the render is still
+  // doing. A wait ends before it, so what outlives it is a synchronous turn:
+  // here the first request's compile of a config big enough to take several
+  // times the backstop. The render's event says the client read another
+  // reply, and the hold it drew under is released when it ends. Last, since
+  // so big a compile slows whatever the daemon does next.
+  test("a render that outlives its request timeout writes timedOut=Y", async () => {
+    const segments = Object.fromEntries(
+      Array.from({ length: 600 }, (_, i) => [`s${i}`, { template: `{{ .session.id }} ${i}` }]),
+    );
+    const config = path.join(projectDir, "heavy.json5");
+    writeFileSync(config, JSON.stringify({ segments, root: { h: Object.keys(segments) } }));
+    await expect(
+      sendDaemonRequest(sockPath, {
+        v: PROTOCOL_VERSION,
+        kind: "render",
+        ...renderBody("ev-backstop", projectDir, {}, ["cc-candybar", "--config", config]),
+        deadline: Date.now() + TOTAL_BUDGET_MS,
+      }),
+    ).resolves.toMatchObject({ ok: false, code: "TIMEOUT" });
+    const late = only(await eventsOf("ev-backstop"));
+    expect(field(late, "outcome")).toBe("ok");
+    expect(field(late, "timedOut")).toBe("Y");
+    expect(Number(field(late, "took")?.replace(/ms$/u, ""))).toBeGreaterThan(REQUEST_TIMEOUT_MS);
+    await expect(
+      sendDaemonRequest(sockPath, { v: PROTOCOL_VERSION, kind: "stats" }),
+    ).resolves.toMatchObject({ ok: true, stats: { renderCache: { held: 0 } } });
   });
 });
