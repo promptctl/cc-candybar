@@ -34,10 +34,10 @@ import {
   type Reading,
 } from "../../src/utils/outcome";
 import { settledLane, type Current, type Lane } from "../../src/utils/reading";
+import { HostService } from "../../src/segments/host";
 import {
   declareLanes,
   payloadOf,
-  readHostIdentity,
   settlePayload,
   todayOf,
   type ConfigFileFacts,
@@ -265,8 +265,8 @@ export function absentOwners() {
     tmuxService: fakeTmux(() => ABSENT),
     autoCompact: fakeAutoCompact(() => ABSENT),
     faults: new RefreshFaults(),
-    // The machine's identity, as the daemon reads it once.
-    host: readHostIdentity().identity,
+    // The machine's identity, read as the daemon reads it.
+    hostService: new HostService(),
   };
 }
 

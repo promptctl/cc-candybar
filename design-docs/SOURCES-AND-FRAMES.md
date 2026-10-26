@@ -18,7 +18,7 @@ A value has one home, keyed by its scope:
 
 | Scope | Key | Example |
 |---|---|---|
-| `daemon` | none | the host name |
+| `daemon` | none | the host name, the daemon's user |
 | `configDir` | a Claude Code configuration directory (a second one is a second account) | today's spend, the auto-compact window |
 | `repo` | a checkout's root (a linked worktree is its own) | branch, status counts, pull request |
 | `directory` | the directory a session renders from | a user `shell` variable that reads nothing per session |
@@ -26,7 +26,7 @@ A value has one home, keyed by its scope:
 | `view` | a session in one directory | the session's inputs in that directory's config, its picks |
 | `pane` | a tmux pane | the tmux session's name |
 
-A **session home** holds what belongs to a session wherever it renders: its latest request, its effect memory, and its session-scoped sources. A `cd` or a worktree changes none of these, so an effect keeps its clock and a transcript is folded once. A **view** holds what depends on one directory's config under the session's picks. A session has at most one view, the one for its latest request's directory, and a request from elsewhere closes it and opens the new one.
+What belongs to a session wherever it renders (its latest request, its effect memory, its session-scoped sources) is kept by each one's owner under the session id, never by a view. A `cd` or a worktree changes none of these, so an effect keeps its clock and a transcript is folded once. A **view** holds what depends on one directory's config under the session's picks. A session has at most one view, the one for its latest request's directory, and a request from elsewhere closes it and opens the new one.
 
 A user source's scope is derived, never authored: it is `view` when its key or dependencies read a session value, otherwise `directory`. So a `shell` keyed on a session input runs once per session, and one that reads nothing per session runs once per directory.
 
@@ -85,8 +85,8 @@ So a click is on the next frame of an open feed, within the moving period if the
 
 ## Lifecycle
 
-The render cache owns directory entries, session homes and views, and bounds them all by one byte budget, a share of the daemon's memory limit. A view is a child of its entry: evicting an entry closes its views. Over budget, eviction takes the least recently used entry or session home, never one being served or one an open feed holds. A feed holds its session's home from open to close, and holds the session's current view only for the length of each draw, so whatever moved the view between frames is what the next frame draws.
+The render cache owns directory entries and views, and bounds them by one byte budget, a share of the daemon's memory limit. A view is a child of its entry: evicting an entry closes its views. Over budget, eviction takes the least recently used entry, never one being served or one whose session an open feed pins. A view no request has read across a whole idle sweep is closed, unless an open feed pins its session. A frame finds its session's current view and opens nothing, so whatever moved the view between frames is what the next frame draws, and a session with no view draws no frame until its next request opens one.
 
 ## Seen
 
-A failed refresh is logged once, by the refresh that failed, never per draw. Every source records each refresh in one ledger, by its trigger, with its outcome and its length. A refresh on any trigger but a request writes one event of its own. A request's refreshes are facts of its render event, which names each lane its arrival refreshed and how long it took, what drew pending, and how long the request waited against its deadline. The daemon's stats list every source's refreshes by trigger, its failures and its last refresh's length, with the homes of each scope. The feed's summary line counts its wakes by cause, how many coalesced, and the refreshes every source ran while it was open, beside the frames it drew.
+A failed refresh is logged once, by the refresh that failed, never per draw. Every source records each refresh in one ledger, by its trigger, with its outcome and its length. A refresh on any trigger but a request writes one event of its own. A request's refreshes are facts of its render event, which names each lane its arrival refreshed and how long it took, what drew pending, and how long the request waited against its deadline. The daemon's stats list every source's refreshes by trigger, its failures and its last refresh's length, with the homes of each scope. The feed's summary line counts its wakes by cause, how many coalesced, and the refreshes the whole daemon ran while it was open (`daemonRefreshed=`, every session's), beside the frames it drew.

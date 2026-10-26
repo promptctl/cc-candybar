@@ -41,8 +41,10 @@ const ROLLING_BUFFER_CAP = 16384;
 // dashboards (no statistical claim of unbiased sampling).
 const HISTOGRAM_CAP = 16;
 
-// The scopes whose homes a view holds, so a period visits only those held.
-export type HeldScope = "repo" | "pane" | "configDir" | "session";
+// The keyed sources whose entries a view holds, so a period visits only
+// those held: a repo's, a pane's, a directory set's scans, a plugin's session
+// files.
+export type HeldSource = "git" | "tmux" | "today" | "pluginStorage";
 
 // [LAW:nothing-unseen] Every source and every home, from the owners that keep
 // them (design-docs/SOURCES-AND-FRAMES.md, "Seen").
@@ -52,8 +54,8 @@ export interface SourceSnapshots {
   readonly records: readonly SourceRecord[];
   // How many homes of each scope are kept now.
   readonly homes: Readonly<Record<SourceScope, number>>;
-  // How many of the keyed homes a view holds now.
-  readonly held: Readonly<Record<HeldScope, number>>;
+  // How many entries of each keyed source a view holds now.
+  readonly held: Readonly<Record<HeldSource, number>>;
   // Every plugin's managed storage: the folders watched now, watch faults by
   // cause, and folders found gone or replaced.
   readonly pluginStorage: Pick<
@@ -311,7 +313,7 @@ export class RuntimeStats {
           view: 0,
           pane: 0,
         },
-        held: { repo: 0, pane: 0, configDir: 0, session: 0 },
+        held: { git: 0, tmux: 0, today: 0, pluginStorage: 0 },
         pluginStorage: {
           folders: 0,
           faults: { unusable: 0, refused: 0, error: 0 },

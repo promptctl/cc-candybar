@@ -140,9 +140,10 @@ interface PrAnswer {
 type PrMove = "-" | "kept" | "recalled" | "looked-up" | "owed" | "unkeyed";
 
 // What asked for a pass, beside the period: a watch fire, a new option set, a
-// reader of a value a pass went by without, the first PR ask or a PR key owed
-// to whoever shows it next. A pass none of these asked for is the period's.
-type PassReason = "watch" | "first" | "resume" | "pr";
+// reader of a value a pass went by without, the first PR ask, or a hold's
+// return to a PR whose key is owed. A pass none of these asked for is the
+// period's.
+type PassReason = "watch" | "first" | "resume" | "pr" | "owed";
 
 // [LAW:one-source-of-truth] A pass's trigger in the ledger's vocabulary: a
 // first value asked for (a new option set, a PR's first key) makes it a first
@@ -543,7 +544,7 @@ export class GitDataProvider {
     if (pr !== null) {
       pr.holders++;
       if (value.missed) owe(pr);
-      if (pr.missed) state.asked.add("pr");
+      if (pr.missed) state.asked.add("owed");
     }
     // A value a pass went by without is read by the next.
     value.readers++;

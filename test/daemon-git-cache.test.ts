@@ -454,6 +454,8 @@ describe("GitDataProvider reads what is held", () => {
     });
     await jest.advanceTimersByTimeAsync(0);
     expect(inner.prCalls).toHaveLength(2);
+    // Its values were read before: the owed key's lookup is a change.
+    expect(passes(logs).at(-1)).toMatch(/ asked=\S*owed\S* .* by=change /);
     await expect(shown).resolves.toMatchObject({
       kind: "ok",
       value: { branch: "feature" },
@@ -1309,7 +1311,7 @@ describe("GitDataProvider PR keys, drops and refresh events", () => {
     ).toEqual(ok({ ...onA, pullRequest: first.value.pullRequest }));
     expect(inner.prCalls).toHaveLength(2);
     expect(logs.filter((l) => l.startsWith("git refresh /repo"))).toEqual([
-      expect.stringMatching(/ asked=first,pr values=1 pr=looked-up by=first /),
+      expect.stringMatching(/ asked=first,pr,owed values=1 pr=looked-up by=first /),
       expect.stringMatching(/ asked=watch values=1 pr=looked-up by=change /),
       expect.stringMatching(/ asked=watch values=1 pr=recalled by=change /),
     ]);

@@ -497,7 +497,7 @@ describe("on a faked clock", () => {
     tmux.recorded("pane=%1", "period", ok(null), 1);
     close();
     expect(log.at(-1)).toContain(
-      " refreshed=first:0,period:2,change:0,request:0,supersede:0 ",
+      " daemonRefreshed=first:0,period:2,change:0,request:0,supersede:0 ",
     );
   });
 

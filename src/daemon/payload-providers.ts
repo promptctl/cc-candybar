@@ -15,17 +15,12 @@ import { SessionUsageStore } from "./cache/session-usage-store";
 import type { WatcherRegistry } from "./cache/watchers";
 import type { DaemonLogger } from "../utils/logger";
 import type { RefreshLedger } from "../utils/refresh-ledger";
-import {
-  readHostIdentity,
-  type HostIdentity,
-  type RenderPayloadDeps,
-} from "./render-payload";
-import { failed, ok } from "../utils/outcome";
-import { valueOf } from "../utils/logfmt";
+import type { RenderPayloadDeps } from "./render-payload";
 import { ContextProvider } from "../segments/context.js";
 import { MetricsProvider } from "../segments/metrics.js";
 import { ActivityProvider } from "../segments/activity.js";
 import { TmuxService } from "../segments/tmux.js";
+import { HostService } from "../segments/host.js";
 import { AutoCompactProvider } from "../segments/autocompact-provider.js";
 import { CacheExpiryProvider } from "../segments/cache.js";
 import { RefreshFaults } from "./refresh-faults.js";
@@ -44,7 +39,7 @@ export function createPayloadProviders(opts: {
 }): PayloadProviders {
   const { logger, ledger } = opts;
   return {
-    host: hostOf(ledger),
+    hostService: new HostService({ logger, ledger }),
     gitProvider: new GitDataProvider({
       watchers: opts.watchers,
       logger,
@@ -65,21 +60,4 @@ export function createPayloadProviders(opts: {
     faults: new RefreshFaults(),
     log: opts.logger,
   };
-}
-
-// The host identity, a daemon-scoped source read once: neither the host name
-// nor the daemon's user changes while it runs. [LAW:no-silent-failure] A
-// syscall that threw is its one refresh's failure, logged once.
-function hostOf(ledger: RefreshLedger): HostIdentity {
-  const startedAt = Date.now();
-  const { identity, failures } = readHostIdentity();
-  ledger
-    .declare({ name: "host", scope: "daemon", refresh: ["first"] })
-    .recorded(
-      `name=${valueOf(identity.name ?? "-")} user=${valueOf(identity.user ?? "-")}`,
-      "first",
-      failures.length === 0 ? ok(identity) : failed(failures.join("; ")),
-      Date.now() - startedAt,
-    );
-  return identity;
 }

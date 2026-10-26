@@ -470,6 +470,10 @@ export class SessionUsageStore {
   // exactly once — so they return the same prev+cur and render identical,
   // deterministic throughput instead of the second clobbering the first.
   private readonly speedFlight = new SingleFlight();
+  // [LAW:single-enforcer] A request's refresh of a session is one unit of
+  // work per (session, observed stamp): the lanes of one request that read
+  // the record (session, speed, today) share it, so it records and logs once.
+  private readonly requestFlight = new SingleFlight();
   private readonly staleAgeMs: number;
   private readonly log: DaemonLogger;
   private readonly renderTally: IngestTally = { hits: 0, misses: 0 };
@@ -574,39 +578,37 @@ export class SessionUsageStore {
 
   // A request's ingest of its own session, whose outcome the session's slot
   // keeps for the draws until the next one.
-  private async refreshed(
+  private refreshed(
     sessionId: string,
     transcriptPath: string | undefined,
     knownStamp?: string,
   ): Promise<Outcome<SessionRecord>> {
-    // [LAW:no-ambient-temporal-coupling] This call's own tally, so whether
-    // IT read is its own fact, never another session's refresh landing in the
-    // same await.
-    const tally: IngestTally = { hits: 0, misses: 0 };
-    const startedAt = Date.now();
-    const record = await this.ingest(
-      sessionId,
-      transcriptPath,
-      tally,
-      knownStamp,
-    );
-    this.renderTally.hits += tally.hits;
-    this.renderTally.misses += tally.misses;
-    if (tally.misses > 0) {
-      this.usage.recorded(
-        `sid=${valueOf(sessionId)}`,
-        "request",
-        record,
-        Date.now() - startedAt,
+    const stamp = knownStamp ?? statStamp(transcriptPath);
+    return this.requestFlight.run(`${sessionId}:${stamp}`, async () => {
+      // [LAW:no-ambient-temporal-coupling] This refresh's own tally, so
+      // whether IT read is its own fact, never another session's refresh
+      // landing in the same await.
+      const tally: IngestTally = { hits: 0, misses: 0 };
+      const startedAt = Date.now();
+      const record = await this.ingest(sessionId, transcriptPath, tally, stamp);
+      this.renderTally.hits += tally.hits;
+      this.renderTally.misses += tally.misses;
+      if (tally.misses > 0) {
+        this.usage.recorded(
+          `sid=${valueOf(sessionId)}`,
+          "request",
+          record,
+          Date.now() - startedAt,
+        );
+      }
+      // The session's slot records that its refresh answered — a failure
+      // kept so the draws until the next refresh show it.
+      answer(
+        this.hold(sessionId).failure,
+        record.kind === "failed" ? record.reason : null,
       );
-    }
-    // The session's slot records that its refresh answered — a failure kept
-    // so the draws until the next refresh show it.
-    answer(
-      this.hold(sessionId).failure,
-      record.kind === "failed" ? record.reason : null,
-    );
-    return record;
+      return record;
+    });
   }
 
   // The `today` projection: cross-session sum of every record's today bucket.

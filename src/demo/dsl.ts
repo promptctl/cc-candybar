@@ -224,6 +224,7 @@ try {
   providers.gitProvider.close();
   providers.usageStore.close();
   providers.tmuxService.close();
+  providers.hostService.close();
   providers.managedStorage.close();
   watchers.closeAll();
 }

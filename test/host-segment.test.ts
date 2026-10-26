@@ -19,9 +19,9 @@ import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
 import os from "node:os";
 
-import {
-  shortHostname,
-} from "../src/daemon/render-payload";
+import { HostService, shortHostname, HOST_NAME_PERIOD_MS } from "../src/segments/host";
+import { RefreshLedger } from "../src/utils/refresh-ledger";
+import { Holds } from "../src/utils/holds";
 import type { RenderPayloadDeps } from "../src/daemon/render-payload";
 import { type EffectiveGlobals } from "../src/config/effective-globals";
 import { globalsFor } from "./helpers/selection";
@@ -76,13 +76,16 @@ const HOOK = {
   workspace: { current_dir: "/tmp", project_dir: "/tmp", added_dirs: [] },
 } as never;
 
+// The host segment's reads: its name and user are sources, `ssh` the hint.
+const HOST_PATHS = new Set(["host.name", "host.user", "host.ssh"]);
+
 const payloadWith = (hints: ClientHints) =>
   requestPayload(
     HOOK,
     instantOf(new Date()),
     DEPS,
     "/tmp",
-    new Set(),
+    HOST_PATHS,
     EFFECTIVE_GLOBALS,
     hints,
     NO_CONFIG_FILE,
@@ -101,6 +104,62 @@ describe("shortHostname", () => {
   test("is total on degenerate input rather than throwing or yielding null", () => {
     expect(shortHostname("")).toBe("");
     expect(shortHostname(".leading")).toBe("");
+  });
+});
+
+describe("the host's sources", () => {
+  // [LAW:effects-at-boundaries] A process that only imports the daemon (a CLI
+  // subcommand) builds the providers and renders nothing: it reads neither.
+  test("nothing is read until a view declares it", async () => {
+    const ledger = new RefreshLedger();
+    const host = new HostService({ ledger });
+    const counts = () =>
+      ledger.snapshot().map((r) => [r.name, r.refreshes.first]);
+    expect(counts()).toEqual([
+      ["host.name", 0],
+      ["host.user", 0],
+    ]);
+    const holds = new Holds();
+    host.declareName(holds);
+    host.declareUser(holds);
+    await new Promise((r) => setImmediate(r));
+    expect(counts()).toEqual([
+      ["host.name", 1],
+      ["host.user", 1],
+    ]);
+    holds.close();
+    host.close();
+  });
+
+  // The name follows the network, so a daemon that lives for days shows the
+  // name it has now; the user never changes while it runs.
+  test("a held name is asked again on its period; the user is read once", async () => {
+    jest.useFakeTimers();
+    const hostname = jest.spyOn(os, "hostname").mockReturnValue("before.lan");
+    const ledger = new RefreshLedger();
+    const host = new HostService({ ledger });
+    const holds = new Holds();
+    try {
+      const name = host.declareName(holds);
+      host.declareUser(holds);
+      await jest.advanceTimersByTimeAsync(0);
+      expect(name.current()).toEqual({ kind: "ok", value: "before" });
+
+      hostname.mockReturnValue("after.vpn");
+      await jest.advanceTimersByTimeAsync(HOST_NAME_PERIOD_MS);
+      expect(name.current()).toEqual({ kind: "ok", value: "after" });
+      expect(
+        ledger.snapshot().map((r) => [r.name, r.refreshes]),
+      ).toEqual([
+        ["host.name", { first: 1, period: 1, change: 0, supersede: 0 }],
+        ["host.user", { first: 1, change: 0, supersede: 0 }],
+      ]);
+    } finally {
+      holds.close();
+      host.close();
+      hostname.mockRestore();
+      jest.useRealTimers();
+    }
   });
 });
 

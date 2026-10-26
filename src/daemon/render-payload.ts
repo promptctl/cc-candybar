@@ -18,7 +18,6 @@
 
 import type { HistoryDepth } from "./settings-history";
 import path from "node:path";
-import os from "node:os";
 import { inspect } from "node:util";
 import type { ClaudeHookData } from "../utils/claude.js";
 import type { ClientHints } from "./protocol.js";
@@ -78,6 +77,7 @@ import type {
   ToolTally,
 } from "../segments/activity.js";
 import type { TmuxService } from "../segments/tmux.js";
+import type { HostService } from "../segments/host.js";
 import type { AutoCompactProvider } from "../segments/autocompact-provider.js";
 import {
   autoCompactControls,
@@ -182,7 +182,7 @@ export interface RenderPayloadOf<P> extends ClaudeHookData, ValuedInputs {
   // the daemon assembles it every render from sources that cannot be "not
   // requested" (two syscalls and one already-parsed wire hint). The fields
   // INSIDE it carry the real optionality — see HostPayload.
-  readonly host: HostPayload;
+  readonly host: HostPayloadOf<P>;
   // `theme.effective`, `style.effective` and `effect.effective` are
   // deliberately NOT fields here. They are the selections whose config rung may
   // hold an EXPRESSION (brandon-looks-pe6, brandon-themes-dzl,
@@ -431,18 +431,19 @@ export function prFactOf(
 // declared default AND records a `last_error` that `cc-candybar vars`
 // surfaces — so "we don't know" stays distinguishable from "we know it's
 // local", which a `?? false` here would have destroyed.
-export interface HostPayload {
+export interface HostPayloadOf<P> {
   // The SHORT hostname — `os.hostname()` up to the first dot, the same
   // projection zsh's `%m` makes. A statusbar cell identifies a machine to a
   // human; the FQDN is a network address, a different fact, and a separate
   // field the day something needs it.
-  readonly name?: string;
+  readonly name?: string | P;
   // The EFFECTIVE username from the passwd database, not `$USER`. The env var
   // is a map that drifts (su/sudo leave it stale); the passwd entry for the
   // running uid is the territory. Matches zsh's `%n`.
-  readonly user?: string;
+  readonly user?: string | P;
   readonly ssh?: boolean;
 }
+export type HostPayload = HostPayloadOf<never>;
 
 export interface SessionPayload {
   readonly cost?: number;
@@ -580,8 +581,8 @@ export interface RenderPayloadDeps {
   readonly autoCompact: AutoCompactProvider;
   // Each session's prompt-cache expiry, read off its transcript's tail.
   readonly cacheExpiry: CacheExpiryProvider;
-  // The machine's identity, read once by the process that renders.
-  readonly host: HostIdentity;
+  // The machine's identity: its host name and the daemon's user.
+  readonly hostService: HostService;
   // The log for a session lane whose refresh threw: a bug no owner saw.
   readonly log: DaemonLogger;
   // Each session lane whose refresh threw, until one runs clean.
@@ -716,64 +717,6 @@ function projectSpeedHistory(obs: SpeedObservation): string | undefined {
   }
   if (rates.length === 0) return undefined;
   return rates.join(",");
-}
-
-// ─── Host identity ───────────────────────────────────────────────────────────
-
-/**
- * The short hostname: everything before the first dot, or the whole string when
- * there is no dot. `os.hostname()` yields an FQDN on some hosts (macOS's
- * `mymachine.local`, a DNS-configured server's `web1.prod.example.com`) and a
- * bare name on others; this makes the rendered cell identify the machine the
- * same way on both, which is zsh's `%m` and the projection git-taculous shows.
- *
- * [LAW:effects-at-boundaries] Pure and total — the syscall stays in readHost.
- */
-export function shortHostname(hostname: string): string {
-  const dot = hostname.indexOf(".");
-  return dot < 0 ? hostname : hostname.slice(0, dot);
-}
-
-// The machine's identity: its short host name and the user the daemon runs
-// as, each absent where its syscall threw. A daemon-scoped source read once
-// (createPayloadProviders): neither changes while the daemon runs, and the
-// session's own `ssh` hint is laid over it per payload.
-export type HostIdentity = Pick<HostPayload, "name" | "user">;
-
-/**
- * Read the host identity, once per process that renders.
- *
- * [LAW:no-silent-failure] A throwing syscall (a uid with no passwd entry is the
- * realistic case, in a stripped container) yields an ABSENT field plus a
- * description for the caller to record as the read's failure — never a
- * fabricated name, and never an exception: the whole bar must not blank over a
- * cosmetic cell.
- */
-export function readHostIdentity(): {
-  readonly identity: HostIdentity;
-  readonly failures: readonly string[];
-} {
-  const failures: string[] = [];
-  const attempt = (field: string, read: () => string): string | undefined => {
-    try {
-      const value = read();
-      // "" is not a usable identity; treat it as absence so the DSL default
-      // applies rather than rendering an empty `@host` fragment.
-      return value === "" ? undefined : value;
-    } catch (e) {
-      failures.push(`host.${field}: ${String(e)}`);
-      return undefined;
-    }
-  };
-  const name = attempt("name", () => shortHostname(os.hostname()));
-  const user = attempt("user", () => os.userInfo().username);
-  return {
-    identity: {
-      ...(name !== undefined && { name }),
-      ...(user !== undefined && { user }),
-    },
-    failures,
-  };
 }
 
 // ─── Builder ─────────────────────────────────────────────────────────────────
@@ -1035,6 +978,9 @@ function wantsOf(neededInputPaths: ReadonlySet<string>) {
     // Only the session NAME costs a spawn; `tmux.pane` is the hint itself, so
     // a config that reads only the pane (every slash gate) runs nothing here.
     tmux: wants("tmux.session"),
+    // `host.ssh` is the hint itself; the name and the user are each a read.
+    hostName: wants("host.name"),
+    hostUser: wants("host.user"),
     cache: wants("cache"),
     speed: wants("speed"),
     autocompact: wants("autocompact"),
@@ -1161,6 +1107,8 @@ interface Lanes {
   readonly metrics: Reading<MetricsInfo>;
   readonly activity: Reading<ActivityInfo>;
   readonly tmuxSession: Current<string>;
+  readonly hostName: Current<string>;
+  readonly hostUser: Current<string>;
   readonly cache: Reading<number>;
   readonly speed: Reading<SpeedObservation>;
   readonly autoCompact: Reading<AutoCompactWindow>;
@@ -1177,7 +1125,11 @@ export type ViewFacts = Pick<PayloadInputs, "hookData" | "cwd" | "hints"> & {
 // The owners of the keyed lanes, which a declaration takes its holds in.
 export type KeyedOwners = Pick<
   RenderPayloadDeps,
-  "gitProvider" | "tmuxService" | "usageStore" | "managedStorage"
+  | "gitProvider"
+  | "tmuxService"
+  | "hostService"
+  | "usageStore"
+  | "managedStorage"
 >;
 
 // [LAW:types-are-the-program] What a view's declaration hands its draws: one
@@ -1186,6 +1138,8 @@ export type KeyedOwners = Pick<
 export interface DeclaredLanes {
   readonly git: Lane<GitInfo>;
   readonly tmux: Lane<string>;
+  readonly hostName: Lane<string>;
+  readonly hostUser: Lane<string>;
   readonly today: Lane<DaySums>;
   // [LAW:dataflow-not-control-flow] One lane per plugin source the preset
   // reads, by the source variable's name: no fixed list — the set is what the
@@ -1223,6 +1177,8 @@ export function settledLanes(
   return {
     git: lane,
     tmux: lane,
+    hostName: lane,
+    hostUser: lane,
     today: lane,
     sources: new Map(sources.map((name) => [name, lane])),
   };
@@ -1289,6 +1245,12 @@ export function declareLanes(
     tmux: declare("tmux", want.tmux && pane !== null, () =>
       owners.tmuxService.declare(holds, pane!),
     ),
+    hostName: declare("host.name", want.hostName, () =>
+      owners.hostService.declareName(holds),
+    ),
+    hostUser: declare("host.user", want.hostUser, () =>
+      owners.hostService.declareUser(holds),
+    ),
     today: declare("today", want.today, () =>
       owners.usageStore.declareToday(holds, facts.hints.claudeConfigDir),
     ),
@@ -1352,6 +1314,8 @@ function readLanes(inputs: PayloadInputs): Lanes {
       deps.activityProvider.activityOf(sessionId),
     ),
     tmuxSession: lanes.tmux.current(),
+    hostName: lanes.hostName.current(),
+    hostUser: lanes.hostUser.current(),
     cache: read("cache", want.cache, () =>
       deps.cacheExpiry.expiryOf(sessionId),
     ),
@@ -1377,6 +1341,8 @@ function waitsOf(lanes: DeclaredLanes): Array<Promise<void>> {
   return [
     git,
     lanes.tmux.current(),
+    lanes.hostName.current(),
+    lanes.hostUser.current(),
     lanes.today.current(),
     ...[...lanes.sources.values()].map((lane) => lane.current()),
     ...(pr === undefined ? [] : [pr]),
@@ -1432,6 +1398,10 @@ function projectPayload(
       : projectGitInfo(lanes.git, () => PENDING);
   const tmuxValue =
     lanes.tmuxSession.kind === "pending" ? PENDING : valueOf(lanes.tmuxSession);
+  const hostName =
+    lanes.hostName.kind === "pending" ? PENDING : valueOf(lanes.hostName);
+  const hostUser =
+    lanes.hostUser.kind === "pending" ? PENDING : valueOf(lanes.hostUser);
   // The controls are capped to the model's context window, so they are not
   // answered while the window is not.
   const autoCompactValue =
@@ -1534,7 +1504,8 @@ function projectPayload(
     // "helpful" fallback would confidently mislabel every session that
     // daemon serves.
     host: {
-      ...inputs.deps.host,
+      ...(hostName !== undefined && { name: hostName }),
+      ...(hostUser !== undefined && { user: hostUser }),
       ...(hints.ssh !== undefined && { ssh: hints.ssh }),
     },
     // [LAW:one-source-of-truth] Always present — the daemon resolves every

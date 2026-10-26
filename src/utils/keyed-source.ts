@@ -99,7 +99,9 @@ export class KeyedSource<I, T> {
     this.refreshes = spec.ledger.declare({
       name: spec.name,
       scope: spec.scope,
-      // [LAW:types-are-the-program] A source with no period has no tick.
+      // [LAW:types-are-the-program] exception: a source with no period
+      // declares no tick, but its handle is typed for every keyed trigger;
+      // only the absent period keeps it from recording one.
       refresh:
         spec.every === null
           ? ["first", "change", "supersede"]

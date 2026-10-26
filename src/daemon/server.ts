@@ -257,6 +257,7 @@ const {
   gitProvider: gitService,
   usageStore,
   tmuxService,
+  hostService,
   managedStorage,
 } = payloadProviders;
 // [LAW:locality-or-seam] Constructed ephemeral so importing this module (CLI
@@ -647,10 +648,10 @@ function sourceSnapshots(): SourceSnapshots {
       pane: tmux.entries,
     },
     held: {
-      repo: git.held,
-      pane: tmux.held,
-      configDir: today.held,
-      session: storage.held,
+      git: git.held,
+      tmux: tmux.held,
+      today: today.held,
+      pluginStorage: storage.held,
     },
     pluginStorage: {
       folders: storage.folders,
@@ -945,6 +946,7 @@ function shutdown(code: number): void {
     ["gitService close", () => gitService.close()],
     ["usageStore close", () => usageStore.close()],
     ["tmuxService close", () => tmuxService.close()],
+    ["hostService close", () => hostService.close()],
     // Before the storage it resumes: an aborted run resumes its sources once
     // its program is gone.
     ["runs close", () => runs.close()],

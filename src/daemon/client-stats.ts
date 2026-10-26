@@ -193,7 +193,7 @@ export function formatStats(s: StatsSnapshot): string {
     .map(([scope, n]) => `${scope}:${n}`)
     .join(" ");
   const held = Object.entries(s.sources.held)
-    .map(([scope, n]) => `${scope}:${n}`)
+    .map(([source, n]) => `${source}:${n}`)
     .join(" ");
   lines.push(`  homes         ${scopes}`);
   lines.push(`  held          ${held}`);

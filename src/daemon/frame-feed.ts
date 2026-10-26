@@ -678,6 +678,10 @@ export class FrameFeeds<Req> {
   // [LAW:nothing-unseen] A feed's frames are not render requests, so they write
   // no render event each: a feed says what it drew in a summary, when it
   // closes and once a minute while it runs.
+  //
+  // `daemonRefreshed=` is every refresh the daemon made while the feed ran,
+  // whichever session's: a frame refreshes nothing, so it bounds what the
+  // feed's `drawn=` frames could have read fresh, and is never their own.
   private summarize(feed: Feed, state: "running" | "closed"): void {
     const now = this.deps.now();
     const refreshes = this.deps.refreshes();
@@ -686,7 +690,7 @@ export class FrameFeeds<Req> {
     ).join(",");
     this.deps.log(
       "info",
-      `feed sid=${JSON.stringify(feed.sessionId)} ${state} subscribers=${feed.followers.size} lanes=${[...feed.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round((now - feed.since) / 1000)}s drawn=${feed.drawn} noted=${feed.noted} noView=${feed.noView} moving=${feed.moving} unseen=${feed.unseen} failed=${feed.failed} pushed=${feed.pushed} pace=${feed.pace}fps evaluated=${feed.evaluated} woke=${WAKE_CAUSES.map((cause) => `${cause}:${feed.woke[cause]}`).join(",")} coalesced=${feed.coalesced} refreshed=${refreshed} meanDraw=${feed.drawn === 0 ? "-" : (feed.drawMs / feed.drawn).toFixed(2)}ms`,
+      `feed sid=${JSON.stringify(feed.sessionId)} ${state} subscribers=${feed.followers.size} lanes=${[...feed.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round((now - feed.since) / 1000)}s drawn=${feed.drawn} noted=${feed.noted} noView=${feed.noView} moving=${feed.moving} unseen=${feed.unseen} failed=${feed.failed} pushed=${feed.pushed} pace=${feed.pace}fps evaluated=${feed.evaluated} woke=${WAKE_CAUSES.map((cause) => `${cause}:${feed.woke[cause]}`).join(",")} coalesced=${feed.coalesced} daemonRefreshed=${refreshed} meanDraw=${feed.drawn === 0 ? "-" : (feed.drawMs / feed.drawn).toFixed(2)}ms`,
     );
     feed.summarizedAt = now;
   }
