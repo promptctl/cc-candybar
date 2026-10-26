@@ -1157,6 +1157,14 @@ export class RenderCache<
   // entries never evicted (`fit`), for as long as the feed is open — the fact
   // itself, not frames happening to read the view within each sweep.
   private readonly pins = new Map<string, number>();
+  // [LAW:no-silent-failure] Each session whose view last failed to open, by
+  // the error, until a view opens for it: a frame draws that error, never the
+  // last bar it pushed. Written only by `opened`, which sets either this or
+  // the session's view, never both.
+  private readonly openFailures = new Map<
+    string,
+    { readonly error: unknown }
+  >();
   // [LAW:one-source-of-truth] One compile per compile key, shared by every
   // state carrying that key, and dropped with the last of them (reclaim).
   private readonly compiles = new Map<string, CompiledConfig>();
@@ -1274,12 +1282,12 @@ export class RenderCache<
   // from (brandon-unfiled-3248.6rc). `using` at the call site releases on
   // every exit, a throw included.
   hold(projectDir: string, cwd: string, configFile: string | undefined): Hold {
-    return this.holdState(this.getOrCreate(projectDir, cwd, configFile));
+    const entry = this.getOrCreate(projectDir, cwd, configFile);
+    return this.holdState(entry, entry.state);
   }
 
   // The hold on `entry`'s state that `hold` and `holdView` hand out.
-  private holdState(entry: CacheEntry): Hold {
-    const { state } = entry;
+  private holdState(entry: CacheEntry, state: DslRenderState): Hold {
     const hold = this.holdOf(state);
     hold.holders++;
     this.armSweep();
@@ -1340,7 +1348,12 @@ export class RenderCache<
     if (view === undefined) return null;
     // Taken before the state hold, so a throw leaves nothing held.
     const lease = this.leaseOf(view);
-    return this.holdViewOf(this.holdState(lease.entry), view, lease);
+    // [LAW:one-source-of-truth] The state held is the one the view is of.
+    return this.holdViewOf(
+      this.holdState(lease.entry, view.state),
+      view,
+      lease,
+    );
   }
 
   // `held` with `lease` on `view` beside it, both released by the one
@@ -1364,6 +1377,12 @@ export class RenderCache<
         held[Symbol.dispose]();
       },
     };
+  }
+
+  // Why the session has no view, when its last opening threw: what a frame
+  // draws in place of the view `holdView` found none of.
+  openFailure(sessionId: string): { readonly error: unknown } | null {
+    return this.openFailures.get(sessionId) ?? null;
   }
 
   // [LAW:single-enforcer] A click that moved the session's origin — a
@@ -1420,8 +1439,7 @@ export class RenderCache<
       // Move to end (most recently used), as getOrCreate does an entry.
       this.views.delete(sessionId);
       this.views.set(sessionId, current);
-      // A request declares again before its refresh; a click's facts, the
-      // view's own, change nothing.
+      // A request declares again before its refresh.
       current.requested(facts);
       return current;
     }
@@ -1459,13 +1477,20 @@ export class RenderCache<
     by: ViewOpening,
   ): SessionView<S, F> {
     const { sessionId } = facts;
-    const view = openView(state, entry.cwd, facts, {
-      sessionState: this.deps.sessionState,
-      declare: this.deps.declare,
-      source: this.deps.source,
-      changed: (sid) => this.observers.onViewChanged?.(sid),
-      log: this.log,
-    });
+    let view: SessionView<S, F>;
+    try {
+      view = openView(state, entry.cwd, facts, {
+        sessionState: this.deps.sessionState,
+        declare: this.deps.declare,
+        source: this.deps.source,
+        changed: (sid) => this.observers.onViewChanged?.(sid),
+        log: this.log,
+      });
+    } catch (error) {
+      this.openFailures.set(sessionId, { error });
+      throw error;
+    }
+    this.openFailures.delete(sessionId);
     this.views.set(sessionId, view);
     this.viewHolds.set(view, { entry, holders: 0, retired: null, read });
     this.log(
@@ -1519,6 +1544,10 @@ export class RenderCache<
       if (lease.read) lease.read = false;
       else this.retireView(view, "idle");
     }
+    // A failure no open feed shows has no frame to draw it in: the session's
+    // next request reports its own.
+    for (const sessionId of this.openFailures.keys())
+      if (!this.pins.has(sessionId)) this.openFailures.delete(sessionId);
     if (this.entries.size === 0 && this.sweep !== null) {
       clearInterval(this.sweep);
       this.sweep = null;

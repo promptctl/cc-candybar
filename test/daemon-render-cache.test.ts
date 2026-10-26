@@ -1309,7 +1309,7 @@ describe("RenderCache frames and pins", () => {
     }
   });
 
-  test("a reload whose successor view fails to open leaves the session with no view, which a frame does not reopen", () => {
+  test("a reload whose successor view fails to open leaves the session with no view and its error, which a frame does not reopen", () => {
     const watchers = new WatcherRegistry({ logger: () => {} });
     const logs: string[] = [];
     const { dir, cleanup } = mkConfigDir();
@@ -1333,16 +1333,45 @@ describe("RenderCache frames and pins", () => {
       expect(logs).toContainEqual(
         expect.stringMatching(/^session view reopen failed sid="s1": Error: the successor broke/),
       );
-      // Frames find nothing, and open nothing.
+      // Frames find nothing, and open nothing; they find the error instead,
+      // which a pin keeps across a sweep.
       expect(cache.holdView("s1")).toBeNull();
       expect(cache.holdView("s1")).toBeNull();
       expect(opens).toBe(2);
-      // The session's next request opens its view.
+      cache.releaseIdle();
+      expect(String(cache.openFailure("s1")?.error)).toBe("Error: the successor broke");
+      // The session's next request opens its view, and the error goes.
       {
         using _request = cache.holdSession(dir, dir, undefined, viewFacts(dir, "s1"));
       }
       expect(cache.holdView("s1")).not.toBeNull();
+      expect(cache.openFailure("s1")).toBeNull();
       unpin();
+    } finally {
+      cache.close();
+      watchers.closeAll();
+      cleanup();
+    }
+  });
+
+  // A failure no open feed shows has no frame to draw it in, so a sweep
+  // forgets it.
+  test("an unpinned session's open failure is forgotten by the next sweep", () => {
+    const watchers = new WatcherRegistry({ logger: () => {} });
+    const { dir, cleanup } = mkConfigDir();
+    const cache = new RenderCache(
+      { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, sessionState: new SessionState(), watchers, log: () => {}, declare: DECLARES_NOTHING,
+        source: () => {
+          throw new Error("the view broke");
+        },
+      },
+      { budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES + VIEW_BYTES },
+    );
+    try {
+      expect(() => cache.holdSession(dir, dir, undefined, viewFacts(dir, "s1"))).toThrow("the view broke");
+      expect(cache.openFailure("s1")).not.toBeNull();
+      cache.releaseIdle();
+      expect(cache.openFailure("s1")).toBeNull();
     } finally {
       cache.close();
       watchers.closeAll();

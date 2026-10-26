@@ -10,7 +10,7 @@ A feed has one timer, and nothing that wakes it draws: a value its bar draws fro
 
 A view reports that its data moved from one reaction over everything it draws from, and a draw writes none of that. A frame is drawn in one synchronous turn and opens nothing, so a wake while it draws can only be the draw's own, and it is coalesced into that frame, which already reads what moved. Drawing again for it would let a draw set its own next frame.
 
-A frame only finds its session's view; it never builds a cache entry or opens a view, because either is I/O on the frame path. Only an event opens one: a request, a reload's successor, or a click that moved the session's config. So an open feed pins its session in the render cache, and its entry is never evicted nor its view closed idle while the feed is open. A feed whose session has no view waits until the event that opens one wakes it.
+A frame only finds its session's view; it never builds a cache entry or opens a view, because either is I/O on the frame path. Only an event opens one: a request, a reload's successor, or a click that moved the session's config. So an open feed pins its session in the render cache, and its entry is never evicted nor its view closed idle while the feed is open. A feed whose session has no view waits until the event that opens one wakes it. A view whose opening threw leaves that error in its place, so an open feed draws the failure rather than freezing on the last bar it pushed.
 
 The fps a frame shows is the feed's pace (1000 / its period), never a measurement. The number is drawn into the frame, so a measured value would make otherwise unchanged frames differ, and they would all get pushed.
 

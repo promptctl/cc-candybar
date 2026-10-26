@@ -2107,7 +2107,13 @@ function setUpFrame(
   facts: RenderFacts,
 ): RenderSetup | null {
   const hold = renderCache.holdView(sessionId);
-  if (hold === null) return null;
+  if (hold === null) {
+    // [LAW:no-silent-failure] A view that failed to open draws its error, as
+    // the render that threw it did, never the last bar the feed pushed.
+    const failed = renderCache.openFailure(sessionId);
+    if (failed !== null) throw failed.error;
+    return null;
+  }
   const req = hold.view.facts();
   let hintsError: string | null;
   try {
