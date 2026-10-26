@@ -1354,16 +1354,22 @@ describe("loadDslConfig — renamed built-in segment", () => {
   });
 
   // The ceiling left with no successor cc-candybar names: a reference to it,
-  // authored or written by an edit-mode click, says it was removed.
+  // authored (the doctor opt-out the docs once taught included) or written by
+  // an edit-mode click, says it was removed.
   test.each([
     ["a root ref", `{ root: { h: ["directory", "ceiling"] } }`],
+    ["a segments delta", `{ segments: { ceiling: { missingData: "ignore" } } }`],
     [
       "a tree-op anchor",
       `{ actions: { p: { persist: "presets.compact.root", insertSegment: "model", anchor: "ceiling", relation: "after" } } }`,
     ],
+    [
+      "a removeSegment",
+      `{ actions: { p: { persist: "presets.compact.root", removeSegment: "ceiling" } } }`,
+    ],
   ])("%s naming the removed ceiling says it was removed", (_, src) => {
     expect(() => validateAgainstDefault(src)).toThrow(
-      /the built-in segment "ceiling" was removed — delete this reference/,
+      /the built-in segment "ceiling" was removed: the program it showed draws it through a cc-candybar plugin of its own now — delete this reference/,
     );
   });
 

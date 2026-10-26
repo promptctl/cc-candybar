@@ -52,6 +52,6 @@ export function renamedHint(name: string): string {
     case "plugin":
       return ` (the built-in segment "${name}" became "${renamed.to}", a segment of the plugin \`cc-candybar plugin install ${renamed.source}\` installs — update this reference)`;
     case "removed":
-      return ` (the built-in segment "${name}" was removed — delete this reference, or place the segment of the plugin the program it showed now ships)`;
+      return ` (the built-in segment "${name}" was removed: the program it showed draws it through a cc-candybar plugin of its own now — delete this reference, or place that plugin's segment)`;
   }
 }

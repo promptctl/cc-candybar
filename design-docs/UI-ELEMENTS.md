@@ -518,8 +518,7 @@ A passing check reads `✓ <label>`. A failing check that can be fixed carries `
 ```
  ✓ done  |  ☐ live
  🍫  |  ✚  |  ✖ host 🔧  |  ✚  |  ✖ directory 🔧  |  ✚  |  ✖ gitaculous 🔧  |  ✚
- ✚  |  ✖ model 🔧  |  ✚  |  ✚  |  ✖ context 🔧  |  ✚  |  ✖ autocompact 🔧  |  ✚  |  ✖ cacheTimer 🔧  |  ✚  |  ✖ block 🔧  |  ✚  |  ✖ weekly 🔧  |  ✚  |  ✖ activity 🔧  |  ✚
- (?)
+ ✚  |  ✖ model 🔧  |  ✚  |  ✚  |  ✖ context 🔧  |  ✚  |  ✖ autocompact 🔧  |  ✚  |  ✖ cacheTimer 🔧  |  ✚  |  ✖ block 🔧  |  ✚  |  ✖ weekly 🔧  |  ✚  |  ✖ activity 🔧  |  ✚  |  (?)
 ```
 
 At 80 columns the rows wrap:
