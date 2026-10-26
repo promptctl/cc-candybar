@@ -15,13 +15,14 @@
 //
 // Pass: every session answers before the warm deadline; every steady render
 // answers ok within the client's budget; the daemon is the same process
-// throughout with no post-mortem; its charge stays within a budget for these
-// sessions and does not climb; the cache's held counts stay flat.
+// throughout with no post-mortem; its charge stays under the line the doctor
+// calls near the limit and does not climb; the cache's held counts stay flat.
 //
 // Run: pnpm build && pnpm load-gate [--sessions N] [--seconds S]
 
 import { spawn } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { monitorEventLoopDelay } from "node:perf_hooks";
 import { parseArgs } from "node:util";
@@ -31,7 +32,11 @@ import { detectClientHints } from "../src/client-hints.js";
 import { daemonArgs } from "../src/daemon/acquire.js";
 import { tryRenderViaDaemon } from "../src/daemon/client.js";
 import { fetchStats } from "../src/daemon/client-stats.js";
-import { mb, memoryLimitBytes } from "../src/daemon/limits.js";
+import {
+  approachingLimit,
+  mb,
+  memoryLimitBytes,
+} from "../src/daemon/limits.js";
 import { chargeProbe } from "../src/daemon/memory-report.js";
 import { PARENT_PID_ENV } from "../src/daemon/parent-watchdog.js";
 import type { StatsSnapshot } from "../src/daemon/stats.js";
@@ -63,18 +68,18 @@ const SESSION_PERIOD_MS = 1600;
 // stages a file (its git index changes) less often.
 const TURN_EVERY = 4;
 const STAGE_EVERY = 8;
-const TRANSCRIPT_TURNS = 60;
+// And now and then switches branch.
+const BRANCH_EVERY = 64;
+// A long session's transcript: ~5000 lines.
+const TRANSCRIPT_TURNS = 1700;
 // A cold daemon builds every session's state at once; each session must have
 // answered once by then.
 const WARM_DEADLINE_MS = 30_000;
 const SAMPLE_MS = 5000;
+const INSPECTOR_CALL_MS = 30_000;
 // What the charge may grow by across the steady phase, beyond a heap's
 // sawtooth: the live daemon's climb is ~80 MB a minute.
 const CLIMB_LIMIT_BYTES = 32 * 1024 * 1024;
-// What these sessions may charge, apart from the shipped limit, which is sized
-// for the cache's share and so far above it that judging by it would pass a
-// daemon twice as heavy. Measured at ~430 MB on macOS and Linux.
-const BUDGET_BYTES = 768 * 1024 * 1024;
 const OID = "4f1c2a9e8b7d6c5a4f3e2d1c0b9a8f7e6d5c4b3a";
 
 // ─── The world ──────────────────────────────────────────────────────────────
@@ -89,6 +94,7 @@ const dirs = {
   claude: path.join(root, "claude"),
   bin: path.join(root, "bin"),
   checkouts: path.join(root, "w"),
+  home: path.join(root, "home"),
 };
 for (const d of Object.values(dirs))
   fs.mkdirSync(d, { recursive: true, mode: 0o700 });
@@ -216,7 +222,7 @@ function litStatusline(index: number): string {
 // with its usage, and the tool's result.
 function turn(sessionId: string, cwd: string, t: number): string {
   const at = new Date(
-    Date.now() - (TRANSCRIPT_TURNS - t) * 20_000,
+    Date.now() - Math.max(0, TRANSCRIPT_TURNS - t) * 20_000,
   ).toISOString();
   const common = {
     sessionId,
@@ -340,9 +346,14 @@ function hookData(s: Session): ClaudeHookData {
 
 // ─── The daemon ─────────────────────────────────────────────────────────────
 
+// [LAW:effects-at-boundaries] The daemon's whole environment, named here: the
+// shell that runs the gate reaches it only through PATH (for node and sh) and
+// the temp dir, so a limit, NODE_OPTIONS or tmux session exported there
+// cannot change the verdict.
 const env: NodeJS.ProcessEnv = {
-  ...process.env,
   PATH: `${dirs.bin}${path.delimiter}${process.env.PATH ?? ""}`,
+  HOME: dirs.home,
+  TMPDIR: os.tmpdir(),
   CC_CANDYBAR_SOCKET: socket,
   XDG_STATE_HOME: dirs.state,
   XDG_CACHE_HOME: dirs.cache,
@@ -402,18 +413,52 @@ const renders: Render[] = [];
 let phase: Render["phase"] = "warm";
 const inFlight = new Set<Promise<void>>();
 
+// [LAW:no-silent-failure] A session's own write that fails is a verdict too:
+// the load it stood for never happened.
+const sessionWriteFailures: string[] = [];
+function sessionWrite(what: string, write: Promise<void>): void {
+  write.catch((e: unknown) =>
+    sessionWriteFailures.push(
+      `${what}: ${e instanceof Error ? e.message : String(e)}`,
+    ),
+  );
+}
+
 function tick(s: Session): void {
   s.ticks++;
-  // Offset by session, so sessions write and stage at their own moments.
-  if ((s.ticks + s.index) % TURN_EVERY === 0) {
-    void fs.promises.appendFile(
-      s.transcript,
-      turn(s.id, s.checkout, TRANSCRIPT_TURNS + s.ticks),
+  // Offset by session, so sessions write, stage and switch at their own moments.
+  const at = s.ticks + s.index;
+  if (at % TURN_EVERY === 0) {
+    sessionWrite(
+      "transcript turn",
+      fs.promises.appendFile(
+        s.transcript,
+        turn(s.id, s.checkout, TRANSCRIPT_TURNS + s.ticks),
+      ),
     );
   }
-  if ((s.ticks + s.index) % STAGE_EVERY === 0) {
+  if (at % STAGE_EVERY === 0) {
     const now = new Date();
-    void fs.promises.utimes(path.join(s.checkout, ".git", "index"), now, now);
+    sessionWrite(
+      "stage",
+      fs.promises.utimes(path.join(s.checkout, ".git", "index"), now, now),
+    );
+  }
+  if (at % BRANCH_EVERY === 0) {
+    // As git checks out a branch: its ref first, then HEAD names it.
+    const branch = `ticket-${s.index}-${s.ticks}`;
+    const gitDir = path.join(s.checkout, ".git");
+    sessionWrite(
+      "branch switch",
+      fs.promises
+        .writeFile(path.join(gitDir, "refs", "heads", branch), `${OID}\n`)
+        .then(() =>
+          fs.promises.writeFile(
+            path.join(gitDir, "HEAD"),
+            `ref: refs/heads/${branch}\n`,
+          ),
+        ),
+    );
   }
   const rendering = phase;
   const t0 = performance.now();
@@ -478,8 +523,18 @@ async function liveHeap(): Promise<number> {
     ws.onopen = resolve;
     ws.onerror = () => reject(new Error("daemon inspector refused the gate"));
   });
+  // An answer, or a failure: the daemon dying under the call closes the socket,
+  // and one that never answers runs out the call's time.
   const call = (id: number, method: string) =>
-    new Promise<{ usedSize?: number }>((resolve) => {
+    new Promise<{ usedSize?: number }>((resolve, reject) => {
+      const timer = setTimeout(
+        () => reject(new Error(`daemon inspector: no answer to ${method}`)),
+        INSPECTOR_CALL_MS,
+      );
+      ws.onclose = () => {
+        clearTimeout(timer);
+        reject(new Error(`daemon inspector closed during ${method}`));
+      };
       ws.addEventListener("message", function answer(e: MessageEvent) {
         const reply = JSON.parse(String(e.data)) as {
           id?: number;
@@ -487,12 +542,14 @@ async function liveHeap(): Promise<number> {
         };
         if (reply.id !== id) return;
         ws.removeEventListener("message", answer);
+        clearTimeout(timer);
         resolve(reply.result);
       });
       ws.send(JSON.stringify({ id, method }));
     });
   await call(1, "HeapProfiler.collectGarbage");
   const { usedSize } = await call(2, "Runtime.getHeapUsage");
+  ws.onclose = null;
   ws.close();
   if (usedSize === undefined)
     throw new Error("daemon inspector reported no heap usage");
@@ -637,9 +694,9 @@ async function run(): Promise<{
       detail: `pids ${pids.join(",")} ${daemonExit ?? "running"}, post-mortems ${JSON.stringify(postMortems)}`,
     },
     {
-      name: "charge within the budget",
-      pass: charges.every((c) => c <= BUDGET_BYTES),
-      detail: `max ${mb(Math.max(...charges))} MB of ${mb(BUDGET_BYTES)} MB (limit ${mb(limit)} MB)`,
+      name: "charge under the limit",
+      pass: charges.every((c) => !approachingLimit(c, limit)),
+      detail: `max ${mb(Math.max(...charges))} MB of ${mb(limit)} MB`,
     },
     {
       name: "live heap not climbing",
@@ -675,6 +732,14 @@ async function run(): Promise<{
       name: "stubs answered everything",
       pass: unknown.length === 0,
       detail: unknown.length === 0 ? "none unanswered" : unknown.join("; "),
+    },
+    {
+      name: "session writes landed",
+      pass: sessionWriteFailures.length === 0,
+      detail:
+        sessionWriteFailures.length === 0
+          ? "every turn, stage and branch switch"
+          : sessionWriteFailures.slice(0, 5).join("; "),
     },
   ];
   const facts = {

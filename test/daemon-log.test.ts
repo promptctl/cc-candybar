@@ -205,20 +205,33 @@ describe("dlog", () => {
   });
 
   // A disk that takes nothing costs lines the log says it lost, not memory:
-  // lines past the bound are counted, and the count is in the file.
-  test("lines past what the log holds while the disk takes none are counted, not held", async () => {
+  // past the bound the oldest waiting lines are dropped, the count is in the
+  // file ahead of the lines kept, and the newest line is kept.
+  test("past what the log holds for the disk, the oldest lines are dropped and counted", async () => {
     await withFreshLog(
       () => {},
       async (dlog, logFile, drained) => {
         const line = "x".repeat(1000);
         const sent = Math.ceil((MAX_WAITING_BYTES * 1.5) / line.length);
         // In one turn: no write can land between them.
-        for (let i = 0; i < sent; i++) dlog("info", line);
+        for (let i = 0; i < sent; i++) dlog("info", `${i} ${line}`);
+        dlog("warn", "death line");
         await drained();
         const logged = fs.readFileSync(logFile, "utf8").trimEnd().split("\n");
-        const dropped = Number(/ (\d+) line\(s\) dropped /.exec(logged.at(-1)!)?.[1]);
+        const counted = logged.find((l) => / earlier line\(s\) dropped: /.test(l));
+        const dropped = Number(/ (\d+) earlier line\(s\) dropped/.exec(counted ?? "")?.[1]);
         expect(dropped).toBeGreaterThan(0);
-        expect(logged.length - 1 + dropped).toBe(sent);
+        expect(logged.length - 1 + dropped).toBe(sent + 1);
+        expect(logged.at(-1)).toMatch(/\[warn\] death line$/);
+        // What was kept: the first line, on its way the moment it was logged,
+        // and the newest, in order.
+        const kept = logged
+          .filter((l) => / \[info\] \d+ /.test(l))
+          .map((l) => Number(/ \[info\] (\d+) /.exec(l)![1]));
+        expect(kept).toEqual([
+          0,
+          ...Array.from({ length: kept.length - 1 }, (_, i) => sent - kept.length + 1 + i),
+        ]);
       },
     );
   });

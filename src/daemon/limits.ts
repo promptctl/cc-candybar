@@ -55,16 +55,15 @@ import {
 // check-protocol name the constants, so renaming them for wording alone would
 // break that contract for no change in meaning.
 //
-// The default is sized so the render cache's share holds a hundred sessions,
-// each drawing from its own checkout: an entry and a view each. Below that the
-// cache cannot hold the directories being rendered from, every render misses,
-// and a miss's config load is longer than the client waits, so every render
-// fails rather than some (the load gate, scripts/load-gate.ts, serves that
-// hundred). The cache evicts only past its share, so a daemon that has rendered
-// from many directories holds cold entries up to it; entries cheap enough to
-// need a smaller share are what bring the limit back down.
+// The default is sized from what a daemon serving a hundred sessions, each
+// drawing from its own checkout, is charged: ~430 MB, about 40% of it, so a
+// leak trips the backstop while it is still a leak. The render cache's share
+// of it holds those hundred (render.ts). Below that the cache cannot hold the
+// directories being rendered from, every render misses, and a miss's config
+// load is longer than the client waits, so every render fails rather than some
+// (the load gate, scripts/load-gate.ts, serves that hundred).
 export const RSS_LIMIT_ENV = "CC_CANDYBAR_RSS_LIMIT_MB";
-export const DEFAULT_RSS_LIMIT_MB = 2560;
+export const DEFAULT_RSS_LIMIT_MB = 1024;
 export const HEAP_CAP_OVER_RSS = 2;
 
 // [LAW:parse-dont-validate] Absent → default; a positive integer → that; present

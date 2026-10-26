@@ -5,10 +5,10 @@ import type { LogLevel } from "../utils/logger";
 
 export const MAX_BYTES = 5 * 1024 * 1024;
 const KEEP_GENERATIONS = 3;
-// What the log holds while the disk takes none of it. Past this a line is
-// counted rather than held, and the count is logged once the disk takes lines
-// again, so a stalled disk costs lines it says it lost, never the daemon's
-// memory.
+// The bytes the log holds waiting for the disk. Past this the oldest waiting
+// lines are dropped and counted, and the count is logged ahead of the lines
+// kept, so a stalled disk costs lines the log says it lost, never the daemon's
+// memory, and the newest lines — a death line among them — are kept.
 export const MAX_WAITING_BYTES = 4 * 1024 * 1024;
 
 // [LAW:no-ambient-temporal-coupling] A line leaves the event loop at once and
@@ -86,26 +86,33 @@ async function rotate(filePath: string): Promise<void> {
   await fs.promises.rename(filePath, `${filePath}.1`).catch(() => {});
 }
 
-// Lines not yet taken, the lines refused while the log was full, and the batch
-// taken and on its way: its bytes, and once its write is out, the descriptor
-// and the size the file reaches when they land.
+// Lines not yet taken and their bytes, the count of the oldest dropped to stay
+// within what the log holds, and the batch taken and on its way.
 let waiting: string[] = [];
 let waitingBytes = 0;
-let refused = 0;
-let onItsWay: {
+let dropped = 0;
+// [LAW:types-are-the-program] Where a batch is: taken and not yet written, its
+// write out (to that descriptor, the file reaching that size once it lands),
+// or landed — after which nothing about it is the way out's to finish.
+interface Batch {
   readonly bytes: Buffer;
-  issued: { readonly fd: number; readonly endsAt: number } | null;
-} | null = null;
+  state:
+    | { readonly kind: "taken" }
+    | { readonly kind: "issued"; readonly fd: number; readonly endsAt: number }
+    | { readonly kind: "landed" };
+}
+let onItsWay: Batch | null = null;
 let flushing: Promise<void> | null = null;
 
 export function dlog(level: LogLevel, msg: string): void {
   const line = `${new Date().toISOString()} [${level}] ${msg}\n`;
-  if (waitingBytes + line.length > MAX_WAITING_BYTES) {
-    refused++;
-    return;
-  }
   waiting.push(line);
-  waitingBytes += line.length;
+  waitingBytes += Buffer.byteLength(line);
+  // The newest lines are the ones kept — the death line is always among them.
+  while (waitingBytes > MAX_WAITING_BYTES && waiting.length > 1) {
+    waitingBytes -= Buffer.byteLength(waiting.shift()!);
+    dropped++;
+  }
   flushing ??= flush();
 }
 
@@ -119,9 +126,9 @@ export function drained(): Promise<void> {
 async function flush(): Promise<void> {
   process.on("exit", writeWaitingSync);
   try {
-    while (waiting.length > 0 || refused > 0) {
+    while (waiting.length > 0) {
       const lines = take();
-      onItsWay = { bytes: Buffer.from(lines), issued: null };
+      onItsWay = { bytes: Buffer.from(lines), state: { kind: "taken" } };
       try {
         // [LAW:single-enforcer] Path resolution reaches os.homedir(); it lives
         // inside the one boundary that makes dlog total.
@@ -138,48 +145,47 @@ async function flush(): Promise<void> {
   }
 }
 
-// Everything waiting, and the count of lines refused after it.
+// Everything waiting, after the count of the lines dropped before it.
 function take(): string {
   const lost =
-    refused === 0
+    dropped === 0
       ? ""
-      : `${new Date().toISOString()} [warn] log: ${refused} line(s) dropped while the disk took none\n`;
-  const lines = waiting.join("") + lost;
+      : `${new Date().toISOString()} [warn] log: ${dropped} earlier line(s) dropped: ${MAX_WAITING_BYTES} bytes were waiting for the disk\n`;
+  const lines = lost + waiting.join("");
   waiting = [];
   waitingBytes = 0;
-  refused = 0;
+  dropped = 0;
   return lines;
 }
 
-async function append(
-  filePath: string,
-  batch: NonNullable<typeof onItsWay>,
-): Promise<void> {
+async function append(filePath: string, batch: Batch): Promise<void> {
   const { held, size } = await sinkAt(filePath);
   const { bytes } = batch;
-  batch.issued = { fd: held.fd, endsAt: size + bytes.length };
+  batch.state = { kind: "issued", fd: held.fd, endsAt: size + bytes.length };
   for (let done = 0; done < bytes.length; ) {
     done += await writeAt(held.fd, bytes.subarray(done));
   }
+  batch.state = { kind: "landed" };
   if (size + bytes.length >= MAX_BYTES) {
     close();
     await rotate(held.path);
   }
 }
 
-// On the way out, after the event loop's last turn: a batch whose write is out
-// lands or not as the file's size says, one not yet written is written, and
+// On the way out, after the event loop's last turn: a batch not yet written is
+// written, one whose write is out is finished as the file's size says, and
 // every line still waiting follows it.
-// [LAW:no-silent-failure] exception: another process appending while that
-// write is out misleads the size, which doubles or loses that one write. A
-// write at an offset of its own would answer exactly, and would overwrite the
-// other daemon's lines at every handoff instead.
+// [LAW:no-silent-failure] exception: two things mislead the size, each costing
+// that one batch. A write still running in the threadpool lands after this
+// one and doubles it; another process appending while it is out hides that it
+// had not landed, and loses it. A write at an offset of its own would answer
+// exactly, and would overwrite the other daemon's lines at every handoff.
 function writeWaitingSync(): void {
   const out = onItsWay;
   onItsWay = null;
-  const unsent = out?.issued === null ? out.bytes.toString() : "";
-  if (out?.issued) {
-    const { fd, endsAt } = out.issued;
+  const unsent = out?.state.kind === "taken" ? out.bytes.toString() : "";
+  if (out?.state.kind === "issued") {
+    const { fd, endsAt } = out.state;
     try {
       const size = fs.fstatSync(fd).size;
       const start = endsAt - out.bytes.length;
@@ -190,7 +196,7 @@ function writeWaitingSync(): void {
       unwritable(out.bytes.toString(), e);
     }
   }
-  if (unsent === "" && waiting.length === 0 && refused === 0) return;
+  if (unsent === "" && waiting.length === 0) return;
   const lines = unsent + take();
   try {
     const filePath = logPath();

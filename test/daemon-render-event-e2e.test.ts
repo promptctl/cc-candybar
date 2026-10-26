@@ -281,7 +281,6 @@ describe("every render request writes one render event, whatever its outcome", (
     expect(field(gate, "dumpFailed")).toBe("-");
     const keys = (event: Event) => event.fields.map(([k]) => k);
     expect(keys(gate)).toEqual(keys(drawn));
-    expect(logLines(env).join("\n")).not.toContain("handler threw");
 
     // A refused request names its problems. The request was not trusted, so
     // nothing it said is recorded as a fact of the render — not even its sid.
@@ -303,6 +302,9 @@ describe("every render request writes one render event, whatever its outcome", (
       expect(event.level).toBe("warn");
       expect(field(event, "sid")).toBeUndefined();
     }
+    // The log has one writer, in order: once these later requests' lines have
+    // landed, any line the renders above wrote has too.
+    expect(logLines(env).join("\n")).not.toContain("handler threw");
   });
 
   // A failed click's error shows on every render inside its hold, and past it
@@ -412,8 +414,13 @@ describe("every render request writes one render event, whatever its outcome", (
       "the render asked tmux",
     );
     // Held at the gate, the render has written nothing yet — and holds the
-    // config state it is drawing with (brandon-unfiled-3248.6rc).
-    expect(eventsNow("ev-late")).toEqual([]);
+    // config state it is drawing with (brandon-unfiled-3248.6rc). The log has
+    // one writer, in order, so once a later render's line has landed, a line
+    // the held one wrote would have too.
+    await render(sockPath, "ev-late-after", projectDir, {});
+    expect(
+      eventsNow("ev-late", await loggedWhen(env, (lines) => eventsNow("ev-late-after", lines).length > 0, "a later render's event")),
+    ).toEqual([]);
     const stats = () =>
       sendDaemonRequest(sockPath, { v: PROTOCOL_VERSION, kind: "stats" });
     await expect(stats()).resolves.toMatchObject({
