@@ -121,6 +121,7 @@ async function rotate(filePath: string): Promise<void> {
 let waiting: string[] = [];
 let waitingBytes = 0;
 let dropped = 0;
+let droppedBytes = 0;
 // [LAW:types-are-the-program] Where a batch is: taken and not yet written, its
 // write out (to that descriptor, the file reaching that size once it lands),
 // or landed — after which nothing about it is the way out's to finish.
@@ -158,7 +159,9 @@ export function dlog(level: LogLevel, msg: string): void {
   if (waitingBytes > MAX_WAITING_BYTES) {
     let cut = 0;
     while (waitingBytes > MAX_WAITING_BYTES / 2 && cut < waiting.length - 1) {
-      waitingBytes -= Buffer.byteLength(waiting[cut]!);
+      const bytes = Buffer.byteLength(waiting[cut]!);
+      waitingBytes -= bytes;
+      droppedBytes += bytes;
       cut++;
     }
     waiting.splice(0, cut);
@@ -196,9 +199,10 @@ async function flush(): Promise<void> {
         await append(logPath(), onItsWay);
       } catch (e) {
         // The failed write is done: the next batch opens the file afresh, so
-        // a state dir removed under the daemon is recreated for it.
+        // a state dir removed under the daemon is recreated for it. A batch a
+        // synchronous caller wrote meanwhile is in the file, not lost.
         close();
-        unwritable(lines, e);
+        if (onItsWay.state.kind !== "landed") unwritable(lines, e);
       } finally {
         onItsWay = null;
       }
@@ -214,11 +218,12 @@ function take(): string {
   const lost =
     dropped === 0
       ? ""
-      : `${new Date().toISOString()} [warn] log: ${dropped} earlier line(s) dropped: ${MAX_WAITING_BYTES} bytes were waiting for the disk\n`;
+      : `${new Date().toISOString()} [warn] log: ${dropped} earlier line(s) dropped (${droppedBytes} bytes): more than ${MAX_WAITING_BYTES} bytes were waiting for the disk\n`;
   const lines = lost + waiting.join("");
   waiting = [];
   waitingBytes = 0;
   dropped = 0;
+  droppedBytes = 0;
   return lines;
 }
 
@@ -230,7 +235,10 @@ async function append(filePath: string, batch: Batch): Promise<void> {
   const endsAt = size + bytes.length;
   batch.state = { kind: "issued", fd: held.fd, endsAt };
   for (let done = 0; done < bytes.length; ) {
-    done += await writeAt(held.fd, bytes.subarray(done));
+    const written = await writeAt(held.fd, bytes.subarray(done));
+    // A write that takes nothing would be asked again forever.
+    if (written === 0) throw new Error("the disk took 0 bytes of a write");
+    done += written;
   }
   batch.state = { kind: "landed" };
   if (endsAt >= MAX_BYTES) {

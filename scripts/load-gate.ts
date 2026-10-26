@@ -800,8 +800,15 @@ async function daemonRenders(
   const log = path.join(dirs.state, "cc-candybar", "daemon.log");
   const stamped = (): Array<{ at: number; line: string }> =>
     logFiles(log)
-      .filter((f) => fs.existsSync(f))
-      .flatMap((f) => fs.readFileSync(f, "utf8").split("\n"))
+      .flatMap((f) => {
+        // A rotation can move a generation between listing and reading it.
+        try {
+          return fs.readFileSync(f, "utf8").split("\n");
+        } catch (e) {
+          if ((e as NodeJS.ErrnoException).code === "ENOENT") return [];
+          throw e;
+        }
+      })
       .map((line) => ({ at: Date.parse(line.slice(0, 24)), line }));
   let all = stamped();
   for (

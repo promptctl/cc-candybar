@@ -268,7 +268,7 @@ describe("dlog", () => {
         dlog("warn", "death line");
         await drained();
         const logged = fs.readFileSync(logFile, "utf8").trimEnd().split("\n");
-        const counted = logged.find((l) => / earlier line\(s\) dropped: /.test(l));
+        const counted = logged.find((l) => / earlier line\(s\) dropped \(\d+ bytes\): /.test(l));
         const dropped = Number(/ (\d+) earlier line\(s\) dropped/.exec(counted ?? "")?.[1]);
         expect(dropped).toBeGreaterThan(0);
         expect(logged.length - 1 + dropped).toBe(sent + 1);

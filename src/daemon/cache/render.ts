@@ -98,10 +98,14 @@ export const VIEW_BYTES = 2.5 * 1024 * 1024;
 // Measured, a full share costs less than its charges: serving 100 sessions,
 // the daemon is charged ~430 MB in all with 560 MB of the share accounted.
 export const RENDER_CACHE_RESERVE_BYTES = 64 * 1024 * 1024;
+// Never less than a quarter of the limit, which a small limit has always had:
+// there the reserve would leave the cache too little to hold two sessions.
 export function renderCacheBudget(memoryLimitBytes: number): number {
-  return Math.max(
-    0,
-    Math.floor(memoryLimitBytes * NEAR_LIMIT - RENDER_CACHE_RESERVE_BYTES),
+  return Math.floor(
+    Math.max(
+      memoryLimitBytes / 4,
+      memoryLimitBytes * NEAR_LIMIT - RENDER_CACHE_RESERVE_BYTES,
+    ),
   );
 }
 
