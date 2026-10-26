@@ -8,3 +8,4 @@
 - Close any render cache a test builds. Otherwise its idle sweep keeps it, and every compile it serves, alive for the life of the worker.
 - The authoring docs under docs/ are tested against the live loader, so editing a doc can fail tests.
 - In a worktree whose node_modules is a symlink to the main checkout's, pnpm can refuse to run scripts. If it does, run the binaries in node_modules/.bin directly.
+- The load gate fails on a Mac whose disk is stalled by other work, because a render still touches the disk. The CI runner is the authority on whether a build passes it.
