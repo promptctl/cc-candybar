@@ -1,0 +1,12 @@
+{
+ "excluded": {
+  "scanner: not a statusline": 1876,
+  "duplicate url": 41,
+  "few commits, none recent": 1896,
+  "no commit history (npm/web/registry page)": 463,
+  "unreachable": 109
+ },
+ "eligible": 5173,
+ "cutoff_commits": 45,
+ "forks_in_selection": 7
+}
