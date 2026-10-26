@@ -619,11 +619,11 @@ async function run(): Promise<{
     await sleep(SAMPLE_MS);
   }
   gateLoop.disable();
+  const steadyEnded = Date.now();
   // The second reading under the load the first was taken under: the steady
   // renders settle, and those the collection delays are not scored.
   phase = "after";
   await Promise.all(inFlight);
-  const steadyEnded = Date.now();
   const heapAfter = await liveHeap();
   for (const t of timers) clearInterval(t);
   await Promise.all(inFlight);
@@ -851,14 +851,29 @@ try {
 } catch (e) {
   console.error(`FAIL  ${e instanceof Error ? e.message : String(e)}`);
 } finally {
-  // The root goes once nothing writes into it: the daemon and its stubs gone.
+  // The daemon ends through its own shutdown, so its log holds every line it
+  // logged, and is killed if it does not; the root goes once nothing writes
+  // into it.
   const gone = new Promise((resolve) => daemon.once("exit", resolve));
-  daemon.kill("SIGKILL");
-  if (daemonExit === null) await Promise.race([gone, sleep(5000)]);
-  if (passed) fs.rmSync(root, { recursive: true, force: true, maxRetries: 5 });
-  else
+  if (daemonExit === null) {
+    daemon.kill("SIGTERM");
+    await Promise.race([gone, sleep(3000)]);
+  }
+  if (daemonExit === null) {
+    daemon.kill("SIGKILL");
+    await Promise.race([gone, sleep(3000)]);
+  }
+  const remove = (dir: string) =>
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5 });
+  if (passed) remove(root);
+  else {
+    // The checkouts and transcripts are the fixture, half a gigabyte of it;
+    // the daemon's state (its log) is the diagnosis.
+    remove(dirs.checkouts);
+    remove(dirs.claude);
     console.error(
       `kept ${root} (daemon log: ${path.join(dirs.state, "cc-candybar", "daemon.log")})`,
     );
+  }
 }
 process.exit(passed ? 0 : 1);

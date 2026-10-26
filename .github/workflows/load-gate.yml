@@ -53,5 +53,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: load-gate-daemon-log
-          path: /tmp/cblg-*/state/cc-candybar/daemon.log
+          path: /tmp/cblg-*/state/cc-candybar/daemon.log*
           if-no-files-found: ignore

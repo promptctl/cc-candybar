@@ -36,7 +36,7 @@ import {
   type CompiledConfig,
   type Registration,
 } from "../../dsl/render.js";
-import { mb } from "../limits.js";
+import { mb, NEAR_LIMIT } from "../limits.js";
 import { stateGate } from "../verbs/state-validators.js";
 import { configGate } from "../verbs/config-validators.js";
 import { presetNames, presetRoot } from "../../config/presets.js";
@@ -85,17 +85,22 @@ export const COMPILE_BYTES = 10 * 1024 * 1024;
 // with headroom for a user config's further placements.
 export const VIEW_BYTES = 2.5 * 1024 * 1024;
 
-// The render cache's share of the daemon's memory limit: five eighths, which
-// at the default limit is ~114 sessions on one compile, each an entry and a
+// The render cache's share of the daemon's memory limit: what is left under
+// the line the doctor calls near the limit once the rest of the daemon is
+// reserved — so a share full at its charges, which a test holds real heap
+// under and so are the most the cache can cost, never puts the daemon past
+// that line, whatever the limit. The reserve is the ~60 MB a daemon serving
+// one session is charged, with room for its heap's growth. At the default
+// limit the share is 640 MB: ~114 sessions on one compile, each an entry and a
 // view, against a working set of ~20 directories in the production daemon.
-// The share is accounted at the measured per-entry and per-view charges, which
-// a test holds real heap under, so a share full at its charges is the most the
-// cache can cost; with the ~60 MB a daemon is charged serving one session, that
-// is ~700 MB, under the line the doctor calls near the limit. Measured, a full
-// share costs less: serving 100 sessions, the daemon is charged ~430 MB in all
-// with 560 MB of the share accounted.
+// Measured, a full share costs less than its charges: serving 100 sessions,
+// the daemon is charged ~430 MB in all with 560 MB of the share accounted.
+export const RENDER_CACHE_RESERVE_BYTES = 128 * 1024 * 1024;
 export function renderCacheBudget(memoryLimitBytes: number): number {
-  return Math.floor((memoryLimitBytes * 5) / 8);
+  return Math.max(
+    0,
+    Math.floor(memoryLimitBytes * NEAR_LIMIT - RENDER_CACHE_RESERVE_BYTES),
+  );
 }
 
 // The count ceiling beside the byte budget: every entry holds a

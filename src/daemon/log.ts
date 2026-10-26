@@ -25,6 +25,11 @@ export const MAX_WAITING_BYTES = 4 * 1024 * 1024;
 // process appending: two daemons overlap at every handoff, and the old one's
 // death line and the new one's first lines land together.
 //
+// [LAW:polishing-by-subtraction] exception: the queue, the batch's state and
+// the exit listener are what a write off the loop costs. A synchronous append
+// is no longer microseconds where it matters: measured at ~0.6 ms a line idle,
+// and up to 450 ms on a busy disk, on every request.
+//
 // [LAW:types-are-the-program] The open log is one value, or none: the file it
 // is and its descriptor.
 interface Sink {
@@ -178,6 +183,9 @@ async function flush(): Promise<void> {
         // inside the one boundary that makes dlog total.
         await append(logPath(), onItsWay);
       } catch (e) {
+        // The failed write is done: the next batch opens the file afresh, so
+        // a state dir removed under the daemon is recreated for it.
+        close();
         unwritable(lines, e);
       } finally {
         onItsWay = null;
@@ -282,6 +290,9 @@ function writeWaitingSync(finishing: boolean, waitMs: number): void {
       };
     }
   } catch (e) {
+    // The sink is left open: a write still out holds its descriptor, and
+    // closed now, its number could go to the next file opened (a heap
+    // snapshot) and the write land in it.
     unwritable(lines.toString(), e);
   }
 }
@@ -305,9 +316,6 @@ function unwritable(lines: string, e: unknown): void {
   // shutdown), taking the clean-death path down with it. stderr carries the
   // line and the reason — the terminal when the daemon runs by hand, and
   // /dev/null under a detached spawn; the daemon keeps serving either way.
-  // Closing the sink re-opens on the next call, so a state dir removed out
-  // from under the daemon is recreated for the next line.
-  close();
   try {
     process.stderr.write(
       `${lines}cc-candybar: daemon.log unwritable: ${(e as Error).message}\n`,

@@ -200,9 +200,11 @@ export function readCharge(
 }
 
 // [LAW:single-enforcer] THE judgment of "near the limit": the restart
-// forecast in daemon-stats and the doctor's daemon row both ask it.
+// forecast in daemon-stats and the doctor's daemon row both ask it, and the
+// render cache's share is sized under it.
+export const NEAR_LIMIT = 0.75;
 export function approachingLimit(bytes: number, limit: number): boolean {
-  return bytes > limit * 0.75;
+  return bytes > limit * NEAR_LIMIT;
 }
 
 function artifactFile(
