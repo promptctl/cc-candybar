@@ -199,9 +199,14 @@ export interface RenderCacheObservers {
   // after the entry's fields and watcher are settled. The entry is handed
   // over as ReloadedEntry so the observer reads the outcome from the one
   // place it lives and the type, not this comment, keeps it from writing
-  // there. Trusted non-throwing (the same contract as onSegmentError): an
-  // observer that throws is a caller bug surfaced loudly, never absorbed here.
-  readonly onReload?: (entry: ReloadedEntry) => void;
+  // there. `sessions` are those whose views draw from the entry now: none
+  // for an entry just created. Trusted non-throwing (the same contract as
+  // onSegmentError): an observer that throws is a caller bug surfaced loudly,
+  // never absorbed here.
+  readonly onReload?: (
+    entry: ReloadedEntry,
+    sessions: readonly string[],
+  ) => void;
   // Fires with a session's id when its view opens and whenever what the view
   // draws from moves (openView's `changed`): what a feed showing the session
   // wakes on.
@@ -470,21 +475,6 @@ function cacheKey(
   configFile: string | undefined,
 ): string {
   return projectDir + "\0" + cwd + "\0" + (configFile ?? "");
-}
-
-// Whether a render from `projectDir`, `cwd` and `configFile` is drawn from
-// `entry`: the cache's own key, so a reload wakes exactly the sessions whose
-// renders it serves.
-export function rendersFrom(
-  entry: ReloadedEntry,
-  projectDir: string,
-  cwd: string,
-  configFile: string | undefined,
-): boolean {
-  return (
-    cacheKey(entry.projectDir, entry.cwd, entry.configFile) ===
-    cacheKey(projectDir, cwd, configFile)
-  );
 }
 
 // [LAW:one-source-of-truth] The preset names whose layout the raw file
@@ -1232,7 +1222,7 @@ export class RenderCache<S extends ViewSource = ViewSource> {
       `render-cache entry projectDir=${projectDir} cwd=${cwd} compile=${entry.state.compileKey.slice(0, 12)} entries=${this.entries.size} compiles=${this.compiles.size} accounted=${mb(this.accountedBytes())}/${mb(this.budgetBytes())}MB`,
     );
     this.refreshWatcher(entry, loaded);
-    this.observers.onReload?.(entry);
+    this.observers.onReload?.(entry, this.sessionsOn(entry));
 
     return entry;
   }
@@ -1598,6 +1588,15 @@ export class RenderCache<S extends ViewSource = ViewSource> {
       this.compiles.delete(state.compileKey);
   }
 
+  // [LAW:one-source-of-truth] The sessions whose views draw from `entry`'s
+  // state, which a reload either reopened over its new state or left on the
+  // state it kept.
+  private sessionsOn(entry: CacheEntry): string[] {
+    return [...this.views.values()]
+      .filter((view) => view.state === entry.state)
+      .map((view) => view.sessionId);
+  }
+
   // Re-read an entry from disk NOW, for a caller that just wrote its file and
   // must not act on the old config until the reload has landed (a save
   // releasing the picks the file now holds). The watcher still fires later;
@@ -1642,7 +1641,7 @@ export class RenderCache<S extends ViewSource = ViewSource> {
     // Rebinds to the broken file (and its sibling candidates) too, so an
     // in-place save OR a higher-precedence file appearing recovers.
     this.refreshWatcher(entry, loaded);
-    this.observers.onReload?.(entry);
+    this.observers.onReload?.(entry, this.sessionsOn(entry));
   }
 
   // [LAW:single-enforcer] One watcher-rebind decision per reload: the watch

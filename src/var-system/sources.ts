@@ -43,7 +43,9 @@ import {
   orElse,
   ABSENT,
   PENDING,
+  type Ok,
   type Outcome,
+  type Pending,
   type Reading,
 } from "../utils/outcome.js";
 import {
@@ -621,14 +623,15 @@ export class SourceRegistry {
   // stored values `published` reads.
   private readonly sourceNames = observable.array<string>([], { deep: false });
   // [LAW:one-source-of-truth] What this registry's sources have published, as
-  // one value that changes exactly when one of their stored values does, by
-  // the store's own compare (`changeKey`): a re-read that found what was
-  // stored moves nothing. A session's view reacts to it, and so its feed
-  // wakes on a publish that changed what the bar can show (openView).
+  // one value that changes exactly when one of their stored values does: the
+  // store writes a value only when its own compare finds it changed, so a
+  // re-read that found what was stored moves nothing. A session's view reacts
+  // to it, and so its feed wakes on a publish that changed what the bar can
+  // show (openView).
   private readonly publishedNow = computed(() =>
-    JSON.stringify(this.sourceNames.map((name) => this.store.changeKey(name))),
+    this.sourceNames.map((name) => this.store.changeKey(name)),
   );
-  published(): string {
+  published(): ReadonlyArray<Pending | Ok<string>> {
     return this.publishedNow.get();
   }
 

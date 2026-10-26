@@ -71,7 +71,6 @@ import { createPayloadProviders } from "./payload-providers";
 import {
   RenderCache,
   renderCacheBudget,
-  rendersFrom,
   type CacheEntry,
   type DslRenderState,
   type SessionView,
@@ -397,7 +396,11 @@ function tmuxServersOf({
 // [LAW:locality-or-seam] Same terms as sessionState: naming the directory is
 // free; the daemon wipes it in onListening() (reset), once the bind is
 // won, and is the only writer.
-const diagnosticDump = new DiagnosticDump(diagnosticsDir());
+// [LAW:single-enforcer] A dump link moving is a data wake like any other: a
+// frame drawn before its request's sync shows the old link until then.
+const diagnosticDump = new DiagnosticDump(diagnosticsDir(), (sessionId) =>
+  frameFeeds.wake(sessionId, "data"),
+);
 const renderCache = new RenderCache<SessionSource>(
   {
     sessionState,
@@ -435,26 +438,14 @@ const renderCache = new RenderCache<SessionSource>(
       // — the operator's only record of whether a save was picked up cleanly,
       // kept rendering last-known-good behind an error, or resolved to a
       // different file. Same info level as the detection line.
-      onReload: (entry) => {
+      onReload: (entry, sessions) => {
         dlog(
           "info",
           `config loaded projectDir=${entry.projectDir} cwd=${entry.cwd} files=${entry.configLayers.join(" < ") || "<bundled default>"} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warning=${entry.lastWarning === null ? "none" : JSON.stringify(entry.lastWarning)}`,
         );
         // A reload changes the bar of every session drawn from the entry,
         // even one that failed and kept the old config: its strip says so.
-        frameFeeds.wakeWhere("reload", (req) => {
-          const origin = sessionRenderOrigin(
-            req.requested,
-            sessionState,
-            req.hookData.session_id,
-          );
-          return rendersFrom(
-            entry,
-            origin.projectDir,
-            origin.cwd,
-            origin.configFile ?? undefined,
-          );
-        });
+        for (const sessionId of sessions) frameFeeds.wake(sessionId, "reload");
       },
       // [LAW:single-enforcer] What a session's view draws from moved: its
       // feed's next frame is brought forward. The one data wake, whatever

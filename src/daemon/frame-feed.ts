@@ -124,13 +124,8 @@ export interface FeedDeps<Req> {
 // Why a feed's next frame was brought forward: a value its bar reads changed
 // (`data`), its session's own state moved (`state`), its config reloaded
 // (`reload`), or which panes are on a screen changed (`visibility`).
-export type WakeCause = "data" | "state" | "reload" | "visibility";
-const WAKE_CAUSES: readonly WakeCause[] = [
-  "data",
-  "state",
-  "reload",
-  "visibility",
-];
+const WAKE_CAUSES = ["data", "state", "reload", "visibility"] as const;
+export type WakeCause = (typeof WAKE_CAUSES)[number];
 
 // [LAW:no-ambient-temporal-coupling] Where a feed's frame clock stands, as
 // state: no request to draw from yet; the next frame due `at` a timer; or a
@@ -472,33 +467,38 @@ export class FrameFeeds<Req> {
 
   // [LAW:single-enforcer] The one fault path of a feed's frame step: a throw
   // anywhere in it — the render adapter, the lane gate, a subscriber's sink —
-  // is logged as the feed's fault, and the feed's next frame falls due at the
-  // still rate. A frame step runs off a timer, so a throw it let go would be an
-  // unhandled rejection, which exits the daemon.
+  // is logged as the feed's fault, and the feed's next frame is set as a
+  // still frame's is, keeping a change that arrived while it was drawn. A
+  // frame step runs off a timer, so a throw it let go would be an unhandled
+  // rejection, which exits the daemon.
   private draw(feed: Feed): void {
+    const noted = this.requests.get(feed.sessionId);
+    if (noted === undefined) {
+      feed.phase = { kind: "waiting" };
+      return;
+    }
+    const phase: Phase = { kind: "drawing", again: false };
+    feed.phase = phase;
+    const started = this.deps.now();
+    feed.lastStart = started;
     try {
-      this.step(feed);
+      this.step(feed, noted.req, phase, started);
     } catch (error) {
       this.deps.log(
         "error",
         `feed sid=${JSON.stringify(feed.sessionId)} threw: ${inspect(error)}`,
       );
       if (this.feeds.get(feed.sessionId) !== feed) return;
-      this.schedule(feed, null, this.deps.now(), false);
+      this.schedule(feed, null, started, phase.again);
     }
   }
 
-  private step(feed: Feed): void {
-    const noted = this.requests.get(feed.sessionId);
-    if (noted === undefined) {
-      feed.phase = { kind: "waiting" };
-      return;
-    }
-    const { req } = noted;
-    const phase: Phase = { kind: "drawing", again: false };
-    feed.phase = phase;
-    const started = this.deps.now();
-    feed.lastStart = started;
+  private step(
+    feed: Feed,
+    req: Req,
+    phase: { readonly again: boolean },
+    started: number,
+  ): void {
     // The render adapter answers a failed render with its error frame; a throw
     // out of it is a fault in the adapter, `draw`'s to report.
     const frame = this.deps.render(req, feed.pace);
@@ -521,7 +521,7 @@ export class FrameFeeds<Req> {
   // [LAW:no-ambient-temporal-coupling] The next frame is due a period after
   // this one STARTED, so the rate holds whatever a render costs, up to a
   // render as slow as the period, when frames are drawn back to back. A frame
-  // step that faulted is followed at the still rate. A change that arrived
+  // step that faulted is followed as a still frame is. A change that arrived
   // while this frame was drawn (`again`) is drawn as soon as the feed's
   // spacing allows, which is never later than the period.
   // [LAW:dataflow-not-control-flow] The moving period is for a bar that moves
@@ -538,7 +538,11 @@ export class FrameFeeds<Req> {
     if (moves && !seen) feed.unseen++;
     const period = seen ? this.deps.periods.moving : this.deps.periods.still;
     feed.pace = paceOf(period);
-    this.arm(feed, started + (again ? this.spacingOf(feed) : period));
+    const spacing = this.spacingOf(feed);
+    // [LAW:nothing-unseen] A change noted while this frame was drawn brought
+    // nothing forward when the spacing is the period: it was coalesced.
+    if (again && spacing === period) feed.coalesced++;
+    this.arm(feed, started + (again ? spacing : period));
   }
 
   // [LAW:single-enforcer] The one bound on how close a feed's frames are: the
@@ -554,8 +558,9 @@ export class FrameFeeds<Req> {
   // [LAW:single-enforcer] The one way a feed's next frame is brought forward:
   // to the earliest its spacing allows after the last frame started, never
   // later than it already falls due. A frame being drawn notes it, and the
-  // next follows under the same rule (`schedule`). Answers whether it moved
-  // anything: a wake that did not was coalesced into a frame already due.
+  // next follows under the same rule (`schedule`, which settles whether that
+  // note moved anything). Answers whether it moved anything: a wake that did
+  // not was coalesced into a frame already due.
   private hasten(feed: Feed): boolean {
     const { phase } = feed;
     if (phase.kind === "drawing") {

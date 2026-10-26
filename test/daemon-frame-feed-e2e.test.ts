@@ -364,9 +364,10 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       expect.stringContaining("status green"),
       expect.stringContaining("status red"),
     ]);
-    // The still bar's next frame falls due a still period after its first
-    // started, so a frame in before then is the wake's.
-    expect(frames[1]!.at - wrote).toBeLessThan(FEED_PERIODS.still);
+    // Measured from the write, as the click's is: the still bar's next frame
+    // falls due a still period after its first started, just before the
+    // write, so a frame in by half of one is the wake's.
+    expect(frames[1]!.at - wrote).toBeLessThan(FEED_PERIODS.still / 2);
     expect(await closedSummary(sid)).toMatch(/ woke=data:[1-9]\d*,/u);
   });
 

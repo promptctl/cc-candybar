@@ -478,6 +478,45 @@ describe("on a faked clock", () => {
     expect(state.renders).toBeLessThanOrEqual(1 + 1000 / PERIODS.still);
   });
 
+  // A wake while a frame is drawn brings the next one forward only when the
+  // feed's spacing is shorter than the period that frame sets: a moving bar
+  // on a screen was due a moving period on anyway.
+  test.each([
+    ["moving", 1],
+    ["still", 0],
+  ] as const)("a wake while a %s bar on a screen is drawn counts %i coalesced", async (motion, coalesced) => {
+    const { feeds, note, state, log } = harness({ motion });
+    note("s", "bar");
+    state.duringRender = () => feeds.wake("s", "data");
+    const close = feeds.subscribe("s", sub(() => {}));
+    await pass(1);
+    close();
+    expect(state.renders).toBe(1);
+    expect(log.at(-1)).toContain(
+      ` woke=data:1,state:0,reload:0,visibility:0 coalesced=${coalesced} `,
+    );
+  });
+
+  test("a change that arrives while a frame faults is drawn as the feed's spacing allows, not a still period later", async () => {
+    const { feeds, note, state, log } = harness({ motion: "still" });
+    note("s", "bar");
+    const close = feeds.subscribe("s", sub(() => {}));
+    await pass(PERIODS.moving + 1);
+    expect(state.renders).toBe(1);
+    state.duringRender = () => {
+      state.gateThrows = true;
+      feeds.wake("s", "state");
+    };
+    feeds.wake("s", "data");
+    await pass(1);
+    expect(state.renders).toBe(2);
+    expect(log.some((l) => l.startsWith('feed sid="s" threw: Error: the gate broke'))).toBe(true);
+    state.gateThrows = false;
+    await pass(PERIODS.moving);
+    close();
+    expect(state.renders).toBe(3);
+  });
+
   test("wakeWhere draws at once only the watched sessions it matches", async () => {
     const { feeds, note, state } = harness({ motion: "still" });
     note("a", "%1:a");
