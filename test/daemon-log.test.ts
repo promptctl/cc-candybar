@@ -40,6 +40,10 @@ async function withFreshLog<T>(
   }
 }
 
+// Each fresh module instance arms its own exit listener, and this file makes
+// more than Node's default count of them.
+process.setMaxListeners(50);
+
 describe("dlog", () => {
   test("never throws even when stderr, the last channel, fails too", async () => {
     await withFreshLog(
@@ -282,18 +286,28 @@ describe("dlog", () => {
     );
   });
 
-  // The way out writes what is on its way, and only while something is.
-  test("the exit listener is there only while lines are on their way", async () => {
-    await withFreshLog(
-      () => {},
-      async (dlog, _logFile, drained) => {
-        const before = process.listenerCount("exit");
-        dlog("info", "one");
-        expect(process.listenerCount("exit")).toBe(before + 1);
-        await drained();
-        expect(process.listenerCount("exit")).toBe(before);
-      },
-    );
+  // A line logged on the way out, by an exit listener that runs after the
+  // log's own, is written as it is logged: no flush will run again.
+  test("a line an exit listener logs after the log's own is in the file", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-log-exit-late-"));
+    try {
+      execFileSync(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          "-e",
+          `import { dlog, drained } from ${JSON.stringify(path.resolve("src/daemon/log.ts"))};` +
+            `dlog("info", "first"); await drained();` +
+            `process.on("exit", () => dlog("warn", "from exit")); process.exit(0);`,
+        ],
+        { env: { ...process.env, XDG_STATE_HOME: dir } },
+      );
+      const text = fs.readFileSync(path.join(dir, "cc-candybar", "daemon.log"), "utf8");
+      expect(text).toMatch(/\[info\] first\n.*\[warn\] from exit\n$/s);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   // The death line: whatever a process logs before process.exit is in the

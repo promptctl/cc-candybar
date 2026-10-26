@@ -4,8 +4,10 @@
 //
 // [LAW:one-source-of-truth] Nothing the gate judges by is a copy. Renders go
 // through the client's own request (its budgets, its hints, its outcome
-// classes); the daemon is spawned with the client's argv; memory is the charge
-// the daemon's backstop judges, read through the backstop's own probe.
+// classes); the daemon is spawned with the client's argv, plus an inspector,
+// the one way to collect its heap before reading it (twice, outside the scored
+// renders); memory is the charge the daemon's backstop judges, read through the
+// backstop's own probe.
 //
 // [LAW:effects-at-boundaries] The world the daemon reads is built here and
 // nowhere real: one temporary root holds its socket, XDG directories, Claude
@@ -621,6 +623,7 @@ async function run(): Promise<{
   // renders settle, and those the collection delays are not scored.
   phase = "after";
   await Promise.all(inFlight);
+  const steadyEnded = Date.now();
   const heapAfter = await liveHeap();
   for (const t of timers) clearInterval(t);
   await Promise.all(inFlight);
@@ -763,10 +766,7 @@ async function run(): Promise<{
     // How long each steady render waited in the daemon before it began and how
     // long it then took, from its own render events, beside the gate's lag: a
     // slow round trip is one of the three.
-    daemonRenderMs: await daemonRenders(
-      steadyStarted,
-      renders.filter((r) => r.phase !== "warm").length,
-    ),
+    daemonRenderMs: await daemonRenders(steadyStarted, steadyEnded),
     gateLoopDelayMs: {
       p99: Math.round(gateLoop.percentile(99) / 1e6),
       max: Math.round(gateLoop.max / 1e6),
@@ -777,32 +777,36 @@ async function run(): Promise<{
   return { checks, facts };
 }
 
-// The daemon writes its log off its event loop, so the render events of the
-// last renders can land after them: the gate waits for one per render it sent
-// since `since` (a timed-out attempt's lands once it finishes), a while at most.
+// What the daemon itself took over every render it finished in the window.
+// It writes its log off its event loop, in order, through one writer, so the
+// window's last events have landed once any line after the window has.
 async function daemonRenders(
   since: number,
-  sent: number,
+  until: number,
 ): Promise<Record<"took" | "waited", Record<string, number>>> {
   const log = path.join(dirs.state, "cc-candybar", "daemon.log");
-  const events = (): string[] =>
+  const stamped = (): Array<{ at: number; line: string }> =>
     [`${log}.3`, `${log}.2`, `${log}.1`, log]
       .filter((f) => fs.existsSync(f))
       .flatMap((f) => fs.readFileSync(f, "utf8").split("\n"))
-      .filter(
-        (l) =>
-          l.includes("] render ") &&
-          l.includes(" took=") &&
-          Date.parse(l.slice(0, 24)) >= since,
-      );
-  let lines = events();
+      .map((line) => ({ at: Date.parse(line.slice(0, 24)), line }));
+  let all = stamped();
   for (
-    const waitUntil = Date.now() + 10_000;
-    lines.length < sent && Date.now() < waitUntil;
+    const giveUp = Date.now() + 10_000;
+    !all.some(({ at }) => at > until) && Date.now() < giveUp;
   ) {
     await sleep(200);
-    lines = events();
+    all = stamped();
   }
+  const lines = all
+    .filter(
+      ({ at, line }) =>
+        at >= since &&
+        at <= until &&
+        line.includes("] render ") &&
+        line.includes(" took="),
+    )
+    .map(({ line }) => line);
   const spread = (field: string): Record<string, number> => {
     const ms = lines
       .map((l) => Number(new RegExp(` ${field}=(\\d+)ms`).exec(l)?.[1]))
@@ -828,12 +832,13 @@ function pct(sorted: readonly number[], p: number): number {
 // failing run keeps its root (the daemon's log is in it) and says where.
 // A gate that hangs (a daemon that stopped answering its inspector, a render
 // that never settles) ends here, with its root kept, before CI cancels it.
-const GATE_DEADLINE_MS = 4 * 60_000;
+// Counted from the process's start, the fixture's building included.
+const GATE_DEADLINE_MS = 3 * 60_000;
 let passed = false;
 try {
   const { checks, facts } = await Promise.race([
     run(),
-    sleep(GATE_DEADLINE_MS).then(() => {
+    sleep(GATE_DEADLINE_MS - performance.now()).then(() => {
       throw new Error(
         `the gate ran past its ${GATE_DEADLINE_MS / 60_000} minutes`,
       );
