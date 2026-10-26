@@ -131,7 +131,7 @@ export async function renderRequest(
         (event = answeredEvents(log, sessionId)[before] ?? "") !== "",
       `the render event of ${sessionId}'s answer`,
     );
-    if (event.includes(" pending=- ")) return resp.output;
+    if (/ pending=-(?: |$)/.test(event)) return resp.output;
     // [LAW:no-silent-failure] A value still pending after every ask is the
     // failure, named by the event that drew it, never a bar a later assertion
     // trips over.

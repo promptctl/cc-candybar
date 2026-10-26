@@ -196,6 +196,7 @@ import { instantOf, type Instant } from "../utils/instant.js";
 import { MenuIdle } from "./menu-idle.js";
 import {
   REQUEST_TIMEOUT_MS,
+  parseClientDeadline,
   waitBudgetMs,
   type ClientDeadline,
 } from "./request-deadline.js";
@@ -1908,24 +1909,12 @@ function checkRenderRequest(
       `request 'args' is not a list of strings: ${JSON.stringify(req.args)}`,
     );
   }
-  // [LAW:parse-dont-validate] The deadline too: a client too old to state one
-  // sends none, and anything but epoch milliseconds is refused, never read as
-  // "no deadline" — a broken client's wait would silently become the old
-  // client's.
-  const raw = (req as { deadline?: unknown }).deadline;
-  const deadline: ClientDeadline | null =
-    raw === undefined
-      ? { kind: "unstated" }
-      : typeof raw === "number" && Number.isSafeInteger(raw) && raw > 0
-        ? { kind: "stated", at: raw }
-        : null;
-  if (deadline === null) {
-    wireProblems.push(
-      `request 'deadline' is not epoch milliseconds: ${JSON.stringify(raw)}`,
-    );
-  }
-  if (wireProblems.length > 0 || deadline === null)
-    return { ok: false, problems: wireProblems };
+  const deadline = parseClientDeadline(
+    (req as { deadline?: unknown }).deadline,
+  );
+  if (deadline.kind === "refused")
+    return { ok: false, problems: [...wireProblems, deadline.problem] };
+  if (wireProblems.length > 0) return { ok: false, problems: wireProblems };
   const hints = parseClientHints(req);
   // [LAW:dataflow-not-control-flow] The *request's* cwd, not the daemon's
   // process.cwd(), so config resolution depends only on request data — the
@@ -2447,9 +2436,9 @@ async function drawAnswer(
   noteFacts(facts, { deadline: `${wait.stated}:${wait.ms}ms` });
   // Rules 1 and 2 of the model: the answer shows what this request carried,
   // so it waits for the refreshes its arrival triggers, the first value of
-  // every keyed lane its view declared, every run of its view's own sources
-  // in flight — a first value, or a re-run its fields started — and the first
-  // value of its directory's, until its client's deadline. What has not
+  // every keyed lane its view declared, and every run of its view's or its
+  // directory's sources that answers a new key — a first value, or a key its
+  // fields moved — until its client's deadline. What has not
   // answered by then draws as pending, and lands for the next frame.
   const waitFrom = performance.now();
   const ended = await waitWithin(
@@ -2459,6 +2448,13 @@ async function drawAnswer(
         setup.view.registry.inFlight(signal),
       ]),
     wait.endsAt - waitFrom,
+    // [LAW:no-silent-failure] The answer is drawn; a wait that fails after
+    // it is a bug, said against the session, never one that ends the daemon.
+    (e) =>
+      dlog(
+        "error",
+        `render wait failed after its deadline sid=${JSON.stringify(setup.sessionId)}: ${inspect(e)}`,
+      ),
   );
   // [LAW:nothing-unseen] How the wait went, on the render event: an answer
   // drawn with values pending says so by name.

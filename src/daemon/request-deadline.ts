@@ -29,6 +29,21 @@ export type ClientDeadline =
   | { readonly kind: "stated"; readonly at: number }
   | { readonly kind: "unstated" };
 
+// The request's `deadline` field, parsed: a client too old to state one sends
+// none, and anything but epoch milliseconds is refused, never read as "no
+// deadline" — a broken client's wait would silently become the old client's.
+export function parseClientDeadline(
+  raw: unknown,
+): ClientDeadline | { readonly kind: "refused"; readonly problem: string } {
+  if (raw === undefined) return { kind: "unstated" };
+  return typeof raw === "number" && Number.isSafeInteger(raw) && raw > 0
+    ? { kind: "stated", at: raw }
+    : {
+        kind: "refused",
+        problem: `request 'deadline' is not epoch milliseconds: ${JSON.stringify(raw)}`,
+      };
+}
+
 // The request's arrival on both clocks: the wall clock a stated deadline is
 // spelled in, and the monotonic one the connection's timer runs on.
 export interface Arrival {

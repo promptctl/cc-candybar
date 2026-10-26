@@ -101,10 +101,13 @@ export type WaitEnd = "answered" | "deadline";
 // wait: `work`, or `ms`, whichever ends first. `work` is handed the wait's
 // signal, aborted when the wait ends on either arm, with its timer cleared:
 // what it listens on through the signal stops with the wait, so a wait leaves
-// nothing behind. What it does not, a run it started, goes on.
+// nothing behind. What it does not, a run it started, goes on, and a failure
+// of it after the deadline is no one's answer: it goes to `late`, its owner's
+// report.
 export function waitWithin(
   work: (signal: AbortSignal) => Promise<unknown>,
   ms: number,
+  late: (e: unknown) => void,
 ): Promise<WaitEnd> {
   const wait = new AbortController();
   const timer = setTimeout(() => wait.abort(), Math.max(0, ms));
@@ -112,13 +115,9 @@ export function waitWithin(
     wait.signal.addEventListener("abort", () => resolve("deadline"));
     void work(wait.signal).then(
       () => resolve("answered"),
-      (e: unknown) => {
-        // [LAW:no-silent-failure] A rejection after the deadline answers no
-        // one: thrown on, it is unhandled, which the daemon logs — never
-        // dropped.
-        if (wait.signal.aborted) throw e;
-        reject(e);
-      },
+      // [LAW:no-silent-failure] Every rejection is reported: the wait's own
+      // while it listens, its owner's after.
+      (e: unknown) => (wait.signal.aborted ? late(e) : reject(e)),
     );
   });
   return ended.finally(() => {
