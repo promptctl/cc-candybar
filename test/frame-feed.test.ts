@@ -244,19 +244,25 @@ test("a new request is drawn at once, and two subscribers share every frame", as
   // The request's own answer is its client's: the feed draws its frame.
   expect(state.renders).toBe(1);
   const closeB = feeds.subscribe("s", sub((r) => b.push(outputOf(r))));
-  // The newcomer gets the bar as it stands, before any new render.
+  // The newcomer gets the bar as it stands, before any new render, and the
+  // next frame is brought forward, since who follows is drawn into it. Its
+  // bytes are the same, so it is pushed to no one.
   expect(b).toEqual(["first#0"]);
-  await sleep(20);
-  note("s", "second");
-  await sleep(20);
+  await sleep(30);
   expect(state.renders).toBe(2);
+  note("s", "second");
+  await sleep(30);
+  expect(state.renders).toBe(3);
   expect(a).toEqual(["first#0", "second#0"]);
   expect(b).toEqual(["first#0", "second#0"]);
+  // A follower leaving brings it forward too.
   closeA();
+  await sleep(30);
+  expect(state.renders).toBe(4);
   closeB();
 });
 
-test("a render slower than the period is followed by the next at once, and a change during it by one more", async () => {
+test("a render slower than the period is followed by the next at once, and a wake during it is coalesced into it", async () => {
   const { feeds, note, state, changes } = harness({ motion: "moving", renderMs: 60 });
   note("s", "bar");
   const close = feeds.subscribe("s", sub(() => {}));
@@ -267,8 +273,8 @@ test("a render slower than the period is followed by the next at once, and a cha
   };
   await sleep(300);
   close();
-  // Back to back: about five 60 ms renders in 310 ms, the changes folded
-  // into the one being drawn rather than piling up.
+  // Back to back: about five 60 ms renders in 310 ms, the wakes folded into
+  // the one being drawn rather than piling up.
   expect(state.renders).toBeGreaterThanOrEqual(3);
   expect(state.renders).toBeLessThanOrEqual(7);
 });
@@ -291,28 +297,6 @@ test("the last subscriber leaving stops the feed and logs what it drew", async (
   note("s", "again");
   await sleep(50);
   expect(state.renders).toBe(drawn);
-});
-
-test("a request noted while a frame is drawn is drawn a moving period after that frame, not a still one", async () => {
-  const { feeds, note, state, changes } = harness({ motion: "still" });
-  note("s", "old");
-  const got: string[] = [];
-  const close = feeds.subscribe("s", sub((r) => got.push(outputOf(r))));
-  // A subscribe draws nothing in its caller's turn: its first frame falls due
-  // on the feed's timer.
-  expect(state.renders).toBe(0);
-  await sleep(30);
-  expect(state.renders).toBe(1);
-  // A frame drawn for a change has a request noted while it draws.
-  state.duringRender = () => note("s", "new");
-  changes.get("s")!();
-  await sleep(80);
-  close();
-  // The frame being drawn is still the newest out, so it goes (its bytes are
-  // the bar as it stood, not pushed again); the new data is drawn a moving
-  // period after it, not a still one.
-  expect(state.renders).toBe(3);
-  expect(got).toEqual(["old#0", "new#0"]);
 });
 
 test("a bar that moves where nobody can see it is drawn at the still rate, and its feed counts it", async () => {
@@ -478,43 +462,22 @@ describe("on a faked clock", () => {
     expect(state.renders).toBeLessThanOrEqual(1 + 1000 / PERIODS.still);
   });
 
-  // A wake while a frame is drawn brings the next one forward only when the
-  // feed's spacing is shorter than the period that frame sets: a moving bar
-  // on a screen was due a moving period on anyway.
-  test.each([
-    ["moving", 1],
-    ["still", 0],
-  ] as const)("a wake while a %s bar on a screen is drawn counts %i coalesced", async (motion, coalesced) => {
-    const { feeds, note, state, log } = harness({ motion });
+  // A frame is drawn in one synchronous turn, so a wake while it draws is the
+  // draw's own (a view it reopened), and the frame reads what that moved: it
+  // is coalesced into that frame, and the next falls due as the frame set it.
+  test("a wake while a frame is drawn is coalesced into it", async () => {
+    const { feeds, note, state, log } = harness({ motion: "still" });
     note("s", "bar");
     state.duringRender = () => feeds.wake("s", "data");
     const close = feeds.subscribe("s", sub(() => {}));
+    await pass(PERIODS.still - 1);
+    expect(state.renders).toBe(1);
     await pass(1);
     close();
-    expect(state.renders).toBe(1);
-    expect(log.at(-1)).toContain(
-      ` woke=data:1,state:0,reload:0,visibility:0 coalesced=${coalesced} `,
-    );
-  });
-
-  test("a change that arrives while a frame faults is drawn as the feed's spacing allows, not a still period later", async () => {
-    const { feeds, note, state, log } = harness({ motion: "still" });
-    note("s", "bar");
-    const close = feeds.subscribe("s", sub(() => {}));
-    await pass(PERIODS.moving + 1);
-    expect(state.renders).toBe(1);
-    state.duringRender = () => {
-      state.gateThrows = true;
-      feeds.wake("s", "state");
-    };
-    feeds.wake("s", "data");
-    await pass(1);
     expect(state.renders).toBe(2);
-    expect(log.some((l) => l.startsWith('feed sid="s" threw: Error: the gate broke'))).toBe(true);
-    state.gateThrows = false;
-    await pass(PERIODS.moving);
-    close();
-    expect(state.renders).toBe(3);
+    expect(log.at(-1)).toContain(
+      " woke=data:1,state:0,reload:0,visibility:0 coalesced=1 ",
+    );
   });
 
   test("wakeWhere draws at once only the watched sessions it matches", async () => {

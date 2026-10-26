@@ -129,8 +129,7 @@ export type WakeCause = (typeof WAKE_CAUSES)[number];
 
 // [LAW:no-ambient-temporal-coupling] Where a feed's frame clock stands, as
 // state: no request to draw from yet; the next frame due `at` a timer; or a
-// frame being drawn, with whether a change arrived while it was (`again`: the
-// next one follows as soon as the feed's spacing allows).
+// frame being drawn.
 type Phase =
   | { readonly kind: "waiting" }
   | {
@@ -138,7 +137,7 @@ type Phase =
       readonly at: number;
       readonly timer: ReturnType<typeof setTimeout>;
     }
-  | { kind: "drawing"; again: boolean };
+  | { readonly kind: "drawing" };
 
 interface Feed {
   readonly sessionId: string;
@@ -317,9 +316,10 @@ export class FrameFeeds<Req> {
     // [LAW:no-ambient-temporal-coupling] A feed's clock starts when it opens:
     // its first frame falls due as a wake's would, in a later turn than the
     // subscribe, so a subscribe draws nothing in its caller's turn. A later
-    // subscriber is handed the frame as it stands.
-    if (held === undefined) this.hasten(feed);
-    else this.send(feed, sub);
+    // subscriber is handed the frame as it stands, and the next is brought
+    // forward: who follows the session is drawn into it (`following`).
+    if (held !== undefined) this.send(feed, sub);
+    this.hasten(feed);
     this.deps.log(
       "info",
       `feed sid=${JSON.stringify(sessionId)} subscribed lane=${sub.lane} subscribers=${feed.followers.size} data=${this.requests.has(sessionId) ? "Y" : "N"}`,
@@ -454,7 +454,11 @@ export class FrameFeeds<Req> {
     if (!feed.followers.delete(sub)) return;
     if (![...feed.followers.keys()].some((s) => s.lane === sub.lane))
       feed.rates.delete(sub.lane);
-    if (feed.followers.size > 0) return;
+    // Who follows the session is drawn into its frame (`following`).
+    if (feed.followers.size > 0) {
+      this.hasten(feed);
+      return;
+    }
     if (feed.phase.kind === "due") clearTimeout(feed.phase.timer);
     feed.unwatch();
     this.feeds.delete(feed.sessionId);
@@ -468,37 +472,30 @@ export class FrameFeeds<Req> {
   // [LAW:single-enforcer] The one fault path of a feed's frame step: a throw
   // anywhere in it — the render adapter, the lane gate, a subscriber's sink —
   // is logged as the feed's fault, and the feed's next frame is set as a
-  // still frame's is, keeping a change that arrived while it was drawn. A
-  // frame step runs off a timer, so a throw it let go would be an unhandled
-  // rejection, which exits the daemon.
+  // still frame's is. A frame step runs off a timer, so a throw it let go
+  // would be an unhandled rejection, which exits the daemon.
   private draw(feed: Feed): void {
     const noted = this.requests.get(feed.sessionId);
     if (noted === undefined) {
       feed.phase = { kind: "waiting" };
       return;
     }
-    const phase: Phase = { kind: "drawing", again: false };
-    feed.phase = phase;
+    feed.phase = { kind: "drawing" };
     const started = this.deps.now();
     feed.lastStart = started;
     try {
-      this.step(feed, noted.req, phase, started);
+      this.step(feed, noted.req, started);
     } catch (error) {
       this.deps.log(
         "error",
         `feed sid=${JSON.stringify(feed.sessionId)} threw: ${inspect(error)}`,
       );
       if (this.feeds.get(feed.sessionId) !== feed) return;
-      this.schedule(feed, null, started, phase.again);
+      this.schedule(feed, null, started);
     }
   }
 
-  private step(
-    feed: Feed,
-    req: Req,
-    phase: { readonly again: boolean },
-    started: number,
-  ): void {
+  private step(feed: Feed, req: Req, started: number): void {
     // The render adapter answers a failed render with its error frame; a throw
     // out of it is a fault in the adapter, `draw`'s to report.
     const frame = this.deps.render(req, feed.pace);
@@ -515,34 +512,23 @@ export class FrameFeeds<Req> {
     if (this.feeds.get(feed.sessionId) !== feed) return;
     if (finished - feed.summarizedAt >= SUMMARY_EVERY_MS)
       this.summarize(feed, "running");
-    this.schedule(feed, frame, started, phase.again);
+    this.schedule(feed, frame, started);
   }
 
   // [LAW:no-ambient-temporal-coupling] The next frame is due a period after
   // this one STARTED, so the rate holds whatever a render costs, up to a
   // render as slow as the period, when frames are drawn back to back. A frame
-  // step that faulted is followed as a still frame is. A change that arrived
-  // while this frame was drawn (`again`) is drawn as soon as the feed's
-  // spacing allows, which is never later than the period.
+  // step that faulted is followed as a still frame is.
   // [LAW:dataflow-not-control-flow] The moving period is for a bar that moves
   // where someone can see it, asked here, as the next frame is set.
-  private schedule(
-    feed: Feed,
-    frame: FeedFrame | null,
-    started: number,
-    again: boolean,
-  ): void {
+  private schedule(feed: Feed, frame: FeedFrame | null, started: number): void {
     const moves = frame?.moves === true;
     const seen = moves && this.shown(feed);
     if (seen) feed.moving++;
     if (moves && !seen) feed.unseen++;
     const period = seen ? this.deps.periods.moving : this.deps.periods.still;
     feed.pace = paceOf(period);
-    const spacing = this.spacingOf(feed);
-    // [LAW:nothing-unseen] A change noted while this frame was drawn brought
-    // nothing forward when the spacing is the period: it was coalesced.
-    if (again && spacing === period) feed.coalesced++;
-    this.arm(feed, started + (again ? spacing : period));
+    this.arm(feed, started + period);
   }
 
   // [LAW:single-enforcer] The one bound on how close a feed's frames are: the
@@ -557,17 +543,14 @@ export class FrameFeeds<Req> {
 
   // [LAW:single-enforcer] The one way a feed's next frame is brought forward:
   // to the earliest its spacing allows after the last frame started, never
-  // later than it already falls due. A frame being drawn notes it, and the
-  // next follows under the same rule (`schedule`, which settles whether that
-  // note moved anything). Answers whether it moved anything: a wake that did
-  // not was coalesced into a frame already due.
+  // later than it already falls due. Answers whether it moved anything: a
+  // wake that did not was coalesced into a frame already due.
+  // [LAW:no-ambient-temporal-coupling] A frame is drawn in one synchronous
+  // turn, so a wake while it draws is the draw's own (a view it reopened),
+  // and the frame reads what that moved: it is coalesced into that frame.
   private hasten(feed: Feed): boolean {
     const { phase } = feed;
-    if (phase.kind === "drawing") {
-      const moved = !phase.again;
-      phase.again = true;
-      return moved;
-    }
+    if (phase.kind === "drawing") return false;
     const at = Math.max(this.deps.now(), feed.lastStart + this.spacingOf(feed));
     if (phase.kind === "due" && phase.at <= at) return false;
     this.arm(feed, at);

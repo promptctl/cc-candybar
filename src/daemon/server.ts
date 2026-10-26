@@ -448,9 +448,9 @@ const renderCache = new RenderCache<SessionSource>(
         for (const sessionId of sessions) frameFeeds.wake(sessionId, "reload");
       },
       // [LAW:single-enforcer] What a session's view draws from moved: its
-      // feed's next frame is brought forward. The one data wake, whatever
-      // moved it: a request's facts, a refresh landing after its deadline, a
-      // source publishing, a pick.
+      // feed's next frame is brought forward, whatever moved it: a request's
+      // facts, a refresh landing after its deadline, a source publishing, a
+      // pick. The dump link, which no view holds, wakes the same way.
       onViewChanged: (sessionId) => frameFeeds.wake(sessionId, "data"),
     },
   },
@@ -1378,7 +1378,7 @@ export async function replyTo(
       sighted(checked.req, "drawing");
       // [LAW:one-source-of-truth] A request past the checkpoint is the
       // session's data from now on; a followed session's next frame is drawn
-      // from it once the request settles (answerRequest). Its answer is its
+      // from it, brought forward as its view takes it up. Its answer is its
       // own client's, drawn for a request, and never a frame
       // (src/daemon/frame-feed.ts).
       frameFeeds.note(checked.req.sessionId, checked.req, order);
