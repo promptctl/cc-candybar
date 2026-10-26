@@ -444,10 +444,6 @@ export interface TmuxStatusDeps {
   readonly handler: string;
   // This daemon's socket: what it writes into tmux is marked with it.
   readonly owner: string;
-  // [LAW:effects-at-boundaries] Subscribing runs after the request or click
-  // that asked for it has returned: a subscribe still draws its first frame
-  // in its caller's turn.
-  readonly defer: (run: () => void) => void;
   readonly log: (level: "info" | "warn", msg: string) => void;
 }
 
@@ -555,20 +551,20 @@ export class TmuxStatusLines {
       "info",
       `tmux-status: holding sid=${JSON.stringify(sessionId)} pane=${where.pane} socket=${JSON.stringify(where.socket)}`,
     );
-    this.deps.defer(() => {
-      if (this.held.get(sessionId) !== entry) return;
-      entry.unsubscribe = this.deps.subscribe(sessionId, {
-        lane: "tmuxStatus",
-        frame: (resp) => {
-          entry.frame = tmuxStatusResponse(resp);
-          this.reconcile(entry.socket);
-        },
-        refused: (resp) => {
-          if (this.held.get(sessionId) === entry)
-            this.release(entry, `refused: ${resp.error}`);
-        },
-        drawing: () => this.draws(entry),
-      });
+    // [LAW:effects-at-boundaries] Subscribed in the caller's turn: a
+    // subscribe draws nothing there, since its first frame falls due on the
+    // feed's own timer (src/daemon/frame-feed.ts).
+    entry.unsubscribe = this.deps.subscribe(sessionId, {
+      lane: "tmuxStatus",
+      frame: (resp) => {
+        entry.frame = tmuxStatusResponse(resp);
+        this.reconcile(entry.socket);
+      },
+      refused: (resp) => {
+        if (this.held.get(sessionId) === entry)
+          this.release(entry, `refused: ${resp.error}`);
+      },
+      drawing: () => this.draws(entry),
     });
   }
 

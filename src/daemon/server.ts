@@ -71,6 +71,7 @@ import { createPayloadProviders } from "./payload-providers";
 import {
   RenderCache,
   renderCacheBudget,
+  rendersFrom,
   type CacheEntry,
   type DslRenderState,
   type SessionView,
@@ -337,21 +338,18 @@ const tmuxStatusLines: TmuxStatusLines = new TmuxStatusLines({
     "url-handle",
   ].join(" "),
   owner: socketPath(),
-  defer: (run) => void setImmediate(run),
   log: dlog,
 });
 // Each subscribed session's frames, drawn from its latest render request
 // (candybar-animation-wbxz.jmm.usl). A change to the session's own state — a
-// click — draws its next frame at once.
+// click — brings its next frame forward.
 const frameFeeds: FrameFeeds<CheckedRenderRequest> = new FrameFeeds({
   render: (req, fps) => renderFrame(req, fps),
-  // [LAW:no-ambient-temporal-coupling] The wake runs on the next turn of the
-  // event loop, not inside the session write that changed the revision, so a
-  // click's whole run of writes lands before a frame of it is drawn.
+  // [LAW:no-ambient-temporal-coupling] A wake only moves the feed's timer,
+  // which fires in a later turn, so a click's whole run of writes and its
+  // journal commit land before a frame of it is drawn.
   watch: (sessionId, onChange) =>
-    reaction(() => sessionState.revision(sessionId), onChange, {
-      scheduler: (run) => setImmediate(run),
-    }),
+    reaction(() => sessionState.revision(sessionId), onChange),
   lanes: (req) => lanesOf(req),
   shown: (req) => paneVisibility.shown(req.hints.tmux),
   watching: () => paneVisibility.follow(),
@@ -383,7 +381,7 @@ const paneVisibility: PaneVisibility = new PaneVisibility({
   onAnswer: (socket, status) => tmuxStatusLines.answered(socket, status),
   // Only the sessions on a server whose view changed are drawn again.
   onChange: (sockets) =>
-    frameFeeds.wakeWhere((req) =>
+    frameFeeds.wakeWhere("visibility", (req) =>
       tmuxServersOf(req).some((socket) => sockets.has(socket)),
     ),
   intervalMs: 1000,
@@ -437,11 +435,32 @@ const renderCache = new RenderCache<SessionSource>(
       // — the operator's only record of whether a save was picked up cleanly,
       // kept rendering last-known-good behind an error, or resolved to a
       // different file. Same info level as the detection line.
-      onReload: (entry) =>
+      onReload: (entry) => {
         dlog(
           "info",
           `config loaded projectDir=${entry.projectDir} cwd=${entry.cwd} files=${entry.configLayers.join(" < ") || "<bundled default>"} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warning=${entry.lastWarning === null ? "none" : JSON.stringify(entry.lastWarning)}`,
-        ),
+        );
+        // A reload changes the bar of every session drawn from the entry,
+        // even one that failed and kept the old config: its strip says so.
+        frameFeeds.wakeWhere("reload", (req) => {
+          const origin = sessionRenderOrigin(
+            req.requested,
+            sessionState,
+            req.hookData.session_id,
+          );
+          return rendersFrom(
+            entry,
+            origin.projectDir,
+            origin.cwd,
+            origin.configFile ?? undefined,
+          );
+        });
+      },
+      // [LAW:single-enforcer] What a session's view draws from moved: its
+      // feed's next frame is brought forward. The one data wake, whatever
+      // moved it: a request's facts, a refresh landing after its deadline, a
+      // source publishing, a pick.
+      onViewChanged: (sessionId) => frameFeeds.wake(sessionId, "data"),
     },
   },
 );
@@ -2428,18 +2447,7 @@ async function answerRequest(
   facts: RenderFacts,
 ): Promise<RequestAnswer> {
   recordRequest(req);
-  try {
-    return await drawAnswer(req, order, at, wait, facts);
-  } finally {
-    // [LAW:no-ambient-temporal-coupling] A followed session's next frame is
-    // drawn once this request has been answered — its own bar drawn, by its
-    // client's deadline, or its failure thrown — so the frame shows what the
-    // request carried, at an instant after it, and a request that fails
-    // leaves no feed waiting on it. Deferred, so the frame's draw is never a cost of
-    // the request's own answer.
-    const sessionId = req.sessionId;
-    setImmediate(() => frameFeeds.wake(sessionId));
-  }
+  return drawAnswer(req, order, at, wait, facts);
 }
 
 // [LAW:effects-at-boundaries] What a request's arrival starts beyond its

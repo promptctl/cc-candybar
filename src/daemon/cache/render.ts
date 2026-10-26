@@ -1,7 +1,7 @@
 import path from "node:path";
 import { nearestWatchTarget } from "../../utils/watch-target.js";
 import type { RichText } from "@promptctl/rich-js";
-import { observable, reaction, runInAction } from "mobx";
+import { compareShallow, observable, reaction, runInAction } from "mobx";
 import {
   neededPrefixesByPreset,
   settledLanes,
@@ -202,6 +202,10 @@ export interface RenderCacheObservers {
   // there. Trusted non-throwing (the same contract as onSegmentError): an
   // observer that throws is a caller bug surfaced loudly, never absorbed here.
   readonly onReload?: (entry: ReloadedEntry) => void;
+  // Fires with a session's id when its view opens and whenever what the view
+  // draws from moves (openView's `changed`): what a feed showing the session
+  // wakes on.
+  readonly onViewChanged?: (sessionId: string) => void;
 }
 
 // [LAW:types-are-the-program] The observer's view of an entry: an ALLOW-LIST
@@ -466,6 +470,21 @@ function cacheKey(
   configFile: string | undefined,
 ): string {
   return projectDir + "\0" + cwd + "\0" + (configFile ?? "");
+}
+
+// Whether a render from `projectDir`, `cwd` and `configFile` is drawn from
+// `entry`: the cache's own key, so a reload wakes exactly the sessions whose
+// renders it serves.
+export function rendersFrom(
+  entry: ReloadedEntry,
+  projectDir: string,
+  cwd: string,
+  configFile: string | undefined,
+): boolean {
+  return (
+    cacheKey(entry.projectDir, entry.cwd, entry.configFile) ===
+    cacheKey(projectDir, cwd, configFile)
+  );
 }
 
 // [LAW:one-source-of-truth] The preset names whose layout the raw file
@@ -926,11 +945,13 @@ export const SOURCES_NOTHING: SourceOf<ViewSource> = ({ state }) =>
     ),
   );
 
-// What a view reads to keep its declaration current, and what it draws from.
+// What a view reads to keep its declaration current, what it draws from, and
+// whom it tells that what it draws from moved.
 export interface ViewDeclaring<S extends ViewSource = ViewSource> {
   readonly sessionState: SessionStateReader;
   readonly declare: Declare;
   readonly source: SourceOf<S>;
+  readonly changed: (sessionId: string) => void;
   readonly log: DaemonLogger;
 }
 
@@ -952,7 +973,7 @@ export function openView<S extends ViewSource>(
   state: DslRenderState,
   cwd: string,
   facts: ViewFacts,
-  { sessionState, declare, source: sourceOf, log }: ViewDeclaring<S>,
+  { sessionState, declare, source: sourceOf, changed, log }: ViewDeclaring<S>,
 ): SessionView<S> {
   // [LAW:one-source-of-truth] The session is the one the request's checkpoint
   // parsed: a later request of the view's names the same one.
@@ -1043,6 +1064,32 @@ export function openView<S extends ViewSource>(
     declared: () => declared.get(),
   });
   bindView(state.compiled, registry.variableStore, registry, source);
+  // [LAW:single-enforcer] The view's one say that what it draws from moved:
+  // its payload (every lane it declared, its request, its picks), its
+  // selections, or a value its own or its directory's sources published. Told
+  // as it opens, since a view opening is what its session's bar draws from
+  // changing. The draw writes none of these (step 4e), so no frame wakes the
+  // next one.
+  // [LAW:no-silent-failure] A tracked read that throws is logged: a reaction
+  // that let it go would reach only the console MobX prints to.
+  const stopChanged = reaction(
+    () => [
+      source.payload(),
+      source.selections(),
+      registry.published(),
+      state.registry.published(),
+    ],
+    () => changed(sessionId),
+    {
+      equals: compareShallow,
+      fireImmediately: true,
+      onError: (e) =>
+        log(
+          "error",
+          `session view change threw sid=${JSON.stringify(sessionId)}: ${String(e)}`,
+        ),
+    },
+  );
   return {
     sessionId,
     state,
@@ -1056,6 +1103,7 @@ export function openView<S extends ViewSource>(
     lastRenderCellsBySegment: new Map<string, readonly RichText[]>(),
     dispose: () => {
       stop();
+      stopChanged();
       holds.close();
       return registry.dispose();
     },
@@ -1311,6 +1359,7 @@ export class RenderCache<S extends ViewSource = ViewSource> {
       sessionState: this.deps.sessionState,
       declare: this.deps.declare,
       source: this.deps.source,
+      changed: (sid) => this.observers.onViewChanged?.(sid),
       log: this.log,
     });
     this.views.set(sessionId, view);

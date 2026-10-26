@@ -1059,7 +1059,7 @@ describe("RenderCache idle sweep", () => {
         cache.getOrCreate(dir, dir, undefined).state,
         dir,
         viewFacts(dir, "s1"),
-        { sessionState: new SessionState(), source: SOURCES_NOTHING, declare: DECLARES_NOTHING, log: () => {} },
+        { sessionState: new SessionState(), source: SOURCES_NOTHING, declare: DECLARES_NOTHING, changed: () => {}, log: () => {} },
       );
       let released = 0;
       view.holds.take("repo", () => () => {

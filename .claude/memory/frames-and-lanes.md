@@ -6,6 +6,10 @@ A subscription turns a connection into a stream of frames. Data and frames trave
 
 A feed runs at 30 fps while its last frame moved in a pane someone can see, and at 1 fps when the frame is still or the pane is off screen. The daemon polls tmux for pane visibility only between the first feed opening and the last one closing.
 
+A feed has one timer, and nothing that wakes it draws: a value its session's view draws from moving, the session's state, a config reload, or a pane coming into view only brings that timer forward, to a moving period after the last frame started while its pane is shown and a still period while not. So no cause sets the draw rate, and an unseen feed woken every millisecond still draws once a second. A frame is never drawn in the turn that woke it, so a click's writes and its journal commit land first, and a subscribe draws nothing in its caller's turn.
+
+A view reports that its data moved from one reaction over everything it draws from. A draw writes none of that, and must not: a draw that wrote something its view reads would wake the next frame, and a still bar would redraw at the moving rate forever.
+
 The fps a frame shows is the feed's pace (1000 / its period), never a measurement. The number is drawn into the frame, so a measured value would make otherwise unchanged frames differ, and they would all get pushed.
 
 A throw in a feed's frame step is logged as that feed's fault, never left as an unhandled rejection.

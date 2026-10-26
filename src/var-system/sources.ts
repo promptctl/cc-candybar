@@ -18,6 +18,7 @@ import path from "path";
 import { nearestWatchTarget } from "../utils/watch-target.js";
 import { setInterval, clearInterval } from "timers";
 import {
+  computed,
   observable,
   reaction,
   runInAction,
@@ -616,6 +617,21 @@ export class SourceRegistry {
   // [LAW:one-source-of-truth] One engine per registry, not one per variable.
   private readonly engine = createCcCandybarEngine({ drawnAt: this.drawnAt });
 
+  // The names of this registry's own async sources (shell, file), whose
+  // stored values `published` reads.
+  private readonly sourceNames = observable.array<string>([], { deep: false });
+  // [LAW:one-source-of-truth] What this registry's sources have published, as
+  // one value that changes exactly when one of their stored values does, by
+  // the store's own compare (`changeKey`): a re-read that found what was
+  // stored moves nothing. A session's view reacts to it, and so its feed
+  // wakes on a publish that changed what the bar can show (openView).
+  private readonly publishedNow = computed(() =>
+    JSON.stringify(this.sourceNames.map((name) => this.store.changeKey(name))),
+  );
+  published(): string {
+    return this.publishedNow.get();
+  }
+
   // [LAW:locality-or-seam] sessionState is injected (not constructed here)
   // so tests can substitute a fake and the daemon shares its singleton.
   // Absent in non-daemon contexts; declareState() rejects loudly in that case
@@ -808,6 +824,7 @@ export class SourceRegistry {
     parse: SourceParse,
   ): void {
     const publish = this.publisherFor(name, parse, reader.where);
+    runInAction(() => this.sourceNames.push(name));
     this.registerCachePolicy(name, cache, (cause) =>
       this.runSource(name, reader, publish, cause),
     );
