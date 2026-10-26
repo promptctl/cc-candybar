@@ -35,7 +35,7 @@ import { daemonArgs } from "../src/daemon/acquire.js";
 import { tryRenderViaDaemon } from "../src/daemon/client.js";
 import { fetchStats } from "../src/daemon/client-stats.js";
 import { mb, memoryLimitBytes } from "../src/daemon/limits.js";
-import { logFiles } from "../src/daemon/log.js";
+import { logLines } from "../src/daemon/log.js";
 import { chargeProbe } from "../src/daemon/memory-report.js";
 import { PARENT_PID_ENV } from "../src/daemon/parent-watchdog.js";
 import type { StatsSnapshot } from "../src/daemon/stats.js";
@@ -510,6 +510,8 @@ function tick(s: Session): void {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 interface Sample {
+  // Under the steady load, or the reading once it has stopped.
+  readonly phase: Render["phase"];
   readonly at: number;
   readonly stats: StatsSnapshot;
   readonly charge: number;
@@ -527,7 +529,7 @@ async function sample(started: number): Promise<void> {
     return;
   }
   const reading = await charge(outcome.value.pid)(outcome.value.rssBytes);
-  samples.push({ at, stats: outcome.value, charge: reading.bytes });
+  samples.push({ phase, at, stats: outcome.value, charge: reading.bytes });
 }
 
 // The daemon's heap once everything unreachable is collected, through its
@@ -621,9 +623,11 @@ async function run(): Promise<{
     await sleep(50);
   }
   const warmMs = Date.now() - warmStarted;
+  // Counted at the deadline: a session that first answers during the
+  // collection below answered late.
+  const silent = sessions.filter((s) => !s.answered).length;
   // Before the steady phase, so no scored render waits on the collection.
   const heapBefore = await liveHeap();
-  const silent = sessions.filter((s) => !s.answered).length;
 
   phase = "steady";
   const steadyStarted = Date.now();
@@ -665,7 +669,9 @@ async function run(): Promise<{
   // climbing after it is full. Charge less V8's heap is no measure of native
   // memory: the heap gives back pages it never touched, which the charge never
   // counted, so the difference grows as the heap shrinks.
-  const underLoad = charges.slice(0, -1);
+  const underLoad = samples
+    .filter((s) => s.phase === "steady")
+    .map((s) => s.charge);
   const secondHalf = underLoad.slice(Math.floor(underLoad.length / 2));
   // Two samples at least, or there is no climb to judge: a run whose samples
   // went unanswered fails here as well as on its own check.
@@ -802,17 +808,7 @@ async function daemonRenders(
 ): Promise<Record<"took" | "waited", Record<string, number>>> {
   const log = path.join(dirs.state, "cc-candybar", "daemon.log");
   const stamped = (): Array<{ at: number; line: string }> =>
-    logFiles(log)
-      .flatMap((f) => {
-        // A rotation can move a generation between listing and reading it.
-        try {
-          return fs.readFileSync(f, "utf8").split("\n");
-        } catch (e) {
-          if ((e as NodeJS.ErrnoException).code === "ENOENT") return [];
-          throw e;
-        }
-      })
-      .map((line) => ({ at: Date.parse(line.slice(0, 24)), line }));
+    logLines(log).map((line) => ({ at: Date.parse(line.slice(0, 24)), line }));
   let all = stamped();
   for (
     const giveUp = Date.now() + 10_000;

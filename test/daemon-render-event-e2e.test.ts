@@ -301,9 +301,15 @@ describe("every render request writes one render event, whatever its outcome", (
       expect(event.level).toBe("warn");
       expect(field(event, "sid")).toBeUndefined();
     }
-    // The log has one writer, in order: once these later requests' lines have
-    // landed, any line the renders above wrote has too.
-    expect(logLines(env).join("\n")).not.toContain("handler threw");
+    // The log has one writer, in order: once a later render's event has
+    // landed, any line the requests above wrote has too.
+    await render(sockPath, "ev-after", projectDir, {});
+    const after = await loggedWhen(
+      env,
+      (lines) => renderEvents(lines).some((e) => field(e, "sid") === "ev-after"),
+      "a later render's event",
+    );
+    expect(after.join("\n")).not.toContain("handler threw");
   });
 
   // A failed click's error shows on every render inside its hold, and past it

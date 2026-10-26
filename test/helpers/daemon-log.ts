@@ -1,6 +1,4 @@
-import { readFileSync } from "node:fs";
-
-import { logFiles } from "../../src/daemon/log";
+import { logLines as linesOf } from "../../src/daemon/log";
 import { logPath } from "../../src/daemon/paths";
 import { until } from "./until";
 
@@ -8,17 +6,8 @@ import { until } from "./until";
 // loop (src/daemon/log.ts), so a line a request logged can land just after the
 // request is answered. A test reads the log once the lines it waits for are
 // there, never once.
-// The log's lines, its rotated generations included: a poll that lands just
-// after a rotation finds its lines there, or no live file yet.
 export function logLines(env: NodeJS.ProcessEnv): string[] {
-  return logFiles(logPath(env)).flatMap((f) => {
-    try {
-      return readFileSync(f, "utf8").split("\n");
-    } catch (e) {
-      if ((e as NodeJS.ErrnoException).code === "ENOENT") return [];
-      throw e;
-    }
-  });
+  return linesOf(logPath(env));
 }
 
 // The log's lines once `holds` is true of them.

@@ -6,16 +6,26 @@ import type { LogLevel } from "../utils/logger";
 export const MAX_BYTES = 5 * 1024 * 1024;
 const KEEP_GENERATIONS = 3;
 
-// The log's files, oldest first: the rotated generations, then the live one.
-// [LAW:one-source-of-truth] Whatever reads the whole log reads these.
-export function logFiles(filePath: string): string[] {
+// The whole log's lines, oldest first: the rotated generations, then the live
+// file. A rotation can move a generation between listing and reading it, so a
+// reader that lands just after one finds its lines in the next, or no live
+// file yet.
+// [LAW:one-source-of-truth] Whatever reads the whole log reads it here.
+export function logLines(filePath: string): string[] {
   return [
     ...Array.from(
       { length: KEEP_GENERATIONS },
       (_, i) => `${filePath}.${KEEP_GENERATIONS - i}`,
     ),
     filePath,
-  ];
+  ].flatMap((f) => {
+    try {
+      return fs.readFileSync(f, "utf8").split("\n");
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === "ENOENT") return [];
+      throw e;
+    }
+  });
 }
 // The bytes the log holds waiting for the disk. Past this the oldest waiting
 // lines are dropped and counted, and the count is logged ahead of the lines

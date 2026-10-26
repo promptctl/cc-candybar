@@ -19,8 +19,8 @@ import {
 //
 // How much of the budget is even reachable by eviction was measured rather than
 // assumed (brandon-daemon-limits-inw): on the live daemon roughly 50 MB of memory is
-// clean file-backed code plus kernel page tables that no cache can release, so a
-// 512 MB budget is about 460 MB of controllable memory. The same measurement is
+// clean file-backed code plus kernel page tables that no cache can release, so
+// that much of any budget is out of eviction's reach. The same measurement is
 // why a breach records more than a heap snapshot — see check.
 //
 // The limit is on what the PLATFORM charges the process (MemoryCharge,
