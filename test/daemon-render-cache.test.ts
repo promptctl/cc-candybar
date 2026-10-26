@@ -5,6 +5,7 @@
 // eviction. The legacy renderer's render-cache tests were deleted in
 // bzh.2; this is the new, smaller test set scoped to the DSL spine.
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import {
   chmodSync,
   mkdirSync,
@@ -83,7 +84,7 @@ function makeCache(
   const sessionState = new SessionState();
   const reloads = new ReloadSignal();
   const cache = new RenderCache(
-    { storage: NO_PLUGIN_STORAGE, sessionState, watchers, log, source: SOURCES_NOTHING, declare: DECLARES_NOTHING },
+    { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, sessionState, watchers, log, source: SOURCES_NOTHING, declare: DECLARES_NOTHING },
     {
       // Room for four entries over one compile: the fifth evicts the oldest.
       budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES,
@@ -1012,7 +1013,7 @@ describe("RenderCache idle sweep", () => {
     const { dir, cleanup } = mkConfigDir();
     const watchers = new WatcherRegistry({ logger: () => {} });
     const cache = new RenderCache(
-      { storage: NO_PLUGIN_STORAGE, sessionState: new SessionState(), watchers, source: SOURCES_NOTHING, declare: DECLARES_NOTHING },
+      { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, sessionState: new SessionState(), watchers, source: SOURCES_NOTHING, declare: DECLARES_NOTHING },
       { budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES },
     );
     try {
@@ -1050,7 +1051,7 @@ describe("RenderCache idle sweep", () => {
     const { dir, cleanup } = mkConfigDir();
     const watchers = new WatcherRegistry({ logger: () => {} });
     const cache = new RenderCache(
-      { storage: NO_PLUGIN_STORAGE, sessionState: new SessionState(), watchers, source: SOURCES_NOTHING, declare: DECLARES_NOTHING },
+      { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, sessionState: new SessionState(), watchers, source: SOURCES_NOTHING, declare: DECLARES_NOTHING },
       { budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES },
     );
     try {
@@ -1091,7 +1092,7 @@ describe("RenderCache idle sweep", () => {
       });
     const logs: string[] = [];
     const cache = new RenderCache(
-      { storage: NO_PLUGIN_STORAGE,
+      { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER,
         sessionState,
         watchers,
         log: (_level, message) => logs.push(message),

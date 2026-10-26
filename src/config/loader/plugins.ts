@@ -643,7 +643,17 @@ function fragmentOf(
       stateKeysUnder(ns, validateSegments(ctx, json.segments, new Set())),
     ),
     helpers: prefixed(ns, validateHelpers(ctx, json.helpers)),
-    actions: prefixed(ns, setKeysUnder(ns, validateActions(ctx, json.actions))),
+    // [LAW:one-source-of-truth] A plugin's `run` runs in its folder, the
+    // real path its storage is resolved under.
+    actions: prefixed(
+      ns,
+      setKeysUnder(
+        ns,
+        validateActions(ctx, json.actions, {
+          dir: fs.realpathSync(path.dirname(file)),
+        }),
+      ),
+    ),
   };
   // [LAW:single-enforcer] Template syntax is otherwise first parsed by the
   // compile, after every plugin has merged — too late to drop just this one.
@@ -740,6 +750,9 @@ function stateKeysUnder(
   );
 }
 
+// [LAW:one-source-of-truth] A `run`'s `refreshes` name the plugin's own
+// sources bare, and meet them under the namespace the same way: a plugin's
+// run can refresh only its own sources.
 function setKeysUnder(
   ns: string,
   actions: Readonly<Record<string, ActionDecl>>,
@@ -747,7 +760,11 @@ function setKeysUnder(
   return Object.fromEntries(
     Object.entries(actions).map(([name, a]) => [
       name,
-      "set" in a ? { ...a, set: keyUnder(ns, a.set) } : a,
+      "set" in a
+        ? { ...a, set: keyUnder(ns, a.set) }
+        : "run" in a
+          ? { ...a, refreshes: a.refreshes.map((r) => keyUnder(ns, r)) }
+          : a,
     ]),
   );
 }

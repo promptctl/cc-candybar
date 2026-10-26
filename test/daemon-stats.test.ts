@@ -82,6 +82,7 @@ describe("RuntimeStats.snapshot", () => {
       },
       effectCache: { sessions: 2, effects: 5 },
       menuIdle: { sessions: 2, armed: 1 },
+      runs: { started: 3, failed: 1, timedOut: 1, refused: 2, running: 0 },
       sessionState: { sessions: 2, observers: 11, revision: 7 },
       frameFeeds: { feeds: 0, subscribers: 0, drawn: 0, pushed: 0, refused: 0, lookups: 0, found: 0 },
       tmuxStatus: { sessions: 0, layouts: 0, writes: 0, failedWrites: 0 },
@@ -151,6 +152,13 @@ describe("RuntimeStats.snapshot", () => {
     });
     expect(snap.effectCache).toEqual({ sessions: 2, effects: 5 });
     expect(snap.menuIdle).toEqual({ sessions: 2, armed: 1 });
+    expect(snap.runs).toEqual({
+      started: 3,
+      failed: 1,
+      timedOut: 1,
+      refused: 2,
+      running: 0,
+    });
     expect(snap.sessionState).toEqual({ sessions: 2, observers: 11, revision: 7 });
     expect(snap.watchers).toEqual({
       active: 2,
@@ -297,6 +305,7 @@ describe("formatStats", () => {
       },
       effectCache: { sessions: 2, effects: 3 },
       menuIdle: { sessions: 2, armed: 1 },
+      runs: { started: 3, failed: 1, timedOut: 1, refused: 2, running: 0 },
       sessionState: { sessions: 2, observers: 11, revision: 7 },
       frameFeeds: { feeds: 0, subscribers: 0, drawn: 0, pushed: 0, refused: 0, lookups: 0, found: 0 },
       tmuxStatus: { sessions: 0, layouts: 0, writes: 0, failedWrites: 0 },
@@ -380,6 +389,7 @@ describe("formatStats", () => {
       },
       effectCache: { sessions: 0, effects: 0 },
       menuIdle: { sessions: 0, armed: 0 },
+      runs: { started: 0, failed: 0, timedOut: 0, refused: 0, running: 0 },
       sessionState: { sessions: 0, observers: 0, revision: 0 },
       frameFeeds: { feeds: 0, subscribers: 0, drawn: 0, pushed: 0, refused: 0, lookups: 0, found: 0 },
       tmuxStatus: { sessions: 0, layouts: 0, writes: 0, failedWrites: 0 },

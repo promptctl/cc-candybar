@@ -20,6 +20,7 @@
 //     opens is the depth-0 `OPEN_HUE` band every bar trigger opens — the
 //     anchor of the chain.
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import { ColorDepth, type ColorRgba } from "@promptctl/rich-js";
 import { getThemePalette } from "@promptctl/rich-js";
 import type { Palette, RichText } from "@promptctl/rich-js";
@@ -178,7 +179,7 @@ function build(src: string, withDefault = false) {
   const sessionState = new SessionState();
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
+  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   const palette = getThemePalette(THEME);
   const sink = new Map<string, readonly RichText[]>();
   recordRender(sessionState, SID);

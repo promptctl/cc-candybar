@@ -9,6 +9,7 @@
 // so "spawns once" is a count of lines, and "in the turn the fact moved" is
 // the run in flight before any draw.
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -43,7 +44,7 @@ function viewOver(
 ) {
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", new SessionState());
-  const compiled = registerDslConfig(config, registry, { cwd: os.tmpdir() });
+  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: os.tmpdir() });
   const answer = observable.box(payload, { deep: false });
   const selections = resolveEffectiveGlobals(
     config,

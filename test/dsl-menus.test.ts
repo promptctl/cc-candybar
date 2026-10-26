@@ -24,6 +24,7 @@
 //   5. Old spellings (positional page/bools/key) and malformed option dicts are
 //      LOAD errors naming the new form — never silently reinterpreted.
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import { picked, selectionFor } from "./helpers/selection";
 import { ColorDepth } from "@promptctl/rich-js";
 import { ownLinks } from "./helpers/ambient-chrome";
@@ -177,7 +178,7 @@ function buildRuntime(src: string, sessionId = "s1", look?: string) {
   const sessionState = new SessionState();
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
+  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   const basePalette = getThemePalette("textual-dark"!);
   const sink = new Map<string, readonly RichText[]>();
   const render = (): string =>

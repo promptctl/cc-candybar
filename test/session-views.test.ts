@@ -1,3 +1,4 @@
+import { TEST_SIGNER } from "./helpers/link-signer";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -50,7 +51,7 @@ function makeCache(
   });
   cleanups.push(() => watchers.closeAll());
   const cache = new RenderCache(
-    { storage: NO_PLUGIN_STORAGE,
+    { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER,
       sessionState: new SessionState(),
       watchers,
       source: SOURCES_NOTHING,

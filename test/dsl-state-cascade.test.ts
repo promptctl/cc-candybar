@@ -8,6 +8,7 @@
 // src/daemon/verbs/index.ts directly. That is the same handler the daemon
 // invokes for a wire-level click; no duplication.
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import { feedInputs } from "./helpers/inputs";
 import { selectionFor } from "./helpers/selection";
 import { autorun } from "mobx";
@@ -60,7 +61,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const sessionState = new SessionState();
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "", sessionState);
-    const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
+    const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     const basePalette = getThemePalette("textual-dark"!);
     const render = () =>
       stripAnsi(renderDsl(config, compiled, store, registry, HOOK_DATA, instantOf(new Date()), OPTS));
@@ -110,7 +111,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const sessionState = new SessionState();
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "", sessionState);
-    const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
+    const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     // Mirror the daemon's per-render theme resolution. Without this the two
     // renders below would BOTH be the floor theme and the test would assert
     // that two identical strings differ — vacuous rather than merely weaker.
@@ -216,7 +217,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const sessionState = new SessionState();
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "", sessionState);
-    registerDslConfig(config, registry, { cwd: process.cwd() });
+    registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     feedInputs(registry, HOOK_DATA);
 
     const themeObs: string[] = [];
@@ -430,7 +431,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     sessionState.set(SESSION_ID, "toolbar-expanded", "1");
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "", sessionState);
-    registerDslConfig(config, registry, { cwd: process.cwd() });
+    registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     feedInputs(registry, HOOK_DATA);
 
     // Observer reads BOTH state vars in one tracked frame — the kind
@@ -549,7 +550,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     expect(config.variables["session.id"]).toEqual(PAYLOAD_INPUTS["session.id"]);
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "", new SessionState());
-    const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
+    const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     const out = renderDsl(config, compiled, store, registry, { session_id: "s1" }, instantOf(new Date()), {
       endcaps: "powerline",
       colorCompatibility: "truecolor",
@@ -581,7 +582,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const sessionState = new SessionState();
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "", sessionState);
-    const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
+    const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     const basePalette = getThemePalette("textual-dark"!);
     const render = () =>
       stripAnsi(renderDsl(config, compiled, store, registry, HOOK_DATA, instantOf(new Date()), OPTS));

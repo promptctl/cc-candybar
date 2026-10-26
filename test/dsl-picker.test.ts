@@ -14,6 +14,7 @@
 //   5. The active option (current value) renders bold.
 //   6. The loader rejects a picker referencing an undeclared action.
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -75,7 +76,7 @@ function buildRuntime(src: string, sessionId = "s1") {
   const sessionState = new SessionState();
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
+  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   const render = (width: number): string =>
     renderDsl(
       config,

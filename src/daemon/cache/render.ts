@@ -12,6 +12,7 @@ import {
   type ViewFacts,
 } from "../render-payload.js";
 import type { ManagedStorage, StorageKey } from "./managed-storage.js";
+import type { LinkSigner } from "../../click/link-signer.js";
 import type { SessionId } from "../session-id.js";
 import { fileHeldSettings } from "../setting-drafts.js";
 import {
@@ -140,6 +141,8 @@ export interface RenderDeps<S extends ViewSource = ViewSource> {
   // The owner of every plugin's managed storage, whose folders a state's
   // build holds (StateDeps).
   storage: PluginStorage;
+  // What signs the `run` links its compiles draw (StateDeps).
+  signer: LinkSigner;
   // What a view declares of the daemon's shared entries
   // (src/daemon/render-payload.ts `declareLanes`); a test reading no built-in
   // source passes DECLARES_NOTHING.
@@ -162,6 +165,8 @@ export type PluginStorage = Pick<ManagedStorage, "keyFor" | "watch">;
 export interface StateDeps {
   readonly sessionState: SessionStateRW;
   readonly storage: PluginStorage;
+  // What signs the `run` links a compile draws.
+  readonly signer: LinkSigner;
   // The compile for a config's compile key. A cache shares one between every
   // entry whose config compiles alike (RenderCache's table); a one-shot load
   // has no other entry to share with and compiles its own.
@@ -617,7 +622,7 @@ export function buildRenderState(
       config,
       registry,
       cwd,
-      deps.compile ?? compileAlone,
+      deps.compile ?? compileAlone(deps.signer),
       DIRECTORY_SCOPE,
     );
     // [LAW:dataflow-not-control-flow] Partial-load warnings (variable
@@ -1098,7 +1103,7 @@ export class RenderCache<S extends ViewSource = ViewSource> {
   // table learns only when a state carrying it is served, so a load that fails
   // after compiling leaves nothing behind.
   private compileOf(key: string, input: CompileInput): CompiledConfig {
-    return this.compiles.get(key) ?? compileDslConfig(input);
+    return this.compiles.get(key) ?? compileDslConfig(input, this.deps.signer);
   }
 
   // [LAW:one-source-of-truth] Read off the map the cache serves: an entry's

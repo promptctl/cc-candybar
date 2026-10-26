@@ -4,6 +4,7 @@
 // function ran. Every view here is the daemon's own: a render cache over the
 // payload providers, declared by `declareLanes`, drawn from `sessionSource`.
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -131,6 +132,7 @@ function rig(): Rig {
       sessionState,
       watchers,
       storage: providers.managedStorage,
+      signer: TEST_SIGNER,
       log,
       declare: (holds, facts, closure, sources) =>
         declareLanes(providers, holds, facts, closure, sources),
@@ -236,6 +238,7 @@ describe("a source's declaration", () => {
     const loaded = loadFromDisk(dir, dir, p, {
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
+      signer: TEST_SIGNER,
     });
     try {
       expect(loaded.error).toBeNull();
@@ -280,6 +283,7 @@ describe("a source's declaration", () => {
     const loaded = loadFromDisk(dir, dir, p, {
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
+      signer: TEST_SIGNER,
     });
     try {
       expect(loaded.state!.plugins.dropped.map((d) => d.plugin)).toEqual(["p"]);
@@ -329,6 +333,7 @@ describe("a source's declaration", () => {
     const loaded = loadFromDisk(dir, dir, p, {
       sessionState: r.sessionState,
       storage: r.providers.managedStorage,
+      signer: TEST_SIGNER,
     });
     try {
       expect(pluginLoadLine(loaded.layers, loaded.state!)).toContain(

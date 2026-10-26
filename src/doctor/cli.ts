@@ -13,6 +13,7 @@
 // itself here (handler-probe.ts), the click that asked there — and the fold
 // is one function either way.
 
+import { linkSignerFromKeyFile } from "../daemon/link-key.js";
 import { openSync } from "node:fs";
 import process from "node:process";
 import { WriteStream } from "node:tty";
@@ -103,7 +104,11 @@ export function loadConfigOnce(origin: ConfigOrigin): ConfigLoad {
   // does, and releases them with the state.
   const watchers = new WatcherRegistry();
   const storage = new ManagedStorage({ watchers, logger: quietLogger });
-  const deps = { sessionState: new SessionState(), storage };
+  const deps = {
+    sessionState: new SessionState(),
+    storage,
+    signer: linkSignerFromKeyFile(),
+  };
   try {
     const loaded = loadFromDisk(
       origin.projectDir,

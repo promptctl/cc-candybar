@@ -16,6 +16,7 @@
 //   5b. Under a preset that pins a setting, a save lands in that preset's own
 //      globals, so the bar the file alone renders draws the saved value.
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { PRESET_DELETE_GLYPH } from "../src/config/settings-menu";
@@ -119,7 +120,7 @@ function rig(
     );
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "", sessionState);
-    const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
+    const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
     // What the render cache reads off the file's raw parse (render.ts).
     const fileHeld = fileHeldSettings(
       loadConfigSource("<user>", text, DEFAULT_DSL_CONFIG, NO_PROJECT, ALLOWED).raw,

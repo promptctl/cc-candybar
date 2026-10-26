@@ -1,4 +1,6 @@
 import fs from "node:fs";
+import { linkSignerFromKeyFile } from "./link-key.js";
+import { Runs } from "./runs.js";
 import net from "node:net";
 import v8 from "node:v8";
 import process from "node:process";
@@ -115,7 +117,7 @@ import {
   type RateLimitsSeen,
 } from "./render-sightings";
 import { claudeConfigDir } from "../claude-settings";
-import { launchSync, setLaunchStats } from "../proc/launch";
+import { launch, launchSync, setLaunchStats } from "../proc/launch";
 import { buildDebugSnapshot } from "./debug";
 import { DEBUG_WHATS, isDebugWhat } from "./debug-types";
 import { drawDsl, type RenderWarning } from "../dsl/render.js";
@@ -277,6 +279,19 @@ const menuIdle = new MenuIdle({
       `menu-idle: close failed (session=${sessionId}): ${inspect(error)}`,
     ),
 });
+// [LAW:single-enforcer] The one signer of every `run` link this daemon draws
+// and the one that verifies them on the click, over the state directory's key.
+const linkSigner = linkSignerFromKeyFile();
+// [LAW:no-ambient-temporal-coupling] The one owner of every `run` program in
+// flight (src/daemon/runs.ts), closed with the daemon.
+const runs = new Runs({
+  supersede: (storage, sessionId) =>
+    managedStorage.supersede(storage, sessionId),
+  launch,
+  state: sessionState,
+  log: dlog,
+  now: () => instantOf(new Date()),
+});
 // How this daemon's node runs its bundle: what a bar pane runs, and what a
 // click in a tmux status line runs to hand the click back.
 const DAEMON_NODE: readonly string[] = [process.execPath, ...process.execArgv];
@@ -390,6 +405,7 @@ const renderCache = new RenderCache<SessionSource>(
     watchers: watcherRegistry,
     log: dlog,
     storage: managedStorage,
+    signer: linkSigner,
     declare: (holds, facts, closure, sources) =>
       declareLanes(payloadProviders, holds, facts, closure, sources),
     // [LAW:single-enforcer] What every session's view draws from: its payload
@@ -882,6 +898,9 @@ function shutdown(code: number): void {
     ["usageStore close", () => usageStore.close()],
     ["tmuxService close", () => tmuxService.close()],
     ["mementoProvider close", () => mementoProvider.close()],
+    // Before the storage it resumes: an aborted run resumes its sources once
+    // its program is gone.
+    ["runs close", () => runs.close()],
     ["managedStorage close", () => managedStorage.close()],
     ["watcherRegistry close", () => watcherRegistry.closeAll()],
     ["sessionState flush", () => sessionState.flush()],
@@ -1280,6 +1299,7 @@ export async function replyTo(
           today: usageStore.scanStats(),
           pluginStorage: managedStorage.stats(),
         },
+        runs: runs.stats(),
         transcriptReads: transcriptReads(),
         renderCache: renderCache.stats,
         effectCache: effectSessions.getStats(),
@@ -1613,6 +1633,15 @@ const verbCtx = {
       origin.cwd,
       origin.configFile ?? undefined,
     ),
+  // The storage keys of the same entry `configFor` reads the config of.
+  sourcesFor: (origin: RenderOrigin) =>
+    renderCache.getOrCreate(
+      origin.projectDir,
+      origin.cwd,
+      origin.configFile ?? undefined,
+    ).state.sources,
+  links: linkSigner,
+  runs,
 };
 
 /**

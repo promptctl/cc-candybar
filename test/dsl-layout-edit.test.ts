@@ -42,6 +42,7 @@
 //      authored root from the file, so the next reload falls back to the
 //      bundled tree — never a silent drift between screen and disk.
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import { picked, selectionFor } from "./helpers/selection";
 import { ownLinks } from "./helpers/ambient-chrome";
 import { SETTINGS_NS } from "../src/config/loader/reserved-namespace";
@@ -543,7 +544,7 @@ function buildLayoutRuntime(src: string, sessionId = "s1") {
   durable.seedOrigin(sessionState, sessionId);
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
+  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   const basePalette = getThemePalette("textual-dark"!);
   const render = (): string =>
     renderDsl(
@@ -864,7 +865,7 @@ describe('the reset-layout banner survives quote/backslash preset names', () => 
     const registry = new SourceRegistry(store, "", sessionState);
     let compiled: ReturnType<typeof registerDslConfig>;
     expect(() => {
-      compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
+      compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     }).not.toThrow();
     const basePalette = getThemePalette("textual-dark"!);
     const rendered = renderDsl(
@@ -918,7 +919,7 @@ describe("a preset root's own top-level `when` hides content, not the menu or ba
     sessionState.set("s1", EDIT_LIVE_KEY, "open");
     const registry = new SourceRegistry(store, "", sessionState);
     try {
-      const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
+      const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
       const basePalette = getThemePalette("textual-dark"!);
       return renderDsl(
         config,
@@ -969,7 +970,7 @@ function makeCache(reloads?: ReloadSignal): {
   cleanups.push(() => watchers.closeAll());
   const sessionState = new SessionState();
   const cache = new RenderCache(
-    { storage: NO_PLUGIN_STORAGE, sessionState, watchers, source: SOURCES_NOTHING, declare: DECLARES_NOTHING },
+    { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, sessionState, watchers, source: SOURCES_NOTHING, declare: DECLARES_NOTHING },
     {
       budgetBytes: () => renderCacheBudget(memoryLimitBytes({})),
       ...(reloads === undefined ? {} : { observers: reloads.observers }),

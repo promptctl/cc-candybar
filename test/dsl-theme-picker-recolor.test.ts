@@ -19,6 +19,7 @@
 // happens to lead the row, and silently starts measuring a different segment
 // the day a cell is added ahead of it.
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import { selectionFor } from "./helpers/selection";
 import type { RichText } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -87,7 +88,7 @@ function buildRuntime() {
   const sessionState = new SessionState();
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
+  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   const sink = new Map<string, readonly RichText[]>();
 
   // [LAW:one-source-of-truth] Resolve the theme per render the SAME way the

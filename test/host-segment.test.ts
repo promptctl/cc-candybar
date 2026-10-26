@@ -14,6 +14,7 @@
 // [LAW:behavior-not-structure] Everything below asserts observable behavior:
 // what lands in the payload, and whether the bundled segment renders.
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
 import os from "node:os";
@@ -162,6 +163,7 @@ describe("the bundled host segment", () => {
     );
     try {
       const compiled = registerDslConfig(CONFIG, registry, {
+        signer: TEST_SIGNER,
         cwd: "/tmp",
       });
       return renderDsl(

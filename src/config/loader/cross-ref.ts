@@ -1268,6 +1268,23 @@ export function validateDeclarations(
       }
     });
   }
+  // [LAW:types-are-the-program] A `run` refreshes only declared sources:
+  // superseding — pending from the click until the program exits — is built
+  // for a source alone, so any other name is refused here, naming it.
+  for (const [name, a] of subjects(cfg.actions, subject)) {
+    if (!("run" in a)) continue;
+    for (const ref of a.refreshes) {
+      const decl = Object.hasOwn(cfg.variables, ref)
+        ? cfg.variables[ref]
+        : undefined;
+      if (decl?.kind === "source") continue;
+      ctx.issues.push({
+        path: `actions.${name}.refreshes`,
+        message: `actions.${name} refreshes "${ref}", which ${decl === undefined ? "is not declared" : `is a ${decl.kind} variable`}: a run refreshes only a declared source (by its full name, plugins.<plugin>.<source>; a plugin names its own sources bare)`,
+        line: findKeyLine(ctx.source, ["actions", name, "refreshes"]),
+      });
+    }
+  }
   // [LAW:no-silent-failure] A `persist`/`reset` target must name a REAL
   // Globals field OR a declared segment's `palette` (candybar-config-engine-
   // 71o.6 — `segments.<name>.palette`, parsed by the one shared authority in

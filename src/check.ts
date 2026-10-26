@@ -22,6 +22,7 @@
 // bounded settle for shell/file sources' first run, which the daemon's first
 // cold render does not (its next render shows what check showed).
 
+import { linkSignerFromKeyFile } from "./daemon/link-key.js";
 import fs from "node:fs";
 import process from "node:process";
 import {
@@ -416,7 +417,12 @@ export async function prepareConfig(
     new SessionState(),
   );
   try {
-    const compiled = registerDslConfig(config, registry, { cwd });
+    // [LAW:single-enforcer] check draws `run` links as the daemon does,
+    // signed with the one key.
+    const compiled = registerDslConfig(config, registry, {
+      cwd,
+      signer: linkSignerFromKeyFile(),
+    });
     warnings.push(...compiled.loadWarnings);
     // A view's inputs are pending until its source answers, and a source
     // whose `key` or `depends_on` reads one first runs when it answers — so

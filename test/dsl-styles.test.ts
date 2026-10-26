@@ -12,6 +12,7 @@
 // the click (gated by the config the session renders), and the same
 // effectiveStyleName/styleKeyByName the daemon calls. No parallel rig.
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import { selectionFor } from "./helpers/selection";
 import { stripAnsi } from "./helpers/ansi";
 import { ownValidators } from "./helpers/ambient-chrome";
@@ -302,6 +303,7 @@ describe('from: "styles" — rendered options and the derived gate share the con
       new SessionState(),
     );
     const compiled = registerDslConfig(config, registry, {
+      signer: TEST_SIGNER,
       cwd: process.cwd(),
     });
     try {
@@ -353,6 +355,7 @@ describe("style click — live whole-bar recolor over the active theme", () => {
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "", sessionState);
     const compiled = registerDslConfig(config, registry, {
+      signer: TEST_SIGNER,
       cwd: process.cwd(),
     });
     // A click is gated by the config its session renders: record the render
@@ -493,6 +496,7 @@ describe("globals.style as an expression — a style chosen by data", () => {
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "", sessionState);
     const compiled = registerDslConfig(config, registry, {
+      signer: TEST_SIGNER,
       cwd: process.cwd(),
     });
     const render = (pct: number, staged?: string): string =>
@@ -727,7 +731,7 @@ describe("globals.style as an expression — a style chosen by data", () => {
     );
     try {
       expect(() =>
-        registerDslConfig(config, registry, { cwd: process.cwd() }),
+        registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() }),
       ).toThrow(/globals\.style/);
     } finally {
       registry.dispose();

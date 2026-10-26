@@ -13,6 +13,7 @@
 //      units — the structural chevron between them survives equal bg (it is no
 //      longer suppressed by `bgcolor === bgcolor`).
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -49,7 +50,7 @@ function render(src: string, hookData: Record<string, unknown>): string {
   const sessionState = new SessionState();
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
+  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   return renderDsl(config, compiled, store, registry, hookData, instantOf(new Date()), OPTS);
 }
 

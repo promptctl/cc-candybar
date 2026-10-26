@@ -32,6 +32,7 @@
 //      file nor the bundled default declares cannot be pinned at all — the
 //      store refuses loudly rather than authoring a hollow declaration.
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import { ownLinks, ownValidators } from "./helpers/ambient-chrome";
 import { existsSync } from "node:fs";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -280,7 +281,7 @@ function buildRuntime(src: string, sessionId = "s1", dflt?: DslConfig) {
   durable.seedOrigin(sessionState, sessionId);
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
+  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   const render = (width = Number.POSITIVE_INFINITY): string =>
     renderDsl(
       config,
@@ -491,7 +492,7 @@ function makeCache(): {
   const sessionState = new SessionState();
   const reloads = new ReloadSignal();
   const cache = new RenderCache(
-    { storage: NO_PLUGIN_STORAGE, sessionState, watchers, source: SOURCES_NOTHING, declare: DECLARES_NOTHING },
+    { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, sessionState, watchers, source: SOURCES_NOTHING, declare: DECLARES_NOTHING },
     { budgetBytes: () => renderCacheBudget(memoryLimitBytes({})), observers: reloads.observers },
   );
   cleanups.unshift(() => cache.close());

@@ -5,6 +5,7 @@
 // a click, an undo — and a reload draw from another source, so nothing they
 // reveal fades.
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import { selectionFor } from "./helpers/selection";
 import {
   DEFAULT_TERMINAL_THEME,
@@ -86,7 +87,7 @@ interface Frame {
 function renderer(
   cfg: ValidatedConfig,
   session = new SessionState(),
-  compiled: CompiledConfig = compileDslConfig(compileInputOf(cfg)),
+  compiled: CompiledConfig = compileDslConfig(compileInputOf(cfg), TEST_SIGNER),
 ) {
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", session);
@@ -349,7 +350,7 @@ describe("nothing fades in where the frame is drawn from another source", () => 
     const loaded = config();
     const again = config();
     expect(compileKey(compileInputOf(again))).toBe(compileKey(compileInputOf(loaded)));
-    const shared = compileDslConfig(compileInputOf(loaded));
+    const shared = compileDslConfig(compileInputOf(loaded), TEST_SIGNER);
     const first = renderer(loaded, new SessionState(), shared);
     const reloaded = renderer(again, new SessionState(), shared);
     try {

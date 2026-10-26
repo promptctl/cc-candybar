@@ -1,3 +1,4 @@
+import { TEST_SIGNER } from "./helpers/link-signer";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -62,7 +63,7 @@ function makeCache(budgetBytes: number, maxEntries?: number) {
   cleanups.push(() => watchers.closeAll());
   const sessionState = new SessionState();
   const cache = new RenderCache(
-    { storage: NO_PLUGIN_STORAGE,
+    { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER,
       sessionState,
       watchers,
       source: SOURCES_NOTHING,
@@ -294,6 +295,7 @@ test("a compile's clock is the draw's: read outside one, it refuses", () => {
         `{ segments: { clock: { template: '{{ now | date "15:04" }}' } }, root: { h: ["clock"] } }`,
       ),
     ),
+    TEST_SIGNER,
   );
   expect(() => compiled.segments["clock"]!.template.evaluate({})).toThrow(
     /the clock was read outside a draw/,
@@ -307,7 +309,7 @@ test("a compile's clock is the draw's: read outside one, it refuses", () => {
 test("a compile keeps nothing of a render once it returns", async () => {
   const gc = exposeGc();
   const config = parseAndValidate("<test>", carouselConfig("mode", "alpha"));
-  const compiled = compileDslConfig(compileInputOf(config));
+  const compiled = compileDslConfig(compileInputOf(config), TEST_SIGNER);
   const drawn = new WeakRef(drawAlone(config, compiled));
   // A WeakRef holds its target until the job that made it ends.
   await new Promise((resolve) => setImmediate(resolve));
@@ -337,7 +339,7 @@ test("an entry, a compile and a view hold no more than the cache charges for the
   // allocations, which are no compile's, so a second is measured.
   const orphan = (): CompiledConfig => {
     const config = parseAndValidate("<test>", "{}", undefined, DEFAULT_DSL_CONFIG);
-    const compiled = compileDslConfig(compileInputOf(config));
+    const compiled = compileDslConfig(compileInputOf(config), TEST_SIGNER);
     drawAlone(config, compiled);
     return compiled;
   };

@@ -75,6 +75,7 @@ export const ACTION_KEYS = [
   "doctor",
   "ceiling",
   "slash",
+  "run",
   "do",
 ] as const;
 export type ActionKey = (typeof ACTION_KEYS)[number];
@@ -164,7 +165,7 @@ export type ActionKey = (typeof ACTION_KEYS)[number];
 // the SAME shared registry algebra — see validator-registry.ts). copy/open/
 // reset write nothing SPEC-shaped (reset's target is gated by key membership,
 // not a value domain) — they derive nothing. The vocabulary grows by arms (a
-// future `run`/`open-url`), not by validator plumbing.
+// `run`, a future `open-url`), not by validator plumbing.
 //
 // [LAW:one-type-per-behavior] `persist` mirrors `set`'s four value-source
 // arms verbatim (to/from/min-max-by/cycle) MINUS `int`: an unbounded page
@@ -269,12 +270,27 @@ export type ActionDecl =
   // proved at load, and a click is honoured only as a line some declared
   // `slash` action holds, so a URL cannot make up what gets typed.
   | { readonly slash: SlashLine }
+  // [LAW:effects-at-boundaries] Run a program for the clicked session: the
+  // program and its arguments, with no shell, and the variables laid over the
+  // session's process environment, every one a template the draw evaluates.
+  // `refreshes` names the declared sources the program writes, each pending
+  // from the click until it exits. `cwd` is the directory of the file that
+  // declares the action, recorded by the loader: the program runs there, so
+  // a session's worktree removed since its last render can't fail the spawn.
+  | RunAction
   // [LAW:composability] One click, several effects, built from actions that
   // already exist rather than from a new write vocabulary: entering edit mode
   // and closing the menu it was entered from is `edit.toggle` and a close,
   // named together. The tuple type states the one structural fact — there is
   // always a head, the member whose display the region shows.
   | { readonly do: readonly [string, ...string[]] };
+
+export interface RunAction {
+  readonly run: readonly [string, ...string[]];
+  readonly env: Readonly<Record<string, string>>;
+  readonly refreshes: readonly string[];
+  readonly cwd: string;
+}
 
 export type CeilingAction = Extract<ActionDecl, { readonly ceiling: string }>;
 export type SlashAction = Extract<ActionDecl, { readonly slash: string }>;
@@ -287,14 +303,21 @@ export function ceilingMoveArgs(a: CeilingAction): readonly string[] {
 }
 
 // [LAW:one-source-of-truth] The templates an action's own text holds, by
-// field: `copy`'s and `open`'s text and a preset delete's `name`, each
-// evaluated where the action is realized.
+// field: `copy`'s and `open`'s text, a preset delete's `name`, and a `run`'s
+// program, arguments and environment values, each evaluated where the action
+// is realized. Every walk of an action's text asks this, so an arm's templates
+// are listed once.
 export function* actionTemplates(
   a: ActionDecl,
 ): IterableIterator<readonly [field: string, source: string]> {
   if ("copy" in a) yield ["copy", a.copy];
   if ("open" in a) yield ["open", a.open];
   if ("preset" in a && a.preset === "delete") yield ["name", a.name];
+  if ("run" in a) {
+    for (const [i, item] of a.run.entries()) yield [`run.${i}`, item];
+    for (const [name, value] of Object.entries(a.env))
+      yield [`env.${name}`, value];
+  }
 }
 
 // [LAW:types-are-the-program] Does this action take the value it writes from

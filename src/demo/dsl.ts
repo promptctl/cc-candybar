@@ -22,6 +22,7 @@
 // is not branching — it lets the config's own timed sources (shell, time)
 // populate, exactly as the daemon re-renders on each status-line tick.
 
+import { linkSignerFromKeyFile } from "../daemon/link-key.js";
 import { UNFOLLOWED_FEEDS } from "../config/lanes.js";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
@@ -105,7 +106,11 @@ function loadState(): ReturnType<typeof buildRenderState> {
       cwd,
       { layers: [configPath], home: configPath, projectDir: cwd },
       advisories,
-      { sessionState, storage: providers.managedStorage },
+      {
+        sessionState,
+        storage: providers.managedStorage,
+        signer: linkSignerFromKeyFile(),
+      },
     );
   } catch (err) {
     if (err instanceof ConfigError) advisories.push(...err.warnings);

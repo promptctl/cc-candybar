@@ -14,6 +14,7 @@
 //   - A control writes a draft: only that placement renders it, `💾 save`
 //     counts it, and saving writes it INTO the placement in the config file.
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import { configurePlacement } from "./helpers/configure";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -110,7 +111,7 @@ function buildRuntime(
   durable.seedOrigin(sessionState, SID);
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
+  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   const render = (): string =>
     renderDsl(
       config,

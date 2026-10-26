@@ -8,6 +8,7 @@
 // session too young to project yields ABSENCE (a missing field → the -1 default
 // → "—"), never a fabricated number.
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
 import {
@@ -215,7 +216,7 @@ function renderBurnrate(
   // and burnrate's own `when` renders an unrelated ⚠ error cell.
   const registry = new SourceRegistry(store, "", new SessionState());
   try {
-    const compiled = registerDslConfig(cfg, registry, { cwd: "/tmp" });
+    const compiled = registerDslConfig(cfg, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
     return renderDsl(
       cfg,
       compiled,

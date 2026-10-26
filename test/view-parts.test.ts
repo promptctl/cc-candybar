@@ -4,6 +4,7 @@
 // the parts that read it; and a view kept across changes draws exactly what a
 // view made fresh for each draws.
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import type { ValidatedConfig } from "../src/config/dsl-types";
@@ -40,7 +41,7 @@ const B = instantOf(new Date(2026, 5, 4, 12, 34, 57));
 function viewOf(config: ValidatedConfig, sessionState = new SessionState()) {
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
+  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
   const errors: string[] = [];
   const warnings: RenderWarning[] = [];
   const draw = (

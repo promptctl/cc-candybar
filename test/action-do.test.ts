@@ -3,6 +3,7 @@
 // spine (registerDslConfig + renderDsl), and the real set-state gate derived
 // from the config, so "the gate admits it" is measured, not assumed.
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -49,7 +50,7 @@ function runtime(src: string) {
   const sessionState = new SessionState();
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", sessionState);
-  const compiled = registerDslConfig(cfg, registry, { cwd: "/tmp/proj" });
+  const compiled = registerDslConfig(cfg, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   recordRender(sessionState, "s1");
   return {
     sessionState,
