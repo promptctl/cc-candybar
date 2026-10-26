@@ -1379,6 +1379,43 @@ describe("RenderCache frames and pins", () => {
     }
   });
 
+  // A click that moves the origin of a session whose opening failed opens
+  // by the request that opening was for, so a pick that fixes it shows with
+  // no request after it.
+  test("follow retries a failed opening by its request, and the error goes", () => {
+    const watchers = new WatcherRegistry({ logger: () => {} });
+    const first = mkConfigDir();
+    const second = mkConfigDir();
+    let opens = 0;
+    const cache = new RenderCache(
+      { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, sessionState: new SessionState(), watchers, log: () => {}, declare: DECLARES_NOTHING,
+        source: (view) => {
+          if (++opens === 1) throw new Error("the view broke");
+          return SOURCES_NOTHING(view);
+        },
+      },
+      { budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES + VIEW_BYTES },
+    );
+    try {
+      const facts = viewFacts(first.dir, "s1");
+      expect(() => cache.holdSession(first.dir, first.dir, undefined, facts)).toThrow("the view broke");
+      const unpin = cache.pin("s1");
+      cache.follow("s1", second.dir, second.dir, undefined);
+      {
+        using hold = cache.holdView("s1");
+        expect(hold?.entry.cwd).toBe(second.dir);
+        expect(hold?.view.facts()).toBe(facts);
+      }
+      expect(cache.openFailure("s1")).toBeNull();
+      unpin();
+    } finally {
+      cache.close();
+      watchers.closeAll();
+      first.cleanup();
+      second.cleanup();
+    }
+  });
+
   test("a view says what opened it", () => {
     const { cache, dirs, close, request, opened } = pinCache();
     try {

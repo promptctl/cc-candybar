@@ -1158,12 +1158,13 @@ export class RenderCache<
   // itself, not frames happening to read the view within each sweep.
   private readonly pins = new Map<string, number>();
   // [LAW:no-silent-failure] Each session whose view last failed to open, by
-  // the error, until a view opens for it: a frame draws that error, never the
-  // last bar it pushed. Written only by `opened`, which sets either this or
-  // the session's view, never both.
+  // the error and the request the opening was for, until a view opens for
+  // it: a frame draws that error, never the last bar it pushed, and a click
+  // that moves the origin retries by that request (`follow`). Written only by
+  // `opened`, which sets either this or the session's view, never both.
   private readonly openFailures = new Map<
     string,
-    { readonly error: unknown }
+    { readonly error: unknown; readonly facts: F }
   >();
   // [LAW:one-source-of-truth] One compile per compile key, shared by every
   // state carrying that key, and dropped with the last of them (reclaim).
@@ -1389,10 +1390,12 @@ export class RenderCache<
   // load-config pick, or a history step restoring one — moves its view to the
   // origin's entry, declared with the request the view draws by, as a
   // request from there would (`journaled`, src/daemon/verbs/index.ts). A
-  // session with no view has nothing to move: no feed draws it, and its next
-  // request opens one. A click that left the origin alone finds the view
-  // already on its entry and changes nothing, its use order included, so the
-  // latest rendered session stays the one that rendered.
+  // session whose last opening failed opens by the request that opening was
+  // for, so a pick that fixes it shows with no request after it. A session
+  // with neither has nothing to move: no feed draws it, and its next request
+  // opens one. A click that left the origin alone finds the view already on
+  // its entry and changes nothing, its use order included, so the latest
+  // rendered session stays the one that rendered.
   follow(
     sessionId: string,
     projectDir: string,
@@ -1400,12 +1403,12 @@ export class RenderCache<
     configFile: string | undefined,
   ): void {
     const current = this.views.get(sessionId);
-    if (current === undefined) return;
-    const origin = this.entries.get(cacheKey(projectDir, cwd, configFile));
-    if (origin?.state === current.state) return;
     // Read before the hold: building the origin's entry may evict the one
     // the current view is of, which retires the view.
-    const facts = current.facts();
+    const facts = current?.facts() ?? this.openFailures.get(sessionId)?.facts;
+    if (facts === undefined) return;
+    const origin = this.entries.get(cacheKey(projectDir, cwd, configFile));
+    if (current !== undefined && origin?.state === current.state) return;
     using held = this.hold(projectDir, cwd, configFile);
     this.viewOf(held.entry, held.state, facts, "click");
   }
@@ -1487,7 +1490,7 @@ export class RenderCache<
         log: this.log,
       });
     } catch (error) {
-      this.openFailures.set(sessionId, { error });
+      this.openFailures.set(sessionId, { error, facts });
       throw error;
     }
     this.openFailures.delete(sessionId);
