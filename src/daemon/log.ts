@@ -263,8 +263,8 @@ async function append(filePath: string, batch: Batch): Promise<void> {
 // How long a synchronous write of what is waiting waits for a write already
 // out to land first. The threadpool writes on while this thread blocks, so a
 // write that is out lands within this unless the disk is stalled or the write
-// never started.
-const EXIT_WAIT_MS = 250;
+// never started: the slowest write measured on a busy disk took ~450 ms.
+const EXIT_WAIT_MS = 1000;
 const BREACH_WAIT_MS = 2000;
 
 // On the way out, after the event loop's last turn (or now, for a caller that

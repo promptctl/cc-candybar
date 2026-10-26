@@ -36,6 +36,7 @@ import { tryRenderViaDaemon } from "../src/daemon/client.js";
 import { fetchStats } from "../src/daemon/client-stats.js";
 import { mb, memoryLimitBytes } from "../src/daemon/limits.js";
 import { logLines } from "../src/daemon/log.js";
+import { logPath } from "../src/daemon/paths.js";
 import { chargeProbe } from "../src/daemon/memory-report.js";
 import { PARENT_PID_ENV } from "../src/daemon/parent-watchdog.js";
 import type { StatsSnapshot } from "../src/daemon/stats.js";
@@ -536,7 +537,18 @@ async function sample(started: number): Promise<void> {
 // inspector. A heap read between collections is mostly garbage V8 has not
 // yet had reason to collect.
 async function liveHeap(): Promise<number> {
-  const ws = new WebSocket(await inspectorUrl);
+  // An inspector that never printed its URL is said, not waited on.
+  let noUrl: NodeJS.Timeout | undefined;
+  const url = await Promise.race([
+    inspectorUrl,
+    new Promise<never>((_, reject) => {
+      noUrl = setTimeout(
+        () => reject(new Error("daemon printed no inspector URL")),
+        INSPECTOR_CALL_MS,
+      );
+    }),
+  ]).finally(() => clearTimeout(noUrl));
+  const ws = new WebSocket(url);
   await new Promise((resolve, reject) => {
     ws.onopen = resolve;
     ws.onerror = () => reject(new Error("daemon inspector refused the gate"));
@@ -806,7 +818,7 @@ async function daemonRenders(
   since: number,
   until: number,
 ): Promise<Record<"took" | "waited", Record<string, number>>> {
-  const log = path.join(dirs.state, "cc-candybar", "daemon.log");
+  const log = logPath(env);
   const stamped = (): Array<{ at: number; line: string }> =>
     logLines(log).map((line) => ({ at: Date.parse(line.slice(0, 24)), line }));
   let all = stamped();
@@ -900,9 +912,7 @@ try {
     // the daemon's state (its log) is the diagnosis.
     remove(dirs.checkouts);
     remove(dirs.claude);
-    console.error(
-      `kept ${root} (daemon log: ${path.join(dirs.state, "cc-candybar", "daemon.log")})`,
-    );
+    console.error(`kept ${root} (daemon log: ${logPath(env)})`);
   }
 }
 process.exit(passed ? 0 : 1);

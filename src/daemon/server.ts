@@ -1284,13 +1284,14 @@ export async function replyTo(
   }
 
   if (req.kind === "render") {
-    // [LAW:effects-at-boundaries] The one clock read of a render request: the
-    // instant the bar is drawn at (every time read in the render reads it) and
-    // the start its duration is measured from.
+    // [LAW:effects-at-boundaries] The render request's two clock reads: the
+    // instant the bar is drawn at (every time read in the render reads it),
+    // and the monotonic start its wait and duration are measured from, so a
+    // clock stepped meanwhile moves neither.
     const started = new Date();
     const at = instantOf(started);
-    const t0 = started.getTime();
-    const waitedMs = Math.round(performance.now() - accepted);
+    const t0 = performance.now();
+    const waitedMs = Math.round(t0 - accepted);
     // [LAW:nothing-unseen] One render event per render request, written here
     // on every exit — a refusal and a throw included — from the facts the
     // render reached, so a failing render is described like any other.
@@ -1379,7 +1380,7 @@ export async function replyTo(
     const { level, line } = renderEvent(
       facts,
       rendered.outcome,
-      Date.now() - t0,
+      Math.round(performance.now() - t0),
     );
     dlog(level, line);
     return {
