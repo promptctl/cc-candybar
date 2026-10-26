@@ -961,7 +961,10 @@ describe("settlePayload — what a request waits on", () => {
       );
     // The key's first read is waited on.
     expect((await request()).tmux).toEqual({ pane: "%7", session: "work" });
-    // A click supersedes it with a read that never lands; the request draws at once.
+    // A click supersedes it with a read that never lands; the request draws at
+    // once. Any lane stands in: the wait asks why a lane is pending, never
+    // which lane it is, and the owners that supersede pin their own state
+    // (keyed-source, managed-storage and run-action tests).
     current = { kind: "pending", why: "superseded", landed: new Promise(() => {}) };
     expect((await request()).tmux).toEqual({ pane: "%7", session: PENDING });
   });

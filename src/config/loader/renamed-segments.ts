@@ -10,9 +10,12 @@
 //
 // [LAW:types-are-the-program] A segment that moved into a plugin exists only
 // once that plugin is installed, so its row names the source that installs it.
+// One that left with no successor cc-candybar can name (another program's own
+// plugin draws it now) has nowhere to point, so its row carries no `to`.
 type Renamed =
   | { readonly kind: "built-in"; readonly to: string }
-  | { readonly kind: "plugin"; readonly to: string; readonly source: string };
+  | { readonly kind: "plugin"; readonly to: string; readonly source: string }
+  | { readonly kind: "removed" };
 
 export const RENAMED_SEGMENTS: ReadonlyMap<string, Renamed> = new Map<
   string,
@@ -35,6 +38,9 @@ export const RENAMED_SEGMENTS: ReadonlyMap<string, Renamed> = new Map<
       source: "promptctl/links-issue-tracker",
     },
   ],
+  // The context ceiling left the bundled bar: the program that owns the
+  // ceiling draws it through a plugin it ships and installs itself.
+  ["ceiling", { kind: "removed" }],
 ]);
 
 export function renamedHint(name: string): string {
@@ -45,5 +51,7 @@ export function renamedHint(name: string): string {
       return ` (the built-in segment "${name}" was renamed to "${renamed.to}" — update this reference)`;
     case "plugin":
       return ` (the built-in segment "${name}" became "${renamed.to}", a segment of the plugin \`cc-candybar plugin install ${renamed.source}\` installs — update this reference)`;
+    case "removed":
+      return ` (the built-in segment "${name}" was removed — delete this reference, or place the segment of the plugin the program it showed now ships)`;
   }
 }

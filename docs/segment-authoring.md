@@ -360,7 +360,7 @@ loader refuses any other value, naming the six.
 `missingData:` decides whether the doctor (`🧰 tools › 🩺 doctor`, or
 `cc-candybar doctor`) fails when this segment reads data that cc-candybar
 cannot get from outside itself: a pull request when `gh` is not installed or
-not logged in, the rate-limit windows Claude Code sends only to Claude.ai
+not logged in, or the rate-limit windows Claude Code sends only to Claude.ai
 subscription sessions. It is `"fail"` unless you set `"ignore"`. A segment
 that reads none of that data is never judged. The bundled bar places `block`
 and `weekly` for everyone and hides each one when its data is absent. If your

@@ -262,7 +262,7 @@ describe("no two neighbouring cells blur", () => {
 
   // The joiner draws a divider where an arrow would vanish into the ground
   // it enters: where two neighbours' backgrounds meet. Cells nested in one bar
-  // cell (context beside autocompact, and ceiling) wear that cell's colour
+  // cell (context beside autocompact) wear that cell's colour
   // byte for byte (decorEntryFor), as do the cells of a muted row, and a
   // theme can draw two of its colours alike (textual-ansi's every shade of a
   // role is one colour). Those are the only neighbours that share a

@@ -1214,6 +1214,8 @@ mod tests {
         assert_eq!(hint(Some(" /a , /b")), Some("/a".into()));
         assert_eq!(hint(Some(".claude-work")), Some("/work/proj/.claude-work".into()));
         assert_eq!(hint(Some("../x/./y/")), Some("/work/x/y".into()));
+        assert_eq!(hint(Some("../cfg//x/.")), Some("/work/cfg/x".into()));
+        assert_eq!(hint(Some("/m/../../..")), Some("/".into()));
     }
 
     // The same table as test/config-hint.test.ts.
