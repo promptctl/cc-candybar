@@ -1,4 +1,9 @@
-import { observable, runInAction, type IObservableValue } from "mobx";
+import {
+  compareStructural,
+  observable,
+  runInAction,
+  type IObservableValue,
+} from "mobx";
 import type { Outcome } from "./outcome";
 
 // [LAW:types-are-the-program] What a source holds for one key: nothing yet,
@@ -43,8 +48,13 @@ export function pending<T>(why: PendingWhy): Reading<T> {
   return { kind: "pending", why, landed, land };
 }
 
+// [LAW:single-enforcer] A read that found what is stored stores nothing, by
+// structure: nothing derived from the value recomputes, and no feed showing it
+// wakes (brandon-unfiled-3248.8ro6, step 4e). A pending value always lands.
 export function settle<T>(source: Readable<T>, outcome: Outcome<T>): void {
   const prior = source.reading.get();
+  if (prior.kind === "read" && compareStructural(prior.outcome, outcome))
+    return;
   runInAction(() => source.reading.set({ kind: "read", outcome }));
   if (prior.kind === "pending") prior.land();
 }

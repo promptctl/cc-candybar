@@ -1,7 +1,7 @@
 import path from "node:path";
 import { nearestWatchTarget } from "../../utils/watch-target.js";
 import type { RichText } from "@promptctl/rich-js";
-import { observable, reaction, runInAction } from "mobx";
+import { compareShallow, observable, reaction, runInAction } from "mobx";
 import {
   neededPrefixesByPreset,
   settledLanes,
@@ -199,9 +199,18 @@ export interface RenderCacheObservers {
   // after the entry's fields and watcher are settled. The entry is handed
   // over as ReloadedEntry so the observer reads the outcome from the one
   // place it lives and the type, not this comment, keeps it from writing
-  // there. Trusted non-throwing (the same contract as onSegmentError): an
-  // observer that throws is a caller bug surfaced loudly, never absorbed here.
-  readonly onReload?: (entry: ReloadedEntry) => void;
+  // there. `sessions` are those whose views drew from the entry before it
+  // loaded: none for an entry just created. Trusted non-throwing (the same contract as
+  // onSegmentError): an observer that throws is a caller bug surfaced loudly,
+  // never absorbed here.
+  readonly onReload?: (
+    entry: ReloadedEntry,
+    sessions: readonly string[],
+  ) => void;
+  // Fires with a session's id when its view opens and whenever what the view
+  // draws from moves (openView's `changed`): what a feed showing the session
+  // wakes on.
+  readonly onViewChanged?: (sessionId: string) => void;
 }
 
 // [LAW:types-are-the-program] The observer's view of an entry: an ALLOW-LIST
@@ -864,6 +873,10 @@ export interface SessionView<S extends ViewSource = ViewSource> {
   // store's inputs and slots (`bindView`) when it opened.
   readonly source: S;
   readonly lastRenderCellsBySegment: Map<string, readonly RichText[]>;
+  // The view is no session's bar from now on (a successor took it, or it
+  // closed): it stops saying what it draws from moved, though a render that
+  // holds it still draws from it.
+  retire(): void;
   // [LAW:single-enforcer] The view's one teardown: its holds close and its
   // registry is disposed, so no caller of openView can release one and leak
   // the other. Returns how many computeds the registry's store released.
@@ -926,11 +939,13 @@ export const SOURCES_NOTHING: SourceOf<ViewSource> = ({ state }) =>
     ),
   );
 
-// What a view reads to keep its declaration current, and what it draws from.
+// What a view reads to keep its declaration current, what it draws from, and
+// whom it tells that what it draws from moved.
 export interface ViewDeclaring<S extends ViewSource = ViewSource> {
   readonly sessionState: SessionStateReader;
   readonly declare: Declare;
   readonly source: SourceOf<S>;
+  readonly changed: (sessionId: string) => void;
   readonly log: DaemonLogger;
 }
 
@@ -952,7 +967,7 @@ export function openView<S extends ViewSource>(
   state: DslRenderState,
   cwd: string,
   facts: ViewFacts,
-  { sessionState, declare, source: sourceOf, log }: ViewDeclaring<S>,
+  { sessionState, declare, source: sourceOf, changed, log }: ViewDeclaring<S>,
 ): SessionView<S> {
   // [LAW:one-source-of-truth] The session is the one the request's checkpoint
   // parsed: a later request of the view's names the same one.
@@ -1043,6 +1058,40 @@ export function openView<S extends ViewSource>(
     declared: () => declared.get(),
   });
   bindView(state.compiled, registry.variableStore, registry, source);
+  // [LAW:single-enforcer] The view's one say that what it draws from moved:
+  // its payload (its request, its picks), every lane it declared, plugin
+  // sources included (`today`'s day sums, which only a draw's projection
+  // reads, among them), its
+  // selections, or what its own or its directory's sources published. Told
+  // as it opens, since a view opening is what its session's bar draws from
+  // changing. The draw writes none of these (step 4e), so no frame wakes the
+  // next one.
+  // [LAW:no-silent-failure] A tracked read that throws is logged: a reaction
+  // that let it go would reach only the console MobX prints to.
+  const stopChanged = reaction(
+    () => {
+      const { sources, ...keyed } = declared.get().lanes;
+      return [
+        source.payload(),
+        source.selections(),
+        registry.published(),
+        state.registry.published(),
+        ...[...Object.values(keyed), ...sources.values()].map((lane) =>
+          lane.current(),
+        ),
+      ];
+    },
+    () => changed(sessionId),
+    {
+      equals: compareShallow,
+      fireImmediately: true,
+      onError: (e) =>
+        log(
+          "error",
+          `session view change threw sid=${JSON.stringify(sessionId)}: ${String(e)}`,
+        ),
+    },
+  );
   return {
     sessionId,
     state,
@@ -1054,8 +1103,10 @@ export function openView<S extends ViewSource>(
     facts: () => declared.get().facts,
     lanes: () => declared.get().lanes,
     lastRenderCellsBySegment: new Map<string, readonly RichText[]>(),
+    retire: stopChanged,
     dispose: () => {
       stop();
+      stopChanged();
       holds.close();
       return registry.dispose();
     },
@@ -1184,7 +1235,8 @@ export class RenderCache<S extends ViewSource = ViewSource> {
       `render-cache entry projectDir=${projectDir} cwd=${cwd} compile=${entry.state.compileKey.slice(0, 12)} entries=${this.entries.size} compiles=${this.compiles.size} accounted=${mb(this.accountedBytes())}/${mb(this.budgetBytes())}MB`,
     );
     this.refreshWatcher(entry, loaded);
-    this.observers.onReload?.(entry);
+    // An entry just created was drawn by no session.
+    this.observers.onReload?.(entry, []);
 
     return entry;
   }
@@ -1311,6 +1363,7 @@ export class RenderCache<S extends ViewSource = ViewSource> {
       sessionState: this.deps.sessionState,
       declare: this.deps.declare,
       source: this.deps.source,
+      changed: (sid) => this.observers.onViewChanged?.(sid),
       log: this.log,
     });
     this.views.set(sessionId, view);
@@ -1334,6 +1387,7 @@ export class RenderCache<S extends ViewSource = ViewSource> {
   private retireView(view: SessionView<S>, reason: ViewClose): void {
     if (this.views.get(view.sessionId) === view)
       this.views.delete(view.sessionId);
+    view.retire();
     const lease = this.leaseOf(view);
     lease.retired = { reason, held: lease.holders };
     this.reclaimView(view, lease);
@@ -1549,6 +1603,14 @@ export class RenderCache<S extends ViewSource = ViewSource> {
       this.compiles.delete(state.compileKey);
   }
 
+  // [LAW:one-source-of-truth] The sessions whose views draw from `entry`'s
+  // state.
+  private sessionsOn(entry: CacheEntry): string[] {
+    return [...this.views.values()]
+      .filter((view) => view.state === entry.state)
+      .map((view) => view.sessionId);
+  }
+
   // Re-read an entry from disk NOW, for a caller that just wrote its file and
   // must not act on the old config until the reload has landed (a save
   // releasing the picks the file now holds). The watcher still fires later;
@@ -1577,6 +1639,9 @@ export class RenderCache<S extends ViewSource = ViewSource> {
   // straight-line, so the signal structurally cannot be skipped by whichever
   // arm the load took.
   private reloadInto(entry: CacheEntry): void {
+    // Taken before the reload, so a session whose view fails to reopen over
+    // the new state is still among those it changed.
+    const sessions = this.sessionsOn(entry);
     const loaded = this.load(entry.projectDir, entry.cwd, entry.configFile);
     entry.lastWarning = loaded.warning;
     entry.lastError = loaded.error;
@@ -1593,7 +1658,7 @@ export class RenderCache<S extends ViewSource = ViewSource> {
     // Rebinds to the broken file (and its sibling candidates) too, so an
     // in-place save OR a higher-precedence file appearing recovers.
     this.refreshWatcher(entry, loaded);
-    this.observers.onReload?.(entry);
+    this.observers.onReload?.(entry, sessions);
   }
 
   // [LAW:single-enforcer] One watcher-rebind decision per reload: the watch

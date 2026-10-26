@@ -18,6 +18,7 @@ import path from "path";
 import { nearestWatchTarget } from "../utils/watch-target.js";
 import { setInterval, clearInterval } from "timers";
 import {
+  computed,
   observable,
   reaction,
   runInAction,
@@ -33,7 +34,7 @@ import {
   type VarType,
   type VarValue,
 } from "./types.js";
-import { VariableStore, type Derivation } from "./store.js";
+import { VariableStore, type Derivation, type StoredValue } from "./store.js";
 import { createCcCandybarEngine } from "../template-engine/engine.js";
 import { buildScope } from "../template-engine/scope.js";
 import {
@@ -457,6 +458,13 @@ export interface LastError {
   readonly message: string;
 }
 
+// What a registry's sources have published: each one's stored value, and the
+// standing fault of each policy that cannot fire.
+export interface Published {
+  readonly values: readonly StoredValue[];
+  readonly faults: readonly LastError[];
+}
+
 // [LAW:types-are-the-program] What a view's inputs are derived from: the value
 // at each payload path as it stands — PENDING while its source has not
 // answered — and the depth the view's renders draw at, which every contrast
@@ -570,7 +578,10 @@ export class SourceRegistry {
   // source will ever run again, so no read outcome clears it. A watch the OS
   // refused lives until the registry does; a key template that throws lives
   // until the key evaluates again. One map, since a variable has one policy.
-  private readonly policyFaults = new Map<string, LastError>();
+  // Observable, since the bar draws each fault as a refresh warning.
+  private readonly policyFaults = observable.map<string, LastError>(undefined, {
+    deep: false,
+  });
 
   // Triggers for shell/file cache policies and the time source's tick:
   private readonly watchMgr = new WatchManager();
@@ -615,6 +626,26 @@ export class SourceRegistry {
   // all key: template compilations.
   // [LAW:one-source-of-truth] One engine per registry, not one per variable.
   private readonly engine = createCcCandybarEngine({ drawnAt: this.drawnAt });
+
+  // The names of this registry's own async sources (shell, file), whose
+  // stored values `published` reads.
+  private readonly sourceNames = observable.array<string>([], { deep: false });
+  // [LAW:one-source-of-truth] What this registry's sources have published, as
+  // one value that changes exactly when one of their stored values or
+  // standing faults does: the store writes a value only when its own compare
+  // finds it changed, and a fault is written only when its reason does, so a
+  // re-read that found what was stored moves nothing. A session's view reacts
+  // to it, and so its feed wakes on a publish that changed what the bar can
+  // show (openView).
+  private readonly publishedNow = computed(
+    (): Published => ({
+      values: this.sourceNames.map((name) => this.store.stored(name)),
+      faults: [...this.policyFaults.values()],
+    }),
+  );
+  published(): Published {
+    return this.publishedNow.get();
+  }
 
   // [LAW:locality-or-seam] sessionState is injected (not constructed here)
   // so tests can substitute a fake and the daemon shares its singleton.
@@ -808,6 +839,7 @@ export class SourceRegistry {
     parse: SourceParse,
   ): void {
     const publish = this.publisherFor(name, parse, reader.where);
+    runInAction(() => this.sourceNames.push(name));
     this.registerCachePolicy(name, cache, (cause) =>
       this.runSource(name, reader, publish, cause),
     );
@@ -1378,13 +1410,17 @@ export class SourceRegistry {
 
   // The one fold from a policy's own outcome — whether it can fire — to the
   // variable's standing fault.
+  // A fault standing for the same reason keeps its record, so it moves
+  // nothing that draws it.
   private notePolicy(name: string, outcome: Reading<unknown>): void {
-    if (outcome.kind === "failed")
-      this.policyFaults.set(name, {
-        timestamp: Date.now(),
-        message: outcome.reason,
-      });
-    else this.policyFaults.delete(name);
+    runInAction(() => {
+      if (outcome.kind !== "failed") this.policyFaults.delete(name);
+      else if (this.policyFaults.get(name)?.message !== outcome.reason)
+        this.policyFaults.set(name, {
+          timestamp: Date.now(),
+          message: outcome.reason,
+        });
+    });
   }
 
   // [LAW:single-enforcer] The one fold from a source outcome to the

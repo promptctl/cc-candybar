@@ -386,9 +386,17 @@ function daySumsOver(
 
 // A directory set's `today` state beside its scan: its roots, and its day
 // sums derived from the records.
-export interface DaySet {
+interface DaySet {
   readonly roots: readonly string[];
   readonly sums: Kept<ReadonlyMap<string, DayUsage>>;
+}
+
+// What `today`'s lane answers: the set's roots and its day sums as they
+// stand. Read through the lane, so whatever tracks the lane moves when a
+// record lands, as it does for every other lane.
+export interface DaySums {
+  readonly roots: readonly string[];
+  readonly sums: ReadonlyMap<string, DayUsage>;
 }
 
 // Bounded-concurrency fan-out for the seed: at most `limit` parses in flight.
@@ -590,7 +598,7 @@ export class SessionUsageStore {
   // rescan's fold of the same session stores first, `ingest`) — once the
   // directory set's first scan, which `today`'s lane waits on, has landed.
   async refreshToday(
-    today: Lane<DaySet>,
+    today: Lane<DaySums>,
     hookData: ClaudeHookData | undefined,
   ): Promise<void> {
     // [LAW:no-ambient-temporal-coupling] The scan first, then the session's
@@ -609,14 +617,16 @@ export class SessionUsageStore {
   declareToday(
     holds: Holds,
     claudeConfigDir: string | undefined,
-  ): Lane<DaySet> {
+  ): Lane<DaySums> {
     const claudePaths = getClaudePaths(claudeConfigDir);
     const scans = this.scans.declare(holds, claudePaths);
     const set = this.daySet(claudePaths);
     return {
       current: () => {
         const scan = scans.current();
-        return scan.kind === "ok" ? ok(set) : scan;
+        return scan.kind === "ok"
+          ? ok({ roots: set.roots, sums: set.sums.read() })
+          : scan;
       },
     };
   }
@@ -626,7 +636,7 @@ export class SessionUsageStore {
   // day with no refresh. The active session's last ingest failing is the
   // projection's failure.
   todayAt(
-    set: DaySet,
+    set: DaySums,
     hookData: ClaudeHookData | undefined,
     at: Instant,
   ): Outcome<TodayInfo> {
@@ -636,7 +646,7 @@ export class SessionUsageStore {
 
     const today = dayKey(dateOf(at));
     const total: DayUsage = { ...EMPTY_DAY };
-    const inSet = set.sums.read().get(today);
+    const inSet = set.sums.get(today);
     if (inSet !== undefined) addDay(total, inSet);
     // The rendering session counts wherever its transcript lives; under the
     // set's roots it is already in the sums.

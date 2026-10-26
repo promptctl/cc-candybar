@@ -105,6 +105,7 @@ const render = (state: ReturnType<RenderCache["getOrCreate"]>["state"]): string 
     sessionState: new SessionState(),
     source: SOURCES_NOTHING,
     declare: DECLARES_NOTHING,
+    changed: () => {},
     log: () => {},
   });
   try {

@@ -10,6 +10,8 @@ A value the daemon itself made stale (a click's move) is pending too, but no req
 
 A supersede holds back every other trigger of its key until it resumes, and overlapping supersedes need every resume, so no read that ran during a move stores the world from before it.
 
+A stored value changes only when a read finds something different, compared by structure. Every stored value is something a feed wakes on, so a period that rewrote an equal value would wake every feed showing it once a period.
+
 ## Periods run only while something holds the key
 
 Each session view declares the keys its preset reads, using the keys its request names: which repo, which pane, which memento scope, which Claude Code directory. Those declarations are the holds. A period runs only while its key is held. It measures from the last read that landed, and resumes where it left off. A preset switch takes the holds it newly needs before any draw and releases the old ones at once. Each source's LRU evicts only unheld keys. So data the old preset read costs nothing once released, and a daemon with no subscribers keeps no timer and makes no external call.

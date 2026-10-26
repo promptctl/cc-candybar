@@ -269,11 +269,21 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
 
   test("a still bar is pushed once, and not again while nothing changes", async () => {
     await render(sockPath, "feed-still", projectDir, {}, args("still"));
-    const frames = await framesOf("feed-still", () => sleep(1500));
+    let drawn = 0;
+    const frames = await framesOf("feed-still", async ({ received, waitFor }) => {
+      await waitFor(() => received.length > 0, "the first frame");
+      const before = (await feedStats()).drawn;
+      await sleep(2000);
+      drawn = (await feedStats()).drawn - before;
+    });
     // Its pace, one a second, is part of the frame and does not change it.
     expect(outputs(frames).map(stripAnsi)).toEqual([
       expect.stringMatching(/ 1 fps .*a still mark/su),
     ]);
+    // brandon-unfiled-3248.8ro6 §4e: and it is drawn once a second. A draw
+    // that wrote something its view reads would wake the next frame, and the
+    // still bar would be redrawn at the moving rate, its bytes never pushed.
+    expect(drawn).toBeLessThanOrEqual(3);
   });
 
   test("a click on a still bar is pushed at once, not when the next frame falls due", async () => {
@@ -284,21 +294,100 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       {},
       args("toggle"),
     );
-    const frames = await framesOf("feed-click", async ({ received, waitFor }) => {
+    let secondAt = 0;
+    const frames = await framesOf("feed-click", async ({ received, elapsed, waitFor }) => {
       // The click lands the moment the bar's first frame is in.
       await waitFor(() => received.length > 0, "the bar before the click");
       await click(sockPath, urlWriting(shut, "face", "open"));
       await waitFor(() => received.length > 1, "the clicked bar");
+      // A second click 100 ms after the first, inside the still period the
+      // first one's frame started: it too is drawn within the feed's spacing,
+      // not when the still bar's next frame falls due, about 900 ms after it.
+      await sleep(100);
+      await click(
+        sockPath,
+        urlWriting(outputs(received)[1]!, "face", "shut"),
+      );
+      secondAt = elapsed();
+      await waitFor(() => received.length > 2, "the bar clicked again");
     });
     expect(outputs(frames).map(stripAnsi)).toEqual([
       expect.stringContaining("door shut"),
       expect.stringContaining("door open"),
+      expect.stringContaining("door shut"),
     ]);
+    // Measured from the click's answer, so a loop held up before it delays
+    // both alike.
+    expect(frames[2]!.at - secondAt).toBeLessThan(FEED_PERIODS.still / 2);
     // [LAW:no-ambient-temporal-coupling] The still bar's next frame falls due
     // a period after its first STARTED drawing, which is after the
     // subscription opened, so a frame in before a period from then can only be
     // the click's.
     expect(frames[1]!.at).toBeLessThan(FEED_PERIODS.still);
+  });
+
+  // The closing summary of `sessionId`'s feed, once the daemon has logged it.
+  const closedSummary = async (sessionId: string): Promise<string> => {
+    const mark = `feed sid=${JSON.stringify(sessionId)} closed `;
+    let line: string | undefined;
+    await until(() => {
+      line = readFileSync(daemonLog, "utf8")
+        .split("\n")
+        .find((l) => l.includes(mark));
+      return line !== undefined;
+    }, "the feed's closing summary");
+    return line!;
+  };
+
+  // brandon-unfiled-3248.8ro6 §4e: a source's value moving between requests
+  // wakes the feed (`data`), and a config saved under it wakes it
+  // (`reload`). Neither waits for the still bar's next frame, a still period
+  // after the last one started, nor for the session's next request.
+  test("a file source rewritten between requests is pushed within the feed's spacing, woken by its data", async () => {
+    const sid = "feed-source-wake";
+    const statusFile = path.join(projectDir, "source-wake.txt");
+    writeFileSync(statusFile, "green");
+    const config = path.join(projectDir, "source-wake.json5");
+    writeFileSync(
+      config,
+      `{ globals: { experimentalStatusline: true }, variables: { status: { kind: "file", path: ${JSON.stringify(statusFile)}, parse: { text: true }, cache: { watch_file: ${JSON.stringify(statusFile)} }, default: "?" } }, segments: { mark: { template: 'status {{ .status }}' } }, root: { h: ['mark'] } }`,
+    );
+    await render(sockPath, sid, projectDir, {}, ["cc-candybar", "--config", config]);
+    let wrote = 0;
+    const frames = await framesOf(sid, async ({ received, elapsed, waitFor }) => {
+      await waitFor(() => received.length > 0, "the bar before the write");
+      wrote = elapsed();
+      writeFileSync(statusFile, "red");
+      await waitFor(() => received.length > 1, "the rewritten value");
+    });
+    expect(outputs(frames).map(stripAnsi)).toEqual([
+      expect.stringContaining("status green"),
+      expect.stringContaining("status red"),
+    ]);
+    // Measured from the write, as the click's is: the still bar's next frame
+    // falls due a still period after its first started, just before the
+    // write, so a frame in by half of one is the wake's.
+    expect(frames[1]!.at - wrote).toBeLessThan(FEED_PERIODS.still / 2);
+    expect(await closedSummary(sid)).toMatch(/ woke=data:[1-9]\d*,/u);
+  });
+
+  test("a config saved under an open feed is pushed with no request after it, woken by the reload", async () => {
+    const sid = "feed-reload-wake";
+    const config = path.join(projectDir, "reload-wake.json5");
+    const configOf = (mark: string): string =>
+      `{ globals: { experimentalStatusline: true }, segments: { mark: { template: '${mark}' } }, root: { h: ['mark'] } }`;
+    writeFileSync(config, configOf("before the save"));
+    await render(sockPath, sid, projectDir, {}, ["cc-candybar", "--config", config]);
+    const frames = await framesOf(sid, async ({ received, waitFor }) => {
+      await waitFor(() => received.length > 0, "the bar before the save");
+      writeFileSync(config, configOf("after the save"));
+      await waitFor(() => received.length > 1, "the saved bar");
+    });
+    expect(outputs(frames).map(stripAnsi)).toEqual([
+      expect.stringContaining("before the save"),
+      expect.stringContaining("after the save"),
+    ]);
+    expect(await closedSummary(sid)).toMatch(/,reload:[1-9]\d*,/u);
   });
 
   test("a subscriber that arrives before the session's first render receives it", async () => {

@@ -168,7 +168,6 @@ function harness(ids: readonly string[] = ["$1"]) {
   const unsubscribed: string[] = [];
   const newest = new Map<string, string>();
   const logs: string[] = [];
-  const deferred: Array<() => void> = [];
   const owner = new TmuxStatusLines({
     edge: tmux,
     subscribe: (sessionId, sub) => {
@@ -178,13 +177,11 @@ function harness(ids: readonly string[] = ["$1"]) {
     sessionInPane: (_socket, pane) => newest.get(pane) ?? null,
     handler: "cc-candybar url-handle",
     owner: OWNER,
-    defer: (run) => void deferred.push(run),
     log: (_level, msg) => logs.push(msg),
   });
   const hold = (sessionId: string, pane: string): void => {
     newest.set(pane, sessionId);
     owner.observe(sessionId, { socket: SOCKET, pane, truecolor: null }, true);
-    deferred.splice(0).forEach((run) => run());
   };
   const answer = async (sessionOf: Record<string, string>, shownBy: Record<string, string>) => {
     const view: StatusLines = {

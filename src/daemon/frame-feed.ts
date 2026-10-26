@@ -111,8 +111,8 @@ export interface FeedDeps<Req> {
   // and the returned stop is called when the last feed closes.
   watching(): () => void;
   // Calls `onChange` whenever the session's own state changes (a click opening
-  // a menu), so its next frame is drawn at once rather than when it falls due.
-  // Returns the disposer.
+  // a menu), so its next frame is brought forward (`wake`). Returns the
+  // disposer.
   watch(sessionId: string, onChange: () => void): () => void;
   periods: FeedPeriods;
   // Milliseconds on a clock that never steps back: a feed measures only
@@ -121,14 +121,23 @@ export interface FeedDeps<Req> {
   log(level: Level, line: string): void;
 }
 
+// Why a feed's next frame was brought forward: a value its bar reads changed
+// (`data`), its session's own state moved (`state`), its config reloaded
+// (`reload`), or which panes are on a screen changed (`visibility`).
+const WAKE_CAUSES = ["data", "state", "reload", "visibility"] as const;
+export type WakeCause = (typeof WAKE_CAUSES)[number];
+
 // [LAW:no-ambient-temporal-coupling] Where a feed's frame clock stands, as
-// state: no request to draw from yet; the next frame due at a timer; or a frame
-// being drawn, with whether a change arrived while it was (`again`: draw the
-// next one as soon as this one is out).
+// state: no request to draw from yet; the next frame due `at` a timer; or a
+// frame being drawn.
 type Phase =
   | { readonly kind: "waiting" }
-  | { readonly kind: "due"; readonly timer: ReturnType<typeof setTimeout> }
-  | { kind: "drawing"; again: boolean };
+  | {
+      readonly kind: "due";
+      readonly at: number;
+      readonly timer: ReturnType<typeof setTimeout>;
+    }
+  | { readonly kind: "drawing" };
 
 interface Feed {
   readonly sessionId: string;
@@ -142,6 +151,8 @@ interface Feed {
   readonly rates: Map<Lane, Instant[]>;
   readonly unwatch: () => void;
   phase: Phase;
+  // When the last frame's draw started: what the next one is spaced from.
+  lastStart: number;
   // The last frame pushed, as serialized, so an unchanged frame is never
   // pushed twice and a new subscriber gets the bar at once.
   last: {
@@ -162,6 +173,10 @@ interface Feed {
   drawMs: number;
   // Parts its frames evaluated: between data changes, those reading the instant.
   evaluated: number;
+  // The wakes of each cause, and how many of them found the next frame
+  // already as early as the feed's spacing allows.
+  readonly woke: Record<WakeCause, number>;
+  coalesced: number;
   summarizedAt: number;
 }
 
@@ -274,15 +289,17 @@ export class FrameFeeds<Req> {
     const feed = this.feeds.get(sessionId);
     if (feed === undefined) return;
     feed.noted++;
-    // [LAW:no-ambient-temporal-coupling] Noting wakes nothing: the request's
-    // refreshes have not landed yet. Its renderer wakes the feed once the
-    // request is answered (`wake`), its refreshes landed or its client's
-    // deadline come first; a frame the feed's own clock draws meanwhile, or
-    // after a refresh that lands past the deadline, reads each value as its
-    // owner holds it.
+    // [LAW:single-enforcer] Noting wakes nothing: what the request changes
+    // reaches the bar through its session's view, whose payload moves as the
+    // request is declared and again as each refresh it started lands, and
+    // each of those wakes the feed (`wake`, "data").
     // [LAW:one-source-of-truth] Every frame a subscriber receives is one the
     // feed drew, as a frame (`drawing.by` is "feed", and the bar shows the
     // feed's pace): the request's own answer is its client's alone.
+    // [LAW:no-ambient-temporal-coupling] A feed waiting has no timer: the
+    // request it waited for is noted, so its first frame falls due, whether
+    // or not the request's render opens a view that says so.
+    if (feed.phase.kind === "waiting") this.hasten(feed);
   }
 
   // [LAW:single-enforcer] The one gate on the lanes: a subscription whose
@@ -301,10 +318,12 @@ export class FrameFeeds<Req> {
     feed.followers.set(sub, null);
     if (!feed.rates.has(sub.lane)) feed.rates.set(sub.lane, []);
     // [LAW:no-ambient-temporal-coupling] A feed's clock starts when it opens:
-    // its first frame is drawn once the subscriber that opened it follows it,
-    // and pushed to it. A later subscriber is handed the frame as it stands.
-    if (held === undefined) this.draw(feed);
-    else this.send(feed, sub);
+    // its first frame falls due as a wake's would, in a later turn than the
+    // subscribe, so a subscribe draws nothing in its caller's turn. A later
+    // subscriber is handed the frame as it stands, and the next is brought
+    // forward: who follows the session is drawn into it (`following`).
+    if (held !== undefined) this.send(feed, sub);
+    this.hasten(feed);
     this.deps.log(
       "info",
       `feed sid=${JSON.stringify(sessionId)} subscribed lane=${sub.lane} subscribers=${feed.followers.size} data=${this.requests.has(sessionId) ? "Y" : "N"}`,
@@ -321,29 +340,20 @@ export class FrameFeeds<Req> {
     );
   }
 
-  // Draw the session's next frame now, if anyone is watching it.
-  wake(sessionId: string): void {
+  // Something the session's bar shows changed, for `cause`: its next frame,
+  // if anyone is watching it, is drawn as soon as the feed's spacing allows.
+  wake(sessionId: string, cause: WakeCause): void {
     const feed = this.feeds.get(sessionId);
     if (feed === undefined) return;
-    switch (feed.phase.kind) {
-      case "drawing":
-        feed.phase.again = true;
-        return;
-      case "due":
-        clearTimeout(feed.phase.timer);
-        this.draw(feed);
-        return;
-      case "waiting":
-        this.draw(feed);
-        return;
-    }
+    feed.woke[cause]++;
+    if (!this.hasten(feed)) feed.coalesced++;
   }
 
-  // Draw at once the next frame of every watched session whose latest request
-  // `match` accepts.
-  wakeWhere(match: (req: Req) => boolean): void {
+  // Wake, for `cause`, every watched session whose latest request `match`
+  // accepts.
+  wakeWhere(cause: WakeCause, match: (req: Req) => boolean): void {
     for (const { sessionId, req } of this.watched())
-      if (match(req)) this.wake(sessionId);
+      if (match(req)) this.wake(sessionId, cause);
   }
 
   // The session of the newest request `match` accepts, among the latest
@@ -417,8 +427,10 @@ export class FrameFeeds<Req> {
       sessionId,
       followers: new Map(),
       rates: new Map(),
-      unwatch: this.deps.watch(sessionId, () => this.wake(sessionId)),
+      unwatch: this.deps.watch(sessionId, () => this.wake(sessionId, "state")),
       phase: { kind: "waiting" },
+      // Never drawn: its first frame may be drawn now.
+      lastStart: -Infinity,
       last: null,
       since: now,
       drawn: 0,
@@ -433,6 +445,8 @@ export class FrameFeeds<Req> {
       pace: paceOf(this.deps.periods.still),
       drawMs: 0,
       evaluated: 0,
+      woke: { data: 0, state: 0, reload: 0, visibility: 0 },
+      coalesced: 0,
       summarizedAt: now,
     };
     this.feeds.set(sessionId, feed);
@@ -444,7 +458,11 @@ export class FrameFeeds<Req> {
     if (!feed.followers.delete(sub)) return;
     if (![...feed.followers.keys()].some((s) => s.lane === sub.lane))
       feed.rates.delete(sub.lane);
-    if (feed.followers.size > 0) return;
+    // Who follows the session is drawn into its frame (`following`).
+    if (feed.followers.size > 0) {
+      this.hasten(feed);
+      return;
+    }
     if (feed.phase.kind === "due") clearTimeout(feed.phase.timer);
     feed.unwatch();
     this.feeds.delete(feed.sessionId);
@@ -457,33 +475,31 @@ export class FrameFeeds<Req> {
 
   // [LAW:single-enforcer] The one fault path of a feed's frame step: a throw
   // anywhere in it — the render adapter, the lane gate, a subscriber's sink —
-  // is logged as the feed's fault, and the feed's next frame falls due at the
-  // still rate. A frame step runs off a timer, so a throw it let go would be an
-  // unhandled rejection, which exits the daemon.
+  // is logged as the feed's fault, and the feed's next frame is set as a
+  // still frame's is. A frame step runs off a timer, so a throw it let go
+  // would be an unhandled rejection, which exits the daemon.
   private draw(feed: Feed): void {
+    const noted = this.requests.get(feed.sessionId);
+    if (noted === undefined) {
+      feed.phase = { kind: "waiting" };
+      return;
+    }
+    feed.phase = { kind: "drawing" };
+    const started = this.deps.now();
+    feed.lastStart = started;
     try {
-      this.step(feed);
+      this.step(feed, noted.req, started);
     } catch (error) {
       this.deps.log(
         "error",
         `feed sid=${JSON.stringify(feed.sessionId)} threw: ${inspect(error)}`,
       );
       if (this.feeds.get(feed.sessionId) !== feed) return;
-      const now = this.deps.now();
-      this.schedule(feed, null, now, now);
+      this.schedule(feed, null, started);
     }
   }
 
-  private step(feed: Feed): void {
-    const noted = this.requests.get(feed.sessionId);
-    if (noted === undefined) {
-      feed.phase = { kind: "waiting" };
-      return;
-    }
-    const { req } = noted;
-    const phase: Phase = { kind: "drawing", again: false };
-    feed.phase = phase;
-    const started = this.deps.now();
+  private step(feed: Feed, req: Req, started: number): void {
     // The render adapter answers a failed render with its error frame; a throw
     // out of it is a fault in the adapter, `draw`'s to report.
     const frame = this.deps.render(req, feed.pace);
@@ -500,36 +516,61 @@ export class FrameFeeds<Req> {
     if (this.feeds.get(feed.sessionId) !== feed) return;
     if (finished - feed.summarizedAt >= SUMMARY_EVERY_MS)
       this.summarize(feed, "running");
-    if (phase.again) {
-      this.draw(feed);
-      return;
-    }
-    this.schedule(feed, frame, started, finished);
+    this.schedule(feed, frame, started);
   }
 
   // [LAW:no-ambient-temporal-coupling] The next frame is due a period after
   // this one STARTED, so the rate holds whatever a render costs, up to a
   // render as slow as the period, when frames are drawn back to back. A frame
-  // step that faulted is followed at the still rate.
+  // step that faulted is followed as a still frame is.
   // [LAW:dataflow-not-control-flow] The moving period is for a bar that moves
   // where someone can see it, asked here, as the next frame is set.
-  private schedule(
-    feed: Feed,
-    frame: FeedFrame | null,
-    started: number,
-    finished: number,
-  ): void {
+  private schedule(feed: Feed, frame: FeedFrame | null, started: number): void {
     const moves = frame?.moves === true;
     const seen = moves && this.shown(feed);
     if (seen) feed.moving++;
     if (moves && !seen) feed.unseen++;
     const period = seen ? this.deps.periods.moving : this.deps.periods.still;
     feed.pace = paceOf(period);
+    this.arm(feed, started + period);
+  }
+
+  // [LAW:single-enforcer] The one bound on how close a feed's frames are: the
+  // moving period while its bar is on a screen, the still period while it is
+  // not. No cause of a wake sets the rate, so an unseen feed draws at most
+  // once a still period however often it is woken.
+  private spacingOf(feed: Feed): number {
+    return this.shown(feed)
+      ? this.deps.periods.moving
+      : this.deps.periods.still;
+  }
+
+  // [LAW:single-enforcer] The one way a feed's next frame is brought forward:
+  // to the earliest its spacing allows after the last frame started, never
+  // later than it already falls due. Answers whether it moved anything: a
+  // wake that did not was coalesced into a frame already due.
+  // [LAW:no-ambient-temporal-coupling] A frame is drawn in one synchronous
+  // turn, so a wake while it draws is the draw's own (a view it reopened),
+  // and the frame reads what that moved: it is coalesced into that frame.
+  private hasten(feed: Feed): boolean {
+    const { phase } = feed;
+    if (phase.kind === "drawing") return false;
+    const at = Math.max(this.deps.now(), feed.lastStart + this.spacingOf(feed));
+    if (phase.kind === "due" && phase.at <= at) return false;
+    this.arm(feed, at);
+    return true;
+  }
+
+  // The feed's one timer, set to draw its next frame `at`, in a later turn
+  // than the caller's however soon that is.
+  private arm(feed: Feed, at: number): void {
+    if (feed.phase.kind === "due") clearTimeout(feed.phase.timer);
     feed.phase = {
       kind: "due",
+      at,
       timer: setTimeout(
         () => this.draw(feed),
-        Math.max(0, started + period - finished),
+        Math.max(0, at - this.deps.now()),
       ),
     };
   }
@@ -613,7 +654,7 @@ export class FrameFeeds<Req> {
     const now = this.deps.now();
     this.deps.log(
       "info",
-      `feed sid=${JSON.stringify(feed.sessionId)} ${state} subscribers=${feed.followers.size} lanes=${[...feed.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round((now - feed.since) / 1000)}s drawn=${feed.drawn} noted=${feed.noted} moving=${feed.moving} unseen=${feed.unseen} failed=${feed.failed} pushed=${feed.pushed} pace=${feed.pace}fps evaluated=${feed.evaluated} meanDraw=${feed.drawn === 0 ? "-" : (feed.drawMs / feed.drawn).toFixed(2)}ms`,
+      `feed sid=${JSON.stringify(feed.sessionId)} ${state} subscribers=${feed.followers.size} lanes=${[...feed.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round((now - feed.since) / 1000)}s drawn=${feed.drawn} noted=${feed.noted} moving=${feed.moving} unseen=${feed.unseen} failed=${feed.failed} pushed=${feed.pushed} pace=${feed.pace}fps evaluated=${feed.evaluated} woke=${WAKE_CAUSES.map((cause) => `${cause}:${feed.woke[cause]}`).join(",")} coalesced=${feed.coalesced} meanDraw=${feed.drawn === 0 ? "-" : (feed.drawMs / feed.drawn).toFixed(2)}ms`,
     );
     feed.summarizedAt = now;
   }

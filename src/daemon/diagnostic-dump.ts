@@ -54,7 +54,12 @@ export interface DumpSync {
 export class DiagnosticDump {
   private readonly synced = new Map<string, Synced>();
 
-  constructor(private readonly dir: string) {}
+  // `changed` hears a session's id whenever the link a frame offers for it
+  // moves: nothing a session's view tracks says so.
+  constructor(
+    private readonly dir: string,
+    private readonly changed: (sessionId: string) => void,
+  ) {}
 
   // Pure: the path a session's dump lives at, whether or not it exists. The
   // strip names it before the daemon writes it, so the two agree by
@@ -87,6 +92,9 @@ export class DiagnosticDump {
     this.synced.delete(sessionId);
     this.synced.set(sessionId, { order, text, failure });
     this.forgetOldestClean();
+    // [LAW:single-enforcer] The link is this record's text and failure; a
+    // sync that moved neither tells no one.
+    if (text !== last.text || failure !== last.failure) this.changed(sessionId);
     return { link: this.linkFor(sessionId, text), failure };
   }
 

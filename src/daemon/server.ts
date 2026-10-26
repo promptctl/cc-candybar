@@ -337,21 +337,18 @@ const tmuxStatusLines: TmuxStatusLines = new TmuxStatusLines({
     "url-handle",
   ].join(" "),
   owner: socketPath(),
-  defer: (run) => void setImmediate(run),
   log: dlog,
 });
 // Each subscribed session's frames, drawn from its latest render request
 // (candybar-animation-wbxz.jmm.usl). A change to the session's own state — a
-// click — draws its next frame at once.
+// click — brings its next frame forward.
 const frameFeeds: FrameFeeds<CheckedRenderRequest> = new FrameFeeds({
   render: (req, fps) => renderFrame(req, fps),
-  // [LAW:no-ambient-temporal-coupling] The wake runs on the next turn of the
-  // event loop, not inside the session write that changed the revision, so a
-  // click's whole run of writes lands before a frame of it is drawn.
+  // [LAW:no-ambient-temporal-coupling] A wake only moves the feed's timer,
+  // which fires in a later turn, so a click's whole run of writes and its
+  // journal commit land before a frame of it is drawn.
   watch: (sessionId, onChange) =>
-    reaction(() => sessionState.revision(sessionId), onChange, {
-      scheduler: (run) => setImmediate(run),
-    }),
+    reaction(() => sessionState.revision(sessionId), onChange),
   lanes: (req) => lanesOf(req),
   shown: (req) => paneVisibility.shown(req.hints.tmux),
   watching: () => paneVisibility.follow(),
@@ -383,7 +380,7 @@ const paneVisibility: PaneVisibility = new PaneVisibility({
   onAnswer: (socket, status) => tmuxStatusLines.answered(socket, status),
   // Only the sessions on a server whose view changed are drawn again.
   onChange: (sockets) =>
-    frameFeeds.wakeWhere((req) =>
+    frameFeeds.wakeWhere("visibility", (req) =>
       tmuxServersOf(req).some((socket) => sockets.has(socket)),
     ),
   intervalMs: 1000,
@@ -399,7 +396,11 @@ function tmuxServersOf({
 // [LAW:locality-or-seam] Same terms as sessionState: naming the directory is
 // free; the daemon wipes it in onListening() (reset), once the bind is
 // won, and is the only writer.
-const diagnosticDump = new DiagnosticDump(diagnosticsDir());
+// [LAW:single-enforcer] A dump link moving is a data wake like any other: a
+// frame drawn before its request's sync shows the old link until then.
+const diagnosticDump = new DiagnosticDump(diagnosticsDir(), (sessionId) =>
+  frameFeeds.wake(sessionId, "data"),
+);
 const renderCache = new RenderCache<SessionSource>(
   {
     sessionState,
@@ -437,11 +438,20 @@ const renderCache = new RenderCache<SessionSource>(
       // — the operator's only record of whether a save was picked up cleanly,
       // kept rendering last-known-good behind an error, or resolved to a
       // different file. Same info level as the detection line.
-      onReload: (entry) =>
+      onReload: (entry, sessions) => {
         dlog(
           "info",
           `config loaded projectDir=${entry.projectDir} cwd=${entry.cwd} files=${entry.configLayers.join(" < ") || "<bundled default>"} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warning=${entry.lastWarning === null ? "none" : JSON.stringify(entry.lastWarning)}`,
-        ),
+        );
+        // A reload changes the bar of every session drawn from the entry,
+        // even one that failed and kept the old config: its strip says so.
+        for (const sessionId of sessions) frameFeeds.wake(sessionId, "reload");
+      },
+      // [LAW:single-enforcer] What a session's view draws from moved: its
+      // feed's next frame is brought forward, whatever moved it: a request's
+      // facts, a refresh landing after its deadline, a source publishing, a
+      // pick. The dump link, which no view holds, wakes the same way.
+      onViewChanged: (sessionId) => frameFeeds.wake(sessionId, "data"),
     },
   },
 );
@@ -1368,7 +1378,7 @@ export async function replyTo(
       sighted(checked.req, "drawing");
       // [LAW:one-source-of-truth] A request past the checkpoint is the
       // session's data from now on; a followed session's next frame is drawn
-      // from it once the request settles (answerRequest). Its answer is its
+      // from it, brought forward as its view takes it up. Its answer is its
       // own client's, drawn for a request, and never a frame
       // (src/daemon/frame-feed.ts).
       frameFeeds.note(checked.req.sessionId, checked.req, order);
@@ -2428,18 +2438,7 @@ async function answerRequest(
   facts: RenderFacts,
 ): Promise<RequestAnswer> {
   recordRequest(req);
-  try {
-    return await drawAnswer(req, order, at, wait, facts);
-  } finally {
-    // [LAW:no-ambient-temporal-coupling] A followed session's next frame is
-    // drawn once this request has been answered — its own bar drawn, by its
-    // client's deadline, or its failure thrown — so the frame shows what the
-    // request carried, at an instant after it, and a request that fails
-    // leaves no feed waiting on it. Deferred, so the frame's draw is never a cost of
-    // the request's own answer.
-    const sessionId = req.sessionId;
-    setImmediate(() => frameFeeds.wake(sessionId));
-  }
+  return drawAnswer(req, order, at, wait, facts);
 }
 
 // [LAW:effects-at-boundaries] What a request's arrival starts beyond its

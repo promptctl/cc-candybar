@@ -142,6 +142,8 @@ async function renderFrames(): Promise<void> {
         history: () => EMPTY_HISTORY_DEPTH,
         navigation: () => 0,
       }),
+      // The demo draws one frame per tick of its own: no feed to wake.
+      changed: () => {},
       log,
     },
   );

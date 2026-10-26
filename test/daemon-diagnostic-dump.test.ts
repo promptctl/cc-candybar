@@ -20,11 +20,16 @@ describe("DiagnosticDump", () => {
   let dump: DiagnosticDump;
   // Each sync is the next request to arrive, unless a test says otherwise.
   let arrivals = 0;
+  // The sessions the dump told that their link moved, in order.
+  let told: string[];
   const sync = (sid: string, text: string | null) =>
     dump.sync(sid, ++arrivals, text);
   beforeEach(() => {
     root = mkdtempSync(path.join(os.tmpdir(), "cc-candybar-dump-"));
-    dump = new DiagnosticDump(path.join(root, "diagnostics"));
+    told = [];
+    dump = new DiagnosticDump(path.join(root, "diagnostics"), (sid) =>
+      told.push(sid),
+    );
   });
   afterEach(() => rmSync(root, { recursive: true, force: true }));
 
@@ -121,6 +126,26 @@ describe("DiagnosticDump", () => {
     expect(readFileSync(p, "utf8")).toBe("ERROR\nboom\n");
     sync("sid", null);
     expect(dump.linkFor("sid", null)).toEqual(file);
+  });
+
+  // brandon-unfiled-3248.8ro6 §4e: a feed frame drawn before its request's
+  // sync links nothing, and is drawn again only if something says so.
+  test("tells its observer when the link a frame offers moves, and only then", () => {
+    sync("sid", "ERROR\nboom\n");
+    sync("sid", "ERROR\nboom\n");
+    sync("other", null);
+    expect(told).toEqual(["sid"]);
+    sync("sid", "ERROR\nworse\n");
+    dump.sync("sid", 0, "ERROR\nolder\n");
+    sync("sid", null);
+    expect(told).toEqual(["sid", "sid", "sid"]);
+    // A failed write moves the link to its reason; the same failure again
+    // moves nothing.
+    rmSync(path.join(root, "diagnostics"), { recursive: true });
+    writeFileSync(path.join(root, "diagnostics"), "");
+    sync("failing", "ERROR\nboom\n");
+    sync("failing", "ERROR\nboom\n");
+    expect(told).toEqual(["sid", "sid", "sid", "failing"]);
   });
 
   test("reset wipes the directory and forgets what was written", () => {
