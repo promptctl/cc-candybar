@@ -92,7 +92,7 @@ describe("a cache policy over the view's payload", () => {
           'style.effective': { kind: "input", path: "style.effective", default: "" },
           probe: {
             kind: "shell",
-            command: "echo run >> ${runs}; echo ran",
+            command: "echo run >> ${runs}; n=$(grep -c . ${runs}); while [ ! -e ${runs}.open$n ]; do sleep 0.01; done; echo ran",
             cache: { key: "{{ .style.effective }}" },
           },
         },
@@ -101,7 +101,12 @@ describe("a cache policy over the view's payload", () => {
       }`,
     );
     const view = viewOver(config, { hot: false }, runs);
+    // [LAW:no-ambient-temporal-coupling] Each run waits at its gate until the
+    // test opens it, so "still out" is a state the test holds, never a race
+    // between the run's exit and a timer.
+    const open = (n: number) => fs.writeFileSync(`${runs}.open${n}`, "");
     try {
+      open(1);
       expect(await view.registry.settled(RUN_WITHIN_MS)).toEqual([]);
       expect(view.runs()).toBe(1);
       view.draw();
@@ -112,6 +117,7 @@ describe("a cache policy over the view's payload", () => {
       // the key's run starts in that turn, before any draw.
       view.arrive({ hot: true });
       expect(await view.registry.settled(0)).toEqual(["probe"]);
+      open(2);
       expect(await view.registry.settled(RUN_WITHIN_MS)).toEqual([]);
       expect(view.runs()).toBe(2);
       view.draw();
