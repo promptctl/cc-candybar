@@ -21,6 +21,12 @@ export async function loggedWhen(
   return lines;
 }
 
+// [LAW:one-source-of-truth] A render event whose reply its client read: an
+// attempt the client gave up on is logged too, so a count of a session's
+// answers counts these, never every event.
+export const answeredRender = (line: string): boolean =>
+  line.includes(" timedOut=N ");
+
 // A session's render events, every attempt in log order, once `count` replies
 // its client read are among them: a request the client retried after a
 // timeout is logged once per attempt, and the attempt it read is the one not
@@ -33,7 +39,7 @@ export async function renderLines(
   const of = (lines: readonly string[]) =>
     lines.filter((l) => l.includes(`render sid=${sessionId} `));
   const read = (lines: readonly string[]) =>
-    of(lines).filter((l) => l.includes(" timedOut=N "));
+    of(lines).filter(answeredRender);
   try {
     return of(
       await loggedWhen(

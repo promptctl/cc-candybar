@@ -17,7 +17,7 @@ import { effectsUrl, VERB_LOAD_CONFIG, VERB_SET_STATE } from "../src/click/wire"
 import { LANES, type Lane } from "../src/config/lanes";
 import type { ClientHints } from "../src/daemon/protocol";
 import { click, killAndWait, render } from "./helpers/daemon-e2e";
-import { logLines, renderLines } from "./helpers/daemon-log";
+import { answeredRender, logLines, renderLines } from "./helpers/daemon-log";
 import {
   prepareIsolatedDaemonEnv,
   spawnDaemonWithEnv,
@@ -95,9 +95,11 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
       l.includes(`tmux-status: ${what} sid=${JSON.stringify(sid)}`),
     );
   // A request whose render event is logged: everything its arrival started
-  // has been logged before it.
+  // has been logged before it. Counted by answers, since a cold render past
+  // the daemon's per-request guard logs a timed-out attempt beside the one
+  // its retry got.
   const renderedAgain = async (sid: string, dir = projectDir): Promise<void> => {
-    const before = (await renderLines(env, sid)).length;
+    const before = (await renderLines(env, sid)).filter(answeredRender).length;
     await renderIn(sid, dir);
     await renderLines(env, sid, before + 1);
   };
