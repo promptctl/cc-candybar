@@ -1,6 +1,8 @@
 import { reaction } from "mobx";
 import { ColorDepth, ensureContrast, parseRgbHex } from "@promptctl/rich-js";
 import { feedInputs } from "./helpers/inputs";
+import { shellGate } from "./helpers/shell-gate";
+import { until } from "./helpers/until";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -1707,20 +1709,20 @@ describe("SourceRegistry — depends_on cache policy", () => {
       // the change below provably lands after the read and before the pass
       // ends — a guessed delay could land before `cat` and prove nothing.
       const readMark = path.join(dir, "read");
-      const go = path.join(dir, "go");
-      registry.declareShell("val", `cat ${dataFile}; touch ${readMark}; until [ -e ${go} ]; do sleep 0.01; done`, {
+      const go = shellGate(path.join(dir, "go"));
+      go.close();
+      registry.declareShell("val", `cat ${dataFile}; touch ${readMark}; ${go.hold}`, {
         cwd: process.cwd(),
         parse: TEXT,
         cache: { kind: "depends_on", varNames: ["trigger"] },
       });
 
-      for (let i = 0; i < 500 && !fs.existsSync(readMark); i++) await elapse(10);
-      expect(fs.existsSync(readMark)).toBe(true);
+      await until(() => fs.existsSync(readMark), "the pass reading the file");
       // Change both the dependency and the data: this is the collision, not a
       // sequence.
       fs.writeFileSync(dataFile, "v2");
       store.setBox("trigger", "b");
-      fs.writeFileSync(go, "");
+      go.open();
 
       // The queued re-read is part of the tracked work, so `ran` is what
       // decides when to look — no second sleep guessing at the re-read.
@@ -2048,11 +2050,20 @@ describe("SourceRegistry — parse seam", () => {
   });
 
   it("settled() names the sources still in flight at its deadline", async () => {
-    const { registry } = make();
-    registry.declareShell("slow", `sleep 1; echo x`, { cwd: process.cwd(), parse: TEXT, cache: { kind: "never" } });
-    registry.declareShell("fast", `echo y`, { cwd: process.cwd(), parse: TEXT, cache: { kind: "never" } });
-    expect(await registry.settled(100)).toEqual(["slow"]);
-    expect(await registry.settled(3000)).toEqual([]);
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const gate = shellGate(path.join(dir, "gate"));
+      gate.close();
+      const { store, registry } = make();
+      registry.declareShell("slow", `${gate.hold}; echo x`, { cwd: process.cwd(), parse: TEXT, cache: { kind: "never" } });
+      registry.declareShell("fast", `echo y`, { cwd: process.cwd(), parse: TEXT, cache: { kind: "never" } });
+      await until(() => store.read("fast") === "y", "fast's run publishing");
+      expect(await registry.settled(0)).toEqual(["slow"]);
+      gate.open();
+      expect(await registry.settled(3000)).toEqual([]);
+    } finally {
+      cleanup();
+    }
   });
 
   it("a file source takes the same json parser", async () => {
@@ -2171,43 +2182,52 @@ describe("SourceRegistry — in-flight runs", () => {
     const { dir, cleanup } = makeTmpDir();
     try {
       const spawns = path.join(dir, "spawns");
+      const gate = shellGate(path.join(dir, "gate"));
+      gate.close();
       const { registry: home } = make();
       const view = home.view();
       live.add(view);
       const period = { kind: "ttl", durationMs: MIN_SHELL_TTL_MS } as const;
-      const counted = (out: string) => `echo x >> ${spawns}; sleep 0.3; echo ${out}`;
+      const counted = (out: string) => `echo x >> ${spawns}; ${gate.hold}; echo ${out}`;
       home.declareShell("dir", counted("d"), { cwd: process.cwd(), parse: TEXT, cache: period });
       view.declareShell("own", counted("o"), { cwd: process.cwd(), parse: TEXT, cache: period });
       expect([...(await view.settled(50))].sort()).toEqual(["dir", "own"]);
+      gate.open();
       expect(await view.settled(3000)).toEqual([]);
-      // Both periods' re-runs out: a re-read keeps the answer it has.
+      // Both periods' re-runs held out: a re-read keeps the answer it has. A
+      // re-run can pass the gate while it is open, so only the runs spawned
+      // after it closes are the held ones.
+      gate.close();
       const spawned = (): number => fs.readFileSync(spawns, "utf8").split("\n").length - 1;
-      const rerunBy = Date.now() + 3000;
-      while (spawned() < 4 && Date.now() < rerunBy) {
-        await new Promise((resolve) => setTimeout(resolve, 20));
-      }
-      expect(spawned()).toBeGreaterThanOrEqual(4);
-      const asked = Date.now();
+      const closedAt = spawned();
+      await until(() => spawned() >= closedAt + 2, "both periods' re-runs spawning", 3000);
       expect(await view.settled(3000)).toEqual([]);
-      expect(Date.now() - asked).toBeLessThan(150);
     } finally {
       cleanup();
     }
   });
 
   it("a wait is for a run its key moved", async () => {
-    const store = new VariableStore();
-    const registry = registryOver(store);
-    store.defineBox("trigger", "string", "a");
-    registry.declareShell("val", "sleep 0.3; echo v", {
-      cwd: process.cwd(),
-      parse: TEXT,
-      cache: { kind: "key", template: "{{ .trigger }}" },
-    });
-    expect(await registry.settled(3000)).toEqual([]);
-    store.setBox("trigger", "b");
-    expect(await registry.settled(50)).toEqual(["val"]);
-    expect(await registry.settled(3000)).toEqual([]);
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const gate = shellGate(path.join(dir, "gate"));
+      const store = new VariableStore();
+      const registry = registryOver(store);
+      store.defineBox("trigger", "string", "a");
+      registry.declareShell("val", `${gate.hold}; echo v`, {
+        cwd: process.cwd(),
+        parse: TEXT,
+        cache: { kind: "key", template: "{{ .trigger }}" },
+      });
+      expect(await registry.settled(3000)).toEqual([]);
+      gate.close();
+      store.setBox("trigger", "b");
+      expect(await registry.settled(50)).toEqual(["val"]);
+      gate.open();
+      expect(await registry.settled(3000)).toEqual([]);
+    } finally {
+      cleanup();
+    }
   });
 
   it("inFlight() lets go of a run that never ends when its signal aborts", async () => {

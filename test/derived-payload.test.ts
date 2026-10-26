@@ -15,6 +15,7 @@ import os from "node:os";
 import path from "node:path";
 import { observable, runInAction } from "mobx";
 import { parseAndValidate } from "./helpers/parse-and-validate";
+import { shellGate } from "./helpers/shell-gate";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import type { ValidatedConfig } from "../src/config/dsl-types";
@@ -82,6 +83,7 @@ describe("a cache policy over the view's payload", () => {
   afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
 
   test("a key over a style rule's .effective runs in the turn its data moves, never in a draw", async () => {
+    const gate = shellGate(path.join(dir, "gate"));
     const config = parseAndValidate(
       "<test>",
       `{
@@ -92,7 +94,7 @@ describe("a cache policy over the view's payload", () => {
           'style.effective': { kind: "input", path: "style.effective", default: "" },
           probe: {
             kind: "shell",
-            command: "echo run >> ${runs}; echo ran",
+            command: "echo run >> ${runs}; ${gate.hold}; echo ran",
             cache: { key: "{{ .style.effective }}" },
           },
         },
@@ -110,8 +112,10 @@ describe("a cache policy over the view's payload", () => {
       expect(view.runs()).toBe(1);
       // The data the rule reads moves: the rule settles on another name, and
       // the key's run starts in that turn, before any draw.
+      gate.close();
       view.arrive({ hot: true });
       expect(await view.registry.settled(0)).toEqual(["probe"]);
+      gate.open();
       expect(await view.registry.settled(RUN_WITHIN_MS)).toEqual([]);
       expect(view.runs()).toBe(2);
       view.draw();
