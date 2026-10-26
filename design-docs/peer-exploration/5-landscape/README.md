@@ -243,6 +243,7 @@ Below the top 1,000 those products thin out, and personal bars take their place.
 
 ## Files
 
+- [landscape.html](landscape.html): open it from disk to explore all 4,002 as a graph of what they do. Each project hangs off its functional characteristics (not a statusline, feeds data back into Claude, games, themes, quota and so on), and each new idea is shown with the screen's reason for calling it unusual. Its source is [explorer/](explorer/), a Svelte app: run `pnpm data` there, then `pnpm build`.
 - [projects.md](projects.md): one section per project for the top 1,000, in rank order.
 - [projects-tail.md](projects-tail.md): one section for each of the 3,002 read from below them, grouped by commit band. In both files, detail follows what the code does: one sentence for a field printer, up to six for a rich bar or an engine, anchored to files.
 - [projects.tsv](projects.tsv): all 4,002 as a table. Ranks run over all 7,069 projects by commits, so gaps in the tail are projects not read. Columns: commit band, commits, dates, stars, language, kind, shape, motive, feature-family codes ([families.md](families.md)), statusline code size, and the closest code overlaps among all 7,046.
