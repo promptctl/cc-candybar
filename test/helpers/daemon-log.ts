@@ -22,20 +22,23 @@ export async function loggedWhen(
   return lines;
 }
 
-// A session's render events once it has at least `count`: a request a client
-// retried is logged once per attempt, so a test asks for what it sent.
+// The render events of the replies a session's client read, once there are
+// `count`: a request the client retried after a timeout is logged once per
+// attempt, and the attempt it read is the one not timed out.
 export async function renderLines(
   env: NodeJS.ProcessEnv,
   sessionId: string,
   count = 1,
 ): Promise<string[]> {
-  const of = (lines: readonly string[]) =>
-    lines.filter((l) => l.includes(`render sid=${sessionId} `));
-  return of(
+  const read = (lines: readonly string[]) =>
+    lines.filter(
+      (l) => l.includes(`render sid=${sessionId} `) && l.includes(" timedOut=N "),
+    );
+  return read(
     await loggedWhen(
       env,
-      (lines) => of(lines).length >= count,
-      `${count} render event(s) for ${sessionId}`,
+      (lines) => read(lines).length >= count,
+      `${count} answered render event(s) for ${sessionId}`,
     ),
   );
 }

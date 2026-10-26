@@ -574,7 +574,10 @@ async function run(): Promise<{
   // counted, so the difference grows as the heap shrinks.
   const underLoad = charges.slice(0, -1);
   const secondHalf = underLoad.slice(Math.floor(underLoad.length / 2));
-  const chargeClimb = secondHalf.at(-1)! - secondHalf[0]!;
+  // Two samples at least, or there is no climb to judge: a run whose samples
+  // went unanswered fails here as well as on its own check.
+  const chargeClimb =
+    secondHalf.length < 2 ? null : secondHalf.at(-1)! - secondHalf[0]!;
   const last = samples.at(-1)!.stats;
   const held = (pick: (s: StatsSnapshot) => number) => [
     ...new Set(samples.map((s) => pick(s.stats))),
@@ -632,8 +635,11 @@ async function run(): Promise<{
     },
     {
       name: "charge not climbing under load",
-      pass: chargeClimb <= CLIMB_LIMIT_BYTES,
-      detail: `${mb(secondHalf[0]!)} MB to ${mb(secondHalf.at(-1)!)} MB over the steady phase's second half (limit +${mb(CLIMB_LIMIT_BYTES)} MB)`,
+      pass: chargeClimb !== null && chargeClimb <= CLIMB_LIMIT_BYTES,
+      detail:
+        chargeClimb === null
+          ? `${secondHalf.length} sample(s) in the steady phase's second half, too few to judge`
+          : `${mb(secondHalf[0]!)} MB to ${mb(secondHalf.at(-1)!)} MB over the steady phase's second half (limit +${mb(CLIMB_LIMIT_BYTES)} MB)`,
     },
     {
       // Watchers opened and closed while the watched set holds still: the

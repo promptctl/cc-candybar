@@ -200,7 +200,15 @@ describe("every render request writes one render event, whatever its outcome", (
       outcome: string,
       level: string,
     ): Promise<Event> => {
-      const events = await eventsOf(sid);
+      const events = eventsNow(
+        sid,
+        await loggedWhen(
+          env,
+          (lines) =>
+            eventsNow(sid, lines).some((e) => field(e, "timedOut") === "N"),
+          `the answered render event for ${sid}`,
+        ),
+      );
       for (const event of events) {
         expect(event.level).toBe(level);
         expect(field(event, "outcome")).toBe(outcome);
@@ -220,6 +228,11 @@ describe("every render request writes one render event, whatever its outcome", (
     // values are all in, the source's name where one is not
     // (brandon-unfiled-3248.8ro6).
     expect(field(drawn, "pending")).toBe("-");
+    // How long the request waited, from the connection's accept, before its
+    // render began: whole milliseconds, and inside the request's own timeout.
+    const waited = /^(\d+)ms$/u.exec(field(drawn, "waited") ?? "");
+    expect(waited).not.toBeNull();
+    expect(Number(waited![1])).toBeLessThan(200);
     const waiting = stripAnsi(
       await render(sockPath, "ev-pending", projectDir, hints, configFlag("waiting")),
     );

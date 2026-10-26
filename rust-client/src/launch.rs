@@ -149,7 +149,7 @@ pub fn spawn_node_detached_daemon(node_script: &Path) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::heap_cap_mb;
+    use super::{heap_cap_mb, DEFAULT_RSS_LIMIT_MB};
     use std::fs;
     use std::path::{Path, PathBuf};
 

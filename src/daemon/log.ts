@@ -17,11 +17,11 @@ const KEEP_GENERATIONS = 3;
 // and closing the file per line cost ~0.6 ms idle and several under load.
 //
 // [LAW:types-are-the-program] The open log is one value, or none: the file it
-// is, its descriptor, and the bytes it holds.
+// is and its descriptor.
 interface Sink {
   readonly path: string;
   readonly fd: number;
-  bytes: number;
+  readonly ino: number;
 }
 let sink: Sink | null = null;
 
@@ -33,24 +33,31 @@ function close(): void {
   sink = null;
 }
 
-// The held sink while it is still the file at the log's path, else a fresh
-// open. The path is read per line (tests move $XDG_STATE_HOME), and a state dir
-// removed out from under the daemon unlinks the file the descriptor holds, so
-// the next line recreates it rather than writing into a file nobody can read.
-function sinkFor(filePath: string): Sink {
-  if (
-    sink !== null &&
-    sink.path === filePath &&
-    fs.fstatSync(sink.fd).nlink > 0
-  ) {
-    return sink;
+// The file now at the log's path and where its end is. The path is read per
+// write (tests move $XDG_STATE_HOME), and the held descriptor is kept only while
+// it is still that file: a state dir removed under the daemon, or a log another
+// daemon rotated, puts a different file there (or none), and the next write goes
+// to it, never into a file nobody reads.
+function sinkAt(filePath: string): { held: Sink; end: number } {
+  const st = statOrNull(filePath);
+  if (sink === null || sink.path !== filePath || sink.ino !== st?.ino) {
+    close();
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    const fd = fs.openSync(
+      filePath,
+      fs.constants.O_WRONLY | fs.constants.O_CREAT,
+    );
+    sink = { path: filePath, fd, ino: fs.fstatSync(fd).ino };
   }
-  close();
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  const fd = fs.openSync(filePath, "a");
-  // The size on disk, so rotation triggers correctly across daemon restarts.
-  sink = { path: filePath, fd, bytes: fs.fstatSync(fd).size };
-  return sink;
+  return { held: sink, end: st?.ino === sink.ino ? st.size : 0 };
+}
+
+function statOrNull(filePath: string): fs.Stats | null {
+  try {
+    return fs.statSync(filePath);
+  } catch {
+    return null;
+  }
 }
 
 // Self-rotation: when daemon.log exceeds MAX_BYTES, shift .1→.2, .2→.3, drop
@@ -70,12 +77,14 @@ function rotate(filePath: string): void {
 }
 
 // Lines not yet handed to a write, and the one write the file has been handed:
-// its bytes, and the size the file reaches once they land.
+// its bytes and the offset they go to. Each write names its offset rather than
+// appending, so writing the same bytes there again changes nothing — which is
+// what lets the way out finish a write it cannot see the end of.
 let waiting: string[] = [];
 let writing: {
   readonly fd: number;
   readonly bytes: Buffer;
-  readonly endsAt: number;
+  readonly at: number;
 } | null = null;
 const drainedWaiters: Array<() => void> = [];
 let exitArmed = false;
@@ -106,48 +115,50 @@ function pump(): void {
   }
   const lines = waiting.join("");
   waiting = [];
-  let held: Sink;
+  let at: { held: Sink; end: number };
   try {
     // [LAW:single-enforcer] Path resolution reaches os.homedir(); it lives
     // inside the one boundary that makes dlog total.
-    held = sinkFor(logPath());
+    at = sinkAt(logPath());
   } catch (e) {
     unwritable(lines, e);
     pump();
     return;
   }
-  const bytes = Buffer.from(lines);
-  const out = { fd: held.fd, bytes, endsAt: held.bytes + bytes.length };
-  writing = out;
-  fs.write(held.fd, bytes, (err, written) => {
+  const { held, end } = at;
+  writeFrom(held, Buffer.from(lines), end);
+}
+
+// One write of `bytes` at `offset`, and of whatever a short write left after
+// it, before the next batch.
+function writeFrom(held: Sink, bytes: Buffer, offset: number): void {
+  writing = { fd: held.fd, bytes, at: offset };
+  fs.write(held.fd, bytes, 0, bytes.length, offset, (err, written) => {
     writing = null;
     if (err !== null) {
       close();
-      unwritable(lines, err);
-    } else {
-      held.bytes += written;
+      unwritable(bytes.toString(), err);
+    } else if (written < bytes.length) {
+      writeFrom(held, bytes.subarray(written), offset + written);
+      return;
+    } else if (offset + written >= MAX_BYTES) {
       // Between writes, never under one: the rename moves a file no write holds.
-      if (held.bytes >= MAX_BYTES) {
-        close();
-        rotate(held.path);
-      }
+      close();
+      rotate(held.path);
     }
     pump();
   });
 }
 
-// On the way out, after the event loop's last turn: the write in flight lands
-// or not as the file's size says, and every line still waiting follows it.
+// On the way out, after the event loop's last turn: the write in flight is made
+// again at its offset (whether or not it landed, the file then holds it once),
+// and every line still waiting follows it.
 function writeWaitingSync(): void {
   const out = writing;
   writing = null;
   if (out !== null) {
     try {
-      const size = fs.fstatSync(out.fd).size;
-      const start = out.endsAt - out.bytes.length;
-      if (size < out.endsAt) {
-        fs.writeSync(out.fd, out.bytes.subarray(Math.max(0, size - start)));
-      }
+      fs.writeSync(out.fd, out.bytes, 0, out.bytes.length, out.at);
     } catch (e) {
       unwritable(out.bytes.toString(), e);
     }
@@ -156,7 +167,8 @@ function writeWaitingSync(): void {
   const lines = waiting.join("");
   waiting = [];
   try {
-    fs.writeSync(sinkFor(logPath()).fd, lines);
+    const { held, end } = sinkAt(logPath());
+    fs.writeSync(held.fd, lines, end);
   } catch (e) {
     unwritable(lines, e);
   }

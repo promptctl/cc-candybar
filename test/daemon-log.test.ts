@@ -115,6 +115,21 @@ describe("dlog", () => {
     );
   });
 
+  test("a log another writer moved aside is not written into: the next line starts the file at the path", async () => {
+    await withFreshLog(
+      () => {},
+      async (dlog, logFile, drained) => {
+        dlog("info", "one");
+        await drained();
+        fs.renameSync(logFile, `${logFile}.1`);
+        dlog("info", "two");
+        await drained();
+        expect(fs.readFileSync(`${logFile}.1`, "utf8")).not.toContain("two");
+        expect(fs.readFileSync(logFile, "utf8")).toMatch(/^\S+ \[info\] two\n$/);
+      },
+    );
+  });
+
   test("never throws: an unwritable sink degrades to stderr, line intact", async () => {
     await withFreshLog(
       (logFile) => {

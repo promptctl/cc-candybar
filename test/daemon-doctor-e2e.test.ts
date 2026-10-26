@@ -9,7 +9,6 @@ import { builtBundle } from "./helpers/spawn-test-daemon";
 import {
   mkdtempSync,
   mkdirSync,
-  readFileSync,
   realpathSync,
   writeFileSync,
 } from "node:fs";
@@ -46,7 +45,7 @@ import {
   productionHandlerProbeEdge,
 } from "../src/doctor/handler-probe";
 import { PACKAGE_VERSION } from "../src/version";
-import { logPath } from "../src/daemon/paths";
+import { loggedWhen, renderLines } from "./helpers/daemon-log";
 import { crateDigest } from "../src/source-digest";
 import { productionInstallEdge } from "../src/doctor/edge";
 import { installOf, rateLimitsOf } from "../src/doctor/cli";
@@ -442,7 +441,11 @@ test("a bar whose only motion is a template's fails effect refresh", async () =>
     daemon = await spawnDaemonWithEnv(env);
     const SID = "doctor-e2e-frames";
     const hints = { claudeConfigDir: claudeDir };
-    const draw = () => render(sockPath, SID, projectDir, hints);
+    let drawn = 0;
+    const draw = () => {
+      drawn++;
+      return render(sockPath, SID, projectDir, hints);
+    };
     await click(
       sockPath,
       urlWriting(await draw(), SETTINGS_ANCHOR, SETTINGS_OPEN),
@@ -487,25 +490,21 @@ test("a bar whose only motion is a template's fails effect refresh", async () =>
     );
     expect(flat(await draw())).toContain("✓ effect refresh");
 
-    const motion = readFileSync(logPath(env), "utf8")
-      .split("\n")
-      .filter((l) => l.includes(`render sid=${SID} `))
-      .map((l) => l.match(/ motion=(\S+) /)?.[1]);
+    const events = await renderLines(env, SID, drawn);
+    const motion = events.map((l) => l.match(/ motion=(\S+) /)?.[1]);
     expect(motion[0]).toBe("moves");
     expect(motion).toContain("can-move");
     // The render event says how long a drawn menu has sat idle, of its timeout.
-    const menuIdle = readFileSync(logPath(env), "utf8")
-      .split("\n")
-      .filter((l) => l.includes(`render sid=${SID} `))
-      .map((l) => l.match(/ menuIdle=(\S+) /)?.[1]);
+    const menuIdle = events.map((l) => l.match(/ menuIdle=(\S+) /)?.[1]);
     expect(menuIdle[0]).toBe("-");
     expect(menuIdle).toContainEqual(expect.stringMatching(/^\d+\.\ds\/30s$/));
     expect(motion).toContain("still");
+    const doctorLines = (lines: readonly string[]) =>
+      lines.filter((l) => l.includes("doctor:") && l.includes(`session=${SID}`));
     expect(
-      readFileSync(logPath(env), "utf8")
-        .split("\n")
-        .filter((l) => l.includes("doctor:") && l.includes(`session=${SID}`))
-        .map((l) => l.match(/ frames=(\S+) /)?.[1]),
+      doctorLines(
+        await loggedWhen(env, (lines) => doctorLines(lines).length >= 4, "the doctor's four runs"),
+      ).map((l) => l.match(/ frames=(\S+) /)?.[1]),
     ).toEqual(["1/0/0/0/0", "1/0/0/0/0", "0/1/0/0/0", "0/0/1/0/0"]);
   } finally {
     if (daemon) await killAndWait(daemon);

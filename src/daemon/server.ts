@@ -898,7 +898,9 @@ function shutdown(code: number): void {
 // --- per-connection handler ---
 
 function handleConnection(sock: net.Socket): void {
-  const accepted = Date.now();
+  // [LAW:effects-at-boundaries] When the connection was accepted, on the
+  // monotonic clock: a render says how long it waited from here to begin.
+  const accepted = performance.now();
   inFlight++;
   stats.inFlight = inFlight;
   let responded = false;
@@ -1288,6 +1290,7 @@ export async function replyTo(
     const started = new Date();
     const at = instantOf(started);
     const t0 = started.getTime();
+    const waitedMs = Math.round(performance.now() - accepted);
     // [LAW:nothing-unseen] One render event per render request, written here
     // on every exit — a refusal and a throw included — from the facts the
     // render reached, so a failing render is described like any other.
@@ -1370,7 +1373,7 @@ export async function replyTo(
     // it began: a round trip longer than `took` is time spent there.
     noteFacts(facts, {
       timedOut: timedOut() ? "Y" : "N",
-      waited: `${t0 - accepted}ms`,
+      waited: `${waitedMs}ms`,
     });
     const { level, line } = renderEvent(
       facts,
