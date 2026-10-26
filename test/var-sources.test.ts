@@ -2155,6 +2155,40 @@ describe("SourceRegistry — in-flight runs", () => {
     }
   });
 
+  it("a view waits for its directory's first value, never for the re-run of one that has answered", async () => {
+    const { registry: home } = make();
+    home.declareShell("dir", "sleep 0.3; echo d", {
+      cwd: process.cwd(),
+      parse: TEXT,
+      cache: { kind: "ttl", durationMs: MIN_SHELL_TTL_MS },
+    });
+    const view = home.view();
+    live.add(view);
+    expect(await view.settled(50)).toEqual(["dir"]);
+    expect(await view.settled(3000)).toEqual([]);
+    // The period's re-run, out in the home, which another session's view
+    // would have started as well as this one's.
+    const rerunBy = Date.now() + 3000;
+    while ((await home.settled(0)).length === 0 && Date.now() < rerunBy) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    expect(await home.settled(0)).toEqual(["dir"]);
+    const asked = Date.now();
+    expect(await view.settled(3000)).toEqual([]);
+    expect(Date.now() - asked).toBeLessThan(150);
+  });
+
+  it("inFlight() lets go of a run that never ends when its signal aborts", async () => {
+    const { registry } = make();
+    registry.declareShell("stuck", "sleep 30", { cwd: process.cwd(), parse: TEXT, cache: { kind: "never" } });
+    const wait = new AbortController();
+    setTimeout(() => wait.abort(), 50);
+    const asked = Date.now();
+    await registry.inFlight(wait.signal);
+    expect(Date.now() - asked).toBeLessThan(1000);
+    expect(await registry.settled(0)).toEqual(["stuck"]);
+  });
+
   it("dispose() aborts an in-flight shell run: the child tree dies with the registry and nothing is published", async () => {
     const stamp = `${process.pid}${Date.now()}`;
     const marker = `ccb-registry-abort-${stamp}`;

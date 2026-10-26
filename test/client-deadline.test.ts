@@ -8,8 +8,11 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 
-import { TOTAL_BUDGET_MS } from "../src/daemon/client";
-import { encodeFrame, makeFrameReader } from "../src/daemon/protocol";
+import {
+  encodeFrame,
+  makeFrameReader,
+  TOTAL_BUDGET_MS,
+} from "../src/daemon/protocol";
 
 // A daemon that hands every request it reads to `seen`, and answers it with
 // `reply` — or, given none, never answers.

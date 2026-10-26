@@ -21,6 +21,7 @@ import {
   observable,
   reaction,
   runInAction,
+  when,
   type IReactionDisposer,
 } from "mobx";
 import type { ColorDepth } from "@promptctl/rich-js";
@@ -546,13 +547,19 @@ export class SourceRegistry {
   // Collects all cleanup callbacks (TTL unsubscribes, watch unsubscribes,
   // MobX reaction disposers) so dispose() tears everything down in one call.
   private readonly cleanups: Array<() => void> = [];
-  // [LAW:no-ambient-temporal-coupling] The end of each async source's
-  // in-flight run, by name: one run per source at a time (a refresh that
-  // fires while the previous run is still out is dropped), and `inFlight()` is
-  // the explicit "every source has completed its current run" state a caller
-  // (a statusline request, `cc-candybar check`) awaits instead of guessing a
-  // delay.
-  private readonly runs = new Map<string, Promise<void>>();
+  // [LAW:no-ambient-temporal-coupling] Each async source's in-flight run, by
+  // name: one run per source at a time (a refresh that fires while the
+  // previous run is still out is dropped). Observable, so `inFlight()` is a
+  // reaction over it — the explicit "the runs a wait is for have ended" state
+  // a caller (a statusline request, `cc-candybar check`) awaits instead of
+  // guessing a delay, and one its deadline can stop listening to.
+  private readonly runs = observable.map<string, Promise<void>>(undefined, {
+    deep: false,
+  });
+  // The sources that have ended a run: a run of any other is its first value.
+  // A source's node holds its fallback before then (`stringInitial`), so the
+  // store cannot say it.
+  private readonly ran = observable.set<string>();
   // [LAW:single-enforcer] Serializes each source's reads and remembers a trigger
   // that arrived mid-read, so a re-trigger re-reads once rather than starting a
   // parallel read or being dropped. Shared with the git cache's refresh path,
@@ -892,41 +899,50 @@ export class SourceRegistry {
     // unconditional delete here would remove the live entry and leave
     // `inFlight()` no longer waiting for work that is still out.
     // [LAW:no-silent-failure] A run's rejection is a bug and stays unhandled
-    // here: a waiter waits on the run's end, never on its outcome, so no wait
-    // swallows it.
-    void work.finally(() => {
-      if (this.runs.get(name) === ended) this.runs.delete(name);
-    });
-    const ended = new Promise<void>((resolve) =>
-      work.then(resolve, () => resolve()),
+    // here: a waiter watches the run leave `runs`, never its outcome, so no
+    // wait swallows it.
+    runInAction(() => this.runs.set(name, work));
+    void work.finally(() =>
+      runInAction(() => {
+        this.ran.add(name);
+        if (this.runs.get(name) === work) this.runs.delete(name);
+      }),
     );
-    this.runs.set(name, ended);
   }
 
-  // [LAW:no-ambient-temporal-coupling] Resolves when every async run of this
-  // registry and of the home it reads through to has ended — a shell/file
-  // run, and every run one of them triggered (a `depends_on` reaction fires
-  // inside a publish), asked again once those end. Never rejects.
-  async inFlight(): Promise<void> {
-    for (;;) {
-      const out = this.running();
-      if (out.length === 0) return;
-      await Promise.all(out.map(([, ended]) => ended));
+  // [LAW:no-ambient-temporal-coupling] Resolves when none of the runs a wait
+  // is for is out (`awaited`), or when `signal` aborts — and then holds
+  // nothing, so a run that never ends keeps no waiter behind it. A run one of
+  // them triggers (a `depends_on` reaction fires inside a publish) enters
+  // `runs` before the run that triggered it leaves, so it is waited out too.
+  async inFlight(signal: AbortSignal): Promise<void> {
+    try {
+      await when(() => this.awaited().length === 0, { signal });
+    } catch (e) {
+      // The signal's abort is the one rejection the wait expects.
+      if (!signal.aborted) throw e;
     }
   }
 
-  // The runs still out here and in the home this registry reads through to.
-  private running(): ReadonlyArray<readonly [string, Promise<void>]> {
-    return [...this.runs, ...(this.parent?.running() ?? [])];
+  // The sources a wait on this registry is for: every run of its own, and of
+  // the home it reads through to, only a source's first run (rule 2's first
+  // value). A home's re-run keeps the answer it has, and no request of
+  // this view started it: the home is every session's in its directory.
+  private awaited(): string[] {
+    return [...this.runs.keys(), ...(this.parent?.firstValues() ?? [])];
   }
 
-  // The names still in flight once every run has ended or `withinMs` has
+  private firstValues(): string[] {
+    return [...this.runs.keys()].filter((name) => !this.ran.has(name));
+  }
+
+  // The names still awaited once every run has ended or `withinMs` has
   // passed: empty when all settled. This is the state a one-shot render
   // (`cc-candybar check`) awaits so it renders what those sources yielded,
   // never a guessed delay.
   async settled(withinMs: number): Promise<readonly string[]> {
-    await waitWithin(this.inFlight(), withinMs);
-    return this.running().map(([name]) => name);
+    await waitWithin((signal) => this.inFlight(signal), withinMs);
+    return this.awaited();
   }
 
   // template: a variable whose value is derived by evaluating a go-template

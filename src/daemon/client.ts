@@ -3,20 +3,19 @@
 // implementation shared with the stats/debug CLIs); this module contributes
 // only the render path's own data: tight timeout budgets and the
 // output-string payload projection. [LAW:dataflow-not-control-flow]
-//
-// [LAW:one-source-of-truth] These budget consts are mirrored by the Rust
-// client (rust-client/src/main.rs) and diffed by scripts/check-protocol.mjs,
-// which anchors on the declarations below — keep them named consts in this
-// file, or repoint the CHECKS rows in the same commit.
+// The render budgets are wire facts, declared in ./protocol.
 
 import type { ClaudeHookData } from "../utils/claude";
 import { interpretResponse, requestOutcome } from "./client-transport";
 import type { RoundTripBudgets, RoundTripOutcome } from "./client-transport";
-import type { ClientHints, Response } from "./protocol";
+import {
+  CONNECT_TIMEOUT_MS,
+  TOTAL_BUDGET_MS,
+  type ClientHints,
+  type Response,
+} from "./protocol";
 import { PACKAGE_VERSION } from "../version";
 
-export const CONNECT_TIMEOUT_MS = 50;
-export const TOTAL_BUDGET_MS = 150;
 const CLICK_BUDGET_MS = 200;
 
 const RENDER_BUDGETS: RoundTripBudgets = {

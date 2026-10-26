@@ -98,24 +98,33 @@ export async function answered<A>(read: () => A | Waiting): Promise<A> {
 export type WaitEnd = "answered" | "deadline";
 
 // [LAW:no-ambient-temporal-coupling][LAW:single-enforcer] The one bounded
-// wait: `work`, or `ms`, whichever ends first. Its timer is cleared when the
-// wait ends, so a wait that answered leaves nothing behind. `work` runs on
-// past a deadline; the wait only stops listening.
-export async function waitWithin(
-  work: Promise<unknown>,
+// wait: `work`, or `ms`, whichever ends first. `work` is handed the wait's
+// signal, aborted when the wait ends on either arm, with its timer cleared:
+// what it listens on through the signal stops with the wait, so a wait leaves
+// nothing behind. What it does not, a run it started, goes on.
+export function waitWithin(
+  work: (signal: AbortSignal) => Promise<unknown>,
   ms: number,
 ): Promise<WaitEnd> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      work.then(() => "answered" as const),
-      new Promise<"deadline">((resolve) => {
-        timer = setTimeout(() => resolve("deadline"), Math.max(0, ms));
-      }),
-    ]);
-  } finally {
+  const wait = new AbortController();
+  const timer = setTimeout(() => wait.abort(), Math.max(0, ms));
+  const ended = new Promise<WaitEnd>((resolve, reject) => {
+    wait.signal.addEventListener("abort", () => resolve("deadline"));
+    void work(wait.signal).then(
+      () => resolve("answered"),
+      (e: unknown) => {
+        // [LAW:no-silent-failure] A rejection after the deadline answers no
+        // one: thrown on, it is unhandled, which the daemon logs — never
+        // dropped.
+        if (wait.signal.aborted) throw e;
+        reject(e);
+      },
+    );
+  });
+  return ended.finally(() => {
     clearTimeout(timer);
-  }
+    wait.abort();
+  });
 }
 
 // [LAW:types-are-the-program] What a declaration hands its reader: the entry

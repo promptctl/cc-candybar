@@ -115,7 +115,6 @@ function markers(relPath, patterns, description) {
 // --- the mirrored set -----------------------------------------------------
 
 const TS_PROTOCOL = "src/daemon/protocol.ts";
-const TS_CLIENT = "src/daemon/client.ts";
 const TS_CLIENT_HINTS = "src/client-hints.ts";
 const TS_CLI_FLAGS = "src/cli-flags.ts";
 const TS_TMUX_HINT = "src/tmux-hint.ts";
@@ -276,7 +275,7 @@ const CHECKS = [
   },
   {
     label: "connect timeout (ms)",
-    ts: num(TS_CLIENT, /const CONNECT_TIMEOUT_MS = ([\d\s*]+);/),
+    ts: num(TS_PROTOCOL, /const CONNECT_TIMEOUT_MS = ([\d\s*]+);/),
     rust: num(
       RS_MAIN,
       /const CONNECT_TIMEOUT: Duration = Duration::from_millis\(([\d\s*]+)\);/,
@@ -284,7 +283,7 @@ const CHECKS = [
   },
   {
     label: "total render budget (ms)",
-    ts: num(TS_CLIENT, /const TOTAL_BUDGET_MS = ([\d\s*]+);/),
+    ts: num(TS_PROTOCOL, /const TOTAL_BUDGET_MS = ([\d\s*]+);/),
     rust: num(
       RS_MAIN,
       /const TOTAL_BUDGET: Duration = Duration::from_millis\(([\d\s*]+)\);/,

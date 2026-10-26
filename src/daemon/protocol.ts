@@ -36,6 +36,15 @@ import type { TmuxStatusBar } from "../tmux-status/frames";
 // Don't bump for growth.
 export const PROTOCOL_VERSION = 3;
 
+// [LAW:one-source-of-truth] A statusline client's budgets: how long its
+// connect may take, and how long its render round trip has. Wire facts, read
+// by the client that spends them and the daemon that answers inside them
+// (src/daemon/request-deadline.ts). Mirrored by the Rust client
+// (rust-client/src/main.rs) and diffed by scripts/check-protocol.mjs, which
+// anchors on these declarations.
+export const CONNECT_TIMEOUT_MS = 50;
+export const TOTAL_BUDGET_MS = 150;
+
 export interface RenderRequest {
   v: number;
   kind: "render";

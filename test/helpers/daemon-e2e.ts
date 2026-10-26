@@ -131,8 +131,14 @@ export async function renderRequest(
         (event = answeredEvents(log, sessionId)[before] ?? "") !== "",
       `the render event of ${sessionId}'s answer`,
     );
-    if (event.includes(" pending=- ") || attempt >= PENDING_RETRY_BUDGET)
-      return resp.output;
+    if (event.includes(" pending=- ")) return resp.output;
+    // [LAW:no-silent-failure] A value still pending after every ask is the
+    // failure, named by the event that drew it, never a bar a later assertion
+    // trips over.
+    if (attempt >= PENDING_RETRY_BUDGET)
+      throw new Error(
+        `render still drew pending after ${attempt} asks: ${event}`,
+      );
   }
 }
 

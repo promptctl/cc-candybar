@@ -3,7 +3,7 @@
 // first, less the draw's reserve — and, from a client too old to state one,
 // by the budget the Node client gives up at.
 
-import { CONNECT_TIMEOUT_MS, TOTAL_BUDGET_MS } from "../src/daemon/client";
+import { CONNECT_TIMEOUT_MS, TOTAL_BUDGET_MS } from "../src/daemon/protocol";
 import {
   DRAW_RESERVE_MS,
   REQUEST_TIMEOUT_MS,
@@ -36,7 +36,7 @@ describe("a request's wait budget", () => {
     ).toBe(ACCEPTED + REQUEST_TIMEOUT_MS - DRAW_RESERVE_MS - ARRIVAL.monoMs);
   });
 
-  test("an unstated deadline is the Node client's budget after a connect that took all its time", () => {
+  test("an unstated deadline is the earliest an old client hangs up: the native client's, after a connect that took all its time", () => {
     expect(waitBudgetMs({ kind: "unstated" }, ACCEPTED, ARRIVAL)).toBe(
       ACCEPTED +
         TOTAL_BUDGET_MS -

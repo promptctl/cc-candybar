@@ -6,7 +6,7 @@
 // it, as `deadline` on the request, and the wait ends early enough for the
 // draw to fit before it. A value still not answered then draws as pending.
 
-import { CONNECT_TIMEOUT_MS, TOTAL_BUDGET_MS } from "./client";
+import { CONNECT_TIMEOUT_MS, TOTAL_BUDGET_MS } from "./protocol";
 
 // [LAW:single-enforcer] Every handler's backstop: the connection's own timer
 // answers TIMEOUT at this, whatever its request is still doing.
@@ -39,8 +39,9 @@ export interface Arrival {
 // [LAW:one-source-of-truth] The milliseconds a request's wait has from its
 // arrival: until its client hangs up or the connection's backstop answers,
 // whichever is first, less the draw's reserve. A client that states no
-// deadline is taken to hang up when the Node client does, its budget after a
-// connect that took all its time. Below zero is no wait at all.
+// deadline is taken to hang up at the earliest an old client can: the native
+// client's, whose budget runs from before a connect that took all its time.
+// Below zero is no wait at all.
 export function waitBudgetMs(
   deadline: ClientDeadline,
   acceptedMonoMs: number,

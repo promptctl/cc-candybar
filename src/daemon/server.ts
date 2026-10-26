@@ -2447,16 +2447,17 @@ async function drawAnswer(
   noteFacts(facts, { deadline: `${wait.stated}:${wait.ms}ms` });
   // Rules 1 and 2 of the model: the answer shows what this request carried,
   // so it waits for the refreshes its arrival triggers, the first value of
-  // every keyed lane its view declared, and every run of its view's sources
-  // in flight — a first value, or a re-run its fields started — until its
-  // client's deadline. What has not answered by then draws as pending, and
-  // lands for the next frame.
+  // every keyed lane its view declared, every run of its view's own sources
+  // in flight — a first value, or a re-run its fields started — and the first
+  // value of its directory's, until its client's deadline. What has not
+  // answered by then draws as pending, and lands for the next frame.
   const waitFrom = performance.now();
   const ended = await waitWithin(
-    Promise.all([
-      settlePayload(setup.payloadInputs, at),
-      setup.view.registry.inFlight(),
-    ]),
+    (signal) =>
+      Promise.all([
+        settlePayload(setup.payloadInputs, at),
+        setup.view.registry.inFlight(signal),
+      ]),
     wait.endsAt - waitFrom,
   );
   // [LAW:nothing-unseen] How the wait went, on the render event: an answer

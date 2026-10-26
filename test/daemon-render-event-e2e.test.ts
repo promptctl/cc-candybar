@@ -20,9 +20,12 @@ import os from "node:os";
 import path from "node:path";
 
 import { stripAnsi } from "./helpers/ansi";
-import { encodeFrame, PROTOCOL_VERSION } from "../src/daemon/protocol";
+import {
+  encodeFrame,
+  PROTOCOL_VERSION,
+  TOTAL_BUDGET_MS,
+} from "../src/daemon/protocol";
 import { stateDir } from "../src/daemon/paths";
-import { TOTAL_BUDGET_MS } from "../src/daemon/client";
 import {
   hookData,
   killAndWait,
