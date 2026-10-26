@@ -2737,7 +2737,7 @@
             "id": {
               "type": "string",
               "minLength": 1,
-              "pattern": "^(?!groups\\.|menus\\.|edit\\.|candybar\\.)[^:/]+$"
+              "pattern": "^(?!groups\\.|menus\\.|menupages\\.|edit\\.|candybar\\.)[^:/]+$"
             },
             "settings": {
               "type": "object",
@@ -2837,7 +2837,7 @@
             "id": {
               "type": "string",
               "minLength": 1,
-              "pattern": "^(?!groups\\.|menus\\.|edit\\.|candybar\\.)[^:/]+$"
+              "pattern": "^(?!groups\\.|menus\\.|menupages\\.|edit\\.|candybar\\.)[^:/]+$"
             },
             "settings": {
               "type": "object",

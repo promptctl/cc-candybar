@@ -1482,8 +1482,8 @@ names wins.
 
 Everything the menu synthesizes lives under the reserved `candybar.` namespace
 — a variable, action, or segment of your own under that prefix is a load error,
-the same contract `groups.` / `menus.` / `edit.` carry (see "Squatting a
-reserved namespace" below). Edit mode also treats those names as structural: no
+the same contract `groups.` / `menus.` / `menupages.` / `edit.` carry (see
+"Squatting a reserved namespace" below). Edit mode also treats those names as structural: no
 `-` affordance is offered beside the menu, so the way back into edit mode cannot
 be edited away.
 
@@ -1491,11 +1491,11 @@ be edited away.
 
 The apply-action name is the menu's **entire declaration**. The loader
 synthesizes everything else under the reserved `menus.*` namespace: the
-open/closed state, the page cursor (state var + int action), and the click
-gates. The trigger's *text* is the one thing it does not synthesize — you bind
-that, below. The body is a paged picker over the apply
-action's option domain, dropped onto the line below the enclosing row while
-open.
+open/closed state and the click gates, and the page cursor (state var + int
+action) beside them under the reserved `menupages.*`. The trigger's *text* is
+the one thing it does not synthesize — you bind that, below. The body is a
+paged picker over the apply action's option domain, dropped onto the line below
+the enclosing row while open.
 
 An option cell is normally coloured by where it sits in the band the menu
 opens. Over a **colour-valued** domain — `themes`, `placementThemes` and
@@ -1553,7 +1553,7 @@ Rare knobs travel as **one trailing `(dict …)`** — note Go template syntax:
 |---|---|---|---|
 | `closeOnPick` | bool | `false` | picking an option also closes the menu (default: stay open to try options in a row) |
 | `paged` | bool | `true` | paginate the body to the terminal width with ←/→ (a short domain shows one page, no arrows); `false` wraps instead |
-| `key` | string | omitted | accordion grouping: menus sharing a key are mutually exclusive — opening one closes the others. Omitted = independent. A key in a reserved namespace (`groups.`, `menus.`, `edit.`, `candybar.`) is a load error |
+| `key` | string | omitted | accordion grouping: menus sharing a key are mutually exclusive — opening one closes the others. Omitted = independent. A key in a reserved namespace (`groups.`, `menus.`, `menupages.`, `edit.`, `candybar.`) is a load error |
 | `distribution` | string | `"van-der-corput"` | how the dropped band places its options' tints — one of the five names in the `distribution` section below. The same field a `{ h }`/`{ v }` row carries; a menu is a placer too |
 
 Two menus in an accordion (one open at a time), the endcaps pick closing its
@@ -2013,9 +2013,9 @@ The accordion drawer:
 }
 ```
 
-The `groups.` and `menus.` namespaces are **reserved** in all three sections
-(variables, actions, segments) — synthesis owns them unconditionally, whether
-or not any group/menu exists in your config.
+The `groups.`, `menus.` and `menupages.` namespaces are **reserved** in all
+three sections (variables, actions, segments) — synthesis owns them
+unconditionally, whether or not any group/menu exists in your config.
 
 ## `distribution` — how a placer spreads its cells' tints
 
@@ -2234,7 +2234,7 @@ whose options (dict …) is not fully literal — every option value must be a l
 
 ### A `{{ menu }}` accordion key in a reserved namespace
 
-The bundled settings menu's four config pickers share the accordion key `candybar.pickers`; a user menu whose `key` derives that same state key would join that accordion, so opening it would close the settings picker and vice versa. A key is collapsed to an identifier before it becomes a state key, so `candybar.pickers`, `candybar-pickers`, and `candybar_pickers` are all the same key and all refused — the rule covers every reserved namespace (`groups.`, `menus.`, `edit.`, `candybar.`), not only this one:
+The bundled settings menu's four config pickers share the accordion key `candybar.pickers`; a user menu whose `key` derives that same state key would join that accordion, so opening it would close the settings picker and vice versa. A key is collapsed to an identifier before it becomes a state key, so `candybar.pickers`, `candybar-pickers`, and `candybar_pickers` are all the same key and all refused — the rule covers every reserved namespace (`groups.`, `menus.`, `menupages.`, `edit.`, `candybar.`), not only this one:
 
 ```json5 check:fail
 {
@@ -2610,7 +2610,7 @@ can only be paired with "removeSegment", "insertSegment", or "insertSegmentFrom"
 
 1. `cc-candybar check <path>` exits 0.
 2. stderr shows no warnings you have not read and accepted.
-3. You declared **no** `menus.*`/`groups.*` names, no page cursors, no
+3. You declared **no** `menus.*`/`menupages.*`/`groups.*` names, no page cursors, no
    open-state vars — if a menu needed backing state, you let it synthesize.
 4. Anything you could not express with `{{ menu }}`, a group, or a named
    action: read examples/demo-actions.json5 for the raw mechanism before

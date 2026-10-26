@@ -94,9 +94,9 @@ import {
   templateReads,
   refResolves,
   templateScopeOf,
-  variableRead,
   type TemplateScope,
 } from "./refs.js";
+import { valueReadsOf, type ValueRead } from "./value-reads.js";
 
 // Where a distribution nothing reads sits: inside a cell, on a bar vertical
 // container whose rows stack further in, or on a body's vertical container.
@@ -848,64 +848,50 @@ function checkPolicyInstant(
 // rule's path, naming the read that closes it (brandon-unfiled-3248.8ro6).
 function checkRuleSlotReads(ctx: ValidateCtx, cfg: DslConfig): void {
   const declared = new Map(declaredVariables(cfg));
-  const names = new Set(declared.keys());
-  // The read through which a template reaches a slot's `.effective`, as a load
-  // error says it; null for none. A namespace read (`.style`) reaches every
-  // name under it.
-  const slotRead = (template: string, seen: Set<string>): string | null => {
-    for (const path of templateReads(template, cfg.helpers).keys()) {
-      // A read at a slot's payload path is that slot's name whoever declares
-      // the input there — the settings menu's synthesis declares
-      // `theme.effective` after this check runs.
+  const fold = valueReadsOf(cfg);
+  // The read through which some reads reach a slot's `.effective`, as a load
+  // error says it; null for none. A read at a slot's payload path is that
+  // slot's name whoever declares the input there — the settings menu's
+  // synthesis declares `theme.effective` after this check runs.
+  const slotRead = (
+    reads: readonly ValueRead[],
+    seen: Set<string>,
+  ): string | null => {
+    for (const { path, reaches } of reads) {
       const atSlot = EXPRESSION_SLOTS.find(
         (slot) =>
           SLOT_PATHS[slot] === path || SLOT_PATHS[slot].startsWith(`${path}.`),
       );
       if (atSlot !== undefined)
         return `reads "${SLOT_PATHS[atSlot]}", the ${atSlot}'s own name`;
-      const exact = variableRead(path, names);
-      const reached =
-        exact !== null
-          ? [exact]
-          : [...names].filter((name) => name.startsWith(`${path}.`));
-      for (const name of reached) {
+      for (const name of reaches) {
         const through = nameRead(name, seen);
         if (through !== null) return through;
       }
     }
     return null;
   };
-  // The same, through a declared variable: its own input path, its template,
-  // or the cache policy that re-runs it — a source keyed on a slot changes
-  // when the slot does, so a rule reading it reads its own answer one run on.
+  // The same, through a declared variable: its own input path, or anything it
+  // reads — its template, or the cache policy that re-runs it: a source keyed
+  // on a slot changes when the slot does, so a rule reading it reads its own
+  // answer one run on.
   const nameRead = (name: string, seen: Set<string>): string | null => {
     if (seen.has(name)) return null;
     seen.add(name);
     const decl = declared.get(name)!;
     const slot = decl.kind === "input" ? slotAt(decl.path) : undefined;
     if (slot !== undefined) return `reads "${name}", the ${slot}'s own name`;
-    if (decl.kind === "template") {
-      const through = slotRead(decl.template, seen);
-      return through === null ? null : `reads "${name}", which ${through}`;
-    }
-    if (!hasCacheField(decl)) return null;
-    if ("key" in decl.cache) {
-      const through = slotRead(decl.cache.key, seen);
-      return through === null
-        ? null
-        : `reads "${name}", whose cache.key ${through}`;
-    }
-    if (!("depends_on" in decl.cache)) return null;
-    for (const target of decl.cache.depends_on) {
-      if (!declared.has(target)) continue;
-      const through = nameRead(target, seen);
-      if (through !== null)
-        return `reads "${name}", whose cache.depends_on ${through}`;
+    for (const read of fold.ofVariable(decl)) {
+      const through = slotRead([read], seen);
+      if (through === null) continue;
+      return read.field === "template"
+        ? `reads "${name}", which ${through}`
+        : `reads "${name}", whose ${read.field} ${through}`;
     }
     return null;
   };
   for (const { at, rule } of authoredRules(cfg)) {
-    const why = slotRead(rule, new Set());
+    const why = slotRead(fold.ofTemplate(rule), new Set());
     if (why === null) continue;
     const path = at.join(".");
     ctx.issues.push({

@@ -78,6 +78,7 @@ import {
 } from "./loader/cross-ref.js";
 import { templateScopeOf } from "./loader/refs.js";
 import { validateNoCycles } from "./loader/cycles.js";
+import { validateNoNesting } from "./loader/nesting.js";
 import {
   applyPlugins,
   ownedBy,
@@ -534,6 +535,7 @@ function checkPlugin(
   };
   validateDeclarations(ctx, config, templateScopeOf(config), owned);
   validateNoCycles(ctx, config, owned);
+  validateNoNesting(ctx, config, owned);
   if (issues.length > 0) throw new ConfigError(filePath, issues);
 }
 
@@ -604,6 +606,12 @@ export function validateConfig(
   // full ordering argument lives in settings-menu.ts's header, beside the pass
   // it governs.
   const withChrome = synthesizeEditChrome(synthesizeSettingsMenu(withMenus));
+  // [LAW:single-enforcer] Over the names the store is declared from, every
+  // synthesized one included (nesting.ts).
+  validateNoNesting(ctx, withChrome);
+  if (issues.length > 0) {
+    throw new ConfigError(filePath, issues);
+  }
   return withChrome as ValidatedConfig;
 }
 

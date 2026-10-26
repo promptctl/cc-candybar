@@ -22,6 +22,7 @@ import {
   EDIT_NS,
   isReservedName,
   MENU_NS,
+  MENU_PAGE_NS,
   SETTINGS_NS,
 } from "../../src/config/loader/reserved-namespace";
 import { parsePersistTarget } from "../../src/config/loader/persist-target";
@@ -43,6 +44,9 @@ import { parseAndValidate } from "./parse-and-validate";
 // membership alone proves the key is chrome.
 function isReservedChromeKey(key: string): boolean {
   return (
+    // A page cursor is chrome when the menu it pages is.
+    (key.startsWith(MENU_PAGE_NS) &&
+      isReservedChromeKey(key.slice(MENU_PAGE_NS.length))) ||
     key.startsWith(SETTINGS_NS) ||
     key.startsWith(EDIT_NS) ||
     // The settings menu's own pickers, hosted on `candybar.<setting>`.

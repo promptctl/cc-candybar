@@ -36,7 +36,7 @@ function config(actions: string, template: string): string {
     variables: {
       panel: { kind: 'state', key: 'panel', default: 'open' },
       focus: { kind: 'state', key: 'focus', default: 'off' },
-      theme: { kind: 'state', key: 'theme', default: 'nord' },
+      themePick: { kind: 'state', key: 'theme', default: 'nord' },
     },
     actions: { ${actions} },
     segments: { bar: { template: '${template}', fg: 'foreground' } },

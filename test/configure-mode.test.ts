@@ -56,6 +56,7 @@ import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { linkUrls, stripAnsi } from "./helpers/ansi";
 import { instantOf } from "../src/utils/instant";
 import { picked, selectionFor } from "./helpers/selection";
+import { MENU_PAGE_NS } from "../src/config/loader/reserved-namespace";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = "s1";
@@ -233,7 +234,7 @@ describe("configure mode: one placement's settings at a time", () => {
     const opener = linkUrls(rt.render()).find((u) => {
       const keys = effectsOf(u).flatMap((e) => e.args.slice(1));
       return (
-        keys.some((k) => k.endsWith(".page")) &&
+        keys.some((k) => k.startsWith(MENU_PAGE_NS)) &&
         keys.some((k) => /\.setting\.\w+\.theme$/.test(k))
       );
     });

@@ -25,7 +25,7 @@
 //               can see in the template, never on tree position.
 
 import { ident } from "./ident.js";
-import { MENU_NS } from "./loader/reserved-namespace.js";
+import { MENU_NS, MENU_PAGE_NS } from "./loader/reserved-namespace.js";
 import {
   DEFAULT_DISTRIBUTION,
   DISTRIBUTION_NAMES,
@@ -94,9 +94,12 @@ export function menuActionName(stateKey: string, member: string): string {
 // approximation — and the disclosure toggle's page-0 reset re-seeds it on
 // every open. [LAW:one-source-of-truth] The synthesized state VARIABLE is
 // named by this same string (the disclosure-var convention), so the renderer
-// reads the live page via this one name.
+// reads the live page via this one name. It sits in its own reserved
+// namespace, beside the state key rather than under it: no declared name may
+// nest under another (loader/nesting.ts), and under `menus.` it would nest
+// under a shared key such as `menus.page`.
 export function menuPageKey(stateKey: string): string {
-  return stateKey + ".page";
+  return MENU_PAGE_NS + stateKey;
 }
 
 // [LAW:types-are-the-program] The `{{ menu }}` rare-knob options, spelled as ONE

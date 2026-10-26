@@ -57,7 +57,7 @@ const SRC = `{
   globals: { palette: '${BASE_THEME}' },
   variables: {
     'session.id': { kind: 'input', path: 'session_id', default: '' },
-    theme: { kind: 'state', key: 'theme', default: '${BASE_THEME}' },
+    themePick: { kind: 'state', key: 'theme', default: '${BASE_THEME}' },
   },
   actions: {
     applyTheme: { set: 'theme', from: 'themes' },

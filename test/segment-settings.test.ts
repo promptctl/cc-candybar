@@ -359,7 +359,7 @@ describe("load errors", () => {
     (id) => {
       expect(
         refusal(withSegment(BOOL, `{ h: [{ seg: 's', id: '${id}' }] }`)),
-      ).toContain(`outside the reserved "groups.", "menus.", "edit.", "candybar." namespaces`);
+      ).toContain(`outside the reserved "groups.", "menus.", "menupages.", "edit.", "candybar." namespaces`);
     },
   );
 });

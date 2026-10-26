@@ -192,6 +192,23 @@ describe("a plugin that does not load is dropped alone", () => {
       "Template parse error in segments.plugins.x.s.template",
     ));
 
+  test("a variable declared under another of its own, naming both", () =>
+    dropped(
+      `{ variables: { status: { kind: "literal", value: "x" }, "status.home": { kind: "literal", value: "y" } } }`,
+      `variable "plugins.x.status.home" is declared under the variable "plugins.x.status"`,
+    ));
+
+  // A field read of a document lands on the document: each key re-runs the
+  // other's source, so neither has a first value.
+  test("two JSON shells whose cache keys read each other's fields", () =>
+    dropped(
+      `{ variables: {
+        a: { kind: "shell", command: "echo {}", parse: { json: true }, cache: { key: "{{ .plugins.x.b.f }}" } },
+        b: { kind: "shell", command: "echo {}", parse: { json: true }, cache: { key: "{{ .plugins.x.a.f }}" } },
+      } }`,
+      "Dependency cycle: plugins.x.a → plugins.x.b → plugins.x.a",
+    ));
+
   test("a definition that is not there", () =>
     dropped(`{ data: "./d.json", segments: {} }`.replace(/.*/s, "{ "), "JSON5"));
 });

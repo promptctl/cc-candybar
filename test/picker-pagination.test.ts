@@ -23,6 +23,7 @@ import { listResolvablePaletteNames } from "../src/themes/policy";
 import { stripAnsi } from "./helpers/ansi";
 import { swatch } from "../src/render/swatch";
 import { instantOf } from "../src/utils/instant";
+import { menuPageKey } from "../src/config/menu-keys";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const THEMES = listResolvablePaletteNames();
@@ -51,7 +52,7 @@ function pickerConfig(): string {
     globals: {},
     variables: {
       'session.id': { kind: 'input', path: 'session_id', default: '' },
-      theme: { kind: 'state', key: 'theme-pick', default: '${THEMES[0]}' },
+      themePick: { kind: 'state', key: 'theme-pick', default: '${THEMES[0]}' },
       page: { kind: 'state', key: 'theme-page', default: '-1' },
       'term.cols': { kind: 'input', path: 'term.cols', type: 'number', default: 80 },
     },
@@ -275,8 +276,8 @@ describe("brandon-menus-bn5.3 I2 — {{ menu }} DROP body fits within term.cols"
   const ENDCAPS_OPEN = "menus.endcapsMenu.applyEndcaps";
   // The synthesized page cursors: derived from identity (menuPageKey), one per
   // disclosure state key.
-  const THEME_PAGE = `${THEME_OPEN}.page`;
-  const STYLE_PAGE = `${ENDCAPS_OPEN}.page`;
+  const THEME_PAGE = menuPageKey(THEME_OPEN);
+  const STYLE_PAGE = menuPageKey(ENDCAPS_OPEN);
 
   function buildMenuRuntime(
     style: Endcaps,

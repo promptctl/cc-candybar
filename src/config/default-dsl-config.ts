@@ -636,7 +636,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
 
     // No page-cursor var: a {{ menu }} synthesizes its own page
     // cursor (state var + int action, named by menuPageKey) under the reserved
-    // menus.* namespace, alongside its open-state.
+    // menupages.* namespace, beside its open-state.
   },
 
   // ─── Segments ──────────────────────────────────────────────────────────────

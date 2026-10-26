@@ -22,7 +22,7 @@ import os from "node:os";
 import { inspect } from "node:util";
 import type { ClaudeHookData } from "../utils/claude.js";
 import type { ClientHints } from "./protocol.js";
-import type { DslConfig, VariableDecl } from "../config/dsl-types.js";
+import type { DslConfig } from "../config/dsl-types.js";
 import {
   DEFAULT_TERMINAL_WIDTH,
   type BuildLineOptions,
@@ -34,7 +34,8 @@ import type { LaneFeeds } from "../config/lanes.js";
 import { presetGlobals, presetRoot } from "../config/presets.js";
 import { EXPRESSION_SLOTS, isExpression } from "../themes/policy.js";
 import { walkNodes } from "../config/dsl-types.js";
-import { templateReads } from "../config/dsl-loader.js";
+import { declaredVariables } from "../config/loader/refs.js";
+import { valueReadsOf } from "../config/loader/value-reads.js";
 import {
   prOfHead,
   trackingOf,
@@ -805,11 +806,11 @@ function readHost(hints: ClientHints): {
 //
 // [LAW:dataflow-not-control-flow] Whether a provider fires is selected by
 // the active layout. Walk from the preset's resolved root (`presetRoot`, the
-// same tree renderDsl compiles for it) → its nodes → their segments →
-// their template strings → referenced variable names → recursive expansion through
-// `template`-kind vars. The transitive closure tells us which input paths
-// are actually reachable from a rendered segment; providers feeding paths
-// outside that closure do not run.
+// same tree renderDsl compiles for it) → its nodes → their segments → their
+// template strings → the declarations they read (value-reads.ts), and on
+// through what each of those reads. The transitive closure tells us which
+// input paths are actually reachable from a rendered segment; providers
+// feeding paths outside that closure do not run.
 //
 // [LAW:single-enforcer] One reachability walk owns "is this provider
 // needed." A declared-but-unreachable input variable (the default config
@@ -820,43 +821,38 @@ export function buildNeededPrefixes(
   config: DslConfig,
   preset: string,
 ): ReadonlySet<string> {
-  // Seeds: refs from each rendered segment's template/when/bg/fg ONLY —
-  // segment-local vars in `seg.vars` are reached transitively via those refs
-  // (their declared names appear in the templates that need them). Seeding
-  // from `seg.vars` directly would mark unused per-segment template vars as
-  // needed and pull in their providers without justification.
-  const frontier: string[] = [];
-  const reads = (src: string): Iterable<string> =>
-    templateReads(src, config.helpers).keys();
-
-  // A globals rule (a theme or style chosen by data) reads variables too, and it
-  // runs every render — seed its reads so a provider feeding only the rule is
-  // not gated out and the rule never evaluates against unfilled defaults. The
-  // rule in force is the active preset's config-default rung (`presetGlobals`,
-  // the merge `resolveEffectiveGlobals` reads); editGlobals holds names only.
+  // Seeds: each rendered segment's template/when/bg/fg ONLY — segment-local
+  // vars in `seg.vars` are reached transitively through the templates that
+  // read them. Seeding from `seg.vars` directly would mark unused per-segment
+  // template vars as needed and pull in their providers without justification.
+  //
+  // A globals rule (a theme or style chosen by data) reads variables too, and
+  // it runs every render — seed it so a provider feeding only the rule is not
+  // gated out and the rule never evaluates against unfilled defaults. The rule
+  // in force is the active preset's config-default rung (`presetGlobals`, the
+  // merge `resolveEffectiveGlobals` reads); editGlobals holds names only.
   const declared = presetGlobals(config, preset);
-  for (const slot of EXPRESSION_SLOTS) {
+  const rules = EXPRESSION_SLOTS.flatMap((slot) => {
     const authored = declared[slot];
-    if (isExpression(authored))
-      for (const ref of reads(authored)) frontier.push(ref);
-  }
-
+    return isExpression(authored) ? [authored] : [];
+  });
+  const seeds = [...rules];
   for (const node of walkNodes(presetRoot(config, preset).node)) {
-    // A node's `when` references variables too — seed them so a provider feeding
-    // only a predicate (e.g. a state var gating a row/container) isn't gated out.
-    if (node.when) for (const ref of reads(node.when)) frontier.push(ref);
+    // A node's `when` reads variables too — seed it so a provider feeding only
+    // a predicate (e.g. a state var gating a row/container) isn't gated out.
+    if (node.when) seeds.push(node.when);
     if (node.kind !== "segment") continue;
-    frontier.push(...segmentReads(config, node.name));
+    seeds.push(...segmentTemplates(config, node.name));
   }
-  return inputClosure(config, frontier);
+  return inputClosure(config, seeds);
 }
 
-// The refs one segment's own templates read — what it seeds the closure with.
-function segmentReads(config: DslConfig, name: string): string[] {
+// One segment's own templates — what it seeds the closure with.
+function segmentTemplates(config: DslConfig, name: string): string[] {
   const seg = config.segments[name];
   if (!seg) return [];
   return [seg.template, seg.when, seg.bg, seg.fg].flatMap((src) =>
-    src ? [...templateReads(src, config.helpers).keys()] : [],
+    src ? [src] : [],
   );
 }
 
@@ -870,72 +866,33 @@ export function segmentInputPaths(
   name: string,
   whens: readonly string[],
 ): ReadonlySet<string> {
-  return inputClosure(config, [
-    ...segmentReads(config, name),
-    ...whens.flatMap((w) => [...templateReads(w, config.helpers).keys()]),
-  ]);
+  return inputClosure(config, [...segmentTemplates(config, name), ...whens]);
 }
 
-// The `kind: "input"` paths a set of refs reaches, through every
-// `template`-kind variable they read.
+// The `kind: "input"` paths a set of templates reaches, through every edge of
+// the one fold of what a value reads (value-reads.ts): a template's reads and
+// the texts of the actions it binds, a variable's template, cache key and
+// depends_on. The draw follows each of these, so a path the closure missed
+// would draw unfilled.
 function inputClosure(
   config: DslConfig,
   seeds: readonly string[],
 ): ReadonlySet<string> {
-  // 1. Variable name → declaration index for fast lookup. Global vars first;
-  //    per-segment vars are namespaced `segName.varName` (same as runtime).
-  const allDecls = new Map<string, VariableDecl>();
-  for (const [name, decl] of Object.entries(config.variables)) {
-    allDecls.set(name, decl);
-  }
-  for (const [segName, seg] of Object.entries(config.segments)) {
-    if (!seg.vars) continue;
-    for (const [varName, decl] of Object.entries(seg.vars)) {
-      allDecls.set(`${segName}.${varName}`, decl);
-    }
-  }
-
-  // 2. `visited` tracks vars whose own `template`-kind body we've already
-  //    followed.
-  const frontier = [...seeds];
+  const reads = valueReadsOf(config);
+  const decls = new Map(declaredVariables(config));
+  const frontier = seeds.flatMap((template) =>
+    reads.ofTemplate(template).flatMap(({ reaches }) => reaches),
+  );
   const visited = new Set<string>();
-  const reads = (src: string): Iterable<string> =>
-    templateReads(src, config.helpers).keys();
-
-  // 3. Walk the closure. A ref is the dotted form `a.b.c`. Two cases:
-  //    - LEAF: `ref` exactly matches a declared variable. The scope proxy
-  //      treats this as the variable read.
-  //    - NAMESPACE: `ref` is a strict prefix of declared variable names
-  //      (e.g. `git` when only `git.branch`, `git.sha`, … are declared).
-  //      The scope proxy returns a nested proxy here, which the template
-  //      can iterate / stringify / pass to functions like `toJson`. A
-  //      namespace read implicitly reaches every leaf under it, so every
-  //      `<ref>.*` declaration becomes reachable.
-  //    Both cases collapse to "expand the ref to every matching declared
-  //    name." For template-kind matches, the body refs become new frontier
-  //    items; for input-kind matches, the path is added to the closure.
   const inputPaths = new Set<string>();
   while (frontier.length > 0) {
-    const ref = frontier.pop()!;
-    for (const declName of expandRef(allDecls, ref)) {
-      if (visited.has(declName)) continue;
-      visited.add(declName);
-      const decl = allDecls.get(declName);
-      if (!decl) continue;
-      if (decl.kind === "input") {
-        inputPaths.add(decl.path);
-      } else if (decl.kind === "template") {
-        for (const r of reads(decl.template)) {
-          frontier.push(r);
-        }
-      }
-      // Other kinds (literal/env/file/shell/time/state) declare their
-      // own box without reading a payload path — they need no provider
-      // gating because the daemon's payload builder is the only thing
-      // this gates.
-    }
+    const name = frontier.pop()!;
+    if (visited.has(name)) continue;
+    visited.add(name);
+    const decl = decls.get(name)!;
+    if (decl.kind === "input") inputPaths.add(decl.path);
+    for (const { reaches } of reads.ofVariable(decl)) frontier.push(...reaches);
   }
-
   return inputPaths;
 }
 
@@ -950,31 +907,6 @@ export function neededPrefixesByPreset(
     byPreset.set(preset, needed);
     return needed;
   };
-}
-
-// [LAW:single-enforcer] Mirror of the scope proxy's read semantics: a ref
-// resolves either to an exact variable (leaf) or to every variable under a
-// namespace prefix (`.git` matches `git.branch`, `git.sha`, …). Yields the
-// set of declared names the ref reaches.
-function expandRef(
-  decls: ReadonlyMap<string, VariableDecl>,
-  ref: string,
-): readonly string[] {
-  // Leaf — most specific declared name wins, mirroring lookupDecl's loop.
-  let candidate = ref;
-  while (candidate.length > 0) {
-    if (decls.has(candidate)) return [candidate];
-    const dot = candidate.lastIndexOf(".");
-    if (dot < 0) break;
-    candidate = candidate.slice(0, dot);
-  }
-  // Namespace — every name starting with `${ref}.` is reachable.
-  const ns = `${ref}.`;
-  const matches: string[] = [];
-  for (const name of decls.keys()) {
-    if (name.startsWith(ns)) matches.push(name);
-  }
-  return matches;
 }
 
 export function anyPathStartsWith(
@@ -1069,7 +1001,7 @@ export interface PayloadInputs {
   readonly cwd: string | undefined;
   // [LAW:single-enforcer] The cache pre-computes the closure once at
   // registration; passing it in (rather than recomputing per render) keeps
-  // the hot path free of the BFS + templateReads cost.
+  // the hot path free of the closure's cost.
   readonly neededInputPaths: ReadonlySet<string>;
   // [LAW:locality-or-seam] The parsed client hints, NOT the raw request — this
   // module is downstream of the wire checkpoint and never re-sanitizes.

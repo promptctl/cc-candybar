@@ -383,19 +383,24 @@ export function* declaredVariables(
   }
 }
 
-// The variable a dotted read lands on: the longest declared name the path
-// starts with (`.budget.spent` reads the document `budget`). Null for a read
-// of nothing declared.
+// [LAW:single-enforcer] THE resolution of a read to the declarations it
+// reaches, for every walk that asks: the declared name the path starts with
+// (`.budget.spent` reads the document `budget`), else — a read that reaches no
+// declared name — every name under it, as a namespace (`.git` reads every
+// `git.*`). Empty for a read of nothing declared. No declared name sits under
+// another (nesting.ts), so at most one declared name starts a path, and the
+// draw's scope proxy, which takes the first it reaches, lands on the same one.
 export function variableRead(
   path: string,
   names: ReadonlySet<string>,
-): string | null {
+): readonly string[] {
   const parts = path.split(".");
   for (let n = parts.length; n > 0; n--) {
     const name = parts.slice(0, n).join(".");
-    if (names.has(name)) return name;
+    if (names.has(name)) return [name];
   }
-  return null;
+  const namespace = `${path}.`;
+  return [...names].filter((name) => name.startsWith(namespace));
 }
 
 // [LAW:types-are-the-program] What a template reference resolves against:
@@ -414,20 +419,14 @@ export interface TemplateScope {
   readonly helpers: Readonly<Record<string, string>>;
 }
 
-// A ref resolves if (a) the full dotted name is a declared variable, (b) it
-// is a strict prefix of some declared variable (namespace navigation like
-// .session in `.session.id` when only `session.id` is declared), or (c) a
-// declared document is a strict prefix of it (a field read).
+// A ref resolves when it reaches a declaration (variableRead): the name
+// itself, a namespace of names under it, or a declared document whose field it
+// reads. Past any other declared name it reads into a value the loader cannot
+// see, so it does not resolve.
 export function refResolves(ref: string, scope: TemplateScope): boolean {
-  if (scope.names.has(ref)) return true;
-  const prefix = `${ref}.`;
-  for (const name of scope.names) {
-    if (name.startsWith(prefix)) return true;
-  }
-  for (const doc of scope.documents) {
-    if (ref.startsWith(`${doc}.`)) return true;
-  }
-  return false;
+  return variableRead(ref, scope.names).some(
+    (name) => !ref.startsWith(`${name}.`) || scope.documents.has(name),
+  );
 }
 
 // [LAW:one-source-of-truth] The one scope every reference surface resolves

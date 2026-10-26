@@ -115,10 +115,10 @@ import { fixedSource, type Selections } from "./view-source.js";
 import { declaredVariables } from "../config/loader/refs.js";
 import {
   authoredRules,
-  projectionNamesOf,
   projectionsOf,
   templateInstants,
 } from "../config/loader/projections.js";
+import { valueReads } from "../config/loader/value-reads.js";
 import {
   barRoot,
   bandRoot,
@@ -512,11 +512,10 @@ export interface CompileInput {
   readonly config: Omit<ValidatedConfig, "variables">;
   readonly stateReads: ReadonlyArray<readonly [key: string, variable: string]>;
   // [LAW:one-source-of-truth] What the compile tells its own templates' reads
-  // of the instant by (projections.ts): the declared names that decide whether
-  // a read lands on a projection, and the projections, with why — the one
+  // of the instant by (projections.ts): the projections, with why — the one
   // other fact of the variables a compile reads, sorted so it is part of the
-  // compile's identity.
-  readonly projectionNames: readonly string[];
+  // compile's identity. No declared name nests under another, so a read lands
+  // on a projection against these names exactly as against them all.
   readonly projections: ReadonlyArray<readonly [variable: string, why: string]>;
 }
 
@@ -549,7 +548,6 @@ export function compileInputOf(config: ValidatedConfig): CompileInput {
   return {
     config: rest,
     stateReads: [...stateKeyToVar].sort(([a], [b]) => (a < b ? -1 : 1)),
-    projectionNames: projectionNamesOf(config),
     projections: [...projectionsOf(config)].sort(([a], [b]) =>
       a < b ? -1 : 1,
     ),
@@ -611,7 +609,6 @@ export const EVERY_SCOPE: ReadonlySet<VarScope> = new Set([
 export function compileDslConfig({
   config,
   stateReads,
-  projectionNames,
   projections,
 }: CompileInput): CompiledConfig {
   // [LAW:locality-or-seam] One engine per config load, carrying THIS config's
@@ -888,21 +885,24 @@ export function compileDslConfig({
   // the gates are told first, by the engine's clock functions alone — a gate
   // is drawn outside any segment, where no layout can be asked for.
   const basis = {
-    helpers: config.helpers,
-    names: new Set(projectionNames),
+    reads: valueReads({
+      names: new Set(projections.map(([name]) => name)),
+      helpers: config.helpers,
+      actions: config.actions,
+    }),
     projections: new Map(projections),
     clock: engineClockFunctions(renderClocks),
   };
-  const gateReadsInstant = templateInstants(basis, config.actions);
+  const gateReadsInstant = templateInstants(basis);
   const gates = [...roots.values()].flatMap(layoutGates(compiled));
   const layoutReadsInstant = gates.some((gate) =>
     gateReadsInstant(sources.get(gate)!),
   );
   const readsInstant = layoutReadsInstant
-    ? templateInstants(
-        { ...basis, clock: new Set([...basis.clock, LAYOUT_PREVIEW]) },
-        config.actions,
-      )
+    ? templateInstants({
+        ...basis,
+        clock: new Set([...basis.clock, LAYOUT_PREVIEW]),
+      })
     : gateReadsInstant;
   const instant = new Set(
     [...sources].flatMap(([template, source]) =>

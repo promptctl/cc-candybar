@@ -719,7 +719,7 @@ export function hasCacheField(v: VariableDecl): v is VariableDeclWithCache {
 // by field: a template variable's body and a source's cache key.
 export function variableTemplates(
   v: VariableDecl,
-): ReadonlyArray<readonly [field: string, template: string]> {
+): ReadonlyArray<readonly [field: "template" | "cache.key", template: string]> {
   return [
     ...(v.kind === "template" ? [["template", v.template] as const] : []),
     ...(hasCacheField(v) && "key" in v.cache

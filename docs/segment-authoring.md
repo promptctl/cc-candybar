@@ -197,9 +197,9 @@ dotted path on a variable that is *not* one (`.budget.spentPct` when
 
 A knob that belongs with the document lives **outside** its namespace. The
 threshold below is `budgetWarnAt`, not `budget.warnAt`: with `budget` a
-document, `.budget.warnAt` is a field read, and a sibling variable spelled
-`budget.warnAt` is accepted by the loader and unreachable at render (Mistakes,
-below).
+document, `.budget.warnAt` is a field read, and a variable spelled
+`budget.warnAt` is refused at load: no variable is declared under another
+(Mistakes, below).
 
 ```json5 check:pass
 {
@@ -1206,10 +1206,10 @@ segment "budget": field "budget.period" not found on receiver
 
 ### A knob declared inside the document's namespace
 
-`budget.warnAt` is a legal variable name and the loader accepts it, but with
-`budget` a document, `.budget.warnAt` is a read of the document's `warnAt`
-field, which the script does not print. Move the knob out of the namespace
-(`budgetWarnAt`):
+With `budget` a document, `.budget.warnAt` would name two things: the variable
+`budget.warnAt` and the document's own `warnAt` field. No variable may be
+declared under another, so the loader refuses the config and names both. Move
+the knob out of the namespace (`budgetWarnAt`):
 
 ```json5 check:fail
 {
@@ -1234,7 +1234,7 @@ field, which the script does not print. Move the knob out of the namespace
 ```
 
 ```error
-segment "budget": field "budget.warnAt" not found on receiver
+variable "budget.warnAt" is declared under the variable "budget"
 ```
 
 ### A threshold declared as a string

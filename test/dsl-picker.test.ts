@@ -49,7 +49,7 @@ function pickerConfig(closeOnPick: boolean, paged: boolean): string {
     globals: {},
     variables: {
       'session.id': { kind: 'input', path: 'session_id', default: '' },
-      theme: { kind: 'state', key: 'theme-pick', default: '${THEMES[0]}' },
+      themePick: { kind: 'state', key: 'theme-pick', default: '${THEMES[0]}' },
       page: { kind: 'state', key: 'theme-page', default: '-1' },
       'term.cols': { kind: 'input', path: 'term.cols', type: 'number', default: 80 },
     },
