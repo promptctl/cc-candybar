@@ -18,6 +18,7 @@ import os from "node:os";
 import path from "node:path";
 import { loadFromDisk, pluginLoadLine } from "../src/daemon/cache/render";
 import { SessionState } from "../src/daemon/session-state";
+import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 
 const config = (variables: string, helpers = "{}") =>
   parseAndValidate(
@@ -192,7 +193,7 @@ test("the config load line names the load's projections", () => {
   const line = (variables: string, segments = "{}"): string => {
     const file = path.join(dir, "config.json5");
     fs.writeFileSync(file, `{ variables: ${variables}, segments: ${segments} }`);
-    const loaded = loadFromDisk(dir, dir, file, {
+    const loaded = loadFromDisk(dir, dir, file, { storage: NO_PLUGIN_STORAGE,
       sessionState: new SessionState(),
     });
     expect(loaded.error).toBeNull();

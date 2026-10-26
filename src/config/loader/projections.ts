@@ -24,7 +24,7 @@ import {
 } from "../payload-inputs.js";
 import { CLOCK_FUNCTIONS } from "../../template-engine/engine.js";
 import { declaredVariables } from "./refs.js";
-import { valueReadsOf, type ValueReads } from "./value-reads.js";
+import { payloadPathOf, valueReadsOf, type ValueReads } from "./value-reads.js";
 
 export type ProjectionConfig = Pick<
   DslConfig,
@@ -95,7 +95,8 @@ function foldProjections(config: ProjectionConfig): InstantBasis {
   };
   for (const [name, decl] of declared) {
     if (decl.kind === "time") projections.set(name, "is a time variable");
-    const drawn = decl.kind === "input" ? drawProjectionAt(decl.path) : null;
+    const at = payloadPathOf(name, decl);
+    const drawn = at === undefined ? null : drawProjectionAt(at);
     if (drawn)
       projections.set(
         name,
@@ -127,8 +128,9 @@ function foldProjections(config: ProjectionConfig): InstantBasis {
       }
     }
     for (const [name, decl] of declared) {
-      if (decl.kind !== "input" || projections.has(name)) continue;
-      const slot = slotAt(decl.path);
+      const at = payloadPathOf(name, decl);
+      if (at === undefined || projections.has(name)) continue;
+      const slot = slotAt(at);
       const why = slot === undefined ? undefined : slotReads.get(slot);
       if (why === undefined) continue;
       projections.set(name, `reads the ${slot} rule, which ${why}`);

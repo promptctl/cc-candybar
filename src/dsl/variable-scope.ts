@@ -6,6 +6,7 @@
 //
 // - a session's own values — its `input`s (the request's facts), its `state`
 //   reads — are the view's;
+// - a plugin's `source` is the view's: each session reads its own file;
 // - a derivation (`template`, `time`) is the view's: it reads the session's
 //   values, the depth its view draws at, and — a projection — the instant of
 //   a draw, and only a view is drawn;
@@ -60,6 +61,9 @@ const KIND_SCOPE: Readonly<
   literal: "directory",
   env: "directory",
   dropped: "directory",
+  // A plugin source is read per session: its reading is the session's own
+  // file, which reaches the view through its payload.
+  source: "view",
 };
 
 // A config's scopes, computed once per config object: every view a session

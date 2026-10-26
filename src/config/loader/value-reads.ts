@@ -114,6 +114,27 @@ export function valueReads({ names, helpers, actions }: ReadBasis): ValueReads {
   return { ofTemplate, calls, ofVariable };
 }
 
+// [LAW:one-source-of-truth] The payload path a declaration reads: an input's
+// `path`, and a plugin source's own name, since its reading travels in the
+// payload at the name it is declared under. Every other kind reads the payload
+// only through the declarations it reads (`ofVariable`). A walk that follows
+// what a value reads down to the payload — the input closure, the rule-slot
+// check, the projection fold — asks this, so a kind that reads the payload is
+// spelled here once.
+export function payloadPathOf(
+  name: string,
+  decl: VariableDecl,
+): string | undefined {
+  switch (decl.kind) {
+    case "input":
+      return decl.path;
+    case "source":
+      return name;
+    default:
+      return undefined;
+  }
+}
+
 // One answer per template text: a gate's text recurs at every node of every
 // preset that edit chrome wraps alike.
 function perTemplate<T>(answer: (template: string) => T): (t: string) => T {

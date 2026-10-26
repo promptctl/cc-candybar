@@ -105,7 +105,7 @@ function loadState(): ReturnType<typeof buildRenderState> {
       cwd,
       { layers: [configPath], home: configPath, projectDir: cwd },
       advisories,
-      { sessionState },
+      { sessionState, storage: providers.managedStorage },
     );
   } catch (err) {
     if (err instanceof ConfigError) advisories.push(...err.warnings);
@@ -122,12 +122,11 @@ async function renderFrames(): Promise<void> {
   const view = openView(
     state,
     cwd,
-    sessionId,
     { sessionId, hookData, cwd, hints },
     {
       sessionState,
-      declare: (holds, facts, closure) =>
-        declareLanes(providers, holds, facts, closure),
+      declare: (holds, facts, closure, sources) =>
+        declareLanes(providers, holds, facts, closure, sources),
       source: sessionSource({
         providers,
         sessionState,

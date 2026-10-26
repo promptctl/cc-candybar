@@ -44,6 +44,7 @@ import { rootNode, rootOf } from "../src/config/root";
 import { SETTINGS_NS } from "../src/config/loader/reserved-namespace";
 import { PRESET_FLOOR, presetRoot } from "../src/config/presets";
 import { viewFacts } from "./helpers/view-facts";
+import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 
 // Flatten a layout tree to its segment names, in pre-order — the post-`root`
 // equivalent of the old `config.layout.flatMap(r => r.segments)`.
@@ -82,7 +83,7 @@ function makeCache(
   const sessionState = new SessionState();
   const reloads = new ReloadSignal();
   const cache = new RenderCache(
-    { sessionState, watchers, log, source: SOURCES_NOTHING, declare: DECLARES_NOTHING },
+    { storage: NO_PLUGIN_STORAGE, sessionState, watchers, log, source: SOURCES_NOTHING, declare: DECLARES_NOTHING },
     {
       // Room for four entries over one compile: the fifth evicts the oldest.
       budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES,
@@ -762,7 +763,7 @@ describe("RenderCache", () => {
       lines.push(msg),
     );
     try {
-      cache.holdSession("/p0", "/p0", undefined, "s0", viewFacts("/p0", "s0"))[Symbol.dispose]();
+      cache.holdSession("/p0", "/p0", undefined, viewFacts("/p0", "s0"))[Symbol.dispose]();
       for (let i = 0; i < 5; i++)
         cache.getOrCreate(`/p${i}`, `/p${i}`, undefined);
       const evict = lines.filter((l) => l.startsWith("config disposed "));
@@ -1011,13 +1012,13 @@ describe("RenderCache idle sweep", () => {
     const { dir, cleanup } = mkConfigDir();
     const watchers = new WatcherRegistry({ logger: () => {} });
     const cache = new RenderCache(
-      { sessionState: new SessionState(), watchers, source: SOURCES_NOTHING, declare: DECLARES_NOTHING },
+      { storage: NO_PLUGIN_STORAGE, sessionState: new SessionState(), watchers, source: SOURCES_NOTHING, declare: DECLARES_NOTHING },
       { budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES },
     );
     try {
       let released = 0;
       {
-        using hold = cache.holdSession(dir, dir, undefined, "s1", viewFacts(dir, "s1"));
+        using hold = cache.holdSession(dir, dir, undefined, viewFacts(dir, "s1"));
         hold.view.holds.take("repo", () => () => {
           released++;
         });
@@ -1049,14 +1050,13 @@ describe("RenderCache idle sweep", () => {
     const { dir, cleanup } = mkConfigDir();
     const watchers = new WatcherRegistry({ logger: () => {} });
     const cache = new RenderCache(
-      { sessionState: new SessionState(), watchers, source: SOURCES_NOTHING, declare: DECLARES_NOTHING },
+      { storage: NO_PLUGIN_STORAGE, sessionState: new SessionState(), watchers, source: SOURCES_NOTHING, declare: DECLARES_NOTHING },
       { budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES },
     );
     try {
       const view = openView(
         cache.getOrCreate(dir, dir, undefined).state,
         dir,
-        "s1",
         viewFacts(dir, "s1"),
         { sessionState: new SessionState(), source: SOURCES_NOTHING, declare: DECLARES_NOTHING, log: () => {} },
       );
@@ -1091,18 +1091,18 @@ describe("RenderCache idle sweep", () => {
       });
     const logs: string[] = [];
     const cache = new RenderCache(
-      {
+      { storage: NO_PLUGIN_STORAGE,
         sessionState,
         watchers,
         log: (_level, message) => logs.push(message),
         source: SOURCES_NOTHING,
-        declare: (holds, facts, closure) => {
+        declare: (holds, facts, closure, sources) => {
           if (!closures.includes(closure)) closures.push(closure);
           const preset = `closure:${closures.indexOf(closure)}`;
           declarations.push(`${facts.cwd} ${preset}`);
           take(holds, `memento:${facts.cwd}`);
           take(holds, preset);
-          return DECLARES_NOTHING(holds, facts, closure);
+          return DECLARES_NOTHING(holds, facts, closure, sources);
         },
       },
       { budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES },
@@ -1123,7 +1123,7 @@ describe("RenderCache idle sweep", () => {
     try {
       const a = request("/a");
       const view = (() => {
-        using hold = cache.holdSession(dir, dir, undefined, "s1", a);
+        using hold = cache.holdSession(dir, dir, undefined, a);
         return hold.view;
       })();
       // A view opens declared, at the request it opens with.

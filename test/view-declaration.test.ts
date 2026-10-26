@@ -26,6 +26,7 @@ import { Holds } from "../src/utils/holds";
 import { ABSENT, failed, ok, type Outcome } from "../src/utils/outcome";
 import { settledLane, type Lane } from "../src/utils/reading";
 import { viewFacts } from "./helpers/view-facts";
+import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 
 const REPO = "/repo";
 
@@ -107,12 +108,12 @@ test("a preset click that newly places the PR starts its lookup with no draw; sw
     usageStore: { declareToday: () => settledLane(ABSENT) },
   } as unknown as KeyedOwners;
   const cache = new RenderCache(
-    {
+    { storage: NO_PLUGIN_STORAGE,
       sessionState,
       watchers,
       source: SOURCES_NOTHING,
-      declare: (holds, facts, closure) =>
-        declareLanes(owners, holds, facts, closure),
+      declare: (holds, facts, closure, sources) =>
+        declareLanes(owners, holds, facts, closure, sources),
     },
     { budgetBytes: () => 1024 * 1024 * 1024 },
   );
@@ -134,7 +135,7 @@ test("a preset click that newly places the PR starts its lookup with no draw; sw
   // The view opens declared at the session's request: its repo is held in
   // the opening turn (brandon-unfiled-3248.8ro6, 4a/4b).
   const view = (() => {
-    using hold = cache.holdSession(dir, dir, undefined, "s1", facts);
+    using hold = cache.holdSession(dir, dir, undefined, facts);
     return hold.view;
   })();
   expect(git.getStats().held).toBe(1);
@@ -156,7 +157,7 @@ test("a preset click that newly places the PR starts its lookup with no draw; sw
   expect(git.getStats().held).toBe(1);
   for (let minute = 0; minute < (PR_PERIOD.okMs * 3) / 60_000; minute++) {
     await jest.advanceTimersByTimeAsync(60_000);
-    using drawn = cache.holdSession(dir, dir, undefined, "s1", facts);
+    using drawn = cache.holdSession(dir, dir, undefined, facts);
     expect(drawn.view).toBe(view);
   }
   expect(inner.prLookups).toBe(1);
@@ -205,6 +206,7 @@ test("a lane whose declaration throws is reported, takes no hold, and stops no o
       holds,
       facts,
       new Set(["git.branch", "tmux.session", "memento.ceiling", "today.cost"]),
+      new Map(),
     ),
   );
   expect(declared.result.faults).toEqual([
@@ -239,18 +241,18 @@ function gitCache() {
     usageStore: { declareToday: () => settledLane(ABSENT) },
   } as unknown as KeyedOwners;
   const cache = new RenderCache(
-    {
+    { storage: NO_PLUGIN_STORAGE,
       sessionState: new SessionState(),
       watchers,
       source: SOURCES_NOTHING,
-      declare: (holds, facts, closure) =>
-        declareLanes(owners, holds, facts, closure),
+      declare: (holds, facts, closure, sources) =>
+        declareLanes(owners, holds, facts, closure, sources),
     },
     { budgetBytes: () => 1024 * 1024 * 1024 },
   );
   cleanups.push(() => cache.close());
   const view = (() => {
-    using hold = cache.holdSession(dir, dir, undefined, "s1", viewFacts(dir));
+    using hold = cache.holdSession(dir, dir, undefined, viewFacts(dir));
     return hold.view;
   })();
   return { inner, git, cache, view };

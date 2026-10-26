@@ -31,7 +31,7 @@ import {
   SEAM_MIN_DELTA_E,
 } from "@promptctl/rich-js";
 
-import { checkPayload } from "../src/check";
+import { CHECK_TODAY, checkPayload } from "../src/check";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { unauthored, validateConfig } from "../src/config/dsl-loader";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
@@ -165,7 +165,10 @@ function render(theme: string, calm: boolean, { variation, shade, look }: Varian
               : null,
     () => false,
   );
-  const hot = checkPayload(e, null, AT) as Record<string, Record<string, unknown>>;
+  const hot = {
+    ...checkPayload(CONFIG, e, null, AT),
+    today: CHECK_TODAY,
+  } as unknown as Record<string, Record<string, unknown>>;
   const payload = calm
     ? Object.fromEntries(
         Object.entries(hot).map(([k, v]) => [

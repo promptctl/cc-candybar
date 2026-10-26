@@ -35,7 +35,7 @@ import { presetGlobals, presetRoot } from "../config/presets.js";
 import { EXPRESSION_SLOTS, isExpression } from "../themes/policy.js";
 import { walkNodes } from "../config/dsl-types.js";
 import { declaredVariables } from "../config/loader/refs.js";
-import { valueReadsOf } from "../config/loader/value-reads.js";
+import { payloadPathOf, valueReadsOf } from "../config/loader/value-reads.js";
 import {
   prOfHead,
   trackingOf,
@@ -102,6 +102,8 @@ import {
 import { dateOf, type Instant } from "../utils/instant.js";
 import type { RefreshFaults, RefreshLane } from "./refresh-faults.js";
 import type { SessionId } from "./session-id.js";
+import type { ManagedStorage, StorageKey } from "./cache/managed-storage.js";
+import type { JsonValue } from "../var-system/types.js";
 
 // The resolved globals as the options renderDsl's joiner and cells read (its
 // selection is the resolution itself — RenderSelection is a Pick of it).
@@ -293,7 +295,18 @@ export interface RenderPayloadOf<P> extends ClaudeHookData, ValuedInputs {
   readonly memento?: MementoPayload | P;
   // Claude Code's auto-compact window, as its `/autocompact` last wrote it.
   readonly autocompact?: AutoCompactPayload | P;
+  // [LAW:types-are-the-program] Each plugin source the view declared, by
+  // plugin then source — `.plugins.<plugin>.<source>`, the source variable's
+  // own name — as the managed storage owner read the session's file: ok,
+  // absent or failed, or not answered yet. Required: a payload builder that
+  // leaves the sources out does not compile (`projectSources`).
+  readonly plugins: SourcesPayload<P>;
 }
+
+// The readings of a view's sources, nested by plugin and source.
+export type SourcesPayload<P> = Readonly<
+  Record<string, Readonly<Record<string, Outcome<JsonValue> | P>>>
+>;
 
 // What a request is answered from: every source answered.
 export type RenderPayload = RenderPayloadOf<never>;
@@ -589,6 +602,10 @@ export interface RenderPayloadDeps {
   readonly activityProvider: ActivityProvider;
   readonly tmuxService: TmuxService;
   readonly mementoProvider: MementoProvider;
+  // [LAW:single-enforcer] The one owner of every plugin's session files: a
+  // view's declaration holds each source it reads there, and a render state's
+  // build holds the folders its config declares.
+  readonly managedStorage: ManagedStorage;
   // Claude Code's auto-compact window, read from the user settings file at
   // the path a render names.
   readonly autoCompact: AutoCompactProvider;
@@ -869,7 +886,8 @@ export function segmentInputPaths(
   return inputClosure(config, [...segmentTemplates(config, name), ...whens]);
 }
 
-// The `kind: "input"` paths a set of templates reaches, through every edge of
+// The payload paths a set of templates reaches — each input's path, each
+// plugin source's name (payloadPathOf) — through every edge of
 // the one fold of what a value reads (value-reads.ts): a template's reads and
 // the texts of the actions it binds, a variable's template, cache key and
 // depends_on. The draw follows each of these, so a path the closure missed
@@ -890,7 +908,8 @@ function inputClosure(
     if (visited.has(name)) continue;
     visited.add(name);
     const decl = decls.get(name)!;
-    if (decl.kind === "input") inputPaths.add(decl.path);
+    const read = payloadPathOf(name, decl);
+    if (read !== undefined) inputPaths.add(read);
     for (const { reaches } of reads.ofVariable(decl)) frontier.push(...reaches);
   }
   return inputPaths;
@@ -1167,6 +1186,7 @@ interface Lanes {
   readonly speed: Reading<SpeedObservation>;
   readonly memento: Current<CeilingReading>;
   readonly autoCompact: Reading<AutoCompactWindow>;
+  readonly sources: ReadonlyMap<string, Current<JsonValue>>;
 }
 
 // What a view's declaration reads of the request its renders draw by: the
@@ -1179,7 +1199,11 @@ export type ViewFacts = Pick<PayloadInputs, "hookData" | "cwd" | "hints"> & {
 // The owners of the keyed lanes, which a declaration takes its holds in.
 export type KeyedOwners = Pick<
   RenderPayloadDeps,
-  "gitProvider" | "tmuxService" | "mementoProvider" | "usageStore"
+  | "gitProvider"
+  | "tmuxService"
+  | "mementoProvider"
+  | "usageStore"
+  | "managedStorage"
 >;
 
 // [LAW:types-are-the-program] What a view's declaration hands its draws: one
@@ -1190,6 +1214,24 @@ export interface DeclaredLanes {
   readonly tmux: Lane<string>;
   readonly memento: Lane<CeilingReading>;
   readonly today: Lane<DaySet>;
+  // [LAW:dataflow-not-control-flow] One lane per plugin source the preset
+  // reads, by the source variable's name: no fixed list — the set is what the
+  // loaded plugins declare and the closure reaches.
+  readonly sources: ReadonlyMap<string, Lane<JsonValue>>;
+}
+
+// The plugin sources a config declares, by variable name, at the storage key
+// its render state's build took for each one's folder.
+export type DeclaredSources = ReadonlyMap<string, StorageKey>;
+
+// [LAW:one-source-of-truth] The sources a view reads: those the config
+// declares that its preset's closure reaches, at their own names
+// (payloadPathOf).
+export function sourcesRead(
+  closure: ReadonlySet<string>,
+  sources: DeclaredSources,
+): readonly string[] {
+  return [...sources.keys()].filter((name) => closure.has(name));
 }
 
 // A declaration's lanes, and what threw while it took them.
@@ -1198,11 +1240,20 @@ export interface Declaration {
   readonly faults: readonly string[];
 }
 
-// Every lane answering one outcome: a view's when its declaration threw
-// whole, or a caller's that declares nothing.
-export function settledLanes(outcome: Outcome<never>): DeclaredLanes {
+// Every lane answering one outcome, `sources` one per name: a view's when its
+// declaration threw whole, or a caller's that declares nothing.
+export function settledLanes(
+  outcome: Outcome<never>,
+  sources: readonly string[],
+): DeclaredLanes {
   const lane = settledLane(outcome);
-  return { git: lane, tmux: lane, memento: lane, today: lane };
+  return {
+    git: lane,
+    tmux: lane,
+    memento: lane,
+    today: lane,
+    sources: new Map(sources.map((name) => [name, lane])),
+  };
 }
 
 // [LAW:one-source-of-truth] The repo a request names, at the option sets and
@@ -1257,6 +1308,7 @@ export function declareLanes(
   holds: Holds,
   facts: ViewFacts,
   closure: ReadonlySet<string>,
+  sources: DeclaredSources,
 ): Declaration {
   const want = wanted(closure);
   const pane = facts.hints.tmux ?? null;
@@ -1288,6 +1340,20 @@ export function declareLanes(
     ),
     today: declare("today", want.today, () =>
       owners.usageStore.declareToday(holds, facts.hints.claudeConfigDir),
+    ),
+    // [LAW:one-source-of-truth] Each source's hold at (its folder's storage
+    // key, the session the checkpoint parsed).
+    sources: new Map(
+      sourcesRead(closure, sources).map((name) => [
+        name,
+        declare(name, true, () =>
+          owners.managedStorage.declare(
+            holds,
+            sources.get(name)!,
+            facts.sessionId,
+          ),
+        ),
+      ]),
     ),
   };
   return { lanes, faults };
@@ -1343,6 +1409,9 @@ function readLanes(inputs: PayloadInputs): Lanes {
     autoCompact: read("autocompact", want.autocompact, () =>
       deps.autoCompact.stored(settingsPathOf(inputs.hints)),
     ),
+    sources: new Map(
+      [...lanes.sources].map(([name, lane]) => [name, lane.current()]),
+    ),
   };
 }
 
@@ -1360,6 +1429,7 @@ function waitsOf(lanes: DeclaredLanes): Array<Promise<void>> {
     lanes.tmux.current(),
     lanes.memento.current(),
     lanes.today.current(),
+    ...[...lanes.sources.values()].map((lane) => lane.current()),
     ...(pr === undefined ? [] : [pr]),
   ].flatMap((lane) =>
     lane.kind === "pending" && lane.why === "unread" ? [lane.landed] : [],
@@ -1556,8 +1626,51 @@ function projectPayload(
     ...(activityPayload !== undefined && { activity: activityPayload }),
     ...(mementoValue !== undefined && { memento: mementoValue }),
     ...(autoCompactValue !== undefined && { autocompact: autoCompactValue }),
+    // The storage owner logs each read that failed: a failure here is a value,
+    // drawn by the template reading it.
+    plugins: projectSources(lanes.sources.keys(), (name) => {
+      const reading = lanes.sources.get(name)!;
+      return reading.kind === "pending" ? PENDING : reading;
+    }),
   };
   return { payload, failures };
+}
+
+// [LAW:nothing-unseen] The render event's `sources=` and `sourcesPending=`:
+// how many plugin sources the view declared, and those not answered yet as
+// the draw reads them (`-` for none), so a source that never lands is told
+// from one nothing declared.
+export function sourcesFactOf(sources: ReadonlyMap<string, Lane<JsonValue>>): {
+  readonly sources: string;
+  readonly sourcesPending: string;
+} {
+  return {
+    sources: String(sources.size),
+    sourcesPending:
+      [...sources]
+        .filter(([, lane]) => lane.current().kind === "pending")
+        .map(([name]) => name)
+        .join(",") || "-",
+  };
+}
+
+// [LAW:one-source-of-truth] The one projection of a view's sources into its
+// payload: each at `.plugins.<plugin>.<source>`, its variable's own name, as
+// `read` answers it — the daemon reads the storage owner's lanes, `check`
+// reads every source absent (what a session reads before its program first
+// writes). No second spelling of the path exists.
+export function projectSources<P>(
+  names: Iterable<string>,
+  read: (name: string) => Outcome<JsonValue> | P,
+): SourcesPayload<P> {
+  const plugins: Record<string, Record<string, Outcome<JsonValue> | P>> = {};
+  for (const name of names) {
+    // [LAW:types-are-the-program] A source's name is
+    // `plugins.<plugin>.<source>`, each one identifier (the plugin loader).
+    const [, plugin, source] = name.split(".") as [string, string, string];
+    (plugins[plugin] ??= {})[source] = read(name);
+  }
+  return plugins;
 }
 
 function burnOf(

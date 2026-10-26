@@ -102,6 +102,7 @@ import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { ReloadSignal } from "./helpers/reload-signal";
 import { INVISIBLE, linkUrls } from "./helpers/ansi";
 import { instantOf } from "../src/utils/instant";
+import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -968,7 +969,7 @@ function makeCache(reloads?: ReloadSignal): {
   cleanups.push(() => watchers.closeAll());
   const sessionState = new SessionState();
   const cache = new RenderCache(
-    { sessionState, watchers, source: SOURCES_NOTHING, declare: DECLARES_NOTHING },
+    { storage: NO_PLUGIN_STORAGE, sessionState, watchers, source: SOURCES_NOTHING, declare: DECLARES_NOTHING },
     {
       budgetBytes: () => renderCacheBudget(memoryLimitBytes({})),
       ...(reloads === undefined ? {} : { observers: reloads.observers }),

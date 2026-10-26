@@ -301,6 +301,7 @@ export async function requestPayload(
     new HoldsClass(),
     { sessionId: sessionIdOf(hookData.session_id), hookData, cwd, hints },
     closure,
+    new Map(),
   );
   const inputs: PayloadInputs = {
     hookData,
@@ -343,6 +344,7 @@ export function declaredLanes(
     new HoldsClass(),
     facts,
     closure,
+    new Map(),
   );
   return () => lanes;
 }

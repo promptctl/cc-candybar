@@ -71,6 +71,7 @@ import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { testVerbContext } from "./helpers/click";
 import { linkUrls, links, stripAnsi } from "./helpers/ansi";
 import { instantOf } from "../src/utils/instant";
+import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -490,7 +491,7 @@ function makeCache(): {
   const sessionState = new SessionState();
   const reloads = new ReloadSignal();
   const cache = new RenderCache(
-    { sessionState, watchers, source: SOURCES_NOTHING, declare: DECLARES_NOTHING },
+    { storage: NO_PLUGIN_STORAGE, sessionState, watchers, source: SOURCES_NOTHING, declare: DECLARES_NOTHING },
     { budgetBytes: () => renderCacheBudget(memoryLimitBytes({})), observers: reloads.observers },
   );
   cleanups.unshift(() => cache.close());

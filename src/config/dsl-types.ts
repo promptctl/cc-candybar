@@ -515,7 +515,10 @@ export type Globals = GlobalsOf<GlobalFieldRows>;
 // [LAW:one-type-per-behavior] One discriminated union covers every source
 // kind. Adding a new kind = code change here + matching runtime support in
 // var-system. There is no "extension" path that bypasses this list.
-export type VariableDecl = AuthoredVariableDecl | DroppedVarDecl;
+export type VariableDecl =
+  | AuthoredVariableDecl
+  | DroppedVarDecl
+  | SourceVarDecl;
 
 // What a config may write under `variables:`.
 export type AuthoredVariableDecl =
@@ -538,6 +541,20 @@ export interface DroppedVarDecl {
   readonly reason: string;
   // The path of the definition that dropped: the drop's identity.
   readonly definition: string;
+}
+
+// [LAW:one-type-per-behavior] A plugin's source (design-docs/PLUGIN-API.md):
+// a DOCUMENT read, per session, from the plugin's managed storage — the file
+// `<storage>/<session id>.json` its program writes. Its reading reaches the
+// view through the payload, at the variable's own name, so it is declared by
+// the view a session's declaration holds it for. Synthesized by the plugin
+// loader from a definition's `sources:`, never authored — the variable loader
+// accepts no `kind: "source"`.
+export interface SourceVarDecl {
+  readonly kind: "source";
+  // The folder the plugin's program writes its session files into: the
+  // plugin folder's real path, then `session`.
+  readonly storage: string;
 }
 
 export interface LiteralVarDecl {

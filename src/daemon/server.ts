@@ -133,6 +133,7 @@ import {
   renderWidth,
   gitOptionsFromClosure,
   prFactOf,
+  sourcesFactOf,
   settlePayload,
   todayOf,
   type PayloadInputs,
@@ -388,8 +389,9 @@ const renderCache = new RenderCache<SessionSource>(
     sessionState,
     watchers: watcherRegistry,
     log: dlog,
-    declare: (holds, facts, closure) =>
-      declareLanes(payloadProviders, holds, facts, closure),
+    storage: managedStorage,
+    declare: (holds, facts, closure, sources) =>
+      declareLanes(payloadProviders, holds, facts, closure, sources),
     // [LAW:single-enforcer] What every session's view draws from: its payload
     // derived over its declaration, its picks and its histories' depths.
     source: sessionSource({
@@ -2021,7 +2023,6 @@ function setUpRender(
     origin.projectDir,
     origin.cwd,
     origin.configFile ?? undefined,
-    sessionId,
     req,
   );
   try {
@@ -2135,6 +2136,7 @@ function drawRender(
     ),
   };
   const metrics = isPending(payload.metrics) ? undefined : payload.metrics;
+  noteFacts(facts, sourcesFactOf(view.lanes().sources));
   noteFacts(facts, {
     prompts: String(metrics?.messageCount ?? "-"),
     nonPrompts: String(metrics?.nonPrompts ?? "-"),

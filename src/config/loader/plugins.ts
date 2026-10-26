@@ -23,6 +23,7 @@ import {
   type DslConfig,
   type RawDslConfig,
   type RawSegmentDecl,
+  type SourceVarDecl,
   type VariableDecl,
 } from "../dsl-types.js";
 import { actionTemplates, type ActionDecl } from "../action.js";
@@ -104,6 +105,7 @@ export function droppedPluginNotice(d: DroppedPlugin): string {
 // `root` — placing its segments is the user's choice.
 const DEFINITION_KEYS = new Set([
   "data",
+  "sources",
   "variables",
   "segments",
   "helpers",
@@ -137,6 +139,10 @@ export const PLUGIN_NS = "plugins.";
 export function pluginDataVar(plugin: string): string {
   return `${PLUGIN_NS}${plugin}.data`;
 }
+
+// The folder a plugin's managed storage lives in: its program writes
+// `<folder>/<session id>.json` there.
+export const STORAGE_FOLDER = "session";
 
 type Attempt<T> =
   | { readonly ok: true; readonly value: T }
@@ -565,6 +571,8 @@ function fragmentOf(
     json.data === undefined
       ? undefined
       : dataPathOf(json.data, file, checkout, issues);
+  const sources =
+    json.sources === undefined ? {} : sourcesOf(json.sources, file, issues);
   if (issues.length > 0) return fail();
 
   const ctx: ValidateCtx = {
@@ -595,15 +603,31 @@ function fragmentOf(
   const variables = validateVariables(ctx, "variables", json.variables);
   // [LAW:one-source-of-truth] `.plugins.<plugin>.data` is the data file's,
   // and a dropped plugin's tombstone, whether or not `data` is declared.
-  if ("data" in variables) {
-    issues.push({
-      path: "variables.data",
-      message: `"data" names the plugin's data file (.${pluginDataVar(ns)}), declared by the definition's own "data" key: give this variable another name`,
-    });
+  for (const [table, names] of [
+    ["variables", Object.keys(variables)],
+    ["sources", Object.keys(sources)],
+  ] as const) {
+    if (names.includes("data")) {
+      issues.push({
+        path: `${table}.data`,
+        message: `"data" names the plugin's data file (.${pluginDataVar(ns)}), declared by the definition's own "data" key: give this ${table === "sources" ? "source" : "variable"} another name`,
+      });
+    }
+  }
+  // [LAW:one-source-of-truth] A source's name is its variable's: one name
+  // under `plugins.<plugin>.` is one declaration.
+  for (const name of Object.keys(sources)) {
+    if (Object.hasOwn(variables, name)) {
+      issues.push({
+        path: `sources.${name}`,
+        message: `source "${name}" and variable "${name}" are one name (.${PLUGIN_NS}${ns}.${name}): give one of them another name`,
+      });
+    }
   }
   const fragment: RawDslConfig = {
     variables: {
       ...data,
+      ...prefixed(ns, sources),
       ...prefixed(
         ns,
         Object.fromEntries(
@@ -726,6 +750,86 @@ function setKeysUnder(
       "set" in a ? { ...a, set: keyUnder(ns, a.set) } : a,
     ]),
   );
+}
+
+// A source's name is one identifier, like a plugin's: `plugins.<plugin>.<source>`
+// is then its full name and its payload path.
+const SOURCE_NAME = PLUGIN_NAME;
+
+// [LAW:types-are-the-program] The one source the API builds: a session's
+// document, re-read when its file changes, read from the plugin's managed
+// storage. Each field is spelled exactly as authored, so anything else — a
+// scope, trigger or reader the design names but this build lacks, a `file`
+// with a path — is refused naming the field and what is built.
+const BUILT_SOURCE = {
+  scope: "session",
+  refresh: { watch: true },
+  read: { file: { json: true } },
+} as const;
+
+// [LAW:parse-dont-validate] A definition's `sources:`, each lowered to the
+// variable that reads it: a session's document in the plugin's managed
+// storage, the folder `<plugin folder real path>/session`. The real path, so a
+// linked plugin folder replaced by an install is another folder.
+function sourcesOf(
+  sources: unknown,
+  file: string,
+  issues: ConfigIssue[],
+): Record<string, SourceVarDecl> {
+  if (!isPlainObject(sources)) {
+    issues.push({
+      path: "sources",
+      message: `"sources" must be an object of named sources, got ${describeType(sources)}`,
+    });
+    return {};
+  }
+  const storage = path.join(
+    fs.realpathSync(path.dirname(file)),
+    STORAGE_FOLDER,
+  );
+  const built = JSON.stringify(BUILT_SOURCE);
+  const lowered: Record<string, SourceVarDecl> = {};
+  for (const [name, source] of Object.entries(sources)) {
+    const at = `sources.${name}`;
+    if (!SOURCE_NAME.test(name)) {
+      issues.push({
+        path: at,
+        message: `source name "${name}" is not one identifier (one matching ${SOURCE_NAME}: it is the last segment of .${PLUGIN_NS}<plugin>.${name})`,
+      });
+      continue;
+    }
+    const wrong = unbuilt(source, BUILT_SOURCE, at);
+    for (const { field, is } of wrong) {
+      issues.push({
+        path: field,
+        message: `${field} ${is}: what is built is a source ${built} — a session's JSON file in the plugin's managed storage, re-read when it changes`,
+      });
+    }
+    if (wrong.length === 0) lowered[name] = { kind: "source", storage };
+  }
+  return lowered;
+}
+
+// Every field where `authored` departs from `built`, at its deepest: a field
+// the build has no such thing as, one it lacks, or another value.
+function unbuilt(
+  authored: unknown,
+  built: unknown,
+  at: string,
+): ReadonlyArray<{ readonly field: string; readonly is: string }> {
+  if (!isPlainObject(built) || !isPlainObject(authored)) {
+    return JSON.stringify(authored) === JSON.stringify(built)
+      ? []
+      : [{ field: at, is: `is ${JSON.stringify(authored)}` }];
+  }
+  return [
+    ...new Set([...Object.keys(built), ...Object.keys(authored)]),
+  ].flatMap((key) => {
+    const field = `${at}.${key}`;
+    if (!Object.hasOwn(built, key)) return [{ field, is: "is not built" }];
+    if (!Object.hasOwn(authored, key)) return [{ field, is: "is missing" }];
+    return unbuilt(authored[key], built[key], field);
+  });
 }
 
 // [LAW:types-are-the-program] Where a plugin's data lives: a path relative to

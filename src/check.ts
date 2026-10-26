@@ -57,9 +57,13 @@ import { perSetting } from "./config/setting-projections.js";
 import { effectivePresetName, presetNames } from "./config/presets.js";
 import {
   effectiveInputs,
+  projectSources,
   renderOptionsOf,
   type RenderPayload,
+  type TodayPayload,
+  type ViewPayload,
 } from "./daemon/render-payload.js";
+import { ABSENT } from "./utils/outcome.js";
 import {
   resolveEffectiveGlobals,
   type EffectiveGlobals,
@@ -100,13 +104,21 @@ const SOURCE_SETTLE_MS = 5000;
 // test/example-configs.test.ts asserts rendered content against these literal
 // values (780s → "◷ 13m", cost $0.39, version 1.15.0, …); changing one here
 // fails that suite loudly rather than drifting silently.
+//
+// [LAW:types-are-the-program] Typed as the payload a view draws from, less
+// `term`, which the draw writes from its width (drawPayload): a field the
+// daemon's payload requires — every declared source's reading among them — is
+// a compile error here until the fixture carries it.
+export type CheckPayload = Omit<ViewPayload, "term">;
+
 export function checkPayload(
+  config: Pick<ValidatedConfig, "variables">,
   effective: EffectiveGlobals,
   configPath: string | null,
   // The instant the render this payload feeds is drawn at, so its reset times
   // sit where the render's own countdowns measure them from.
   at: Instant,
-): Record<string, unknown> {
+): CheckPayload {
   const home = "/home/tester";
   const nowSec = Math.floor(at);
   const sessionId = "test0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b";
@@ -149,7 +161,6 @@ export function checkPayload(
       committedAt: nowSec - 780,
     },
     session: { cost: 0.39, tokens: 241400 },
-    today: { cost: 12.5, tokens: 3_400_000 },
     context: { totalTokens: 48487, contextLeft: 24 },
     metrics: {
       lastResponseTime: 8.2,
@@ -201,8 +212,25 @@ export function checkPayload(
     // the bundled default has no file, and a stand-in keeps `↗ config` drawn.
     resumeCommand: resumeCommand(workspace, sessionId, undefined),
     configPath: configPath ?? `${home}/.config/cc-candybar/config.json5`,
+    // [LAW:one-source-of-truth] Every source the config declares reads
+    // absent, through the daemon's own projection: `check` runs no plugin
+    // program and has no session, and absent is what a session reads before
+    // its program first writes. So a segment gated on `hasKey` is hidden, and
+    // an unguarded read fails the check with the missing-field error that
+    // session's bar would draw.
+    plugins: projectSources(
+      Object.entries(config.variables).flatMap(([name, decl]) =>
+        decl.kind === "source" ? [name] : [],
+      ),
+      () => ABSENT,
+    ),
   };
 }
+
+// `today` is a fact of the draw's own instant, not of the view's payload
+// (DRAW_PROJECTIONS), so the fixture hands it to the draw beside the payload,
+// as the demo hands its draws theirs.
+export const CHECK_TODAY: TodayPayload = { cost: 12.5, tokens: 3_400_000 };
 
 // [LAW:dataflow-not-control-flow] The check result is DATA — a pure function of
 // the target file's contents — discriminated into the three outcomes the exit-
@@ -405,7 +433,10 @@ export async function prepareConfig(
       store,
       registry,
       fixedSource(
-        checkPayload(effective, layers.at(-1) ?? null, at),
+        {
+          ...checkPayload(config, effective, layers.at(-1) ?? null, at),
+          today: CHECK_TODAY,
+        },
         effective,
       ),
     );
@@ -508,7 +539,10 @@ export function renderEffective(
     compiled,
     store,
     registry,
-    checkPayload(effective, layers.at(-1) ?? null, at),
+    {
+      ...checkPayload(config, effective, layers.at(-1) ?? null, at),
+      today: CHECK_TODAY,
+    },
     at,
     renderOptionsOf(effective, width),
     {

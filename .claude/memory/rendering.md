@@ -23,7 +23,7 @@ A session view's payload is derived from its declaration, the session's picks an
 ## Templates
 
 - A `when` hides its segment only when it renders the literal text "false". So a gate must render a boolean. An `or` over numbers that are all zero renders "0", and the segment then shows as an empty coloured cell.
-- A missing field is an error, not empty text.
+- A missing field is an error, not empty text. A document with nothing to read is a missing field too, never an error of its own, so one gate (`hasKey`) hides what reads it until its source writes.
 - Sprig's regex functions use ECMAScript regex syntax, not RE2.
 - Parse once and evaluate many times, because parsing is the expensive step.
 

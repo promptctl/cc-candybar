@@ -460,9 +460,13 @@ export function templateScopeOf(cfg: DslConfig): TemplateScope {
   return { names, documents, helpers: cfg.helpers };
 }
 
+// [LAW:one-source-of-truth] The one document predicate: what cross-ref lets a
+// field read reach into is what the store declares a document (declareOne,
+// src/dsl/render.ts) — a json shell or file, a plugin's source, a tombstone.
 function isDocumentDecl(v: VariableDecl): boolean {
   return (
     v.kind === "dropped" ||
+    v.kind === "source" ||
     ((v.kind === "shell" || v.kind === "file") && parseArm(v.parse) === "json")
   );
 }

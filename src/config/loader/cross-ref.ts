@@ -96,7 +96,7 @@ import {
   templateScopeOf,
   type TemplateScope,
 } from "./refs.js";
-import { valueReadsOf, type ValueRead } from "./value-reads.js";
+import { payloadPathOf, valueReadsOf, type ValueRead } from "./value-reads.js";
 
 // Where a distribution nothing reads sits: inside a cell, on a bar vertical
 // container whose rows stack further in, or on a body's vertical container.
@@ -879,7 +879,8 @@ function checkRuleSlotReads(ctx: ValidateCtx, cfg: DslConfig): void {
     if (seen.has(name)) return null;
     seen.add(name);
     const decl = declared.get(name)!;
-    const slot = decl.kind === "input" ? slotAt(decl.path) : undefined;
+    const at = payloadPathOf(name, decl);
+    const slot = at === undefined ? undefined : slotAt(at);
     if (slot !== undefined) return `reads "${name}", the ${slot}'s own name`;
     for (const read of fold.ofVariable(decl)) {
       const through = slotRead([read], seen);

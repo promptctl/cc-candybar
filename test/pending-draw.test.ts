@@ -342,7 +342,7 @@ describe("a template variable over a value not answered yet is not answered yet"
 });
 
 describe("a json source with no default", () => {
-  test("draws `…` before its first scan, and ⚠ when its scan had nothing to read", async () => {
+  test("draws `…` before its first scan, and the missing-field ⚠ when its scan had nothing to read", async () => {
     const on = renderer(
       parseAndValidate(
         "<test>",
@@ -359,8 +359,9 @@ describe("a json source with no default", () => {
       expect(cellBetween(on.draw().text, "L", "R")).toBe(`  ${LOADING_GLYPH}  `);
       expect(await on.registry.settled(5000)).toEqual([]);
       const { text, errors, frame } = on.draw();
-      expect(text).toContain('⚠ value: variable "doc": no document, and no default');
-      expect(errors).toEqual(['value: variable "doc": no document, and no default']);
+      // Absent is a missing field (src/template-engine/scope.ts).
+      expect(text).toContain('⚠ value: field "doc.label" not found on receiver');
+      expect(errors).toEqual([expect.stringContaining('value: field "doc.label" not found on receiver')]);
       expect(frame.pending).toEqual([]);
     } finally {
       on.dispose();

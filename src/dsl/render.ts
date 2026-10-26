@@ -298,6 +298,13 @@ function declareOne(
       registry.declareFailedDocument(name, decl.reason);
       break;
 
+    // [LAW:single-enforcer] A plugin source's reading is read by the managed
+    // storage owner and carried by the view's payload at the source's name
+    // (src/daemon/render-payload.ts); the view derives the document from it.
+    case "source":
+      registry.declareSourceDocument(name);
+      break;
+
     case "input":
       // [LAW:types-are-the-program] The loader validated that `decl.type` is
       // one of "string"|"number"|"boolean" and that `decl.default` (if

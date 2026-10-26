@@ -63,6 +63,9 @@ import { detectConfigEnv } from "../config-hint.js";
 import { explicitConfigPath } from "../utils/user-path.js";
 import { fallbackState, loadFromDisk } from "../daemon/cache/render.js";
 import { SessionState } from "../daemon/session-state.js";
+import { WatcherRegistry } from "../daemon/cache/watchers.js";
+import { ManagedStorage } from "../daemon/cache/managed-storage.js";
+import { quietLogger } from "../utils/logger.js";
 import { claudeConfigDir } from "../claude-settings.js";
 import type {
   RateLimitsSeen,
@@ -96,23 +99,32 @@ function reportLine({ check, verdict }: CheckReport): string {
 // state, keeps the outcome, and releases the sources the state started. A
 // load that failed reads the bar a fresh daemon would draw under the error.
 export function loadConfigOnce(origin: ConfigOrigin): ConfigLoad {
-  const deps = { sessionState: new SessionState() };
-  const loaded = loadFromDisk(
-    origin.projectDir,
-    origin.cwd,
-    origin.configFile ?? undefined,
-    deps,
-  );
-  const state =
-    loaded.state ?? fallbackState(origin.cwd, origin.projectDir, deps);
-  state.registry.dispose();
-  return {
-    layers: loaded.layers,
-    error: loaded.error,
-    warning: loaded.warning,
-    unused: state.unused,
-    config: state.config,
-  };
+  // The load holds the storage folders its plugins declare, as the daemon's
+  // does, and releases them with the state.
+  const watchers = new WatcherRegistry();
+  const storage = new ManagedStorage({ watchers, logger: quietLogger });
+  const deps = { sessionState: new SessionState(), storage };
+  try {
+    const loaded = loadFromDisk(
+      origin.projectDir,
+      origin.cwd,
+      origin.configFile ?? undefined,
+      deps,
+    );
+    const state =
+      loaded.state ?? fallbackState(origin.cwd, origin.projectDir, deps);
+    state.registry.dispose();
+    return {
+      layers: loaded.layers,
+      error: loaded.error,
+      warning: loaded.warning,
+      unused: state.unused,
+      config: state.config,
+    };
+  } finally {
+    storage.close();
+    watchers.closeAll();
+  }
 }
 
 // The install facts of the daemon's answer: the clients that drew the scope's

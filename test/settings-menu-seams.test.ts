@@ -13,7 +13,7 @@ import { sharedMenuStateKey } from "../src/config/menu-keys";
 import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/settings-menu";
 import { SETTINGS_NS } from "../src/config/loader/reserved-namespace";
 import { perSetting } from "../src/config/setting-projections";
-import { checkPayload } from "../src/check";
+import { CHECK_TODAY, checkPayload } from "../src/check";
 import { renderOptionsOf } from "../src/daemon/render-payload";
 import { SessionState } from "../src/daemon/session-state";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
@@ -51,7 +51,8 @@ function menuSeams(
     const effective = resolveEffectiveGlobals(config, (key) => session.get(SID, key) ?? null, () => false);
     const at = instantOf(new Date());
     const payload = {
-      ...checkPayload(effective, null, at),
+      ...checkPayload(config, effective, null, at),
+      today: CHECK_TODAY,
       resettable: perSetting(() => false),
       unsaved: 0,
       history: { undo: 0, redo: 0 },
