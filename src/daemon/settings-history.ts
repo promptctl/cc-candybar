@@ -125,8 +125,6 @@ export const isSettingKey = (key: string): boolean =>
 const MAX_STEPS = 50;
 const MAX_SESSIONS = 32;
 const MAX_BYTES = 8 * 1024 * 1024;
-// How many sessions' last setting move `revision` remembers.
-const MAX_MOVES = 1024;
 
 const EMPTY: SessionHistory = { past: [], future: [] };
 
@@ -168,10 +166,6 @@ export class SettingsHistory {
   private set state(next: Map<string, SessionHistory>) {
     runInAction(() => this.held.replace(next));
   }
-  // When each session last moved a setting, on this history's own count of
-  // moves — every one lands in `put`, whichever control made it.
-  private readonly moves = new Map<string, number>();
-  private head = 0;
 
   constructor(
     private readonly sessionState: SessionStateRW,
@@ -195,15 +189,6 @@ export class SettingsHistory {
       redo: future.length,
       sinceEdit: savepoint?.net.length ?? 0,
     };
-  }
-
-  // [LAW:one-source-of-truth] The revision of the session's own setting
-  // moves: a set, a save, a reset, an undo or a redo by this session moves it,
-  // and nothing else does — not another session's save to a file both read,
-  // not a render rewriting what the session's client reported. 0 until the
-  // session's first move this daemon saw.
-  revision(sessionId: string): number {
-    return this.moves.get(sessionId) ?? 0;
   }
 
   history(sessionId: string): SessionHistory {
@@ -424,13 +409,6 @@ export class SettingsHistory {
   // session that changed least recently. The new state is adopted only once
   // it is saved, so memory never holds a step the file could not.
   private put(sessionId: string, history: SessionHistory): void {
-    this.moves.delete(sessionId);
-    this.moves.set(sessionId, ++this.head);
-    // [LAW:carrying-cost] Bounded like the histories, by recency.
-    for (const [oldest] of this.moves) {
-      if (this.moves.size <= MAX_MOVES) break;
-      this.moves.delete(oldest);
-    }
     const next = new Map(this.state);
     next.delete(sessionId);
     if (

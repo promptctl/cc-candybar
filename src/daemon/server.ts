@@ -178,7 +178,7 @@ import { reaction } from "mobx";
 import { setImmediate } from "node:timers";
 import type { RenderedLine } from "../dsl/node-registry.js";
 import { productionClaudeInputEdge } from "../claude-input/edge.js";
-import { LaneSetups } from "./lane-setup.js";
+import { LaneSetups, type LaneSession } from "./lane-setup.js";
 import { productionLaneEdge } from "./lane-edge.js";
 import { handedOffTo, laneHandoff } from "./lane-handoff.js";
 import {
@@ -278,7 +278,8 @@ const menuIdle = new MenuIdle({
 // click in a tmux status line runs to hand the click back.
 const DAEMON_NODE: readonly string[] = [process.execPath, ...process.execArgv];
 // [LAW:single-enforcer] The one owner of what turning an animation lane on or
-// off takes (src/daemon/lane-setup.ts), told the switches every render draws by.
+// off takes (src/daemon/lane-setup.ts), told the switches each of a session's
+// clicks moved, and each request's arrival for the setups owed to it.
 const laneSetups = new LaneSetups({
   edge: productionLaneEdge((sessionId) => frameFeeds.following(sessionId)),
   // A bar pane runs this bundle under the node running it now, with the
@@ -1609,6 +1610,7 @@ const verbCtx = {
       origin.cwd,
       origin.configFile ?? undefined,
     ),
+  lanes: { of: lanesAt, clicked: laneClicked },
 };
 
 /**
@@ -1822,7 +1824,15 @@ function sessionGlobals(
 // its session's picks.
 function lanesOf(req: CheckedRenderRequest): LaneSwitches {
   const sessionId = req.hookData.session_id;
-  const origin = sessionRenderOrigin(req.requested, sessionState, sessionId);
+  return lanesAt(
+    sessionRenderOrigin(req.requested, sessionState, sessionId),
+    sessionId,
+  );
+}
+
+// The lanes `sessionId`'s settings switch on over the config `origin`
+// resolves to, as the render cache holds it.
+function lanesAt(origin: RenderOrigin, sessionId: string): LaneSwitches {
   using hold = renderCache.hold(
     origin.projectDir,
     origin.cwd,
@@ -2028,26 +2038,9 @@ function setUpRender(
     // entry always holds a renderable state (the bundled default until a
     // config loads — src/daemon/cache/render.ts), so body = drawDsl(state)
     // and output = diagnostics + body, with no "did the config load" branch.
-    // The picks as the request arrived: what its refresh reads and its lane
-    // setups follow. The draw settles its own (drawRender).
+    // The picks as the request arrived: what its refresh reads. The draw
+    // settles its own (drawRender).
     const effective: EffectiveGlobals = view.source.effective();
-    // Which animation lanes this session's settings switch on.
-    const lanes = laneSwitches(effective);
-    // [LAW:dataflow-not-control-flow] What a lane runs follows the switch every
-    // render draws by, as the session's own setting moves moved it
-    // (src/daemon/lane-setup.ts).
-    laneSetups.observe(
-      {
-        sessionId,
-        hints,
-        origin,
-        transcript: req.hookData.transcript_path,
-        answered: answeredOf(req.hookData),
-      },
-      lanes,
-      settingsHistory.revision(sessionId),
-    );
-    tmuxStatusLines.observe(sessionId, hints.tmux, lanes.tmuxStatus);
     const payloadInputs: PayloadInputs = {
       hookData: req.hookData,
       deps: {
@@ -2416,6 +2409,59 @@ async function answerRequest(
   }
 }
 
+// [LAW:effects-at-boundaries] What a request's arrival starts beyond its
+// own answer, in its arrival turn, by the lanes its session's settings switch
+// on as it arrived: the setups its session's clicks owe
+// (src/daemon/lane-setup.ts), and the tmux status line its switch and pane
+// hold (src/daemon/tmux-status.ts) — held again here after `answered`
+// released it, and by nothing between requests, so a status line another
+// session's save turned off is never re-taken from a remembered switch. No
+// draw starts either.
+function arrived(req: CheckedRenderRequest, lanes: LaneSwitches): void {
+  laneSetups.noted(laneSessionOf(req), lanes);
+  tmuxStatusLines.observe(
+    req.hookData.session_id,
+    req.hints.tmux,
+    lanes.tmuxStatus,
+  );
+}
+
+// [LAW:one-source-of-truth] A session as a lane's setup needs it: what its
+// request `req` reported, and the config inputs it renders from now.
+function laneSessionOf(req: CheckedRenderRequest): LaneSession {
+  const sessionId = req.hookData.session_id;
+  return {
+    sessionId,
+    hints: req.hints,
+    origin: sessionRenderOrigin(req.requested, sessionState, sessionId),
+    transcript: req.hookData.transcript_path,
+    answered: answeredOf(req.hookData),
+  };
+}
+
+// What follows a click of `sessionId` that found its lane switches at
+// `before` and left them at `after`: each lane it moved is set up for the
+// session as its latest request reported it, or owed to its first request;
+// and a tmux status line switch it moved is followed in the pane that request
+// reported. A click that left that switch alone holds nothing: the pane is
+// only remembered, and `answered` may have released it to the session that
+// took it since.
+function laneClicked(
+  sessionId: string,
+  before: LaneSwitches,
+  after: LaneSwitches,
+): void {
+  const latest = frameFeeds.latest(sessionId);
+  laneSetups.clicked(
+    sessionId,
+    latest === null ? null : laneSessionOf(latest),
+    before,
+    after,
+  );
+  if (latest !== null && before.tmuxStatus !== after.tmuxStatus)
+    tmuxStatusLines.observe(sessionId, latest.hints.tmux, after.tmuxStatus);
+}
+
 // A request's wait, fixed at its arrival: whether its client stated its
 // deadline, the milliseconds the wait had then, and when it ends, on the
 // monotonic clock. Both, because the render notes the first on its event
@@ -2434,6 +2480,7 @@ async function drawAnswer(
   facts: RenderFacts,
 ): Promise<RequestAnswer> {
   using setup = setUpRender(req, at, facts);
+  arrived(req, laneSwitches(setup.view.source.effective()));
   noteFacts(facts, { deadline: `${wait.stated}:${wait.ms}ms` });
   // Rules 1 and 2 of the model: the answer shows what this request carried,
   // so it waits for the refreshes its arrival triggers, the first value of
