@@ -3,7 +3,7 @@
 //   1. the pure projection math (projectTokensPerSecond),
 //   2. the SessionUsageStore retaining the prior (counts, time) sample — the
 //      single owner of per-session totals, no parallel counter,
-//   3. buildRenderPayload folding the prev+cur pair into speed.{in,out,total}
+//   3. payloadOf folding the prev+cur pair into speed.{in,out,total}
 //      under the closure gate,
 //   4. the speed segment formatting it — including the "—" absence path.
 //
@@ -48,6 +48,7 @@ import {
   fakeTmux,
   fakeUsage,
   requestPayload,
+  settled,
 } from "./helpers/payload-owners";
 
 // ─── projectTokensPerSecond (pure) ───────────────────────────────────────────
@@ -242,7 +243,7 @@ describe("SessionUsageStore.observeSpeed — prior-sample retention", () => {
   });
 });
 
-// ─── buildRenderPayload — speed lane ──────────────────────────────────────────
+// ─── payloadOf — speed lane ──────────────────────────────────────────
 
 function depsWith(
   overrides: Partial<RenderPayloadDeps> = {},
@@ -297,7 +298,7 @@ function hook(): ClaudeHookData {
   } as unknown as ClaudeHookData;
 }
 
-describe("buildRenderPayload — speed lane", () => {
+describe("payloadOf — speed lane", () => {
   test("projectable: output/total rates land; idle input lane is absent", async () => {
     const payload = await requestPayload(
       hook(),
@@ -310,9 +311,9 @@ describe("buildRenderPayload — speed lane", () => {
       NO_CONFIG_FILE,
     );
     // Δoutput 500 / 1s = 500; Δtotal 500 / 1s = 500; Δinput 0 ⇒ absent.
-    expect(payload.speed?.output).toBe(500);
-    expect(payload.speed?.total).toBe(500);
-    expect(payload.speed?.input).toBeUndefined();
+    expect(settled(payload.speed)?.output).toBe(500);
+    expect(settled(payload.speed)?.total).toBe(500);
+    expect(settled(payload.speed)?.input).toBeUndefined();
   });
 
   test("first render (no prior sample) ⇒ no speed key, never a fabricated rate", async () => {
@@ -368,7 +369,7 @@ describe("buildRenderPayload — speed lane", () => {
       NO_HINTS,
       NO_CONFIG_FILE,
     );
-    expect(payload.speed?.history).toBe("100,0,300");
+    expect(settled(payload.speed)?.history).toBe("100,0,300");
   });
 
   test("history skips unmeasurable (out-of-window) pairs instead of fabricating a 0 bar", async () => {
@@ -400,7 +401,7 @@ describe("buildRenderPayload — speed lane", () => {
     );
     // Only the single in-window pair survives; the stale and rapid gaps are
     // dropped, never shown as 0.
-    expect(payload.speed?.history).toBe("100");
+    expect(settled(payload.speed)?.history).toBe("100");
   });
 
   test("a single-sample ring yields no history (needs two samples for one bar)", async () => {

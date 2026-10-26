@@ -280,21 +280,18 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
     }
   });
 
-  test("a rule reading .theme.effective sees the floor, not a stale name", () => {
-    // Self-reference: the provisional push carries the floor, which is what a
-    // rule naming nothing collapses to — never a value left over from the render
-    // before, which would make one render's theme depend on its predecessor.
-    const rt = buildRuntime(
-      src('{{ if eq .theme.effective "" }}nord{{ else }}dracula{{ end }}'),
+  test("a rule reading .theme.effective is refused at load: it would read its own answer", () => {
+    // [LAW:types-are-the-program] A slot's `.effective` is the name its rule
+    // decides, so a rule reading it is a cycle with no first value
+    // (brandon-unfiled-3248.8ro6, 4e) — refused where it is written, naming
+    // the read that closes it, never drawn on a provisional floor.
+    expect(() =>
+      buildRuntime(
+        src('{{ if eq .theme.effective "" }}nord{{ else }}dracula{{ end }}'),
+      ),
+    ).toThrow(
+      /globals\.palette reads "theme\.effective", the palette's own name: a rule decides that name, so it cannot read it/,
     );
-    try {
-      expect(rt.render(0).bg("plain")).toBe(byName("dracula"));
-      // Twice, to prove the second render does not read the first's answer.
-      expect(rt.render(0).bg("plain")).toBe(byName("dracula"));
-      expect(stripAnsi(rt.render(0).text)).toContain("T=dracula");
-    } finally {
-      rt.dispose();
-    }
   });
 
   test("registration does not resolve the rule as a palette NAME", () => {

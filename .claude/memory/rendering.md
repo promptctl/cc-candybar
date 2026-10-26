@@ -16,6 +16,10 @@ The payload stores instants (epoch seconds), never values relative to now. Ages 
 
 Every template a draw evaluates is a derived part of the view's store, and it is kept between frames unless it reads the instant. A frame over unchanged data evaluates only the parts that read the instant. Parts pass values to each other and compare them by value, so a neighbour that is a projection never wakes a kept part. Writing a draw fact (width, padding, preset, look) with an unchanged value wakes nothing.
 
+## A draw writes no input
+
+A session view's payload is derived from its declaration, the session's picks and the histories' depths, and its inputs derive from it, so a cache policy over the payload reruns in the turn its fact moves (a request's arrival, a lane's landing, a click), never inside a draw. What moves with the instant (`today`, `feeds`, `drawing`) cannot live in the payload, since it would change every frame, so each draw projects it for itself. A selection's `.effective` comes from its slot, outside the payload, so a rule reading any `.effective` would read its own answer, and the loader refuses it. A refresh that throws stores nothing of its own, so its failure is kept per session and lane; without that, the lane would read as not answered forever.
+
 ## Templates
 
 - A `when` hides its segment only when it renders the literal text "false". So a gate must render a boolean. An `or` over numbers that are all zero renders "0", and the segment then shows as an empty coloured cell.

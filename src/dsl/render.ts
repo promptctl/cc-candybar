@@ -12,7 +12,7 @@
 // govern output, not whether operations run.
 
 import { createHash } from "node:crypto";
-import type { ColorDepth, RichText } from "@promptctl/rich-js";
+import type { ColorDepth, RichText, ThemeKey } from "@promptctl/rich-js";
 import { Defines, type Engine, type Template } from "@promptctl/go-template-js";
 import type { Instant } from "../utils/instant.js";
 import type { ClockFactory } from "../template-engine/clock.js";
@@ -20,7 +20,6 @@ import type {
   ValidatedConfig,
   VariableDecl,
   CacheDecl,
-  Globals,
   LayoutNode,
   ParseDecl,
   SegmentNode,
@@ -63,12 +62,8 @@ import {
   decideStyleName,
   decideThemeName,
   ruleFloorMessage,
-  type Selection,
   EXPRESSION_SLOTS,
   type ExpressionSlot,
-  finishSelection,
-  drawnDepth,
-  isExpression,
   SLOT_FLOORS,
   EFFECT_FLOOR,
   transposedPalette,
@@ -106,14 +101,20 @@ import {
 import { segmentColorFuncs } from "../render/segment-color.js";
 import { variableScopes, type VarScope } from "./variable-scope.js";
 import {
+  bindView,
+  decideSlot,
   decoratedStyles,
   evaluateOnce,
-  viewParts,
+  partsOf,
+  type CompiledRule,
   type RuleOutcome,
+  type SlotState,
   type ViewParts,
 } from "./parts.js";
+import { fixedSource, type Selections } from "./view-source.js";
 import { declaredVariables } from "../config/loader/refs.js";
 import {
+  authoredRules,
   projectionNamesOf,
   projectionsOf,
   templateInstants,
@@ -168,10 +169,7 @@ import {
 // A globals rule compiled once, with every path it was written at — the config's
 // own `globals.<slot>` and/or `presets.<name>.globals.<slot>`, since one source
 // may be authored in several fragments (save-as-preset copies globals verbatim).
-export interface CompiledRule {
-  readonly where: string;
-  readonly template: Template<RichText>;
-}
+export type { CompiledRule } from "./parts.js";
 
 export interface CompiledConfig {
   readonly segments: CompiledSegments;
@@ -224,6 +222,11 @@ export interface CompiledConfig {
   // the layout `{{ layoutPreview }}` lays out reads it, through its gates.
   readonly instant: ReadonlySet<Template<RichText>>;
   readonly layoutReadsInstant: boolean;
+  // The styles a style rule's answer is decided against, and the runtime the
+  // compile's template functions read the render through — what a view's
+  // slots settle outside a draw by.
+  readonly styles: Readonly<Record<string, ThemeKey>>;
+  readonly runtime: ActionRuntime;
   // [LAW:single-enforcer] Each store this compile draws from, with the parts it
   // keeps there. A store is drawn by one compile, and releases its parts with
   // its variables (VariableStore.dispose), so an entry here lives exactly as
@@ -306,6 +309,7 @@ function declareOne(
         decl.path,
         decl.type ?? "string",
         decl.default,
+        derivation,
       );
       break;
 
@@ -865,27 +869,16 @@ export function compileDslConfig({
   const globalExpressions = new Map(
     EXPRESSION_SLOTS.map((slot) => [slot, new Map<string, CompiledRule>()]),
   );
-  const fragments: ReadonlyArray<readonly [string, Partial<Globals>]> = [
-    ["globals", config.globals],
-    ...Object.entries(config.presets).map(
-      ([name, preset]) =>
-        [`presets.${name}.globals`, preset.globals ?? {}] as const,
-    ),
-  ];
-  for (const [path, globals] of fragments) {
-    for (const slot of EXPRESSION_SLOTS) {
-      const authored = globals[slot];
-      if (!isExpression(authored)) continue;
-      const where = `${path}.${slot}`;
-      const rules = globalExpressions.get(slot)!;
-      const seen = rules.get(authored);
-      rules.set(
-        authored,
-        seen === undefined
-          ? { where, template: parseExpressionSlot(parse, where, authored) }
-          : { where: `${seen.where}, ${where}`, template: seen.template },
-      );
-    }
+  for (const { at, slot, rule: authored } of authoredRules(config)) {
+    const where = at.join(".");
+    const rules = globalExpressions.get(slot)!;
+    const seen = rules.get(authored);
+    rules.set(
+      authored,
+      seen === undefined
+        ? { where, template: parseExpressionSlot(parse, where, authored) }
+        : { where: `${seen.where}, ${where}`, template: seen.template },
+    );
   }
 
   // [LAW:single-enforcer] Which of these templates read the instant
@@ -925,6 +918,8 @@ export function compileDslConfig({
     globalExpressions,
     instant,
     layoutReadsInstant,
+    styles: config.styles,
+    runtime: actionRuntime,
     views: new WeakMap(),
   };
 }
@@ -979,25 +974,11 @@ function parseExpressionSlot(
   }
 }
 
-// [LAW:no-defensive-null-guards] `isExpression` gates BOTH the compile in
-// registerDslConfig and the `expression` arm the resolution produces, over the
-// same fragments, so a missing template here is drift between two readers of
-// that one predicate — a loud caller bug, never a case to absorb into a field's
-// floor.
-function compiledRule(
-  compiled: CompiledConfig,
-  slot: ExpressionSlot,
-  source: string,
-): CompiledRule {
-  const rule = compiled.globalExpressions.get(slot)!.get(source);
-  if (rule === undefined) {
-    throw new Error(
-      `the ${slot} rule ${JSON.stringify(source)} reached the render but no compiled ` +
-        `template exists — registerDslConfig and the resolution disagree about isExpression`,
-    );
-  }
-  return rule;
-}
+// [LAW:no-silent-failure] A slot's settled name is a member of its domain by
+// construction (decideSlot): one that is not is drift, named.
+const unreachable = (message: string): never => {
+  throw new Error(`a slot settled on a name its domain refuses: ${message}`);
+};
 
 // What a draw keeps of its globals rules: the name each slot settled on in
 // the view's last frame, and where this frame's go.
@@ -1055,18 +1036,6 @@ function ruleName(
       });
       return SLOT_FLOORS[slot];
   }
-}
-
-// The name a render publishes for a slot BEFORE its fold has finished: the
-// decided name, or that slot's floor when only this render can settle it — the
-// floor a failing rule collapses to, read from the one table.
-// [LAW:dataflow-not-control-flow] One total projection of the union to one value,
-// shared by every slot, rather than a per-slot branch at the push site.
-function provisionalName<T>(
-  selected: Selection<T>,
-  slot: ExpressionSlot,
-): string {
-  return selected.kind === "decided" ? selected.name : SLOT_FLOORS[slot];
 }
 
 // The ids of the placements a layout node holds, its open bodies' included:
@@ -1177,6 +1146,10 @@ export interface DrawnFrame {
   readonly evaluated: number;
   // The sources whose values this frame drew as not answered yet, by name.
   readonly pending: readonly string[];
+  // How each slot whose selection is a rule settled: `kept`, settled in the
+  // turn what it reads moved (outside any draw), or `per-draw`, a rule that
+  // reads the instant, evaluated by this frame. A decided slot is absent.
+  readonly rules: ReadonlyMap<ExpressionSlot, "kept" | "per-draw">;
 }
 
 // [LAW:types-are-the-program] What a render could not honour, by what failed:
@@ -1220,17 +1193,17 @@ export type RenderWarning =
 // [LAW:locality-or-seam] The per-render RESOLUTION the caller performs and hands
 // down — the values that are neither config (compiled once) nor payload (input
 // data), but the session's live choices resolved against the config: which
-// theme, style, effect, preset, variation and shade, and whether placements
-// fade. Bundled as ONE named bag for exactly the reason RenderObservers is.
+// preset, variation and shade, and whether placements fade. Bundled as ONE
+// named bag for exactly the reason RenderObservers is. The theme, style and
+// effect are not among them: the view's slots settle those from what it draws
+// from (`ViewSource.selections`), so a label reading `.style.effective` and
+// the palette the bar wears are one node.
 // [LAW:one-source-of-truth] Each field IS the field `resolveEffectiveGlobals`
 // resolves (see EffectiveGlobals for how): a Pick, not a restatement, so the
 // selection cannot hold a field the resolution does not, and every one is
 // required — a caller hands over the whole resolution or none of it.
-export type RenderSelection = Pick<
+export type DrawSelection = Pick<
   EffectiveGlobals,
-  | "theme"
-  | "style"
-  | "effect"
   | "preset"
   | "variation"
   | "shade"
@@ -1251,10 +1224,57 @@ export type RenderSelection = Pick<
   readonly idleSince?: Instant;
 };
 
-// The bar's bytes alone: `drawDsl`'s text, for a caller that draws one frame
-// and asks nothing of its motion.
-export function renderDsl(...args: Parameters<typeof drawDsl>): string {
-  return drawDsl(...args).text;
+// The whole resolution a caller drawing a fixed payload hands over: what the
+// draw reads, and the selections its view's slots settle.
+export type RenderSelection = DrawSelection & Selections;
+
+// One frame of a fixed payload: the view drawing from `store` is bound to
+// `payload` and `selection` — at the width it is drawn at, `term.cols`, and the
+// depth `opts` names, so the writer and every contrast floor read one depth —
+// and drawn. What `cc-candybar check`, the demo and a test draw by: the seam a
+// session's view reads, given a constant. The payload is also the draw's
+// projections (DRAW_PROJECTIONS read their paths in it).
+export function drawPayload(
+  config: ValidatedConfig,
+  compiled: CompiledConfig,
+  store: VariableStore,
+  registry: SourceRegistry,
+  payload: unknown,
+  at: Instant,
+  opts: BuildLineOptions,
+  observers?: RenderObservers,
+  // [LAW:one-source-of-truth] An omitting caller renders as a session that has
+  // never clicked: the daemon's own resolution with no picks, so a config
+  // declaring globals.preset or globals.style draws the preset, theme and look
+  // the bar does. Whether the file authors the preset's root is no part of it.
+  selection: RenderSelection = resolveEffectiveGlobals(
+    config,
+    () => null,
+    () => false,
+  ),
+): DrawnFrame {
+  const drawn = {
+    ...(payload as object),
+    term: { cols: opts.width },
+    colorCompatibility: { effective: opts.colorCompatibility },
+  };
+  bindView(compiled, store, registry, fixedSource(drawn, selection));
+  return drawDsl(
+    config,
+    compiled,
+    store,
+    registry,
+    drawn,
+    at,
+    opts,
+    observers,
+    selection,
+  );
+}
+
+// The bytes of `drawPayload`'s frame.
+export function renderDsl(...args: Parameters<typeof drawPayload>): string {
+  return drawPayload(...args).text;
 }
 
 export function drawDsl(
@@ -1262,23 +1282,17 @@ export function drawDsl(
   compiled: CompiledConfig,
   store: VariableStore,
   registry: SourceRegistry,
-  payload: unknown,
+  // [LAW:one-source-of-truth] The draw's own facts: the payload fields its
+  // instant answers (DRAW_PROJECTIONS — who it is for, the frames its lanes
+  // were sent, the day it is at). Everything else its inputs read is the
+  // view's (`bindView`): a draw writes no input.
+  projected: unknown,
   // [LAW:effects-at-boundaries] The instant this render is drawn at, sampled by
   // the caller: nothing rendered reads a clock of its own.
   at: Instant,
   opts: BuildLineOptions,
-  observers?: RenderObservers,
-  // [LAW:one-source-of-truth] An omitting caller renders as a session that has
-  // never clicked: the daemon's own resolution with no picks, so a config
-  // declaring globals.preset or globals.style draws the preset, theme and look
-  // the bar does. `opts` stays the caller's own: the daemon derives it from the
-  // same resolution (`renderOptionsOf`). Whether the file authors the preset's
-  // root is no part of the selection.
-  selection: RenderSelection = resolveEffectiveGlobals(
-    config,
-    () => null,
-    () => false,
-  ),
+  observers: RenderObservers | undefined,
+  selection: DrawSelection,
 ): DrawnFrame {
   const { perSegmentSink, onSegmentError, onRenderWarning } = observers ?? {};
   const warn = (warning: RenderWarning): void => onRenderWarning?.(warning);
@@ -1295,22 +1309,27 @@ export function drawDsl(
   // below — a template's `now`, a `time` variable — reads the one instant.
   // eslint-disable-next-line @typescript-eslint/no-unused-vars -- held for its disposal
   using _clock = bindClock(at, clock.anim);
-  // The depth it draws at, into the view's registry: every text colour chosen
-  // below — and every variable template's `readableOn` — is floored on it.
-  registry.drawAt(drawnDepth(opts.colorCompatibility));
+  const parts = partsOf(compiled, store);
+  // [LAW:one-source-of-truth] The depth the bytes are written at is the
+  // view's — the one every contrast floor below is measured on.
+  const drawOpts: BuildLineOptions = {
+    ...opts,
+    colorCompatibility: parts.colorCompatibility(),
+  };
   // [LAW:one-source-of-truth] The view's parts: every template below is read
   // through them, kept until what it read changes unless it reads the instant
   // (src/dsl/parts.ts). The draw's own facts first, so no part reads the last
   // draw's.
-  const facts = {
-    width: opts.width,
-    chromeCols: stripChromeCols(opts),
-    padding: opts.padding,
-    seamCols: stripSeamCols(opts),
-    preset: selection.preset,
-  };
-  const parts = viewParts(compiled, store, registry, facts);
-  parts.draw(facts);
+  parts.draw(
+    {
+      width: drawOpts.width,
+      chromeCols: stripChromeCols(drawOpts),
+      padding: drawOpts.padding,
+      seamCols: stripSeamCols(drawOpts),
+      preset: selection.preset,
+    },
+    projected,
+  );
   const evaluatedBefore = parts.evaluated;
   // [LAW:no-ambient-temporal-coupling] The compile may serve many stores (one
   // per render-cache entry its config compiles alike in): every template it
@@ -1318,68 +1337,19 @@ export function drawDsl(
   // on every exit, a throw included, so the compile keeps nothing of it.
   // eslint-disable-next-line @typescript-eslint/no-unused-vars -- held for its disposal
   using _bound = bindRender(compiled.menuRuntime.action, parts.binding);
-  const {
-    preset,
-    theme: selectedTheme,
-    style: selectedStyle,
-    effect: selectedEffect,
-    transitions,
-  } = selection;
+  const { preset, transitions } = selection;
   const decor: Decor = {
     variation: VARIATIONS[selection.variation],
     shade: SHADES[selection.shade],
   };
-  // [LAW:one-source-of-truth] Inject the usable width as `term.cols` from the
-  // SAME opts.width the strip wraps to (below) and a row fits to (published as
-  // RenderBinding.width), so a template reads the exact wrap width — never a
-  // cached or independently-measured copy. This is the RAW usable width
-  // (terminal cols minus the Claude-Code reserve), the honest meaning every
-  // template — incl. user configs reading `.term.cols` — expects. The picker's
-  // strip-chrome reservation is NOT folded in here: that is a row-local concern
-  // (the strip's end-caps wrap the picker's row, not every segment), applied at
-  // the fitting seam in rowBudget. [LAW:locality-or-seam]
-  // Spreading a non-object payload yields no keys (compile-only callers), so the
-  // width is set regardless without a trust-boundary guard.
-  // [LAW:one-source-of-truth] `theme.effective` and `style.effective` are each
-  // published by whatever FINISHED that field's fold, and nothing else CAN publish
-  // them: under a rule nobody upstream knows the answer, and under a decided name
-  // the selection already carries it. So the payload never carries either field —
-  // renderDsl injects both, exactly as it injects `term.cols`, which is why a
-  // `{{ .theme.effective }}` / `{{ .style.effective }}` label and the palette the
-  // bar is actually painted from cannot disagree (brandon-looks-pe6,
-  // brandon-themes-dzl).
-  const payloadWith = (
-    themeName: string,
-    styleName: string,
-    effectName: string,
-  ): object => ({
-    ...(payload as object),
-    term: { cols: opts.width },
-    theme: { effective: themeName },
-    style: { effective: styleName },
-    effect: { effective: effectName },
-  });
-  // An expression arm's provisional value is its FLOOR: it is what that slot
-  // collapses to when its result names nothing, so a rule reading its own
-  // `.effective` (a self-reference) sees the answer it would get by naming
-  // nothing, rather than a stale value from a previous render. A rule in ONE slot
-  // reading the OTHER's `.effective` sees the same thing, which is why neither
-  // slot's rule may be written to depend on the other's result.
-  registry.applyInput(
-    payloadWith(
-      provisionalName(selectedTheme, "palette"),
-      provisionalName(selectedStyle, "style"),
-      provisionalName(selectedEffect, "effect"),
-    ),
-  );
   // The view's record of this frame, kept once its rows serialize, and the
   // sources whose values it drew as not answered yet. The session's state
-  // revision is read through the session id the push above wrote.
+  // revision is read through the session id the view's payload carries.
   const source = {
     config,
     preset,
     revision: registry.stateRevision(),
-    width: opts.width,
+    width: drawOpts.width,
   };
   const record = parts.memory.begin(source, returnedBy);
   const last = parts.memory.from(source);
@@ -1389,65 +1359,56 @@ export function drawDsl(
     waited: (variable) => waited.add(variable),
     settled: record.rule,
   };
-  // The other half of each fold, which could only ever happen here: a rule reads
-  // the store the push above just filled with this render's values. A decided
-  // selection returns ITSELF, so the republish below is skipped by identity
-  // rather than by re-testing the discriminator [LAW:dataflow-not-control-flow].
-  // [LAW:one-type-per-behavior] One `finishSelection` for both slots; what differs
-  // is the two values each hands it — which template to evaluate, and how a name
-  // becomes that field's value.
-  const theme = finishSelection(selectedTheme, (source) => {
-    const rule = compiledRule(compiled, "palette", source);
-    // [LAW:effects-at-boundaries] The message belongs to the theme domain, the
-    // channel to the caller: a result naming no installed theme renders the floor
-    // and says so, rather than throwing away the whole bar.
-    return decideThemeName(
-      evalRule("palette", rule, parts, warn, ruleFrame),
-      rule.where,
-      (message) => warn({ kind: "rule", slot: "palette", message }),
+  // [LAW:one-source-of-truth] Each slot's name is its view node's: settled
+  // there, or — for a rule reading the instant — evaluated here, at this
+  // draw's instant, and published for the projections reading it. Its value
+  // is its slot's domain's reading of that name.
+  const rules = new Map<ExpressionSlot, "kept" | "per-draw">();
+  const slotted = (slot: ExpressionSlot): string => {
+    const state: SlotState = parts.slot(slot);
+    rules.set(slot, state.kind === "settled" ? "kept" : "per-draw");
+    if (state.kind === "settled") {
+      if (state.warning !== null)
+        warn({ kind: "rule", slot, message: state.warning });
+      if (state.waited !== null) waited.add(state.waited);
+      return state.name;
+    }
+    const name = decideSlot(
+      compiled,
+      slot,
+      evalRule(slot, state.rule, parts, warn, ruleFrame),
+      state.rule.where,
+      (message) => warn({ kind: "rule", slot, message }),
     );
-  });
-  const style = finishSelection(selectedStyle, (source) =>
-    decideStyleName(
-      evalRule(
-        "style",
-        compiledRule(compiled, "style", source),
-        parts,
-        warn,
-        ruleFrame,
-      ),
-      config.styles,
-    ),
-  );
-  const effect = finishSelection(selectedEffect, (source) =>
-    decideEffectName(
-      evalRule(
-        "effect",
-        compiledRule(compiled, "effect", source),
-        parts,
-        warn,
-        ruleFrame,
-      ),
-    ),
-  );
-  // [LAW:no-silent-failure] A rule arm learned a name the push above could not
-  // carry, so push it: without this the settings menu's `🎨 theme` / `◐ style`
-  // controls would label themselves from the floor while the bar wore the rule's
-  // result — one fact with two answers. All payload ingestion goes through
-  // applyInput (see SourceRegistry's own contract), so this is that one path,
-  // called again, not a second way to write an input box.
-  if (
-    theme !== selectedTheme ||
-    style !== selectedStyle ||
-    effect !== selectedEffect
-  )
-    registry.applyInput(payloadWith(theme.name, style.name, effect.name));
+    parts.drawnSlot(slot, name);
+    return name;
+  };
+  // [LAW:one-source-of-truth] A decided selection carries its value — the
+  // name a higher rung settled AND what it names — so it is drawn as decided,
+  // a value no declaration names (a staged look) included. Only a rule's
+  // answer is a bare name, read through its slot's domain.
+  const {
+    theme: decidedTheme,
+    style: decidedStyle,
+    effect: decidedEffect,
+  } = parts.selections();
+  const theme =
+    decidedTheme.kind === "decided"
+      ? decidedTheme
+      : decideThemeName(slotted("palette"), "", unreachable);
+  const style =
+    decidedStyle.kind === "decided"
+      ? decidedStyle
+      : decideStyleName(slotted("style"), config.styles);
+  const effect =
+    decidedEffect.kind === "decided"
+      ? decidedEffect
+      : decideEffectName(slotted("effect"));
   // [LAW:one-source-of-truth] The render's BASE palette: a picker over a
   // colour-valued domain paints each option in the palette picking it would put
   // in force, and a style's answer is this base transposed by that style's key —
   // the base, never the styled palette below, because a style applies to the
-  // base by definition. Under a rule, this is the first line at which the base
-  // palette is known.
+  // base by definition.
   const basePalette = theme.value;
   // [LAW:one-source-of-truth] The render's palette: the base theme under the
   // session's style, transposed ONCE here — every unpinned segment colours from
@@ -1549,7 +1510,7 @@ export function drawDsl(
       scope: parts.scope,
       palette,
       gate,
-      padding: opts.padding,
+      padding: drawOpts.padding,
       region,
       perSegmentSink,
       onSegmentError,
@@ -1620,14 +1581,14 @@ export function drawDsl(
     // Its items are what the strip stamps their cells with, each beside the
     // effect its cell demands.
     .map(({ line, row }) => {
-      const items = resolveFill(line.cells, opts);
+      const items = resolveFill(line.cells, drawOpts);
       // At the root, a `deeper` line is one an open menu added.
       const kind: RowKind = line.band === "deeper" ? "menu" : "bar";
       return {
         kind,
         ...drawStripCells(
           items.map((item) => item.owner),
-          opts,
+          drawOpts,
           motion.row(row, kind, items),
         ),
       };
@@ -1641,7 +1602,7 @@ export function drawDsl(
   // frame no row of which moves.
   const armed = (): boolean =>
     menuRows > 0 ||
-    selectedEffect.kind === "expression" ||
+    parts.selections().effect.kind === "expression" ||
     transitions ||
     segmentsUnder(root).some(
       ({ settings }) =>
@@ -1667,5 +1628,6 @@ export function drawDsl(
     menuRows,
     evaluated: parts.evaluated - evaluatedBefore,
     pending: [...waited].sort(),
+    rules,
   };
 }

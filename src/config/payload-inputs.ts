@@ -21,6 +21,7 @@ import {
   type LaneFeed,
 } from "./lanes.js";
 import { CONFIG_KEY_TO_EFFECTIVE_VAR } from "./setting-projections.js";
+import { EXPRESSION_SLOTS, type ExpressionSlot } from "../themes/policy.js";
 import {
   GLOBAL_FIELDS,
   wireKindOf,
@@ -74,7 +75,7 @@ export const PAYLOAD_INPUTS: Readonly<Record<string, VariableDecl>> = {
   },
   [SESSION_ID_VAR_NAME]: { kind: "input", path: "session_id", default: "" },
   // Transcript path (a top-level hookData field, spread onto the payload
-  // root by buildRenderPayload). Read by the quick-action tray's
+  // root by payloadOf). Read by the quick-action tray's
   // openTranscript action — pass-through, no projection.
   transcript_path: {
     kind: "input",
@@ -196,6 +197,45 @@ export const PAYLOAD_INPUTS: Readonly<Record<string, VariableDecl>> = {
   // path remote) — the quick-action tray's link reads that value, not a flag.
   "git.repoUrl": { kind: "input", path: "git.repoUrl", default: "" },
 };
+
+// [LAW:one-source-of-truth] The payload fields the draw's own instant answers
+// (brandon-unfiled-3248.8ro6, step 4): never stored in a view's payload,
+// since they move with the instant, but read by each draw — an input at one
+// is a projection (projections.ts), so a cache policy over it is refused at
+// load, and the view's source answers it from the draw in progress
+// (src/dsl/view-source.ts). Each key is a root field; why it moves is how a
+// load error says it.
+export const DRAW_PROJECTIONS = {
+  today: "the day the draw is at",
+  feeds: "the frames a lane was sent up to the draw's instant",
+  drawing: "who the draw is for",
+} as const;
+export type DrawProjection = keyof typeof DRAW_PROJECTIONS;
+
+// The draw projection a payload path reads, if any.
+export function drawProjectionAt(path: string): DrawProjection | undefined {
+  const root = path.split(".", 1)[0]!;
+  return Object.hasOwn(DRAW_PROJECTIONS, root)
+    ? (root as DrawProjection)
+    : undefined;
+}
+
+// [LAW:one-source-of-truth] Where each selection slot's `.effective` is read:
+// the name the bar wears, which the slot's node answers (a rule's answer, or
+// the decided name) — never the payload, so a rule reading the payload closes
+// no cycle through it.
+export const SLOT_PATHS: Readonly<Record<ExpressionSlot, string>> =
+  Object.fromEntries(
+    EXPRESSION_SLOTS.map((slot) => [
+      slot,
+      CONFIG_KEY_TO_EFFECTIVE_VAR.get(slot)!,
+    ]),
+  ) as Record<ExpressionSlot, string>;
+
+// The selection slot whose `.effective` a payload path reads, if any.
+export function slotAt(path: string): ExpressionSlot | undefined {
+  return EXPRESSION_SLOTS.find((slot) => SLOT_PATHS[slot] === path);
+}
 
 // [LAW:one-source-of-truth] The one spelling of "a `slash` click has a pane to
 // type into", as a template expression: every bundled slash control gates on

@@ -2,17 +2,17 @@
 // render request samples its clock once, the bar is drawn at that instant, and
 // the daemon's one event per render — its `render sid=…` log line — names it.
 
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { logPath } from "../src/daemon/paths";
 import { killAndWait, render, stripAnsi } from "./helpers/daemon-e2e";
 import {
   prepareIsolatedDaemonEnv,
   spawnDaemonWithEnv,
   type RunningDaemon,
 } from "./helpers/spawn-isolated-daemon";
+import { renderLines } from "./helpers/daemon-log";
 
 jest.setTimeout(30_000);
 
@@ -58,10 +58,9 @@ describe("a daemon render is drawn at the instant its request sampled, and logs 
     // A request the helper retried after a reply timeout is logged once per
     // attempt, so the reply's render is the event whose instant the bar shows,
     // to the millisecond — which is the claim itself.
-    const instants = readFileSync(logPath(env), "utf8")
-      .split("\n")
-      .filter((l) => l.includes(`render sid=${sessionId} `))
-      .map((l) => l.match(/ at=(\d+\.\d{3}) /)?.[1]);
+    const instants = (await renderLines(env, sessionId)).map(
+      (l) => l.match(/ at=(\d+\.\d{3}) /)?.[1],
+    );
 
     expect(shown).toMatch(/^\d+\.\d{3}$/);
     expect(instants).toContain(shown);

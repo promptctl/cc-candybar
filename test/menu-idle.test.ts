@@ -7,7 +7,7 @@ import type { RichText } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { drawDsl, registerDslConfig } from "../src/dsl/render";
+import { drawPayload, registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
@@ -241,7 +241,7 @@ function buildRuntime(src: string) {
   // A frame drawn at `when`, its session idle since `idleSince`.
   const draw = (when: Instant, idleSince?: Instant) => {
     sink.clear();
-    return drawDsl(
+    return drawPayload(
       config,
       compiled,
       store,

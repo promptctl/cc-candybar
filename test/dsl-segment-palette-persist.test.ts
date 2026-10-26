@@ -61,6 +61,7 @@ import type { DslConfig } from "../src/config/dsl-types";
 import { memoryLimitBytes } from "../src/daemon/limits";
 import {
   DECLARES_NOTHING,
+  SOURCES_NOTHING,
   RenderCache,
   renderCacheBudget,
 } from "../src/daemon/cache/render";
@@ -489,7 +490,7 @@ function makeCache(): {
   const sessionState = new SessionState();
   const reloads = new ReloadSignal();
   const cache = new RenderCache(
-    { sessionState, watchers, declare: DECLARES_NOTHING },
+    { sessionState, watchers, source: SOURCES_NOTHING, declare: DECLARES_NOTHING },
     { budgetBytes: () => renderCacheBudget(memoryLimitBytes({})), observers: reloads.observers },
   );
   cleanups.unshift(() => cache.close());

@@ -613,8 +613,8 @@ describe("the payload projection", () => {
 // ─── the bundled segment reads it ─────────────────────────────────────────────
 //
 // Through the REAL path: the bundled config, narrowed to this one segment, its
-// helper block compiled by registerDslConfig and the payload pushed through
-// registry.applyInput — so the `when` gate, the shared `formatToolTally` helper,
+// helper block compiled by registerDslConfig and the payload bound as its
+// view's source (bindView) — so the `when` gate, the shared `formatToolTally` helper,
 // and the var-system defaults for an absent family are all the production ones.
 
 describe("the bundled activity segment renders the payload", () => {

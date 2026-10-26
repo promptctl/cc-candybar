@@ -4,17 +4,17 @@
 // stops moving can be told from a session with none, and a render whose hook
 // carried no cost block (no metrics fold ran) reads `-`, not zero.
 
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { logPath } from "../src/daemon/paths";
 import { hookData, killAndWait, renderRequest } from "./helpers/daemon-e2e";
 import {
   prepareIsolatedDaemonEnv,
   spawnDaemonWithEnv,
   type RunningDaemon,
 } from "./helpers/spawn-isolated-daemon";
+import { renderLines } from "./helpers/daemon-log";
 
 jest.setTimeout(30_000);
 
@@ -95,6 +95,13 @@ describe("a daemon render's event counts the session's prompts", () => {
       `{ segments: { msgs: { template: '{{ .metrics.messageCount }}' } }, root: { h: ['msgs'] } }`,
     );
     daemon = await spawnDaemonWithEnv(prepared.env);
+    // The config's entry compiled first: a request that compiles it does so in
+    // its arrival turn, which can spend its whole deadline before the fold.
+    await renderRequest(sockPath, {
+      hookData: hookData("prompts-e2e-warm", projectDir),
+      args: ["cc-candybar", "--config", config],
+      cwd: projectDir,
+    });
   });
 
   afterAll(async () => {
@@ -103,14 +110,16 @@ describe("a daemon render's event counts the session's prompts", () => {
     removeTmpDirs();
   });
 
-  const counts = (sessionId: string) =>
-    readFileSync(logPath(env), "utf8")
-      .split("\n")
-      .filter((l) => l.includes(`render sid=${sessionId} `))
-      .map((l) => ({
+  const counts = async (sessionId: string) =>
+    (await renderLines(env, sessionId)).map((l) => {
+      // A count drawn before its fold landed would read `-` for the wrong
+      // reason: the wait says so by name.
+      expect(l).toContain(" ended=answered ");
+      return {
         prompts: l.match(/ prompts=(\S+) /)?.[1],
         nonPrompts: l.match(/ nonPrompts=(\S+) /)?.[1],
-      }));
+      };
+    });
 
   test("one prompt, and two other user entries, on a render that folded the transcript", async () => {
     const sessionId = "prompts-e2e-folded";
@@ -119,7 +128,7 @@ describe("a daemon render's event counts the session's prompts", () => {
       args: ["cc-candybar", "--config", config],
       cwd: projectDir,
     });
-    expect(counts(sessionId).at(-1)).toEqual({ prompts: "1", nonPrompts: "2" });
+    expect((await counts(sessionId)).at(-1)).toEqual({ prompts: "1", nonPrompts: "2" });
   });
 
   test("a render with no cost block reads `-` for both", async () => {
@@ -129,6 +138,6 @@ describe("a daemon render's event counts the session's prompts", () => {
       args: ["cc-candybar", "--config", config],
       cwd: projectDir,
     });
-    expect(counts(sessionId).at(-1)).toEqual({ prompts: "-", nonPrompts: "-" });
+    expect((await counts(sessionId)).at(-1)).toEqual({ prompts: "-", nonPrompts: "-" });
   });
 });

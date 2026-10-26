@@ -1,3 +1,4 @@
+import { observable, runInAction, type IObservableValue } from "mobx";
 import type { Outcome } from "./outcome";
 
 // [LAW:types-are-the-program] What a source holds for one key: nothing yet,
@@ -13,8 +14,17 @@ export type Reading<T> =
     }
   | { readonly kind: "read"; readonly outcome: Outcome<T> };
 
+// [LAW:no-ambient-temporal-coupling] A source's stored value, observable, so a
+// derivation over it — a view's payload (brandon-unfiled-3248.8ro6, step 4) —
+// is recomputed in the turn the value lands, never read stale. Only `settle`
+// and `renew` write it.
 export interface Readable<T> {
-  reading: Reading<T>;
+  readonly reading: IObservableValue<Reading<T>>;
+}
+
+// A source's stored value before its first read.
+export function unread<T>(): IObservableValue<Reading<T>> {
+  return observable.box<Reading<T>>(pending(), { deep: false });
 }
 
 export function pending<T>(): Reading<T> {
@@ -26,9 +36,17 @@ export function pending<T>(): Reading<T> {
 }
 
 export function settle<T>(source: Readable<T>, outcome: Outcome<T>): void {
-  const prior = source.reading;
-  source.reading = { kind: "read", outcome };
+  const prior = source.reading.get();
+  runInAction(() => source.reading.set({ kind: "read", outcome }));
   if (prior.kind === "pending") prior.land();
+}
+
+// The stored value no longer answers what its source reads (a new key, a
+// superseding move): it is pending until a fresh read lands. A value already
+// pending keeps the landing its readers wait on.
+export function renew<T>(source: Readable<T>): void {
+  if (source.reading.get().kind === "read")
+    runInAction(() => source.reading.set(pending()));
 }
 
 // A source its owner is dropping: a reader waiting on its pending value is
@@ -37,7 +55,7 @@ export function answerPending<T>(
   source: Readable<T>,
   outcome: Outcome<never>,
 ): void {
-  if (source.reading.kind === "pending") settle(source, outcome);
+  if (source.reading.get().kind === "pending") settle(source, outcome);
 }
 
 // [LAW:types-are-the-program] A read as it stands now: its outcome, or not
@@ -61,7 +79,7 @@ function isWaiting<A>(current: A | Waiting): current is Waiting {
 }
 
 export function currentOf<T>(source: Readable<T>): Current<T> {
-  const reading = source.reading;
+  const reading = source.reading.get();
   return reading.kind === "read" ? reading.outcome : reading;
 }
 
@@ -74,6 +92,40 @@ export async function answered<A>(read: () => A | Waiting): Promise<A> {
     if (!isWaiting(current)) return current;
     await current.landed;
   }
+}
+
+// How a bounded wait ended: what it waited on answered, or its time ran out.
+export type WaitEnd = "answered" | "deadline";
+
+// [LAW:no-ambient-temporal-coupling][LAW:single-enforcer] The one bounded
+// wait over work that does not end at a signal of its own (a wait that does,
+// as `SourceRegistry.inFlight` does, is bounded by the signal it is given):
+// `work`, or `ms`, whichever ends first. `work` is handed the wait's
+// signal, aborted when the wait ends on either arm, with its timer cleared:
+// what it listens on through the signal stops with the wait, so a wait leaves
+// nothing behind. What it does not, a run it started, goes on, and a failure
+// of it after the deadline is no one's answer: it goes to `late`, its owner's
+// report.
+export function waitWithin(
+  work: (signal: AbortSignal) => Promise<unknown>,
+  ms: number,
+  late: (e: unknown) => void,
+): Promise<WaitEnd> {
+  const wait = new AbortController();
+  const timer = setTimeout(() => wait.abort(), Math.max(0, ms));
+  const ended = new Promise<WaitEnd>((resolve, reject) => {
+    wait.signal.addEventListener("abort", () => resolve("deadline"));
+    void work(wait.signal).then(
+      () => resolve("answered"),
+      // [LAW:no-silent-failure] Every rejection is reported: the wait's own
+      // while it listens, its owner's after.
+      (e: unknown) => (wait.signal.aborted ? late(e) : reject(e)),
+    );
+  });
+  return ended.finally(() => {
+    clearTimeout(timer);
+    wait.abort();
+  });
 }
 
 // [LAW:types-are-the-program] What a declaration hands its reader: the entry

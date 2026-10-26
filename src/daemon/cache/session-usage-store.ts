@@ -1,6 +1,6 @@
 import { dirname, join, sep } from "node:path";
 
-import { observable, runInAction } from "mobx";
+import { observable, runInAction, type IObservableValue } from "mobx";
 
 import {
   type SessionInfo,
@@ -169,9 +169,11 @@ interface SessionSlot {
   readonly ring: SpeedSample[];
   // What the session's last request's refreshes answered, which a draw reads
   // as they stand: the record's ingest — `null` when it worked, else why it
-  // failed — and the speed observation it took.
-  failure: string | null;
-  speed: Outcome<SpeedObservation> | undefined;
+  // failed — and the speed observation it took. Observable, so a view's
+  // payload over them is recomputed in the turn they land, and boxes of their
+  // own, so a request's answer moves no day sum.
+  readonly failure: IObservableValue<string | null>;
+  readonly speed: IObservableValue<Outcome<SpeedObservation> | undefined>;
 }
 
 // What one caller's ingests did. Renders share the store's running tally — the
@@ -425,6 +427,11 @@ function usageOver(base: SessionInfo, hookData?: ClaudeHookData): UsageInfo {
   };
 }
 
+// A slot's answer, stored in the turn it lands.
+function answer<T>(box: IObservableValue<T>, value: T): void {
+  runInAction(() => box.set(value));
+}
+
 export class SessionUsageStore {
   // No count cap: `today` is a fold over every record, so a cap smaller than
   // the day's sessions would drop work from it unseen. A record is a few
@@ -536,7 +543,8 @@ export class SessionUsageStore {
   usageOf(sessionId: string, hookData: ClaudeHookData): Reading<UsageInfo> {
     const slot = this.sessions.get(sessionId);
     if (slot === undefined) return PENDING;
-    if (slot.failure !== null) return failed(slot.failure);
+    const failure = slot.failure.get();
+    if (failure !== null) return failed(failure);
     return ok(
       usageOver(slot.record?.sessionInfo ?? EMPTY_SESSION_INFO, hookData),
     );
@@ -557,8 +565,10 @@ export class SessionUsageStore {
     );
     // The session's slot records that its refresh answered — a failure kept
     // so the draws until the next refresh show it.
-    this.hold(sessionId).failure =
-      record.kind === "failed" ? record.reason : null;
+    answer(
+      this.hold(sessionId).failure,
+      record.kind === "failed" ? record.reason : null,
+    );
     return record;
   }
 
@@ -621,7 +631,8 @@ export class SessionUsageStore {
     at: Instant,
   ): Outcome<TodayInfo> {
     const active = this.sessions.get(hookData?.session_id ?? "");
-    if (active?.failure != null) return failed(active.failure);
+    const failure = active?.failure.get() ?? null;
+    if (failure !== null) return failed(failure);
 
     const today = dayKey(dateOf(at));
     const total: DayUsage = { ...EMPTY_DAY };
@@ -674,7 +685,7 @@ export class SessionUsageStore {
     return this.speedFlight.run(`${sessionId}:${stamp}`, async () => {
       const record = await this.refreshed(sessionId, transcriptPath, stamp);
       if (record.kind === "failed") {
-        this.hold(sessionId).speed = record;
+        answer(this.hold(sessionId).speed, record);
         return record;
       }
       const breakdown =
@@ -706,7 +717,7 @@ export class SessionUsageStore {
         cur,
         samples: [...ring],
       });
-      this.hold(sessionId).speed = observed;
+      answer(this.hold(sessionId).speed, observed);
       return observed;
     });
   }
@@ -715,7 +726,7 @@ export class SessionUsageStore {
   // takes no sample, so how often the bar is drawn moves no rate.
   speedOf(sessionId: string): Reading<SpeedObservation> {
     if (!sessionId) return ABSENT;
-    return this.sessions.get(sessionId)?.speed ?? PENDING;
+    return this.sessions.get(sessionId)?.speed.get() ?? PENDING;
   }
 
   // stamp-gated, coalesced re-parse of ONE session. `ok` is its record,
@@ -822,8 +833,10 @@ export class SessionUsageStore {
       lastSeenAt: Date.now(),
       record: undefined,
       ring: [],
-      failure: null,
-      speed: undefined,
+      failure: observable.box<string | null>(null),
+      speed: observable.box<Outcome<SpeedObservation> | undefined>(undefined, {
+        deep: false,
+      }),
     };
     runInAction(() => this.sessions.set(sessionId, slot));
     return slot;

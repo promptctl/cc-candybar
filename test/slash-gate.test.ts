@@ -1,7 +1,7 @@
 // [LAW:verifiable-goals] brandon-tmux-tk7: a `slash` control shows exactly
 // where its click has a pane to type into. Each of the client's three tmux
 // answers — a pane, "not in tmux", and nothing (a client too old to say) — is
-// driven through the daemon's own payload assembly (buildRenderPayload) and the
+// driven through the daemon's own payload assembly (payloadOf) and the
 // real spine (registerDslConfig + renderDsl), over the bundled default with
 // every bundled slash control on the bar: the `commands` tray, `autocompact`,
 // and the settings menu's own tray, its door open.

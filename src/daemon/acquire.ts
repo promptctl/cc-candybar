@@ -663,6 +663,12 @@ function sleep(ms: number): Promise<void> {
 // of the budget can keep that order true. The Rust client derives the same
 // value the same way (rust-client/src/launch.rs).
 //
+// [LAW:one-source-of-truth] node's argv for a daemon running `script`: what
+// the client spawns, and what the load gate spawns to measure the same thing.
+export function daemonArgs(script: string, env: NodeJS.ProcessEnv): string[] {
+  return [`--max-old-space-size=${heapCapMb(env)}`, script, "daemon"];
+}
+
 // [LAW:single-enforcer] Routes through src/proc/launch so daemon-spawn shows
 // up in subprocess metering (category "daemon-spawn"). The launch primitive
 // owns the only child_process import in this file.
@@ -677,7 +683,7 @@ function spawnDaemonDetachedReal(): boolean {
   // discarded the Promise and unconditionally returned true.
   const result = launchDetachedSync({
     bin: node,
-    args: [`--max-old-space-size=${heapCapMb(process.env)}`, script, "daemon"],
+    args: daemonArgs(script, process.env),
     category: "daemon-spawn",
   });
   return result.ok;

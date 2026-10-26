@@ -1,7 +1,8 @@
 // [LAW:one-source-of-truth] Source kinds are the bridge between external
 // data (render payload, environment, static config) and the VariableStore.
-// All payload ingestion goes through applyInput — there is no other path
-// that writes input-kind boxes during a render.
+// An input is a derived value of its path in the view's bound InputSource
+// (brandon-unfiled-3248.8ro6, step 4): nothing writes one, so no draw can
+// start a cache policy that reads one.
 //
 // Two concerns deliberately separated:
 // - VariableStore: reactivity primitives (boxes, computeds, MobX scheduling)
@@ -16,8 +17,14 @@ import { realpathSync, statSync } from "fs";
 import path from "path";
 import { nearestWatchTarget } from "../utils/watch-target.js";
 import { setInterval, clearInterval } from "timers";
-import { observable, reaction, type IReactionDisposer } from "mobx";
-import { ColorDepth } from "@promptctl/rich-js";
+import {
+  observable,
+  reaction,
+  runInAction,
+  when,
+  type IReactionDisposer,
+} from "mobx";
+import type { ColorDepth } from "@promptctl/rich-js";
 import {
   typeOf,
   toString,
@@ -45,9 +52,9 @@ import {
   type Parser,
   type SourceParse,
 } from "./parse.js";
-import { readPending, type JsonValue } from "./types.js";
+import { PendingValueError, readPending, type JsonValue } from "./types.js";
 import type { SessionStateReader } from "../daemon/session-state.js";
-import { TrailingEdge } from "../utils/trailing-edge.js";
+import { TrailingEdge, type Trigger } from "../utils/trailing-edge.js";
 
 // How long text that is not a document may be a write still in progress
 // before it shows as the failure it is (documentPublisher).
@@ -450,10 +457,29 @@ export interface LastError {
   readonly message: string;
 }
 
-interface InputMeta {
-  readonly path: string;
-  readonly varDefault: VarValue | undefined;
+// [LAW:types-are-the-program] What a view's inputs are derived from: the value
+// at each payload path as it stands — PENDING while its source has not
+// answered — and the depth the view's renders draw at, which every contrast
+// floor reads. A read is tracked, so an input moves in the turn its value
+// does, and nothing else moves it.
+export interface InputSource {
+  read(path: string): unknown;
+  drawnAt(): ColorDepth;
 }
+
+// A registry no view source is bound to: a directory's, which reads no
+// payload, or a view's before its source is bound — every input not answered,
+// and its depth neither, so a key measuring a floor waits for the view's
+// rather than running once at a depth no draw is at.
+const UNBOUND: InputSource = {
+  read: () => PENDING,
+  drawnAt: () => {
+    throw new PendingValueError(
+      "colorCompatibility.effective",
+      "the drawn depth has no value yet: no view source is bound",
+    );
+  },
+};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -462,7 +488,7 @@ interface InputMeta {
 // object. [LAW:types-are-the-program] A PENDING node is a source that has not
 // answered yet, so every path through it is pending too: one `git: PENDING`
 // is every `git.*` input not answered, never each one's default.
-function resolvePath(obj: unknown, path: string): unknown {
+export function resolvePath(obj: unknown, path: string): unknown {
   let cur: unknown = obj;
   for (const part of path.split(".")) {
     if (cur === PENDING) return PENDING;
@@ -505,8 +531,13 @@ function zeroValue(type: VarType): VarValue {
 // VariableStore. Multiple registries on the same store would produce
 // duplicate box definitions for input-kind variables.
 
+// Why a source runs: for a key it has no answer under yet — its first run, or
+// a key or dependency that moved — or to re-read the key it has answered, on
+// a period's tick or a watched file's change. A re-read keeps its answer
+// standing; a new key has none, so a wait is for it alone.
+type RunCause = "new-key" | "re-read";
+
 export class SourceRegistry {
-  private readonly inputMetas = new Map<string, InputMeta>();
   private readonly lastErrors = new Map<string, LastError>();
   // A cache policy that cannot fire is a STANDING fault, not a read's
   // outcome: a read that succeeds afterwards says nothing about whether the
@@ -521,12 +552,17 @@ export class SourceRegistry {
   // Collects all cleanup callbacks (TTL unsubscribes, watch unsubscribes,
   // MobX reaction disposers) so dispose() tears everything down in one call.
   private readonly cleanups: Array<() => void> = [];
-  // [LAW:no-ambient-temporal-coupling] The in-flight run of each async
-  // source, by name: one run per source at a time (a refresh that fires
-  // while the previous run is still out is dropped), and `settled()` is the
-  // explicit "every source has completed its current run" state a caller
-  // (`cc-candybar check`) awaits instead of guessing a delay.
-  private readonly inFlight = new Map<string, Promise<void>>();
+  // Each async source's in-flight loop, by name: one per source at a time.
+  private readonly runs = new Map<string, Promise<void>>();
+  // [LAW:no-ambient-temporal-coupling] The sources whose loop out answers a
+  // key they have no answer under yet (`RunCause`). Observable, so
+  // `inFlight()` is a reaction over it — the explicit "the runs a wait is for
+  // have ended" state a caller (a statusline request, `cc-candybar check`)
+  // awaits instead of guessing a delay, and one its deadline can stop
+  // listening to. Set by the trigger, since a source's node holds its
+  // fallback before its first answer (`stringInitial`), so the store cannot
+  // say it.
+  private readonly newKeys = observable.set<string>();
   // [LAW:single-enforcer] Serializes each source's reads and remembers a trigger
   // that arrived mid-read, so a re-trigger re-reads once rather than starting a
   // parallel read or being dropped. Shared with the git cache's refresh path,
@@ -538,15 +574,17 @@ export class SourceRegistry {
   // run cannot outlive the registry that started it (RenderCache's
   // dispose-before-swap contract reaches the children too).
   private readonly abort = new AbortController();
-  // [LAW:one-source-of-truth] The depth the terminal draws this view's renders
-  // at — the one depth every contrast floor reads, in this registry's variable
-  // templates and in the render engine alike. Observable, because the depth is
-  // the session's setting (edit mode stages it over the config's own): a
-  // template variable whose `readableOn` read it recomputes when it moves rather
-  // than keeping the answer it measured at the previous depth. A render
-  // publishing the depth it already holds moves nothing (MobX compares).
-  private readonly drawn = observable.box(ColorDepth.TRUECOLOR);
-  readonly drawnAt = (): ColorDepth => this.drawn.get();
+  // [LAW:one-source-of-truth] What this registry's inputs are derived from
+  // (`bindInputs`), and so the depth the terminal draws this view's renders at
+  // — the one depth every contrast floor reads, in this registry's variable
+  // templates and in the render engine alike. Derived from the view's own
+  // settings, so a template variable whose `readableOn` read it recomputes in
+  // the turn the setting moves (edit mode staging a depth included), never at
+  // a draw.
+  private readonly inputs = observable.box<InputSource>(UNBOUND, {
+    deep: false,
+  });
+  readonly drawnAt = (): ColorDepth => this.inputs.get().drawnAt();
   // Shared engine instance — parse() is expensive; the engine is reused for
   // all key: template compilations.
   // [LAW:one-source-of-truth] One engine per registry, not one per variable.
@@ -612,20 +650,61 @@ export class SourceRegistry {
     this.store.defineDocument(name, failed(reason));
   }
 
-  // input: a box each payload writes, resolving its path against it.
-  // [LAW:types-are-the-program] Before its view's first payload it holds no
+  // input: a derived value of its path in the bound InputSource, cast to its
+  // type. [LAW:types-are-the-program] Before its source answers it holds no
   // value: it is not answered yet, never its default, which answers a payload
-  // that lacks the path (brandon-unfiled-3248.8ro6). A draw pushes its payload
-  // before it reads anything, so only what reads it before any draw — a cache
-  // key, a depends_on — sees it pending, and waits for its first value.
+  // that lacks the path (brandon-unfiled-3248.8ro6). A path the draw's own
+  // instant answers (DRAW_PROJECTIONS) is a projection, read by each draw.
   declareInput(
     name: string,
     path: string,
     type: VarType,
-    varDefault?: VarValue,
+    varDefault: VarValue | undefined,
+    derivation: Derivation,
   ): void {
-    this.store.defineBox(name, type, PENDING);
-    this.inputMetas.set(name, { path, varDefault });
+    this.store.defineDerived(name, type, derivation, () =>
+      this.inputAt(name, path, type, varDefault),
+    );
+  }
+
+  // [LAW:single-enforcer] The one reading of an input: its path's value cast
+  // to its type, else the fallback chain with the failure recorded.
+  private inputAt(
+    name: string,
+    path: string,
+    type: VarType,
+    varDefault: VarValue | undefined,
+  ): VarValue {
+    const raw = this.inputs.get().read(path);
+    if (raw === PENDING) {
+      // Not answered yet is no failure: an earlier read's error no longer
+      // stands for it.
+      this.lastErrors.delete(name);
+      throw new PendingValueError(
+        name,
+        `variable "${name}" has no value yet: its source has not answered`,
+      );
+    }
+    if (raw === undefined) {
+      return this.fallbackOf(
+        name,
+        type,
+        varDefault,
+        `input path "${path}" not found in payload`,
+      );
+    }
+    try {
+      const value = coerceToType(raw, type);
+      this.lastErrors.delete(name);
+      return value;
+    } catch (e) {
+      return this.fallbackOf(
+        name,
+        type,
+        varDefault,
+        e instanceof Error ? e.message : String(e),
+      );
+    }
   }
 
   // env: resolved once at declaration from process.env; box written once, never again.
@@ -683,8 +762,8 @@ export class SourceRegistry {
     parse: SourceParse,
   ): void {
     const publish = this.publisherFor(name, parse, reader.where);
-    this.registerCachePolicy(name, cache, () =>
-      this.runSource(name, reader, publish),
+    this.registerCachePolicy(name, cache, (cause) =>
+      this.runSource(name, reader, publish, cause),
     );
   }
 
@@ -789,6 +868,7 @@ export class SourceRegistry {
     name: string,
     reader: SourceReader,
     publish: Publish,
+    cause: RunCause,
   ): void {
     // [LAW:no-ambient-temporal-coupling] A trigger that arrives while this
     // source is mid-read is not a duplicate to drop: it means the inputs the
@@ -807,50 +887,71 @@ export class SourceRegistry {
         if (err !== this.abort.signal.reason) throw err;
       }),
     );
-    // A queued trigger needs no tracking: the loop it joined is already the
-    // tracked promise, and it does not resolve until that trigger's own pass has
-    // run — which is exactly what makes `settled()` wait for the re-read too.
-    if (trigger.kind === "started") this.track(name, trigger.done);
+    this.track(name, trigger, cause);
   }
 
-  // [LAW:single-enforcer] The one writer of `inFlight`: an async source's
-  // pending work enters here and leaves when it completes, so "which sources
-  // are still out" has a single mechanism rather than one per source kind.
-  private track(name: string, work: Promise<void>): void {
+  // [LAW:single-enforcer] The one writer of `runs` and `newKeys`: an async
+  // source's pending work enters here and leaves when it completes, so "which
+  // sources are still out" has a single mechanism rather than one per source
+  // kind. A queued trigger joins the loop out, which runs one more pass for it
+  // before it ends: that loop answers a new key when either trigger brought
+  // one.
+  private track(name: string, trigger: Trigger, cause: RunCause): void {
+    runInAction(() => {
+      if (trigger.kind === "started") {
+        this.runs.set(name, trigger.done);
+        this.newKeys.delete(name);
+      }
+      if (cause === "new-key") this.newKeys.add(name);
+    });
+    if (trigger.kind === "queued") return;
+    const done = trigger.done;
     // The identity check is the same one SingleFlight makes, for the same
     // reason: `TrailingEdge` releases a key before this `finally` runs, so a
     // trigger landing in that window starts a NEW tracked loop, and an
     // unconditional delete here would remove the live entry and leave
-    // `settled()` no longer waiting for work that is still out.
-    const tracked: Promise<void> = work.finally(() => {
-      if (this.inFlight.get(name) === tracked) this.inFlight.delete(name);
-    });
-    this.inFlight.set(name, tracked);
+    // `inFlight()` no longer waiting for work that is still out.
+    // [LAW:no-silent-failure] A run's rejection is a bug and stays unhandled
+    // here: a waiter watches the run leave `newKeys`, never its outcome, so
+    // no wait swallows it.
+    void done.finally(() =>
+      runInAction(() => {
+        if (this.runs.get(name) !== done) return;
+        this.runs.delete(name);
+        this.newKeys.delete(name);
+      }),
+    );
   }
 
-  // [LAW:no-ambient-temporal-coupling] Resolves when every async source's
-  // pending work — a shell/file run, and every run one of them triggered (a `depends_on` reaction fires inside a
-  // publish) — has completed, or at the deadline. The value is the names still
-  // in flight: empty when all settled. This is the state a one-shot render
-  // (`cc-candybar check`) awaits so it renders what those sources yielded,
-  // never a guessed delay; the registry owns the timer, so no caller races one
-  // of its own.
-  async settled(withinMs: number): Promise<readonly string[]> {
-    const deadline = Date.now() + withinMs;
-    while (this.inFlight.size > 0) {
-      const remaining = deadline - Date.now();
-      if (remaining <= 0) break;
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const outcome = await Promise.race([
-        Promise.all(this.inFlight.values()).then(() => "settled" as const),
-        new Promise<"deadline">((resolve) => {
-          timer = setTimeout(() => resolve("deadline"), remaining);
-        }),
-      ]);
-      clearTimeout(timer);
-      if (outcome === "deadline") break;
+  // [LAW:no-ambient-temporal-coupling] Resolves when none of the runs a wait
+  // is for is out (`awaited`), or when `signal` aborts — and then holds
+  // nothing, so a run that never ends keeps no waiter behind it. A run one of
+  // them triggers (a `depends_on` reaction fires inside a publish) is marked
+  // before the run that triggered it ends, so it is waited out too.
+  async inFlight(signal: AbortSignal): Promise<void> {
+    try {
+      await when(() => this.awaited().length === 0, { signal });
+    } catch (e) {
+      // The signal's abort is the one rejection the wait expects.
+      if (!signal.aborted) throw e;
     }
-    return [...this.inFlight.keys()];
+  }
+
+  // The sources a wait on this registry is for: the runs out here and in the
+  // home it reads through to that answer a new key (rule 2's first value, or
+  // a key its facts moved). A re-read keeps the answer it has standing, so no
+  // wait is for it, whoever's period or watch started it.
+  private awaited(): string[] {
+    return [...this.newKeys, ...(this.parent?.awaited() ?? [])];
+  }
+
+  // The names still awaited once every run has ended or `withinMs` has
+  // passed: empty when all settled. This is the state a one-shot render
+  // (`cc-candybar check`) awaits so it renders what those sources yielded,
+  // never a guessed delay.
+  async settled(withinMs: number): Promise<readonly string[]> {
+    await this.inFlight(AbortSignal.timeout(withinMs));
+    return this.awaited();
   }
 
   // template: a variable whose value is derived by evaluating a go-template
@@ -1010,51 +1111,15 @@ export class SourceRegistry {
       : 0;
   }
 
-  // ─── Render-cycle driver ──────────────────────────────────────────────────
+  // ─── The view's source ────────────────────────────────────────────────────
 
-  // Called at the start of each render request. Pushes all input-kind boxes in
-  // a single runInAction so their dependents invalidate exactly once.
-  // [LAW:dataflow-not-control-flow] Variability lives in the payload values,
-  // not in whether the update runs — every input box is refreshed every render.
-  applyInput(payload: unknown): void {
-    this.store.runInAction(() => {
-      for (const [name, meta] of this.inputMetas) {
-        const raw = resolvePath(payload, meta.path);
-        const type = this.store.getType(name);
-        if (raw === PENDING) {
-          // Not answered yet is no failure: an earlier read's error no longer
-          // stands for it.
-          this.store.setBox(name, PENDING);
-          this.lastErrors.delete(name);
-        } else if (raw !== undefined) {
-          try {
-            this.store.setBox(name, coerceToType(raw, type));
-            this.lastErrors.delete(name);
-          } catch (e) {
-            this.applyFallback(
-              name,
-              type,
-              meta.varDefault,
-              e instanceof Error ? e.message : String(e),
-            );
-          }
-        } else {
-          this.applyFallback(
-            name,
-            type,
-            meta.varDefault,
-            `input path "${meta.path}" not found in payload`,
-          );
-        }
-      }
-    });
-  }
-
-  // Called by the render beside applyInput: the depth this render draws at,
-  // into this registry alone. A directory reads no depth: a source whose key
-  // reads one is a view's (src/dsl/variable-scope.ts).
-  drawAt(depth: ColorDepth): void {
-    this.store.runInAction(() => this.drawn.set(depth));
+  // [LAW:single-enforcer] What this registry's inputs, and the depth, are
+  // derived from: bound once by the view that owns the registry, whose source
+  // reads its payload as it stands. A directory binds none: it reads no
+  // payload and no depth — a source whose key reads one is a view's
+  // (src/dsl/variable-scope.ts).
+  bindInputs(source: InputSource): void {
+    runInAction(() => this.inputs.set(source));
   }
 
   // ─── Diagnostics ─────────────────────────────────────────────────────────
@@ -1126,24 +1191,28 @@ export class SourceRegistry {
   private registerCachePolicy(
     name: string,
     policy: CachePolicy,
-    update: () => void,
+    update: (cause: RunCause) => void,
   ): void {
     switch (policy.kind) {
       case "never":
-        update();
+        update("new-key");
         break;
 
       case "ttl": {
-        update();
-        const unsub = this.ttlMgr.subscribe(policy.durationMs, update);
+        update("new-key");
+        const unsub = this.ttlMgr.subscribe(policy.durationMs, () =>
+          update("re-read"),
+        );
         this.cleanups.push(unsub);
         break;
       }
 
       case "watch_file": {
-        update();
-        const unsub = this.watchMgr.subscribe(policy.path, update, (message) =>
-          this.notePolicy(name, failed(message)),
+        update("new-key");
+        const unsub = this.watchMgr.subscribe(
+          policy.path,
+          () => update("re-read"),
+          (message) => this.notePolicy(name, failed(message)),
         );
         this.cleanups.push(unsub);
         break;
@@ -1178,7 +1247,7 @@ export class SourceRegistry {
                   );
             }
           },
-          update,
+          () => update("new-key"),
         );
         break;
       }
@@ -1195,7 +1264,7 @@ export class SourceRegistry {
               ? ok(keys.map((key) => key.value).join(","))
               : PENDING;
           },
-          update,
+          () => update("new-key"),
         );
         break;
       }
@@ -1234,21 +1303,18 @@ export class SourceRegistry {
   // [LAW:no-defensive-null-guards] Each fallback level is deliberate; the zero
   // backstop is the only "silent" path and exists because the caller has already
   // recorded the error — downstream reads get a safe typed value, not an exception.
-  private applyFallback(
+  private fallbackOf(
     name: string,
     type: VarType,
     varDefault: VarValue | undefined,
     errorMessage: string,
-  ): void {
+  ): VarValue {
     this.recordError(name, errorMessage);
-    if (varDefault !== undefined) {
-      this.store.setBox(name, varDefault);
-      return;
-    }
+    if (varDefault !== undefined) return varDefault;
     try {
-      this.store.setBox(name, coerceToType(this.defaultEmptyValue, type));
+      return coerceToType(this.defaultEmptyValue, type);
     } catch {
-      this.store.setBox(name, zeroValue(type));
+      return zeroValue(type);
     }
   }
 

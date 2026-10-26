@@ -444,8 +444,9 @@ export interface TmuxStatusDeps {
   readonly handler: string;
   // This daemon's socket: what it writes into tmux is marked with it.
   readonly owner: string;
-  // [LAW:effects-at-boundaries] Subscribing runs after the render that asked
-  // for it has returned.
+  // [LAW:effects-at-boundaries] Subscribing runs after the request or click
+  // that asked for it has returned: a subscribe still draws its first frame
+  // in its caller's turn.
   readonly defer: (run: () => void) => void;
   readonly log: (level: "info" | "warn", msg: string) => void;
 }
@@ -520,9 +521,11 @@ export class TmuxStatusLines {
 
   constructor(private readonly deps: TmuxStatusDeps) {}
 
-  // [LAW:dataflow-not-control-flow] Level-triggered off every render: a
-  // session whose switch is on and that reported a tmux pane is held, any
-  // other is not. A daemon restart picks each session up at its next render.
+  // [LAW:dataflow-not-control-flow] Level-triggered, at events — a request's
+  // arrival with its own hints, a click's commit with its session's latest —
+  // never at a draw: a session whose switch is on and that reported a tmux
+  // pane is held, any other is not. A daemon restart picks each session up at
+  // its next request.
   observe(
     sessionId: string,
     tmux: TmuxHint | null | undefined,

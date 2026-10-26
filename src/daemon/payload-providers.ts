@@ -1,4 +1,4 @@
-// The data providers `buildRenderPayload` reads, constructed once per process
+// The data providers a view's payload reads, constructed once per process
 // that renders.
 //
 // [LAW:one-source-of-truth] The daemon and the demo render from the same set,
@@ -23,15 +23,11 @@ import { MementoProvider } from "../segments/memento.js";
 import { productionMementoEdge } from "../memento/edge.js";
 import { AutoCompactProvider } from "../segments/autocompact-provider.js";
 import { CacheExpiryProvider } from "../segments/cache.js";
+import { RefreshFaults } from "./refresh-faults.js";
 
-// What a session's own history contributes (`history`, `navigation`), the
-// frames the renderer pushes it (`feeds`) and the lanes the view's
-// declaration handed it (`lanes`) are the renderer's to supply; everything
-// else is a provider.
-export type PayloadProviders = Omit<
-  RenderPayloadDeps,
-  "history" | "navigation" | "feeds" | "lanes"
->;
+// The lanes the view's declaration handed it (`lanes`) are the view's to
+// supply; everything else is a provider.
+export type PayloadProviders = Omit<RenderPayloadDeps, "lanes">;
 
 export function createPayloadProviders(opts: {
   readonly watchers: WatcherRegistry;
@@ -52,6 +48,7 @@ export function createPayloadProviders(opts: {
     }),
     autoCompact: new AutoCompactProvider(opts.logger),
     cacheExpiry: new CacheExpiryProvider(opts.logger),
+    faults: new RefreshFaults(),
     log: opts.logger,
   };
 }

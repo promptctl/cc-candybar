@@ -14,7 +14,7 @@ import {
   compileDslConfig,
   compileInputOf,
   declareDslVariables,
-  drawDsl,
+  drawPayload,
   EVERY_SCOPE,
   type DrawnFrame,
   type RenderWarning,
@@ -73,7 +73,7 @@ function renderer(cfg: ValidatedConfig) {
     draw: (width = 160): Drawn => {
       const errors: string[] = [];
       const warnings: RenderWarning[] = [];
-      const frame = drawDsl(
+      const frame = drawPayload(
         cfg,
         compiled,
         store,

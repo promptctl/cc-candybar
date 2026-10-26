@@ -53,7 +53,7 @@ export function sendDaemonRequest(
     sock.once("connect", () => {
       clearTimeout(connectTimer);
       sock.removeListener("error", onConnectError);
-      sendOne(sock, req as unknown as Request, timeoutMs).then(
+      sendOne(sock, req as unknown as Request, Date.now() + timeoutMs).then(
         resolve,
         reject,
       );

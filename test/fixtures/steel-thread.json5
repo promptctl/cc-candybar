@@ -3,7 +3,7 @@
 //   (a) the Joiner between two segments, and
 //   (b) per-segment palette switching via 3rq.2 (sessionId uses 'gruvbox').
 // Variables are declared as input/env kinds so the test drives them through
-// registerDslConfig + applyInput — no hand-seeded store.
+// registerDslConfig + a bound payload — no hand-seeded store.
 {
   globals: {},
   variables: {

@@ -43,7 +43,7 @@ export function answeredOf(
 // windows. `unanswered` is a session with no API response to report on, so
 // its missing windows are no finding. A Claude Code too old to leave the mark
 // sends no windows either: `missing`. Carried means a window the payload
-// reads (`five_hour`, `seven_day` — buildRenderPayload), so an empty or null
+// reads (`five_hour`, `seven_day` — payloadOf), so an empty or null
 // `rate_limits` is `missing`.
 export const RATE_LIMITS_SEEN = ["carried", "missing", "unanswered"] as const;
 export type RateLimitsSeen = (typeof RATE_LIMITS_SEEN)[number];

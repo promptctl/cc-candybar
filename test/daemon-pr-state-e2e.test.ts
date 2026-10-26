@@ -11,7 +11,6 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { logPath } from "../src/daemon/paths";
 import {
   hookData,
   killAndWait,
@@ -23,6 +22,7 @@ import {
   spawnDaemonWithEnv,
   type RunningDaemon,
 } from "./helpers/spawn-isolated-daemon";
+import { renderLines } from "./helpers/daemon-log";
 
 jest.setTimeout(30_000);
 
@@ -90,12 +90,8 @@ describe("a daemon render carries the branch's PR in every state", () => {
     removeTmpDirs();
   });
 
-  const prFacts = (sessionId: string) =>
-    fs
-      .readFileSync(logPath(env), "utf8")
-      .split("\n")
-      .filter((l) => l.includes(`render sid=${sessionId} `))
-      .map((l) => l.match(/ pr=(\S+) /)?.[1]);
+  const prFacts = async (sessionId: string) =>
+    (await renderLines(env, sessionId)).map((l) => l.match(/ pr=(\S+) /)?.[1]);
 
   test.each([
     ["OPEN", "pr:open ", "open"],
@@ -117,6 +113,6 @@ describe("a daemon render carries the branch's PR in every state", () => {
     expect(out).toContain(cell);
     // A remote, but no branch here was ever pushed to it.
     expect(out).toContain("t:none");
-    expect(prFacts(sessionId).at(-1)).toBe(fact);
+    expect((await prFacts(sessionId)).at(-1)).toBe(fact);
   });
 });

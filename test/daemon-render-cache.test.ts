@@ -25,6 +25,7 @@ import {
   type RenderCacheObservers,
   type SessionView,
   DECLARES_NOTHING,
+  SOURCES_NOTHING,
   openView,
   ENTRY_BYTES,
   COMPILE_BYTES,
@@ -78,7 +79,7 @@ function makeCache(
   const sessionState = new SessionState();
   const reloads = new ReloadSignal();
   const cache = new RenderCache(
-    { sessionState, watchers, log, declare: DECLARES_NOTHING },
+    { sessionState, watchers, log, source: SOURCES_NOTHING, declare: DECLARES_NOTHING },
     {
       // Room for four entries over one compile: the fifth evicts the oldest.
       budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES,
@@ -1007,7 +1008,7 @@ describe("RenderCache idle sweep", () => {
     const { dir, cleanup } = mkConfigDir();
     const watchers = new WatcherRegistry({ logger: () => {} });
     const cache = new RenderCache(
-      { sessionState: new SessionState(), watchers, declare: DECLARES_NOTHING },
+      { sessionState: new SessionState(), watchers, source: SOURCES_NOTHING, declare: DECLARES_NOTHING },
       { budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES },
     );
     try {
@@ -1045,7 +1046,7 @@ describe("RenderCache idle sweep", () => {
     const { dir, cleanup } = mkConfigDir();
     const watchers = new WatcherRegistry({ logger: () => {} });
     const cache = new RenderCache(
-      { sessionState: new SessionState(), watchers, declare: DECLARES_NOTHING },
+      { sessionState: new SessionState(), watchers, source: SOURCES_NOTHING, declare: DECLARES_NOTHING },
       { budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES },
     );
     try {
@@ -1054,7 +1055,7 @@ describe("RenderCache idle sweep", () => {
         dir,
         "s1",
         viewFacts(dir, "s1"),
-        { sessionState: new SessionState(), declare: DECLARES_NOTHING, log: () => {} },
+        { sessionState: new SessionState(), source: SOURCES_NOTHING, declare: DECLARES_NOTHING, log: () => {} },
       );
       let released = 0;
       view.holds.take("repo", () => () => {
@@ -1091,6 +1092,7 @@ describe("RenderCache idle sweep", () => {
         sessionState,
         watchers,
         log: (_level, message) => logs.push(message),
+        source: SOURCES_NOTHING,
         declare: (holds, facts, closure) => {
           if (!closures.includes(closure)) closures.push(closure);
           const preset = `closure:${closures.indexOf(closure)}`;

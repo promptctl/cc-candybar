@@ -26,6 +26,10 @@ import { linkUrls } from "./ansi";
 import { detectClaudeConfigDir } from "../../src/claude-settings";
 import { detectMementoEnv } from "../../src/memento-hint";
 import { PACKAGE_VERSION } from "../../src/version";
+import { logLines } from "../../src/daemon/log";
+import { logPath } from "../../src/daemon/paths";
+import { valueOf } from "../../src/utils/logfmt";
+import { until } from "./until";
 export { linkUrls, stripAnsi } from "./ansi";
 
 const REPLY_BUDGET_MS = 5000;
@@ -44,6 +48,32 @@ const REPLY_BUDGET_MS = 5000;
 // condition as a hard failure.
 const TIMEOUT_RETRY_BUDGET = 5;
 
+// [LAW:no-ambient-temporal-coupling] The same contract for an answer drawn at
+// its deadline: a request is answered by its client's deadline, and a source
+// still reading then draws as pending (src/daemon/request-deadline.ts) — a
+// new repo's first git reads, a config's first compile. A real client shows
+// those cells and the next tick shows them answered; a test asks again
+// inline, bounded, and reads which answer it got from the request's own
+// render event. A case that means to see the pending answer sends a request
+// of its own (sendDaemonRequest).
+const PENDING_RETRY_BUDGET = 20;
+
+// The daemon's log, found from its socket: an isolated daemon keeps its
+// socket in its state directory (prepareIsolatedDaemonEnv), whose log is the
+// one the daemon itself writes (logPath).
+function logOf(sockPath: string): string {
+  return logPath({ XDG_STATE_HOME: path.dirname(path.dirname(sockPath)) });
+}
+
+// A session's render events whose reply its client read, in log order.
+function answeredEvents(log: string, sessionId: string): string[] {
+  return logLines(log).filter(
+    (l) =>
+      l.includes(` render sid=${valueOf(sessionId)} `) &&
+      l.includes(" timedOut=N "),
+  );
+}
+
 // The Status hook payload Claude Code sends, as `render` below relays it and
 // as the real client reads it from stdin.
 export function hookData(sessionId: string, cwd: string): ClaudeHookData {
@@ -57,18 +87,33 @@ export function hookData(sessionId: string, cwd: string): ClaudeHookData {
   };
 }
 
-// One render request, retried on TIMEOUT within the budget above, its output
-// returned. The one spelling of the transient contract: `render` below and
+// One render request, retried on TIMEOUT and on an answer that drew a
+// source pending, within the budgets above, its output returned. The one
+// spelling of the transient contract: `render` below and
 // test/helpers/drive-bar.ts both send through it.
 export async function renderRequest(
   sockPath: string,
   request: Record<string, unknown>,
   replyBudgetMs = REPLY_BUDGET_MS,
 ): Promise<string> {
+  const log = logOf(sockPath);
+  const sessionId = String(
+    (request.hookData as Partial<ClaudeHookData> | undefined)?.session_id,
+  );
   for (let attempt = 1; ; attempt++) {
+    const before = answeredEvents(log, sessionId).length;
+    // [LAW:one-source-of-truth] The deadline it states is the one it waits
+    // to: like a real client, it says when it will hang up, so the daemon's
+    // wait for its refreshes ends by that or by its own backstop
+    // (src/daemon/request-deadline.ts). A case's own deadline wins.
     const resp = await sendDaemonRequest(
       sockPath,
-      { v: PROTOCOL_VERSION, kind: "render", ...request },
+      {
+        v: PROTOCOL_VERSION,
+        kind: "render",
+        deadline: Date.now() + replyBudgetMs,
+        ...request,
+      },
       replyBudgetMs,
     );
     if (!resp.ok) {
@@ -80,7 +125,25 @@ export async function renderRequest(
         `render response carried no output: ${JSON.stringify(resp)}`,
       );
     }
-    return resp.output;
+    let event = "";
+    await until(
+      () =>
+        (event = answeredEvents(log, sessionId)[before] ?? "") !== "",
+      `the render event of ${sessionId}'s answer`,
+    );
+    if (/ pending=-(?: |$)/.test(event)) return resp.output;
+    // [LAW:no-silent-failure] Only a wait its deadline ended may draw
+    // pending: one that answered yet drew a value not answered means the wait
+    // left out something the request started (rule 1), and asking again would
+    // hide it. A value still pending after every ask is the failure too.
+    // Both are named by the event that drew them, never a bar a later
+    // assertion trips over.
+    if (!/ ended=deadline(?: |$)/.test(event))
+      throw new Error(`render drew pending though its wait answered: ${event}`);
+    if (attempt >= PENDING_RETRY_BUDGET)
+      throw new Error(
+        `render still drew pending after ${attempt} asks: ${event}`,
+      );
   }
 }
 

@@ -63,23 +63,30 @@ export type UnversionedRequest = Unversioned<Request>;
 
 type OkResponse = Extract<Response, { ok: true }>;
 
-// One round-trip, classified. `project` extracts the caller's payload from
-// an ok response and returns undefined when the response, though ok, does
-// not carry the expected shape (the daemon is up, it just answered the
-// wrong question) — that maps to permanent/malformed_response, not a kick.
-// The payload types themselves never enter this module [LAW:one-way-deps].
+// One round-trip, classified. `request` builds the request from the instant
+// the client will hang up (epoch milliseconds), known once the connect is
+// done and the budget starts, so a render request can state it. `project`
+// extracts the caller's payload from an ok response and returns undefined
+// when the response, though ok, does not carry the expected shape (the daemon
+// is up, it just answered the wrong question) — that maps to
+// permanent/malformed_response, not a kick. The payload types themselves
+// never enter this module [LAW:one-way-deps].
 export async function requestOutcome<T>(
-  req: UnversionedRequest,
+  request: (deadline: number) => UnversionedRequest,
   budgets: RoundTripBudgets,
   project: (resp: OkResponse) => T | undefined,
 ): Promise<RoundTripOutcome<T>> {
   let sock: net.Socket | null = null;
   try {
     sock = await connectWithTimeout(socketPath(), budgets.connectMs);
+    // [LAW:one-source-of-truth] One instant: the one the request states and
+    // the one the client's own timer gives up at.
+    const deadline = Date.now() + budgets.budgetMs;
+    const req = request(deadline);
     const resp: Response = await sendOne(
       sock,
       { v: PROTOCOL_VERSION, ...req },
-      budgets.budgetMs,
+      deadline,
     );
     return interpretResponse(req.kind, resp, project);
   } catch (e) {

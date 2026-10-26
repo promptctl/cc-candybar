@@ -115,7 +115,6 @@ function markers(relPath, patterns, description) {
 // --- the mirrored set -----------------------------------------------------
 
 const TS_PROTOCOL = "src/daemon/protocol.ts";
-const TS_CLIENT = "src/daemon/client.ts";
 const TS_CLIENT_HINTS = "src/client-hints.ts";
 const TS_CLI_FLAGS = "src/cli-flags.ts";
 const TS_TMUX_HINT = "src/tmux-hint.ts";
@@ -276,7 +275,7 @@ const CHECKS = [
   },
   {
     label: "connect timeout (ms)",
-    ts: num(TS_CLIENT, /const CONNECT_TIMEOUT_MS = ([\d\s*]+);/),
+    ts: num(TS_PROTOCOL, /const CONNECT_TIMEOUT_MS = ([\d\s*]+);/),
     rust: num(
       RS_MAIN,
       /const CONNECT_TIMEOUT: Duration = Duration::from_millis\(([\d\s*]+)\);/,
@@ -284,7 +283,7 @@ const CHECKS = [
   },
   {
     label: "total render budget (ms)",
-    ts: num(TS_CLIENT, /const TOTAL_BUDGET_MS = ([\d\s*]+);/),
+    ts: num(TS_PROTOCOL, /const TOTAL_BUDGET_MS = ([\d\s*]+);/),
     rust: num(
       RS_MAIN,
       /const TOTAL_BUDGET: Duration = Duration::from_millis\(([\d\s*]+)\);/,
@@ -315,6 +314,23 @@ const CHECKS = [
       RS_MAIN,
       /--- client hints[\s\S]+?--- end client hints ---/,
       /request\["(\w+)"\]/g,
+    ),
+  },
+  // The render request's own wire keys, the ones above its hints. A key the
+  // native client stops sending degrades the same silent way: a `deadline`
+  // spelled differently reads as a client too old to state one, and every
+  // answer waits by the guessed budget instead of its client's.
+  {
+    label: "render request wire keys",
+    ts: memberSet(
+      TS_PROTOCOL,
+      /export interface RenderRequest \{[\s\S]+?\/\/ ─── Client hints/,
+      /^ {2}(\w+)\??:/gm,
+    ),
+    rust: memberSet(
+      RS_MAIN,
+      /let mut request = serde_json::json!\(\{[\s\S]+?--- client hints/,
+      /(?:^ +"|request\[")(\w+)"(?::|\])/gm,
     ),
   },
   // What the native client says it is: the field names of the `client` hint.

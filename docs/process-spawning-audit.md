@@ -131,7 +131,7 @@ These are timers that can drive subprocess work over time:
 | Site | Cadence | What it does |
 |---|---|---|
 | `src/daemon/server.ts:armBinaryWatch` (`BIN_CHECK_INTERVAL_MS = 60s`) | every 60s | `statSync` the daemon binary; if mtime changed → `shutdown(0)`. No spawn directly; but a rebuild that changes the bundle triggers the dies-and-respawns cycle. |
-| `src/daemon/limits.ts:arm` (`DEFAULT_CHECK_INTERVAL = 60s`) | every 60s | Sample RSS; if > 512MB (default; override via `CC_CANDYBAR_RSS_LIMIT_MB`) → heap snapshot + `shutdown(0)`. |
+| `src/daemon/limits.ts:arm` (`DEFAULT_CHECK_INTERVAL = 60s`) | every 60s | Sample RSS; if over the limit (1024MB by default; override via `CC_CANDYBAR_RSS_LIMIT_MB`) → heap snapshot + `shutdown(0)`. |
 | `src/daemon/cache/git.ts:runSanityCheck` (`SANITY_INTERVAL_MS = 5min`) | every 5min | mtime walk of cached `gitDir`s; invalidates entries where the watcher missed a change. Drives a refresh that may spawn `git` per active subscriber. |
 | `src/var-system/sources.ts` (TTL bucket) | per-bucket | One `setInterval` per unique TTL duration, shared across variables. Drives `declareShell` / `declareFile` refreshes (a `time` variable has no timer: it reads the instant each render publishes). **No `unref()`** — see **F8**. |
 
@@ -261,13 +261,13 @@ old; each holds an `unix` fd on the (now-unlinked) socket path.
 **Where:** `src/daemon/limits.ts` ("Only the RSS trigger remains — idle
 and age limits were removed because they interrupted active sessions").
 
-**Effect:** The daemon lives forever modulo a 512MB RSS hit. `CLAUDE.md`
+**Effect:** The daemon lives forever modulo a 1024MB memory-limit hit. `CLAUDE.md`
 still claims "Idle-shutdown after 30 min; hard limits in
 `src/daemon/limits.ts` (200 MB RSS → heap snapshot then exit; 24 h age → exit)"
 (`CLAUDE.md` "Daemon" section). All three numbers are wrong:
 
 - Idle shutdown: removed.
-- RSS: now 512MB, not 200MB.
+- RSS: now 1024MB, not 200MB.
 - 24h age: removed.
 
 When combined with **F2**, a daemon that ever fails to die from a normal

@@ -15,7 +15,7 @@
 import { isConfirmKey } from "../config/confirm-step";
 import { isSettingKey } from "./settings-history";
 import { UPDATE_DISMISSED_KEY } from "./update-notice";
-import { runInAction } from "mobx";
+import { observable, runInAction } from "mobx";
 import { recordingView, type SessionStateRW } from "./session-state";
 import type { Gate } from "./verbs/validator-registry";
 import { BadVerbArgs } from "./verb-error";
@@ -47,7 +47,12 @@ export interface NavigationJournal {
 }
 
 export class NavigationHistory {
-  private past: Map<string, readonly NavigationStep[]> = new Map();
+  // Observable, so a view's payload over a session's depth (`◁`) is
+  // recomputed in the turn a step lands.
+  private readonly past = observable.map<string, readonly NavigationStep[]>(
+    undefined,
+    { deep: false },
+  );
 
   // [LAW:one-source-of-truth] How many clicks on `◁` restore something — the
   // walk `back` itself makes, so the count cannot promise a step it discards.
@@ -159,10 +164,12 @@ export class NavigationHistory {
 
   // Move-to-end keeps insertion order as recency.
   private put(sessionId: string, steps: readonly NavigationStep[]): void {
-    this.past.delete(sessionId);
-    if (steps.length > 0) this.past.set(sessionId, steps);
-    while (this.past.size > MAX_SESSIONS) {
-      this.past.delete(this.past.keys().next().value!);
-    }
+    runInAction(() => {
+      this.past.delete(sessionId);
+      if (steps.length > 0) this.past.set(sessionId, steps);
+      while (this.past.size > MAX_SESSIONS) {
+        this.past.delete(this.past.keys().next().value!);
+      }
+    });
   }
 }

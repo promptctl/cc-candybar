@@ -49,6 +49,7 @@ import { sendDaemonRequest } from "./helpers/daemon-wire";
 import { links } from "./helpers/ansi";
 import { HANDOFF_BUTTON } from "../src/daemon/lane-handoff";
 import { until } from "./helpers/until";
+import { renderLines } from "./helpers/daemon-log";
 import {
   effectsUrl,
   VERB_LOAD_CONFIG,
@@ -96,6 +97,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   let sockPath: string;
   let removeTmpDirs: () => void;
   let daemonLog: string;
+  let env: NodeJS.ProcessEnv;
   let projectDir: string;
   let daemon: RunningDaemon | undefined;
 
@@ -189,7 +191,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
 
   beforeAll(async () => {
     const prepared = prepareIsolatedDaemonEnv("cc-candybar-feed-e2e");
-    ({ sockPath, removeTmpDirs } = prepared);
+    ({ sockPath, removeTmpDirs, env } = prepared);
     daemonLog = path.join(prepared.env.XDG_STATE_HOME!, "cc-candybar", "daemon.log");
     projectDir = mkdtempSync(path.join(os.tmpdir(), "cc-candybar-feed-e2e-"));
     for (const [name, text] of Object.entries(CONFIGS))
@@ -256,9 +258,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       await sleep(1000);
       await render(sockPath, "feed-rate", projectDir, {}, args("turning"));
     });
-    const events = readFileSync(daemonLog, "utf8")
-      .split("\n")
-      .filter((l) => l.includes("render sid=feed-rate "));
+    const events = await renderLines(env, "feed-rate", 2);
     expect(events[0]).toContain(" feeds=- ");
     const fps = /feeds=statusline:1sub\/(\d+)fps\/shown /u.exec(events.at(-1)!);
     expect(fps).not.toBeNull();
@@ -425,11 +425,11 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     );
   });
 
-  // What a lane runs follows the session's own moves of its switch. Another
+  // What a lane runs follows the session's own clicks on its switch. Another
   // session's save to a file both read moves this session's switch too, and
-  // its next render — which rewrites what its client reported — starts
-  // nothing: setting up a lane there would restart every idle Claude Code
-  // reading that file for one session's save.
+  // nothing — its renders included — sets it up: setting up a lane there
+  // would restart every idle Claude Code reading that file for one session's
+  // save.
   test("a switch moved only by the file starts no lane setup, until the session moves it itself", async () => {
     const sid = "feed-file-lane";
     const file = path.join(projectDir, "fileLane.json5");
@@ -442,10 +442,9 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       await render(sockPath, sid, projectDir, { termCols: cols }, args("fileLane"));
     }
     await render(sockPath, sid, projectDir, { termCols: 20 }, args("fileLane"));
-    // The session moves the switch itself: its setup runs, and it is the
-    // only one this session's log holds.
+    // The session moves the switch itself: its click sets it up, with no
+    // request after it, and it is the only setup this session's log holds.
     await setState(sid, "experimentalBand", "false");
-    await render(sockPath, sid, projectDir, { termCols: 21 }, args("fileLane"));
     await until(() => laneLines(sid).length > 0, "the session's own move's setup");
     expect(laneLines(sid)).toEqual([expect.stringContaining("lane: band off")]);
   });

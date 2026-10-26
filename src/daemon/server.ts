@@ -99,7 +99,6 @@ import {
   sessionRenderOrigin,
   type RenderOrigin,
 } from "./verbs";
-import { settingCounts } from "./setting-drafts";
 import { validateHookData } from "../utils/schema-validator.js";
 import { transcriptReads } from "../utils/transcript-fs.js";
 import { fileStores, productionEdge, readStores } from "../doctor/edge";
@@ -122,25 +121,22 @@ import { drawDsl, type RenderWarning } from "../dsl/render.js";
 import type { DrawnMotion } from "../render/drawn-motion.js";
 import {
   renderStripCells,
-  DEFAULT_TERMINAL_WIDTH,
   type BuildLineOptions,
   type ColorCompatibility,
 } from "../render/strip.js";
-import { applyClaudeCodeReserve } from "../utils/terminal-width.js";
 import { floorOf } from "../config/globals-fields.js";
 import type { RichText } from "@promptctl/rich-js";
 import {
-  buildRenderPayload,
   declareLanes,
-  payloadOf,
   renderOptionsOf,
+  renderWidth,
   gitOptionsFromClosure,
   prFactOf,
-  type DrawInputs,
-  type DrawnPayload,
+  settlePayload,
+  todayOf,
   type PayloadInputs,
-  type RenderPayloadDeps,
 } from "./render-payload.js";
+import { sessionSource, type SessionSource } from "./session-source.js";
 import { isPending } from "../utils/outcome.js";
 import {
   laneSwitches,
@@ -182,7 +178,7 @@ import { reaction } from "mobx";
 import { setImmediate } from "node:timers";
 import type { RenderedLine } from "../dsl/node-registry.js";
 import { productionClaudeInputEdge } from "../claude-input/edge.js";
-import { LaneSetups } from "./lane-setup.js";
+import { LaneSetups, type LaneSession } from "./lane-setup.js";
 import { productionLaneEdge } from "./lane-edge.js";
 import { handedOffTo, laneHandoff } from "./lane-handoff.js";
 import {
@@ -198,6 +194,13 @@ import {
 import { DiagnosticDump } from "./diagnostic-dump.js";
 import { instantOf, type Instant } from "../utils/instant.js";
 import { MenuIdle } from "./menu-idle.js";
+import {
+  REQUEST_TIMEOUT_MS,
+  parseClientDeadline,
+  waitBudgetMs,
+  type ClientDeadline,
+} from "./request-deadline.js";
+import { waitWithin } from "../utils/reading.js";
 import {
   noteFacts,
   renderEvent,
@@ -275,7 +278,8 @@ const menuIdle = new MenuIdle({
 // click in a tmux status line runs to hand the click back.
 const DAEMON_NODE: readonly string[] = [process.execPath, ...process.execArgv];
 // [LAW:single-enforcer] The one owner of what turning an animation lane on or
-// off takes (src/daemon/lane-setup.ts), told the switches every render draws by.
+// off takes (src/daemon/lane-setup.ts), told the switches each of a session's
+// clicks moved, and each request's arrival for the setups owed to it.
 const laneSetups = new LaneSetups({
   edge: productionLaneEdge((sessionId) => frameFeeds.following(sessionId)),
   // A bar pane runs this bundle under the node running it now, with the
@@ -378,13 +382,26 @@ function tmuxServersOf({
 // free; the daemon wipes it in onListening() (reset), once the bind is
 // won, and is the only writer.
 const diagnosticDump = new DiagnosticDump(diagnosticsDir());
-const renderCache = new RenderCache(
+const renderCache = new RenderCache<SessionSource>(
   {
     sessionState,
     watchers: watcherRegistry,
     log: dlog,
     declare: (holds, facts, closure) =>
       declareLanes(payloadProviders, holds, facts, closure),
+    // [LAW:single-enforcer] What every session's view draws from: its payload
+    // derived over its declaration, its picks and its histories' depths.
+    source: sessionSource({
+      // [LAW:single-enforcer] The providers carry `dlog` as `log`: the view's
+      // payload projects the outcome-carrying lanes' failures, which the
+      // request drawing it logs; git logs the refreshes it makes.
+      providers: payloadProviders,
+      sessionState,
+      history: (sessionId) => settingsHistory.depth(sessionId),
+      // Measured against the gate of the config the view draws with.
+      navigation: (sessionId, config) =>
+        navigationHistory.depth(sessionId, sessionState, stateGate(config)),
+    }),
   },
   {
     // [LAW:no-ambient-temporal-coupling] The budget as boot established it
@@ -409,7 +426,6 @@ const renderCache = new RenderCache(
   },
 );
 
-const REQUEST_TIMEOUT_MS = 200;
 // One cadence for "how often does the daemon look at its build on disk" —
 // the binary watch (exit on a changed bundle) and the update watch (does the
 // bundle match `src/`) both sample on it.
@@ -890,14 +906,17 @@ function shutdown(code: number): void {
       (p) => fs.unlinkSync(p),
     );
   }
-  // Every dlog above was a synchronous append (log.ts), so the death line is
-  // already on disk; nothing to flush before exit.
+  // The log writes every line still waiting as the process exits (log.ts), so
+  // the death line lands without a flush here.
   process.exit(code);
 }
 
 // --- per-connection handler ---
 
 function handleConnection(sock: net.Socket): void {
+  // [LAW:effects-at-boundaries] When the connection was accepted, on the
+  // monotonic clock: a render says how long it waited from here to begin.
+  const accepted = performance.now();
   inFlight++;
   stats.inFlight = inFlight;
   let responded = false;
@@ -979,7 +998,7 @@ function handleConnection(sock: net.Socket): void {
     respond(
       {
         ok: false,
-        error: "request exceeded 200ms",
+        error: `request exceeded ${REQUEST_TIMEOUT_MS}ms`,
         code: "TIMEOUT",
         daemonV: PROTOCOL_VERSION,
       },
@@ -990,7 +1009,7 @@ function handleConnection(sock: net.Socket): void {
 
   const reader = makeFrameReader(
     (frame) => {
-      void handleRequest(frame as Request, () => timedOut)
+      void handleRequest(frame as Request, () => timedOut, accepted)
         .then((r) =>
           r.kind === "reply"
             ? respond(r.resp, r.exitAfterFlush, r.delivered)
@@ -1150,6 +1169,7 @@ function subscription(req: SubscribeRequest): HandledRequest {
 export async function handleRequest(
   req: Request,
   timedOut: () => boolean,
+  accepted: number,
 ): Promise<HandledRequest> {
   if (
     !req ||
@@ -1202,7 +1222,7 @@ export async function handleRequest(
   // kinds it is typed for.
   if (typeof req.kind !== "string" || !Object.hasOwn(REPLY_KINDS, req.kind))
     return refuse("BAD_REQUEST", "unknown kind");
-  return replied(await replyTo(req, timedOut));
+  return replied(await replyTo(req, timedOut, accepted));
 }
 
 // The reply to a request of any kind but a subscribe, past the connection's
@@ -1210,6 +1230,7 @@ export async function handleRequest(
 export async function replyTo(
   req: ReplyRequest,
   timedOut: () => boolean,
+  accepted: number,
 ): Promise<Reply> {
   if (req.kind === "shutdown") {
     return {
@@ -1279,12 +1300,14 @@ export async function replyTo(
   }
 
   if (req.kind === "render") {
-    // [LAW:effects-at-boundaries] The one clock read of a render request: the
-    // instant the bar is drawn at (every time read in the render reads it) and
-    // the start its duration is measured from.
+    // [LAW:effects-at-boundaries] The render request's two clock reads: the
+    // instant the bar is drawn at (every time read in the render reads it),
+    // and the monotonic start its wait and duration are measured from, so a
+    // clock stepped meanwhile moves neither.
     const started = new Date();
     const at = instantOf(started);
-    const t0 = started.getTime();
+    const t0 = performance.now();
+    const queuedMs = Math.round(t0 - accepted);
     // [LAW:nothing-unseen] One render event per render request, written here
     // on every exit — a refusal and a throw included — from the facts the
     // render reached, so a failing render is described like any other.
@@ -1326,13 +1349,29 @@ export async function replyTo(
       // (src/daemon/frame-feed.ts).
       frameFeeds.note(checked.req.hookData.session_id, checked.req, order);
     }
+    // [LAW:no-ambient-temporal-coupling] When the request's wait ends, fixed
+    // at its arrival: early enough before its client hangs up to draw
+    // (src/daemon/request-deadline.ts).
+    const waitFor = (req: CheckedRenderRequest): RequestWait => {
+      const ms = waitBudgetMs(req.deadline, accepted, {
+        epochMs: started.getTime(),
+        monoMs: t0,
+      });
+      return { stated: req.deadline.kind, ms, endsAt: t0 + ms };
+    };
     const rendered: {
       outcome: RenderOutcome;
       resp: Response;
       delivered: () => void;
     } = !checked.ok
       ? refusedRender(checked.problems)
-      : await answerRequest(checked.req, order, at, facts).then(
+      : await answerRequest(
+          checked.req,
+          order,
+          at,
+          waitFor(checked.req),
+          facts,
+        ).then(
           ({ answer, motion, clickShown }) => {
             sighted(checked.req, motion);
             return {
@@ -1362,12 +1401,19 @@ export async function replyTo(
           },
         );
     if (rendered.outcome.kind !== "ok") stats.requestsErrored++;
-    // Whether the client was already told TIMEOUT while this render ran on.
-    noteFacts(facts, { timedOut: timedOut() ? "Y" : "N" });
+    // Whether the client was already told TIMEOUT while this render ran on,
+    // and how long the request was queued, from the connection's accept,
+    // before it began: the daemon's own delay and the client's sending of its
+    // frame both count, so a round trip longer than `took` is time spent
+    // there.
+    noteFacts(facts, {
+      timedOut: timedOut() ? "Y" : "N",
+      queued: `${queuedMs}ms`,
+    });
     const { level, line } = renderEvent(
       facts,
       rendered.outcome,
-      Date.now() - t0,
+      Math.round(performance.now() - t0),
     );
     dlog(level, line);
     return {
@@ -1564,6 +1610,7 @@ const verbCtx = {
       origin.cwd,
       origin.configFile ?? undefined,
     ),
+  lanes: { of: lanesAt, clicked: laneClicked },
 };
 
 /**
@@ -1616,17 +1663,6 @@ function serializeSegmentCells(
   }
   return out;
 }
-
-// [LAW:single-enforcer] The payload-builder dependency bundle. One value
-// passed through every render — the data the daemon brings to each tick.
-const payloadDeps: Omit<RenderPayloadDeps, "navigation" | "lanes"> = {
-  // [LAW:single-enforcer] The providers carry `dlog` as `log`:
-  // buildRenderPayload is the one log site for the outcome-carrying provider
-  // lanes read per render (cache, …); git logs the refreshes it makes.
-  ...payloadProviders,
-  history: (sessionId: string) => settingsHistory.depth(sessionId),
-  feeds: (sessionId: string, at: Instant) => frameFeeds.feedsOf(sessionId, at),
-};
 
 function handleClick(
   verb: string,
@@ -1709,19 +1745,18 @@ function statusLineClick(value: string): Response {
 // request writes, for the feed to log when that failure is first pushed; the
 // feed summarizes the frames that render.
 // [LAW:effects-at-boundaries] Synchronous by type: a frame reads every value
-// as its owner stored it (`payloadOf`), so it performs no I/O and refreshes no
-// source — the request it is drawn from made those refreshes.
+// as its owner stored it (the view's payload), so it performs no I/O and
+// refreshes no source — the request it is drawn from made those refreshes.
 function renderFrame(req: CheckedRenderRequest, fps: number): FeedFrame {
   const started = new Date();
   const at = instantOf(started);
   const facts: RenderFacts = [];
   try {
     using setup = setUpRender(req, at, facts);
-    const { drawn, motion, evaluated, lanes } = drawRender(
-      setup,
-      payloadOf(setup.payloadInputs, setup.drawInputs),
-      { by: "feed", fps },
-    );
+    const { drawn, motion, evaluated, lanes } = drawRender(setup, {
+      by: "feed",
+      fps,
+    });
     // [LAW:effects-at-boundaries] A frame only draws: the dump is the
     // session's requests' to write, and the frame links it only when it holds
     // this frame's text.
@@ -1789,7 +1824,15 @@ function sessionGlobals(
 // its session's picks.
 function lanesOf(req: CheckedRenderRequest): LaneSwitches {
   const sessionId = req.hookData.session_id;
-  const origin = sessionRenderOrigin(req.requested, sessionState, sessionId);
+  return lanesAt(
+    sessionRenderOrigin(req.requested, sessionState, sessionId),
+    sessionId,
+  );
+}
+
+// The lanes `sessionId`'s settings switch on over the config `origin`
+// resolves to, as the render cache holds it.
+function lanesAt(origin: RenderOrigin, sessionId: string): LaneSwitches {
   using hold = renderCache.hold(
     origin.projectDir,
     origin.cwd,
@@ -1802,12 +1845,13 @@ function lanesOf(req: CheckedRenderRequest): LaneSwitches {
 // required field with its declared type, its cwd is absolute, `hints` is its
 // client hints, parsed, and its args are parsed into `requested` — the config
 // inputs it named, its explicit path the `--config` flag over the client's
-// `CC_CANDYBAR_CONFIG` hint — and `refusedArgs`, and `rateLimits` is
-// what its hookData says of the rate-limit windows. Raw `req.*` hint
-// fields and `req.args` are not read past the checkpoint. Only
-// checkRenderRequest makes one.
+// `CC_CANDYBAR_CONFIG` hint — and `refusedArgs`, `rateLimits` is
+// what its hookData says of the rate-limit windows, and `deadline` is when its
+// client hangs up. Raw `req.*` hint fields and `req.args` are not read past
+// the checkpoint. Only checkRenderRequest makes one.
 declare const CHECKED: unique symbol;
-type CheckedRenderRequest = RenderRequest & {
+type CheckedRenderRequest = Omit<RenderRequest, "deadline"> & {
+  readonly deadline: ClientDeadline;
   readonly hints: ClientHints;
   readonly rateLimits: RateLimitsSeen;
   readonly requested: RenderOrigin;
@@ -1875,6 +1919,11 @@ function checkRenderRequest(
       `request 'args' is not a list of strings: ${JSON.stringify(req.args)}`,
     );
   }
+  const deadline = parseClientDeadline(
+    (req as { deadline?: unknown }).deadline,
+  );
+  if (deadline.kind === "refused")
+    return { ok: false, problems: [...wireProblems, deadline.problem] };
   if (wireProblems.length > 0) return { ok: false, problems: wireProblems };
   const hints = parseClientHints(req);
   // [LAW:dataflow-not-control-flow] The *request's* cwd, not the daemon's
@@ -1885,6 +1934,7 @@ function checkRenderRequest(
     ok: true,
     req: {
       ...req,
+      deadline,
       hints,
       rateLimits: rateLimitsSeen(req.hookData),
       requested: {
@@ -1921,14 +1971,10 @@ interface RenderSetup extends Disposable {
   readonly sessionId: string;
   readonly entry: CacheEntry;
   readonly state: DslRenderState;
-  readonly view: SessionView;
-  readonly width: number;
-  readonly rowCap: number;
-  readonly effective: EffectiveGlobals;
-  readonly lanes: LaneSwitches;
+  readonly view: SessionView<SessionSource>;
   readonly hintsError: string | null;
+  // What the request's refresh and wait read (settlePayload).
   readonly payloadInputs: PayloadInputs;
-  readonly drawInputs: DrawInputs;
 }
 
 function setUpRender(
@@ -1950,10 +1996,6 @@ function setUpRender(
   // spawned it. We do NOT consult getTerminalWidth's env/stderr fallbacks
   // for width, and we do NOT consult SSH_* for remoteness — both would
   // describe a different session than the one being rendered.
-  // [LAW:one-source-of-truth] Both branches feed raw cols through
-  // applyClaudeCodeReserve, so `width` always means "usable cells
-  // post-reserve" with no semantic split between wire-supplied and
-  // fallback values.
   const hints = req.hints;
   const refused = refusedHints(req, hints);
   const hintsError = refusedHintsError(refused);
@@ -1992,73 +2034,24 @@ function setUpRender(
   );
   try {
     const { entry, state, view } = hold;
-    const termCols = hints.termCols;
-    const width = applyClaudeCodeReserve(termCols ?? DEFAULT_TERMINAL_WIDTH);
-    const rowCap = diagnosticRowCap(hints.termRows);
-    noteFacts(facts, { width: String(width) });
     // [LAW:dataflow-not-control-flow] One composition every render: the
     // entry always holds a renderable state (the bundled default until a
     // config loads — src/daemon/cache/render.ts), so body = drawDsl(state)
     // and output = diagnostics + body, with no "did the config load" branch.
-    // [LAW:one-source-of-truth] Every globals field resolved ONCE per
-    // render, here — before the payload build, so the same struct feeds
-    // BOTH the payload's `*.effective` fields (what a trigger label says)
-    // AND renderOpts below (what actually renders). One resolution, two
-    // readers, so a label can never disagree with the bar. The precedence
-    // the resolver applies, and why each rung sits where it does, lives
-    // with the chain (resolveEffectiveGlobals, and src/config/presets.ts).
-    const sessionPick = (key: string): string | null =>
-      sessionState.get(req.hookData.session_id, key);
-    const effective: EffectiveGlobals = sessionGlobals(sessionId, state);
-    // Which animation lanes this session's settings switch on.
-    const lanes = laneSwitches(effective);
-    noteFacts(facts, {
-      lanes: LANE_NAMES.filter((lane) => lanes[lane]).join(",") || "-",
-    });
-    // [LAW:dataflow-not-control-flow] What a lane runs follows the switch every
-    // render draws by, as the session's own setting moves moved it
-    // (src/daemon/lane-setup.ts).
-    laneSetups.observe(
-      {
-        sessionId,
-        hints,
-        origin,
-        transcript: req.hookData.transcript_path,
-        answered: answeredOf(req.hookData),
-      },
-      lanes,
-      settingsHistory.revision(sessionId),
-    );
-    tmuxStatusLines.observe(sessionId, hints.tmux, lanes.tmuxStatus);
+    // The picks as the request arrived: what its refresh reads. The draw
+    // settles its own (drawRender).
+    const effective: EffectiveGlobals = view.source.effective();
     const payloadInputs: PayloadInputs = {
       hookData: req.hookData,
-      at,
       deps: {
-        ...payloadDeps,
+        ...payloadProviders,
         // The lanes the session's view declared: what this render reads of
         // the daemon's shared entries.
         lanes: view.lanes,
-        // Measured against the gate of the config this render draws with.
-        navigation: (sessionId: string) =>
-          navigationHistory.depth(
-            sessionId,
-            sessionState,
-            stateGate(state.config),
-          ),
       },
       cwd: req.cwd,
       neededInputPaths: state.neededInputPaths(effective.preset),
       hints,
-    };
-    const drawInputs: DrawInputs = {
-      effective,
-      configFacts: {
-        ...settingCounts(state.config, state.fileHeldSettings, sessionPick),
-        // The file the menu's saves and resets edit, once it exists.
-        configPath: entry.configLayers.includes(entry.configHome)
-          ? entry.configHome
-          : null,
-      },
     };
     return {
       req,
@@ -2068,13 +2061,8 @@ function setUpRender(
       entry,
       state,
       view,
-      width,
-      rowCap,
-      effective,
-      lanes,
       hintsError,
       payloadInputs,
-      drawInputs,
       [Symbol.dispose]: () => hold[Symbol.dispose](),
     };
   } catch (e) {
@@ -2090,7 +2078,6 @@ function setUpRender(
 // the caller's to record.
 function drawRender(
   setup: RenderSetup,
-  payload: DrawnPayload,
   drawing: Drawing,
 ): {
   drawn: DrawnBar;
@@ -2100,20 +2087,44 @@ function drawRender(
   // Which animation lanes the session's settings switch on, as drawn.
   lanes: LaneSwitches;
 } {
-  const {
-    req,
-    at,
-    facts,
-    sessionId,
-    entry,
-    state,
-    view,
-    width,
-    rowCap,
-    effective,
-    lanes,
-    hintsError,
-  } = setup;
+  const { req, at, facts, sessionId, entry, state, view, hintsError } = setup;
+  // [LAW:no-ambient-temporal-coupling] The picks this draw settles in its own
+  // turn, the one its slots and payload are read in: a pick that moved during
+  // a request's wait is drawn as one snapshot of the new one.
+  // [LAW:one-source-of-truth] Every globals field as the session's view
+  // resolved it (src/daemon/session-source.ts) — the same struct its
+  // payload's `*.effective` fields (what a trigger label says) are read
+  // from, and renderOpts below (what actually renders). One resolution, two
+  // readers, so a label can never disagree with the bar. The precedence
+  // the resolver applies, and why each rung sits where it does, lives
+  // with the chain (resolveEffectiveGlobals, and src/config/presets.ts).
+  const effective = view.source.effective();
+  // Which animation lanes this session's settings switch on, as drawn.
+  const lanes = laneSwitches(effective);
+  noteFacts(facts, {
+    lanes: LANE_NAMES.filter((lane) => lanes[lane]).join(",") || "-",
+  });
+  // [LAW:one-source-of-truth] The width is `renderWidth` of the hints the
+  // view draws by — the client's cols, else the default, less Claude Code's
+  // reserve — the same request its payload carries as `term.cols`.
+  const { hints } = view.facts();
+  const width = renderWidth(hints);
+  const rowCap = diagnosticRowCap(hints.termRows);
+  noteFacts(facts, { width: String(width) });
+  // [LAW:one-source-of-truth] What the view keeps, and the facts of this
+  // draw's own instant (DRAW_PROJECTIONS): who it is for, the frames each
+  // lane was sent in the second up to it, and the day `today` sums.
+  const payload = view.source.payload();
+  const projected = {
+    drawing,
+    feeds: frameFeeds.feedsOf(sessionId, at),
+    today: todayOf(
+      payloadProviders,
+      view.lanes().today,
+      view.facts().hookData,
+      at,
+    ),
+  };
   const metrics = isPending(payload.metrics) ? undefined : payload.metrics;
   noteFacts(facts, {
     prompts: String(metrics?.messageCount ?? "-"),
@@ -2123,7 +2134,7 @@ function drawRender(
       gitOptionsFromClosure(setup.payloadInputs.neededInputPaths)
         .showPullRequest === true,
     ),
-    feeds: feedsFact(payload.feeds),
+    feeds: feedsFact(projected.feeds),
   });
   // [LAW:no-silent-failure] What renderDsl had to settle for itself and could
   // not honour (`RenderWarning`). Collected per render into a local, so there
@@ -2139,24 +2150,19 @@ function drawRender(
   const renderOpts = renderOptionsOf(effective, width);
   const effects = effectSessions.of(sessionId);
   const idleSince = menuIdle.since(sessionId, at);
-  // [LAW:single-enforcer] renderDsl internally calls
-  // `registry.applyInput(payload)` as its first step (see step 1 in
-  // src/dsl/render.ts). The daemon must not pre-apply — doing so
-  // would run the MobX action twice per render and clear last_error
-  // diagnostics on the round trip.
+  // [LAW:single-enforcer] The view's inputs read its source (`bindView`, at
+  // its opening): the draw hands only its own instant's facts.
   const frame = drawDsl(
     state.config,
     state.compiled,
     view.store,
     view.registry,
-    // [LAW:one-source-of-truth] Who the render is for is the render's own
-    // fact, beside what the providers assembled.
-    { ...payload, drawing },
+    projected,
     at,
     renderOpts,
     // [LAW:single-enforcer] The per-segment StripCell sink for the
     // `debug segments` projection. Its identity stays stable for the
-    // view's lifetime; renderDsl clears + repopulates it
+    // view's lifetime; drawDsl clears + repopulates it
     // in place. Cells are cheap (already computed during the render);
     // the per-segment ANSI serialization happens lazily inside the
     // debug handler so normal renders pay no extra serializer cost.
@@ -2164,10 +2170,10 @@ function drawRender(
       perSegmentSink: view.lastRenderCellsBySegment,
       onRenderWarning: (warning) => renderWarnings.push(warning),
     },
-    // [LAW:one-source-of-truth] The theme crosses as the SELECTION, palette
-    // and name together, so renderDsl publishes the `theme.effective` the
-    // bar was actually painted from. No separate basePalette argument: one
-    // would be a second clock free to disagree with that name.
+    // [LAW:one-source-of-truth] The draw's own settings and the session's
+    // effect memory. The theme, style and effect are not among them: the
+    // view's slots settle those names (src/dsl/parts.ts), the same ones its
+    // payload's `.effective` fields read.
     { ...effective, effects, idleSince },
   );
   // What this frame drew is what the session's close timer follows.
@@ -2276,6 +2282,10 @@ function drawRender(
     evaluated: String(frame.evaluated),
     // The sources it drew as not answered yet; `-` for none.
     pending: frame.pending.join(",") || "-",
+    // Each globals rule in force, as its slot settled it: `kept` outside the
+    // draw, `per-draw` at this frame's instant; `-` for none.
+    rules:
+      [...frame.rules].map(([slot, how]) => `${slot}:${how}`).join(",") || "-",
     err: combinedError ? "Y" : "N",
     clickError: clickHold.kind === "none" ? "-" : clickHold.kind,
     upd: String(updates.length),
@@ -2381,49 +2391,132 @@ async function answerRequest(
   req: CheckedRenderRequest,
   order: number,
   at: Instant,
+  wait: RequestWait,
   facts: RenderFacts,
 ): Promise<RequestAnswer> {
   recordRequest(req);
   try {
-    return await drawAnswer(req, order, at, facts);
+    return await drawAnswer(req, order, at, wait, facts);
   } finally {
     // [LAW:no-ambient-temporal-coupling] A followed session's next frame is
-    // drawn once this request has settled — its refreshes landed and its own
-    // bar drawn, or its failure thrown — so the frame shows what the request
-    // carried, at an instant after it, and a request that fails leaves no
-    // feed waiting on it. Deferred, so the frame's draw is never a cost of
+    // drawn once this request has been answered — its own bar drawn, by its
+    // client's deadline, or its failure thrown — so the frame shows what the
+    // request carried, at an instant after it, and a request that fails
+    // leaves no feed waiting on it. Deferred, so the frame's draw is never a cost of
     // the request's own answer.
     const sessionId = req.hookData.session_id;
     setImmediate(() => frameFeeds.wake(sessionId));
   }
 }
 
+// [LAW:effects-at-boundaries] What a request's arrival starts beyond its
+// own answer, in its arrival turn, by the lanes its session's settings switch
+// on as it arrived: the setups its session's clicks owe
+// (src/daemon/lane-setup.ts), and the tmux status line its switch and pane
+// hold (src/daemon/tmux-status.ts) — held again here after `answered`
+// released it, and by nothing between requests, so a status line another
+// session's save turned off is never re-taken from a remembered switch. No
+// draw starts either.
+function arrived(req: CheckedRenderRequest, lanes: LaneSwitches): void {
+  laneSetups.noted(laneSessionOf(req), lanes);
+  tmuxStatusLines.observe(
+    req.hookData.session_id,
+    req.hints.tmux,
+    lanes.tmuxStatus,
+  );
+}
+
+// [LAW:one-source-of-truth] A session as a lane's setup needs it: what its
+// request `req` reported, and the config inputs it renders from now.
+function laneSessionOf(req: CheckedRenderRequest): LaneSession {
+  const sessionId = req.hookData.session_id;
+  return {
+    sessionId,
+    hints: req.hints,
+    origin: sessionRenderOrigin(req.requested, sessionState, sessionId),
+    transcript: req.hookData.transcript_path,
+    answered: answeredOf(req.hookData),
+  };
+}
+
+// What follows a click of `sessionId` that found its lane switches at
+// `before` and left them at `after`: each lane it moved is set up for the
+// session as its latest request reported it, or owed to its first request;
+// and a tmux status line switch it moved is followed in the pane that request
+// reported. A click that left that switch alone holds nothing: the pane is
+// only remembered, and `answered` may have released it to the session that
+// took it since.
+function laneClicked(
+  sessionId: string,
+  before: LaneSwitches,
+  after: LaneSwitches,
+): void {
+  const latest = frameFeeds.latest(sessionId);
+  laneSetups.clicked(
+    sessionId,
+    latest === null ? null : laneSessionOf(latest),
+    before,
+    after,
+  );
+  if (latest !== null && before.tmuxStatus !== after.tmuxStatus)
+    tmuxStatusLines.observe(sessionId, latest.hints.tmux, after.tmuxStatus);
+}
+
+// A request's wait, fixed at its arrival: whether its client stated its
+// deadline, the milliseconds the wait had then, and when it ends, on the
+// monotonic clock. Both, because the render notes the first on its event
+// after the session's id leads it, and has no arrival instant to derive it.
+interface RequestWait {
+  readonly stated: ClientDeadline["kind"];
+  readonly ms: number;
+  readonly endsAt: number;
+}
+
 async function drawAnswer(
   req: CheckedRenderRequest,
   order: number,
   at: Instant,
+  wait: RequestWait,
   facts: RenderFacts,
 ): Promise<RequestAnswer> {
   using setup = setUpRender(req, at, facts);
-  const { payloadInputs: inputs, drawInputs: draw } = setup;
-  // Rule 1 of the model: the answer shows what this request carried, so it
-  // waits for the refreshes its arrival triggers — and for the first value of
-  // every keyed source its draw reads — before it draws.
-  const payload = await buildRenderPayload(
-    inputs.hookData,
-    inputs.at,
-    inputs.deps,
-    inputs.cwd,
-    inputs.neededInputPaths,
-    draw.effective,
-    inputs.hints,
-    draw.configFacts,
+  arrived(req, laneSwitches(setup.view.source.effective()));
+  noteFacts(facts, { deadline: `${wait.stated}:${wait.ms}ms` });
+  // Rules 1 and 2 of the model: the answer shows what this request carried,
+  // so it waits for the refreshes its arrival triggers, the first value of
+  // every keyed lane its view declared, and every run of its view's or its
+  // directory's sources that answers a new key — a first value, or a key its
+  // fields moved — until its client's deadline. What has not
+  // answered by then draws as pending, and lands for the next frame.
+  const waitFrom = performance.now();
+  const ended = await waitWithin(
+    (signal) =>
+      Promise.all([
+        settlePayload(setup.payloadInputs, at),
+        setup.view.registry.inFlight(signal),
+      ]),
+    wait.endsAt - waitFrom,
+    // [LAW:no-silent-failure] The answer is drawn; a wait that fails after
+    // it is a bug, said against the session, never one that ends the daemon.
+    (e) =>
+      dlog(
+        "error",
+        `render wait failed after its deadline sid=${JSON.stringify(setup.sessionId)}: ${inspect(e)}`,
+      ),
   );
-  const { drawn, motion, clickShown, lanes } = drawRender(
-    setup,
-    payload,
-    ANSWERING,
-  );
+  // [LAW:nothing-unseen] How the wait went, on the render event: an answer
+  // drawn with values pending says so by name.
+  const drawFrom = performance.now();
+  noteFacts(facts, {
+    waited: `${Math.round(drawFrom - waitFrom)}ms`,
+    ended,
+  });
+  // [LAW:no-silent-failure] Each lane the view's payload projected as a
+  // missing field, once per request: a frame draws the same payload and
+  // logs nothing of it.
+  for (const f of setup.view.source.failures())
+    dlog("warn", `provider fetch failed: ${f}`);
+  const { drawn, motion, clickShown, lanes } = drawRender(setup, ANSWERING);
   const { link, failure } = diagnosticDump.sync(
     req.hookData.session_id,
     order,
@@ -2441,9 +2534,12 @@ async function drawAnswer(
   // A `frames` display draws the bar itself; Claude Code's statusline hands
   // it to the lanes drawing it elsewhere.
   const toStatusline = roleOf(req.hints.client ?? null) === "statusline";
-  // [LAW:nothing-unseen] Which lanes the statusline handed the bar to.
+  // [LAW:nothing-unseen] Which lanes the statusline handed the bar to, and
+  // how long the turn after the wait took to make the answer — what the
+  // draw's reserve is held to (DRAW_RESERVE_MS).
   noteFacts(facts, {
     handoff: (toStatusline ? elsewhere : []).join(",") || "-",
+    drew: `${Math.round(performance.now() - drawFrom)}ms`,
   });
   return {
     answer: toStatusline ? statusline : output,

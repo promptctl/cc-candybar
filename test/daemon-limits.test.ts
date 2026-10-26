@@ -57,6 +57,9 @@ function makeDeps(rec: Recorder, overrides: Partial<LimitsDeps> = {}): LimitsDep
       rec.reportsWritten.push({ file, text });
       rec.existingFiles.push(file);
     },
+    writeLogNow: () => {
+      rec.order.push("write-log");
+    },
     writeHeapSnapshot: (file) => {
       rec.order.push("write-heap");
       rec.snapshotsWritten.push(file);
@@ -71,9 +74,14 @@ function makeDeps(rec: Recorder, overrides: Partial<LimitsDeps> = {}): LimitsDep
     },
     shutdown: (code) => rec.shutdownCalls.push(code),
     startedAtMs: rec.startedAtMs,
+    // The fixture's own limit: these tests judge readings against a limit they
+    // state, not whatever the shipped default is.
+    limitBytes: FIXTURE_LIMIT_MB * 1024 * 1024,
     ...overrides,
   };
 }
+
+const FIXTURE_LIMIT_MB = 512;
 
 function newRec(): Recorder {
   return {
@@ -214,7 +222,9 @@ describe("the breach records where the memory actually was", () => {
   test("the attribution is captured before the snapshot rewrites the state", async () => {
     const rec = newRec();
     await breach(rec);
-    expect(rec.order).toEqual(["capture", "write-report", "write-heap"]);
+    // What the log holds about the breach is on disk before the snapshot
+    // holds the loop.
+    expect(rec.order).toEqual(["capture", "write-report", "write-log", "write-heap"]);
   });
 
   // [LAW:no-silent-failure] One artifact failing must not cost the other: they
@@ -321,7 +331,7 @@ describe("heap snapshot rotation", () => {
 describe("describeNextRestart", () => {
   test("null before any reading, and when far from the limit", async () => {
     const rec = newRec();
-    rec.fakeRss = DEFAULT_RSS_LIMIT_MB * 0.8 * 1024 * 1024;
+    rec.fakeRss = FIXTURE_LIMIT_MB * 0.8 * 1024 * 1024;
     const limits = makeLimits(makeDeps(rec, { memoryCharge: async () => ({ kind: "charged", measure: "phys_footprint", bytes: 50 * 1024 * 1024 }) }));
     expect(limits.describeNextRestart()).toBeNull();
     await limits.check();

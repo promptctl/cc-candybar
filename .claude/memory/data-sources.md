@@ -4,7 +4,7 @@
 
 Each shared source has one owner that schedules its reads: git state, PR lookups, tmux pane names, memento's ceiling, today's transcript scans, the auto-compact setting and the cache expiry. A read returns the stored value, and only a value that has never been read is awaited. Refreshes come from triggers (a watch, a period), never from a render. A pushed frame does no I/O at all. It draws what the owners have stored.
 
-A render request waits for the first value of every keyed source it reads. A frame waits for nothing, and anything not answered yet is drawn as pending.
+A render request waits for what its arrival started: the refreshes it triggers, the first value of every keyed source its view declares, and every run of its session's or its directory's sources that answers a key the source has no answer under yet: a first value, or a key or dependency that moved. A period's or a watch's re-read is not waited for, since it keeps the answer it has standing, and another session may have started it. It waits only until its client's deadline, less what the draw needs, and whatever has not answered then is drawn as pending. The client states the deadline because only the client knows when it hangs up: the native client counts its budget from before it connects, the Node client from after, and under load the daemon reads a request late. A config's first request compiles in its arrival turn, and that compile can spend the whole deadline, so the first bar from a new directory or config can be mostly pending. A frame waits for nothing, and anything not answered yet is drawn as pending.
 
 ## Periods run only while something holds the key
 
@@ -26,7 +26,7 @@ The forge lookup is a separate source on the repo, and a git refresh never await
 
 A value is pending (not answered yet), absent (the domain has nothing), failed, or ok. Reading a pending value throws a pending signal. Every place that evaluates a template treats that signal as its own outcome, never as a failure. No error is recorded and no default is used, since a default stands in for a failure, not a wait. A pending placement draws loading cells laid out like the last frame drawn from the same source, so the bar doesn't reflow when the answer lands. A pending globals rule keeps the name it last settled on.
 
-An input variable stays pending until its view's first payload. Its default answers only a payload that lacks the path, not a missing payload. A cache policy reads its source when the value it keys on first answers, not at declaration, so a view's source reads once when the view opens.
+An input variable stays pending until its view's source is bound and answers its path. Its default answers only a payload that lacks the path, not a missing payload. A cache policy reads its source when the value it keys on first answers, not at declaration, so a view's source reads once when the view opens.
 
 ## Usage and today
 

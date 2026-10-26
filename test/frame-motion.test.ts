@@ -8,7 +8,7 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import {
   registerDslConfig,
-  drawDsl,
+  drawPayload,
 } from "../src/dsl/render";
 import type { DrawnMotion } from "../src/render/drawn-motion";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
@@ -35,7 +35,7 @@ function motionOf(
   const registry = new SourceRegistry(store, "", new SessionState());
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
   try {
-    return drawDsl(
+    return drawPayload(
       config,
       compiled,
       store,

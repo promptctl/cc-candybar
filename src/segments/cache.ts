@@ -21,6 +21,7 @@
 // boundary, the one place that logs it — there is no "0 means hidden"
 // ambiguity to defend against downstream, and no failure dressed as absence.
 
+import { ObservableLru } from "../utils/observable-lru.js";
 import {
   ABSENT,
   ok,
@@ -96,7 +97,9 @@ interface Known {
 // a request over an unchanged transcript, reads nothing — and a draw takes
 // the expiry as the last request left it.
 export class CacheExpiryProvider {
-  private readonly known = new Map<string, Known>();
+  // Observable, so a view's payload over an expiry is recomputed in the turn
+  // a new one is stored.
+  private readonly known = new ObservableLru<string, Known>(MAX_SESSIONS);
   // [LAW:no-silent-failure] Each read of the tail is one event, a failed one at
   // warn; an answer believed under its stamp reads nothing, and logs nothing.
   private readonly refreshes: Refreshes<"request">;
@@ -115,20 +118,18 @@ export class CacheExpiryProvider {
     // A stamp of "" is a transcript no stat could see, and a failure is no
     // answer about the stamp it was read at: both are read again, never
     // believed unchanged.
-    const outcome =
+    if (
       prior !== undefined &&
       stamp !== "" &&
       prior.stamp === stamp &&
       prior.outcome.kind !== "failed"
-        ? prior.outcome
-        : await this.read(sessionId, transcriptPath, stamp);
-    // LRU touch: re-inserting moves the session to the newest end.
-    this.known.delete(sessionId);
-    this.known.set(sessionId, { stamp, outcome });
-    for (const oldest of this.known.keys()) {
-      if (this.known.size <= MAX_SESSIONS) break;
-      this.known.delete(oldest);
+    ) {
+      // The answer stands: a use, which wakes no view reading it.
+      this.known.touch(sessionId);
+      return prior.outcome;
     }
+    const outcome = await this.read(sessionId, transcriptPath, stamp);
+    this.known.set(sessionId, { stamp, outcome });
     return outcome;
   }
 

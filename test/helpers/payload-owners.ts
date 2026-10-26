@@ -8,7 +8,7 @@
 // as on the real one; a request lane (session, today, speed, context, metrics,
 // activity, cache, autocompact) stores what its refresh's reader answered, and
 // a draw reads that back. So a test says what a lane answers, and the payload
-// reads it the way it reads the daemon's. `buildRenderPayload` below declares
+// reads it the way it reads the daemon's. `requestPayload` below declares
 // the lanes over the fakes as a view's declaration does.
 
 import type { Holds } from "../../src/utils/holds";
@@ -35,13 +35,23 @@ import {
 } from "../../src/utils/outcome";
 import { settledLane, type Current, type Lane } from "../../src/utils/reading";
 import {
-  buildRenderPayload as payloadOfRequest,
   declareLanes,
+  payloadOf,
+  settlePayload,
+  todayOf,
+  type ConfigFileFacts,
+  type DrawnPayload,
   type KeyedOwners,
+  type PayloadInputs,
   type RenderPayloadDeps,
 } from "../../src/daemon/render-payload";
+import type { EffectiveGlobals } from "../../src/config/effective-globals";
+import type { ClientHints } from "../../src/daemon/protocol";
+import { EMPTY_HISTORY_DEPTH } from "../../src/daemon/settings-history";
+import { UNFOLLOWED_FEEDS } from "../../src/config/lanes";
 import { Holds as HoldsClass } from "../../src/utils/holds";
 import { CacheExpiryProvider } from "../../src/segments/cache";
+import { RefreshFaults } from "../../src/daemon/refresh-faults";
 
 type Answer<T> = Outcome<T> | Promise<Outcome<T>>;
 
@@ -265,32 +275,59 @@ export function absentOwners() {
     tmuxService: fakeTmux(() => ABSENT),
     mementoProvider: fakeMemento(() => ABSENT),
     autoCompact: fakeAutoCompact(() => ABSENT),
+    faults: new RefreshFaults(),
   };
 }
 
-// A request's payload as the daemon builds one: the lanes declared over the
+// A request's payload as the daemon draws one: the lanes declared over the
 // owners at the request's facts and closure, as the session's view declares
-// them (brandon-unfiled-3248.8ro6, 4a), then the request itself. Same
-// signature as the real one, `lanes` supplied.
-export function requestPayload(
-  ...[hookData, at, deps, cwd, closure, ...rest]: Parameters<
-    typeof payloadOfRequest
-  >
-): ReturnType<typeof payloadOfRequest> {
+// them (brandon-unfiled-3248.8ro6, 4a), the request's refresh and wait
+// (settlePayload), then the view's payload as it stands (payloadOf) with the
+// draw's own projections beside it — `today` at `at`, no feeds. The failures
+// it projected are logged as the daemon's request logs them.
+export async function requestPayload(
+  hookData: ClaudeHookData,
+  at: Instant,
+  deps: Omit<RenderPayloadDeps, "lanes">,
+  cwd: string | undefined,
+  closure: ReadonlySet<string>,
+  effective: EffectiveGlobals,
+  hints: ClientHints,
+  configFacts: ConfigFileFacts,
+): Promise<DrawnPayload> {
   const { lanes } = declareLanes(
     deps as unknown as KeyedOwners,
     new HoldsClass(),
-    { hookData, cwd, hints: rest[1] },
+    { hookData, cwd, hints },
     closure,
   );
-  return payloadOfRequest(
+  const inputs: PayloadInputs = {
     hookData,
-    at,
-    { ...deps, lanes: () => lanes } as RenderPayloadDeps,
     cwd,
-    closure,
-    ...rest,
-  );
+    hints,
+    neededInputPaths: closure,
+    deps: { ...deps, lanes: () => lanes } as RenderPayloadDeps,
+  };
+  await settlePayload(inputs, at);
+  const { payload, failures } = payloadOf(inputs, {
+    effective,
+    configFacts,
+    history: EMPTY_HISTORY_DEPTH,
+    back: 0,
+  });
+  for (const f of failures) deps.log("warn", `provider fetch failed: ${f}`);
+  return {
+    ...payload,
+    feeds: UNFOLLOWED_FEEDS,
+    today: todayOf(deps, lanes.today, hookData, at),
+  };
+}
+
+// A field of a request's payload, which its wait answered: a request draws
+// once every lane it waits on has landed, so one still pending is a bug.
+export function settled<T>(value: T | typeof PENDING): T {
+  if (value === PENDING) throw new Error("pending after the request settled");
+  return value as T;
 }
 
 // The lanes a view declared at `facts` over `owners` and every lane read, for

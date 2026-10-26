@@ -228,7 +228,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     },
     version: { kind: "input", path: "version", default: "" },
 
-    // home flows through the augmented payload (buildRenderPayload reads
+    // home flows through the augmented payload (payloadOf reads
     // HOME, falling back to USERPROFILE on Windows where HOME is often
     // unset). Sourcing via `kind: "input"` rather than `kind: "env",
     // name: "HOME"` makes the directory `~` collapse work on every

@@ -12,7 +12,7 @@ import { VERBS } from "../src/daemon/verbs";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import { parseHandlerUrl } from "../src/install/index";
 import {
-  drawDsl,
+  drawPayload,
   registerDslConfig,
   type DrawnFrame,
   type RenderWarning,
@@ -49,7 +49,7 @@ function viewOf(config: ValidatedConfig, sessionState = new SessionState()) {
     opts: typeof OPTS = OPTS,
     selection = resolveEffectiveGlobals(config, () => null, () => false),
   ): DrawnFrame =>
-    drawDsl(
+    drawPayload(
       config,
       compiled,
       store,
@@ -85,8 +85,9 @@ describe("a frame evaluates the parts whose inputs moved", () => {
     const first = view.draw({ x: "1" }, A);
     const second = view.draw({ x: "1" }, B);
     expect(first.evaluated).toBeGreaterThan(second.evaluated);
-    // `stamp`'s body, and nothing else.
-    expect(second.evaluated).toBe(1);
+    // `stamp`'s body, and the settings door's, which reads who the frame is
+    // drawn for (`drawing.fps`, a draw projection); nothing else.
+    expect(second.evaluated).toBe(2);
     expect(stripAnsi(second.text)).toContain(String(Math.floor(B)));
     expect(view.errors).toEqual([]);
   });
@@ -95,8 +96,9 @@ describe("a frame evaluates the parts whose inputs moved", () => {
     const view = viewOf(CONFIG);
     view.draw({ x: "1" }, A);
     const changed = view.draw({ x: "2" }, A);
-    // `stamp`'s body and `shown`'s body: `shown`'s colours read no `x`.
-    expect(changed.evaluated).toBe(2);
+    // `stamp`'s body, the door's, and `shown`'s body: `shown`'s colours read
+    // no `x`.
+    expect(changed.evaluated).toBe(3);
     expect(stripAnsi(changed.text)).toContain("x=2");
   });
 
@@ -258,7 +260,8 @@ describe("a kept part keeps nothing of where it was first asked", () => {
       ),
     );
     view.draw({}, A);
-    expect(view.draw({}, B).evaluated).toBe(0);
+    // The settings door's body alone, which reads who the frame is drawn for.
+    expect(view.draw({}, B).evaluated).toBe(1);
     expect(view.errors).toEqual([]);
   });
 

@@ -44,8 +44,10 @@ export function fetchStats(): Promise<RoundTripOutcome<StatsSnapshot>> {
   // an unchecked cast from socket JSON; the presence check is the explicit
   // narrowing at the wire edge (an ok response without `stats` classifies as
   // permanent/malformed_response in the transport).
-  return requestOutcome({ kind: "stats" }, BUDGETS, (resp) =>
-    "stats" in resp ? resp.stats : undefined,
+  return requestOutcome(
+    () => ({ kind: "stats" }),
+    BUDGETS,
+    (resp) => ("stats" in resp ? resp.stats : undefined),
   );
 }
 
