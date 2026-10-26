@@ -156,6 +156,34 @@ describe("SessionUsageStore — session projection", () => {
       expect(lines.filter((l) => l.startsWith("warn usage refresh"))).toEqual(
         [expect.stringContaining("sid=B ")],
       );
+
+      // Today's lane lands after its directory set's scan, once the other
+      // lanes' refresh has answered: it reads that refresh, never its own.
+      const late = join(dir, "C.jsonl");
+      mkdirSync(late);
+      const request = store.request("C", late);
+      let landed = false;
+      let scanned!: () => void;
+      const scan = new Promise<void>((resolve) => (scanned = resolve));
+      const today = {
+        current: () =>
+          (landed
+            ? { kind: "ok", value: null }
+            : { kind: "pending", why: "unread", landed: scan }) as never,
+      };
+      const lanes = Promise.all([
+        request.usage(hook("C", late)),
+        request.speed(Date.now()),
+        request.today(today),
+      ]);
+      await new Promise((r) => setTimeout(r, 20));
+      landed = true;
+      scanned();
+      await lanes;
+      expect(usage()).toMatchObject({ refreshes: { request: 3 }, failures: 2 });
+      expect(
+        lines.filter((l) => l.startsWith("warn usage refresh sid=C ")),
+      ).toHaveLength(1);
     } finally {
       store.close();
     }

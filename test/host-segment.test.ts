@@ -19,7 +19,7 @@ import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
 import os from "node:os";
 
-import { HostService, shortHostname, HOST_NAME_PERIOD_MS } from "../src/segments/host";
+import { HostService, shortHostname, HOST_PERIOD_MS } from "../src/segments/host";
 import { RefreshLedger } from "../src/utils/refresh-ledger";
 import { Holds } from "../src/utils/holds";
 import type { RenderPayloadDeps } from "../src/daemon/render-payload";
@@ -132,8 +132,8 @@ describe("the host's sources", () => {
   });
 
   // The name follows the network, so a daemon that lives for days shows the
-  // name it has now; the user never changes while it runs.
-  test("a held name is asked again on its period; the user is read once", async () => {
+  // name it has now; a user lookup that failed is tried again.
+  test("a held name and user are asked again on their period", async () => {
     jest.useFakeTimers();
     const hostname = jest.spyOn(os, "hostname").mockReturnValue("before.lan");
     const ledger = new RefreshLedger();
@@ -146,13 +146,13 @@ describe("the host's sources", () => {
       expect(name.current()).toEqual({ kind: "ok", value: "before" });
 
       hostname.mockReturnValue("after.vpn");
-      await jest.advanceTimersByTimeAsync(HOST_NAME_PERIOD_MS);
+      await jest.advanceTimersByTimeAsync(HOST_PERIOD_MS);
       expect(name.current()).toEqual({ kind: "ok", value: "after" });
       expect(
         ledger.snapshot().map((r) => [r.name, r.refreshes]),
       ).toEqual([
         ["host.name", { first: 1, period: 1, change: 0, supersede: 0 }],
-        ["host.user", { first: 1, change: 0, supersede: 0 }],
+        ["host.user", { first: 1, period: 1, change: 0, supersede: 0 }],
       ]);
     } finally {
       holds.close();

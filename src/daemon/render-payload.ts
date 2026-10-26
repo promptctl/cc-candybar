@@ -178,10 +178,10 @@ export interface RenderPayloadOf<P> extends ClaudeHookData, ValuedInputs {
   // say; the detached daemon's own environment is never consulted
   // (brandon-tmux-tk7). `session` is that pane's session name.
   readonly tmux?: { readonly pane: string; readonly session?: string | P };
-  // [LAW:types-are-the-program] REQUIRED for the same reason theme/style are:
-  // the daemon assembles it every render from sources that cannot be "not
-  // requested" (two syscalls and one already-parsed wire hint). The fields
-  // INSIDE it carry the real optionality — see HostPayload.
+  // [LAW:types-are-the-program] REQUIRED: every payload carries the object,
+  // and the fields INSIDE it carry the real optionality — the name and the
+  // user each a source the closure reads (src/segments/host.ts), `ssh` the
+  // session's hint. See HostPayloadOf.
   readonly host: HostPayloadOf<P>;
   // `theme.effective`, `style.effective` and `effect.effective` are
   // deliberately NOT fields here. They are the selections whose config rung may
@@ -443,7 +443,6 @@ export interface HostPayloadOf<P> {
   readonly user?: string | P;
   readonly ssh?: boolean;
 }
-export type HostPayload = HostPayloadOf<never>;
 
 export interface SessionPayload {
   readonly cost?: number;
@@ -1041,6 +1040,9 @@ export async function refreshPayload(
   const { hookData, deps, hints } = inputs;
   const want = wanted(inputs.neededInputPaths);
   const sessionId = hookData.session_id;
+  // The request's one refresh of its session's record, which the session,
+  // today and speed lanes share.
+  const session = deps.usageStore.request(sessionId, hookData.transcript_path);
   const lane = async (
     name: RefreshLane,
     needed: boolean,
@@ -1060,12 +1062,8 @@ export async function refreshPayload(
     deps.faults.refreshed(sessionId, name, threw);
   };
   await Promise.all([
-    lane("session", want.session, () =>
-      deps.usageStore.getUsageInfo(sessionId, hookData),
-    ),
-    lane("today", want.today, () =>
-      deps.usageStore.refreshToday(deps.lanes().today, hookData),
-    ),
+    lane("session", want.session, () => session.usage(hookData)),
+    lane("today", want.today, () => session.today(deps.lanes().today)),
     lane("context", want.context, () =>
       deps.contextProvider.getContextInfo(hookData),
     ),
@@ -1083,13 +1081,7 @@ export async function refreshPayload(
     // [LAW:one-source-of-truth] tok/s folds from the SAME store the session
     // lane reads, one sample per request: a frame takes none, so how often the
     // bar is drawn moves no rate.
-    lane("speed", want.speed, () =>
-      deps.usageStore.observeSpeed(
-        sessionId,
-        hookData.transcript_path,
-        dateOf(at).getTime(),
-      ),
-    ),
+    lane("speed", want.speed, () => session.speed(dateOf(at).getTime())),
     lane("autocompact", want.autocompact, async () =>
       deps.autoCompact.window(settingsPathOf(hints)),
     ),

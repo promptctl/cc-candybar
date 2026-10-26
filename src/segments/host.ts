@@ -7,10 +7,12 @@ import { quietLogger, type DaemonLogger } from "../utils/logger.js";
 import { RefreshLedger } from "../utils/refresh-ledger.js";
 import type { Lane } from "../utils/reading.js";
 
-// How often the host name is asked again while a view reads it: the name
-// follows the network (DHCP, a VPN), so a daemon that lives for days sees it
-// move.
-export const HOST_NAME_PERIOD_MS = 60_000;
+// How often the host's name and user are asked again while a view reads
+// them: the name follows the network (DHCP, a VPN), so a daemon that lives
+// for days sees it move, and a user lookup that failed (a directory service
+// briefly unreachable) is retried.
+export const HOST_PERIOD_MS = 60_000;
+const HOST_EVERY = { okMs: HOST_PERIOD_MS, failedMs: HOST_PERIOD_MS };
 
 /**
  * Project `os.hostname()` to its short form: everything before the first dot, or
@@ -44,11 +46,10 @@ function syscall(field: string, read: () => string): Promise<Outcome<string>> {
 }
 
 // [LAW:one-type-per-behavior] The machine's identity is two daemon-scoped
-// sources, each one key: its short host name, asked again on a period, and
-// the user the daemon runs as, which never changes while it runs, so it has
-// no period. Each is read first by the view that declares it, so a process
-// that renders nothing reads neither. The session's own `ssh` hint is laid
-// over them per payload.
+// sources, each one key and one period: its short host name and the user the
+// daemon runs as. Each is read first by the view that declares it, so a
+// process that renders nothing reads neither, and each fails alone. The
+// session's own `ssh` hint is laid over them per payload.
 export class HostService {
   private readonly name: KeyedSource<null, string>;
   private readonly user: KeyedSource<null, string>;
@@ -65,6 +66,7 @@ export class HostService {
       scope: "daemon",
       keyOf: () => "",
       fields: () => "-",
+      every: HOST_EVERY,
       maxEntries: 1,
       logger,
       ledger,
@@ -73,13 +75,11 @@ export class HostService {
       ...one,
       name: "host.name",
       read: () => syscall("name", () => shortHostname(os.hostname())),
-      every: { okMs: HOST_NAME_PERIOD_MS, failedMs: HOST_NAME_PERIOD_MS },
     });
     this.user = new KeyedSource({
       ...one,
       name: "host.user",
       read: () => syscall("user", () => os.userInfo().username),
-      every: null,
     });
   }
 

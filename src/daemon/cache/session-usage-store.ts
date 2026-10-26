@@ -177,6 +177,21 @@ interface SessionSlot {
   readonly speed: IObservableValue<Outcome<SpeedObservation> | undefined>;
 }
 
+// A request's one refresh of its session: the stamp it observed, and the
+// record that refresh answered.
+interface SessionRefresh {
+  readonly stamp: string;
+  readonly record: Promise<Outcome<SessionRecord>>;
+}
+
+// What one statusline request reads of its session's record: each lane over
+// the request's one refresh of it.
+export interface SessionRequest {
+  usage(hookData: ClaudeHookData | undefined): Promise<Outcome<UsageInfo>>;
+  speed(nowMs: number): Promise<Outcome<SpeedObservation>>;
+  today(today: Lane<DaySums>): Promise<void>;
+}
+
 // What one caller's ingests did. Renders share the store's running tally — the
 // usage cache's hit rate; each scan keeps its own, reported on its event, so a
 // rescan over thousands of warm records cannot pass for render behaviour.
@@ -548,18 +563,55 @@ export class SessionUsageStore {
   // SessionInfo whose fields the boundary drops per-field — top-level
   // `absent` is reserved for ingest, since the native officialCost overlay
   // applies even with no record.
-  async getUsageInfo(
+  getUsageInfo(
     sessionId: string,
     hookData?: ClaudeHookData,
   ): Promise<Outcome<UsageInfo>> {
-    const record = await this.refreshed(sessionId, hookData?.transcript_path);
-    if (record.kind === "failed") return record;
-    return ok(
-      usageOver(
-        record.kind === "ok" ? record.value.sessionInfo : EMPTY_SESSION_INFO,
-        hookData,
-      ),
-    );
+    return this.request(sessionId, hookData?.transcript_path).usage(hookData);
+  }
+
+  // [LAW:no-ambient-temporal-coupling] One statusline request's refresh of
+  // its session, as a value: the request's session, speed and today lanes
+  // read the one refresh it starts, whichever asks first and whenever the
+  // others land, so it reads, records and logs once per request.
+  request(
+    sessionId: string,
+    transcriptPath: string | undefined,
+  ): SessionRequest {
+    let refresh: SessionRefresh | null = null;
+    const once = (): SessionRefresh => {
+      if (refresh !== null) return refresh;
+      const stamp = statStamp(transcriptPath);
+      refresh = {
+        stamp,
+        record: this.refreshed(sessionId, transcriptPath, stamp),
+      };
+      return refresh;
+    };
+    return {
+      usage: async (hookData) => {
+        const record = await once().record;
+        if (record.kind === "failed") return record;
+        return ok(
+          usageOver(
+            record.kind === "ok"
+              ? record.value.sessionInfo
+              : EMPTY_SESSION_INFO,
+            hookData,
+          ),
+        );
+      },
+      speed: (nowMs) => this.observed(sessionId, once, nowMs),
+      // [LAW:no-ambient-temporal-coupling] The scan first, then the
+      // session's own refresh: run together, a seed's ingest of this session
+      // and the request's are two cold parses at two stamps, and whichever
+      // lands second is not stored — the request's own, newer fold among
+      // them. A refresh another lane already started is the one awaited.
+      today: async (today) => {
+        await laneOutcome(today);
+        await once().record;
+      },
+    };
   }
 
   // The `session` projection as the session's last refresh left it, for a
@@ -628,16 +680,14 @@ export class SessionUsageStore {
   // `today` keeps up with the cost it was sent with (short only by what a
   // rescan's fold of the same session stores first, `ingest`) — once the
   // directory set's first scan, which `today`'s lane waits on, has landed.
-  async refreshToday(
+  refreshToday(
     today: Lane<DaySums>,
     hookData: ClaudeHookData | undefined,
   ): Promise<void> {
-    // [LAW:no-ambient-temporal-coupling] The scan first, then the session's
-    // own refresh: run together, a seed's ingest of this session and the
-    // request's are two cold parses at two stamps, and whichever lands second
-    // is not stored — the request's own, newer fold among them.
-    await laneOutcome(today);
-    await this.refreshed(hookData?.session_id ?? "", hookData?.transcript_path);
+    return this.request(
+      hookData?.session_id ?? "",
+      hookData?.transcript_path,
+    ).today(today);
   }
 
   // [LAW:single-enforcer] A view's declaration of `today` (declareLanes in
@@ -708,9 +758,18 @@ export class SessionUsageStore {
   // session yields a zero-count sample, so a first-ever render establishes a
   // baseline without fabricating a rate. `nowMs` is the caller's single-enforcer
   // clock instant — the store never reads the clock for tok/s timing itself.
-  async observeSpeed(
+  observeSpeed(
     sessionId: string,
     transcriptPath: string | undefined,
+    nowMs: number,
+  ): Promise<Outcome<SpeedObservation>> {
+    return this.request(sessionId, transcriptPath).speed(nowMs);
+  }
+
+  // A request's speed sample, over the request's one refresh of the session.
+  private async observed(
+    sessionId: string,
+    refresh: () => SessionRefresh,
     nowMs: number,
   ): Promise<Outcome<SpeedObservation>> {
     // [LAW:no-ambient-temporal-coupling] Key the observation by the same
@@ -722,9 +781,9 @@ export class SessionUsageStore {
     // No session id is no session: there is no baseline to keep, and a ring
     // keyed "" would be every id-less caller's baseline at once.
     if (!sessionId) return ABSENT;
-    const stamp = statStamp(transcriptPath);
+    const { stamp, record: refreshed } = refresh();
     return this.speedFlight.run(`${sessionId}:${stamp}`, async () => {
-      const record = await this.refreshed(sessionId, transcriptPath, stamp);
+      const record = await refreshed;
       if (record.kind === "failed") {
         answer(this.hold(sessionId).speed, record);
         return record;

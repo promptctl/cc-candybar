@@ -155,9 +155,28 @@ export function fakeUsage(
   // reads it as not answered yet.
   const todayRefreshed = new Set<string>();
   const speed = refreshed<SpeedObservation>();
+  const getUsageInfo = (sessionId: string, hookData?: ClaudeHookData) =>
+    usage.store(sessionId, readers.usage?.(sessionId, hookData) ?? ABSENT);
+  const observeSpeed = (
+    sessionId: string,
+    transcriptPath: string | undefined,
+    nowMs: number,
+  ) =>
+    speed.store(
+      sessionId,
+      readers.speed?.(sessionId, transcriptPath, nowMs) ?? ABSENT,
+    );
   return {
-    getUsageInfo: (sessionId: string, hookData?: ClaudeHookData) =>
-      usage.store(sessionId, readers.usage?.(sessionId, hookData) ?? ABSENT),
+    getUsageInfo,
+    // A request's lanes over its session, as the real store's `request`.
+    request: (sessionId: string, transcriptPath: string | undefined) => ({
+      usage: (hookData: ClaudeHookData | undefined) =>
+        getUsageInfo(sessionId, hookData),
+      speed: (nowMs: number) => observeSpeed(sessionId, transcriptPath, nowMs),
+      today: async (_today: Lane<FakeSet>) => {
+        todayRefreshed.add(sessionId);
+      },
+    }),
     usageOf: (sessionId: string): Reading<UsageInfo> => usage.read(sessionId),
     declareToday: (
       _holds: Holds,
@@ -178,15 +197,7 @@ export function fakeUsage(
         ? ((readers.today?.(hookData, set.claudeConfigDir, at) ??
             ABSENT) as Outcome<TodayInfo>)
         : PENDING,
-    observeSpeed: (
-      sessionId: string,
-      transcriptPath: string | undefined,
-      nowMs: number,
-    ) =>
-      speed.store(
-        sessionId,
-        readers.speed?.(sessionId, transcriptPath, nowMs) ?? ABSENT,
-      ),
+    observeSpeed,
     speedOf: (sessionId: string): Reading<SpeedObservation> =>
       speed.read(sessionId),
   };
