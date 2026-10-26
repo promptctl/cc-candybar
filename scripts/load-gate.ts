@@ -79,10 +79,13 @@ const INSPECTOR_CALL_MS = 30_000;
 // What the charge may grow by across the steady phase, beyond a heap's
 // sawtooth: the live daemon's climb is ~80 MB a minute.
 const CLIMB_LIMIT_BYTES = 32 * 1024 * 1024;
-// What these sessions may be charged: ~430 MB measured on macOS and Linux, and
-// a fifth more. The shipped limit is sized for the backstop, and judging by it
-// would pass a daemon nearly twice as heavy.
-const BUDGET_BYTES = 512 * 1024 * 1024;
+// What these sessions may be charged: a fifth over the daemon's base and each
+// session's part, as measured at their peaks (~180 MB at 20 sessions, ~275 MB
+// at 50 and ~430 MB at 100) — ~516 MB at 100. The shipped limit is sized for
+// the backstop, and judging by it would pass a daemon nearly twice as heavy.
+// [LAW:one-source-of-truth] Derived from the sessions run, so the budget is
+// always these sessions'.
+const BUDGET_BYTES = 1.2 * (120 + 3.1 * SESSIONS) * 1024 * 1024;
 const OID = "4f1c2a9e8b7d6c5a4f3e2d1c0b9a8f7e6d5c4b3a";
 
 // ─── The world ──────────────────────────────────────────────────────────────
