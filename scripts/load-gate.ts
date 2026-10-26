@@ -553,6 +553,13 @@ async function run(): Promise<{
   const expected = (SESSIONS * STEADY_MS) / SESSION_PERIOD_MS;
   const charges = samples.map((s) => s.charge);
   const climb = heapAfter - heapBefore;
+  // The first and last samples each follow a collection, so what the charge
+  // holds beyond V8's heap there is native memory: buffers, malloc, watchers.
+  const first0 = samples[0]!.stats;
+  const outside = [samples[0]!, samples.at(-1)!].map(
+    (s) => s.charge - s.stats.heapTotalBytes,
+  );
+  const nativeClimb = outside[1]! - outside[0]!;
   const last = samples.at(-1)!.stats;
   const held = (pick: (s: StatsSnapshot) => number) => [
     ...new Set(samples.map((s) => pick(s.stats))),
@@ -609,6 +616,20 @@ async function run(): Promise<{
       detail: `${mb(heapBefore)} MB to ${mb(heapAfter)} MB over the steady phase (limit +${mb(CLIMB_LIMIT_BYTES)} MB)`,
     },
     {
+      name: "charge outside the heap not climbing",
+      pass: nativeClimb <= CLIMB_LIMIT_BYTES,
+      detail: `${outside.map(mb).join(" MB to ")} MB over the steady phase (limit +${mb(CLIMB_LIMIT_BYTES)} MB)`,
+    },
+    {
+      // Watchers opened and closed while the watched set holds still: the
+      // churn behind native growth the heap never shows.
+      name: "no watcher churn",
+      pass:
+        last.watchers.opened === first0.watchers.opened &&
+        last.watchers.closed === first0.watchers.closed,
+      detail: `${last.watchers.opened - first0.watchers.opened} opened, ${last.watchers.closed - first0.watchers.closed} closed over the steady phase`,
+    },
+    {
       name: "held counts flat",
       pass:
         Object.values(counters).every((v) => v.length === 1) &&
@@ -636,10 +657,6 @@ async function run(): Promise<{
     rssMb: samples.map((s) => mb(s.stats.rssBytes)),
     heapUsedMb: samples.map((s) => mb(s.stats.heapUsedBytes)),
     heapTotalMb: samples.map((s) => mb(s.stats.heapTotalBytes)),
-    // The charge V8's heap does not hold, each just after a collection.
-    outsideHeapAfterGcMb: [samples[0]!, samples.at(-1)!].map((s) =>
-      mb(s.charge - s.stats.heapTotalBytes),
-    ),
     // How long the daemon itself took over each steady render, from its own
     // render events, beside the gate's lag: a slow round trip is one or the other.
     daemonRenderMs: daemonRenders(steadyStarted),
