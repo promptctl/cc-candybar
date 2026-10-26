@@ -370,17 +370,33 @@ export function templateHelperCalls(
   return called;
 }
 
-// Every variable the config declares, under the name the store holds it by:
-// a global by its own name, a segment's local as `segName.varName`.
+// Every variable the config declares, under the name the store holds it by
+// (a global by its own name, a segment's local as `segName.varName`), with the
+// config path that declares it.
+// [LAW:one-source-of-truth] The one spelling of a segment variable's store name.
+export function* declarationsAt(
+  config: Pick<DslConfig, "variables" | "segments">,
+): IterableIterator<
+  readonly [name: string, decl: VariableDecl, at: readonly string[]]
+> {
+  for (const [name, decl] of Object.entries(config.variables)) {
+    yield [name, decl, ["variables", name]];
+  }
+  for (const [segName, seg] of Object.entries(config.segments)) {
+    for (const [varName, decl] of Object.entries(seg.vars ?? {})) {
+      yield [
+        `${segName}.${varName}`,
+        decl,
+        ["segments", segName, "vars", varName],
+      ];
+    }
+  }
+}
+
 export function* declaredVariables(
   config: Pick<DslConfig, "variables" | "segments">,
 ): IterableIterator<readonly [name: string, decl: VariableDecl]> {
-  yield* Object.entries(config.variables);
-  for (const [segName, seg] of Object.entries(config.segments)) {
-    for (const [varName, decl] of Object.entries(seg.vars ?? {})) {
-      yield [`${segName}.${varName}`, decl];
-    }
-  }
+  for (const [name, decl] of declarationsAt(config)) yield [name, decl];
 }
 
 // [LAW:single-enforcer] THE resolution of a read to the declarations it

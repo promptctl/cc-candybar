@@ -12,6 +12,7 @@
 
 import type { DslConfig } from "../dsl-types.js";
 import { findKeyLine } from "./diagnostics.js";
+import { declarationsAt } from "./refs.js";
 import type { ValidateCtx } from "./validate-core.js";
 
 export function validateNoNesting(
@@ -20,15 +21,9 @@ export function validateNoNesting(
   subject: (name: string) => boolean = () => true,
 ): void {
   // Each store name, at the config path that declares it.
-  const declaredAt = new Map<string, readonly string[]>();
-  for (const name of Object.keys(cfg.variables)) {
-    declaredAt.set(name, ["variables", name]);
-  }
-  for (const [segName, seg] of Object.entries(cfg.segments)) {
-    for (const name of Object.keys(seg.vars ?? {})) {
-      declaredAt.set(`${segName}.${name}`, ["segments", segName, "vars", name]);
-    }
-  }
+  const declaredAt = new Map(
+    [...declarationsAt(cfg)].map(([name, , at]) => [name, at] as const),
+  );
   for (const [inner, at] of declaredAt) {
     const parts = inner.split(".");
     for (let n = 1; n < parts.length; n++) {
