@@ -21,6 +21,12 @@ export async function loggedWhen(
   return lines;
 }
 
+// [LAW:one-source-of-truth] A render event whose reply its client read: an
+// attempt the client gave up on is logged too, so a count of a session's
+// answers counts these, never every event.
+export const answeredRender = (line: string): boolean =>
+  line.includes(" timedOut=N ");
+
 // A session's render events, every attempt in log order, once `count` replies
 // its client read are among them: a request the client retried after a
 // timeout is logged once per attempt, and the attempt it read is the one not
@@ -33,12 +39,20 @@ export async function renderLines(
   const of = (lines: readonly string[]) =>
     lines.filter((l) => l.includes(`render sid=${sessionId} `));
   const read = (lines: readonly string[]) =>
-    of(lines).filter((l) => l.includes(" timedOut=N "));
-  return of(
-    await loggedWhen(
-      env,
-      (lines) => read(lines).length >= count,
-      `${count} answered render event(s) for ${sessionId}`,
-    ),
-  );
+    of(lines).filter(answeredRender);
+  try {
+    return of(
+      await loggedWhen(
+        env,
+        (lines) => read(lines).length >= count,
+        `${count} answered render event(s) for ${sessionId}`,
+      ),
+    );
+  } catch (e) {
+    // [LAW:no-silent-failure] The wait names what it counted, so a failure
+    // on a runner nobody can log into says which events were there.
+    throw new Error(
+      `${e instanceof Error ? e.message : String(e)}; its events:\n${of(logLines(env)).join("\n")}`,
+    );
+  }
 }

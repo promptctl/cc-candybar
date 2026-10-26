@@ -20,6 +20,15 @@ import type { DslConfig } from "../../src/config/dsl-types";
 import { ProbeArrivals } from "../../src/doctor/handler-probe";
 import { RenderSightings } from "../../src/daemon/render-sightings";
 import { PACKAGE_VERSION } from "../../src/version";
+import {
+  laneSwitches,
+  resolveEffectiveGlobals,
+} from "../../src/config/effective-globals";
+import { LANE_NAMES, type LaneSwitches } from "../../src/config/lanes";
+
+const NO_LANES = Object.fromEntries(
+  LANE_NAMES.map((lane) => [lane, false]),
+) as LaneSwitches;
 
 // The record a session's render leaves behind, which a click resolves its
 // config from: a session only clicks links its own render drew.
@@ -159,6 +168,23 @@ export function testVerbContext(
       refused: () => {
         throw new Error("run: no run owner in this test");
       },
+    },
+    // A click of a session that has rendered measures its lane switches over
+    // that same config, as the daemon's does; a test that handed in none
+    // switches no lane on. No lane owner runs here: a test that reads what a
+    // click set up hands in its own `clicked`.
+    lanes: {
+      of: (_origin, sid) =>
+        config === undefined
+          ? NO_LANES
+          : laneSwitches(
+              resolveEffectiveGlobals(
+                config,
+                (key) => sessionState.get(sid, key),
+                () => false,
+              ),
+            ),
+      clicked: () => {},
     },
   };
 }

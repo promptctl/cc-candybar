@@ -1,0 +1,2 @@
+# Its own workspace root, so the repo's workspace never installs or builds this research page.
+packages: []

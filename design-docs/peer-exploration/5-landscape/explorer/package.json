@@ -1,0 +1,24 @@
+{
+  "name": "statusline-landscape-explorer",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "data": "python3 -I ../tools/export.py src/data.json",
+    "build": "vite build && cp dist/index.html ../landscape.html",
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "dev": "vite"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^7.3.1",
+    "@tsconfig/svelte": "^5.0.8",
+    "@types/cytoscape-fcose": "^2.2.5",
+    "cytoscape": "^3.34.4",
+    "cytoscape-fcose": "^2.2.0",
+    "playwright-core": "^1.64.1",
+    "svelte": "^5.57.2",
+    "svelte-check": "^4.7.7",
+    "typescript": "^6.0.3",
+    "vite": "^8.3.5",
+    "vite-plugin-singlefile": "^2.3.4"
+  }
+}

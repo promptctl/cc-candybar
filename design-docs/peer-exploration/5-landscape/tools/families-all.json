@@ -1,0 +1,6141 @@
+[
+ {
+  "size": 57,
+  "in_top1000": 4,
+  "members": [
+   {
+    "repo": "seung-hr/claude-statusline",
+    "commits": 99,
+    "stars": 0,
+    "top1000": true,
+    "sl_loc": 828
+   },
+   {
+    "repo": "daniel3303/ClaudeCodeStatusLine",
+    "commits": 93,
+    "stars": 616,
+    "top1000": true,
+    "sl_loc": 768
+   },
+   {
+    "repo": "astout/ClaudeCodeStatusLine",
+    "commits": 81,
+    "stars": 0,
+    "top1000": true,
+    "sl_loc": 710
+   },
+   {
+    "repo": "zzfn/cc-statusline",
+    "commits": 62,
+    "stars": 2,
+    "top1000": true,
+    "sl_loc": 581
+   },
+   {
+    "repo": "nischal94/claude-statusline",
+    "commits": 33,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 732
+   },
+   {
+    "repo": "FlorianRiquelme/claudefuel",
+    "commits": 29,
+    "stars": 2,
+    "top1000": false,
+    "sl_loc": 585
+   },
+   {
+    "repo": "Scorpiolover/ClaudeCodeStatusLine",
+    "commits": 27,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 435
+   },
+   {
+    "repo": "crosscountryridinggirlwonder916/claude-statusline",
+    "commits": 21,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 267
+   },
+   {
+    "repo": "Tght1211/claude-statusline",
+    "commits": 13,
+    "stars": 2,
+    "top1000": false,
+    "sl_loc": 787
+   },
+   {
+    "repo": "t34-dev/claude-statusline",
+    "commits": 10,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 305
+   },
+   {
+    "repo": "wheelsandcogs/cc-statusline",
+    "commits": 10,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 277
+   },
+   {
+    "repo": "gist:1134104e5afc53b70b38d3fb27c4cf6d",
+    "commits": 9,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 191
+   },
+   {
+    "repo": "goodboybeau/claude-statusline",
+    "commits": 8,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 663
+   },
+   {
+    "repo": "Juyn/claude-status-line",
+    "commits": 7,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 267
+   },
+   {
+    "repo": "TaichiS/claude-code-statusline",
+    "commits": 7,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 305
+   },
+   {
+    "repo": "ThaisBarrosAlvim/claude-code-safe-usage-status-line",
+    "commits": 6,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 339
+   },
+   {
+    "repo": "andrewii23/claude-statusline",
+    "commits": 6,
+    "stars": 9,
+    "top1000": false,
+    "sl_loc": 183
+   },
+   {
+    "repo": "carbonid1/claude-statusline",
+    "commits": 6,
+    "stars": 3,
+    "top1000": false,
+    "sl_loc": 281
+   },
+   {
+    "repo": "haukurk/claude-status-line",
+    "commits": 6,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 707
+   },
+   {
+    "repo": "risingpower/claude-code-statusline",
+    "commits": 6,
+    "stars": 7,
+    "top1000": false,
+    "sl_loc": 244
+   },
+   {
+    "repo": "wkliwk/claude-statusline",
+    "commits": 6,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 296
+   },
+   {
+    "repo": "gist:67f6279d78dd343a71156f1acaefab34",
+    "commits": 5,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 214
+   },
+   {
+    "repo": "leandrohmvieira/ClaudeCodeStatusLine",
+    "commits": 5,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 758
+   },
+   {
+    "repo": "cooliopas/claude-statusline",
+    "commits": 4,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 259
+   },
+   {
+    "repo": "isaacaudet/claude-code-statusline",
+    "commits": 4,
+    "stars": 15,
+    "top1000": false,
+    "sl_loc": 317
+   },
+   {
+    "repo": "moictab/claude-pulse",
+    "commits": 4,
+    "stars": 2,
+    "top1000": false,
+    "sl_loc": 274
+   },
+   {
+    "repo": "shashikirandevadiga/claude-statusline",
+    "commits": 4,
+    "stars": 2,
+    "top1000": false,
+    "sl_loc": 335
+   },
+   {
+    "repo": "diogofelixti/claude-panel-money",
+    "commits": 3,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 830
+   },
+   {
+    "repo": "sfirke/statusline",
+    "commits": 3,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 457
+   },
+   {
+    "repo": "srijxnnn/ccstatusline",
+    "commits": 3,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 269
+   },
+   {
+    "repo": "Chen-Rong-Zi/tmux-claude-workload",
+    "commits": 2,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 493
+   },
+   {
+    "repo": "ReubenBeeler/statusline",
+    "commits": 2,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 190
+   },
+   {
+    "repo": "chriscollective/paw-print-claude-statusline",
+    "commits": 2,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 270
+   },
+   {
+    "repo": "gist:0cd256789b6350196fc34c6d0ac09871",
+    "commits": 2,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 407
+   },
+   {
+    "repo": "gist:3b5d4fa0de358e9bc3d472015e0fa3ba",
+    "commits": 2,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 180
+   },
+   {
+    "repo": "gist:9423944ea21093b7821cb3f834a8a303",
+    "commits": 2,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 371
+   },
+   {
+    "repo": "gist:afccec338c4916f3a837f41450d268c2",
+    "commits": 2,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 462
+   },
+   {
+    "repo": "gist:d3269b3fad36a3c66a041ffc63edd537",
+    "commits": 2,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 330
+   },
+   {
+    "repo": "jguerra6/claude-statusline",
+    "commits": 2,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 248
+   },
+   {
+    "repo": "lncch/almoayyad-claude-statusline",
+    "commits": 2,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 837
+   },
+   {
+    "repo": "trongdth/ClaudeCodeStatusLine",
+    "commits": 2,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 569
+   },
+   {
+    "repo": "zjhewy/claude-code-statusline-win",
+    "commits": 2,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 342
+   },
+   {
+    "repo": "Erics-yan/claude-code-",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 350
+   },
+   {
+    "repo": "NDilanka/claude-code-config",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 254
+   },
+   {
+    "repo": "The-Nice-One/ClaudeCodeStatusLineAntigravitySupport",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 1143
+   },
+   {
+    "repo": "arshve/claude-statusline",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 436
+   },
+   {
+    "repo": "gist:35c384573776a9139d977d0a7c40cd88",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 196
+   },
+   {
+    "repo": "gist:543c651788fb408efa7c7aa0678e4b9a",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 259
+   },
+   {
+    "repo": "gist:b43001f5694a267a42d0dbb5b18875cd",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 362
+   },
+   {
+    "repo": "gist:d0570491f9f75d51638a36feba3799b0",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 297
+   },
+   {
+    "repo": "gist:e1c29829a21b26edb82f53115c6ee8be",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 297
+   },
+   {
+    "repo": "gist:e8f3e4c6667eab41a3a7b10e079fda32",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 363
+   },
+   {
+    "repo": "mahimulasad/claude-code-statusline",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 354
+   },
+   {
+    "repo": "renathoaz/pacman-statusline",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 346
+   },
+   {
+    "repo": "walidnabilx/claude-statusline",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 313
+   },
+   {
+    "repo": "TiFoil/must-have-claude-statusline",
+    "commits": 0,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 268
+   },
+   {
+    "repo": "hbcbh1999/claude-statusline",
+    "commits": 0,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 268
+   }
+  ]
+ },
+ {
+  "size": 44,
+  "in_top1000": 20,
+  "members": [
+   {
+    "repo": "fyeeme/claude-statusline",
+    "commits": 729,
+    "stars": 0,
+    "top1000": true,
+    "sl_loc": 1036
+   },
+   {
+    "repo": "BND-1/claude-hud-glm",
+    "commits": 681,
+    "stars": 2,
+    "top1000": true,
+    "sl_loc": 1270
+   },
+   {
+    "repo": "tpf308/claude-hud",
+    "commits": 672,
+    "stars": 0,
+    "top1000": true,
+    "sl_loc": 1022
+   },
+   {
+    "repo": "ohsk23/claude-hud-bedrock",
+    "commits": 642,
+    "stars": 0,
+    "top1000": true,
+    "sl_loc": 916
+   },
+   {
+    "repo": "ChenYouP/claude-hud",
+    "commits": 603,
+    "stars": 1,
+    "top1000": true,
+    "sl_loc": 901
+   },
+   {
+    "repo": "freeshr1107-free/claude-hud-cn",
+    "commits": 575,
+    "stars": 0,
+    "top1000": true,
+    "sl_loc": 911
+   },
+   {
+    "repo": "liguan-89/claude-hud",
+    "commits": 533,
+    "stars": 0,
+    "top1000": true,
+    "sl_loc": 964
+   },
+   {
+    "repo": "Ethanzyc/claude-hub-glm",
+    "commits": 525,
+    "stars": 2,
+    "top1000": true,
+    "sl_loc": 914
+   },
+   {
+    "repo": "helloWorldTT-user/claude-hud-cn",
+    "commits": 510,
+    "stars": 0,
+    "top1000": true,
+    "sl_loc": 890
+   },
+   {
+    "repo": "raveboyxup/claude-hud-local",
+    "commits": 482,
+    "stars": 0,
+    "top1000": true,
+    "sl_loc": 783
+   },
+   {
+    "repo": "bxyb/claude-hud",
+    "commits": 421,
+    "stars": 0,
+    "top1000": true,
+    "sl_loc": 642
+   },
+   {
+    "repo": "lgdy88/claude-hud",
+    "commits": 419,
+    "stars": 0,
+    "top1000": true,
+    "sl_loc": 642
+   },
+   {
+    "repo": "hyderapple/claude-hub-new",
+    "commits": 409,
+    "stars": 0,
+    "top1000": true,
+    "sl_loc": 483
+   },
+   {
+    "repo": "alwinpaul1/claude-hud-enhanced",
+    "commits": 367,
+    "stars": 10,
+    "top1000": true,
+    "sl_loc": 2248
+   },
+   {
+    "repo": "ibragimov-oasis/name-navigator",
+    "commits": 279,
+    "stars": 0,
+    "top1000": true,
+    "sl_loc": 849
+   },
+   {
+    "repo": "jinhuang712/claude-super-statusline",
+    "commits": 246,
+    "stars": 0,
+    "top1000": true,
+    "sl_loc": 2396
+   },
+   {
+    "repo": "xiangruiai/xiangrui-toolkit",
+    "commits": 201,
+    "stars": 55,
+    "top1000": true,
+    "sl_loc": 642
+   },
+   {
+    "repo": "Aminmmmm/cometix-hud",
+    "commits": 103,
+    "stars": 0,
+    "top1000": true,
+    "sl_loc": 898
+   },
+   {
+    "repo": "Dec27-Lee/claude-hud-plus",
+    "commits": 52,
+    "stars": 2,
+    "top1000": true,
+    "sl_loc": 1663
+   },
+   {
+    "repo": "gitlab.com:alone-solition-limited-public/claudehud",
+    "commits": 51,
+    "stars": "1",
+    "top1000": true,
+    "sl_loc": 668
+   },
+   {
+    "repo": "johnleeGitHub/claude-hud-enhanced",
+    "commits": 32,
+    "stars": 2,
+    "top1000": false,
+    "sl_loc": 1015
+   },
+   {
+    "repo": "jovetickop/my-claude-code-plugin-pack",
+    "commits": 26,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 1018
+   },
+   {
+    "repo": "ExaDev/claude-hud",
+    "commits": 22,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 2315
+   },
+   {
+    "repo": "tsungseu/claude-hud-advanced",
+    "commits": 20,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 1589
+   },
+   {
+    "repo": "imleben/claude-hud-controls",
+    "commits": 17,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 2281
+   },
+   {
+    "repo": "mason369/claude-hud-overwatch",
+    "commits": 15,
+    "stars": 2,
+    "top1000": false,
+    "sl_loc": 648
+   },
+   {
+    "repo": "tinyvane/20260603-HUDplus4cc",
+    "commits": 14,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 1120
+   },
+   {
+    "repo": "hxuaj/glm-claude-hud",
+    "commits": 11,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 135
+   },
+   {
+    "repo": "sirouyang/claude-hud-tuned",
+    "commits": 11,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 1157
+   },
+   {
+    "repo": "NieRMHY/NieRMHY_claude-hud-Deepseek",
+    "commits": 5,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 1379
+   },
+   {
+    "repo": "alexw24/claude-hud",
+    "commits": 5,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 1018
+   },
+   {
+    "repo": "Greal-dev/claude-hud",
+    "commits": 4,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 916
+   },
+   {
+    "repo": "LeiCodex/claude-hud-for-glm",
+    "commits": 4,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 2360
+   },
+   {
+    "repo": "glacierzzz26/claude-plugins",
+    "commits": 4,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 2277
+   },
+   {
+    "repo": "ppezzull/claude-hud",
+    "commits": 4,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 1055
+   },
+   {
+    "repo": "ppezzull/glm-claude-hud",
+    "commits": 4,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 268
+   },
+   {
+    "repo": "bearchild233/claude-hud-cache-hit",
+    "commits": 3,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 1100
+   },
+   {
+    "repo": "Mick4994/claude-hud-ccswitch",
+    "commits": 2,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 934
+   },
+   {
+    "repo": "caby-li/Claude-KimiCode-Usage",
+    "commits": 2,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 890
+   },
+   {
+    "repo": "dingchangfei/claude-hud",
+    "commits": 2,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 1055
+   },
+   {
+    "repo": "Mars535821089-ops/Claude-hud",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 2256
+   },
+   {
+    "repo": "Spanky96/claude-hud",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 1148
+   },
+   {
+    "repo": "h15933012656-beep/claude-hud",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 892
+   },
+   {
+    "repo": "XelaNull/claude-hud-weeklyToDaily",
+    "commits": 0,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 1095
+   }
+  ]
+ },
+ {
+  "size": 30,
+  "in_top1000": 10,
+  "members": [
+   {
+    "repo": "tt-a1i/claude-hud",
+    "commits": 333,
+    "stars": 6,
+    "top1000": true,
+    "sl_loc": 368
+   },
+   {
+    "repo": "nangongwentian-fe/claude-hud-cubence",
+    "commits": 331,
+    "stars": 14,
+    "top1000": true,
+    "sl_loc": 377
+   },
+   {
+    "repo": "time4Wiley/claude-hud",
+    "commits": 331,
+    "stars": 0,
+    "top1000": true,
+    "sl_loc": 368
+   },
+   {
+    "repo": "rabbitearspigsticking801/claude-hud",
+    "commits": 329,
+    "stars": 0,
+    "top1000": true,
+    "sl_loc": 368
+   },
+   {
+    "repo": "YaoArmy/Claude-HUD",
+    "commits": 326,
+    "stars": 0,
+    "top1000": true,
+    "sl_loc": 368
+   },
+   {
+    "repo": "29583855/claude-hud",
+    "commits": 287,
+    "stars": 0,
+    "top1000": true,
+    "sl_loc": 210
+   },
+   {
+    "repo": "SJF-ECNU/Claude-hud-shjf",
+    "commits": 278,
+    "stars": 0,
+    "top1000": true,
+    "sl_loc": 263
+   },
+   {
+    "repo": "kellymears/agents",
+    "commits": 90,
+    "stars": 0,
+    "top1000": true,
+    "sl_loc": 398
+   },
+   {
+    "repo": "LKCY23/claudespace",
+    "commits": 71,
+    "stars": 0,
+    "top1000": true,
+    "sl_loc": 323
+   },
+   {
+    "repo": "KwCCCC/claude-statusbar",
+    "commits": 57,
+    "stars": 5,
+    "top1000": true,
+    "sl_loc": 157
+   },
+   {
+    "repo": "adzcsx2/my-claude-code-setting",
+    "commits": 43,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 448
+   },
+   {
+    "repo": "xyzbit/claude-plugins",
+    "commits": 33,
+    "stars": 29,
+    "top1000": false,
+    "sl_loc": 164
+   },
+   {
+    "repo": "ibytechaos/claude",
+    "commits": 32,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 368
+   },
+   {
+    "repo": "hyeongjun-dev/claude-pulse",
+    "commits": 20,
+    "stars": 12,
+    "top1000": false,
+    "sl_loc": 233
+   },
+   {
+    "repo": "puddinging/prism-hud",
+    "commits": 18,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 368
+   },
+   {
+    "repo": "Siiichenggg/claude-hud-glm",
+    "commits": 9,
+    "stars": 5,
+    "top1000": false,
+    "sl_loc": 138
+   },
+   {
+    "repo": "lemonpopdo/claude-hud-for-minimax",
+    "commits": 9,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 389
+   },
+   {
+    "repo": "binbin1213/claude-hud",
+    "commits": 8,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 353
+   },
+   {
+    "repo": "yang66yang/claude-hud",
+    "commits": 6,
+    "stars": 3,
+    "top1000": false,
+    "sl_loc": 355
+   },
+   {
+    "repo": "heytaibai/claude-hud-multiprovider",
+    "commits": 4,
+    "stars": 2,
+    "top1000": false,
+    "sl_loc": 386
+   },
+   {
+    "repo": "stevendejongnl/claude-statusline",
+    "commits": 4,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 112
+   },
+   {
+    "repo": "thkbaldpsychologist/claude-hud",
+    "commits": 4,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 368
+   },
+   {
+    "repo": "kinaxng/claude-hud-minimax",
+    "commits": 3,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 138
+   },
+   {
+    "repo": "willzhanghang-code/claude-hud-cn",
+    "commits": 3,
+    "stars": 2,
+    "top1000": false,
+    "sl_loc": 212
+   },
+   {
+    "repo": "fxzer/claude-hud-zhipu",
+    "commits": 2,
+    "stars": 3,
+    "top1000": false,
+    "sl_loc": 355
+   },
+   {
+    "repo": "gpalmgg/lucid-hud",
+    "commits": 2,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 428
+   },
+   {
+    "repo": "kleer001/claude_hud_ratio",
+    "commits": 2,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 368
+   },
+   {
+    "repo": "yfilwzy/claude-hud-vivid",
+    "commits": 2,
+    "stars": 3,
+    "top1000": false,
+    "sl_loc": 221
+   },
+   {
+    "repo": "MarssZ/claude-hud-enhanced",
+    "commits": 0,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 154
+   },
+   {
+    "repo": "xiaodream551-a11y/claude-hud",
+    "commits": 0,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 368
+   }
+  ]
+ },
+ {
+  "size": 27,
+  "in_top1000": 15,
+  "members": [
+   {
+    "repo": "ricks774/ccstatusline-zh-tw",
+    "commits": 491,
+    "stars": 0,
+    "top1000": true,
+    "sl_loc": 815
+   },
+   {
+    "repo": "sirmalloc/ccstatusline",
+    "commits": 474,
+    "stars": 13409,
+    "top1000": true,
+    "sl_loc": 879
+   },
+   {
+    "repo": "fredericosantos/ccstatusline",
+    "commits": 427,
+    "stars": 0,
+    "top1000": true,
+    "sl_loc": 826
+   },
+   {
+    "repo": "Demonad112/ccstatusline",
+    "commits": 419,
+    "stars": 0,
+    "top1000": true,
+    "sl_loc": 817
+   },
+   {
+    "repo": "akkaz/ccstatusline-gradient",
+    "commits": 392,
+    "stars": 1,
+    "top1000": true,
+    "sl_loc": 830
+   },
+   {
+    "repo": "pcvelz/ccstatusline-usage",
+    "commits": 350,
+    "stars": 160,
+    "top1000": true,
+    "sl_loc": 1146
+   },
+   {
+    "repo": "huangguang1999/ccstatusline-zh",
+    "commits": 294,
+    "stars": 813,
+    "top1000": true,
+    "sl_loc": 879
+   },
+   {
+    "repo": "RobGruhl/ccstatusline",
+    "commits": 210,
+    "stars": 0,
+    "top1000": true,
+    "sl_loc": 571
+   },
+   {
+    "repo": "vbonk/ccstatusline",
+    "commits": 207,
+    "stars": 0,
+    "top1000": true,
+    "sl_loc": 508
+   },
+   {
+    "repo": "ader/ccstatusline",
+    "commits": 200,
+    "stars": 0,
+    "top1000": true,
+    "sl_loc": 508
+   },
+   {
+    "repo": "whisperers26/ccstatusline-desktop",
+    "commits": 171,
+    "stars": 1,
+    "top1000": true,
+    "sl_loc": 2629
+   },
+   {
+    "repo": "LeviLazinskiy/ccstatusline",
+    "commits": 128,
+    "stars": 0,
+    "top1000": true,
+    "sl_loc": 259
+   },
+   {
+    "repo": "LuiserFarzati/ccstatusline",
+    "commits": 128,
+    "stars": 0,
+    "top1000": true,
+    "sl_loc": 259
+   },
+   {
+    "repo": "SurajKuswawer/ccstatusline",
+    "commits": 128,
+    "stars": 0,
+    "top1000": true,
+    "sl_loc": 259
+   },
+   {
+    "repo": "CrazyCoder/ccstatusline",
+    "commits": 49,
+    "stars": 3,
+    "top1000": true,
+    "sl_loc": 820
+   },
+   {
+    "repo": "aleksadvaisly/ccstatusline",
+    "commits": 43,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 260
+   },
+   {
+    "repo": "sdadz-luo/ccstatusline-zh-deepseek",
+    "commits": 17,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 898
+   },
+   {
+    "repo": "ChahinDB7/ccstatusline",
+    "commits": 6,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 626
+   },
+   {
+    "repo": "Glucksberg/cc-hud",
+    "commits": 6,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 114
+   },
+   {
+    "repo": "Subaru486desuwa/mochiapi-statusline",
+    "commits": 5,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 784
+   },
+   {
+    "repo": "starbaser/ccstatusline",
+    "commits": 4,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 256
+   },
+   {
+    "repo": "powerfulhang/API-Monitor",
+    "commits": 2,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 644
+   },
+   {
+    "repo": "zhourui156897/ccstatusline",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 509
+   },
+   {
+    "repo": "Neragoth/ccstatusline-windows",
+    "commits": 0,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 232
+   },
+   {
+    "repo": "RocketPartners/rocket-ccstatusline",
+    "commits": 0,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 259
+   },
+   {
+    "repo": "aavva/MIT-ccstatusline",
+    "commits": 0,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 643
+   },
+   {
+    "repo": "b-open-io/statusline",
+    "commits": 0,
+    "stars": 10,
+    "top1000": false,
+    "sl_loc": 259
+   }
+  ]
+ },
+ {
+  "size": 26,
+  "in_top1000": 3,
+  "members": [
+   {
+    "repo": "DamianPala/hazline",
+    "commits": 138,
+    "stars": 0,
+    "top1000": true,
+    "sl_loc": 1968
+   },
+   {
+    "repo": "Miracle0x0/CCometixLine",
+    "commits": 111,
+    "stars": 0,
+    "top1000": true,
+    "sl_loc": 1998
+   },
+   {
+    "repo": "zleo-ai/line",
+    "commits": 88,
+    "stars": 0,
+    "top1000": true,
+    "sl_loc": 977
+   },
+   {
+    "repo": "EF-FlowCode/EFlowCodeLine",
+    "commits": 36,
+    "stars": 4,
+    "top1000": false,
+    "sl_loc": 1257
+   },
+   {
+    "repo": "kiritoko1029/glmcode",
+    "commits": 35,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 904
+   },
+   {
+    "repo": "hollegjx/mycode_statusline",
+    "commits": 21,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 1077
+   },
+   {
+    "repo": "leo919cc/CClineBar",
+    "commits": 20,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 1545
+   },
+   {
+    "repo": "lilicocon/CCometixLine",
+    "commits": 18,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 2201
+   },
+   {
+    "repo": "ding113/ccline-packycc",
+    "commits": 17,
+    "stars": 29,
+    "top1000": false,
+    "sl_loc": 1092
+   },
+   {
+    "repo": "rere43/CCometixLine",
+    "commits": 17,
+    "stars": 5,
+    "top1000": false,
+    "sl_loc": 1021
+   },
+   {
+    "repo": "MengFanLu1/opendoor-statusline",
+    "commits": 16,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 1433
+   },
+   {
+    "repo": "zuoliangyu/MicuSubCodeLine",
+    "commits": 16,
+    "stars": 5,
+    "top1000": false,
+    "sl_loc": 1271
+   },
+   {
+    "repo": "hollegjx/uucode",
+    "commits": 15,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 964
+   },
+   {
+    "repo": "dengshuit/cclinepro",
+    "commits": 11,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 1331
+   },
+   {
+    "repo": "Cubence-com/CubenceLine",
+    "commits": 10,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 927
+   },
+   {
+    "repo": "ThirteenAsh/CCometixLine",
+    "commits": 9,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 899
+   },
+   {
+    "repo": "LemonYangZW/CCometixLine",
+    "commits": 7,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 1077
+   },
+   {
+    "repo": "TanyuSylvain/mossccline",
+    "commits": 6,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 920
+   },
+   {
+    "repo": "architg25/cc-statusline",
+    "commits": 6,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 899
+   },
+   {
+    "repo": "HoBeedzc/ccline-customcc",
+    "commits": 4,
+    "stars": 3,
+    "top1000": false,
+    "sl_loc": 904
+   },
+   {
+    "repo": "francismiko/CCometixLine",
+    "commits": 4,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 901
+   },
+   {
+    "repo": "lucasmen9527/CCometixLine",
+    "commits": 4,
+    "stars": 2,
+    "top1000": false,
+    "sl_loc": 1076
+   },
+   {
+    "repo": "oray749616/CCometixLine",
+    "commits": 2,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 906
+   },
+   {
+    "repo": "MaurUppi/CCstatus",
+    "commits": 0,
+    "stars": 34,
+    "top1000": false,
+    "sl_loc": 1306
+   },
+   {
+    "repo": "lion231226/glmcode",
+    "commits": 0,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 899
+   },
+   {
+    "repo": "zuoliangyu/MICUCODELINE",
+    "commits": 0,
+    "stars": 15,
+    "top1000": false,
+    "sl_loc": 1165
+   }
+  ]
+ },
+ {
+  "size": 25,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "cuteboy0323/claude-statusline",
+    "commits": 21,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 278
+   },
+   {
+    "repo": "limingsoftvision-hub/claude-statusline",
+    "commits": 21,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 278
+   },
+   {
+    "repo": "nilbuild/claude-statusline",
+    "commits": 21,
+    "stars": 1394,
+    "top1000": false,
+    "sl_loc": 278
+   },
+   {
+    "repo": "pvnazarov/claude-statusbar",
+    "commits": 10,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 449
+   },
+   {
+    "repo": "hephaestus-workers/cc-statusline",
+    "commits": 7,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 443
+   },
+   {
+    "repo": "pessini/claudecode-status-line",
+    "commits": 7,
+    "stars": 3,
+    "top1000": false,
+    "sl_loc": 262
+   },
+   {
+    "repo": "wallace921029/claude-statusline",
+    "commits": 7,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 583
+   },
+   {
+    "repo": "lucasfdale/cc-statusline",
+    "commits": 5,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 268
+   },
+   {
+    "repo": "minoism/cc-pretty-statusline",
+    "commits": 5,
+    "stars": 22,
+    "top1000": false,
+    "sl_loc": 507
+   },
+   {
+    "repo": "sykfar/statusline",
+    "commits": 5,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 810
+   },
+   {
+    "repo": "utkarshchowdhary/claude-statusline",
+    "commits": 5,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 304
+   },
+   {
+    "repo": "GentaAmeku/claude-statusline",
+    "commits": 4,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 287
+   },
+   {
+    "repo": "ncara42/statusline-claude",
+    "commits": 4,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 304
+   },
+   {
+    "repo": "raphaelc0elh0/claude-statusline",
+    "commits": 4,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 289
+   },
+   {
+    "repo": "minhtran3124/cc-statusline",
+    "commits": 3,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 610
+   },
+   {
+    "repo": "sadspirit/claude-ratelimit-bar",
+    "commits": 3,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 105
+   },
+   {
+    "repo": "sirdree/claude-statusline",
+    "commits": 3,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 456
+   },
+   {
+    "repo": "Cody-Xue/cc-statusline",
+    "commits": 2,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 486
+   },
+   {
+    "repo": "kvmaker/statusline",
+    "commits": 2,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 389
+   },
+   {
+    "repo": "Fuck4ik/claude-code-statusline",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 277
+   },
+   {
+    "repo": "dichioniccolo/statusline",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 339
+   },
+   {
+    "repo": "gist:1300298fc90bdb20c7486f0e4b1230be",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 278
+   },
+   {
+    "repo": "gist:ff665071ff259881db530f1c8f3b4fc2",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 278
+   },
+   {
+    "repo": "ken1520/claude-code-statusline",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 278
+   },
+   {
+    "repo": "MammadovZaur/claude-statusline",
+    "commits": 0,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 278
+   }
+  ]
+ },
+ {
+  "size": 19,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "kunaltulsidasani/claude-reimagined",
+    "commits": 24,
+    "stars": 8,
+    "top1000": false,
+    "sl_loc": 144
+   },
+   {
+    "repo": "brunohradec/claude-code-statusline",
+    "commits": 9,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 37
+   },
+   {
+    "repo": "AliT-Hammoud/claude-statusline",
+    "commits": 6,
+    "stars": 2,
+    "top1000": false,
+    "sl_loc": 94
+   },
+   {
+    "repo": "Zaronian/claude-usage-statusline",
+    "commits": 6,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 60
+   },
+   {
+    "repo": "jasonkradams/claude-status",
+    "commits": 6,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 85
+   },
+   {
+    "repo": "hugohvf/claude-code-statusline",
+    "commits": 4,
+    "stars": 6,
+    "top1000": false,
+    "sl_loc": 75
+   },
+   {
+    "repo": "tiger3645/claude-stats",
+    "commits": 4,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 95
+   },
+   {
+    "repo": "CaioScan/claude-code-statusline",
+    "commits": 3,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 71
+   },
+   {
+    "repo": "gist:6ea38c1850ade42dae252a9416daffea",
+    "commits": 3,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 32
+   },
+   {
+    "repo": "gist:9169920346086a0421093022282697be",
+    "commits": 3,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 28
+   },
+   {
+    "repo": "Procorpcdaza/claude-statusline",
+    "commits": 2,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 65
+   },
+   {
+    "repo": "gist:d62a746f5106f215fbb0d69d14eacfff",
+    "commits": 2,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 43
+   },
+   {
+    "repo": "Venser724/claude-code-statusline",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 43
+   },
+   {
+    "repo": "gist:3919f9e602d909b0b3f13894b9de7e6f",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 56
+   },
+   {
+    "repo": "gist:463ad5584dc83340b0379f5ba477073f",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 22
+   },
+   {
+    "repo": "gist:aa8f057954896c42c66d4ad66970ebe3",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 39
+   },
+   {
+    "repo": "gist:f5ce5bbc57c3016e6839359c2d704075",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 25
+   },
+   {
+    "repo": "h4ckforge/claude-statusline",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 31
+   },
+   {
+    "repo": "rainerpassos/2609-claude-code-statusline",
+    "commits": 0,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 71
+   }
+  ]
+ },
+ {
+  "size": 14,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "danielmackay/claude-code-statusline",
+    "commits": 10,
+    "stars": 111,
+    "top1000": false,
+    "sl_loc": 165
+   },
+   {
+    "repo": "jpjerkins/claude-statusline",
+    "commits": 7,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 90
+   },
+   {
+    "repo": "purelife12181-droid/ClaudeCode-Statusline",
+    "commits": 7,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 78
+   },
+   {
+    "repo": "yo-resistor/claude-code-statusline",
+    "commits": 7,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 154
+   },
+   {
+    "repo": "gist:570554fa7a2ce2e36ee16ce5784eb824",
+    "commits": 4,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 78
+   },
+   {
+    "repo": "noppadol26dw/claude-status-line",
+    "commits": 4,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 74
+   },
+   {
+    "repo": "wilsonneto-swe/cc-utils",
+    "commits": 4,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 126
+   },
+   {
+    "repo": "RangerDjanger/claude-code-statusline",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 76
+   },
+   {
+    "repo": "gist:1e227fe30a212d09063aa3ecb023000a",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 96
+   },
+   {
+    "repo": "gist:3634a6b7627a26c523409ae4d2daeba9",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 78
+   },
+   {
+    "repo": "gist:43008157b1608614506398e073b666a2",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 116
+   },
+   {
+    "repo": "gist:67212299857be946420bae06c0116edd",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 79
+   },
+   {
+    "repo": "gist:bbef076946299a04b0ece77c235eb736",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 84
+   },
+   {
+    "repo": "jpsirois/claude-statusline",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 73
+   }
+  ]
+ },
+ {
+  "size": 11,
+  "in_top1000": 2,
+  "members": [
+   {
+    "repo": "ykdojo/claude-code-tips",
+    "commits": 742,
+    "stars": 10269,
+    "top1000": true,
+    "sl_loc": 169
+   },
+   {
+    "repo": "AthullyaBhuvan/claude-code-tips",
+    "commits": 741,
+    "stars": 0,
+    "top1000": true,
+    "sl_loc": 169
+   },
+   {
+    "repo": "methuz/methuz-claude-marketplace",
+    "commits": 13,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 173
+   },
+   {
+    "repo": "gist:d6010ca191d7f0c4321a4f976bfcbef0",
+    "commits": 4,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 106
+   },
+   {
+    "repo": "Zeynal7/claude-statusline",
+    "commits": 3,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 264
+   },
+   {
+    "repo": "blazingbunny/claude-code-context-bar",
+    "commits": 3,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 195
+   },
+   {
+    "repo": "wjgoarxiv/pretty-claude-hud",
+    "commits": 3,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 302
+   },
+   {
+    "repo": "yaronbeen/ClaudeCodeSetup",
+    "commits": 3,
+    "stars": 4,
+    "top1000": false,
+    "sl_loc": 186
+   },
+   {
+    "repo": "picat-ai/claude-status-bar",
+    "commits": 2,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 247
+   },
+   {
+    "repo": "gist:6f793bae58a00db35e463ca8895f562e",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 238
+   },
+   {
+    "repo": "mf-rug/claude-context-bar",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 232
+   }
+  ]
+ },
+ {
+  "size": 8,
+  "in_top1000": 1,
+  "members": [
+   {
+    "repo": "MartyBonacci/specswarm",
+    "commits": 234,
+    "stars": 66,
+    "top1000": true,
+    "sl_loc": 660
+   },
+   {
+    "repo": "chongdashu/cc-statusline",
+    "commits": 38,
+    "stars": 646,
+    "top1000": false,
+    "sl_loc": 778
+   },
+   {
+    "repo": "masx200/claude-code-statusline-docker",
+    "commits": 13,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 259
+   },
+   {
+    "repo": "wjshin-personal/statusLine_Edit",
+    "commits": 2,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 318
+   },
+   {
+    "repo": "Organized-AI/organized-statusline",
+    "commits": 0,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 671
+   },
+   {
+    "repo": "QianziTech/cc-statusline-for-deepseek",
+    "commits": 0,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 553
+   },
+   {
+    "repo": "dlepold/cc-statusline-with-unix-prompt",
+    "commits": 0,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 553
+   },
+   {
+    "repo": "vrgcosta/cc-statusline-usando",
+    "commits": 0,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 671
+   }
+  ]
+ },
+ {
+  "size": 6,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "azekyoo/claude-code-status-line",
+    "commits": 26,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 398
+   },
+   {
+    "repo": "kcchien/claude-code-statusline",
+    "commits": 7,
+    "stars": 197,
+    "top1000": false,
+    "sl_loc": 245
+   },
+   {
+    "repo": "syntaxerror00100/claude-code-statusline",
+    "commits": 7,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 380
+   },
+   {
+    "repo": "LucanMarsh/Claude-Status-Bar",
+    "commits": 2,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 318
+   },
+   {
+    "repo": "koller-nexus/claude-code-statusline",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 288
+   },
+   {
+    "repo": "muou55555/claude-code-statusline",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 267
+   }
+  ]
+ },
+ {
+  "size": 6,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "Undone-drawknife974/claude-code-statusline",
+    "commits": 4,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 216
+   },
+   {
+    "repo": "alexskinner/claude-status-bar",
+    "commits": 3,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 81
+   },
+   {
+    "repo": "yoanm/claude-statusline",
+    "commits": 2,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 70
+   },
+   {
+    "repo": "ajpy08/claudecode-statusline",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 97
+   },
+   {
+    "repo": "gist:2bdc05ea1f145807e39a9d4d78ff552d",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 216
+   },
+   {
+    "repo": "nasri-mohamed/claude-code-statusline",
+    "commits": 1,
+    "stars": 3,
+    "top1000": false,
+    "sl_loc": 216
+   }
+  ]
+ },
+ {
+  "size": 6,
+  "in_top1000": 2,
+  "members": [
+   {
+    "repo": "jarrodwatts/claude-hud",
+    "commits": 871,
+    "stars": 28882,
+    "top1000": true,
+    "sl_loc": 581
+   },
+   {
+    "repo": "hoobnn/hoobnn-agent-mods",
+    "commits": 52,
+    "stars": 7,
+    "top1000": true,
+    "sl_loc": 1354
+   },
+   {
+    "repo": "fabioivan/claude-code-mods",
+    "commits": 18,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 1415
+   },
+   {
+    "repo": "e950280/hudlite",
+    "commits": 7,
+    "stars": 3,
+    "top1000": false,
+    "sl_loc": 1492
+   },
+   {
+    "repo": "deniskern/hoobnn-agent-mods",
+    "commits": 0,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 1350
+   },
+   {
+    "repo": "xdimtech/stepcode-hud",
+    "commits": 0,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 589
+   }
+  ]
+ },
+ {
+  "size": 5,
+  "in_top1000": 1,
+  "members": [
+   {
+    "repo": "Nanako0129/coralline",
+    "commits": 289,
+    "stars": 549,
+    "top1000": true,
+    "sl_loc": 7151
+   },
+   {
+    "repo": "catapultam/cc-coralline-rust",
+    "commits": 37,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 3359
+   },
+   {
+    "repo": "Silverance/coralline",
+    "commits": 26,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 6683
+   },
+   {
+    "repo": "miyago9267/coralline",
+    "commits": 14,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 1807
+   },
+   {
+    "repo": "kylinfish/coralline-best-themes",
+    "commits": 5,
+    "stars": 2,
+    "top1000": false,
+    "sl_loc": 750
+   }
+  ]
+ },
+ {
+  "size": 5,
+  "in_top1000": 2,
+  "members": [
+   {
+    "repo": "awesomezun/claude-statusline",
+    "commits": 133,
+    "stars": 201,
+    "top1000": true,
+    "sl_loc": 2662
+   },
+   {
+    "repo": "jnelken/CC-statusline-node",
+    "commits": 115,
+    "stars": 0,
+    "top1000": true,
+    "sl_loc": 2677
+   },
+   {
+    "repo": "damithdev/claude-code-hud",
+    "commits": 6,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 1125
+   },
+   {
+    "repo": "webtitovdev/claude-statusline",
+    "commits": 3,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 261
+   },
+   {
+    "repo": "ricafa/my-claude-statusline",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 356
+   }
+  ]
+ },
+ {
+  "size": 5,
+  "in_top1000": 1,
+  "members": [
+   {
+    "repo": "uppinote20/claude-dashboard",
+    "commits": 530,
+    "stars": 583,
+    "top1000": true,
+    "sl_loc": 1063
+   },
+   {
+    "repo": "jobc90/multi-ai-orchestration",
+    "commits": 26,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 330
+   },
+   {
+    "repo": "wenjiecome/claude-dashboard-zai",
+    "commits": 2,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 567
+   },
+   {
+    "repo": "kubony/claude-dashboard",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 296
+   },
+   {
+    "repo": "rcobean-sei/CustomClaudeStatusBar",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 261
+   }
+  ]
+ },
+ {
+  "size": 4,
+  "in_top1000": 1,
+  "members": [
+   {
+    "repo": "mr-kumuditha/devpilot-studio",
+    "commits": 47,
+    "stars": 2,
+    "top1000": true,
+    "sl_loc": 1194
+   },
+   {
+    "repo": "lakpriya1s/ccbar",
+    "commits": 29,
+    "stars": 9,
+    "top1000": false,
+    "sl_loc": 896
+   },
+   {
+    "repo": "oboistwalpurgisnight703/ccbar",
+    "commits": 23,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 873
+   },
+   {
+    "repo": "ChethiyaKD/ccbar",
+    "commits": 0,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 448
+   }
+  ]
+ },
+ {
+  "size": 4,
+  "in_top1000": 1,
+  "members": [
+   {
+    "repo": "professionalcrastinationco/METRICC",
+    "commits": 79,
+    "stars": 42,
+    "top1000": true,
+    "sl_loc": 740
+   },
+   {
+    "repo": "Domizze/claude-code-hud",
+    "commits": 8,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 751
+   },
+   {
+    "repo": "jonobri/cc-statusline",
+    "commits": 7,
+    "stars": 2,
+    "top1000": false,
+    "sl_loc": 930
+   },
+   {
+    "repo": "indiana-nikel/claude-hud",
+    "commits": 3,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 363
+   }
+  ]
+ },
+ {
+  "size": 4,
+  "in_top1000": 1,
+  "members": [
+   {
+    "repo": "tinnet/ccline",
+    "commits": 55,
+    "stars": 1,
+    "top1000": true,
+    "sl_loc": 656
+   },
+   {
+    "repo": "martinemde/starship-claude",
+    "commits": 30,
+    "stars": 152,
+    "top1000": false,
+    "sl_loc": 482
+   },
+   {
+    "repo": "gist:67ee588b2d8c39703d4ac9986f2b09ea",
+    "commits": 10,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 340
+   },
+   {
+    "repo": "UtakataKyosui/utakata-starship-claude",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 198
+   }
+  ]
+ },
+ {
+  "size": 4,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "gist:01f2d2b682739bdc4802db74655d37c7",
+    "commits": 2,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 100
+   },
+   {
+    "repo": "je4yfc/claude-catppuccin",
+    "commits": 2,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 101
+   },
+   {
+    "repo": "gist:4149045e9af0c523290e13776ca08918",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 118
+   },
+   {
+    "repo": "gist:9723c4eb2ae632e2b762b6050e7fd928",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 102
+   }
+  ]
+ },
+ {
+  "size": 4,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "ryotaro0213/claude-code-statusline",
+    "commits": 6,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 89
+   },
+   {
+    "repo": "gist:098db8f7f1964707fe6893a4dab70912",
+    "commits": 2,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 93
+   },
+   {
+    "repo": "gist:19ff5bcab95c92278df2985a4fafb367",
+    "commits": 2,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 73
+   },
+   {
+    "repo": "gist:673088fd69f35caf42fb5dd1ea7c7e40",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 39
+   }
+  ]
+ },
+ {
+  "size": 4,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "jeziellopes/claude-stats",
+    "commits": 23,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 927
+   },
+   {
+    "repo": "vfmatzkin/claude-statusline",
+    "commits": 16,
+    "stars": 56,
+    "top1000": false,
+    "sl_loc": 347
+   },
+   {
+    "repo": "ricardokrieg/claude-statusline",
+    "commits": 5,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 245
+   },
+   {
+    "repo": "gist:25a182e2c541eb8c02d0315155d237d4",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 380
+   }
+  ]
+ },
+ {
+  "size": 3,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "AndyShaman/claude-statusline",
+    "commits": 9,
+    "stars": 34,
+    "top1000": false,
+    "sl_loc": 220
+   },
+   {
+    "repo": "kyllian330/claude-statusline",
+    "commits": 6,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 199
+   },
+   {
+    "repo": "umar-s/statusline",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 429
+   }
+  ]
+ },
+ {
+  "size": 3,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "ArielRi/claude-code-multi-account-statusline",
+    "commits": 17,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 1246
+   },
+   {
+    "repo": "gist:e0f4e94073eda3c394ecab57947a67db",
+    "commits": 2,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 377
+   },
+   {
+    "repo": "gist:1f70230c8cdbbe8a6f1ba2a900f12420",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 331
+   }
+  ]
+ },
+ {
+  "size": 3,
+  "in_top1000": 1,
+  "members": [
+   {
+    "repo": "Astro-Han/claude-pace",
+    "commits": 131,
+    "stars": 241,
+    "top1000": true,
+    "sl_loc": 651
+   },
+   {
+    "repo": "VallierDev/claude-statusline-plus",
+    "commits": 10,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 1095
+   },
+   {
+    "repo": "mairas/claude-pace-sparklines",
+    "commits": 7,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 535
+   }
+  ]
+ },
+ {
+  "size": 3,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "Charliecl-Lau/ClaudeHUD",
+    "commits": 7,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 342
+   },
+   {
+    "repo": "skyconnfig/claude-statusline",
+    "commits": 7,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 227
+   },
+   {
+    "repo": "Smopig/Claude-Code-Statusline",
+    "commits": 5,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 667
+   }
+  ]
+ },
+ {
+  "size": 3,
+  "in_top1000": 2,
+  "members": [
+   {
+    "repo": "rz1989s/claude-code-statusline",
+    "commits": 918,
+    "stars": 480,
+    "top1000": true,
+    "sl_loc": 4051
+   },
+   {
+    "repo": "gitlab.com:rz1989s/claude-code-statusline",
+    "commits": 100,
+    "stars": "1",
+    "top1000": true,
+    "sl_loc": 4051
+   },
+   {
+    "repo": "Dev-MS-Infrastructure-Ops/copyof-claude-code-statusline",
+    "commits": 0,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 3481
+   }
+  ]
+ },
+ {
+  "size": 3,
+  "in_top1000": 2,
+  "members": [
+   {
+    "repo": "Div0011/Frontend-Pipeline",
+    "commits": 142,
+    "stars": 0,
+    "top1000": true,
+    "sl_loc": 1522
+   },
+   {
+    "repo": "jcsoftlabs/civora-backend",
+    "commits": 97,
+    "stars": 0,
+    "top1000": true,
+    "sl_loc": 315
+   },
+   {
+    "repo": "bencium/bencium-marketplace",
+    "commits": 41,
+    "stars": 467,
+    "top1000": false,
+    "sl_loc": 315
+   }
+  ]
+ },
+ {
+  "size": 3,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "gist:89d81945f0bae0bce6f0c6b90745f1a2",
+    "commits": 8,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 110
+   },
+   {
+    "repo": "DrebotAI/claude-statusline",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 145
+   },
+   {
+    "repo": "KitKat-ru/claude-code-statusline",
+    "commits": 0,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 147
+   }
+  ]
+ },
+ {
+  "size": 3,
+  "in_top1000": 2,
+  "members": [
+   {
+    "repo": "usedhonda/statusline",
+    "commits": 161,
+    "stars": 81,
+    "top1000": true,
+    "sl_loc": 3767
+   },
+   {
+    "repo": "HarutoKimura/claude-code-token-monitor",
+    "commits": 57,
+    "stars": 0,
+    "top1000": true,
+    "sl_loc": 1904
+   },
+   {
+    "repo": "johnnymny/statusline",
+    "commits": 19,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 2417
+   }
+  ]
+ },
+ {
+  "size": 3,
+  "in_top1000": 1,
+  "members": [
+   {
+    "repo": "stephenleo/cship",
+    "commits": 336,
+    "stars": 428,
+    "top1000": true,
+    "sl_loc": 6865
+   },
+   {
+    "repo": "KJ21-ENG/keyjey",
+    "commits": 16,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 2922
+   },
+   {
+    "repo": "tkm3d1a/cship-windows",
+    "commits": 0,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 2989
+   }
+  ]
+ },
+ {
+  "size": 3,
+  "in_top1000": 1,
+  "members": [
+   {
+    "repo": "ohugonnot/claude-code-statusline",
+    "commits": 45,
+    "stars": 14,
+    "top1000": true,
+    "sl_loc": 721
+   },
+   {
+    "repo": "latte3cup/claude-code-statusline",
+    "commits": 19,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 400
+   },
+   {
+    "repo": "KenKinCOM/cc-statusline",
+    "commits": 2,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 286
+   }
+  ]
+ },
+ {
+  "size": 3,
+  "in_top1000": 1,
+  "members": [
+   {
+    "repo": "MatteoSchifano/claude-statusline",
+    "commits": 48,
+    "stars": 6,
+    "top1000": true,
+    "sl_loc": 1364
+   },
+   {
+    "repo": "OJBoon/claude-statusline",
+    "commits": 44,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 1267
+   },
+   {
+    "repo": "hell0github/claude-statusline",
+    "commits": 42,
+    "stars": 27,
+    "top1000": false,
+    "sl_loc": 1156
+   }
+  ]
+ },
+ {
+  "size": 3,
+  "in_top1000": 2,
+  "members": [
+   {
+    "repo": "leeguooooo/claude-code-usage-bar",
+    "commits": 463,
+    "stars": 384,
+    "top1000": true,
+    "sl_loc": 11864
+   },
+   {
+    "repo": "Nishant-Rajj/claude-statusbar",
+    "commits": 373,
+    "stars": 1,
+    "top1000": true,
+    "sl_loc": 8648
+   },
+   {
+    "repo": "lazearth/claude-code-usage-bar",
+    "commits": 0,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 3915
+   }
+  ]
+ },
+ {
+  "size": 3,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "gitlab.com:TheoBrigitte/claude-statusline",
+    "commits": 34,
+    "stars": "0",
+    "top1000": false,
+    "sl_loc": 308
+   },
+   {
+    "repo": "TheoBrigitte/claude-statusline",
+    "commits": 32,
+    "stars": 8,
+    "top1000": false,
+    "sl_loc": 308
+   },
+   {
+    "repo": "kiyomasanaki/claude-statusline",
+    "commits": 7,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 589
+   }
+  ]
+ },
+ {
+  "size": 3,
+  "in_top1000": 1,
+  "members": [
+   {
+    "repo": "aiedwardyi/claude-usage-monitor",
+    "commits": 51,
+    "stars": 58,
+    "top1000": true,
+    "sl_loc": 446
+   },
+   {
+    "repo": "koosolek/claude-usage-monitor",
+    "commits": 6,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 373
+   },
+   {
+    "repo": "gcampton/gcs-claude-stats",
+    "commits": 3,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 347
+   }
+  ]
+ },
+ {
+  "size": 3,
+  "in_top1000": 2,
+  "members": [
+   {
+    "repo": "welflau/ai-dev-system",
+    "commits": 893,
+    "stars": 3,
+    "top1000": true,
+    "sl_loc": 78
+   },
+   {
+    "repo": "davepoon/buildwithclaude",
+    "commits": 697,
+    "stars": 3678,
+    "top1000": true,
+    "sl_loc": 117
+   },
+   {
+    "repo": "masx200/codebuddy-plugins-official",
+    "commits": 27,
+    "stars": 2,
+    "top1000": false,
+    "sl_loc": 78
+   }
+  ]
+ },
+ {
+  "size": 3,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "milan44i/claude-setup",
+    "commits": 11,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 245
+   },
+   {
+    "repo": "elsung/claude-code-context-monitor",
+    "commits": 3,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 426
+   },
+   {
+    "repo": "gist:6c7dccb705b413a030805081428d0212",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 127
+   }
+  ]
+ },
+ {
+  "size": 3,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "gist:7862daf2f9ead4012a58bea10f57838c",
+    "commits": 5,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 325
+   },
+   {
+    "repo": "gist:068cf2d75ba27fa0dc087dc60a500217",
+    "commits": 3,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 279
+   },
+   {
+    "repo": "gist:545f959aa5b95205cc6e83e891fc6b04",
+    "commits": 2,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 319
+   }
+  ]
+ },
+ {
+  "size": 3,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "gist:0bf37901d25f14f3a4f32d2e4a43f45c",
+    "commits": 3,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 230
+   },
+   {
+    "repo": "gist:bf166c6c2db4b98ed3c8e972c88733b5",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 230
+   },
+   {
+    "repo": "gist:d28177664d5f6464b5b397d1326e3375",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 230
+   }
+  ]
+ },
+ {
+  "size": 3,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "gist:76b4b400a6519fc341a1dbd27c1b46ec",
+    "commits": 8,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 253
+   },
+   {
+    "repo": "gist:2260a6265c6e5607263f4981c5e1c962",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 244
+   },
+   {
+    "repo": "gist:70bca6a66a6e2d662b22503e293e0d2e",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 143
+   }
+  ]
+ },
+ {
+  "size": 3,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "gist:362c1fc77909b202476aba9b57cb0145",
+    "commits": 5,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 150
+   },
+   {
+    "repo": "gist:5858af16fdfe191fd07b3dcf9873eb3a",
+    "commits": 3,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 99
+   },
+   {
+    "repo": "gist:f14c3be7cb30d1727b1727acf2912b31",
+    "commits": 2,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 99
+   }
+  ]
+ },
+ {
+  "size": 3,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "xleddyl/claude-watch",
+    "commits": 7,
+    "stars": 70,
+    "top1000": false,
+    "sl_loc": 101
+   },
+   {
+    "repo": "gist:a65a95a0d4931e19bf83cf19ab040e64",
+    "commits": 3,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 90
+   },
+   {
+    "repo": "gist:71a694583e50f9ef65bfa9ff07240eff",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 83
+   }
+  ]
+ },
+ {
+  "size": 3,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "gist:ca6976906daae18d90aba15992a932dc",
+    "commits": 2,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 53
+   },
+   {
+    "repo": "gist:e8d4ad1515d4973911f7fdbd6fb72745",
+    "commits": 2,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 81
+   },
+   {
+    "repo": "gist:e62803979b1fc3e0771e5bbb782693f1",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 87
+   }
+  ]
+ },
+ {
+  "size": 3,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "qicui-netizen/claude-code-statusline",
+    "commits": 4,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 130
+   },
+   {
+    "repo": "qifeif/claude-code-statusline",
+    "commits": 4,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 130
+   },
+   {
+    "repo": "shier-12-zwf/claude-code-statusline",
+    "commits": 2,
+    "stars": 3,
+    "top1000": false,
+    "sl_loc": 123
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 2,
+  "members": [
+   {
+    "repo": "aguinaldotupy/claude-session-tracker",
+    "commits": 119,
+    "stars": 2,
+    "top1000": true,
+    "sl_loc": 31
+   },
+   {
+    "repo": "02siteIQ/claude-session-tracker",
+    "commits": 115,
+    "stars": 0,
+    "top1000": true,
+    "sl_loc": 31
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "0xYubo/claude-statusline",
+    "commits": 17,
+    "stars": 2,
+    "top1000": false,
+    "sl_loc": 868
+   },
+   {
+    "repo": "evachxji/yc-statusline",
+    "commits": 5,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 530
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "SRHSoulja/claude-code-hud",
+    "commits": 19,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 233
+   },
+   {
+    "repo": "99percentgod/claude-code-hud",
+    "commits": 0,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 99
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "AbdulrahmanMasoud/claude-bar",
+    "commits": 9,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 492
+   },
+   {
+    "repo": "LTnanana/claude-code-config",
+    "commits": 2,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 494
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "AnitChaudhry/claude-code-statusline",
+    "commits": 20,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 1511
+   },
+   {
+    "repo": "OpenAnalystInc/Statusline",
+    "commits": 1,
+    "stars": 2,
+    "top1000": false,
+    "sl_loc": 1293
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "DiceNameIsMy/statusline",
+    "commits": 3,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 65
+   },
+   {
+    "repo": "NurAtEnverus/statusline",
+    "commits": 3,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 65
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "lucasfsanti/claude-statusline",
+    "commits": 2,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 317
+   },
+   {
+    "repo": "DougieWougie/claude-statusline",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 276
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "Dr-LinLang/claude-statusline",
+    "commits": 23,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 428
+   },
+   {
+    "repo": "fightingPig/claude-statusline",
+    "commits": 20,
+    "stars": 12,
+    "top1000": false,
+    "sl_loc": 255
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "EchoPrime-Studio/claude-code-statusline",
+    "commits": 10,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 99
+   },
+   {
+    "repo": "gitlab.com:spiegel/claude-code-statusline",
+    "commits": 4,
+    "stars": "0",
+    "top1000": false,
+    "sl_loc": 78
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "Elbhnasy/status-line",
+    "commits": 16,
+    "stars": 8,
+    "top1000": false,
+    "sl_loc": 830
+   },
+   {
+    "repo": "TahaSabir0/Best-ClaudeCode-statusline",
+    "commits": 10,
+    "stars": 19,
+    "top1000": false,
+    "sl_loc": 259
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "FeilongAI/statusLine",
+    "commits": 7,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 434
+   },
+   {
+    "repo": "yang1997434/claude-code-hud",
+    "commits": 4,
+    "stars": 3,
+    "top1000": false,
+    "sl_loc": 416
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "Fibonach0/claude-code-gadgets-linux",
+    "commits": 16,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 426
+   },
+   {
+    "repo": "Fibonach0/claude-code-gadgets-macos",
+    "commits": 14,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 276
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "Fighting05/minimax-hud",
+    "commits": 5,
+    "stars": 2,
+    "top1000": false,
+    "sl_loc": 325
+   },
+   {
+    "repo": "Fighting05/OpenCode-Go-hud",
+    "commits": 4,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 313
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "FlorianBx/status-bar-claude",
+    "commits": 7,
+    "stars": 15,
+    "top1000": false,
+    "sl_loc": 83
+   },
+   {
+    "repo": "dt-florian-beaumont/status-bar-claude",
+    "commits": 4,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 91
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "Greg-Klein/claude-usage-statusline",
+    "commits": 6,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 93
+   },
+   {
+    "repo": "robin-sm/claude-usage-statusline",
+    "commits": 0,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 93
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "Gui-Gou/claude-statusline-burnrate",
+    "commits": 16,
+    "stars": 21,
+    "top1000": false,
+    "sl_loc": 794
+   },
+   {
+    "repo": "rasulfal7902/claude-statusline-burnrate",
+    "commits": 15,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 294
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "hanliang97/claude-buddy-cn",
+    "commits": 16,
+    "stars": 3,
+    "top1000": false,
+    "sl_loc": 581
+   },
+   {
+    "repo": "IdoCohen560/KodamaAlpha",
+    "commits": 15,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 687
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "Link-Start/my-claude-hud",
+    "commits": 27,
+    "stars": 9,
+    "top1000": false,
+    "sl_loc": 390
+   },
+   {
+    "repo": "JackCmd233/my-claude-hud",
+    "commits": 0,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 283
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "gist:b0de6f3c93f229cfca6c44470e096a9c",
+    "commits": 8,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 154
+   },
+   {
+    "repo": "Jarkius/Jarkius.github.io",
+    "commits": 4,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 235
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "JerryFan626/claude-statusline",
+    "commits": 7,
+    "stars": 3,
+    "top1000": false,
+    "sl_loc": 272
+   },
+   {
+    "repo": "yuanzhixiang/claude-statusline",
+    "commits": 2,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 259
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "Jhonatan-de-Souza/ClaudeMods",
+    "commits": 30,
+    "stars": 24,
+    "top1000": false,
+    "sl_loc": 188
+   },
+   {
+    "repo": "Jhonatan-de-Souza/claude-code-statusline",
+    "commits": 4,
+    "stars": 26,
+    "top1000": false,
+    "sl_loc": 355
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 1,
+  "members": [
+   {
+    "repo": "JochenYang/minimax-status",
+    "commits": 130,
+    "stars": 33,
+    "top1000": true,
+    "sl_loc": 696
+   },
+   {
+    "repo": "spuentesp/minimax-status-en",
+    "commits": 0,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 700
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "gist:ffadccca6238b3c9c9be5ebf23fa4487",
+    "commits": 5,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 60
+   },
+   {
+    "repo": "JoseAlgemi/claude-code-statusline",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 78
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "LiveLikeCounter/claude-usage",
+    "commits": 10,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 392
+   },
+   {
+    "repo": "LXXero/claude-usage",
+    "commits": 9,
+    "stars": 3,
+    "top1000": false,
+    "sl_loc": 309
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "slopware/claude-quota",
+    "commits": 8,
+    "stars": 3,
+    "top1000": false,
+    "sl_loc": 196
+   },
+   {
+    "repo": "LYtingN/claude-usage-display-IDE",
+    "commits": 3,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 220
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "LipiTechnology/claude-code-statusbar",
+    "commits": 17,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 356
+   },
+   {
+    "repo": "TheBikramLama/claude-status-bar",
+    "commits": 11,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 298
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 2,
+  "members": [
+   {
+    "repo": "LokiQ0713/cc-statusline-tui",
+    "commits": 96,
+    "stars": 1,
+    "top1000": true,
+    "sl_loc": 1128
+   },
+   {
+    "repo": "Sodanitertraction336/cc-statusline-tui",
+    "commits": 78,
+    "stars": 1,
+    "top1000": true,
+    "sl_loc": 1020
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "Lorex/.claude-statusline",
+    "commits": 2,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 356
+   },
+   {
+    "repo": "Lorex/claude-statusline",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 358
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 2,
+  "members": [
+   {
+    "repo": "Melvynx/aiblueprint",
+    "commits": 317,
+    "stars": 233,
+    "top1000": true,
+    "sl_loc": 6876
+   },
+   {
+    "repo": "atournayre/claude-marketplace",
+    "commits": 155,
+    "stars": 9,
+    "top1000": true,
+    "sl_loc": 1640
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "RozenScarlet/claude-status-bar",
+    "commits": 22,
+    "stars": 7,
+    "top1000": false,
+    "sl_loc": 1151
+   },
+   {
+    "repo": "MengFanLu1/claude-code-status-bar",
+    "commits": 15,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 590
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "jojo-dan/claude-code-statusline",
+    "commits": 11,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 145
+   },
+   {
+    "repo": "Moonlighter99/2vs0-statusline-kr",
+    "commits": 4,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 275
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "Ventuss-OvO/cc-costline",
+    "commits": 32,
+    "stars": 28,
+    "top1000": false,
+    "sl_loc": 178
+   },
+   {
+    "repo": "Mr-Koala/cc-costline-zhipu",
+    "commits": 9,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 300
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 1,
+  "members": [
+   {
+    "repo": "NYCU-Chung/cc-statusline",
+    "commits": 63,
+    "stars": 265,
+    "top1000": true,
+    "sl_loc": 723
+   },
+   {
+    "repo": "v0re/cc-statusline",
+    "commits": 38,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 514
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 2,
+  "members": [
+   {
+    "repo": "Nadav-Fux/claude-2x-statusline",
+    "commits": 183,
+    "stars": 22,
+    "top1000": true,
+    "sl_loc": 7201
+   },
+   {
+    "repo": "codeberg.org:Nadav-Fux/claude-2x-statusline",
+    "commits": 183,
+    "stars": "0",
+    "top1000": true,
+    "sl_loc": 7201
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 2,
+  "members": [
+   {
+    "repo": "terzigolu/ccwatch",
+    "commits": 81,
+    "stars": 3,
+    "top1000": true,
+    "sl_loc": 666
+   },
+   {
+    "repo": "Narcooo/ccbar",
+    "commits": 71,
+    "stars": 25,
+    "top1000": true,
+    "sl_loc": 596
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "NeilTJM/statusline",
+    "commits": 13,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 561
+   },
+   {
+    "repo": "rabacen/statusline",
+    "commits": 9,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 337
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 1,
+  "members": [
+   {
+    "repo": "lexfrei/ailine",
+    "commits": 89,
+    "stars": 10,
+    "top1000": true,
+    "sl_loc": 2959
+   },
+   {
+    "repo": "NetBUG/claudeline",
+    "commits": 5,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 2701
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "NikitaSh8/claude-statusline",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 96
+   },
+   {
+    "repo": "gist:31f1677eeb3e2ea64d29f7504d1a5d74",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 144
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "yuco944/mood-claude-statusline",
+    "commits": 4,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 477
+   },
+   {
+    "repo": "PanMarieStudio/cat-claude-statusline",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 312
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "PeterCang/claude-code-statusline",
+    "commits": 7,
+    "stars": 5,
+    "top1000": false,
+    "sl_loc": 548
+   },
+   {
+    "repo": "Zephyruston/agents-statusline",
+    "commits": 3,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 1299
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "Raphael-0624/claudecode-status",
+    "commits": 2,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 169
+   },
+   {
+    "repo": "Rockelbel/claudecode-status",
+    "commits": 2,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 169
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "jkaloger/statusline-sprite",
+    "commits": 36,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 1545
+   },
+   {
+    "repo": "Rory-Clare-Inlight/statusline-sprite",
+    "commits": 0,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 452
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "SATOYUSUKE/claude-statusline",
+    "commits": 8,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 170
+   },
+   {
+    "repo": "gist:5f4ae32579ae6765fa7d31d8b9ecfaf4",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 165
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "SaharCarmel/claude-code-status-line",
+    "commits": 36,
+    "stars": 9,
+    "top1000": false,
+    "sl_loc": 317
+   },
+   {
+    "repo": "rami2102/cc_stats",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 318
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "SnowSky1/clawd",
+    "commits": 24,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 571
+   },
+   {
+    "repo": "SnowSky1/clawd-skins",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 362
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "aleksander-dytko/claude-code-statusline",
+    "commits": 29,
+    "stars": 8,
+    "top1000": false,
+    "sl_loc": 377
+   },
+   {
+    "repo": "Sokanon/muslim-statusline",
+    "commits": 15,
+    "stars": 6,
+    "top1000": false,
+    "sl_loc": 880
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "frshaka/claude-statusline",
+    "commits": 5,
+    "stars": 3,
+    "top1000": false,
+    "sl_loc": 609
+   },
+   {
+    "repo": "SouzaGusmaoTecnologia/claude-code-statusline",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 315
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 1,
+  "members": [
+   {
+    "repo": "artem-from-ua/claude-plugins",
+    "commits": 323,
+    "stars": 11,
+    "top1000": true,
+    "sl_loc": 844
+   },
+   {
+    "repo": "Tribe-Coding/claude-plugins",
+    "commits": 0,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 825
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "sk-ilya/claude-statusline",
+    "commits": 13,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 159
+   },
+   {
+    "repo": "Urilavi2/claude-codex-statusline",
+    "commits": 0,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 159
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 1,
+  "members": [
+   {
+    "repo": "Wangnov/claude-code-statusline-pro",
+    "commits": 264,
+    "stars": 239,
+    "top1000": true,
+    "sl_loc": 6499
+   },
+   {
+    "repo": "amadeus19/cc-statusline",
+    "commits": 10,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 2296
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "a692570/gauge",
+    "commits": 5,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 4126
+   },
+   {
+    "repo": "johan--/claude-pulse-statusline",
+    "commits": 0,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 4079
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "adyrugina/claude-code-statusline",
+    "commits": 24,
+    "stars": 2,
+    "top1000": false,
+    "sl_loc": 164
+   },
+   {
+    "repo": "productowner-ro/claude-code-statusline",
+    "commits": 0,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 151
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "eliasfaltin/cc-poor-mans-statusline",
+    "commits": 7,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 308
+   },
+   {
+    "repo": "alexfazio/cc-poor-mans-statusline",
+    "commits": 6,
+    "stars": 4,
+    "top1000": false,
+    "sl_loc": 363
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "alexj/oh-my-claude-duo",
+    "commits": 35,
+    "stars": 4,
+    "top1000": false,
+    "sl_loc": 305
+   },
+   {
+    "repo": "ssenart/oh-my-claude",
+    "commits": 21,
+    "stars": 16,
+    "top1000": false,
+    "sl_loc": 209
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "alloben812/claude-statusline-limits",
+    "commits": 2,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 102
+   },
+   {
+    "repo": "gist:d03777d98868b04898f4b3e2fbfc538c",
+    "commits": 2,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 147
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "obivanste/allthingsclaude-bar-forwindows",
+    "commits": 28,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 195
+   },
+   {
+    "repo": "allthingsclaude/bar",
+    "commits": 22,
+    "stars": 29,
+    "top1000": false,
+    "sl_loc": 96
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "alonw0/cc-promotion-statusline",
+    "commits": 4,
+    "stars": 2,
+    "top1000": false,
+    "sl_loc": 161
+   },
+   {
+    "repo": "codeberg.org:Nadav-Fux/cc-promotion-statusline",
+    "commits": 4,
+    "stars": "0",
+    "top1000": false,
+    "sl_loc": 161
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "alonw0/cc-redalerts-statusline",
+    "commits": 3,
+    "stars": 3,
+    "top1000": false,
+    "sl_loc": 189
+   },
+   {
+    "repo": "assafneudorfer/console-statusline",
+    "commits": 0,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 189
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "amantidesigns/claude-code-statusline",
+    "commits": 8,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 267
+   },
+   {
+    "repo": "gist:39bb37cda2678b6e0941c5ca99757d9e",
+    "commits": 4,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 94
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 1,
+  "members": [
+   {
+    "repo": "anthonybaldwin/cc-plugins",
+    "commits": 86,
+    "stars": 0,
+    "top1000": true,
+    "sl_loc": 3101
+   },
+   {
+    "repo": "anthonybaldwin/claude-statusline",
+    "commits": 39,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 2039
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "arm3n/claude-code-config",
+    "commits": 7,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 150
+   },
+   {
+    "repo": "arm3n/claude-code-statusline",
+    "commits": 4,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 150
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "avenoxai/avenoxstatusline",
+    "commits": 3,
+    "stars": 19,
+    "top1000": false,
+    "sl_loc": 155
+   },
+   {
+    "repo": "riqas/avenoxstatusline-windows",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 156
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "saurabhomer258/agent-bar",
+    "commits": 19,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 722
+   },
+   {
+    "repo": "avinashbest/cli-status-bar",
+    "commits": 3,
+    "stars": 3,
+    "top1000": false,
+    "sl_loc": 722
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "videvjs/claude-statusline",
+    "commits": 4,
+    "stars": 52,
+    "top1000": false,
+    "sl_loc": 97
+   },
+   {
+    "repo": "barletjb/claude-statusline",
+    "commits": 2,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 108
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 2,
+  "members": [
+   {
+    "repo": "bart-turczynski/cc-cream",
+    "commits": 227,
+    "stars": 5,
+    "top1000": true,
+    "sl_loc": 2503
+   },
+   {
+    "repo": "gitlab.com:bart-turczynski/cc-cream",
+    "commits": 100,
+    "stars": "0",
+    "top1000": true,
+    "sl_loc": 2503
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "ramonclaudio/claude-code-statusline",
+    "commits": 27,
+    "stars": 2,
+    "top1000": false,
+    "sl_loc": 360
+   },
+   {
+    "repo": "ben-vargas/ai-claude-code-statusline",
+    "commits": 0,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 360
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 1,
+  "members": [
+   {
+    "repo": "benabraham/claude-code-status-line",
+    "commits": 99,
+    "stars": 21,
+    "top1000": true,
+    "sl_loc": 1969
+   },
+   {
+    "repo": "gist:86f698886b519b4e111a0b6547e319eb",
+    "commits": 3,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 1830
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "gist:0b76f2909a127d6ded8db3ee96a5287c",
+    "commits": 3,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 149
+   },
+   {
+    "repo": "bendela6/claude-statusline",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 149
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "bhutano/claude-usage-bar",
+    "commits": 8,
+    "stars": 32,
+    "top1000": false,
+    "sl_loc": 376
+   },
+   {
+    "repo": "datagimp/claude-code-minimax",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 204
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 1,
+  "members": [
+   {
+    "repo": "vincent-k2026/codachi",
+    "commits": 56,
+    "stars": 14,
+    "top1000": true,
+    "sl_loc": 164
+   },
+   {
+    "repo": "bobbyfongau/Bobbycodachi",
+    "commits": 5,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 186
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 1,
+  "members": [
+   {
+    "repo": "bpinheiroms/claude-office",
+    "commits": 61,
+    "stars": 7,
+    "top1000": true,
+    "sl_loc": 946
+   },
+   {
+    "repo": "felipeorlando/hud",
+    "commits": 3,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 946
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "meresiam/claude-statusline",
+    "commits": 7,
+    "stars": 10,
+    "top1000": false,
+    "sl_loc": 515
+   },
+   {
+    "repo": "caiquecontarini/claude-pixelbar",
+    "commits": 1,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 987
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 2,
+  "members": [
+   {
+    "repo": "callmemorgan/agents-statusline",
+    "commits": 184,
+    "stars": 0,
+    "top1000": true,
+    "sl_loc": 1507
+   },
+   {
+    "repo": "callmemorgan/claude-statusline",
+    "commits": 179,
+    "stars": 6,
+    "top1000": true,
+    "sl_loc": 2367
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 2,
+  "members": [
+   {
+    "repo": "centminmod/my-claude-code-setup",
+    "commits": 310,
+    "stars": 2680,
+    "top1000": true,
+    "sl_loc": 3847
+   },
+   {
+    "repo": "centminmod/claude-plugins",
+    "commits": 183,
+    "stars": 18,
+    "top1000": true,
+    "sl_loc": 4257
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "chardigio/claude-code-statusline",
+    "commits": 13,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 499
+   },
+   {
+    "repo": "chardigio/claude-code-api-statusline",
+    "commits": 6,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 186
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "stuartshields/claude-co2-status-line",
+    "commits": 18,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 121
+   },
+   {
+    "repo": "costrict-plugins-repo/github-trending-claude-co2-status-line",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 121
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "simao-coutinho/claude-usage-statusline",
+    "commits": 7,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 122
+   },
+   {
+    "repo": "costrict-plugins-repo/github-trending-claude-usage-statusline",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 122
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "craftowen/cc-alchemy-statusline",
+    "commits": 39,
+    "stars": 4,
+    "top1000": false,
+    "sl_loc": 665
+   },
+   {
+    "repo": "haksuperman/custom-claudecode-statusline",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 665
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 2,
+  "members": [
+   {
+    "repo": "cwf818/creditgauge",
+    "commits": 362,
+    "stars": 2,
+    "top1000": true,
+    "sl_loc": 5853
+   },
+   {
+    "repo": "cwf818/topgauge",
+    "commits": 275,
+    "stars": 2,
+    "top1000": true,
+    "sl_loc": 1621
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 1,
+  "members": [
+   {
+    "repo": "jezweb/contextbricks",
+    "commits": 614,
+    "stars": 1,
+    "top1000": true,
+    "sl_loc": 333
+   },
+   {
+    "repo": "davidtalas/davetalas-claude-code-resources",
+    "commits": 2,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 125
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "docker-run/tmux-claude-usage",
+    "commits": 39,
+    "stars": 14,
+    "top1000": false,
+    "sl_loc": 42
+   },
+   {
+    "repo": "talayhan/tmux-claude",
+    "commits": 7,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 130
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "drsnsoni/terminal-claude-mascot-windows",
+    "commits": 11,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 158
+   },
+   {
+    "repo": "meetp06/terminal-claude-mascot",
+    "commits": 6,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 238
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "webkubor/claude-usage-statusline",
+    "commits": 17,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 413
+   },
+   {
+    "repo": "dsqdqsds/claude-usage-statusline",
+    "commits": 0,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 413
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 1,
+  "members": [
+   {
+    "repo": "ericwu917/claude-utils",
+    "commits": 73,
+    "stars": 0,
+    "top1000": true,
+    "sl_loc": 465
+   },
+   {
+    "repo": "taige/claude-utils",
+    "commits": 14,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 245
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "f3r21/Margherita",
+    "commits": 29,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 124
+   },
+   {
+    "repo": "f3r21/UsageLine",
+    "commits": 4,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 41
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "faborsky/claude-code-statusline",
+    "commits": 6,
+    "stars": 6,
+    "top1000": false,
+    "sl_loc": 73
+   },
+   {
+    "repo": "narayaenw/status-line",
+    "commits": 4,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 53
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "fcoury/ccline",
+    "commits": 21,
+    "stars": 10,
+    "top1000": false,
+    "sl_loc": 621
+   },
+   {
+    "repo": "petiky/packycc",
+    "commits": 6,
+    "stars": 46,
+    "top1000": false,
+    "sl_loc": 294
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 1,
+  "members": [
+   {
+    "repo": "felipeelias/claude-statusline",
+    "commits": 97,
+    "stars": 23,
+    "top1000": true,
+    "sl_loc": 470
+   },
+   {
+    "repo": "frank-bee/claude-statusline",
+    "commits": 42,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 568
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "wolfdenpublishing/pyccsl",
+    "commits": 40,
+    "stars": 83,
+    "top1000": false,
+    "sl_loc": 1008
+   },
+   {
+    "repo": "forkni/pyccsl",
+    "commits": 7,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 1486
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 1,
+  "members": [
+   {
+    "repo": "fredrikaverpil/claudeline",
+    "commits": 165,
+    "stars": 55,
+    "top1000": true,
+    "sl_loc": 1524
+   },
+   {
+    "repo": "shourovrm/cc-limitline",
+    "commits": 2,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 1287
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "sanztheo/claude-code-statusline",
+    "commits": 11,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 692
+   },
+   {
+    "repo": "gabriel-dehan/claude_monitor_statusline",
+    "commits": 5,
+    "stars": 21,
+    "top1000": false,
+    "sl_loc": 410
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "zorkzorkzork/zaksclaudetaximeter",
+    "commits": 15,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 163
+   },
+   {
+    "repo": "genmomentum/taxi-meter",
+    "commits": 3,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 96
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "getvalidated/claude_code_status_line",
+    "commits": 5,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 82
+   },
+   {
+    "repo": "gist:fdfde54edc3002e2c865cd630e79fbf5",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 108
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "gist:0540d2a8e3cc96a72b93a8e0e0ef6cf3",
+    "commits": 2,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 77
+   },
+   {
+    "repo": "gist:1c4a911594ca4af8ec6d18c0b8d1cb97",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 135
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "gist:0a64e2be819606d1741066d240efc331",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 506
+   },
+   {
+    "repo": "gist:e6ea48962056a62441bc94fe0f0804eb",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 506
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "matheusvcouto/statusline-claude",
+    "commits": 6,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 662
+   },
+   {
+    "repo": "gist:0df26d18a711ae27b9eccaca272fb8b9",
+    "commits": 3,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 223
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "gist:0ef98c05c2edf568a207b0ed2deaaa16",
+    "commits": 18,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 130
+   },
+   {
+    "repo": "gist:139b51ed270d74c526082ac3f518cd2a",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 130
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "gist:0f20817763c8d5981e1a3a6ac27999eb",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 111
+   },
+   {
+    "repo": "gist:932fef65be5d1845e7673840a1725d53",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 31
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "gist:133626b0174938be9bb825fbc71da073",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 90
+   },
+   {
+    "repo": "gist:c0725fc68a8b28e6ac8c61d29e7ce25b",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 50
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "gist:631709e28d3078abb8fe77a2404b4225",
+    "commits": 3,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 86
+   },
+   {
+    "repo": "gist:17255fc13e42c0d701df85995ca461de",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 86
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "gist:c0132b5abea44763b77c2b0b5fdcf7f8",
+    "commits": 2,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 97
+   },
+   {
+    "repo": "gist:1a032c1c8e9a0a02f3094c68419d7930",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 150
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "gist:1f36c1081d877675e804f963cc8623d4",
+    "commits": 2,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 64
+   },
+   {
+    "repo": "gist:625080c127924e8a45c1270c7ec2ec94",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 53
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "gist:1fb0076c9ee7c59cf58ecdd746cbd83f",
+    "commits": 6,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 93
+   },
+   {
+    "repo": "gist:afcac56db4a7e27b2b2d1f662adaf53c",
+    "commits": 2,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 54
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "gist:275c3fd29b14447e3656cf9573863607",
+    "commits": 3,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 19
+   },
+   {
+    "repo": "gist:dc3ca148cf432499f011e99fbd065214",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 29
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "gist:2c5d7e0fb6960a64de2b8a729ad5f6cc",
+    "commits": 5,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 248
+   },
+   {
+    "repo": "pranav2012/claude-statusline-pro",
+    "commits": 5,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 274
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "premalmistry/claude-statusline",
+    "commits": 2,
+    "stars": 2,
+    "top1000": false,
+    "sl_loc": 87
+   },
+   {
+    "repo": "gist:2e94a4ef2e7eb4601770b472201aa27a",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 77
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "gist:4b7ebb97039bfdec2ab9669e4bf51460",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 95
+   },
+   {
+    "repo": "gist:bc186ed0b69287c62dc259effd67ab08",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 59
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "gist:68141b3ad716a96950cd111c749442b6",
+    "commits": 6,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 247
+   },
+   {
+    "repo": "gist:54499d5a2543b601815e4651a4876e26",
+    "commits": 3,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 247
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "gist:55709b1925b94aec55083dd1da9d8f39",
+    "commits": 5,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 164
+   },
+   {
+    "repo": "gist:fe1eaadb2db71002a0f0e868806cc52d",
+    "commits": 2,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 148
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "gist:5f27e226b1ffecfb9bff5ce96981653d",
+    "commits": 2,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 90
+   },
+   {
+    "repo": "mikekoka/claude-statusline",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 90
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "mansurmuaz/claude-statusline",
+    "commits": 4,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 157
+   },
+   {
+    "repo": "gist:6069d8d286f75195dd1a9d831dc97689",
+    "commits": 2,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 134
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "gist:688386811330572c3d7bf774f87bb74b",
+    "commits": 5,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 210
+   },
+   {
+    "repo": "xingfanxia/custom-claude-code-status-line",
+    "commits": 2,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 185
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "gist:6d17ca8f77ca392eb0a426f7e5c31342",
+    "commits": 7,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 137
+   },
+   {
+    "repo": "gist:82c51b1d7150c6bd61ef3627475c9142",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 162
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "gist:6f387f68e5f4592d5191006189c2e7d4",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 278
+   },
+   {
+    "repo": "gist:816853e5a5200d66be621d619b3090e5",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 763
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "gist:da28f8032a32d76f3a5a507a6db78a73",
+    "commits": 3,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 321
+   },
+   {
+    "repo": "gist:7e8fd02b16ca007dc361bf3f9dd83f7f",
+    "commits": 2,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 538
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "gist:847e3efc2b3a668b869274c15667d015",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 180
+   },
+   {
+    "repo": "gist:d74d88553b2506b2e2e48edf2594a0bd",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 178
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "gist:91ad05cd0a736b676dae0d77b1b09386",
+    "commits": 2,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 141
+   },
+   {
+    "repo": "gist:d91bcf5414fb8278ba2d5ac4c44f9808",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 140
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "gist:984aa915c3e3b6695b2c14f0cc1c1f4d",
+    "commits": 4,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 98
+   },
+   {
+    "repo": "gist:d46802c5a0528bb1d3571acaeea8ceeb",
+    "commits": 2,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 71
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "gist:d744a1e07916bcdc39fb4c755a47bcf1",
+    "commits": 2,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 69
+   },
+   {
+    "repo": "gist:9ec176d0da4aadfd8f0874c692633750",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 69
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "gist:ac4a86c0984bdece3cb78804c62bb440",
+    "commits": 3,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 36
+   },
+   {
+    "repo": "gist:9ef00fa810445804e1875045a7a08ebf",
+    "commits": 2,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 39
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "gist:a84e885ac3ee80f4bba2cc4274e01a12",
+    "commits": 2,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 163
+   },
+   {
+    "repo": "hamed-elfayome/Claude-Code-Statusline-Usage-Tracker-MacOS",
+    "commits": 1,
+    "stars": 5,
+    "top1000": false,
+    "sl_loc": 76
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "gist:a8f0b6d105cb1e565b456331a5515b3c",
+    "commits": 7,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 57
+   },
+   {
+    "repo": "justdan0227/claude-code-statusline",
+    "commits": 3,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 57
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "gist:b355b160db0f22ea474976a64783ad9a",
+    "commits": 13,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 324
+   },
+   {
+    "repo": "lololopez200123/claude-code-statusline",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 324
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "gist:b62018f28bc4046f685dab5ad7b9ca78",
+    "commits": 6,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 92
+   },
+   {
+    "repo": "gist:fa8bb56f85194bef5c0fa219e792a287",
+    "commits": 2,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 54
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "minorun365/my-claude-code-settings",
+    "commits": 7,
+    "stars": 142,
+    "top1000": false,
+    "sl_loc": 36
+   },
+   {
+    "repo": "gist:c43b7fc9e6a72d5cb27ef86a04ac408b",
+    "commits": 1,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 51
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "izumiz-dev/ccsl",
+    "commits": 10,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 237
+   },
+   {
+    "repo": "gist:ed9265b93e26408d357027b95e0ad80d",
+    "commits": 2,
+    "stars": "",
+    "top1000": false,
+    "sl_loc": 135
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 1,
+  "members": [
+   {
+    "repo": "hagan/claudia-statusline",
+    "commits": 529,
+    "stars": 36,
+    "top1000": true,
+    "sl_loc": 15587
+   },
+   {
+    "repo": "taskx6004/claudia-statusline",
+    "commits": 3,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 5351
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "hyperlook/cclook",
+    "commits": 3,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 118
+   },
+   {
+    "repo": "ljcamel/ccstatus",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 109
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 2,
+  "members": [
+   {
+    "repo": "stormzhang/token-tracker",
+    "commits": 392,
+    "stars": 534,
+    "top1000": true,
+    "sl_loc": 1421
+   },
+   {
+    "repo": "iYuXiaoyan/token-tracker",
+    "commits": 390,
+    "stars": 0,
+    "top1000": true,
+    "sl_loc": 1665
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 1,
+  "members": [
+   {
+    "repo": "orassayag/super-status",
+    "commits": 109,
+    "stars": 8,
+    "top1000": true,
+    "sl_loc": 2755
+   },
+   {
+    "repo": "ira-at-work/super-status",
+    "commits": 0,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 2587
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 1,
+  "members": [
+   {
+    "repo": "j2h4u/oh-my-claude-plugins",
+    "commits": 245,
+    "stars": 2,
+    "top1000": true,
+    "sl_loc": 2562
+   },
+   {
+    "repo": "j2h4u/oh-my-statusline",
+    "commits": 12,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 2463
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "jrykn/save-buddy",
+    "commits": 27,
+    "stars": 28,
+    "top1000": false,
+    "sl_loc": 217
+   },
+   {
+    "repo": "paullaudeman/tamashell",
+    "commits": 14,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 613
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 1,
+  "members": [
+   {
+    "repo": "labzink/cc-probeline",
+    "commits": 257,
+    "stars": 12,
+    "top1000": true,
+    "sl_loc": 704
+   },
+   {
+    "repo": "romular21/cc-probeline",
+    "commits": 21,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 1566
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "lbenothman/claude-code-statusline",
+    "commits": 3,
+    "stars": 4,
+    "top1000": false,
+    "sl_loc": 103
+   },
+   {
+    "repo": "tuckerritti/claude-statusline",
+    "commits": 2,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 127
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "sivarp/claude-statusline",
+    "commits": 11,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 1326
+   },
+   {
+    "repo": "lbw2100/claude-hud",
+    "commits": 10,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 736
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "lincpek-bot/claude-statusline",
+    "commits": 2,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 42
+   },
+   {
+    "repo": "lincpek-bot/claude-code-context-guard",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 60
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "lirenjian132/step-cc-tps",
+    "commits": 2,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 180
+   },
+   {
+    "repo": "xkwy521/glm-cc-tps",
+    "commits": 1,
+    "stars": 14,
+    "top1000": false,
+    "sl_loc": 292
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "loadbalance-sudachi-kun/claude-code-statusline",
+    "commits": 8,
+    "stars": 56,
+    "top1000": false,
+    "sl_loc": 294
+   },
+   {
+    "repo": "nisarahot/claude-code-statusline-wsl",
+    "commits": 2,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 301
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "medhatdawoud/cconeline",
+    "commits": 30,
+    "stars": 36,
+    "top1000": false,
+    "sl_loc": 425
+   },
+   {
+    "repo": "macoy1989/cconeline",
+    "commits": 23,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 417
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "moshemishel/claude-code-statusline",
+    "commits": 2,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 213
+   },
+   {
+    "repo": "moshemishel/claude-statusline",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 44
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "nperez-auditboard/claude-wave-statusline",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 408
+   },
+   {
+    "repo": "nperez9/claude-wave-statusline",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 410
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "odlev/claude-statusbar-lev",
+    "commits": 13,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 343
+   },
+   {
+    "repo": "vbcherepanov/claude-statusbar",
+    "commits": 9,
+    "stars": 29,
+    "top1000": false,
+    "sl_loc": 293
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 1,
+  "members": [
+   {
+    "repo": "onury/claude-statusline",
+    "commits": 53,
+    "stars": 3,
+    "top1000": true,
+    "sl_loc": 298
+   },
+   {
+    "repo": "phucanh08/claude-statusline",
+    "commits": 29,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 462
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "pedruino/claude-code-statusline",
+    "commits": 2,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 488
+   },
+   {
+    "repo": "wvwvw5/claude-statusline",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 383
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "purposive-streptocarpus303/claude-code-terminal-pro",
+    "commits": 7,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 61
+   },
+   {
+    "repo": "rathi-prashant/claude-code-terminal-pro",
+    "commits": 2,
+    "stars": 29,
+    "top1000": false,
+    "sl_loc": 61
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "qicui-netizen/ai-statusline",
+    "commits": 14,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 219
+   },
+   {
+    "repo": "qifeif/ai-statusline",
+    "commits": 14,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 219
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "rammuthurangan/claude-statusline",
+    "commits": 6,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 173
+   },
+   {
+    "repo": "rmuthura/claude-statusline",
+    "commits": 4,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 173
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "rgomes87/claude-code-statusline",
+    "commits": 10,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 489
+   },
+   {
+    "repo": "rgomes87/claude-code-statusline-rg",
+    "commits": 4,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 489
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "sinoda1114/cc-win-statusline",
+    "commits": 8,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 192
+   },
+   {
+    "repo": "sinoda1114/cc-mac-statusline",
+    "commits": 4,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 145
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "sky-salsa/barkeep-claude-statusbar",
+    "commits": 3,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 101
+   },
+   {
+    "repo": "sky-salsa/small-magics",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 336
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "snowcraneww/grace-cc-statusline",
+    "commits": 5,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 126
+   },
+   {
+    "repo": "snowcranestart/grace-cc-statusline",
+    "commits": 2,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 126
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "tzengyuxio/claude-statusline",
+    "commits": 6,
+    "stars": 31,
+    "top1000": false,
+    "sl_loc": 193
+   },
+   {
+    "repo": "sumitosou/claude-statusline",
+    "commits": 4,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 312
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "win-chanma/claude-code-statusline",
+    "commits": 25,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 214
+   },
+   {
+    "repo": "ueki-interpark/claude-code-statusline",
+    "commits": 20,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 214
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "useronezero/claude-statusbar",
+    "commits": 7,
+    "stars": 2,
+    "top1000": false,
+    "sl_loc": 207
+   },
+   {
+    "repo": "xPrimeTime/claude-statusline",
+    "commits": 2,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 198
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "westpoint-io/claude-limits-checker",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 132
+   },
+   {
+    "repo": "westpoint-io/claude-status-line",
+    "commits": 1,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 132
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "yct94/claude-statusbar",
+    "commits": 3,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 138
+   },
+   {
+    "repo": "yct94/claude-statusline",
+    "commits": 1,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 146
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 1,
+  "members": [
+   {
+    "repo": "ynsmlkc/Dwell",
+    "commits": 94,
+    "stars": 0,
+    "top1000": true,
+    "sl_loc": 390
+   },
+   {
+    "repo": "ynsmlkc/Linger",
+    "commits": 16,
+    "stars": 0,
+    "top1000": false,
+    "sl_loc": 390
+   }
+  ]
+ },
+ {
+  "size": 2,
+  "in_top1000": 0,
+  "members": [
+   {
+    "repo": "ziHoHe/glm-cc-bar",
+    "commits": 4,
+    "stars": 2,
+    "top1000": false,
+    "sl_loc": 260
+   },
+   {
+    "repo": "ziHoHe/gpt-cc-bar",
+    "commits": 2,
+    "stars": 1,
+    "top1000": false,
+    "sl_loc": 403
+   }
+  ]
+ }
+]
