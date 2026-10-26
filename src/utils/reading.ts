@@ -94,6 +94,30 @@ export async function answered<A>(read: () => A | Waiting): Promise<A> {
   }
 }
 
+// How a bounded wait ended: what it waited on answered, or its time ran out.
+export type WaitEnd = "answered" | "deadline";
+
+// [LAW:no-ambient-temporal-coupling][LAW:single-enforcer] The one bounded
+// wait: `work`, or `ms`, whichever ends first. Its timer is cleared when the
+// wait ends, so a wait that answered leaves nothing behind. `work` runs on
+// past a deadline; the wait only stops listening.
+export async function waitWithin(
+  work: Promise<unknown>,
+  ms: number,
+): Promise<WaitEnd> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      work.then(() => "answered" as const),
+      new Promise<"deadline">((resolve) => {
+        timer = setTimeout(() => resolve("deadline"), Math.max(0, ms));
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // [LAW:types-are-the-program] What a declaration hands its reader: the entry
 // it took, read as it stands. The key was computed once, by the declaration,
 // and reading takes nothing, so a read can neither re-derive the key nor take

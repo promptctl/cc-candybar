@@ -317,6 +317,23 @@ const CHECKS = [
       /request\["(\w+)"\]/g,
     ),
   },
+  // The render request's own wire keys, the ones above its hints. A key the
+  // native client stops sending degrades the same silent way: a `deadline`
+  // spelled differently reads as a client too old to state one, and every
+  // answer waits by the guessed budget instead of its client's.
+  {
+    label: "render request wire keys",
+    ts: memberSet(
+      TS_PROTOCOL,
+      /export interface RenderRequest \{[\s\S]+?\/\/ ─── Client hints/,
+      /^ {2}(\w+)\??:/gm,
+    ),
+    rust: memberSet(
+      RS_MAIN,
+      /let mut request = serde_json::json!\(\{[\s\S]+?--- client hints/,
+      /(?:^ +"|request\[")(\w+)"(?::|\])/gm,
+    ),
+  },
   // What the native client says it is: the field names of the `client` hint.
   // A renamed field would make every native render read as "unreported" to
   // the doctor's install check, on the one client path that ships.

@@ -95,6 +95,13 @@ describe("a daemon render's event counts the session's prompts", () => {
       `{ segments: { msgs: { template: '{{ .metrics.messageCount }}' } }, root: { h: ['msgs'] } }`,
     );
     daemon = await spawnDaemonWithEnv(prepared.env);
+    // The config's entry compiled first: a request that compiles it does so in
+    // its arrival turn, which can spend its whole deadline before the fold.
+    await renderRequest(sockPath, {
+      hookData: hookData("prompts-e2e-warm", projectDir),
+      args: ["cc-candybar", "--config", config],
+      cwd: projectDir,
+    });
   });
 
   afterAll(async () => {
@@ -104,10 +111,15 @@ describe("a daemon render's event counts the session's prompts", () => {
   });
 
   const counts = async (sessionId: string) =>
-    (await renderLines(env, sessionId)).map((l) => ({
-      prompts: l.match(/ prompts=(\S+) /)?.[1],
-      nonPrompts: l.match(/ nonPrompts=(\S+) /)?.[1],
-    }));
+    (await renderLines(env, sessionId)).map((l) => {
+      // A count drawn before its fold landed would read `-` for the wrong
+      // reason: the wait says so by name.
+      expect(l).toContain(" ended=answered ");
+      return {
+        prompts: l.match(/ prompts=(\S+) /)?.[1],
+        nonPrompts: l.match(/ nonPrompts=(\S+) /)?.[1],
+      };
+    });
 
   test("one prompt, and two other user entries, on a render that folded the transcript", async () => {
     const sessionId = "prompts-e2e-folded";

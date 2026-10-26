@@ -54,6 +54,7 @@ import {
 import { PendingValueError, readPending, type JsonValue } from "./types.js";
 import type { SessionStateReader } from "../daemon/session-state.js";
 import { TrailingEdge } from "../utils/trailing-edge.js";
+import { waitWithin } from "../utils/reading.js";
 
 // How long text that is not a document may be a write still in progress
 // before it shows as the failure it is (documentPublisher).
@@ -545,12 +546,13 @@ export class SourceRegistry {
   // Collects all cleanup callbacks (TTL unsubscribes, watch unsubscribes,
   // MobX reaction disposers) so dispose() tears everything down in one call.
   private readonly cleanups: Array<() => void> = [];
-  // [LAW:no-ambient-temporal-coupling] The in-flight run of each async
-  // source, by name: one run per source at a time (a refresh that fires
-  // while the previous run is still out is dropped), and `settled()` is the
-  // explicit "every source has completed its current run" state a caller
-  // (`cc-candybar check`) awaits instead of guessing a delay.
-  private readonly inFlight = new Map<string, Promise<void>>();
+  // [LAW:no-ambient-temporal-coupling] The end of each async source's
+  // in-flight run, by name: one run per source at a time (a refresh that
+  // fires while the previous run is still out is dropped), and `inFlight()` is
+  // the explicit "every source has completed its current run" state a caller
+  // (a statusline request, `cc-candybar check`) awaits instead of guessing a
+  // delay.
+  private readonly runs = new Map<string, Promise<void>>();
   // [LAW:single-enforcer] Serializes each source's reads and remembers a trigger
   // that arrived mid-read, so a re-trigger re-reads once rather than starting a
   // parallel read or being dropped. Shared with the git cache's refresh path,
@@ -876,11 +878,11 @@ export class SourceRegistry {
     );
     // A queued trigger needs no tracking: the loop it joined is already the
     // tracked promise, and it does not resolve until that trigger's own pass has
-    // run — which is exactly what makes `settled()` wait for the re-read too.
+    // run — which is exactly what makes `inFlight()` wait for the re-read too.
     if (trigger.kind === "started") this.track(name, trigger.done);
   }
 
-  // [LAW:single-enforcer] The one writer of `inFlight`: an async source's
+  // [LAW:single-enforcer] The one writer of `runs`: an async source's
   // pending work enters here and leaves when it completes, so "which sources
   // are still out" has a single mechanism rather than one per source kind.
   private track(name: string, work: Promise<void>): void {
@@ -888,36 +890,43 @@ export class SourceRegistry {
     // reason: `TrailingEdge` releases a key before this `finally` runs, so a
     // trigger landing in that window starts a NEW tracked loop, and an
     // unconditional delete here would remove the live entry and leave
-    // `settled()` no longer waiting for work that is still out.
-    const tracked: Promise<void> = work.finally(() => {
-      if (this.inFlight.get(name) === tracked) this.inFlight.delete(name);
+    // `inFlight()` no longer waiting for work that is still out.
+    // [LAW:no-silent-failure] A run's rejection is a bug and stays unhandled
+    // here: a waiter waits on the run's end, never on its outcome, so no wait
+    // swallows it.
+    void work.finally(() => {
+      if (this.runs.get(name) === ended) this.runs.delete(name);
     });
-    this.inFlight.set(name, tracked);
+    const ended = new Promise<void>((resolve) =>
+      work.then(resolve, () => resolve()),
+    );
+    this.runs.set(name, ended);
   }
 
-  // [LAW:no-ambient-temporal-coupling] Resolves when every async source's
-  // pending work — a shell/file run, and every run one of them triggered (a `depends_on` reaction fires inside a
-  // publish) — has completed, or at the deadline. The value is the names still
-  // in flight: empty when all settled. This is the state a one-shot render
-  // (`cc-candybar check`) awaits so it renders what those sources yielded,
-  // never a guessed delay; the registry owns the timer, so no caller races one
-  // of its own.
-  async settled(withinMs: number): Promise<readonly string[]> {
-    const deadline = Date.now() + withinMs;
-    while (this.inFlight.size > 0) {
-      const remaining = deadline - Date.now();
-      if (remaining <= 0) break;
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const outcome = await Promise.race([
-        Promise.all(this.inFlight.values()).then(() => "settled" as const),
-        new Promise<"deadline">((resolve) => {
-          timer = setTimeout(() => resolve("deadline"), remaining);
-        }),
-      ]);
-      clearTimeout(timer);
-      if (outcome === "deadline") break;
+  // [LAW:no-ambient-temporal-coupling] Resolves when every async run of this
+  // registry and of the home it reads through to has ended — a shell/file
+  // run, and every run one of them triggered (a `depends_on` reaction fires
+  // inside a publish), asked again once those end. Never rejects.
+  async inFlight(): Promise<void> {
+    for (;;) {
+      const out = this.running();
+      if (out.length === 0) return;
+      await Promise.all(out.map(([, ended]) => ended));
     }
-    return [...this.inFlight.keys()];
+  }
+
+  // The runs still out here and in the home this registry reads through to.
+  private running(): ReadonlyArray<readonly [string, Promise<void>]> {
+    return [...this.runs, ...(this.parent?.running() ?? [])];
+  }
+
+  // The names still in flight once every run has ended or `withinMs` has
+  // passed: empty when all settled. This is the state a one-shot render
+  // (`cc-candybar check`) awaits so it renders what those sources yielded,
+  // never a guessed delay.
+  async settled(withinMs: number): Promise<readonly string[]> {
+    await waitWithin(this.inFlight(), withinMs);
+    return this.running().map(([name]) => name);
   }
 
   // template: a variable whose value is derived by evaluating a go-template

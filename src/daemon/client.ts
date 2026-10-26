@@ -15,8 +15,8 @@ import type { RoundTripBudgets, RoundTripOutcome } from "./client-transport";
 import type { ClientHints, Response } from "./protocol";
 import { PACKAGE_VERSION } from "../version";
 
-const CONNECT_TIMEOUT_MS = 50;
-const TOTAL_BUDGET_MS = 150;
+export const CONNECT_TIMEOUT_MS = 50;
+export const TOTAL_BUDGET_MS = 150;
 const CLICK_BUDGET_MS = 200;
 
 const RENDER_BUDGETS: RoundTripBudgets = {
@@ -64,7 +64,7 @@ export function tryRenderViaDaemon(
   hints: ClientHints,
 ): Promise<ClientOutcome> {
   return requestOutcome(
-    { kind: "render", hookData, args, cwd, ...hints },
+    (deadline) => ({ kind: "render", hookData, args, cwd, deadline, ...hints }),
     RENDER_BUDGETS,
     projectOutput,
   );
@@ -77,7 +77,7 @@ export function trySessionInPane(
   pane: string,
 ): Promise<RoundTripOutcome<string | null>> {
   return requestOutcome(
-    { kind: "pane-session", socket, pane },
+    () => ({ kind: "pane-session", socket, pane }),
     CLICK_BUDGETS,
     (resp) => ("paneSession" in resp ? resp.paneSession : undefined),
   );
@@ -91,7 +91,7 @@ export function tryClickViaDaemon(
   value: string,
 ): Promise<ClientOutcome> {
   return requestOutcome(
-    { kind: "click", verb, value, clientVersion: PACKAGE_VERSION },
+    () => ({ kind: "click", verb, value, clientVersion: PACKAGE_VERSION }),
     CLICK_BUDGETS,
     projectOutput,
   );

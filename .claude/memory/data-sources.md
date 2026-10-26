@@ -4,7 +4,7 @@
 
 Each shared source has one owner that schedules its reads: git state, PR lookups, tmux pane names, memento's ceiling, today's transcript scans, the auto-compact setting and the cache expiry. A read returns the stored value, and only a value that has never been read is awaited. Refreshes come from triggers (a watch, a period), never from a render. A pushed frame does no I/O at all. It draws what the owners have stored.
 
-A render request waits for the first value of every keyed source it reads. A frame waits for nothing, and anything not answered yet is drawn as pending.
+A render request waits for what its arrival started: the refreshes it triggers, the first value of every keyed source its view declares, and its view's source runs in flight. It waits only until its client's deadline, less what the draw needs, and whatever has not answered then is drawn as pending. The client states the deadline because only the client knows when it hangs up: the native client counts its budget from before it connects, the Node client from after, and under load the daemon reads a request late. A config's first request compiles in its arrival turn, and that compile can spend the whole deadline, so the first bar from a new directory or config can be mostly pending. A frame waits for nothing, and anything not answered yet is drawn as pending.
 
 ## Periods run only while something holds the key
 

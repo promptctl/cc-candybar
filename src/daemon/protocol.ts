@@ -46,6 +46,12 @@ export interface RenderRequest {
   // strip (parseRenderArgs, server.ts).
   args: string[];
   cwd: string;
+  // When the client hangs up, in epoch milliseconds: the daemon's wait for
+  // this request's refreshes ends early enough to draw before it
+  // (src/daemon/request-deadline.ts). Absent from a client too old to state
+  // one. Never a hint: it is new on every request, and the hints are recorded
+  // per session whenever they change.
+  deadline?: number;
   // ─── Client hints ────────────────────────────────────────────────────────
   // [LAW:single-enforcer] Facts only the LIVE CLIENT can observe, captured at
   // the trust boundary and trusted by the daemon. The daemon is detached and
@@ -528,12 +534,14 @@ export function makeFrameReader(
   };
 }
 
-// Send one frame and await one response, with a hard total budget. Resolves
-// to the parsed response or rejects on timeout / parse error / socket error.
+// Send one frame and await one response, giving up at `deadline` (epoch
+// milliseconds) — the instant a render request states as its own, so the
+// client hangs up when it said it would. Resolves to the parsed response or
+// rejects on timeout / parse error / socket error.
 export function sendOne(
   sock: Socket,
   req: Request,
-  totalBudgetMs: number,
+  deadline: number,
 ): Promise<Response> {
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -551,7 +559,7 @@ export function sendOne(
         sock.destroy();
         reject(new Error("TIMEOUT"));
       });
-    }, totalBudgetMs);
+    }, deadline - Date.now());
 
     const reader = makeFrameReader(
       (frame) => finish(() => resolve(frame as Response)),

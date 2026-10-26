@@ -10,6 +10,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -21,6 +22,7 @@ import path from "node:path";
 import { stripAnsi } from "./helpers/ansi";
 import { encodeFrame, PROTOCOL_VERSION } from "../src/daemon/protocol";
 import { stateDir } from "../src/daemon/paths";
+import { TOTAL_BUDGET_MS } from "../src/daemon/client";
 import {
   hookData,
   killAndWait,
@@ -186,6 +188,16 @@ describe("every render request writes one render event, whatever its outcome", (
         cwd: projectDir,
       }),
     ).rejects.toThrow(/BAD_REQUEST/);
+    // A deadline that is not epoch milliseconds is refused, never read as a
+    // client too old to state one.
+    await expect(
+      renderRequest(sockPath, {
+        hookData: hookData("ev-refused-deadline", projectDir),
+        args: [],
+        cwd: projectDir,
+        deadline: "soon",
+      }),
+    ).rejects.toThrow(/BAD_REQUEST/);
     // An empty session id names no session.
     await expect(
       renderRequest(sockPath, {
@@ -231,10 +243,17 @@ describe("every render request writes one render event, whatever its outcome", (
     // values are all in, the source's name where one is not
     // (brandon-unfiled-3248.8ro6).
     expect(field(drawn, "pending")).toBe("-");
-    // How long the request waited, from the connection's accept, before its
-    // render began: whole milliseconds. Its size is the machine's, not the
-    // daemon's to promise.
+    // How long the request was queued, from the connection's accept, before
+    // its render began, and how long it waited for its refreshes: whole
+    // milliseconds. Their size is the machine's, not the daemon's to promise.
+    expect(field(drawn, "queued")).toMatch(/^\d+ms$/u);
     expect(field(drawn, "waited")).toMatch(/^\d+ms$/u);
+    // How the wait ended — every refresh it waited on answered, or its
+    // client's deadline came first, as it can for the daemon's first render,
+    // which compiles the config in its arrival turn — and how long the turn
+    // after it took to make the answer, which the draw's reserve is held to.
+    expect(field(drawn, "ended")).toMatch(/^(answered|deadline)$/u);
+    expect(field(drawn, "drew")).toMatch(/^\d+ms$/u);
     // How each globals rule settled: none on a bar that names its look, and
     // per slot where rules choose it — kept outside the draw, or evaluated at
     // the frame's instant (brandon-unfiled-3248.8ro6, 4e).
@@ -243,9 +262,14 @@ describe("every render request writes one render event, whatever its outcome", (
     expect(field(await attempts("ev-ruled", "ok", "info"), "rules")).toBe(
       "style:kept,effect:per-draw",
     );
-    const waiting = stripAnsi(
-      await render(sockPath, "ev-pending", projectDir, hints, configFlag("waiting")),
-    );
+    // One request, the answer it got: a source that never answers draws
+    // pending however often it is asked.
+    const asked = await sendDaemonRequest(sockPath, {
+      v: PROTOCOL_VERSION,
+      kind: "render",
+      ...renderBody("ev-pending", projectDir, hints, configFlag("waiting")),
+    });
+    const waiting = stripAnsi((asked as { output: string }).output);
     expect(waiting).toContain("…");
     expect(waiting).not.toContain("⚠");
     expect(field(await attempts("ev-pending", "ok", "info"), "pending")).toBe("doc");
@@ -254,11 +278,12 @@ describe("every render request writes one render event, whatever its outcome", (
     // again (brandon-unfiled-3248.8ro6).
     await render(sockPath, "ev-kept", projectDir, hints, configFlag("drawn"));
     await render(sockPath, "ev-kept", projectDir, hints, configFlag("drawn"));
-    const [cold, kept] = (await eventsOf("ev-kept", 2)).map((e) =>
-      Number(field(e, "evaluated")),
-    );
+    const keptEvents = await eventsOf("ev-kept", 2);
+    const [cold, kept] = keptEvents.map((e) => Number(field(e, "evaluated")));
     expect(cold).toBeGreaterThan(0);
     expect(kept).toBeLessThan(cold!);
+    // A warm render's wait answers inside its deadline.
+    expect(field(keptEvents[1]!, "ended")).toBe("answered");
     await render(
       sockPath,
       "ev-native",
@@ -299,13 +324,14 @@ describe("every render request writes one render event, whatever its outcome", (
     const refused = badRequests(
       await loggedWhen(
         env,
-        (lines) => badRequests(lines).length >= 3,
+        (lines) => badRequests(lines).length >= 4,
         "the refused requests' events",
       ),
     );
     expect(refused.map((e) => field(e, "problems"))).toEqual([
       `request 'cwd' is not an absolute path: "proj"`,
       `request 'args' is not a list of strings: "x"`,
+      `request 'deadline' is not epoch milliseconds: "soon"`,
       "field 'session_id' is empty",
     ]);
     for (const event of refused) {
@@ -400,64 +426,164 @@ describe("every render request writes one render event, whatever its outcome", (
       });
   });
 
-  // A render still running when its client was answered TIMEOUT says so: its
-  // event is written when it ends, after that reply, and is the one record
-  // that the reply the client read was not this render's.
-  test("a render that outlives its request timeout writes timedOut=Y", async () => {
-    await expect(
-      sendDaemonRequest(sockPath, {
+  // Rule 1 of the model (brandon-unfiled-3248.8ro6): an answer shows what its
+  // request carried. A shell keyed on the model re-runs in the turn a request
+  // moves the model, and that request's answer waits for the re-run inside
+  // its deadline, rather than drawing the previous model's output. The
+  // command counts its runs, so the output names which run drew it.
+  test("a request that moves a shell's key is answered with the re-run's output", async () => {
+    const runs = path.join(projectDir, "keyed-runs");
+    const config = path.join(projectDir, "keyed.json5");
+    writeFileSync(
+      config,
+      `{ variables: { mid: { kind: 'input', path: 'model.id', default: '' }, runs: { kind: 'shell', command: 'sleep 0.02; n=$(($(cat ${runs} 2>/dev/null || echo 0) + 1)); echo $n > ${runs}; echo run$n', cache: { key: '{{ .mid }}' } } }, segments: { mark: { template: '{{ .runs }}' } }, root: { h: ['mark'] } }`,
+    );
+    const ask = (model: string) => {
+      const body = renderBody("ev-keyed", projectDir, {}, [
+        "cc-candybar",
+        "--config",
+        config,
+      ]);
+      return renderRequest(sockPath, {
+        ...body,
+        hookData: {
+          ...(body.hookData as object),
+          model: { id: model, display_name: model },
+        },
+        // A client with time to spare: the wait runs to the daemon's own
+        // backstop, less the draw's reserve.
+        deadline: Date.now() + 5_000,
+      });
+    };
+    const revision = async (): Promise<number> => {
+      const resp = await sendDaemonRequest(sockPath, {
         v: PROTOCOL_VERSION,
-        kind: "render",
-        ...renderBody(
-          "ev-late",
-          projectDir,
-          {
-            // A socket inside the test's own directory: were the stub ever
-            // bypassed, a real tmux would find no server there.
-            tmux: {
-              socket: path.join(tmuxDir, "tmux.sock"),
-              pane: "%1",
-              truecolor: null,
-            },
-          },
-          configFlag("held"),
-        ),
-      }),
-    ).resolves.toMatchObject({ ok: false, code: "TIMEOUT" });
+        kind: "stats",
+      });
+      return (resp as { stats: { sessionState: { revision: number } } }).stats
+        .sessionState.revision;
+    };
+    // The first request compiles the config's entry in its arrival turn,
+    // which can spend its whole deadline: what it draws is not this case's.
+    // Its run lands on its own.
+    await ask("model-a");
+    await until(
+      () => existsSync(runs) && readFileSync(runs, "utf8") === "1\n",
+      "the first run landing",
+    );
+    expect(stripAnsi(await ask("model-b"))).toContain("run2");
+    // Its deadline is the request's own, never one of the session's facts: a
+    // request that differs from the last only by it moves no session state.
+    const before = await revision();
+    expect(stripAnsi(await ask("model-b"))).toContain("run2");
+    expect(await revision()).toBe(before);
+    for (const event of (await eventsOf("ev-keyed", 3)).slice(1))
+      expect(field(event, "ended")).toBe("answered");
+  });
 
+  // A request is answered by its client's deadline, whatever its sources are
+  // still doing (brandon-unfiled-3248.8ro6, §4c): a source still reading then
+  // draws as pending, and lands for the session's next render. The tmux stub
+  // answers only once the test opens the gate, so the source provably
+  // outlives the deadline — an ordering the test owns, not a bet on how slow a
+  // render is.
+  test("a source that outlives its client's deadline draws pending, and lands for the next render", async () => {
+    const tmuxBody = (sid: string, pane: string) =>
+      renderBody(
+        sid,
+        projectDir,
+        {
+          // A socket inside the test's own directory: were the stub ever
+          // bypassed, a real tmux would find no server there.
+          tmux: { socket: path.join(tmuxDir, "tmux.sock"), pane, truecolor: null },
+        },
+        configFlag("held"),
+      );
+    const openGate = async (): Promise<void> => {
+      // A non-blocking open fails (ENXIO) once the stub has stopped reading,
+      // rather than waiting for a reader that will never come.
+      const gate = await open(
+        path.join(tmuxDir, "gate"),
+        constants.O_WRONLY | constants.O_NONBLOCK,
+      );
+      await gate.write("open\n");
+      await gate.close();
+    };
+    const stats = () =>
+      sendDaemonRequest(sockPath, { v: PROTOCOL_VERSION, kind: "stats" });
+
+    // The config's entry compiled first, by a render that reports no pane,
+    // so the deadline below is spent on the wait, not on a compile.
+    await renderRequest(sockPath, {
+      ...tmuxBody("ev-late-warm", "%0"),
+      tmux: null,
+    });
+    // A client that states its deadline, as the native one does: its budget
+    // counted from before it connects.
+    const deadline = Date.now() + TOTAL_BUDGET_MS;
+    const stated = await sendDaemonRequest(sockPath, {
+      v: PROTOCOL_VERSION,
+      kind: "render",
+      ...tmuxBody("ev-late", "%1"),
+      deadline,
+    });
+    expect(Date.now()).toBeLessThanOrEqual(deadline);
+    expect(stated).toMatchObject({ ok: true });
+    expect(stripAnsi((stated as { output: string }).output)).toContain("…");
     await until(
       () => existsSync(path.join(tmuxDir, "asked")),
       "the render asked tmux",
     );
-    // Held at the gate, the render has written nothing yet — and holds the
-    // config state it is drawing with (brandon-unfiled-3248.6rc). The log has
-    // one writer, in order, so once a later render's line has landed, a line
-    // the held one wrote would have too.
-    await render(sockPath, "ev-late-after", projectDir, {});
-    expect(
-      eventsNow("ev-late", await loggedWhen(env, (lines) => eventsNow("ev-late-after", lines).length > 0, "a later render's event")),
-    ).toEqual([]);
-    const stats = () =>
-      sendDaemonRequest(sockPath, { v: PROTOCOL_VERSION, kind: "stats" });
-    await expect(stats()).resolves.toMatchObject({
-      ok: true,
-      stats: { renderCache: { held: 1 } },
-    });
-    // A non-blocking open fails (ENXIO) once the stub has stopped reading,
-    // rather than waiting for a reader that will never come.
-    const gate = await open(
-      path.join(tmuxDir, "gate"),
-      constants.O_WRONLY | constants.O_NONBLOCK,
-    );
-    await gate.write("open\n");
-    await gate.close();
     const late = only(await eventsOf("ev-late"));
-    expect(field(late, "timedOut")).toBe("Y");
     expect(field(late, "outcome")).toBe("ok");
-    // Returned, it holds nothing: `using` released the hold on exit.
+    expect(field(late, "timedOut")).toBe("N");
+    expect(field(late, "deadline")).toMatch(/^stated:\d+ms$/u);
+    expect(field(late, "ended")).toBe("deadline");
+    expect(field(late, "pending")).toBe("tmux.session");
+    // Answered, it holds nothing, though its source reads on: `using`
+    // released the hold on exit.
     await expect(stats()).resolves.toMatchObject({
       ok: true,
       stats: { renderCache: { held: 0, retired: 0 } },
     });
+
+    // The read lands, and the session's next render draws it, waiting on
+    // nothing.
+    await openGate();
+    await loggedWhen(
+      env,
+      (lines) => lines.some((l) => / tmux refresh .* outcome=ok /u.test(l)),
+      "tmux's read landing",
+    );
+    const drawn = stripAnsi(
+      await renderRequest(sockPath, tmuxBody("ev-late", "%1")),
+    );
+    expect(drawn).toContain("held");
+    expect(field((await eventsOf("ev-late", 2))[1]!, "ended")).toBe(
+      "answered",
+    );
+
+    // A client too old to state its deadline is answered by the budget the
+    // Node client gives up at, counted from the accept: within its whole
+    // budget, the connect included.
+    rmSync(path.join(tmuxDir, "asked"));
+    const sent = Date.now();
+    await expect(
+      sendDaemonRequest(sockPath, {
+        v: PROTOCOL_VERSION,
+        kind: "render",
+        ...tmuxBody("ev-late-unstated", "%2"),
+      }),
+    ).resolves.toMatchObject({ ok: true });
+    expect(Date.now() - sent).toBeLessThanOrEqual(TOTAL_BUDGET_MS);
+    const unstated = only(await eventsOf("ev-late-unstated"));
+    expect(field(unstated, "deadline")).toMatch(/^unstated:\d+ms$/u);
+    expect(field(unstated, "ended")).toBe("deadline");
+    // Its stub is still reading: let it answer rather than be killed.
+    await until(
+      () => existsSync(path.join(tmuxDir, "asked")),
+      "the second render asked tmux",
+    );
+    await openGate();
   });
 });
