@@ -204,6 +204,52 @@ describe("dlog", () => {
     );
   });
 
+  // A flush that fails before it ever yields (the path cannot be resolved)
+  // ends as one that did: the next line starts a flush of its own.
+  test("a flush that ends without yielding leaves the next line to flush", async () => {
+    await withFreshLog(
+      () => {},
+      async (dlog, logFile, drained) => {
+        const prevXdg = process.env.XDG_STATE_HOME;
+        delete process.env.XDG_STATE_HOME;
+        const home = jest.spyOn(os, "homedir").mockImplementation(() => {
+          throw new Error("ENOENT: no home");
+        });
+        const err = jest.spyOn(process.stderr, "write").mockImplementation(() => true);
+        try {
+          dlog("error", "unresolvable");
+        } finally {
+          err.mockRestore();
+          home.mockRestore();
+          process.env.XDG_STATE_HOME = prevXdg;
+        }
+        dlog("info", "after");
+        await drained();
+        expect(fs.readFileSync(logFile, "utf8")).toMatch(/\[info\] after\n$/);
+      },
+    );
+  });
+
+  // Before a caller blocks the loop on the way to a death that may skip the
+  // exit event, what is waiting is in the file at once — and only once.
+  test("what is waiting is written at once on request, and not again", async () => {
+    await withFreshLog(
+      () => {},
+      async (dlog, logFile, drained) => {
+        const { writeWaitingNow } = await import("../src/daemon/log");
+        for (let i = 0; i < 50; i++) dlog("info", `breach ${i}`);
+        writeWaitingNow();
+        const now = fs.readFileSync(logFile, "utf8");
+        expect(now).toContain("[info] breach 49\n");
+        await drained();
+        const lines = fs.readFileSync(logFile, "utf8").trimEnd().split("\n");
+        expect(lines.map((l) => / breach (\d+)$/.exec(l)?.[1])).toEqual(
+          Array.from({ length: 50 }, (_, i) => String(i)),
+        );
+      },
+    );
+  });
+
   // A disk that takes nothing costs lines the log says it lost, not memory:
   // past the bound the oldest waiting lines are dropped, the count is in the
   // file ahead of the lines kept, and the newest line is kept.

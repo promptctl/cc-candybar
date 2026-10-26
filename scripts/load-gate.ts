@@ -15,8 +15,8 @@
 //
 // Pass: every session answers before the warm deadline; every steady render
 // answers ok within the client's budget; the daemon is the same process
-// throughout with no post-mortem; its charge stays under the line the doctor
-// calls near the limit and does not climb; the cache's held counts stay flat.
+// throughout with no post-mortem; its charge stays within a budget for these
+// sessions and does not climb; the cache's held counts stay flat.
 //
 // Run: pnpm build && pnpm load-gate [--sessions N] [--seconds S]
 
@@ -32,11 +32,7 @@ import { detectClientHints } from "../src/client-hints.js";
 import { daemonArgs } from "../src/daemon/acquire.js";
 import { tryRenderViaDaemon } from "../src/daemon/client.js";
 import { fetchStats } from "../src/daemon/client-stats.js";
-import {
-  approachingLimit,
-  mb,
-  memoryLimitBytes,
-} from "../src/daemon/limits.js";
+import { mb, memoryLimitBytes } from "../src/daemon/limits.js";
 import { chargeProbe } from "../src/daemon/memory-report.js";
 import { PARENT_PID_ENV } from "../src/daemon/parent-watchdog.js";
 import type { StatsSnapshot } from "../src/daemon/stats.js";
@@ -80,6 +76,10 @@ const INSPECTOR_CALL_MS = 30_000;
 // What the charge may grow by across the steady phase, beyond a heap's
 // sawtooth: the live daemon's climb is ~80 MB a minute.
 const CLIMB_LIMIT_BYTES = 32 * 1024 * 1024;
+// What these sessions may be charged: ~430 MB measured on macOS and Linux, and
+// a fifth more. The shipped limit is sized for the backstop, and judging by it
+// would pass a daemon nearly twice as heavy.
+const BUDGET_BYTES = 512 * 1024 * 1024;
 const OID = "4f1c2a9e8b7d6c5a4f3e2d1c0b9a8f7e6d5c4b3a";
 
 // ─── The world ──────────────────────────────────────────────────────────────
@@ -404,7 +404,7 @@ const sessionEnv = {
 const client = nodeClientHint("node", BUNDLE);
 
 interface Render {
-  readonly phase: "warm" | "steady";
+  readonly phase: "warm" | "steady" | "after";
   readonly ms: number;
   // The client's own outcome: ok, or its failure class.
   readonly outcome: string;
@@ -616,10 +616,14 @@ async function run(): Promise<{
     await sample(steadyStarted);
     await sleep(SAMPLE_MS);
   }
-  for (const t of timers) clearInterval(t);
   gateLoop.disable();
+  // The second reading under the load the first was taken under: the steady
+  // renders settle, and those the collection delays are not scored.
+  phase = "after";
   await Promise.all(inFlight);
   const heapAfter = await liveHeap();
+  for (const t of timers) clearInterval(t);
+  await Promise.all(inFlight);
   // The first and last samples each follow a collection.
   await sample(steadyStarted);
   if (samples.length === 0) {
@@ -694,9 +698,9 @@ async function run(): Promise<{
       detail: `pids ${pids.join(",")} ${daemonExit ?? "running"}, post-mortems ${JSON.stringify(postMortems)}`,
     },
     {
-      name: "charge under the limit",
-      pass: charges.every((c) => !approachingLimit(c, limit)),
-      detail: `max ${mb(Math.max(...charges))} MB of ${mb(limit)} MB`,
+      name: "charge within the budget",
+      pass: charges.every((c) => c <= BUDGET_BYTES),
+      detail: `max ${mb(Math.max(...charges))} MB of ${mb(BUDGET_BYTES)} MB (limit ${mb(limit)} MB)`,
     },
     {
       name: "live heap not climbing",
@@ -759,7 +763,10 @@ async function run(): Promise<{
     // How long each steady render waited in the daemon before it began and how
     // long it then took, from its own render events, beside the gate's lag: a
     // slow round trip is one of the three.
-    daemonRenderMs: daemonRenders(steadyStarted),
+    daemonRenderMs: await daemonRenders(
+      steadyStarted,
+      renders.filter((r) => r.phase !== "warm").length,
+    ),
     gateLoopDelayMs: {
       p99: Math.round(gateLoop.percentile(99) / 1e6),
       max: Math.round(gateLoop.max / 1e6),
@@ -770,16 +777,32 @@ async function run(): Promise<{
   return { checks, facts };
 }
 
-function daemonRenders(
+// The daemon writes its log off its event loop, so the render events of the
+// last renders can land after them: the gate waits for one per render it sent
+// since `since` (a timed-out attempt's lands once it finishes), a while at most.
+async function daemonRenders(
   since: number,
-): Record<"took" | "waited", Record<string, number>> {
+  sent: number,
+): Promise<Record<"took" | "waited", Record<string, number>>> {
   const log = path.join(dirs.state, "cc-candybar", "daemon.log");
-  const lines = [`${log}.3`, `${log}.2`, `${log}.1`, log]
-    .filter((f) => fs.existsSync(f))
-    .flatMap((f) => fs.readFileSync(f, "utf8").split("\n"))
-    .filter(
-      (l) => l.includes("] render ") && Date.parse(l.slice(0, 24)) >= since,
-    );
+  const events = (): string[] =>
+    [`${log}.3`, `${log}.2`, `${log}.1`, log]
+      .filter((f) => fs.existsSync(f))
+      .flatMap((f) => fs.readFileSync(f, "utf8").split("\n"))
+      .filter(
+        (l) =>
+          l.includes("] render ") &&
+          l.includes(" took=") &&
+          Date.parse(l.slice(0, 24)) >= since,
+      );
+  let lines = events();
+  for (
+    const waitUntil = Date.now() + 10_000;
+    lines.length < sent && Date.now() < waitUntil;
+  ) {
+    await sleep(200);
+    lines = events();
+  }
   const spread = (field: string): Record<string, number> => {
     const ms = lines
       .map((l) => Number(new RegExp(` ${field}=(\\d+)ms`).exec(l)?.[1]))

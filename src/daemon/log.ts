@@ -30,7 +30,8 @@ export const MAX_WAITING_BYTES = 4 * 1024 * 1024;
 interface Sink {
   readonly path: string;
   readonly fd: number;
-  readonly ino: number;
+  // The file it is: an inode is unique only within its device.
+  readonly id: string;
 }
 let sink: Sink | null = null;
 
@@ -49,7 +50,12 @@ function close(): void {
 // write goes to it, never into a file nobody reads.
 async function sinkAt(filePath: string): Promise<{ held: Sink; size: number }> {
   const st = await fs.promises.stat(filePath).catch(() => null);
-  if (sink !== null && sink.path === filePath && sink.ino === st?.ino) {
+  if (
+    sink !== null &&
+    sink.path === filePath &&
+    st !== null &&
+    sink.id === idOf(st)
+  ) {
     return { held: sink, size: st.size };
   }
   close();
@@ -62,8 +68,12 @@ async function sinkAt(filePath: string): Promise<{ held: Sink; size: number }> {
   const opened = await new Promise<fs.Stats>((resolve, reject) =>
     fs.fstat(fd, (err, stats) => (err === null ? resolve(stats) : reject(err))),
   );
-  sink = { path: filePath, fd, ino: opened.ino };
+  sink = { path: filePath, fd, id: idOf(opened) };
   return { held: sink, size: opened.size };
+}
+
+function idOf(st: fs.Stats): string {
+  return `${st.dev}:${st.ino}`;
 }
 
 function writeAt(fd: number, bytes: Buffer): Promise<number> {
@@ -102,29 +112,50 @@ interface Batch {
     | { readonly kind: "landed" };
 }
 let onItsWay: Batch | null = null;
-let flushing: Promise<void> | null = null;
+// Set by the flush itself as it starts and cleared as it ends, so a flush that
+// ends without ever yielding leaves the next line free to start another.
+let flushing = false;
+const drainedWaiters: Array<() => void> = [];
 
 export function dlog(level: LogLevel, msg: string): void {
   const line = `${new Date().toISOString()} [${level}] ${msg}\n`;
   waiting.push(line);
   waitingBytes += Buffer.byteLength(line);
   // The newest lines are the ones kept — the death line is always among them.
-  while (waitingBytes > MAX_WAITING_BYTES && waiting.length > 1) {
-    waitingBytes -= Buffer.byteLength(waiting.shift()!);
-    dropped++;
+  // Dropped down to half at once, so a disk that stays stalled costs a drop
+  // now and then rather than one on every line.
+  if (waitingBytes > MAX_WAITING_BYTES) {
+    let cut = 0;
+    while (waitingBytes > MAX_WAITING_BYTES / 2 && cut < waiting.length - 1) {
+      waitingBytes -= Buffer.byteLength(waiting[cut]!);
+      cut++;
+    }
+    waiting.splice(0, cut);
+    dropped += cut;
   }
-  flushing ??= flush();
+  if (!flushing) void flush();
 }
 
 // Resolves once every line logged so far is in the file (or reported unwritable).
 export function drained(): Promise<void> {
-  return flushing ?? Promise.resolve();
+  if (!flushing) return Promise.resolve();
+  return new Promise((resolve) => drainedWaiters.push(resolve));
 }
+
+// What is waiting, written now, synchronously: for a caller about to block the
+// loop on the way to a death that may come with no exit event (a heap
+// snapshot, which can draw the OS's kill), so what explains it is on disk first.
+export function writeWaitingNow(): void {
+  writeWaitingSync(false);
+}
+
+const onExit = (): void => writeWaitingSync(true);
 
 // One write at a time until nothing waits. The exit listener is there exactly
 // while lines are on their way, so the way out writes what is still waiting.
 async function flush(): Promise<void> {
-  process.on("exit", writeWaitingSync);
+  flushing = true;
+  process.on("exit", onExit);
   try {
     while (waiting.length > 0) {
       const lines = take();
@@ -140,8 +171,9 @@ async function flush(): Promise<void> {
       }
     }
   } finally {
-    process.off("exit", writeWaitingSync);
-    flushing = null;
+    process.off("exit", onExit);
+    flushing = false;
+    for (const resolve of drainedWaiters.splice(0)) resolve();
   }
 }
 
@@ -160,6 +192,8 @@ function take(): string {
 
 async function append(filePath: string, batch: Batch): Promise<void> {
   const { held, size } = await sinkAt(filePath);
+  // Written meanwhile, synchronously, by a caller that could not wait.
+  if (batch.state.kind === "landed") return;
   const { bytes } = batch;
   batch.state = { kind: "issued", fd: held.fd, endsAt: size + bytes.length };
   for (let done = 0; done < bytes.length; ) {
@@ -172,20 +206,27 @@ async function append(filePath: string, batch: Batch): Promise<void> {
   }
 }
 
-// On the way out, after the event loop's last turn: a batch not yet written is
-// written, one whose write is out is finished as the file's size says, and
-// every line still waiting follows it.
+// On the way out, after the event loop's last turn (or now, for a caller that
+// cannot wait): a batch not yet written is written, one whose write is out is
+// finished as the file's size says, and every line still waiting follows it.
 // [LAW:no-silent-failure] exception: two things mislead the size, each costing
 // that one batch. A write still running in the threadpool lands after this
 // one and doubles it; another process appending while it is out hides that it
 // had not landed, and loses it. A write at an offset of its own would answer
 // exactly, and would overwrite the other daemon's lines at every handoff.
-function writeWaitingSync(): void {
+// A write already out lands on its own while the process lives, so only the
+// way out has to finish one.
+function writeWaitingSync(exiting: boolean): void {
   const out = onItsWay;
-  onItsWay = null;
-  const unsent = out?.state.kind === "taken" ? out.bytes.toString() : "";
-  if (out?.state.kind === "issued") {
-    const { fd, endsAt } = out.state;
+  const was = out?.state;
+  // The flush that took a batch written here finds it landed, and goes no
+  // further with it.
+  if (out !== null && (was?.kind === "taken" || exiting)) {
+    out.state = { kind: "landed" };
+  }
+  const unsent = was?.kind === "taken" ? out!.bytes.toString() : "";
+  if (exiting && out !== null && was?.kind === "issued") {
+    const { fd, endsAt } = was;
     try {
       const size = fs.fstatSync(fd).size;
       const start = endsAt - out.bytes.length;

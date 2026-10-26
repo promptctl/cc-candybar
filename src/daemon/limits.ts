@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import v8 from "node:v8";
 import { daemonDir } from "./paths";
-import { dlog } from "./log";
+import { dlog, writeWaitingNow } from "./log";
 import { type DaemonLogger } from "../utils/logger";
 import {
   chargeProbe,
@@ -257,6 +257,8 @@ export interface LimitsDeps {
   captureMemoryReport: () => string;
   writeMemoryReport: (filePath: string, text: string) => void;
   writeHeapSnapshot: (filePath: string) => string;
+  // What the log holds, written before the loop blocks (log.ts).
+  writeLogNow: () => void;
   // Every artifact a breach leaves behind, for rotation — both kinds.
   listArtifacts: () => string[];
   removeFile: (filePath: string) => void;
@@ -334,6 +336,10 @@ export function makeLimits(deps: LimitsDeps): LimitsHandle {
       deps.log("info", `memory report written: ${file}`);
     });
     attempt(deps.log, "heap snapshot", () => {
+      // [LAW:no-ambient-temporal-coupling] The snapshot holds the loop for
+      // seconds and can double the heap, which can draw the OS's kill with no
+      // exit event: what the log holds about this breach is on disk first.
+      deps.writeLogNow();
       const file = artifactFile(deps.snapshotDir, "heapSnapshot", identity);
       deps.log(
         "info",
@@ -505,6 +511,7 @@ export function realLimitsDeps(
     writeMemoryReport: (file, text) =>
       fs.writeFileSync(file, text, { mode: 0o600 }),
     writeHeapSnapshot: (file) => v8.writeHeapSnapshot(file),
+    writeLogNow: writeWaitingNow,
     // [LAW:no-silent-failure] A directory not yet made holds no breaches;
     // one that cannot be read is said so — never read as "none".
     listArtifacts: () => {

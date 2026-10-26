@@ -57,6 +57,9 @@ function makeDeps(rec: Recorder, overrides: Partial<LimitsDeps> = {}): LimitsDep
       rec.reportsWritten.push({ file, text });
       rec.existingFiles.push(file);
     },
+    writeLogNow: () => {
+      rec.order.push("write-log");
+    },
     writeHeapSnapshot: (file) => {
       rec.order.push("write-heap");
       rec.snapshotsWritten.push(file);
@@ -219,7 +222,9 @@ describe("the breach records where the memory actually was", () => {
   test("the attribution is captured before the snapshot rewrites the state", async () => {
     const rec = newRec();
     await breach(rec);
-    expect(rec.order).toEqual(["capture", "write-report", "write-heap"]);
+    // What the log holds about the breach is on disk before the snapshot
+    // holds the loop.
+    expect(rec.order).toEqual(["capture", "write-report", "write-log", "write-heap"]);
   });
 
   // [LAW:no-silent-failure] One artifact failing must not cost the other: they
