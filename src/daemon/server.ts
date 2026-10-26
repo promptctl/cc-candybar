@@ -898,6 +898,7 @@ function shutdown(code: number): void {
 // --- per-connection handler ---
 
 function handleConnection(sock: net.Socket): void {
+  const accepted = Date.now();
   inFlight++;
   stats.inFlight = inFlight;
   let responded = false;
@@ -990,7 +991,7 @@ function handleConnection(sock: net.Socket): void {
 
   const reader = makeFrameReader(
     (frame) => {
-      void handleRequest(frame as Request, () => timedOut)
+      void handleRequest(frame as Request, () => timedOut, accepted)
         .then((r) =>
           r.kind === "reply"
             ? respond(r.resp, r.exitAfterFlush, r.delivered)
@@ -1150,6 +1151,7 @@ function subscription(req: SubscribeRequest): HandledRequest {
 export async function handleRequest(
   req: Request,
   timedOut: () => boolean,
+  accepted: number,
 ): Promise<HandledRequest> {
   if (
     !req ||
@@ -1202,7 +1204,7 @@ export async function handleRequest(
   // kinds it is typed for.
   if (typeof req.kind !== "string" || !Object.hasOwn(REPLY_KINDS, req.kind))
     return refuse("BAD_REQUEST", "unknown kind");
-  return replied(await replyTo(req, timedOut));
+  return replied(await replyTo(req, timedOut, accepted));
 }
 
 // The reply to a request of any kind but a subscribe, past the connection's
@@ -1210,6 +1212,7 @@ export async function handleRequest(
 export async function replyTo(
   req: ReplyRequest,
   timedOut: () => boolean,
+  accepted: number,
 ): Promise<Reply> {
   if (req.kind === "shutdown") {
     return {
@@ -1362,8 +1365,13 @@ export async function replyTo(
           },
         );
     if (rendered.outcome.kind !== "ok") stats.requestsErrored++;
-    // Whether the client was already told TIMEOUT while this render ran on.
-    noteFacts(facts, { timedOut: timedOut() ? "Y" : "N" });
+    // Whether the client was already told TIMEOUT while this render ran on,
+    // and how long the request waited, from the connection's accept, before
+    // it began: a round trip longer than `took` is time spent there.
+    noteFacts(facts, {
+      timedOut: timedOut() ? "Y" : "N",
+      waited: `${t0 - accepted}ms`,
+    });
     const { level, line } = renderEvent(
       facts,
       rendered.outcome,

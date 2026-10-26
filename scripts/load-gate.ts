@@ -150,11 +150,24 @@ interface Session {
 const sessions: Session[] = Array.from({ length: SESSIONS }, (_, index) => {
   const id = `5aec8cd7-7c8a-456f-84e0-${String(index).padStart(12, "0")}`;
   const checkout = path.join(dirs.checkouts, `s${index}`);
-  fs.mkdirSync(path.join(checkout, ".git"), { recursive: true });
+  // A checkout's .git as git leaves it: the daemon dates what it holds by these
+  // files (the remotes by the config, the watch on refs/heads), so one missing
+  // makes it ask git again on every refresh, which a real checkout never does.
+  fs.mkdirSync(path.join(checkout, ".git", "refs", "heads"), {
+    recursive: true,
+  });
   fs.mkdirSync(path.join(checkout, ".lit"));
   fs.writeFileSync(
     path.join(checkout, ".git", "HEAD"),
     `ref: refs/heads/ticket-${index}\n`,
+  );
+  fs.writeFileSync(
+    path.join(checkout, ".git", "refs", "heads", `ticket-${index}`),
+    `${OID}\n`,
+  );
+  fs.writeFileSync(
+    path.join(checkout, ".git", "config"),
+    `[core]\n\trepositoryformatversion = 0\n[remote "origin"]\n\turl = git@github.com:promptctl/cc-candybar.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n`,
   );
   fs.writeFileSync(path.join(checkout, ".git", "index"), "");
   fs.writeFileSync(
@@ -553,13 +566,15 @@ async function run(): Promise<{
   const expected = (SESSIONS * STEADY_MS) / SESSION_PERIOD_MS;
   const charges = samples.map((s) => s.charge);
   const climb = heapAfter - heapBefore;
-  // The first and last samples each follow a collection, so what the charge
-  // holds beyond V8's heap there is native memory: buffers, malloc, watchers.
   const first0 = samples[0]!.stats;
-  const outside = [samples[0]!, samples.at(-1)!].map(
-    (s) => s.charge - s.stats.heapTotalBytes,
-  );
-  const nativeClimb = outside[1]! - outside[0]!;
+  // The charge under load, over the steady phase's second half: in the first
+  // the allocator is still filling to the load's working set, and a leak keeps
+  // climbing after it is full. Charge less V8's heap is no measure of native
+  // memory: the heap gives back pages it never touched, which the charge never
+  // counted, so the difference grows as the heap shrinks.
+  const underLoad = charges.slice(0, -1);
+  const secondHalf = underLoad.slice(Math.floor(underLoad.length / 2));
+  const chargeClimb = secondHalf.at(-1)! - secondHalf[0]!;
   const last = samples.at(-1)!.stats;
   const held = (pick: (s: StatsSnapshot) => number) => [
     ...new Set(samples.map((s) => pick(s.stats))),
@@ -616,9 +631,9 @@ async function run(): Promise<{
       detail: `${mb(heapBefore)} MB to ${mb(heapAfter)} MB over the steady phase (limit +${mb(CLIMB_LIMIT_BYTES)} MB)`,
     },
     {
-      name: "charge outside the heap not climbing",
-      pass: nativeClimb <= CLIMB_LIMIT_BYTES,
-      detail: `${outside.map(mb).join(" MB to ")} MB over the steady phase (limit +${mb(CLIMB_LIMIT_BYTES)} MB)`,
+      name: "charge not climbing under load",
+      pass: chargeClimb <= CLIMB_LIMIT_BYTES,
+      detail: `${mb(secondHalf[0]!)} MB to ${mb(secondHalf.at(-1)!)} MB over the steady phase's second half (limit +${mb(CLIMB_LIMIT_BYTES)} MB)`,
     },
     {
       // Watchers opened and closed while the watched set holds still: the
@@ -657,8 +672,9 @@ async function run(): Promise<{
     rssMb: samples.map((s) => mb(s.stats.rssBytes)),
     heapUsedMb: samples.map((s) => mb(s.stats.heapUsedBytes)),
     heapTotalMb: samples.map((s) => mb(s.stats.heapTotalBytes)),
-    // How long the daemon itself took over each steady render, from its own
-    // render events, beside the gate's lag: a slow round trip is one or the other.
+    // How long each steady render waited in the daemon before it began and how
+    // long it then took, from its own render events, beside the gate's lag: a
+    // slow round trip is one of the three.
     daemonRenderMs: daemonRenders(steadyStarted),
     gateLoopDelayMs: {
       p99: Math.round(gateLoop.percentile(99) / 1e6),
@@ -670,17 +686,23 @@ async function run(): Promise<{
   return { checks, facts };
 }
 
-function daemonRenders(since: number): Record<string, number> {
+function daemonRenders(
+  since: number,
+): Record<"took" | "waited", Record<string, number>> {
   const log = path.join(dirs.state, "cc-candybar", "daemon.log");
-  const took = [`${log}.1`, log]
+  const lines = [`${log}.1`, log]
     .filter((f) => fs.existsSync(f))
     .flatMap((f) => fs.readFileSync(f, "utf8").split("\n"))
     .filter(
       (l) => l.includes("] render ") && Date.parse(l.slice(0, 24)) >= since,
-    )
-    .map((l) => Number(/ took=(\d+)ms/.exec(l)?.[1]))
-    .sort((a, b) => a - b);
-  return { n: took.length, p99: pct(took, 0.99), max: took.at(-1) ?? 0 };
+    );
+  const spread = (field: string): Record<string, number> => {
+    const ms = lines
+      .map((l) => Number(new RegExp(` ${field}=(\\d+)ms`).exec(l)?.[1]))
+      .sort((a, b) => a - b);
+    return { n: ms.length, p99: pct(ms, 0.99), max: ms.at(-1) ?? 0 };
+  };
+  return { took: spread("took"), waited: spread("waited") };
 }
 
 function tally(xs: readonly string[]): Record<string, number> {
