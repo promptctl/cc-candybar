@@ -1,3 +1,13 @@
+## [1.157.0](https://github.com/promptctl/cc-candybar/compare/v1.156.4...v1.157.0) (2026-10-26)
+
+### ⚠ BREAKING CHANGES
+
+* **test:** the built-in `ceiling` segment and cc-candybar's memento integration are removed (#443). memento 0.11.0 and later ship their own cc-candybar plugin: place `plugins.memento.ceiling` where `ceiling` stood. A config that still names `ceiling` gets an error saying the segment was removed. Plugins can now declare per-session sources that a program writes, `run` actions that run the plugin's own program, and their own variables (#441).
+
+### Bug Fixes
+
+* **test:** a key's run waits at a gate the test opens, so a loaded runner cannot end it before the check (brandon-unfiled-3248.2uq4) ([#445](https://github.com/promptctl/cc-candybar/issues/445)) ([0b3046c](https://github.com/promptctl/cc-candybar/commit/0b3046c23ea645d918c8637267116bb18eecaced)), closes [promptctl/cc-candybar#441](https://github.com/promptctl/cc-candybar/issues/441) [#443](https://github.com/promptctl/cc-candybar/issues/443)
+
 ## [1.156.4](https://github.com/promptctl/cc-candybar/compare/v1.156.3...v1.156.4) (2026-10-23)
 
 ### Bug Fixes
