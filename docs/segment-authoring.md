@@ -148,6 +148,14 @@ session rendering from the same directory never re-runs it. A `key` or
 `now`, or a variable reading either — is refused at load: to re-run on time,
 use `ttl` (see "A cache key that reads the clock" under Mistakes).
 
+A source runs only when its cache policy says so. Drawing the bar never runs
+one: while the bar moves it is redrawn up to 30 times a second between
+statusline requests, and each of those frames reads the value the source last
+stored, so a `ttl: "5s"` shell runs once every five seconds however often the
+bar is drawn. `cc-candybar daemon-stats` lists every source's runs by what
+asked for each (its first run, its period, a change, a request), its
+failures, and how long its last run took.
+
 A `file` variable is the same declaration with `path` (absolute — `~` and
 relative paths are refused at load, like a relative `watch_file`; write the
 full path) in place of `command`, plus an
