@@ -969,12 +969,14 @@ loading until the program exits, and then shows what it wrote.
 A definition that does not load — a missing file, a syntax error, a field it
 may not declare, a template that does not parse or names something nothing
 declares — drops **that plugin only**: the rest of your config renders, a
-template reading its data, calling its helper or binding its action shows `⚠` naming the
-drop — a segment of it you placed or retuned stands in as that cell — the
-bar's diagnostic strip names the definition and the reason, and `check`
-fails. An INSTALLED plugin that does not load is your config's problem only
-where it reaches it (a placement, a retune, a helper call or an action
-binding): one nothing reaches is neither on the strip nor in `check`. A
+template reading its data, a source or a variable, calling its helper or
+binding its action shows `⚠` naming the drop — a segment of it you placed or
+retuned stands in as that cell — a `run` of yours that refreshes one of its
+sources still runs, with nothing of it to refresh, the bar's diagnostic strip
+names the definition and the reason, and `check` fails. An INSTALLED plugin
+that does not load is your config's problem only where it reaches it (a
+placement, a retune, a helper call, an action binding or a `refreshes`): one
+nothing reaches is neither on the strip nor in `check`. A
 listed definition is a folder's `plugin.json5`, the folder naming the plugin.
 A definition is watched like your config file, so fixing or installing it
 reloads the bar:

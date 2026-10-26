@@ -347,6 +347,37 @@ describe("a source's declaration", () => {
     }
   });
 
+  test("a user config naming a dropped plugin's source still loads: its read draws the drop, and its run refreshes nothing of it", () => {
+    const r = rig();
+    write(
+      "p/plugin.json5",
+      `{ sources: { status: ${SOURCE} }, segments: { s: { template: "{{ " } } }`,
+    );
+    const p = write(
+      "config.json5",
+      `{ plugins: ["./p/plugin.json5"],
+         actions: { raise: { run: ["/bin/true"], refreshes: ["plugins.p.status"] } },
+         segments: { mine: { template: "x{{ .plugins.p.status.home }}" } },
+         root: { h: ["mine"] } }`,
+    );
+    const loaded = loadFromDisk(dir, dir, p, {
+      sessionState: r.sessionState,
+      storage: r.providers.managedStorage,
+      signer: TEST_SIGNER,
+    });
+    try {
+      expect(loaded.error).toBeNull();
+      const { config, plugins } = loaded.state!;
+      expect(plugins.dropped.map((d) => d.plugin)).toEqual(["p"]);
+      // The namespace is the drop, so every name under it reads it.
+      expect(config.variables["plugins.p"]).toMatchObject({ kind: "dropped" });
+      expect(config.actions.raise).toMatchObject({ refreshes: [] });
+      expect([...plugins.reached]).toEqual([path.join(dir, "p", "plugin.json5")]);
+    } finally {
+      loaded.state?.registry.dispose();
+    }
+  });
+
   test("a source's name is one identifier", async () => {
     const message = fatal(
       await checkConfig(listing(`{ "a.b": ${SOURCE} }`), dir),

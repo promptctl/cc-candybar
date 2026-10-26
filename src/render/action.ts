@@ -28,7 +28,11 @@ import type { VariableStore } from "../var-system/store.js";
 import type { SourceRegistry } from "../var-system/sources.js";
 import { toString as varToString } from "../var-system/types.js";
 import { buildScope } from "../template-engine/scope.js";
-import { ceilingMoveArgs, type ActionDecl } from "../config/action.js";
+import {
+  ceilingMoveArgs,
+  runDeclaration,
+  type ActionDecl,
+} from "../config/action.js";
 import {
   resolveOptionDomain,
   type DomainLibrary,
@@ -241,11 +245,12 @@ export type CompiledActionDecl =
   | { readonly kind: "slash"; readonly line: string }
   // [LAW:one-source-of-truth] A `run`: its program, arguments and environment
   // values pre-parsed, evaluated by the draw into the link it signs. It
-  // carries its own name, which the link signs: the click looks the
-  // declaration up by it.
+  // carries its own name and its declaration, which the link signs: the click
+  // looks the declaration up by name and verifies it is the one drawn.
   | {
       readonly kind: "run";
       readonly name: string;
+      readonly declaration: string;
       readonly argv: ReadonlyArray<Template<RichText>>;
       readonly env: ReadonlyArray<
         readonly [name: string, value: Template<RichText>]
@@ -604,6 +609,7 @@ function compileAction(
     return {
       kind: "run",
       name,
+      declaration: runDeclaration(action),
       argv: action.run.map((item) => parseActionTemplate(parse, item, name)),
       env: Object.entries(action.env).map(
         ([variable, value]) =>
@@ -1036,7 +1042,12 @@ export function realize(
           ]),
         ),
       } satisfies EvaluatedRun);
-      const mac = signer.sign({ sessionId, action: c.name, evaluated });
+      const mac = signer.sign({
+        sessionId,
+        action: c.name,
+        declaration: c.declaration,
+        evaluated,
+      });
       return {
         effects: [
           { verb: VERB_RUN, args: [sessionId, c.name, evaluated, mac] },

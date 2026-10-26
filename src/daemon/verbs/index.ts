@@ -125,6 +125,7 @@ import type { DeclaredSources } from "../render-payload";
 import { sessionEnv } from "../session-env";
 import {
   ceilingMoveArgs,
+  runDeclaration,
   type CeilingAction,
   type SlashAction,
 } from "../../config/action";
@@ -1495,29 +1496,32 @@ const slash: VerbHandler = (value, ctx) => {
 
 // ─── Run (a `run` action) ───────────────────────────────────────────────────
 
-// [LAW:parse-dont-validate] A run link is honoured only when its mac verifies
-// — it was drawn by this daemon's key, for this session, with exactly the
-// program, arguments and environment it carries — and it names a `run` action
-// the session's config declares. The directory the program runs in and the
-// sources it refreshes come from that declaration, never from the link. Any
-// web page can open a `cc-candybar://` link, so either check failing refuses
-// the click before anything runs.
+// [LAW:parse-dont-validate] A run link is honoured only when it names a `run`
+// action the session's config declares and its mac verifies — it was drawn by
+// this daemon's key, for this session, from that declaration as it stands
+// now, with exactly the program, arguments and environment it carries. The
+// directory the program runs in and the sources it refreshes come from that
+// declaration, never from the link. Any web page can open a `cc-candybar://`
+// link, so either check failing refuses the click before anything runs.
 function runOf(
   [sessionId = "", action = "", evaluated = "", mac = ""]: readonly string[],
   ctx: VerbContext,
 ): RunRequest {
   const sid = requireSessionId(sessionId);
-  if (!ctx.links.verify({ sessionId: sid, action, evaluated }, mac)) {
-    throw new BadVerbArgs(
-      "the link's signature does not match what it carries: it was not drawn by this daemon",
-    );
-  }
   const origin = sessionOrigin(ctx, sid);
   const actions = ctx.configFor(origin).actions;
   const decl = Object.hasOwn(actions, action) ? actions[action] : undefined;
   if (decl === undefined || !("run" in decl)) {
     throw new BadVerbArgs(
       `"${action}" is not a run action this session's config declares`,
+    );
+  }
+  const declaration = runDeclaration(decl);
+  if (
+    !ctx.links.verify({ sessionId: sid, action, declaration, evaluated }, mac)
+  ) {
+    throw new BadVerbArgs(
+      "the link's signature does not match what it carries: it was not drawn by this daemon, or its action has been edited since it was drawn",
     );
   }
   // Signed, so it is what a draw wrote: the JSON of an EvaluatedRun.

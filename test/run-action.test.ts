@@ -32,6 +32,7 @@ import { sessionEnv } from "../src/daemon/session-env";
 import { lastClickError } from "../src/daemon/click-error";
 import { linkSigner } from "../src/click/link-signer";
 import { linkSignerFromKeyFile } from "../src/daemon/link-key";
+import { runDeclaration, type RunAction } from "../src/config/action";
 import { effectsUrl, VERB_RUN, type EvaluatedRun } from "../src/click/wire";
 import {
   BadVerbArgs,
@@ -272,6 +273,10 @@ function runLink(links: readonly string[], action: string) {
 // What a click on a session's link is handed: the session's recorded render
 // and client facts, the config and sources its render state holds, and the
 // run owner.
+// The declaration a view's config holds for a run, as its link signs it.
+const declarationOf = (view: SessionView<SessionSource>, name: string): string =>
+  runDeclaration(view.state.config.actions[name] as RunAction);
+
 function clickContext(r: Rig, view: SessionView<SessionSource>, over: Partial<VerbContext> = {}): VerbContext {
   r.sessionState.set(
     SID,
@@ -431,7 +436,10 @@ describe("a run link", () => {
       run: ["./write.sh", SID],
       env: { HOME_VALUE: "/h/other", DELAY: "0" },
     });
-    expect(TEST_SIGNER.verify({ sessionId: link.sid, action: link.name, evaluated: link.evaluated }, link.mac)).toBe(true);
+    const declaration = declarationOf(view, link.name);
+    expect(TEST_SIGNER.verify({ sessionId: link.sid, action: link.name, declaration, evaluated: link.evaluated }, link.mac)).toBe(
+      true,
+    );
   });
 
   test("a run bound by a computed name draws with the value of a source only its env reads", async () => {
@@ -470,7 +478,11 @@ describe("a click on a run link", () => {
     const r = rig();
     const { view, link } = await drawnLink(r);
     const tampered = tamper(link);
-    expect(() => clickUrl(relink(tampered), clickContext(r, view))).toThrow(BadVerbArgs);
+    const ctx = clickContext(r, view);
+    // Another session that has rendered: what its link must prove is the
+    // signature.
+    r.sessionState.set("s2", SESSION_RENDER_ORIGIN_KEY, encodeRenderOrigin({ projectDir: dir, cwd: dir, configFile: null }));
+    expect(() => clickUrl(relink(tampered), ctx)).toThrow(BadVerbArgs);
     expect(r.runs.stats()).toMatchObject({ started: 0, refused: 1 });
     expect(r.lines).toContainEqual(
       expect.stringMatching(
@@ -480,6 +492,32 @@ describe("a click on a run link", () => {
     // The refusal is in the bar of the session the link names.
     expect(lastClickError(r.sessionState, tampered.sid)?.text).toContain("signature does not match");
     expect(fs.existsSync(path.join(storage(), `${SID}.json`))).toBe(false);
+  });
+
+  test("a link naming a session that has never rendered is refused, and nothing runs", async () => {
+    const r = rig();
+    const { view, link } = await drawnLink(r);
+    expect(() => clickUrl(relink({ ...link, sid: "s3" }), clickContext(r, view))).toThrow(
+      "session s3 has not rendered yet — no config to act on",
+    );
+    expect(r.runs.stats()).toMatchObject({ started: 0, refused: 1 });
+  });
+
+  test("a link drawn before its action was edited is refused, and nothing runs", async () => {
+    const r = rig();
+    const { view, link } = await drawnLink(r);
+    const { config: drawnUnder } = view.state;
+    const decl = drawnUnder.actions[link.name] as RunAction;
+    const edited = {
+      ...drawnUnder,
+      actions: { ...drawnUnder.actions, [link.name]: { ...decl, run: ["./other.sh", ...decl.run.slice(1)] } },
+    } as typeof drawnUnder;
+    const ctx = clickContext(r, view, { configFor: () => edited });
+    expect(() => clickUrl(link.url, ctx)).toThrow(/its action has been edited since it was drawn/);
+    expect(r.runs.stats()).toMatchObject({ started: 0, refused: 1 });
+    // The same link under the declaration it was drawn from runs.
+    clickUrl(link.url, clickContext(r, view));
+    expect(r.runs.stats()).toMatchObject({ started: 1 });
   });
 
   test("a link signed with another key is refused", async () => {
@@ -494,7 +532,11 @@ describe("a click on a run link", () => {
     const r = rig();
     const { view, link } = await drawnLink(r);
     for (const action of ["plugins.p.nope", "mine"]) {
-      const forged = { ...link, name: action, mac: TEST_SIGNER.sign({ sessionId: SID, action, evaluated: link.evaluated }) };
+      const forged = {
+        ...link,
+        name: action,
+        mac: TEST_SIGNER.sign({ sessionId: SID, action, declaration: "[]", evaluated: link.evaluated }),
+      };
       expect(() => clickUrl(relink(forged), clickContext(r, view))).toThrow(
         `"${action}" is not a run action this session's config declares`,
       );
@@ -655,7 +697,7 @@ describe("the session's process environment", () => {
 describe("the link key", () => {
   test("is made once, 32 bytes readable by this user alone, and the same key across restarts", () => {
     const file = path.join(dir, "state", "link.key");
-    const fields = { sessionId: SID, action: "a", evaluated: "{}" };
+    const fields = { sessionId: SID, action: "a", declaration: "[]", evaluated: "{}" };
     const mac = linkSignerFromKeyFile(file).sign(fields);
     expect(fs.statSync(file).mode & 0o777).toBe(0o600);
     expect(fs.readFileSync(file)).toHaveLength(32);
@@ -668,7 +710,7 @@ describe("the link key", () => {
 
   test("a maker that dies writing leaves no key, and the next one makes it whole", () => {
     const file = path.join(dir, "state", "link.key");
-    const fields = { sessionId: SID, action: "a", evaluated: "{}" };
+    const fields = { sessionId: SID, action: "a", declaration: "[]", evaluated: "{}" };
     const write = fs.writeFileSync;
     jest.spyOn(fs, "writeFileSync").mockImplementationOnce((target, data, opts) => {
       write(target, (data as Buffer).subarray(0, 3), opts as fs.WriteFileOptions);
@@ -683,7 +725,7 @@ describe("the link key", () => {
 
   test("a key already made is served from a state directory that cannot be written", () => {
     const file = path.join(dir, "state", "link.key");
-    const fields = { sessionId: SID, action: "a", evaluated: "{}" };
+    const fields = { sessionId: SID, action: "a", declaration: "[]", evaluated: "{}" };
     const mac = linkSignerFromKeyFile(file).sign(fields);
     fs.chmodSync(path.dirname(file), 0o500);
     try {
@@ -695,7 +737,7 @@ describe("the link key", () => {
 
   test("a key file of the wrong length is refused, naming it", () => {
     const file = write("state/link.key", "short");
-    expect(() => linkSignerFromKeyFile(file).sign({ sessionId: SID, action: "a", evaluated: "{}" })).toThrow(
+    expect(() => linkSignerFromKeyFile(file).sign({ sessionId: SID, action: "a", declaration: "[]", evaluated: "{}" })).toThrow(
       `link key ${file} holds 5 bytes, not 32`,
     );
   });

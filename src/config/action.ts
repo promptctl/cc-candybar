@@ -292,6 +292,14 @@ export interface RunAction {
   readonly cwd: string;
 }
 
+// [LAW:one-source-of-truth] A run's declaration as its link signs it, spelled
+// once for the draw that signs and the click that verifies: a link verifies
+// only while its action is declared as it was when the bar drew it, so an
+// edited run never runs what was drawn before the edit.
+export function runDeclaration(a: RunAction): string {
+  return JSON.stringify([a.run, Object.entries(a.env), a.cwd, a.refreshes]);
+}
+
 export type CeilingAction = Extract<ActionDecl, { readonly ceiling: string }>;
 export type SlashAction = Extract<ActionDecl, { readonly slash: string }>;
 

@@ -280,14 +280,21 @@ export function applyPlugins(
   );
 }
 
-// Whether a declared name is the plugin's: everything under
-// `plugins.<plugin>.`.
+// Whether a declared name is the plugin's: its namespace, `plugins.<plugin>`,
+// where a dropped plugin's tombstone stands, and everything under it.
 export function ownedBy(plugin: string): (name: string) => boolean {
-  const prefix = `${PLUGIN_NS}${plugin}.`;
-  return (name) => name.startsWith(prefix);
+  const ns = tombstoneVar(plugin);
+  return (name) => name === ns || name.startsWith(`${ns}.`);
 }
 
-// The config with nothing left under `plugins.<plugin>.`.
+// [LAW:one-source-of-truth] Where a dropped plugin's tombstone is declared:
+// its namespace itself, so every read under it — its data, its sources, its
+// variables — lands on the drop.
+function tombstoneVar(plugin: string): string {
+  return `${PLUGIN_NS}${plugin}`;
+}
+
+// The config with nothing of the plugin's left.
 // The config itself when it held nothing there, so a caller can tell.
 function withoutPlugin(config: DslConfig, plugin: string): DslConfig {
   const owned = ownedBy(plugin);
@@ -309,9 +316,9 @@ function withoutPlugin(config: DslConfig, plugin: string): DslConfig {
   };
 }
 
-// [LAW:no-silent-failure] A dropped plugin still owns its namespace: its data
-// variable is a document that IS the drop, so a template reading it — the
-// user's own, a stand-in's — renders ⚠ naming why.
+// [LAW:no-silent-failure] A dropped plugin still owns its namespace: the
+// namespace is a document that IS the drop, so a template reading any name
+// under it — the user's own, a stand-in's — renders ⚠ naming why.
 function tombstone(
   config: DslConfig,
   plugin: string,
@@ -321,7 +328,7 @@ function tombstone(
     ...config,
     variables: {
       ...config.variables,
-      [pluginDataVar(plugin)]: {
+      [tombstoneVar(plugin)]: {
         kind: "dropped",
         reason: droppedPluginNotice(dropped),
         definition: dropped.path,
@@ -365,7 +372,7 @@ export function dropsOwning(
   return (name) => {
     const plugin = pluginOf(name);
     if (plugin === undefined) return [];
-    const data = layer.config.variables[pluginDataVar(plugin)];
+    const data = layer.config.variables[tombstoneVar(plugin)];
     if (data?.kind === "dropped")
       return [{ definition: data.definition, notice: data.reason }];
     return owners.has(plugin) ? [] : unnamed;
@@ -411,9 +418,7 @@ export function withDroppedPlacements(
   const tombstoned = (name: string): DropCause | undefined => {
     const plugin = pluginOf(name);
     const data =
-      plugin === undefined
-        ? undefined
-        : config.variables[pluginDataVar(plugin)];
+      plugin === undefined ? undefined : config.variables[tombstoneVar(plugin)];
     return data?.kind === "dropped"
       ? { definition: data.definition, notice: data.reason }
       : undefined;
@@ -453,9 +458,30 @@ export function withDroppedPlacements(
     templates.flatMap((t) => [...templateHelperCalls(t, config.helpers)]),
     config.helpers,
   );
+  // [LAW:dataflow-not-control-flow] A run's `refreshes` naming a dropped
+  // plugin's source loses that name: the plugin brings no source this load,
+  // so the click has nothing of it to make stale, and the run is still the
+  // config's own.
+  const lowered = Object.entries(config.actions).flatMap(([name, a]) => {
+    if (!("run" in a)) return [];
+    const gone = new Map(missing(a.refreshes, config.variables));
+    return gone.size === 0
+      ? []
+      : [
+          {
+            name,
+            action: {
+              ...a,
+              refreshes: a.refreshes.filter((r) => !gone.has(r)),
+            },
+            causes: [...gone.values()],
+          },
+        ];
+  });
   const reached = new Set([
     ...caused.flatMap(({ cause }) => cause.map((c) => c.definition)),
     ...[...actionStandIns, ...helperStandIns].map(([, c]) => c.definition),
+    ...lowered.flatMap(({ causes }) => causes.map((c) => c.definition)),
   ]);
   return {
     config: {
@@ -466,9 +492,12 @@ export function withDroppedPlacements(
       actions: {
         ...config.actions,
         ...Object.fromEntries(
+          lowered.map(({ name, action }) => [name, action]),
+        ),
+        ...Object.fromEntries(
           actionStandIns.map(([name]) => [
             name,
-            { copy: `{{ .${pluginDataVar(pluginOf(name) ?? "")} }}` },
+            { copy: `{{ .${tombstoneVar(pluginOf(name) ?? "")} }}` },
           ]),
         ),
       },
@@ -609,7 +638,7 @@ function fragmentOf(
   // `variables:`, parsed by the same validator, named under its namespace.
   const variables = validateVariables(ctx, "variables", json.variables);
   // [LAW:one-source-of-truth] `.plugins.<plugin>.data` is the data file's,
-  // and a dropped plugin's tombstone, whether or not `data` is declared.
+  // whether or not `data` is declared.
   for (const [table, names] of [
     ["variables", Object.keys(variables)],
     ["sources", Object.keys(sources)],

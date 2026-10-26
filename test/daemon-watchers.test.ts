@@ -134,7 +134,10 @@ describe("WatcherRegistry", () => {
       watchRefusals: 1,
       watchErrors: 0,
     });
+    // Its release is counted like any slot's: opened plus refusals less
+    // closed is what is held now.
     reg.closeAll();
+    expect(counters.watchersClosed).toBe(1);
   });
 
   test("an error after open reaches the consumer and the stats", async () => {

@@ -12,11 +12,14 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 // bytes.
 export const LINK_KEY_BYTES = 32;
 
-// What a link signs: the session it runs for, the action it names, and the
-// JSON of what the draw evaluated. The verb reads all three back from the URL.
+// What a link signs: the session it runs for, the action it names, that
+// action's declaration as the draw saw it, and the JSON of what the draw
+// evaluated. The verb reads the session, name and evaluation back from the
+// URL, and the declaration from the session's config.
 export interface SignedFields {
   readonly sessionId: string;
   readonly action: string;
+  readonly declaration: string;
   readonly evaluated: string;
 }
 
@@ -30,11 +33,18 @@ export interface LinkSigner {
   readonly verify: (fields: SignedFields, mac: string) => boolean;
 }
 
-// [LAW:types-are-the-program] The three fields are joined as one JSON array,
-// so no choice of field text makes two different triples sign alike.
+// [LAW:types-are-the-program] The fields are joined as one JSON array, so no
+// choice of field text makes two different sets sign alike.
 function digest(key: Buffer, fields: SignedFields): Buffer {
   return createHmac("sha256", key)
-    .update(JSON.stringify([fields.sessionId, fields.action, fields.evaluated]))
+    .update(
+      JSON.stringify([
+        fields.sessionId,
+        fields.action,
+        fields.declaration,
+        fields.evaluated,
+      ]),
+    )
     .digest();
 }
 

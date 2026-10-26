@@ -104,7 +104,7 @@ actions: {
 
 - **The draw evaluates it.** The argument list and `env` are templates the draw evaluates, as it evaluates `copy`'s text. A click runs exactly what the glyph promised, and nothing is evaluated at click time.
 - **No shell.** The list is the program and its arguments. It runs in the directory of the file that declares it, so a config with no file, such as the bundled default, declares none.
-- **The link is signed.** A `cc-candybar://` link can be opened by any web page, so a `run` link carries its session, its action name and its evaluated arguments signed with a key only the daemon holds. A link that fails the signature, or names an action the session's config doesn't declare, is refused.
+- **The link is signed.** A `cc-candybar://` link can be opened by any web page, so a `run` link carries its session, its action name and its evaluated arguments signed with a key only the daemon holds, together with the action's declaration as the draw saw it. A link that fails the signature, names an action the session's config doesn't declare, or was drawn before that action was edited, is refused.
 - **It runs off the click.** The click returns at once and the program runs asynchronously, bounded by one timeout. A non-zero exit, a timeout or a failed launch shows its stderr, or the reason when it printed none, in the session's click-error slot.
 - **`refreshes` names what it makes stale.** Each named source is superseded: its value reads pending, any read in flight is abandoned, and a fresh read starts once the program exits. No draw after the click shows the value from before it.
 

@@ -90,7 +90,8 @@ export interface WatcherHandle {
 // `watchersOpened` counts slots whose every target opened, `watchRefusals`
 // slots with a target refused, and `watchErrors` errors watches reported after
 // they opened — so a refused or failed watch is never counted as a working
-// one.
+// one. `watchersClosed` counts every slot released, refused or not, so the
+// slots held now are opened plus refusals less closed.
 export interface WatcherCounters {
   watchersOpened: number;
   watchersClosed: number;
