@@ -36,7 +36,6 @@ import {
   fakeAutoCompact,
   fakeContext,
   fakeGit,
-  fakeMemento,
   fakeMetrics,
   fakeTmux,
   fakeUsage,
@@ -83,7 +82,6 @@ async function bar(
     contextProvider: fakeContext(async () => ABSENT),
     metricsProvider: fakeMetrics(async () => ABSENT),
     activityProvider: fakeActivity(async () => ABSENT),
-    mementoProvider: fakeMemento(async () => ABSENT),
     tmuxService: fakeTmux(async () => {
       sessionLookups++;
       return ok("work");

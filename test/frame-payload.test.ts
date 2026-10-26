@@ -36,7 +36,6 @@ import {
   fakeCacheExpiry,
   fakeContext,
   fakeGit,
-  fakeMemento,
   fakeMetrics,
   fakeTmux,
   fakeUsage,
@@ -74,7 +73,6 @@ const EVERY_LANE = new Set([
   "metrics.messageCount",
   "activity.running",
   "cache.expiresAt",
-  "memento.ceiling",
   "autocompact.window",
 ]);
 
@@ -104,9 +102,6 @@ function counted(pr?: unknown) {
       count("git", ok(pr === undefined ? GIT : { ...GIT, pullRequest: pr })),
     ),
     tmuxService: fakeTmux(count("tmux", ok("work"))),
-    mementoProvider: fakeMemento(
-      count("memento", ok({ ceiling: 350_000, session: null })),
-    ),
     usageStore: fakeUsage({
       usage: count("session", ok({ session: { cost: 2, tokens: 10 } })),
       today: count("today", ok({ cost: 5, tokens: 50 })),
@@ -160,7 +155,6 @@ describe("a frame's payload", () => {
         "cache",
         "context",
         "git",
-        "memento",
         "metrics",
         "session",
         "speed",
@@ -184,7 +178,6 @@ describe("a frame's payload", () => {
     expect(today()).toBe(PENDING);
     expect(payload.git).toBe(PENDING);
     expect(payload.tmux).toEqual({ pane: "%7", session: PENDING });
-    expect(payload.memento).toBe(PENDING);
     for (const lane of [
       payload.session,
       payload.speed,

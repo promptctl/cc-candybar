@@ -242,9 +242,6 @@ const watcherRegistry = new WatcherRegistry({
 // render in this daemon, built by the one constructor every renderer uses
 // (payload-providers.ts). The render cache owns DSL-state-per-config; these
 // serve the augmented payload that flows through every render.
-// [LAW:single-enforcer] `mementoProvider` is the one owner of memento's
-// ceiling: the payload reads through it and the ceiling verb moves through it,
-// so a click drops the very reading it made stale.
 const payloadProviders = createPayloadProviders({
   watchers: watcherRegistry,
   logger: dlog,
@@ -253,7 +250,6 @@ const {
   gitProvider: gitService,
   usageStore,
   tmuxService,
-  mementoProvider,
   autoCompact,
   cacheExpiry,
   managedStorage,
@@ -910,7 +906,6 @@ function shutdown(code: number): void {
     ["gitService close", () => gitService.close()],
     ["usageStore close", () => usageStore.close()],
     ["tmuxService close", () => tmuxService.close()],
-    ["mementoProvider close", () => mementoProvider.close()],
     // Before the storage it resumes: an aborted run resumes its sources once
     // its program is gone.
     ["runs close", () => runs.close()],
@@ -1306,7 +1301,6 @@ export async function replyTo(
         usageCache: usageStore.getStats(),
         sources: {
           tmux: tmuxService.getStats(),
-          memento: mementoProvider.getStats(),
           autocompact: autoCompact.getStats(),
           cache: cacheExpiry.getStats(),
           today: usageStore.scanStats(),
@@ -1628,7 +1622,6 @@ const verbCtx = {
   clients: renderSightings,
   bundle: DAEMON_BUNDLE,
   serving: () => establishedLimits().serving(),
-  memento: mementoProvider,
   claudeInput: productionClaudeInputEdge(),
   history: settingsHistory,
   navigation: navigationHistory,

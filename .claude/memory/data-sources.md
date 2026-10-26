@@ -2,7 +2,7 @@
 
 ## One owner per source; renders never fetch
 
-Each shared source has one owner that schedules its reads: git state, PR lookups, tmux pane names, memento's ceiling, today's transcript scans, the auto-compact setting and the cache expiry. A read returns the stored value, and only a value that has never been read is awaited. Refreshes come from triggers (a watch, a period), never from a render. A pushed frame does no I/O at all. It draws what the owners have stored.
+Each shared source has one owner that schedules its reads: git state, PR lookups, tmux pane names, plugins' session files, today's transcript scans, the auto-compact setting and the cache expiry. A read returns the stored value, and only a value that has never been read is awaited. Refreshes come from triggers (a watch, a period), never from a render. A pushed frame does no I/O at all. It draws what the owners have stored.
 
 A render request waits for what its arrival started: the refreshes it triggers, the first value of every keyed source its view declares, and every run of its session's or its directory's sources that answers a key the source has no answer under yet: a first value, or a key or dependency that moved. A period's or a watch's re-read is not waited for, since it keeps the answer it has standing, and another session may have started it. It waits only until its client's deadline, less what the draw needs, and whatever has not answered then is drawn as pending. The client states the deadline because only the client knows when it hangs up: the native client counts its budget from before it connects, the Node client from after, and under load the daemon reads a request late. A config's first request compiles in its arrival turn, and that compile can spend the whole deadline, so the first bar from a new directory or config can be mostly pending. A frame waits for nothing, and anything not answered yet is drawn as pending.
 
@@ -14,7 +14,7 @@ A stored value changes only when a read finds something different, compared by s
 
 ## Periods run only while something holds the key
 
-Each session view declares the keys its preset reads, using the keys its request names: which repo, which pane, which memento scope, which Claude Code directory. Those declarations are the holds. A period runs only while its key is held. It measures from the last read that landed, and resumes where it left off. A preset switch takes the holds it newly needs before any draw and releases the old ones at once. Each source's LRU evicts only unheld keys. So data the old preset read costs nothing once released, and a daemon with no subscribers keeps no timer and makes no external call.
+Each session view declares the keys its preset reads, using the keys its request names: which repo, which pane, which plugin session file, which Claude Code directory. Those declarations are the holds. A period runs only while its key is held. It measures from the last read that landed, and resumes where it left off. A preset switch takes the holds it newly needs before any draw and releases the old ones at once. Each source's LRU evicts only unheld keys. So data the old preset read costs nothing once released, and a daemon with no subscribers keeps no timer and makes no external call.
 
 ## Where a variable lives
 
@@ -55,10 +55,6 @@ One daemon-wide owner reads every plugin's session files. A plugin source has no
 A folder's watch is held by what declares the folder, never by a view, because opening or closing a directory watch leaks on macOS. A folder is keyed by its path and a generation the owner moves on every loss, because an install replaces folders by rename and ext4 reuses a freed inode number; birth time sits beside device and inode in a folder's identity for the same reason. An event naming the folder itself is checked against the disk, because a chmod, a utimes or an xattr reports the same name as a removal. A removed storage folder recovers by reloading the config through the watch that already follows the plugin's folder for its definition, because the watch registry follows nothing: the reload's build recreates the folder under a new generation, and a spurious fire reloads into the same key and opens nothing. Until then the lost folder's held files are re-read from the path, so no draw shows a value from a folder that is gone.
 
 Only the daemon's storage owner creates, watches or sweeps a storage folder. A build outside the daemon, such as the doctor's or the demo's, holds none of the daemon's sessions, so a sweep there would remove files they hold.
-
-## Memento's ceiling
-
-cc-candybar doesn't know memento's config grammar. If memento rejects a line, its Stop-hook gate silently switches off. So readings come from memento's own in-force query, and moves go through memento's own command. A move supersedes its scope's reading. The read in flight is abandoned and the value stays pending until a fresh read lands, so no render after a move shows the old value. Memento runs with the session's memento environment from the hints, not the daemon's. Only an old client that sends no hint leaves the daemon's environment in place.
 
 ## Auto-compact window
 

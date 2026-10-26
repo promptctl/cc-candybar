@@ -3,7 +3,7 @@
 // payload reads it with.
 //
 // A fake keeps what its reader answered as a real owner keeps its source's
-// value: a keyed lane (git, tmux, memento) is declared into a lane that is
+// value: a keyed lane (git, tmux) is declared into a lane that is
 // pending from its first read until its reader lands, so a request waits on it
 // as on the real one; a request lane (session, today, speed, context, metrics,
 // activity, cache, autocompact) stores what its refresh's reader answered, and
@@ -16,7 +16,6 @@ import type { ClaudeHookData } from "../../src/utils/claude";
 import { sessionIdOf } from "../../src/daemon/session-id";
 import type { GitInfo, GitInfoOptions } from "../../src/segments/git";
 import type { TmuxHint } from "../../src/tmux-hint";
-import type { CeilingReading, CeilingScope } from "../../src/memento/edge";
 import type { ContextInfo } from "../../src/segments/context";
 import type { MetricsInfo } from "../../src/segments/metrics";
 import type { ActivityInfo } from "../../src/segments/activity";
@@ -123,17 +122,6 @@ export function fakeTmux(read: (holds: Holds, hint: TmuxHint) => Loose) {
   return {
     declare: (holds: Holds, hint: TmuxHint): Lane<string> => ({
       current: () => current(holds, hint),
-    }),
-  };
-}
-
-export function fakeMemento(
-  read: (holds: Holds, scope: CeilingScope) => Loose,
-) {
-  const current = keyed<[CeilingScope], CeilingReading>(read);
-  return {
-    declare: (holds: Holds, scope: CeilingScope): Lane<CeilingReading> => ({
-      current: () => current(holds, scope),
     }),
   };
 }
@@ -274,7 +262,6 @@ export function absentOwners() {
     metricsProvider: fakeMetrics(() => ABSENT),
     activityProvider: fakeActivity(() => ABSENT),
     tmuxService: fakeTmux(() => ABSENT),
-    mementoProvider: fakeMemento(() => ABSENT),
     autoCompact: fakeAutoCompact(() => ABSENT),
     faults: new RefreshFaults(),
   };

@@ -23,11 +23,10 @@ function needsIn(source: string, preset: string) {
 }
 
 describe("dataNeeds", () => {
-  test("the bundled bar needs rate limits and memento, and no PR", () => {
+  test("the bundled bar needs rate limits, and no PR", () => {
     expect(needsIn("{}", "default")).toEqual({
       pullRequests: [],
       rateLimits: ["block", "weekly"],
-      memento: ["ceiling"],
     });
   });
 
@@ -38,10 +37,10 @@ describe("dataNeeds", () => {
   test("a segment set to ignore missing data needs nothing", () => {
     expect(
       needsIn(
-        `{ segments: { ceiling: { missingData: "ignore" }, block: { missingData: "ignore" } } }`,
+        `{ segments: { block: { missingData: "ignore" } } }`,
         "default",
       ),
-    ).toEqual({ pullRequests: [], rateLimits: ["weekly"], memento: [] });
+    ).toEqual({ pullRequests: [], rateLimits: ["weekly"] });
   });
 
   test("a user segment reading the data needs it like a bundled one", () => {
@@ -68,7 +67,7 @@ describe("dataNeeds", () => {
 
   test("missingData outside its two words is a load error", () => {
     expect(() =>
-      needsIn(`{ segments: { ceiling: { missingData: "warn" } } }`, "default"),
+      needsIn(`{ segments: { block: { missingData: "warn" } } }`, "default"),
     ).toThrow(/missingData/);
   });
 });

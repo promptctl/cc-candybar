@@ -83,9 +83,6 @@ export function testVerbContext(
       forge: () => {
         throw new Error("doctor: no forge edge in this test");
       },
-      memento: () => {
-        throw new Error("doctor: no memento edge in this test");
-      },
       transcript: () => {
         throw new Error("doctor: no transcript edge in this test");
       },
@@ -123,12 +120,6 @@ export function testVerbContext(
     clients: new RenderSightings(),
     bundle: HEALTHY_BUNDLE,
     serving: () => HEALTHY_SERVING,
-    // And for memento: a test that drives a ceiling click hands in its own.
-    memento: {
-      move: () => {
-        throw new Error("ceiling: no memento provider in this test");
-      },
-    },
     // And for the Claude Code pane: a test that drives a slash click hands in
     // its own edge.
     claudeInput: {

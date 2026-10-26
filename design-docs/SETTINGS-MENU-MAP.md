@@ -136,7 +136,7 @@ Added by me, at Brandon's request to fill out the list:
 
 - **Install is current.** The client that drew the bar is the native client of the install the daemon runs from, not the Node fallback, and in a checkout it was built from the Rust source there. The check reads the client the bar actually ran, which reports itself on every render. It does not read the settings file, because managed settings or a launcher script can stand between the file and what runs.
 - **Daemon is healthy.** Exactly one daemon is running. Memory is well under the memory limit. There are no crash reports since the last check.
-- **Segments have their data.** `gitPr` is placed and `gh`/`glab` is installed and logged in. `block`/`weekly` are placed and the hook payload carries `rate_limits`. The ceiling widget is placed and memento is installed.
+- **Segments have their data.** `gitPr` is placed and `gh`/`glab` is installed and logged in. `block`/`weekly` are placed and the hook payload carries `rate_limits`.
 - **Session data is readable.** The transcript can be read.
 
 ## Widths at 80 columns
@@ -159,7 +159,7 @@ Added by me, at Brandon's request to fill out the list:
 
 - The drift marker is the reset. `↺` appears on a control only when it has a session draft or a config-file value, which are what the reset clears. A value the active preset pins shows none, since a reset could not move it. This narrows brandon-menu-ia-q30.nk8, which counts preset-set values as drift.
 - Clicking `directory` copies the full path, which the fish-abbreviated text hides, through the bundled `copyDir` action.
-- Placed outside the menu: the context ceiling widget (xta.asv) and the lit widget (3xo.btb) are segments added from edit mode's library. Git expand (ixf.tl0) is the segment's own arrow. Configure mode (i4n.g64) is a `🔧` beside each cell while arranging.
+- Placed outside the menu: the lit widget (3xo.btb) is a segment added from edit mode's library. Git expand (ixf.tl0) is the segment's own arrow. Configure mode (i4n.g64) is a `🔧` beside each cell while arranging.
 
 ## Tickets
 

@@ -4,7 +4,6 @@ import type { ClaudeHookData } from "../utils/claude";
 import type { StatsSnapshot } from "./stats";
 import type { DebugSnapshot, DebugWhat } from "./debug-types";
 import type { TmuxHint } from "../tmux-hint";
-import { MEMENTO_ENV_VARS, type MementoEnvHint } from "../memento-hint";
 import { TERMINAL_ENV_VARS, type TerminalEnvHint } from "../terminal-hint";
 import { CLIENT_KINDS, type ClientHint, type ClientKind } from "../client-hint";
 import type { Lane } from "../config/lanes";
@@ -75,7 +74,6 @@ export interface RenderRequest {
   tmux?: TmuxHint | null;
   configEnv?: string;
   claudeConfigDir?: string;
-  mementoEnv?: MementoEnvHint;
   terminalEnv?: TerminalEnvHint;
   client?: ClientHint;
 }
@@ -129,12 +127,6 @@ export interface RenderRequest {
 //     Present, it is the absolute directory the client resolved from it
 //     (detectClaudeConfigDir, src/claude-settings.ts) — the one whose
 //     settings.json that session's Claude Code reads.
-//   • `mementoEnv` absent — the client did not REPORT (too old, as with
-//     `ssh`), so memento's spawns inherit the daemon's own variables, as they
-//     did before the hint existed. Present, it is total: every variable of
-//     MEMENTO_ENV_VARS the client's environment sets, and a name left out is
-//     one it does not set — the daemon's own value for it is dropped, never
-//     inherited (src/memento/edge.ts).
 //   • `client` absent — the client did not REPORT what it is: a client too
 //     old to carry the field, which is itself the doctor's finding (an
 //     install whose client predates its daemon). Present, it is total: the
@@ -146,7 +138,6 @@ export interface ClientHints {
   readonly tmux?: TmuxHint | null;
   readonly configEnv?: string;
   readonly claudeConfigDir?: string;
-  readonly mementoEnv?: MementoEnvHint;
   readonly terminalEnv?: TerminalEnvHint;
   readonly client?: ClientHint;
 }
@@ -160,7 +151,6 @@ const CLIENT_HINT_FIELDS = Object.keys({
   tmux: true,
   configEnv: true,
   claudeConfigDir: true,
-  mementoEnv: true,
   terminalEnv: true,
   client: true,
 } satisfies Record<keyof ClientHints, true>) as ReadonlyArray<
@@ -183,7 +173,6 @@ export function parseClientHints(
   const tmux = sanitizeTmux(req.tmux);
   const configEnv = sanitizeAbsolutePath(req.configEnv);
   const claudeConfigDir = sanitizeAbsolutePath(req.claudeConfigDir);
-  const mementoEnv = sanitizeMementoEnv(req.mementoEnv);
   const terminalEnv = sanitizeTerminalEnv(req.terminalEnv);
   const client = sanitizeClient(req.client);
   return {
@@ -193,7 +182,6 @@ export function parseClientHints(
     ...(tmux !== undefined && { tmux }),
     ...(configEnv !== undefined && { configEnv }),
     ...(claudeConfigDir !== undefined && { claudeConfigDir }),
-    ...(mementoEnv !== undefined && { mementoEnv }),
     ...(terminalEnv !== undefined && { terminalEnv }),
     ...(client !== undefined && { client }),
   };
@@ -273,21 +261,7 @@ export function refusedArgsError(
 }
 
 // [LAW:no-defensive-null-guards] exception: trust boundary, same shape as
-// sanitizeTmux. Only the variables of MEMENTO_ENV_VARS are read, each an
-// absolute path as both clients send it; one that is anything else makes the
-// whole hint unreported (`undefined`) — a malformed frame never becomes a
-// half-true environment for memento to resolve its config home from.
-export function sanitizeMementoEnv(v: unknown): MementoEnvHint | undefined {
-  if (typeof v !== "object" || v === null || Array.isArray(v)) return undefined;
-  const o = v as Record<string, unknown>;
-  const set = MEMENTO_ENV_VARS.filter((name) => o[name] !== undefined);
-  return set.every((name) => sanitizeAbsolutePath(o[name]) !== undefined)
-    ? Object.fromEntries(set.map((name) => [name, o[name] as string]))
-    : undefined;
-}
-
-// [LAW:no-defensive-null-guards] exception: trust boundary, same shape as
-// sanitizeMementoEnv. Only the variables of TERMINAL_ENV_VARS are read, each a
+// sanitizeTmux. Only the variables of TERMINAL_ENV_VARS are read, each a
 // non-empty string as both clients send it; one that is anything else makes
 // the whole hint unreported (`undefined`).
 export function sanitizeTerminalEnv(v: unknown): TerminalEnvHint | undefined {

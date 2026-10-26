@@ -43,7 +43,7 @@ How they show up here:
 
 - `.claude/memory/architecture.md`: the client and daemon, the wire, hints, logs and stats, packaging and install. Read before you touch the client, the protocol, a hint, daemon lifetime, or install.
 - `.claude/memory/daemon-memory.md`: the memory limit, the render cache's budget, and how state is retired and disposed. Read before you touch caches, eviction, reload, or anything holding MobX subscriptions.
-- `.claude/memory/data-sources.md`: how git, PRs, transcripts, usage, memento, auto-compact and tmux are read, held and refreshed, and what pending means. Read before you add or change a source or a payload field.
+- `.claude/memory/data-sources.md`: how git, PRs, transcripts, usage, plugin sources, auto-compact and tmux are read, held and refreshed, and what pending means. Read before you add or change a source or a payload field.
 - `.claude/memory/rendering.md`: the render walk, the instant and projections, template traps, layout, effects and transitions. Read before you change how a frame is drawn or add a template function.
 - `.claude/memory/colour.md`: decoration by address, open triggers and bands, contrast floors, styles and theme selection, colour functions. Read before you change anything that picks a colour.
 - `.claude/memory/config.md`: resolution and merge, the config file as the durable store, settings rows, drafts, save, reset, undo, edit mode and placements. Read before you touch the loader, a setting, or a click that writes the config.

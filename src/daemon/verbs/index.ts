@@ -116,7 +116,6 @@ import {
   VERB_DOCTOR_FIX,
   VERB_DOCTOR_MARK,
   VERB_DOCTOR_PROBE,
-  VERB_CEILING,
   VERB_SLASH,
   VERB_RUN,
   type EvaluatedRun,
@@ -125,16 +124,9 @@ import type { LinkSigner } from "../../click/link-signer";
 import type { Runs, RunRequest } from "../runs";
 import type { DeclaredSources } from "../render-payload";
 import { sessionEnv } from "../session-env";
-import {
-  ceilingMoveArgs,
-  runDeclaration,
-  type CeilingAction,
-  type SlashAction,
-} from "../../config/action";
-import { ceilingScope, type CeilingMove } from "../../memento/edge";
+import { runDeclaration, type SlashAction } from "../../config/action";
 import type { RenderSightings } from "../render-sightings";
 import type { ServingDaemon } from "../limits";
-import type { MementoProvider } from "../../segments/memento";
 import { parseClientHints } from "../protocol";
 import {
   GLYPH_MARKS,
@@ -200,9 +192,6 @@ export interface DaemonContext {
   readonly bundle: string;
   // This daemon as the doctor's daemon row judges it (src/daemon/limits.ts).
   readonly serving: () => ServingDaemon;
-  // [LAW:single-enforcer] The one owner of memento's ceiling reading, so the
-  // move that makes a reading stale is the one that drops it.
-  readonly memento: Pick<MementoProvider, "move">;
   // [LAW:effects-at-boundaries] The tmux pane read and the typing
   // (src/claude-input/edge.ts), handed in so a test drives them with fakes.
   readonly claudeInput: ClaudeInputEdge;
@@ -1465,48 +1454,6 @@ const doctorMark: VerbHandler = (value, ctx) => {
   });
 };
 
-// ─── Memento ceiling (brandon-context-ceiling-xta.asv) ───────────────────────
-
-// [LAW:parse-dont-validate] A click's move is honoured only as one of the
-// `ceiling` actions the session's config declares: the declaration found is
-// the parsed move, so what reaches memento is what the config author wrote,
-// never text a URL made up. The session's recorded render origin supplies the
-// directories memento anchors its project layer on, and its recorded client
-// hints the Claude Code directory and memento environment — the scope the
-// bar's reading was taken with.
-const ceiling: VerbHandler = (value, ctx) => {
-  const [sessionId = "", ...args] = decodeWire(() => decodeSegments(value));
-  const sid = requireSessionId(sessionId);
-  const origin = sessionOrigin(ctx, sid);
-  const action = Object.values(ctx.configFor(origin).actions)
-    .filter((a): a is CeilingAction => "ceiling" in a)
-    .find((a) => {
-      const declared = ceilingMoveArgs(a);
-      return (
-        declared.length === args.length &&
-        declared.every((d, i) => d === args[i])
-      );
-    });
-  if (action === undefined) {
-    throw new BadVerbArgs(
-      `ceiling: "${args.join(" ")}" is not a move this config declares`,
-    );
-  }
-  const move: CeilingMove =
-    action.ceiling === "set"
-      ? { kind: "set", to: action.to }
-      : { kind: "clear" };
-  const scope = ceilingScope(
-    { sessionId: sid, projectDir: origin.projectDir, cwd: origin.cwd },
-    sessionHints(ctx, sid),
-  );
-  ctx.memento.move(scope, move);
-  ctx.dlog(
-    "info",
-    `ceiling: ${args.join(" ")} (session=${sid} claudeConfigDir=${scope.claudeConfigDir})`,
-  );
-};
-
 // ─── Slash commands (brandon-context-ceiling-xta.7xt) ───────────────────────
 
 // [LAW:parse-dont-validate] A click's line is honoured only as one a `slash`
@@ -1704,7 +1651,6 @@ const LEAF_VERBS = new Map<string, VerbHandler>([
   [VERB_DOCTOR_FIX, doctorFix],
   [VERB_DOCTOR_MARK, doctorMark],
   [VERB_DOCTOR_PROBE, doctorProbe],
-  [VERB_CEILING, ceiling],
   [VERB_SLASH, slash],
   [VERB_RUN, run],
 ]);
@@ -1729,7 +1675,6 @@ export const SEGMENTED_VERBS: ReadonlySet<string> = new Set([
   VERB_REDO,
   VERB_DOCTOR_FIX,
   VERB_DOCTOR_MARK,
-  VERB_CEILING,
   VERB_SLASH,
   VERB_RUN,
 ]);
@@ -1758,7 +1703,6 @@ const SESSION_FIRST_VERBS: ReadonlySet<string> = new Set([
   VERB_DOCTOR_RUN,
   VERB_DOCTOR_FIX,
   VERB_DOCTOR_MARK,
-  VERB_CEILING,
   VERB_SLASH,
   VERB_RUN,
   VERB_LOAD_CONFIG,

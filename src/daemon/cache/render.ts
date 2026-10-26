@@ -854,7 +854,7 @@ const VIEW_SCOPE: ReadonlySet<VarScope> = new Set(["view"]);
 // and no other session's render re-runs, reads, or reports them.
 //
 // `holds` is what the session's renders read of the daemon's shared entries (a
-// repo, a pane, a memento reading), as the view's declaration takes them
+// repo, a pane, a plugin's session file), as the view's declaration takes them
 // (openView), so their owners' periods visit them while the view's preset and
 // request name them and stop when it is disposed; the directory home reads
 // none itself, so it holds none (brandon-unfiled-3248.8ro6).
@@ -1133,7 +1133,7 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
 // render and stopped with the last entry: every interval it closes each view
 // no request read since the interval before and no open feed pins, which
 // releases the view's holds, so an owner's period stops visiting a repo, pane
-// or memento reading 2.5 to 5 minutes after the session's last request. A view
+// or session file 2.5 to 5 minutes after the session's last request. A view
 // still drawn holds what its declaration takes (openView), and a period
 // resumed after a gap reads at once.
 export const HOLD_SWEEP_MS = 150_000;
@@ -1701,7 +1701,7 @@ export class RenderCache<
     // retires every view of it first, so each is disposed before or with it.
     // [LAW:no-ambient-temporal-coupling] A reload opens each view's successor
     // over the new state first, declared with the request the old one drew by,
-    // so the session's repo, pane and memento scope stay held across it and
+    // so the session's repo, pane and session files stay held across it and
     // the next frame draws a declared view (brandon-unfiled-3248.8ro6, 4a).
     for (const view of [...this.views.values()]) {
       if (view.state !== state) continue;

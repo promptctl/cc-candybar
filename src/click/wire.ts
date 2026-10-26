@@ -139,12 +139,6 @@ export const VERB_DOCTOR_MARK = "doctor-mark";
 // it. Arg: the nonce the CLI will look for among the daemon's arrivals.
 export const VERB_DOCTOR_PROBE = "doctor-probe";
 
-// [LAW:effects-at-boundaries] Move the memento plugin's context ceiling for a
-// session. Args: `[sessionId, "set", to]` or `[sessionId, "clear"]`. The move
-// must be one the session's config declares (a `ceiling` action), and `to`
-// reaches memento's own `ceiling` command as one argv entry — never a shell.
-export const VERB_CEILING = "ceiling";
-
 // [LAW:effects-at-boundaries] Type a slash command into the session's Claude
 // Code prompt through its tmux pane. Args: `[sessionId, line]` — the line must
 // be one a `slash` action in the session's config declares.

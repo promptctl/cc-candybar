@@ -23,18 +23,12 @@ import type { GitInfo, GitInfoOptions, PrState } from "../src/segments/git";
 import { ABSENT, PENDING, failed, ok, type Outcome } from "../src/utils/outcome";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
 import { instantOf } from "../src/utils/instant";
-import { MementoProvider } from "../src/segments/memento";
-import type {
-  CeilingReading,
-  CeilingScope,
-  MementoEdge,
-} from "../src/memento/edge";
+import type { Current } from "../src/utils/reading";
 import {
   absentOwners,
   fakeAutoCompact,
   fakeContext,
   fakeGit,
-  fakeMemento,
   fakeMetrics,
   fakeTmux,
   fakeUsage,
@@ -848,18 +842,12 @@ describe("payloadOf — autocompact lane", () => {
   });
 });
 
-// brandon-client-hints-7ua: the memento and today lanes answer for the Claude
-// Code THIS render's client runs under — its config directory and the
-// variables memento resolves its config home from — never the daemon's env.
+// brandon-client-hints-7ua: the today lane answers for the Claude Code THIS
+// render's client runs under — its config directory — never the daemon's env.
 describe("payloadOf — the lanes that read a session's Claude Code", () => {
   const run = async (paths: string[], hints: ClientHints) => {
-    const scopes: unknown[] = [];
     const seeded: unknown[] = [];
     const deps = depsWith(ABSENT, [], {
-      mementoProvider: fakeMemento(async (_holds: unknown, scope: unknown) => {
-        scopes.push(scope);
-        return ABSENT;
-      }),
       usageStore: fakeUsage({
         usage: async () => ABSENT,
         today: (_hook: unknown, claudeConfigDir: unknown) => {
@@ -878,34 +866,8 @@ describe("payloadOf — the lanes that read a session's Claude Code", () => {
       hints,
       NO_CONFIG_FILE,
     );
-    return { scopes, seeded };
+    return { seeded };
   };
-  const ANCHOR = { sessionId: "test-session", projectDir: "/tmp", cwd: "/tmp" };
-
-  test("memento is asked under the client's directory and env", async () => {
-    const { scopes } = await run(["memento.ceiling"], {
-      claudeConfigDir: "/home/u/.claude.zai",
-      mementoEnv: { XDG_CONFIG_HOME: "/home/u/.config-zai" },
-    });
-    expect(scopes).toEqual([
-      {
-        ...ANCHOR,
-        claudeConfigDir: "/home/u/.claude.zai",
-        env: { XDG_CONFIG_HOME: "/home/u/.config-zai" },
-      },
-    ]);
-  });
-
-  test("a client that reports neither: the default directory, and the env left to the daemon's", async () => {
-    const { scopes } = await run(["memento.ceiling"], NO_HINTS);
-    expect(scopes).toEqual([
-      {
-        ...ANCHOR,
-        claudeConfigDir: claudeConfigDir(undefined),
-        env: undefined,
-      },
-    ]);
-  });
 
   test("today seeds the client's directory", async () => {
     const zai = await run(["today.cost"], {
@@ -975,41 +937,35 @@ describe("payloadOf — config file and resume command", () => {
 // request after it draws the loading cell at once rather than waiting out its
 // deadline.
 describe("settlePayload — what a request waits on", () => {
-  const A = ok({ ceiling: 350_000, session: null });
-
-  test("a superseded lane is not waited on: the request after a move draws it pending at once", async () => {
-    const scopes: CeilingScope[] = [];
-    const hung = new Promise<Outcome<CeilingReading>>(() => {});
-    const edge: MementoEdge = {
-      locate: () => ok("/plugin"),
-      read: (_root, scope) => {
-        scopes.push(scope);
-        return scopes.length === 1 ? Promise.resolve(A) : hung;
-      },
-      move: () => {},
+  test("a superseded lane is not waited on: the request after a click draws it pending at once", async () => {
+    let current: Current<string> = {
+      kind: "pending",
+      why: "unread",
+      landed: Promise.resolve().then(() => {
+        current = ok("work");
+      }),
     };
-    const memento = new MementoProvider(edge);
-    const deps = depsWith(ABSENT, [], { mementoProvider: memento });
+    const deps = depsWith(ABSENT, [], {
+      tmuxService: { declare: () => ({ current: () => current }) },
+    });
     const request = () =>
       requestPayload(
         hookData("/no/such/transcript.jsonl"),
         instantOf(new Date()),
         deps,
         undefined,
-        new Set(["memento.ceiling"]),
+        new Set(["tmux.session"]),
         EFFECTIVE_GLOBALS,
-        NO_HINTS,
+        { tmux: { socket: "/s", pane: "%7", truecolor: null } },
         NO_CONFIG_FILE,
       );
-    try {
-      // The key's first read is waited on.
-      expect((await request()).memento).toMatchObject({ ceiling: 350_000 });
-      memento.move(scopes[0]!, { kind: "clear" });
-      expect(scopes).toHaveLength(2);
-      // The read the move started never lands; the request draws at once.
-      expect((await request()).memento).toBe(PENDING);
-    } finally {
-      memento.close();
-    }
+    // The key's first read is waited on.
+    expect((await request()).tmux).toEqual({ pane: "%7", session: "work" });
+    // A click supersedes it with a read that never lands; the request draws at
+    // once. Any lane stands in: the wait asks why a lane is pending, never
+    // which lane it is, and the owners that supersede pin their own state
+    // (keyed-source, managed-storage and run-action tests).
+    current = { kind: "pending", why: "superseded", landed: new Promise(() => {}) };
+    expect((await request()).tmux).toEqual({ pane: "%7", session: PENDING });
   });
 });
