@@ -1310,8 +1310,10 @@ export class RenderCache<
   ): SessionHold<S, F> {
     const held = this.hold(projectDir, cwd, configFile);
     let view: SessionView<S, F>;
+    let lease: ViewHold;
     try {
       view = this.viewOf(held.entry, held.state, facts, "request");
+      lease = this.leaseOf(view);
     } catch (err) {
       // [LAW:no-ambient-temporal-coupling] The state hold is this call's
       // until the returned hold carries it: a throw before then releases it,
@@ -1319,9 +1321,8 @@ export class RenderCache<
       held[Symbol.dispose]();
       throw err;
     }
-    const hold = this.holdViewOf(held, view);
-    this.leaseOf(view).read = true;
-    return hold;
+    lease.read = true;
+    return this.holdViewOf(held, view, lease);
   }
 
   // [LAW:single-enforcer] A frame's door: the session's current view, held
@@ -1340,13 +1341,18 @@ export class RenderCache<
     // retired retires its views first (`retire`).
     if (entry === undefined)
       throw new Error("render-cache view of no served entry");
-    return this.holdViewOf(this.holdState(entry), view);
+    // Taken before the state hold, so a throw leaves nothing held.
+    const lease = this.leaseOf(view);
+    return this.holdViewOf(this.holdState(entry), view, lease);
   }
 
-  // `held` with a lease on `view` beside it, both released by the one
-  // `using`.
-  private holdViewOf(held: Hold, view: SessionView<S, F>): SessionHold<S, F> {
-    const lease = this.leaseOf(view);
+  // `held` with `lease` on `view` beside it, both released by the one
+  // `using`. Nothing in it throws, so `held` is never stranded.
+  private holdViewOf(
+    held: Hold,
+    view: SessionView<S, F>,
+    lease: ViewHold,
+  ): SessionHold<S, F> {
     lease.holders++;
     let released = false;
     return {
@@ -1368,7 +1374,9 @@ export class RenderCache<
   // origin's entry, declared with the request the view draws by, as a
   // request from there would (`journaled`, src/daemon/verbs/index.ts). A
   // session with no view has nothing to move: no feed draws it, and its next
-  // request opens one.
+  // request opens one. A click that left the origin alone finds the view
+  // already on its entry, and changes nothing, use order included: a click is
+  // no render, so the latest rendered session stays the one that rendered.
   follow(
     sessionId: string,
     projectDir: string,
@@ -1377,8 +1385,13 @@ export class RenderCache<
   ): void {
     const current = this.views.get(sessionId);
     if (current === undefined) return;
+    const origin = this.entries.get(cacheKey(projectDir, cwd, configFile));
+    if (origin?.state === current.state) return;
+    // Read before the hold: building the origin's entry may evict the one
+    // the current view is of, which retires the view.
+    const facts = current.facts();
     using held = this.hold(projectDir, cwd, configFile);
-    this.viewOf(held.entry, held.state, current.facts(), "click");
+    this.viewOf(held.entry, held.state, facts, "click");
   }
 
   // [LAW:no-ambient-temporal-coupling] An open feed's pin on its session,

@@ -1284,10 +1284,13 @@ describe("RenderCache frames and pins", () => {
     const { cache, dirs, close, request, opened } = pinCache();
     try {
       const view = request("s1", dirs[0]!);
+      request("s3", dirs[0]!);
       cache.follow("s1", dirs[0]!, dirs[0]!, undefined);
-      // Its origin did not move: nothing opened.
-      expect(opened()).toHaveLength(1);
+      // Its origin did not move: nothing opened, and the click is no render,
+      // so the latest rendered session is still the one that rendered.
+      expect(opened()).toHaveLength(2);
       expect(cache.holdView("s1")?.view).toBe(view);
+      expect(cache.latestView()?.sessionId).toBe("s3");
       cache.follow("s1", dirs[1]!, dirs[1]!, undefined);
       expect(opened().at(-1)).toMatch(/^session view opened sid="s1" by=click /);
       {

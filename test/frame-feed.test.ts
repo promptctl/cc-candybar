@@ -512,6 +512,19 @@ describe("on a faked clock", () => {
     expect(log.at(-1)).toContain(" noView=1 ");
   });
 
+  // A draw that found no view drew nothing, so it spaces nothing: an unseen
+  // feed's first frame is not held a still period behind it.
+  test("the frame a view's opening wakes is drawn at once, not spaced from a draw that found no view", async () => {
+    const { feeds, note, state } = harness({ motion: "unseen" });
+    const close = feeds.subscribe("s", sub(() => {}));
+    await pass(PERIODS.still / 8);
+    expect(state.renders).toBe(0);
+    note("s", "bar");
+    await pass(1);
+    close();
+    expect(state.renders).toBe(1);
+  });
+
   test("wakeWhere draws at once only the watched sessions it matches", async () => {
     const { feeds, note, state } = harness({ motion: "still" });
     note("a", "%1:a");

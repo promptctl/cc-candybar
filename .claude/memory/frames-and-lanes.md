@@ -22,7 +22,7 @@ The Node and native followers share their reconnect decisions through one fixtur
 
 ## Lane switches
 
-A lane's switch is read at the moment it's needed, never copied onto a frame. A subscribe to a lane that's off is refused before any feed opens.
+A lane's switch is read at the moment it's needed, never copied onto a frame. A subscribe to a lane that's off is refused before any feed opens, once the session has a view. A session with no view yet has no switch to read, since only an event opens a view, so its feed opens and its first frame decides.
 
 A lane is set up or torn down only by the session's own click that moved its switch, measured around the click (before the handler, after the commit) rather than inferred at a draw. A switch moved by anything else (another session's save, a hand edit, a restart, a cd) sets nothing up, because that would restart every idle Claude Code reading the file. One edge: the before reading is the config as this session's cache last loaded it, and the after reading follows the click's own reload, so another session's save that the watcher hasn't reloaded here yet counts as this click's move. The window is the watcher's debounce, and only the clicking session is set up, to match the bar its click left. A click on a bar from before a daemon restart has no request to set the lane up with yet, so it is owed to the session's next click or request, and settled against the switch as that event finds it: by then another session's save may have moved the switch back, and a setup from the click's reading would restart Claude Code for a lane the bar shows off.
 

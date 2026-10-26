@@ -490,10 +490,12 @@ export class FrameFeeds<Req> {
   private draw(feed: Feed): void {
     feed.phase = { kind: "drawing" };
     const started = this.deps.now();
-    feed.lastStart = started;
     try {
       this.step(feed, started);
     } catch (error) {
+      // A frame that faulted spaces the next as a drawn one does, so a feed
+      // woken while its adapter throws still draws at its spacing.
+      feed.lastStart = started;
       this.deps.log(
         "error",
         `feed sid=${JSON.stringify(feed.sessionId)} threw: ${inspect(error)}`,
@@ -509,11 +511,14 @@ export class FrameFeeds<Req> {
     const frame = this.deps.render(feed.sessionId, feed.pace);
     // [LAW:no-ambient-temporal-coupling] No view to draw: the feed waits,
     // with no timer, until the event that opens one wakes it.
+    // A draw that found no view drew nothing, so it spaces nothing: the
+    // frame the view's opening wakes is drawn at once.
     if (frame === null) {
       feed.noView++;
       feed.phase = { kind: "waiting" };
       return;
     }
+    feed.lastStart = started;
     const finished = this.deps.now();
     this.drawn++;
     feed.drawn++;
