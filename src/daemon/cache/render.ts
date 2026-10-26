@@ -89,10 +89,11 @@ export const VIEW_BYTES = 2.5 * 1024 * 1024;
 // at the default limit is ~114 sessions on one compile, each an entry and a
 // view, against a working set of ~20 directories in the production daemon.
 // The share is accounted at the measured per-entry and per-view charges, which
-// run above what entries really hold, so a full share costs less than itself:
-// serving 100 sessions, the daemon is charged ~430 MB in all with 560 MB of
-// the share accounted. The rest of the limit is V8's own mappings, the code,
-// the other caches and the heap's growth room.
+// a test holds real heap under, so a share full at its charges is the most the
+// cache can cost; with the ~60 MB a daemon is charged serving one session, that
+// is ~700 MB, under the line the doctor calls near the limit. Measured, a full
+// share costs less: serving 100 sessions, the daemon is charged ~430 MB in all
+// with 560 MB of the share accounted.
 export function renderCacheBudget(memoryLimitBytes: number): number {
   return Math.floor((memoryLimitBytes * 5) / 8);
 }

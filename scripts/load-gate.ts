@@ -133,7 +133,7 @@ writeStub(
   "gh",
   `case "$*" in
   "pr view --json number,state,url,headRefOid")
-    n=\${PWD##*/s}; printf '{"number":%d,"state":"OPEN","url":"https://github.com/promptctl/cc-candybar/pull/%d","headRefOid":"${OID}"}\\n' "$n" "$n" ;;
+    n=\$(( \${PWD##*/s} + 1 )); printf '{"number":%d,"state":"OPEN","url":"https://github.com/promptctl/cc-candybar/pull/%d","headRefOid":"${OID}"}\\n' "$n" "$n" ;;
   *) echo "gh $*" >> "${unknownCalls}"; exit 1 ;;
 esac`,
 );
@@ -806,6 +806,7 @@ async function daemonRenders(
   const spread = (field: string): Record<string, number> => {
     const ms = lines
       .map((l) => Number(new RegExp(` ${field}=(\\d+)ms`).exec(l)?.[1]))
+      .filter(Number.isFinite)
       .sort((a, b) => a - b);
     return { n: ms.length, p99: pct(ms, 0.99), max: ms.at(-1) ?? 0 };
   };
@@ -825,9 +826,19 @@ function pct(sorted: readonly number[], p: number): number {
 
 // [LAW:no-silent-failure] Every way out is a verdict: a crash fails, and a
 // failing run keeps its root (the daemon's log is in it) and says where.
+// A gate that hangs (a daemon that stopped answering its inspector, a render
+// that never settles) ends here, with its root kept, before CI cancels it.
+const GATE_DEADLINE_MS = 4 * 60_000;
 let passed = false;
 try {
-  const { checks, facts } = await run();
+  const { checks, facts } = await Promise.race([
+    run(),
+    sleep(GATE_DEADLINE_MS).then(() => {
+      throw new Error(
+        `the gate ran past its ${GATE_DEADLINE_MS / 60_000} minutes`,
+      );
+    }),
+  ]);
   passed = checks.every((c) => c.pass);
   for (const c of checks)
     console.error(`${c.pass ? "pass" : "FAIL"}  ${c.name}: ${c.detail}`);
@@ -835,8 +846,11 @@ try {
 } catch (e) {
   console.error(`FAIL  ${e instanceof Error ? e.message : String(e)}`);
 } finally {
+  // The root goes once nothing writes into it: the daemon and its stubs gone.
+  const gone = new Promise((resolve) => daemon.once("exit", resolve));
   daemon.kill("SIGKILL");
-  if (passed) fs.rmSync(root, { recursive: true, force: true });
+  if (daemonExit === null) await Promise.race([gone, sleep(5000)]);
+  if (passed) fs.rmSync(root, { recursive: true, force: true, maxRetries: 5 });
   else
     console.error(
       `kept ${root} (daemon log: ${path.join(dirs.state, "cc-candybar", "daemon.log")})`,

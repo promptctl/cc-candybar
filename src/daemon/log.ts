@@ -206,45 +206,77 @@ async function append(filePath: string, batch: Batch): Promise<void> {
   }
 }
 
+// How long a synchronous write of what is waiting waits for a write already
+// out to land first. The threadpool writes on while this thread blocks, so a
+// write that is out lands within this unless the disk is stalled or the write
+// never started.
+const ISSUED_WAIT_MS = 250;
+
 // On the way out, after the event loop's last turn (or now, for a caller that
-// cannot wait): a batch not yet written is written, one whose write is out is
-// finished as the file's size says, and every line still waiting follows it.
-// [LAW:no-silent-failure] exception: two things mislead the size, each costing
-// that one batch. A write still running in the threadpool lands after this
-// one and doubles it; another process appending while it is out hides that it
-// had not landed, and loses it. A write at an offset of its own would answer
+// cannot wait): a batch not yet written is written; one whose write is out is
+// waited for, as the file's size says, so the lines after it follow it in
+// order — and on the way out, one that has not landed by then is written
+// again, since a write that never started never will. Every line still
+// waiting follows.
+// [LAW:no-silent-failure] exception: the size misleads in two ways, each
+// costing that one batch: another process appending while it is out makes it
+// look landed (lost), and a write that starts after the wait gave up lands
+// beside its rewrite (doubled). A write at an offset of its own would answer
 // exactly, and would overwrite the other daemon's lines at every handoff.
-// A write already out lands on its own while the process lives, so only the
-// way out has to finish one.
 function writeWaitingSync(exiting: boolean): void {
   const out = onItsWay;
-  const was = out?.state;
-  // The flush that took a batch written here finds it landed, and goes no
-  // further with it.
-  if (out !== null && (was?.kind === "taken" || exiting)) {
+  let first: Buffer = Buffer.alloc(0);
+  if (out !== null && out.state.kind === "taken") {
+    first = out.bytes;
+    // The flush that took it finds it landed, and goes no further with it.
     out.state = { kind: "landed" };
   }
-  const unsent = was?.kind === "taken" ? out!.bytes.toString() : "";
-  if (exiting && out !== null && was?.kind === "issued") {
-    const { fd, endsAt } = was;
+  let stillOut: { fd: number; endsAt: number } | null = null;
+  if (out !== null && out.state.kind === "issued") {
+    const { fd, endsAt } = out.state;
     try {
-      const size = fs.fstatSync(fd).size;
-      const start = endsAt - out.bytes.length;
-      if (size < endsAt) {
-        fs.writeSync(fd, out.bytes.subarray(Math.max(0, size - start)));
+      const size = sizeOnceLanded(fd, endsAt);
+      if (size < endsAt && exiting) {
+        first = out.bytes.subarray(
+          Math.max(0, size - (endsAt - out.bytes.length)),
+        );
+        out.state = { kind: "landed" };
+      } else if (size < endsAt) {
+        stillOut = { fd, endsAt };
       }
     } catch (e) {
       unwritable(out.bytes.toString(), e);
     }
   }
-  if (unsent === "" && waiting.length === 0) return;
-  const lines = unsent + take();
+  if (first.length === 0 && waiting.length === 0) return;
+  const lines = Buffer.concat([first, Buffer.from(take())]);
   try {
     const filePath = logPath();
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     fs.appendFileSync(filePath, lines);
+    // A write still out lands after these lines now: the file it lands in
+    // ends that much further on.
+    if (stillOut !== null && out !== null) {
+      out.state = {
+        kind: "issued",
+        fd: stillOut.fd,
+        endsAt: stillOut.endsAt + lines.length,
+      };
+    }
   } catch (e) {
-    unwritable(lines, e);
+    unwritable(lines.toString(), e);
+  }
+}
+
+// The file's size once it reaches `endsAt`, or as it stands when the wait is
+// over. Blocking: only a caller that cannot yield waits here.
+function sizeOnceLanded(fd: number, endsAt: number): number {
+  const until = Date.now() + ISSUED_WAIT_MS;
+  const nap = new Int32Array(new SharedArrayBuffer(4));
+  for (;;) {
+    const { size } = fs.fstatSync(fd);
+    if (size >= endsAt || Date.now() >= until) return size;
+    Atomics.wait(nap, 0, 0, 1);
   }
 }
 

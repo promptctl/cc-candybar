@@ -47,8 +47,9 @@ jobs:
         run: pnpm run load-gate
 
       # A failing run keeps its root under /tmp/cblg-*; the daemon's log says why.
+      # A run cancelled at the job's timeout is one too.
       - name: Daemon log
-        if: failure()
+        if: failure() || cancelled()
         uses: actions/upload-artifact@v4
         with:
           name: load-gate-daemon-log

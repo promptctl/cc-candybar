@@ -7,8 +7,18 @@ import { until } from "./until";
 // loop (src/daemon/log.ts), so a line a request logged can land just after the
 // request is answered. A test reads the log once the lines it waits for are
 // there, never once.
+// The log's lines, the generation it last rotated into included: a poll that
+// lands just after a rotation finds its lines there, or no file yet.
 export function logLines(env: NodeJS.ProcessEnv): string[] {
-  return readFileSync(logPath(env), "utf8").split("\n");
+  const file = logPath(env);
+  return [`${file}.1`, file].flatMap((f) => {
+    try {
+      return readFileSync(f, "utf8").split("\n");
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === "ENOENT") return [];
+      throw e;
+    }
+  });
 }
 
 // The log's lines once `holds` is true of them.

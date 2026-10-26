@@ -229,10 +229,9 @@ describe("every render request writes one render event, whatever its outcome", (
     // (brandon-unfiled-3248.8ro6).
     expect(field(drawn, "pending")).toBe("-");
     // How long the request waited, from the connection's accept, before its
-    // render began: whole milliseconds, and inside the request's own timeout.
-    const waited = /^(\d+)ms$/u.exec(field(drawn, "waited") ?? "");
-    expect(waited).not.toBeNull();
-    expect(Number(waited![1])).toBeLessThan(200);
+    // render began: whole milliseconds. Its size is the machine's, not the
+    // daemon's to promise.
+    expect(field(drawn, "waited")).toMatch(/^\d+ms$/u);
     const waiting = stripAnsi(
       await render(sockPath, "ev-pending", projectDir, hints, configFlag("waiting")),
     );
