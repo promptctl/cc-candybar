@@ -87,12 +87,12 @@ export const VIEW_BYTES = 2.5 * 1024 * 1024;
 
 // The render cache's share of the daemon's memory limit: a quarter, leaving the
 // rest to V8's own mappings, the code, the other caches, and the heap's growth
-// room. At the default 512 MB that is ~39 entries on one compile, against a
-// working set of 19 directories in the production daemon's first 2.3 hours
-// (2026-10-20). A larger share buys entries with RSS: rendering 100 worktree
-// directories, RSS ended at 329 / 390 / 424 MB under a quarter / three
-// eighths / half — the larger two past the 75% line `approachingLimit` warns
-// at.
+// room. At the default limit that is ~114 sessions on one compile, each an
+// entry and a view, against a working set of ~20 directories in the production
+// daemon. A larger share buys entries with RSS: rendering 100 worktree
+// directories, RSS ended at 329 / 390 / 424 MB of a 512 MB limit under a
+// quarter / three eighths / half — the larger two past the 75% line
+// `approachingLimit` warns at.
 export function renderCacheBudget(memoryLimitBytes: number): number {
   return Math.floor(memoryLimitBytes / 4);
 }

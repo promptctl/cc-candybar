@@ -71,9 +71,14 @@ function makeDeps(rec: Recorder, overrides: Partial<LimitsDeps> = {}): LimitsDep
     },
     shutdown: (code) => rec.shutdownCalls.push(code),
     startedAtMs: rec.startedAtMs,
+    // The fixture's own limit: these tests judge readings against a limit they
+    // state, not whatever the shipped default is.
+    limitBytes: FIXTURE_LIMIT_MB * 1024 * 1024,
     ...overrides,
   };
 }
+
+const FIXTURE_LIMIT_MB = 512;
 
 function newRec(): Recorder {
   return {
@@ -321,7 +326,7 @@ describe("heap snapshot rotation", () => {
 describe("describeNextRestart", () => {
   test("null before any reading, and when far from the limit", async () => {
     const rec = newRec();
-    rec.fakeRss = DEFAULT_RSS_LIMIT_MB * 0.8 * 1024 * 1024;
+    rec.fakeRss = FIXTURE_LIMIT_MB * 0.8 * 1024 * 1024;
     const limits = makeLimits(makeDeps(rec, { memoryCharge: async () => ({ kind: "charged", measure: "phys_footprint", bytes: 50 * 1024 * 1024 }) }));
     expect(limits.describeNextRestart()).toBeNull();
     await limits.check();

@@ -1,0 +1,56 @@
+name: Load gate
+
+# The built daemon serving a hundred statusline sessions on a full config
+# (scripts/load-gate.ts). Its own workflow, so it runs beside the test suite
+# rather than adding to it. A change that cannot serve that load cannot merge.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: load-gate-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  gate:
+    name: Load gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm run build
+
+      - name: Load gate
+        run: pnpm run load-gate
+
+      # A failing run keeps its root under /tmp/cblg-*; the daemon's log says why.
+      - name: Daemon log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: load-gate-daemon-log
+          path: /tmp/cblg-*/state/cc-candybar/daemon.log
+          if-no-files-found: ignore
