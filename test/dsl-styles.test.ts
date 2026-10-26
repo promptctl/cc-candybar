@@ -456,7 +456,7 @@ describe("style click — live whole-bar recolor over the active theme", () => {
 //
 // The rig mirrors the daemon verbatim: `resolveStyleSelection` over the three
 // rungs, threaded into renderDsl as `RenderSelection.style`, exactly as
-// buildRenderPayload → server.ts does.
+// payloadOf → server.ts does.
 describe("globals.style as an expression — a style chosen by data", () => {
   // The expression reads a payload field, which is the point: `.context.pct` is
   // stand-in for the rate-limit/idle facts the ticket names. Two declared styles

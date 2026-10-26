@@ -285,7 +285,7 @@ export interface RenderBinding {
   // [LAW:one-source-of-truth] The store the render reads every variable from —
   // so an action reads session.id and the current values the bar shows.
   readonly store: VariableStore;
-  // The depth the render draws at, its view's (SourceRegistry.drawAt). Its
+  // The depth the render draws at, its view's (SourceRegistry.drawnAt). Its
   // instant is no part of the binding: the engine's clock reads the draw in
   // progress (template-engine/engine.ts, bindClock).
   readonly registry: Pick<SourceRegistry, "drawnAt">;

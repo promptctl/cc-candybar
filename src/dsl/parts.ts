@@ -251,12 +251,6 @@ export class ViewParts {
         ? said
         : COLOR_FLOOR;
     });
-    // [LAW:single-enforcer] The registry's inputs, and its depth, are derived
-    // through the view's one source.
-    registry.bindInputs({
-      read: (path) => this.inputAt(path),
-      drawnAt: () => drawnDepth(this.colorCompatibility()),
-    });
     const drawn = observable(UNDRAWN, undefined, { deep: false });
     this.facts = drawn;
     const look = this.look;
@@ -304,6 +298,14 @@ export class ViewParts {
               ];
         }),
       );
+    });
+    // [LAW:single-enforcer] The registry's inputs, and its depth, are derived
+    // through the view's one source. [LAW:no-ambient-temporal-coupling] Bound
+    // last: binding reruns, in its action, every cache policy already declared
+    // over an input, and one reaching a rule reads this view's binding.
+    registry.bindInputs({
+      read: (path) => this.inputAt(path),
+      drawnAt: () => drawnDepth(this.colorCompatibility()),
     });
   }
 

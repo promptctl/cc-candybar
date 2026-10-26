@@ -51,7 +51,7 @@ const UNSET_ENV_VAR = "CC_CANDYBAR_DEBUG_TEST_UNSET_VAR_XYZ";
 
 // A minimal DslConfig that exercises every snapshot field:
 //   - literal (no source-side state)
-//   - input (driven by applyInput payload, produces a value)
+//   - input (driven by the bound payload, produces a value)
 //   - env (resolved at declare time — UNSET_ENV_VAR is enforced absent so
 //     this records a lastError and uses the per-variable default)
 //   - template (computed node, depends on other vars)

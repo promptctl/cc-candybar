@@ -1932,8 +1932,6 @@ interface RenderSetup extends Disposable {
   readonly entry: CacheEntry;
   readonly state: DslRenderState;
   readonly view: SessionView<SessionSource>;
-  readonly width: number;
-  readonly rowCap: number;
   readonly effective: EffectiveGlobals;
   readonly lanes: LaneSwitches;
   readonly hintsError: string | null;
@@ -1960,9 +1958,6 @@ function setUpRender(
   // spawned it. We do NOT consult getTerminalWidth's env/stderr fallbacks
   // for width, and we do NOT consult SSH_* for remoteness — both would
   // describe a different session than the one being rendered.
-  // [LAW:one-source-of-truth] `width` is `renderWidth` of the hints — the
-  // client's cols, else the default, less Claude Code's reserve — the same
-  // value the view's payload carries as `term.cols`.
   const hints = req.hints;
   const refused = refusedHints(req, hints);
   const hintsError = refusedHintsError(refused);
@@ -2001,9 +1996,6 @@ function setUpRender(
   );
   try {
     const { entry, state, view } = hold;
-    const width = renderWidth(hints);
-    const rowCap = diagnosticRowCap(hints.termRows);
-    noteFacts(facts, { width: String(width) });
     // [LAW:dataflow-not-control-flow] One composition every render: the
     // entry always holds a renderable state (the bundled default until a
     // config loads — src/daemon/cache/render.ts), so body = drawDsl(state)
@@ -2056,8 +2048,6 @@ function setUpRender(
       entry,
       state,
       view,
-      width,
-      rowCap,
       effective,
       lanes,
       hintsError,
@@ -2094,12 +2084,17 @@ function drawRender(
     entry,
     state,
     view,
-    width,
-    rowCap,
     effective,
     lanes,
     hintsError,
   } = setup;
+  // [LAW:one-source-of-truth] The width is `renderWidth` of the hints the
+  // view draws by — the client's cols, else the default, less Claude Code's
+  // reserve — the same request its payload carries as `term.cols`.
+  const { hints } = view.facts();
+  const width = renderWidth(hints);
+  const rowCap = diagnosticRowCap(hints.termRows);
+  noteFacts(facts, { width: String(width) });
   // [LAW:one-source-of-truth] What the view keeps, and the facts of this
   // draw's own instant (DRAW_PROJECTIONS): who it is for, the frames each
   // lane was sent in the second up to it, and the day `today` sums.

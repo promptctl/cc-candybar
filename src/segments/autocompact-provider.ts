@@ -11,7 +11,8 @@ import { PENDING, type Outcome, type Reading } from "../utils/outcome.js";
 import { stampOf } from "../utils/transcript-fs.js";
 
 // How many settings files keep their last reading: one per Claude Code
-// directory a session reported, which a user has few of.
+// directory a session reported, which a user has few of. The oldest read goes
+// first; one still in use is read again on its session's next request.
 const MAX_FILES = 64;
 
 interface Known {
@@ -39,14 +40,9 @@ export class AutoCompactProvider {
   window(settingsPath: string): Outcome<AutoCompactWindow> {
     const stamp = stampAt(settingsPath);
     const known = this.known.get(settingsPath);
-    if (known !== undefined && known.stamp === stamp) {
-      // LRU touch: re-inserting moves the file to the newest end.
-      runInAction(() => {
-        this.known.delete(settingsPath);
-        this.known.set(settingsPath, known);
-      });
-      return known.outcome;
-    }
+    // [LAW:no-ambient-temporal-coupling] A hit writes nothing: a view's
+    // payload over the window recomputes only when a read stored a new one.
+    if (known !== undefined && known.stamp === stamp) return known.outcome;
     const startedAt = Date.now();
     const outcome = readAutoCompactWindow(settingsPath);
     this.refreshes.recorded(

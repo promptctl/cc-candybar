@@ -3,7 +3,7 @@
 //   1. the pure projection math (projectTokensPerSecond),
 //   2. the SessionUsageStore retaining the prior (counts, time) sample — the
 //      single owner of per-session totals, no parallel counter,
-//   3. buildRenderPayload folding the prev+cur pair into speed.{in,out,total}
+//   3. payloadOf folding the prev+cur pair into speed.{in,out,total}
 //      under the closure gate,
 //   4. the speed segment formatting it — including the "—" absence path.
 //
@@ -243,7 +243,7 @@ describe("SessionUsageStore.observeSpeed — prior-sample retention", () => {
   });
 });
 
-// ─── buildRenderPayload — speed lane ──────────────────────────────────────────
+// ─── payloadOf — speed lane ──────────────────────────────────────────
 
 function depsWith(
   overrides: Partial<RenderPayloadDeps> = {},
@@ -298,7 +298,7 @@ function hook(): ClaudeHookData {
   } as unknown as ClaudeHookData;
 }
 
-describe("buildRenderPayload — speed lane", () => {
+describe("payloadOf — speed lane", () => {
   test("projectable: output/total rates land; idle input lane is absent", async () => {
     const payload = await requestPayload(
       hook(),

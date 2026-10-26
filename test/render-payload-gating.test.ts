@@ -1,4 +1,4 @@
-// [LAW:dataflow-not-control-flow] buildRenderPayload's provider gating is
+// [LAW:dataflow-not-control-flow] payloadOf's provider gating is
 // derived from the DslConfig's layout-reachable input paths. This test pins
 // the contract by counting provider invocations against two configs that
 // differ only in `layout` — same declared variables, different layouts.
@@ -195,7 +195,7 @@ const CONFIG_WITH_METRICS: DslConfig = {
   themeDefaults: {},
 };
 
-describe("buildRenderPayload — layout-driven provider gating", () => {
+describe("payloadOf — layout-driven provider gating", () => {
   test("providers whose payload prefix is not reachable from layout do not fire", async () => {
     const { deps, counts } = buildMockDeps();
     await requestPayload(

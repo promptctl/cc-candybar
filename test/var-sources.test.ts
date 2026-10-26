@@ -331,7 +331,7 @@ describe("SourceRegistry — input: runInAction batching", () => {
     expect(evalCount).toBe(1);
   });
 
-  it("updates independently across multiple applyInput calls", () => {
+  it("updates independently across multiple payloads fed in turn", () => {
     const { store, registry } = make();
     registry.declareInput("cwd", "cwd", "string", undefined, "computed");
 
@@ -1817,7 +1817,7 @@ describe("SourceRegistry — state: read-through to SessionState", () => {
     const store = new VariableStore();
     const registry = registryOver(store, "", sessionState);
     // session.id is the conventional source for "which session am I in" —
-    // input boxes refresh per render via applyInput.
+    // inputs derive from the payload the view is bound to.
     registry.declareInput("session.id", "session_id", "string", undefined, "computed");
     return { store, registry, sessionState };
   }

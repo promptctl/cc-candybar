@@ -155,16 +155,18 @@ const identity = (c: Change): string =>
 export class SettingsHistory {
   // [LAW:no-ambient-temporal-coupling] Observable, so a view's payload over a
   // session's depth (`↶`/`↷`) is recomputed in the turn a step lands — a
-  // refused `↶` that drops steps included, which moves no pick.
-  private readonly held = observable.box<ReadonlyMap<string, SessionHistory>>(
-    new Map(),
-    { deep: false },
-  );
+  // refused `↶` that drops steps included, which moves no pick. Per key: a
+  // whole next state is adopted by `replace`, which keeps its order (the
+  // recency) and moves only the sessions whose history changed, so one
+  // session's click recomputes no other session's payload.
+  private readonly held = observable.map<string, SessionHistory>(undefined, {
+    deep: false,
+  });
   private get state(): ReadonlyMap<string, SessionHistory> {
-    return this.held.get();
+    return this.held;
   }
-  private set state(next: ReadonlyMap<string, SessionHistory>) {
-    runInAction(() => this.held.set(next));
+  private set state(next: Map<string, SessionHistory>) {
+    runInAction(() => this.held.replace(next));
   }
   // When each session last moved a setting, on this history's own count of
   // moves — every one lands in `put`, whichever control made it.

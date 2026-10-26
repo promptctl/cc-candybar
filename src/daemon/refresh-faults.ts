@@ -44,9 +44,4 @@ export class RefreshFaults {
       else this.bySession.set(sessionId, next);
     });
   }
-
-  // How many sessions hold a lane whose refresh threw.
-  get size(): number {
-    return this.bySession.size;
-  }
 }

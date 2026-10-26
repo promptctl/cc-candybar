@@ -1,6 +1,6 @@
 // Burn-rate + cap-projection segment (brandon-usage-4be). Three layers:
 //   1. the pure projection math (etaMinutes / projectCostPerHour),
-//   2. buildRenderPayload folding the burn rate into the payload under the
+//   2. payloadOf folding the burn rate into the payload under the
 //      closure gate (the ETAs are the draw's, from the windows' instants),
 //   3. the burnrate segment formatting it — including the "—" absence path.
 //
@@ -84,7 +84,7 @@ describe("projectCostPerHour (pure)", () => {
   });
 });
 
-// ─── buildRenderPayload integration ────────────────────────────────────────────
+// ─── payloadOf integration ────────────────────────────────────────────
 
 function depsWith(
   overrides: Partial<RenderPayloadDeps> = {},
@@ -149,7 +149,7 @@ const NO_HINTS: ClientHints = {};
 
 const EFFECTIVE_GLOBALS: EffectiveGlobals = globalsFor(DEFAULT_DSL_CONFIG);
 
-describe("buildRenderPayload — burn projection lane", () => {
+describe("payloadOf — burn projection lane", () => {
   test("projectable: the burn rate and both windows' instants land in the payload", async () => {
     const payload = await requestPayload(
       hookWithWindows(),

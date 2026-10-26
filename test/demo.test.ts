@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { stripAnsi } from "./helpers/ansi";
 
 // `pnpm demo` claims to print what production produces. That holds only while
-// its payload is the daemon's own (buildRenderPayload over a faked hook event):
+// its payload is the daemon's own (payloadOf over a faked hook event):
 // the fields below are ones no hook event carries and the daemon always
 // supplies, so a demo that restates its payload by hand renders them empty.
 describe("pnpm demo", () => {
