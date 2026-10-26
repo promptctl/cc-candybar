@@ -443,9 +443,13 @@ export type ViewOpening = "request" | "reload" | "click";
 // read it across a whole sweep while no feed pinned its session (`idle`).
 export type ViewClose = Teardown["reason"] | "moved" | "idle";
 
-// A view's lifetime, as a state's (StateHold), and whether a request read it
-// since the last sweep.
+// A view's lifetime, as a state's (StateHold), the entry it opened over, and
+// whether a request read it since the last sweep.
 interface ViewHold {
+  // [LAW:one-source-of-truth] The entry whose state the view is of: an entry
+  // whose state changes or that is dropped retires its views first
+  // (`retire`), so a served view's entry is this one.
+  readonly entry: CacheEntry;
   holders: number;
   retired: { readonly reason: ViewClose; readonly held: number } | null;
   read: boolean;
@@ -1334,16 +1338,9 @@ export class RenderCache<
   holdView(sessionId: string): SessionHold<S, F> | null {
     const view = this.views.get(sessionId);
     if (view === undefined) return null;
-    const entry = [...this.entries.values()].find(
-      (e) => e.state === view.state,
-    );
-    // [LAW:no-silent-failure] A served view's state is an entry's: a state
-    // retired retires its views first (`retire`).
-    if (entry === undefined)
-      throw new Error("render-cache view of no served entry");
     // Taken before the state hold, so a throw leaves nothing held.
     const lease = this.leaseOf(view);
-    return this.holdViewOf(this.holdState(entry), view, lease);
+    return this.holdViewOf(this.holdState(lease.entry), view, lease);
   }
 
   // `held` with `lease` on `view` beside it, both released by the one
@@ -1375,8 +1372,8 @@ export class RenderCache<
   // request from there would (`journaled`, src/daemon/verbs/index.ts). A
   // session with no view has nothing to move: no feed draws it, and its next
   // request opens one. A click that left the origin alone finds the view
-  // already on its entry, and changes nothing, use order included: a click is
-  // no render, so the latest rendered session stays the one that rendered.
+  // already on its entry and changes nothing, its use order included, so the
+  // latest rendered session stays the one that rendered.
   follow(
     sessionId: string,
     projectDir: string,
@@ -1470,7 +1467,7 @@ export class RenderCache<
       log: this.log,
     });
     this.views.set(sessionId, view);
-    this.viewHolds.set(view, { holders: 0, retired: null, read });
+    this.viewHolds.set(view, { entry, holders: 0, retired: null, read });
     this.log(
       "info",
       `session view opened sid=${JSON.stringify(sessionId)} by=${by} cwd=${entry.cwd} views=${this.views.size}`,
