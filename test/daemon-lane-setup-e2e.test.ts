@@ -201,9 +201,13 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
     daemon = await spawnDaemonWithEnv(env);
     await switchLanes(sid, true, "tmuxStatus");
     await renderedAgain(sid);
-    await until(() => laneLines(sid).length > 0, "the owed setup");
-    // Set up once, by the request: the click had no session to set up.
-    expect(laneLines(sid)).toEqual([expect.stringContaining(" by=owed ")]);
+    await until(() => laneLines(sid).length > 1, "the owed setup");
+    // Owed at the click, which had no session to set up, and set up once, by
+    // the request.
+    expect(laneLines(sid)).toEqual([
+      expect.stringContaining(`lane: owed tmuxStatus on (session=${sid})`),
+      expect.stringContaining(" by=owed "),
+    ]);
     expect(statusLines(sid, "holding")).toHaveLength(1);
   });
 });

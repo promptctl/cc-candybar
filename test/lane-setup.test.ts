@@ -861,6 +861,7 @@ describe("LaneSetups", () => {
     await settle();
     expect(did).toEqual([OPENED]);
     expect(logs).toEqual([
+      `info lane: owed pane on (session=${SID})`,
       `info lane: pane on — opened bar pane %9 under %7 by=owed (session=${SID})`,
     ]);
     // Owed once: the next request starts nothing.
@@ -878,7 +879,11 @@ describe("LaneSetups", () => {
     setups.noted(session(), switches({}));
     await settle();
     expect(did).toEqual([]);
-    expect(logs).toEqual([]);
+    expect(logs).toEqual([
+      `info lane: owed band on,pane on (session=${SID})`,
+      `info lane: owed band on (session=${SID})`,
+      `info lane: owed nothing (session=${SID})`,
+    ]);
   });
 
   // Another session's save to the file both read, or a hand edit, between the
@@ -890,7 +895,10 @@ describe("LaneSetups", () => {
     setups.noted(session(), switches({}));
     await settle();
     expect(did).toEqual([]);
-    expect(logs).toEqual([]);
+    expect(logs).toEqual([
+      `info lane: owed pane on (session=${SID})`,
+      `info lane: pane off — nothing owed: its switch is back where the lane is by=owed (session=${SID})`,
+    ]);
   });
 
   // A request noted for its feed whose draw failed before its arrival settled
@@ -905,7 +913,29 @@ describe("LaneSetups", () => {
     setups.noted(session(), switches({ pane: true }));
     await settle();
     expect(did).toEqual([]);
-    expect(logs).toEqual([]);
+    expect(logs).toEqual([
+      `info lane: owed pane on (session=${SID})`,
+      `info lane: pane off — nothing owed: its switch is back where the lane is by=click (session=${SID})`,
+    ]);
+  });
+
+  test("a click that settles an earlier click's owed lane says which lane each started", async () => {
+    const { edge, did } = fakeEdge();
+    const { setups, logs, settle } = owner(edge);
+    setups.clicked(SID, null, switches({}), switches({ pane: true }));
+    setups.clicked(
+      SID,
+      session(),
+      switches({ pane: true }),
+      switches({ pane: true, tmuxStatus: true }),
+    );
+    await settle();
+    expect(did).toEqual([OPENED]);
+    expect(logs).toEqual([
+      `info lane: owed pane on (session=${SID})`,
+      `info lane: pane on — opened bar pane %9 under %7 by=owed (session=${SID})`,
+      `info lane: tmuxStatus on — the daemon draws %7's bar in its status line by=click (session=${SID})`,
+    ]);
   });
 
   test("owed setups are kept for 1024 sessions; the oldest is dropped, and said", async () => {
@@ -913,7 +943,9 @@ describe("LaneSetups", () => {
     const { setups, logs } = owner(edge);
     for (let i = 0; i <= 1024; i++)
       setups.clicked(`s${i}`, null, switches({}), switches({ pane: true }));
-    expect(logs).toEqual([`warn lane: owed dropped sid="s0" lanes=pane`]);
+    expect(logs.filter((l) => l.startsWith("warn"))).toEqual([
+      `warn lane: owed dropped sid="s0" lanes=pane`,
+    ]);
   });
 
   // Toggled on, off and on again inside one restart: a second restart of the

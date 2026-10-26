@@ -669,16 +669,29 @@ export class LaneSetups {
   ): void {
     // [LAW:one-source-of-truth] The click's moves join what the session
     // already owes: a lane owed before keeps where it stood then.
+    const moved = LANE_NAMES.filter((lane) => before[lane] !== after[lane]);
     const owed = this.take(sessionId);
-    for (const lane of LANE_NAMES)
-      if (before[lane] !== after[lane] && !owed.has(lane))
-        owed.set(lane, before[lane]);
+    for (const lane of moved) if (!owed.has(lane)) owed.set(lane, before[lane]);
+    const byOf = (lane: Lane): SetupCause =>
+      moved.includes(lane) ? "click" : "owed";
     if (session !== null) {
-      this.settle(session, owed, after, "click");
+      this.settle(session, owed, after, byOf);
       return;
     }
     for (const [lane, from] of owed)
       if (from === after[lane]) owed.delete(lane);
+    // [LAW:nothing-unseen] What a click before the session's first request
+    // leaves owed is said at the click, so a setup that never runs still has
+    // its line.
+    if (moved.length > 0) {
+      const lanes = [...owed.keys()].map(
+        (lane) => `${lane} ${after[lane] ? "on" : "off"}`,
+      );
+      this.deps.log(
+        "info",
+        `lane: owed ${lanes.join(",") || "nothing"} (session=${sessionId})`,
+      );
+    }
     // [LAW:carrying-cost] Bounded like the daemon's other per-session
     // memories: least recently owed dropped first, and said.
     if (owed.size > 0) this.owed.set(sessionId, owed);
@@ -695,7 +708,7 @@ export class LaneSetups {
   // A request of `session` arrived, finding its switches at `switches`: the
   // setups its clicks owe start now.
   noted(session: LaneSession, switches: LaneSwitches): void {
-    this.settle(session, this.take(session.sessionId), switches, "owed");
+    this.settle(session, this.take(session.sessionId), switches, () => "owed");
   }
 
   private take(sessionId: string): Owed {
@@ -705,15 +718,23 @@ export class LaneSetups {
   }
 
   // [LAW:dataflow-not-control-flow] Each owed lane is brought to its switch
-  // `now`, unless the switch stands where the lane already is.
+  // `now`, unless the switch stands where the lane already is, and either
+  // way is said, under what started it: this click's move, or one owed from
+  // before.
   private settle(
     session: LaneSession,
     owed: Owed,
     now: LaneSwitches,
-    by: SetupCause,
+    byOf: (lane: Lane) => SetupCause,
   ): void {
-    for (const [lane, from] of owed)
-      if (now[lane] !== from) this.start(session, lane, now[lane], by);
+    for (const [lane, from] of owed) {
+      if (now[lane] !== from) this.start(session, lane, now[lane], byOf(lane));
+      else
+        this.deps.log(
+          "info",
+          `lane: ${lane} ${from ? "on" : "off"} — nothing owed: its switch is back where the lane is by=${byOf(lane)} (session=${session.sessionId})`,
+        );
+    }
   }
 
   private start(
