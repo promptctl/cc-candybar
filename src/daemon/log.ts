@@ -6,17 +6,15 @@ import type { LogLevel } from "../utils/logger";
 export const MAX_BYTES = 5 * 1024 * 1024;
 const KEEP_GENERATIONS = 3;
 
-// [LAW:no-ambient-temporal-coupling] Every line is a synchronous write, so a
-// line is in the file the moment the call returns — including the death line
-// each shutdown path writes last, which an async stream dropped whenever
-// `process.exit` outran its flush. No stream means nothing to flush and no
-// window in which a late writer can reopen a sink that nobody waits for.
-//
-// The descriptor stays open between lines. Opening and closing the file for
-// each line cost ~0.6 ms a line idle and several under load, and the daemon
-// writes a line for every request and every client that gave up waiting: past
-// a few hundred lines a second the log was most of the event loop, and each
-// line it delayed made another client give up and another line to write.
+// [LAW:no-ambient-temporal-coupling] A line leaves the event loop at once and
+// reaches the file through one write at a time, and whatever is still waiting
+// when the process exits is written synchronously on the way out — so the
+// death line each shutdown path writes last is in the file, and no render waits
+// on the disk. A synchronous write per line put the disk on every request: a
+// write that a busy disk held for hundreds of milliseconds held every waiting
+// statusline client past its budget, and each client that gave up was one more
+// line. The descriptor stays open between lines for the same reason: opening
+// and closing the file per line cost ~0.6 ms idle and several under load.
 //
 // [LAW:types-are-the-program] The open log is one value, or none: the file it
 // is, its descriptor, and the bytes it holds.
@@ -71,33 +69,114 @@ function rotate(filePath: string): void {
   } catch {}
 }
 
+// Lines not yet handed to a write, and the one write the file has been handed:
+// its bytes, and the size the file reaches once they land.
+let waiting: string[] = [];
+let writing: {
+  readonly fd: number;
+  readonly bytes: Buffer;
+  readonly endsAt: number;
+} | null = null;
+const drainedWaiters: Array<() => void> = [];
+let exitArmed = false;
+
 export function dlog(level: LogLevel, msg: string): void {
   const line = `${new Date().toISOString()} [${level}] ${msg}\n`;
+  if (!exitArmed) {
+    exitArmed = true;
+    process.on("exit", writeWaitingSync);
+  }
+  waiting.push(line);
+  pump();
+}
+
+// Resolves once every line logged so far is in the file (or reported unwritable).
+export function drained(): Promise<void> {
+  if (writing === null && waiting.length === 0) return Promise.resolve();
+  return new Promise((resolve) => drainedWaiters.push(resolve));
+}
+
+// Hands everything waiting to one write, unless one is out already; its
+// completion hands on whatever arrived meanwhile.
+function pump(): void {
+  if (writing !== null) return;
+  if (waiting.length === 0) {
+    for (const resolve of drainedWaiters.splice(0)) resolve();
+    return;
+  }
+  const lines = waiting.join("");
+  waiting = [];
+  let held: Sink;
   try {
     // [LAW:single-enforcer] Path resolution reaches os.homedir(); it lives
     // inside the one boundary that makes dlog total.
-    const held = sinkFor(logPath());
-    held.bytes += fs.writeSync(held.fd, line);
-    if (held.bytes >= MAX_BYTES) {
-      close();
-      rotate(held.path);
-    }
+    held = sinkFor(logPath());
   } catch (e) {
-    // [LAW:no-silent-failure] exception: the failure IS the log sink, so it
-    // cannot be reported through the log sink. A throw here would escape the
-    // crash handlers that call dlog first (uncaughtException → dlog →
-    // shutdown), taking the clean-death path down with it. stderr carries the
-    // line and the reason — the terminal when the daemon runs by hand, and
-    // /dev/null under a detached spawn; the daemon keeps serving either way.
-    // Closing the sink re-opens on the next call, so a state dir removed out
-    // from under the daemon is recreated for the next line.
-    close();
-    try {
-      process.stderr.write(
-        `${line}cc-candybar: daemon.log unwritable: ${(e as Error).message}\n`,
-      );
-    } catch {
-      // stderr was the last channel.
+    unwritable(lines, e);
+    pump();
+    return;
+  }
+  const bytes = Buffer.from(lines);
+  const out = { fd: held.fd, bytes, endsAt: held.bytes + bytes.length };
+  writing = out;
+  fs.write(held.fd, bytes, (err, written) => {
+    writing = null;
+    if (err !== null) {
+      close();
+      unwritable(lines, err);
+    } else {
+      held.bytes += written;
+      // Between writes, never under one: the rename moves a file no write holds.
+      if (held.bytes >= MAX_BYTES) {
+        close();
+        rotate(held.path);
+      }
     }
+    pump();
+  });
+}
+
+// On the way out, after the event loop's last turn: the write in flight lands
+// or not as the file's size says, and every line still waiting follows it.
+function writeWaitingSync(): void {
+  const out = writing;
+  writing = null;
+  if (out !== null) {
+    try {
+      const size = fs.fstatSync(out.fd).size;
+      const start = out.endsAt - out.bytes.length;
+      if (size < out.endsAt) {
+        fs.writeSync(out.fd, out.bytes.subarray(Math.max(0, size - start)));
+      }
+    } catch (e) {
+      unwritable(out.bytes.toString(), e);
+    }
+  }
+  if (waiting.length === 0) return;
+  const lines = waiting.join("");
+  waiting = [];
+  try {
+    fs.writeSync(sinkFor(logPath()).fd, lines);
+  } catch (e) {
+    unwritable(lines, e);
+  }
+}
+
+function unwritable(lines: string, e: unknown): void {
+  // [LAW:no-silent-failure] exception: the failure IS the log sink, so it
+  // cannot be reported through the log sink. A throw here would escape the
+  // crash handlers that call dlog first (uncaughtException → dlog →
+  // shutdown), taking the clean-death path down with it. stderr carries the
+  // line and the reason — the terminal when the daemon runs by hand, and
+  // /dev/null under a detached spawn; the daemon keeps serving either way.
+  // Closing the sink re-opens on the next call, so a state dir removed out
+  // from under the daemon is recreated for the next line.
+  close();
+  try {
+    process.stderr.write(
+      `${lines}cc-candybar: daemon.log unwritable: ${(e as Error).message}\n`,
+    );
+  } catch {
+    // stderr was the last channel.
   }
 }

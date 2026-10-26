@@ -23,6 +23,7 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { monitorEventLoopDelay } from "node:perf_hooks";
 import { parseArgs } from "node:util";
 
 import { nodeClientHint } from "../src/client-hint.js";
@@ -30,7 +31,11 @@ import { detectClientHints } from "../src/client-hints.js";
 import { daemonArgs } from "../src/daemon/acquire.js";
 import { tryRenderViaDaemon } from "../src/daemon/client.js";
 import { fetchStats } from "../src/daemon/client-stats.js";
-import { approachingLimit, mb, memoryLimitBytes } from "../src/daemon/limits.js";
+import {
+  approachingLimit,
+  mb,
+  memoryLimitBytes,
+} from "../src/daemon/limits.js";
 import { chargeProbe } from "../src/daemon/memory-report.js";
 import { PARENT_PID_ENV } from "../src/daemon/parent-watchdog.js";
 import type { StatsSnapshot } from "../src/daemon/stats.js";
@@ -50,7 +55,9 @@ const { values } = parseArgs({
 const SESSIONS = Number(values.sessions);
 const STEADY_MS = Number(values.seconds) * 1000;
 if (!(Number.isInteger(SESSIONS) && SESSIONS > 0 && STEADY_MS > 0)) {
-  throw new Error(`--sessions and --seconds must be positive: ${JSON.stringify(values)}`);
+  throw new Error(
+    `--sessions and --seconds must be positive: ${JSON.stringify(values)}`,
+  );
 }
 
 // Each session's statusline refreshes this often: 100 sessions ask ~60
@@ -67,7 +74,7 @@ const WARM_DEADLINE_MS = 30_000;
 const SAMPLE_MS = 5000;
 // What the charge may grow by across the steady phase, beyond a heap's
 // sawtooth: the live daemon's climb is ~80 MB a minute.
-const CLIMB_LIMIT_BYTES = 48 * 1024 * 1024;
+const CLIMB_LIMIT_BYTES = 32 * 1024 * 1024;
 const OID = "4f1c2a9e8b7d6c5a4f3e2d1c0b9a8f7e6d5c4b3a";
 
 // ─── The world ──────────────────────────────────────────────────────────────
@@ -83,7 +90,8 @@ const dirs = {
   bin: path.join(root, "bin"),
   checkouts: path.join(root, "w"),
 };
-for (const d of Object.values(dirs)) fs.mkdirSync(d, { recursive: true, mode: 0o700 });
+for (const d of Object.values(dirs))
+  fs.mkdirSync(d, { recursive: true, mode: 0o700 });
 const socket = path.join(dirs.state, "cc-candybar", "socket");
 fs.mkdirSync(path.dirname(socket), { mode: 0o700 });
 const unknownCalls = path.join(root, "unknown-calls");
@@ -93,9 +101,13 @@ fs.copyFileSync(
   path.join(FIXTURES, "config.json5"),
   path.join(dirs.config, "cc-candybar", "config.json5"),
 );
-fs.cpSync(path.join(FIXTURES, "plugins"), path.join(dirs.data, "cc-candybar", "plugins"), {
-  recursive: true,
-});
+fs.cpSync(
+  path.join(FIXTURES, "plugins"),
+  path.join(dirs.data, "cc-candybar", "plugins"),
+  {
+    recursive: true,
+  },
+);
 
 // The git lane's questions, answered as a checkout on its own branch with an
 // upstream, one commit ahead, a modified file and an untracked one.
@@ -121,7 +133,9 @@ esac`,
 );
 
 function writeStub(name: string, body: string): void {
-  fs.writeFileSync(path.join(dirs.bin, name), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
+  fs.writeFileSync(path.join(dirs.bin, name), `#!/bin/sh\n${body}\n`, {
+    mode: 0o755,
+  });
 }
 
 interface Session {
@@ -138,16 +152,28 @@ const sessions: Session[] = Array.from({ length: SESSIONS }, (_, index) => {
   const checkout = path.join(dirs.checkouts, `s${index}`);
   fs.mkdirSync(path.join(checkout, ".git"), { recursive: true });
   fs.mkdirSync(path.join(checkout, ".lit"));
-  fs.writeFileSync(path.join(checkout, ".git", "HEAD"), `ref: refs/heads/ticket-${index}\n`);
+  fs.writeFileSync(
+    path.join(checkout, ".git", "HEAD"),
+    `ref: refs/heads/ticket-${index}\n`,
+  );
   fs.writeFileSync(path.join(checkout, ".git", "index"), "");
-  fs.writeFileSync(path.join(checkout, ".lit", "statusline.json"), litStatusline(index));
+  fs.writeFileSync(
+    path.join(checkout, ".lit", "statusline.json"),
+    litStatusline(index),
+  );
   // Where Claude Code keeps a session's transcript: under its project's slug.
-  const project = path.join(dirs.claude, "projects", checkout.replace(/[^A-Za-z0-9]/g, "-"));
+  const project = path.join(
+    dirs.claude,
+    "projects",
+    checkout.replace(/[^A-Za-z0-9]/g, "-"),
+  );
   fs.mkdirSync(project, { recursive: true });
   const transcript = path.join(project, `${id}.jsonl`);
   fs.writeFileSync(
     transcript,
-    Array.from({ length: TRANSCRIPT_TURNS }, (_, t) => turn(id, checkout, t)).join(""),
+    Array.from({ length: TRANSCRIPT_TURNS }, (_, t) =>
+      turn(id, checkout, t),
+    ).join(""),
   );
   return { index, id, checkout, transcript, ticks: 0, answered: false };
 });
@@ -162,7 +188,10 @@ function litStatusline(index: number): string {
     schema_version: 1,
     working_on: {
       ticket: ticket(index),
-      rollup_progress: { rollup_completed_count: index % 9, rollup_total_count: 12 },
+      rollup_progress: {
+        rollup_completed_count: index % 9,
+        rollup_total_count: 12,
+      },
       phase: ["plan", "impl", "review", "merge"][index % 4],
       recorded_at: "2026-10-25T20:00:00Z",
     },
@@ -173,15 +202,26 @@ function litStatusline(index: number): string {
 // One turn as Claude Code writes it: the prompt, the assistant's tool call
 // with its usage, and the tool's result.
 function turn(sessionId: string, cwd: string, t: number): string {
-  const at = new Date(Date.now() - (TRANSCRIPT_TURNS - t) * 20_000).toISOString();
-  const common = { sessionId, cwd, version: "2.1.299", gitBranch: "main", userType: "external" };
+  const at = new Date(
+    Date.now() - (TRANSCRIPT_TURNS - t) * 20_000,
+  ).toISOString();
+  const common = {
+    sessionId,
+    cwd,
+    version: "2.1.299",
+    gitBranch: "main",
+    userType: "external",
+  };
   const lines = [
     {
       ...common,
       type: "user",
       uuid: `u-${t}`,
       timestamp: at,
-      message: { role: "user", content: `Step ${t}: run the tests and fix what fails. `.repeat(8) },
+      message: {
+        role: "user",
+        content: `Step ${t}: run the tests and fix what fails. `.repeat(8),
+      },
     },
     {
       ...common,
@@ -196,7 +236,12 @@ function turn(sessionId: string, cwd: string, t: number): string {
         role: "assistant",
         content: [
           { type: "thinking", thinking: "", signature: "C".repeat(900) },
-          { type: "tool_use", id: `toolu_${t}`, name: "Bash", input: { command: "pnpm test" } },
+          {
+            type: "tool_use",
+            id: `toolu_${t}`,
+            name: "Bash",
+            input: { command: "pnpm test" },
+          },
         ],
         stop_reason: "tool_use",
         usage: {
@@ -205,7 +250,10 @@ function turn(sessionId: string, cwd: string, t: number): string {
           cache_read_input_tokens: 40_000 + 900 * t,
           output_tokens: 300 + t,
           service_tier: "standard",
-          cache_creation: { ephemeral_1h_input_tokens: 1200 + t, ephemeral_5m_input_tokens: 0 },
+          cache_creation: {
+            ephemeral_1h_input_tokens: 1200 + t,
+            ephemeral_5m_input_tokens: 0,
+          },
         },
       },
     },
@@ -216,7 +264,13 @@ function turn(sessionId: string, cwd: string, t: number): string {
       timestamp: at,
       message: {
         role: "user",
-        content: [{ type: "tool_result", tool_use_id: `toolu_${t}`, content: "ok ".repeat(200) }],
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: `toolu_${t}`,
+            content: "ok ".repeat(200),
+          },
+        ],
       },
     },
   ];
@@ -234,7 +288,11 @@ function hookData(s: Session): ClaudeHookData {
     transcript_path: s.transcript,
     cwd: s.checkout,
     model: { id: "claude-opus-5-5", display_name: "Opus 5.5" },
-    workspace: { current_dir: s.checkout, project_dir: s.checkout, added_dirs: [] },
+    workspace: {
+      current_dir: s.checkout,
+      project_dir: s.checkout,
+      added_dirs: [],
+    },
     version: "2.1.299",
     output_style: { name: "default" },
     cost: {
@@ -287,9 +345,25 @@ const env: NodeJS.ProcessEnv = {
 // The client half of the gate reaches the daemon through this process's env.
 process.env.CC_CANDYBAR_SOCKET = socket;
 
-const daemon = spawn(process.execPath, daemonArgs(BUNDLE, env), {
-  env,
-  stdio: ["ignore", "ignore", "inherit"],
+// The daemon as the client spawns it, plus an inspector on a loopback port:
+// the one way to read its live heap is to collect it first.
+const daemon = spawn(
+  process.execPath,
+  ["--inspect=127.0.0.1:0", ...daemonArgs(BUNDLE, env)],
+  { env, stdio: ["ignore", "ignore", "pipe"] },
+);
+const inspectorUrl = new Promise<string>((resolve) => {
+  let text = "";
+  daemon.stderr.on("data", (chunk: Buffer) => {
+    text += chunk.toString();
+    const url = /Debugger listening on (ws:\S+)/.exec(text)?.[1];
+    if (url !== undefined) resolve(url);
+    // Everything but the inspector's own banner is the daemon's to say.
+    for (const line of chunk.toString().split("\n")) {
+      if (line !== "" && !/Debugger listening|For help, see/.test(line))
+        console.error(line);
+    }
+  });
 });
 let daemonExit: string | null = null;
 daemon.on("exit", (code, signal) => {
@@ -317,10 +391,14 @@ const inFlight = new Set<Promise<void>>();
 
 function tick(s: Session): void {
   s.ticks++;
-  if (s.ticks % TURN_EVERY === 0) {
-    void fs.promises.appendFile(s.transcript, turn(s.id, s.checkout, TRANSCRIPT_TURNS + s.ticks));
+  // Offset by session, so sessions write and stage at their own moments.
+  if ((s.ticks + s.index) % TURN_EVERY === 0) {
+    void fs.promises.appendFile(
+      s.transcript,
+      turn(s.id, s.checkout, TRANSCRIPT_TURNS + s.ticks),
+    );
   }
-  if (s.ticks % STAGE_EVERY === 0) {
+  if ((s.ticks + s.index) % STAGE_EVERY === 0) {
     const now = new Date();
     void fs.promises.utimes(path.join(s.checkout, ".git", "index"), now, now);
   }
@@ -333,7 +411,8 @@ function tick(s: Session): void {
     renders.push({
       phase: rendering,
       ms: performance.now() - t0,
-      outcome: outcome.kind === "ok" ? "ok" : `${outcome.kind}/${outcome.cause}`,
+      outcome:
+        outcome.kind === "ok" ? "ok" : `${outcome.kind}/${outcome.cause}`,
     });
     if (outcome.kind === "ok") s.answered = true;
     inFlight.delete(done);
@@ -364,6 +443,36 @@ async function sample(started: number): Promise<void> {
   samples.push({ at, stats: outcome.value, charge: reading.bytes });
 }
 
+// The daemon's heap once everything unreachable is collected, through its
+// inspector. A heap read between collections is mostly garbage V8 has not
+// yet had reason to collect.
+async function liveHeap(): Promise<number> {
+  const ws = new WebSocket(await inspectorUrl);
+  await new Promise((resolve, reject) => {
+    ws.onopen = resolve;
+    ws.onerror = () => reject(new Error("daemon inspector refused the gate"));
+  });
+  const call = (id: number, method: string) =>
+    new Promise<{ usedSize?: number }>((resolve) => {
+      ws.addEventListener("message", function answer(e: MessageEvent) {
+        const reply = JSON.parse(String(e.data)) as {
+          id?: number;
+          result: { usedSize?: number };
+        };
+        if (reply.id !== id) return;
+        ws.removeEventListener("message", answer);
+        resolve(reply.result);
+      });
+      ws.send(JSON.stringify({ id, method }));
+    });
+  await call(1, "HeapProfiler.collectGarbage");
+  const { usedSize } = await call(2, "Runtime.getHeapUsage");
+  ws.close();
+  if (usedSize === undefined)
+    throw new Error("daemon inspector reported no heap usage");
+  return usedSize;
+}
+
 // ─── The run ────────────────────────────────────────────────────────────────
 
 interface Check {
@@ -372,12 +481,17 @@ interface Check {
   readonly detail: string;
 }
 
-async function run(): Promise<{ checks: Check[]; facts: Record<string, unknown> }> {
+async function run(): Promise<{
+  checks: Check[];
+  facts: Record<string, unknown>;
+}> {
   const bootDeadline = Date.now() + 15_000;
   let first: StatsSnapshot | null = null;
   while (first === null) {
-    if (daemonExit !== null) throw new Error(`daemon ${daemonExit} before serving`);
-    if (Date.now() > bootDeadline) throw new Error("daemon did not answer stats within 15 s");
+    if (daemonExit !== null)
+      throw new Error(`daemon ${daemonExit} before serving`);
+    if (Date.now() > bootDeadline)
+      throw new Error("daemon did not answer stats within 15 s");
     const outcome = await fetchStats();
     if (outcome.kind === "ok") first = outcome.value;
     else await sleep(50);
@@ -390,43 +504,59 @@ async function run(): Promise<{ checks: Check[]; facts: Record<string, unknown> 
   }
 
   const timers = sessions.map((s) =>
-    setTimeout(() => {
-      tick(s);
-      timers[s.index] = setInterval(() => tick(s), SESSION_PERIOD_MS);
-    }, (s.index * SESSION_PERIOD_MS) / SESSIONS),
+    setTimeout(
+      () => {
+        tick(s);
+        timers[s.index] = setInterval(() => tick(s), SESSION_PERIOD_MS);
+      },
+      (s.index * SESSION_PERIOD_MS) / SESSIONS,
+    ),
   );
   const warmStarted = Date.now();
-  while (!sessions.every((s) => s.answered) && Date.now() - warmStarted < WARM_DEADLINE_MS) {
+  while (
+    !sessions.every((s) => s.answered) &&
+    Date.now() - warmStarted < WARM_DEADLINE_MS
+  ) {
     await sleep(50);
   }
   const warmMs = Date.now() - warmStarted;
+  // Before the steady phase, so no scored render waits on the collection.
+  const heapBefore = await liveHeap();
   const silent = sessions.filter((s) => !s.answered).length;
 
   phase = "steady";
   const steadyStarted = Date.now();
+  // The gate's own event loop: a render it measured late may be its own lag.
+  const gateLoop = monitorEventLoopDelay({ resolution: 5 });
+  gateLoop.enable();
   while (Date.now() - steadyStarted < STEADY_MS) {
     await sample(steadyStarted);
     await sleep(SAMPLE_MS);
   }
   for (const t of timers) clearInterval(t);
+  gateLoop.disable();
   await Promise.all(inFlight);
+  const heapAfter = await liveHeap();
+  // The first and last samples each follow a collection.
   await sample(steadyStarted);
   if (samples.length === 0) {
-    throw new Error(`the daemon answered no stats sample: ${unanswered.join("; ")}`);
+    throw new Error(
+      `the daemon answered no stats sample: ${unanswered.join("; ")}`,
+    );
   }
 
   const limit = memoryLimitBytes(env);
   const steady = renders.filter((r) => r.phase === "steady");
-  const failures = tally(steady.filter((r) => r.outcome !== "ok").map((r) => r.outcome));
+  const failures = tally(
+    steady.filter((r) => r.outcome !== "ok").map((r) => r.outcome),
+  );
   const expected = (SESSIONS * STEADY_MS) / SESSION_PERIOD_MS;
   const charges = samples.map((s) => s.charge);
-  const third = Math.max(1, Math.floor(samples.length / 3));
-  // What V8's heap does not hold: native allocations, code, mappings. The V8
-  // heap itself sawtooths with collection, and its leaks are the held counts.
-  const outside = samples.map((s) => s.charge - s.stats.heapTotalBytes);
-  const climb = median(outside.slice(-third)) - median(outside.slice(0, third));
+  const climb = heapAfter - heapBefore;
   const last = samples.at(-1)!.stats;
-  const held = (pick: (s: StatsSnapshot) => number) => [...new Set(samples.map((s) => pick(s.stats)))];
+  const held = (pick: (s: StatsSnapshot) => number) => [
+    ...new Set(samples.map((s) => pick(s.stats))),
+  ];
   const counters = {
     entries: held((s) => s.renderCache.size),
     compiles: held((s) => s.renderCache.compiles),
@@ -449,7 +579,8 @@ async function run(): Promise<{ checks: Check[]; facts: Record<string, unknown> 
     },
     {
       name: "steady renders",
-      pass: steady.length >= expected * 0.9 && Object.keys(failures).length === 0,
+      pass:
+        steady.length >= expected * 0.9 && Object.keys(failures).length === 0,
       detail: `${steady.length} renders (~${Math.round(expected)} asked), failures ${JSON.stringify(failures)}`,
     },
     {
@@ -473,9 +604,9 @@ async function run(): Promise<{ checks: Check[]; facts: Record<string, unknown> 
       detail: `max ${mb(Math.max(...charges))} MB of ${mb(limit)} MB`,
     },
     {
-      name: "charge outside the heap not climbing",
+      name: "live heap not climbing",
       pass: climb <= CLIMB_LIMIT_BYTES,
-      detail: `${mb(climb)} MB over the steady phase (limit ${mb(CLIMB_LIMIT_BYTES)} MB)`,
+      detail: `${mb(heapBefore)} MB to ${mb(heapAfter)} MB over the steady phase (limit +${mb(CLIMB_LIMIT_BYTES)} MB)`,
     },
     {
       name: "held counts flat",
@@ -495,7 +626,9 @@ async function run(): Promise<{ checks: Check[]; facts: Record<string, unknown> 
     sessions: SESSIONS,
     steadySeconds: STEADY_MS / 1000,
     warmMs,
-    warmRenders: tally(renders.filter((r) => r.phase === "warm").map((r) => r.outcome)),
+    warmRenders: tally(
+      renders.filter((r) => r.phase === "warm").map((r) => r.outcome),
+    ),
     steadyRenders: steady.length,
     steadyMs: { p50: pct(ms, 0.5), p99: pct(ms, 0.99), max: ms.at(-1) ?? 0 },
     chargeMb: charges.map(mb),
@@ -503,11 +636,34 @@ async function run(): Promise<{ checks: Check[]; facts: Record<string, unknown> 
     rssMb: samples.map((s) => mb(s.stats.rssBytes)),
     heapUsedMb: samples.map((s) => mb(s.stats.heapUsedBytes)),
     heapTotalMb: samples.map((s) => mb(s.stats.heapTotalBytes)),
-    outsideHeapMb: outside.map(mb),
+    // The charge V8's heap does not hold, each just after a collection.
+    outsideHeapAfterGcMb: [samples[0]!, samples.at(-1)!].map((s) =>
+      mb(s.charge - s.stats.heapTotalBytes),
+    ),
+    // How long the daemon itself took over each steady render, from its own
+    // render events, beside the gate's lag: a slow round trip is one or the other.
+    daemonRenderMs: daemonRenders(steadyStarted),
+    gateLoopDelayMs: {
+      p99: Math.round(gateLoop.percentile(99) / 1e6),
+      max: Math.round(gateLoop.max / 1e6),
+    },
     renderCache: last.renderCache,
     requests: last.requests,
   };
   return { checks, facts };
+}
+
+function daemonRenders(since: number): Record<string, number> {
+  const log = path.join(dirs.state, "cc-candybar", "daemon.log");
+  const took = [`${log}.1`, log]
+    .filter((f) => fs.existsSync(f))
+    .flatMap((f) => fs.readFileSync(f, "utf8").split("\n"))
+    .filter(
+      (l) => l.includes("] render ") && Date.parse(l.slice(0, 24)) >= since,
+    )
+    .map((l) => Number(/ took=(\d+)ms/.exec(l)?.[1]))
+    .sort((a, b) => a - b);
+  return { n: took.length, p99: pct(took, 0.99), max: took.at(-1) ?? 0 };
 }
 
 function tally(xs: readonly string[]): Record<string, number> {
@@ -515,12 +671,10 @@ function tally(xs: readonly string[]): Record<string, number> {
   for (const x of xs) out[x] = (out[x] ?? 0) + 1;
   return out;
 }
-function median(xs: readonly number[]): number {
-  const s = [...xs].sort((a, b) => a - b);
-  return s[Math.floor(s.length / 2)]!;
-}
 function pct(sorted: readonly number[], p: number): number {
-  return Math.round(sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))] ?? 0);
+  return Math.round(
+    sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))] ?? 0,
+  );
 }
 
 // [LAW:no-silent-failure] Every way out is a verdict: a crash fails, and a
@@ -529,13 +683,17 @@ let passed = false;
 try {
   const { checks, facts } = await run();
   passed = checks.every((c) => c.pass);
-  for (const c of checks) console.error(`${c.pass ? "pass" : "FAIL"}  ${c.name}: ${c.detail}`);
+  for (const c of checks)
+    console.error(`${c.pass ? "pass" : "FAIL"}  ${c.name}: ${c.detail}`);
   console.log(JSON.stringify({ pass: passed, checks, facts }));
 } catch (e) {
   console.error(`FAIL  ${e instanceof Error ? e.message : String(e)}`);
 } finally {
   daemon.kill("SIGKILL");
   if (passed) fs.rmSync(root, { recursive: true, force: true });
-  else console.error(`kept ${root} (daemon log: ${path.join(dirs.state, "cc-candybar", "daemon.log")})`);
+  else
+    console.error(
+      `kept ${root} (daemon log: ${path.join(dirs.state, "cc-candybar", "daemon.log")})`,
+    );
 }
 process.exit(passed ? 0 : 1);

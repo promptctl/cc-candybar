@@ -890,8 +890,8 @@ function shutdown(code: number): void {
       (p) => fs.unlinkSync(p),
     );
   }
-  // Every dlog above was a synchronous append (log.ts), so the death line is
-  // already on disk; nothing to flush before exit.
+  // The log writes every line still waiting as the process exits (log.ts), so
+  // the death line lands without a flush here.
   process.exit(code);
 }
 

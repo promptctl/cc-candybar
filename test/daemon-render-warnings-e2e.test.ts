@@ -6,17 +6,17 @@
 // load warning or not, a render warning or not — and read each render's strip
 // beside its event, so the two cannot disagree unseen.
 
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { logPath } from "../src/daemon/paths";
 import { killAndWait, render, stripAnsi } from "./helpers/daemon-e2e";
 import {
   prepareIsolatedDaemonEnv,
   spawnDaemonWithEnv,
   type RunningDaemon,
 } from "./helpers/spawn-isolated-daemon";
+import { renderLines } from "./helpers/daemon-log";
 
 jest.setTimeout(30_000);
 
@@ -114,10 +114,9 @@ describe("a daemon render's event names every warning its strip carried", () => 
 
       // A request the helper retried after a reply timeout is logged once per
       // attempt, and every attempt drew the same warnings.
-      const events = readFileSync(logPath(env), "utf8")
-        .split("\n")
-        .filter((l) => l.includes(`render sid=${sessionId} `))
-        .map((l) => l.match(/ warn=(\S+)/)?.[1]);
+      const events = (await renderLines(env, sessionId)).map(
+        (l) => l.match(/ warn=(\S+)/)?.[1],
+      );
       expect(events.length).toBeGreaterThanOrEqual(1);
       for (const event of events) expect(event).toBe(warn);
     },

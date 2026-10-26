@@ -3,11 +3,10 @@
 // the effect's own clock, and whether each row's effect was made or reused —
 // and (brandon-effects-2gka.bm1) each placement wearing its own, on its clock.
 
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { logPath } from "../src/daemon/paths";
 import {
   hookData,
   killAndWait,
@@ -19,6 +18,7 @@ import {
   spawnDaemonWithEnv,
   type RunningDaemon,
 } from "./helpers/spawn-isolated-daemon";
+import { renderLines } from "./helpers/daemon-log";
 
 jest.setTimeout(30_000);
 
@@ -55,17 +55,14 @@ describe("a daemon render's event names the effect it wore", () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
     await render(sockPath, sessionId, projectDir, {}, argv);
 
-    const events = readFileSync(logPath(env), "utf8")
-      .split("\n")
-      .filter((l) => l.includes(`render sid=${sessionId} `))
-      .map((l) => ({
-        effect: l.match(/ effect=(\S+) /)?.[1],
-        t: Number(l.match(/ effectT=(\d+\.\d{3}) /)?.[1]),
-        speed: l.match(/ speed=(\S+) /)?.[1],
-        made: Number(l.match(/ effectRows=(\d+)made\//)?.[1]),
-        reused: Number(l.match(/\/(\d+)reused /)?.[1]),
-        own: l.match(/ effectOwn=(\S+) /)?.[1],
-      }));
+    const events = (await renderLines(env, sessionId, 2)).map((l) => ({
+      effect: l.match(/ effect=(\S+) /)?.[1],
+      t: Number(l.match(/ effectT=(\d+\.\d{3}) /)?.[1]),
+      speed: l.match(/ speed=(\S+) /)?.[1],
+      made: Number(l.match(/ effectRows=(\d+)made\//)?.[1]),
+      reused: Number(l.match(/\/(\d+)reused /)?.[1]),
+      own: l.match(/ effectOwn=(\S+) /)?.[1],
+    }));
     const ownT = (own: string | undefined): number =>
       Number(own?.match(/^b:pulse@(\d+\.\d{3})$/)?.[1]);
 
@@ -108,13 +105,10 @@ describe("a daemon render's event names the effect it wore", () => {
     await new Promise((resolve) => setTimeout(resolve, gapMs));
     await render(sockPath, sessionId, projectDir, {}, argv);
 
-    const events = readFileSync(logPath(env), "utf8")
-      .split("\n")
-      .filter((l) => l.includes(`render sid=${sessionId} `))
-      .map((l) => ({
-        speed: l.match(/ speed=(\S+) /)?.[1],
-        t: Number(l.match(/ effectT=(\d+\.\d{3}) /)?.[1]),
-      }));
+    const events = (await renderLines(env, sessionId, 2)).map((l) => ({
+      speed: l.match(/ speed=(\S+) /)?.[1],
+      t: Number(l.match(/ effectT=(\d+\.\d{3}) /)?.[1]),
+    }));
     expect(events.length).toBeGreaterThanOrEqual(2);
     expect(events.every((e) => e.speed === "20x")).toBe(true);
     // At least the gap passed between the first render and the last, so the
@@ -146,10 +140,9 @@ describe("a daemon render's event names the effect it wore", () => {
     await renderAs("here");
     await renderAs("gone");
 
-    const leaves = readFileSync(logPath(env), "utf8")
-      .split("\n")
-      .filter((l) => l.includes(`render sid=${sessionId} `))
-      .map((l) => l.match(/ leaves=(\S+) /)?.[1]);
+    const leaves = (await renderLines(env, sessionId, 3)).map(
+      (l) => l.match(/ leaves=(\S+) /)?.[1],
+    );
     // A retried request logs once per attempt, so the event that saw `b`
     // leave is the first naming it, and every event before it names none.
     const left = leaves.findIndex((l) => l !== "-");

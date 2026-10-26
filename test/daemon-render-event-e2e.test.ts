@@ -10,7 +10,6 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
-  readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -21,7 +20,7 @@ import path from "node:path";
 
 import { stripAnsi } from "./helpers/ansi";
 import { encodeFrame, PROTOCOL_VERSION } from "../src/daemon/protocol";
-import { logPath, stateDir } from "../src/daemon/paths";
+import { stateDir } from "../src/daemon/paths";
 import {
   hookData,
   killAndWait,
@@ -32,6 +31,7 @@ import {
 } from "./helpers/daemon-e2e";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { CLICK_ERROR_HOLD_S } from "../src/daemon/click-error";
+import { logLines, loggedWhen } from "./helpers/daemon-log";
 import { sendDaemonRequest } from "./helpers/daemon-wire";
 import { until } from "./helpers/until";
 import {
@@ -114,15 +114,23 @@ describe("every render request writes one render event, whatever its outcome", (
     "--config",
     path.join(projectDir, `${name}.json5`),
   ];
-  const renderEvents = (): Event[] =>
-    readFileSync(logPath(env), "utf8")
-      .split("\n")
-      .filter((l) => / \[\w+\] render /.test(l))
-      .map(eventOf);
+  const renderEvents = (lines: readonly string[] = logLines(env)): Event[] =>
+    lines.filter((l) => / \[\w+\] render /.test(l)).map(eventOf);
   const field = (event: Event, key: string): string | undefined =>
     event.fields.find(([k]) => k === key)?.[1];
-  const eventsOf = (sid: string): Event[] =>
-    renderEvents().filter((e) => field(e, "sid") === sid);
+  // What has landed so far: for what must not have been written.
+  const eventsNow = (sid: string, lines?: readonly string[]): Event[] =>
+    renderEvents(lines).filter((e) => field(e, "sid") === sid);
+  // A session's events once at least `count` have landed.
+  const eventsOf = async (sid: string, count = 1): Promise<Event[]> =>
+    eventsNow(
+      sid,
+      await loggedWhen(
+        env,
+        (lines) => eventsNow(sid, lines).length >= count,
+        `${count} render event(s) for ${sid}`,
+      ),
+    );
 
   beforeAll(async () => {
     const prepared = prepareIsolatedDaemonEnv("cc-candybar-event-e2e");
@@ -187,8 +195,12 @@ describe("every render request writes one render event, whatever its outcome", (
     // A request the helper retried after a reply timeout is logged once per
     // attempt: every attempt ended the same way, and exactly one of them is
     // the reply the client read.
-    const attempts = (sid: string, outcome: string, level: string): Event => {
-      const events = eventsOf(sid);
+    const attempts = async (
+      sid: string,
+      outcome: string,
+      level: string,
+    ): Promise<Event> => {
+      const events = await eventsOf(sid);
       for (const event of events) {
         expect(event.level).toBe(level);
         expect(field(event, "outcome")).toBe(outcome);
@@ -196,8 +208,8 @@ describe("every render request writes one render event, whatever its outcome", (
       return only(events.filter((e) => field(e, "timedOut") === "N"));
     };
     // The forging sid is read back whole, as one field of one event.
-    const drawn = attempts(FORGING_SID, "ok", "info");
-    expect(renderEvents().filter((e) => field(e, "sid") === "x")).toEqual([]);
+    const drawn = await attempts(FORGING_SID, "ok", "info");
+    expect(eventsNow("x")).toEqual([]);
 
     // Which client drew the bar: the program a hint names, and `unreported`
     // for a client too old to say (brandon-doctor-v62x.tfb).
@@ -213,13 +225,13 @@ describe("every render request writes one render event, whatever its outcome", (
     );
     expect(waiting).toContain("…");
     expect(waiting).not.toContain("⚠");
-    expect(field(attempts("ev-pending", "ok", "info"), "pending")).toBe("doc");
+    expect(field(await attempts("ev-pending", "ok", "info"), "pending")).toBe("doc");
     // How many of its view's parts a render evaluated: all of them cold, and
     // only those whose inputs moved when the session draws the same data
     // again (brandon-unfiled-3248.8ro6).
     await render(sockPath, "ev-kept", projectDir, hints, configFlag("drawn"));
     await render(sockPath, "ev-kept", projectDir, hints, configFlag("drawn"));
-    const [cold, kept] = eventsOf("ev-kept").map((e) =>
+    const [cold, kept] = (await eventsOf("ev-kept", 2)).map((e) =>
       Number(field(e, "evaluated")),
     );
     expect(cold).toBeGreaterThan(0);
@@ -231,7 +243,7 @@ describe("every render request writes one render event, whatever its outcome", (
       { ...hints, client: { kind: "native", bundle: "/b/dist/index.mjs", source: null } },
       configFlag("drawn"),
     );
-    expect(field(attempts("ev-native", "ok", "info"), "client")).toBe("native");
+    expect(field(await attempts("ev-native", "ok", "info"), "client")).toBe("native");
 
     // What the hook payload said of the rate-limit windows — the sighting the
     // doctor's segment-data check reads (brandon-doctor-v62x.onf).
@@ -244,24 +256,30 @@ describe("every render request writes one render event, whatever its outcome", (
         rate_limits: { five_hour: { used_percentage: 10, resets_at: 0 } },
       },
     });
-    expect(field(attempts("ev-windows", "ok", "info"), "rateLimits")).toBe(
+    expect(field(await attempts("ev-windows", "ok", "info"), "rateLimits")).toBe(
       "carried",
     );
 
     // The broken gate is a render that finished, warning which gate it was;
     // its fields are the drawn bar's, in the same order.
-    const gate = attempts("ev-gate", "ok", "info");
+    const gate = await attempts("ev-gate", "ok", "info");
     expect(field(gate, "warn")).toBe("when");
     // Its strip's full text was written beside it.
     expect(field(gate, "dumpFailed")).toBe("-");
     const keys = (event: Event) => event.fields.map(([k]) => k);
     expect(keys(gate)).toEqual(keys(drawn));
-    expect(readFileSync(logPath(env), "utf8")).not.toContain("handler threw");
+    expect(logLines(env).join("\n")).not.toContain("handler threw");
 
     // A refused request names its problems. The request was not trusted, so
     // nothing it said is recorded as a fact of the render — not even its sid.
-    const refused = renderEvents().filter(
-      (e) => field(e, "outcome") === "bad-request",
+    const badRequests = (lines?: readonly string[]) =>
+      renderEvents(lines).filter((e) => field(e, "outcome") === "bad-request");
+    const refused = badRequests(
+      await loggedWhen(
+        env,
+        (lines) => badRequests(lines).length >= 3,
+        "the refused requests' events",
+      ),
     );
     expect(refused.map((e) => field(e, "problems"))).toEqual([
       `request 'cwd' is not an absolute path: "proj"`,
@@ -279,9 +297,10 @@ describe("every render request writes one render event, whatever its outcome", (
   // redraws only on events needs — then on none.
   test("a failed click's error is the render event's clickError: held, owed, then over", async () => {
     const sid = "ev-click";
+    let sent = 0;
     const renderOne = async (): Promise<Event> => {
       await render(sockPath, sid, projectDir, {}, configFlag("drawn"));
-      return eventsOf(sid).at(-1)!;
+      return (await eventsOf(sid, ++sent)).at(-1)!;
     };
     expect(field(await renderOne(), "clickError")).toBe("-");
     const bad = effectsUrl([
@@ -295,7 +314,7 @@ describe("every render request writes one render event, whatever its outcome", (
     // inside its hold. A request whose client is gone before its answer is
     // written is answered to no one, so it carries nothing.
     expect((await sendClick(sockPath, bad)).ok).toBe(false);
-    const rendered = eventsOf(sid).length;
+    const rendered = eventsNow(sid).length;
     // Sent and half-closed at once: the daemon's side ends with it, before the
     // render's answer is written.
     const gone = net.connect(sockPath, () =>
@@ -307,11 +326,8 @@ describe("every render request writes one render event, whatever its outcome", (
         }),
       ),
     );
-    for (let waited = 0; eventsOf(sid).length === rendered; waited += 20) {
-      if (waited > 5000) throw new Error("the abandoned request wrote no event");
-      await new Promise((r) => setTimeout(r, 20));
-    }
-    expect(field(eventsOf(sid).at(-1)!, "clickError")).toBe("held");
+    sent = rendered + 1;
+    expect(field((await eventsOf(sid, sent)).at(-1)!, "clickError")).toBe("held");
     await new Promise((r) => setTimeout(r, (CLICK_ERROR_HOLD_S + 0.2) * 1000));
     const owed = await renderOne();
     expect(field(owed, "clickError")).toBe("owed");
@@ -332,7 +348,7 @@ describe("every render request writes one render event, whatever its outcome", (
     } finally {
       rmSync(dir, { force: true });
     }
-    const event = only(eventsOf("ev-dump-refused"));
+    const event = only(await eventsOf("ev-dump-refused"));
     expect(field(event, "outcome")).toBe("ok");
     expect(JSON.parse(field(event, "dumpFailed") ?? "null")).toMatch(
       /ev-dump-refused\.txt: /,
@@ -384,7 +400,7 @@ describe("every render request writes one render event, whatever its outcome", (
     );
     // Held at the gate, the render has written nothing yet — and holds the
     // config state it is drawing with (brandon-unfiled-3248.6rc).
-    expect(eventsOf("ev-late")).toEqual([]);
+    expect(eventsNow("ev-late")).toEqual([]);
     const stats = () =>
       sendDaemonRequest(sockPath, { v: PROTOCOL_VERSION, kind: "stats" });
     await expect(stats()).resolves.toMatchObject({
@@ -399,12 +415,7 @@ describe("every render request writes one render event, whatever its outcome", (
     );
     await gate.write("open\n");
     await gate.close();
-    await until(
-      () => eventsOf("ev-late").length > 0,
-      "the held render wrote its event",
-    );
-
-    const late = only(eventsOf("ev-late"));
+    const late = only(await eventsOf("ev-late"));
     expect(field(late, "timedOut")).toBe("Y");
     expect(field(late, "outcome")).toBe("ok");
     // Returned, it holds nothing: `using` released the hold on exit.

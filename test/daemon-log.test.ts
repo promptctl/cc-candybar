@@ -1,11 +1,13 @@
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { MAX_BYTES } from "../src/daemon/log";
 
-// The log sink's contract (src/daemon/log.ts): a line is on disk the moment
-// dlog returns — no stream, nothing to flush — and the file self-rotates at
-// the size boundary, shifting .1→.2→.3 and dropping the oldest.
+// The log sink's contract (src/daemon/log.ts): a line is in the file once the
+// log drains, every line logged before the process exits is in the file, and
+// the file self-rotates at the size boundary, shifting .1→.2→.3 and dropping
+// the oldest.
 //
 // [LAW:locality-or-seam] logPath() reads $XDG_STATE_HOME at call time and the
 // sink's byte counter is module state, so each scenario gets a fresh tmp state
@@ -17,6 +19,7 @@ async function withFreshLog<T>(
   fn: (
     dlog: (level: "info" | "warn" | "error", msg: string) => void,
     logFile: string,
+    drained: () => Promise<void>,
   ) => Promise<T> | T,
 ): Promise<T> {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-log-"));
@@ -28,8 +31,8 @@ async function withFreshLog<T>(
     const logFile = logPath();
     fs.mkdirSync(path.dirname(logFile), { recursive: true });
     seed(logFile);
-    const { dlog } = await import("../src/daemon/log");
-    return await fn(dlog, logFile);
+    const { dlog, drained } = await import("../src/daemon/log");
+    return await fn(dlog, logFile, drained);
   } finally {
     if (prev === undefined) delete process.env.XDG_STATE_HOME;
     else process.env.XDG_STATE_HOME = prev;
@@ -92,18 +95,21 @@ describe("dlog", () => {
   test("self-heals: a state dir removed mid-life is recreated for the next line", async () => {
     await withFreshLog(
       () => {},
-      (dlog, logFile) => {
+      async (dlog, logFile, drained) => {
         dlog("info", "one");
+        await drained();
         fs.rmSync(path.dirname(logFile), { recursive: true, force: true });
         const spy = jest
           .spyOn(process.stderr, "write")
           .mockImplementation(() => true);
         try {
           dlog("info", "two");
+          await drained();
         } finally {
           spy.mockRestore();
         }
         dlog("info", "three");
+        await drained();
         expect(fs.readFileSync(logFile, "utf8")).toMatch(/\[info\] three\n$/);
       },
     );
@@ -134,13 +140,14 @@ describe("dlog", () => {
     );
   });
 
-  test("the line is on disk when dlog returns", async () => {
+  test("the line is in the file once the log drains", async () => {
     await withFreshLog(
       () => {},
-      (dlog, logFile) => {
-        dlog("warn", "death line");
+      async (dlog, logFile, drained) => {
+        dlog("warn", "a line");
+        await drained();
         const text = fs.readFileSync(logFile, "utf8");
-        expect(text).toMatch(/^\d{4}-\d{2}-\d{2}T[^ ]+ \[warn\] death line\n$/);
+        expect(text).toMatch(/^\d{4}-\d{2}-\d{2}T[^ ]+ \[warn\] a line\n$/);
       },
     );
   });
@@ -155,8 +162,9 @@ describe("dlog", () => {
         fs.writeFileSync(`${logFile}.2`, "gen2");
         fs.writeFileSync(`${logFile}.3`, "gen3");
       },
-      (dlog, logFile) => {
+      async (dlog, logFile, drained) => {
         dlog("info", "tips over");
+        await drained();
         // The tipping line landed in the file that then became .1. Sliced,
         // not regexed: `x+` over 5 MB overflows the regex stack on node 22.
         const seeded = MAX_BYTES - 16;
@@ -170,10 +178,44 @@ describe("dlog", () => {
 
         // The counter reset: the next line opens a fresh generation alone.
         dlog("info", "fresh");
+        await drained();
         const fresh = fs.readFileSync(logFile, "utf8");
         expect(fresh).toMatch(/^\d{4}-.* \[info\] fresh\n$/);
         expect(fs.existsSync(`${logFile}.1`)).toBe(true);
       },
     );
+  });
+
+  // The death line: whatever a process logs before process.exit is in the
+  // file, in order, though the writes are asynchronous.
+  test("every line logged before process.exit is in the file", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-log-exit-"));
+    try {
+      const lines = 2000;
+      execFileSync(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          "-e",
+          `import { dlog } from ${JSON.stringify(path.resolve("src/daemon/log.ts"))};` +
+            `for (let i = 0; i < ${lines}; i++) dlog("info", "line " + i + " " + "x".repeat(200));` +
+            `dlog("warn", "death line"); process.exit(0);`,
+        ],
+        { env: { ...process.env, XDG_STATE_HOME: dir } },
+      );
+      const text = fs.readFileSync(
+        path.join(dir, "cc-candybar", "daemon.log"),
+        "utf8",
+      );
+      const logged = text.trimEnd().split("\n");
+      expect(logged).toHaveLength(lines + 1);
+      expect(logged.slice(0, -1).map((l) => / line (\d+) /.exec(l)?.[1])).toEqual(
+        Array.from({ length: lines }, (_, i) => String(i)),
+      );
+      expect(logged.at(-1)).toMatch(/\[warn\] death line$/);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
