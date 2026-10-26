@@ -14,6 +14,7 @@ import {
   VERB_DISPATCH,
   VERB_DOCTOR_FIX,
   VERB_DOCTOR_RUN,
+  VERB_LOAD_CONFIG,
   VERB_RESET_CONFIG,
   VERB_SET_STATE,
   VERB_STEP_STATE,
@@ -263,6 +264,18 @@ describe("dispatch verb — run all, aggregate, no nesting", () => {
     expect(clickError).toMatch(/no-such-key/);
     // Session ID is extracted from the first set-state effect.
     expect(clickError).toMatch(/set-state:/);
+  });
+
+  test("a session-bearing step's malformed argument is that step's error: the click still finds its session and runs the rest", () => {
+    const sessionState = new SessionState();
+    // A load-config path carrying a bad percent escape (`%ZZ`).
+    const url = effectsUrl([
+      { verb: VERB_LOAD_CONFIG, args: [SID, "BAD"] },
+      { verb: VERB_SET_STATE, args: [SID, "theme", "textual-dark"] },
+    ]).replace("BAD", encodeURIComponent("%ZZ"));
+    expect(() => clickUrl(url, ctx(sessionState))).toThrow(BadVerbArgs);
+    expect(sessionState.get(SID, "theme")).toBe("textual-dark");
+    expect(lastClickError(sessionState, SID)?.text).toMatch(/load-config:/);
   });
 
   test("click.error is not written when no session-bearing effect exists", () => {

@@ -85,6 +85,7 @@ import {
 import { decodeLayoutOp } from "../../config/layout-ops";
 import { presetNames, presetRoot } from "../../config/presets";
 import {
+  decodeFirstSegment,
   decodeSegments,
   batchAdjacentWrites,
   parseEffects,
@@ -1691,10 +1692,13 @@ export function clickSessionOf(verb: string, value: string): string | null {
 
 function sessionOfEffects(effects: readonly ParsedEffect[]): string | null {
   const bearing = effects.find((e) => SESSION_FIRST_VERBS.has(e.verb));
-  const [sid = ""] =
+  // Only the session's own segment is read: a step's malformed argument is
+  // that step's error to hold on the bar, after the click has found its
+  // session.
+  const sid =
     bearing === undefined
-      ? []
-      : decodeWire(() => decodeSegments(bearing.value));
+      ? ""
+      : decodeWire(() => decodeFirstSegment(bearing.value));
   return sid === "" ? null : sid;
 }
 
