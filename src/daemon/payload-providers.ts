@@ -14,7 +14,14 @@ import { GitDataProvider } from "./cache/git";
 import { SessionUsageStore } from "./cache/session-usage-store";
 import type { WatcherRegistry } from "./cache/watchers";
 import type { DaemonLogger } from "../utils/logger";
-import type { RenderPayloadDeps } from "./render-payload";
+import type { RefreshLedger } from "../utils/refresh-ledger";
+import {
+  readHostIdentity,
+  type HostIdentity,
+  type RenderPayloadDeps,
+} from "./render-payload";
+import { failed, ok } from "../utils/outcome";
+import { valueOf } from "../utils/logfmt";
 import { ContextProvider } from "../segments/context.js";
 import { MetricsProvider } from "../segments/metrics.js";
 import { ActivityProvider } from "../segments/activity.js";
@@ -28,27 +35,51 @@ import { ManagedStorage } from "./cache/managed-storage.js";
 // supply; everything else is a provider.
 export type PayloadProviders = Omit<RenderPayloadDeps, "lanes">;
 
+// [LAW:single-enforcer] Every provider records its refreshes in the caller's
+// one ledger, so its stats read every source in one place.
 export function createPayloadProviders(opts: {
   readonly watchers: WatcherRegistry;
   readonly logger: DaemonLogger;
+  readonly ledger: RefreshLedger;
 }): PayloadProviders {
+  const { logger, ledger } = opts;
   return {
+    host: hostOf(ledger),
     gitProvider: new GitDataProvider({
       watchers: opts.watchers,
-      logger: opts.logger,
+      logger,
+      ledger,
     }),
-    usageStore: new SessionUsageStore({ logger: opts.logger }),
-    contextProvider: new ContextProvider({ logger: opts.logger }),
-    metricsProvider: new MetricsProvider({ logger: opts.logger }),
-    activityProvider: new ActivityProvider({ logger: opts.logger }),
-    tmuxService: new TmuxService({ logger: opts.logger }),
-    autoCompact: new AutoCompactProvider(opts.logger),
-    cacheExpiry: new CacheExpiryProvider(opts.logger),
+    usageStore: new SessionUsageStore({ logger, ledger }),
+    contextProvider: new ContextProvider({ logger, ledger }),
+    metricsProvider: new MetricsProvider({ logger, ledger }),
+    activityProvider: new ActivityProvider({ logger, ledger }),
+    tmuxService: new TmuxService({ logger, ledger }),
+    autoCompact: new AutoCompactProvider(logger, ledger),
+    cacheExpiry: new CacheExpiryProvider(logger, ledger),
     managedStorage: new ManagedStorage({
       watchers: opts.watchers,
-      logger: opts.logger,
+      logger,
+      ledger,
     }),
     faults: new RefreshFaults(),
     log: opts.logger,
   };
+}
+
+// The host identity, a daemon-scoped source read once: neither the host name
+// nor the daemon's user changes while it runs. [LAW:no-silent-failure] A
+// syscall that threw is its one refresh's failure, logged once.
+function hostOf(ledger: RefreshLedger): HostIdentity {
+  const startedAt = Date.now();
+  const { identity, failures } = readHostIdentity();
+  ledger
+    .declare({ name: "host", scope: "daemon", refresh: ["first"] })
+    .recorded(
+      `name=${valueOf(identity.name ?? "-")} user=${valueOf(identity.user ?? "-")}`,
+      "first",
+      failures.length === 0 ? ok(identity) : failed(failures.join("; ")),
+      Date.now() - startedAt,
+    );
+  return identity;
 }

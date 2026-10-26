@@ -10,8 +10,9 @@ import type { ClaudeHookData, ParsedEntry, UserEntry } from "../utils/claude";
 // The fold machinery itself moved out when the activity provider became its
 // second instance (brandon-activity-ue7): what is left here is the projection.
 import { TranscriptFold, type FoldOutcome } from "../utils/transcript-fold";
-import type { DaemonLogger } from "../utils/logger";
-import { debug } from "../utils/logger";
+import { debug, quietLogger, type DaemonLogger } from "../utils/logger";
+import { RefreshLedger } from "../utils/refresh-ledger";
+
 import {
   ABSENT,
   failed,
@@ -104,8 +105,18 @@ function lastResponseTime(entries: readonly ParsedEntry[]): number | null {
 export class MetricsProvider {
   private readonly fold: TranscriptFold<MetricsState>;
 
-  constructor(opts: { logger?: DaemonLogger } = {}) {
-    this.fold = new TranscriptFold<MetricsState>(EMPTY, step, opts.logger);
+  constructor(opts: { logger?: DaemonLogger; ledger?: RefreshLedger } = {}) {
+    const logger = opts.logger ?? quietLogger;
+    this.fold = new TranscriptFold<MetricsState>(
+      EMPTY,
+      step,
+      (opts.ledger ?? new RefreshLedger(logger)).declare({
+        name: "metrics",
+        scope: "session",
+        refresh: ["request"],
+      }),
+      logger,
+    );
   }
 
   // [LAW:no-silent-failure] A hook payload with no cost block is `absent`

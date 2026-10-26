@@ -12,6 +12,7 @@ import {
   type ViewFacts,
 } from "../render-payload.js";
 import type { ManagedStorage, StorageKey } from "./managed-storage.js";
+import type { RefreshLedger } from "../../utils/refresh-ledger";
 import type { LinkSigner } from "../../click/link-signer.js";
 import type { SessionId } from "../session-id.js";
 import { fileHeldSettings } from "../setting-drafts.js";
@@ -143,6 +144,9 @@ export interface RenderDeps<S extends ViewSource = ViewSource> {
   storage: PluginStorage;
   // What signs the `run` links its compiles draw (StateDeps).
   signer: LinkSigner;
+  // The ledger its states' user sources record their refreshes in
+  // (StateDeps).
+  ledger?: RefreshLedger;
   // What a view declares of the daemon's shared entries
   // (src/daemon/render-payload.ts `declareLanes`); a test reading no built-in
   // source passes DECLARES_NOTHING.
@@ -177,6 +181,10 @@ export interface StateDeps {
   readonly storage: PluginStorage;
   // What signs the `run` links a compile draws.
   readonly signer: LinkSigner;
+  // Where a state's user sources record their refreshes: the daemon's one
+  // ledger. A build outside the daemon (check, the doctor, a test) leaves it
+  // out, and its registries keep their own.
+  readonly ledger?: RefreshLedger;
   // The compile for a config's compile key. A cache shares one between every
   // entry whose config compiles alike (RenderCache's table); a one-shot load
   // has no other entry to share with and compiles its own.
@@ -641,6 +649,8 @@ export function buildRenderState(
     store,
     config.globals.default_empty_value ?? "",
     deps.sessionState,
+    null,
+    deps.ledger,
   );
 
   let registration: Registration;

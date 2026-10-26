@@ -68,6 +68,7 @@ import type {
 } from "./protocol";
 import { parseSessionId, type SessionId } from "./session-id";
 import { createPayloadProviders } from "./payload-providers";
+import { RefreshLedger } from "../utils/refresh-ledger";
 import {
   RenderCache,
   renderCacheBudget,
@@ -77,7 +78,7 @@ import {
   type SessionView,
 } from "./cache/render";
 import { WatcherRegistry } from "./cache/watchers";
-import { RuntimeStats } from "./stats";
+import { RuntimeStats, type SourceSnapshots } from "./stats";
 import {
   makeLimits,
   mb,
@@ -138,6 +139,8 @@ import {
   prFactOf,
   sourcesFactOf,
   settlePayload,
+  refreshedFact,
+  type Refreshed,
   todayOf,
   type PayloadInputs,
 } from "./render-payload.js";
@@ -242,16 +245,18 @@ const watcherRegistry = new WatcherRegistry({
 // render in this daemon, built by the one constructor every renderer uses
 // (payload-providers.ts). The render cache owns DSL-state-per-config; these
 // serve the augmented payload that flows through every render.
+// [LAW:single-enforcer] The daemon's one record of every source's refreshes:
+// the providers', and each config's user sources (the render cache's).
+const refreshLedger = new RefreshLedger(dlog);
 const payloadProviders = createPayloadProviders({
   watchers: watcherRegistry,
   logger: dlog,
+  ledger: refreshLedger,
 });
 const {
   gitProvider: gitService,
   usageStore,
   tmuxService,
-  autoCompact,
-  cacheExpiry,
   managedStorage,
 } = payloadProviders;
 // [LAW:locality-or-seam] Constructed ephemeral so importing this module (CLI
@@ -350,6 +355,7 @@ const frameFeeds: FrameFeeds<CheckedRenderRequest> = new FrameFeeds({
   pin: (sessionId) => renderCache.pin(sessionId),
   shown: (req) => paneVisibility.shown(req.hints.tmux),
   watching: () => paneVisibility.follow(),
+  refreshes: () => refreshLedger.totals(),
   periods: FEED_PERIODS,
   now: () => performance.now(),
   log: dlog,
@@ -406,14 +412,14 @@ const renderCache = new RenderCache<SessionSource, CheckedRenderRequest>(
     log: dlog,
     storage: managedStorage,
     signer: linkSigner,
+    ledger: refreshLedger,
     declare: (holds, facts, closure, sources) =>
       declareLanes(payloadProviders, holds, facts, closure, sources),
     // [LAW:single-enforcer] What every session's view draws from: its payload
     // derived over its declaration, its picks and its histories' depths.
     source: sessionSource({
-      // [LAW:single-enforcer] The providers carry `dlog` as `log`: the view's
-      // payload projects the outcome-carrying lanes' failures, which the
-      // request drawing it logs; git logs the refreshes it makes.
+      // [LAW:single-enforcer] Every provider logs the refreshes it makes,
+      // through the one ledger, so a view's payload logs none of them.
       providers: payloadProviders,
       sessionState,
       history: (sessionId) => settingsHistory.depth(sessionId),
@@ -619,6 +625,39 @@ export function runDaemon(): void {
   // duplicate-daemon unrepresentable. The pidfile is diagnostic only — never
   // load-bearing for exclusion.
   bindOrAttachAndExit(server, socketPath(), /* retried */ false);
+}
+
+// [LAW:nothing-unseen] Every source's refreshes from the one ledger, beside
+// how many homes of each scope the owners keep and how many a view holds.
+function sourceSnapshots(): SourceSnapshots {
+  const git = gitService.getStats();
+  const tmux = tmuxService.getStats();
+  const today = usageStore.scanStats();
+  const storage = managedStorage.stats();
+  const cache = renderCache.stats;
+  return {
+    records: refreshLedger.snapshot(),
+    homes: {
+      daemon: 1,
+      configDir: today.entries,
+      repo: git.size,
+      directory: cache.size,
+      session: usageStore.getStats().size,
+      view: cache.views,
+      pane: tmux.entries,
+    },
+    held: {
+      repo: git.held,
+      pane: tmux.held,
+      configDir: today.held,
+      session: storage.held,
+    },
+    pluginStorage: {
+      folders: storage.folders,
+      faults: storage.faults,
+      lost: storage.lost,
+    },
+  };
 }
 
 // [LAW:dataflow-not-control-flow] One operation ("bring this server up or
@@ -1299,13 +1338,7 @@ export async function replyTo(
       stats: stats.snapshot({
         gitCache: gitService.getStats(),
         usageCache: usageStore.getStats(),
-        sources: {
-          tmux: tmuxService.getStats(),
-          autocompact: autoCompact.getStats(),
-          cache: cacheExpiry.getStats(),
-          today: usageStore.scanStats(),
-          pluginStorage: managedStorage.stats(),
-        },
+        sources: sourceSnapshots(),
         runs: runs.stats(),
         transcriptReads: transcriptReads(),
         renderCache: renderCache.stats,
@@ -2575,10 +2608,11 @@ async function drawAnswer(
   // fields moved — until its client's deadline. What has not
   // answered by then draws as pending, and lands for the next frame.
   const waitFrom = performance.now();
+  const refreshed: Refreshed = new Map();
   const ended = await waitWithin(
     (signal) =>
       Promise.all([
-        settlePayload(setup.payloadInputs, at),
+        settlePayload(setup.payloadInputs, at, refreshed),
         setup.view.registry.inFlight(signal),
       ]),
     wait.endsAt - waitFrom,
@@ -2596,12 +2630,8 @@ async function drawAnswer(
   noteFacts(facts, {
     waited: `${Math.round(drawFrom - waitFrom)}ms`,
     ended,
+    refreshed: refreshedFact(refreshed),
   });
-  // [LAW:no-silent-failure] Each lane the view's payload projected as a
-  // missing field, once per request: a frame draws the same payload and
-  // logs nothing of it.
-  for (const f of setup.view.source.failures())
-    dlog("warn", `provider fetch failed: ${f}`);
   const { drawn, motion, clickShown, lanes } = drawRender(setup, ANSWERING);
   const { link, failure } = diagnosticDump.sync(
     req.sessionId,

@@ -1,6 +1,5 @@
 import type { ParsedEntry, ClaudeHookData } from "../utils/claude";
 
-import { debug } from "../utils/logger";
 import {
   ABSENT,
   failed,
@@ -9,7 +8,8 @@ import {
   type Reading,
 } from "../utils/outcome";
 import { TranscriptFold, type FoldOutcome } from "../utils/transcript-fold";
-import type { DaemonLogger } from "../utils/logger";
+import { debug, quietLogger, type DaemonLogger } from "../utils/logger";
+import { RefreshLedger } from "../utils/refresh-ledger";
 
 export interface ContextInfo {
   totalTokens: number;
@@ -56,8 +56,18 @@ export class ContextProvider {
   // entry of the transcript re-parsed to find the last one.
   private readonly fold: TranscriptFold<ContextState>;
 
-  constructor(opts: { logger?: DaemonLogger } = {}) {
-    this.fold = new TranscriptFold<ContextState>(undefined, step, opts.logger);
+  constructor(opts: { logger?: DaemonLogger; ledger?: RefreshLedger } = {}) {
+    const logger = opts.logger ?? quietLogger;
+    this.fold = new TranscriptFold<ContextState>(
+      undefined,
+      step,
+      (opts.ledger ?? new RefreshLedger(logger)).declare({
+        name: "context",
+        scope: "session",
+        refresh: ["request"],
+      }),
+      logger,
+    );
   }
 
   private readonly thresholds: ContextUsageThresholds = {

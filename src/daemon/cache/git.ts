@@ -9,6 +9,12 @@ import {
 } from "../../segments/git";
 import { ABSENT, failed, ok, type Outcome } from "../../utils/outcome";
 import { quietLogger } from "../../utils/logger";
+import { valueOf as logfmtValue } from "../../utils/logfmt";
+import {
+  RefreshLedger,
+  type RefreshTrigger,
+  type Refreshes,
+} from "../../utils/refresh-ledger";
 import {
   WatcherRegistry,
   type DirTarget,
@@ -138,6 +144,17 @@ type PrMove = "-" | "kept" | "recalled" | "looked-up" | "owed" | "unkeyed";
 // to whoever shows it next. A pass none of these asked for is the period's.
 type PassReason = "watch" | "first" | "resume" | "pr";
 
+// [LAW:one-source-of-truth] A pass's trigger in the ledger's vocabulary: a
+// first value asked for (a new option set, a PR's first key) makes it a first
+// read, else a watch or a hold's return makes it a change, else its period
+// started it. Which reasons it answered stay on its event (`asked=`).
+function triggerOf(
+  asked: readonly PassReason[],
+): Extract<RefreshTrigger, "first" | "period" | "change"> {
+  if (asked.includes("first") || asked.includes("pr")) return "first";
+  return asked.length === 0 ? "period" : "change";
+}
+
 // [LAW:types-are-the-program] One repo the cache knows. The watch lives as long
 // as the state does — closing and reopening it per value leaked native memory
 // on macOS (brandon-unfiled-3248.576q; src/daemon/cache/watchers.ts). Its one
@@ -176,7 +193,6 @@ export interface GitCacheStats {
   hits: number;
   misses: number;
   changes: number;
-  refreshes: number;
   watchers: number;
 }
 
@@ -272,7 +288,8 @@ export class GitDataProvider {
   private hits = 0;
   private misses = 0;
   private changes = 0;
-  private refreshCount = 0;
+  private readonly gitRefreshes: Refreshes<"first" | "period" | "change">;
+  private readonly prRefreshes: Refreshes<"first" | "period">;
   private readonly inner: GitService;
   private readonly periodMs: number;
   private readonly maxRepos: number;
@@ -290,12 +307,24 @@ export class GitDataProvider {
       // non-daemon consumers leave the default (debug-routed, quiet
       // unless CC_CANDYBAR_DEBUG is set).
       logger?: GitProviderLogger;
+      ledger?: RefreshLedger;
     } = {},
   ) {
     this.inner = opts.inner ?? new GitService();
     this.periodMs = opts.periodMs ?? GIT_PERIOD_MS;
     this.maxRepos = opts.maxRepos ?? DEFAULT_MAX_REPOS;
     this.logger = opts.logger ?? quietLogger;
+    const ledger = opts.ledger ?? new RefreshLedger(this.logger);
+    this.gitRefreshes = ledger.declare({
+      name: "git",
+      scope: "repo",
+      refresh: ["first", "period", "change"],
+    });
+    this.prRefreshes = ledger.declare({
+      name: "pr",
+      scope: "repo",
+      refresh: ["first", "period"],
+    });
     if (opts.watchers) {
       this.watchers = opts.watchers;
       this.ownsWatchers = false;
@@ -320,7 +349,6 @@ export class GitDataProvider {
       hits: this.hits,
       misses: this.misses,
       changes: this.changes,
-      refreshes: this.refreshCount,
       watchers: this.watchers.size(),
     };
   }
@@ -598,7 +626,7 @@ export class GitDataProvider {
   private async pass(state: RepoState): Promise<void> {
     if (this.repos.get(state.root) !== state) return;
     const startedAt = Date.now();
-    const by = state.asked.size === 0 ? "period" : [...state.asked].join(",");
+    const asked = [...state.asked];
     state.asked.clear();
     const values: GitValue[] = [];
     // A value something reads, or something waits on, is read; the rest are
@@ -621,7 +649,6 @@ export class GitDataProvider {
     ]);
     // Dropped or closed while the read was out: nothing of it is stored.
     if (this.repos.get(state.root) !== state) return;
-    this.refreshCount++;
     const failures = new Set<string>();
     values.forEach((value, i) => {
       const outcome = outcomes[i]!;
@@ -632,11 +659,6 @@ export class GitDataProvider {
         for (const f of gitInfoFailures(outcome.value)) failures.add(f);
       }
     });
-    // [LAW:no-silent-failure] Logged once, by the refresh that failed; a read
-    // of the stored value never logs it again.
-    for (const f of failures) {
-      this.logger("warn", `git refresh failed (${state.root}): ${f}`);
-    }
     // An `absent` repo — a removed worktree, a deleted `.git` — is stored as
     // absent like any outcome. A state has one lifetime rule: kept while in
     // use, and bounded by the LRU once nothing uses it.
@@ -650,9 +672,14 @@ export class GitDataProvider {
           ? unkeyedPr(pr, failures)
           : this.movePr(state, pr, branch, remote ?? pr.remote);
     this.held(state);
-    this.logger(
-      "info",
-      `git refresh ${state.root} by=${by} values=${values.length} failed=${failures.size} pr=${prMove} took=${Date.now() - startedAt}ms`,
+    // [LAW:no-silent-failure] Logged once, by the refresh that failed, every
+    // reason it met on the one event; a read of the stored value never logs
+    // it again.
+    this.gitRefreshes.recorded(
+      `${state.root} asked=${asked.join(",") || "-"} values=${values.length} pr=${prMove}`,
+      triggerOf(asked),
+      failures.size === 0 ? ok(null) : failed([...failures].join("; ")),
+      Date.now() - startedAt,
     );
   }
 
@@ -662,7 +689,7 @@ export class GitDataProvider {
   private prSource(state: RepoState): PrSource {
     const pr: PrSource = {
       period: new Period(() => {
-        void this.readPr(state, pr);
+        void this.readPr(state, pr, "period");
       }),
       seen: new Map(),
       holders: 0,
@@ -714,17 +741,22 @@ export class GitDataProvider {
     }
     renew(pr, "unread");
     pr.missed = false;
-    void this.readPr(state, pr);
+    void this.readPr(state, pr, "first");
     return "looked-up";
   }
 
   // One lookup for the PR's current key; an ask for a key already being looked
   // up shares that lookup. The forge dispatch delegates to
   // inner.resolvePullRequest — this layer is the source's lifecycle only.
-  private readPr(state: RepoState, pr: PrSource): Promise<void> {
+  private readPr(
+    state: RepoState,
+    pr: PrSource,
+    by: "first" | "period",
+  ): Promise<void> {
     const key = pr.key;
     if (pr.inFlight?.key === key) return pr.inFlight.done;
     const remote = pr.remote;
+    const startedAt = Date.now();
     const lookup: Promise<Outcome<PullRequest>> =
       remote.kind === "ok"
         ? this.inner
@@ -734,12 +766,12 @@ export class GitDataProvider {
     const done = lookup.then((outcome) => {
       if (pr.inFlight?.key === key) pr.inFlight = null;
       if (this.repos.get(state.root) !== state) return;
-      if (outcome.kind === "failed") {
-        this.logger(
-          "warn",
-          `git refresh failed (${state.root}): git.pr: ${outcome.reason}`,
-        );
-      }
+      this.prRefreshes.recorded(
+        `${state.root} key=${logfmtValue(key)}`,
+        by,
+        outcome,
+        Date.now() - startedAt,
+      );
       // Kept under its own key whether or not the PR has moved on since.
       const at = Date.now();
       pr.seen.delete(key);

@@ -307,13 +307,6 @@ export type DrawnPayload = RenderPayloadOf<Pending>;
 // facts of the draw's own instant (DRAW_PROJECTIONS, which each draw hands
 // its binding), so no stored value moves with the clock.
 export type ViewPayload = Omit<DrawnPayload, "feeds" | "today">;
-// A view's payload, and what it projected as missing fields — a failed
-// lane — for the request that draws it to log.
-export interface ViewPayloadOf {
-  readonly payload: ViewPayload;
-  readonly failures: readonly string[];
-}
-
 // The control's facts (src/segments/autocompact.ts) — or the refusal that the
 // settings file could not be read, carried as text, so the control says why
 // it cannot show the window.
@@ -587,11 +580,9 @@ export interface RenderPayloadDeps {
   readonly autoCompact: AutoCompactProvider;
   // Each session's prompt-cache expiry, read off its transcript's tail.
   readonly cacheExpiry: CacheExpiryProvider;
-  // [LAW:single-enforcer] The log capability for the provider lanes whose
-  // owner does not log: the request drawing a view's payload is the ONE
-  // place their failures are logged (its `failures`). Git, tmux and autocompact are not among them: each
-  // owner refreshes on its own triggers and logs each refresh that failed,
-  // so a failure stored there is logged once, never once per render.
+  // The machine's identity, read once by the process that renders.
+  readonly host: HostIdentity;
+  // The log for a session lane whose refresh threw: a bug no owner saw.
   readonly log: DaemonLogger;
   // Each session lane whose refresh threw, until one runs clean.
   readonly faults: RefreshFaults;
@@ -743,23 +734,23 @@ export function shortHostname(hostname: string): string {
   return dot < 0 ? hostname : hostname.slice(0, dot);
 }
 
+// The machine's identity: its short host name and the user the daemon runs
+// as, each absent where its syscall threw. A daemon-scoped source read once
+// (createPayloadProviders): neither changes while the daemon runs, and the
+// session's own `ssh` hint is laid over it per payload.
+export type HostIdentity = Pick<HostPayload, "name" | "user">;
+
 /**
- * Assemble the host identity for one render.
- *
- * [LAW:effects-at-boundaries] Named `read*`, not `project*`, because it is not
- * pure: two syscalls happen here. That is in bounds — this module IS the
- * daemon's data-assembly edge, the same edge that reads `process.env.HOME`
- * below — and the point of the seam is that nothing downstream reads them
- * again.
+ * Read the host identity, once per process that renders.
  *
  * [LAW:no-silent-failure] A throwing syscall (a uid with no passwd entry is the
  * realistic case, in a stripped container) yields an ABSENT field plus a
- * description for the caller to log, exactly like a failed git lane — never a
+ * description for the caller to record as the read's failure — never a
  * fabricated name, and never an exception: the whole bar must not blank over a
  * cosmetic cell.
  */
-function readHost(hints: ClientHints): {
-  readonly host: HostPayload;
+export function readHostIdentity(): {
+  readonly identity: HostIdentity;
   readonly failures: readonly string[];
 } {
   const failures: string[] = [];
@@ -774,20 +765,12 @@ function readHost(hints: ClientHints): {
       return undefined;
     }
   };
-
   const name = attempt("name", () => shortHostname(os.hostname()));
   const user = attempt("user", () => os.userInfo().username);
   return {
-    host: {
+    identity: {
       ...(name !== undefined && { name }),
       ...(user !== undefined && { user }),
-      // [LAW:one-source-of-truth] Passed straight through from the parsed
-      // hint. The daemon deliberately does NOT consult its own SSH_* env as a
-      // fallback: that env belongs to whichever shell spawned it, so a
-      // "helpful" fallback would confidently mislabel every session that
-      // daemon serves. Absent hint → absent field → declared default + a
-      // recorded last_error, which is the honest report of "not answered".
-      ...(hints.ssh !== undefined && { ssh: hints.ssh }),
     },
     failures,
   };
@@ -1073,6 +1056,21 @@ function settingsPathOf(hints: ClientHints): string {
   return claudeSettingsPath(claudeConfigDir(hints.claudeConfigDir));
 }
 
+// The lanes a request's arrival refreshed: how long each took, or null while
+// it is still out.
+export type Refreshed = Map<RefreshLane, number | null>;
+
+// [LAW:nothing-unseen] The render event's `refreshed=`: each lane the
+// request's arrival refreshed, with how long it took, `…` for one still out
+// when the answer was drawn; `-` for none.
+export function refreshedFact(refreshed: Refreshed): string {
+  return (
+    [...refreshed]
+      .map(([lane, ms]) => `${lane}:${ms === null ? "…" : `${ms}ms`}`)
+      .join(",") || "-"
+  );
+}
+
 // [LAW:single-enforcer] A statusline request's own triggers
 // (brandon-unfiled-3248.8ro6, step 3): it refreshes every session source the
 // closure reads — the transcript's folds, the cache expiry, the speed sample,
@@ -1087,9 +1085,12 @@ function settingsPathOf(hints: ClientHints): string {
 // derived from what is stored, reads it failed rather than not answered.
 //
 // `at` is the request's arrival, the instant its speed sample is taken at.
+// `refreshed` is the request's record of them: each lane it starts, and how
+// long the lane took once it lands.
 export async function refreshPayload(
   inputs: PayloadInputs,
   at: Instant,
+  refreshed: Refreshed,
 ): Promise<void> {
   const { hookData, deps, hints } = inputs;
   const want = wanted(inputs.neededInputPaths);
@@ -1100,6 +1101,8 @@ export async function refreshPayload(
     run: () => Promise<unknown>,
   ): Promise<void> => {
     if (!needed) return;
+    const startedAt = performance.now();
+    refreshed.set(name, null);
     let threw: string | null = null;
     try {
       await run();
@@ -1107,6 +1110,7 @@ export async function refreshPayload(
       deps.log("error", `${name} lane threw: ${inspect(e)}`);
       threw = `${name}: ${String(e)}`;
     }
+    refreshed.set(name, Math.round(performance.now() - startedAt));
     deps.faults.refreshed(sessionId, name, threw);
   };
   await Promise.all([
@@ -1389,15 +1393,16 @@ function projectPayload(
   inputs: PayloadInputs,
   draw: DrawInputs,
   lanes: Lanes,
-): ViewPayloadOf {
+): ViewPayload {
   const { hookData, hints } = inputs;
   const { effective, configFacts } = draw;
   const { configPath, ...settingCounts } = configFacts;
   const want = wanted(inputs.neededInputPaths);
   // `over` is the total fold of one lane's reading into its payload field:
-  // ok → its projection, absent → undefined, failed → undefined + a failure to
-  // log, pending → the payload's pending spelling.
-  const failures: string[] = [];
+  // ok → its projection, absent or failed → undefined, pending → the payload's
+  // pending spelling. [LAW:no-silent-failure] A failed lane was logged by the
+  // refresh that failed, its owner's (src/utils/refresh-ledger.ts), so a
+  // payload derived from it logs nothing again.
   const over = <T, U>(
     reading: Reading<T>,
     project: (value: T) => U | undefined,
@@ -1406,8 +1411,6 @@ function projectPayload(
       case "pending":
         return PENDING;
       case "failed":
-        failures.push(reading.reason);
-        return undefined;
       case "absent":
         return undefined;
       case "ok":
@@ -1427,10 +1430,6 @@ function projectPayload(
     lanes.git.kind === "pending"
       ? PENDING
       : projectGitInfo(lanes.git, () => PENDING);
-  // Ungated, like `home` below: two syscalls and a hint already in hand, so a
-  // `wants` gate would add a branch and save nothing.
-  const hostProjection = readHost(hints);
-  failures.push(...hostProjection.failures);
   const tmuxValue =
     lanes.tmuxSession.kind === "pending" ? PENDING : valueOf(lanes.tmuxSession);
   // The controls are capped to the model's context window, so they are not
@@ -1529,7 +1528,15 @@ function projectPayload(
         ...(tmuxValue !== undefined && { session: tmuxValue }),
       },
     }),
-    host: hostProjection.host,
+    // [LAW:one-source-of-truth] Passed straight through from the parsed
+    // hint. The daemon deliberately does NOT consult its own SSH_* env as a
+    // fallback: that env belongs to whichever shell spawned it, so a
+    // "helpful" fallback would confidently mislabel every session that
+    // daemon serves.
+    host: {
+      ...inputs.deps.host,
+      ...(hints.ssh !== undefined && { ssh: hints.ssh }),
+    },
     // [LAW:one-source-of-truth] Always present — the daemon resolves every
     // one of these each render (for BuildLineOptions/basePalette), and these
     // are those exact values. No `wants` gate: each costs nothing (already in
@@ -1575,7 +1582,7 @@ function projectPayload(
       return reading.kind === "pending" ? PENDING : reading;
     }),
   };
-  return { payload, failures };
+  return payload;
 }
 
 // [LAW:nothing-unseen] The render event's `sources=` and `sourcesPending=`:
@@ -1639,14 +1646,14 @@ function speedPayloadOf(obs: SpeedObservation): SpeedPayload | undefined {
 
 // [LAW:one-source-of-truth] The one assembly of a view's payload: every
 // source as its owner holds it now, a value not answered yet as PENDING —
-// which the draw takes as its own outcome (the placement's loading cell) —
-// and the failures it projected as missing fields. Performs no I/O, refreshes
+// which the draw takes as its own outcome (the placement's loading cell).
+// Performs no I/O, refreshes
 // nothing and reads no instant, so the session's view keeps it as one computed
 // (src/daemon/session-source.ts), recomputed in the turn a fact it reads moves.
 export function payloadOf(
   inputs: PayloadInputs,
   draw: DrawInputs,
-): ViewPayloadOf {
+): ViewPayload {
   return projectPayload(inputs, draw, readLanes(inputs));
 }
 
@@ -1692,8 +1699,9 @@ export function todayOf(
 export async function settlePayload(
   inputs: PayloadInputs,
   at: Instant,
+  refreshed: Refreshed,
 ): Promise<void> {
-  await refreshPayload(inputs, at);
+  await refreshPayload(inputs, at, refreshed);
   // [LAW:one-source-of-truth] The one wait for an answer: the lanes the view
   // declares now, read again once every landing they waited on has landed —
   // so a lane that turns unread again (a new key) is waited out too, and a

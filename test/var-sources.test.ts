@@ -1,3 +1,4 @@
+import { RefreshLedger } from "../src/utils/refresh-ledger";
 import { reaction } from "mobx";
 import { ColorDepth, ensureContrast, parseRgbHex } from "@promptctl/rich-js";
 import { feedInputs } from "./helpers/inputs";
@@ -664,6 +665,41 @@ describe("SourceRegistry — shell: ttl cache policy", () => {
       await ran(registry);
 
       expect(store.read("val")).toBe("v2");
+    } finally {
+      cleanup();
+    }
+  });
+
+  // [LAW:nothing-unseen] A user source is a source like any other: its
+  // refreshes are recorded in the ledger under its derived scope, by the
+  // trigger that asked — its first read, then its period.
+  it("records each run in the ledger: its first read, then its period's", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const f = path.join(dir, "v");
+      fs.writeFileSync(f, "v1");
+      const ledger = new RefreshLedger();
+      const store = new VariableStore();
+      const registry = registryOver(store, "", undefined, null, ledger);
+      registry.declareShell("val", `cat ${f}`, {
+        cwd: process.cwd(),
+        parse: TEXT,
+        cache: { kind: "ttl", durationMs: MIN_SHELL_TTL_MS },
+      });
+      await ran(registry);
+      await elapse(TTL_TICK_WAIT_MS);
+      await ran(registry);
+
+      expect(ledger.snapshot()).toEqual([
+        {
+          name: "var.val",
+          scope: "directory",
+          refreshes: { first: 1, period: expect.any(Number) },
+          failures: 0,
+          lastMs: expect.any(Number),
+        },
+      ]);
+      expect(ledger.snapshot()[0]!.refreshes.period).toBeGreaterThanOrEqual(1);
     } finally {
       cleanup();
     }

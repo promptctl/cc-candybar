@@ -4,7 +4,8 @@ import {
   readAutoCompactWindow,
   type AutoCompactWindow,
 } from "./autocompact.js";
-import { Refreshes, type SourceStats } from "../utils/keyed-source.js";
+import { RefreshLedger, type Refreshes } from "../utils/refresh-ledger.js";
+import type { SourceStats } from "../utils/keyed-source.js";
 import { quietLogger, type DaemonLogger } from "../utils/logger.js";
 import { valueOf } from "../utils/logfmt.js";
 import { PENDING, type Outcome, type Reading } from "../utils/outcome.js";
@@ -30,8 +31,15 @@ export class AutoCompactProvider {
   private readonly known = new ObservableLru<string, Known>(MAX_FILES);
   private readonly refreshes: Refreshes<"request">;
 
-  constructor(logger: DaemonLogger = quietLogger) {
-    this.refreshes = new Refreshes("autocompact", ["request"], logger);
+  constructor(
+    logger: DaemonLogger = quietLogger,
+    ledger: RefreshLedger = new RefreshLedger(logger),
+  ) {
+    this.refreshes = ledger.declare({
+      name: "autocompact",
+      scope: "configDir",
+      refresh: ["request"],
+    });
   }
 
   window(settingsPath: string): Outcome<AutoCompactWindow> {
@@ -61,8 +69,9 @@ export class AutoCompactProvider {
     return this.known.get(settingsPath)?.outcome ?? PENDING;
   }
 
-  getStats(): SourceStats<"request"> {
-    return this.refreshes.stats(this.known.size);
+  getStats(): SourceStats {
+    const { refreshes, failures, lastMs } = this.refreshes.record();
+    return { entries: this.known.size, refreshes, failures, lastMs };
   }
 }
 

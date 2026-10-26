@@ -115,6 +115,9 @@ describe("a daemon render's event counts the session's prompts", () => {
       // A count drawn before its fold landed would read `-` for the wrong
       // reason: the wait says so by name.
       expect(l).toContain(" ended=answered ");
+      // [LAW:nothing-unseen] What the request's arrival refreshed is on its
+      // render event: the metrics lane the bar reads, landed, with its length.
+      expect(l).toMatch(/ refreshed=\S*metrics:\d+ms/);
       return {
         prompts: l.match(/ prompts=(\S+) /)?.[1],
         nonPrompts: l.match(/ nonPrompts=(\S+) /)?.[1],

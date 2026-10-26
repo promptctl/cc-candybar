@@ -1,4 +1,4 @@
-import { RuntimeStats } from "../src/daemon/stats";
+import { RuntimeStats, type SourceSnapshots } from "../src/daemon/stats";
 import { EMPTY_STORES } from "./helpers/doctor-facts";
 import {
   formatStats,
@@ -14,6 +14,41 @@ import { join } from "node:path";
 const pkg = JSON.parse(
   readFileSync(join(process.cwd(), "package.json"), "utf8"),
 ) as { version: string };
+
+// Every source's record as the ledger keeps it, and the homes by scope.
+const SOURCES: SourceSnapshots = {
+  records: [
+    {
+      name: "tmux",
+      scope: "pane",
+      refreshes: { first: 2, period: 7, change: 0, supersede: 0 },
+      failures: 1,
+      lastMs: 3,
+    },
+    {
+      name: "cache",
+      scope: "session",
+      refreshes: { request: 3 },
+      failures: 1,
+      lastMs: 0,
+    },
+  ],
+  homes: {
+    daemon: 1,
+    configDir: 1,
+    repo: 4,
+    directory: 3,
+    session: 10,
+    view: 2,
+    pane: 2,
+  },
+  held: { repo: 1, pane: 1, configDir: 1, session: 1 },
+  pluginStorage: {
+    folders: 1,
+    faults: { unusable: 0, refused: 1, error: 0 },
+    lost: 1,
+  },
+};
 
 describe("RuntimeStats.snapshot", () => {
   test("produces a stable shape with extras merged in", () => {
@@ -34,35 +69,10 @@ describe("RuntimeStats.snapshot", () => {
         hits: 100,
         misses: 20,
         changes: 3,
-        refreshes: 0,
         watchers: 2,
       },
       usageCache: { size: 10, hits: 50, misses: 5, sweeps: 1 },
-      sources: {
-        today: {
-          entries: 1,
-          held: 1,
-          refreshes: { first: 1, period: 4, change: 0, supersede: 0 },
-          failures: 0,
-        },
-        tmux: {
-          entries: 2,
-          held: 1,
-          refreshes: { first: 2, period: 7, change: 0, supersede: 0 },
-          failures: 1,
-        },
-        autocompact: { entries: 1, refreshes: { request: 2 }, failures: 0 },
-        cache: { entries: 1, refreshes: { request: 3 }, failures: 1 },
-        pluginStorage: {
-          entries: 2,
-          held: 1,
-          refreshes: { first: 2, period: 0, change: 3, supersede: 1 },
-          failures: 0,
-          folders: 1,
-          faults: { unusable: 0, refused: 1, error: 0 },
-          lost: 1,
-        },
-      },
+      sources: SOURCES,
       transcriptReads: { reads: 0, bytes: 0, longLines: 0, largestLine: 0 },
       renderCache: {
         size: 3,
@@ -128,23 +138,7 @@ describe("RuntimeStats.snapshot", () => {
     expect(snap.gitCache.hits).toBe(100);
     expect(snap.gitCache.held).toBe(1);
     expect(snap.usageCache.size).toBe(10);
-    expect(snap.sources.tmux.refreshes).toEqual({
-      first: 2,
-      period: 7,
-      change: 0,
-      supersede: 0,
-    });
-    expect(snap.sources.pluginStorage).toMatchObject({
-      folders: 1,
-      faults: { unusable: 0, refused: 1, error: 0 },
-      lost: 1,
-    });
-    expect(snap.sources.autocompact.refreshes).toEqual({ request: 2 });
-    expect(snap.sources.cache).toEqual({
-      entries: 1,
-      refreshes: { request: 3 },
-      failures: 1,
-    });
+    expect(snap.sources).toEqual(SOURCES);
     expect(snap.effectCache).toEqual({ sessions: 2, effects: 5 });
     expect(snap.menuIdle).toEqual({ sessions: 2, armed: 1 });
     expect(snap.runs).toEqual({
@@ -252,35 +246,10 @@ describe("formatStats", () => {
         hits: 80,
         misses: 20,
         changes: 3,
-        refreshes: 0,
         watchers: 5,
       },
       usageCache: { size: 3, hits: 40, misses: 10, sweeps: 0 },
-      sources: {
-        today: {
-          entries: 1,
-          held: 1,
-          refreshes: { first: 1, period: 4, change: 0, supersede: 0 },
-          failures: 0,
-        },
-        tmux: {
-          entries: 2,
-          held: 1,
-          refreshes: { first: 2, period: 7, change: 0, supersede: 0 },
-          failures: 1,
-        },
-        autocompact: { entries: 1, refreshes: { request: 2 }, failures: 0 },
-        cache: { entries: 1, refreshes: { request: 3 }, failures: 1 },
-        pluginStorage: {
-          entries: 2,
-          held: 1,
-          refreshes: { first: 2, period: 0, change: 3, supersede: 1 },
-          failures: 0,
-          folders: 1,
-          faults: { unusable: 0, refused: 1, error: 0 },
-          lost: 1,
-        },
-      },
+      sources: SOURCES,
       transcriptReads: { reads: 0, bytes: 0, longLines: 0, largestLine: 0 },
       renderCache: {
         size: 4,
@@ -321,15 +290,18 @@ describe("formatStats", () => {
     expect(out).toContain("held          2");
     expect(out).toContain("hit rate      80.0%");
     expect(out).toContain(
-      "tmux          entries=2 held=1 failures=1 refreshes first:2 period:7 change:0 supersede:0",
+      "pane/tmux                 failures=1 last=3ms refreshes first:2 period:7 change:0 supersede:0",
     );
     expect(out).toContain(
-      "autocompact   entries=1 failures=0 refreshes request:2",
+      "session/cache             failures=1 last=0ms refreshes request:3",
     );
     expect(out).toContain(
-      "pluginStorage  entries=2 held=1 failures=0 refreshes first:2 period:0 change:3 supersede:1",
+      "homes         daemon:1 configDir:1 repo:4 directory:3 session:10 view:2 pane:2",
     );
-    expect(out).toContain("folders=1 lost=1 faults unusable:0 refused:1 error:0");
+    expect(out).toContain("held          repo:1 pane:1 configDir:1 session:1");
+    expect(out).toContain(
+      "plugin storage folders=1 lost=1 faults unusable:0 refused:1 error:0",
+    );
     expect(out).toContain("refused       1");
     expect(out).toContain("errors        3");
     expect(out).toContain("active        5");
@@ -361,7 +333,6 @@ describe("formatStats", () => {
         hits: 0,
         misses: 0,
         changes: 0,
-        refreshes: 0,
         watchers: 0,
       },
       usageCache: { size: 0, hits: 0, misses: 0, sweeps: 0 },

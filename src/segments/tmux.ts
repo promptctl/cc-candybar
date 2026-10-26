@@ -3,6 +3,7 @@ import type { TmuxHint } from "../tmux-hint";
 import type { Holds } from "../utils/holds";
 import { KeyedSource, type KeyedSourceStats } from "../utils/keyed-source";
 import { quietLogger, type DaemonLogger } from "../utils/logger";
+import { RefreshLedger } from "../utils/refresh-ledger";
 import type { Lane } from "../utils/reading";
 import { valueOf } from "../utils/logfmt";
 import { ABSENT, failed, ok, type Outcome } from "../utils/outcome";
@@ -28,9 +29,16 @@ const MAX_ENTRIES = 64;
 export class TmuxService {
   private readonly names: KeyedSource<TmuxHint, string>;
 
-  constructor(opts: { readonly logger?: DaemonLogger } = {}) {
+  constructor(
+    opts: {
+      readonly logger?: DaemonLogger;
+      readonly ledger?: RefreshLedger;
+    } = {},
+  ) {
+    const logger = opts.logger ?? quietLogger;
     this.names = new KeyedSource({
       name: "tmux",
+      scope: "pane",
       // A socket path cannot hold a newline's worth of pane id, so the pair
       // is unambiguous.
       keyOf: (hint) => `${hint.socket}\n${hint.pane}`,
@@ -39,7 +47,8 @@ export class TmuxService {
       read: askSessionName,
       every: { okMs: NAME_PERIOD_MS, failedMs: NAME_PERIOD_MS },
       maxEntries: MAX_ENTRIES,
-      logger: opts.logger ?? quietLogger,
+      logger,
+      ledger: opts.ledger ?? new RefreshLedger(logger),
     });
   }
 

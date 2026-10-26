@@ -42,6 +42,7 @@ import { laneOutcome, type Lane } from "../../utils/reading";
 import { valueOf } from "../../utils/logfmt";
 import type { Holds } from "../../utils/holds";
 import { KeyedSource, type KeyedSourceStats } from "../../utils/keyed-source";
+import { RefreshLedger, type Refreshes } from "../../utils/refresh-ledger";
 import type { Every } from "../../utils/period";
 import { Kept } from "../../var-system/store";
 
@@ -472,6 +473,10 @@ export class SessionUsageStore {
   private readonly staleAgeMs: number;
   private readonly log: DaemonLogger;
   private readonly renderTally: IngestTally = { hits: 0, misses: 0 };
+  private readonly ledger: RefreshLedger;
+  // The session record's refresh, which its statusline request makes; a
+  // rescan's reads are its `today` scan's.
+  private readonly usage: Refreshes<"request">;
   private sweeps = 0;
   private sweepTimer: NodeJS.Timeout | null = null;
 
@@ -484,18 +489,27 @@ export class SessionUsageStore {
       // daemon passes `dlog`; every other consumer keeps the debug-routed
       // default and never writes daemon.log.
       logger?: DaemonLogger;
+      ledger?: RefreshLedger;
     } = {},
   ) {
     this.log = opts.logger ?? quietLogger;
+    this.ledger = opts.ledger ?? new RefreshLedger(this.log);
+    this.usage = this.ledger.declare({
+      name: "usage",
+      scope: "session",
+      refresh: ["request"],
+    });
     this.staleAgeMs = opts.staleAgeMs ?? DEFAULT_STALE_AGE_MS;
     this.scans = new KeyedSource({
       name: "today",
+      scope: "configDir",
       keyOf: (paths) => paths.join("\0"),
       fields: (paths) => `dirs=${valueOf(paths.join(","))}`,
       read: (paths) => this.scan(paths),
       every: opts.rescan ?? DEFAULT_RESCAN,
       maxEntries: MAX_UNHELD_SCANS,
       logger: this.log,
+      ledger: this.ledger,
     });
     const interval = opts.sweepIntervalMs ?? DEFAULT_SWEEP_INTERVAL_MS;
     if (interval > 0) {
@@ -565,12 +579,27 @@ export class SessionUsageStore {
     transcriptPath: string | undefined,
     knownStamp?: string,
   ): Promise<Outcome<SessionRecord>> {
+    // [LAW:no-ambient-temporal-coupling] This call's own tally, so whether
+    // IT read is its own fact, never another session's refresh landing in the
+    // same await.
+    const tally: IngestTally = { hits: 0, misses: 0 };
+    const startedAt = Date.now();
     const record = await this.ingest(
       sessionId,
       transcriptPath,
-      this.renderTally,
+      tally,
       knownStamp,
     );
+    this.renderTally.hits += tally.hits;
+    this.renderTally.misses += tally.misses;
+    if (tally.misses > 0) {
+      this.usage.recorded(
+        `sid=${valueOf(sessionId)}`,
+        "request",
+        record,
+        Date.now() - startedAt,
+      );
+    }
     // The session's slot records that its refresh answered — a failure kept
     // so the draws until the next refresh show it.
     answer(

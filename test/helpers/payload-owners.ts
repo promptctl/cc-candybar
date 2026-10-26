@@ -37,6 +37,7 @@ import { settledLane, type Current, type Lane } from "../../src/utils/reading";
 import {
   declareLanes,
   payloadOf,
+  readHostIdentity,
   settlePayload,
   todayOf,
   type ConfigFileFacts,
@@ -264,6 +265,8 @@ export function absentOwners() {
     tmuxService: fakeTmux(() => ABSENT),
     autoCompact: fakeAutoCompact(() => ABSENT),
     faults: new RefreshFaults(),
+    // The machine's identity, as the daemon reads it once.
+    host: readHostIdentity().identity,
   };
 }
 
@@ -297,14 +300,13 @@ export async function requestPayload(
     neededInputPaths: closure,
     deps: { ...deps, lanes: () => lanes } as RenderPayloadDeps,
   };
-  await settlePayload(inputs, at);
-  const { payload, failures } = payloadOf(inputs, {
+  await settlePayload(inputs, at, new Map());
+  const payload = payloadOf(inputs, {
     effective,
     configFacts,
     history: EMPTY_HISTORY_DEPTH,
     back: 0,
   });
-  for (const f of failures) deps.log("warn", `provider fetch failed: ${f}`);
   return {
     ...payload,
     feeds: UNFOLLOWED_FEEDS,

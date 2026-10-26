@@ -4,6 +4,7 @@
 // function ran. Every view here is the daemon's own: a render cache over the
 // payload providers, declared by `declareLanes`, drawn from `sessionSource`.
 
+import { RefreshLedger } from "../src/utils/refresh-ledger";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import fs from "node:fs";
 import os from "node:os";
@@ -124,7 +125,11 @@ function rig(): Rig {
     lines.push(`${level} ${message}`);
   };
   const watchers = new WatcherRegistry({ counters, logger: log });
-  const providers = createPayloadProviders({ watchers, logger: log });
+  const providers = createPayloadProviders({
+    watchers,
+    logger: log,
+    ledger: new RefreshLedger(log),
+  });
   const sessionState = new SessionState();
   const reloads = new ReloadSignal();
   const cache = new RenderCache<SessionSource>(
