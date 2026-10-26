@@ -873,16 +873,38 @@ function checkRuleSlotReads(ctx: ValidateCtx, cfg: DslConfig): void {
           ? [exact]
           : [...names].filter((name) => name.startsWith(`${path}.`));
       for (const name of reached) {
-        if (seen.has(name)) continue;
-        seen.add(name);
-        const decl = declared.get(name)!;
-        const slot = decl.kind === "input" ? slotAt(decl.path) : undefined;
-        if (slot !== undefined)
-          return `reads "${name}", the ${slot}'s own name`;
-        if (decl.kind !== "template") continue;
-        const through = slotRead(decl.template, seen);
-        if (through !== null) return `reads "${name}", which ${through}`;
+        const through = nameRead(name, seen);
+        if (through !== null) return through;
       }
+    }
+    return null;
+  };
+  // The same, through a declared variable: its own input path, its template,
+  // or the cache policy that re-runs it — a source keyed on a slot changes
+  // when the slot does, so a rule reading it reads its own answer one run on.
+  const nameRead = (name: string, seen: Set<string>): string | null => {
+    if (seen.has(name)) return null;
+    seen.add(name);
+    const decl = declared.get(name)!;
+    const slot = decl.kind === "input" ? slotAt(decl.path) : undefined;
+    if (slot !== undefined) return `reads "${name}", the ${slot}'s own name`;
+    if (decl.kind === "template") {
+      const through = slotRead(decl.template, seen);
+      return through === null ? null : `reads "${name}", which ${through}`;
+    }
+    if (!hasCacheField(decl)) return null;
+    if ("key" in decl.cache) {
+      const through = slotRead(decl.cache.key, seen);
+      return through === null
+        ? null
+        : `reads "${name}", whose cache.key ${through}`;
+    }
+    if (!("depends_on" in decl.cache)) return null;
+    for (const target of decl.cache.depends_on) {
+      if (!declared.has(target)) continue;
+      const through = nameRead(target, seen);
+      if (through !== null)
+        return `reads "${name}", whose cache.depends_on ${through}`;
     }
     return null;
   };

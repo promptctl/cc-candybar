@@ -190,6 +190,30 @@ describe("a policy or rule over what the draw answers is refused at load", () =>
     );
   });
 
+  test("a rule reading a source whose cache policy reads a slot's .effective", () => {
+    expect(
+      load(`{
+        globals: { palette: '{{ if eq .probe "x" }}nord{{ else }}dracula{{ end }}' },
+        variables: { probe: { kind: "shell", command: "echo x",
+          cache: { key: "{{ .theme.effective }}" } } },
+      }`),
+    ).toThrow(
+      /globals\.palette reads "probe", whose cache\.key reads "theme\.effective", the palette's own name/,
+    );
+    expect(
+      load(`{
+        globals: { style: '{{ if eq .probe "x" }}vivid{{ else }}none{{ end }}' },
+        variables: {
+          picked: { kind: "template", template: "{{ .style.effective }}" },
+          probe: { kind: "shell", command: "echo x",
+            cache: { depends_on: ["picked"] } },
+        },
+      }`),
+    ).toThrow(
+      /globals\.style reads "probe", whose cache\.depends_on reads "picked", which reads "style\.effective", the style's own name/,
+    );
+  });
+
   test("a rule reading a slot's .effective, its own or another's", () => {
     expect(
       load(`{ globals: { effect: '{{ if eq .theme.effective "nord" }}pulse{{ else }}none{{ end }}' } }`),

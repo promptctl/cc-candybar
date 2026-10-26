@@ -382,8 +382,11 @@ export class ViewParts {
           case "pending":
             return settled(last ?? SLOT_FLOORS[slot], null, outcome.variable);
           case "failed":
+            // A failure settles on the floor, so a pending answer after it
+            // keeps the floor, as a per-draw rule's frame does.
+            last = SLOT_FLOORS[slot];
             return settled(
-              SLOT_FLOORS[slot],
+              last,
               ruleFloorMessage(
                 rule.where,
                 slot,

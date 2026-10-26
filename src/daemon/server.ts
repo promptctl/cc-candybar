@@ -1932,8 +1932,6 @@ interface RenderSetup extends Disposable {
   readonly entry: CacheEntry;
   readonly state: DslRenderState;
   readonly view: SessionView<SessionSource>;
-  readonly effective: EffectiveGlobals;
-  readonly lanes: LaneSwitches;
   readonly hintsError: string | null;
   // What the request's refresh and wait read (settlePayload).
   readonly payloadInputs: PayloadInputs;
@@ -2000,19 +1998,11 @@ function setUpRender(
     // entry always holds a renderable state (the bundled default until a
     // config loads — src/daemon/cache/render.ts), so body = drawDsl(state)
     // and output = diagnostics + body, with no "did the config load" branch.
-    // [LAW:one-source-of-truth] Every globals field as the session's view
-    // resolved it (src/daemon/session-source.ts) — the same struct its
-    // payload's `*.effective` fields (what a trigger label says) are read
-    // from, and renderOpts below (what actually renders). One resolution, two
-    // readers, so a label can never disagree with the bar. The precedence
-    // the resolver applies, and why each rung sits where it does, lives
-    // with the chain (resolveEffectiveGlobals, and src/config/presets.ts).
+    // The picks as the request arrived: what its refresh reads and its lane
+    // setups follow. The draw settles its own (drawRender).
     const effective: EffectiveGlobals = view.source.effective();
     // Which animation lanes this session's settings switch on.
     const lanes = laneSwitches(effective);
-    noteFacts(facts, {
-      lanes: LANE_NAMES.filter((lane) => lanes[lane]).join(",") || "-",
-    });
     // [LAW:dataflow-not-control-flow] What a lane runs follows the switch every
     // render draws by, as the session's own setting moves moved it
     // (src/daemon/lane-setup.ts).
@@ -2048,8 +2038,6 @@ function setUpRender(
       entry,
       state,
       view,
-      effective,
-      lanes,
       hintsError,
       payloadInputs,
       [Symbol.dispose]: () => hold[Symbol.dispose](),
@@ -2076,18 +2064,23 @@ function drawRender(
   // Which animation lanes the session's settings switch on, as drawn.
   lanes: LaneSwitches;
 } {
-  const {
-    req,
-    at,
-    facts,
-    sessionId,
-    entry,
-    state,
-    view,
-    effective,
-    lanes,
-    hintsError,
-  } = setup;
+  const { req, at, facts, sessionId, entry, state, view, hintsError } = setup;
+  // [LAW:no-ambient-temporal-coupling] The picks this draw settles in its own
+  // turn, the one its slots and payload are read in: a pick that moved during
+  // a request's wait is drawn as one snapshot of the new one.
+  // [LAW:one-source-of-truth] Every globals field as the session's view
+  // resolved it (src/daemon/session-source.ts) — the same struct its
+  // payload's `*.effective` fields (what a trigger label says) are read
+  // from, and renderOpts below (what actually renders). One resolution, two
+  // readers, so a label can never disagree with the bar. The precedence
+  // the resolver applies, and why each rung sits where it does, lives
+  // with the chain (resolveEffectiveGlobals, and src/config/presets.ts).
+  const effective = view.source.effective();
+  // Which animation lanes this session's settings switch on, as drawn.
+  const lanes = laneSwitches(effective);
+  noteFacts(facts, {
+    lanes: LANE_NAMES.filter((lane) => lanes[lane]).join(",") || "-",
+  });
   // [LAW:one-source-of-truth] The width is `renderWidth` of the hints the
   // view draws by — the client's cols, else the default, less Claude Code's
   // reserve — the same request its payload carries as `term.cols`.
@@ -2146,7 +2139,7 @@ function drawRender(
     renderOpts,
     // [LAW:single-enforcer] The per-segment StripCell sink for the
     // `debug segments` projection. Its identity stays stable for the
-    // view's lifetime; renderDsl clears + repopulates it
+    // view's lifetime; drawDsl clears + repopulates it
     // in place. Cells are cheap (already computed during the render);
     // the per-segment ANSI serialization happens lazily inside the
     // debug handler so normal renders pay no extra serializer cost.
@@ -2154,10 +2147,10 @@ function drawRender(
       perSegmentSink: view.lastRenderCellsBySegment,
       onRenderWarning: (warning) => renderWarnings.push(warning),
     },
-    // [LAW:one-source-of-truth] The theme crosses as the SELECTION, palette
-    // and name together, so renderDsl publishes the `theme.effective` the
-    // bar was actually painted from. No separate basePalette argument: one
-    // would be a second clock free to disagree with that name.
+    // [LAW:one-source-of-truth] The draw's own settings and the session's
+    // effect memory. The theme, style and effect are not among them: the
+    // view's slots settle those names (src/dsl/parts.ts), the same ones its
+    // payload's `.effective` fields read.
     { ...effective, effects, idleSince },
   );
   // What this frame drew is what the session's close timer follows.
