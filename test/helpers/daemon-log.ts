@@ -34,11 +34,19 @@ export async function renderLines(
     lines.filter((l) => l.includes(`render sid=${sessionId} `));
   const read = (lines: readonly string[]) =>
     of(lines).filter((l) => l.includes(" timedOut=N "));
-  return of(
-    await loggedWhen(
-      env,
-      (lines) => read(lines).length >= count,
-      `${count} answered render event(s) for ${sessionId}`,
-    ),
-  );
+  try {
+    return of(
+      await loggedWhen(
+        env,
+        (lines) => read(lines).length >= count,
+        `${count} answered render event(s) for ${sessionId}`,
+      ),
+    );
+  } catch (e) {
+    // [LAW:no-silent-failure] The wait names what it counted, so a failure
+    // on a runner nobody can log into says which events were there.
+    throw new Error(
+      `${e instanceof Error ? e.message : String(e)}; its events:\n${of(logLines(env)).join("\n")}`,
+    );
+  }
 }
