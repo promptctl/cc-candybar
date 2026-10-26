@@ -32,7 +32,11 @@ import { setTimeout as sleep } from "node:timers/promises";
 
 import { detectClientHints } from "../client-hints.js";
 import { ConfigError } from "../config/loader/diagnostics.js";
-import { buildRenderState, openView } from "../daemon/cache/render.js";
+import {
+  buildRenderState,
+  openView,
+  UNOWNED_STORAGE,
+} from "../daemon/cache/render.js";
 import { WatcherRegistry } from "../daemon/cache/watchers.js";
 import type { DaemonLogger } from "../utils/logger.js";
 import { createPayloadProviders } from "../daemon/payload-providers.js";
@@ -108,7 +112,7 @@ function loadState(): ReturnType<typeof buildRenderState> {
       advisories,
       {
         sessionState,
-        storage: providers.managedStorage,
+        storage: UNOWNED_STORAGE,
         signer: linkSignerFromKeyFile(),
       },
     );

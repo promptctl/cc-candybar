@@ -174,6 +174,7 @@ export class KeyedSource<I, T> {
     renew(entry, "superseded");
     entry.flight = null;
     entry.changed = false;
+    this.evict();
     let resumed = false;
     return () => {
       if (resumed) return;
@@ -315,10 +316,13 @@ export class KeyedSource<I, T> {
 
   // A held entry is never evicted, so held entries are bounded by their
   // holders (the render cache's budget).
+  // [LAW:single-enforcer] Run by every claim that can add an entry (a hold, a
+  // supersede). An entry mid-supersede is kept like a held one: dropped, a
+  // hold returning during the move would read the world from before it.
   private evict(): void {
     for (const entry of [...this.entries.values()]) {
       if (this.entries.size <= this.spec.maxEntries) return;
-      if (entry.holders === 0) this.drop(entry);
+      if (entry.holders === 0 && entry.superseding === 0) this.drop(entry);
     }
   }
 

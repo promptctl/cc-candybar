@@ -161,6 +161,16 @@ export interface RenderDeps<S extends ViewSource = ViewSource> {
 // folder's watch, held from the build to the state's reclaim.
 export type PluginStorage = Pick<ManagedStorage, "keyFor" | "watch">;
 
+// [LAW:single-enforcer] The storage of a build outside the daemon (the
+// doctor's load, the demo's): it creates, watches and sweeps no folder,
+// because only the daemon's owner knows which files its sessions hold, and a
+// sweep anywhere else removes theirs. A view reading its keys reads the files
+// as they are.
+export const UNOWNED_STORAGE: PluginStorage = {
+  keyFor: (folder) => ({ folder, generation: 0 }),
+  watch: () => () => {},
+};
+
 // What building one config's state needs.
 export interface StateDeps {
   readonly sessionState: SessionStateRW;

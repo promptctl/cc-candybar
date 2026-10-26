@@ -397,6 +397,19 @@ describe("KeyedSource", () => {
     expect(f.calls).toHaveLength(reads);
   });
 
+  test("supersedes of keys nobody holds stay within the bound once they resume, and none is dropped mid-move", () => {
+    const f = fakeRead();
+    source = sourceOf(f.read, { maxEntries: 1 });
+    const moving = source.supersede("a");
+    // "a" is mid-move, so it is kept past the bound.
+    const resumes = ["b", "c"].map((k) => source!.supersede(k));
+    expect(source.stats().entries).toBe(3);
+    moving();
+    for (const resume of resumes) resume();
+    source.supersede("d")();
+    expect(source.stats().entries).toBe(1);
+  });
+
   test("a waiter on a key the LRU drops is answered, never left waiting", async () => {
     const f = fakeRead();
     source = sourceOf(f.read, { maxEntries: 0 });

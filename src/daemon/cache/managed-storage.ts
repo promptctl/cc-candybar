@@ -419,15 +419,21 @@ export class ManagedStorage {
         if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
         scanned++;
         const file = path.join(key.folder, entry.name);
-        const { mtimeMs } = await fs.promises.stat(file);
-        const held = this.sessions.isHeld(
-          (f) =>
-            f.storage.folder === key.folder &&
-            fileName(f.sessionId) === entry.name,
-        );
-        if (mtimeMs >= cutoff || held) continue;
-        await fs.promises.unlink(file);
-        removed++;
+        try {
+          const { mtimeMs } = await fs.promises.stat(file);
+          const held = this.sessions.isHeld(
+            (f) =>
+              f.storage.folder === key.folder &&
+              fileName(f.sessionId) === entry.name,
+          );
+          if (mtimeMs >= cutoff || held) continue;
+          await fs.promises.unlink(file);
+          removed++;
+        } catch (e) {
+          // Gone already: another generation's sweep of the folder got there
+          // first. Any other fault ends the sweep, loud.
+          if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+        }
       }
       this.logger("info", event());
     } catch (e) {

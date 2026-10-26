@@ -65,7 +65,7 @@ import { explicitConfigPath } from "../utils/user-path.js";
 import {
   fallbackState,
   loadFromDisk,
-  type PluginStorage,
+  UNOWNED_STORAGE,
 } from "../daemon/cache/render.js";
 import { SessionState } from "../daemon/session-state.js";
 import { claudeConfigDir } from "../claude-settings.js";
@@ -103,7 +103,7 @@ function reportLine({ check, verdict }: CheckReport): string {
 export function loadConfigOnce(origin: ConfigOrigin): ConfigLoad {
   const deps = {
     sessionState: new SessionState(),
-    storage: UNREAD_STORAGE,
+    storage: UNOWNED_STORAGE,
     signer: linkSignerFromKeyFile(),
   };
   const loaded = loadFromDisk(
@@ -123,15 +123,6 @@ export function loadConfigOnce(origin: ConfigOrigin): ConfigLoad {
     config: state.config,
   };
 }
-
-// [LAW:single-enforcer] A one-shot load reads no session's file, so it
-// creates, watches and sweeps no storage folder: the daemon's storage owner is
-// the one process that does, and the only one that knows which files its
-// sessions hold. The keys it hands out are never read.
-const UNREAD_STORAGE: PluginStorage = {
-  keyFor: (folder) => ({ folder, generation: 0 }),
-  watch: () => () => {},
-};
 
 // The install facts of the daemon's answer: the clients that drew the scope's
 // bars, and the bundle the daemon runs.

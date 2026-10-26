@@ -533,6 +533,32 @@ describe("ManagedStorage cleanup", () => {
     );
   });
 
+  test("a file gone between the listing and its removal leaves the rest of the sweep to run", async () => {
+    const r = rig();
+    const key = r.storage.keyFor(r.folder);
+    for (const sid of ["a", "b"]) {
+      r.write(sid, "{}");
+      age(path.join(r.folder, `${sid}.json`), 31);
+    }
+    const stat = fs.promises.stat;
+    jest.spyOn(fs.promises, "stat").mockImplementationOnce(async (file) => {
+      // Another sweep removes it first.
+      fs.unlinkSync(file);
+      return stat(file);
+    });
+    r.storage.watch(key);
+    await until(
+      () => r.lines.some((l) => l.includes("plugin storage sweep")),
+      "the sweep's event",
+    );
+    expect(fs.readdirSync(r.folder)).toEqual([]);
+    expect(r.lines).toContainEqual(
+      expect.stringMatching(
+        /^info plugin storage sweep folder=\S+ scanned=2 removed=1 took=\d+ms$/,
+      ),
+    );
+  });
+
   test("a held watch sweeps again once a day", async () => {
     jest.useFakeTimers({
       doNotFake: [

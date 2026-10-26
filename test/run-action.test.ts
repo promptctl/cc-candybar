@@ -681,6 +681,18 @@ describe("the link key", () => {
     expect(fs.readFileSync(file)).toHaveLength(32);
   });
 
+  test("a key already made is served from a state directory that cannot be written", () => {
+    const file = path.join(dir, "state", "link.key");
+    const fields = { sessionId: SID, action: "a", evaluated: "{}" };
+    const mac = linkSignerFromKeyFile(file).sign(fields);
+    fs.chmodSync(path.dirname(file), 0o500);
+    try {
+      expect(linkSignerFromKeyFile(file).verify(fields, mac)).toBe(true);
+    } finally {
+      fs.chmodSync(path.dirname(file), 0o700);
+    }
+  });
+
   test("a key file of the wrong length is refused, naming it", () => {
     const file = write("state/link.key", "short");
     expect(() => linkSignerFromKeyFile(file).sign({ sessionId: SID, action: "a", evaluated: "{}" })).toThrow(

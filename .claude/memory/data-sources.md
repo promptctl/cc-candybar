@@ -52,7 +52,7 @@ One daemon-wide owner reads every plugin's session files. A plugin source has no
 
 A folder's watch is held by what declares the folder, never by a view, because opening or closing a directory watch leaks on macOS. A folder is keyed by its path and a generation the owner moves on every loss, because an install replaces folders by rename and ext4 reuses a freed inode number; birth time sits beside device and inode in a folder's identity for the same reason. An event naming the folder itself is checked against the disk, because a chmod, a utimes or an xattr reports the same name as a removal. A removed storage folder recovers by reloading the config through the watch that already follows the plugin's folder for its definition, because the watch registry follows nothing: the reload's build recreates the folder under a new generation, and a spurious fire reloads into the same key and opens nothing. Until then the lost folder's held files are re-read from the path, so no draw shows a value from a folder that is gone.
 
-Only the daemon's storage owner creates, watches or sweeps a storage folder. A one-shot load, such as the doctor's, holds no session, so a sweep there would remove files the daemon's sessions hold.
+Only the daemon's storage owner creates, watches or sweeps a storage folder. A build outside the daemon, such as the doctor's or the demo's, holds none of the daemon's sessions, so a sweep there would remove files they hold.
 
 ## Memento's ceiling
 
