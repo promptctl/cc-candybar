@@ -149,8 +149,9 @@ describe("a daemon reads a plugin's session source and runs its program", () => 
       "the config-load event counting the plugin's source",
     );
     // The request waited for the source's first read, so nothing was pending
-    // when it drew.
-    const [event] = await renderLines(env, SESSION);
+    // when it drew. The answer `render` took is the last event: under load an
+    // ask can end at its deadline first, and `render` asks again.
+    const event = (await renderLines(env, SESSION)).at(-1);
     expect(event).toContain(" sources=1 sourcesPending=- ");
 
     // The program's write: the whole file, renamed into place, again until a
