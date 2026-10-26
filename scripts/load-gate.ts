@@ -15,8 +15,8 @@
 //
 // Pass: every session answers before the warm deadline; every steady render
 // answers ok within the client's budget; the daemon is the same process
-// throughout with no post-mortem; its charge stays under the line the doctor
-// calls near the limit and does not climb; the cache's held counts stay flat.
+// throughout with no post-mortem; its charge stays within a budget for these
+// sessions and does not climb; the cache's held counts stay flat.
 //
 // Run: pnpm build && pnpm load-gate [--sessions N] [--seconds S]
 
@@ -31,11 +31,7 @@ import { detectClientHints } from "../src/client-hints.js";
 import { daemonArgs } from "../src/daemon/acquire.js";
 import { tryRenderViaDaemon } from "../src/daemon/client.js";
 import { fetchStats } from "../src/daemon/client-stats.js";
-import {
-  approachingLimit,
-  mb,
-  memoryLimitBytes,
-} from "../src/daemon/limits.js";
+import { mb, memoryLimitBytes } from "../src/daemon/limits.js";
 import { chargeProbe } from "../src/daemon/memory-report.js";
 import { PARENT_PID_ENV } from "../src/daemon/parent-watchdog.js";
 import type { StatsSnapshot } from "../src/daemon/stats.js";
@@ -75,6 +71,10 @@ const SAMPLE_MS = 5000;
 // What the charge may grow by across the steady phase, beyond a heap's
 // sawtooth: the live daemon's climb is ~80 MB a minute.
 const CLIMB_LIMIT_BYTES = 32 * 1024 * 1024;
+// What these sessions may charge, apart from the shipped limit, which is sized
+// for the cache's share and so far above it that judging by it would pass a
+// daemon twice as heavy. Measured at ~430 MB on macOS and Linux.
+const BUDGET_BYTES = 768 * 1024 * 1024;
 const OID = "4f1c2a9e8b7d6c5a4f3e2d1c0b9a8f7e6d5c4b3a";
 
 // ─── The world ──────────────────────────────────────────────────────────────
@@ -417,20 +417,33 @@ function tick(s: Session): void {
   }
   const rendering = phase;
   const t0 = performance.now();
-  const done = tryRenderViaDaemon(hookData(s), [BUNDLE], s.checkout, {
-    ...detectClientHints(sessionEnv, s.checkout, { columns: 160, rows: 48 }),
-    client,
-  }).then((outcome) => {
-    renders.push({
-      phase: rendering,
-      ms: performance.now() - t0,
-      outcome:
-        outcome.kind === "ok" ? "ok" : `${outcome.kind}/${outcome.cause}`,
-    });
-    if (outcome.kind === "ok") s.answered = true;
-    inFlight.delete(done);
-  });
+  const done = (async () => {
+    let outcome: string;
+    try {
+      const rendered = await tryRenderViaDaemon(
+        hookData(s),
+        [BUNDLE],
+        s.checkout,
+        {
+          ...detectClientHints(sessionEnv, s.checkout, {
+            columns: 160,
+            rows: 48,
+          }),
+          client,
+        },
+      );
+      outcome =
+        rendered.kind === "ok" ? "ok" : `${rendered.kind}/${rendered.cause}`;
+      if (rendered.kind === "ok") s.answered = true;
+    } catch (e) {
+      // [LAW:no-silent-failure] A client path that throws is a failed render,
+      // scored like any other, never a gate that ends without a verdict.
+      outcome = `threw/${e instanceof Error ? e.message : String(e)}`;
+    }
+    renders.push({ phase: rendering, ms: performance.now() - t0, outcome });
+  })();
   inFlight.add(done);
+  void done.finally(() => inFlight.delete(done));
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -624,9 +637,9 @@ async function run(): Promise<{
       detail: `pids ${pids.join(",")} ${daemonExit ?? "running"}, post-mortems ${JSON.stringify(postMortems)}`,
     },
     {
-      name: "charge under the limit",
-      pass: charges.every((c) => !approachingLimit(c, limit)),
-      detail: `max ${mb(Math.max(...charges))} MB of ${mb(limit)} MB`,
+      name: "charge within the budget",
+      pass: charges.every((c) => c <= BUDGET_BYTES),
+      detail: `max ${mb(Math.max(...charges))} MB of ${mb(BUDGET_BYTES)} MB (limit ${mb(limit)} MB)`,
     },
     {
       name: "live heap not climbing",
@@ -696,7 +709,7 @@ function daemonRenders(
   since: number,
 ): Record<"took" | "waited", Record<string, number>> {
   const log = path.join(dirs.state, "cc-candybar", "daemon.log");
-  const lines = [`${log}.1`, log]
+  const lines = [`${log}.3`, `${log}.2`, `${log}.1`, log]
     .filter((f) => fs.existsSync(f))
     .flatMap((f) => fs.readFileSync(f, "utf8").split("\n"))
     .filter(

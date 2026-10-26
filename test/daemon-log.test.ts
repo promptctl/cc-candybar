@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { MAX_BYTES } from "../src/daemon/log";
+import { MAX_BYTES, MAX_WAITING_BYTES } from "../src/daemon/log";
 
 // The log sink's contract (src/daemon/log.ts): a line is in the file once the
 // log drains, every line logged before the process exits is in the file, and
@@ -137,7 +137,7 @@ describe("dlog", () => {
         fs.rmSync(path.dirname(logFile), { recursive: true, force: true });
         fs.writeFileSync(path.dirname(logFile), "");
       },
-      (dlog) => {
+      async (dlog, _logFile, drained) => {
         const written: string[] = [];
         const spy = jest
           .spyOn(process.stderr, "write")
@@ -147,6 +147,9 @@ describe("dlog", () => {
           });
         try {
           expect(() => dlog("error", "uncaughtException: boom")).not.toThrow();
+          // The disk is asked off the event loop, so its refusal is reported
+          // once the log drains.
+          await drained();
         } finally {
           spy.mockRestore();
         }
@@ -197,6 +200,39 @@ describe("dlog", () => {
         const fresh = fs.readFileSync(logFile, "utf8");
         expect(fresh).toMatch(/^\d{4}-.* \[info\] fresh\n$/);
         expect(fs.existsSync(`${logFile}.1`)).toBe(true);
+      },
+    );
+  });
+
+  // A disk that takes nothing costs lines the log says it lost, not memory:
+  // lines past the bound are counted, and the count is in the file.
+  test("lines past what the log holds while the disk takes none are counted, not held", async () => {
+    await withFreshLog(
+      () => {},
+      async (dlog, logFile, drained) => {
+        const line = "x".repeat(1000);
+        const sent = Math.ceil((MAX_WAITING_BYTES * 1.5) / line.length);
+        // In one turn: no write can land between them.
+        for (let i = 0; i < sent; i++) dlog("info", line);
+        await drained();
+        const logged = fs.readFileSync(logFile, "utf8").trimEnd().split("\n");
+        const dropped = Number(/ (\d+) line\(s\) dropped /.exec(logged.at(-1)!)?.[1]);
+        expect(dropped).toBeGreaterThan(0);
+        expect(logged.length - 1 + dropped).toBe(sent);
+      },
+    );
+  });
+
+  // The way out writes what is on its way, and only while something is.
+  test("the exit listener is there only while lines are on their way", async () => {
+    await withFreshLog(
+      () => {},
+      async (dlog, _logFile, drained) => {
+        const before = process.listenerCount("exit");
+        dlog("info", "one");
+        expect(process.listenerCount("exit")).toBe(before + 1);
+        await drained();
+        expect(process.listenerCount("exit")).toBe(before);
       },
     );
   });

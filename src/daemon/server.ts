@@ -1370,7 +1370,8 @@ export async function replyTo(
     if (rendered.outcome.kind !== "ok") stats.requestsErrored++;
     // Whether the client was already told TIMEOUT while this render ran on,
     // and how long the request waited, from the connection's accept, before
-    // it began: a round trip longer than `took` is time spent there.
+    // it began: the daemon's own delay and the client's sending of its frame
+    // both count, so a round trip longer than `took` is time spent there.
     noteFacts(facts, {
       timedOut: timedOut() ? "Y" : "N",
       waited: `${waitedMs}ms`,

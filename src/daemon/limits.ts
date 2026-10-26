@@ -60,8 +60,9 @@ import {
 // cache cannot hold the directories being rendered from, every render misses,
 // and a miss's config load is longer than the client waits, so every render
 // fails rather than some (the load gate, scripts/load-gate.ts, serves that
-// hundred). The limit is a ceiling, not a reservation: a daemon serving twenty
-// sessions holds what twenty sessions need.
+// hundred). The cache evicts only past its share, so a daemon that has rendered
+// from many directories holds cold entries up to it; entries cheap enough to
+// need a smaller share are what bring the limit back down.
 export const RSS_LIMIT_ENV = "CC_CANDYBAR_RSS_LIMIT_MB";
 export const DEFAULT_RSS_LIMIT_MB = 2560;
 export const HEAP_CAP_OVER_RSS = 2;
