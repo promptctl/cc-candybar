@@ -508,8 +508,11 @@ function sourceReading(name: string, raw: unknown): Reading<JsonValue> {
       `variable "${name}": the view's payload has no "${name}": its declaration did not take the source the preset reads`,
     );
   }
-  const reading = raw as { kind?: unknown };
-  switch (reading.kind) {
+  const kind =
+    typeof raw === "object" && raw !== null
+      ? (raw as { kind?: unknown }).kind
+      : undefined;
+  switch (kind) {
     case "ok":
     case "absent":
     case "failed":

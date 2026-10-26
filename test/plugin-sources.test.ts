@@ -608,6 +608,15 @@ describe("a source's document", () => {
     }
   });
 
+  test("anything else at its name reads failed, never a throw", () => {
+    for (const held of [null, 3, "x", { kind: "other" }]) {
+      expect(sourceDoc(() => ({ plugins: { p: { status: held } } }))()).toEqual({
+        kind: "failed",
+        reason: `variable "${STATUS}": the view's payload holds no source reading at "${STATUS}"`,
+      });
+    }
+  });
+
   test("a payload without it reads failed, naming the variable: the declaration did not take it", () => {
     expect(sourceDoc(() => ({ plugins: {} }))()).toEqual({
       kind: "failed",
