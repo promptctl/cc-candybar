@@ -1,0 +1,112 @@
+kind by tier:
+  system tier (all read): statusline 1386, not-statusline 239, fork-diff 67, copy 9, unreachable 2
+  hardcoded tier, random sample: statusline 94, not-statusline 4, fork-diff 2
+  hardcoded tier, >=20 stars: statusline 72, not-statusline 5
+
+## system tier (all read): 1386 statuslines
+
+### system tier (all read) — seg (n=1386)
+any of: state 1181 (85%), fixed 732 (53%), role 288 (21%), user 171 (12%), position 112 (8%), single 53 (4%), none 51 (4%)
+combinations: fixed+state 538, state 207, role+state 185, none 48, state+user 47, fixed+role+state 40, fixed 38, fixed+state+user 38, fixed+position+state 34, single+state 30, fixed+user 22, position+role+state 21
+
+### system tier (all read) — fill (n=1386)
+any of: fg 1026 (74%), both 251 (18%), bg 73 (5%)
+combinations: fg 1026, both 251, bg 73, - 36
+
+### system tier (all read) — sep (n=1386)
+any of: text 1044 (75%), none 224 (16%), powerline 175 (13%), caps 86 (6%), unverified 2 (0%), gray 1 (0%), text/powerline 1 (0%)
+combinations: text 960, none 219, powerline 60, powerline+text 53, caps+powerline 33, caps+powerline+text 25, caps 19, caps+text 6, - 2, caps+none+powerline 2, none+powerline 2, unverified 2
+
+### system tier (all read) — neighbours (n=1386)
+any of: separator 810 (58%), hue 698 (50%), none 265 (19%), lightness 68 (5%), alternate 33 (2%)
+combinations: hue+separator 401, separator 376, none 264, hue 243, hue+lightness 29, lightness 17, lightness+separator 11, alternate+hue 9, alternate 9, hue+lightness+separator 9, alternate+separator 8, alternate+hue+separator 5
+
+### system tier (all read) — depth (n=1386)
+any of: 16 808 (58%), hex 618 (45%), 256 542 (39%), nocolor 226 (16%), detect 129 (9%), downsample 84 (6%), none 10 (1%)
+combinations: 16 343, hex 252, 16+256 145, 256 123, 16+256+hex 73, 16+hex 73, 16+nocolor 50, 16+256+detect+downsample+hex+nocolor 34, - 31, 256+hex 30, hex+nocolor 29, 256+detect+hex 24
+
+### system tier (all read) — lightdark (n=1386)
+any of: none 1054 (76%), light-themes 175 (13%), contrast 160 (12%), detect 115 (8%), detect-none 2 (0%), detect-ish 1 (0%)
+combinations: none 1054, contrast 111, light-themes 89, detect+light-themes 49, detect 32, contrast+detect+light-themes 21, contrast+light-themes 14, contrast+detect 13, detect-ish 1, detect-none+light-themes 1, contrast+detect-none+light-themes 1
+
+### themes (n=1386): bundled themes 584 (42%); user-definable 214 (15%); format roles 278, segmap 175, palette 128, glyphs 1, custom 1, none 1
+
+### system tier (all read), background-filled only — neighbours (n=324)
+any of: hue 215 (66%), separator 154 (48%), lightness 58 (18%), none 42 (13%), alternate 33 (10%)
+combinations: hue+separator 94, hue 71, none 42, separator 28, hue+lightness 26, lightness 11, lightness+separator 10, alternate+hue 9, alternate 9, hue+lightness+separator 9, alternate+separator 8, alternate+hue+separator 5
+
+### system tier (all read), background-filled only — seg (n=324)
+any of: state 251 (77%), fixed 183 (56%), role 86 (27%), position 80 (25%), user 75 (23%), single 6 (2%), none 3 (1%)
+combinations: fixed+state 93, role+state 44, fixed+state+user 19, fixed+position+state 18, state+user 15, position+role+state 15, fixed+role+state 14, position+user 14, fixed 13, state 12, fixed+user 12, position+state 9
+
+## hardcoded tier, random sample: 94 statuslines
+
+### hardcoded tier, random sample — seg (n=94)
+any of: state 83 (88%), fixed 64 (68%), single 4 (4%), position 3 (3%), user 2 (2%), role 1 (1%), none 1 (1%)
+combinations: fixed+state 51, state 24, fixed 8, single 3, fixed+position+state 3, fixed+state+user 2, role+state 1, single+state 1, none+state 1
+
+### hardcoded tier, random sample — fill (n=94)
+any of: fg 86 (91%), both 8 (9%)
+combinations: fg 86, both 8
+
+### hardcoded tier, random sample — sep (n=94)
+any of: text 73 (78%), none 20 (21%), powerline 2 (2%)
+combinations: text 72, none 20, powerline 1, powerline+text 1
+
+### hardcoded tier, random sample — neighbours (n=94)
+any of: separator 54 (57%), hue 46 (49%), none 22 (23%)
+combinations: hue+separator 28, separator 26, none 22, hue 18
+
+### hardcoded tier, random sample — depth (n=94)
+any of: 16 66 (70%), 256 33 (35%), hex 24 (26%), nocolor 9 (10%), detect 2 (2%), downsample 1 (1%)
+combinations: 16 40, 16+256 12, 256 12, hex 11, 16+256+hex 4, 16+hex 4, 16+nocolor 3, 256+hex 2, 16+256+nocolor 1, 16+hex+nocolor 1, 16+detect+nocolor 1, hex+nocolor 1
+
+### hardcoded tier, random sample — lightdark (n=94)
+any of: none 87 (93%), contrast 5 (5%), detect 2 (2%)
+combinations: none 87, contrast 5, detect 2
+
+### themes (n=94): bundled themes 4 (4%); user-definable 1 (1%); format segmap 2, palette 1, roles 1
+
+### hardcoded tier, random sample, background-filled only — neighbours (n=8)
+any of: hue 5 (62%), separator 3 (38%), none 1 (12%)
+combinations: hue 4, separator 2, hue+separator 1, none 1
+
+### hardcoded tier, random sample, background-filled only — seg (n=8)
+any of: fixed 8 (100%), state 8 (100%), position 1 (12%)
+combinations: fixed+state 7, fixed+position+state 1
+
+## hardcoded tier, >=20 stars: 72 statuslines
+
+### hardcoded tier, >=20 stars — seg (n=72)
+any of: state 52 (72%), fixed 38 (53%), role 8 (11%), none 6 (8%), user 4 (6%), single 4 (6%), position 1 (1%)
+combinations: fixed+state 27, state 15, fixed 8, role+state 7, none 6, single 4, fixed+user 2, role+state+user 1, state+user 1, fixed+position+state 1
+
+### hardcoded tier, >=20 stars — fill (n=72)
+any of: fg 63 (88%), both 2 (3%), bg 1 (1%)
+combinations: fg 63, - 6, both 2, bg 1
+
+### hardcoded tier, >=20 stars — sep (n=72)
+any of: text 65 (90%), none 6 (8%), powerline 1 (1%), caps 1 (1%)
+combinations: text 65, none 6, caps+powerline 1
+
+### hardcoded tier, >=20 stars — neighbours (n=72)
+any of: separator 47 (65%), hue 31 (43%), none 12 (17%)
+combinations: separator 29, hue+separator 18, hue 13, none 12
+
+### hardcoded tier, >=20 stars — depth (n=72)
+any of: 16 41 (57%), 256 29 (40%), hex 24 (33%), nocolor 8 (11%), detect 2 (3%), downsample 1 (1%)
+combinations: 16 22, hex 11, 16+256 10, 256 5, - 5, 256+hex 5, 16+256+hex 4, 16+nocolor 2, 256+nocolor 2, hex+nocolor 1, 16+256+detect+downsample+hex+nocolor 1, 256+detect+hex 1
+
+### hardcoded tier, >=20 stars — lightdark (n=72)
+any of: none 71 (99%), contrast 1 (1%)
+combinations: none 71, contrast 1
+
+### themes (n=72): bundled themes 13 (18%); user-definable 5 (7%); format palette 10, segmap 3
+
+### hardcoded tier, >=20 stars, background-filled only — neighbours (n=3)
+any of: hue 2 (67%), separator 1 (33%)
+combinations: hue 2, separator 1
+
+### hardcoded tier, >=20 stars, background-filled only — seg (n=3)
+any of: fixed 3 (100%), state 2 (67%)
+combinations: fixed+state 2, fixed 1
