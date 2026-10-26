@@ -276,8 +276,10 @@ export class FrameFeeds<Req> {
     feed.noted++;
     // [LAW:no-ambient-temporal-coupling] Noting wakes nothing: the request's
     // refreshes have not landed yet. Its renderer wakes the feed once the
-    // request has settled (`wake`); a frame the feed's own clock draws
-    // meanwhile reads each value as its owner holds it.
+    // request is answered (`wake`), its refreshes landed or its client's
+    // deadline come first; a frame the feed's own clock draws meanwhile, or
+    // after a refresh that lands past the deadline, reads each value as its
+    // owner holds it.
     // [LAW:one-source-of-truth] Every frame a subscriber receives is one the
     // feed drew, as a frame (`drawing.by` is "feed", and the bar shows the
     // feed's pace): the request's own answer is its client's alone.

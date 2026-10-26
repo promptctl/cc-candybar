@@ -797,9 +797,10 @@ async function run(): Promise<{
     rssMb: samples.map((s) => mb(s.stats.rssBytes)),
     heapUsedMb: samples.map((s) => mb(s.stats.heapUsedBytes)),
     heapTotalMb: samples.map((s) => mb(s.stats.heapTotalBytes)),
-    // How long each steady render waited in the daemon before it began and how
-    // long it then took, from its own render events, beside the gate's lag: a
-    // slow round trip is one of the three.
+    // How long each steady render was queued in the daemon before it began,
+    // how long it then waited for its refreshes and how long it took in all,
+    // from its own render events, beside the gate's lag: a slow round trip is
+    // one of these.
     daemonRenderMs: await daemonRenders(steadyStarted, steadyEnded),
     gateLoopDelayMs: {
       p99: Math.round(gateLoop.percentile(99) / 1e6),
@@ -817,7 +818,7 @@ async function run(): Promise<{
 async function daemonRenders(
   since: number,
   until: number,
-): Promise<Record<"took" | "waited", Record<string, number>>> {
+): Promise<Record<"took" | "queued" | "waited", Record<string, number>>> {
   const log = logPath(env);
   const stamped = (): Array<{ at: number; line: string }> =>
     logLines(log).map((line) => ({ at: Date.parse(line.slice(0, 24)), line }));
@@ -845,7 +846,11 @@ async function daemonRenders(
       .sort((a, b) => a - b);
     return { n: ms.length, p99: pct(ms, 0.99), max: ms.at(-1) ?? 0 };
   };
-  return { took: spread("took"), waited: spread("waited") };
+  return {
+    took: spread("took"),
+    queued: spread("queued"),
+    waited: spread("waited"),
+  };
 }
 
 function tally(xs: readonly string[]): Record<string, number> {

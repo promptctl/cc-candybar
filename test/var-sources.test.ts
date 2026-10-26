@@ -2155,6 +2155,60 @@ describe("SourceRegistry — in-flight runs", () => {
     }
   });
 
+  it("a wait is for a first value, never for a period's re-read: the view's own or its directory's", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const spawns = path.join(dir, "spawns");
+      const { registry: home } = make();
+      const view = home.view();
+      live.add(view);
+      const period = { kind: "ttl", durationMs: MIN_SHELL_TTL_MS } as const;
+      const counted = (out: string) => `echo x >> ${spawns}; sleep 0.3; echo ${out}`;
+      home.declareShell("dir", counted("d"), { cwd: process.cwd(), parse: TEXT, cache: period });
+      view.declareShell("own", counted("o"), { cwd: process.cwd(), parse: TEXT, cache: period });
+      expect([...(await view.settled(50))].sort()).toEqual(["dir", "own"]);
+      expect(await view.settled(3000)).toEqual([]);
+      // Both periods' re-runs out: a re-read keeps the answer it has.
+      const spawned = (): number => fs.readFileSync(spawns, "utf8").split("\n").length - 1;
+      const rerunBy = Date.now() + 3000;
+      while (spawned() < 4 && Date.now() < rerunBy) {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      expect(spawned()).toBeGreaterThanOrEqual(4);
+      const asked = Date.now();
+      expect(await view.settled(3000)).toEqual([]);
+      expect(Date.now() - asked).toBeLessThan(150);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("a wait is for a run its key moved", async () => {
+    const store = new VariableStore();
+    const registry = registryOver(store);
+    store.defineBox("trigger", "string", "a");
+    registry.declareShell("val", "sleep 0.3; echo v", {
+      cwd: process.cwd(),
+      parse: TEXT,
+      cache: { kind: "key", template: "{{ .trigger }}" },
+    });
+    expect(await registry.settled(3000)).toEqual([]);
+    store.setBox("trigger", "b");
+    expect(await registry.settled(50)).toEqual(["val"]);
+    expect(await registry.settled(3000)).toEqual([]);
+  });
+
+  it("inFlight() lets go of a run that never ends when its signal aborts", async () => {
+    const { registry } = make();
+    registry.declareShell("stuck", "sleep 30", { cwd: process.cwd(), parse: TEXT, cache: { kind: "never" } });
+    const wait = new AbortController();
+    setTimeout(() => wait.abort(), 50);
+    const asked = Date.now();
+    await registry.inFlight(wait.signal);
+    expect(Date.now() - asked).toBeLessThan(1000);
+    expect(await registry.settled(0)).toEqual(["stuck"]);
+  });
+
   it("dispose() aborts an in-flight shell run: the child tree dies with the registry and nothing is published", async () => {
     const stamp = `${process.pid}${Date.now()}`;
     const marker = `ccb-registry-abort-${stamp}`;

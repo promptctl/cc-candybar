@@ -195,6 +195,13 @@ import { DiagnosticDump } from "./diagnostic-dump.js";
 import { instantOf, type Instant } from "../utils/instant.js";
 import { MenuIdle } from "./menu-idle.js";
 import {
+  REQUEST_TIMEOUT_MS,
+  parseClientDeadline,
+  waitBudgetMs,
+  type ClientDeadline,
+} from "./request-deadline.js";
+import { waitWithin } from "../utils/reading.js";
+import {
   noteFacts,
   renderEvent,
   type RenderFacts,
@@ -418,7 +425,6 @@ const renderCache = new RenderCache<SessionSource>(
   },
 );
 
-const REQUEST_TIMEOUT_MS = 200;
 // One cadence for "how often does the daemon look at its build on disk" —
 // the binary watch (exit on a changed bundle) and the update watch (does the
 // bundle match `src/`) both sample on it.
@@ -991,7 +997,7 @@ function handleConnection(sock: net.Socket): void {
     respond(
       {
         ok: false,
-        error: "request exceeded 200ms",
+        error: `request exceeded ${REQUEST_TIMEOUT_MS}ms`,
         code: "TIMEOUT",
         daemonV: PROTOCOL_VERSION,
       },
@@ -1300,7 +1306,7 @@ export async function replyTo(
     const started = new Date();
     const at = instantOf(started);
     const t0 = performance.now();
-    const waitedMs = Math.round(t0 - accepted);
+    const queuedMs = Math.round(t0 - accepted);
     // [LAW:nothing-unseen] One render event per render request, written here
     // on every exit — a refusal and a throw included — from the facts the
     // render reached, so a failing render is described like any other.
@@ -1342,13 +1348,29 @@ export async function replyTo(
       // (src/daemon/frame-feed.ts).
       frameFeeds.note(checked.req.hookData.session_id, checked.req, order);
     }
+    // [LAW:no-ambient-temporal-coupling] When the request's wait ends, fixed
+    // at its arrival: early enough before its client hangs up to draw
+    // (src/daemon/request-deadline.ts).
+    const waitFor = (req: CheckedRenderRequest): RequestWait => {
+      const ms = waitBudgetMs(req.deadline, accepted, {
+        epochMs: started.getTime(),
+        monoMs: t0,
+      });
+      return { stated: req.deadline.kind, ms, endsAt: t0 + ms };
+    };
     const rendered: {
       outcome: RenderOutcome;
       resp: Response;
       delivered: () => void;
     } = !checked.ok
       ? refusedRender(checked.problems)
-      : await answerRequest(checked.req, order, at, facts).then(
+      : await answerRequest(
+          checked.req,
+          order,
+          at,
+          waitFor(checked.req),
+          facts,
+        ).then(
           ({ answer, motion, clickShown }) => {
             sighted(checked.req, motion);
             return {
@@ -1379,12 +1401,13 @@ export async function replyTo(
         );
     if (rendered.outcome.kind !== "ok") stats.requestsErrored++;
     // Whether the client was already told TIMEOUT while this render ran on,
-    // and how long the request waited, from the connection's accept, before
-    // it began: the daemon's own delay and the client's sending of its frame
-    // both count, so a round trip longer than `took` is time spent there.
+    // and how long the request was queued, from the connection's accept,
+    // before it began: the daemon's own delay and the client's sending of its
+    // frame both count, so a round trip longer than `took` is time spent
+    // there.
     noteFacts(facts, {
       timedOut: timedOut() ? "Y" : "N",
-      waited: `${waitedMs}ms`,
+      queued: `${queuedMs}ms`,
     });
     const { level, line } = renderEvent(
       facts,
@@ -1812,12 +1835,13 @@ function lanesOf(req: CheckedRenderRequest): LaneSwitches {
 // required field with its declared type, its cwd is absolute, `hints` is its
 // client hints, parsed, and its args are parsed into `requested` — the config
 // inputs it named, its explicit path the `--config` flag over the client's
-// `CC_CANDYBAR_CONFIG` hint — and `refusedArgs`, and `rateLimits` is
-// what its hookData says of the rate-limit windows. Raw `req.*` hint
-// fields and `req.args` are not read past the checkpoint. Only
-// checkRenderRequest makes one.
+// `CC_CANDYBAR_CONFIG` hint — and `refusedArgs`, `rateLimits` is
+// what its hookData says of the rate-limit windows, and `deadline` is when its
+// client hangs up. Raw `req.*` hint fields and `req.args` are not read past
+// the checkpoint. Only checkRenderRequest makes one.
 declare const CHECKED: unique symbol;
-type CheckedRenderRequest = RenderRequest & {
+type CheckedRenderRequest = Omit<RenderRequest, "deadline"> & {
+  readonly deadline: ClientDeadline;
   readonly hints: ClientHints;
   readonly rateLimits: RateLimitsSeen;
   readonly requested: RenderOrigin;
@@ -1885,6 +1909,11 @@ function checkRenderRequest(
       `request 'args' is not a list of strings: ${JSON.stringify(req.args)}`,
     );
   }
+  const deadline = parseClientDeadline(
+    (req as { deadline?: unknown }).deadline,
+  );
+  if (deadline.kind === "refused")
+    return { ok: false, problems: [...wireProblems, deadline.problem] };
   if (wireProblems.length > 0) return { ok: false, problems: wireProblems };
   const hints = parseClientHints(req);
   // [LAW:dataflow-not-control-flow] The *request's* cwd, not the daemon's
@@ -1895,6 +1924,7 @@ function checkRenderRequest(
     ok: true,
     req: {
       ...req,
+      deadline,
       hints,
       rateLimits: rateLimitsSeen(req.hookData),
       requested: {
@@ -2368,34 +2398,72 @@ async function answerRequest(
   req: CheckedRenderRequest,
   order: number,
   at: Instant,
+  wait: RequestWait,
   facts: RenderFacts,
 ): Promise<RequestAnswer> {
   recordRequest(req);
   try {
-    return await drawAnswer(req, order, at, facts);
+    return await drawAnswer(req, order, at, wait, facts);
   } finally {
     // [LAW:no-ambient-temporal-coupling] A followed session's next frame is
-    // drawn once this request has settled — its refreshes landed and its own
-    // bar drawn, or its failure thrown — so the frame shows what the request
-    // carried, at an instant after it, and a request that fails leaves no
-    // feed waiting on it. Deferred, so the frame's draw is never a cost of
+    // drawn once this request has been answered — its own bar drawn, by its
+    // client's deadline, or its failure thrown — so the frame shows what the
+    // request carried, at an instant after it, and a request that fails
+    // leaves no feed waiting on it. Deferred, so the frame's draw is never a cost of
     // the request's own answer.
     const sessionId = req.hookData.session_id;
     setImmediate(() => frameFeeds.wake(sessionId));
   }
 }
 
+// A request's wait, fixed at its arrival: whether its client stated its
+// deadline, the milliseconds the wait had then, and when it ends, on the
+// monotonic clock. Both, because the render notes the first on its event
+// after the session's id leads it, and has no arrival instant to derive it.
+interface RequestWait {
+  readonly stated: ClientDeadline["kind"];
+  readonly ms: number;
+  readonly endsAt: number;
+}
+
 async function drawAnswer(
   req: CheckedRenderRequest,
   order: number,
   at: Instant,
+  wait: RequestWait,
   facts: RenderFacts,
 ): Promise<RequestAnswer> {
   using setup = setUpRender(req, at, facts);
-  // Rule 1 of the model: the answer shows what this request carried, so it
-  // waits for the refreshes its arrival triggers — and for the first value of
-  // every keyed lane its view declared — before it draws.
-  await settlePayload(setup.payloadInputs, at);
+  noteFacts(facts, { deadline: `${wait.stated}:${wait.ms}ms` });
+  // Rules 1 and 2 of the model: the answer shows what this request carried,
+  // so it waits for the refreshes its arrival triggers, the first value of
+  // every keyed lane its view declared, and every run of its view's or its
+  // directory's sources that answers a new key — a first value, or a key its
+  // fields moved — until its client's deadline. What has not
+  // answered by then draws as pending, and lands for the next frame.
+  const waitFrom = performance.now();
+  const ended = await waitWithin(
+    (signal) =>
+      Promise.all([
+        settlePayload(setup.payloadInputs, at),
+        setup.view.registry.inFlight(signal),
+      ]),
+    wait.endsAt - waitFrom,
+    // [LAW:no-silent-failure] The answer is drawn; a wait that fails after
+    // it is a bug, said against the session, never one that ends the daemon.
+    (e) =>
+      dlog(
+        "error",
+        `render wait failed after its deadline sid=${JSON.stringify(setup.sessionId)}: ${inspect(e)}`,
+      ),
+  );
+  // [LAW:nothing-unseen] How the wait went, on the render event: an answer
+  // drawn with values pending says so by name.
+  const drawFrom = performance.now();
+  noteFacts(facts, {
+    waited: `${Math.round(drawFrom - waitFrom)}ms`,
+    ended,
+  });
   // [LAW:no-silent-failure] Each lane the view's payload projected as a
   // missing field, once per request: a frame draws the same payload and
   // logs nothing of it.
@@ -2419,9 +2487,12 @@ async function drawAnswer(
   // A `frames` display draws the bar itself; Claude Code's statusline hands
   // it to the lanes drawing it elsewhere.
   const toStatusline = roleOf(req.hints.client ?? null) === "statusline";
-  // [LAW:nothing-unseen] Which lanes the statusline handed the bar to.
+  // [LAW:nothing-unseen] Which lanes the statusline handed the bar to, and
+  // how long the turn after the wait took to make the answer — what the
+  // draw's reserve is held to (DRAW_RESERVE_MS).
   noteFacts(facts, {
     handoff: (toStatusline ? elsewhere : []).join(",") || "-",
+    drew: `${Math.round(performance.now() - drawFrom)}ms`,
   });
   return {
     answer: toStatusline ? statusline : output,

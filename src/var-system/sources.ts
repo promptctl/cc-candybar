@@ -21,6 +21,7 @@ import {
   observable,
   reaction,
   runInAction,
+  when,
   type IReactionDisposer,
 } from "mobx";
 import type { ColorDepth } from "@promptctl/rich-js";
@@ -53,7 +54,7 @@ import {
 } from "./parse.js";
 import { PendingValueError, readPending, type JsonValue } from "./types.js";
 import type { SessionStateReader } from "../daemon/session-state.js";
-import { TrailingEdge } from "../utils/trailing-edge.js";
+import { TrailingEdge, type Trigger } from "../utils/trailing-edge.js";
 
 // How long text that is not a document may be a write still in progress
 // before it shows as the failure it is (documentPublisher).
@@ -530,6 +531,12 @@ function zeroValue(type: VarType): VarValue {
 // VariableStore. Multiple registries on the same store would produce
 // duplicate box definitions for input-kind variables.
 
+// Why a source runs: for a key it has no answer under yet — its first run, or
+// a key or dependency that moved — or to re-read the key it has answered, on
+// a period's tick or a watched file's change. A re-read keeps its answer
+// standing; a new key has none, so a wait is for it alone.
+type RunCause = "new-key" | "re-read";
+
 export class SourceRegistry {
   private readonly lastErrors = new Map<string, LastError>();
   // A cache policy that cannot fire is a STANDING fault, not a read's
@@ -545,12 +552,17 @@ export class SourceRegistry {
   // Collects all cleanup callbacks (TTL unsubscribes, watch unsubscribes,
   // MobX reaction disposers) so dispose() tears everything down in one call.
   private readonly cleanups: Array<() => void> = [];
-  // [LAW:no-ambient-temporal-coupling] The in-flight run of each async
-  // source, by name: one run per source at a time (a refresh that fires
-  // while the previous run is still out is dropped), and `settled()` is the
-  // explicit "every source has completed its current run" state a caller
-  // (`cc-candybar check`) awaits instead of guessing a delay.
-  private readonly inFlight = new Map<string, Promise<void>>();
+  // Each async source's in-flight loop, by name: one per source at a time.
+  private readonly runs = new Map<string, Promise<void>>();
+  // [LAW:no-ambient-temporal-coupling] The sources whose loop out answers a
+  // key they have no answer under yet (`RunCause`). Observable, so
+  // `inFlight()` is a reaction over it — the explicit "the runs a wait is for
+  // have ended" state a caller (a statusline request, `cc-candybar check`)
+  // awaits instead of guessing a delay, and one its deadline can stop
+  // listening to. Set by the trigger, since a source's node holds its
+  // fallback before its first answer (`stringInitial`), so the store cannot
+  // say it.
+  private readonly newKeys = observable.set<string>();
   // [LAW:single-enforcer] Serializes each source's reads and remembers a trigger
   // that arrived mid-read, so a re-trigger re-reads once rather than starting a
   // parallel read or being dropped. Shared with the git cache's refresh path,
@@ -750,8 +762,8 @@ export class SourceRegistry {
     parse: SourceParse,
   ): void {
     const publish = this.publisherFor(name, parse, reader.where);
-    this.registerCachePolicy(name, cache, () =>
-      this.runSource(name, reader, publish),
+    this.registerCachePolicy(name, cache, (cause) =>
+      this.runSource(name, reader, publish, cause),
     );
   }
 
@@ -856,6 +868,7 @@ export class SourceRegistry {
     name: string,
     reader: SourceReader,
     publish: Publish,
+    cause: RunCause,
   ): void {
     // [LAW:no-ambient-temporal-coupling] A trigger that arrives while this
     // source is mid-read is not a duplicate to drop: it means the inputs the
@@ -874,50 +887,71 @@ export class SourceRegistry {
         if (err !== this.abort.signal.reason) throw err;
       }),
     );
-    // A queued trigger needs no tracking: the loop it joined is already the
-    // tracked promise, and it does not resolve until that trigger's own pass has
-    // run — which is exactly what makes `settled()` wait for the re-read too.
-    if (trigger.kind === "started") this.track(name, trigger.done);
+    this.track(name, trigger, cause);
   }
 
-  // [LAW:single-enforcer] The one writer of `inFlight`: an async source's
-  // pending work enters here and leaves when it completes, so "which sources
-  // are still out" has a single mechanism rather than one per source kind.
-  private track(name: string, work: Promise<void>): void {
+  // [LAW:single-enforcer] The one writer of `runs` and `newKeys`: an async
+  // source's pending work enters here and leaves when it completes, so "which
+  // sources are still out" has a single mechanism rather than one per source
+  // kind. A queued trigger joins the loop out, which runs one more pass for it
+  // before it ends: that loop answers a new key when either trigger brought
+  // one.
+  private track(name: string, trigger: Trigger, cause: RunCause): void {
+    runInAction(() => {
+      if (trigger.kind === "started") {
+        this.runs.set(name, trigger.done);
+        this.newKeys.delete(name);
+      }
+      if (cause === "new-key") this.newKeys.add(name);
+    });
+    if (trigger.kind === "queued") return;
+    const done = trigger.done;
     // The identity check is the same one SingleFlight makes, for the same
     // reason: `TrailingEdge` releases a key before this `finally` runs, so a
     // trigger landing in that window starts a NEW tracked loop, and an
     // unconditional delete here would remove the live entry and leave
-    // `settled()` no longer waiting for work that is still out.
-    const tracked: Promise<void> = work.finally(() => {
-      if (this.inFlight.get(name) === tracked) this.inFlight.delete(name);
-    });
-    this.inFlight.set(name, tracked);
+    // `inFlight()` no longer waiting for work that is still out.
+    // [LAW:no-silent-failure] A run's rejection is a bug and stays unhandled
+    // here: a waiter watches the run leave `newKeys`, never its outcome, so
+    // no wait swallows it.
+    void done.finally(() =>
+      runInAction(() => {
+        if (this.runs.get(name) !== done) return;
+        this.runs.delete(name);
+        this.newKeys.delete(name);
+      }),
+    );
   }
 
-  // [LAW:no-ambient-temporal-coupling] Resolves when every async source's
-  // pending work — a shell/file run, and every run one of them triggered (a `depends_on` reaction fires inside a
-  // publish) — has completed, or at the deadline. The value is the names still
-  // in flight: empty when all settled. This is the state a one-shot render
-  // (`cc-candybar check`) awaits so it renders what those sources yielded,
-  // never a guessed delay; the registry owns the timer, so no caller races one
-  // of its own.
-  async settled(withinMs: number): Promise<readonly string[]> {
-    const deadline = Date.now() + withinMs;
-    while (this.inFlight.size > 0) {
-      const remaining = deadline - Date.now();
-      if (remaining <= 0) break;
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const outcome = await Promise.race([
-        Promise.all(this.inFlight.values()).then(() => "settled" as const),
-        new Promise<"deadline">((resolve) => {
-          timer = setTimeout(() => resolve("deadline"), remaining);
-        }),
-      ]);
-      clearTimeout(timer);
-      if (outcome === "deadline") break;
+  // [LAW:no-ambient-temporal-coupling] Resolves when none of the runs a wait
+  // is for is out (`awaited`), or when `signal` aborts — and then holds
+  // nothing, so a run that never ends keeps no waiter behind it. A run one of
+  // them triggers (a `depends_on` reaction fires inside a publish) is marked
+  // before the run that triggered it ends, so it is waited out too.
+  async inFlight(signal: AbortSignal): Promise<void> {
+    try {
+      await when(() => this.awaited().length === 0, { signal });
+    } catch (e) {
+      // The signal's abort is the one rejection the wait expects.
+      if (!signal.aborted) throw e;
     }
-    return [...this.inFlight.keys()];
+  }
+
+  // The sources a wait on this registry is for: the runs out here and in the
+  // home it reads through to that answer a new key (rule 2's first value, or
+  // a key its facts moved). A re-read keeps the answer it has standing, so no
+  // wait is for it, whoever's period or watch started it.
+  private awaited(): string[] {
+    return [...this.newKeys, ...(this.parent?.awaited() ?? [])];
+  }
+
+  // The names still awaited once every run has ended or `withinMs` has
+  // passed: empty when all settled. This is the state a one-shot render
+  // (`cc-candybar check`) awaits so it renders what those sources yielded,
+  // never a guessed delay.
+  async settled(withinMs: number): Promise<readonly string[]> {
+    await this.inFlight(AbortSignal.timeout(withinMs));
+    return this.awaited();
   }
 
   // template: a variable whose value is derived by evaluating a go-template
@@ -1157,24 +1191,28 @@ export class SourceRegistry {
   private registerCachePolicy(
     name: string,
     policy: CachePolicy,
-    update: () => void,
+    update: (cause: RunCause) => void,
   ): void {
     switch (policy.kind) {
       case "never":
-        update();
+        update("new-key");
         break;
 
       case "ttl": {
-        update();
-        const unsub = this.ttlMgr.subscribe(policy.durationMs, update);
+        update("new-key");
+        const unsub = this.ttlMgr.subscribe(policy.durationMs, () =>
+          update("re-read"),
+        );
         this.cleanups.push(unsub);
         break;
       }
 
       case "watch_file": {
-        update();
-        const unsub = this.watchMgr.subscribe(policy.path, update, (message) =>
-          this.notePolicy(name, failed(message)),
+        update("new-key");
+        const unsub = this.watchMgr.subscribe(
+          policy.path,
+          () => update("re-read"),
+          (message) => this.notePolicy(name, failed(message)),
         );
         this.cleanups.push(unsub);
         break;
@@ -1209,7 +1247,7 @@ export class SourceRegistry {
                   );
             }
           },
-          update,
+          () => update("new-key"),
         );
         break;
       }
@@ -1226,7 +1264,7 @@ export class SourceRegistry {
               ? ok(keys.map((key) => key.value).join(","))
               : PENDING;
           },
-          update,
+          () => update("new-key"),
         );
         break;
       }

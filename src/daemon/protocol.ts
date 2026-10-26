@@ -36,6 +36,15 @@ import type { TmuxStatusBar } from "../tmux-status/frames";
 // Don't bump for growth.
 export const PROTOCOL_VERSION = 3;
 
+// [LAW:one-source-of-truth] A statusline client's budgets: how long its
+// connect may take, and how long its render round trip has. Wire facts, read
+// by the client that spends them and the daemon that answers inside them
+// (src/daemon/request-deadline.ts). Mirrored by the Rust client
+// (rust-client/src/main.rs) and diffed by scripts/check-protocol.mjs, which
+// anchors on these declarations.
+export const CONNECT_TIMEOUT_MS = 50;
+export const TOTAL_BUDGET_MS = 150;
+
 export interface RenderRequest {
   v: number;
   kind: "render";
@@ -46,6 +55,12 @@ export interface RenderRequest {
   // strip (parseRenderArgs, server.ts).
   args: string[];
   cwd: string;
+  // When the client hangs up, in epoch milliseconds: the daemon's wait for
+  // this request's refreshes ends early enough to draw before it
+  // (src/daemon/request-deadline.ts). Absent from a client too old to state
+  // one. Never a hint: it is new on every request, and the hints are recorded
+  // per session whenever they change.
+  deadline?: number;
   // ─── Client hints ────────────────────────────────────────────────────────
   // [LAW:single-enforcer] Facts only the LIVE CLIENT can observe, captured at
   // the trust boundary and trusted by the daemon. The daemon is detached and
@@ -528,12 +543,14 @@ export function makeFrameReader(
   };
 }
 
-// Send one frame and await one response, with a hard total budget. Resolves
-// to the parsed response or rejects on timeout / parse error / socket error.
+// Send one frame and await one response, giving up at `deadline` (epoch
+// milliseconds) — the instant a render request states as its own, so the
+// client hangs up when it said it would. Resolves to the parsed response or
+// rejects on timeout / parse error / socket error.
 export function sendOne(
   sock: Socket,
   req: Request,
-  totalBudgetMs: number,
+  deadline: number,
 ): Promise<Response> {
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -551,7 +568,7 @@ export function sendOne(
         sock.destroy();
         reject(new Error("TIMEOUT"));
       });
-    }, totalBudgetMs);
+    }, deadline - Date.now());
 
     const reader = makeFrameReader(
       (frame) => finish(() => resolve(frame as Response)),

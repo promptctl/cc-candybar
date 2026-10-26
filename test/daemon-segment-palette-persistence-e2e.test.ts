@@ -16,8 +16,6 @@ import os from "node:os";
 import path from "node:path";
 
 import JSON5 from "json5";
-import { PROTOCOL_VERSION } from "../src/daemon/protocol";
-import { parseHandlerUrl } from "../src/install/index";
 import { effectsOf } from "./helpers/click";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import {
@@ -25,71 +23,13 @@ import {
   spawnDaemonWithEnv,
   type RunningDaemon,
 } from "./helpers/spawn-isolated-daemon";
-import { sendDaemonRequest, waitForExit } from "./helpers/daemon-wire";
+import { waitForExit } from "./helpers/daemon-wire";
+// [LAW:one-source-of-truth] The shared transient contract: a render retried
+// on TIMEOUT and on an answer that drew a source pending.
+import { click, render } from "./helpers/daemon-e2e";
 import { linkUrls, withoutLinks } from "./helpers/ansi";
-import { detectClaudeConfigDir } from "../src/claude-settings";
 
 jest.setTimeout(30_000);
-
-const REPLY_BUDGET_MS = 5000;
-
-// [LAW:no-ambient-temporal-coupling] Same transient-TIMEOUT retry budget
-// daemon-config-persistence-e2e.test.ts uses (see its own comment) — a cold
-// first render on a loaded CI runner can genuinely exceed the daemon's real
-// per-request timeout guard even though it's fast locally.
-const TIMEOUT_RETRY_BUDGET = 5;
-
-async function render(
-  sockPath: string,
-  sessionId: string,
-  cwd: string,
-): Promise<string> {
-  for (let attempt = 1; ; attempt++) {
-    const resp = await sendDaemonRequest(
-      sockPath,
-      {
-        v: PROTOCOL_VERSION,
-        kind: "render",
-        hookData: {
-          hook_event_name: "Status",
-          session_id: sessionId,
-          transcript_path: path.join(cwd, "transcript.jsonl"),
-          cwd,
-          model: { id: "claude-opus-4-7", display_name: "Opus 4.7" },
-          workspace: { current_dir: cwd, project_dir: cwd, added_dirs: [] },
-        },
-        args: [],
-        cwd,
-        // The hint the real client sends: test/setup.ts's empty Claude Code
-        // directory, never the host's settings.
-        claudeConfigDir: detectClaudeConfigDir(process.env, cwd),
-      },
-      REPLY_BUDGET_MS,
-    );
-    if (!resp.ok) {
-      if (resp.code === "TIMEOUT" && attempt < TIMEOUT_RETRY_BUDGET) continue;
-      throw new Error(`render failed: ${resp.error} (${resp.code})`);
-    }
-    if (!("output" in resp)) {
-      throw new Error(
-        `render response carried no output: ${JSON.stringify(resp)}`,
-      );
-    }
-    return resp.output;
-  }
-}
-
-async function click(sockPath: string, url: string): Promise<void> {
-  const { verb, value } = parseHandlerUrl(url);
-  const resp = await sendDaemonRequest(
-    sockPath,
-    { v: PROTOCOL_VERSION, kind: "click", verb, value },
-    REPLY_BUDGET_MS,
-  );
-  if (!resp.ok) {
-    throw new Error(`click failed: ${resp.error} (${resp.code})`);
-  }
-}
 
 async function killAndWait(daemon: RunningDaemon): Promise<void> {
   const exited = waitForExit(daemon.child);

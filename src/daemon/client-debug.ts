@@ -47,8 +47,10 @@ function fetchDebug(what: DebugWhat): Promise<RoundTripOutcome<DebugSnapshot>> {
   // an unchecked cast from socket JSON; the presence check is the explicit
   // narrowing at the wire edge (an ok response without `debug` classifies as
   // permanent/malformed_response in the transport).
-  return requestOutcome({ kind: "debug", what }, BUDGETS, (resp) =>
-    "debug" in resp ? resp.debug : undefined,
+  return requestOutcome(
+    () => ({ kind: "debug", what }),
+    BUDGETS,
+    (resp) => ("debug" in resp ? resp.debug : undefined),
   );
 }
 

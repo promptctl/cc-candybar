@@ -275,6 +275,14 @@ enum BadInput {
 
 fn render(argv: &[String], hook_data: &serde_json::Value) -> RenderOutcome {
     let deadline = Instant::now() + TOTAL_BUDGET;
+    // [LAW:one-source-of-truth] The same instant on the wall clock, stated on
+    // the request so the daemon's wait ends early enough to answer before we
+    // hang up (src/daemon/request-deadline.ts). A clock set before 1970 states
+    // nothing, the old client's silence, rather than a deadline in the past.
+    let deadline_epoch_ms = (std::time::SystemTime::now() + TOTAL_BUDGET)
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()
+        .map(|d| d.as_millis() as u64);
     let cwd = match env::current_dir() {
         Ok(p) => p.to_string_lossy().into_owned(),
         Err(e) => return RenderOutcome::Transient(TransientCause::Io(e.to_string())),
@@ -298,6 +306,9 @@ fn render(argv: &[String], hook_data: &serde_json::Value) -> RenderOutcome {
         "args": argv,
         "cwd": cwd,
     });
+    if let Some(ms) = deadline_epoch_ms {
+        request["deadline"] = serde_json::Value::from(ms);
+    }
     // --- client hints (mirrors ClientHints in src/daemon/protocol.ts) ---
     // [LAW:one-source-of-truth] scripts/check-protocol.mjs diffs the key set in
     // this block against that interface — add a hint in both runtimes at once.

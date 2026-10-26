@@ -94,6 +94,40 @@ export async function answered<A>(read: () => A | Waiting): Promise<A> {
   }
 }
 
+// How a bounded wait ended: what it waited on answered, or its time ran out.
+export type WaitEnd = "answered" | "deadline";
+
+// [LAW:no-ambient-temporal-coupling][LAW:single-enforcer] The one bounded
+// wait over work that does not end at a signal of its own (a wait that does,
+// as `SourceRegistry.inFlight` does, is bounded by the signal it is given):
+// `work`, or `ms`, whichever ends first. `work` is handed the wait's
+// signal, aborted when the wait ends on either arm, with its timer cleared:
+// what it listens on through the signal stops with the wait, so a wait leaves
+// nothing behind. What it does not, a run it started, goes on, and a failure
+// of it after the deadline is no one's answer: it goes to `late`, its owner's
+// report.
+export function waitWithin(
+  work: (signal: AbortSignal) => Promise<unknown>,
+  ms: number,
+  late: (e: unknown) => void,
+): Promise<WaitEnd> {
+  const wait = new AbortController();
+  const timer = setTimeout(() => wait.abort(), Math.max(0, ms));
+  const ended = new Promise<WaitEnd>((resolve, reject) => {
+    wait.signal.addEventListener("abort", () => resolve("deadline"));
+    void work(wait.signal).then(
+      () => resolve("answered"),
+      // [LAW:no-silent-failure] Every rejection is reported: the wait's own
+      // while it listens, its owner's after.
+      (e: unknown) => (wait.signal.aborted ? late(e) : reject(e)),
+    );
+  });
+  return ended.finally(() => {
+    clearTimeout(timer);
+    wait.abort();
+  });
+}
+
 // [LAW:types-are-the-program] What a declaration hands its reader: the entry
 // it took, read as it stands. The key was computed once, by the declaration,
 // and reading takes nothing, so a read can neither re-derive the key nor take
