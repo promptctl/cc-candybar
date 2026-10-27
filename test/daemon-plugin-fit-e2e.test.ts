@@ -174,12 +174,14 @@ describe("another program's plugin, as such a program ships it, on a real daemon
   // rename, again until the bar shows it (the folder's watch goes live after
   // it opens).
   const programWrites = async (doc: object, shows: string): Promise<void> => {
-    await renderUntil((bar) => {
+    let bar = "";
+    await until(async () => {
       const tmp = path.join(storage(), `.${SESSION}.tmp`);
       fs.writeFileSync(tmp, JSON.stringify(doc));
       fs.renameSync(tmp, path.join(storage(), `${SESSION}.json`));
+      bar = stripAnsi(await renderRaw());
       return bar.includes(shows);
-    }, `the program's write of ${shows}`);
+    }, () => `the bar showing ${shows}; last:\n${bar}`, 10_000);
   };
 
   const calls = (): Call[] =>

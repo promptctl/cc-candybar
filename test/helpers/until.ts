@@ -8,16 +8,17 @@ export type What = string | (() => string);
 
 const TICK_MS = 10;
 
-const describe = (what: What): string =>
+const nameOf = (what: What): string =>
   typeof what === "string" ? what : what();
 
-// [LAW:no-ambient-temporal-coupling] The budget is counted in real ticks,
-// never read off a clock. Jest's fake timers freeze Date, hrtime and
-// performance, but node:timers/promises keeps real time under them, so a
-// test that fakes the clock for the code it drives still gets a real
-// deadline on what it waits for. Ticks bound the sleeps, not the probes, so
-// the budget is a floor on wall time: a slow probe makes the wait longer,
-// never shorter.
+// [LAW:no-ambient-temporal-coupling] The budget is one real sleep, never a
+// deadline read off a clock. Jest's fake timers freeze Date, hrtime and
+// performance, and sinon would fake node:timers/promises too were the clock
+// installed on the real global; jest installs it on the sandbox's global, so
+// the module keeps real time there, and a test that fakes the clock for the
+// code it drives still gets a real deadline on what it waits for. The
+// deadline is read after each probe, not raced against it, so a wait ends
+// at most one probe past its budget and never cuts a probe short.
 // [LAW:one-source-of-truth] THE poll loop: both named waits below are one
 // loop with the two outcomes named, so no test file keeps a copy that
 // answers false at its deadline.
@@ -25,10 +26,20 @@ async function holdsWithin(
   reached: Condition,
   budgetMs: number,
 ): Promise<boolean> {
-  for (let ticks = Math.ceil(budgetMs / TICK_MS); ; ticks--) {
-    if (await reached()) return true;
-    if (ticks <= 0) return false;
-    await sleep(TICK_MS);
+  const stop = new AbortController();
+  let expired = false;
+  void sleep(budgetMs, undefined, { signal: stop.signal }).then(
+    () => { expired = true; },
+    () => {},
+  );
+  try {
+    for (;;) {
+      if (await reached()) return true;
+      if (expired) return false;
+      await sleep(TICK_MS);
+    }
+  } finally {
+    stop.abort();
   }
 }
 
@@ -41,7 +52,7 @@ export async function until(
   budgetMs = 5_000,
 ): Promise<void> {
   if (!(await holdsWithin(reached, budgetMs)))
-    throw new Error(`${describe(what)} did not hold within ${budgetMs}ms`);
+    throw new Error(`${nameOf(what)} did not hold within ${budgetMs}ms`);
 }
 
 // The complement: a named condition that must keep holding for the whole
@@ -54,5 +65,5 @@ export async function throughout(
   budgetMs: number,
 ): Promise<void> {
   if (await holdsWithin(async () => !(await holds()), budgetMs))
-    throw new Error(`${describe(what)} stopped holding within ${budgetMs}ms`);
+    throw new Error(`${nameOf(what)} stopped holding within ${budgetMs}ms`);
 }

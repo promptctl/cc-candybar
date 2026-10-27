@@ -26,6 +26,10 @@ import {
 import { waitForExit } from "./helpers/daemon-wire";
 // [LAW:one-source-of-truth] The shared transient contract: a render retried
 // on TIMEOUT and on an answer that drew a source pending.
+// [LAW:no-ambient-temporal-coupling] A persist's synchronous write completing
+// does not mean the render cache has reloaded (that is a separate fs.watch
+// callback), so the wait for a click's effect is the shared render-until,
+// which carries the reason.
 import { click, render, renderUntil } from "./helpers/daemon-e2e";
 import { linkUrls, withoutLinks } from "./helpers/ansi";
 
@@ -36,7 +40,6 @@ async function killAndWait(daemon: RunningDaemon): Promise<void> {
   daemon.killTree();
   await exited;
 }
-
 
 describe("candybar-config-engine-71o.6: real-daemon segment-palette click → persist → restart", () => {
   test("a user's directory-palette menu, clicked over the real socket, survives a cold restart and leaves every other segment's palette untouched", async () => {
