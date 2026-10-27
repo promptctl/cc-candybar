@@ -1,3 +1,9 @@
+## [1.160.3](https://github.com/promptctl/cc-candybar/compare/v1.160.2...v1.160.3) (2026-10-27)
+
+### Bug Fixes
+
+* **config:** a symlinked config is watched where a write to it lands, and no file is watched by its inode (brandon-unfiled-3248.wyc) ([#459](https://github.com/promptctl/cc-candybar/issues/459)) ([68a0bd7](https://github.com/promptctl/cc-candybar/commit/68a0bd744efdcc5c3292272895a34a54e880db58))
+
 ## [1.160.2](https://github.com/promptctl/cc-candybar/compare/v1.160.1...v1.160.2) (2026-10-27)
 
 ### Bug Fixes
