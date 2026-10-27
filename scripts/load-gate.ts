@@ -623,16 +623,33 @@ async function menuClick(s: Session, open: boolean): Promise<string> {
 // clicked as often, never less. The phase ends on a close, so the menu is left
 // as the clicks found it.
 async function clickMenu(s: Session, started: number): Promise<void> {
+  let answered = s.answers;
   for (let n = 0; n % 2 === 1 || Date.now() - started < STEADY_MS; n++) {
     const t0 = performance.now();
     const outcome = await menuClick(s, n % 2 === 0);
     clicks.push({ ms: performance.now() - t0, outcome });
+    answered = s.answers;
     // The next beat, or the steady phase's end if that comes first: the
     // phase's daemon events are read up to when the last click answered.
     await sleep(
       Math.min(started + (n + 1) * CLICK_PERIOD_MS, started + STEADY_MS) -
         Date.now(),
     );
+  }
+  // The last close's release lands with the bar's next draw, which the
+  // samples after the phase must count.
+  await redrawn(s, answered);
+}
+
+// Until the session draws its bar again after a click answered, when it had
+// `answered`: the draw that builds what an open menu reads, or releases it
+// once closed.
+async function redrawn(s: Session, answered: number): Promise<void> {
+  const deadline = Date.now() + WARM_DEADLINE_MS;
+  while (s.answers === answered) {
+    if (Date.now() >= deadline)
+      throw new Error(`${s.id} drew no bar after its menu was clicked`);
+    await sleep(50);
   }
 }
 
@@ -642,16 +659,10 @@ async function clickMenu(s: Session, started: number): Promise<void> {
 // they keep beyond it.
 async function warmMenu(s: Session): Promise<void> {
   for (const open of [true, false]) {
-    const answered = s.answers;
     const outcome = await menuClick(s, open);
     if (outcome !== "ok")
       throw new Error(`the warm-up click on ${s.id}'s menu ended ${outcome}`);
-    const deadline = Date.now() + WARM_DEADLINE_MS;
-    while (s.answers === answered) {
-      if (Date.now() >= deadline)
-        throw new Error(`${s.id} drew no bar after its warm-up click`);
-      await sleep(50);
-    }
+    await redrawn(s, s.answers);
   }
 }
 

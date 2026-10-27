@@ -102,6 +102,8 @@ export class FileSessionStorage implements SessionStorage {
     const body = JSON.stringify(snapshot);
     const tmp = `${this.filePath}.writing`;
     this.writing = true;
+    // The thread is held until the first await, and again for the rename.
+    const heldBefore = performance.now() - started;
     try {
       await fs.promises.mkdir(path.dirname(this.filePath), { recursive: true });
       const file = await fs.promises.open(tmp, "w", 0o600);
@@ -119,15 +121,23 @@ export class FileSessionStorage implements SessionStorage {
         await fs.promises.rm(tmp, { force: true });
         return;
       }
-      const held = performance.now();
+      const renaming = performance.now();
       fs.renameSync(tmp, this.filePath);
-      this.saved(body, snapshot, started, performance.now() - held);
+      this.saved(
+        body,
+        snapshot,
+        started,
+        heldBefore + performance.now() - renaming,
+      );
       if (this.pending === snapshot) this.pending = null;
     } catch (e) {
       this.logger("warn", `session-state save failed: ${(e as Error).message}`);
     } finally {
       this.writing = false;
-      if (this.pending !== null) this.schedule();
+      // A save that arrived while this one was written is written next. A
+      // snapshot whose write failed waits for the next save or shutdown's
+      // flush, so a disk that keeps refusing is not retried on a timer.
+      if (this.pending !== null && this.pending !== snapshot) this.schedule();
     }
   }
 

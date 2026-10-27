@@ -318,8 +318,11 @@ export function clickLaunch(
     dlog("warn", `${opts.category} rate-limited: ${result.error ?? ""}`);
     return;
   }
+  // What the launch itself said of its failure: the spawn's error, or what
+  // the program wrote to stderr before it exited.
+  const said = result.error ?? result.stderr.trim();
   throw new Error(
-    `${what} failed (${result.reason}, exit ${result.exitCode ?? "null"})`,
+    `${what} failed (${result.reason}, exit ${result.exitCode ?? "null"})${said === "" ? "" : `: ${said}`}`,
   );
 }
 

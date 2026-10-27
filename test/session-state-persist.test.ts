@@ -106,6 +106,25 @@ describe("SessionState disk persistence", () => {
     expect(existsSync(`${file}.writing`)).toBe(false);
   });
 
+  // A disk that refuses a write is retried by the next save or shutdown's
+  // flush, not on a timer: an idle daemon does not spin on it.
+  it("a debounced write the disk refuses is tried once, not on a timer", async () => {
+    const blocked = join(dir, "not-a-folder");
+    writeFileSync(blocked, "");
+    const logged: string[] = [];
+    const ss = new SessionState(
+      new FileSessionStorage(
+        join(blocked, "session-state.json"),
+        0,
+        (_level, line) => logged.push(line),
+      ),
+    );
+    ss.set("s1", "theme", "nord");
+    await settled(() => logged.some((l) => l.includes("save failed")));
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(logged.filter((l) => l.includes("save failed"))).toHaveLength(1);
+  });
+
   it("survives a daemon restart: a fresh instance reads identical values", () => {
     const first = new SessionState(new FileSessionStorage(file, 0));
     first.set("s1", "theme", "dracula");
