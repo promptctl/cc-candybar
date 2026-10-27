@@ -533,7 +533,7 @@ describe("ManagedStorage stalls", () => {
     new Promise((resolve) => setTimeout(resolve, 3 * DEBOUNCE_MS));
   const stallReason = (folder: string) =>
     new RegExp(
-      `^cannot refresh: ${folder}: its watch has delivered no event since \\S+, not even for a file the daemon wrote there to test it; the OS has stopped delivering file events$`,
+      `^cannot refresh: ${folder}: its watch has delivered no event since \\S+, not even for a file the daemon wrote there to test it; the OS is not delivering its file events$`,
     );
   const warnings = (r: Rig) =>
     r.lines.filter((l) => l.startsWith("warn plugin storage stalled"));
@@ -692,6 +692,23 @@ describe("ManagedStorage stalls", () => {
       kind: "failed",
       reason: expect.stringMatching(stallReason(r.folder)),
     });
+    expect(r.storage.stats()).toMatchObject({ lost: 1, stalled: 1, stalls: 1 });
+  });
+
+  test("a stalled folder found lost recovers on its watch's next report, and its lanes read the path again", async () => {
+    const { r, lane, watch } = await stalledRig();
+    await until(
+      () => r.storage.stats().probes === 2,
+      "the stalling period's probe",
+    );
+    fs.rmSync(r.folder, { recursive: true });
+    fs.mkdirSync(r.folder);
+    r.write(A, '"in the new folder"');
+    period();
+    await until(() => r.storage.stats().lost === 1, "the loss");
+    watch.listener("change", "session-a.json");
+    await until(() => lane.current().kind === "ok", "the re-read");
+    expect(lane.current()).toEqual(ok("in the new folder"));
     expect(r.storage.stats()).toMatchObject({ lost: 1, stalled: 0, stalls: 1 });
   });
 
