@@ -28,10 +28,15 @@
   let graphCore = $state.raw<Core>();
 
   const simNodes = new Map<NodeId, SimNode>();
+  // A link pulls in proportion to how few other links its busier end has, as d3's default does.
+  // At full strength, twenty projects each tied to three characteristics drag those
+  // characteristics into one knot; shared out over the degree, a crowded node is held, not hauled.
+  const degree = new Map<string, number>();
+  const endId = (n: SimNode | string | number) => (typeof n === 'object' ? n.id : String(n));
   const linkForce = forceLink<SimNode, SimLink>([])
     .id((d) => d.id)
     .distance((l) => DISTANCE[l.kind])
-    .strength((l) => STRENGTH[l.kind]);
+    .strength((l) => STRENGTH[l.kind] / Math.max(1, Math.min(degree.get(endId(l.source)) ?? 1, degree.get(endId(l.target)) ?? 1)));
   // A low velocity decay lets nodes overshoot and wobble before they settle, which is the bounce.
   // A low alpha decay keeps a change moving for a few seconds instead of freezing at once.
   const sim = forceSimulation<SimNode, SimLink>([])
@@ -58,7 +63,7 @@
       return { data: { id, label: `+${left} more`, size: 12 }, classes: 'more' };
     }
     const p = projectById.get(id)!;
-    return { data: { id, label: p.repo, size: 9 + Math.min(10, p.novel.length * 3) }, classes: p.novel.length ? 'project novel' : 'project' };
+    return { data: { id, label: p.repo, size: 9 + Math.min(10, p.novel.length * 3) }, classes: ['project', p.novel.length ? 'novel' : '', p.live ? 'live' : ''].join(' ') };
   }
 
   function shape(id: NodeId): { kind: SimNode['kind']; r: number } {
@@ -163,6 +168,8 @@
     const shown = edges.filter((e) => simNodes.has(e.source) && simNodes.has(e.target));
     // d3 rewrites a link's source and target into node objects, so the simulation gets its own copies.
     const live = shown.map((e) => ({ id: e.id, source: e.source, target: e.target, kind: e.kind, w: e.w }));
+    degree.clear();
+    for (const e of shown) for (const end of [e.source, e.target]) degree.set(end, (degree.get(end) ?? 0) + 1);
     // d3's link force resolves ids the moment its links are set, against the nodes it already has,
     // so the links are emptied, the nodes replaced, and only then the new links set.
     linkForce.links([]);
@@ -199,6 +206,8 @@
       { selector: 'node.project.showlabel', style: { label: 'data(label)' } },
       { selector: 'node.project.lens', style: { label: 'data(label)' } },
       { selector: 'node.novel', style: { 'background-color': '#f0e0c8', 'border-color': '#e8a25c', 'border-width': 2 } },
+      // a project whose bar plays along the bottom when opened; the novel border stays, the fill says live
+      { selector: 'node.live', style: { 'background-color': '#5fc0a8' } },
       { selector: 'node:selected', style: { 'border-color': '#ffffff', 'border-width': 3 } },
       { selector: 'edge', style: { width: 1, 'line-color': '#2e333c', 'curve-style': 'haystack' } },
       { selector: 'edge.related', style: { width: 'mapData(w, 0, 0.6, 1, 7)', 'line-color': '#4a505b', opacity: 0.6 } },

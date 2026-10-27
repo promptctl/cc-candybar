@@ -1,9 +1,11 @@
-"""Export every project read, both runs, as the explorer app's data.json (argv[1] is its path).
+"""Export every project read, both runs, as the explorer app's data.json (argv[1] is its path),
+and the captured bars as a gzip file beside it, bars.json.gz.b64, base64 so the page can inline
+it: the bars are most of the page's bytes and compress twentyfold.
 
 Data comes from the same files build.py reads; the novelty patterns are taken from novel.py's PAT
 literal so an item lands in the same group the README counts.
 """
-import ast, json, glob, os, re, sys
+import ast, base64, gzip, json, glob, os, re, sys
 from collections import defaultdict
 
 DEST = sys.argv[1]
@@ -63,6 +65,7 @@ runs = [('/tmp/ccland', True, list(enumerate(top, 1))),
         ('/tmp/ccland/t2', False, [(len(top) + i, q) for i, q in enumerate(everyone, 1) if q['slug'] in picked])]
 
 projects = []
+bars = {}  # repo -> frames by width, written beside data.json
 for run, is_top, ranked in runs:
     rows, motive, fams, novel = load(run)
     for rank, q in ranked:
@@ -82,13 +85,14 @@ for run, is_top, ranked in runs:
              'copy': [[o.replace('__', '/', 1), round(100 * a)] for o, n, a, _ in m.get('shares', [])[:3]]}
         p['tier'] = tiers[q['slug']]['tier']
         cap = captures.get(q['slug'])
-        if cap and cap['ok']:
-            # one capture per terminal width, keeping only widths whose output differs from the narrower one
-            bars, last = {}, None
-            for w in sorted(cap['bars'], key=int):
-                if cap['bars'][w] != last:
-                    bars[w] = last = cap['bars'][w]
-            p['bars'] = bars
+        p['live'] = bool(cap and cap['ok'])
+        if p['live']:
+            # the frames at each terminal width, keeping only widths whose frames differ from the narrower one
+            frames, last = {}, None
+            for w in sorted(cap['frames'], key=int):
+                if cap['frames'][w] and cap['frames'][w] != last:
+                    frames[w] = last = cap['frames'][w]
+            bars[q['repo']] = frames
         if not boring:  # boring rows carry no drill-down, so their long fields are left out of the page
             p.update({'created': (md.get('created') or '')[:10], 'size': r.get('size', ''),
                       'sources': r.get('data sources', ''), 'lineage': r.get('lineage', ''),
@@ -97,6 +101,8 @@ for run, is_top, ranked in runs:
         projects.append(p)
 
 groups = [name for name, _ in PAT] + ['unsorted']
+packed = gzip.compress(json.dumps(bars, separators=(',', ':')).encode(), 9)
+open(os.path.join(os.path.dirname(DEST), 'bars.json.gz.b64'), 'w').write(base64.b64encode(packed).decode())
 data = {'projects': projects, 'families': families, 'fnames': fnames, 'motives': motives, 'groups': groups}
 json.dump(data, open(DEST, 'w'), separators=(',', ':'))
 print(len(projects), 'projects;', sum(p['boring'] for p in projects), 'just print fields;',

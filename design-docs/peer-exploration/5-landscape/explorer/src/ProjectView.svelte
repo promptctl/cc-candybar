@@ -15,7 +15,7 @@
 <h2>{p.repo}</h2>
 <p><a class="repo" href={p.url} target="_blank" rel="noopener">{p.url.replace('https://', '')} ↗</a></p>
 <p>{p.what}</p>
-{#if p.bars}<p class="muted small">Its bar is drawn along the bottom of the graph, as it printed in a sandbox against one fake session: a project on a feature branch, 61% context, $4.37 spent.</p>{/if}
+{#if p.live}<p class="muted small">Its bar plays along the bottom of the graph, as it printed in a sandbox through a two-minute mock conversation: a feature branch, edits, a commit, a push.</p>{/if}
 <p class="muted small">{p.loc} statusline lines{p.lang ? ` · ${p.lang}` : ''} · {p.commits} commits · last {p.last}{p.created ? ` · created ${p.created}` : ''}</p>
 
 {#if p.novel.length}

@@ -12,7 +12,7 @@
   {#if project.boring}
     <a href={project.url} target="_blank" rel="noopener">{project.repo}</a>
   {:else}
-    <button class="ref" onclick={() => go(id)}>{project.repo}</button>
+    <button class="ref" class:live={project.live} onclick={() => go(id)}>{project.repo}</button>
     <a class="out" href={project.url} target="_blank" rel="noopener" title="open on GitHub">↗</a>
   {/if}
 {:else if trait}

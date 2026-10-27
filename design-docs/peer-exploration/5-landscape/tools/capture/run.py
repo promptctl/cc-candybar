@@ -1,19 +1,25 @@
-"""Run every resolved entry inside the sandbox, once per terminal width, and keep what it printed.
+"""Run every resolved entry inside the sandbox through the fixture's timeline, at each terminal
+width, and keep every frame the bar changed to.
 
     python3 -I run.py <entries.json> <fixture-dir> <src-root> <runs-dir> <captures.json> [slug ...]
 
-Each run gets a fresh copy of the fixture and of the project tree under <runs-dir>/<slug>, and
-the sandbox profile beside this file confines the process to that copy: no network, no reads
-outside it except the runtimes, no writes outside it. The command runs with the hook JSON on
-stdin, the fixture home as HOME, and the terminal size Claude Code advertises. A terminal reflows
-by re-running the script at the new width, so each width is its own run on its own fresh copy.
+Each width gets one run copy under <runs-dir>/<slug>-<width>: the fixture's home, stub tools and
+a copy of the project tree. The copy lives for the whole timeline, so a script that keeps state in
+its home (a pet, a spinner, a cache) keeps it between ticks, as it would under Claude Code. At
+each tick only what the session changes is swapped in: the project tree and the transcript. The
+sandbox profile beside this file confines the process to the copy: no network, no reads outside
+it except the runtimes, no writes outside it. The command runs with the tick's hook JSON on
+stdin, the copy's home as HOME, and the terminal size Claude Code advertises.
 
 Every entry produces a record, success or not [LAW:no-silent-failure]:
-  {"ok": true,  "ms": n, "bars": {"80": "<bytes as text>", "120": ..., "160": ...}, "cmd": "<shell>"}
-  {"ok": false, "ms": n, "bars": {...}, "err": "<stderr tail>", "exit": n | "timeout", "cmd": "<shell>"}
-ok is the verdict of the 120-column run, the width Claude Code most often advertises; bars holds
-every width that printed something and exited 0. A run whose exit code is 0 but printed nothing
-is not ok: a blank bar is a failure to show anything.
+  {"ok": true,  "ms": n, "cmd": "<shell>",
+   "frames": {"80": [[tick, "<bytes as text>"], ...], "120": [...], "160": [...]}}
+  {"ok": false, "ms": n, "cmd": "<shell>", "frames": {...}, "err": "<stderr tail>", "exit": n | "timeout"}
+A frame is recorded at a tick when the output differs from the previous tick's, so a static bar
+is one frame and an animated one is many. ok is the verdict of the first tick at 120 columns, the
+width Claude Code most often advertises; a tick whose exit code is 0 but printed nothing is not
+ok: a blank bar is a failure to show anything. Ticks that fail after the first are left out of
+the frames.
 """
 import json, os, shutil, subprocess, sys, time
 import concurrent.futures as cf
@@ -21,12 +27,17 @@ import concurrent.futures as cf
 ENTRIES, FIXTURE, SRC, RUNS, DEST = sys.argv[1:6]
 ONLY = set(sys.argv[6:])
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)  # -I leaves the script's own directory off the path
+from scrub import scrub  # noqa: E402
 PROFILE = os.path.join(HERE, 'sandbox.sb')
 TIMEOUT = 20
 WIDTHS, MAIN, ROWS = (80, 120, 160), 120, 40
-HOME_SHOWN = '/Users/dev'
 MAX_TREE = 200_000_000
-WORKERS = 6
+WORKERS = 8
+TICKS = sorted(os.listdir(os.path.join(FIXTURE, 'tick')))
+# this user's temp directory, by its real path, for the sandbox to deny
+UTMP = os.path.realpath(subprocess.check_output(['getconf', 'DARWIN_USER_TEMP_DIR'], text=True).strip())
+TRANSCRIPT_DIR = 'home/.claude/projects'
 
 
 def real(p):
@@ -49,28 +60,26 @@ def tree_size(root):
 def capture(slug, entry):
     src = os.path.join(SRC, slug)
     if tree_size(src) > MAX_TREE:
-        return {'ok': False, 'ms': 0, 'bars': {}, 'err': 'project tree over %d MB' % (MAX_TREE // 1_000_000), 'exit': 'skipped', 'cmd': entry['cmd']}
-    runs = {w: run_once(slug, entry, src, w) for w in WIDTHS}
-    main = runs[MAIN]
-    rec = {'ok': main['ok'], 'ms': sum(r['ms'] for r in runs.values()), 'cmd': entry['cmd'],
-           'bars': {str(w): r['out'] for w, r in runs.items() if r['ok']}}
-    if not main['ok']:
-        rec['exit'] = main['exit']
-        rec['err'] = main['err']
+        return {'ok': False, 'ms': 0, 'cmd': entry['cmd'], 'frames': {}, 'err': 'project tree over %d MB' % (MAX_TREE // 1_000_000), 'exit': 'skipped'}
+    runs = {w: run_timeline(slug, entry, src, w) for w in WIDTHS}
+    first = runs[MAIN]['first']
+    rec = {'ok': first['ok'], 'ms': sum(r['ms'] for r in runs.values()), 'cmd': entry['cmd'],
+           'frames': {str(w): r['frames'] for w, r in runs.items()}}
+    if not first['ok']:
+        rec['exit'] = first['exit']
+        rec['err'] = first['err']
     return rec
 
 
-def run_once(slug, entry, src, width):
+def run_timeline(slug, entry, src, width):
     run = real(os.path.join(RUNS, '%s-%d' % (slug, width)))
     shutil.rmtree(run, ignore_errors=True)
-    shutil.copytree(FIXTURE, run, symlinks=True)
+    os.makedirs(run)
+    for d in ('home', 'bin'):
+        shutil.copytree(os.path.join(FIXTURE, 'base', d), os.path.join(run, d), symlinks=True)
     proj = os.path.join(run, 'proj')
     shutil.copytree(src, proj, symlinks=True)
-    hook = open(os.path.join(FIXTURE, 'hook.json')).read().replace('__RUN__', run)
-    tp = os.path.join(run, 'home/.claude/projects')
-    for d in os.listdir(tp):
-        if '__RUN__' in d:
-            os.rename(os.path.join(tp, d), os.path.join(tp, d.replace('__RUN__', run.replace('/', '-'))))
+    os.makedirs(os.path.join(run, 'tmp'))
     home = os.path.join(run, 'home')
     cwd = os.path.join(run, 'work', 'candybar-demo')
     cmd = entry['cmd'].replace('__PROJ__', proj)
@@ -79,20 +88,36 @@ def run_once(slug, entry, src, width):
            'LANG': 'en_US.UTF-8', 'LC_ALL': 'en_US.UTF-8', 'TERM': 'xterm-256color', 'COLORTERM': 'truecolor',
            'COLUMNS': str(width), 'LINES': str(ROWS), 'CLAUDE_PLUGIN_ROOT': proj, 'CLAUDE_CONFIG_DIR': os.path.join(home, '.claude'),
            'CLAUDE_CODE_ENTRYPOINT': 'cli', 'CLAUDECODE': '1', 'NO_COLOR': '', 'FORCE_COLOR': '1', 'PWD': cwd}
-    os.makedirs(env['TMPDIR'])
-    argv = ['sandbox-exec', '-f', PROFILE, '-D', 'RUN=' + run, '-D', 'SRC=' + real(src), 'bash', '-c', cmd]
-    t0 = time.time()
-    try:
-        p = subprocess.run(argv, input=hook.encode(), capture_output=True, cwd=cwd, env=env, timeout=TIMEOUT, start_new_session=True)
-        exit_code, out, err = p.returncode, p.stdout, p.stderr
-    except subprocess.TimeoutExpired as e:
-        exit_code, out, err = 'timeout', e.stdout or b'', e.stderr or b''
-    ms = int((time.time() - t0) * 1000)
+    argv = ['sandbox-exec', '-f', PROFILE, '-D', 'RUN=' + run, '-D', 'SRC=' + real(src), '-D', 'UTMP=' + UTMP, 'bash', '-c', cmd]
+    frames, last, first, ms = [], None, None, 0
+    for k, tick in enumerate(TICKS):
+        td = os.path.join(FIXTURE, 'tick', tick)
+        # what the session changed since the last tick: the project tree and the transcript
+        shutil.rmtree(os.path.join(run, 'work'), ignore_errors=True)
+        shutil.copytree(os.path.join(td, 'work'), os.path.join(run, 'work'), symlinks=True)
+        tdir = os.path.join(run, TRANSCRIPT_DIR)
+        shutil.rmtree(tdir, ignore_errors=True)
+        for d in os.listdir(os.path.join(td, TRANSCRIPT_DIR)):
+            shutil.copytree(os.path.join(td, TRANSCRIPT_DIR, d), os.path.join(tdir, d.replace('__RUN__', run.replace('/', '-'))))
+        hook = open(os.path.join(td, 'hook.json')).read().replace('__RUN__', run)
+        t0 = time.time()
+        try:
+            p = subprocess.run(argv, input=hook.encode(), capture_output=True, cwd=cwd, env=env, timeout=TIMEOUT, start_new_session=True)
+            exit_code, out, err = p.returncode, p.stdout, p.stderr
+        except subprocess.TimeoutExpired as e:
+            exit_code, out, err = 'timeout', e.stdout or b'', e.stderr or b''
+        ms += int((time.time() - t0) * 1000)
+        text = scrub(out.decode('utf-8', errors='replace'), run)[:20000]
+        ok = exit_code == 0 and text.strip() != ''
+        if first is None:
+            first = {'ok': ok, 'exit': exit_code, 'err': err.decode('utf-8', errors='replace')[-2000:] or ('printed nothing' if exit_code == 0 else '')}
+            if not ok:
+                break
+        if ok and text != last:
+            frames.append([k, text])
+            last = text
     shutil.rmtree(run, ignore_errors=True)
-    # The run directory stands in for the user's home, so a bar that prints a path shows a home-like one.
-    text = out.decode('utf-8', errors='replace').replace(run, HOME_SHOWN)
-    return {'ok': exit_code == 0 and text.strip() != '', 'ms': ms, 'out': text[:20000], 'exit': exit_code,
-            'err': err.decode('utf-8', errors='replace')[-2000:] or ('printed nothing' if exit_code == 0 else '')}
+    return {'first': first, 'frames': frames, 'ms': ms}
 
 
 entries = {k: v for k, v in json.load(open(ENTRIES)).items() if 'cmd' in v and (not ONLY or k in ONLY)}
@@ -105,7 +130,7 @@ with cf.ThreadPoolExecutor(WORKERS) as pool:
         slug = futures[f]
         captures[slug] = f.result()
         done += 1
-        if done % 100 == 0 or ONLY:
+        if done % 50 == 0 or ONLY:
             print(done, slug, 'ok' if captures[slug]['ok'] else captures[slug].get('exit'), flush=True)
             json.dump(captures, open(DEST, 'w'))
 json.dump(captures, open(DEST, 'w'))

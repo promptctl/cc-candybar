@@ -20,12 +20,10 @@ export interface RawProject {
   novel: Novel[];
   boring: boolean;
   copy: [repo: string, percent: number][];
-  // The risk tier the capture triage stamped (tools/capture/triage.py), and the bytes the
-  // statusline printed in the sandbox at each terminal width it was captured at, keyed by column
-  // count. A width whose output matched the next narrower one is left out. Absent when it was not
-  // run or failed.
+  // The risk tier the capture triage stamped (tools/capture/triage.py), and whether its bar was
+  // captured: ran in the sandbox and printed something. The frames themselves live in bars.ts.
   tier: 'skip' | 'unlocated' | 'safe' | 'review' | 'risky';
-  bars?: Record<string, string>;
+  live: boolean;
   created?: string;
   size?: string;
   sources?: string;
@@ -35,6 +33,11 @@ export interface RawProject {
   summary?: string;
   fork?: string;
 }
+
+// What a statusline printed in the sandbox through the fixture's 120-second conversation, keyed
+// by terminal width: a frame for each tick at which the output changed. A width whose frames
+// matched the next narrower one is left out.
+export type Bars = Record<string, [tick: number, out: string][]>;
 
 export interface RawData {
   projects: RawProject[];
