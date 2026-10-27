@@ -210,12 +210,11 @@ import {
 } from "./request-deadline.js";
 import { waitWithin } from "../utils/reading.js";
 import {
-  eventLine,
   noteFacts,
-  renderEvent,
-  type RenderFacts,
-  type RenderOutcome,
-} from "./render-event.js";
+  requestEvent,
+  type RequestFacts,
+  type RequestOutcome,
+} from "./request-event.js";
 
 // [LAW:one-source-of-truth] one cache instance per daemon process — multiple
 // instances would defeat the share-across-sessions invariant.
@@ -1380,7 +1379,7 @@ export async function replyTo(
     // render reached, so a failing render is described like any other.
     // A throw is this request's own RENDER_FAILED reply, so the event is the
     // one record of it and the connection's catch never sees a render.
-    const facts: RenderFacts = [];
+    const facts: RequestFacts = [];
     // Where this request came in the order they arrived: renders of one session
     // can finish out of it.
     // [LAW:one-source-of-truth] The count of render requests received is that
@@ -1427,7 +1426,7 @@ export async function replyTo(
       return { stated: req.deadline.kind, ms, endsAt: t0 + ms };
     };
     const rendered: {
-      outcome: RenderOutcome;
+      outcome: RequestOutcome;
       resp: Response;
       delivered: () => void;
     } = !checked.ok
@@ -1477,7 +1476,8 @@ export async function replyTo(
       timedOut: timedOut() ? "Y" : "N",
       queued: `${queuedMs}ms`,
     });
-    const { level, line } = renderEvent(
+    const { level, line } = requestEvent(
+      "render",
       facts,
       rendered.outcome,
       Math.round(performance.now() - t0),
@@ -1493,27 +1493,25 @@ export async function replyTo(
   if (req.kind === "click") {
     // [LAW:nothing-unseen] One click event per click request, whatever its
     // outcome: how long it was queued behind the loop from its accept, how
-    // long it then took, and what it learned on the way (its session, a
-    // status-line click's link). A field absent means it stopped before it.
+    // long it then took, and what it learned on the way (a status-line
+    // click's link, the verb that ran, its session). A field absent means it
+    // stopped before it.
     const t0 = performance.now();
-    const facts: RenderFacts = [
-      ["verb", req.verb],
-      ["queued", `${Math.round(t0 - accepted)}ms`],
-    ];
-    const resp = handleClick(
+    const facts: RequestFacts = [["queued", `${Math.round(t0 - accepted)}ms`]];
+    const outcome = handleClick(
       req.verb,
       req.value,
       { via: "link", handler: sanitizeClientVersion(req.clientVersion) },
       facts,
     );
-    noteFacts(facts, {
-      took: `${Math.round(performance.now() - t0)}ms`,
-      ...(resp.ok
-        ? { outcome: "ok" }
-        : { outcome: resp.code, error: resp.error }),
-    });
-    dlog(resp.ok ? "info" : "warn", eventLine("click", facts));
-    return stay(resp);
+    const { level, line } = requestEvent(
+      "click",
+      facts,
+      outcome,
+      Math.round(performance.now() - t0),
+    );
+    dlog(level, line);
+    return stay(clickReply(outcome));
   }
 
   if (req.kind === "debug") {
@@ -1769,34 +1767,51 @@ function handleClick(
   verb: string,
   value: string,
   arrival: ClickArrival,
-  facts: RenderFacts,
-): Response {
+  facts: RequestFacts,
+): RequestOutcome {
   if (verb === VERB_TMUX_STATUS_CLICK) return statusLineClick(value, facts);
   const handler = VERBS.get(verb);
   if (!handler) {
-    return {
-      ok: false,
-      error: `unknown click verb: ${verb}`,
-      code: "BAD_REQUEST",
-      daemonV: PROTOCOL_VERSION,
-    };
+    return { kind: "bad-request", problems: [`unknown click verb: ${verb}`] };
   }
+  noteFacts(facts, { verb });
   try {
-    // A click restarts its session's idle clock; one naming no session
-    // restarts none.
-    const clickedIn = clickSessionOf(verb, value);
-    noteFacts(facts, { session: clickedIn ?? "-" });
-    if (clickedIn !== null) menuIdle.clicked(clickedIn, instantOf(new Date()));
+    // [LAW:parse-dont-validate] The click's session crosses the one
+    // session-id checkpoint before it is recorded or restarts its idle clock.
+    // One that fails it is refused by its verb, so its event carries no
+    // `sid`; a click naming no session records `sid=-` and restarts no clock.
+    const named = clickSessionOf(verb, value);
+    const session = named === null ? null : parseSessionId(named);
+    if (session === null) noteFacts(facts, { sid: "-" });
+    else if (session.ok) {
+      noteFacts(facts, { sid: session.id });
+      menuIdle.clicked(session.id, instantOf(new Date()));
+    }
     handler(value, { ...verbCtx, arrival });
-    return { ok: true, output: "" };
-  } catch (e) {
-    const code = e instanceof BadVerbArgs ? "BAD_REQUEST" : "RENDER_FAILED";
-    return {
-      ok: false,
-      error: String(e instanceof Error ? e.message : e),
-      code,
-      daemonV: PROTOCOL_VERSION,
-    };
+    return { kind: "ok" };
+  } catch (error) {
+    // A verb's refusal of its arguments is the click's bad request; anything
+    // else it throws is a bug in the verb, recorded with its stack.
+    return error instanceof BadVerbArgs
+      ? { kind: "bad-request", problems: [error.message] }
+      : { kind: "threw", error };
+  }
+}
+
+// [LAW:single-enforcer] The reply a click's outcome is answered with.
+function clickReply(outcome: RequestOutcome): Response {
+  switch (outcome.kind) {
+    case "ok":
+      return { ok: true, output: "" };
+    case "bad-request":
+      return {
+        ok: false,
+        error: outcome.problems.join("; "),
+        code: "BAD_REQUEST",
+        daemonV: PROTOCOL_VERSION,
+      };
+    case "threw":
+      return renderFailed(outcome.error);
   }
 }
 
@@ -1804,12 +1819,10 @@ function handleClick(
 // with, run as a click on it in the bar would run — a `cc-candybar://` link
 // through its own verb, any other through the platform's opener. Its verb
 // is told the click came through tmux, not the URL handler.
-function statusLineClick(value: string, facts: RenderFacts): Response {
-  const refused = (error: string): Response => ({
-    ok: false,
-    error,
-    code: "BAD_REQUEST",
-    daemonV: PROTOCOL_VERSION,
+function statusLineClick(value: string, facts: RequestFacts): RequestOutcome {
+  const refused = (problem: string): RequestOutcome => ({
+    kind: "bad-request",
+    problems: [problem],
   });
   const click = tmuxStatusLines.linkAt(value);
   if (click.kind === "refused") return refused(click.reason);
@@ -1833,12 +1846,12 @@ function statusLineClick(value: string, facts: RenderFacts): Response {
     category: "click.open",
   });
   return opened.ok
-    ? { ok: true, output: "" }
+    ? { kind: "ok" }
     : {
-        ok: false,
-        error: `opening ${click.url} failed (${opened.error ?? opened.reason})`,
-        code: "RENDER_FAILED",
-        daemonV: PROTOCOL_VERSION,
+        kind: "threw",
+        error: new Error(
+          `opening ${click.url} failed (${opened.error ?? opened.reason})`,
+        ),
       };
 }
 
@@ -1860,7 +1873,7 @@ function statusLineClick(value: string, facts: RenderFacts): Response {
 function renderFrame(sessionId: string, fps: number): FeedFrame | null {
   const started = new Date();
   const at = instantOf(started);
-  const facts: RenderFacts = [];
+  const facts: RequestFacts = [];
   try {
     using setup = setUpFrame(sessionId, at, facts);
     if (setup === null) return null;
@@ -1892,7 +1905,8 @@ function renderFrame(sessionId: string, fps: number): FeedFrame | null {
     };
   } catch (error) {
     const outcome = { kind: "threw", error } as const;
-    const { level, line } = renderEvent(
+    const { level, line } = requestEvent(
+      "render",
       facts,
       outcome,
       Date.now() - started.getTime(),
@@ -1976,17 +1990,6 @@ function checkRenderRequest(
   // sender is broken or malicious); unknown fields are advisory (Anthropic
   // may have added something).
   const { report } = validateHookData(req.hookData as unknown);
-  // [LAW:nothing-unseen] Said once per daemon, at its first sight: every
-  // request carries the field, and a line each rotated the log in minutes.
-  // The stats snapshot lists them all.
-  for (const field of report.unknownTopLevelFields) {
-    if (stats.firstSightOfUnknownHookField(field)) {
-      dlog(
-        "info",
-        `schema: unknown field ${JSON.stringify(field)} — Anthropic may have added it`,
-      );
-    }
-  }
   // [LAW:no-silent-failure][LAW:types-are-the-program] Gate hard on
   // schema violations. Continuing with `workspace?.project_dir` would
   // collapse "absent" into an empty-string cache key — silently sharing
@@ -2036,6 +2039,18 @@ function checkRenderRequest(
     return { ok: false, problems: [...wireProblems, deadline.problem] };
   if (wireProblems.length > 0 || !sessionId.ok)
     return { ok: false, problems: wireProblems };
+  // [LAW:nothing-unseen] Said once per daemon, at its first sight: every
+  // request carries the field, and a line each rotated the log in minutes.
+  // The stats snapshot lists them all, and only a request the checkpoint
+  // passed adds one: what a refused request says is not recorded as fact.
+  for (const field of report.unknownTopLevelFields) {
+    if (stats.firstSightOfUnknownHookField(field)) {
+      dlog(
+        "info",
+        `schema: unknown field ${JSON.stringify(field)} — Anthropic may have added it`,
+      );
+    }
+  }
   const hints = parseClientHints(req);
   // [LAW:dataflow-not-control-flow] The *request's* cwd, not the daemon's
   // process.cwd(), so config resolution depends only on request data — the
@@ -2079,7 +2094,7 @@ const refusedRender = (problems: string[]) => ({
 interface RenderSetup extends Disposable {
   readonly req: CheckedRenderRequest;
   readonly at: Instant;
-  readonly facts: RenderFacts;
+  readonly facts: RequestFacts;
   readonly sessionId: SessionId;
   readonly entry: CacheEntry;
   readonly state: DslRenderState;
@@ -2094,7 +2109,7 @@ interface RenderSetup extends Disposable {
 function requestFacts(
   req: CheckedRenderRequest,
   at: Instant,
-  facts: RenderFacts,
+  facts: RequestFacts,
 ): string | null {
   noteFacts(facts, {
     sid: req.sessionId,
@@ -2130,7 +2145,7 @@ function requestFacts(
 function setUpRender(
   req: CheckedRenderRequest,
   at: Instant,
-  facts: RenderFacts,
+  facts: RequestFacts,
 ): RenderSetup {
   const sessionId = req.sessionId;
   const hintsError = requestFacts(req, at, facts);
@@ -2163,7 +2178,7 @@ function setUpRender(
 function setUpFrame(
   sessionId: string,
   at: Instant,
-  facts: RenderFacts,
+  facts: RequestFacts,
 ): RenderSetup | null {
   const hold = renderCache.holdView(sessionId);
   if (hold === null) {
@@ -2191,7 +2206,7 @@ function setUpDraw(
   req: CheckedRenderRequest,
   hintsError: string | null,
   at: Instant,
-  facts: RenderFacts,
+  facts: RequestFacts,
 ): RenderSetup {
   try {
     const { entry, state, view } = hold;
@@ -2555,7 +2570,7 @@ async function answerRequest(
   order: number,
   at: Instant,
   wait: RequestWait,
-  facts: RenderFacts,
+  facts: RequestFacts,
 ): Promise<RequestAnswer> {
   recordRequest(req);
   return drawAnswer(req, order, at, wait, facts);
@@ -2629,7 +2644,7 @@ async function drawAnswer(
   order: number,
   at: Instant,
   wait: RequestWait,
-  facts: RenderFacts,
+  facts: RequestFacts,
 ): Promise<RequestAnswer> {
   using setup = setUpRender(req, at, facts);
   arrived(req, laneSwitches(setup.view.source.effective()));

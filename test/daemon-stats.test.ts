@@ -89,7 +89,15 @@ describe("RuntimeStats.snapshot", () => {
       menuIdle: { sessions: 2, armed: 1 },
       runs: { started: 3, failed: 1, timedOut: 1, refused: 2, running: 0 },
       sessionState: { sessions: 2, observers: 11, revision: 7 },
-      frameFeeds: { feeds: 0, subscribers: 0, drawn: 0, pushed: 0, refused: 0, lookups: 0, found: 0 },
+      frameFeeds: {
+        feeds: 0,
+        subscribers: 0,
+        drawn: 0,
+        pushed: 0,
+        refused: 0,
+        lookups: 0,
+        found: 0,
+      },
       tmuxStatus: { sessions: 0, layouts: 0, writes: 0, failedWrites: 0 },
       watchersActive: 2,
       handlerProbes: [{ nonce: "n", handler: "1.2.3" }],
@@ -108,23 +116,28 @@ describe("RuntimeStats.snapshot", () => {
         },
       ],
       bundle: "/opt/cc/dist/index.mjs",
-      daemon: { pid: 1234, memory: { kind: "unmeasured" }, limit: 1, postMortems: { kind: "ok", value: [] } },
+      daemon: {
+        pid: 1234,
+        memory: { kind: "unmeasured" },
+        limit: 1,
+        postMortems: { kind: "ok", value: [] },
+      },
       doctorStores: EMPTY_STORES,
     });
     expect(snap.handlerProbes).toEqual([{ nonce: "n", handler: "1.2.3" }]);
     expect(snap.clients).toEqual([
       {
-          client: null,
-          sessionId: "s1",
-          termCols: 148,
-          rateLimits: "carried",
-          claudeConfigDir: "/c",
-          projectDir: "/p",
-          transcript: { path: "/c/t.jsonl", answered: true },
-          frame: "still",
-          role: "statusline",
-          ago: 4,
-        },
+        client: null,
+        sessionId: "s1",
+        termCols: 148,
+        rateLimits: "carried",
+        claudeConfigDir: "/c",
+        projectDir: "/p",
+        transcript: { path: "/c/t.jsonl", answered: true },
+        frame: "still",
+        role: "statusline",
+        ago: 4,
+      },
     ]);
     expect(snap.bundle).toBe("/opt/cc/dist/index.mjs");
     expect(snap.doctorStores).toEqual(EMPTY_STORES);
@@ -148,7 +161,11 @@ describe("RuntimeStats.snapshot", () => {
       refused: 2,
       running: 0,
     });
-    expect(snap.sessionState).toEqual({ sessions: 2, observers: 11, revision: 7 });
+    expect(snap.sessionState).toEqual({
+      sessions: 2,
+      observers: 11,
+      revision: 7,
+    });
     expect(snap.watchers).toEqual({
       active: 2,
       opened: 5,
@@ -216,11 +233,17 @@ describe("shapeSkew", () => {
     // `failed` one, so a tagged union is judged present, not below its tag.
     const unlisted = {
       ...snap,
-      daemon: { ...snap.daemon, postMortems: { kind: "failed", reason: "EACCES" } },
+      daemon: {
+        ...snap.daemon,
+        postMortems: { kind: "failed", reason: "EACCES" },
+      },
     };
     expect(missingFields(snap, unlisted)).toEqual([]);
     expect(
-      missingFields(snap, { ...snap, daemon: { ...snap.daemon, postMortems: 3 } }),
+      missingFields(snap, {
+        ...snap,
+        daemon: { ...snap.daemon, postMortems: 3 },
+      }),
     ).toEqual(["daemon.postMortems"]);
   });
 });
@@ -240,7 +263,7 @@ describe("formatStats", () => {
       externalBytes: 1 * 1024 * 1024,
       arrayBuffersBytes: 256 * 1024,
       requests: { total: 100, errored: 2, timedOut: 1, inFlight: 0 },
-      unknownHookFields: ["fast_mode", "prompt_id"],
+      unknownHookFields: ["fast_mode", "x\n  inFlight      9"],
       gitCache: {
         size: 5,
         held: 2,
@@ -267,7 +290,15 @@ describe("formatStats", () => {
       menuIdle: { sessions: 2, armed: 1 },
       runs: { started: 3, failed: 1, timedOut: 1, refused: 2, running: 0 },
       sessionState: { sessions: 2, observers: 11, revision: 7 },
-      frameFeeds: { feeds: 0, subscribers: 0, drawn: 0, pushed: 0, refused: 0, lookups: 0, found: 0 },
+      frameFeeds: {
+        feeds: 0,
+        subscribers: 0,
+        drawn: 0,
+        pushed: 0,
+        refused: 0,
+        lookups: 0,
+        found: 0,
+      },
       tmuxStatus: { sessions: 0, layouts: 0, writes: 0, failedWrites: 0 },
       watchers: { active: 5, opened: 7, closed: 2, refused: 1, errors: 3 },
       subprocesses: {
@@ -282,11 +313,18 @@ describe("formatStats", () => {
       handlerProbes: [],
       clients: [],
       bundle: "/",
-      daemon: { pid: 1234, memory: { kind: "unmeasured" }, limit: 1, postMortems: { kind: "ok", value: [] } },
+      daemon: {
+        pid: 1234,
+        memory: { kind: "unmeasured" },
+        limit: 1,
+        postMortems: { kind: "ok", value: [] },
+      },
       doctorStores: EMPTY_STORES,
     });
     expect(out).toContain("pid           1234");
-    expect(out).toContain("unknownFields fast_mode, prompt_id");
+    // A name a client chose cannot forge a row: each is a JSON string.
+    expect(out).toContain('unknownFields "fast_mode", "x\\n  inFlight      9"');
+    expect(out).not.toContain("\n  inFlight      9");
     expect(out).toContain("uptime        2m5s");
     expect(out).toContain("rss           50.0MB");
     expect(out).toContain("held          2");
@@ -358,7 +396,15 @@ describe("formatStats", () => {
       menuIdle: { sessions: 0, armed: 0 },
       runs: { started: 0, failed: 0, timedOut: 0, refused: 0, running: 0 },
       sessionState: { sessions: 0, observers: 0, revision: 0 },
-      frameFeeds: { feeds: 0, subscribers: 0, drawn: 0, pushed: 0, refused: 0, lookups: 0, found: 0 },
+      frameFeeds: {
+        feeds: 0,
+        subscribers: 0,
+        drawn: 0,
+        pushed: 0,
+        refused: 0,
+        lookups: 0,
+        found: 0,
+      },
       tmuxStatus: { sessions: 0, layouts: 0, writes: 0, failedWrites: 0 },
       watchers: { active: 0, opened: 0, closed: 0, refused: 0, errors: 0 },
       subprocesses: {
@@ -373,7 +419,12 @@ describe("formatStats", () => {
       handlerProbes: [],
       clients: [],
       bundle: "/",
-      daemon: { pid: 1234, memory: { kind: "unmeasured" }, limit: 1, postMortems: { kind: "ok", value: [] } },
+      daemon: {
+        pid: 1234,
+        memory: { kind: "unmeasured" },
+        limit: 1,
+        postMortems: { kind: "ok", value: [] },
+      },
       doctorStores: EMPTY_STORES,
     });
     expect(out).toContain("hit rate      n/a");
