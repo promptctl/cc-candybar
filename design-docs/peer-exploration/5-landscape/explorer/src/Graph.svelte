@@ -13,6 +13,7 @@
   // coordinates are written into cytoscape, so a node the user drags pulls its neighbours with it.
   interface SimNode extends SimulationNodeDatum { id: NodeId; kind: 'trait' | 'project' | 'more'; r: number }
   interface SimLink extends SimulationLinkDatum<SimNode> { id: string; kind: GraphEdge['kind']; w: number }
+  interface Box { x0: number; x1: number; y0: number; y1: number }
 
   // [LAW:one-type-per-behavior] one table per force: the kind of edge sets its pull, and the kind of node sets its push.
   const CHARGE: Record<SimNode['kind'], number> = { trait: -1400, project: -170, more: -40 };
@@ -39,6 +40,7 @@
     .force('charge', forceManyBody<SimNode>().strength((d) => CHARGE[d.kind]))
     .force('link', linkForce)
     .force('collide', forceCollide<SimNode>((d) => d.r + 6).strength(0.8))
+    .force('labels', labelForce)
     .force('x', forceX<SimNode>(0).strength(0.02))
     .force('y', forceY<SimNode>(0).strength(0.02))
     .on('tick', publish)
@@ -70,6 +72,66 @@
     cy.batch(() => {
       for (const n of simNodes.values()) cy.getElementById(n.id).position({ x: n.x ?? 0, y: n.y ?? 0 });
     });
+  }
+
+  // A label is a box beside its dot, sized the way the sheet draws it at the current zoom. The box is in
+  // simulation units, so its screen size is divided by zoom. A dot whose label is not shown has no box.
+  function labelOf(n: SimNode, z: number): Box | null {
+    const cy = graphCore;
+    if (!cy) return null;
+    const c = cy.getElementById(n.id);
+    if (c.empty()) return null;
+    if (!(c.hasClass('trait') || c.hasClass('more') || c.hasClass('showlabel') || c.hasClass('lens'))) return null;
+    const b = c.data('boost') as number;
+    // On-screen font size: the sheet divides by zoom and cytoscape multiplies by it, so this is the size shown.
+    const font = (c.hasClass('trait') ? 13 + 9 * b : 10 + 10 * b) * textScale;
+    const width = 160 * textScale;
+    const textWidth = String(c.data('label')).length * 0.6 * font;
+    const lines = Math.max(1, Math.ceil(textWidth / width));
+    const w = Math.min(textWidth, width) / z;
+    const h = (lines * font * 1.3) / z;
+    // text-halign is right, so the text starts just outside the dot.
+    const x0 = (n.x ?? 0) + n.r + 4 / z;
+    const y0 = (n.y ?? 0) - h / 2;
+    return { x0, x1: x0 + w, y0, y1: y0 + h };
+  }
+
+  // Text pushes text: where two label boxes overlap, they move apart along the axis that needs the
+  // least movement, and each push lands on the dot the label hangs off, so the dots and text move together.
+  function labelForce(alpha: number) {
+    const cy = graphCore;
+    if (!cy) return;
+    const z = cy.zoom();
+    const nodes = [...simNodes.values()];
+    const boxes = nodes.map((n) => labelOf(n, z));
+    for (let i = 0; i < nodes.length; i++) {
+      const a = boxes[i];
+      if (!a) continue;
+      for (let j = i + 1; j < nodes.length; j++) {
+        const b = boxes[j];
+        if (!b) continue;
+        const ox = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0);
+        const oy = Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0);
+        if (ox <= 0 || oy <= 0) continue;
+        const na = nodes[i];
+        const nb = nodes[j];
+        if (ox < oy) {
+          const dir = (a.x0 + a.x1 < b.x0 + b.x1 ? -1 : 1) * ox * alpha * 0.5;
+          na.vx = (na.vx ?? 0) + dir;
+          nb.vx = (nb.vx ?? 0) - dir;
+        } else {
+          const dir = (a.y0 + a.y1 < b.y0 + b.y1 ? -1 : 1) * oy * alpha * 0.5;
+          na.vy = (na.vy ?? 0) + dir;
+          nb.vy = (nb.vy ?? 0) - dir;
+        }
+      }
+    }
+  }
+
+  // A zoom, a cursor move or a size change moves label boxes without moving any dot, so the simulation is
+  // woken to push them apart.
+  function wake() {
+    sim.alpha(Math.max(sim.alpha(), 0.1)).restart();
   }
 
   // Projects get a label only when zoomed in, when they touch the open node, or while hovered.
@@ -130,19 +192,19 @@
   // One stylesheet, with every text size scaled by s. The slider is the only thing that changes s.
   function sheet(s: number): cytoscape.StylesheetJson {
     return [
-        { selector: 'node', style: { width: 'data(size)', height: 'data(size)', 'background-color': '#c9ccd2', color: '#f2f3f5', 'font-size': `mapData(boost, 0, 1, 10, ${20 * s})`, 'text-valign': 'center', 'text-halign': 'right', 'text-margin-x': 5, 'min-zoomed-font-size': 9, 'text-wrap': 'ellipsis', 'text-max-width': `${320 * s}px`, 'text-background-color': '#101216', 'text-background-opacity': 0.85, 'text-background-padding': '3px', 'text-background-shape': 'roundrectangle' } },
-        { selector: 'node.trait', style: { label: 'data(label)', 'background-color': 'data(colour)', 'font-size': `mapData(boost, 0, 1, 13, ${22 * s})`, 'font-weight': 600 } },
-        { selector: 'node.more', style: { label: 'data(label)', 'background-color': '#3a3f49', color: '#8b919c', 'font-style': 'italic' } },
-        { selector: 'node.project', style: { label: '', 'background-color': '#6b717c' } },
-        { selector: 'node.project.showlabel', style: { label: 'data(label)' } },
-        { selector: 'node.project.lens', style: { label: 'data(label)' } },
-        { selector: 'node.novel', style: { 'background-color': '#f0e0c8', 'border-color': '#e8a25c', 'border-width': 2 } },
-        { selector: 'node:selected', style: { 'border-color': '#ffffff', 'border-width': 3 } },
-        { selector: 'edge', style: { width: 1, 'line-color': '#2e333c', 'curve-style': 'haystack' } },
-        { selector: 'edge.related', style: { width: 'mapData(w, 0, 0.6, 1, 7)', 'line-color': '#4a505b', opacity: 0.6 } },
-        { selector: 'edge.clone', style: { width: 'mapData(w, 0.2, 1, 1.5, 5)', 'line-color': '#b58be0', 'line-style': 'dashed', 'curve-style': 'straight' } },
-        { selector: '.faded', style: { opacity: 0.12 } },
-        { selector: 'edge.lit', style: { 'line-color': '#e8a25c', opacity: 1 } },
+      { selector: 'node', style: { width: 'data(size)', height: 'data(size)', 'background-color': '#c9ccd2', color: '#f2f3f5', 'font-size': `mapData(boost, 0, 1, 10, ${20 * s})`, 'text-valign': 'center', 'text-halign': 'right', 'text-margin-x': 5, 'min-zoomed-font-size': 9, 'text-wrap': 'wrap', 'text-max-width': `${160 * s}px`, 'text-background-color': '#101216', 'text-background-opacity': 0.85, 'text-background-padding': '3px', 'text-background-shape': 'roundrectangle' } },
+      { selector: 'node.trait', style: { label: 'data(label)', 'background-color': 'data(colour)', 'font-size': `mapData(boost, 0, 1, 13, ${22 * s})`, 'font-weight': 600 } },
+      { selector: 'node.more', style: { label: 'data(label)', 'background-color': '#3a3f49', color: '#8b919c', 'font-style': 'italic' } },
+      { selector: 'node.project', style: { label: '', 'background-color': '#6b717c' } },
+      { selector: 'node.project.showlabel', style: { label: 'data(label)' } },
+      { selector: 'node.project.lens', style: { label: 'data(label)' } },
+      { selector: 'node.novel', style: { 'background-color': '#f0e0c8', 'border-color': '#e8a25c', 'border-width': 2 } },
+      { selector: 'node:selected', style: { 'border-color': '#ffffff', 'border-width': 3 } },
+      { selector: 'edge', style: { width: 1, 'line-color': '#2e333c', 'curve-style': 'haystack' } },
+      { selector: 'edge.related', style: { width: 'mapData(w, 0, 0.6, 1, 7)', 'line-color': '#4a505b', opacity: 0.6 } },
+      { selector: 'edge.clone', style: { width: 'mapData(w, 0.2, 1, 1.5, 5)', 'line-color': '#b58be0', 'line-style': 'dashed', 'curve-style': 'straight' } },
+      { selector: '.faded', style: { opacity: 0.12 } },
+      { selector: 'edge.lit', style: { 'line-color': '#e8a25c', opacity: 1 } },
     ];
   }
 
@@ -170,21 +232,31 @@
       }
       sim.alphaTarget(0);
     });
-    core.on('zoom', updateLabels);
+    // Cytoscape draws text at the zoom level, so the sizes are divided by zoom to hold them still on screen.
+    core.on('zoom', () => {
+      core.style().fromJson(sheet(textScale / core.zoom())).update();
+      updateLabels();
+      wake();
+    });
     // A lens under the cursor: text grows with closeness, and nearby projects show their names.
     // [LAW:dataflow-not-control-flow] the cursor writes one number per node; the style reads it.
-    // Full size inside FULL (about the diameter of a large dot), then a short ramp to nothing at LENS.
+    // Full size inside FULL (about the diameter of a large dot), then a ramp to nothing at LENS.
     const FULL = 60;
-    const LENS = 120;
+    const LENS = 600;
     core.on('mousemove', (e) => {
+      let changed = false;
       core.batch(() => {
         core.nodes().forEach((n) => {
           const d = Math.hypot(n.position('x') - e.position.x, n.position('y') - e.position.y);
           const b = Math.round(Math.min(1, Math.max(0, (LENS - d) / (LENS - FULL))) * 50) / 50;
-          if (b !== n.data('boost')) n.data('boost', b);
+          if (b !== n.data('boost')) {
+            n.data('boost', b);
+            changed = true;
+          }
           if (n.hasClass('project')) n.toggleClass('lens', b > 0.3);
         });
       });
+      if (changed) wake();
     });
     core.on('mouseout', (e) => {
       if (e.target !== core) return;
@@ -194,6 +266,7 @@
           if (n.hasClass('project')) n.removeClass('lens');
         });
       });
+      wake();
     });
     core.on('mouseover', 'node', (e) => {
       const hood = e.target.closedNeighborhood();
@@ -219,7 +292,9 @@
 
   $effect(() => {
     const s = textScale;
-    graphCore?.style().fromJson(sheet(s)).update();
+    const cy = graphCore;
+    cy?.style().fromJson(sheet(s / cy.zoom())).update();
+    wake();
   });
 
   $effect(() => {
