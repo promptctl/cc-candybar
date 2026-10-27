@@ -36,11 +36,10 @@ const defaultLogger: WatcherLogger = (_level, message) => debug(message);
 // drift silently.
 export const DEBOUNCE_MS = 50;
 
-// Absolute directories the consumer wants invalidation for. Each may
-// optionally restrict which child filenames should fire — without a filter
-// every change in the dir fires (legacy git-refs behavior); with a filter only
-// matching basenames fire (config case: avoids noise from sibling files in
-// ~/.claude/).
+// Absolute directories the consumer wants invalidation for. A directory is
+// watched one level deep, optionally restricted to the child basenames that
+// should fire (config case: avoids noise from sibling files in ~/.claude/), or
+// as a whole tree (git's refs: a branch name's slashes are directories).
 //
 // [LAW:types-are-the-program] A file is watched through its directory, by
 // name, never by its own inode: a watch on the file binds the inode it finds,
@@ -48,12 +47,19 @@ export const DEBOUNCE_MS = 50;
 // way) replaces that inode, leaving the watch deaf with no event to say so. A
 // directory watch reports a child's in-place write and its rename alike, so
 // the contract offers nothing a consumer could go deaf on.
-export interface DirTarget {
-  path: string;
-  // If set, only fire when fs.watch reports a filename in this list.
-  // Filenames are basenames (not paths) — that's what fs.watch supplies.
-  filenames?: readonly string[];
-}
+//
+// [LAW:types-are-the-program] A tree watch reports paths relative to its
+// root, so a basename filter has nothing to match against; the two shapes are
+// discriminated on `recursive` so a filtered tree cannot be asked for.
+export type DirTarget =
+  | {
+      path: string;
+      // If set, only fire when fs.watch reports a filename in this list.
+      // Filenames are basenames (not paths) — that's what fs.watch supplies.
+      filenames?: readonly string[];
+      recursive?: false;
+    }
+  | { path: string; recursive: true; filenames?: never };
 
 export interface WatchTargets {
   dirs: readonly DirTarget[];
@@ -252,7 +258,11 @@ export class WatcherRegistry {
           if (filterSet && (!filename || !filterSet.has(filename))) return;
           fire(namedOf(filename));
         };
-        const w = fs.watch(target.path, { persistent: false }, onDirEvent);
+        const w = fs.watch(
+          target.path,
+          { persistent: false, recursive: target.recursive === true },
+          onDirEvent,
+        );
         w.on("error", failedAt(target.path));
         slot.watchers.push(w);
       } catch (e) {

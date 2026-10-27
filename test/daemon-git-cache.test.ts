@@ -1412,7 +1412,9 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
   test("the held watch hears every lock-file rename over index and HEAD", async () => {
     const repo = fs.mkdtempSync(path.join(os.tmpdir(), "git-cache-576q-"));
     const gitDir = path.join(repo, ".git");
-    fs.mkdirSync(gitDir);
+    // A git directory always holds `refs/heads`, and the repo's watch covers
+    // that tree; a fixture without it is refused, not opened.
+    fs.mkdirSync(path.join(gitDir, "refs", "heads"), { recursive: true });
     const replace = (name: string, text: string) => {
       const lock = path.join(gitDir, `${name}.lock`);
       fs.writeFileSync(lock, text);

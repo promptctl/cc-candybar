@@ -1,4 +1,3 @@
-import fs from "node:fs";
 import path from "node:path";
 import {
   GitService,
@@ -221,19 +220,28 @@ function optionsKey(options: GitOptions): string {
 // renaming a `.lock` file over them, and a watch on the file follows the inode
 // git just unlinked — it fires once and never again (measured, macOS).
 //
-// `refs/heads/` only exists in the main repo's gitDir, not under a worktree's
-// metadata dir, so it is watched only where it is real — the `gitDir` watch on
-// HEAD/index still covers branch and index changes in the worktree case.
-function watcherTargets(gitDir: string): WatchTargets {
-  const dirs: DirTarget[] = [{ path: gitDir, filenames: ["HEAD", "index"] }];
-  const refsHeads = path.join(gitDir, "refs/heads");
-  try {
-    if (fs.statSync(refsHeads).isDirectory()) {
-      dirs.push({ path: refsHeads });
-    }
-  } catch {
-    // ENOENT (worktree case) or other fs error — skip the dir target.
-  }
+// `commonDir` is the git directory the refs live in (`resolveCommonGitDir`):
+// the gitDir itself for a main checkout, the main repo's for a linked
+// worktree, whose own metadata dir holds no refs at all. The branch refs are
+// watched as a tree, because a branch name's slashes are directories
+// (`refs/heads/fix/thing`) and a watch one level deep never hears a ref move
+// below them. A ref-only move — `reset --soft`, `update-ref`, an amend with
+// nothing staged — rewrites nothing but its ref.
+//
+// The tree is `refs/heads`, not `refs`: on Linux a recursive watch is Node's
+// own walk, one inotify watch and one stat per entry and a re-read of a
+// directory on every event in it, so its cost is the tree's size. Local
+// branches are tens to hundreds; remote refs and tags are the remote's to
+// grow, and a fetch rewriting thousands of them would re-walk the directory
+// per ref. Those still reach the bar on the period.
+// [LAW:dataflow-not-control-flow] One shape for both layouts: nothing stats
+// first. A tree that cannot be opened is a refusal the registry logs and
+// counts, and the period is what refreshes a repo whose watch is refused.
+function watcherTargets(gitDir: string, commonDir: string): WatchTargets {
+  const dirs: DirTarget[] = [
+    { path: gitDir, filenames: ["HEAD", "index"] },
+    { path: path.join(commonDir, "refs", "heads"), recursive: true },
+  ];
   return { dirs };
 }
 
@@ -488,12 +496,13 @@ export class GitDataProvider {
       return existing;
     }
     const gitDir = this.inner.resolveGitDir(root);
+    const commonDir = this.inner.resolveCommonGitDir(gitDir);
     const state: RepoState = {
       root,
       refresh: new TrailingEdge(),
       watcher: this.watchers.acquire(
         `git:${root}`,
-        watcherTargets(gitDir),
+        watcherTargets(gitDir, commonDir),
         () => this.changed(root),
       ),
       period: new Period(() => {
