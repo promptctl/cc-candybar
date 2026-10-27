@@ -20,6 +20,12 @@ export interface RawProject {
   novel: Novel[];
   boring: boolean;
   copy: [repo: string, percent: number][];
+  // The risk tier the capture triage stamped (tools/capture/triage.py), and the bytes the
+  // statusline printed in the sandbox at each terminal width it was captured at, keyed by column
+  // count. A width whose output matched the next narrower one is left out. Absent when it was not
+  // run or failed.
+  tier: 'skip' | 'unlocated' | 'safe' | 'review' | 'risky';
+  bars?: Record<string, string>;
   created?: string;
   size?: string;
   sources?: string;

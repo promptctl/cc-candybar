@@ -22,6 +22,13 @@ await page.fill('input', 'pet');
 await page.waitForTimeout(300);
 await page.screenshot({ path: '/tmp/ccland/shot-4-search.png' });
 await page.fill('input', '');
+// a project with a captured bar: the terminal must draw it
+await page.fill('input', 'pyccsl');
+await page.waitForTimeout(300);
+await page.locator('.hits button').first().click();
+await page.waitForTimeout(1500);
+if ((await page.locator('.strip .xterm-rows').count()) === 0) errors.push('no terminal drawn for a captured bar');
+await page.screenshot({ path: '/tmp/ccland/shot-4b-bar.png' });
 await page.mouse.move(500, 480);
 await page.mouse.move(520, 470, { steps: 5 });
 await page.waitForTimeout(400);

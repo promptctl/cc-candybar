@@ -2,9 +2,12 @@
   import { Explorer, type NodeId } from './explorer.svelte';
   import Graph from './Graph.svelte';
   import Panel from './Panel.svelte';
-  import { liveTraits, projects } from './model';
+  import Bar from './Bar.svelte';
+  import { liveTraits, projectById, projects } from './model';
 
   const explorer = new Explorer();
+  // The selected project's captured bar, drawn where a statusline lives: along the bottom.
+  const bars = $derived(explorer.selected === null ? null : (projectById.get(explorer.selected)?.bars ?? null));
   let panelOpen = $state(true);
   let textScale = $state(1);
   const PANEL = 470;
@@ -38,6 +41,7 @@
       </div>
     {/if}
   </div>
+  {#if bars !== null}<div class="strip" style:right="{panelOpen ? PANEL : 0}px">{#key explorer.selected}<Bar {bars} />{/key}</div>{/if}
   {#if panelOpen}<Panel {explorer} />{/if}
 </main>
 
@@ -48,6 +52,7 @@
   .scale { display: flex; align-items: center; gap: 6px; color: var(--dim); font-size: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; }
   .scale input { width: 140px; }
   .bar { position: absolute; left: 14px; top: 12px; display: flex; gap: 8px; z-index: 2; }
+  .strip { position: absolute; left: 0; bottom: 0; z-index: 3; padding: 0 14px 12px; pointer-events: none; }
   input { width: 320px; background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 9px; font: inherit; }
   .bar > button { background: var(--panel); color: var(--dim); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; font: inherit; cursor: pointer; }
   .hits { position: absolute; top: 38px; left: 0; width: 460px; max-height: 60vh; overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; }

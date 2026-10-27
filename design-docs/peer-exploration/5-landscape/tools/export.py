@@ -15,6 +15,9 @@ PAT = next(ast.literal_eval(n.value) for n in ast.parse(src).body
            if isinstance(n, ast.Assign) and getattr(n.targets[0], 'id', '') == 'PAT')
 motives = dict(re.findall(r'^(M\d\d) (.+)$', open('/tmp/ccland/why-brief.md').read(), re.M))
 BANDS = [(20, '20-44'), (10, '10-19'), (5, '5-9'), (2, '2-4'), (0, '0-1')]
+# What tools/capture produced: the risk tier of every project, and the bytes each safe one printed.
+tiers = json.load(open('/tmp/ccland/tiers.json'))
+captures = json.load(open('/tmp/ccland/captures.json'))
 
 
 def group_of(text):
@@ -77,6 +80,15 @@ for run, is_top, ranked in runs:
              'kind': kind, 'shape': shape, 'motive': motive.get(k, ''), 'fams': sorted(fams.get(k, [])), 'loc': loc,
              'fam': family_of.get(k), 'novel': nov, 'boring': boring,
              'copy': [[o.replace('__', '/', 1), round(100 * a)] for o, n, a, _ in m.get('shares', [])[:3]]}
+        p['tier'] = tiers[q['slug']]['tier']
+        cap = captures.get(q['slug'])
+        if cap and cap['ok']:
+            # one capture per terminal width, keeping only widths whose output differs from the narrower one
+            bars, last = {}, None
+            for w in sorted(cap['bars'], key=int):
+                if cap['bars'][w] != last:
+                    bars[w] = last = cap['bars'][w]
+            p['bars'] = bars
         if not boring:  # boring rows carry no drill-down, so their long fields are left out of the page
             p.update({'created': (md.get('created') or '')[:10], 'size': r.get('size', ''),
                       'sources': r.get('data sources', ''), 'lineage': r.get('lineage', ''),
