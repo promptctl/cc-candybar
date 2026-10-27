@@ -18,7 +18,9 @@
 // Pass: every session answers before the warm deadline; every steady render
 // answers ok within the client's budget; the daemon is the same process
 // throughout with no post-mortem; its charge stays within a budget for these
-// sessions and does not climb; the cache's held counts stay flat.
+// sessions and does not climb; the cache's held counts stay flat; every click
+// on one session's settings menu, once a second, answers ok within the click's
+// budget.
 //
 // Run: pnpm build && pnpm load-gate [--sessions N] [--seconds S]
 //
@@ -40,7 +42,9 @@ import { parseArgs } from "node:util";
 import { nodeClientHint } from "../src/client-hint.js";
 import { detectClientHints } from "../src/client-hints.js";
 import { daemonArgs } from "../src/daemon/acquire.js";
-import { tryRenderViaDaemon } from "../src/daemon/client.js";
+import { effectsUrl, VERB_SET_STATE } from "../src/click/wire.js";
+import { DISCLOSURE_CLOSED } from "../src/config/disclosure.js";
+import { tryClickViaDaemon, tryRenderViaDaemon } from "../src/daemon/client.js";
 import { fetchStats } from "../src/daemon/client-stats.js";
 import { mb, memoryLimitBytes } from "../src/daemon/limits.js";
 import { logLines } from "../src/daemon/log.js";
@@ -52,6 +56,7 @@ import {
 } from "../src/daemon/client-frames.js";
 import { PARENT_PID_ENV } from "../src/daemon/parent-watchdog.js";
 import type { StatsSnapshot } from "../src/daemon/stats.js";
+import { parseHandlerUrl } from "../src/install/index.js";
 import { sourceDigest } from "../src/source-digest.js";
 import type { ClaudeHookData } from "../src/utils/claude.js";
 
@@ -104,6 +109,8 @@ const FEED_PACE_SHARE = 0.95;
 // How far the statusline's p90 may rise with a feed open: the epic's
 // criterion.
 const FEED_P90_RATIO = 2;
+// How often the steady phase clicks: a person opening and closing a menu.
+const CLICK_PERIOD_MS = 1000;
 // [LAW:parse-dont-validate] The feed-off run the `on` run is judged against:
 // its statusline `took=` p90, read once from its own output.
 const BASELINE_P90: number | null =
@@ -582,6 +589,47 @@ function tick(s: Session): void {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// The clicks the steady phase made, as the URL handler makes them: their
+// round trip and how each ended.
+interface Click {
+  readonly ms: number;
+  readonly outcome: string;
+}
+const clicks: Click[] = [];
+
+// One session's settings menu, opened and closed on a beat over the steady
+// phase: the link its 🍫 draws, through the handler's own parse and client.
+// A click that answers late runs the next at once, so a slow daemon is
+// clicked as often, never less.
+async function clickMenu(s: Session, started: number): Promise<void> {
+  for (let n = 0; Date.now() - started < STEADY_MS; n++) {
+    const { verb, value } = parseHandlerUrl(
+      effectsUrl([
+        {
+          verb: VERB_SET_STATE,
+          args: [
+            s.id,
+            "candybar.menu",
+            n % 2 === 0 ? "open" : DISCLOSURE_CLOSED,
+          ],
+        },
+      ]),
+    );
+    const t0 = performance.now();
+    let outcome: string;
+    try {
+      const clicked = await tryClickViaDaemon(verb, value);
+      outcome =
+        clicked.kind === "ok" ? "ok" : `${clicked.kind}/${clicked.cause}`;
+    } catch (e) {
+      // [LAW:no-silent-failure] A click path that throws is a failed click.
+      outcome = `threw/${e instanceof Error ? e.message : String(e)}`;
+    }
+    clicks.push({ ms: performance.now() - t0, outcome });
+    await sleep(started + (n + 1) * CLICK_PERIOD_MS - Date.now());
+  }
+}
+
 interface Sample {
   // Under the steady load, or the reading once it has stopped.
   readonly phase: Render["phase"];
@@ -735,6 +783,7 @@ async function run(): Promise<{
 
   phase = "steady";
   const steadyStarted = Date.now();
+  const clicking = clickMenu(sessions[0]!, steadyStarted);
   // The gate's own event loop: a render it measured late may be its own lag.
   const gateLoop = monitorEventLoopDelay({ resolution: 5 });
   gateLoop.enable();
@@ -743,6 +792,7 @@ async function run(): Promise<{
     await sleep(SAMPLE_MS);
   }
   gateLoop.disable();
+  await clicking;
   const steadyEnded = Date.now();
   const feedFramesSteady = feedFrames - feedFramesBefore;
   // The second reading under the load the first was taken under: the steady
@@ -804,7 +854,21 @@ async function run(): Promise<{
     ? [...new Set(fs.readFileSync(unknownCalls, "utf8").trim().split("\n"))]
     : [];
   const ms = steady.map((r) => r.ms).sort((a, b) => a - b);
-  const daemonRenderMs = await daemonRenders(steadyStarted, steadyEnded);
+  const daemon = await daemonEvents(steadyStarted, steadyEnded);
+  const daemonRenderMs = {
+    took: spreadOf(daemon, "render", "took"),
+    queued: spreadOf(daemon, "render", "queued"),
+    waited: spreadOf(daemon, "render", "waited"),
+  };
+  const daemonClickMs = {
+    took: spreadOf(daemon, "click", "took"),
+    queued: spreadOf(daemon, "click", "queued"),
+  };
+  const clickFailures = tally(
+    clicks.filter((c) => c.outcome !== "ok").map((c) => c.outcome),
+  );
+  const expectedClicks = STEADY_MS / CLICK_PERIOD_MS;
+  const clickMs = clicks.map((c) => c.ms).sort((a, b) => a - b);
 
   const checks: Check[] = [
     {
@@ -817,6 +881,14 @@ async function run(): Promise<{
       pass:
         steady.length >= expected * 0.9 && Object.keys(failures).length === 0,
       detail: `${steady.length} renders (~${Math.round(expected)} asked), failures ${JSON.stringify(failures)}`,
+    },
+    {
+      // The client's own budget is the verdict: a click past it is a timeout.
+      name: "steady clicks",
+      pass:
+        clicks.length >= expectedClicks * 0.9 &&
+        Object.keys(clickFailures).length === 0,
+      detail: `${clicks.length} clicks (~${expectedClicks} made), failures ${JSON.stringify(clickFailures)}`,
     },
     {
       name: "stats answered",
@@ -918,6 +990,14 @@ async function run(): Promise<{
     // from its own render events, beside the gate's lag: a slow round trip is
     // one of these.
     daemonRenderMs,
+    // The steady clicks' round trips, and what the daemon took over each from
+    // its click events.
+    clickMs: {
+      p50: pct(clickMs, 0.5),
+      p90: pct(clickMs, 0.9),
+      max: clickMs.at(-1) ?? 0,
+    },
+    daemonClickMs,
     gateLoopDelayMs: {
       p99: Math.round(gateLoop.percentile(99) / 1e6),
       max: Math.round(gateLoop.max / 1e6),
@@ -953,38 +1033,25 @@ async function feedSummary(state: "closed"): Promise<string> {
   throw new Error(`the feed wrote no ${state} summary within 10 s`);
 }
 
-// [LAW:verifiable-goals] A feed holds its pace when it draws, over its life,
-// at the pace its summary states.
+// [LAW:verifiable-goals] A feed holds its pace when the rate it drew at over
+// its life, as its summary states it, is the pace it set.
 function feedPaceCheck(summary: string): Check {
   const field = (name: string): number =>
-    Number(new RegExp(` ${name}=(\\d+)`).exec(summary)?.[1]);
-  const drawn = field("drawn");
-  const seconds = field("for");
+    Number(new RegExp(` ${name}=([\\d.]+)`).exec(summary)?.[1]);
+  const achieved = field("achieved");
   const pace = field("pace");
-  const fps = drawn / seconds;
   return {
     name: "feed holds its pace",
-    pass: Number.isFinite(fps) && fps >= FEED_PACE_SHARE * pace,
-    detail: `drew ${drawn} frames in ${seconds} s (${fps.toFixed(1)} fps of ${pace}; at least ${FEED_PACE_SHARE * 100}%)`,
+    pass: Number.isFinite(achieved) && achieved >= FEED_PACE_SHARE * pace,
+    detail: `drew ${field("drawn")} frames in ${field("for")} s at ${achieved} fps of ${pace} (at least ${FEED_PACE_SHARE * 100}%)`,
   };
 }
 
-// One field's spread over the window's renders, in ms.
-interface Spread {
-  readonly n: number;
-  readonly p50: number;
-  readonly p90: number;
-  readonly p99: number;
-  readonly max: number;
-}
-
-// What the daemon itself took over every render it finished in the window.
-// It writes its log off its event loop, in order, through one writer, so the
-// window's last events have landed once any line after the window has.
-async function daemonRenders(
-  since: number,
-  until: number,
-): Promise<Record<"took" | "queued" | "waited", Spread>> {
+// The events the daemon wrote in the window: what it took over every render
+// and click it finished there. It writes its log off its event loop, in
+// order, through one writer, so the window's last events have landed once any
+// line after the window has.
+async function daemonEvents(since: number, until: number): Promise<string[]> {
   const log = logPath(env);
   const stamped = (): Array<{ at: number; line: string }> =>
     logLines(log).map((line) => ({ at: Date.parse(line.slice(0, 24)), line }));
@@ -996,32 +1063,38 @@ async function daemonRenders(
     await sleep(200);
     all = stamped();
   }
-  const lines = all
+  return all
     .filter(
-      ({ at, line }) =>
-        at >= since &&
-        at <= until &&
-        line.includes("] render ") &&
-        line.includes(" took="),
+      ({ at, line }) => at >= since && at <= until && line.includes(" took="),
     )
     .map(({ line }) => line);
-  const spread = (field: string): Spread => {
-    const ms = lines
-      .map((l) => Number(new RegExp(` ${field}=(\\d+)ms`).exec(l)?.[1]))
-      .filter(Number.isFinite)
-      .sort((a, b) => a - b);
-    return {
-      n: ms.length,
-      p50: pct(ms, 0.5),
-      p90: pct(ms, 0.9),
-      p99: pct(ms, 0.99),
-      max: ms.at(-1) ?? 0,
-    };
-  };
+}
+
+// One field's spread over the window's events of one kind, in ms.
+interface Spread {
+  readonly n: number;
+  readonly p50: number;
+  readonly p90: number;
+  readonly p99: number;
+  readonly max: number;
+}
+
+function spreadOf(
+  lines: readonly string[],
+  event: "render" | "click",
+  field: string,
+): Spread {
+  const ms = lines
+    .filter((l) => l.includes(`] ${event} `))
+    .map((l) => Number(new RegExp(` ${field}=(\\d+)ms`).exec(l)?.[1]))
+    .filter(Number.isFinite)
+    .sort((a, b) => a - b);
   return {
-    took: spread("took"),
-    queued: spread("queued"),
-    waited: spread("waited"),
+    n: ms.length,
+    p50: pct(ms, 0.5),
+    p90: pct(ms, 0.9),
+    p99: pct(ms, 0.99),
+    max: ms.at(-1) ?? 0,
   };
 }
 

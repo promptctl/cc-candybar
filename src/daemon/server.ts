@@ -210,6 +210,7 @@ import {
 } from "./request-deadline.js";
 import { waitWithin } from "../utils/reading.js";
 import {
+  eventLine,
   noteFacts,
   renderEvent,
   type RenderFacts,
@@ -1490,12 +1491,29 @@ export async function replyTo(
   }
 
   if (req.kind === "click") {
-    return stay(
-      handleClick(req.verb, req.value, {
-        via: "link",
-        handler: sanitizeClientVersion(req.clientVersion),
-      }),
+    // [LAW:nothing-unseen] One click event per click request, whatever its
+    // outcome: how long it was queued behind the loop from its accept, how
+    // long it then took, and what it learned on the way (its session, a
+    // status-line click's link). A field absent means it stopped before it.
+    const t0 = performance.now();
+    const facts: RenderFacts = [
+      ["verb", req.verb],
+      ["queued", `${Math.round(t0 - accepted)}ms`],
+    ];
+    const resp = handleClick(
+      req.verb,
+      req.value,
+      { via: "link", handler: sanitizeClientVersion(req.clientVersion) },
+      facts,
     );
+    noteFacts(facts, {
+      took: `${Math.round(performance.now() - t0)}ms`,
+      ...(resp.ok
+        ? { outcome: "ok" }
+        : { outcome: resp.code, error: resp.error }),
+    });
+    dlog(resp.ok ? "info" : "warn", eventLine("click", facts));
+    return stay(resp);
   }
 
   if (req.kind === "debug") {
@@ -1751,8 +1769,9 @@ function handleClick(
   verb: string,
   value: string,
   arrival: ClickArrival,
+  facts: RenderFacts,
 ): Response {
-  if (verb === VERB_TMUX_STATUS_CLICK) return statusLineClick(value);
+  if (verb === VERB_TMUX_STATUS_CLICK) return statusLineClick(value, facts);
   const handler = VERBS.get(verb);
   if (!handler) {
     return {
@@ -1766,6 +1785,7 @@ function handleClick(
     // A click restarts its session's idle clock; one naming no session
     // restarts none.
     const clickedIn = clickSessionOf(verb, value);
+    noteFacts(facts, { session: clickedIn ?? "-" });
     if (clickedIn !== null) menuIdle.clicked(clickedIn, instantOf(new Date()));
     handler(value, { ...verbCtx, arrival });
     return { ok: true, output: "" };
@@ -1784,7 +1804,7 @@ function handleClick(
 // with, run as a click on it in the bar would run — a `cc-candybar://` link
 // through its own verb, any other through the platform's opener. Its verb
 // is told the click came through tmux, not the URL handler.
-function statusLineClick(value: string): Response {
+function statusLineClick(value: string, facts: RenderFacts): Response {
   const refused = (error: string): Response => ({
     ok: false,
     error,
@@ -1793,14 +1813,19 @@ function statusLineClick(value: string): Response {
   });
   const click = tmuxStatusLines.linkAt(value);
   if (click.kind === "refused") return refused(click.reason);
-  dlog("info", `tmux-status: click ${JSON.stringify(click.url)}`);
+  noteFacts(facts, { link: click.url });
   if (click.url.startsWith("cc-candybar://")) {
     const parsed = parseHandlerUrl(click.url);
     // [LAW:no-silent-failure] A link the bar draws never names this verb; one
     // that did would be a click that only ever clicks another.
     if (parsed.verb === VERB_TMUX_STATUS_CLICK)
       return refused("a status-line link names another status-line click");
-    return handleClick(parsed.verb, parsed.value, { via: "tmux-status" });
+    return handleClick(
+      parsed.verb,
+      parsed.value,
+      { via: "tmux-status" },
+      facts,
+    );
   }
   const opened = launchSync({
     bin: process.platform === "darwin" ? "/usr/bin/open" : "xdg-open",
@@ -1951,11 +1976,16 @@ function checkRenderRequest(
   // sender is broken or malicious); unknown fields are advisory (Anthropic
   // may have added something).
   const { report } = validateHookData(req.hookData as unknown);
+  // [LAW:nothing-unseen] Said once per daemon, at its first sight: every
+  // request carries the field, and a line each rotated the log in minutes.
+  // The stats snapshot lists them all.
   for (const field of report.unknownTopLevelFields) {
-    dlog(
-      "info",
-      `schema: unknown field '${field}' — Anthropic may have added it`,
-    );
+    if (stats.firstSightOfUnknownHookField(field)) {
+      dlog(
+        "info",
+        `schema: unknown field ${JSON.stringify(field)} — Anthropic may have added it`,
+      );
+    }
   }
   // [LAW:no-silent-failure][LAW:types-are-the-program] Gate hard on
   // schema violations. Continuing with `workspace?.project_dir` would

@@ -84,10 +84,11 @@ type Event = {
   fields: ReadonlyArray<readonly [string, string]>;
 };
 
-// A log line's level and its `key=value` fields, in order. A value that could
-// be misread as more than one field is a JSON string, read whole and unquoted.
+// A request event's level and its `key=value` fields, in order. A value that
+// could be misread as more than one field is a JSON string, read whole and
+// unquoted.
 function eventOf(line: string): Event {
-  const [, level, rest] = line.match(/ \[(\w+)\] render (.*)$/)!;
+  const [, level, rest] = line.match(/ \[(\w+)\] (?:render|click) (.*)$/)!;
   const fields = [...rest!.matchAll(/(\w+)=("(?:[^"\\]|\\.)*"|\S+)/g)].map(
     ([, key, value]) =>
       [
@@ -125,6 +126,8 @@ describe("every render request writes one render event, whatever its outcome", (
   ];
   const renderEvents = (lines: readonly string[] = logLines(env)): Event[] =>
     lines.filter((l) => / \[\w+\] render /.test(l)).map(eventOf);
+  const clickEvents = (lines: readonly string[]): Event[] =>
+    lines.filter((l) => / \[\w+\] click /.test(l)).map(eventOf);
   const field = (event: Event, key: string): string | undefined =>
     event.fields.find(([k]) => k === key)?.[1];
   // What has landed so far: for what must not have been written.
@@ -405,6 +408,79 @@ describe("every render request writes one render event, whatever its outcome", (
     const over = await renderOne();
     expect(field(over, "clickError")).toBe("over");
     expect(field(over, "err")).toBe("N");
+  });
+
+  // [LAW:nothing-unseen] A click is a unit of work like a render: how long it
+  // waited behind the daemon's loop is what a starved click looks like.
+  test("every click request writes one click event: its session, how long it queued and took, and how it ended", async () => {
+    const sid = "ev-click-event";
+    await render(sockPath, sid, projectDir, {}, configFlag("drawn"));
+    const open = effectsUrl([
+      { verb: VERB_SET_STATE, args: [sid, "candybar.menu", "open"] },
+    ]);
+    expect((await sendClick(sockPath, open)).ok).toBe(true);
+    const unknown = await sendClick(sockPath, "cc-candybar://no-such-verb/x");
+    expect(unknown.ok).toBe(false);
+    const lines = await loggedWhen(
+      env,
+      (ls) => clickEvents(ls).some((e) => field(e, "verb") === "no-such-verb"),
+      "the unknown verb's click event",
+    );
+    const opened = only(
+      clickEvents(lines).filter((e) => field(e, "session") === sid),
+    );
+    expect(opened.level).toBe("info");
+    expect(opened.fields.map(([key]) => key)).toEqual([
+      "verb",
+      "queued",
+      "session",
+      "took",
+      "outcome",
+    ]);
+    expect(field(opened, "verb")).toBe("dispatch");
+    expect(field(opened, "queued")).toMatch(/^\d+ms$/);
+    expect(field(opened, "took")).toMatch(/^\d+ms$/);
+    expect(field(opened, "outcome")).toBe("ok");
+    // Refused before it found a session: the field is absent, not `-`.
+    const refused = only(
+      clickEvents(lines).filter((e) => field(e, "verb") === "no-such-verb"),
+    );
+    expect(refused.level).toBe("warn");
+    expect(refused.fields.map(([key]) => key)).toEqual([
+      "verb",
+      "queued",
+      "took",
+      "outcome",
+      "error",
+    ]);
+    expect(field(refused, "outcome")).toBe("BAD_REQUEST");
+    expect(field(refused, "error")).toBe("unknown click verb: no-such-verb");
+  });
+
+  // Every request carries a field the schema does not know, so it is said
+  // once per daemon, and the stats list it for as long as the daemon lives.
+  test("an unknown hook field is logged once per daemon and listed in its stats", async () => {
+    const sid = "ev-unknown-field";
+    const request = {
+      ...renderBody(sid, projectDir, {}, configFlag("drawn")),
+      hookData: { ...hookData(sid, projectDir), novel_field_9b04: 1 },
+    };
+    await renderRequest(sockPath, request);
+    await renderRequest(sockPath, request);
+    // Each line lands before its request's render event, in the log's order.
+    await eventsOf(sid, 2);
+    expect(
+      logLines(env).filter((l) =>
+        l.includes('schema: unknown field "novel_field_9b04"'),
+      ),
+    ).toHaveLength(1);
+    const resp = await sendDaemonRequest(sockPath, {
+      v: PROTOCOL_VERSION,
+      kind: "stats",
+    });
+    expect(
+      resp.ok && "stats" in resp ? resp.stats.unknownHookFields : resp,
+    ).toContain("novel_field_9b04");
   });
 
   // A dump write the filesystem refuses costs the render nothing: the bar is

@@ -89,6 +89,9 @@ export interface StatsSnapshot {
     timedOut: number;
     inFlight: number;
   };
+  // Hook-data fields this daemon has been sent that its schema does not know:
+  // what Anthropic has added since the schema was written.
+  unknownHookFields: string[];
   gitCache: GitCacheStats;
   usageCache: {
     size: number;
@@ -177,6 +180,15 @@ export class RuntimeStats {
   requestsErrored = 0;
   requestsTimedOut = 0;
   inFlight = 0;
+  private readonly unknownHookFields = new Set<string>();
+
+  // Whether `field` is the first sight of that unknown hook field in this
+  // daemon's life: every request carries it, so it is said once.
+  firstSightOfUnknownHookField(field: string): boolean {
+    const first = !this.unknownHookFields.has(field);
+    this.unknownHookFields.add(field);
+    return first;
+  }
 
   watchersOpened = 0;
   watchersClosed = 0;
@@ -403,6 +415,7 @@ export class RuntimeStats {
         timedOut: this.requestsTimedOut,
         inFlight: this.inFlight,
       },
+      unknownHookFields: [...this.unknownHookFields],
       gitCache: extras.gitCache,
       usageCache: extras.usageCache,
       sources: extras.sources,

@@ -164,6 +164,7 @@ export function formatStats(s: StatsSnapshot): string {
   lines.push(`  errored       ${s.requests.errored}`);
   lines.push(`  timedOut      ${s.requests.timedOut}`);
   lines.push(`  inFlight      ${s.requests.inFlight}`);
+  lines.push(`  unknownFields ${s.unknownHookFields.join(", ") || "-"}`);
   lines.push(``);
   lines.push(`gitCache`);
   lines.push(`  size          ${s.gitCache.size}`);

@@ -56,8 +56,11 @@ export function renderEvent(
     ["outcome", outcome.kind],
     ...detailOf(outcome),
   ];
-  return {
-    level: LEVEL[outcome.kind],
-    line: `render${fields.map(([key, value]) => ` ${key}=${valueOf(value)}`).join("")}`,
-  };
+  return { level: LEVEL[outcome.kind], line: eventLine("render", fields) };
+}
+
+// [LAW:single-enforcer] The one spelling of a request's event: its name, then
+// each fact as a logfmt field, so every request kind is read the same way.
+export function eventLine(name: string, facts: RenderFacts): string {
+  return `${name}${facts.map(([key, value]) => ` ${key}=${valueOf(value)}`).join("")}`;
 }

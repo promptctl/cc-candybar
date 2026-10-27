@@ -423,6 +423,20 @@ describe("on a faked clock", () => {
     expect(log.at(-1)).toMatch(new RegExp(` pace=${pace(PERIODS.still)}fps `));
   });
 
+  // The rate a feed drew at, beside the pace it set: the gap is what the
+  // daemon's other work cost it.
+  test("the summary states the rate the feed drew at over its life", async () => {
+    const { feeds, note, state, log } = harness({ motion: "moving" });
+    note("s", "bar");
+    const close = feeds.subscribe("s", sub(() => {}));
+    await pass(2000);
+    close();
+    expect(state.renders).toBeGreaterThan(1);
+    expect(log.at(-1)).toMatch(
+      new RegExp(` for=2s drawn=${state.renders} .* achieved=${(state.renders / 2).toFixed(1)}fps `),
+    );
+  });
+
   // brandon-unfiled-3248.8ro6 step 7: what the feed's frames evaluated rides
   // beside what it drew.
   test("the summary counts the parts its frames evaluated", async () => {

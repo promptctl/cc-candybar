@@ -240,6 +240,7 @@ describe("formatStats", () => {
       externalBytes: 1 * 1024 * 1024,
       arrayBuffersBytes: 256 * 1024,
       requests: { total: 100, errored: 2, timedOut: 1, inFlight: 0 },
+      unknownHookFields: ["fast_mode", "prompt_id"],
       gitCache: {
         size: 5,
         held: 2,
@@ -285,6 +286,7 @@ describe("formatStats", () => {
       doctorStores: EMPTY_STORES,
     });
     expect(out).toContain("pid           1234");
+    expect(out).toContain("unknownFields fast_mode, prompt_id");
     expect(out).toContain("uptime        2m5s");
     expect(out).toContain("rss           50.0MB");
     expect(out).toContain("held          2");
@@ -329,6 +331,7 @@ describe("formatStats", () => {
       externalBytes: 0,
       arrayBuffersBytes: 0,
       requests: { total: 0, errored: 0, timedOut: 0, inFlight: 0 },
+      unknownHookFields: [],
       gitCache: {
         size: 0,
         held: 0,
