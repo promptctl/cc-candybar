@@ -86,13 +86,15 @@ export function gateRepos(
   };
 }
 
-// The book with `dir` answered: the latest answer is the directory's.
+// The book with `dir` answered: the latest answer is the directory's. The
+// answer it already holds is the book itself, which the store writes nothing
+// for.
 export function withAnswer(
   book: RepoConfigBook,
   dir: string,
   answer: RepoAnswer,
 ): RepoConfigBook {
-  return { ...book, [dir]: answer };
+  return book[dir] === answer ? book : { ...book, [dir]: answer };
 }
 
 // [LAW:parse-dont-validate] The document as a book: directory, then answer.
