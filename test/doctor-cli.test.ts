@@ -9,7 +9,7 @@ import { withMark } from "../src/doctor/mark-book";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { doctorPlan, loadConfigOnce } from "../src/doctor/cli";
+import { doctorPlan, loadConfigOnce, parseDoctorArgs } from "../src/doctor/cli";
 import { doctorReportKeys, doctorReportPairs } from "../src/doctor/report";
 import { runDoctor } from "../src/doctor/checks";
 import { gatherFacts } from "../src/doctor/edge";
@@ -458,6 +458,27 @@ describe("doctorPlan over a real config", () => {
       )
         .stdout,
     ).toBe(`✗ config — helper "h" is never called\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width — 120 columns, as this command's terminal measured\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n✓ session data\n`);
+  });
+
+  // [LAW:single-enforcer] brandon-unfiled-3248.e3r: the argv gate refuses
+  // arity and a stray option only. An empty argument — `doctor "$CFG"` with
+  // CFG unset — passes through as the name it is; what it means is decided
+  // where `check` and the bar decide it, not at the gate. Named per case:
+  // reintroducing `args[0] === ""` fails the first row, not the suite.
+  test("parseDoctorArgs refuses two files or an option, never an empty name", () => {
+    const USAGE = "doctor: expected at most one config file\nUsage: cc-candybar doctor [config-file]\n";
+    expect(
+      [[], [""], ["a.json5"], ["a.json5", "b.json5"], ["--help"]].map((args) => ({
+        args,
+        parsed: parseDoctorArgs(args),
+      })),
+    ).toEqual([
+      { args: [], parsed: { kind: "run", configFile: undefined } },
+      { args: [""], parsed: { kind: "run", configFile: "" } },
+      { args: ["a.json5"], parsed: { kind: "run", configFile: "a.json5" } },
+      { args: ["a.json5", "b.json5"], parsed: { kind: "usage", message: USAGE } },
+      { args: ["--help"], parsed: { kind: "usage", message: USAGE } },
+    ]);
   });
 
   // [LAW:one-source-of-truth] brandon-unfiled-3248.e3r: `doctor "$CFG"` with

@@ -60,8 +60,7 @@ import {
   productionHandlerProbeEdge,
   type HandlerProbeEdge,
 } from "./handler-probe.js";
-import { detectConfigEnv } from "../config-hint.js";
-import { explicitConfigPath } from "../utils/user-path.js";
+import { cliConfigTarget } from "../config-hint.js";
 import {
   fallbackState,
   loadFromDisk,
@@ -246,10 +245,7 @@ export async function doctorPlan(
           cwd,
         ),
         cwd,
-        configFile:
-          explicitConfigPath(cwd, configFile) ??
-          detectConfigEnv(env, cwd) ??
-          null,
+        configFile: cliConfigTarget(configFile, env, cwd) ?? null,
       },
       // No session: the bar a session started here opens on.
       () => null,
@@ -306,29 +302,45 @@ function commandTerminal(): { readonly columns?: number } {
   return { columns };
 }
 
+// [LAW:parse-dont-validate] argv crosses one checkpoint and becomes a request,
+// as `check`'s does, so the usage contract is a value a test reads rather
+// than an exit from the middle of `runDoctorCli`.
+export type DoctorArgs =
+  | { readonly kind: "run"; readonly configFile: string | undefined }
+  | { readonly kind: "usage"; readonly message: string };
+
+export function parseDoctorArgs(args: readonly string[]): DoctorArgs {
+  // [LAW:single-enforcer] Arity and a stray option only. What the argument
+  // means — including that an empty one, a statusline's `--config "$CFG"`
+  // with CFG unset, is no override — is `cliConfigTarget`'s to say inside
+  // `doctorPlan`, the one reading `check` runs under and the bar renders under.
+  if (args.length > 1 || args[0]?.startsWith("--")) {
+    return {
+      kind: "usage",
+      message:
+        "doctor: expected at most one config file\nUsage: cc-candybar doctor [config-file]\n",
+    };
+  }
+  return { kind: "run", configFile: args[0] };
+}
+
 // `cc-candybar doctor [config-file]` — the argv binding. The one argument is
 // the config file a session's statusline command names with `--config`, so
 // the CLI can check the file that session's bar renders.
 export async function runDoctorCli(args: readonly string[]): Promise<never> {
-  // [LAW:single-enforcer] What the argument means — including that an empty
-  // one, a statusline's `--config "$CFG"` with CFG unset, is no override — is
-  // `explicitConfigPath`'s to say, the same reading the bar renders under.
-  // Only arity and a stray option are refused here.
-  if (args.length > 1 || args[0]?.startsWith("--")) {
-    process.stderr.write(
-      "doctor: expected at most one config file\nUsage: cc-candybar doctor [config-file]\n",
-    );
+  const parsed = parseDoctorArgs(args);
+  if (parsed.kind === "usage") {
+    process.stderr.write(parsed.message);
     process.exit(EXIT_USAGE);
   }
-  const cwd = process.cwd();
   const plan = await doctorPlan(
     productionEdge(loadConfigOnce),
     productionHandlerProbeEdge(),
     askDaemon,
     process.env,
-    cwd,
+    process.cwd(),
     commandTerminal,
-    args[0],
+    parsed.configFile,
   );
   process.stdout.write(plan.stdout);
   process.stderr.write(plan.stderr);
