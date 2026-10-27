@@ -5,6 +5,8 @@
   import { liveTraits, projects } from './model';
 
   const explorer = new Explorer();
+  let panelOpen = $state(true);
+  const PANEL = 470;
   let query = $state('');
   const q = $derived(query.trim().toLowerCase());
   const hits = $derived.by(() => {
@@ -23,7 +25,8 @@
 </script>
 
 <main>
-  <Graph {explorer} />
+  <Graph {explorer} right={panelOpen ? PANEL : 0} />
+  <button class="toggle" style:right="{panelOpen ? PANEL : 0}px" title={panelOpen ? 'hide the panel' : 'show the panel'} onclick={() => (panelOpen = !panelOpen)}>{panelOpen ? '›' : '‹'}</button>
   <div class="bar">
     <input placeholder="find a project or characteristic…" bind:value={query} />
     <button onclick={() => explorer.reset()}>reset graph</button>
@@ -33,11 +36,13 @@
       </div>
     {/if}
   </div>
-  <Panel {explorer} />
+  {#if panelOpen}<Panel {explorer} />{/if}
 </main>
 
 <style>
   main { position: fixed; inset: 0; }
+  .toggle { position: absolute; top: 12px; z-index: 4; width: 26px; height: 30px; background: var(--panel); color: var(--dim); border: 1px solid var(--line); border-radius: 6px 0 0 6px; font-size: 18px; line-height: 1; cursor: pointer; }
+  .toggle:hover { color: var(--fg); }
   .bar { position: absolute; left: 14px; top: 12px; display: flex; gap: 8px; z-index: 2; }
   input { width: 320px; background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 9px; font: inherit; }
   .bar > button { background: var(--panel); color: var(--dim); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; font: inherit; cursor: pointer; }

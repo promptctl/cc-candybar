@@ -19,7 +19,8 @@
   const DISTANCE: Record<GraphEdge['kind'], number> = { related: 180, has: 60, clone: 90 };
   const STRENGTH: Record<GraphEdge['kind'], number> = { related: 0.2, has: 0.6, clone: 0.3 };
 
-  let { explorer }: { explorer: Explorer } = $props();
+  // The px the sidebar takes from the right; the graph fills the rest and resizes when this changes.
+  let { explorer, right = 470 }: { explorer: Explorer; right?: number } = $props();
   let el: HTMLDivElement;
   // Set once mounted; the effects below read it, so they re-run when it appears.
   let graphCore = $state.raw<Core>();
@@ -115,7 +116,8 @@
           if (n.id.startsWith('more:')) have.data('label', definition(n.id).data.label);
           continue;
         }
-        cy.add({ ...definition(n.id), position: { x: n.x ?? 0, y: n.y ?? 0 } });
+        const def = definition(n.id);
+        cy.add({ ...def, data: { ...def.data, boost: 0 }, position: { x: n.x ?? 0, y: n.y ?? 0 } });
       }
       for (const e of shown) {
         if (cy.getElementById(e.id).empty()) cy.add({ data: { id: e.id, source: e.source, target: e.target, w: e.w }, classes: e.kind });
@@ -130,11 +132,12 @@
       minZoom: 0.1,
       maxZoom: 4,
       style: [
-        { selector: 'node', style: { width: 'data(size)', height: 'data(size)', 'background-color': '#c9ccd2', color: '#f2f3f5', 'font-size': 10, 'text-valign': 'center', 'text-halign': 'right', 'text-margin-x': 5, 'min-zoomed-font-size': 9, 'text-wrap': 'ellipsis', 'text-max-width': '200px', 'text-background-color': '#101216', 'text-background-opacity': 0.85, 'text-background-padding': '3px', 'text-background-shape': 'roundrectangle' } },
-        { selector: 'node.trait', style: { label: 'data(label)', 'background-color': 'data(colour)', 'font-size': 13, 'font-weight': 600 } },
+        { selector: 'node', style: { width: 'data(size)', height: 'data(size)', 'background-color': '#c9ccd2', color: '#f2f3f5', 'font-size': 'mapData(boost, 0, 1, 10, 20)','text-valign': 'center', 'text-halign': 'right', 'text-margin-x': 5, 'min-zoomed-font-size': 9, 'text-wrap': 'ellipsis', 'text-max-width': '320px', 'text-background-color': '#101216', 'text-background-opacity': 0.85, 'text-background-padding': '3px', 'text-background-shape': 'roundrectangle' } },
+        { selector: 'node.trait', style: { label: 'data(label)', 'background-color': 'data(colour)', 'font-size': 'mapData(boost, 0, 1, 13, 22)', 'font-weight': 600 } },
         { selector: 'node.more', style: { label: 'data(label)', 'background-color': '#3a3f49', color: '#8b919c', 'font-style': 'italic' } },
         { selector: 'node.project', style: { label: '', 'background-color': '#6b717c' } },
         { selector: 'node.project.showlabel', style: { label: 'data(label)' } },
+        { selector: 'node.project.lens', style: { label: 'data(label)' } },
         { selector: 'node.novel', style: { 'background-color': '#f0e0c8', 'border-color': '#e8a25c', 'border-width': 2 } },
         { selector: 'node:selected', style: { 'border-color': '#ffffff', 'border-width': 3 } },
         { selector: 'edge', style: { width: 1, 'line-color': '#2e333c', 'curve-style': 'haystack' } },
@@ -167,6 +170,28 @@
       sim.alphaTarget(0);
     });
     core.on('zoom', updateLabels);
+    // A lens under the cursor: text grows with closeness, and nearby projects show their names.
+    // [LAW:dataflow-not-control-flow] the cursor writes one number per node; the style reads it.
+    const LENS = 160;
+    core.on('mousemove', (e) => {
+      core.batch(() => {
+        core.nodes().forEach((n) => {
+          const d = Math.hypot(n.position('x') - e.position.x, n.position('y') - e.position.y);
+          const b = Math.round(Math.max(0, 1 - d / LENS) * 50) / 50;
+          if (b !== n.data('boost')) n.data('boost', b);
+          if (n.hasClass('project')) n.toggleClass('lens', b > 0.3);
+        });
+      });
+    });
+    core.on('mouseout', (e) => {
+      if (e.target !== core) return;
+      core.batch(() => {
+        core.nodes().forEach((n) => {
+          n.data('boost', 0);
+          if (n.hasClass('project')) n.removeClass('lens');
+        });
+      });
+    });
     core.on('mouseover', 'node', (e) => {
       const hood = e.target.closedNeighborhood();
       core.elements().not(hood).addClass('faded');
@@ -182,6 +207,11 @@
       sim.stop();
       core.destroy();
     };
+  });
+
+  $effect(() => {
+    right;
+    graphCore?.resize();
   });
 
   $effect(() => {
@@ -211,8 +241,8 @@
   });
 </script>
 
-<div class="graph" bind:this={el}></div>
+<div class="graph" bind:this={el} style:right="{right}px"></div>
 
 <style>
-  .graph { position: absolute; inset: 0 470px 0 0; }
+  .graph { position: absolute; top: 0; bottom: 0; left: 0; }
 </style>
