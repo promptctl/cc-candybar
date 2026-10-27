@@ -117,28 +117,28 @@ export class FileSessionStorage implements SessionStorage {
       }
       // [LAW:no-ambient-temporal-coupling] A synchronous flush since this
       // write began wrote state at least as new: renaming this over it would
-      // put older state back.
+      // put older state back. A flush that lands while the rename is on its
+      // way removes the temp file first (flush, below), so the rename finds
+      // nothing: the one outcome in which this older state cannot land over
+      // the newer.
+      let landed = false;
       if (generation !== this.generation) {
         await fs.promises.rm(tmp, { force: true });
-        return;
+      } else {
+        try {
+          await fs.promises.rename(tmp, this.filePath);
+          landed = true;
+        } catch (e) {
+          if (
+            (e as NodeJS.ErrnoException).code !== "ENOENT" ||
+            generation === this.generation
+          )
+            throw e;
+        }
       }
-      // A flush that lands while this rename is on its way removes the temp
-      // file first (flush, below), so the rename finds nothing: the one
-      // outcome in which this older state cannot land over the newer.
-      let landed = true;
-      try {
-        await fs.promises.rename(tmp, this.filePath);
-      } catch (e) {
-        if (
-          (e as NodeJS.ErrnoException).code !== "ENOENT" ||
-          generation === this.generation
-        )
-          throw e;
-        landed = false;
-      }
-      // [LAW:nothing-unseen] A flush since the rename began wrote state at
-      // least as new, over this one if it landed: this write is superseded
-      // either way, and the last `saved` line stays the flush's.
+      // [LAW:nothing-unseen] A write a flush superseded, before or after its
+      // rename, says so: its bytes were written and synced, and the last
+      // `saved` line stays the flush's.
       if (generation !== this.generation) {
         this.logger(
           "info",
@@ -172,12 +172,6 @@ export class FileSessionStorage implements SessionStorage {
     const started = performance.now();
     try {
       fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
-      // [LAW:no-ambient-temporal-coupling] The debounced write's temp file goes
-      // before this write lands, whatever its rename is doing on the thread
-      // pool: a rename and an unlink of one directory entry cannot interleave,
-      // so either the older state landed already and is overwritten below, or
-      // its rename finds nothing. Newer state is never put back under older.
-      fs.rmSync(`${this.filePath}.writing`, { force: true });
       const tmp = `${this.filePath}.tmp`;
       const body = JSON.stringify(snapshot);
       // [LAW:single-enforcer] Daemon runtime files are owner-only (0o600), like
@@ -185,6 +179,14 @@ export class FileSessionStorage implements SessionStorage {
       // gets the same perms — chmod defeats umask and re-perms a reused tmp.
       fs.writeFileSync(tmp, body, { mode: 0o600 });
       fs.chmodSync(tmp, 0o600);
+      // [LAW:no-ambient-temporal-coupling] The debounced write's temp file goes
+      // just before this write lands, whatever its rename is doing on the
+      // thread pool: a rename and an unlink of one directory entry cannot
+      // interleave, so either the older state landed already and is
+      // overwritten below, or its rename finds nothing. Newer state is never
+      // put back under older, and a flush this disk refuses, above, discards
+      // nothing.
+      fs.rmSync(`${this.filePath}.writing`, { force: true });
       fs.renameSync(tmp, this.filePath);
       this.saved(body, snapshot, started, performance.now() - started);
       // [LAW:one-source-of-truth] `pending` is "state not yet durably written".

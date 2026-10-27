@@ -133,7 +133,39 @@ describe("SessionState disk persistence", () => {
       ss.flush();
       release();
       // The held rename runs out: it finds no temp file, and the write ends.
-      await (spy.mock.results[0]!.value as Promise<void>).catch(() => {});
+      await settled(() => logged.some((l) => l.includes("superseded")));
+    } finally {
+      spy.mockRestore();
+    }
+    expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({
+      s1: { theme: "new" },
+    });
+    expect(existsSync(`${file}.writing`)).toBe(false);
+    expect(logged.filter((l) => l.includes("save failed"))).toEqual([]);
+    expect(logged.filter((l) => l.includes("superseded"))).toEqual([
+      expect.stringContaining("superseded by a flush landed=false"),
+    ]);
+  });
+
+  // A flush that lands before the debounced write reaches its rename: the
+  // write removes its own temp file and says it was superseded.
+  it("a synchronous flush before the debounced rename supersedes it", async () => {
+    const logged: string[] = [];
+    const ss = new SessionState(
+      new FileSessionStorage(file, 0, (_level, line) => logged.push(line)),
+    );
+    const mkdir = fs.promises.mkdir;
+    const spy = jest
+      .spyOn(fs.promises, "mkdir")
+      .mockImplementation(async (dir, opts) => {
+        // The write's first await: the flush lands before it resumes.
+        ss.set("s1", "theme", "new");
+        ss.flush();
+        return mkdir(dir, opts);
+      });
+    try {
+      ss.set("s1", "theme", "old");
+      await settled(() => logged.some((l) => l.includes("superseded")));
     } finally {
       spy.mockRestore();
     }

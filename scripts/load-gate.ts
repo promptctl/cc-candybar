@@ -658,18 +658,14 @@ async function clickMenu(s: Session, started: number): Promise<void> {
   await redrawn(s, answered);
 }
 
-// Until the session draws its bar again after `after`, when it had
+// Until the session draws its bar again after a click answered, when it had
 // `answered`: the draw that builds what an open menu reads, or releases it
-// once closed; or the first draw served once a collection's backlog is gone.
-async function redrawn(
-  s: Session,
-  answered: number,
-  after = "its menu was clicked",
-): Promise<void> {
+// once closed.
+async function redrawn(s: Session, answered: number): Promise<void> {
   const deadline = Date.now() + WARM_DEADLINE_MS;
   while (s.answers === answered) {
     if (Date.now() >= deadline)
-      throw new Error(`${s.id} drew no bar after ${after}`);
+      throw new Error(`${s.id} drew no bar after its menu was clicked`);
     await sleep(50);
   }
 }
@@ -793,6 +789,7 @@ async function run(): Promise<{
     );
   }
 
+  enter("warm");
   sessions.forEach((s) =>
     timers.push(
       setTimeout(
@@ -824,10 +821,17 @@ async function run(): Promise<{
   // budget. The steady phase begins once every session has been answered
   // again inside the client's budget: an answer in budget means the queue
   // ahead of it was shorter than the budget, and the daemon serves faster
-  // than the sessions ask, so from there the queue only shrinks.
-  await Promise.all(
-    sessions.map((s) => redrawn(s, s.answers, "the heap was collected")),
-  );
+  // than the sessions ask, so from there the queue only shrinks. A session
+  // not answered by the deadline is scored by the steady renders it fails,
+  // as the warm phase scores one, never a run without a verdict.
+  const collected = sessions.map((s) => s.answers);
+  const resumeStarted = Date.now();
+  while (
+    !sessions.every((s, i) => s.answers > collected[i]!) &&
+    Date.now() - resumeStarted < WARM_DEADLINE_MS
+  ) {
+    await sleep(50);
+  }
 
   // [LAW:dataflow-not-control-flow] The feed is one session's subscriber,
   // opened only in the `on` world; its frames are counted over the steady
@@ -1060,6 +1064,9 @@ async function run(): Promise<{
       renders.filter((r) => r.phase === "warm").map((r) => r.outcome),
     ),
     steadyRenders: steady.length,
+    // When the steady phase began, as the daemon's log stamps its lines: a
+    // failure's offset is added to it to find the instant there.
+    steadyStartedAt: new Date(steadyStarted).toISOString(),
     steadyFailures,
     steadyMs: {
       p50: pct(ms, 0.5),
