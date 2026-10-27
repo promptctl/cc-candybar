@@ -49,7 +49,7 @@ import { sendDaemonRequest } from "./helpers/daemon-wire";
 import { links } from "./helpers/ansi";
 import { HANDOFF_BUTTON } from "../src/daemon/lane-handoff";
 import { until } from "./helpers/until";
-import { renderLines } from "./helpers/daemon-log";
+import { loggedWhen, logLines, renderLines } from "./helpers/daemon-log";
 import { POLLED } from "../src/config/settings-menu";
 import {
   effectsUrl,
@@ -97,7 +97,6 @@ type Frame = { readonly at: number; readonly resp: Response };
 describe("a subscriber receives a session's frames as the bar moves", () => {
   let sockPath: string;
   let removeTmpDirs: () => void;
-  let daemonLog: string;
   let env: NodeJS.ProcessEnv;
   let projectDir: string;
   let daemon: RunningDaemon | undefined;
@@ -193,7 +192,6 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   beforeAll(async () => {
     const prepared = prepareIsolatedDaemonEnv("cc-candybar-feed-e2e");
     ({ sockPath, removeTmpDirs, env } = prepared);
-    daemonLog = path.join(prepared.env.XDG_STATE_HOME!, "cc-candybar", "daemon.log");
     projectDir = mkdtempSync(path.join(os.tmpdir(), "cc-candybar-feed-e2e-"));
     for (const [name, text] of Object.entries(CONFIGS))
       writeFileSync(path.join(projectDir, `${name}.json5`), text);
@@ -332,14 +330,12 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   // The closing summary of `sessionId`'s feed, once the daemon has logged it.
   const closedSummary = async (sessionId: string): Promise<string> => {
     const mark = `feed sid=${JSON.stringify(sessionId)} closed `;
-    let line: string | undefined;
-    await until(() => {
-      line = readFileSync(daemonLog, "utf8")
-        .split("\n")
-        .find((l) => l.includes(mark));
-      return line !== undefined;
-    }, "the feed's closing summary");
-    return line!;
+    const lines = await loggedWhen(
+      env,
+      (l) => l.some((line) => line.includes(mark)),
+      "the feed's closing summary",
+    );
+    return lines.find((line) => line.includes(mark))!;
   };
 
   // brandon-unfiled-3248.8ro6 §4e: a source's value moving between requests
@@ -428,14 +424,19 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     expect(shown.some((text) => text.includes("the picked mark"))).toBe(true);
     // [LAW:no-ambient-temporal-coupling] The log is written off the loop, so
     // the frame a click's view-open draws can reach the test before the line
-    // that records the open lands. Wait for the lines, as laneLines does.
-    const opened = (): Array<string | undefined> =>
-      readFileSync(daemonLog, "utf8")
-        .split("\n")
+    // that records the open lands. The wait is a gate; the assertion below is
+    // the only failure, and on a timeout it reads what did land, so a run that
+    // fails says whether a click opened no view or logged it late.
+    const openedBy = (lines: readonly string[]): Array<string | undefined> =>
+      lines
         .filter((l) => l.includes(`session view opened sid=${JSON.stringify(sid)} `))
         .map((l) => / by=(\w+) /.exec(l)?.[1]);
-    await until(() => opened().length >= 3, "the cleared pick's view-open line");
-    expect(opened()).toEqual(["request", "click", "click"]);
+    const lines = await loggedWhen(
+      env,
+      (l) => openedBy(l).length >= 3,
+      "three view-open lines for the session",
+    ).catch(() => logLines(env));
+    expect(openedBy(lines)).toEqual(["request", "click", "click"]);
   });
 
   test("a subscriber that arrives before the session's first render receives it", async () => {
@@ -502,13 +503,9 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   // The daemon log's lines for `sid`: its render events, and how each of its
   // lane setups ended (src/daemon/lane-setup.ts).
   const renderEvents = (sid: string): string[] =>
-    readFileSync(daemonLog, "utf8")
-      .split("\n")
-      .filter((l) => l.includes(` render sid=${sid} `));
+    logLines(env).filter((l) => l.includes(` render sid=${sid} `));
   const laneLines = (sid: string): string[] =>
-    readFileSync(daemonLog, "utf8")
-      .split("\n")
-      .filter((l) => l.includes(" lane: ") && l.includes(`(session=${sid})`));
+    logLines(env).filter((l) => l.includes(" lane: ") && l.includes(`(session=${sid})`));
   const setState = (sid: string, key: string, value: string): Promise<void> =>
     click(sockPath, effectsUrl([{ verb: VERB_SET_STATE, args: [sid, key, value] }]));
 
