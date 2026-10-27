@@ -49,7 +49,12 @@ import { sendDaemonRequest } from "./helpers/daemon-wire";
 import { links } from "./helpers/ansi";
 import { HANDOFF_BUTTON } from "../src/daemon/lane-handoff";
 import { until } from "./helpers/until";
-import { loggedLines, logLines, renderLines } from "./helpers/daemon-log";
+import {
+  loggedLines,
+  logLines,
+  renderEventsOf,
+  renderLines,
+} from "./helpers/daemon-log";
 import { POLLED } from "../src/config/settings-menu";
 import {
   effectsUrl,
@@ -507,7 +512,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   // The daemon log's lines for `sid`: its render events, and how each of its
   // lane setups ended (src/daemon/lane-setup.ts).
   const renderEvents = (sid: string): string[] =>
-    logLines(env).filter((l) => l.includes(` render sid=${sid} `));
+    renderEventsOf(logLines(env), sid);
   const laneLines = (sid: string): string[] =>
     logLines(env).filter(
       (l) => l.includes(" lane: ") && l.includes(`(session=${sid})`),
@@ -538,13 +543,19 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     expect(barText(band.frames[0]!)).toEqual(
       expect.stringContaining("a handed-off mark"),
     );
-    const before = events().length;
     const handedOff = await render(sockPath, sid, projectDir, {}, args("handoff"));
     expect(stripAnsi(handedOff).trim().split("\n")).toEqual([
       `🧪 the bar is drawn in the band above the prompt ${HANDOFF_BUTTON}`,
     ]);
-    await until(() => events().length > before, "the handoff render's event");
-    expect(events().at(-1)).toMatch(/ handoff=band /);
+    // [LAW:no-ambient-temporal-coupling] Waited for as the fact itself, not
+    // as one more event than a count read before the render: a retry of the
+    // first render can land its event after that count is taken.
+    await loggedLines(
+      env,
+      (lines) => renderEventsOf(lines, sid),
+      (found) => / handoff=band /.test(found.at(-1) ?? ""),
+      "the handoff render's event",
+    );
     const button = links(handedOff).find((l) => l.text.includes("⟲"));
     await click(sockPath, button!.url);
     // The reset took the lane's setting out of the file it was in.

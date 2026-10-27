@@ -11,7 +11,7 @@ import path from "node:path";
 
 import { DRAW_RESERVE_MS } from "../src/daemon/request-deadline";
 import { killAndWait, renderBody, renderRequest } from "./helpers/daemon-e2e";
-import { loggedWhen } from "./helpers/daemon-log";
+import { loggedLines } from "./helpers/daemon-log";
 import {
   prepareIsolatedDaemonEnv,
   spawnDaemonWithEnv,
@@ -77,20 +77,20 @@ describe("the draw's reserve", () => {
     for (let i = 0; i < SAMPLES; i++) await ask(`${tag}-${i}`);
     // A session's first draw alone: an ask the helper repeated, because the
     // first drew pending, draws warm.
+    const drawn = new RegExp(`render sid=(${tag}-\\d+) .* drew=(\\d+)ms `);
     const drew = (lines: readonly string[]): number[] => {
       const first = new Map<string, number>();
       for (const line of lines) {
-        const m = line.match(
-          new RegExp(`render sid=(${tag}-\\d+) .* drew=(\\d+)ms `),
-        );
+        const m = line.match(drawn);
         if (m !== null && !first.has(m[1]!)) first.set(m[1]!, Number(m[2]));
       }
       return [...first.values()];
     };
     const samples = drew(
-      await loggedWhen(
+      await loggedLines(
         env,
-        (lines) => drew(lines).length >= SAMPLES,
+        (lines) => lines.filter((l) => drawn.test(l)),
+        (found) => drew(found).length >= SAMPLES,
         `${SAMPLES} render events for ${name}`,
       ),
     ).sort((a, b) => a - b);

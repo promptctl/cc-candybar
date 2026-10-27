@@ -10,7 +10,8 @@ export function logLines(env: NodeJS.ProcessEnv): string[] {
   return linesOf(logPath(env));
 }
 
-// The log's lines once `holds` is true of them.
+// The whole log once `holds` is true of it: for a condition over the log
+// entire. A wait on particular lines is loggedLines, whose failure names them.
 export async function loggedWhen(
   env: NodeJS.ProcessEnv,
   holds: (lines: readonly string[]) => boolean,
@@ -36,10 +37,17 @@ export async function loggedLines(
   } catch (e) {
     throw new Error(
       `${e instanceof Error ? e.message : String(e)}; the lines picked:\n${picked.join("\n")}`,
+      { cause: e },
     );
   }
   return picked;
 }
+
+// A session's render events, every attempt in log order.
+export const renderEventsOf = (
+  lines: readonly string[],
+  sessionId: string,
+): string[] => lines.filter((l) => l.includes(` render sid=${sessionId} `));
 
 // [LAW:one-source-of-truth] A render event whose reply its client read: an
 // attempt the client gave up on is logged too, so a count of a session's
@@ -58,7 +66,7 @@ export async function renderLines(
 ): Promise<string[]> {
   return loggedLines(
     env,
-    (lines) => lines.filter((l) => l.includes(`render sid=${sessionId} `)),
+    (lines) => renderEventsOf(lines, sessionId),
     (events) => events.filter(answeredRender).length >= count,
     `${count} answered render event(s) for ${sessionId}`,
   );
