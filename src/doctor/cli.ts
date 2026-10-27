@@ -17,7 +17,7 @@ import { linkSignerFromKeyFile } from "../daemon/link-key.js";
 import { openSync } from "node:fs";
 import process from "node:process";
 import { WriteStream } from "node:tty";
-import { exitWith, type CliPlan } from "../cli-plan.js";
+import type { CliPlan } from "../cli-plan.js";
 import { DOOR_GLYPH } from "../config/disclosure.js";
 import {
   barsOf,
@@ -207,7 +207,7 @@ export function widthOf(
 }
 
 // [LAW:effects-at-boundaries] The whole CLI as data: facts in, (streams,
-// exit code) out. `runDoctorCli` performs it; a test reads it.
+// exit code) out. `doctorCommandPlan` hands it to the one delivery; a test reads it.
 export async function doctorPlan(
   edge: DoctorEdge,
   handler: HandlerProbeEdge,
@@ -304,7 +304,7 @@ function commandTerminal(): { readonly columns?: number } {
 
 // [LAW:parse-dont-validate] argv crosses one checkpoint and becomes a request,
 // as `check`'s does, so the usage contract is a value a test reads rather
-// than an exit from the middle of `runDoctorCli`.
+// than an exit from the middle of the command.
 export type DoctorArgs =
   | { readonly kind: "run"; readonly configFile: string | undefined }
   | { readonly kind: "usage"; readonly message: string };
@@ -339,19 +339,19 @@ export function parseDoctorArgs(args: readonly string[]): DoctorArgs {
 // `cc-candybar doctor [config-file]` — the argv binding. The one argument is
 // the config file a session's statusline command names with `--config`, so
 // the CLI can check the file that session's bar renders.
-export async function runDoctorCli(args: readonly string[]): Promise<never> {
+export async function doctorCommandPlan(
+  args: readonly string[],
+): Promise<CliPlan> {
   const parsed = parseDoctorArgs(args);
-  const plan: CliPlan =
-    parsed.kind === "usage"
-      ? { stdout: "", stderr: parsed.message, code: EXIT_USAGE }
-      : await doctorPlan(
-          productionEdge(loadConfigOnce),
-          productionHandlerProbeEdge(),
-          askDaemon,
-          process.env,
-          process.cwd(),
-          commandTerminal,
-          parsed.configFile,
-        );
-  return exitWith(plan);
+  return parsed.kind === "usage"
+    ? { stdout: "", stderr: parsed.message, code: EXIT_USAGE }
+    : await doctorPlan(
+        productionEdge(loadConfigOnce),
+        productionHandlerProbeEdge(),
+        askDaemon,
+        process.env,
+        process.cwd(),
+        commandTerminal,
+        parsed.configFile,
+      );
 }

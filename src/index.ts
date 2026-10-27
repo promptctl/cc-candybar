@@ -18,7 +18,7 @@ import { daemonStatsPlan } from "./daemon/client-stats";
 import { debugCommandPlan } from "./daemon/client-debug";
 import { DEBUG_WHATS } from "./daemon/debug-types";
 import { schemaPlan } from "./config/cli";
-import { runCheck } from "./check";
+import { checkCommandPlan } from "./check";
 import { runPlugin } from "./plugin-install";
 import { obtainDaemonKick } from "./daemon/acquire";
 import { planOutcome } from "./render/outcome-plan";
@@ -30,7 +30,7 @@ import { NODE_FLAGS } from "./cli-flags";
 import { PACKAGE_VERSION } from "./version";
 import { detectClientHints } from "./client-hints";
 import { nodeClientHint } from "./client-hint";
-import { runDoctorCli } from "./doctor/cli";
+import { doctorCommandPlan } from "./doctor/cli";
 import { runFrames } from "./frames-cli";
 import { runBarPane } from "./bar-pane";
 import { exitWith } from "./cli-plan";
@@ -57,11 +57,13 @@ function showHelpText(): void {
 }
 
 // [LAW:dataflow-not-control-flow] Subcommand dispatch is data: argv[2] names
-// a handler. A handler whose body can outgrow a pipe buffer (stats, the debug
-// projections, check, doctor, schema, the render relay) folds its outcome
-// into a plan and delivers it through the one exit (src/cli-plan.ts); install
-// and plugin print short lines as they go; the daemon, the stream and the
-// pane own their own lifecycles. The
+// a handler. A one-shot handler (stats, the debug projections, check, doctor,
+// schema, the render relay) folds its outcome into a plan and delivers it
+// through the one exit (src/cli-plan.ts), in one shape:
+// `exitWith(await <command>Plan(args))`. install and plugin print as they go
+// and exit directly, which holds only while their whole output stays under
+// one pipe buffer (64 KiB): past that, an exit drops the queued tail. The
+// daemon, the stream and the pane own their own lifecycles. The
 // stdin-driven render takes flags only (`--config`), so a positional argv[2]
 // naming no handler is a mistake, refused rather than read as a render.
 // `lint` is an alias of `check` — one config verdict, one pipeline, one
@@ -94,10 +96,10 @@ const SUBCOMMANDS: Readonly<Record<string, Subcommand>> = {
     await runFrames(process.argv, RUNNING_BUNDLE);
   },
   check: async (args) => {
-    await runCheck(args);
+    await exitWith(await checkCommandPlan(args));
   },
   lint: async (args) => {
-    await runCheck(args);
+    await exitWith(await checkCommandPlan(args));
   },
   plugin: async (args) => {
     process.exit(runPlugin(args));
@@ -109,7 +111,7 @@ const SUBCOMMANDS: Readonly<Record<string, Subcommand>> = {
   // the bar's 🩺 click runs, over this process's own environment (which IS
   // Claude Code's when run from a Claude Code shell).
   doctor: async (args) => {
-    await runDoctorCli(args);
+    await exitWith(await doctorCommandPlan(args));
   },
   // Runs until the pane closes.
   "bar-pane": async (args) => {
@@ -232,9 +234,15 @@ echo '{"session_id":"test-session","workspace":{"project_dir":"/path/to/project"
     const errorMessage = error instanceof Error ? error.message : String(error);
     // [LAW:no-silent-failure] Named for what was running: a subcommand whose
     // delivery failed (a full disk under `check`) is reported as that
-    // subcommand, not as a statusline render.
-    console.error(`cc-candybar ${named ?? "statusline"}: ${errorMessage}`);
-    process.exit(1);
+    // subcommand, not as a statusline render. The report goes through the
+    // same delivery, so it is waited for like any plan; a stream that refuses
+    // this too rejects out of main, and Node's unhandled-rejection report is
+    // the loud end.
+    await exitWith({
+      stdout: "",
+      stderr: `cc-candybar ${named ?? "statusline"}: ${errorMessage}\n`,
+      code: 1,
+    });
   }
 }
 
