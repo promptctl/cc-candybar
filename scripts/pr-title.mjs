@@ -16,8 +16,9 @@
 // release (a BREAKING CHANGE note), never cancel what the title earns.
 
 import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { analyzeCommits } from "@semantic-release/commit-analyzer";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -28,7 +29,11 @@ const entry = releaseConfig.plugins.find((p) => Array.isArray(p) && p[0] === ANA
 if (!entry) throw new Error(`pr-title: .releaserc.json configures no ${ANALYZER} entry with options`);
 const config = entry[1];
 
-const preset = await import(`conventional-changelog-${config.preset}`);
+// [LAW:one-source-of-truth] The preset module is the one commit-analyzer parses
+// with: named and resolved the way it names and resolves it, from its own install.
+const fromAnalyzer = createRequire(fileURLToPath(import.meta.resolve(ANALYZER)));
+const presetPath = fromAnalyzer.resolve(`conventional-changelog-${config.preset.toLowerCase()}`);
+const preset = await import(pathToFileURL(presetPath).href);
 const presetTypes = config.presetConfig?.types ?? preset.DEFAULT_COMMIT_TYPES;
 if (!presetTypes) {
   throw new Error(`pr-title: preset "${config.preset}" exports no DEFAULT_COMMIT_TYPES and the config sets no presetConfig.types`);
@@ -58,7 +63,7 @@ const title = process.env.PR_TITLE ?? "";
 const verdict = await judge(title);
 
 if (verdict.release) {
-  console.log(`pr-title: ok release=${verdict.release} (from the title; a BREAKING CHANGE note in the merge body can raise it)`);
+  console.log(`pr-title: ok release=${verdict.release}`);
 } else if (verdict.ok) {
   console.log(`pr-title: ok release=none (a type the config does not release)`);
 } else {

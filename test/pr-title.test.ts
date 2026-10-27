@@ -21,7 +21,7 @@ describe("PR title check", () => {
   ])("%p releases %s", (title, release) => {
     const run = check(title);
     expect(run.status).toBe(0);
-    expect(run.stdout).toContain(`pr-title: ok release=${release} `);
+    expect(run.stdout).toBe(`pr-title: ok release=${release}\n`);
   });
 
   test.each(["test(views): x", "chore: x", "docs: x"])("%p is a type the config does not release", (title) => {
