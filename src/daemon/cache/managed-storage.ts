@@ -22,6 +22,13 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 // is gone.
 export const STORAGE_FILE_MAX_AGE_MS = 30 * DAY_MS;
 export const STORAGE_SWEEP_EVERY_MS = DAY_MS;
+// [LAW:no-ambient-temporal-coupling] How long a probe's write may go
+// unreported before the folder's watch is judged stalled: far above the
+// watch's debounce, and no longer than a bar may lag behind its plugin's file.
+export const STORAGE_PROBE_EVERY_MS = 30_000;
+// The file the owner rewrites to test its folder's watch: not `*.json`, so no
+// session's file is ever it and the sweep never removes it.
+export const STORAGE_PROBE_FILE = ".cc-candybar-watch-probe";
 // Entries nobody holds that are kept, so a session back from idle draws its
 // last value while it is re-read.
 const MAX_ENTRIES = 256;
@@ -72,6 +79,13 @@ export interface ManagedStorageStats extends KeyedSourceStats {
   readonly faults: Readonly<Record<FaultCause, number>>;
   // Folders found gone or replaced under their watch.
   readonly lost: number;
+  // Probes written: with no stall, how many times a watch proved it is
+  // delivering, so a quiet folder reads as checked rather than unknown.
+  readonly probes: number;
+  // Folders whose watch is stalled now, and every move into a stall. Not a
+  // fault cause: a fault ends its generation, and a stall recovers.
+  readonly stalled: number;
+  readonly stalls: number;
 }
 
 // One session's file: the folder's key and the session it is for.
@@ -104,6 +118,21 @@ interface Folder {
   unusable: string | null;
 }
 
+// [LAW:types-are-the-program] One generation's standing, which its sources'
+// reads derive their failure from. `delivering`: its watch reported something
+// since the last probe was written. `stalled`: the probe written at `since`
+// went unreported for a whole period; the next delivery recovers it. `lost`:
+// its folder is gone or replaced. `faulted`: its folder could not be made or
+// its watch failed. `closed`: its last holder released it. `lost`, `faulted`
+// and `closed` end the generation: nothing moves it on, so each is counted
+// once, and a probe still in flight at the close judges nothing.
+type Health =
+  | { readonly kind: "delivering" }
+  | { readonly kind: "stalled"; readonly since: number }
+  | { readonly kind: "lost" }
+  | { readonly kind: "faulted"; readonly reason: string }
+  | { readonly kind: "closed" };
+
 // One generation's watch, held by the render states that declare the folder.
 interface Watched {
   readonly key: StorageKey;
@@ -113,7 +142,19 @@ interface Watched {
   holders: number;
   readonly handle: WatcherHandle;
   readonly sweep: NodeJS.Timeout;
+  readonly probe: NodeJS.Timeout;
+  health: Health;
+  // Whether the watch has reported anything since the last probe was
+  // written, and when that probe was written. Nothing is asked at the
+  // opening, so it starts answered.
+  answered: boolean;
+  probedAt: number;
 }
+
+const ends = (health: Health): boolean =>
+  health.kind === "lost" ||
+  health.kind === "faulted" ||
+  health.kind === "closed";
 
 // [LAW:single-enforcer] The one owner of every plugin's managed storage, for
 // the whole daemon (design-docs/PLUGIN-API.md, "Managed storage"). A plugin's
@@ -126,18 +167,23 @@ interface Watched {
 // opening or closing a directory watch leaks on macOS. The owner never re-arms
 // a watch: a folder gone or replaced is marked lost, and the next key request
 // (a config load) moves its generation.
+//
+// [LAW:nothing-unseen] A watch the OS has stopped feeding (macOS's fseventsd
+// wedged) reports nothing at all, exactly as a folder nobody writes does. The
+// owner tells the two apart by writing a probe into the folder every period
+// and judging whether the watch reported anything since the last one.
 export class ManagedStorage {
   private readonly sessions: KeyedSource<SessionFile, JsonValue>;
   private readonly folders = new Map<string, Folder>();
   private readonly watched = new Map<string, Watched>();
-  // A faulted generation's standing failure, read by every source in it.
-  private readonly faults = new Map<string, string>();
   private readonly faultCounts: Record<FaultCause, number> = {
     unusable: 0,
     refused: 0,
     error: 0,
   };
   private lost = 0;
+  private stalls = 0;
+  private probes = 0;
   private readonly watchers: WatcherRegistry;
   private readonly logger: DaemonLogger;
   private readonly identityOf: IdentityRead;
@@ -239,6 +285,11 @@ export class ManagedStorage {
       folders: this.watched.size,
       faults: { ...this.faultCounts },
       lost: this.lost,
+      stalled: [...this.watched.values()].filter(
+        (w) => w.health.kind === "stalled",
+      ).length,
+      stalls: this.stalls,
+      probes: this.probes,
     };
   }
 
@@ -284,24 +335,31 @@ export class ManagedStorage {
         (invalidation) => this.invalidated(watched, invalidation),
       ),
       sweep: setInterval(() => void this.sweep(key), STORAGE_SWEEP_EVERY_MS),
+      probe: setInterval(() => void this.tick(watched), STORAGE_PROBE_EVERY_MS),
+      health: { kind: "delivering" },
+      answered: true,
+      probedAt: Date.now(),
     };
     watched.sweep.unref();
+    watched.probe.unref();
     this.watched.set(keyString(key), watched);
+    // First, so its reason is the one the sources read: a folder that could
+    // not be made refuses its watch too.
+    if (unusable !== null) this.faulted(watched, "unusable", unusable);
     for (const refusal of watched.handle.refused) {
       this.faulted(watched, "refused", refusal.reason);
     }
-    // Last, so its reason is the one the sources read: a folder that could
-    // not be made refuses its watch too.
-    if (unusable !== null) this.faulted(watched, "unusable", unusable);
     void this.sweep(key);
+    void this.tick(watched);
     return watched;
   }
 
   private closed(watched: Watched): void {
     const id = keyString(watched.key);
     this.watched.delete(id);
-    this.faults.delete(id);
+    watched.health = { kind: "closed" };
     clearInterval(watched.sweep);
+    clearInterval(watched.probe);
     watched.handle.release();
   }
 
@@ -311,6 +369,7 @@ export class ManagedStorage {
   private invalidated(watched: Watched, invalidation: Invalidation): void {
     const { key } = watched;
     const inFolder = (f: SessionFile) => sameKey(f.storage, key);
+    if (invalidation.kind !== "failed") this.delivered(watched);
     switch (invalidation.kind) {
       case "unknown":
         this.sessions.changed(inFolder);
@@ -339,8 +398,10 @@ export class ManagedStorage {
   // as a removal does. Lost only if the path is gone or holds another folder;
   // otherwise `present` runs. A lost folder's held files are re-read from the
   // path, so no draw shows a value from a folder no longer there while the
-  // config's reload opens the next generation.
+  // config's reload opens the next generation. A generation already ended has
+  // nothing left to judge.
   private judged(watched: Watched, present: () => void): void {
+    if (ends(watched.health)) return;
     const { key, folder } = watched;
     let now: FolderIdentity | "gone";
     try {
@@ -354,8 +415,9 @@ export class ManagedStorage {
       present();
       return;
     }
-    // An older generation's watch has nothing left to judge: its folder has
-    // already moved on.
+    watched.health = { kind: "lost" };
+    // An older generation's folder has already moved on: its loss was the
+    // current generation's to count.
     if (key.generation !== folder.generation) return;
     folder.lost = true;
     this.lost++;
@@ -373,10 +435,8 @@ export class ManagedStorage {
   // (limits, permissions) refuses an immediate retry the same way.
   private faulted(watched: Watched, cause: FaultCause, reason: string): void {
     const { key, folder } = watched;
-    this.faults.set(
-      keyString(key),
-      `cannot refresh: ${key.folder} ${reason}; reload the config or restart the daemon`,
-    );
+    if (ends(watched.health)) return;
+    watched.health = { kind: "faulted", reason };
     this.faultCounts[cause]++;
     if (key.generation === folder.generation) folder.lost = true;
     this.logger(
@@ -386,9 +446,86 @@ export class ManagedStorage {
     this.sessions.changed((f) => sameKey(f.storage, key));
   }
 
+  // [LAW:dataflow-not-control-flow] The same steps at the watch's opening and
+  // every period after: judge the folder against the disk, so a folder
+  // replaced at the path is lost and never read as stalled; judge whether the
+  // last probe was reported; write the next one. A probe that cannot be
+  // written to a folder still there is the generation's fault, since its
+  // program cannot write there either.
+  private async tick(watched: Watched): Promise<void> {
+    this.judged(watched, () => {
+      if (!watched.answered) this.stalled(watched);
+    });
+    if (ends(watched.health)) return;
+    watched.answered = false;
+    watched.probedAt = Date.now();
+    try {
+      await fs.promises.writeFile(
+        path.join(watched.key.folder, STORAGE_PROBE_FILE),
+        String(watched.probedAt),
+      );
+      this.probes++;
+    } catch (e) {
+      this.judged(watched, () =>
+        this.faulted(
+          watched,
+          "error",
+          `probe write failed: ${(e as Error).message}`,
+        ),
+      );
+    }
+  }
+
+  // [LAW:no-silent-failure] Its sources read the stall, never the value it
+  // froze at.
+  private stalled(watched: Watched): void {
+    if (watched.health.kind !== "delivering") return;
+    const since = watched.probedAt;
+    watched.health = { kind: "stalled", since };
+    this.stalls++;
+    this.logger(
+      "warn",
+      `plugin storage stalled folder=${valueOf(watched.key.folder)} generation=${watched.key.generation} since=${new Date(since).toISOString()}`,
+    );
+    this.sessions.changed((f) => sameKey(f.storage, watched.key));
+  }
+
+  // Anything the watch reports proves it is delivering. The first report after
+  // a stall re-reads every held file in the folder: a write may have gone
+  // unreported meanwhile.
+  private delivered(watched: Watched): void {
+    watched.answered = true;
+    if (watched.health.kind !== "stalled") return;
+    const took = Date.now() - watched.health.since;
+    watched.health = { kind: "delivering" };
+    this.logger(
+      "info",
+      `plugin storage recovered folder=${valueOf(watched.key.folder)} generation=${watched.key.generation} stalled=${took}ms`,
+    );
+    this.sessions.changed((f) => sameKey(f.storage, watched.key));
+  }
+
+  // The generation's standing failure, which every source in it reads first.
+  // A generation no render state watches has none: its files read the path.
+  private standing(storage: StorageKey): string | null {
+    const watched = this.watched.get(keyString(storage));
+    if (watched === undefined) return null;
+    const { health } = watched;
+    switch (health.kind) {
+      case "faulted":
+        return `cannot refresh: ${storage.folder} ${health.reason}; reload the config or restart the daemon`;
+      case "stalled":
+        return `cannot refresh: ${storage.folder}: its watch has delivered no event since ${new Date(health.since).toISOString()}, not even for a file the daemon wrote there to test it; the OS has stopped delivering file events`;
+      case "delivering":
+      case "lost":
+      case "closed":
+        return null;
+    }
+  }
+
   private async read(f: SessionFile): Promise<Outcome<JsonValue>> {
-    const fault = this.faults.get(keyString(f.storage));
-    if (fault !== undefined) return failed(fault);
+    const fault = this.standing(f.storage);
+    if (fault !== null) return failed(fault);
     const file = fileOf(f);
     let text: string;
     try {

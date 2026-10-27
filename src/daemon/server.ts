@@ -660,6 +660,9 @@ function sourceSnapshots(): SourceSnapshots {
       folders: storage.folders,
       faults: storage.faults,
       lost: storage.lost,
+      probes: storage.probes,
+      stalled: storage.stalled,
+      stalls: storage.stalls,
     },
   };
 }

@@ -7,11 +7,14 @@ import {
   ManagedStorage,
   statIdentity,
   STORAGE_FILE_MAX_AGE_MS,
+  STORAGE_PROBE_EVERY_MS,
+  STORAGE_PROBE_FILE,
   STORAGE_SWEEP_EVERY_MS,
   type FolderIdentity,
   type IdentityRead,
 } from "../src/daemon/cache/managed-storage";
 import {
+  DEBOUNCE_MS,
   WatcherRegistry,
   type WatcherCounters,
 } from "../src/daemon/cache/watchers";
@@ -497,6 +500,221 @@ describe("ManagedStorage watches", () => {
   });
 });
 
+// A watch the OS has stopped feeding reports nothing, as a quiet folder does;
+// the owner's probe tells them apart. Fake intervals and clock turn the
+// probe's period by hand; the registry's debounce stays real, so a fake
+// watch's report lands one window later.
+describe("ManagedStorage stalls", () => {
+  const fakeClock = () =>
+    jest.useFakeTimers({
+      doNotFake: [
+        "setTimeout",
+        "clearTimeout",
+        "setImmediate",
+        "nextTick",
+        "queueMicrotask",
+      ],
+    });
+  const period = () => jest.advanceTimersByTime(STORAGE_PROBE_EVERY_MS);
+  // Long enough for a debounce window to close and nothing to follow it:
+  // only for asserting that something did not happen.
+  const quiet = () =>
+    new Promise((resolve) => setTimeout(resolve, 3 * DEBOUNCE_MS));
+  const stallReason = (folder: string) =>
+    new RegExp(
+      `^cannot refresh: ${folder}: its watch has delivered no event since \\S+, not even for a file the daemon wrote there to test it; the OS has stopped delivering file events$`,
+    );
+  const warnings = (r: Rig) =>
+    r.lines.filter((l) => l.startsWith("warn plugin storage stalled"));
+
+  async function stalledRig() {
+    const watches = fakeWatches();
+    fakeClock();
+    const r = rig();
+    const key = r.storage.keyFor(r.folder);
+    r.storage.watch(key);
+    r.write(A, '"a"');
+    const lane = r.storage.declare(new Holds(), key, A);
+    expect(await answered(lane)).toEqual(ok("a"));
+    period();
+    await until(() => lane.current().kind === "failed", "the stall");
+    return { r, key, lane, watch: watches[0]! };
+  }
+
+  test("a watch that reports its probe keeps delivering, and its lanes keep their values", async () => {
+    const watches = fakeWatches();
+    fakeClock();
+    const r = rig();
+    const key = r.storage.keyFor(r.folder);
+    r.storage.watch(key);
+    r.write(A, '"a"');
+    const lane = r.storage.declare(new Holds(), key, A);
+    expect(await answered(lane)).toEqual(ok("a"));
+    for (let i = 0; i < 3; i++) {
+      await until(
+        () => fs.existsSync(path.join(r.folder, STORAGE_PROBE_FILE)),
+        "the probe",
+      );
+      watches[0]!.listener("change", STORAGE_PROBE_FILE);
+      await quiet();
+      period();
+    }
+    await quiet();
+    expect(lane.current()).toEqual(ok("a"));
+    // The opening's probe and one each period.
+    expect(r.storage.stats()).toMatchObject({
+      probes: 4,
+      stalled: 0,
+      stalls: 0,
+    });
+    expect(warnings(r)).toEqual([]);
+  });
+
+  test("a watch that reports nothing for a period stalls its folder: every held lane reads the stall, counted and logged once", async () => {
+    const { r, key, lane } = await stalledRig();
+    const other = r.storage.declare(new Holds(), key, B);
+    expect(lane.current()).toEqual({
+      kind: "failed",
+      reason: expect.stringMatching(stallReason(r.folder)),
+    });
+    expect(await answered(other)).toEqual({
+      kind: "failed",
+      reason: expect.stringMatching(stallReason(r.folder)),
+    });
+    period();
+    period();
+    await quiet();
+    expect(r.storage.stats()).toMatchObject({ stalled: 1, stalls: 1, lost: 0 });
+    expect(warnings(r)).toHaveLength(1);
+    expect(warnings(r)[0]).toMatch(
+      /^warn plugin storage stalled folder=\S+ generation=0 since=\S+$/,
+    );
+    // A stall is not a loss: the generation is still the right one.
+    expect(r.storage.keyFor(r.folder)).toEqual(key);
+  });
+
+  test("the first report after a stall recovers it and re-reads every held file, landing a write made during the stall", async () => {
+    const { r, lane, watch } = await stalledRig();
+    r.write(A, '"written during the stall"');
+    watch.listener("change", STORAGE_PROBE_FILE);
+    await until(
+      () => lane.current().kind === "ok",
+      "the re-read after the recovery",
+    );
+    expect(lane.current()).toEqual(ok("written during the stall"));
+    expect(r.storage.stats()).toMatchObject({ stalled: 0, stalls: 1 });
+    expect(r.lines).toContainEqual(
+      expect.stringMatching(
+        /^info plugin storage recovered folder=\S+ generation=0 stalled=\d+ms$/,
+      ),
+    );
+  });
+
+  test("a watch error during a stall is the fault its sources read", async () => {
+    const { r, lane, watch } = await stalledRig();
+    watch.emitter.emit("error", new Error("EIO: i/o error"));
+    await until(
+      () =>
+        lane.current().kind === "failed" &&
+        !stallReason(r.folder).test(
+          (lane.current() as { reason: string }).reason,
+        ),
+      "the fault",
+    );
+    expect(lane.current()).toEqual({
+      kind: "failed",
+      reason: `cannot refresh: ${r.folder} ${r.folder}: EIO: i/o error; reload the config or restart the daemon`,
+    });
+    expect(r.storage.stats()).toMatchObject({
+      stalled: 0,
+      faults: { unusable: 0, refused: 0, error: 1 },
+    });
+  });
+
+  test("a folder removed under its watch is lost once, never stalled, however many periods pass", async () => {
+    fakeWatches();
+    fakeClock();
+    const r = rig();
+    r.storage.watch(r.storage.keyFor(r.folder));
+    await until(
+      () => fs.existsSync(path.join(r.folder, STORAGE_PROBE_FILE)),
+      "the probe",
+    );
+    fs.rmSync(r.folder, { recursive: true });
+    for (let i = 0; i < 4; i++) period();
+    await quiet();
+    expect(r.storage.stats()).toMatchObject({
+      lost: 1,
+      stalled: 0,
+      stalls: 0,
+      faults: { unusable: 0, refused: 0, error: 0 },
+    });
+    expect(
+      r.lines.filter((l) => l.startsWith("info plugin storage lost")),
+    ).toHaveLength(1);
+  });
+
+  test("a folder replaced at the path is lost, not stalled", async () => {
+    fakeWatches();
+    fakeClock();
+    const r = rig();
+    const key = r.storage.keyFor(r.folder);
+    r.storage.watch(key);
+    await until(
+      () => fs.existsSync(path.join(r.folder, STORAGE_PROBE_FILE)),
+      "the probe",
+    );
+    fs.rmSync(r.folder, { recursive: true });
+    fs.mkdirSync(r.folder);
+    period();
+    await quiet();
+    expect(r.storage.stats()).toMatchObject({ lost: 1, stalls: 0 });
+    expect(r.storage.keyFor(r.folder)).toEqual({ ...key, generation: 1 });
+  });
+
+  test("a probe still in flight when the last holder releases judges nothing", async () => {
+    fakeWatches();
+    fakeClock();
+    let fail: (e: Error) => void = () => {};
+    const write = jest
+      .spyOn(fs.promises, "writeFile")
+      .mockImplementation(
+        () => new Promise<void>((_resolve, reject) => (fail = reject)),
+      );
+    const r = rig();
+    const release = r.storage.watch(r.storage.keyFor(r.folder));
+    expect(write).toHaveBeenCalledTimes(1);
+    release();
+    fs.rmSync(r.folder, { recursive: true });
+    fail(Object.assign(new Error("ENOENT: no such file"), { code: "ENOENT" }));
+    await quiet();
+    expect(r.storage.stats()).toMatchObject({
+      folders: 0,
+      lost: 0,
+      faults: { unusable: 0, refused: 0, error: 0 },
+    });
+  });
+
+  // A loaded Mac's fseventsd can stop delivering altogether, and then this
+  // reads the stall it exists to catch: CI's runner judges it.
+  test("a real watch reports the probe's own write, so a folder nobody writes keeps delivering", async () => {
+    fakeClock();
+    const r = rig();
+    const key = r.storage.keyFor(r.folder);
+    r.storage.watch(key);
+    r.write(A, '"a"');
+    const lane = r.storage.declare(new Holds(), key, A);
+    expect(await answered(lane)).toEqual(ok("a"));
+    for (let i = 0; i < 2; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 1_000));
+      period();
+    }
+    await quiet();
+    expect(r.storage.stats()).toMatchObject({ stalled: 0, stalls: 0 });
+    expect(lane.current()).toEqual(ok("a"));
+  });
+});
+
 describe("ManagedStorage cleanup", () => {
   const DAY = 24 * 60 * 60 * 1000;
   const age = (file: string, days: number) => {
@@ -519,7 +737,9 @@ describe("ManagedStorage cleanup", () => {
       () => r.lines.some((l) => l.includes("plugin storage sweep")),
       "the sweep's event",
     );
+    // The owner's probe is no session's file: the sweep leaves it.
     expect(fs.readdirSync(r.folder).sort()).toEqual([
+      STORAGE_PROBE_FILE,
       "held-old.json",
       "old-notes.txt",
       "young.json",
@@ -551,7 +771,7 @@ describe("ManagedStorage cleanup", () => {
       () => r.lines.some((l) => l.includes("plugin storage sweep")),
       "the sweep's event",
     );
-    expect(fs.readdirSync(r.folder)).toEqual([]);
+    expect(fs.readdirSync(r.folder)).toEqual([STORAGE_PROBE_FILE]);
     expect(r.lines).toContainEqual(
       expect.stringMatching(
         /^info plugin storage sweep folder=\S+ scanned=2 removed=1 took=\d+ms$/,
