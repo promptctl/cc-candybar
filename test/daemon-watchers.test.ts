@@ -250,18 +250,6 @@ class StubInner extends GitService {
   }
 }
 
-// The real reader, counted: what it stores is what git reads off the repo, so
-// a test can ask whether the value is the ref's after a move.
-class CountingInner extends GitService {
-  public calls = 0;
-  override async getGitInfo(
-    ...args: Parameters<GitService["getGitInfo"]>
-  ): Promise<Outcome<GitInfo>> {
-    this.calls++;
-    return super.getGitInfo(...args);
-  }
-}
-
 const sha = (ref: string, cwd: string): string =>
   execSync(`git rev-parse ${ref}`, { cwd, encoding: "utf8" }).trim();
 
@@ -278,7 +266,9 @@ async function hearsRefOnlyMove(
   workingDir: string,
   branch: string,
 ): Promise<void> {
-  const inner = new CountingInner();
+  // The real reader: what it stores is what git reads off the repo, so the
+  // test can ask whether the value is the ref's after a move.
+  const inner = new GitService();
   const svc = new GitDataProvider({ inner, periodMs: 600_000 });
   const lane = svc.declare(new Holds(), workingDir, {});
   await laneOutcome(lane);
@@ -289,9 +279,10 @@ async function hearsRefOnlyMove(
       : undefined;
   };
   try {
-    // fs.watch has no ready signal: HEAD is rewritten, unchanged, until a
-    // re-read proves the watch live. Written as git writes it, a `.lock`
-    // renamed over it, so a read mid-rewrite never sees an empty HEAD.
+    // fs.watch has no ready signal: HEAD is rewritten, unchanged, until the
+    // watch fires a change, which only the watch can raise. Written as git
+    // writes it, a `.lock` renamed over it, so a read mid-rewrite never sees
+    // an empty HEAD.
     const headPath = path.join(inner.resolveGitDir(workingDir), "HEAD");
     const head = fs.readFileSync(headPath, "utf8");
     const rewrite = setInterval(() => {
@@ -300,8 +291,8 @@ async function hearsRefOnlyMove(
     }, WATCH_RETRY_MS);
     try {
       await until(
-        () => inner.calls >= 2,
-        "the HEAD rewrite's re-read",
+        () => svc.getStats().changes >= 1,
+        "the HEAD rewrite's change",
         WATCH_LIVENESS_BUDGET_MS,
       );
     } finally {
