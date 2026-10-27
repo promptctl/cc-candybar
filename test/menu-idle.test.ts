@@ -237,7 +237,10 @@ function buildRuntime(src: string) {
   const sessionState = new SessionState();
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
+  const compiled = registerDslConfig(config, registry, {
+    signer: TEST_SIGNER,
+    cwd: "/tmp/proj",
+  });
   const sink = new Map<string, readonly RichText[]>();
   // A frame drawn at `when`, its session idle since `idleSince`.
   const draw = (when: Instant, idleSince?: Instant) => {
@@ -275,7 +278,7 @@ function buildRuntime(src: string) {
     );
     if (!url) throw new Error(`no affordance writing ${key}=${value} rendered`);
     const { verb, value: v } = parseHandlerUrl(url);
-    expect(clickSessionOf(verb, v)).toBe(SID);
+    expect(clickSessionOf(verb, v)).toEqual({ ok: true, id: SID });
     VERBS.get(verb)!(v, ctx);
   };
   const held = (key: string): string =>

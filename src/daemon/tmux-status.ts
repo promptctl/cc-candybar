@@ -33,6 +33,7 @@ import type { TmuxRun } from "../proc/tmux.js";
 import type { TmuxHint } from "../tmux-hint.js";
 import type { StatusLines } from "./pane-visibility.js";
 import type { Subscriber } from "./frame-feed.js";
+import { decodeWire } from "./verb-error.js";
 import {
   decodeSegments,
   encodeSegments,
@@ -631,7 +632,9 @@ export class TmuxStatusLines {
   // (segments, as the binding's URL carries them): the link the frame the
   // daemon drew there marks it with.
   linkAt(value: string): StatusClick {
-    const [socket, pane, range, ...extra] = decodeSegments(value);
+    const [socket, pane, range, ...extra] = decodeWire(() =>
+      decodeSegments(value),
+    );
     if (
       socket === undefined ||
       pane === undefined ||

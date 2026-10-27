@@ -59,6 +59,7 @@ import {
   sanitizeClientVersion,
 } from "./protocol";
 import type {
+  ClickRequest,
   ClientHints,
   RefusedArg,
   RenderRequest,
@@ -1498,12 +1499,7 @@ export async function replyTo(
     // stopped before it.
     const t0 = performance.now();
     const facts: RequestFacts = [["queued", `${Math.round(t0 - accepted)}ms`]];
-    const outcome = handleClick(
-      req.verb,
-      req.value,
-      { via: "link", handler: sanitizeClientVersion(req.clientVersion) },
-      facts,
-    );
+    const outcome = clickOutcome(req, facts);
     const { level, line } = requestEvent(
       "click",
       facts,
@@ -1763,39 +1759,69 @@ function serializeSegmentCells(
   return out;
 }
 
+// [LAW:parse-dont-validate][LAW:no-silent-failure] A click request run to its
+// outcome. Its verb and value are untrusted JSON, refused here unless both are
+// strings, and whatever the click then throws is its outcome too, so every
+// click writes its event: a refusal of its arguments is a bad request, and
+// anything else thrown is a bug, recorded with its stack.
+function clickOutcome(req: ClickRequest, facts: RequestFacts): RequestOutcome {
+  const { verb, value } = req as { verb: unknown; value: unknown };
+  if (typeof verb !== "string" || typeof value !== "string") {
+    return {
+      kind: "bad-request",
+      problems: [
+        `a click's verb and value are strings, got ${JSON.stringify({ verb, value })}`,
+      ],
+    };
+  }
+  try {
+    return handleClick(
+      verb,
+      value,
+      { via: "link", handler: sanitizeClientVersion(req.clientVersion) },
+      facts,
+    );
+  } catch (error) {
+    return error instanceof BadVerbArgs
+      ? { kind: "bad-request", problems: [error.message] }
+      : { kind: "threw", error };
+  }
+}
+
+// [LAW:dataflow-not-control-flow] The field a click records the verb it runs
+// under, by how it arrived: a status-line click has already recorded its own
+// verb, so the one its link runs is `linkVerb`.
+const VERB_FACT: Readonly<Record<ClickArrival["via"], string>> = {
+  link: "verb",
+  "tmux-status": "linkVerb",
+};
+
 function handleClick(
   verb: string,
   value: string,
   arrival: ClickArrival,
   facts: RequestFacts,
 ): RequestOutcome {
-  if (verb === VERB_TMUX_STATUS_CLICK) return statusLineClick(value, facts);
+  if (verb === VERB_TMUX_STATUS_CLICK) {
+    noteFacts(facts, { verb });
+    return statusLineClick(value, facts);
+  }
   const handler = VERBS.get(verb);
   if (!handler) {
     return { kind: "bad-request", problems: [`unknown click verb: ${verb}`] };
   }
-  noteFacts(facts, { verb });
-  try {
-    // [LAW:parse-dont-validate] The click's session crosses the one
-    // session-id checkpoint before it is recorded or restarts its idle clock.
-    // One that fails it is refused by its verb, so its event carries no
-    // `sid`; a click naming no session records `sid=-` and restarts no clock.
-    const named = clickSessionOf(verb, value);
-    const session = named === null ? null : parseSessionId(named);
-    if (session === null) noteFacts(facts, { sid: "-" });
-    else if (session.ok) {
-      noteFacts(facts, { sid: session.id });
-      menuIdle.clicked(session.id, instantOf(new Date()));
-    }
-    handler(value, { ...verbCtx, arrival });
-    return { kind: "ok" };
-  } catch (error) {
-    // A verb's refusal of its arguments is the click's bad request; anything
-    // else it throws is a bug in the verb, recorded with its stack.
-    return error instanceof BadVerbArgs
-      ? { kind: "bad-request", problems: [error.message] }
-      : { kind: "threw", error };
+  noteFacts(facts, { [VERB_FACT[arrival.via]]: verb });
+  // The click's session, as it crossed the one session-id checkpoint: one
+  // that passed is recorded and restarts its idle clock, one that failed is
+  // never recorded, and a click naming none records `sid=-`.
+  const session = clickSessionOf(verb, value);
+  if (session === null) noteFacts(facts, { sid: "-" });
+  else if (session.ok) {
+    noteFacts(facts, { sid: session.id });
+    menuIdle.clicked(session.id, instantOf(new Date()));
   }
+  handler(value, { ...verbCtx, arrival });
+  return { kind: "ok" };
 }
 
 // [LAW:single-enforcer] The reply a click's outcome is answered with.
@@ -1812,6 +1838,13 @@ function clickReply(outcome: RequestOutcome): Response {
       };
     case "threw":
       return renderFailed(outcome.error);
+    case "failed":
+      return {
+        ok: false,
+        error: outcome.problem,
+        code: "RENDER_FAILED",
+        daemonV: PROTOCOL_VERSION,
+      };
   }
 }
 
@@ -1848,10 +1881,8 @@ function statusLineClick(value: string, facts: RequestFacts): RequestOutcome {
   return opened.ok
     ? { kind: "ok" }
     : {
-        kind: "threw",
-        error: new Error(
-          `opening ${click.url} failed (${opened.error ?? opened.reason})`,
-        ),
+        kind: "failed",
+        problem: `opening ${click.url} failed (${opened.error ?? opened.reason})`,
       };
 }
 

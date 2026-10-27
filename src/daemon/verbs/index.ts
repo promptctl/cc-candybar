@@ -270,8 +270,12 @@ export type ClickContext = Journaled<VerbContext>;
 // throw a BadVerbArgs error which the dispatcher surfaces as BAD_REQUEST.
 export type VerbHandler = (value: string, ctx: ClickContext) => void;
 
-import { BadVerbArgs } from "../verb-error";
-import { parseSessionId, type SessionId } from "../session-id";
+import { BadVerbArgs, decodeWire } from "../verb-error";
+import {
+  parseSessionId,
+  type ParsedSessionId,
+  type SessionId,
+} from "../session-id";
 export { BadVerbArgs };
 
 // ─── Argument decoders ───────────────────────────────────────────────────────
@@ -294,22 +298,6 @@ function requireSessionId(value: string): SessionId {
 // that knows its shape [LAW:single-enforcer].
 function oneArg(value: string): string {
   return decodeWire(() => decodeURIComponent(value));
-}
-
-// [LAW:single-enforcer] One boundary reclassifies malformed wire encoding.
-// percent-decoding untrusted wire input throws a raw URIError on a bad escape
-// (`%ZZ`, a lone `%`); that is an argument-shape failure, not an operational
-// one, so it must reach the dispatcher as BadVerbArgs (→ BAD_REQUEST) like every
-// other bad-input shape. Both verb codecs (single-arg whole-value, multi-seg
-// set-state) funnel their decode through here so the reclassification lives once.
-function decodeWire<T>(decode: () => T): T {
-  try {
-    return decode();
-  } catch (err) {
-    if (err instanceof URIError)
-      throw new BadVerbArgs(`malformed wire encoding: ${err.message}`);
-    throw err;
-  }
 }
 
 // ─── Verb handlers ───────────────────────────────────────────────────────────
@@ -1734,14 +1722,22 @@ const SESSION_FIRST_VERBS: ReadonlySet<string> = new Set([
 // its first session-bearing effect — every SESSION_FIRST_VERBS member carries
 // it there — or none. Dispatch surfaces a failed step in that session's bar,
 // and the daemon counts the click as that session's activity
-// (src/daemon/menu-idle.ts).
-export function clickSessionOf(verb: string, value: string): string | null {
+// (src/daemon/menu-idle.ts). [LAW:single-enforcer] It is read as it crosses
+// the one session-id checkpoint, so every reader of a click's session reads
+// the same checked value; one that fails is no session's, and its verb
+// refuses the click.
+export function clickSessionOf(
+  verb: string,
+  value: string,
+): ParsedSessionId | null {
   return sessionOfEffects(
     verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }],
   );
 }
 
-function sessionOfEffects(effects: readonly ParsedEffect[]): string | null {
+function sessionOfEffects(
+  effects: readonly ParsedEffect[],
+): ParsedSessionId | null {
   const bearing = effects.find((e) => SESSION_FIRST_VERBS.has(e.verb));
   // Only the session's own segment is read: a step's malformed argument is
   // that step's error to hold on the bar, after the click has found its
@@ -1750,7 +1746,7 @@ function sessionOfEffects(effects: readonly ParsedEffect[]): string | null {
     bearing === undefined
       ? ""
       : decodeWire(() => decodeFirstSegment(bearing.value));
-  return sid === "" ? null : sid;
+  return sid === "" ? null : parseSessionId(sid);
 }
 
 const dispatch: VerbHandler = (rawValue, ctx) => {
@@ -1759,7 +1755,7 @@ const dispatch: VerbHandler = (rawValue, ctx) => {
   const effects = parseEffects(rawValue);
   // The click's session, for error display, so a failing step surfaces in the
   // bar like any other.
-  const sessionId = sessionOfEffects(effects);
+  const session = sessionOfEffects(effects);
   for (const { verb, value } of batchAdjacentWrites(effects)) {
     const handler = LEAF_VERBS.get(verb);
     if (!handler) {
@@ -1774,10 +1770,10 @@ const dispatch: VerbHandler = (rawValue, ctx) => {
     }
   }
   if (errors.length > 0) {
-    if (sessionId) {
+    if (session?.ok) {
       holdClickError(
         ctx.sessionState,
-        sessionId,
+        session.id,
         errors.join("\n"),
         instantOf(new Date()),
       );
@@ -1876,7 +1872,10 @@ export const VERBS: ReadonlyMap<
     ([verb, handler]) =>
       [
         verb,
-        journaled(handler, (value) => clickSessionOf(verb, value)),
+        journaled(handler, (value) => {
+          const session = clickSessionOf(verb, value);
+          return session?.ok ? session.id : null;
+        }),
       ] as const,
   ),
 );

@@ -6,13 +6,16 @@ import { valueOf } from "../utils/logfmt.js";
 // The requests that each write one event: a statusline render and a click.
 export type RequestKind = "render" | "click";
 
-// How one request ended. A request the daemon refused and one whose handler
-// threw are outcomes of the same unit of work as one that succeeded, so the
-// one event records all three (brandon-unfiled-3248.87p).
+// How one request ended. A request the daemon refused, one whose handler
+// threw, and one the world failed are outcomes of the same unit of work as
+// one that succeeded, so the one event records them all
+// (brandon-unfiled-3248.87p). `bad-request` is the client's fault, `threw` a
+// bug in the daemon, `failed` neither: a program the request ran refused it.
 export type RequestOutcome =
   | { readonly kind: "ok" }
   | { readonly kind: "bad-request"; readonly problems: readonly string[] }
-  | { readonly kind: "threw"; readonly error: unknown };
+  | { readonly kind: "threw"; readonly error: unknown }
+  | { readonly kind: "failed"; readonly problem: string };
 
 // What a request has learned so far, in the order it learned it. A request
 // that stops early carries only the facts it reached, so a field absent from
@@ -30,6 +33,7 @@ const LEVEL: Record<RequestOutcome["kind"], LogLevel> = {
   ok: "info",
   "bad-request": "warn",
   threw: "error",
+  failed: "error",
 };
 
 // The outcome's own detail. A thrown value is described by `inspect`, which
@@ -42,6 +46,8 @@ function detailOf(outcome: RequestOutcome): RequestFacts {
       return [["problems", outcome.problems.join("; ")]];
     case "threw":
       return [["error", inspect(outcome.error)]];
+    case "failed":
+      return [["problem", outcome.problem]];
   }
 }
 

@@ -35,7 +35,11 @@ import {
   renderRequest,
   sendClick,
 } from "./helpers/daemon-e2e";
-import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
+import {
+  effectsUrl,
+  VERB_SET_STATE,
+  VERB_TMUX_STATUS_CLICK,
+} from "../src/click/wire";
 import { CLICK_ERROR_HOLD_S } from "../src/daemon/click-error";
 import { logLines, loggedWhen } from "./helpers/daemon-log";
 import { sendDaemonRequest } from "./helpers/daemon-wire";
@@ -500,6 +504,47 @@ describe("every render request writes one render event, whatever its outcome", (
       "problems",
     ]);
     expect(field(unparsed, "outcome")).toBe("bad-request");
+  });
+
+  // A click the daemon cannot read still writes its event, refused as the
+  // client's fault: no throw escapes the click to skip it.
+  test("a click whose fields or encoding are malformed is a bad-request click event", async () => {
+    const notStrings = await sendDaemonRequest(sockPath, {
+      v: PROTOCOL_VERSION,
+      kind: "click",
+      verb: "dispatch",
+      value: 5,
+    });
+    expect(notStrings).toMatchObject({ ok: false, code: "BAD_REQUEST" });
+    const badEscape = await sendDaemonRequest(sockPath, {
+      v: PROTOCOL_VERSION,
+      kind: "click",
+      verb: VERB_TMUX_STATUS_CLICK,
+      value: "%E0/1/r",
+    });
+    expect(badEscape).toMatchObject({ ok: false, code: "BAD_REQUEST" });
+    const refusedBy = (ls: readonly string[], needle: string): Event[] =>
+      clickEvents(ls).filter((e) => field(e, "problems")?.includes(needle));
+    const lines = await loggedWhen(
+      env,
+      (ls) =>
+        refusedBy(ls, "are strings").length > 0 &&
+        refusedBy(ls, "malformed wire encoding").length > 0,
+      "the malformed clicks' events",
+    );
+    const fields = only(refusedBy(lines, "are strings"));
+    expect(fields.level).toBe("warn");
+    expect(fields.fields.map(([key]) => key)).toEqual([
+      "queued",
+      "took",
+      "outcome",
+      "problems",
+    ]);
+    // The status-line verb is known, so it is recorded before the decode
+    // that refused its value.
+    const escape = only(refusedBy(lines, "malformed wire encoding"));
+    expect(field(escape, "verb")).toBe(VERB_TMUX_STATUS_CLICK);
+    expect(field(escape, "outcome")).toBe("bad-request");
   });
 
   // Every request carries a field the schema does not know, so it is said

@@ -626,7 +626,12 @@ async function clickMenu(s: Session, started: number): Promise<void> {
       outcome = `threw/${e instanceof Error ? e.message : String(e)}`;
     }
     clicks.push({ ms: performance.now() - t0, outcome });
-    await sleep(started + (n + 1) * CLICK_PERIOD_MS - Date.now());
+    // The next beat, or the steady phase's end if that comes first: the
+    // phase's daemon events are read up to when the last click answered.
+    await sleep(
+      Math.min(started + (n + 1) * CLICK_PERIOD_MS, started + STEADY_MS) -
+        Date.now(),
+    );
   }
 }
 
