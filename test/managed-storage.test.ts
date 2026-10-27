@@ -674,6 +674,27 @@ describe("ManagedStorage stalls", () => {
     expect(r.storage.keyFor(r.folder)).toEqual({ ...key, generation: 1 });
   });
 
+  // The reload that would move a lost folder on rides the same stalled
+  // service, so a file read once from the path would freeze there unreported.
+  test("a stalled folder replaced at the path is lost, and its lanes keep reading the stall", async () => {
+    const { r, lane } = await stalledRig();
+    await until(
+      () => r.storage.stats().probes === 2,
+      "the stalling period's probe",
+    );
+    fs.rmSync(r.folder, { recursive: true });
+    fs.mkdirSync(r.folder);
+    r.write(A, '"in the new folder"');
+    period();
+    await until(() => r.storage.stats().lost === 1, "the loss");
+    await quiet();
+    expect(lane.current()).toEqual({
+      kind: "failed",
+      reason: expect.stringMatching(stallReason(r.folder)),
+    });
+    expect(r.storage.stats()).toMatchObject({ lost: 1, stalled: 0, stalls: 1 });
+  });
+
   test("a probe still in flight when the last holder releases judges nothing", async () => {
     fakeWatches();
     fakeClock();

@@ -122,14 +122,17 @@ interface Folder {
 // reads derive their failure from. `delivering`: its watch reported something
 // since the last probe was written. `stalled`: the probe written at `since`
 // went unreported for a whole period; the next delivery recovers it. `lost`:
-// its folder is gone or replaced. `faulted`: its folder could not be made or
+// its folder is gone or replaced; found while stalled, it keeps the stall,
+// since the config reload that would move it on rides the same stalled
+// service, so nothing would re-read a file read once from the path.
+// `faulted`: its folder could not be made or
 // its watch failed. `closed`: its last holder released it. `lost`, `faulted`
 // and `closed` end the generation: nothing moves it on, so each is counted
 // once, and a probe still in flight at the close judges nothing.
 type Health =
   | { readonly kind: "delivering" }
   | { readonly kind: "stalled"; readonly since: number }
-  | { readonly kind: "lost" }
+  | { readonly kind: "lost"; readonly stalledSince: number | null }
   | { readonly kind: "faulted"; readonly reason: string }
   | { readonly kind: "closed" };
 
@@ -144,12 +147,14 @@ interface Watched {
   readonly sweep: NodeJS.Timeout;
   readonly probe: NodeJS.Timeout;
   health: Health;
-  // Whether the watch has reported anything since the last probe was
-  // written, and when that probe was written. Nothing is asked at the
-  // opening, so it starts answered.
-  answered: boolean;
-  probedAt: number;
+  // [LAW:one-source-of-truth] When the probe the watch has not reported yet
+  // was written; null once the watch reports anything. Nothing is asked at
+  // the opening.
+  pending: number | null;
 }
+
+const stallReason = (storage: StorageKey, since: number): string =>
+  `cannot refresh: ${storage.folder}: its watch has delivered no event since ${new Date(since).toISOString()}, not even for a file the daemon wrote there to test it; the OS has stopped delivering file events`;
 
 const ends = (health: Health): boolean =>
   health.kind === "lost" ||
@@ -337,8 +342,7 @@ export class ManagedStorage {
       sweep: setInterval(() => void this.sweep(key), STORAGE_SWEEP_EVERY_MS),
       probe: setInterval(() => void this.tick(watched), STORAGE_PROBE_EVERY_MS),
       health: { kind: "delivering" },
-      answered: true,
-      probedAt: Date.now(),
+      pending: null,
     };
     watched.sweep.unref();
     watched.probe.unref();
@@ -415,7 +419,11 @@ export class ManagedStorage {
       present();
       return;
     }
-    watched.health = { kind: "lost" };
+    const { health } = watched;
+    watched.health = {
+      kind: "lost",
+      stalledSince: health.kind === "stalled" ? health.since : null,
+    };
     // An older generation's folder has already moved on: its loss was the
     // current generation's to count.
     if (key.generation !== folder.generation) return;
@@ -454,15 +462,15 @@ export class ManagedStorage {
   // program cannot write there either.
   private async tick(watched: Watched): Promise<void> {
     this.judged(watched, () => {
-      if (!watched.answered) this.stalled(watched);
+      if (watched.pending !== null) this.stalled(watched, watched.pending);
     });
     if (ends(watched.health)) return;
-    watched.answered = false;
-    watched.probedAt = Date.now();
+    const at = Date.now();
+    watched.pending = at;
     try {
       await fs.promises.writeFile(
         path.join(watched.key.folder, STORAGE_PROBE_FILE),
-        String(watched.probedAt),
+        String(at),
       );
       this.probes++;
     } catch (e) {
@@ -478,9 +486,8 @@ export class ManagedStorage {
 
   // [LAW:no-silent-failure] Its sources read the stall, never the value it
   // froze at.
-  private stalled(watched: Watched): void {
+  private stalled(watched: Watched, since: number): void {
     if (watched.health.kind !== "delivering") return;
-    const since = watched.probedAt;
     watched.health = { kind: "stalled", since };
     this.stalls++;
     this.logger(
@@ -494,7 +501,7 @@ export class ManagedStorage {
   // a stall re-reads every held file in the folder: a write may have gone
   // unreported meanwhile.
   private delivered(watched: Watched): void {
-    watched.answered = true;
+    watched.pending = null;
     if (watched.health.kind !== "stalled") return;
     const took = Date.now() - watched.health.since;
     watched.health = { kind: "delivering" };
@@ -515,9 +522,12 @@ export class ManagedStorage {
       case "faulted":
         return `cannot refresh: ${storage.folder} ${health.reason}; reload the config or restart the daemon`;
       case "stalled":
-        return `cannot refresh: ${storage.folder}: its watch has delivered no event since ${new Date(health.since).toISOString()}, not even for a file the daemon wrote there to test it; the OS has stopped delivering file events`;
-      case "delivering":
+        return stallReason(storage, health.since);
       case "lost":
+        return health.stalledSince === null
+          ? null
+          : stallReason(storage, health.stalledSince);
+      case "delivering":
       case "closed":
         return null;
     }
