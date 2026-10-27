@@ -1144,8 +1144,9 @@ describe("spawn backoff under sustained non-convergence (brandon-daemon-lifecycl
       jest.useFakeTimers();
       try {
         // Three consecutive non-converging spawns — streak climbs to 3, so the
-        // required window is SPAWN_COOLDOWN_MS * 8. Each wait clears the
-        // widest window the streak can have reached so the next kick lands.
+        // required window is SPAWN_COOLDOWN_MS * 8. Each wait between kicks
+        // is longer than any window the loop reaches (streak ≤ 2, so at most
+        // SPAWN_COOLDOWN_MS * 4), so every kick lands.
         for (let i = 0; i < 3; i++) {
           if (i > 0) jest.advanceTimersByTime(SPAWN_COOLDOWN_MS * 8 + 1_000);
           obtainDaemonKick({ spawn });
