@@ -187,8 +187,10 @@ export class FileSessionStorage implements SessionStorage {
       // thread pool: a rename and an unlink of one directory entry cannot
       // interleave, so either the older state landed already and is
       // overwritten below, or its rename finds nothing. Newer state is never
-      // put back under older, and a flush this disk refuses, above, discards
-      // nothing.
+      // put back under older. A flush the disk refuses before this point
+      // discards nothing; one it refuses at the rename below leaves both
+      // writes saying they failed, and the newer state pending for the next
+      // save.
       fs.rmSync(this.writingPath, { force: true });
       fs.renameSync(tmp, this.filePath);
       this.generation++;
