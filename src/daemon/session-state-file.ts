@@ -82,15 +82,23 @@ export class FileSessionStorage implements SessionStorage {
     }
     if (this.pending === null) return;
     const snapshot = this.pending;
+    const started = performance.now();
     try {
       fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
       const tmp = `${this.filePath}.tmp`;
+      const body = JSON.stringify(snapshot);
       // [LAW:single-enforcer] Daemon runtime files are owner-only (0o600), like
       // pid/spawn.lock. Session state carries conversation identifiers, so it
       // gets the same perms — chmod defeats umask and re-perms a reused tmp.
-      fs.writeFileSync(tmp, JSON.stringify(snapshot), { mode: 0o600 });
+      fs.writeFileSync(tmp, body, { mode: 0o600 });
       fs.chmodSync(tmp, 0o600);
       fs.renameSync(tmp, this.filePath);
+      // [LAW:nothing-unseen] The write blocks the daemon's one thread, so how
+      // long it held it is a fact of every flush.
+      this.logger(
+        "info",
+        `session-state saved bytes=${Buffer.byteLength(body)} sessions=${Object.keys(snapshot).length} took=${Math.round(performance.now() - started)}ms`,
+      );
       // [LAW:one-source-of-truth] `pending` is "state not yet durably written".
       // Clear it only once the rename lands, so a transient EIO/ENOSPC leaves
       // the snapshot for a later flush (e.g. shutdown) to retry rather than

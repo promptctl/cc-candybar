@@ -42,6 +42,21 @@ describe("SessionState disk persistence", () => {
     expect(ss.get("s1", "theme")).toBe("nord"); // now loaded from disk
   });
 
+  // [LAW:nothing-unseen] A flush blocks the daemon's one thread, so each one
+  // says what it wrote and how long it held the thread.
+  it("each flush logs the bytes and sessions it wrote and how long it took", () => {
+    const logged: string[] = [];
+    const ss = new SessionState(
+      new FileSessionStorage(file, 0, (_level, line) => logged.push(line)),
+    );
+    ss.set("s1", "theme", "dracula");
+    ss.flush();
+    const bytes = Buffer.byteLength(readFileSync(file, "utf8"));
+    expect(logged.at(-1)).toMatch(
+      new RegExp(`^session-state saved bytes=${bytes} sessions=1 took=\\d+ms$`),
+    );
+  });
+
   it("survives a daemon restart: a fresh instance reads identical values", () => {
     const first = new SessionState(new FileSessionStorage(file, 0));
     first.set("s1", "theme", "dracula");
