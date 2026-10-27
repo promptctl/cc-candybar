@@ -30,9 +30,10 @@ export interface StateFile<T> {
 // so text that does not read is that failure, never the empty value.
 // [LAW:one-source-of-truth] The directory is always given. `cc-candybar
 // doctor` reads the stores in the daemon's answer
-// (src/doctor/daemon-answer.ts), never at a path of its own guessing; the
-// daemon, `check` and the demo read the answers for repositories in their
-// own state directory, as they read the link key there.
+// (src/doctor/daemon-answer.ts), never at a path of its own guessing. The
+// answers for repositories are read by every config load — the daemon's,
+// `check`'s, the doctor's, the demo's — in its own state directory, as it
+// reads the link key there.
 export function stateFile<T>(
   dir: string,
   name: string,
