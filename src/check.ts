@@ -837,14 +837,14 @@ function parseCheckArgs(args: readonly string[]): CheckArgs {
       message: `check: unknown option ${unknown.join(" ")}\n${USAGE}`,
     };
   }
-  // An empty string is not "no argument": `target: undefined` means "resolve
-  // like the daemon", while `""` is a malformed target (the likeliest cause is
-  // an unquoted or mis-expanded shell variable) that would otherwise EISDIR on
-  // the cwd.
-  if (paths.length > 1 || paths[0] === "") {
+  // [LAW:single-enforcer] Arity only. What the path means — including that an
+  // empty one, a statusline's `--config "$CFG"` with CFG unset, resolves like
+  // no argument — is `explicitConfigPath`'s to say inside `checkConfig`, the
+  // same reading the bar renders under.
+  if (paths.length > 1) {
     return {
       kind: "usage",
-      message: `check: expected at most one non-empty path\n${USAGE}`,
+      message: `check: expected at most one path\n${USAGE}`,
     };
   }
   return {
@@ -859,12 +859,18 @@ function parseCheckArgs(args: readonly string[]): CheckArgs {
 // its plan carries.
 export async function runCheck(args: readonly string[]): Promise<never> {
   const parsed = parseCheckArgs(args);
+  const cwd = process.cwd();
   const plan: CliPlan =
     parsed.kind === "usage"
       ? { stdout: "", stderr: parsed.message, code: EXIT_USAGE }
       : checkPlan(
+          // [LAW:one-source-of-truth] The argument crosses `explicitConfigPath`
+          // before the fall to $CC_CANDYBAR_CONFIG, as the doctor's does: an
+          // empty one is no argument, so the variable is the target.
           await checkConfig(
-            parsed.target ?? detectConfigEnv(process.env, process.cwd()),
+            explicitConfigPath(cwd, parsed.target) ??
+              detectConfigEnv(process.env, cwd),
+            cwd,
           ),
           parsed.render,
         );

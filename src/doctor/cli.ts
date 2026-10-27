@@ -310,8 +310,11 @@ function commandTerminal(): { readonly columns?: number } {
 // the config file a session's statusline command names with `--config`, so
 // the CLI can check the file that session's bar renders.
 export async function runDoctorCli(args: readonly string[]): Promise<never> {
-  // An empty string is a mis-expanded shell variable, never "no argument".
-  if (args.length > 1 || args[0] === "" || args[0]?.startsWith("--")) {
+  // [LAW:single-enforcer] What the argument means — including that an empty
+  // one, a statusline's `--config "$CFG"` with CFG unset, is no override — is
+  // `explicitConfigPath`'s to say, the same reading the bar renders under.
+  // Only arity and a stray option are refused here.
+  if (args.length > 1 || args[0]?.startsWith("--")) {
     process.stderr.write(
       "doctor: expected at most one config file\nUsage: cc-candybar doctor [config-file]\n",
     );

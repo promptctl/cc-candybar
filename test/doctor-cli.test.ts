@@ -460,6 +460,23 @@ describe("doctorPlan over a real config", () => {
     ).toBe(`✗ config — helper "h" is never called\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width — 120 columns, as this command's terminal measured\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n✓ session data\n`);
   });
 
+  // [LAW:one-source-of-truth] brandon-unfiled-3248.e3r: `doctor "$CFG"` with
+  // CFG unset checks the bar `--config "$CFG"` renders — the hinted chain —
+  // never refusing the run. The empty name means what it means to the bar.
+  test("an empty name on the command line is no name: $CC_CANDYBAR_CONFIG is the file checked", async () => {
+    const hinted = path.join(dir, "hinted.json5");
+    fs.writeFileSync(hinted, `{ helpers: { h: "x" } }`);
+    const out = await doctorPlan(
+      REAL,
+      NO_HANDLER, DAEMON,
+      inDir({ CC_CANDYBAR_CONFIG: hinted }),
+      project, () => ({ columns: 120 }),
+      "",
+    );
+    expect(out.code).toBe(1);
+    expect(out.stdout).toMatch(/^✗ config — helper "h" is never called\n/);
+  });
+
   // brandon-effects-2gka.21e, brandon-doctor-v62x.tgp: what the recent bars
   // of this Claude Code directory drew decides whether the bar moves, and the
   // settings file in this shell's CLAUDE_CONFIG_DIR whether Claude Code
