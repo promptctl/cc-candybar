@@ -12,6 +12,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { hookData, killAndWait, linkUrls, renderRequest, sendClick, stripAnsi } from "./helpers/daemon-e2e";
+import { until } from "./helpers/until";
 import {
   prepareIsolatedDaemonEnv,
   spawnDaemonWithEnv,
@@ -120,14 +121,13 @@ describe("a daemon reads a plugin's session source and runs its program", () => 
   // Renders until the bar (escapes stripped) shows what is waited for; the
   // bytes of that render.
   const renderUntil = async (shows: (bar: string) => boolean, what: string): Promise<string> => {
-    let bar = "";
-    for (let round = 0; round < 100; round++) {
-      const raw = await renderRaw();
-      bar = stripAnsi(raw);
-      if (shows(bar)) return raw;
-      await new Promise((r) => setTimeout(r, 100));
-    }
-    throw new Error(`the bar never showed ${what}; last:\n${bar}`);
+    let raw = "";
+    await until(
+      async () => shows(stripAnsi((raw = await renderRaw()))),
+      () => `the bar showing ${what}; last:\n${stripAnsi(raw)}`,
+      10_000,
+    );
+    return raw;
   };
 
   // The run link the bar drew, read out of its bytes.
@@ -156,15 +156,14 @@ describe("a daemon reads a plugin's session source and runs its program", () => 
 
     // The program's write: the whole file, renamed into place, again until a
     // render shows it (the folder's watch goes live after it opens).
-    let shown = "";
-    for (let round = 0; round < 50 && !shown.includes("home=/h/before"); round++) {
+    let bar = "";
+    await until(async () => {
       const tmp = path.join(storage, `.${SESSION}.tmp`);
       fs.writeFileSync(tmp, JSON.stringify({ home: "/h/before" }));
       fs.renameSync(tmp, path.join(storage, `${SESSION}.json`));
-      await new Promise((r) => setTimeout(r, 100));
-      shown = await render();
-    }
-    expect(shown).toContain("home=/h/before");
+      bar = await render();
+      return bar.includes("home=/h/before");
+    }, () => `the bar showing the program's write; last:\n${bar}`, 10_000);
   });
 
   test("a click runs the drawn program; while it runs the source draws its loading cell and no request times out; then its write", async () => {

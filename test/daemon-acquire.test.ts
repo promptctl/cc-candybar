@@ -3,7 +3,9 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 
+import { isConnectable } from "./helpers/daemon-wire";
 import { spawnTestDaemon } from "./helpers/spawn-test-daemon";
+import { until } from "./helpers/until";
 
 // Each test creates its own isolated state root. CC_CANDYBAR_SOCKET isolates
 // the socket so concurrent tests don't race on the same bind path; XDG_STATE_HOME
@@ -1193,16 +1195,18 @@ describe("resetSpawnBackoff wiring into onListening (integration: real daemon)",
 
     const { child: daemon, killTree, release } = await spawnTestDaemon(env);
     try {
-      const connectable = await waitForBackoffWireConnectable(sockPath, 8000);
-      expect(connectable).toBe(true);
+      await until(() => isConnectable(sockPath), "the daemon's socket", 8000);
       // [LAW:no-ambient-temporal-coupling] Kernel connectability begins when
       // listen(2) completes — BEFORE the daemon's 'listening' JS callback
       // (where resetSpawnBackoff runs) has executed. An instant existsSync
       // here races that callback and loses on slow CI runners. The contract
       // is "a serving daemon promptly clears the streak", so await exactly
       // that: the file's disappearance, within a bounded budget.
-      const cleared = await waitForBackoffWireGone(backoffPath, 8000);
-      expect(cleared).toBe(true);
+      await until(
+        () => !fs.existsSync(backoffPath),
+        "the backoff wire's removal",
+        8000,
+      );
     } finally {
       killTree();
       await new Promise<void>((resolve) => {
@@ -1223,35 +1227,3 @@ describe("resetSpawnBackoff wiring into onListening (integration: real daemon)",
     }
   });
 });
-
-async function waitForBackoffWireConnectable(
-  sockPath: string,
-  budgetMs: number,
-): Promise<boolean> {
-  const deadline = Date.now() + budgetMs;
-  while (Date.now() < deadline) {
-    const ok = await new Promise<boolean>((resolve) => {
-      const s = net.connect(sockPath);
-      s.once("connect", () => {
-        s.destroy();
-        resolve(true);
-      });
-      s.once("error", () => resolve(false));
-    });
-    if (ok) return true;
-    await new Promise((r) => setTimeout(r, 25).unref());
-  }
-  return false;
-}
-
-async function waitForBackoffWireGone(
-  filePath: string,
-  budgetMs: number,
-): Promise<boolean> {
-  const deadline = Date.now() + budgetMs;
-  while (Date.now() < deadline) {
-    if (!fs.existsSync(filePath)) return true;
-    await new Promise((r) => setTimeout(r, 25).unref());
-  }
-  return false;
-}

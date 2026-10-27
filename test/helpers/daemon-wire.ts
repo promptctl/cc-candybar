@@ -82,3 +82,22 @@ export function waitForExit(child: ChildProcess): Promise<ExitResult> {
     child.once("exit", (code, signal) => resolve({ code, signal }));
   });
 }
+
+// [LAW:one-source-of-truth] THE probe for "is a daemon serving this socket":
+// a connect that completes, then closed. A missing path errors the connect
+// like a dead socket does, so there is no stat before it. A connect that
+// neither completes nor errors (bound, nobody accepting) is destroyed at its
+// own bound and answers false, so a poll that gives up on it leaves no live
+// handle behind.
+export function isConnectable(sockPath: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const sock = net.connect(sockPath);
+    sock.setTimeout(1_000, () => sock.destroy());
+    sock.once("connect", () => {
+      sock.destroy();
+      resolve(true);
+    });
+    sock.once("error", () => resolve(false));
+    sock.once("close", () => resolve(false));
+  });
+}

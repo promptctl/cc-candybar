@@ -1,11 +1,12 @@
 import type { ChildProcess } from "node:child_process";
 import fs from "node:fs";
-import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 
 import { createDaemonPool } from "./helpers/daemon-pool";
+import { isConnectable } from "./helpers/daemon-wire";
 import { spawnTestDaemon } from "./helpers/spawn-test-daemon";
+import { until } from "./helpers/until";
 
 // [LAW:verifiable-goals] Integration proof for the daemon-side fork-bomb
 // circuit breaker (brandon-daemon-lifecycle-gad.2): with a real, tiny ceiling
@@ -71,33 +72,6 @@ function makeFixture(prefix: string, registryDir: string): Fixture {
   };
 }
 
-function isConnectable(sockPath: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    if (!fs.existsSync(sockPath)) {
-      resolve(false);
-      return;
-    }
-    const s = net.connect(sockPath);
-    s.once("connect", () => {
-      s.destroy();
-      resolve(true);
-    });
-    s.once("error", () => resolve(false));
-  });
-}
-
-async function waitUntil(
-  check: () => Promise<boolean> | boolean,
-  budgetMs: number,
-): Promise<boolean> {
-  const deadline = Date.now() + budgetMs;
-  while (Date.now() < deadline) {
-    if (await check()) return true;
-    await new Promise((r) => setTimeout(r, 50));
-  }
-  return false;
-}
-
 // Clears its own timeout on the exit path so a resolved race never leaves a
 // live timer pinning the event loop open past the test (Promise.race alone
 // doesn't cancel the losing branch).
@@ -149,12 +123,8 @@ describe("daemon-side fork-bomb circuit breaker (integration)", () => {
         d2.release();
       });
 
-      expect(await waitUntil(() => isConnectable(fx1.sockPath), 5000)).toBe(
-        true,
-      );
-      expect(await waitUntil(() => isConnectable(fx2.sockPath), 5000)).toBe(
-        true,
-      );
+      await until(() => isConnectable(fx1.sockPath), "d1's socket");
+      await until(() => isConnectable(fx2.sockPath), "d2's socket");
 
       // Ceiling is full (2/2 live isolated daemons registered). The 3rd must
       // refuse — exiting fast, never binding its own socket.
@@ -188,9 +158,7 @@ describe("daemon-side fork-bomb circuit breaker (integration)", () => {
         d4.killTree();
         d4.release();
       });
-      expect(await waitUntil(() => isConnectable(fx4.sockPath), 5000)).toBe(
-        true,
-      );
+      await until(() => isConnectable(fx4.sockPath), "d4's socket");
     } finally {
       for (const cleanup of cleanups.reverse()) {
         try {

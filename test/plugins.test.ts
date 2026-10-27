@@ -10,6 +10,7 @@ import path from "node:path";
 import { checkConfig, prepareConfig, type CheckOutcome } from "../src/check";
 import { addableSegmentDomains } from "../src/config/edit-chrome";
 import { stripAnsi } from "./helpers/daemon-e2e";
+import { until } from "./helpers/until";
 import { renderDsl } from "../src/dsl/render";
 import { instantOf } from "../src/utils/instant";
 import { memoryLimitBytes } from "../src/daemon/limits";
@@ -120,12 +121,10 @@ describe("a listed plugin", () => {
       expect(read()).toEqual({ kind: "ok", value: { env: "prod", state: "rolling" } });
       // fs.watch attaches asynchronously and has no ready signal, so the
       // (idempotent) rewrite repeats until the watcher delivers it.
-      const next = `{ "env": "prod", "state": "live" }`;
-      for (let i = 0; i < 100; i++) {
-        fs.writeFileSync(data, next);
-        await new Promise((r) => setTimeout(r, 50));
-        if ((read() as { value?: { state?: string } }).value?.state === "live") break;
-      }
+      await until(() => {
+        fs.writeFileSync(data, `{ "env": "prod", "state": "live" }`);
+        return (read() as { value?: { state?: string } }).value?.state === "live";
+      }, "the rewrite's arrival in the store");
       expect(read()).toEqual({ kind: "ok", value: { env: "prod", state: "live" } });
     } finally {
       prepared.registry.dispose();
@@ -338,17 +337,15 @@ test("a data file written after load, and replaced by rename, is read", async ()
     const read = () => (prepared.store.readDocument("plugins.deploy.data") as { value?: { state?: string } }).value?.state;
     // fs.watch attaches asynchronously with no ready signal: repeat the
     // (idempotent) write until the watcher delivers it.
-    const until = async (state: string, write: () => void) => {
-      for (let i = 0; i < 100 && read() !== state; i++) {
+    const delivered = (state: string, write: () => void) =>
+      until(() => {
         write();
-        await new Promise((r) => setTimeout(r, 50));
-      }
-      expect(read()).toBe(state);
-    };
+        return read() === state;
+      }, `the store reading "${state}"`);
     const data = path.join(dir, "deploy/state.json");
-    await until("first", () => fs.writeFileSync(data, `{ "state": "first" }`));
+    await delivered("first", () => fs.writeFileSync(data, `{ "state": "first" }`));
     for (const state of ["second", "third"]) {
-      await until(state, () => {
+      await delivered(state, () => {
         fs.writeFileSync(`${data}.tmp`, `{ "state": "${state}" }`);
         fs.renameSync(`${data}.tmp`, data);
       });
@@ -1062,11 +1059,12 @@ describe("a plugin segment's state variable", () => {
     bar = await startBar({ width: 120, rows: 40, config: p, cwd: dir, ssh: false });
     // The data file is a watched source read after the load, so the first
     // render may still show the empty document.
-    let closed = stripAnsi(await bar.render());
-    for (let i = 0; i < 50 && !closed.includes("n-1"); i++) {
-      await new Promise((r) => setTimeout(r, 100));
-      closed = stripAnsi(await bar.render());
-    }
+    const started = bar;
+    let closed = "";
+    await until(
+      async () => (closed = stripAnsi(await started.render())).includes("n-1"),
+      () => `the bar showing n-1; last:\n${closed}`,
+    );
     expect(closed).toContain("n-1 ▸");
     expect(closed).not.toContain("the long form");
     const opened = await bar.click("▸");

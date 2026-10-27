@@ -432,12 +432,15 @@ async function repeatUntil(
   registry: SourceRegistry,
   done: () => boolean,
   change: () => void,
+  what: string,
 ): Promise<void> {
-  for (let i = 0; i < 60 && !done(); i++) {
+  await until(async () => {
+    if (done()) return true;
     change();
     await elapse(50);
     await ran(registry);
-  }
+    return done();
+  }, what, 15_000);
 }
 
 // ─── shell — basic ────────────────────────────────────────────────────────────
@@ -792,6 +795,7 @@ describe("SourceRegistry — shell: watch_file cache policy", () => {
         registry,
         () => store.read("val") === "v2",
         () => fs.writeFileSync(watchedFile, "x"),
+        "the store reading v2",
       );
 
       expect(store.read("val")).toBe("v2");
@@ -821,6 +825,7 @@ describe("SourceRegistry — shell: watch_file cache policy", () => {
         registry,
         () => store.read("val") === "v2",
         () => fs.writeFileSync(path.join(watchedDir, "main"), String(write++)),
+        "the store reading v2",
       );
       expect(store.read("val")).toBe("v2");
     } finally {
@@ -849,6 +854,7 @@ describe("SourceRegistry — shell: watch_file cache policy", () => {
         registry,
         () => store.read("val") === "v1",
         () => fs.writeFileSync(f, "v1"),
+        "the store reading v1",
       );
       expect(store.read("val")).toBe("v1");
     } finally {
@@ -871,7 +877,7 @@ describe("SourceRegistry — shell: watch_file cache policy", () => {
       await elapse(100); // the watch attaches with no ready signal, and a removal is not repeatable
       expect(store.read("val")).toBe("v1");
       fs.rmSync(path.dirname(f), { recursive: true });
-      await repeatUntil(registry, () => store.read("val") === "(none)", () => undefined);
+      await repeatUntil(registry, () => store.read("val") === "(none)", () => undefined, "the store reading (none)");
       expect(store.read("val")).toBe("(none)");
     } finally {
       cleanup();
@@ -922,6 +928,7 @@ describe("SourceRegistry — shell: watch_file cache policy", () => {
         registry,
         () => store.read("val") === "v2",
         () => fs.writeFileSync(real, "v2"),
+        "the store reading v2",
       );
       expect(store.read("val")).toBe("v2");
     } finally {
@@ -960,6 +967,7 @@ describe("SourceRegistry — shell: watch_file cache policy", () => {
         registry,
         () => store.read("v1") === "a2" && store.read("v2") === "b2",
         () => fs.writeFileSync(watchedFile, "y"),
+        "both stores reading a2 and b2",
       );
 
       expect(store.read("v1")).toBe("a2");
@@ -1347,7 +1355,7 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
       await ran(registry);
       expect(store.read("val")).toBe("v1");
 
-      await repeatUntil(registry, () => store.read("val") === "v2", () => fs.writeFileSync(f, "v2"));
+      await repeatUntil(registry, () => store.read("val") === "v2", () => fs.writeFileSync(f, "v2"), "the store reading v2");
 
       expect(store.read("val")).toBe("v2");
     } finally {
@@ -1379,6 +1387,7 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
         registry,
         () => store.read("v1") === "a2" && store.read("v2") === "b2",
         () => fs.writeFileSync(watchedFile, "v2"),
+        "both stores reading a2 and b2",
       );
 
       expect(store.read("v1")).toBe("a2");
@@ -2027,17 +2036,19 @@ describe("SourceRegistry — parse seam", () => {
         registry,
         () => registry.getLastError("doc") !== undefined,
         () => fs.writeFileSync(f, `{ "sta`),
+        "doc's last error",
       );
       expect(readDoc(store, "doc")).toEqual({ state: "one" });
       await repeatUntil(
         registry,
         () => store.readDocument("doc").kind === "ok" && doc(store, "doc").state === "two",
         () => fs.writeFileSync(f, `{ "state": "two" }`),
+        "the document reading state two",
       );
       expect(readDoc(store, "doc")).toEqual({ state: "two" });
       // Left broken past the settle: the failure shows.
       fs.writeFileSync(f, `{ "sta`);
-      await repeatUntil(registry, () => store.readDocument("doc").kind === "failed", () => undefined);
+      await repeatUntil(registry, () => store.readDocument("doc").kind === "failed", () => undefined, "the document reading failed");
       expect(store.readDocument("doc")).toMatchObject({ kind: "failed" });
     } finally {
       cleanup();
