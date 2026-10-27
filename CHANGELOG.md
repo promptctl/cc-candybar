@@ -1,3 +1,9 @@
+## [1.160.0](https://github.com/promptctl/cc-candybar/compare/v1.159.0...v1.160.0) (2026-10-27)
+
+### Features
+
+* **config:** a repository's config runs only once the user approves it in the bar (brandon-unfiled-3248.kezw) ([#454](https://github.com/promptctl/cc-candybar/issues/454)) ([f945a18](https://github.com/promptctl/cc-candybar/commit/f945a18e70e9dd90588d3ee8b7ec4d7d175564b9))
+
 ## [1.159.0](https://github.com/promptctl/cc-candybar/compare/v1.158.1...v1.159.0) (2026-10-27)
 
 ### Features
