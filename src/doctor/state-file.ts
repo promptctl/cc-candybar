@@ -26,11 +26,13 @@ export interface StateFile<T> {
 
 // The store named `name` under the daemon's state directory. `parse` reads
 // the parsed document; its failure reason is told after the file's name
-// ("<file> is not a list of terminals"). Only the doctor writes these files,
+// ("<file> is not a list of terminals"). Only cc-candybar writes these files,
 // so text that does not read is that failure, never the empty value.
-// [LAW:one-source-of-truth] The directory is always given, and only the
-// daemon gives one: `cc-candybar doctor` reads the stores in the daemon's
-// answer (src/doctor/daemon-answer.ts), never at a path of its own guessing.
+// [LAW:one-source-of-truth] The directory is always given. `cc-candybar
+// doctor` reads the stores in the daemon's answer
+// (src/doctor/daemon-answer.ts), never at a path of its own guessing; the
+// daemon, `check` and the demo read the answers for repositories in their
+// own state directory, as they read the link key there.
 export function stateFile<T>(
   dir: string,
   name: string,
