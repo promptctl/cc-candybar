@@ -290,13 +290,14 @@ async function hearsRefOnlyMove(
   };
   try {
     // fs.watch has no ready signal: HEAD is rewritten, unchanged, until a
-    // re-read proves the watch live.
+    // re-read proves the watch live. Written as git writes it, a `.lock`
+    // renamed over it, so a read mid-rewrite never sees an empty HEAD.
     const headPath = path.join(inner.resolveGitDir(workingDir), "HEAD");
     const head = fs.readFileSync(headPath, "utf8");
-    const rewrite = setInterval(
-      () => fs.writeFileSync(headPath, head),
-      WATCH_RETRY_MS,
-    );
+    const rewrite = setInterval(() => {
+      fs.writeFileSync(`${headPath}.lock`, head);
+      fs.renameSync(`${headPath}.lock`, headPath);
+    }, WATCH_RETRY_MS);
     try {
       await until(
         () => inner.calls >= 2,
