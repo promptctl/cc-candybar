@@ -1,3 +1,9 @@
+## [1.160.8](https://github.com/promptctl/cc-candybar/compare/v1.160.7...v1.160.8) (2026-10-27)
+
+### Bug Fixes
+
+* **cli:** a one-shot command exits once its streams have taken the plan (brandon-unfiled-3248.6di0) ([#465](https://github.com/promptctl/cc-candybar/issues/465)) ([80c6c54](https://github.com/promptctl/cc-candybar/commit/80c6c54a5f214b6f1eb182b540656eec3770c234))
+
 ## [1.160.7](https://github.com/promptctl/cc-candybar/compare/v1.160.6...v1.160.7) (2026-10-27)
 
 ### Bug Fixes
