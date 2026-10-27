@@ -57,10 +57,17 @@ export interface SourceSnapshots {
   // How many entries of each keyed source a view holds now.
   readonly held: Readonly<Record<HeldSource, number>>;
   // Every plugin's managed storage: the folders watched now, watch faults by
-  // cause, and folders found gone or replaced.
+  // cause, folders found gone or replaced, probes written and failed, and
+  // folders whose watch is stalled now and every move into a stall.
   readonly pluginStorage: Pick<
     ManagedStorageStats,
-    "folders" | "faults" | "lost"
+    | "folders"
+    | "faults"
+    | "lost"
+    | "probes"
+    | "probeFailures"
+    | "stalled"
+    | "stalls"
   >;
 }
 
@@ -330,6 +337,10 @@ export class RuntimeStats {
           folders: 0,
           faults: { unusable: 0, refused: 0, error: 0 },
           lost: 0,
+          probes: 0,
+          probeFailures: 0,
+          stalled: 0,
+          stalls: 0,
         },
       },
       transcriptReads: { reads: 0, bytes: 0, longLines: 0, largestLine: 0 },
