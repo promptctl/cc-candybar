@@ -1,3 +1,9 @@
+## [1.160.1](https://github.com/promptctl/cc-candybar/compare/v1.160.0...v1.160.1) (2026-10-27)
+
+### Bug Fixes
+
+* **daemon:** the session-state rename leaves the daemon's thread, and the load gate's steady phase starts once the collection's backlog is served (brandon-frame-feed-znsy.2dj) ([#457](https://github.com/promptctl/cc-candybar/issues/457)) ([d92aece](https://github.com/promptctl/cc-candybar/commit/d92aece3eea9069a6cd603ee2fe21f169812f1d5))
+
 ## [1.160.0](https://github.com/promptctl/cc-candybar/compare/v1.159.0...v1.160.0) (2026-10-27)
 
 ### Features
