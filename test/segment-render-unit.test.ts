@@ -126,10 +126,11 @@ describe("segment is the rendering unit (2de.10)", () => {
     // the mid-join. The a↔b join is now the DIVIDER — the arrow would be drawn
     // in the shared background and vanish (rich-js CellJoiner) — so the
     // arrows are the lead, the join to the global settings menu every bar
-    // carries (candybar-settings-ui-aok.1) and the tail, and a↔b is the one
-    // divider.
+    // carries (candybar-settings-ui-aok.1) and the tail. The dividers are
+    // a↔b and the one inside that menu's unit, between the door and the
+    // frame rate beside it, which share its band.
     expect(chevronCount(out)).toBe(3);
-    expect(out.split(DIVIDER).length - 1).toBe(1);
+    expect(out.split(DIVIDER).length - 1).toBe(2);
     expect(stripAnsi(out)).toMatch(new RegExp(`AAA\\s*${DIVIDER}\\s*BBB`));
     expect(out).toContain("AAA");
     expect(out).toContain("BBB");

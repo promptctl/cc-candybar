@@ -62,6 +62,9 @@ import { resolvedStyle } from "../src/render/rich-theme";
 import { TEXT_MIN_CONTRAST } from "../src/themes/decor";
 import { QUIET_MIN_CONTRAST } from "../src/config/quiet-text";
 import { INVISIBLE, linkUrls } from "./helpers/ansi";
+import { POLLED } from "../src/config/settings-menu";
+import { DOOR_GLYPH } from "../src/config/disclosure";
+import { REMOVE_GLYPH } from "../src/config/edit-glyphs";
 import { type Instant, instantOf } from "../src/utils/instant";
 
 // Visible segment text: every zero-width escape, plus the powerline cap glyphs.
@@ -1840,6 +1843,25 @@ describe("bundled preset library renders clean at every width — brandon-preset
         expect(segmentErrors).toEqual([]);
         expect(rendered.length).toBeGreaterThan(0);
       }
+    },
+  );
+
+  // [LAW:verifiable-goals] Every bar says how it is redrawn, right after the
+  // door, whatever the preset arranges — and edit mode offers no way to
+  // remove it, as it offers none for the door. checkPayload's render is a
+  // request's answer, so the readout is the polled one.
+  test.each(presetNames(DEFAULT_DSL_CONFIG.presets))(
+    'preset "%s" carries the frame rate right after the door, in edit mode too',
+    (name) => {
+      const afterDoor = new RegExp(`${DOOR_GLYPH}[^\\p{L}\\p{N}]*${POLLED}`, "u");
+      const plain = renderPreset(name, 120);
+      expect(plain.segmentErrors).toEqual([]);
+      expect(stripAnsi(plain.rendered)).toMatch(afterDoor);
+      const editing = stripAnsi(
+        renderPreset(name, 120, undefined, editingSession).rendered,
+      );
+      expect(editing).toMatch(afterDoor);
+      expect(editing).not.toMatch(new RegExp(`${REMOVE_GLYPH}\\s*${POLLED}`, "u"));
     },
   );
 

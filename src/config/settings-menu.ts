@@ -7,7 +7,8 @@
 // synthesis runs the same two total functions on every preset root, in the same
 // order, every load: `withAnchor` yields a tree that CONTAINS the anchor — the
 // author's own placement untouched, or the default position prepended — and
-// `expandAnchor` replaces that one leaf with the lowered disclosure subtree.
+// `expandAnchor` replaces that one leaf with the lowered disclosure subtree
+// and the frame-rate cell beside it.
 // "The author placed it" and "the author did not" differ only in the VALUE
 // handed to one splice; there is no second code path to keep in agreement.
 //
@@ -382,14 +383,27 @@ const laneReadout = (lane: Lane): string => {
     `{{ else }}no subscriber{{ end }}{{ end }}`
   );
 };
-// [LAW:nothing-unseen] On a frame the feed drew, the door says how fast the
-// feed draws this bar: the moving rate while it moves where someone can see
-// it, one a second while it is still or unseen. A bar Claude Code polls is
-// answered by a request, which shows none. The pace is padded to the widest
-// it can be, MOVING_FPS, so a bar starting or stopping moves no cell after it.
+// [LAW:nothing-unseen] Every bar says how it is redrawn, in the cell beside the
+// door. On a frame the feed drew: how fast the feed draws it, the moving rate
+// while it moves where someone can see it, one a second while it is still or
+// unseen. On a request's answer: that Claude Code polls it. A polled bar has no
+// rate to show, since its redraws are Claude Code's, and the requests that
+// carry them cannot tell its timer from its event redraws or a daemon stall.
+// [LAW:dataflow-not-control-flow] The one branch is Drawing's own
+// discriminator. Both forms are padded to the wider of `polled` and the
+// fastest pace, MOVING_FPS, so a bar starting, stopping or losing its lane
+// moves no cell after it.
+const FPS_SEG = `${SETTINGS_NS}fps`;
+export const POLLED = "polled";
+const FPS_UNIT = " fps";
+const RATE_WIDTH = Math.max(
+  POLLED.length,
+  String(MOVING_FPS).length + FPS_UNIT.length,
+);
 const FRAME_RATE =
-  `{{ if eq .${drawingVar("by")} "${"feed" satisfies Drawing["by"]}" }} ` +
-  `{{ printf "%${String(MOVING_FPS).length}d" (int .${drawingVar("fps")}) }} fps{{ end }}`;
+  `{{ if eq .${drawingVar("by")} "${"feed" satisfies Drawing["by"]}" }}` +
+  `{{ printf "%${RATE_WIDTH - FPS_UNIT.length}d" (int .${drawingVar("fps")}) }}${FPS_UNIT}` +
+  `{{ else }}${POLLED.padStart(RATE_WIDTH)}{{ end }}`;
 
 // What a control shows after itself: a lane's toggle its readout.
 const TRAIL: Partial<Record<SettingName, string>> = Object.fromEntries(
@@ -727,10 +741,22 @@ function placeBody(place: Place): ContainerNode {
 // trigger the closed menu does not render. The walk colours the body on the
 // door's band and a tab's body on the band the tab opens, one depth
 // further (candybar-render-ai7.9).
+//
+// [LAW:single-enforcer] The anchor is the one position every bar is
+// guaranteed, so what every bar carries hangs on it: the door and, beside it,
+// how the bar is redrawn (FRAME_RATE). One unit, so the two share the door's
+// band, and no preset or authored root has to remember the rate.
 function expandAnchor(node: AnchoredRoot | LayoutNode): LayoutNode {
   if (node.kind === "segment") {
     return isSettingsAnchor(node.name)
-      ? disclosureNode(node.name, SETTINGS_REF, DOOR_BODY, "above")
+      ? {
+          kind: "container",
+          direction: "horizontal",
+          children: [
+            disclosureNode(node.name, SETTINGS_REF, DOOR_BODY, "above"),
+            seg(FPS_SEG),
+          ],
+        }
       : node;
   }
   return expandContainer(node);
@@ -835,9 +861,9 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
           `{{ $door := ${disclosureTriggerCall(SETTINGS_ANCHOR, templateLiteral(doorGlyph), templateLiteral(DOOR_CLOSE_GLYPH))} }}` +
           `{{ if ${disclosureTerm(SETTINGS_REF)} }}` +
           `{{ fg (keptOn (color "${DOOR_CLOSE_ROLE}") (bgOf)) $door }}` +
-          `{{ else }}{{ $door }}{{ end }}` +
-          FRAME_RATE,
+          `{{ else }}{{ $door }}{{ end }}`,
       },
+      [FPS_SEG]: { template: FRAME_RATE },
       [TOOLBAR_SEG]: { template: TOOLBAR.template },
       [COMMANDS_SEG]: { template: COMMANDS.template, when: COMMANDS.when },
       [AUTOCOMPACT_SEG]: {

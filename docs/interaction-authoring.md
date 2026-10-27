@@ -1402,7 +1402,9 @@ label plus an arrow: `🍫` closed, `✖` open. By default it is the leading cel
 the bar's first row, and it wears the theme's tint like every other cell.
 `globals.menuGlyph` sets the closed glyph (top-level `globals` only — one menu
 is shared by every preset). Place the reserved `candybar.menu` segment name
-yourself to move it anywhere else.
+yourself to move it anywhere else. The cell beside it, saying how the bar is
+redrawn (`30 fps`, ` 1 fps` or `polled`), goes wherever the door goes, and
+stays on the bar while the menu is open.
 
 ```json5 check:pass
 { globals: { menuGlyph: "🍬" } }
@@ -1423,7 +1425,7 @@ picked in this session and not yet saved, and the theme's `⚙` is open:
   ▾ ⚡ session   🎨 look   📐 layout   ⚙ config   🧰 tools
 ✕ ⎘ id ⎘ resume ↗ proj ↗ log ↗ repo ↗ config
   …
-host   directory   gitaculous             ← the bar, less the door
+polled   host   directory   gitaculous    ← the bar, less the door
 ```
 
 Every row an open disclosure drops leads with a `✕` that closes **that**
@@ -1730,7 +1732,7 @@ writes unsaved, so the two always show the same theme:
 ```
 
 ```render
- 🍫  ✱ Opus 4.8 󰶼 
+ 🍫  polled  ✱ Opus 4.8 󰶼 
  ◀ nord ▀▀▀ ▶ 
 ```
 

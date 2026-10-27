@@ -12,7 +12,9 @@ A view reports that its data moved from one reaction over everything it draws fr
 
 A frame only finds its session's view; it never builds a cache entry or opens a view, because either is I/O on the frame path. Only an event opens one: a request, a reload's successor, or a click that moved the session's config. So an open feed pins its session in the render cache, and its entry is never evicted nor its view closed idle while the feed is open. A feed whose session has no view waits until the event that opens one wakes it. A view whose opening threw leaves that error in its place, so an open feed draws the failure rather than freezing on the last bar it pushed.
 
-The fps a frame shows is the feed's pace (1000 / its period), never a measurement. The number is drawn into the frame, so a measured value would make otherwise unchanged frames differ, and they would all get pushed.
+The fps a frame shows is the feed's pace (1000 / its period), never a measurement. The number is drawn into the frame, so a measured value would make otherwise unchanged frames differ, and they would all get pushed. A bar Claude Code polls says `polled` rather than a rate, because request arrivals can't tell Claude Code's timer from its event redraws or from a daemon stall, and a count over a trailing second never reads below one.
+
+The rate cell hangs on the menu's anchor, beside the door, because the anchor is the one position every bar is guaranteed. Placed in a preset's root instead, it would be missing from every preset and authored root that didn't name it.
 
 A throw in a feed's frame step is logged as that feed's fault, never left as an unhandled rejection.
 
