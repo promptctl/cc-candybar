@@ -1730,7 +1730,7 @@ writes unsaved, so the two always show the same theme:
 ```
 
 ```render
- 🍫  ✱ Opus 4.8 󰶼 
+ 🍫  polled  ✱ Opus 4.8 󰶼 
  ◀ nord ▀▀▀ ▶ 
 ```
 

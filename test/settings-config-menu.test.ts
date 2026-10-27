@@ -19,7 +19,7 @@
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { PRESET_DELETE_GLYPH } from "../src/config/settings-menu";
+import { POLLED, PRESET_DELETE_GLYPH } from "../src/config/settings-menu";
 import {
   ConfigError,
   loadConfigSource,
@@ -1650,40 +1650,45 @@ describe("a lane toggle's readout", () => {
   });
 });
 
-// [LAW:verifiable-goals] candybar-animation-wbxz.829: a bar the feed draws
-// shows the pace the feed draws it at (not a count of pushes, which is the
-// lane toggle's), beside the door; a bar answering
-// Claude Code's request shows none.
-describe("the frame rate on a fed bar", () => {
+// [LAW:verifiable-goals] Every bar says how it is redrawn, in its own cell
+// right after the door: a bar the feed draws shows the pace the feed draws it
+// at (not a count of pushes, which is the lane toggle's); a bar answering
+// Claude Code's request shows that it is polled. Every form is one width.
+describe("the frame rate beside the door", () => {
   const doorLine = (rendered: string): string => plain(rendered).split("\n")[0]!;
+  // The readout is the next text after the door: only padding and chrome
+  // between them.
+  const afterDoor = (readout: string): RegExp =>
+    new RegExp(`${DOOR_GLYPH}[^\\p{L}\\p{N}]*${readout}`, "u");
 
   test("a frame the feed drew shows the rate the feed draws at, after the door", () => {
     const r = rig(TWO_SEGMENT_ROOT);
     try {
-      expect(doorLine(r.render(undefined, undefined, { by: "feed", fps: MOVING_FPS }))).toMatch(
-        new RegExp(`${DOOR_GLYPH} ${MOVING_FPS} fps `, "u"),
-      );
+      const line = doorLine(r.render(undefined, undefined, { by: "feed", fps: MOVING_FPS }));
+      expect(line).toMatch(afterDoor(`${MOVING_FPS} fps`));
     } finally {
       r.dispose();
     }
   });
 
-  test("the still pace takes the moving pace's width, so nothing after the door moves", () => {
+  test("a request's answer shows that Claude Code polls the bar", () => {
+    const r = rig(TWO_SEGMENT_ROOT);
+    try {
+      expect(doorLine(r.render())).toMatch(afterDoor(POLLED));
+    } finally {
+      r.dispose();
+    }
+  });
+
+  test("the still pace and polled take the moving pace's width, so nothing after the door moves", () => {
     const r = rig(TWO_SEGMENT_ROOT);
     try {
       const still = doorLine(r.render(undefined, undefined, { by: "feed", fps: 1 }));
       const moving = doorLine(r.render(undefined, undefined, { by: "feed", fps: MOVING_FPS }));
-      expect(still).toMatch(new RegExp(`${DOOR_GLYPH} {${String(MOVING_FPS).length}}1 fps `, "u"));
+      const polled = doorLine(r.render());
+      expect(still).toContain(`${" ".repeat(String(MOVING_FPS).length - 1)}1 fps`);
       expect(still.length).toBe(moving.length);
-    } finally {
-      r.dispose();
-    }
-  });
-
-  test("a request's answer shows no rate", () => {
-    const r = rig(TWO_SEGMENT_ROOT);
-    try {
-      expect(doorLine(r.render())).not.toMatch(/fps/u);
+      expect(polled.length).toBe(moving.length);
     } finally {
       r.dispose();
     }

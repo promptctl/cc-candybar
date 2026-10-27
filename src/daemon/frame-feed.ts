@@ -34,7 +34,7 @@ import { laneOffReason } from "../config/menu-places";
 // whether the bar it drew moves, and — for a render that threw — the render
 // event describing it, logged when that failure is first pushed. It is drawn
 // for the feed (`drawing.by` "feed"), so it shows the feed's pace where a
-// render request's answer shows none.
+// render request's answer shows that it is polled.
 // [LAW:decomposition] A frame says only what was drawn. Whether anyone can see
 // it is the feed's question, asked when it schedules the next.
 // A frame's two answers: the bar, which a lane drawing it elsewhere draws,

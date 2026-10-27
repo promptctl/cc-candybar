@@ -50,6 +50,7 @@ import { links } from "./helpers/ansi";
 import { HANDOFF_BUTTON } from "../src/daemon/lane-handoff";
 import { until } from "./helpers/until";
 import { renderLines } from "./helpers/daemon-log";
+import { POLLED } from "../src/config/settings-menu";
 import {
   effectsUrl,
   VERB_LOAD_CONFIG,
@@ -268,7 +269,9 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   });
 
   test("a still bar is pushed once, and not again while nothing changes", async () => {
-    await render(sockPath, "feed-still", projectDir, {}, args("still"));
+    const answered = await render(sockPath, "feed-still", projectDir, {}, args("still"));
+    // The request's own answer is Claude Code's to poll: it shows no pace.
+    expect(stripAnsi(answered)).toMatch(new RegExp(`${POLLED}.*a still mark`, "su"));
     let drawn = 0;
     const frames = await framesOf("feed-still", async ({ received, waitFor }) => {
       await waitFor(() => received.length > 0, "the first frame");
