@@ -125,15 +125,26 @@ export class FileSessionStorage implements SessionStorage {
       // A flush that lands while this rename is on its way removes the temp
       // file first (flush, below), so the rename finds nothing: the one
       // outcome in which this older state cannot land over the newer.
+      let landed = true;
       try {
         await fs.promises.rename(tmp, this.filePath);
       } catch (e) {
         if (
-          (e as NodeJS.ErrnoException).code === "ENOENT" &&
-          generation !== this.generation
+          (e as NodeJS.ErrnoException).code !== "ENOENT" ||
+          generation === this.generation
         )
-          return;
-        throw e;
+          throw e;
+        landed = false;
+      }
+      // [LAW:nothing-unseen] A flush since the rename began wrote state at
+      // least as new, over this one if it landed: this write is superseded
+      // either way, and the last `saved` line stays the flush's.
+      if (generation !== this.generation) {
+        this.logger(
+          "info",
+          `session-state write superseded by a flush landed=${landed} took=${Math.round(performance.now() - started)}ms held=${Math.round(heldMs)}ms`,
+        );
+        return;
       }
       this.saved(body, snapshot, started, heldMs);
       if (this.pending === snapshot) this.pending = null;

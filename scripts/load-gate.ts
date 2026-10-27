@@ -821,8 +821,10 @@ async function run(): Promise<{
   // [LAW:no-ambient-temporal-coupling] The sessions tick on through the
   // collection, and the daemon drains what they queued once it ends, so a
   // render asked right after would wait behind that backlog and run out its
-  // budget. The steady phase begins once every session has been served
-  // again: the same condition the warm phase ends on.
+  // budget. The steady phase begins once every session has been answered
+  // again inside the client's budget: an answer in budget means the queue
+  // ahead of it was shorter than the budget, and the daemon serves faster
+  // than the sessions ask, so from there the queue only shrinks.
   await Promise.all(
     sessions.map((s) => redrawn(s, s.answers, "the heap was collected")),
   );
@@ -890,11 +892,7 @@ async function run(): Promise<{
   // hold of the daemon's thread is found in its log as a gap at that instant.
   const steadyFailures = steady
     .filter((r) => r.outcome !== "ok")
-    .map(({ session, atMs, outcome }) => ({
-      session,
-      atMs: Math.round(atMs),
-      outcome,
-    }));
+    .map(({ session, atMs, outcome }) => ({ session, atMs, outcome }));
   const failures = tally(steadyFailures.map((r) => r.outcome));
   const expected = (SESSIONS * STEADY_MS) / SESSION_PERIOD_MS;
   const charges = samples.map((s) => s.charge);

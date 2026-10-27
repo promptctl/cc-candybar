@@ -142,6 +142,43 @@ describe("SessionState disk persistence", () => {
     });
     expect(existsSync(`${file}.writing`)).toBe(false);
     expect(logged.filter((l) => l.includes("save failed"))).toEqual([]);
+    expect(logged.filter((l) => l.includes("superseded"))).toEqual([
+      expect.stringContaining("superseded by a flush landed=false"),
+    ]);
+  });
+
+  // The other ordering: the debounced rename lands, and the flush writes over
+  // it before the write resumes. The write says it was superseded rather than
+  // `saved` after the flush's own line, and the flush's state stands.
+  it("a synchronous flush right after the debounced rename lands supersedes it", async () => {
+    const logged: string[] = [];
+    const ss = new SessionState(
+      new FileSessionStorage(file, 0, (_level, line) => logged.push(line)),
+    );
+    const rename = fs.promises.rename;
+    const spy = jest
+      .spyOn(fs.promises, "rename")
+      .mockImplementation(async (from, to) => {
+        await rename(from, to);
+        // On disk, but the write has not resumed: the flush lands in between.
+        ss.set("s1", "theme", "new");
+        ss.flush();
+      });
+    try {
+      ss.set("s1", "theme", "old");
+      await settled(() => logged.some((l) => l.includes("superseded")));
+    } finally {
+      spy.mockRestore();
+    }
+    expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({
+      s1: { theme: "new" },
+    });
+    expect(logged.filter((l) => l.includes("save failed"))).toEqual([]);
+    expect(logged.filter((l) => l.includes("superseded"))).toEqual([
+      expect.stringContaining("superseded by a flush landed=true"),
+    ]);
+    // The flush's `saved` is the last one.
+    expect(logged.filter((l) => l.includes("saved")).length).toBe(1);
   });
 
   // A disk that refuses a write is retried by the next save or shutdown's
