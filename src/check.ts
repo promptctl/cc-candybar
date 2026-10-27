@@ -27,6 +27,7 @@ import { repoConfigs } from "./daemon/repo-configs.js";
 import { repoGateLines, type ApprovedRepo } from "./config/loader/repo-gate.js";
 import type { ConfigResolution } from "./config/loader/discovery.js";
 import fs from "node:fs";
+import { exitWith, type CliPlan } from "./cli-plan.js";
 import process from "node:process";
 import {
   loadConfigChain,
@@ -750,15 +751,10 @@ const EXIT_FATAL = 1;
 const EXIT_USAGE = 2;
 
 // [LAW:dataflow-not-control-flow] The outcome → (streams, exit-code) mapping is
-// DATA: a total fold over CheckOutcome returning one descriptor; runCheck runs
-// the two unconditional writes + exit against it. Verdict on stdout, every
-// diagnostic (warnings included) on stderr — so `check` in a pipeline yields a
-// parseable verdict while a human still sees the advisories.
-export interface CliPlan {
-  readonly stdout: string;
-  readonly stderr: string;
-  readonly code: number;
-}
+// DATA: a total fold over CheckOutcome returning one plan (src/cli-plan.ts);
+// runCheck delivers it. Verdict on stdout, every diagnostic (warnings
+// included) on stderr — so `check` in a pipeline yields a parseable verdict
+// while a human still sees the advisories.
 
 function warningLines(warnings: readonly string[]): string {
   return warnings.map((w) => `warning: ${w}\n`).join("");
@@ -873,7 +869,5 @@ export async function runCheck(args: readonly string[]): Promise<never> {
           ),
           parsed.render,
         );
-  process.stdout.write(plan.stdout);
-  process.stderr.write(plan.stderr);
-  process.exit(plan.code);
+  return exitWith(plan);
 }

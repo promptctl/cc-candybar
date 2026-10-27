@@ -17,7 +17,7 @@ import { linkSignerFromKeyFile } from "../daemon/link-key.js";
 import { openSync } from "node:fs";
 import process from "node:process";
 import { WriteStream } from "node:tty";
-import type { CliPlan } from "../check.js";
+import { exitWith, type CliPlan } from "../cli-plan.js";
 import { DOOR_GLYPH } from "../config/disclosure.js";
 import {
   barsOf,
@@ -341,20 +341,17 @@ export function parseDoctorArgs(args: readonly string[]): DoctorArgs {
 // the CLI can check the file that session's bar renders.
 export async function runDoctorCli(args: readonly string[]): Promise<never> {
   const parsed = parseDoctorArgs(args);
-  if (parsed.kind === "usage") {
-    process.stderr.write(parsed.message);
-    process.exit(EXIT_USAGE);
-  }
-  const plan = await doctorPlan(
-    productionEdge(loadConfigOnce),
-    productionHandlerProbeEdge(),
-    askDaemon,
-    process.env,
-    process.cwd(),
-    commandTerminal,
-    parsed.configFile,
-  );
-  process.stdout.write(plan.stdout);
-  process.stderr.write(plan.stderr);
-  process.exit(plan.code);
+  const plan: CliPlan =
+    parsed.kind === "usage"
+      ? { stdout: "", stderr: parsed.message, code: EXIT_USAGE }
+      : await doctorPlan(
+          productionEdge(loadConfigOnce),
+          productionHandlerProbeEdge(),
+          askDaemon,
+          process.env,
+          process.cwd(),
+          commandTerminal,
+          parsed.configFile,
+        );
+  return exitWith(plan);
 }

@@ -8,6 +8,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
+import type { CliPlan } from "../cli-plan.js";
 
 const EXIT_VALID = 0;
 const EXIT_USAGE = 2;
@@ -25,7 +26,7 @@ export function loadSchemaText(): string | null {
 // autocomplete + structural validation. Emitted from the loader schemas at build
 // time (scripts/gen-schema.ts → emitConfigSchema); served verbatim here (the
 // emitter runs at build, not ship time).
-export function runSchema(): void {
+export function schemaPlan(): CliPlan {
   // [LAW:no-silent-failure] A schema that exists but cannot be read (EACCES, a
   // deletion racing the existsSync in locateSchema) is a distinct failure from
   // schema-not-found — report it as what it is, not a misleading top-level
@@ -34,20 +35,22 @@ export function runSchema(): void {
   try {
     text = loadSchemaText();
   } catch (e) {
-    process.stderr.write(
-      `schema: cannot read bundled schema: ${e instanceof Error ? e.message : String(e)}\n`,
-    );
-    process.exit(EXIT_USAGE);
+    return {
+      stdout: "",
+      stderr: `schema: cannot read bundled schema: ${e instanceof Error ? e.message : String(e)}\n`,
+      code: EXIT_USAGE,
+    };
   }
   if (text === null) {
-    process.stderr.write(
-      "schema: bundled schema not found (expected schema/cc-candybar.schema.json). " +
+    return {
+      stdout: "",
+      stderr:
+        "schema: bundled schema not found (expected schema/cc-candybar.schema.json). " +
         "Run `pnpm gen:schema` from a source checkout.\n",
-    );
-    process.exit(EXIT_USAGE);
+      code: EXIT_USAGE,
+    };
   }
-  process.stdout.write(text);
-  process.exit(EXIT_VALID);
+  return { stdout: text, stderr: "", code: EXIT_VALID };
 }
 
 // [LAW:locality-or-seam] The schema sits at `<package-root>/schema/...`. Anchor

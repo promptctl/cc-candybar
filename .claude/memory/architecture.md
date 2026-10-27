@@ -6,6 +6,8 @@ Claude Code spawns the client on every statusline tick. The client connects to t
 
 The shipped client is native (Rust) and handles only the render hot path. It hands every other subcommand to the Node entry. On a daemon miss it spawns a detached daemon and prints an empty line, so the next refresh finds the daemon running.
 
+A one-shot Node subcommand folds its outcome into a plan (what goes to each stream, the exit code) and ends through one delivery that waits for both streams' write callbacks before exiting. A piped stdout flushes asynchronously on macOS, so an exit right after the write drops everything past the first 64 KiB the pipe buffered, and the loss is invisible on Linux, where pipes are synchronous. [LAW:single-enforcer]
+
 ## The wire is spelled twice
 
 The protocol lives in TypeScript and is copied into the Rust client as literal constants: version, frame cap and header, timeouts, error codes, diagnostic styling, and the code points the sanitizer neutralizes. The protocol check compares every copied constant across the two runtimes, and a missing anchor counts as drift. Change a mirrored constant in both runtimes in one commit. When you add a mirrored constant, add a row to the check. The same check also covers the hint code both runtimes share, the vendored launcher's statusline push, and which subcommands only the native client knows.

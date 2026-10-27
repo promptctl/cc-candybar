@@ -989,12 +989,24 @@ describe("runCheck — the argv edge", () => {
   }> {
     let stdout = "";
     let stderr = "";
+    // A stream's write takes the text, then it is written: the delivery
+    // (src/cli-plan.ts) exits only once each stream has said so.
+    const taken =
+      (sink: (text: string) => void): typeof process.stdout.write =>
+      (chunk: unknown, ...rest: unknown[]) => {
+        sink(String(chunk));
+        const cb = rest.find((a) => typeof a === "function") as
+          | (() => void)
+          | undefined;
+        cb?.();
+        return true;
+      };
     const out = jest
       .spyOn(process.stdout, "write")
-      .mockImplementation((chunk) => ((stdout += String(chunk)), true));
+      .mockImplementation(taken((t) => (stdout += t)));
     const err = jest
       .spyOn(process.stderr, "write")
-      .mockImplementation((chunk) => ((stderr += String(chunk)), true));
+      .mockImplementation(taken((t) => (stderr += t)));
     const exit = jest.spyOn(process, "exit").mockImplementation(((
       code?: number,
     ) => {

@@ -5,7 +5,7 @@
 // with constructed snapshots, the same way daemon-debug.test.ts drives the
 // introspector.
 
-import { formatDebug } from "../src/daemon/client-debug";
+import { debugPlan, formatDebug } from "../src/daemon/client-debug";
 import type { DebugSnapshot, VarSnapshot } from "../src/daemon/debug-types";
 
 describe("formatDebug", () => {
@@ -118,5 +118,38 @@ describe("formatDebug", () => {
     } as unknown as Extract<DebugSnapshot, { what: "config" }>["config"];
     const out = formatDebug({ what: "config", config });
     expect(out).toContain('"palette": "dracula"');
+  });
+});
+
+// [LAW:verifiable-goals] The text/exit-code contract of the debug CLI is a
+// plan value (src/cli-plan.ts delivers it), so it is pinned here without a
+// process.
+describe("debugPlan — the text/exit-code contract", () => {
+  const snap: DebugSnapshot = { what: "vars", vars: [] };
+
+  it("JSON mode carries the snapshot on stdout and exits 0", () => {
+    const plan = debugPlan("vars", { kind: "ok", value: snap }, true);
+    expect(plan.code).toBe(0);
+    expect(plan.stderr).toBe("");
+    expect(JSON.parse(plan.stdout)).toEqual(snap);
+  });
+
+  it("text mode carries the formatted projection", () => {
+    expect(debugPlan("vars", { kind: "ok", value: snap }, false)).toEqual({
+      stdout: formatDebug(snap),
+      stderr: "",
+      code: 0,
+    });
+  });
+
+  it("an unreachable daemon is a stderr line naming the projection, exit 1", () => {
+    const plan = debugPlan(
+      "segments",
+      { kind: "transient", cause: "timeout", message: "500ms" },
+      false,
+    );
+    expect(plan.stdout).toBe("");
+    expect(plan.stderr).toMatch(/^segments: daemon unavailable/);
+    expect(plan.code).toBe(1);
   });
 });
