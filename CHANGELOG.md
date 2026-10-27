@@ -1,3 +1,9 @@
+## [1.160.6](https://github.com/promptctl/cc-candybar/compare/v1.160.5...v1.160.6) (2026-10-27)
+
+### Bug Fixes
+
+* **doctor:** an empty config argument to doctor and check is no override, as the bar reads it (brandon-unfiled-3248.e3r) ([#463](https://github.com/promptctl/cc-candybar/issues/463)) ([a560eb1](https://github.com/promptctl/cc-candybar/commit/a560eb1cab9d992ac084c05c7a75465835666512))
+
 ## [1.160.5](https://github.com/promptctl/cc-candybar/compare/v1.160.4...v1.160.5) (2026-10-27)
 
 ### Bug Fixes
