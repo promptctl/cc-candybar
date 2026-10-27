@@ -1745,9 +1745,9 @@ const sameAddress = sameEach(
 
 export const sameDecor = sameBy<Decor>({ variation: is, shade: is });
 
-// Whether two disclosures are one band: one hue, at one depth, on one ground.
+// Whether two disclosures are one band: one decor (so one lineage), at one depth, on one ground.
 export const sameDisclosure = sameBy<Disclosure>({
-  hue: is,
+  decor: sameDecor,
   depth: is,
   ground: sameEach(sameBy<DecorEntry>({ hue: is, shade: is })),
 });
