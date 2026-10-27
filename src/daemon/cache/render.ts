@@ -16,6 +16,13 @@ import type { RefreshLedger } from "../../utils/refresh-ledger";
 import type { LinkSigner } from "../../click/link-signer.js";
 import type { SessionId } from "../session-id.js";
 import { fileHeldSettings } from "../setting-drafts.js";
+import { repoConfigs, repoConfigsPath } from "../repo-configs.js";
+import { REPO_PLUGIN_DIR } from "../../config/loader/plugin-folders.js";
+import {
+  repoUnreadNotice,
+  type ApprovedRepo,
+  type RepoGate,
+} from "../../config/loader/repo-gate.js";
 import {
   loadConfigChain,
   type LoadedChain,
@@ -234,6 +241,7 @@ export type ReloadedEntry = Readonly<
     | "cwd"
     | "configFile"
     | "configLayers"
+    | "repos"
     | "failedFile"
     | "lastError"
     | "lastWarning"
@@ -302,8 +310,8 @@ type LoadedPlugins = LoadedChain["installed"];
 export interface ConfigChain {
   readonly layers: readonly string[];
   readonly home: string;
-  // The session's project: where its repo-shipped plugins live.
-  readonly projectDir: string | null;
+  // The session's project, once approved: where the plugins it ships live.
+  readonly repo: ApprovedRepo | null;
 }
 
 // [LAW:nothing-unseen] Which plugins a daemon load merged, how many variables
@@ -368,6 +376,14 @@ export interface Teardown {
   readonly held: number;
 }
 
+// [LAW:nothing-unseen] Every (re)load's outcome, success and failure alike:
+// the files it resolved, what failed or warned, and which repositories it
+// left out awaiting the user's answer or declined by it.
+export function configLoadedLine(entry: ReloadedEntry): string {
+  const dirs = (ds: readonly string[]): string => ds.join(",") || "-";
+  return `config loaded projectDir=${entry.projectDir} cwd=${entry.cwd} files=${entry.configLayers.join(" < ") || "<bundled default>"} awaiting=${dirs(entry.repos.awaiting)} declined=${dirs(entry.repos.declined)} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warning=${entry.lastWarning === null ? "none" : JSON.stringify(entry.lastWarning)}`;
+}
+
 export function configDisposeLine(
   teardown: Teardown,
   released: number,
@@ -404,6 +420,9 @@ export interface CacheEntry {
   configLayers: readonly string[];
   // The file durable clicks write (resolveDslConfig's home).
   configHome: string;
+  // What the session's repositories contribute, as the last load's answers
+  // decided it: the strip asks for each one awaiting.
+  repos: RepoGate;
   failedFile: string | null;
   lastError: string | null;
   lastWarning: string | null;
@@ -538,7 +557,15 @@ function watchTargetsFor(
   const byDir = new Map<string, Set<string> | null>();
   // A plugin definition is part of the config it is listed in: installing,
   // fixing or editing one reloads the config as an edit to the file would.
-  const { roots, loaded, dropped, unreached } = entry.state.plugins;
+  const { loaded, dropped, unreached } = entry.state.plugins;
+  // The project's plugin folder is consulted whatever its answer: a plugin
+  // dropped there is a question to ask. The answers are the cache's own watch.
+  const roots = [
+    ...new Set([
+      ...entry.state.plugins.roots,
+      path.join(entry.projectDir, REPO_PLUGIN_DIR),
+    ]),
+  ];
   for (const candidate of [
     ...dslConfigCandidatePaths(entry.projectDir, entry.cwd, entry.configFile),
     ...roots,
@@ -588,6 +615,7 @@ function joinWarnings(parts: ReadonlyArray<string | null>): string | null {
 export type LoadOutcome = {
   readonly layers: readonly string[];
   readonly home: string;
+  readonly repos: RepoGate;
   readonly warning: string | null;
   // How long the attempt took, resolution to built state or to its error:
   // the one number that shows a load getting slower or faster.
@@ -634,7 +662,7 @@ export function buildRenderState(
     chain.layers,
     DEFAULT_DSL_CONFIG,
     { entered, warned: (w) => warnings.push(...w) },
-    { projectDir: chain.projectDir, cwd },
+    { repo: chain.repo, cwd },
   );
   // Past the chain, a failure is the one file's when there is one, and no
   // file's when several merged into what failed.
@@ -766,8 +794,9 @@ function declaredSources(
   return sources;
 }
 
-// [LAW:effects-at-boundaries] One attempt at the disk: resolve the path,
-// detect collisions, build the state. It touches no entry — the cache folds
+// [LAW:effects-at-boundaries] One attempt at the disk: read the user's
+// answers for repositories, resolve the path, detect collisions, build the
+// state. It touches no entry — the cache folds
 // the outcome onto a new entry (getOrCreate) or an existing one (reloadInto),
 // so the state it built is never constructed-then-discarded and the no-file
 // default is built once, not twice; `cc-candybar doctor`, which has no cache,
@@ -779,13 +808,19 @@ export function loadFromDisk(
   deps: StateDeps,
 ): LoadOutcome {
   const started = performance.now();
-  const resolution = resolveDslConfig(projectDir, cwd, configFile);
+  const resolution = resolveDslConfig(
+    repoConfigs().read(),
+    projectDir,
+    cwd,
+    configFile,
+  );
+  const { repos } = resolution;
   // `chain` loads its layers; `missing`/`unreadable` build the bundled
   // default — what distinguishes them is a notice, below, not a load path.
   const chain: ConfigChain = {
     layers: resolution.kind === "chain" ? resolution.layers : [],
     home: resolution.home,
-    projectDir,
+    repo: repos.plugins,
   };
 
   // [LAW:dataflow-not-control-flow] Advisories run every load, independent
@@ -799,6 +834,7 @@ export function loadFromDisk(
   const advisories = [
     detectConfigCollisions(projectDir, cwd),
     configResolutionNotice(resolution),
+    repoUnreadNotice(repos),
   ];
 
   // [LAW:dataflow-not-control-flow] A failure at any step — parse,
@@ -823,6 +859,7 @@ export function loadFromDisk(
       layers: chain.layers,
       home: chain.home,
       ms: Math.round(performance.now() - started),
+      repos,
       failedFile: failing,
       warning: joinWarnings(advisories),
       state: null,
@@ -838,6 +875,7 @@ export function loadFromDisk(
     layers: chain.layers,
     home: chain.home,
     ms: Math.round(performance.now() - started),
+    repos,
     warning: joinWarnings(advisories),
     state,
     error: null,
@@ -851,12 +889,12 @@ export function loadFromDisk(
 // load's, and the default earns none by program invariant.
 export function fallbackState(
   cwd: string,
-  projectDir: string,
+  repo: ApprovedRepo | null,
   deps: StateDeps,
 ): DslRenderState {
-  // The entry's own project: the seed watches its repo's plugin root, so a
-  // plugin installed there after the failed load reloads.
-  return buildRenderState(cwd, { layers: [], home: "", projectDir }, [], deps);
+  // The failed load's approved project: the seed draws the plugins it ships,
+  // as the load would have.
+  return buildRenderState(cwd, { layers: [], home: "", repo }, [], deps);
 }
 
 // The scopes a render cache entry and a session's view declare.
@@ -1160,6 +1198,12 @@ export class RenderCache<
   F extends ViewFacts = ViewFacts,
 > {
   private readonly entries = new Map<string, CacheEntry>();
+  // [LAW:one-source-of-truth] The user's answers for repositories are one
+  // fact for the whole daemon, so one watch follows them, never one per
+  // entry: they sit in the state directory beside the daemon's log, and a
+  // watch there wakes on every log line. The daemon makes that directory (the
+  // link key) before it builds the cache.
+  private readonly answersWatch: WatcherHandle;
   private sweep: ReturnType<typeof setInterval> | null = null;
   private closed = false;
   // Every state the map serves or served, until reclaimed.
@@ -1209,6 +1253,12 @@ export class RenderCache<
     this.budgetBytes = opts.budgetBytes;
     this.maxEntries = opts.maxEntries ?? MAX_ENTRIES;
     this.observers = opts.observers ?? {};
+    const { dir, name } = nearestWatchTarget(repoConfigsPath());
+    this.answersWatch = deps.watchers.acquire(
+      `repo-configs:${dir}/${name}`,
+      { files: [], dirs: [{ path: dir, filenames: [name] }] },
+      () => this.reloadEvery(),
+    );
   }
 
   // The compile a served state carries for `key`, else a new one — which the
@@ -1264,10 +1314,12 @@ export class RenderCache<
       configFile,
       configLayers: [],
       configHome: "",
+      repos: loaded.repos,
       failedFile: null,
       lastError: loaded.error,
       lastWarning: loaded.warning,
-      state: loaded.state ?? fallbackState(cwd, projectDir, this.deps),
+      state:
+        loaded.state ?? fallbackState(cwd, loaded.repos.plugins, this.deps),
       watcher: null,
       watcherKey: null,
     };
@@ -1583,6 +1635,7 @@ export class RenderCache<
     this.closed = true;
     if (this.sweep !== null) clearInterval(this.sweep);
     this.sweep = null;
+    this.answersWatch.release();
     const entries = this.entries.size;
     for (const [key, entry] of this.entries) this.drop(key, entry, "close");
     // [LAW:one-source-of-truth] Every state left in `holds` is retired and
@@ -1822,6 +1875,19 @@ export class RenderCache<
     this.observers.onReload?.(entry, sessions);
   }
 
+  // Every entry, under the answers now on disk: any of them may draw from a
+  // repository. The live map is walked, so an entry a reload's `fit` evicts
+  // is skipped, never reloaded back to life.
+  private reloadEvery(): void {
+    // [LAW:nothing-unseen] Why every entry is about to reload, as a config
+    // edit's reload says which entry it was for.
+    this.log(
+      "info",
+      `repo-config answers changed, reloading entries=${this.entries.size}`,
+    );
+    for (const entry of this.entries.values()) this.reloadInto(entry);
+  }
+
   // [LAW:single-enforcer] One watcher-rebind decision per reload: the watch
   // target set is DERIVED from disk (which candidate resolved, which
   // ancestor directories exist right now), and the entry rebinds exactly when
@@ -1832,6 +1898,7 @@ export class RenderCache<
   private refreshWatcher(entry: CacheEntry, loaded: LoadOutcome): void {
     entry.configLayers = loaded.layers;
     entry.configHome = loaded.home;
+    entry.repos = loaded.repos;
     entry.failedFile = loaded.error === null ? null : loaded.failedFile;
     const targets = watchTargetsFor(entry, loaded.layers);
     // [LAW:one-source-of-truth] WatcherRegistry shares slots by key and keeps

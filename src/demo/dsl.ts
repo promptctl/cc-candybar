@@ -23,6 +23,8 @@
 // populate, exactly as the daemon re-renders on each status-line tick.
 
 import { linkSignerFromKeyFile } from "../daemon/link-key.js";
+import { repoGateAt } from "../daemon/repo-configs.js";
+import { repoGateLines } from "../config/loader/repo-gate.js";
 import { UNFOLLOWED_FEEDS } from "../config/lanes.js";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
@@ -109,11 +111,12 @@ const sessionState = new SessionState();
 // earns are reported whether or not it goes on to load, as the daemon's strip
 // and `cc-candybar check` report them.
 function loadState(): ReturnType<typeof buildRenderState> {
-  const advisories: Array<string | null> = [];
+  const repos = repoGateAt(cwd);
+  const advisories: Array<string | null> = [...repoGateLines(repos)];
   try {
     return buildRenderState(
       cwd,
-      { layers: [configPath], home: configPath, projectDir: cwd },
+      { layers: [configPath], home: configPath, repo: repos.plugins },
       advisories,
       {
         sessionState,

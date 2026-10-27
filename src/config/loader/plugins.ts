@@ -31,6 +31,7 @@ import { listResolvablePaletteNames } from "../../themes/policy.js";
 import { ConfigError, type ConfigIssue } from "./diagnostics.js";
 import { resolveUserPath } from "../../utils/user-path.js";
 import { type Checkout } from "../../utils/git-root.js";
+import type { ApprovedRepo } from "./repo-gate.js";
 import {
   isPlainObject,
   describeType,
@@ -87,9 +88,9 @@ export interface DropCause {
 
 // What a definition's paths resolve against beyond its own directory.
 export interface PluginContext {
-  // The session's project: where its repo-shipped plugins live. Null where no
-  // project is known.
-  readonly projectDir: string | null;
+  // The session's project, once the user approved it: where the plugins it
+  // ships live. Null where none is known or approved.
+  readonly repo: ApprovedRepo | null;
   // The checkout the session works in, for a `data: { checkout }` path; null
   // where no session is known.
   readonly checkout: Checkout | null;

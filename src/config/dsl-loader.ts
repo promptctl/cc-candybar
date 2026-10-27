@@ -95,6 +95,7 @@ import {
   type PluginLayer,
 } from "./loader/plugins.js";
 import { installedPlugins } from "./loader/plugin-folders.js";
+import type { ApprovedRepo } from "./loader/repo-gate.js";
 import { type Checkout, checkoutOf } from "../utils/git-root.js";
 
 // ─── Public barrel ───────────────────────────────────────────────────────────
@@ -193,7 +194,7 @@ export interface LoadContext extends PluginContext {
 // A load with no session and nothing beneath the bundled default: a
 // `data: { checkout }` plugin drops, naming why.
 export const NO_PROJECT: LoadContext = {
-  projectDir: null,
+  repo: null,
   checkout: null,
   beneath: { dropped: [], rendering: new Map() },
 };
@@ -278,7 +279,7 @@ function installedLayer(
   // checkout reads the same data, and the next load after a `.git` appears
   // above a directory reads the new checkout's. Nothing watches for that
   // `.git`: an ancestor watch per session is the cost, a reload the remedy.
-  const slot = JSON.stringify([ctx.projectDir, ctx.checkout?.root ?? null]);
+  const slot = JSON.stringify([ctx.repo, ctx.checkout?.root ?? null]);
   const hit = byProject.get(slot);
   if (hit?.key === key) return hit.layer;
   const layer = applyPlugins(
@@ -307,7 +308,7 @@ export function definitionProblems(
 ): readonly DroppedPlugin[] {
   return applyPlugins(
     definitions,
-    { projectDir: null, checkout },
+    { repo: null, checkout },
     { config: dflt, rendering: new Map() },
     (c, plugin, replaces) =>
       checkPlugin(c, plugin, replaces, "<plugin install>", undefined),
@@ -356,14 +357,14 @@ export function loadConfigChain(
   // [LAW:single-enforcer] The one place a session's working directory
   // becomes the checkout its plugins' data paths resolve against.
   const ctx: PluginContext = {
-    projectDir: session.projectDir,
+    repo: session.repo,
     checkout: session.cwd === null ? null : checkoutOf(session.cwd),
   };
   // [LAW:one-source-of-truth] Installed plugins are the layer every file
   // merges over: bundled < installed < the chain's files (and what each
   // lists). A file names an installed plugin's segment exactly as it names a
   // bundled one.
-  const found = installedPlugins(ctx.projectDir);
+  const found = installedPlugins(ctx.repo);
   const merged = installedLayer(found.definitions, ctx, dflt, allowedPalettes);
   const plugins = {
     ...merged,
@@ -446,9 +447,10 @@ export function loadConfigChain(
   }
 }
 
-// The session a chain loads for: its project, and the directory it works in.
+// The session a chain loads for: its approved project, and the directory it
+// works in.
 export interface SessionDirs {
-  readonly projectDir: string | null;
+  readonly repo: ApprovedRepo | null;
   readonly cwd: string | null;
 }
 

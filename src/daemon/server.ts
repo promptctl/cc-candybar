@@ -70,7 +70,9 @@ import type {
 import { parseSessionId, type SessionId } from "./session-id";
 import { createPayloadProviders } from "./payload-providers";
 import { RefreshLedger } from "../utils/refresh-ledger";
+import { repoQuestions } from "./repo-configs";
 import {
+  configLoadedLine,
   RenderCache,
   renderCacheBudget,
   type CacheEntry,
@@ -447,10 +449,7 @@ const renderCache = new RenderCache<SessionSource, CheckedRenderRequest>(
       // kept rendering last-known-good behind an error, or resolved to a
       // different file. Same info level as the detection line.
       onReload: (entry, sessions) => {
-        dlog(
-          "info",
-          `config loaded projectDir=${entry.projectDir} cwd=${entry.cwd} files=${entry.configLayers.join(" < ") || "<bundled default>"} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warning=${entry.lastWarning === null ? "none" : JSON.stringify(entry.lastWarning)}`,
-        );
+        dlog("info", configLoadedLine(entry));
         // A reload changes the bar of every session drawn from the entry,
         // even one that failed and kept the old config: its strip says so.
         for (const sessionId of sessions) frameFeeds.wake(sessionId, "reload");
@@ -2435,9 +2434,12 @@ function drawRender(
       : [{ kind: "load" as const, message: entry.lastWarning }]),
     ...renderWarnings,
   ];
+  // [LAW:single-enforcer] Each repository awaiting the user's answer asks,
+  // in every session drawn from the entry, until one of them answers.
+  const questions = repoQuestions(entry.repos, sessionId, linkSigner);
   const diagnostics = collectDiagnostics(
     combinedError,
-    updates,
+    [...updates, ...questions],
     warnings.map((w) => w.message).join("\n"),
   );
   const g = gitService.getStats();
@@ -2498,6 +2500,8 @@ function drawRender(
     err: combinedError ? "Y" : "N",
     clickError: clickHold.kind === "none" ? "-" : clickHold.kind,
     upd: String(updates.length),
+    // How many repositories the strip asked about.
+    ask: String(questions.length),
     warn: warned,
   });
   return {

@@ -118,9 +118,12 @@ import {
   VERB_DOCTOR_PROBE,
   VERB_SLASH,
   VERB_RUN,
+  VERB_REPO_CONFIG,
   type EvaluatedRun,
 } from "../../click/wire";
 import type { LinkSigner } from "../../click/link-signer";
+import { repoAnswerFields, repoConfigs } from "../repo-configs";
+import { withAnswer, type RepoAnswer } from "../../config/loader/repo-gate";
 import type { Runs, RunRequest } from "../runs";
 import type { DeclaredSources } from "../render-payload";
 import { sessionEnv } from "../session-env";
@@ -741,8 +744,11 @@ function nestOf(ctx: DaemonContext, sid: string): DisclosureNest {
   return origin === null ? NO_NEST : disclosureNest(ctx.configFor(origin));
 }
 
+// [LAW:single-enforcer] The home as the render resolves it, under the same
+// answers: a click's chain leaves out what the bar's leaves out.
 function originHome(origin: RenderOrigin): ConfigHome {
   return durableConfig(
+    repoConfigs().read(),
     origin.projectDir,
     origin.cwd,
     origin.configFile ?? undefined,
@@ -1566,6 +1572,33 @@ const run: VerbHandler = (value, ctx) => {
   ctx.runs.start(request);
 };
 
+// ─── Repository configs (brandon-unfiled-3248.kezw) ─────────────────────────
+
+// [LAW:parse-dont-validate] An answer is recorded only when its mac verifies:
+// the bar drew it, for this session, for this directory and this answer. The
+// book lives beside the link key, and the render cache watches it, so every
+// bar reloads; the clicking session's reloads before the click answers, as
+// save's does.
+const repoConfig: VerbHandler = (value, ctx) => {
+  const [sessionId = "", dir = "", answer = "", mac = ""] = decodeWire(() =>
+    decodeSegments(value),
+  );
+  const sid = requireSessionId(sessionId);
+  // Signed, so it is an answer the bar offered.
+  const answered = answer as RepoAnswer;
+  if (!ctx.links.verify(repoAnswerFields(sid, dir, answered), mac)) {
+    throw new BadVerbArgs(
+      "the answer's signature does not match what it carries: it was not drawn by this daemon",
+    );
+  }
+  const filed = repoConfigs().update((book) => withAnswer(book, dir, answered));
+  if (filed.kind === "failed") {
+    throw new Error(`${dir} was not ${answered}: ${filed.reason}`);
+  }
+  ctx.dlog("info", `repo-config: ${dir} ${answered} (session=${sid})`);
+  ctx.reloadConfig(sessionOrigin(ctx, sid));
+};
+
 // ─── Registry ───────────────────────────────────────────────────────────────
 
 // [LAW:one-source-of-truth] The LEAF verbs — every click effect that does real
@@ -1646,6 +1679,7 @@ const LEAF_VERBS = new Map<string, VerbHandler>([
   [VERB_DOCTOR_PROBE, doctorProbe],
   [VERB_SLASH, slash],
   [VERB_RUN, run],
+  [VERB_REPO_CONFIG, repoConfig],
 ]);
 
 // [LAW:one-source-of-truth] The verbs whose handler splits its value into
@@ -1670,6 +1704,7 @@ export const SEGMENTED_VERBS: ReadonlySet<string> = new Set([
   VERB_DOCTOR_MARK,
   VERB_SLASH,
   VERB_RUN,
+  VERB_REPO_CONFIG,
 ]);
 
 // [LAW:one-source-of-truth] The verbs whose FIRST wire segment is the session
@@ -1698,6 +1733,7 @@ const SESSION_FIRST_VERBS: ReadonlySet<string> = new Set([
   VERB_DOCTOR_MARK,
   VERB_SLASH,
   VERB_RUN,
+  VERB_REPO_CONFIG,
   VERB_LOAD_CONFIG,
 ]);
 

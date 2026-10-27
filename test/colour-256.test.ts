@@ -219,7 +219,7 @@ async function closedBars(): Promise<{
   render: (theme: string, colorCompatibility: ColorCompatibility) => Chars;
   dispose: () => void;
 }> {
-  const prepared = await prepareConfig([], process.cwd(), [], instantOf(new Date()));
+  const prepared = await prepareConfig([], null, process.cwd(), [], instantOf(new Date()));
   return {
     render: (theme, colorCompatibility) =>
       drawnChars(

@@ -56,6 +56,7 @@ import {
 import { claudeConfigDir, detectClaudeConfigDir } from "../src/claude-settings";
 import type { ClientHints } from "../src/daemon/protocol";
 import type { StatsSnapshot } from "../src/daemon/stats";
+import { answerRepo } from "./helpers/repo-approval";
 
 jest.setTimeout(30_000);
 
@@ -79,6 +80,8 @@ test("the doctor's config row reports the session's own config load", async () =
   );
   const projectConfig = path.join(projectDir, ".cc-candybar.json5");
   writeFileSync(projectConfig, `{ helpers: { idle: "x" } }`);
+  // The project's config is the session's own: the user approved it.
+  answerRepo(projectDir, "approved", env);
 
   let daemon: RunningDaemon | undefined;
   try {
@@ -435,6 +438,7 @@ test("a bar whose only motion is a template's fails effect refresh", async () =>
   const barOf = (template: string): string =>
     `{ segments: { cell: { template: ${JSON.stringify(template)} } }, root: { h: ["cell"] } }`;
   writeFileSync(projectConfig, barOf('{{ frames 1 "a" 1 "b" }}'));
+  answerRepo(projectDir, "approved", env);
 
   let daemon: RunningDaemon | undefined;
   try {

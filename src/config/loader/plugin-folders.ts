@@ -8,16 +8,18 @@ import os from "node:os";
 import path from "node:path";
 import { DEFINITION_FILE, type DroppedPlugin } from "./plugins.js";
 import type { Unchecked } from "../../utils/presence.js";
+import type { ApprovedRepo } from "./repo-gate.js";
 
 /**
  * The plugin roots, lowest precedence first: each `$XDG_DATA_DIRS` entry
  * (package managers — Homebrew's `share/` — the first entry the most
  * important, so it comes last), then `$XDG_DATA_HOME` (the user's), then
- * `<projectDir>/.cc-candybar/plugins` (a repo's own, for sessions working
- * there). A nearer root's plugin replaces a farther one's of the same name.
- * Read from the daemon's environment, as the XDG config location is.
+ * `<repo>/.cc-candybar/plugins` (a repo's own, for sessions working there,
+ * once the user approved it). A nearer root's plugin replaces a farther
+ * one's of the same name. Read from the daemon's environment, as the XDG
+ * config location is.
  */
-export function pluginRoots(projectDir: string | null): readonly string[] {
+export function pluginRoots(repo: ApprovedRepo | null): readonly string[] {
   const dataDirs = (process.env.XDG_DATA_DIRS || defaultDataDirs())
     .split(":")
     .filter((d) => d !== "");
@@ -26,7 +28,7 @@ export function pluginRoots(projectDir: string | null): readonly string[] {
       .reverse()
       .map((d) => path.join(d, "cc-candybar", "plugins")),
     userPluginRoot(),
-    ...(projectDir === null ? [] : [path.join(projectDir, REPO_PLUGIN_DIR)]),
+    ...(repo === null ? [] : [path.join(repo, REPO_PLUGIN_DIR)]),
   ];
   // A root listed twice keeps its NEAREST position: `$XDG_DATA_HOME` named in
   // `$XDG_DATA_DIRS` too still outranks every package manager's root.
@@ -71,8 +73,8 @@ export interface InstalledPlugins {
 
 // [LAW:types-are-the-program] A root that does not exist holds no plugins;
 // one that cannot be listed is a fact the caller reports, never absence.
-export function installedPlugins(projectDir: string | null): InstalledPlugins {
-  const roots = pluginRoots(projectDir);
+export function installedPlugins(repo: ApprovedRepo | null): InstalledPlugins {
+  const roots = pluginRoots(repo);
   const byName = new Map<string, string>();
   const unchecked: Unchecked[] = [];
   const strays: DroppedPlugin[] = [];
