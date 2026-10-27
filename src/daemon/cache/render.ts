@@ -564,7 +564,7 @@ function watchTargetsFor(entry: CacheEntry): {
     try {
       return linkChain(candidate);
     } catch (e) {
-      unresolved.push({ path: candidate, reason: String(e) });
+      unresolved.push({ path: candidate, reason: (e as Error).message });
       return [candidate];
     }
   };

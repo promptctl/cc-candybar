@@ -89,6 +89,9 @@ describe("linkChain", () => {
     expect(linkChain(plain)).toEqual([plain]);
     const absent = path.join(dir, "absent.json5");
     expect(linkChain(absent)).toEqual([absent]);
+    // An ancestor that is a regular file: the path does not exist either.
+    const underFile = path.join(plain, "config.json5");
+    expect(linkChain(underFile)).toEqual([underFile]);
   });
 
   test("a link lists itself and its target, a dangling target included", () => {

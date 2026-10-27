@@ -4,7 +4,6 @@ import path from "node:path";
 import { execSync } from "node:child_process";
 import { EventEmitter } from "node:events";
 import {
-  DEBOUNCE_MS,
   WatcherRegistry,
   type Invalidation,
 } from "../src/daemon/cache/watchers";
@@ -13,6 +12,10 @@ import { GitService, type GitInfo } from "../src/segments/git";
 import { ok, type Outcome } from "../src/utils/outcome";
 import { Holds } from "../src/utils/holds";
 import { until } from "./helpers/until";
+import {
+  WATCH_LIVENESS_BUDGET_MS,
+  WATCH_RETRY_MS,
+} from "./helpers/reload-signal";
 import { laneOutcome } from "../src/utils/reading";
 
 function makeRepo(): string {
@@ -48,10 +51,14 @@ describe("WatcherRegistry", () => {
     try {
       const rewrite = setInterval(
         () => fs.writeFileSync(headPath, "ref: refs/heads/x\n"),
-        4 * DEBOUNCE_MS,
+        WATCH_RETRY_MS,
       );
       try {
-        await until(() => fired >= 1, "HEAD write fired the watch");
+        await until(
+          () => fired >= 1,
+          "HEAD write fired the watch",
+          WATCH_LIVENESS_BUDGET_MS,
+        );
       } finally {
         clearInterval(rewrite);
       }

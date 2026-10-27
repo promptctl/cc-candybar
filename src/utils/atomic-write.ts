@@ -52,7 +52,10 @@ export function linkChain(at: string): readonly string[] {
     try {
       stat = fs.lstatSync(file);
     } catch (e) {
-      if ((e as NodeJS.ErrnoException).code === "ENOENT") return chain;
+      // Absent, or under an ancestor that is a regular file: either way the
+      // path does not exist, so there is no link to follow and the chain ends.
+      const { code } = e as NodeJS.ErrnoException;
+      if (code === "ENOENT" || code === "ENOTDIR") return chain;
       throw e;
     }
     if (!stat.isSymbolicLink()) return chain;
