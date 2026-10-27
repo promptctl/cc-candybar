@@ -3,9 +3,7 @@
 // these catch are theme-specific — textual-dark's navy secondary beside its
 // orange accent, a muted plane that rounds onto the one above it at 256 — so
 // a sample proves nothing and the whole registry is walked, which takes
-// minutes. That is why this is an audit and not a test: it runs on the
-// nightly schedule alone (audits/README.md), never locally, never on a PR,
-// and nothing is gated on it.
+// minutes. That is why this is an audit and not a test (audits/README.md).
 //
 // [LAW:verifiable-goals] Each `describe` is one line of a Done-when
 // (candybar-render-ai7.2/.3, candybar-theme-colours-6fq5.e5n), pinned over the
@@ -241,8 +239,8 @@ describe("done-when: a decorated cell's text clears the text floor on every them
 });
 
 describe("done-when: an open trigger stands STATE_FLOOR off every closed cell of the row it stands in", () => {
-  // One test per depth and style: together they walk every theme × ground ×
-  // depth hue, past what one test's timeout allows.
+  // One test per depth and style, so a shortfall is reported under the depth
+  // and style it stands in rather than somewhere in one walk of everything.
   test.each(DRAWN.flatMap((drawnAt) => STYLE_NAMES.map((style) => [drawnAt, style] as const)))(
     "a shortfall is reported exactly where the state stands short of a cell as the terminal draws both, and by that much (depth %s, style %s)",
     (drawnAt, style) => {

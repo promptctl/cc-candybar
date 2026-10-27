@@ -39,7 +39,6 @@ import {
   inBin,
   nearestPoint,
   type Address,
-  type AddressStep,
   type Decor,
   type DecorEntry,
   type DecorHue,
@@ -503,8 +502,6 @@ describe("a band item is placed by its step", () => {
   test("an item wears one of its band's two items, picked by the step that places it along its row", () => {
     const disclosure: Disclosure = { hue: "primary", depth: 0, ground: FIRST_ROW };
     const at = (index: number, count: number): PlacedStep => ({ index, count, distribution: VDC });
-    const row = (index: number, count: number): AddressStep => ({ ...at(index, count), axis: "row" });
-    const cell = (index: number, count: number): AddressStep => ({ ...at(index, count), axis: "cell" });
     for (const palette of REGISTRY) {
       const { items } = bandFor(palette, disclosure, ColorDepth.TRUECOLOR);
       const [low, high] = [items[0]!.hex, items[1]!.hex];

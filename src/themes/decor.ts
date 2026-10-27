@@ -542,7 +542,7 @@ export type DecorRole =
 /**
  * [LAW:parse-dont-validate] The one unit that turns a palette role NAME into a
  * proven `ColorRgba`. Every shipped theme carries every role this module names
- * (the nightly colour audits check the whole registry), so an absence is registry
+ * (test/decor.test.ts checks the whole registry), so an absence is registry
  * drift or a hand-built palette missing a role — a loud failure naming both,
  * never a fallback colour. [LAW:no-silent-failure]
  */

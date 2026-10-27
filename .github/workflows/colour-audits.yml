@@ -1,11 +1,9 @@
 name: Colour audits
 
-# The registry-wide colour audits (audits/README.md): every bundled theme
-# under every style, ground and colour depth, walked through the colour model.
-# Minutes per file, so they run here nightly and nowhere else. No push, no
-# pull_request, no workflow_dispatch: an audit is never a status check on a
-# PR or on main, and nothing is ever gated on one. The runner itself refuses
-# any event but `schedule` (audits/jest.config.js).
+# The registry-wide colour audits. The rule they run under — nightly here and
+# nowhere else, gating nothing — is stated once, in audits/README.md; this
+# workflow's single trigger and the runner's guard (audits/jest.config.js)
+# are that rule enforced.
 on:
   schedule:
     - cron: '0 9 * * *'

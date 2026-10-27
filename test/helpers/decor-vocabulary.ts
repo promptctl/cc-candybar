@@ -45,14 +45,6 @@ export const FIRST_ROW: Ground = rowGround(
   [row(0, 2), cell(0, 5)],
 );
 
-/** ΔE in OKLab: Euclidean distance over the coordinates rich-js's `Oklch` exposes. */
-export function deltaE(a: ColorRgba, b: ColorRgba): number {
-  const lab = (c: ColorRgba): [number, number, number] => {
-    const o = Oklch.fromRgba(c);
-    const rad = (o.h * Math.PI) / 180;
-    return [o.l, o.c * Math.cos(rad), o.c * Math.sin(rad)];
-  };
-  const [l1, a1, b1] = lab(a);
-  const [l2, a2, b2] = lab(b);
-  return Math.hypot(l1 - l2, a1 - a2, b1 - b2);
-}
+/** ΔE in OKLab, as rich-js measures it — the same measure the colour model floors against. */
+export const deltaE = (a: ColorRgba, b: ColorRgba): number =>
+  Oklch.fromRgba(a).deltaE(Oklch.fromRgba(b));

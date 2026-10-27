@@ -1,12 +1,9 @@
 // The nightly colour audits' runner: the test suite's jest config over
 // audits/ instead of test/, with the hours these walks need.
 //
-// [LAW:single-enforcer] The one rule, enforced in the one place every audit
-// run passes through: an audit runs on GitHub's schedule and nowhere else.
-// Not locally, not on a PR, not on main, not by hand — a workflow_dispatch is
-// a "push" of a human's making and `schedule` is the only event name GitHub
-// gives a cron run. Nothing is gated on an audit, so no merge, release or
-// developer ever waits on one.
+// [LAW:single-enforcer] The rule audits/README.md states, enforced in the one
+// place every audit run passes through: `schedule` is the only event name
+// GitHub gives a cron run, so it is the only one admitted here.
 // [LAW:no-silent-failure] Any other caller fails here, loudly, before a
 // single test is collected.
 
