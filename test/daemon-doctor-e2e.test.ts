@@ -45,7 +45,7 @@ import {
   productionHandlerProbeEdge,
 } from "../src/doctor/handler-probe";
 import { PACKAGE_VERSION } from "../src/version";
-import { loggedWhen, renderLines } from "./helpers/daemon-log";
+import { loggedLines, renderLines } from "./helpers/daemon-log";
 import { crateDigest } from "../src/source-digest";
 import { productionInstallEdge } from "../src/doctor/edge";
 import { installOf, rateLimitsOf } from "../src/doctor/cli";
@@ -502,8 +502,8 @@ test("a bar whose only motion is a template's fails effect refresh", async () =>
     const doctorLines = (lines: readonly string[]) =>
       lines.filter((l) => l.includes("doctor:") && l.includes(`session=${SID}`));
     expect(
-      doctorLines(
-        await loggedWhen(env, (lines) => doctorLines(lines).length >= 4, "the doctor's four runs"),
+      (
+        await loggedLines(env, doctorLines, (found) => found.length >= 4, "the doctor's four runs")
       ).map((l) => l.match(/ frames=(\S+) /)?.[1]),
     ).toEqual(["1/0/0/0/0", "1/0/0/0/0", "0/1/0/0/0", "0/0/1/0/0"]);
   } finally {

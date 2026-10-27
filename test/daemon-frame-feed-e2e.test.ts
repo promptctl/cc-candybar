@@ -49,7 +49,12 @@ import { sendDaemonRequest } from "./helpers/daemon-wire";
 import { links } from "./helpers/ansi";
 import { HANDOFF_BUTTON } from "../src/daemon/lane-handoff";
 import { until } from "./helpers/until";
-import { renderLines } from "./helpers/daemon-log";
+import {
+  loggedLines,
+  logLines,
+  renderEventsOf,
+  renderLines,
+} from "./helpers/daemon-log";
 import { POLLED } from "../src/config/settings-menu";
 import {
   effectsUrl,
@@ -97,7 +102,6 @@ type Frame = { readonly at: number; readonly resp: Response };
 describe("a subscriber receives a session's frames as the bar moves", () => {
   let sockPath: string;
   let removeTmpDirs: () => void;
-  let daemonLog: string;
   let env: NodeJS.ProcessEnv;
   let projectDir: string;
   let daemon: RunningDaemon | undefined;
@@ -193,7 +197,6 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   beforeAll(async () => {
     const prepared = prepareIsolatedDaemonEnv("cc-candybar-feed-e2e");
     ({ sockPath, removeTmpDirs, env } = prepared);
-    daemonLog = path.join(prepared.env.XDG_STATE_HOME!, "cc-candybar", "daemon.log");
     projectDir = mkdtempSync(path.join(os.tmpdir(), "cc-candybar-feed-e2e-"));
     for (const [name, text] of Object.entries(CONFIGS))
       writeFileSync(path.join(projectDir, `${name}.json5`), text);
@@ -332,13 +335,12 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   // The closing summary of `sessionId`'s feed, once the daemon has logged it.
   const closedSummary = async (sessionId: string): Promise<string> => {
     const mark = `feed sid=${JSON.stringify(sessionId)} closed `;
-    let line: string | undefined;
-    await until(() => {
-      line = readFileSync(daemonLog, "utf8")
-        .split("\n")
-        .find((l) => l.includes(mark));
-      return line !== undefined;
-    }, "the feed's closing summary");
+    const [line] = await loggedLines(
+      env,
+      (lines) => lines.filter((l) => l.includes(mark)),
+      (found) => found.length > 0,
+      "the feed's closing summary",
+    );
     return line!;
   };
 
@@ -426,11 +428,24 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     const shown = outputs(frames).map(stripAnsi);
     expect(shown[0]).toContain("a still mark");
     expect(shown.some((text) => text.includes("the picked mark"))).toBe(true);
-    const opened = readFileSync(daemonLog, "utf8")
-      .split("\n")
-      .filter((l) => l.includes(`session view opened sid=${JSON.stringify(sid)} `))
-      .map((l) => / by=(\w+) /.exec(l)?.[1]);
-    expect(opened).toEqual(["request", "click", "click"]);
+    // [LAW:no-ambient-temporal-coupling] The log is written off the loop, so
+    // the frame a click's view-open draws can reach the test before the line
+    // that records the open lands. Wait for the lines; a wait that fails
+    // names the view-open lines that did land.
+    const opened = await loggedLines(
+      env,
+      (lines) =>
+        lines.filter((l) =>
+          l.includes(`session view opened sid=${JSON.stringify(sid)} `),
+        ),
+      (found) => found.length >= 3,
+      "three view-open lines for the session",
+    );
+    expect(opened.map((l) => / by=(\w+) /.exec(l)?.[1])).toEqual([
+      "request",
+      "click",
+      "click",
+    ]);
   });
 
   test("a subscriber that arrives before the session's first render receives it", async () => {
@@ -497,13 +512,11 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   // The daemon log's lines for `sid`: its render events, and how each of its
   // lane setups ended (src/daemon/lane-setup.ts).
   const renderEvents = (sid: string): string[] =>
-    readFileSync(daemonLog, "utf8")
-      .split("\n")
-      .filter((l) => l.includes(` render sid=${sid} `));
+    renderEventsOf(logLines(env), sid);
   const laneLines = (sid: string): string[] =>
-    readFileSync(daemonLog, "utf8")
-      .split("\n")
-      .filter((l) => l.includes(" lane: ") && l.includes(`(session=${sid})`));
+    logLines(env).filter(
+      (l) => l.includes(" lane: ") && l.includes(`(session=${sid})`),
+    );
   const setState = (sid: string, key: string, value: string): Promise<void> =>
     click(sockPath, effectsUrl([{ verb: VERB_SET_STATE, args: [sid, key, value] }]));
 
@@ -530,13 +543,19 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     expect(barText(band.frames[0]!)).toEqual(
       expect.stringContaining("a handed-off mark"),
     );
-    const before = events().length;
     const handedOff = await render(sockPath, sid, projectDir, {}, args("handoff"));
     expect(stripAnsi(handedOff).trim().split("\n")).toEqual([
       `🧪 the bar is drawn in the band above the prompt ${HANDOFF_BUTTON}`,
     ]);
-    await until(() => events().length > before, "the handoff render's event");
-    expect(events().at(-1)).toMatch(/ handoff=band /);
+    // [LAW:no-ambient-temporal-coupling] Waited for as the fact itself, not
+    // as one more event than a count read before the render: a retry of the
+    // first render can land its event after that count is taken.
+    await loggedLines(
+      env,
+      (lines) => renderEventsOf(lines, sid),
+      (found) => / handoff=band /.test(found.at(-1) ?? ""),
+      "the handoff render's event",
+    );
     const button = links(handedOff).find((l) => l.text.includes("⟲"));
     await click(sockPath, button!.url);
     // The reset took the lane's setting out of the file it was in.
