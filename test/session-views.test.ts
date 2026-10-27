@@ -487,7 +487,9 @@ test("a config load starts no view's source, and still names a session value tha
   const entry = cache.getOrCreate(dir, dir, undefined);
   expect(entry.lastError).toBeNull();
   expect(await entry.state!.registry.settled(5000)).toEqual([]);
-  expect(entry.lastWarning).toContain('Variable "unclosed":');
+  // The one value that cannot declare, and no view source faulted for want of
+  // a session.
+  expect(entry.lastWarning).toBe('Variable "unclosed": unclosed action');
   // The directory's one source, and nothing a session did not ask for.
   expect(shells).toBe(1);
   expect(runs("perDirectory")).toBe(1);
@@ -497,4 +499,5 @@ test("a config load starts no view's source, and still names a session value tha
   for (const name of ["byInput", "byState", "afterState", "byDepth"]) {
     expect([name, runs(name)]).toEqual([name, 1]);
   }
+  expect(shells).toBe(5);
 });
