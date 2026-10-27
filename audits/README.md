@@ -12,7 +12,7 @@ The rule, enforced by `audits/jest.config.js`:
 
 - They run on the nightly GitHub schedule (`.github/workflows/colour-audits.yml`) and nowhere else.
 - Never locally. `pnpm test` does not see this directory, and the audit runner refuses to start outside a scheduled run.
-- Never on a pull request, never on main, never by hand: the workflow has no `push`, `pull_request` or `workflow_dispatch` trigger.
+- Never on a pull request, never on a push to main, never by hand: the workflow has no `push`, `pull_request` or `workflow_dispatch` trigger.
 - Nothing is gated on them. A red nightly run is a report to read the next morning, not a check a merge waits on.
 
 A failing audit names the theme, style, ground and depth it found short, so

@@ -16,7 +16,7 @@
 
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { listThemePalettes, ColorRgba, SEAM_MIN_DELTA_E } from "@promptctl/rich-js";
-import { deltaE as deltaERgba } from "./helpers/decor-vocabulary";
+import { deltaE as deltaERgba } from "../src/themes/decor";
 import { POWERLINE } from "./helpers/powerline";
 import { prepareConfig, renderEffective } from "../src/check";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";

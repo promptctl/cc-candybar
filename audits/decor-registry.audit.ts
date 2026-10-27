@@ -58,6 +58,7 @@ import {
   type ShadeName,
   type VariationName,
   WHOLE_ROW,
+  deltaE,
 } from "../src/themes/decor";
 import {
   DRAWN,
@@ -65,7 +66,6 @@ import {
   SHADE_NAMES,
   VARIATION_NAMES,
   cell,
-  deltaE,
   drawnGround,
   row,
   shownAt,
@@ -488,12 +488,12 @@ describe("depth advances the hue, over every lineage", () => {
     // A bar trigger (depth 0) stands among its row's cells; a trigger inside a
     // band among what it is drawn beside there: that band's plane, and its
     // state, which the ✕ leading the trigger's row wears (b9w).
-    for (const { palette, hue, ground } of LINEAGES) {
+    for (const { palette, hue, ground, name } of LINEAGES) {
       let among: readonly ColorRgba[] = groundCells(palette, ground);
       for (const depth of [0, 1, 2, 3]) {
         const search = stateFor(palette, hueAtDepth(hue, depth), among, ColorDepth.TRUECOLOR);
         const band = bandFor(palette, { hue, depth, ground }, ColorDepth.TRUECOLOR);
-        expect(band.state.hex).toBe(search.state.hex);
+        expect([name, depth, band.state.hex]).toEqual([name, depth, search.state.hex]);
         among = [band.plane, search.anchor];
       }
     }
@@ -557,13 +557,13 @@ describe("a band is a plane", () => {
 
   test("the plane is the state receded toward background by the depth's recession, capped — or, where that breaks a band floor, toward foreground, then as far as the cap, then the nearest twelfth that holds", () => {
     let intoForeground = 0;
-    for (const { palette, hue, ground } of LINEAGES) {
+    for (const { palette, hue, ground, name } of LINEAGES) {
       for (const depth of [0, 1, 2, 3, 4]) {
         const { state, plane } = bandFor(palette, { hue, depth, ground }, ColorDepth.TRUECOLOR);
         const outer = depth === 0 ? [] : [bandFor(palette, { hue, depth: depth - 1, ground }, ColorDepth.TRUECOLOR).plane];
         const expected = recededPlane(palette, state, depth, outer);
         if (expected.plane.hex !== expected.background.hex) intoForeground++;
-        expect(plane.hex).toBe(expected.plane.hex);
+        expect([name, depth, plane.hex]).toEqual([name, depth, expected.plane.hex]);
       }
     }
     // Non-vacuous: some band's background plane breaks a floor.

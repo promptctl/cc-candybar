@@ -30,7 +30,6 @@ import {
   listThemePalettes,
   SEAM_MIN_DELTA_E,
 } from "@promptctl/rich-js";
-import { deltaE } from "../test/helpers/decor-vocabulary";
 
 import { CHECK_TODAY, checkPayload } from "../src/check";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
@@ -39,6 +38,7 @@ import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { SessionState } from "../src/daemon/session-state";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import {
+  deltaE,
   SHADES,
   VARIATIONS,
   type ShadeName,

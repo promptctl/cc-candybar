@@ -1,6 +1,6 @@
 // The vocabulary the colour-model tests and the nightly colour audits state
 // their facts in: the bundled registry, the depths a terminal draws at, an
-// address step, a cell as the SGR writer draws it, and ΔE in OKLab.
+// address step, and a cell as the SGR writer draws it.
 // [LAW:one-source-of-truth] Spelled once, so test/decor.test.ts and
 // audits/decor-registry.audit.ts measure the same thing by the same words.
 
@@ -44,5 +44,3 @@ export const FIRST_ROW: Ground = rowGround(
   { variation: VARIATIONS[floorOf("variation")], shade: SHADES[floorOf("shade")] },
   [row(0, 2), cell(0, 5)],
 );
-
-export { deltaE } from "../../src/themes/decor";

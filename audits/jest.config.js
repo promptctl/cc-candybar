@@ -11,8 +11,7 @@ import base from "../jest.config.js";
 
 if (process.env.GITHUB_EVENT_NAME !== "schedule") {
   throw new Error(
-    "the colour audits run on the nightly GitHub schedule only (.github/workflows/colour-audits.yml); " +
-      "they are never run locally, on a PR, on main, or by hand — see audits/README.md",
+    `the colour audits run on GitHub's nightly schedule only, not under "${process.env.GITHUB_EVENT_NAME ?? "no event"}" — audits/README.md`,
   );
 }
 
@@ -21,7 +20,8 @@ export default {
   rootDir: "..",
   roots: ["<rootDir>/audits"],
   testMatch: ["**/*.audit.ts"],
-  // One file is one walk of the whole registry; decor-registry alone is
-  // minutes per test.each row.
-  testTimeout: 60 * 60 * 1000,
+  // One test is one walk of the registry under a depth and style, which
+  // is minutes, never tens of them: a test that overruns this is hung, and
+  // failing it names it, where the job's own limit would name nothing.
+  testTimeout: 10 * 60 * 1000,
 };

@@ -18,6 +18,7 @@ import {
 import { floorOf } from "../src/config/globals-fields";
 import {
   BAND_FLOORS,
+  deltaE,
   VARIATIONS,
   SHADES,
   DECOR_HUES,
@@ -62,7 +63,7 @@ import {
   withSiblingAdded,
   type Shape,
 } from "./helpers/seeded-trees";
-import { DRAWN, FIRST_ROW, REGISTRY, SHADE_NAMES, VARIATION_NAMES, VDC, cell, deltaE, row } from "./helpers/decor-vocabulary";
+import { DRAWN, FIRST_ROW, REGISTRY, SHADE_NAMES, VARIATION_NAMES, VDC, cell, row } from "./helpers/decor-vocabulary";
 
 const DRACULA = getThemePalette("dracula");
 // The decor the address properties are stated under: a two-step variation, so
