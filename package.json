@@ -22,6 +22,7 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
+    "audit:colour": "jest --config audits/jest.config.js",
     "demo": "tsx src/demo/dsl.ts",
     "gallery": "node --require ./scripts/version-stamp.cjs --import tsx src/demo/gallery.ts",
     "bar": "node --require ./scripts/version-stamp.cjs --import tsx scripts/drive-bar.ts",
