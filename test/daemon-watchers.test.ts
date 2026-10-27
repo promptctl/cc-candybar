@@ -4,6 +4,7 @@ import path from "node:path";
 import { execSync } from "node:child_process";
 import { EventEmitter } from "node:events";
 import {
+  DEBOUNCE_MS,
   WatcherRegistry,
   type Invalidation,
 } from "../src/daemon/cache/watchers";
@@ -30,7 +31,11 @@ function rmrf(dir: string): void {
 }
 
 describe("WatcherRegistry", () => {
-  test("HEAD modification fires invalidation within debounce window", async () => {
+  // fs.watch has no ready signal (on macOS the FSEvents stream goes live
+  // after the call returns), so the write is re-applied until an event
+  // proves the watch was live — the only proof there is — never written once
+  // after a sleep that bets on it.
+  test("a write to a watched name fires invalidation", async () => {
     const repo = makeRepo();
     const reg = new WatcherRegistry();
     let fired = 0;
@@ -40,14 +45,20 @@ describe("WatcherRegistry", () => {
       { dirs: [{ path: path.dirname(headPath), filenames: ["HEAD"] }] },
       () => fired++,
     );
-    await new Promise((r) => setTimeout(r, 50));
-
-    fs.writeFileSync(headPath, "ref: refs/heads/x\n");
-    await new Promise((r) => setTimeout(r, 400));
-
-    expect(fired).toBeGreaterThanOrEqual(1);
-    reg.closeAll();
-    rmrf(repo);
+    try {
+      const rewrite = setInterval(
+        () => fs.writeFileSync(headPath, "ref: refs/heads/x\n"),
+        4 * DEBOUNCE_MS,
+      );
+      try {
+        await until(() => fired >= 1, "HEAD write fired the watch");
+      } finally {
+        clearInterval(rewrite);
+      }
+    } finally {
+      reg.closeAll();
+      rmrf(repo);
+    }
   });
 
   test("refcount: release closes watchers when refcount hits zero", async () => {

@@ -22,7 +22,7 @@ No variable is declared under another. The draw lands a read on the first declar
 
 There's no daemon-side overrides layer. A click that persists something edits the user's config file in place: it splices one value span and keeps every other byte, comments included. The daemon reloads through the same watcher a hand edit trips. A value written by the menu looks the same as a hand-edited one.
 
-A config file is watched through its directory by name, never by its own inode, because a write-then-rename replaces the inode and leaves an inode watch deaf with nothing to say so. A symlinked config is watched in two places, its own directory and its target's, because each directory reports only its own children: re-pointing the link appears in the first, and a write, which lands in the target, appears in the second.
+A config file is watched through its directory by name, never by its own inode, because a write-then-rename replaces the inode and leaves an inode watch deaf with nothing to say so. A symlinked config is watched in every directory along its link chain, by the name each hop has there, because each directory reports only its own children: re-pointing any link appears in that link's directory, and a write, which lands in the last target, appears in its.
 
 A click writes to the session's home file: the explicit path if there is one, else the user's XDG file, which is created on first write. It never writes a project or cwd layer, because that's somebody's repository.
 

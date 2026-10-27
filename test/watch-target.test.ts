@@ -1,7 +1,7 @@
 import fs from "fs";
 import os from "os";
 import path from "path";
-import { nearestWatchTarget, watchedPathsOf } from "../src/utils/watch-target";
+import { nearestWatchTarget } from "../src/utils/watch-target";
 
 describe("nearestWatchTarget", () => {
   let root: string;
@@ -43,51 +43,5 @@ describe("nearestWatchTarget", () => {
     fs.writeFileSync(path.join(root, "real", "data"), "");
     expect(before).toEqual(nearestWatchTarget(fs.realpathSync(viaLink)));
     expect(before.dir).toBe(path.join(root, "real"));
-  });
-});
-
-describe("watchedPathsOf", () => {
-  let root: string;
-  beforeEach(() => {
-    root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "wp-")));
-  });
-  afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
-
-  it("a plain path is watched in one place", () => {
-    const plain = path.join(root, "config.json5");
-    fs.writeFileSync(plain, "");
-    expect(watchedPathsOf(plain)).toEqual([plain]);
-    expect(watchedPathsOf(path.join(root, "absent.json5"))).toEqual([
-      path.join(root, "absent.json5"),
-    ]);
-  });
-
-  it("a link is watched as spelled and where a write to it lands", () => {
-    fs.mkdirSync(path.join(root, "dotfiles"));
-    const target = path.join(root, "dotfiles", "config.json5");
-    fs.writeFileSync(target, "");
-    const link = path.join(root, "config.json5");
-    fs.symlinkSync(target, link);
-    expect(watchedPathsOf(link)).toEqual([link, target]);
-  });
-
-  it("a dangling link is watched where its target will appear", () => {
-    const target = path.join(root, "dotfiles", "config.json5");
-    const link = path.join(root, "config.json5");
-    fs.symlinkSync(target, link);
-    expect(watchedPathsOf(link)).toEqual([link, target]);
-    expect(nearestWatchTarget(target)).toEqual({
-      dir: root,
-      name: "dotfiles",
-      leaf: false,
-    });
-  });
-
-  it("a link loop is watched as spelled", () => {
-    const a = path.join(root, "a");
-    const b = path.join(root, "b");
-    fs.symlinkSync(b, a);
-    fs.symlinkSync(a, b);
-    expect(watchedPathsOf(a)).toEqual([a]);
   });
 });
