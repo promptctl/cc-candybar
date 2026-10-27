@@ -558,8 +558,8 @@ function watchTargetsFor(
   // A plugin definition is part of the config it is listed in: installing,
   // fixing or editing one reloads the config as an edit to the file would.
   const { loaded, dropped, unreached } = entry.state.plugins;
-  // The project's plugin folder is consulted whatever its answer — a plugin
-  // dropped there is a question to ask — and so is the book of answers.
+  // The project's plugin folder is consulted whatever its answer: a plugin
+  // dropped there is a question to ask. The answers are the cache's own watch.
   const roots = [
     ...new Set([
       ...entry.state.plugins.roots,
@@ -568,7 +568,6 @@ function watchTargetsFor(
   ];
   for (const candidate of [
     ...dslConfigCandidatePaths(entry.projectDir, entry.cwd, entry.configFile),
-    repoConfigsPath(),
     ...roots,
     ...loaded,
     ...[...dropped, ...unreached].map((d) => d.path),
@@ -1199,6 +1198,12 @@ export class RenderCache<
   F extends ViewFacts = ViewFacts,
 > {
   private readonly entries = new Map<string, CacheEntry>();
+  // [LAW:one-source-of-truth] The user's answers for repositories are one
+  // fact for the whole daemon, so one watch follows them, never one per
+  // entry: they sit in the state directory beside the daemon's log, and a
+  // watch there wakes on every log line. The daemon makes that directory (the
+  // link key) before it builds the cache.
+  private readonly answersWatch: WatcherHandle;
   private sweep: ReturnType<typeof setInterval> | null = null;
   private closed = false;
   // Every state the map serves or served, until reclaimed.
@@ -1248,6 +1253,12 @@ export class RenderCache<
     this.budgetBytes = opts.budgetBytes;
     this.maxEntries = opts.maxEntries ?? MAX_ENTRIES;
     this.observers = opts.observers ?? {};
+    const { dir, name } = nearestWatchTarget(repoConfigsPath());
+    this.answersWatch = deps.watchers.acquire(
+      `repo-configs:${dir}/${name}`,
+      { files: [], dirs: [{ path: dir, filenames: [name] }] },
+      () => this.reloadEvery(),
+    );
   }
 
   // The compile a served state carries for `key`, else a new one — which the
@@ -1624,6 +1635,7 @@ export class RenderCache<
     this.closed = true;
     if (this.sweep !== null) clearInterval(this.sweep);
     this.sweep = null;
+    this.answersWatch.release();
     const entries = this.entries.size;
     for (const [key, entry] of this.entries) this.drop(key, entry, "close");
     // [LAW:one-source-of-truth] Every state left in `holds` is retired and
@@ -1861,6 +1873,19 @@ export class RenderCache<
     // in-place save OR a higher-precedence file appearing recovers.
     this.refreshWatcher(entry, loaded);
     this.observers.onReload?.(entry, sessions);
+  }
+
+  // Every entry, under the answers now on disk: any of them may draw from a
+  // repository. The live map is walked, so an entry a reload's `fit` evicts
+  // is skipped, never reloaded back to life.
+  private reloadEvery(): void {
+    // [LAW:nothing-unseen] Why every entry is about to reload, as a config
+    // edit's reload says which entry it was for.
+    this.log(
+      "info",
+      `repo-config answers changed, reloading entries=${this.entries.size}`,
+    );
+    for (const entry of this.entries.values()) this.reloadInto(entry);
   }
 
   // [LAW:single-enforcer] One watcher-rebind decision per reload: the watch

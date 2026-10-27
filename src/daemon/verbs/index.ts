@@ -1576,9 +1576,9 @@ const run: VerbHandler = (value, ctx) => {
 
 // [LAW:parse-dont-validate] An answer is recorded only when its mac verifies:
 // the bar drew it, for this session, for this directory and this answer. The
-// book lives beside the link key, and every entry watches it, so every bar
-// drawn from the directory reloads; the clicking session's reloads before
-// the click answers, as save's does.
+// book lives beside the link key, and the render cache watches it, so every
+// bar reloads; the clicking session's reloads before the click answers, as
+// save's does.
 const repoConfig: VerbHandler = (value, ctx) => {
   const [sessionId = "", dir = "", answer = "", mac = ""] = decodeWire(() =>
     decodeSegments(value),

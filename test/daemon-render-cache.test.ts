@@ -48,6 +48,7 @@ import { PRESET_FLOOR, presetRoot } from "../src/config/presets";
 import { viewFacts } from "./helpers/view-facts";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { answerRepo } from "./helpers/repo-approval";
+import { repoConfigsPath } from "../src/daemon/repo-configs";
 
 // Flatten a layout tree to its segment names, in pre-order — the post-`root`
 // equivalent of the old `config.layout.flatMap(r => r.segments)`.
@@ -86,7 +87,15 @@ function makeCache(
   const sessionState = new SessionState();
   const reloads = new ReloadSignal();
   const cache = new RenderCache(
-    { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, sessionState, watchers, log, source: SOURCES_NOTHING, declare: DECLARES_NOTHING },
+    {
+      storage: NO_PLUGIN_STORAGE,
+      signer: TEST_SIGNER,
+      sessionState,
+      watchers,
+      log,
+      source: SOURCES_NOTHING,
+      declare: DECLARES_NOTHING,
+    },
     {
       // Room for four entries over one compile: the fifth evicts the oldest.
       budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES,
@@ -674,6 +683,8 @@ describe("RenderCache", () => {
         throw new Error("observer boom");
       },
     });
+    // The cache's own watch, on the answers for repositories.
+    const own = watchers.size();
     try {
       expect(() => cache.getOrCreate(dir, dir, undefined)).toThrow(
         "observer boom",
@@ -681,13 +692,13 @@ describe("RenderCache", () => {
       // The entry — and the live registry + watcher it owns — is in the
       // cache, so eviction/dispose can still reach it.
       expect(cache.size).toBe(1);
-      expect(watchers.size()).toBe(1);
+      expect(watchers.size()).toBe(own + 1);
       // A second lookup finds it rather than building a duplicate: the
       // observer (which would throw again) does not run, and no second
       // watcher opens.
       cache.getOrCreate(dir, dir, undefined);
       expect(cache.size).toBe(1);
-      expect(watchers.size()).toBe(1);
+      expect(watchers.size()).toBe(own + 1);
     } finally {
       for (const fn of cleanups) fn();
       cleanup();
@@ -702,6 +713,7 @@ describe("RenderCache", () => {
         throw new Error("observer boom");
       },
     });
+    const own = watchers.size();
     try {
       for (let i = 0; i < 5; i++) {
         expect(() => cache.getOrCreate(`/p${i}`, `/p${i}`, undefined)).toThrow(
@@ -709,7 +721,7 @@ describe("RenderCache", () => {
         );
       }
       expect(cache.size).toBe(4);
-      expect(watchers.size()).toBe(4);
+      expect(watchers.size()).toBe(own + 4);
     } finally {
       for (const fn of cleanups) fn();
     }
@@ -723,11 +735,46 @@ describe("RenderCache", () => {
         inner = cache.getOrCreate(dir, dir, undefined);
       },
     });
+    const own = watchers.size();
     try {
       const outer = cache.getOrCreate(dir, dir, undefined);
       expect(inner).toBe(outer);
       expect(cache.size).toBe(1);
-      expect(watchers.size()).toBe(1);
+      expect(watchers.size()).toBe(own + 1);
+    } finally {
+      for (const fn of cleanups) fn();
+      cleanup();
+    }
+  });
+
+  // The answers for repositories are one watch for the whole cache, never one
+  // per entry, and a change to them reloads the entries under the new answer.
+  test("an entry follows the answers through the cache's one watch", async () => {
+    const { dir, cleanup } = mkConfigDir();
+    const lines: string[] = [];
+    const { cache, cleanups, reloads, watchers } = makeCache(
+      undefined,
+      (_level, msg) => lines.push(msg),
+    );
+    try {
+      const own = watchers.size();
+      const file = join(dir, ".cc-candybar.json5");
+      writeFileSync(file, `{ segments: { t: { template: "x" } } }`);
+      const entry = cache.getOrCreate(dir, dir, undefined);
+      expect(entry.configLayers).toEqual([file]);
+      expect(watchers.size()).toBe(own + 1);
+      // A rewrite of the book, so every retry the signal makes is an event.
+      const declined = JSON.stringify({
+        [realpathSync.native(dir)]: "declined",
+      });
+      await reloads.after(entry, () =>
+        writeFileSync(repoConfigsPath(), declined),
+      );
+      expect(entry.configLayers).toEqual([]);
+      expect(entry.repos.declined).toEqual([realpathSync.native(dir)]);
+      expect(lines).toContain(
+        "repo-config answers changed, reloading entries=1",
+      );
     } finally {
       for (const fn of cleanups) fn();
       cleanup();
@@ -768,7 +815,9 @@ describe("RenderCache", () => {
       lines.push(msg),
     );
     try {
-      cache.holdSession("/p0", "/p0", undefined, viewFacts("/p0", "s0"))[Symbol.dispose]();
+      cache
+        .holdSession("/p0", "/p0", undefined, viewFacts("/p0", "s0"))
+        [Symbol.dispose]();
       for (let i = 0; i < 5; i++)
         cache.getOrCreate(`/p${i}`, `/p${i}`, undefined);
       const evict = lines.filter((l) => l.startsWith("config disposed "));
@@ -776,13 +825,13 @@ describe("RenderCache", () => {
       expect(evict[0]).toMatch(
         /^config disposed reason=evict released=\d+ held=0$/,
       );
-      expect(
-        lines.filter((l) => l.startsWith("session view closed ")),
-      ).toEqual([
-        expect.stringMatching(
-          /^session view closed sid="s0" reason=evict released=[1-9]\d* held=0 /,
-        ),
-      ]);
+      expect(lines.filter((l) => l.startsWith("session view closed "))).toEqual(
+        [
+          expect.stringMatching(
+            /^session view closed sid="s0" reason=evict released=[1-9]\d* held=0 /,
+          ),
+        ],
+      );
 
       cache.reload("/p4", "/p4", undefined);
       const reload = lines.filter((l) =>
@@ -1017,13 +1066,25 @@ describe("RenderCache idle sweep", () => {
     const { dir, cleanup } = mkConfigDir();
     const watchers = new WatcherRegistry({ logger: () => {} });
     const cache = new RenderCache(
-      { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, sessionState: new SessionState(), watchers, source: SOURCES_NOTHING, declare: DECLARES_NOTHING },
+      {
+        storage: NO_PLUGIN_STORAGE,
+        signer: TEST_SIGNER,
+        sessionState: new SessionState(),
+        watchers,
+        source: SOURCES_NOTHING,
+        declare: DECLARES_NOTHING,
+      },
       { budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES },
     );
     try {
       let released = 0;
       {
-        using hold = cache.holdSession(dir, dir, undefined, viewFacts(dir, "s1"));
+        using hold = cache.holdSession(
+          dir,
+          dir,
+          undefined,
+          viewFacts(dir, "s1"),
+        );
         hold.view.holds.take("repo", () => () => {
           released++;
         });
@@ -1055,7 +1116,14 @@ describe("RenderCache idle sweep", () => {
     const { dir, cleanup } = mkConfigDir();
     const watchers = new WatcherRegistry({ logger: () => {} });
     const cache = new RenderCache(
-      { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, sessionState: new SessionState(), watchers, source: SOURCES_NOTHING, declare: DECLARES_NOTHING },
+      {
+        storage: NO_PLUGIN_STORAGE,
+        signer: TEST_SIGNER,
+        sessionState: new SessionState(),
+        watchers,
+        source: SOURCES_NOTHING,
+        declare: DECLARES_NOTHING,
+      },
       { budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES },
     );
     try {
@@ -1063,7 +1131,13 @@ describe("RenderCache idle sweep", () => {
         cache.getOrCreate(dir, dir, undefined).state,
         dir,
         viewFacts(dir, "s1"),
-        { sessionState: new SessionState(), source: SOURCES_NOTHING, declare: DECLARES_NOTHING, changed: () => {}, log: () => {} },
+        {
+          sessionState: new SessionState(),
+          source: SOURCES_NOTHING,
+          declare: DECLARES_NOTHING,
+          changed: () => {},
+          log: () => {},
+        },
       );
       let released = 0;
       view.holds.take("repo", () => () => {
@@ -1096,7 +1170,9 @@ describe("RenderCache idle sweep", () => {
       });
     const logs: string[] = [];
     const cache = new RenderCache(
-      { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER,
+      {
+        storage: NO_PLUGIN_STORAGE,
+        signer: TEST_SIGNER,
         sessionState,
         watchers,
         log: (_level, message) => logs.push(message),
@@ -1160,11 +1236,13 @@ describe("RenderCache idle sweep", () => {
       expect(view.holds.size).toBe(2);
       // Each declaration that moved a hold says so; the repeat of `a` and the
       // picks that moved no preset wrote nothing.
-      expect(logs.filter((l) => l.startsWith("session view declared"))).toEqual([
-        'session view declared sid="s1" acquired=2 released=0 held=2',
-        'session view declared sid="s1" acquired=1 released=1 held=2',
-        'session view declared sid="s1" acquired=1 released=1 held=2',
-      ]);
+      expect(logs.filter((l) => l.startsWith("session view declared"))).toEqual(
+        [
+          'session view declared sid="s1" acquired=2 released=0 held=2',
+          'session view declared sid="s1" acquired=1 released=1 held=2',
+          'session view declared sid="s1" acquired=1 released=1 held=2',
+        ],
+      );
 
       // Closing the view stops its declarations and releases what it held.
       cache.releaseIdle();
@@ -1194,7 +1272,15 @@ describe("RenderCache frames and pins", () => {
     const watchers = new WatcherRegistry({ logger: () => {} });
     const logs: string[] = [];
     const cache = new RenderCache(
-      { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, sessionState: new SessionState(), watchers, log: (_level, line) => logs.push(line), source: SOURCES_NOTHING, declare: DECLARES_NOTHING },
+      {
+        storage: NO_PLUGIN_STORAGE,
+        signer: TEST_SIGNER,
+        sessionState: new SessionState(),
+        watchers,
+        log: (_level, line) => logs.push(line),
+        source: SOURCES_NOTHING,
+        declare: DECLARES_NOTHING,
+      },
       // Room for four entries over one compile, and the view of one.
       { budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES + VIEW_BYTES },
     );
@@ -1205,12 +1291,24 @@ describe("RenderCache frames and pins", () => {
       for (const d of dirs) d.cleanup();
     };
     const request = (sessionId: string, dir: string): SessionView => {
-      using hold = cache.holdSession(dir, dir, undefined, viewFacts(dir, sessionId));
+      using hold = cache.holdSession(
+        dir,
+        dir,
+        undefined,
+        viewFacts(dir, sessionId),
+      );
       return hold.view;
     };
     const opened = (): string[] =>
       logs.filter((l) => l.startsWith("session view opened"));
-    return { cache, logs, dirs: dirs.map((d) => d.dir), close, request, opened };
+    return {
+      cache,
+      logs,
+      dirs: dirs.map((d) => d.dir),
+      close,
+      request,
+      opened,
+    };
   }
 
   test("holdView opens nothing: no entry, no view, before or after a session's request", () => {
@@ -1295,7 +1393,9 @@ describe("RenderCache frames and pins", () => {
       expect(cache.holdView("s1")?.view).toBe(view);
       expect(cache.latestView()?.sessionId).toBe("s3");
       cache.follow("s1", dirs[1]!, dirs[1]!, undefined);
-      expect(opened().at(-1)).toMatch(/^session view opened sid="s1" by=click /);
+      expect(opened().at(-1)).toMatch(
+        /^session view opened sid="s1" by=click /,
+      );
       {
         using hold = cache.holdView("s1");
         expect(hold?.entry.cwd).toBe(dirs[1]);
@@ -1318,7 +1418,13 @@ describe("RenderCache frames and pins", () => {
     const { dir, cleanup } = mkConfigDir();
     let opens = 0;
     const cache = new RenderCache(
-      { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, sessionState: new SessionState(), watchers, log: (_level, line) => logs.push(line), declare: DECLARES_NOTHING,
+      {
+        storage: NO_PLUGIN_STORAGE,
+        signer: TEST_SIGNER,
+        sessionState: new SessionState(),
+        watchers,
+        log: (_level, line) => logs.push(line),
+        declare: DECLARES_NOTHING,
         // The second view built over the entry, the reload's successor, fails.
         source: (view) => {
           if (++opens === 2) throw new Error("the successor broke");
@@ -1329,12 +1435,19 @@ describe("RenderCache frames and pins", () => {
     );
     try {
       {
-        using _request = cache.holdSession(dir, dir, undefined, viewFacts(dir, "s1"));
+        using _request = cache.holdSession(
+          dir,
+          dir,
+          undefined,
+          viewFacts(dir, "s1"),
+        );
       }
       const unpin = cache.pin("s1");
       cache.reload(dir, dir, undefined);
       expect(logs).toContainEqual(
-        expect.stringMatching(/^session view reopen failed sid="s1": Error: the successor broke/),
+        expect.stringMatching(
+          /^session view reopen failed sid="s1": Error: the successor broke/,
+        ),
       );
       // Frames find nothing, and open nothing; they find the error instead,
       // which a pin keeps across a sweep.
@@ -1342,10 +1455,17 @@ describe("RenderCache frames and pins", () => {
       expect(cache.holdView("s1")).toBeNull();
       expect(opens).toBe(2);
       cache.releaseIdle();
-      expect(String(cache.openFailure("s1")?.error)).toBe("Error: the successor broke");
+      expect(String(cache.openFailure("s1")?.error)).toBe(
+        "Error: the successor broke",
+      );
       // The session's next request opens its view, and the error goes.
       {
-        using _request = cache.holdSession(dir, dir, undefined, viewFacts(dir, "s1"));
+        using _request = cache.holdSession(
+          dir,
+          dir,
+          undefined,
+          viewFacts(dir, "s1"),
+        );
       }
       expect(cache.holdView("s1")).not.toBeNull();
       expect(cache.openFailure("s1")).toBeNull();
@@ -1363,7 +1483,13 @@ describe("RenderCache frames and pins", () => {
     const watchers = new WatcherRegistry({ logger: () => {} });
     const { dir, cleanup } = mkConfigDir();
     const cache = new RenderCache(
-      { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, sessionState: new SessionState(), watchers, log: () => {}, declare: DECLARES_NOTHING,
+      {
+        storage: NO_PLUGIN_STORAGE,
+        signer: TEST_SIGNER,
+        sessionState: new SessionState(),
+        watchers,
+        log: () => {},
+        declare: DECLARES_NOTHING,
         source: () => {
           throw new Error("the view broke");
         },
@@ -1371,7 +1497,9 @@ describe("RenderCache frames and pins", () => {
       { budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES + VIEW_BYTES },
     );
     try {
-      expect(() => cache.holdSession(dir, dir, undefined, viewFacts(dir, "s1"))).toThrow("the view broke");
+      expect(() =>
+        cache.holdSession(dir, dir, undefined, viewFacts(dir, "s1")),
+      ).toThrow("the view broke");
       expect(cache.openFailure("s1")).not.toBeNull();
       cache.releaseIdle();
       expect(cache.openFailure("s1")).toBeNull();
@@ -1391,7 +1519,13 @@ describe("RenderCache frames and pins", () => {
     const second = mkConfigDir();
     let opens = 0;
     const cache = new RenderCache(
-      { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, sessionState: new SessionState(), watchers, log: () => {}, declare: DECLARES_NOTHING,
+      {
+        storage: NO_PLUGIN_STORAGE,
+        signer: TEST_SIGNER,
+        sessionState: new SessionState(),
+        watchers,
+        log: () => {},
+        declare: DECLARES_NOTHING,
         source: (view) => {
           if (++opens === 1) throw new Error("the view broke");
           return SOURCES_NOTHING(view);
@@ -1401,7 +1535,9 @@ describe("RenderCache frames and pins", () => {
     );
     try {
       const facts = viewFacts(first.dir, "s1");
-      expect(() => cache.holdSession(first.dir, first.dir, undefined, facts)).toThrow("the view broke");
+      expect(() =>
+        cache.holdSession(first.dir, first.dir, undefined, facts),
+      ).toThrow("the view broke");
       const unpin = cache.pin("s1");
       cache.follow("s1", second.dir, second.dir, undefined);
       {
