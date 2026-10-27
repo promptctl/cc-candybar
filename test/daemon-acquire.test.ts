@@ -1077,24 +1077,27 @@ describe("spawn backoff under sustained non-convergence (brandon-daemon-lifecycl
 
       const grantedAtSimulatedMs: number[] = [];
       let simulatedElapsedMs = 0;
-      // Simulate 10 minutes of continuous statusline-tick pressure, probing
-      // once per simulated second (the natural render cadence).
-      for (let tick = 0; tick < 600; tick++) {
-        obtainDaemonKick({ spawn });
-        if (spawned > grantedAtSimulatedMs.length) {
-          grantedAtSimulatedMs.push(simulatedElapsedMs);
+      // [LAW:one-source-of-truth] The cooldown's age is Date.now() minus the
+      // record's mtime, so the test owns both: Date.now() is jest's fake
+      // clock, and each granted record is pinned to that clock. Backdating
+      // the mtime alone leaves real wall-clock time as a second clock, and on
+      // a loaded machine it pushes the age past the cap a tick early.
+      jest.useFakeTimers();
+      try {
+        // Simulate 10 minutes of continuous statusline-tick pressure, probing
+        // once per simulated second (the natural render cadence).
+        for (let tick = 0; tick < 600; tick++) {
+          obtainDaemonKick({ spawn });
+          if (spawned > grantedAtSimulatedMs.length) {
+            grantedAtSimulatedMs.push(simulatedElapsedMs);
+            const now = new Date(Date.now());
+            fs.utimesSync(spawnCooldownPath(), now, now);
+          }
+          simulatedElapsedMs += 1_000;
+          jest.advanceTimersByTime(1_000);
         }
-        simulatedElapsedMs += 1_000;
-        // Advance the cooldown file's mtime into the past by the same amount
-        // real wall-clock time would have — the file's age is the only clock
-        // claimSpawnCooldown reads.
-        try {
-          const st = fs.statSync(spawnCooldownPath());
-          const backdated = new Date(st.mtimeMs - 1_000);
-          fs.utimesSync(spawnCooldownPath(), backdated, backdated);
-        } catch {
-          // No cooldown file yet on the very first iteration before any grant.
-        }
+      } finally {
+        jest.useRealTimers();
       }
 
       // Fixed-rate floor: one spawn every 3s for 600s ≈ 200 spawns. The
