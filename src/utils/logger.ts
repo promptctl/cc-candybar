@@ -1,5 +1,15 @@
+// [LAW:one-source-of-truth] The debug channel's gate and its line shape, in
+// one place: `debug` emits a line now; `debugText` hands the same line to a
+// writer that delivers it itself (a one-shot command's plan), and is empty
+// when the channel is off.
+const debugOn = (): boolean => Boolean(process.env.CC_CANDYBAR_DEBUG);
+
+export function debugText(message: string): string {
+  return debugOn() ? `[DEBUG] ${message}\n` : "";
+}
+
 export function debug(message: string, ...args: unknown[]): void {
-  if (process.env.CC_CANDYBAR_DEBUG) {
+  if (debugOn()) {
     console.error(`[DEBUG] ${message}`, ...args);
   }
 }

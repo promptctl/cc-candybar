@@ -57,9 +57,11 @@ function showHelpText(): void {
 }
 
 // [LAW:dataflow-not-control-flow] Subcommand dispatch is data: argv[2] names
-// a handler. A one-shot handler folds its outcome into a plan and delivers it
-// through the one exit (src/cli-plan.ts); the daemon, the stream and the pane
-// own their own lifecycles. The
+// a handler. A handler whose body can outgrow a pipe buffer (stats, the debug
+// projections, check, doctor, schema, the render relay) folds its outcome
+// into a plan and delivers it through the one exit (src/cli-plan.ts); install
+// and plugin print short lines as they go; the daemon, the stream and the
+// pane own their own lifecycles. The
 // stdin-driven render takes flags only (`--config`), so a positional argv[2]
 // naming no handler is a mistake, refused rather than read as a render.
 // `lint` is an alias of `check` — one config verdict, one pipeline, one
@@ -230,7 +232,14 @@ echo '{"session_id":"test-session","workspace":{"project_dir":"/path/to/project"
     await exitWith({ stdout: plan.output, stderr: "", code: 0 });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error("Error generating statusline:", errorMessage);
+    // [LAW:no-silent-failure] Named for what was running: a subcommand whose
+    // delivery failed (a full disk under `check`) is reported as that
+    // subcommand, not as a statusline render.
+    const what =
+      process.argv[2]?.startsWith("-") === false
+        ? process.argv[2]
+        : "statusline";
+    console.error(`cc-candybar ${what}: ${errorMessage}`);
     process.exit(1);
   }
 }

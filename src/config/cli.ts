@@ -14,8 +14,8 @@ const EXIT_VALID = 0;
 const EXIT_USAGE = 2;
 
 // Read the build-generated JSON Schema for the config file shape (RawDslConfig),
-// or null when the artifact is absent. Pure read — `runSchema` owns the side
-// effects, so the locate-and-read path is testable.
+// or null when the artifact is absent. Pure read, folded by `schemaPlan` into a
+// plan that src/cli-plan.ts delivers, so the locate-and-read path is testable.
 export function loadSchemaText(): string | null {
   const schemaPath = locateSchema();
   return schemaPath === null ? null : fs.readFileSync(schemaPath, "utf-8");

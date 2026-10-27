@@ -39,5 +39,5 @@ test("a flags-only invocation is still the statusline render", () => {
   // Empty stdin: the render path's own failure, never the subcommand refusal.
   const r = run(["--config", "/nonexistent.json5"]);
   expect(r.stderr).not.toMatch(/unknown subcommand/);
-  expect(r.stderr).toMatch(/Error generating statusline/);
+  expect(r.stderr).toMatch(/^cc-candybar statusline: /m);
 });

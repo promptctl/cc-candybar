@@ -10,7 +10,7 @@
 // the plan carries.
 
 import process from "node:process";
-import { debug } from "./utils/logger";
+import { debugText } from "./utils/logger";
 
 // [LAW:dataflow-not-control-flow] The outcome → (streams, exit-code) mapping is
 // DATA: each command's fold returns one descriptor, and the two writes and the
@@ -33,23 +33,35 @@ const written = (stream: NodeJS.WritableStream, text: string): Promise<void> =>
     // Any other refusal rejects into the command's catch. The stream emits
     // the error as well as passing it to the callback, so the listener is
     // what keeps a hung-up reader from being an unhandled event.
-    const settled = (err?: Error | null): void =>
-      err && (err as NodeJS.ErrnoException).code !== "EPIPE"
-        ? reject(err)
-        : resolve();
+    // A clean write takes its listener off: the streams outlive every delivery
+    // a process makes (a test drives many through one worker), and a listener
+    // per delivery accumulates on them. A failed write leaves it on, for the
+    // emit that follows the callback; `once` removes it then.
+    const settled = (err?: Error | null): void => {
+      if (!err) {
+        stream.off("error", settled);
+        resolve();
+      } else if ((err as NodeJS.ErrnoException).code === "EPIPE") {
+        resolve();
+      } else {
+        reject(err);
+      }
+    };
     stream.once("error", settled);
     stream.write(text, settled);
   });
 
 export async function exitWith(plan: CliPlan): Promise<never> {
-  await Promise.all([
-    written(process.stdout, plan.stdout),
-    written(process.stderr, plan.stderr),
-  ]);
   // [LAW:nothing-unseen] The delivery's record, on the client's debug channel:
-  // what each stream took and the code the process ends with.
-  debug(
+  // what each stream took and the code the process ends with. It rides the
+  // plan's own stderr write, so it is waited for like the rest — a line
+  // written after the wait would be the one line the exit could drop.
+  const record = debugText(
     `delivered stdout=${plan.stdout.length} stderr=${plan.stderr.length} code=${plan.code}`,
   );
+  await Promise.all([
+    written(process.stdout, plan.stdout),
+    written(process.stderr, plan.stderr + record),
+  ]);
   process.exit(plan.code);
 }

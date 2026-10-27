@@ -30,8 +30,8 @@ test("a body larger than a pipe buffer reaches a piped reader whole, and the exi
   expect(r.status).toBe(0);
   expect(r.stdout).toHaveLength(BODY_BYTES);
   expect(r.stdout.endsWith("\n")).toBe(true);
-  // tsx adds a deprecation line of its own after the plan's.
-  expect(r.stderr.startsWith("advisory\n")).toBe(true);
+  // tsx adds a deprecation line of its own, whose position is tsx's.
+  expect(r.stderr).toContain("advisory\n");
 });
 
 test("a non-zero plan exits non-zero after its body is through", () => {
