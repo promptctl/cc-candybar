@@ -725,28 +725,29 @@ describe("the preset control's list carries the layout beneath it", () => {
     );
     expect(rows).toEqual({
       default: [
-        ["candybar.menu", "host", "directory", "gitaculous"],
+        ["candybar.menu", "candybar.fps", "host", "directory", "gitaculous"],
         ["model", "context", "autocompact", "cacheTimer", "block", "weekly", "activity"],
       ],
-      compact: [["candybar.menu", "directory", "gitaculous", "context"]],
+      compact: [["candybar.menu", "candybar.fps", "directory", "gitaculous", "context"]],
       verbose: [
-        ["candybar.menu", "directory", "gitaculous", "gitPr"],
+        ["candybar.menu", "candybar.fps", "directory", "gitaculous", "gitPr"],
         ["model", "context", "autocompact", "cacheTimer", "block", "weekly", "burnrate"],
         ["speed", "tokenSparkline"],
       ],
-      zen: [["candybar.menu", "directory", "context"]],
+      zen: [["candybar.menu", "candybar.fps", "directory", "context"]],
       git: [
-        ["candybar.menu", "host", "directory", "gitaculous", "gitPr"],
+        ["candybar.menu", "candybar.fps", "host", "directory", "gitaculous", "gitPr"],
         ["model", "context", "activity"],
       ],
       usage: [
-        ["candybar.menu", "model", "context", "autocompact", "cacheTimer"],
+        ["candybar.menu", "candybar.fps", "model", "context", "autocompact", "cacheTimer"],
         ["block", "weekly", "burnrate"],
         ["session", "today", "speed", "tokenSparkline"],
       ],
       dense: [
         [
           "candybar.menu",
+          "candybar.fps",
           "host",
           "directory",
           "gitaculous",
@@ -827,7 +828,7 @@ describe("the preset control's list carries the layout beneath it", () => {
     // for them whether or not this payload renders them (it renders no host,
     // context, cache timer, or activity).
     const placed = [
-      ["menu", "host", "directory", "gitaculous"],
+      ["menu", "fps", "host", "directory", "gitaculous"],
       ["model", "context", "autocompact", "cacheTimer", "block", "weekly", "activity"],
     ];
     expect(previewLabels(rt.render())).toEqual(placed);
