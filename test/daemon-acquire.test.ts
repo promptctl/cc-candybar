@@ -1060,6 +1060,18 @@ describe("daemon startup (bind-based singleton)", () => {
 // level (shutdownObserved). No new production code was needed for that half;
 // this file adds nothing that duplicates it.
 describe("spawn backoff under sustained non-convergence (brandon-daemon-lifecycle-gad.3)", () => {
+  // [LAW:one-source-of-truth] The cooldown's age is Date.now() minus the
+  // record's mtime. Under jest's fake timers Date.now() is the test's clock,
+  // but the filesystem stamps a freshly written record with the real clock,
+  // so every granted record is pinned to the fake clock and the age is
+  // exactly the simulated elapsed time. Backdating the mtime against real
+  // time instead leaves wall-clock as a second clock, and on a loaded
+  // machine it pushes the age across a window boundary a tick early.
+  const pinCooldownRecordToNow = (recordPath: string): void => {
+    const now = new Date();
+    fs.utimesSync(recordPath, now, now);
+  };
+
   test("consecutive kicks that never converge widen the cooldown and cap it — never worse than the fixed 3s floor, decaying toward 1/min", async () => {
     await withTempState(async () => {
       jest.resetModules();
@@ -1076,24 +1088,17 @@ describe("spawn backoff under sustained non-convergence (brandon-daemon-lifecycl
       };
 
       const grantedAtSimulatedMs: number[] = [];
-      let simulatedElapsedMs = 0;
-      // [LAW:one-source-of-truth] The cooldown's age is Date.now() minus the
-      // record's mtime, so the test owns both: Date.now() is jest's fake
-      // clock, and each granted record is pinned to that clock. Backdating
-      // the mtime alone leaves real wall-clock time as a second clock, and on
-      // a loaded machine it pushes the age past the cap a tick early.
       jest.useFakeTimers();
       try {
+        const t0 = Date.now();
         // Simulate 10 minutes of continuous statusline-tick pressure, probing
         // once per simulated second (the natural render cadence).
         for (let tick = 0; tick < 600; tick++) {
           obtainDaemonKick({ spawn });
           if (spawned > grantedAtSimulatedMs.length) {
-            grantedAtSimulatedMs.push(simulatedElapsedMs);
-            const now = new Date(Date.now());
-            fs.utimesSync(spawnCooldownPath(), now, now);
+            grantedAtSimulatedMs.push(Date.now() - t0);
+            pinCooldownRecordToNow(spawnCooldownPath());
           }
-          simulatedElapsedMs += 1_000;
           jest.advanceTimersByTime(1_000);
         }
       } finally {
@@ -1136,27 +1141,33 @@ describe("spawn backoff under sustained non-convergence (brandon-daemon-lifecycl
         return true;
       };
 
-      // Three consecutive non-converging spawns — streak climbs to 3, so the
-      // required window is SPAWN_COOLDOWN_MS * 8.
-      for (let i = 0; i < 3; i++) {
+      jest.useFakeTimers();
+      try {
+        // Three consecutive non-converging spawns — streak climbs to 3, so the
+        // required window is SPAWN_COOLDOWN_MS * 8. Each wait clears the
+        // widest window the streak can have reached so the next kick lands.
+        for (let i = 0; i < 3; i++) {
+          if (i > 0) jest.advanceTimersByTime(SPAWN_COOLDOWN_MS * 8 + 1_000);
+          obtainDaemonKick({ spawn });
+          pinCooldownRecordToNow(spawnCooldownPath());
+        }
+        expect(spawned).toBe(3);
+
+        // Just past the BASE window and well inside the backed-off one: the
+        // kick is refused, which is what makes the grant after the reset
+        // evidence of the reset rather than of the clock.
+        jest.advanceTimersByTime(SPAWN_COOLDOWN_MS + 500);
         obtainDaemonKick({ spawn });
-        const st = fs.statSync(spawnCooldownPath());
-        const backdated = new Date(st.mtimeMs - SPAWN_COOLDOWN_MS * 8 - 1_000);
-        fs.utimesSync(spawnCooldownPath(), backdated, backdated);
+        expect(spawned).toBe(3);
+
+        // The daemon FINALLY binds — server.ts's onListening calls this.
+        resetSpawnBackoff();
+
+        obtainDaemonKick({ spawn });
+        expect(spawned).toBe(4);
+      } finally {
+        jest.useRealTimers();
       }
-      expect(spawned).toBe(3);
-
-      // The daemon FINALLY binds — server.ts's onListening calls this.
-      resetSpawnBackoff();
-
-      // Backdate by just past the BASE window (not the backed-off one) —
-      // if the reset didn't take effect, this kick would still be denied.
-      const st = fs.statSync(spawnCooldownPath());
-      const backdated = new Date(st.mtimeMs - SPAWN_COOLDOWN_MS - 500);
-      fs.utimesSync(spawnCooldownPath(), backdated, backdated);
-
-      obtainDaemonKick({ spawn });
-      expect(spawned).toBe(4);
     });
   });
 });
