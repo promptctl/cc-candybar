@@ -105,21 +105,24 @@ function nativeNamesNodeLacks() {
   return reads.without(native, node, debug);
 }
 
-// A code is a member of the union, one `| "CODE"` line.
+// A code is any upper-case literal in the block, on either side. A narrower
+// form (`| "CODE"` lines, `"CODE" =>` arms) reads nothing from a layout it
+// did not foresee — a one-line union, an or-pattern arm — and a code that
+// vanishes from both sides passes silently. [LAW:no-silent-failure] A literal
+// that is not a code, in a trailing comment or a label, fails this row
+// loudly and by name instead.
 const errorCodes = memberSet(
   TS_PROTOCOL,
   /export type ErrorCode =[^;]+;/,
-  /^[ \t]*\| "([A-Z_]+)"/gm,
+  /"([A-Z_]+)"/g,
 );
 // The four decisions, from the first to the close of the last: the two that
 // decide by a code today, and the two beside them, so a code a decision comes
-// to spell is read wherever among them it lands. A code is one a match arm
-// names, `"CODE" =>` with or without a guard, never a literal that is not
-// decided by.
+// to spell is read wherever among them it lands.
 const followerCodes = memberSet(
   RS_FOLLOW,
   /^fn classify\([\s\S]+?^fn next_retry_ms\([\s\S]+?^\}/m,
-  /"([A-Z_]+)"\)?(?: if [^\n]+?)? =>/g,
+  /"([A-Z_]+)"/g,
 );
 
 const clientHintKeys = memberSet(
@@ -132,18 +135,18 @@ const clientHintKeys = memberSet(
 // request literal and after it, then the hints client_hints sets by a call
 // that names no key. Read as one set, so a hint RenderRequest no longer
 // spells, or a key the client stops sending, is drift here either way.
-const RUST_HINT_KEYS = memberSet(
+const rustHintKeys = memberSet(
   RS_MAIN,
   /^fn client_hints\([\s\S]+?^\}/m,
-  /^[ \t]*request\["(\w+)"\]/gm,
+  /request\["(\w+)"\]/g,
 );
 function renderRequestRustKeys() {
   const own = memberSet(
     RS_MAIN,
     /let mut request = serde_json::json!\(\{[\s\S]+?let body = match serde_json::to_vec\(&request\)/,
-    /^[ \t]*(?:"|request\[")(\w+)"(?::|\])/gm,
+    /(?:^ +"|request\[")(\w+)"(?::|\])/gm,
   )();
-  return reads.union(own, RUST_HINT_KEYS());
+  return reads.union(own, rustHintKeys());
 }
 
 // The error codes the native follower decides by, less any the daemon's
@@ -264,7 +267,7 @@ const CHECKS = [
   {
     label: "client-hint wire keys",
     ts: clientHintKeys,
-    rust: RUST_HINT_KEYS,
+    rust: rustHintKeys,
   },
   // Every wire key of the render request, hints included. A key the native
   // client stops sending degrades the same silent way: a `deadline` spelled

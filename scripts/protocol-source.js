@@ -18,8 +18,10 @@ export function uncommented(text) {
 // Every reader is built here, over the source less its comment lines: no
 // reader can take a value from a line that opens as a comment, so a region a
 // reader slices is delimited by code, never by a comment. A comment trailing
-// code on the same line stays (see uncommented), so a member regex that could
-// meet one anchors at the line start.
+// code on the same line stays (see uncommented): a member it spells is read,
+// and fails its row loudly as a phantom. Readers stay that broad on purpose —
+// one narrowed to a line shape reads nothing from a layout it did not
+// foresee, and a member missing from both sides passes silently.
 const overCode =
   (read) =>
   (source, ...anchors) =>
@@ -77,7 +79,9 @@ export const markers = overCode((code, patterns, description) =>
 // side's set less, or within, another's. [LAW:one-source-of-truth] The
 // canonical form (sorted, ", "-joined) is read and split here only. A null
 // operand is a missing anchor, and stays null through the operation.
-const members = (set) => new Set(set.split(", "));
+// The empty set is the empty string, which split would read as one unnamed
+// member.
+const members = (set) => new Set(set === "" ? [] : set.split(", "));
 const keep = (set, test) =>
   set
     .split(", ")

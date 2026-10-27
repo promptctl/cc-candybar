@@ -93,6 +93,8 @@ describe("without, union and within", () => {
   it("union names every member once, sorted", () => {
     expect(union("c, a", "b, a")).toBe("a, b, c");
     expect(union("a", null)).toBeNull();
+    expect(union(without("a", "a"), "b")).toBe("b");
+    expect(without("", "x")).toBe("");
   });
 
   it("within keeps the members the other also names", () => {
