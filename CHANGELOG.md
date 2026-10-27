@@ -1,3 +1,9 @@
+## [1.160.7](https://github.com/promptctl/cc-candybar/compare/v1.160.6...v1.160.7) (2026-10-27)
+
+### Bug Fixes
+
+* **test:** the backoff test owns the one clock the cooldown reads (brandon-unfiled-3248.9h9) ([#464](https://github.com/promptctl/cc-candybar/issues/464)) ([7c7eb31](https://github.com/promptctl/cc-candybar/commit/7c7eb3123c7a361191f1bc79aa403b1190e3a07c))
+
 ## [1.160.6](https://github.com/promptctl/cc-candybar/compare/v1.160.5...v1.160.6) (2026-10-27)
 
 ### Bug Fixes
