@@ -36,19 +36,7 @@
 // it runs the same measurement path, so a broken harness (import error, no-op
 // observer) surfaces as a loud red instead of making this gate vacuously green.
 
-// [LAW:no-ambient-temporal-coupling] jest.setTimeout is FILE-scoped, so it is
-// stated here where that is visible rather than inside the one describe whose
-// cost motivates it. The heap-analysis block writes two full V8 heap snapshots
-// of the Jest worker: its duration scales with the worker's loaded heap and
-// the machine's contention, not with the code under test — ~5s locally, over
-// the 30s unit-test budget on a loaded CI runner once the repo's test corpus
-// grew. The concurrency gate below shares the budget as a consequence; its
-// assertions are unchanged and it passes in milliseconds, so the cost is a
-// slower failure there, not a weaker check.
-jest.setTimeout(180_000);
-
 import { createHook } from "node:async_hooks";
-import { writeHeapSnapshot } from "node:v8";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -197,28 +185,52 @@ describe("daemon transcript-fs concurrency", () => {
 // fs burst is in flight. Guards the scripts from bitrot and demonstrates the
 // heap-snapshot delta gate (diff) + retainer trace the 5qh evidence was built
 // from. Always-green: the snapshots are constructed to contain the signal.
+// The burst is plain reads, not the daemon's transcript reader: the scripts
+// read pending fs ops of any origin, and the daemon's reader is the bound the
+// concurrency gate above holds, not these.
 describe("heap-analysis scripts", () => {
   const scriptsDir = join(process.cwd(), "scripts");
   let before: string;
   let after: string;
 
-  beforeAll(async () => {
+  beforeAll(() => {
     before = join(root, "before.heapsnapshot");
     after = join(root, "after.heapsnapshot");
-    writeHeapSnapshot(before);
-    // Launch the burst, let the fan-out dispatch for a couple of event-loop
-    // turns, then snapshot WHILE ops are pending (the FSReqPromise are gone
-    // once it drains). Drain afterward so nothing bleeds into other tests.
-    const inFlight = burst(RENDER_CONCURRENCY);
-    await new Promise((r) => setImmediate(r));
-    await new Promise((r) => setImmediate(r));
-    writeHeapSnapshot(after);
-    await inFlight;
+    // The snapshots come from a bare node process, not this Jest worker: a
+    // heap snapshot's cost is the heap's size, and the worker's holds every
+    // transpiled module of the suite, which makes two of them the slowest
+    // thing in this file by far and a minute on a shared CI core. The child
+    // holds only the burst, so the scripts read the same FSReqPromise signal
+    // from a heap a fraction of the size. Snapshot, launch the burst, let the
+    // fan-out dispatch for a couple of event-loop turns, then snapshot WHILE
+    // ops are pending (the FSReqPromise are gone once it drains).
+    execFileSync(
+      process.execPath,
+      [
+        "--input-type=module",
+        "-e",
+        `
+        import { writeHeapSnapshot } from "node:v8";
+        import { readFile } from "node:fs/promises";
+        const [before, after, ...files] = process.argv.slice(1);
+        writeHeapSnapshot(before);
+        const inFlight = Promise.all(files.map((f) => readFile(f)));
+        await new Promise((r) => setImmediate(r));
+        await new Promise((r) => setImmediate(r));
+        writeHeapSnapshot(after);
+        await inFlight;
+        `,
+        before,
+        after,
+        ...allFiles(),
+      ],
+      { stdio: "inherit" },
+    );
   });
 
   test("heap-analyze diff reports FSReqPromise growth between snapshots", () => {
     const out = execFileSync(
-      "node",
+      process.execPath,
       [join(scriptsDir, "heap-analyze.mjs"), before, after, "--match", "FSReqPromise", "--json"],
       { encoding: "utf8" },
     );
@@ -231,7 +243,7 @@ describe("heap-analysis scripts", () => {
 
   test("heap-retainers traces FSReqPromise to a GC root", () => {
     const out = execFileSync(
-      "node",
+      process.execPath,
       [join(scriptsDir, "heap-retainers.mjs"), after, "FSReqPromise", "--limit", "3", "--json"],
       { encoding: "utf8" },
     );

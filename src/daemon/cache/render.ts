@@ -309,9 +309,9 @@ export interface ConfigChain {
 // [LAW:nothing-unseen] Which plugins a daemon load merged, how many variables
 // they declare between them, the data file each merged one reads, the checkout a `{ checkout }` path resolved against —
 // `git:<root>`, or `dir:<cwd>` for a directory in no checkout, `-` with no
-// session — and which it dropped: a drop is also on the strip, but the rest is
-// said nowhere else. The daemon's own sink — buildRenderState is shared with
-// the demo.
+// session — which it dropped, and how long the load took: a drop is also on
+// the strip, but the rest is said nowhere else. The daemon's own sink —
+// buildRenderState is shared with the demo.
 export function pluginLoadLine(
   layers: readonly string[],
   {
@@ -319,6 +319,7 @@ export function pluginLoadLine(
     config,
     compiled,
   }: Pick<DslRenderState, "plugins" | "config" | "compiled">,
+  ms: number,
 ): string {
   const { checkout, loaded, dropped, unreached } = plugins;
   const checkoutField =
@@ -347,7 +348,7 @@ export function pluginLoadLine(
   const sources = declared.filter(([, d]) => d.kind === "source").length;
   const pluginVariables = declared.length - sources;
   return (
-    `config load ${layers.join(" < ") || "<default>"}: projections=${[...projectionsOf(config).keys()].join(",") || "-"} instantSegments=${instantSegments(compiled).join(",") || "-"} instantTemplates=${compiled.instant.size} plugins loaded=${loaded.length} sources=${sources} pluginVariables=${pluginVariables} dropped=${dropped.length} unplaced=${unreached.length} checkout=${checkoutField}` +
+    `config load ${layers.join(" < ") || "<default>"}: projections=${[...projectionsOf(config).keys()].join(",") || "-"} instantSegments=${instantSegments(compiled).join(",") || "-"} instantTemplates=${compiled.instant.size} plugins loaded=${loaded.length} sources=${sources} pluginVariables=${pluginVariables} dropped=${dropped.length} unplaced=${unreached.length} checkout=${checkoutField} ms=${ms}` +
     loaded.map((p) => ` +${p} data=${dataOf(p)}`).join("") +
     dropped.map((d) => ` -${d.path} (${d.reason})`).join("") +
     unreached.map((d) => ` ~${d.path} (${d.reason})`).join("")
@@ -588,6 +589,9 @@ export type LoadOutcome = {
   readonly layers: readonly string[];
   readonly home: string;
   readonly warning: string | null;
+  // How long the attempt took, resolution to built state or to its error:
+  // the one number that shows a load getting slower or faster.
+  readonly ms: number;
 } & (
   | { readonly state: DslRenderState; readonly error: null }
   | {
@@ -774,6 +778,7 @@ export function loadFromDisk(
   configFile: string | undefined,
   deps: StateDeps,
 ): LoadOutcome {
+  const started = performance.now();
   const resolution = resolveDslConfig(projectDir, cwd, configFile);
   // `chain` loads its layers; `missing`/`unreadable` build the bundled
   // default — what distinguishes them is a notice, below, not a load path.
@@ -817,6 +822,7 @@ export function loadFromDisk(
     return {
       layers: chain.layers,
       home: chain.home,
+      ms: Math.round(performance.now() - started),
       failedFile: failing,
       warning: joinWarnings(advisories),
       state: null,
@@ -831,6 +837,7 @@ export function loadFromDisk(
   return {
     layers: chain.layers,
     home: chain.home,
+    ms: Math.round(performance.now() - started),
     warning: joinWarnings(advisories),
     state,
     error: null,
@@ -1244,7 +1251,7 @@ export class RenderCache<
 
     const loaded = this.load(projectDir, cwd, configFile);
     if (loaded.state !== null)
-      this.log("info", pluginLoadLine(loaded.layers, loaded.state));
+      this.log("info", pluginLoadLine(loaded.layers, loaded.state, loaded.ms));
     // [LAW:no-silent-failure] A config that fails its FIRST load still yields
     // a bar: the bundled default, built exactly here and only then — the error
     // rides the diagnostic strip above it, loud, and the settings menu is the
@@ -1800,7 +1807,7 @@ export class RenderCache<
     entry.lastWarning = loaded.warning;
     entry.lastError = loaded.error;
     if (loaded.state !== null) {
-      this.log("info", pluginLoadLine(loaded.layers, loaded.state));
+      this.log("info", pluginLoadLine(loaded.layers, loaded.state, loaded.ms));
       const retired = entry.state;
       entry.state = loaded.state;
       this.serve(loaded.state);

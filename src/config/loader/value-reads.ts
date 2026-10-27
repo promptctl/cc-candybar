@@ -20,6 +20,7 @@ import {
 import {
   bindsComputedAction,
   declaredVariables,
+  perTemplate,
   templateActionRefs,
   templateFunctions,
   templateReads,
@@ -73,13 +74,15 @@ export function valueReads({ names, helpers, actions }: ReadBasis): ValueReads {
     ];
   };
   // Every text a template's draw evaluates: itself, then its bound actions'.
-  const texts = (template: string): readonly string[] => {
+  // Answered once per template: the reads and the calls both ask, and the
+  // bound actions are two walks of the template's call graph.
+  const texts = perTemplate((template): readonly string[] => {
     const bound = bindsComputedAction(template, helpers)
       ? Object.keys(actions)
       : templateActionRefs(template, helpers).map((ref) => ref.name);
     const seen = new Set<string>();
     return [template, ...bound.flatMap((name) => actionTexts(name, seen))];
-  };
+  });
   const ofTemplate = perTemplate((template) =>
     texts(template).flatMap((text) =>
       [...templateReads(text, helpers).keys()].map((path) => ({
@@ -133,16 +136,6 @@ export function payloadPathOf(
     default:
       return undefined;
   }
-}
-
-// One answer per template text: a gate's text recurs at every node of every
-// preset that edit chrome wraps alike.
-function perTemplate<T>(answer: (template: string) => T): (t: string) => T {
-  const answers = new Map<string, T>();
-  return (template) => {
-    if (!answers.has(template)) answers.set(template, answer(template));
-    return answers.get(template)!;
-  };
 }
 
 // A config's fold, built once per config object: every walk over one config

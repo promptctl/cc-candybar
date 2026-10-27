@@ -469,15 +469,24 @@ describe("done-when: permuting an unrelated subtree", () => {
 describe("done-when: a vocabulary of size 1 is a uniform bar", () => {
   test("every address selects the one entry under every distribution", () => {
     const only = { hue: "primary", shade: "muted" } as const;
+    // The selector reads one step, so the sweep is over the distinct steps
+    // the addresses hold, not the addresses: a few dozen, where every node of
+    // every shape under every distribution is a hundred thousand repeats. A
+    // step is keyed by exactly what the selector reads of it — its
+    // distribution, by name, at its index of its count — so no field a step
+    // grows can fold two steps the selector tells apart into one.
+    const steps = new Map<string, PlacedStep | undefined>([["", undefined]]);
     for (const name of ALL_NAMES) {
       for (const { shape } of SHAPES) {
         for (const { address } of allNodes(shape, DISTRIBUTIONS[name])) {
-          for (const step of [undefined, ...address]) {
-            for (const quantize of [inBin, nearestPoint]) {
-              expect(vocabularySelect([only], step, quantize)).toBe(only);
-            }
-          }
+          for (const step of address) steps.set(`${name}:${step.index}/${step.count}`, step);
         }
+      }
+    }
+    expect(steps.size).toBeGreaterThan(ALL_NAMES.length);
+    for (const step of steps.values()) {
+      for (const quantize of [inBin, nearestPoint]) {
+        expect(vocabularySelect([only], step, quantize)).toBe(only);
       }
     }
   });

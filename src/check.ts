@@ -294,6 +294,10 @@ function searchedLayers(cwd: string, warnings: string[]): readonly string[] {
 export async function checkConfig(
   target: string | undefined,
   cwd: string = process.cwd(),
+  // [LAW:no-ambient-temporal-coupling] The settle budget is an input of the
+  // verdict, so a caller that means to see the deadline reached names a
+  // budget of its own instead of waiting out the command's.
+  settleMs: number = SOURCE_SETTLE_MS,
 ): Promise<CheckOutcome> {
   // Advisories accumulate from the search onward, independent of load
   // success — mirror of RenderCache.reloadInto.
@@ -339,7 +343,7 @@ export async function checkConfig(
   if (collision !== null) warnings.push(collision);
 
   try {
-    const rendered = await loadRegisterRender(layers, cwd, warnings);
+    const rendered = await loadRegisterRender(layers, cwd, warnings, settleMs);
     return { kind: "clean", layers, warnings, rendered };
   } catch (e) {
     // A filesystem error on the config file itself (ENOENT/EACCES from
@@ -399,6 +403,7 @@ export async function prepareConfig(
   // The instant the view's first payload is stamped at: the one its renders
   // are drawn at.
   at: Instant,
+  settleMs: number = SOURCE_SETTLE_MS,
 ): Promise<PreparedConfig> {
   // Each file's own advisories (an editability notice naming a duplicate key)
   // land before its validation, so a fatal outcome still carries them.
@@ -452,10 +457,10 @@ export async function prepareConfig(
     // no default draws its loading cell until it is scanned). The registry owns
     // the "every run complete" state; a source still out at the deadline is
     // named and the render proceeds on what it holds.
-    const pending = await registry.settled(SOURCE_SETTLE_MS);
+    const pending = await registry.settled(settleMs);
     if (pending.length > 0) {
       warnings.push(
-        `source${pending.length === 1 ? "" : "s"} still running after ${SOURCE_SETTLE_MS} ms, rendered with fallback values: ${pending.join(", ")}`,
+        `source${pending.length === 1 ? "" : "s"} still running after ${settleMs} ms, rendered with fallback values: ${pending.join(", ")}`,
       );
     }
     return {
@@ -567,11 +572,12 @@ async function loadRegisterRender(
   layers: readonly string[],
   cwd: string,
   warnings: string[],
+  settleMs: number,
 ): Promise<string> {
   // [LAW:effects-at-boundaries] One instant for every pass, so the passes
   // differ only in the preset they render.
   const at = instantOf(new Date());
-  const prepared = await prepareConfig(layers, cwd, warnings, at);
+  const prepared = await prepareConfig(layers, cwd, warnings, at, settleMs);
   const { config } = prepared;
   try {
     // The gates the daemon derives when it loads this config, over the keys

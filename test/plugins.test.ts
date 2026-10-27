@@ -435,7 +435,7 @@ describe("a plugin's own variables", () => {
     try {
       expect(loaded.state?.plugins.loaded).toEqual([path.join(dir, "hello/plugin.json5")]);
       expect(Object.keys(loaded.state!.config.variables).filter((v) => v.startsWith("plugins.hello."))).toEqual([]);
-      expect(pluginLoadLine(loaded.layers, loaded.state!)).toContain(
+      expect(pluginLoadLine(loaded.layers, loaded.state!, loaded.ms)).toContain(
         ` +${path.join(dir, "hello/plugin.json5")} data=none`,
       );
     } finally {
@@ -493,7 +493,7 @@ describe("a plugin's own variables", () => {
     );
     const loaded = loadFromDisk(dir, dir, p, { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, sessionState: new SessionState() });
     try {
-      expect(pluginLoadLine(loaded.layers, loaded.state!)).toContain(
+      expect(pluginLoadLine(loaded.layers, loaded.state!, loaded.ms)).toContain(
         " plugins loaded=2 sources=0 pluginVariables=4 dropped=1 ",
       );
     } finally {
@@ -504,7 +504,7 @@ describe("a plugin's own variables", () => {
   test("none declared counts zero", () => {
     const loaded = loadFromDisk(dir, dir, config(), { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, sessionState: new SessionState() });
     try {
-      expect(pluginLoadLine(loaded.layers, loaded.state!)).toContain(" pluginVariables=0 ");
+      expect(pluginLoadLine(loaded.layers, loaded.state!, loaded.ms)).toContain(" pluginVariables=0 ");
     } finally {
       loaded.state?.registry.dispose();
     }
@@ -600,7 +600,8 @@ describe("an installed plugin", () => {
       expect(loaded.state?.config.variables["plugins.lit.data"]).toMatchObject({ path: data });
       // [LAW:nothing-unseen] The daemon's load line names the file it read,
       // and the checkout it resolved against.
-      const line = pluginLoadLine(loaded.layers, loaded.state!);
+      const line = pluginLoadLine(loaded.layers, loaded.state!, loaded.ms);
+      expect(line).toMatch(/ checkout=git:\S+ ms=\d+ /);
       expect(line).toContain(
         ` +${path.join(dir, "data/cc-candybar/plugins/lit/plugin.json5")} data=${data}`,
       );
@@ -692,7 +693,7 @@ describe("an installed plugin", () => {
         sessionState: new SessionState(),
       });
       loaded.state?.registry.dispose();
-      return pluginLoadLine(loaded.layers, loaded.state!);
+      return pluginLoadLine(loaded.layers, loaded.state!, loaded.ms);
     };
     const before = load();
     expect(before).toContain(` checkout=dir:${path.join(dir, "outer/inner")} `);

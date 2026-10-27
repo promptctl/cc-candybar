@@ -99,7 +99,9 @@ function rig(
   const ctx = testVerbContext(sessionState, undefined, config);
   const sink = new Map<string, readonly RichText[]>();
   let last = "";
-  const render = (): string => {
+  // The terminal's width is a fact of the render, not of the compile: one
+  // compiled config draws at every width a sweep asks for.
+  const render = (cols = width): string => {
     const effective = resolveEffectiveGlobals(
       config,
       (key) => sessionState.get(SID, key),
@@ -117,7 +119,7 @@ function rig(
         cwd: "/tmp",
         model: { id: "claude-opus-4-7", display_name: "Opus 4.7" },
         workspace: { current_dir: "/tmp", project_dir: "/tmp", added_dirs: [] },
-        term: { cols: width },
+        term: { cols },
         endcaps: { effective: sessionState.get(SID, "endcaps") ?? style },
         preset: { effective: effective.preset },
         autoWrap: { effective: true },
@@ -127,7 +129,7 @@ function rig(
         shade: { effective: effective.shade },
       },
       instantOf(new Date()),
-      opts(width, padding, style, depth),
+      opts(cols, padding, style, depth),
       { perSegmentSink: sink },
       effective,
     );
@@ -472,10 +474,12 @@ describe("the settings menu's look controls are pickers whose name opens a list"
       ),
     ),
   )("every row of the open %s list fits its terminal (%s, padding %i)", (control, style, padding) => {
+    // One compile per case, opened once; the sweep is renders, which cost
+    // nothing beside the compile they would otherwise each repeat.
+    const rt = rig(`{ globals: { palette: 'nord' } }`, 200, padding, style);
+    openPicker(rt, control);
     for (let width = 40; width <= 160; width += 3) {
-      const rt = rig(`{ globals: { palette: 'nord' } }`, width, padding, style);
-      openPicker(rt, control);
-      const lines = stripAnsi(rt.render()).split("\n");
+      const lines = stripAnsi(rt.render(width)).split("\n");
       // The body drops below the row the control sits in, which may itself
       // wrap: it starts at the first line after the control holding the
       // body's first row.
@@ -495,8 +499,8 @@ describe("the settings menu's look controls are pickers whose name opens a list"
       );
       const over = lines.filter((l) => new RichTextValue(l).cellLength > width);
       expect([width, over]).toEqual([width, []]);
-      rt.dispose();
     }
+    rt.dispose();
   });
 
   test("▶ applies the next theme and the whole bar recolours, turning the row to it; ◀ takes it back", () => {
