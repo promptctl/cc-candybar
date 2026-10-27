@@ -16,6 +16,7 @@ import {
 import { ABSENT, failed, ok, type Outcome } from "../src/utils/outcome";
 import { Holds } from "../src/utils/holds";
 import { answered } from "../src/utils/reading";
+import { until } from "./helpers/until";
 
 class StubGitService extends GitService {
   public computeCalls: Array<{
@@ -1422,10 +1423,7 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
     const { svc, inner, counters } = counted();
     inner.repoRootByDir[repo] = repo;
     const changedTo = async (n: number) => {
-      const deadline = Date.now() + 5_000;
-      while (svc.getStats().changes < n && Date.now() < deadline) {
-        await new Promise((r) => setTimeout(r, 20));
-      }
+      await until(() => svc.getStats().changes >= n, `${n} changes`);
       expect(svc.getStats().changes).toBe(n);
     };
     try {

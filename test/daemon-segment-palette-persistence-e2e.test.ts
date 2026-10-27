@@ -26,7 +26,7 @@ import {
 import { waitForExit } from "./helpers/daemon-wire";
 // [LAW:one-source-of-truth] The shared transient contract: a render retried
 // on TIMEOUT and on an answer that drew a source pending.
-import { click, render } from "./helpers/daemon-e2e";
+import { click, render, renderUntil } from "./helpers/daemon-e2e";
 import { linkUrls, withoutLinks } from "./helpers/ansi";
 
 jest.setTimeout(30_000);
@@ -37,31 +37,6 @@ async function killAndWait(daemon: RunningDaemon): Promise<void> {
   await exited;
 }
 
-// [LAW:no-ambient-temporal-coupling] A `persist` write's synchronous
-// fs.writeFileSync completing does NOT mean RenderCache has reloaded — that
-// happens on a separate, asynchronous fs.watch callback (src/daemon/cache/
-// render.ts), so the very next render after a click can legitimately still
-// observe the pre-reload config. Polling for the observable effect (the
-// render actually changing) is the correct wait — not a fixed sleep, and
-// not a bare immediate assertion racing the watcher.
-async function waitForRenderChange(
-  sockPath: string,
-  sessionId: string,
-  cwd: string,
-  baseline: string,
-  timeoutMs = 10000,
-): Promise<string> {
-  const deadline = Date.now() + timeoutMs;
-  let last = baseline;
-  while (Date.now() < deadline) {
-    last = await render(sockPath, sessionId, cwd);
-    if (last !== baseline) return last;
-    await new Promise((r) => setTimeout(r, 50));
-  }
-  throw new Error(
-    `waitForRenderChange: render never changed from baseline within ${timeoutMs}ms`,
-  );
-}
 
 describe("candybar-config-engine-71o.6: real-daemon segment-palette click → persist → restart", () => {
   test("a user's directory-palette menu, clicked over the real socket, survives a cold restart and leaves every other segment's palette untouched", async () => {
@@ -180,11 +155,13 @@ describe("candybar-config-engine-71o.6: real-daemon segment-palette click → pe
       // the rendered `directory` segment's colors — not just that the
       // config file was written (asserted below): a broken reload of
       // the file's own declaration would time out here.
-      const afterClick = await waitForRenderChange(
+      const afterClick = await renderUntil(
         sockPath,
         SID,
         projectDir,
-        opened,
+        (b) => b !== opened,
+        "a change from the opened render",
+        10_000,
       );
       expect(afterClick).not.toBe(opened);
       // The status row — nothing to do with `directory` — is byte-identical:

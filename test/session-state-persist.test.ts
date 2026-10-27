@@ -10,6 +10,7 @@ import { join } from "path";
 import { tmpdir } from "os";
 import { SessionState } from "../src/daemon/session-state";
 import { FileSessionStorage } from "../src/daemon/session-state-file";
+import { until } from "./helpers/until";
 
 describe("SessionState disk persistence", () => {
   let dir: string;
@@ -59,13 +60,8 @@ describe("SessionState disk persistence", () => {
     );
   });
 
-  const settled = async (done: () => boolean): Promise<void> => {
-    const deadline = Date.now() + 5_000;
-    while (!done()) {
-      if (Date.now() >= deadline) throw new Error("the write never landed");
-      await new Promise((resolve) => setTimeout(resolve, 5));
-    }
-  };
+  const settled = (done: () => boolean): Promise<void> =>
+    until(done, "the write's landing");
 
   // The debounced write reaches the disk off the daemon's thread: no flush is
   // called, and the file still lands whole, owner-only.

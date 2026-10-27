@@ -1,11 +1,12 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs";
-import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 
 import { createDaemonPool } from "./helpers/daemon-pool";
+import { isConnectable } from "./helpers/daemon-wire";
 import { spawnTestDaemon } from "./helpers/spawn-test-daemon";
+import { throughout, until } from "./helpers/until";
 import { readStartTime } from "../src/daemon/process-fingerprint";
 
 // [LAW:verifiable-goals] Pins the shared-pool primitive's core contract in
@@ -176,33 +177,6 @@ describe("daemon pool caps real daemon subprocesses (integration)", () => {
     };
   }
 
-  function isConnectable(sockPath: string): Promise<boolean> {
-    return new Promise((resolve) => {
-      if (!fs.existsSync(sockPath)) {
-        resolve(false);
-        return;
-      }
-      const s = net.connect(sockPath);
-      s.once("connect", () => {
-        s.destroy();
-        resolve(true);
-      });
-      s.once("error", () => resolve(false));
-    });
-  }
-
-  async function waitUntil(
-    check: () => Promise<boolean>,
-    budgetMs: number,
-  ): Promise<boolean> {
-    const deadline = Date.now() + budgetMs;
-    while (Date.now() < deadline) {
-      if (await check()) return true;
-      await new Promise((r) => setTimeout(r, 50));
-    }
-    return false;
-  }
-
   test("a 3rd real daemon blocks until a slot frees, on a pool sized 2", async () => {
     const pool = createDaemonPool(tmpPoolDir(), 2);
     const fx1 = makeFixture("cc-candybar-poolit-1-");
@@ -217,12 +191,8 @@ describe("daemon pool caps real daemon subprocesses (integration)", () => {
       try {
         const d2 = await spawnTestDaemon(fx2.env, pool);
         try {
-          expect(
-            await waitUntil(() => isConnectable(fx1.sockPath), 5000),
-          ).toBe(true);
-          expect(
-            await waitUntil(() => isConnectable(fx2.sockPath), 5000),
-          ).toBe(true);
+          await until(() => isConnectable(fx1.sockPath), "d1's socket");
+          await until(() => isConnectable(fx2.sockPath), "d2's socket");
 
           // Pool is full (2/2). The 3rd spawn must not even start its daemon
           // process until a slot frees — that's the ceiling this pool exists
@@ -232,11 +202,11 @@ describe("daemon pool caps real daemon subprocesses (integration)", () => {
           const d3Promise = spawnTestDaemon(fx3.env, pool);
           try {
             try {
-              const stillBlocked = !(await waitUntil(
-                () => isConnectable(fx3.sockPath),
+              await throughout(
+                async () => !(await isConnectable(fx3.sockPath)),
+                "d3's socket staying unbound",
                 800,
-              ));
-              expect(stillBlocked).toBe(true);
+              );
             } finally {
               // Free one slot UNCONDITIONALLY — whether or not the
               // "still blocked" assertion above passed. d3Promise can only
@@ -253,9 +223,7 @@ describe("daemon pool caps real daemon subprocesses (integration)", () => {
 
             const d3 = await d3Promise;
             try {
-              expect(
-                await waitUntil(() => isConnectable(fx3.sockPath), 5000),
-              ).toBe(true);
+              await until(() => isConnectable(fx3.sockPath), "d3's socket");
             } finally {
               d3.killTree();
               d3.release();

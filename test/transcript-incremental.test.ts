@@ -35,6 +35,7 @@ import type { ClaudeHookData } from "../src/utils/claude";
 import { Holds } from "../src/utils/holds";
 import { instantOf } from "../src/utils/instant";
 import { todayInfo, todayNow } from "./helpers/today";
+import { until } from "./helpers/until";
 
 let seq = 0;
 // One newline-terminated usage line. Unique tags keep every entry distinct.
@@ -447,18 +448,17 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
       if (held.length < 2) await new Promise<void>((r) => held.push(r));
       return out;
     };
-    const until = async (n: number) => {
-      while (held.length < n) await new Promise((r) => setTimeout(r, 5));
-    };
+    const heldCount = (n: number) =>
+      until(() => held.length >= n, `${n} held folds`);
     try {
       writeFileSync(t, line(new Date(), 0.01, 100, 20));
       touch(t);
       const older = store.getUsageInfo("N", hook("N", t));
-      await until(1);
+      await heldCount(1);
       appendFileSync(t, line(new Date(), 0.02, 200, 40));
       touch(t);
       const newer = store.getUsageInfo("N", hook("N", t));
-      await until(2);
+      await heldCount(2);
       held[0]!();
       await older;
       held[1]!();
