@@ -650,6 +650,7 @@ function sourceSnapshots(): SourceSnapshots {
     held: {
       git: git.held,
       tmux: tmux.held,
+      host: hostService.held(),
       today: today.held,
       pluginStorage: storage.held,
     },

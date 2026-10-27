@@ -42,9 +42,9 @@ const ROLLING_BUFFER_CAP = 16384;
 const HISTOGRAM_CAP = 16;
 
 // The keyed sources whose entries a view holds, so a period visits only
-// those held: a repo's, a pane's, a directory set's scans, a plugin's session
-// files.
-export type HeldSource = "git" | "tmux" | "today" | "pluginStorage";
+// those held: a repo's, a pane's, the host's name and user, a directory
+// set's scans, a plugin's session files.
+export type HeldSource = "git" | "tmux" | "host" | "today" | "pluginStorage";
 
 // [LAW:nothing-unseen] Every source and every home, from the owners that keep
 // them (design-docs/SOURCES-AND-FRAMES.md, "Seen").
@@ -313,7 +313,7 @@ export class RuntimeStats {
           view: 0,
           pane: 0,
         },
-        held: { git: 0, tmux: 0, today: 0, pluginStorage: 0 },
+        held: { git: 0, tmux: 0, host: 0, today: 0, pluginStorage: 0 },
         pluginStorage: {
           folders: 0,
           faults: { unusable: 0, refused: 0, error: 0 },

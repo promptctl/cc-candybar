@@ -127,6 +127,7 @@ describe("the host's sources", () => {
       ["host.name", 1],
       ["host.user", 1],
     ]);
+    expect(host.held()).toBe(2);
     holds.close();
     host.close();
   });

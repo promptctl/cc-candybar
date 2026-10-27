@@ -91,6 +91,11 @@ export class HostService {
     return this.user.declare(holds, null);
   }
 
+  // How many of its two sources a view holds now.
+  held(): number {
+    return this.name.stats().held + this.user.stats().held;
+  }
+
   close(): void {
     this.name.close();
     this.user.close();

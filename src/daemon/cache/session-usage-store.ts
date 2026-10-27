@@ -633,9 +633,8 @@ export class SessionUsageStore {
   private refreshed(
     sessionId: string,
     transcriptPath: string | undefined,
-    knownStamp?: string,
+    stamp: string,
   ): Promise<Outcome<SessionRecord>> {
-    const stamp = knownStamp ?? statStamp(transcriptPath);
     return this.requestFlight.run(`${sessionId}:${stamp}`, async () => {
       // [LAW:no-ambient-temporal-coupling] This refresh's own tally, so
       // whether IT read is its own fact, never another session's refresh
@@ -838,10 +837,10 @@ export class SessionUsageStore {
     sessionId: string,
     transcriptPath: string | undefined,
     tally: IngestTally,
-    knownStamp?: string,
+    // The transcript's stamp as the caller observed it.
+    stamp: string,
   ): Promise<Outcome<SessionRecord>> {
     if (!sessionId) return ABSENT;
-    const stamp = knownStamp ?? statStamp(transcriptPath);
     const existing = this.see(sessionId)?.record;
     if (existing && stamp !== "" && existing.transcriptStamp === stamp) {
       tally.hits++;
@@ -856,9 +855,9 @@ export class SessionUsageStore {
     // record when it RUNS (first caller); coalesced callers share that one
     // refold. Two concurrent DIFFERENT-stamp refolds — a render and a rescan,
     // say — each read the same prior, and the commit below is a compare-and-set
-    // on it: the first to land replaces the prior, and the other is not stored,
-    // though its caller still gets the fold its own stamp asked for (so a tok/s
-    // sample is never another stamp's counts). So the stored record only ever
+    // on it: the first to land replaces the prior, and the other folds again
+    // over what landed (below), so neither caller's fold is lost and a request
+    // that lands second still stores its newer stamp. So the stored record only ever
     // advances — `today` never steps back to a shorter fold — and since
     // `refold` writes the byte cursor and the fold as ONE pair
     // covering exactly [0, cursor), the next refold folds each byte once.
@@ -901,12 +900,20 @@ export class SessionUsageStore {
       transcriptStamp: outcome.value.mainStamp,
       transcriptPath,
     };
-    // Something else landed first (another refold, a sweep): store nothing.
-    // Store only over the record this fold started from; a sweep of that record
-    // mid-flight is a change too, so its slot is not brought back.
-    if (this.sessions.get(sessionId)?.record !== prior) return ok(record);
-    this.stored(sessionId, record);
-    return ok(record);
+    // Store only over the record this fold started from. A sweep of that
+    // record mid-flight is a change too, so its slot is not brought back.
+    const landed = this.sessions.get(sessionId)?.record;
+    if (landed === prior) {
+      this.stored(sessionId, record);
+      return ok(record);
+    }
+    if (landed === undefined) return ok(record);
+    // [LAW:no-ambient-temporal-coupling] Another fold landed first — a
+    // rescan's at an older stamp, say. Fold again over it at this stamp, so
+    // the newer fold is never the one dropped: an incremental read of what
+    // lies past it, or a hit when it already covers this stamp. Each retry
+    // starts from what landed, so the stored record only advances.
+    return this.ingest(sessionId, transcriptPath, tally, stamp);
   }
 
   // [LAW:single-enforcer] The one write of a slot's record: the slot is
