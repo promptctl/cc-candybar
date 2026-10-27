@@ -6,6 +6,7 @@
 // cache over the payload providers, declared by `declareLanes`, drawn from
 // `sessionSource`.
 
+import { RefreshLedger } from "../src/utils/refresh-ledger";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -154,7 +155,11 @@ function rig(timeoutMs?: number): Rig {
     lines.push(`${level} ${message}`);
   };
   const watchers = new WatcherRegistry({ logger: log });
-  const providers = createPayloadProviders({ watchers, logger: log });
+  const providers = createPayloadProviders({
+    watchers,
+    logger: log,
+    ledger: new RefreshLedger(log),
+  });
   const sessionState = new SessionState();
   const cache = new RenderCache<SessionSource>(
     {

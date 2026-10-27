@@ -9,3 +9,4 @@
 - The authoring docs under docs/ are tested against the live loader, so editing a doc can fail tests.
 - In a worktree whose node_modules is a symlink to the main checkout's, pnpm can refuse to run scripts. If it does, run the binaries in node_modules/.bin directly.
 - A render request answers by its client's deadline, so a first render from a new directory or config can draw sources as pending. The e2e render helper asks again until the request's own render event says nothing drew pending, as Claude Code's next tick would. A case that means to see the pending answer sends one request of its own over the wire.
+- The load gate and its feed criterion are judged on CI's runner, not on a busy Mac. When fseventsd falls behind, the kernel holds file writes back, so the daemon's log writes occupy the libuv pool and the transcript reads behind them miss their deadlines while every draw stays fast. The numbers are then the machine's, not the daemon's.

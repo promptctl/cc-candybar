@@ -30,6 +30,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { SessionUsageStore } from "../src/daemon/cache/session-usage-store";
+import { RefreshLedger } from "../src/utils/refresh-ledger";
 import type { ClaudeHookData } from "../src/utils/claude";
 import { Holds } from "../src/utils/holds";
 import { instantOf } from "../src/utils/instant";
@@ -118,6 +119,71 @@ describe("SessionUsageStore — session projection", () => {
       utimesSync(t, future, future);
       await store.getUsageInfo("A", hd);
       expect(store.getStats()).toMatchObject({ misses: 2, hits: 1 });
+    } finally {
+      store.close();
+    }
+  });
+
+  // [LAW:single-enforcer] One request's session, speed and today lanes read
+  // one record: they share its refresh, which is recorded once, and a failed
+  // one is logged once.
+  test("a request's lanes share one refresh of the session, logged once", async () => {
+    const lines: string[] = [];
+    const ledger = new RefreshLedger((level, msg) =>
+      lines.push(`${level} ${msg}`),
+    );
+    const store = new SessionUsageStore({ sweepIntervalMs: 0, ledger });
+    const usage = () => ledger.snapshot().find((r) => r.name === "usage");
+    try {
+      const t = join(dir, "A.jsonl");
+      writeFileSync(t, usageLine("a", new Date(), 0.01));
+      const hd = hook("A", t);
+      await Promise.all([
+        store.getUsageInfo("A", hd),
+        store.observeSpeed("A", t, Date.now()),
+      ]);
+      expect(usage()).toMatchObject({ refreshes: { request: 1 }, failures: 0 });
+
+      // A transcript path that is a directory: the read fails.
+      const broken = join(dir, "B.jsonl");
+      mkdirSync(broken);
+      const hb = hook("B", broken);
+      await Promise.all([
+        store.getUsageInfo("B", hb),
+        store.observeSpeed("B", broken, Date.now()),
+      ]);
+      expect(usage()).toMatchObject({ refreshes: { request: 2 }, failures: 1 });
+      expect(lines.filter((l) => l.startsWith("warn usage refresh"))).toEqual(
+        [expect.stringContaining("sid=B ")],
+      );
+
+      // Today's lane lands after its directory set's scan, once the other
+      // lanes' refresh has answered: it reads that refresh, never its own.
+      const late = join(dir, "C.jsonl");
+      mkdirSync(late);
+      const request = store.request("C", late);
+      let landed = false;
+      let scanned!: () => void;
+      const scan = new Promise<void>((resolve) => (scanned = resolve));
+      const today = {
+        current: () =>
+          (landed
+            ? { kind: "ok", value: null }
+            : { kind: "pending", why: "unread", landed: scan }) as never,
+      };
+      const lanes = Promise.all([
+        request.usage(hook("C", late)),
+        request.speed(Date.now()),
+        request.today(today),
+      ]);
+      await new Promise((r) => setTimeout(r, 20));
+      landed = true;
+      scanned();
+      await lanes;
+      expect(usage()).toMatchObject({ refreshes: { request: 3 }, failures: 2 });
+      expect(
+        lines.filter((l) => l.startsWith("warn usage refresh sid=C ")),
+      ).toHaveLength(1);
     } finally {
       store.close();
     }

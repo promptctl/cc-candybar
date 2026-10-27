@@ -160,6 +160,20 @@ function makeCache(
   return { svc, inner, logs, holds: new Holds() };
 }
 
+// The git passes' refresh events, without the PR lookups' between them.
+const passes = (logs: readonly string[]): string[] =>
+  logs.filter((l) => l.startsWith("git refresh "));
+
+// [LAW:no-silent-failure] The reasons each failed refresh of `source` logged,
+// in order: one event per refresh that failed, carrying every reason it met.
+const failuresIn = (logs: readonly string[], source = "git"): string[] =>
+  logs
+    .filter((l) => l.startsWith(`${source} refresh `))
+    .flatMap((l) => {
+      const reason = / outcome=failed reason=("(?:[^"\\]|\\.)*")/.exec(l);
+      return reason === null ? [] : [JSON.parse(reason[1]!) as string];
+    });
+
 // A promise whose settling the test controls — the only way to make a read
 // genuinely in flight, rather than hoping an await boundary lands where needed.
 function deferred(): { promise: Promise<void>; resolve: () => void } {
@@ -432,7 +446,7 @@ describe("GitDataProvider reads what is held", () => {
     svc.changed("/repo");
     await jest.advanceTimersByTimeAsync(0);
     expect(inner.prCalls).toHaveLength(1);
-    expect(logs.at(-1)).toMatch(/^git refresh \/repo by=watch .* pr=owed /);
+    expect(logs.at(-1)).toMatch(/^git refresh \/repo asked=watch .* pr=owed by=change /);
 
     // Shown again: the new key is looked up, never answered by the old one.
     const shown = gitOf(svc, new Holds(), "/repo", {
@@ -440,6 +454,8 @@ describe("GitDataProvider reads what is held", () => {
     });
     await jest.advanceTimersByTimeAsync(0);
     expect(inner.prCalls).toHaveLength(2);
+    // Its values were read before: the owed key's lookup is a change.
+    expect(passes(logs).at(-1)).toMatch(/ asked=\S*owed\S* .* by=change /);
     await expect(shown).resolves.toMatchObject({
       kind: "ok",
       value: { branch: "feature" },
@@ -462,7 +478,7 @@ describe("GitDataProvider reads what is held", () => {
     inner.stubInfo = { ...inner.stubInfo, branch: "feature" };
     svc.changed("/repo");
     await jest.advanceTimersByTimeAsync(0);
-    expect(logs.at(-1)).toMatch(/^git refresh \/repo by=watch values=1 .* pr=looked-up /);
+    expect(passes(logs).at(-1)).toMatch(/ asked=watch values=1 pr=looked-up by=change /);
     expect(inner.prCalls).toHaveLength(2);
     svc.close();
   });
@@ -489,7 +505,7 @@ describe("GitDataProvider reads what is held", () => {
     // Shown again: one lookup, for `third` — none for the owed `feature`.
     void gitOf(svc, new Holds(), "/repo", { showPullRequest: true });
     await jest.advanceTimersByTimeAsync(0);
-    expect(logs.at(-1)).toMatch(/ pr=looked-up /);
+    expect(passes(logs).at(-1)).toMatch(/ pr=looked-up /);
     expect(inner.prCalls).toHaveLength(2);
     svc.close();
   });
@@ -543,7 +559,7 @@ describe("GitDataProvider reads what is held", () => {
     inner.infoGate.resolve();
     inner.infoGate = null;
     await jest.advanceTimersByTimeAsync(0);
-    expect(logs.at(-1)).toMatch(/ pr=looked-up /);
+    expect(passes(logs).at(-1)).toMatch(/ pr=looked-up /);
     expect(inner.prCalls).toHaveLength(2);
     svc.close();
   });
@@ -638,7 +654,7 @@ describe("GitDataProvider refreshes on its own triggers", () => {
     const out = await gitOf(svc, holds, "/repo", {});
     expect(out).toMatchObject({ kind: "ok", value: { branch: "feature" } });
     expect(inner.computeCalls).toHaveLength(2);
-    expect(svc.getStats()).toMatchObject({ changes: 1, refreshes: 2 });
+    expect(svc.getStats()).toMatchObject({ changes: 1 });
   });
 
   test("a change mid-read queues one re-read after it, so the last change lands (brandon-unfiled-3248.xjma)", async () => {
@@ -796,9 +812,7 @@ describe("GitDataProvider refreshes on its own triggers", () => {
     for (let i = 0; i < 3; i++) {
       expect((await gitOf(svc, holds, "/repo", {})).kind).toBe("failed");
     }
-    expect(logs.filter((l) => l.startsWith("git refresh failed"))).toEqual([
-      "git refresh failed (/repo): git status timed out",
-    ]);
+    expect(failuresIn(logs)).toEqual(["git status timed out"]);
 
     inner.infoFailure = null;
     svc.changed("/repo");
@@ -815,9 +829,7 @@ describe("GitDataProvider refreshes on its own triggers", () => {
     };
 
     for (let i = 0; i < 3; i++) await gitOf(svc, holds, "/repo", {});
-    expect(logs.filter((l) => l.startsWith("git refresh failed"))).toEqual([
-      "git refresh failed (/repo): git.stash: git stash list: timeout",
-    ]);
+    expect(failuresIn(logs)).toEqual(["git.stash: git stash list: timeout"]);
   });
 
   test("a HEAD git could not read is logged, though the payload only reads it for the PR", async () => {
@@ -826,9 +838,7 @@ describe("GitDataProvider refreshes on its own triggers", () => {
     inner.stubInfo = { ...inner.stubInfo, head: failed("git rev-parse: timeout") };
 
     await gitOf(svc, holds, "/repo", {});
-    expect(logs.filter((l) => l.startsWith("git refresh failed"))).toEqual([
-      "git refresh failed (/repo): git.head: git rev-parse: timeout",
-    ]);
+    expect(failuresIn(logs)).toEqual(["git.head: git rev-parse: timeout"]);
   });
 });
 
@@ -1069,9 +1079,7 @@ describe("GitDataProvider PR source", () => {
         reason: "gh pr view: non-zero, HTTP 401",
       });
     }
-    expect(logs.filter((l) => l.includes("git.pr"))).toEqual([
-      "git refresh failed (/repo): git.pr: gh pr view: non-zero, HTTP 401",
-    ]);
+    expect(failuresIn(logs, "pr")).toEqual(["gh pr view: non-zero, HTTP 401"]);
   });
 
   test("a re-pointed origin is a new key, looked up afresh", async () => {
@@ -1255,7 +1263,7 @@ describe("GitDataProvider owns its failures and its PR's timing", () => {
     jest.useFakeTimers();
     const { svc, inner, logs, holds } = makeCache({
       periodMs: 1_000,
-      throwOn: "git refresh failed",
+      throwOn: "outcome=failed",
     });
     inner.repoRootByDir = { "/repo": "/repo" };
     inner.infoFailure = "git status: boom";
@@ -1267,7 +1275,7 @@ describe("GitDataProvider owns its failures and its PR's timing", () => {
     ]);
     await jest.advanceTimersByTimeAsync(1_000);
     expect(inner.computeCalls).toHaveLength(2);
-    expect(logs).toContain("git refresh failed (/repo): git status: boom");
+    expect(failuresIn(logs)).toEqual(["git status: boom"]);
     svc.close();
   });
 });
@@ -1303,9 +1311,9 @@ describe("GitDataProvider PR keys, drops and refresh events", () => {
     ).toEqual(ok({ ...onA, pullRequest: first.value.pullRequest }));
     expect(inner.prCalls).toHaveLength(2);
     expect(logs.filter((l) => l.startsWith("git refresh /repo"))).toEqual([
-      expect.stringMatching(/ by=first,pr values=1 failed=0 pr=looked-up /),
-      expect.stringMatching(/ by=watch values=1 failed=0 pr=looked-up /),
-      expect.stringMatching(/ by=watch values=1 failed=0 pr=recalled /),
+      expect.stringMatching(/ asked=first,pr,owed values=1 pr=looked-up by=first /),
+      expect.stringMatching(/ asked=watch values=1 pr=looked-up by=change /),
+      expect.stringMatching(/ asked=watch values=1 pr=recalled by=change /),
     ]);
   });
 
@@ -1348,8 +1356,8 @@ describe("GitDataProvider PR keys, drops and refresh events", () => {
     await jest.advanceTimersByTimeAsync(1_000);
 
     expect(logs.filter((l) => l.startsWith("git refresh /repo"))).toEqual([
-      expect.stringMatching(/ by=first values=1 failed=0 pr=- took=\d+ms$/),
-      expect.stringMatching(/ by=period values=1 failed=0 pr=- took=\d+ms$/),
+      expect.stringMatching(/ asked=first values=1 pr=- by=first outcome=ok took=\d+ms$/),
+      expect.stringMatching(/ asked=- values=1 pr=- by=period outcome=ok took=\d+ms$/),
     ]);
     svc.close();
   });

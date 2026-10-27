@@ -169,7 +169,10 @@ describe("CacheExpiryProvider", () => {
     expect(await provider.refresh("s", path)).toEqual(ok(at(A)));
   });
 
-  test("each read of the tail is one refresh event; an answer believed under its stamp is none", async () => {
+  // [LAW:nothing-unseen] A request's refreshes are facts of its render event,
+  // so a read of the tail is counted, never a line of its own; a failed one is
+  // its own line.
+  test("each read of the tail is one refresh counted; an answer believed under its stamp is none", async () => {
     const lines: string[] = [];
     const path = writeTranscript([entry({ ts: A, cacheRead: 1 })]);
     const provider = new CacheExpiryProvider((level, msg) =>
@@ -177,15 +180,12 @@ describe("CacheExpiryProvider", () => {
     );
     await provider.refresh("s", path);
     await provider.refresh("s", path);
-    expect(lines).toEqual([
-      expect.stringMatching(
-        /^info cache refresh sid=s stamp=\S+ by=request outcome=ok took=\d+ms$/,
-      ),
-    ]);
+    expect(lines).toEqual([]);
     expect(provider.getStats()).toEqual({
       entries: 1,
       refreshes: { request: 1 },
       failures: 0,
+      lastMs: expect.any(Number),
     });
   });
 

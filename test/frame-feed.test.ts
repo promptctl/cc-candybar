@@ -4,6 +4,8 @@
 // frame forward to the earliest the feed's spacing allows, two subscribers
 // share each render, and a feed with no subscriber draws nothing.
 
+import { RefreshLedger } from "../src/utils/refresh-ledger";
+import { ok } from "../src/utils/outcome";
 import {
   feedsFact,
   FrameFeeds,
@@ -82,6 +84,7 @@ function harness(opts: { motion: Motion; renderMs?: number; fails?: boolean }) {
         );
   const changes = new Map<string, () => void>();
   const log: string[] = [];
+  const ledger = new RefreshLedger();
   const feeds: FrameFeeds<string> = new FrameFeeds<string>({
     render: (sessionId, fps): FeedFrame | null => {
       const req = feeds.latest(sessionId);
@@ -115,6 +118,7 @@ function harness(opts: { motion: Motion; renderMs?: number; fails?: boolean }) {
       changes.set(sessionId, onChange);
       return () => changes.delete(sessionId);
     },
+    refreshes: () => ledger.totals(),
     periods: PERIODS,
     now: () => Date.now() + state.skewMs,
     log: (_level, line) => log.push(line),
@@ -123,7 +127,7 @@ function harness(opts: { motion: Motion; renderMs?: number; fails?: boolean }) {
     feeds.note(sessionId, req, order);
     feeds.wake(sessionId, "data");
   };
-  return { feeds, note, state, changes, log };
+  return { feeds, note, state, changes, log, ledger };
 }
 
 // The parts each bar frame says it evaluated.
@@ -473,6 +477,28 @@ describe("on a faked clock", () => {
     close();
     // The first frame, and one a still period after it, through the second.
     expect(state.renders).toBeLessThanOrEqual(1 + 1000 / PERIODS.still);
+  });
+
+  // [LAW:nothing-unseen] Beside the frames a feed drew, its summary counts the
+  // refreshes every source ran while it was open, by trigger: a feed that drew
+  // a moving bar and refreshed nothing is seen to.
+  test("its summary counts the refreshes run while it was open, by trigger", async () => {
+    const { feeds, note, ledger, log } = harness({ motion: "still" });
+    const tmux = ledger.declare({
+      name: "tmux",
+      scope: "pane",
+      refresh: ["first", "period"],
+    });
+    tmux.recorded("pane=%1", "first", ok(null), 1);
+    note("s", "bar");
+    const close = feeds.subscribe("s", sub(() => {}));
+    await pass(1);
+    tmux.recorded("pane=%1", "period", ok(null), 1);
+    tmux.recorded("pane=%1", "period", ok(null), 1);
+    close();
+    expect(log.at(-1)).toContain(
+      " daemonRefreshed=first:0,period:2,change:0,request:0,supersede:0 ",
+    );
   });
 
   // A frame is drawn in one synchronous turn, so a wake while it draws is the

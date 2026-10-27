@@ -5,6 +5,7 @@
 // from a real 0/"" — so the DSL input fallback chain (default + last_error)
 // fires. [LAW:no-silent-failure][LAW:single-enforcer][LAW:one-type-per-behavior]
 
+import { CacheExpiryProvider } from "../src/segments/cache";
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
 import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
@@ -255,7 +256,12 @@ describe("payloadOf — cache outcome lane", () => {
     chmodSync(transcript, 0o000);
 
     const logs: LogEntry[] = [];
-    const deps = depsWith(ABSENT, logs);
+    // The owner logs the refresh that failed, once, as the daemon's does.
+    const deps = depsWith(ABSENT, logs, {
+      cacheExpiry: new CacheExpiryProvider((level, msg) =>
+        logs.push({ level, msg }),
+      ),
+    });
     const payload = await requestPayload(
       hookData(transcript),
       instantOf(new Date()),
@@ -317,7 +323,10 @@ describe("payloadOf — migrated lanes share the outcome contract", () => {
     "tmux.session",
   ]);
 
-  test("failed lanes each log one warn and project as missing fields", async () => {
+  // [LAW:no-silent-failure] A failed lane was logged by the refresh that
+  // failed, its owner's (these stubs stand in for owners); the payload
+  // derived from it logs nothing again.
+  test("failed lanes project as missing fields, and the payload logs none of them", async () => {
     const logs: LogEntry[] = [];
     const deps = depsWith(ABSENT, logs, {
       contextProvider: fakeContext(async () =>
@@ -339,16 +348,7 @@ describe("payloadOf — migrated lanes share the outcome contract", () => {
 
     expect(payload.context).toBeUndefined();
     expect(payload.metrics).toBeUndefined();
-    expect(logs).toEqual(
-      expect.arrayContaining([
-        {
-          level: "warn",
-          msg: "provider fetch failed: context transcript: EACCES",
-        },
-        { level: "warn", msg: "provider fetch failed: metrics (s): boom" },
-      ]),
-    );
-    expect(logs).toHaveLength(2);
+    expect(logs).toEqual([]);
   });
 
   test("ok lanes project values; absent lanes are missing with nothing logged", async () => {
@@ -410,14 +410,10 @@ describe("payloadOf — migrated lanes share the outcome contract", () => {
     expect(payload.context).toBeUndefined();
     // The pane is the client's report and survives the failed name lookup,
     // whose failure its owner logged when the refresh failed: the render
-    // logs only the lane that threw — the throw where it was caught, then
-    // the lane's failure.
+    // logs only the throw, where it was caught.
     expect(payload.tmux).toEqual({ pane: "%7" });
-    expect(logs.map((l) => l.level)).toEqual(["error", "warn"]);
+    expect(logs.map((l) => l.level)).toEqual(["error"]);
     expect(logs[0]!.msg).toContain("context lane threw: Error: stub bug");
-    expect(logs[1]!.msg).toBe(
-      "provider fetch failed: context: Error: stub bug",
-    );
   });
 
   // brandon-tmux-tk7: the tmux family is the session's own client hint. With

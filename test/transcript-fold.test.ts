@@ -5,6 +5,7 @@
 // /compact rewrites a transcript, and retention only shows itself when the file
 // a fold was built from goes away.
 
+import { RefreshLedger } from "../src/utils/refresh-ledger";
 import {
   mkdtempSync,
   writeFileSync,
@@ -30,10 +31,22 @@ const line = (text: string): string =>
     message: { role: "user", content: text },
   });
 
+const REFRESHES = new RefreshLedger().declare({
+  name: "count",
+  scope: "session",
+  refresh: ["request"],
+});
+
 // Every fold here counts entries: the smallest projection that makes "how much
 // was folded, and from where" visible without reading any internal state.
 const counting = (max?: number) =>
-  new TranscriptFold<number>(0, (n: number, _e: ParsedEntry) => n + 1, undefined, max);
+  new TranscriptFold<number>(
+    0,
+    (n: number, _e: ParsedEntry) => n + 1,
+    REFRESHES,
+    undefined,
+    max,
+  );
 
 // The fold reads only when the mtime moved, so a test that rewrites a file in the
 // same millisecond must say so explicitly.
@@ -139,6 +152,7 @@ test("a multi-window transcript folds every entry, and a long line is logged", a
   const fold = new TranscriptFold<number>(
     0,
     (n: number, _e: ParsedEntry) => n + 1,
+    REFRESHES,
     (_level, msg) => logged.push(msg),
   );
 

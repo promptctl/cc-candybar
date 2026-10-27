@@ -172,7 +172,6 @@ export function formatStats(s: StatsSnapshot): string {
     `  hit rate      ${fmtRate(s.gitCache.hits, s.gitCache.misses)} (${s.gitCache.hits} / ${s.gitCache.hits + s.gitCache.misses})`,
   );
   lines.push(`  changes       ${s.gitCache.changes}`);
-  lines.push(`  refreshes     ${s.gitCache.refreshes}`);
   lines.push(``);
   lines.push(`usageCache`);
   lines.push(`  size          ${s.usageCache.size}`);
@@ -182,21 +181,28 @@ export function formatStats(s: StatsSnapshot): string {
   lines.push(`  sweeps        ${s.usageCache.sweeps}`);
   lines.push(``);
   lines.push(`sources`);
-  for (const [name, source] of Object.entries(s.sources)) {
-    const refreshes = Object.entries(source.refreshes)
+  for (const r of s.sources.records) {
+    const refreshes = Object.entries(r.refreshes)
       .map(([by, n]) => `${by}:${n}`)
       .join(" ");
-    const held = "held" in source ? ` held=${source.held}` : "";
     lines.push(
-      `  ${name.padEnd(12)}  entries=${source.entries}${held} failures=${source.failures} refreshes ${refreshes}`,
+      `  ${`${r.scope}/${r.name}`.padEnd(24)}  failures=${r.failures} last=${r.lastMs === null ? "-" : `${r.lastMs}ms`} refreshes ${refreshes}`,
     );
   }
+  const scopes = Object.entries(s.sources.homes)
+    .map(([scope, n]) => `${scope}:${n}`)
+    .join(" ");
+  const held = Object.entries(s.sources.held)
+    .map(([source, n]) => `${source}:${n}`)
+    .join(" ");
+  lines.push(`  homes         ${scopes}`);
+  lines.push(`  held          ${held}`);
   const storage = s.sources.pluginStorage;
   const faults = Object.entries(storage.faults)
     .map(([cause, n]) => `${cause}:${n}`)
     .join(" ");
   lines.push(
-    `  ${"".padEnd(12)}  folders=${storage.folders} lost=${storage.lost} faults ${faults}`,
+    `  plugin storage folders=${storage.folders} lost=${storage.lost} faults ${faults}`,
   );
   lines.push(``);
   lines.push(`transcriptReads`);

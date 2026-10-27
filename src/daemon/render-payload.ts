@@ -18,7 +18,6 @@
 
 import type { HistoryDepth } from "./settings-history";
 import path from "node:path";
-import os from "node:os";
 import { inspect } from "node:util";
 import type { ClaudeHookData } from "../utils/claude.js";
 import type { ClientHints } from "./protocol.js";
@@ -78,6 +77,7 @@ import type {
   ToolTally,
 } from "../segments/activity.js";
 import type { TmuxService } from "../segments/tmux.js";
+import type { HostService } from "../segments/host.js";
 import type { AutoCompactProvider } from "../segments/autocompact-provider.js";
 import {
   autoCompactControls,
@@ -178,11 +178,11 @@ export interface RenderPayloadOf<P> extends ClaudeHookData, ValuedInputs {
   // say; the detached daemon's own environment is never consulted
   // (brandon-tmux-tk7). `session` is that pane's session name.
   readonly tmux?: { readonly pane: string; readonly session?: string | P };
-  // [LAW:types-are-the-program] REQUIRED for the same reason theme/style are:
-  // the daemon assembles it every render from sources that cannot be "not
-  // requested" (two syscalls and one already-parsed wire hint). The fields
-  // INSIDE it carry the real optionality — see HostPayload.
-  readonly host: HostPayload;
+  // [LAW:types-are-the-program] REQUIRED: every payload carries the object,
+  // and the fields INSIDE it carry the real optionality — the name and the
+  // user each a source the closure reads (src/segments/host.ts), `ssh` the
+  // session's hint. See HostPayloadOf.
+  readonly host: HostPayloadOf<P>;
   // `theme.effective`, `style.effective` and `effect.effective` are
   // deliberately NOT fields here. They are the selections whose config rung may
   // hold an EXPRESSION (brandon-looks-pe6, brandon-themes-dzl,
@@ -307,13 +307,6 @@ export type DrawnPayload = RenderPayloadOf<Pending>;
 // facts of the draw's own instant (DRAW_PROJECTIONS, which each draw hands
 // its binding), so no stored value moves with the clock.
 export type ViewPayload = Omit<DrawnPayload, "feeds" | "today">;
-// A view's payload, and what it projected as missing fields — a failed
-// lane — for the request that draws it to log.
-export interface ViewPayloadOf {
-  readonly payload: ViewPayload;
-  readonly failures: readonly string[];
-}
-
 // The control's facts (src/segments/autocompact.ts) — or the refusal that the
 // settings file could not be read, carried as text, so the control says why
 // it cannot show the window.
@@ -438,16 +431,16 @@ export function prFactOf(
 // declared default AND records a `last_error` that `cc-candybar vars`
 // surfaces — so "we don't know" stays distinguishable from "we know it's
 // local", which a `?? false` here would have destroyed.
-export interface HostPayload {
+export interface HostPayloadOf<P> {
   // The SHORT hostname — `os.hostname()` up to the first dot, the same
   // projection zsh's `%m` makes. A statusbar cell identifies a machine to a
   // human; the FQDN is a network address, a different fact, and a separate
   // field the day something needs it.
-  readonly name?: string;
+  readonly name?: string | P;
   // The EFFECTIVE username from the passwd database, not `$USER`. The env var
   // is a map that drifts (su/sudo leave it stale); the passwd entry for the
   // running uid is the territory. Matches zsh's `%n`.
-  readonly user?: string;
+  readonly user?: string | P;
   readonly ssh?: boolean;
 }
 
@@ -587,11 +580,9 @@ export interface RenderPayloadDeps {
   readonly autoCompact: AutoCompactProvider;
   // Each session's prompt-cache expiry, read off its transcript's tail.
   readonly cacheExpiry: CacheExpiryProvider;
-  // [LAW:single-enforcer] The log capability for the provider lanes whose
-  // owner does not log: the request drawing a view's payload is the ONE
-  // place their failures are logged (its `failures`). Git, tmux and autocompact are not among them: each
-  // owner refreshes on its own triggers and logs each refresh that failed,
-  // so a failure stored there is logged once, never once per render.
+  // The machine's identity: its host name and the daemon's user.
+  readonly hostService: HostService;
+  // The log for a session lane whose refresh threw: a bug no owner saw.
   readonly log: DaemonLogger;
   // Each session lane whose refresh threw, until one runs clean.
   readonly faults: RefreshFaults;
@@ -725,72 +716,6 @@ function projectSpeedHistory(obs: SpeedObservation): string | undefined {
   }
   if (rates.length === 0) return undefined;
   return rates.join(",");
-}
-
-// ─── Host identity ───────────────────────────────────────────────────────────
-
-/**
- * The short hostname: everything before the first dot, or the whole string when
- * there is no dot. `os.hostname()` yields an FQDN on some hosts (macOS's
- * `mymachine.local`, a DNS-configured server's `web1.prod.example.com`) and a
- * bare name on others; this makes the rendered cell identify the machine the
- * same way on both, which is zsh's `%m` and the projection git-taculous shows.
- *
- * [LAW:effects-at-boundaries] Pure and total — the syscall stays in readHost.
- */
-export function shortHostname(hostname: string): string {
-  const dot = hostname.indexOf(".");
-  return dot < 0 ? hostname : hostname.slice(0, dot);
-}
-
-/**
- * Assemble the host identity for one render.
- *
- * [LAW:effects-at-boundaries] Named `read*`, not `project*`, because it is not
- * pure: two syscalls happen here. That is in bounds — this module IS the
- * daemon's data-assembly edge, the same edge that reads `process.env.HOME`
- * below — and the point of the seam is that nothing downstream reads them
- * again.
- *
- * [LAW:no-silent-failure] A throwing syscall (a uid with no passwd entry is the
- * realistic case, in a stripped container) yields an ABSENT field plus a
- * description for the caller to log, exactly like a failed git lane — never a
- * fabricated name, and never an exception: the whole bar must not blank over a
- * cosmetic cell.
- */
-function readHost(hints: ClientHints): {
-  readonly host: HostPayload;
-  readonly failures: readonly string[];
-} {
-  const failures: string[] = [];
-  const attempt = (field: string, read: () => string): string | undefined => {
-    try {
-      const value = read();
-      // "" is not a usable identity; treat it as absence so the DSL default
-      // applies rather than rendering an empty `@host` fragment.
-      return value === "" ? undefined : value;
-    } catch (e) {
-      failures.push(`host.${field}: ${String(e)}`);
-      return undefined;
-    }
-  };
-
-  const name = attempt("name", () => shortHostname(os.hostname()));
-  const user = attempt("user", () => os.userInfo().username);
-  return {
-    host: {
-      ...(name !== undefined && { name }),
-      ...(user !== undefined && { user }),
-      // [LAW:one-source-of-truth] Passed straight through from the parsed
-      // hint. The daemon deliberately does NOT consult its own SSH_* env as a
-      // fallback: that env belongs to whichever shell spawned it, so a
-      // "helpful" fallback would confidently mislabel every session that
-      // daemon serves. Absent hint → absent field → declared default + a
-      // recorded last_error, which is the honest report of "not answered".
-      ...(hints.ssh !== undefined && { ssh: hints.ssh }),
-    },
-    failures,
-  };
 }
 
 // ─── Builder ─────────────────────────────────────────────────────────────────
@@ -1052,6 +977,9 @@ function wantsOf(neededInputPaths: ReadonlySet<string>) {
     // Only the session NAME costs a spawn; `tmux.pane` is the hint itself, so
     // a config that reads only the pane (every slash gate) runs nothing here.
     tmux: wants("tmux.session"),
+    // `host.ssh` is the hint itself; the name and the user are each a read.
+    hostName: wants("host.name"),
+    hostUser: wants("host.user"),
     cache: wants("cache"),
     speed: wants("speed"),
     autocompact: wants("autocompact"),
@@ -1073,6 +1001,21 @@ function settingsPathOf(hints: ClientHints): string {
   return claudeSettingsPath(claudeConfigDir(hints.claudeConfigDir));
 }
 
+// The lanes a request's arrival refreshed: how long each took, or null while
+// it is still out.
+export type Refreshed = Map<RefreshLane, number | null>;
+
+// [LAW:nothing-unseen] The render event's `refreshed=`: each lane the
+// request's arrival refreshed, with how long it took, `…` for one still out
+// when the answer was drawn; `-` for none.
+export function refreshedFact(refreshed: Refreshed): string {
+  return (
+    [...refreshed]
+      .map(([lane, ms]) => `${lane}:${ms === null ? "…" : `${ms}ms`}`)
+      .join(",") || "-"
+  );
+}
+
 // [LAW:single-enforcer] A statusline request's own triggers
 // (brandon-unfiled-3248.8ro6, step 3): it refreshes every session source the
 // closure reads — the transcript's folds, the cache expiry, the speed sample,
@@ -1087,19 +1030,27 @@ function settingsPathOf(hints: ClientHints): string {
 // derived from what is stored, reads it failed rather than not answered.
 //
 // `at` is the request's arrival, the instant its speed sample is taken at.
+// `refreshed` is the request's record of them: each lane it starts, and how
+// long the lane took once it lands.
 export async function refreshPayload(
   inputs: PayloadInputs,
   at: Instant,
+  refreshed: Refreshed,
 ): Promise<void> {
   const { hookData, deps, hints } = inputs;
   const want = wanted(inputs.neededInputPaths);
   const sessionId = hookData.session_id;
+  // The request's one refresh of its session's record, which the session,
+  // today and speed lanes share.
+  const session = deps.usageStore.request(sessionId, hookData.transcript_path);
   const lane = async (
     name: RefreshLane,
     needed: boolean,
     run: () => Promise<unknown>,
   ): Promise<void> => {
     if (!needed) return;
+    const startedAt = performance.now();
+    refreshed.set(name, null);
     let threw: string | null = null;
     try {
       await run();
@@ -1107,15 +1058,12 @@ export async function refreshPayload(
       deps.log("error", `${name} lane threw: ${inspect(e)}`);
       threw = `${name}: ${String(e)}`;
     }
+    refreshed.set(name, Math.round(performance.now() - startedAt));
     deps.faults.refreshed(sessionId, name, threw);
   };
   await Promise.all([
-    lane("session", want.session, () =>
-      deps.usageStore.getUsageInfo(sessionId, hookData),
-    ),
-    lane("today", want.today, () =>
-      deps.usageStore.refreshToday(deps.lanes().today, hookData),
-    ),
+    lane("session", want.session, () => session.usage(hookData)),
+    lane("today", want.today, () => session.today(deps.lanes().today)),
     lane("context", want.context, () =>
       deps.contextProvider.getContextInfo(hookData),
     ),
@@ -1133,13 +1081,7 @@ export async function refreshPayload(
     // [LAW:one-source-of-truth] tok/s folds from the SAME store the session
     // lane reads, one sample per request: a frame takes none, so how often the
     // bar is drawn moves no rate.
-    lane("speed", want.speed, () =>
-      deps.usageStore.observeSpeed(
-        sessionId,
-        hookData.transcript_path,
-        dateOf(at).getTime(),
-      ),
-    ),
+    lane("speed", want.speed, () => session.speed(dateOf(at).getTime())),
     lane("autocompact", want.autocompact, async () =>
       deps.autoCompact.window(settingsPathOf(hints)),
     ),
@@ -1157,6 +1099,8 @@ interface Lanes {
   readonly metrics: Reading<MetricsInfo>;
   readonly activity: Reading<ActivityInfo>;
   readonly tmuxSession: Current<string>;
+  readonly hostName: Current<string>;
+  readonly hostUser: Current<string>;
   readonly cache: Reading<number>;
   readonly speed: Reading<SpeedObservation>;
   readonly autoCompact: Reading<AutoCompactWindow>;
@@ -1173,7 +1117,11 @@ export type ViewFacts = Pick<PayloadInputs, "hookData" | "cwd" | "hints"> & {
 // The owners of the keyed lanes, which a declaration takes its holds in.
 export type KeyedOwners = Pick<
   RenderPayloadDeps,
-  "gitProvider" | "tmuxService" | "usageStore" | "managedStorage"
+  | "gitProvider"
+  | "tmuxService"
+  | "hostService"
+  | "usageStore"
+  | "managedStorage"
 >;
 
 // [LAW:types-are-the-program] What a view's declaration hands its draws: one
@@ -1182,6 +1130,8 @@ export type KeyedOwners = Pick<
 export interface DeclaredLanes {
   readonly git: Lane<GitInfo>;
   readonly tmux: Lane<string>;
+  readonly hostName: Lane<string>;
+  readonly hostUser: Lane<string>;
   readonly today: Lane<DaySums>;
   // [LAW:dataflow-not-control-flow] One lane per plugin source the preset
   // reads, by the source variable's name: no fixed list — the set is what the
@@ -1219,6 +1169,8 @@ export function settledLanes(
   return {
     git: lane,
     tmux: lane,
+    hostName: lane,
+    hostUser: lane,
     today: lane,
     sources: new Map(sources.map((name) => [name, lane])),
   };
@@ -1285,6 +1237,12 @@ export function declareLanes(
     tmux: declare("tmux", want.tmux && pane !== null, () =>
       owners.tmuxService.declare(holds, pane!),
     ),
+    hostName: declare("host.name", want.hostName, () =>
+      owners.hostService.declareName(holds),
+    ),
+    hostUser: declare("host.user", want.hostUser, () =>
+      owners.hostService.declareUser(holds),
+    ),
     today: declare("today", want.today, () =>
       owners.usageStore.declareToday(holds, facts.hints.claudeConfigDir),
     ),
@@ -1348,6 +1306,8 @@ function readLanes(inputs: PayloadInputs): Lanes {
       deps.activityProvider.activityOf(sessionId),
     ),
     tmuxSession: lanes.tmux.current(),
+    hostName: lanes.hostName.current(),
+    hostUser: lanes.hostUser.current(),
     cache: read("cache", want.cache, () =>
       deps.cacheExpiry.expiryOf(sessionId),
     ),
@@ -1373,6 +1333,8 @@ function waitsOf(lanes: DeclaredLanes): Array<Promise<void>> {
   return [
     git,
     lanes.tmux.current(),
+    lanes.hostName.current(),
+    lanes.hostUser.current(),
     lanes.today.current(),
     ...[...lanes.sources.values()].map((lane) => lane.current()),
     ...(pr === undefined ? [] : [pr]),
@@ -1389,15 +1351,16 @@ function projectPayload(
   inputs: PayloadInputs,
   draw: DrawInputs,
   lanes: Lanes,
-): ViewPayloadOf {
+): ViewPayload {
   const { hookData, hints } = inputs;
   const { effective, configFacts } = draw;
   const { configPath, ...settingCounts } = configFacts;
   const want = wanted(inputs.neededInputPaths);
   // `over` is the total fold of one lane's reading into its payload field:
-  // ok → its projection, absent → undefined, failed → undefined + a failure to
-  // log, pending → the payload's pending spelling.
-  const failures: string[] = [];
+  // ok → its projection, absent or failed → undefined, pending → the payload's
+  // pending spelling. [LAW:no-silent-failure] A failed lane was logged by the
+  // refresh that failed, its owner's (src/utils/refresh-ledger.ts), so a
+  // payload derived from it logs nothing again.
   const over = <T, U>(
     reading: Reading<T>,
     project: (value: T) => U | undefined,
@@ -1406,8 +1369,6 @@ function projectPayload(
       case "pending":
         return PENDING;
       case "failed":
-        failures.push(reading.reason);
-        return undefined;
       case "absent":
         return undefined;
       case "ok":
@@ -1427,12 +1388,12 @@ function projectPayload(
     lanes.git.kind === "pending"
       ? PENDING
       : projectGitInfo(lanes.git, () => PENDING);
-  // Ungated, like `home` below: two syscalls and a hint already in hand, so a
-  // `wants` gate would add a branch and save nothing.
-  const hostProjection = readHost(hints);
-  failures.push(...hostProjection.failures);
   const tmuxValue =
     lanes.tmuxSession.kind === "pending" ? PENDING : valueOf(lanes.tmuxSession);
+  const hostName =
+    lanes.hostName.kind === "pending" ? PENDING : valueOf(lanes.hostName);
+  const hostUser =
+    lanes.hostUser.kind === "pending" ? PENDING : valueOf(lanes.hostUser);
   // The controls are capped to the model's context window, so they are not
   // answered while the window is not.
   const autoCompactValue =
@@ -1529,7 +1490,16 @@ function projectPayload(
         ...(tmuxValue !== undefined && { session: tmuxValue }),
       },
     }),
-    host: hostProjection.host,
+    // [LAW:one-source-of-truth] Passed straight through from the parsed
+    // hint. The daemon deliberately does NOT consult its own SSH_* env as a
+    // fallback: that env belongs to whichever shell spawned it, so a
+    // "helpful" fallback would confidently mislabel every session that
+    // daemon serves.
+    host: {
+      ...(hostName !== undefined && { name: hostName }),
+      ...(hostUser !== undefined && { user: hostUser }),
+      ...(hints.ssh !== undefined && { ssh: hints.ssh }),
+    },
     // [LAW:one-source-of-truth] Always present — the daemon resolves every
     // one of these each render (for BuildLineOptions/basePalette), and these
     // are those exact values. No `wants` gate: each costs nothing (already in
@@ -1575,7 +1545,7 @@ function projectPayload(
       return reading.kind === "pending" ? PENDING : reading;
     }),
   };
-  return { payload, failures };
+  return payload;
 }
 
 // [LAW:nothing-unseen] The render event's `sources=` and `sourcesPending=`:
@@ -1639,14 +1609,14 @@ function speedPayloadOf(obs: SpeedObservation): SpeedPayload | undefined {
 
 // [LAW:one-source-of-truth] The one assembly of a view's payload: every
 // source as its owner holds it now, a value not answered yet as PENDING —
-// which the draw takes as its own outcome (the placement's loading cell) —
-// and the failures it projected as missing fields. Performs no I/O, refreshes
+// which the draw takes as its own outcome (the placement's loading cell).
+// Performs no I/O, refreshes
 // nothing and reads no instant, so the session's view keeps it as one computed
 // (src/daemon/session-source.ts), recomputed in the turn a fact it reads moves.
 export function payloadOf(
   inputs: PayloadInputs,
   draw: DrawInputs,
-): ViewPayloadOf {
+): ViewPayload {
   return projectPayload(inputs, draw, readLanes(inputs));
 }
 
@@ -1692,8 +1662,9 @@ export function todayOf(
 export async function settlePayload(
   inputs: PayloadInputs,
   at: Instant,
+  refreshed: Refreshed,
 ): Promise<void> {
-  await refreshPayload(inputs, at);
+  await refreshPayload(inputs, at, refreshed);
   // [LAW:one-source-of-truth] The one wait for an answer: the lanes the view
   // declares now, read again once every landing they waited on has landed —
   // so a lane that turns unread again (a new key) is waited out too, and a

@@ -1,4 +1,11 @@
 import { failed, type Outcome } from "./outcome";
+import type {
+  RefreshLedger,
+  RefreshTrigger,
+  Refreshes,
+  SourceRecord,
+  SourceScope,
+} from "./refresh-ledger";
 import type { DaemonLogger } from "./logger";
 import type { Holds, Release } from "./holds";
 import { Period, periodOf, type Every } from "./period";
@@ -12,80 +19,33 @@ import {
   type Readable,
 } from "./reading";
 
-// [LAW:verifiable-goals] What a source has done since the daemon started: how
-// many entries it keeps, its refreshes by the trigger that asked for each,
-// and how many failed. `Trigger` is the source's own vocabulary, so a count
-// under a trigger the source has no way to fire cannot be written.
-export interface SourceStats<Trigger extends string> {
-  readonly entries: number;
-  readonly refreshes: Readonly<Record<Trigger, number>>;
-  readonly failures: number;
-}
-
-// [LAW:one-source-of-truth] The one spelling of a source's refresh event and
-// of the counts its stats report, whatever schedules its reads: one event per
-// refresh, a failed one at warn, so a read of the stored value never logs it
-// again.
-export class Refreshes<Trigger extends string> {
-  private readonly counts: Record<Trigger, number>;
-  private failures = 0;
-
-  constructor(
-    private readonly name: string,
-    triggers: readonly Trigger[],
-    private readonly logger: DaemonLogger,
-  ) {
-    this.counts = Object.fromEntries(triggers.map((t) => [t, 0])) as Record<
-      Trigger,
-      number
-    >;
-  }
-
-  // `fields` is the refreshed entry's logfmt identity.
-  recorded(
-    fields: string,
-    by: Trigger,
-    outcome: Outcome<unknown>,
-    took: number,
-  ): void {
-    this.counts[by]++;
-    if (outcome.kind === "failed") this.failures++;
-    const why =
-      outcome.kind === "failed"
-        ? ` reason=${JSON.stringify(outcome.reason)}`
-        : "";
-    this.logger(
-      outcome.kind === "failed" ? "warn" : "info",
-      `${this.name} refresh ${fields} by=${by} outcome=${outcome.kind}${why} took=${took}ms`,
-    );
-  }
-
-  stats(entries: number): SourceStats<Trigger> {
-    return { entries, refreshes: { ...this.counts }, failures: this.failures };
-  }
-}
-
-// What asks a keyed source to read: a key's first read, its period's tick, a
-// change (the world moved under the key: a watched file was written, or a hold
-// returned to an entry of a source with no period), or a supersede's resume
-// (the daemon itself changed what the key reads).
-export type KeyedTrigger = "first" | "period" | "change" | "supersede";
+// What asks a keyed source to read: every trigger but a request, which only a
+// session's own lanes take.
+export type KeyedTrigger = Exclude<RefreshTrigger, "request">;
 
 // Ends one supersede of a key. The last of a key's outstanding supersedes to
 // resume starts its one fresh read. Calling it again does nothing.
 export type Resume = () => void;
 
+// [LAW:verifiable-goals] What a source has done since the daemon started, as
+// its owner reports it: how many entries it keeps, and its record in the
+// ledger — its refreshes by trigger, its failures, its last refresh's length.
+export interface SourceStats extends Omit<SourceRecord, "name" | "scope"> {
+  readonly entries: number;
+}
+
 // A keyed source's stats add the entries a home holds — the ones its period
 // visits.
-export interface KeyedSourceStats extends SourceStats<KeyedTrigger> {
+export interface KeyedSourceStats extends SourceStats {
   readonly held: number;
 }
 
 // [LAW:one-type-per-behavior] Everything one keyed source varies by, as data:
 // a tmux pane's session name and a plugin's session file are instances.
 export interface KeyedSourceSpec<I, T> {
-  // Names the source in its hold keys, its refresh events and its stats.
+  // Names the source in its hold keys, its refresh events and its record.
   readonly name: string;
+  readonly scope: SourceScope;
   // The read's identity: two inputs with one key are one reading.
   readonly keyOf: (input: I) => string;
   // The entry's logfmt fields on a refresh event.
@@ -99,6 +59,7 @@ export interface KeyedSourceSpec<I, T> {
   // How many entries nothing holds are kept, least recently read first out.
   readonly maxEntries: number;
   readonly logger: DaemonLogger;
+  readonly ledger: RefreshLedger;
 }
 
 interface Entry<I, T> extends Readable<T> {
@@ -135,11 +96,17 @@ export class KeyedSource<I, T> {
   private readonly refreshes: Refreshes<KeyedTrigger>;
 
   constructor(private readonly spec: KeyedSourceSpec<I, T>) {
-    this.refreshes = new Refreshes(
-      spec.name,
-      ["first", "period", "change", "supersede"],
-      spec.logger,
-    );
+    this.refreshes = spec.ledger.declare({
+      name: spec.name,
+      scope: spec.scope,
+      // [LAW:types-are-the-program] exception: a source with no period
+      // declares no tick, but its handle is typed for every keyed trigger;
+      // only the absent period keeps it from recording one.
+      refresh:
+        spec.every === null
+          ? ["first", "change", "supersede"]
+          : ["first", "period", "change", "supersede"],
+    });
   }
 
   // [LAW:single-enforcer] The one way into an entry: `holds` takes it — the
@@ -207,7 +174,8 @@ export class KeyedSource<I, T> {
   stats(): KeyedSourceStats {
     let held = 0;
     for (const entry of this.entries.values()) if (entry.holders > 0) held++;
-    return { ...this.refreshes.stats(this.entries.size), held };
+    const { refreshes, failures, lastMs } = this.refreshes.record();
+    return { entries: this.entries.size, held, refreshes, failures, lastMs };
   }
 
   // Ends every entry's period: a held entry's period re-arms on every landing,

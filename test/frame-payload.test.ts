@@ -133,8 +133,8 @@ function counted(pr?: unknown) {
   });
   // A request: its refresh and wait, then the view's payload it draws.
   const request = async () => {
-    await settlePayload(inputs(), AT);
-    return payloadOf(inputs(), DRAW).payload;
+    await settlePayload(inputs(), AT, new Map());
+    return payloadOf(inputs(), DRAW);
   };
   // `today` as a draw at `at` projects it.
   const today = (at = AT) =>
@@ -163,7 +163,7 @@ describe("a frame's payload", () => {
       ].sort(),
     );
     for (let frame = 0; frame < 5; frame++) {
-      expect(payloadOf(inputs(), DRAW).payload).toEqual(drawn);
+      expect(payloadOf(inputs(), DRAW)).toEqual(drawn);
       expect(today()).toEqual({ cost: 5, tokens: 50 });
     }
     // `today`'s reader is the day a draw picks of the sums its lane holds
@@ -174,7 +174,7 @@ describe("a frame's payload", () => {
 
   test("draws every lane no request has answered as not answered yet", () => {
     const { inputs, today } = counted();
-    const { payload } = payloadOf(inputs(), DRAW);
+    const payload = payloadOf(inputs(), DRAW);
     expect(today()).toBe(PENDING);
     expect(payload.git).toBe(PENDING);
     expect(payload.tmux).toEqual({ pane: "%7", session: PENDING });
@@ -197,7 +197,7 @@ describe("a frame's payload", () => {
     deps.contextProvider.contextOf = () => {
       throw new Error("context bug");
     };
-    const { payload } = payloadOf(inputs(), DRAW);
+    const payload = payloadOf(inputs(), DRAW);
     expect(payload.context).toBeUndefined();
     expect(payload.git).toMatchObject({ branch: "main" });
     expect(payload.session).not.toBe(PENDING);
@@ -213,7 +213,7 @@ describe("a frame's payload", () => {
       ...inputs(),
       neededInputPaths: new Set(["context.contextLeft"]),
     };
-    const { payload } = payloadOf(contextOnly, DRAW);
+    const payload = payloadOf(contextOnly, DRAW);
     expect(payload.context).toBe(PENDING);
     expect(payload.autocompact).toBeUndefined();
   });
@@ -224,8 +224,8 @@ describe("a frame's payload", () => {
     const { inputs, request } = counted();
     await request();
     const other = { ...inputs(), hookData: { ...HOOK, session_id: "other" } };
-    expect(payloadOf(other, DRAW).payload.autocompact).toBe(PENDING);
-    expect(payloadOf(inputs(), DRAW).payload.autocompact).not.toBe(PENDING);
+    expect(payloadOf(other, DRAW).autocompact).toBe(PENDING);
+    expect(payloadOf(inputs(), DRAW).autocompact).not.toBe(PENDING);
   });
 
   test("a PR not answered yet draws only the PR's fields as not answered", async () => {
@@ -235,7 +235,7 @@ describe("a frame's payload", () => {
     // what it stored.
     payloadOf(inputs(), DRAW);
     await new Promise((resolve) => setImmediate(resolve));
-    const { git } = payloadOf(inputs(), DRAW).payload;
+    const { git } = payloadOf(inputs(), DRAW);
     expect(git).toMatchObject({ branch: "main", sha: "abc1234" });
     expect(git).toMatchObject({
       prNumber: PENDING,
@@ -251,7 +251,7 @@ describe("a frame's payload", () => {
     // clock, so they are each draw's projections (DRAW_PROJECTIONS), never a
     // stored value of the view's payload.
     const { inputs } = counted();
-    const { payload } = payloadOf(inputs(), DRAW);
+    const payload = payloadOf(inputs(), DRAW);
     expect(payload).not.toHaveProperty("today");
     expect(payload).not.toHaveProperty("feeds");
     expect(payload.term).toEqual({ cols: renderWidth(HINTS) });
@@ -265,22 +265,26 @@ describe("a frame's payload", () => {
     };
     await request();
     for (let frame = 0; frame < 2; frame++) {
-      const drawn = payloadOf(inputs(), DRAW);
-      expect(drawn.payload.context).toBeUndefined();
-      expect(drawn.failures).toEqual(["context: Error: refresh bug"]);
+      expect(payloadOf(inputs(), DRAW).context).toBeUndefined();
     }
     deps.contextProvider.getContextInfo = getContextInfo;
     await request();
-    expect(payloadOf(inputs(), DRAW).failures).toEqual([]);
+    expect(deps.faults.of(HOOK.session_id, "context")).toBeUndefined();
   });
 
-  test("a failed lane is the payload's failure, for the request to log", async () => {
-    const { inputs, request, deps } = counted();
+  // [LAW:no-silent-failure] A failed lane was logged by the refresh that
+  // failed, its owner's; the payload derived from it, and each draw of it,
+  // logs nothing again.
+  test("a failed lane draws as missing, and its payload logs nothing of it", async () => {
+    const { inputs, request, deps, logs } = counted();
     await request();
     deps.contextProvider.contextOf = () => ({
       kind: "failed",
       reason: "context: no window",
     });
-    expect(payloadOf(inputs(), DRAW).failures).toEqual(["context: no window"]);
+    const before = logs.length;
+    expect(payloadOf(inputs(), DRAW).context).toBeUndefined();
+    expect(payloadOf(inputs(), DRAW).context).toBeUndefined();
+    expect(logs.slice(before)).toEqual([]);
   });
 });

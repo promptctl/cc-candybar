@@ -10,6 +10,10 @@
 // each instant they are drawn, so a frame between two of Claude Code's ticks is
 // the same bar the next tick would draw, at a later instant.
 
+import {
+  REFRESH_TRIGGERS,
+  type RefreshTrigger,
+} from "../utils/refresh-ledger.js";
 import { inspect } from "node:util";
 import type { Instant } from "../utils/instant";
 import { PROTOCOL_VERSION, type Response } from "./protocol";
@@ -121,6 +125,10 @@ export interface FeedDeps<Req> {
   // entry it is of, from the feed's open to its close: the feed being open is
   // what keeps it, not its frames reading it. Returns the release.
   pin(sessionId: string): () => void;
+  // Every source's refreshes so far, by trigger (the daemon's one ledger):
+  // the feed's summary says how many ran while it was open, beside the frames
+  // it drew, so a feed that drew without refreshing anything is seen to.
+  refreshes(): Readonly<Record<RefreshTrigger, number>>;
   periods: FeedPeriods;
   // Milliseconds on a clock that never steps back: a feed measures only
   // durations with it — periods, the rate window, how long it has run.
@@ -188,6 +196,8 @@ interface Feed {
   readonly woke: Record<WakeCause, number>;
   coalesced: number;
   summarizedAt: number;
+  // The ledger's refreshes when the feed opened.
+  readonly refreshesAtOpen: Readonly<Record<RefreshTrigger, number>>;
 }
 
 // The render event's `feeds=` field: each lane following the session as
@@ -458,6 +468,7 @@ export class FrameFeeds<Req> {
       woke: { data: 0, state: 0, reload: 0, visibility: 0 },
       coalesced: 0,
       summarizedAt: now,
+      refreshesAtOpen: this.deps.refreshes(),
     };
     this.feeds.set(sessionId, feed);
     this.stopWatching ??= this.deps.watching();
@@ -667,11 +678,19 @@ export class FrameFeeds<Req> {
   // [LAW:nothing-unseen] A feed's frames are not render requests, so they write
   // no render event each: a feed says what it drew in a summary, when it
   // closes and once a minute while it runs.
+  //
+  // `daemonRefreshed=` is every refresh the daemon made while the feed ran,
+  // whichever session's: a frame refreshes nothing, so it bounds what the
+  // feed's `drawn=` frames could have read fresh, and is never their own.
   private summarize(feed: Feed, state: "running" | "closed"): void {
     const now = this.deps.now();
+    const refreshes = this.deps.refreshes();
+    const refreshed = REFRESH_TRIGGERS.map(
+      (by) => `${by}:${refreshes[by] - feed.refreshesAtOpen[by]}`,
+    ).join(",");
     this.deps.log(
       "info",
-      `feed sid=${JSON.stringify(feed.sessionId)} ${state} subscribers=${feed.followers.size} lanes=${[...feed.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round((now - feed.since) / 1000)}s drawn=${feed.drawn} noted=${feed.noted} noView=${feed.noView} moving=${feed.moving} unseen=${feed.unseen} failed=${feed.failed} pushed=${feed.pushed} pace=${feed.pace}fps evaluated=${feed.evaluated} woke=${WAKE_CAUSES.map((cause) => `${cause}:${feed.woke[cause]}`).join(",")} coalesced=${feed.coalesced} meanDraw=${feed.drawn === 0 ? "-" : (feed.drawMs / feed.drawn).toFixed(2)}ms`,
+      `feed sid=${JSON.stringify(feed.sessionId)} ${state} subscribers=${feed.followers.size} lanes=${[...feed.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round((now - feed.since) / 1000)}s drawn=${feed.drawn} noted=${feed.noted} noView=${feed.noView} moving=${feed.moving} unseen=${feed.unseen} failed=${feed.failed} pushed=${feed.pushed} pace=${feed.pace}fps evaluated=${feed.evaluated} woke=${WAKE_CAUSES.map((cause) => `${cause}:${feed.woke[cause]}`).join(",")} coalesced=${feed.coalesced} daemonRefreshed=${refreshed} meanDraw=${feed.drawn === 0 ? "-" : (feed.drawMs / feed.drawn).toFixed(2)}ms`,
     );
     feed.summarizedAt = now;
   }

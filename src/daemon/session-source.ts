@@ -28,12 +28,10 @@ import { settingCounts } from "./setting-drafts.js";
 // What a session's view draws from: the selections its slots settle and the
 // payload its inputs read, as ViewSource names them, the globals the session's
 // picks resolve to (what the draw's options are built from, beside the
-// payload's `.effective` fields), and the failures its payload projected as
-// missing fields — logged by the request that draws them.
+// payload's `.effective` fields).
 export interface SessionSource extends ViewSource {
   readonly payload: () => ViewPayload;
   readonly effective: () => EffectiveGlobals;
-  readonly failures: () => readonly string[];
 }
 
 export interface SessionSourceDeps {
@@ -87,8 +85,7 @@ export function sessionSource(
       );
     });
     return {
-      payload: () => payload.read().payload,
-      failures: () => payload.read().failures,
+      payload: () => payload.read(),
       effective: () => effective.read(),
       selections: () => effective.read(),
     };

@@ -40,6 +40,7 @@ import {
 import { WatcherRegistry } from "../daemon/cache/watchers.js";
 import type { DaemonLogger } from "../utils/logger.js";
 import { createPayloadProviders } from "../daemon/payload-providers.js";
+import { RefreshLedger } from "../utils/refresh-ledger.js";
 import { parseClientHints } from "../daemon/protocol.js";
 import {
   declareLanes,
@@ -94,7 +95,11 @@ const log: DaemonLogger = (level, message) =>
 const warn = (message: string): void => log("warn", message);
 
 const watchers = new WatcherRegistry({ logger: log });
-const providers = createPayloadProviders({ watchers, logger: log });
+const providers = createPayloadProviders({
+  watchers,
+  logger: log,
+  ledger: new RefreshLedger(log),
+});
 // A session that has never clicked: every pick is absent, so each setting
 // resolves to the config's own value, every picker is closed, and there is
 // nothing to undo or go back to.
@@ -172,9 +177,8 @@ async function renderFrames(): Promise<void> {
           hints,
         },
         at,
+        new Map(),
       );
-      for (const f of view.source.failures())
-        warn(`provider fetch failed: ${f}`);
       const { text: line } = drawDsl(
         state.config,
         state.compiled,
@@ -220,6 +224,7 @@ try {
   providers.gitProvider.close();
   providers.usageStore.close();
   providers.tmuxService.close();
+  providers.hostService.close();
   providers.managedStorage.close();
   watchers.closeAll();
 }

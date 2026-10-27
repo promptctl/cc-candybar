@@ -9,7 +9,7 @@ import type { TranscriptReads } from "../utils/transcript-fs";
 import type { FeedStats } from "./frame-feed";
 import type { RenderCacheStats } from "./cache/render";
 import type { GitCacheStats } from "./cache/git";
-import type { KeyedSourceStats, SourceStats } from "../utils/keyed-source";
+import type { SourceRecord, SourceScope } from "../utils/refresh-ledger";
 import type { ManagedStorageStats } from "./cache/managed-storage";
 import type { ProbeArrival } from "../doctor/handler-probe";
 import type { RenderSighting } from "./render-sightings";
@@ -41,32 +41,28 @@ const ROLLING_BUFFER_CAP = 16384;
 // dashboards (no statistical claim of unbiased sampling).
 const HISTOGRAM_CAP = 16;
 
+// The keyed sources whose entries a view holds, so a period visits only
+// those held: a repo's, a pane's, the host's name and user, a directory
+// set's scans, a plugin's session files.
+export type HeldSource = "git" | "tmux" | "host" | "today" | "pluginStorage";
+
+// [LAW:nothing-unseen] Every source and every home, from the owners that keep
+// them (design-docs/SOURCES-AND-FRAMES.md, "Seen").
 export interface SourceSnapshots {
-  tmux: KeyedSourceStats;
-  autocompact: SourceStats<"request">;
-  cache: SourceStats<"request">;
-  // A Claude Code directory's transcript scan: `first` its seed, `period`
-  // its rescans.
-  today: KeyedSourceStats;
-  // Every plugin's managed storage: its session files' entries and
-  // refreshes, the folders watched now, watch faults by cause, and folders
-  // found gone or replaced.
-  pluginStorage: ManagedStorageStats;
+  // Every source declared, from the one ledger: its scope, its refreshes by
+  // the trigger that asked, its failures and its last refresh's length.
+  readonly records: readonly SourceRecord[];
+  // How many homes of each scope are kept now.
+  readonly homes: Readonly<Record<SourceScope, number>>;
+  // How many entries of each keyed source a view holds now.
+  readonly held: Readonly<Record<HeldSource, number>>;
+  // Every plugin's managed storage: the folders watched now, watch faults by
+  // cause, and folders found gone or replaced.
+  readonly pluginStorage: Pick<
+    ManagedStorageStats,
+    "folders" | "faults" | "lost"
+  >;
 }
-
-const KEYED_SOURCE_ZERO: KeyedSourceStats = {
-  entries: 0,
-  held: 0,
-  refreshes: { first: 0, period: 0, change: 0, supersede: 0 },
-  failures: 0,
-};
-
-const MANAGED_STORAGE_ZERO: ManagedStorageStats = {
-  ...KEYED_SOURCE_ZERO,
-  folders: 0,
-  faults: { unusable: 0, refused: 0, error: 0 },
-  lost: 0,
-};
 
 export interface StatsSnapshot {
   pid: number;
@@ -100,9 +96,6 @@ export interface StatsSnapshot {
     misses: number;
     sweeps: number;
   };
-  // The shared sources each owner refreshes on its own triggers
-  // (brandon-unfiled-3248.8ro6, step 1): the entries each keeps, how many a
-  // home holds, its refreshes by the trigger that asked, and how many failed.
   sources: SourceSnapshots;
   // [LAW:nothing-unseen] Every forward transcript read since start: gated
   // reads, bytes off disk, lines longer than the fold window read whole and
@@ -306,16 +299,26 @@ export class RuntimeStats {
         hits: 0,
         misses: 0,
         changes: 0,
-        refreshes: 0,
         watchers: 0,
       },
       usageCache: { size: 0, hits: 0, misses: 0, sweeps: 0 },
       sources: {
-        tmux: KEYED_SOURCE_ZERO,
-        autocompact: { entries: 0, refreshes: { request: 0 }, failures: 0 },
-        cache: { entries: 0, refreshes: { request: 0 }, failures: 0 },
-        today: KEYED_SOURCE_ZERO,
-        pluginStorage: MANAGED_STORAGE_ZERO,
+        records: [],
+        homes: {
+          daemon: 0,
+          configDir: 0,
+          repo: 0,
+          directory: 0,
+          session: 0,
+          view: 0,
+          pane: 0,
+        },
+        held: { git: 0, tmux: 0, host: 0, today: 0, pluginStorage: 0 },
+        pluginStorage: {
+          folders: 0,
+          faults: { unusable: 0, refused: 0, error: 0 },
+          lost: 0,
+        },
       },
       transcriptReads: { reads: 0, bytes: 0, longLines: 0, largestLine: 0 },
       renderCache: {

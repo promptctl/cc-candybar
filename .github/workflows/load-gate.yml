@@ -55,3 +55,55 @@ jobs:
           name: load-gate-daemon-log
           path: /tmp/cblg-*/state/cc-candybar/daemon.log*
           if-no-files-found: ignore
+
+  # The frame-feed epic's criterion: beside 20 sessions at 1 Hz, a shown
+  # moving feed holds its pace, and the statusline's took= p90 stays within
+  # 2x of the same world without the feed. Run on a quiet runner, so the
+  # measurement is the daemon's, never the machine's.
+  feed:
+    name: Feed criterion
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm run build
+
+      - name: Feed off (the baseline)
+        run: pnpm --silent load-gate --sessions 20 --period-ms 1000 --feed off > feed-off.json
+
+      - name: Feed on
+        run: pnpm --silent load-gate --sessions 20 --period-ms 1000 --feed on --baseline feed-off.json > feed-on.json
+
+      # Both runs' facts, the numbers the criterion was judged by.
+      - name: Feed facts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: feed-criterion-facts
+          path: feed-*.json
+          if-no-files-found: ignore
+
+      - name: Daemon log
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: feed-criterion-daemon-log
+          path: /tmp/cblg-*/state/cc-candybar/daemon.log*
+          if-no-files-found: ignore

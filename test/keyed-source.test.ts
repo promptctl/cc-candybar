@@ -1,3 +1,4 @@
+import { RefreshLedger } from "../src/utils/refresh-ledger";
 import { KeyedSource } from "../src/utils/keyed-source";
 import { Holds } from "../src/utils/holds";
 import { failed, ok, type Outcome } from "../src/utils/outcome";
@@ -37,12 +38,14 @@ function sourceOf(
 ) {
   return new KeyedSource<string, string>({
     name: "fake",
+    scope: "pane",
     keyOf: (k) => k,
     fields: (k) => `key=${k}`,
     read,
     every: EVERY,
     maxEntries: opts.maxEntries ?? 64,
     logger: (level, msg) => opts.lines?.push({ level, msg }),
+    ledger: new RefreshLedger((level, msg) => opts.lines?.push({ level, msg })),
   });
 }
 
@@ -325,12 +328,14 @@ describe("KeyedSource", () => {
     const noPeriod = (read: (key: string) => Promise<Outcome<string>>) =>
       new KeyedSource<string, string>({
         name: "fake",
+        scope: "pane",
         keyOf: (k) => k,
         fields: (k) => `key=${k}`,
         read,
         every: null,
         maxEntries: 64,
         logger: () => {},
+        ledger: new RefreshLedger(),
       });
 
     test("a held entry is read only on a change, never on a clock", async () => {

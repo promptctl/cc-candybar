@@ -34,6 +34,7 @@ import {
   type Reading,
 } from "../../src/utils/outcome";
 import { settledLane, type Current, type Lane } from "../../src/utils/reading";
+import { HostService } from "../../src/segments/host";
 import {
   declareLanes,
   payloadOf,
@@ -154,9 +155,28 @@ export function fakeUsage(
   // reads it as not answered yet.
   const todayRefreshed = new Set<string>();
   const speed = refreshed<SpeedObservation>();
+  const getUsageInfo = (sessionId: string, hookData?: ClaudeHookData) =>
+    usage.store(sessionId, readers.usage?.(sessionId, hookData) ?? ABSENT);
+  const observeSpeed = (
+    sessionId: string,
+    transcriptPath: string | undefined,
+    nowMs: number,
+  ) =>
+    speed.store(
+      sessionId,
+      readers.speed?.(sessionId, transcriptPath, nowMs) ?? ABSENT,
+    );
   return {
-    getUsageInfo: (sessionId: string, hookData?: ClaudeHookData) =>
-      usage.store(sessionId, readers.usage?.(sessionId, hookData) ?? ABSENT),
+    getUsageInfo,
+    // A request's lanes over its session, as the real store's `request`.
+    request: (sessionId: string, transcriptPath: string | undefined) => ({
+      usage: (hookData: ClaudeHookData | undefined) =>
+        getUsageInfo(sessionId, hookData),
+      speed: (nowMs: number) => observeSpeed(sessionId, transcriptPath, nowMs),
+      today: async (_today: Lane<FakeSet>) => {
+        todayRefreshed.add(sessionId);
+      },
+    }),
     usageOf: (sessionId: string): Reading<UsageInfo> => usage.read(sessionId),
     declareToday: (
       _holds: Holds,
@@ -177,15 +197,7 @@ export function fakeUsage(
         ? ((readers.today?.(hookData, set.claudeConfigDir, at) ??
             ABSENT) as Outcome<TodayInfo>)
         : PENDING,
-    observeSpeed: (
-      sessionId: string,
-      transcriptPath: string | undefined,
-      nowMs: number,
-    ) =>
-      speed.store(
-        sessionId,
-        readers.speed?.(sessionId, transcriptPath, nowMs) ?? ABSENT,
-      ),
+    observeSpeed,
     speedOf: (sessionId: string): Reading<SpeedObservation> =>
       speed.read(sessionId),
   };
@@ -264,6 +276,8 @@ export function absentOwners() {
     tmuxService: fakeTmux(() => ABSENT),
     autoCompact: fakeAutoCompact(() => ABSENT),
     faults: new RefreshFaults(),
+    // The machine's identity, read as the daemon reads it.
+    hostService: new HostService(),
   };
 }
 
@@ -297,14 +311,13 @@ export async function requestPayload(
     neededInputPaths: closure,
     deps: { ...deps, lanes: () => lanes } as RenderPayloadDeps,
   };
-  await settlePayload(inputs, at);
-  const { payload, failures } = payloadOf(inputs, {
+  await settlePayload(inputs, at, new Map());
+  const payload = payloadOf(inputs, {
     effective,
     configFacts,
     history: EMPTY_HISTORY_DEPTH,
     back: 0,
   });
-  for (const f of failures) deps.log("warn", `provider fetch failed: ${f}`);
   return {
     ...payload,
     feeds: UNFOLLOWED_FEEDS,

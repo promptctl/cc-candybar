@@ -23,7 +23,8 @@
 import type { ClaudeHookData, ParsedEntry } from "../utils/claude";
 import type { ToolCall, TodoItem } from "../utils/transcript-activity";
 import { TranscriptFold, type FoldOutcome } from "../utils/transcript-fold";
-import type { DaemonLogger } from "../utils/logger";
+import { quietLogger, type DaemonLogger } from "../utils/logger";
+import { RefreshLedger } from "../utils/refresh-ledger";
 import { failed, ok, type Outcome, type Reading } from "../utils/outcome";
 
 export type { TodoItem } from "../utils/transcript-activity";
@@ -147,8 +148,18 @@ function report(state: ActivityState): ActivityInfo {
 export class ActivityProvider {
   private readonly fold: TranscriptFold<ActivityState>;
 
-  constructor(opts: { logger?: DaemonLogger } = {}) {
-    this.fold = new TranscriptFold<ActivityState>(EMPTY, step, opts.logger);
+  constructor(opts: { logger?: DaemonLogger; ledger?: RefreshLedger } = {}) {
+    const logger = opts.logger ?? quietLogger;
+    this.fold = new TranscriptFold<ActivityState>(
+      EMPTY,
+      step,
+      (opts.ledger ?? new RefreshLedger(logger)).declare({
+        name: "activity",
+        scope: "session",
+        refresh: ["request"],
+      }),
+      logger,
+    );
   }
 
   // [LAW:no-silent-failure] A transcript read error is `failed`, carried to the

@@ -32,7 +32,7 @@ The update notice compares two content digests of the source tree: one baked int
 
 Every render request writes exactly one render event. Fields are added stage by stage as the request goes through, so an absent field means the render stopped before that stage, and `-` means none. A bad request records no session id, because nothing an untrusted request says is recorded as fact. Any value a client could shape into something that parses as several fields (a session id, for example) is written as a JSON string. When a change introduces a new fact, put it on that event or on its source's refresh event. Counters go in the stats snapshot.
 
-Each source logs its own failures, once per refresh, and the payload logs none of them, so each failure appears once.
+Each source logs its own failures, once per refresh, and the payload logs none of them, so each failure appears once. Every source records its refreshes in one ledger, which is what the stats and a feed's summary read. A refresh a request triggered writes no line of its own: it is a fact of that request's render event, because a line per source per request would rotate the log every few minutes.
 
 The log never writes on the event loop. A synchronous write held every waiting client past its budget whenever the disk was slow, and each client that gave up was one more line. Lines still waiting when the process exits are written synchronously, so the death line lands. Anything reading the log, tests included, waits for the lines it expects rather than reading once.
 

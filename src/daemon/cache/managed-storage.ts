@@ -11,6 +11,7 @@ import {
 import type { Lane } from "../../utils/reading";
 import { ABSENT, failed, type Outcome } from "../../utils/outcome";
 import type { DaemonLogger } from "../../utils/logger";
+import { RefreshLedger } from "../../utils/refresh-ledger";
 import { valueOf } from "../../utils/logfmt";
 import { jsonParser } from "../../var-system/parse";
 import { sessionFileName } from "../../config/loader/plugins";
@@ -145,12 +146,14 @@ export class ManagedStorage {
     readonly watchers: WatcherRegistry;
     readonly logger: DaemonLogger;
     readonly identityOf?: IdentityRead;
+    readonly ledger?: RefreshLedger;
   }) {
     this.watchers = opts.watchers;
     this.logger = opts.logger;
     this.identityOf = opts.identityOf ?? statIdentity;
     this.sessions = new KeyedSource({
       name: "plugin storage",
+      scope: "session",
       keyOf: (f) =>
         JSON.stringify([f.storage.folder, f.storage.generation, f.sessionId]),
       fields: (f) =>
@@ -161,6 +164,7 @@ export class ManagedStorage {
       every: null,
       maxEntries: MAX_ENTRIES,
       logger: opts.logger,
+      ledger: opts.ledger ?? new RefreshLedger(opts.logger),
     });
   }
 

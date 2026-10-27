@@ -56,6 +56,12 @@ import {
 import { PendingValueError, readPending, type JsonValue } from "./types.js";
 import type { SessionStateReader } from "../daemon/session-state.js";
 import { TrailingEdge, type Trigger } from "../utils/trailing-edge.js";
+import {
+  RefreshLedger,
+  type Refreshes,
+  type RefreshTrigger,
+} from "../utils/refresh-ledger.js";
+import { valueOf } from "../utils/logfmt.js";
 
 // How long text that is not a document may be a write still in progress
 // before it shows as the failure it is (documentPublisher).
@@ -251,7 +257,40 @@ function parsed<V>(
 
 // The publish half of a source, closed over its store node: takes what the
 // reader yielded, parses it, and writes the node — value or fallback.
-type Publish = (read: Outcome<string>) => void;
+// What the read stored: its outcome, once parsed.
+type Publish = (read: Outcome<string>) => Outcome<unknown>;
+
+// What makes a user source read: its first read, and then what its cache
+// policy names — a period, or a change (a watched file, its key or
+// dependencies moving).
+type UserTrigger = Extract<RefreshTrigger, "first" | "period" | "change">;
+
+// [LAW:one-source-of-truth] A cache policy's refresh, in the ledger's
+// vocabulary.
+function refreshOf(policy: CachePolicy): readonly UserTrigger[] {
+  switch (policy.kind) {
+    case "never":
+      return ["first"];
+    case "ttl":
+      return ["first", "period"];
+    case "watch_file":
+    case "key":
+    case "depends_on":
+      return ["first", "change"];
+  }
+}
+
+// A policy over what a source reads runs it first when that answers, and on
+// every change of the answer after.
+function firstThenChange(
+  update: (cause: RunCause, by: UserTrigger) => void,
+): () => void {
+  let ran = false;
+  return () => {
+    update("new-key", ran ? "change" : "first");
+    ran = true;
+  };
+}
 
 // ─── WatchManager ─────────────────────────────────────────────────────────────
 
@@ -605,6 +644,8 @@ export class SourceRegistry {
   // parallel read or being dropped. Shared with the git cache's refresh path,
   // which had the same problem first — see src/utils/trailing-edge.ts.
   private readonly reads = new TrailingEdge();
+  // Each source's latest trigger, which the pass that answers it records.
+  private readonly askedBy = new Map<string, UserTrigger>();
   // [LAW:single-enforcer] The registry owns every async handle its sources
   // hold — timers, watchers, reactions, and the child processes and file
   // reads in flight. This is their cancellation: dispose() aborts it, so a
@@ -665,6 +706,9 @@ export class SourceRegistry {
     sessionState?: SessionStateReader,
     // The directory home a session's view reads through to (`view()`).
     private readonly parent: SourceRegistry | null = null,
+    // [LAW:single-enforcer] The daemon's one ledger, which every source's
+    // refreshes are recorded in; a registry outside the daemon keeps its own.
+    private readonly ledger: RefreshLedger = new RefreshLedger(),
   ) {
     this.sessionState = sessionState;
   }
@@ -683,6 +727,7 @@ export class SourceRegistry {
       this.defaultEmptyValue,
       this.sessionState,
       this,
+      this.ledger,
     );
   }
 
@@ -840,8 +885,15 @@ export class SourceRegistry {
   ): void {
     const publish = this.publisherFor(name, parse, reader.where);
     runInAction(() => this.sourceNames.push(name));
-    this.registerCachePolicy(name, cache, (cause) =>
-      this.runSource(name, reader, publish, cause),
+    // [LAW:types-are-the-program] Its scope is derived, never authored: a
+    // view's source reads a session value, a directory home's reads none.
+    const refreshes = this.ledger.declare({
+      name: `var.${name}`,
+      scope: this.parent === null ? "directory" : "view",
+      refresh: refreshOf(cache),
+    });
+    this.registerCachePolicy(name, cache, (cause, by) =>
+      this.runSource(name, reader, publish, cause, by, refreshes),
     );
   }
 
@@ -880,6 +932,7 @@ export class SourceRegistry {
       const outcome = parsed(read, parser, where);
       this.noteOutcome(name, outcome);
       this.store.setBox(name, orElse(outcome, fallback));
+      return outcome;
     };
   }
 
@@ -939,6 +992,9 @@ export class SourceRegistry {
       } else {
         show();
       }
+      // A torn read is still the failure its read met, though the document
+      // stays showing until the settle.
+      return outcome;
     };
   }
 
@@ -947,7 +1003,11 @@ export class SourceRegistry {
     reader: SourceReader,
     publish: Publish,
     cause: RunCause,
+    by: UserTrigger,
+    refreshes: Refreshes<UserTrigger>,
   ): void {
+    // The latest trigger is the one a coalesced pass answers.
+    this.askedBy.set(name, by);
     // [LAW:no-ambient-temporal-coupling] A trigger that arrives while this
     // source is mid-read is not a duplicate to drop: it means the inputs the
     // running read is about to publish are already stale. The trailing edge
@@ -960,11 +1020,22 @@ export class SourceRegistry {
     // [LAW:no-silent-failure] A cancelled read publishes nothing; the
     // registry's own abort is the one rejection a run may end in. Any other
     // rejection is a bug and stays unhandled — loud.
-    const trigger = this.reads.run(name, () =>
-      reader.read().then(publish, (err: unknown) => {
-        if (err !== this.abort.signal.reason) throw err;
-      }),
-    );
+    const trigger = this.reads.run(name, () => {
+      const asked = this.askedBy.get(name) ?? by;
+      const startedAt = Date.now();
+      return reader.read().then(
+        (read) =>
+          refreshes.recorded(
+            `where=${valueOf(reader.where)}`,
+            asked,
+            publish(read),
+            Date.now() - startedAt,
+          ),
+        (err: unknown) => {
+          if (err !== this.abort.signal.reason) throw err;
+        },
+      );
+    });
     this.track(name, trigger, cause);
   }
 
@@ -1269,27 +1340,27 @@ export class SourceRegistry {
   private registerCachePolicy(
     name: string,
     policy: CachePolicy,
-    update: (cause: RunCause) => void,
+    update: (cause: RunCause, by: UserTrigger) => void,
   ): void {
     switch (policy.kind) {
       case "never":
-        update("new-key");
+        update("new-key", "first");
         break;
 
       case "ttl": {
-        update("new-key");
+        update("new-key", "first");
         const unsub = this.ttlMgr.subscribe(policy.durationMs, () =>
-          update("re-read"),
+          update("re-read", "period"),
         );
         this.cleanups.push(unsub);
         break;
       }
 
       case "watch_file": {
-        update("new-key");
+        update("new-key", "first");
         const unsub = this.watchMgr.subscribe(
           policy.path,
-          () => update("re-read"),
+          () => update("re-read", "change"),
           (message) => this.notePolicy(name, failed(message)),
         );
         this.cleanups.push(unsub);
@@ -1325,7 +1396,7 @@ export class SourceRegistry {
                   );
             }
           },
-          () => update("new-key"),
+          firstThenChange(update),
         );
         break;
       }
@@ -1342,7 +1413,7 @@ export class SourceRegistry {
               ? ok(keys.map((key) => key.value).join(","))
               : PENDING;
           },
-          () => update("new-key"),
+          firstThenChange(update),
         );
         break;
       }
