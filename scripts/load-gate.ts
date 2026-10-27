@@ -21,6 +21,14 @@
 // sessions and does not climb; the cache's held counts stay flat.
 //
 // Run: pnpm build && pnpm load-gate [--sessions N] [--seconds S]
+//
+// The feed measurement (the frame-feed epic's criterion): the same world with
+// a moving bar and its statusline lane on, measured without a feed (`off`,
+// the baseline) and with one session's feed open (`on`), both at 1 Hz:
+//   pnpm load-gate --sessions 20 --period-ms 1000 --feed off > off.json
+//   pnpm load-gate --sessions 20 --period-ms 1000 --feed on --baseline off.json
+// The `on` run adds two checks: the feed holds its pace on its summary line,
+// and the statusline's `took=` p90 is within 2x of the baseline's.
 
 import { spawn } from "node:child_process";
 import fs from "node:fs";
@@ -38,6 +46,10 @@ import { mb, memoryLimitBytes } from "../src/daemon/limits.js";
 import { logLines } from "../src/daemon/log.js";
 import { logPath } from "../src/daemon/paths.js";
 import { chargeProbe } from "../src/daemon/memory-report.js";
+import {
+  openFrameStream,
+  type StreamEnd,
+} from "../src/daemon/client-frames.js";
 import { PARENT_PID_ENV } from "../src/daemon/parent-watchdog.js";
 import type { StatsSnapshot } from "../src/daemon/stats.js";
 import { sourceDigest } from "../src/source-digest.js";
@@ -51,19 +63,67 @@ const { values } = parseArgs({
   options: {
     sessions: { type: "string", default: "100" },
     seconds: { type: "string", default: "60" },
+    // Each session's statusline refreshes this often: 100 sessions ask ~60
+    // renders a second, five times what ~20 live sessions ask.
+    "period-ms": { type: "string", default: "1600" },
+    feed: { type: "string" },
+    baseline: { type: "string" },
   },
 });
 const SESSIONS = Number(values.sessions);
 const STEADY_MS = Number(values.seconds) * 1000;
-if (!(Number.isInteger(SESSIONS) && SESSIONS > 0 && STEADY_MS > 0)) {
+const SESSION_PERIOD_MS = Number(values["period-ms"]);
+if (
+  !(
+    Number.isInteger(SESSIONS) &&
+    SESSIONS > 0 &&
+    STEADY_MS > 0 &&
+    SESSION_PERIOD_MS > 0
+  )
+) {
   throw new Error(
-    `--sessions and --seconds must be positive: ${JSON.stringify(values)}`,
+    `--sessions, --seconds and --period-ms must be positive: ${JSON.stringify(values)}`,
   );
 }
-
-// Each session's statusline refreshes this often: 100 sessions ask ~60
-// renders a second, five times what ~20 live sessions ask.
-const SESSION_PERIOD_MS = 1600;
+// [LAW:parse-dont-validate] The feed's world, or none: the gate as CI runs it.
+type FeedWorld = "off" | "on" | null;
+const FEED: FeedWorld =
+  values.feed === undefined
+    ? null
+    : values.feed === "off" || values.feed === "on"
+      ? values.feed
+      : (() => {
+          throw new Error(`--feed is off or on: ${values.feed}`);
+        })();
+// How long the feed runs before the steady phase, so its first frames (the
+// lane's setup) are not scored.
+const FEED_SETTLE_MS = 3000;
+// The share of its pace a feed must draw at to hold it: frames are paced,
+// so a feed drawing on every beat lands a frame or two short of the pace.
+const FEED_PACE_SHARE = 0.95;
+// How far the statusline's p90 may rise with a feed open: the epic's
+// criterion.
+const FEED_P90_RATIO = 2;
+// [LAW:parse-dont-validate] The feed-off run the `on` run is judged against:
+// its statusline `took=` p90, read once from its own output.
+const BASELINE_P90: number | null =
+  values.baseline === undefined
+    ? null
+    : (() => {
+        if (FEED !== "on") throw new Error("--baseline judges a --feed on run");
+        const base = JSON.parse(fs.readFileSync(values.baseline, "utf8")) as {
+          facts: {
+            feed: { world: string } | null;
+            daemonRenderMs: { took: { p90: number } };
+          };
+        };
+        if (base.facts.feed?.world !== "off") {
+          throw new Error(
+            `--baseline is not a --feed off run: ${values.baseline}`,
+          );
+        }
+        return base.facts.daemonRenderMs.took.p90;
+      })();
 // An active session writes a turn to its transcript every few refreshes, and
 // stages a file (its git index changes) less often.
 const TURN_EVERY = 4;
@@ -75,6 +135,10 @@ const TRANSCRIPT_TURNS = 1700;
 // A cold daemon builds every session's state at once; each session must have
 // answered once by then.
 const WARM_DEADLINE_MS = 30_000;
+// A session is warm once it has answered twice: what its first answer set in
+// motion (its lane's setup) has landed by its second, so the steady phase's
+// first sample holds what the steady phase keeps.
+const WARM_ANSWERS = 2;
 const SAMPLE_MS = 5000;
 const INSPECTOR_CALL_MS = 30_000;
 // What the charge may grow by across the steady phase, beyond a heap's
@@ -110,9 +174,17 @@ fs.mkdirSync(path.dirname(socket), { mode: 0o700 });
 const unknownCalls = path.join(root, "unknown-calls");
 
 fs.mkdirSync(path.join(dirs.config, "cc-candybar"));
-fs.copyFileSync(
-  path.join(FIXTURES, "config.json5"),
+// The feed's world moves: an effect animates the bar, and the statusline lane
+// is on, so a feed has frames to push.
+const config = fs.readFileSync(path.join(FIXTURES, "config.json5"), "utf8");
+fs.writeFileSync(
   path.join(dirs.config, "cc-candybar", "config.json5"),
+  FEED === null
+    ? config
+    : config.replace(
+        "{",
+        '{ globals: { effect: "sparkle", experimentalStatusline: true },',
+      ),
 );
 fs.cpSync(
   path.join(FIXTURES, "plugins"),
@@ -157,7 +229,7 @@ interface Session {
   readonly checkout: string;
   readonly transcript: string;
   ticks: number;
-  answered: boolean;
+  answers: number;
 }
 
 const sessions: Session[] = Array.from({ length: SESSIONS }, (_, index) => {
@@ -201,7 +273,7 @@ const sessions: Session[] = Array.from({ length: SESSIONS }, (_, index) => {
       turn(id, checkout, t),
     ).join(""),
   );
-  return { index, id, checkout, transcript, ticks: 0, answered: false };
+  return { index, id, checkout, transcript, ticks: 0, answers: 0 };
 });
 
 function litStatusline(index: number): string {
@@ -496,7 +568,7 @@ function tick(s: Session): void {
       );
       outcome =
         rendered.kind === "ok" ? "ok" : `${rendered.kind}/${rendered.cause}`;
-      if (rendered.kind === "ok") s.answered = true;
+      if (rendered.kind === "ok") s.answers++;
     } catch (e) {
       // [LAW:no-silent-failure] A client path that throws is a failed render,
       // scored like any other, never a gate that ends without a verdict.
@@ -629,7 +701,7 @@ async function run(): Promise<{
   );
   const warmStarted = Date.now();
   while (
-    !sessions.every((s) => s.answered) &&
+    !sessions.every((s) => s.answers >= WARM_ANSWERS) &&
     Date.now() - warmStarted < WARM_DEADLINE_MS
   ) {
     await sleep(50);
@@ -637,9 +709,29 @@ async function run(): Promise<{
   const warmMs = Date.now() - warmStarted;
   // Counted at the deadline: a session that first answers during the
   // collection below answered late.
-  const silent = sessions.filter((s) => !s.answered).length;
+  const silent = sessions.filter((s) => s.answers === 0).length;
   // Before the steady phase, so no scored render waits on the collection.
   const heapBefore = await liveHeap();
+
+  // [LAW:dataflow-not-control-flow] The feed is one session's subscriber,
+  // opened only in the `on` world; its frames are counted over the steady
+  // phase alone.
+  let feedFrames = 0;
+  let feedEnd: StreamEnd | null = null;
+  const stream =
+    FEED === "on"
+      ? openFrameStream(
+          socket,
+          sessions[0]!.id,
+          "statusline",
+          () => feedFrames++,
+          (end) => {
+            feedEnd = end;
+          },
+        )
+      : null;
+  if (stream !== null) await sleep(FEED_SETTLE_MS);
+  const feedFramesBefore = feedFrames;
 
   phase = "steady";
   const steadyStarted = Date.now();
@@ -652,6 +744,7 @@ async function run(): Promise<{
   }
   gateLoop.disable();
   const steadyEnded = Date.now();
+  const feedFramesSteady = feedFrames - feedFramesBefore;
   // The second reading under the load the first was taken under: the steady
   // renders settle, and those the collection delays are not scored.
   phase = "after";
@@ -661,6 +754,11 @@ async function run(): Promise<{
   await Promise.all(inFlight);
   // The first and last samples each follow a collection.
   await sample(steadyStarted);
+  // After the last sample: a feed closing is a view's observers going, which
+  // the held counts would read as churn.
+  stream?.close();
+  // The feed's closing summary: what it drew over its whole life, at its pace.
+  const feedClosed = stream === null ? null : await feedSummary("closed");
   if (samples.length === 0) {
     throw new Error(
       `the daemon answered no stats sample: ${unanswered.join("; ")}`,
@@ -706,6 +804,7 @@ async function run(): Promise<{
     ? [...new Set(fs.readFileSync(unknownCalls, "utf8").trim().split("\n"))]
     : [];
   const ms = steady.map((r) => r.ms).sort((a, b) => a - b);
+  const daemonRenderMs = await daemonRenders(steadyStarted, steadyEnded);
 
   const checks: Check[] = [
     {
@@ -782,6 +881,18 @@ async function run(): Promise<{
           ? "every turn, stage and branch switch"
           : sessionWriteFailures.slice(0, 5).join("; "),
     },
+    // [LAW:dataflow-not-control-flow] The feed's checks, in the world that
+    // opens one; the p90 check where a baseline was given to judge by.
+    ...(feedClosed === null ? [] : [feedPaceCheck(feedClosed)]),
+    ...(BASELINE_P90 === null
+      ? []
+      : [
+          {
+            name: "statusline p90 within 2x of the feed-off baseline",
+            pass: daemonRenderMs.took.p90 <= FEED_P90_RATIO * BASELINE_P90,
+            detail: `took p90 ${daemonRenderMs.took.p90} ms with the feed, ${BASELINE_P90} ms without (limit ${FEED_P90_RATIO}x)`,
+          },
+        ]),
   ];
   const facts = {
     sessions: SESSIONS,
@@ -791,7 +902,12 @@ async function run(): Promise<{
       renders.filter((r) => r.phase === "warm").map((r) => r.outcome),
     ),
     steadyRenders: steady.length,
-    steadyMs: { p50: pct(ms, 0.5), p99: pct(ms, 0.99), max: ms.at(-1) ?? 0 },
+    steadyMs: {
+      p50: pct(ms, 0.5),
+      p90: pct(ms, 0.9),
+      p99: pct(ms, 0.99),
+      max: ms.at(-1) ?? 0,
+    },
     chargeMb: charges.map(mb),
     limitMb: mb(limit),
     rssMb: samples.map((s) => mb(s.stats.rssBytes)),
@@ -801,15 +917,65 @@ async function run(): Promise<{
     // how long it then waited for its refreshes and how long it took in all,
     // from its own render events, beside the gate's lag: a slow round trip is
     // one of these.
-    daemonRenderMs: await daemonRenders(steadyStarted, steadyEnded),
+    daemonRenderMs,
     gateLoopDelayMs: {
       p99: Math.round(gateLoop.percentile(99) / 1e6),
       max: Math.round(gateLoop.max / 1e6),
     },
     renderCache: last.renderCache,
     requests: last.requests,
+    // The frames the feed's subscriber received over the steady phase, how
+    // its stream ended (null while open), and the feed's own summary lines.
+    feed:
+      FEED === null
+        ? null
+        : {
+            world: FEED,
+            frames: feedFramesSteady,
+            fps: +(feedFramesSteady / (STEADY_MS / 1000)).toFixed(1),
+            end: feedEnd,
+            closed: feedClosed,
+          },
+    loadAverage: os.loadavg().map((x) => +x.toFixed(2)),
   };
   return { checks, facts };
+}
+
+// The feed's summary line in `state`, once the daemon has written it.
+async function feedSummary(state: "closed"): Promise<string> {
+  for (const giveUp = Date.now() + 10_000; Date.now() < giveUp; ) {
+    const line = logLines(logPath(env)).find(
+      (l) => l.includes("] feed sid=") && l.includes(` ${state} `),
+    );
+    if (line !== undefined) return line;
+    await sleep(200);
+  }
+  throw new Error(`the feed wrote no ${state} summary within 10 s`);
+}
+
+// [LAW:verifiable-goals] A feed holds its pace when it draws, over its life,
+// at the pace its summary states.
+function feedPaceCheck(summary: string): Check {
+  const field = (name: string): number =>
+    Number(new RegExp(` ${name}=(\\d+)`).exec(summary)?.[1]);
+  const drawn = field("drawn");
+  const seconds = field("for");
+  const pace = field("pace");
+  const fps = drawn / seconds;
+  return {
+    name: "feed holds its pace",
+    pass: Number.isFinite(fps) && fps >= FEED_PACE_SHARE * pace,
+    detail: `drew ${drawn} frames in ${seconds} s (${fps.toFixed(1)} fps of ${pace}; at least ${FEED_PACE_SHARE * 100}%)`,
+  };
+}
+
+// One field's spread over the window's renders, in ms.
+interface Spread {
+  readonly n: number;
+  readonly p50: number;
+  readonly p90: number;
+  readonly p99: number;
+  readonly max: number;
 }
 
 // What the daemon itself took over every render it finished in the window.
@@ -818,7 +984,7 @@ async function run(): Promise<{
 async function daemonRenders(
   since: number,
   until: number,
-): Promise<Record<"took" | "queued" | "waited", Record<string, number>>> {
+): Promise<Record<"took" | "queued" | "waited", Spread>> {
   const log = logPath(env);
   const stamped = (): Array<{ at: number; line: string }> =>
     logLines(log).map((line) => ({ at: Date.parse(line.slice(0, 24)), line }));
@@ -839,12 +1005,18 @@ async function daemonRenders(
         line.includes(" took="),
     )
     .map(({ line }) => line);
-  const spread = (field: string): Record<string, number> => {
+  const spread = (field: string): Spread => {
     const ms = lines
       .map((l) => Number(new RegExp(` ${field}=(\\d+)ms`).exec(l)?.[1]))
       .filter(Number.isFinite)
       .sort((a, b) => a - b);
-    return { n: ms.length, p99: pct(ms, 0.99), max: ms.at(-1) ?? 0 };
+    return {
+      n: ms.length,
+      p50: pct(ms, 0.5),
+      p90: pct(ms, 0.9),
+      p99: pct(ms, 0.99),
+      max: ms.at(-1) ?? 0,
+    };
   };
   return {
     took: spread("took"),
