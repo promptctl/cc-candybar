@@ -16,8 +16,10 @@ export function uncommented(text) {
 // A reader takes a runtime's source and returns the canonical string for one
 // mirrored fact, or null when its anchor is missing. [LAW:single-enforcer]
 // Every reader is built here, over the source less its comment lines: no
-// reader can take a value from a commented-out copy of its anchor, so a
-// region a reader slices is delimited by code, never by a comment.
+// reader can take a value from a line that opens as a comment, so a region a
+// reader slices is delimited by code, never by a comment. A comment trailing
+// code on the same line stays (see uncommented), so a member regex that could
+// meet one anchors at the line start.
 const overCode =
   (read) =>
   (source, ...anchors) =>
@@ -70,6 +72,31 @@ export const codeRanges = overCode((code, blockRegex) => {
 export const markers = overCode((code, patterns, description) =>
   patterns.every((p) => p.test(code)) ? description : null,
 );
+
+// Set algebra over canonical member strings, for a row whose value is one
+// side's set less, or within, another's. [LAW:one-source-of-truth] The
+// canonical form (sorted, ", "-joined) is read and split here only. A null
+// operand is a missing anchor, and stays null through the operation.
+const members = (set) => new Set(set.split(", "));
+const keep = (set, test) =>
+  set
+    .split(", ")
+    .filter((m) => test(m))
+    .join(", ");
+
+// The members of `set` that none of `others` name.
+export function without(set, ...others) {
+  if (set === null || others.some((o) => o === null)) return null;
+  const named = new Set(others.flatMap((o) => [...members(o)]));
+  return keep(set, (m) => !named.has(m));
+}
+
+// The members of `set` that `other` also names.
+export function within(set, other) {
+  if (set === null || other === null) return null;
+  const named = members(other);
+  return keep(set, (m) => named.has(m));
+}
 
 // The set of code points in the body of a table of inclusive range pairs,
 // `[lo, hi]` (TS) or `(lo, hi)` (Rust), in hex or decimal with optional `_`

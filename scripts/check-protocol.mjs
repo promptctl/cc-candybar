@@ -102,12 +102,7 @@ function nativeNamesNodeLacks() {
     /export const DEBUG_WHATS = \[[^\]]+\]/,
     /"([a-z]+)"/g,
   )();
-  if (native === null || node === null || debug === null) return null;
-  const nodeNames = new Set([...node.split(", "), ...debug.split(", ")]);
-  return native
-    .split(", ")
-    .filter((n) => !nodeNames.has(n))
-    .join(", ");
+  return reads.without(native, node, debug);
 }
 
 const errorCodes = memberSet(
@@ -115,10 +110,12 @@ const errorCodes = memberSet(
   /export type ErrorCode =[^;]+;/,
   /"([A-Z_]+)"/g,
 );
-// The two functions that decide by a code: classify, then after_stream_end.
+// The four decisions, from the first to the close of the last: the two that
+// decide by a code today, and the two beside them, so a code a decision comes
+// to spell is read wherever among them it lands.
 const followerCodes = memberSet(
   RS_FOLLOW,
-  /^fn classify\([\s\S]+?^fn after_stream_end\([\s\S]+?^\}/m,
+  /^fn classify\([\s\S]+?^fn next_retry_ms\([\s\S]+?^\}/m,
   /"([A-Z_]+)"/g,
 );
 
@@ -136,13 +133,7 @@ function renderRequestOwnKeys() {
     /export interface RenderRequest \{[\s\S]+?\n\}/,
     /^ {2}(\w+)\??:/gm,
   )();
-  const hints = clientHintKeys();
-  if (all === null || hints === null) return null;
-  const hinted = new Set(hints.split(", "));
-  return all
-    .split(", ")
-    .filter((k) => !hinted.has(k))
-    .join(", ");
+  return reads.without(all, clientHintKeys());
 }
 
 // The error codes the native follower decides by, less any the daemon's
@@ -150,14 +141,7 @@ function renderRequestOwnKeys() {
 // row agrees exactly when every code it spells is one the daemon sends: a
 // renamed code would otherwise fall through to its `exit` arm.
 function followerCodesTheDaemonSends() {
-  const follower = followerCodes();
-  const daemon = errorCodes();
-  if (follower === null || daemon === null) return null;
-  const sent = new Set(daemon.split(", "));
-  return follower
-    .split(", ")
-    .filter((c) => sent.has(c))
-    .join(", ");
+  return reads.within(followerCodes(), errorCodes());
 }
 
 // [LAW:one-source-of-truth] A row's mirror is the Rust client (`rust`) or
@@ -270,7 +254,11 @@ const CHECKS = [
   {
     label: "client-hint wire keys",
     ts: clientHintKeys,
-    rust: memberSet(RS_MAIN, /^fn client_hints\([\s\S]+?^\}/m, /request\["(\w+)"\]/g),
+    rust: memberSet(
+      RS_MAIN,
+      /^fn client_hints\([\s\S]+?^\}/m,
+      /^\s*request\["(\w+)"\]/gm,
+    ),
   },
   // The render request's own wire keys, the ones beside its hints. A key the
   // native client stops sending degrades the same silent way: a `deadline`
@@ -284,7 +272,7 @@ const CHECKS = [
     rust: memberSet(
       RS_MAIN,
       /let mut request = serde_json::json!\(\{[\s\S]+?let body = match serde_json::to_vec\(&request\)/,
-      /(?:^ +"|request\[")(\w+)"(?::|\])/gm,
+      /^\s*(?:"|request\[")(\w+)"(?::|\])/gm,
     ),
   },
   // What the native client says it is: the field names of the `client` hint.
