@@ -185,6 +185,9 @@ describe("daemon transcript-fs concurrency", () => {
 // fs burst is in flight. Guards the scripts from bitrot and demonstrates the
 // heap-snapshot delta gate (diff) + retainer trace the 5qh evidence was built
 // from. Always-green: the snapshots are constructed to contain the signal.
+// The burst is plain reads, not the daemon's transcript reader: the scripts
+// read pending fs ops of any origin, and the daemon's reader is the bound the
+// concurrency gate above holds, not these.
 describe("heap-analysis scripts", () => {
   const scriptsDir = join(process.cwd(), "scripts");
   let before: string;

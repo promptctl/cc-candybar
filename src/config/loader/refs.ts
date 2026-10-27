@@ -177,6 +177,19 @@ function* callGraphBlocks(
   yield* walk(template, "", null, new Set());
 }
 
+// One answer per template text: a gate's text recurs at every node of every
+// preset that edit chrome wraps alike, and every question asked of a template
+// is asked of the same text again at compile.
+export function perTemplate<T>(
+  answer: (template: string) => T,
+): (t: string) => T {
+  const answers = new Map<string, T>();
+  return (template) => {
+    if (!answers.has(template)) answers.set(template, answer(template));
+    return answers.get(template)!;
+  };
+}
+
 // [LAW:one-source-of-truth] The walk, materialised once per template under one
 // helpers object, and read by every question asked of that template: a
 // template is asked what it reads, which actions it binds, which functions
@@ -184,22 +197,20 @@ function* callGraphBlocks(
 // its own over the same text. The helpers object is the config's, so the
 // walks live exactly as long as the config does, as a config's value-reads
 // fold does (value-reads.ts).
-const WALKS = new WeakMap<object, Map<string, readonly GraphBlock[]>>();
+const WALKS = new WeakMap<
+  object,
+  (template: string) => readonly GraphBlock[]
+>();
 function callGraph(
   template: string,
   helpers: Readonly<Record<string, string>>,
 ): readonly GraphBlock[] {
   let walks = WALKS.get(helpers);
   if (walks === undefined) {
-    walks = new Map();
+    walks = perTemplate((t) => [...callGraphBlocks(t, helpers)]);
     WALKS.set(helpers, walks);
   }
-  let blocks = walks.get(template);
-  if (blocks === undefined) {
-    blocks = [...callGraphBlocks(template, helpers)];
-    walks.set(template, blocks);
-  }
-  return blocks;
+  return walks(template);
 }
 
 // The refs an action's text spells, as paths from the template's root. A `$.a`

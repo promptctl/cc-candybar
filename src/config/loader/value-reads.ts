@@ -20,6 +20,7 @@ import {
 import {
   bindsComputedAction,
   declaredVariables,
+  perTemplate,
   templateActionRefs,
   templateFunctions,
   templateReads,
@@ -135,16 +136,6 @@ export function payloadPathOf(
     default:
       return undefined;
   }
-}
-
-// One answer per template text: a gate's text recurs at every node of every
-// preset that edit chrome wraps alike.
-function perTemplate<T>(answer: (template: string) => T): (t: string) => T {
-  const answers = new Map<string, T>();
-  return (template) => {
-    if (!answers.has(template)) answers.set(template, answer(template));
-    return answers.get(template)!;
-  };
 }
 
 // A config's fold, built once per config object: every walk over one config
