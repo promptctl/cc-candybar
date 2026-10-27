@@ -1674,7 +1674,9 @@ describe("the frame rate beside the door", () => {
   test("a request's answer shows that Claude Code polls the bar", () => {
     const r = rig(TWO_SEGMENT_ROOT);
     try {
-      expect(doorLine(r.render())).toMatch(afterDoor(POLLED));
+      const line = doorLine(r.render());
+      expect(line).toMatch(afterDoor(POLLED));
+      expect(line).not.toMatch(/fps/u);
     } finally {
       r.dispose();
     }
@@ -1686,7 +1688,8 @@ describe("the frame rate beside the door", () => {
       const still = doorLine(r.render(undefined, undefined, { by: "feed", fps: 1 }));
       const moving = doorLine(r.render(undefined, undefined, { by: "feed", fps: MOVING_FPS }));
       const polled = doorLine(r.render());
-      expect(still).toContain(`${" ".repeat(String(MOVING_FPS).length - 1)}1 fps`);
+      // The equal lengths are the padding: an unpadded form would be shorter.
+      expect(still).toMatch(afterDoor("1 fps"));
       expect(still.length).toBe(moving.length);
       expect(polled.length).toBe(moving.length);
     } finally {
