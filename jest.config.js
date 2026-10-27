@@ -36,9 +36,9 @@ export default {
         // [LAW:single-enforcer] Types are checked once, by `tsc --noEmit`
         // (the Test job's typecheck step, and publish). The transform only
         // transpiles: with a type-check it re-reads the module graph in every
-        // worker on a cold cache, which is seconds per test file on CI.
-        // tsconfig's `isolatedModules` is what makes transpiling alone sound.
-        isolatedModules: true,
+        // worker on a cold cache, which is seconds per test file on CI. The
+        // switch is tsconfig's `isolatedModules`, which ts-jest reads; it is
+        // not set here, where ts-jest deprecates it.
       },
     ],
   },

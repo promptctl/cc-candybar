@@ -471,16 +471,18 @@ describe("done-when: a vocabulary of size 1 is a uniform bar", () => {
     const only = { hue: "primary", shade: "muted" } as const;
     // The selector reads one step, so the sweep is over the distinct steps
     // the addresses hold, not the addresses: a few dozen, where every node of
-    // every shape under every distribution is a hundred thousand repeats.
+    // every shape under every distribution is a hundred thousand repeats. A
+    // step's distribution is a function, which JSON drops, so the key names
+    // it: the same position under two distributions is two steps.
     const steps = new Map<string, PlacedStep | undefined>([["", undefined]]);
     for (const name of ALL_NAMES) {
       for (const { shape } of SHAPES) {
         for (const { address } of allNodes(shape, DISTRIBUTIONS[name])) {
-          for (const step of address) steps.set(JSON.stringify(step), step);
+          for (const step of address) steps.set(`${name}:${JSON.stringify(step)}`, step);
         }
       }
     }
-    expect(steps.size).toBeGreaterThan(1);
+    expect(steps.size).toBeGreaterThan(ALL_NAMES.length);
     for (const step of steps.values()) {
       for (const quantize of [inBin, nearestPoint]) {
         expect(vocabularySelect([only], step, quantize)).toBe(only);
