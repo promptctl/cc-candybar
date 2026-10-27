@@ -32,14 +32,16 @@ declare const approved: unique symbol;
 // loader a project it did not gate.
 export type ApprovedRepo = string & { readonly [approved]: true };
 
-export type RepoStanding = RepoAnswer | "awaiting";
+// [LAW:types-are-the-program] `unread` is not `awaiting`: a book that could
+// not be read takes no answer either, so the bar asks nothing it could not
+// record, and the unread notice speaks for every repository.
+export type RepoStanding = RepoAnswer | "awaiting" | "unread";
 
-// A directory's standing: its answer, or awaiting one. A book that could not
-// be read answers for no directory, so every repository waits on it.
+// A directory's standing: its answer, awaiting one, or unknown because the
+// book could not be read. Only `approved` loads.
 export function standing(answers: RepoAnswers, dir: string): RepoStanding {
-  return answers.kind === "ok" && Object.hasOwn(answers.value, dir)
-    ? answers.value[dir]!
-    : "awaiting";
+  if (answers.kind === "failed") return "unread";
+  return Object.hasOwn(answers.value, dir) ? answers.value[dir]! : "awaiting";
 }
 
 // What a session's repositories contribute, as their answers decide it.

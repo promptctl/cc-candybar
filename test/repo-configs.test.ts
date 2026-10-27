@@ -108,7 +108,7 @@ describe("the gate over a project's config file", () => {
     expect(durableConfig(book({}), project, project).above).toEqual([]);
   });
 
-  test("a book that cannot be read answers for nobody, and says so", () => {
+  test("a book that cannot be read answers for nobody, asks nothing, and says so", () => {
     write(".cc-candybar.json5", "{}");
     const resolved = resolveDslConfig(
       { kind: "failed", reason: "repo-configs.json is not JSON" },
@@ -116,7 +116,9 @@ describe("the gate over a project's config file", () => {
       project,
     );
     expect(resolved.kind === "chain" && resolved.layers).toEqual([]);
-    expect(resolved.repos.awaiting).toEqual([project]);
+    // A question it asked could not be recorded: the notice is the answer.
+    expect(resolved.repos.awaiting).toEqual([]);
+    expect(resolved.repos.declined).toEqual([]);
     expect(resolved.repos.unread).toBe("repo-configs.json is not JSON");
     // The bar's search notice stays about the search.
     expect(configResolutionNotice(resolved)).toBeNull();
@@ -227,7 +229,9 @@ test("the question offers each answer as a link signed for its session, director
     signer,
   );
   expect(rest).toEqual([]);
-  expect(channel!.message).toBe(`${project} has a cc-candybar config — run it?`);
+  expect(channel!.message).toBe(
+    `${project} has a cc-candybar config — run it?`,
+  );
   const answers = channel!.lines[0]
     .flatMap((span) => effectsOf(span.link))
     .filter((e) => e.verb === VERB_REPO_CONFIG);
@@ -236,7 +240,12 @@ test("the question offers each answer as a link signed for its session, director
     ["sid-1", project, "declined"],
   ]);
   for (const e of answers) {
-    const [sid, dir, answer, mac] = e.args as [string, string, "approved", string];
+    const [sid, dir, answer, mac] = e.args as [
+      string,
+      string,
+      "approved",
+      string,
+    ];
     expect(signer.verify(repoAnswerFields(sid, dir, answer), mac)).toBe(true);
     // The mac answers for this answer only.
     const other = answer === "approved" ? "declined" : "approved";
