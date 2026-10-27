@@ -151,8 +151,11 @@ describe("SessionState disk persistence", () => {
   // still publishes, and the flush's newer state waits for the next save.
   it("a synchronous flush the disk refuses leaves the in-flight write to land", async () => {
     const logged: string[] = [];
+    // A real debounce: the newer state the failed flush leaves pending is
+    // rescheduled once the raced write lands, and must not land before the
+    // file is read back.
     const ss = new SessionState(
-      new FileSessionStorage(file, 0, (_level, line) => logged.push(line)),
+      new FileSessionStorage(file, 500, (_level, line) => logged.push(line)),
     );
     const rename = fs.promises.rename;
     let release: () => void = () => {};
@@ -187,6 +190,12 @@ describe("SessionState disk persistence", () => {
     expect(logged.filter((l) => l.includes("save failed"))).toHaveLength(1);
     expect(logged.filter((l) => l.includes("superseded"))).toEqual([]);
     expect(logged.filter((l) => l.includes("saved"))).toHaveLength(1);
+    // The newer state is still pending: the next flush lands it.
+    ss.flush();
+    expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({
+      s1: { theme: "new" },
+    });
+    expect(logged.filter((l) => l.includes("saved"))).toHaveLength(2);
   });
 
   // A flush that lands before the debounced write reaches its rename: the
