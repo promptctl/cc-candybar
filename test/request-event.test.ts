@@ -35,19 +35,4 @@ describe("requestEvent", () => {
       `render sid=${JSON.stringify('a b outcome=ok\n[error] render sid="x"')} took=1ms outcome=ok`,
     );
   });
-
-  test("a request the world failed is an error event naming the problem, with no stack", () => {
-    const facts: RequestFacts = [];
-    noteFacts(facts, { verb: "tmux-status-click", link: "https://x" });
-    const { level, line } = requestEvent(
-      "click",
-      facts,
-      { kind: "failed", problem: "opening https://x failed (non-zero)" },
-      3,
-    );
-    expect(level).toBe("error");
-    expect(line).toBe(
-      'click verb=tmux-status-click link=https://x took=3ms outcome=failed problem="opening https://x failed (non-zero)"',
-    );
-  });
 });

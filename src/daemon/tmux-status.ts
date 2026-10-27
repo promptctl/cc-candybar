@@ -33,7 +33,6 @@ import type { TmuxRun } from "../proc/tmux.js";
 import type { TmuxHint } from "../tmux-hint.js";
 import type { StatusLines } from "./pane-visibility.js";
 import type { Subscriber } from "./frame-feed.js";
-import { decodeWire } from "./verb-error.js";
 import {
   decodeSegments,
   encodeSegments,
@@ -632,10 +631,10 @@ export class TmuxStatusLines {
   // (segments, as the binding's URL carries them): the link the frame the
   // daemon drew there marks it with.
   linkAt(value: string): StatusClick {
-    const [socket, pane, range, ...extra] = decodeWire(() =>
-      decodeSegments(value),
-    );
+    const segments = segmentsOf(value);
+    const [socket, pane, range, ...extra] = segments ?? [];
     if (
+      segments === null ||
       socket === undefined ||
       pane === undefined ||
       range === undefined ||
@@ -1077,5 +1076,16 @@ export class TmuxStatusLines {
       socket,
       this.deps.edge.runSync(socket, chain(commands), stdin),
     );
+  }
+}
+
+// A status-line click's segments, or null when one is not percent-encoded:
+// a value it cannot read is refused like any other it cannot use.
+function segmentsOf(value: string): string[] | null {
+  try {
+    return decodeSegments(value);
+  } catch (err) {
+    if (err instanceof URIError) return null;
+    throw err;
   }
 }

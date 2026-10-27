@@ -16,8 +16,8 @@ export class BadVerbArgs extends Error {
 // (`%ZZ`, a lone `%`); that is an argument-shape failure, not an operational
 // one, so it must reach the dispatcher as BadVerbArgs (→ BAD_REQUEST) like every
 // other bad-input shape. Every decode of a click's wire value (the verb codecs,
-// a status-line click's segments) funnels through here so the reclassification
-// lives once.
+// the verb of a link a status-line click runs) funnels through here so the
+// reclassification lives once.
 export function decodeWire<T>(decode: () => T): T {
   try {
     return decode();

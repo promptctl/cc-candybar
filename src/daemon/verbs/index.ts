@@ -18,7 +18,7 @@
 // into the typed args it needs. URL format mirrors:
 //   cc-candybar://<verb>/<value>   where <value> may itself contain `/`.
 
-import { launchSync } from "../../proc/launch";
+import { launchSync, type LaunchOpts } from "../../proc/launch";
 import type { SessionStateReader, SessionStateRW } from "../session-state";
 import { holdClickError } from "../click-error";
 import { instantOf } from "../../utils/instant";
@@ -302,47 +302,49 @@ function oneArg(value: string): string {
 
 // ─── Verb handlers ───────────────────────────────────────────────────────────
 
-// [LAW:single-enforcer] One clipboard primitive, no decode — both the `copy`
-// verb (decodes a wire segment) and the diagnostic verbs (already hold a plain
-// message) funnel here so the launch + rate-limit handling lives in one place.
-function pbcopy(text: string, ctx: VerbContext): void {
-  const result = launchSync({
-    bin: "/usr/bin/pbcopy",
-    stdinInput: text,
-    category: "click.pbcopy",
-  });
-  // [LAW:dataflow-not-control-flow] Rate-limit rejection is one outcome among
-  // many — the click is acknowledged and the rejection is logged. Other
-  // failures are genuine errors that surface as RENDER_FAILED.
-  if (!result.ok) {
-    if (result.reason === "rate-limited") {
-      ctx.dlog("warn", `click.pbcopy rate-limited: ${result.error ?? ""}`);
-      return;
-    }
-    throw new Error(
-      `pbcopy failed (${result.reason}, exit ${result.exitCode ?? "null"})`,
-    );
+// [LAW:single-enforcer] The one launch a click makes of a program — the
+// clipboard, an editor, a status-line link's opener — so its failure handling
+// lives in one place. [LAW:dataflow-not-control-flow] Rate-limit rejection is
+// one outcome among many — the click is acknowledged and the rejection is
+// logged. Other failures are genuine errors that surface as RENDER_FAILED.
+export function clickLaunch(
+  opts: LaunchOpts,
+  what: string,
+  dlog: DaemonContext["dlog"],
+): void {
+  const result = launchSync(opts);
+  if (result.ok) return;
+  if (result.reason === "rate-limited") {
+    dlog("warn", `${opts.category} rate-limited: ${result.error ?? ""}`);
+    return;
   }
+  throw new Error(
+    `${what} failed (${result.reason}, exit ${result.exitCode ?? "null"})`,
+  );
+}
+
+// One clipboard primitive, no decode — both the `copy` verb (decodes a wire
+// segment) and the diagnostic verbs (already hold a plain message) funnel here.
+function pbcopy(text: string, ctx: VerbContext): void {
+  clickLaunch(
+    { bin: "/usr/bin/pbcopy", stdinInput: text, category: "click.pbcopy" },
+    "pbcopy",
+    ctx.dlog,
+  );
 }
 
 const copy: VerbHandler = (value, ctx) => pbcopy(oneArg(value), ctx);
 
-const openVscode: VerbHandler = (value, ctx) => {
-  const result = launchSync({
-    bin: "/usr/bin/open",
-    args: ["-a", "Visual Studio Code", oneArg(value)],
-    category: "click.open",
-  });
-  if (!result.ok) {
-    if (result.reason === "rate-limited") {
-      ctx.dlog("warn", `click.open rate-limited: ${result.error ?? ""}`);
-      return;
-    }
-    throw new Error(
-      `open -a "Visual Studio Code" failed (${result.reason}, exit ${result.exitCode ?? "null"})`,
-    );
-  }
-};
+const openVscode: VerbHandler = (value, ctx) =>
+  clickLaunch(
+    {
+      bin: "/usr/bin/open",
+      args: ["-a", "Visual Studio Code", oneArg(value)],
+      category: "click.open",
+    },
+    'open -a "Visual Studio Code"',
+    ctx.dlog,
+  );
 
 // Click on the ⚠ in the bar copies the parse error to clipboard.
 const showConfigError: VerbHandler = (value, ctx) => pbcopy(oneArg(value), ctx);

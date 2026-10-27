@@ -456,13 +456,18 @@ describe("every render request writes one render event, whatever its outcome", (
       { verb: VERB_SET_STATE, args: ["../x", "candybar.menu", "open"] },
     ]);
     expect((await sendClick(sockPath, badSession)).ok).toBe(false);
+    // A verb that names no session, refused before it launches anything.
+    expect((await sendClick(sockPath, "cc-candybar://copy/%E0")).ok).toBe(
+      false,
+    );
     const refusedBy = (ls: readonly string[], needle: string): Event[] =>
       clickEvents(ls).filter((e) => field(e, "problems")?.includes(needle));
     const lines = await loggedWhen(
       env,
       (ls) =>
         refusedBy(ls, "no-such-verb").length > 0 &&
-        refusedBy(ls, "session id").length > 0,
+        refusedBy(ls, "session id").length > 0 &&
+        clickEvents(ls).some((e) => field(e, "verb") === "copy"),
       "the refused clicks' events",
     );
     const opened = only(
@@ -473,12 +478,14 @@ describe("every render request writes one render event, whatever its outcome", (
       "queued",
       "verb",
       "sid",
+      "timedOut",
       "took",
       "outcome",
     ]);
     expect(field(opened, "verb")).toBe("dispatch");
     expect(field(opened, "queued")).toMatch(/^\d+ms$/);
     expect(field(opened, "took")).toMatch(/^\d+ms$/);
+    expect(field(opened, "timedOut")).toBe("N");
     expect(field(opened, "outcome")).toBe("ok");
     // Refused before its verb was known: no verb, no session. The client's
     // text is in the problem, never a field.
@@ -486,6 +493,7 @@ describe("every render request writes one render event, whatever its outcome", (
     expect(unknownVerb.level).toBe("warn");
     expect(unknownVerb.fields.map(([key]) => key)).toEqual([
       "queued",
+      "timedOut",
       "took",
       "outcome",
       "problems",
@@ -499,11 +507,17 @@ describe("every render request writes one render event, whatever its outcome", (
     expect(unparsed.fields.map(([key]) => key)).toEqual([
       "queued",
       "verb",
+      "timedOut",
       "took",
       "outcome",
       "problems",
     ]);
     expect(field(unparsed, "outcome")).toBe("bad-request");
+    // A click naming no session says so: `-`, not absent.
+    const sessionless = only(
+      clickEvents(lines).filter((e) => field(e, "verb") === "copy"),
+    );
+    expect(field(sessionless, "sid")).toBe("-");
   });
 
   // A click the daemon cannot read still writes its event, refused as the
@@ -529,20 +543,21 @@ describe("every render request writes one render event, whatever its outcome", (
       env,
       (ls) =>
         refusedBy(ls, "are strings").length > 0 &&
-        refusedBy(ls, "malformed wire encoding").length > 0,
+        refusedBy(ls, "needs <socket>/<pane>/<range>").length > 0,
       "the malformed clicks' events",
     );
     const fields = only(refusedBy(lines, "are strings"));
     expect(fields.level).toBe("warn");
     expect(fields.fields.map(([key]) => key)).toEqual([
       "queued",
+      "timedOut",
       "took",
       "outcome",
       "problems",
     ]);
-    // The status-line verb is known, so it is recorded before the decode
-    // that refused its value.
-    const escape = only(refusedBy(lines, "malformed wire encoding"));
+    // The status-line verb is known, so it is recorded before the value its
+    // decode refused.
+    const escape = only(refusedBy(lines, "needs <socket>/<pane>/<range>"));
     expect(field(escape, "verb")).toBe(VERB_TMUX_STATUS_CLICK);
     expect(field(escape, "outcome")).toBe("bad-request");
   });

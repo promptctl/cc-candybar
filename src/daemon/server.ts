@@ -96,6 +96,7 @@ import { NavigationHistory } from "./navigation-history";
 import { stateGate } from "./verbs/state-validators";
 import {
   VERBS,
+  clickLaunch,
   clickSessionOf,
   closeIdleMenus,
   BadVerbArgs,
@@ -120,7 +121,8 @@ import {
   type RateLimitsSeen,
 } from "./render-sightings";
 import { claudeConfigDir } from "../claude-settings";
-import { launch, launchSync, setLaunchStats } from "../proc/launch";
+import { launch, setLaunchStats } from "../proc/launch";
+import { decodeWire } from "./verb-error";
 import { buildDebugSnapshot } from "./debug";
 import { DEBUG_WHATS, isDebugWhat } from "./debug-types";
 import { drawDsl, type RenderWarning } from "../dsl/render.js";
@@ -1500,6 +1502,9 @@ export async function replyTo(
     const t0 = performance.now();
     const facts: RequestFacts = [["queued", `${Math.round(t0 - accepted)}ms`]];
     const outcome = clickOutcome(req, facts);
+    // Whether the client was already told TIMEOUT while the click waited or
+    // ran: its effect still lands, and the client reported a failure.
+    noteFacts(facts, { timedOut: timedOut() ? "Y" : "N" });
     const { level, line } = requestEvent(
       "click",
       facts,
@@ -1763,14 +1768,15 @@ function serializeSegmentCells(
 // outcome. Its verb and value are untrusted JSON, refused here unless both are
 // strings, and whatever the click then throws is its outcome too, so every
 // click writes its event: a refusal of its arguments is a bad request, and
-// anything else thrown is a bug, recorded with its stack.
+// anything else thrown is the daemon's failure — a program the click ran, or
+// a bug — recorded with the stack that says which.
 function clickOutcome(req: ClickRequest, facts: RequestFacts): RequestOutcome {
   const { verb, value } = req as { verb: unknown; value: unknown };
   if (typeof verb !== "string" || typeof value !== "string") {
     return {
       kind: "bad-request",
       problems: [
-        `a click's verb and value are strings, got ${JSON.stringify({ verb, value })}`,
+        `a click's verb and value are strings, got ${typeof verb} and ${typeof value}`,
       ],
     };
   }
@@ -1838,13 +1844,6 @@ function clickReply(outcome: RequestOutcome): Response {
       };
     case "threw":
       return renderFailed(outcome.error);
-    case "failed":
-      return {
-        ok: false,
-        error: outcome.problem,
-        code: "RENDER_FAILED",
-        daemonV: PROTOCOL_VERSION,
-      };
   }
 }
 
@@ -1861,7 +1860,9 @@ function statusLineClick(value: string, facts: RequestFacts): RequestOutcome {
   if (click.kind === "refused") return refused(click.reason);
   noteFacts(facts, { link: click.url });
   if (click.url.startsWith("cc-candybar://")) {
-    const parsed = parseHandlerUrl(click.url);
+    // A link a config wrote with a malformed escape is refused, as any
+    // click's malformed wire encoding is.
+    const parsed = decodeWire(() => parseHandlerUrl(click.url));
     // [LAW:no-silent-failure] A link the bar draws never names this verb; one
     // that did would be a click that only ever clicks another.
     if (parsed.verb === VERB_TMUX_STATUS_CLICK)
@@ -1873,17 +1874,16 @@ function statusLineClick(value: string, facts: RequestFacts): RequestOutcome {
       facts,
     );
   }
-  const opened = launchSync({
-    bin: process.platform === "darwin" ? "/usr/bin/open" : "xdg-open",
-    args: [click.url],
-    category: "click.open",
-  });
-  return opened.ok
-    ? { kind: "ok" }
-    : {
-        kind: "failed",
-        problem: `opening ${click.url} failed (${opened.error ?? opened.reason})`,
-      };
+  clickLaunch(
+    {
+      bin: process.platform === "darwin" ? "/usr/bin/open" : "xdg-open",
+      args: [click.url],
+      category: "click.open",
+    },
+    `opening ${click.url}`,
+    dlog,
+  );
+  return { kind: "ok" };
 }
 
 // --- render ---
