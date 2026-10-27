@@ -19,6 +19,7 @@ import { ABSENT } from "../src/utils/outcome";
 import { stripAnsi } from "./helpers/ansi";
 import { viewFacts } from "./helpers/view-facts";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
+import { setLaunchStats, type LaunchCategory } from "../src/proc/launch";
 
 // brandon-unfiled-3248.8ro6, step 2: each value lives where its scope says. A
 // directory's store holds the sources no session value reaches; each session
@@ -438,3 +439,56 @@ test("views the served entry alone carries past the budget are said, not hidden"
   );
 });
 
+// A config load declares the session values into a view no session draws, to
+// find what cannot declare. Every source a view holds reads a session value,
+// which that view never answers, so the load starts none of them: counted at
+// the spawn, since the probe's teardown aborts a shell it started before the
+// shell can leave a trace of its own.
+test("a config load starts no view's source, and still names a session value that cannot declare", async () => {
+  const shell = (name: string, cache: object) => ({
+    kind: "shell",
+    command: counted(name, name),
+    cache,
+  });
+  fs.writeFileSync(
+    path.join(dir, ".cc-candybar.json5"),
+    JSON.stringify({
+      variables: {
+        sid: { kind: "input", path: "session_id" },
+        mode: { kind: "state", key: "mode", default: "a" },
+        byInput: shell("byInput", { key: "{{ .sid }}" }),
+        byState: shell("byState", { key: "{{ .mode }}" }),
+        afterState: shell("afterState", { depends_on: ["mode"] }),
+        byDepth: shell("byDepth", {
+          key: '{{ readableOn "#777777" "#000000" 4.5 }}',
+        }),
+        perDirectory: shell("perDirectory", { ttl: "1h" }),
+        unclosed: { kind: "template", template: "{{ .sid " },
+      },
+      segments: {
+        s: {
+          template:
+            "{{ .byInput }} {{ .byState }} {{ .afterState }} {{ .byDepth }} {{ .perDirectory }}",
+        },
+      },
+      root: { h: ["s"] },
+    }),
+  );
+  const started: LaunchCategory[] = [];
+  setLaunchStats({ onStart: (c) => started.push(c), onEnd: () => {} });
+  cleanups.push(() => setLaunchStats(null));
+  const shells = () => started.filter((c) => c === "user-shell").length;
+  const { cache } = makeCache();
+
+  const entry = cache.getOrCreate(dir, dir, undefined);
+  expect(await entry.state!.registry.settled(5000)).toEqual([]);
+  expect(entry.lastError).toBeNull();
+  expect(entry.lastWarning).toContain('Variable "unclosed":');
+  // The directory's one source, and nothing a session did not ask for.
+  expect(shells()).toBe(1);
+  expect(runs("perDirectory")).toBe(1);
+
+  // A session asks for each of them.
+  await render(cache, "s-a");
+  expect(shells()).toBe(5);
+});
