@@ -7,7 +7,8 @@
 // synthesis runs the same two total functions on every preset root, in the same
 // order, every load: `withAnchor` yields a tree that CONTAINS the anchor — the
 // author's own placement untouched, or the default position prepended — and
-// `expandAnchor` replaces that one leaf with the lowered disclosure subtree.
+// `expandAnchor` replaces that one leaf with the lowered disclosure subtree
+// and the frame-rate cell beside it.
 // "The author placed it" and "the author did not" differ only in the VALUE
 // handed to one splice; there is no second code path to keep in agreement.
 //
@@ -389,15 +390,20 @@ const laneReadout = (lane: Lane): string => {
 // rate to show, since its redraws are Claude Code's, and the requests that
 // carry them cannot tell its timer from its event redraws or a daemon stall.
 // [LAW:dataflow-not-control-flow] The one branch is Drawing's own
-// discriminator. The pace is padded to the widest it can be, MOVING_FPS, and
-// `polled` is as wide, so a bar starting, stopping or losing its lane moves
-// no cell after it.
-export const FPS_SEG = `${SETTINGS_NS}fps`;
+// discriminator. Both forms are padded to the wider of `polled` and the
+// fastest pace, MOVING_FPS, so a bar starting, stopping or losing its lane
+// moves no cell after it.
+const FPS_SEG = `${SETTINGS_NS}fps`;
 export const POLLED = "polled";
+const FPS_UNIT = " fps";
+const RATE_WIDTH = Math.max(
+  POLLED.length,
+  String(MOVING_FPS).length + FPS_UNIT.length,
+);
 const FRAME_RATE =
   `{{ if eq .${drawingVar("by")} "${"feed" satisfies Drawing["by"]}" }}` +
-  `{{ printf "%${String(MOVING_FPS).length}d" (int .${drawingVar("fps")}) }} fps` +
-  `{{ else }}${POLLED}{{ end }}`;
+  `{{ printf "%${RATE_WIDTH - FPS_UNIT.length}d" (int .${drawingVar("fps")}) }}${FPS_UNIT}` +
+  `{{ else }}${POLLED.padStart(RATE_WIDTH)}{{ end }}`;
 
 // What a control shows after itself: a lane's toggle its readout.
 const TRAIL: Partial<Record<SettingName, string>> = Object.fromEntries(
