@@ -73,13 +73,15 @@ export function valueReads({ names, helpers, actions }: ReadBasis): ValueReads {
     ];
   };
   // Every text a template's draw evaluates: itself, then its bound actions'.
-  const texts = (template: string): readonly string[] => {
+  // Answered once per template: the reads and the calls both ask, and the
+  // bound actions are two walks of the template's call graph.
+  const texts = perTemplate((template): readonly string[] => {
     const bound = bindsComputedAction(template, helpers)
       ? Object.keys(actions)
       : templateActionRefs(template, helpers).map((ref) => ref.name);
     const seen = new Set<string>();
     return [template, ...bound.flatMap((name) => actionTexts(name, seen))];
-  };
+  });
   const ofTemplate = perTemplate((template) =>
     texts(template).flatMap((text) =>
       [...templateReads(text, helpers).keys()].map((path) => ({
