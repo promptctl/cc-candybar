@@ -13,7 +13,7 @@ Every project asked for gets a record [LAW:no-silent-failure]:
   {"js": "ok" | "<stderr tail>" | null, "py": "ok" | "<stderr tail>" | null}
 null where the entry has no manifest of that kind.
 """
-import json, os, subprocess, sys, tomllib
+import json, os, shutil, subprocess, sys, tomllib
 
 ENTRIES, SRC, DEST = sys.argv[1:4]
 ONLY = set(sys.argv[4:])
@@ -72,7 +72,8 @@ def py_deps(root, rel):
     if not want:
         return 'ok'
     venv = os.path.join(root, VENV)
-    r = sh(['uv', 'venv', '--quiet', venv], root)
+    # on the python3 the sandbox can read; uv's own managed interpreter lives under the home directory, which it denies
+    r = sh(['uv', 'venv', '--quiet', '--python', shutil.which('python3'), venv], root)
     if r != 'ok':
         return r
     return sh(['uv', 'pip', 'install', '--quiet', '--python', os.path.join(venv, 'bin', 'python3'), '--only-binary', ':all:'] + want, root)

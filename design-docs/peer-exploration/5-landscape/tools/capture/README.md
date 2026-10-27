@@ -100,13 +100,13 @@ raise that:
    survey's order as tie-break, author's runner kept); 210 safe entries changed command and are
    being rerun into `captures-rerun.json` (log `run-rerun.log`, slugs in `rerun.json`). Eleven
    of those had a working capture under the old command; keep whichever capture is ok.
-3. `deps.py` is written and tested on three projects: bun deps work end to end
-   (`Ido-Levi__claude-code-tamagotchi` captures). The venv path does not yet: the venv's
-   `python3` fails with "Operation not permitted" under the sandbox. Unverified guess: the
-   venv's interpreter symlink resolves into a path the profile does not allow to execute, or
-   the venv needs `--seed`/copies rather than symlinks. Fix that, then run deps over the failing
-   entries (296 node and bun entries have a package.json, 44 python entries a manifest),
-   re-resolve, rerun those slugs.
+3. `deps.py` is running over the 544 failing safe entries (`deps-todo.json`, log `deps.log`,
+   output `deps.json`). Both paths are proven on one project each: bun
+   (`Ido-Levi__claude-code-tamagotchi`) and a venv (`oroddlokken__ccreport`). The venv has to
+   be built on the Homebrew python3: uv's own managed interpreter lives under the home
+   directory, which the sandbox denies, so a venv on it fails "Operation not permitted". After
+   it finishes: re-resolve the safe tier so launch picks up the venvs, rerun the slugs whose
+   deps fetched, merge.
 
 After the sweeps: merge the partial files into `captures.json`, then `pnpm data && pnpm build`
 in the explorer and `node smoke.mjs`. Five bars still show a truncated sandbox path containing

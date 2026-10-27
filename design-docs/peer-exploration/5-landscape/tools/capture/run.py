@@ -31,8 +31,9 @@ sys.path.insert(0, HERE)  # -I leaves the script's own directory off the path
 from scrub import scrub  # noqa: E402
 PROFILE = os.path.join(HERE, 'sandbox.sb')
 TIMEOUT = 20
+SLOW_MS = 3000  # average per tick above which the timeline is cut short
 WIDTHS, MAIN, ROWS = (80, 120, 160), 120, 40
-MAX_TREE = 200_000_000
+MAX_TREE = 600_000_000  # node_modules fetched by deps.py count; a bigger tree is only slower to copy
 WORKERS = 8
 TICKS = sorted(os.listdir(os.path.join(FIXTURE, 'tick')))
 # this user's temp directory, by its real path, for the sandbox to deny
@@ -109,12 +110,17 @@ def run_timeline(slug, entry, src, width):
             exit_code = 'timeout'
         # A bar that leaves a helper running in the background (a cache refresher, a daemon) would hold
         # the pipes open into the next tick and outlive the sweep; the whole session is ended each tick.
+        # A helper that made its own session survives that and keeps the pipes, so after a timeout
+        # nothing waits on the pipes again: they are closed and only the direct child is reaped.
         try:
             os.killpg(p.pid, signal.SIGKILL)
         except ProcessLookupError:
             pass
         if exit_code == 'timeout':
-            out, err = p.communicate()
+            out, err = b'', b''
+            p.stdout.close()
+            p.stderr.close()
+            p.wait()
         ms += int((time.time() - t0) * 1000)
         text = scrub(out.decode('utf-8', errors='replace'), run)[:20000]
         ok = exit_code == 0 and text.strip() != ''
@@ -125,6 +131,11 @@ def run_timeline(slug, entry, src, width):
         if ok and text != last:
             frames.append([k, text])
             last = text
+        # Claude Code re-runs a bar on every change; one that takes seconds per run is not a bar
+        # that works there, and walking it through sixty ticks would take an hour. Its first
+        # frame is kept and the timeline stops.
+        if ms > SLOW_MS * (k + 1):
+            break
     shutil.rmtree(run, ignore_errors=True)
     return {'first': first, 'frames': frames, 'ms': ms}
 

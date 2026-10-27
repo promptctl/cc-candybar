@@ -99,6 +99,8 @@ def resolve_cmd(root, cmd, by_base, preferred):
     if any(w.strip('"\'') in RUNNERS for w in out[:at]):
         if out[0] == 'node' and ext(file) in ('ts', 'mts', 'tsx'):
             out[0] = 'bun'
+        if out[0] in ('python3', 'python') and os.path.exists(os.path.join(root, '.ccland-venv/bin/python3')):
+            out[0] = '"__PROJ__/.ccland-venv/bin/python3"'
         return ' '.join(out), file
     how = launch(root, file)
     if how is None:
@@ -133,22 +135,64 @@ def launch(root, file):
 
 
 READS_STDIN = re.compile(r'stdin|readFileSync\(\s*0|\bread\s+-r|\bjq\b|\bcat\b')
-ENTRY_NAME = re.compile(r'(^|/)(index|main|cli|statusline|status[-_]line|status)\.[^/]+$', re.I)
+STATUSLINE_NAME = re.compile(r'(^|/)[^/]*status[-_]?line[^/]*\.[^/]+$', re.I)
+ENTRY_NAME = re.compile(r'(^|/)(index|main|cli|status)\.[^/]+$', re.I)
 NOT_ENTRY = re.compile(r'(^|/)(types?|schemas?|config|utils?|helpers?|constants|interfaces|formatters?|stdin|payload|render(er)?)\.[^/]+$', re.I)
+
+
+BUILT = re.compile(r'(^|/)(dist|build|lib|out)/(.*)\.(c|m)?js$')
+
+
+def manifest_entries(root, file):
+    """What the package.json nearest the survey's file names as its entry, with the weight it earns:
+    a bin is what the author runs, a main may be a library's API. A built path that is absent, as in
+    a checkout nobody built, is tried as its source under src/."""
+    d = os.path.dirname(file)
+    while True:
+        pj = os.path.join(root, d, 'package.json')
+        if os.path.exists(pj):
+            break
+        if not d:
+            return {}
+        d = os.path.dirname(d)
+    try:
+        m = json.load(open(pj, encoding='utf-8', errors='replace'))
+    except ValueError:
+        return {}
+    bins = m.get('bin')
+    named = [(b, 2) for b in ([bins] if isinstance(bins, str) else list(bins.values()) if isinstance(bins, dict) else [])] + [(m.get("main") or "", 1)]
+    out = {}
+    for n, weight in named:
+        if not isinstance(n, str) or not n:
+            continue
+        rel = os.path.normpath(os.path.join(d, n))
+        if os.path.isfile(os.path.join(root, rel)):
+            out.setdefault(rel, weight)
+            continue
+        built = BUILT.search(n)
+        if built:
+            for src in ('src/%s.ts' % built.group(3), 'src/%s.tsx' % built.group(3), 'src/%s.mts' % built.group(3)):
+                srel = os.path.normpath(os.path.join(d, src))
+                if os.path.isfile(os.path.join(root, srel)):
+                    out.setdefault(srel, weight)
+                    break
+    return out
 
 
 def guess(root, files):
     """The survey's files for a project, ranked by how much each looks like the entry: the one that
-    reads stdin and is named like one, not a types or helpers module. The survey's own order breaks ties."""
+    reads stdin and is named like one, not a types or helpers module. The survey's own order breaks ties.
+    A package manifest's bin or main is the fallback: it beats a file with nothing going for it."""
     best = None
-    for rank, f in enumerate(files):
+    declared = {f: w for f, w in manifest_entries(root, files[0]).items() if ext(f) in ('js', 'mjs', 'cjs', 'ts', 'tsx', 'mts')} if files else {}
+    for rank, f in enumerate(list(declared) + list(files)):
         if NOT_A_STATUSLINE.search(f) or f.endswith('.d.ts') or not os.path.isfile(os.path.join(root, f)):
             continue
         how = launch(root, f)
         if how is None:
             continue
         text = open(os.path.join(root, f), encoding='utf-8', errors='replace').read(200_000)
-        score = 3 * bool(READS_STDIN.search(text)) + 4 * bool(ENTRY_NAME.search(f)) - 3 * bool(NOT_ENTRY.search(f)) - rank
+        score = 3 * bool(READS_STDIN.search(text)) + (6 if STATUSLINE_NAME.search(f) else 3 if ENTRY_NAME.search(f) else 0) - 3 * bool(NOT_ENTRY.search(f)) - rank + declared.get(f, 0)
         if best is None or score > best[0]:
             best = (score, how, f)
     return best and best[1:]
