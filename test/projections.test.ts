@@ -199,7 +199,7 @@ test("the config load line names the load's projections", () => {
     });
     expect(loaded.error).toBeNull();
     loaded.state!.registry.dispose();
-    return pluginLoadLine(loaded.layers, loaded.state!);
+    return pluginLoadLine(loaded.layers, loaded.state!, loaded.ms);
   };
   // The projections the line names, less the draw's own facts every config
   // has (DRAW_PROJECTIONS).

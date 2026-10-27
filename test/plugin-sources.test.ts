@@ -479,7 +479,7 @@ describe("a source's declaration", () => {
       signer: TEST_SIGNER,
     });
     try {
-      expect(pluginLoadLine(loaded.layers, loaded.state!)).toContain(
+      expect(pluginLoadLine(loaded.layers, loaded.state!, loaded.ms)).toContain(
         " plugins loaded=2 sources=2 pluginVariables=1 dropped=0 ",
       );
     } finally {
