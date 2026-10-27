@@ -426,11 +426,16 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     const shown = outputs(frames).map(stripAnsi);
     expect(shown[0]).toContain("a still mark");
     expect(shown.some((text) => text.includes("the picked mark"))).toBe(true);
-    const opened = readFileSync(daemonLog, "utf8")
-      .split("\n")
-      .filter((l) => l.includes(`session view opened sid=${JSON.stringify(sid)} `))
-      .map((l) => / by=(\w+) /.exec(l)?.[1]);
-    expect(opened).toEqual(["request", "click", "click"]);
+    // [LAW:no-ambient-temporal-coupling] The log is written off the loop, so
+    // the frame a click's view-open draws can reach the test before the line
+    // that records the open lands. Wait for the lines, as laneLines does.
+    const opened = (): Array<string | undefined> =>
+      readFileSync(daemonLog, "utf8")
+        .split("\n")
+        .filter((l) => l.includes(`session view opened sid=${JSON.stringify(sid)} `))
+        .map((l) => / by=(\w+) /.exec(l)?.[1]);
+    await until(() => opened().length >= 3, "the cleared pick's view-open line");
+    expect(opened()).toEqual(["request", "click", "click"]);
   });
 
   test("a subscriber that arrives before the session's first render receives it", async () => {
