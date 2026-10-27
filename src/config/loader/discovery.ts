@@ -7,6 +7,15 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { presence, type Unchecked } from "../../utils/presence.js";
+import { listFolders, REPO_PLUGIN_DIR } from "./plugin-folders.js";
+import {
+  gateRepos,
+  standing,
+  type ApprovedRepo,
+  type RepoAnswers,
+  type RepoGate,
+  type RepoProject,
+} from "./repo-gate.js";
 
 // [LAW:one-source-of-truth] The set of accepted extensions lives here once.
 // Both .json5 and .json are accepted: JSON ⊂ JSON5, so the same parser
@@ -97,13 +106,17 @@ function xdgConfigBase(): string {
  * (`durableConfig`). `chain` carries `unchecked`: locations stat could not
  * see past; the search never stops on a guess, and the notice names each.
  *
+ * Every arm carries `repos`: what the session's repositories contribute,
+ * as their answers decide it. A cwd or project layer whose directory is not
+ * approved is not in the chain.
+ *
  * [LAW:types-are-the-program] `string | null` collapsed `default` and
  * `missing` into one null, which is how an explicit path to a nonexistent
  * file rendered byte-identically to no config at all (brandon-config-5g8).
  * The path rides on `missing` so the message and the durable-write target
  * both name it without re-deriving it from the inputs.
  */
-export type ConfigResolution =
+export type ConfigResolution = { readonly repos: RepoGate } & (
   | {
       readonly kind: "chain";
       readonly layers: readonly string[];
@@ -116,7 +129,8 @@ export type ConfigResolution =
       readonly path: string;
       readonly home: string;
       readonly error: string;
-    };
+    }
+);
 
 /**
  * The search, over the locations of `dslConfigCandidatePaths`:
@@ -139,15 +153,23 @@ export type ConfigResolution =
  * branch.
  *
  * [LAW:single-enforcer] Built on top of `dslConfigCandidatePaths` — the
- * precedence list lives in one place.
+ * precedence list lives in one place. And the one place a repository's
+ * answer decides whether its files load (`gateRepos`): the render, `check`
+ * and the durable writer all resolve here.
  */
 export function resolveDslConfig(
+  answers: RepoAnswers,
   projectDir?: string,
   cwd?: string,
   configFile?: string,
 ): ConfigResolution {
   const unchecked: Unchecked[] = [];
-  const atLocation = new Map<string, string>();
+  // Each location's file, and the real directory of the repository that
+  // supplies it — null for the user's own file or the explicit one.
+  const atLocation = new Map<
+    string,
+    { readonly file: string; readonly repo: string | null }
+  >();
   for (const candidate of dslConfigCandidatePaths(
     projectDir,
     cwd,
@@ -162,23 +184,57 @@ export function resolveDslConfig(
     // A location is a directory AND a base name: `.cc-candybar` and the XDG
     // `config` may share a directory and are two layers; `.json5`/`.json`
     // at one location are one, the first enumerated winning.
+    const dir = fs.realpathSync(path.dirname(candidate));
     const location = path.join(
-      fs.realpathSync(path.dirname(candidate)),
+      dir,
       path.basename(candidate).replace(/\.(json5|json)$/, ""),
     );
-    if (!atLocation.has(location)) atLocation.set(location, candidate);
+    const repo = configFile !== undefined || isUserFile(candidate) ? null : dir;
+    if (!atLocation.has(location)) {
+      atLocation.set(location, { file: candidate, repo });
+    }
   }
-  const layers = [...atLocation.values()].reverse();
+  const found = [...atLocation.values()];
+  const repos = gateRepos(
+    answers,
+    found.flatMap((f) => (f.repo === null ? [] : [f.repo])),
+    repoProject(projectDir),
+  );
+  const layers = found
+    .filter((f) => f.repo === null || standing(answers, f.repo) === "approved")
+    .map((f) => f.file)
+    .reverse();
   if (configFile === undefined) {
-    return { kind: "chain", layers, home: userHome(layers), unchecked };
+    return { kind: "chain", layers, home: userHome(layers), unchecked, repos };
   }
   // An explicit path is the sole candidate: its one probe is the verdict.
   const [own] = unchecked;
   const home = configFile;
-  if (layers.length > 0) return { kind: "chain", layers, home, unchecked };
+  if (layers.length > 0) {
+    return { kind: "chain", layers, home, unchecked, repos };
+  }
   return own === undefined
-    ? { kind: "missing", path: configFile, home }
-    : { kind: "unreadable", ...own, home };
+    ? { kind: "missing", path: configFile, home, repos }
+    : { kind: "unreadable", ...own, home, repos };
+}
+
+// The user's own XDG file, at either extension: the one chain layer no
+// repository can supply.
+function isUserFile(candidate: string): boolean {
+  return CONFIG_EXTENSIONS.some((e) => candidate === `${xdgConfigBase()}.${e}`);
+}
+
+// The session's project, or null for none, or one that is not there.
+function repoProject(projectDir: string | undefined): RepoProject | null {
+  if (projectDir === undefined || presence(projectDir) !== "present") {
+    return null;
+  }
+  const listed = listFolders(path.join(projectDir, REPO_PLUGIN_DIR));
+  return {
+    dir: fs.realpathSync(projectDir),
+    path: projectDir,
+    ships: !("error" in listed) && listed.folders.length > 0,
+  };
 }
 
 // The user's file: the XDG layer when the chain holds one, else the file a
@@ -212,23 +268,24 @@ export interface ConfigHome {
   // The chain's layers over `path`, lowest first. The home is the chain's
   // bottom, so a layer is either the home or above it.
   readonly above: readonly string[];
-  // The session's project and working directory the chain loads for (its
-  // installed plugins, and their checkout data paths).
-  readonly projectDir: string | null;
+  // The approved project whose plugins the chain loads, and the working
+  // directory their checkout data paths resolve against.
+  readonly repo: ApprovedRepo | null;
   readonly cwd: string | null;
 }
 
 export function durableConfig(
+  answers: RepoAnswers,
   projectDir?: string,
   cwd?: string,
   configFile?: string,
 ): ConfigHome {
-  const resolved = resolveDslConfig(projectDir, cwd, configFile);
+  const resolved = resolveDslConfig(answers, projectDir, cwd, configFile);
   const layers = resolved.kind === "chain" ? resolved.layers : [];
   return {
     path: resolved.home,
     above: layers.filter((l) => l !== resolved.home),
-    projectDir: projectDir ?? null,
+    repo: resolved.repos.plugins,
     cwd: cwd ?? null,
   };
 }

@@ -113,7 +113,7 @@ export function loadConfigOnce(origin: ConfigOrigin): ConfigLoad {
     deps,
   );
   const state =
-    loaded.state ?? fallbackState(origin.cwd, origin.projectDir, deps);
+    loaded.state ?? fallbackState(origin.cwd, loaded.repos.plugins, deps);
   state.registry.dispose();
   return {
     layers: loaded.layers,

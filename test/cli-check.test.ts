@@ -24,6 +24,7 @@ import {
 } from "../src/check";
 import { detectConfigEnv } from "../src/config-hint";
 import { stripAnsi } from "./helpers/daemon-e2e";
+import { answerRepo } from "./helpers/repo-approval";
 
 // The budget a verdict waits for a source that will not answer in time: long
 // enough that a settling source is not mistaken for a straggler, short enough
@@ -818,6 +819,7 @@ describe("checkConfig — default resolution (the daemon's own chain)", () => {
       "proj/.cc-candybar.json5",
       `{ segments: { a: { template: 'a' } }, root: { h: ['a'] } }`,
     );
+    answerRepo(cwd);
     const outcome = await checkConfig(undefined, cwd);
     expect(outcome.kind).toBe("clean");
     if (outcome.kind === "clean") expect(outcome.layers).toEqual([p]);

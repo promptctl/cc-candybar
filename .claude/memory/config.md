@@ -8,6 +8,8 @@ Only ENOENT counts as absent. A location a stat can't see past, such as an unsea
 
 When `.json5` and `.json` sit side by side, `.json5` wins and the shadowed file gets a warning.
 
+A cwd or project layer, and a repository's own plugin folder, load only once the user has approved that directory in the bar. A config can run commands, so a cloned repository asks once, as Claude Code does for a project's MCP servers. The answer is kept by directory, not by content, so editing the files never asks again. The gate sits inside the one resolution every load shares (the render, `check`, the durable writer, the demo), and the plugin listing takes only an approved project as a stamped type, so a new load path can't list a repository's plugins without consulting the answer. The answers live in the state directory, beside the link key that signs the question's clicks.
+
 User files merge over the bundled default by name. Segments and presets merge by name and then by field, so a user declares only what differs. Root rows merge by name, and a whole tree replaces every row.
 
 JSON5 tolerates duplicate keys (the last one wins), but the file editor refuses the whole document. So loading runs the editor's own scanner and warns. With one detector, the warning and the refusal can't disagree.

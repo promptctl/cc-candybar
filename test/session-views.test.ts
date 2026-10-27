@@ -20,6 +20,7 @@ import { stripAnsi } from "./helpers/ansi";
 import { viewFacts } from "./helpers/view-facts";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { setLaunchStats } from "../src/proc/launch";
+import { answerRepo } from "./helpers/repo-approval";
 
 // brandon-unfiled-3248.8ro6, step 2: each value lives where its scope says. A
 // directory's store holds the sources no session value reaches; each session
@@ -32,6 +33,8 @@ let dir: string;
 let cleanups: Array<() => void>;
 beforeEach(() => {
   dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "ccb-views-")));
+  // The configs these sessions draw are the directory's own.
+  answerRepo(dir);
   cleanups = [() => fs.rmSync(dir, { recursive: true, force: true })];
 });
 afterEach(() => {
@@ -101,6 +104,7 @@ function configure(cwd: string): void {
     root: { h: ["who"] },
   };
   fs.writeFileSync(path.join(cwd, ".cc-candybar.json5"), JSON.stringify(config));
+  answerRepo(cwd);
 }
 
 const drawn = (

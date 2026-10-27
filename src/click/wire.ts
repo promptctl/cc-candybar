@@ -152,6 +152,12 @@ export const VERB_SLASH = "slash";
 // sources it refreshes come from that declaration, never the URL.
 export const VERB_RUN = "run";
 
+// [LAW:effects-at-boundaries] Answer the bar's question about a repository's
+// cc-candybar config. Args: `[sessionId, dir, answer, mac]` — `answer` is
+// approved or declined, and `mac` signs the session, directory and answer
+// (src/daemon/repo-configs.ts), so only an answer the bar drew is recorded.
+export const VERB_REPO_CONFIG = "repo-config";
+
 // [LAW:types-are-the-program] What a `run` link carries of the draw's
 // evaluation: the argv, program first, and the variables laid over the
 // session's process environment.

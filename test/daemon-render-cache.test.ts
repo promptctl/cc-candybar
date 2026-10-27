@@ -47,6 +47,7 @@ import { SETTINGS_NS } from "../src/config/loader/reserved-namespace";
 import { PRESET_FLOOR, presetRoot } from "../src/config/presets";
 import { viewFacts } from "./helpers/view-facts";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
+import { answerRepo } from "./helpers/repo-approval";
 
 // Flatten a layout tree to its segment names, in pre-order — the post-`root`
 // equivalent of the old `config.layout.flatMap(r => r.segments)`.
@@ -98,6 +99,8 @@ function makeCache(
 
 function mkConfigDir(): { dir: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "cc-candybar-cache-"));
+  // The config the cache loads here is the directory's own.
+  answerRepo(dir);
   return {
     dir,
     cleanup: () => rmSync(dir, { recursive: true, force: true }),

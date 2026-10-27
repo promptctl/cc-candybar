@@ -5,6 +5,7 @@
 - The transform transpiles only, so a type error in a test passes jest and fails the typecheck. Types have one checker, tsc, which the Test job runs before the suite; checking them in the transform costs seconds per file on CI's cold cache.
 - Tests time out at 30 s. Fake time and the filesystem rather than waiting on real ones.
 - Test setup isolates the daemon from the host. Claude Code's config directory points at an empty dir, so no test reads the host's Claude Code settings or transcripts. The registry URL points at a closed port, and managed settings at an empty dir.
+- Test setup also isolates the state directory, so a test never sees the host's answers for repository configs. A test that loads a project or cwd config, or a repository's plugins, approves the directory first through the approval helper. Unapproved, the layer is silently absent from the chain, and the failure looks like the config never loaded.
 - Test daemons watch the Jest worker's pid and shut down when it dies, so a killed or timed-out Jest can't leave an orphaned daemon.
 - Close any render cache a test builds. Otherwise its idle sweep keeps it, and every compile it serves, alive for the life of the worker.
 - The authoring docs under docs/ are tested against the live loader, so editing a doc can fail tests.
