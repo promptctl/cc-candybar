@@ -1,9 +1,108 @@
 // How check-protocol reads source: a range table as one set of code points,
-// and comment lines as not-code. A wrong reading here passes a drift between
-// the runtimes or fails an equal pair, so each rule is pinned on fixed text.
-import { rangeSpans, uncommented } from "../scripts/protocol-source";
+// comment lines as not-code, and every reader over the code alone. A wrong
+// reading here passes a drift between the runtimes or fails an equal pair, so
+// each rule is pinned on fixed text.
+import {
+  codeRanges,
+  lit,
+  markers,
+  memberSet,
+  num,
+  rangeSpans,
+  uncommented,
+  union,
+  within,
+  without,
+} from "../scripts/protocol-source";
 
 const SANITIZER = "U+0000-U+001F, U+007F-U+009F, U+202A-U+202E, U+2066-U+206F";
+
+// Each reader, on source where a commented-out copy of its anchor still
+// carries the value the mirror has, above the real anchor that has moved on:
+// the reader returns what the runtime runs, never the comment, so the moved
+// value is the drift the check reports.
+describe("readers take no value from a comment line", () => {
+  it("num", () => {
+    const src =
+      "// export const PROTOCOL_VERSION = 3;\nexport const PROTOCOL_VERSION = 4;\n";
+    expect(num(src, /export const PROTOCOL_VERSION = ([\d\s*]+);/)).toBe("4");
+    expect(num("const N = 16 * 1_024;", /const N = ([\d\s*_]+);/)).toBe(
+      "16384",
+    );
+    expect(num("// const N = 1;\n", /const N = ([\d\s*]+);/)).toBeNull();
+  });
+
+  it("lit", () => {
+    const src =
+      '  // const PREFIX = "\\x1b[1m";\n  const PREFIX = "\\u{1b}[2m";\n';
+    expect(lit(src, /const PREFIX = "((?:[^"\\]|\\.)*)";/)).toBe(
+      JSON.stringify("\x1b[2m"),
+    );
+  });
+
+  it("memberSet: a commented copy of the block, and a commented member in it", () => {
+    const src = [
+      '// export type ErrorCode = "TIMEOUT" | "BAD_REQUEST";',
+      "export type ErrorCode =",
+      '  | "TIMEOUT"',
+      '  // | "BAD_REQUEST"',
+      '  | "SWITCHED_OFF";',
+    ].join("\n");
+    expect(
+      memberSet(src, /export type ErrorCode =[^;]+;/, /"([A-Z_]+)"/g),
+    ).toBe("SWITCHED_OFF, TIMEOUT");
+  });
+
+  it("codeRanges", () => {
+    const src = [
+      "// const RANGES = [[0x00, 0x1f], [0x7f, 0x9f]] as const;",
+      "const RANGES = [",
+      "  [0x00, 0x1f],",
+      "] as const;",
+    ].join("\n");
+    expect(codeRanges(src, /const RANGES = \[([\s\S]*?)\] as const;/)).toBe(
+      "U+0000-U+001F",
+    );
+  });
+
+  it("markers", () => {
+    expect(
+      markers(
+        "// to_be_bytes()\nfrom_be_bytes()",
+        [/to_be_bytes/],
+        "u32 big-endian",
+      ),
+    ).toBeNull();
+    expect(markers("to_be_bytes()", [/to_be_bytes/], "u32 big-endian")).toBe(
+      "u32 big-endian",
+    );
+  });
+});
+
+// A row whose value is one side's set less, or within, another's, read on the
+// canonical form the readers produce; a missing anchor on either side stays
+// the null the runner fails on.
+describe("without, union and within", () => {
+  it("without keeps the members none of the others name", () => {
+    expect(without("a, b, c", "b", "c, d")).toBe("a");
+    expect(without("a, b", "z")).toBe("a, b");
+    expect(without(null, "a")).toBeNull();
+    expect(without("a", "b", null)).toBeNull();
+  });
+
+  it("union names every member once, sorted", () => {
+    expect(union("c, a", "b, a")).toBe("a, b, c");
+    expect(union("a", null)).toBeNull();
+    expect(union(without("a", "a"), "b")).toBe("b");
+    expect(without("", "x")).toBe("");
+  });
+
+  it("within keeps the members the other also names", () => {
+    expect(within("a, b, c", "c, a, z")).toBe("a, c");
+    expect(within("a", null)).toBeNull();
+    expect(within(null, "a")).toBeNull();
+  });
+});
 
 describe("rangeSpans", () => {
   it("reads a TS table and a Rust table of one set alike", () => {
