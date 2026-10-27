@@ -14,14 +14,14 @@
 // At ansi no ratio exists, and the one floor that does is measured instead:
 // nothing is drawn on its own ground's index.
 
-import { TEST_SIGNER } from "./helpers/link-signer";
+import { TEST_SIGNER } from "../test/helpers/link-signer";
 import {
   listThemePalettes,
   Oklch,
   ColorRgba,
   SEAM_MIN_DELTA_E,
 } from "@promptctl/rich-js";
-import { POWERLINE } from "./helpers/powerline";
+import { POWERLINE } from "../test/helpers/powerline";
 import { prepareConfig, renderEffective } from "../src/check";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import {
@@ -38,14 +38,14 @@ import { SessionState } from "../src/daemon/session-state";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { parseAndValidate } from "../test/helpers/parse-and-validate";
 import {
   clickUrl,
   effectsOf,
   recordRender,
   testVerbContext,
-} from "./helpers/click";
-import { INVISIBLE, linkUrls } from "./helpers/ansi";
+} from "../test/helpers/click";
+import { INVISIBLE, linkUrls } from "../test/helpers/ansi";
 import { SWATCH_GLYPH } from "../src/render/swatch";
 import { instantOf } from "../src/utils/instant";
 

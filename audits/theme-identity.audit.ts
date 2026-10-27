@@ -21,7 +21,7 @@
 // name every accent alike, as Textual draws them — and fact 1 is what holds
 // a bar to its theme.
 
-import { TEST_SIGNER } from "./helpers/link-signer";
+import { TEST_SIGNER } from "../test/helpers/link-signer";
 import {
   ColorDepth,
   ColorRgba,
