@@ -19,7 +19,7 @@ import { ABSENT } from "../src/utils/outcome";
 import { stripAnsi } from "./helpers/ansi";
 import { viewFacts } from "./helpers/view-facts";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
-import { setLaunchStats, type LaunchCategory } from "../src/proc/launch";
+import { setLaunchStats } from "../src/proc/launch";
 
 // brandon-unfiled-3248.8ro6, step 2: each value lives where its scope says. A
 // directory's store holds the sources no session value reaches; each session
@@ -474,21 +474,27 @@ test("a config load starts no view's source, and still names a session value tha
       root: { h: ["s"] },
     }),
   );
-  const started: LaunchCategory[] = [];
-  setLaunchStats({ onStart: (c) => started.push(c), onEnd: () => {} });
+  let shells = 0;
+  setLaunchStats({
+    onStart: (c) => {
+      if (c === "user-shell") shells++;
+    },
+    onEnd: () => {},
+  });
   cleanups.push(() => setLaunchStats(null));
-  const shells = () => started.filter((c) => c === "user-shell").length;
   const { cache } = makeCache();
 
   const entry = cache.getOrCreate(dir, dir, undefined);
-  expect(await entry.state!.registry.settled(5000)).toEqual([]);
   expect(entry.lastError).toBeNull();
+  expect(await entry.state!.registry.settled(5000)).toEqual([]);
   expect(entry.lastWarning).toContain('Variable "unclosed":');
   // The directory's one source, and nothing a session did not ask for.
-  expect(shells()).toBe(1);
+  expect(shells).toBe(1);
   expect(runs("perDirectory")).toBe(1);
 
-  // A session asks for each of them.
+  // A session asks for each of them, and a render settles what it started.
   await render(cache, "s-a");
-  expect(shells()).toBe(5);
+  for (const name of ["byInput", "byState", "afterState", "byDepth"]) {
+    expect([name, runs(name)]).toEqual([name, 1]);
+  }
 });
