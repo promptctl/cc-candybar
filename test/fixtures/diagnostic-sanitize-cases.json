@@ -1,5 +1,5 @@
 {
-  "//": "The diagnostic sanitizer, asserted by both runtimes: test/diagnostic-sanitize-cases.test.ts (src/render/diagnostic-text.ts sanitizeText) and rust-client/src/error_glyph.rs sanitize. Each case is one input and its exact sanitized text before any clip: neutralized code points become a space, whitespace runs collapse to one space, both ends trim. Every Unicode White_Space code point, NEL, ZWNBSP (U+FEFF), the code points either side of each neutralized range, and the bidi marks that pass through are among them.",
+  "//": "The diagnostic sanitizer, asserted by both runtimes: test/diagnostic-sanitize-cases.test.ts (src/render/diagnostic-text.ts sanitizeText) and rust-client/src/error_glyph.rs sanitize. Each case is one input and its exact sanitized text before any clip: neutralized code points become a space, whitespace runs collapse to one space, both ends trim. Every Unicode White_Space code point, NEL, ZWNBSP (U+FEFF), the ends and an interior point of each neutralized range, the printable neighbours of those ranges (U+007E, U+2065, U+2070; the other neighbours are whitespace and collapse either way, so only check-protocol's table pin guards those edges), and the bidi marks that pass through are among them.",
   "cases": [
     { "input": "hello world", "output": "hello world" },
     { "input": "a\nb\rc\td", "output": "a b c d" },
@@ -65,9 +65,12 @@
     { "input": "a\u007fb", "output": "a b" },
     { "input": "a\u009fb", "output": "a b" },
     { "input": "a\u202ab", "output": "a b" },
+    { "input": "a\u202cb", "output": "a b" },
     { "input": "a\u202eb", "output": "a b" },
     { "input": "a\u2065b", "output": "a\u2065b" },
     { "input": "a\u2066b", "output": "a b" },
+    { "input": "a\u2069b", "output": "a b" },
+    { "input": "a\u206ab", "output": "a b" },
     { "input": "a\u206fb", "output": "a b" },
     { "input": "a\u2070b", "output": "a\u2070b" },
     { "input": "a\u061cb", "output": "a\u061cb" },

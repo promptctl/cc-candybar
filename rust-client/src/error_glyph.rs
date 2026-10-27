@@ -230,10 +230,10 @@ mod tests {
         assert!(body.contains("bypass"), "lost safe content after C1: {g:?}");
     }
 
-    // [LAW:one-source-of-truth] The sanitizer's behaviour, from the one table
-    // test/diagnostic-sanitize-cases.test.ts asserts against the TS
-    // sanitizeText, so a collapse or neutralize rule changed in one runtime
-    // fails the other's test.
+    // [LAW:one-source-of-truth] [LAW:one-type-per-behavior] The sanitizer's
+    // behaviour, from the one table test/diagnostic-sanitize-cases.test.ts
+    // asserts against the TS sanitizeText, so a collapse or neutralize rule
+    // changed in one runtime fails the other's test.
     const CASES: &str = include_str!("../../test/fixtures/diagnostic-sanitize-cases.json");
 
     #[test]

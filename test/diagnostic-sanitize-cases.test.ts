@@ -18,8 +18,16 @@ const CASES = JSON.parse(
   readFileSync(join(__dirname, "fixtures", "diagnostic-sanitize-cases.json"), "utf8"),
 ) as Cases;
 
-// The title is %j, not $input: the inputs carry ESC, 8-bit CSI and bidi
-// overrides, and a title that prints them raw re-styles the failure report.
-test.each(CASES.cases)("sanitizeText %j", ({ input, output }) => {
-  expect(sanitizeText(input)).toBe(output);
-});
+// The title spells every code point outside printable ASCII as \uXXXX: the
+// inputs carry ESC, 8-bit CSI and bidi overrides, and a title that prints
+// them raw re-styles the failure report. (%j is not enough: JSON leaves
+// U+009B and U+202E raw.)
+const escaped = (s: string): string =>
+  s.replace(/[^\x20-\x7e]/gu, (ch) => `\\u${ch.codePointAt(0)!.toString(16).padStart(4, "0")}`);
+
+test.each(CASES.cases.map((c) => [escaped(c.input), c] as const))(
+  'sanitizeText "%s"',
+  (_, { input, output }) => {
+    expect(sanitizeText(input)).toBe(output);
+  },
+);

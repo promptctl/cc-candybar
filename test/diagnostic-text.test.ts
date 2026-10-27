@@ -44,6 +44,10 @@ describe("sanitizeAndTruncate", () => {
     expect(sanitizeAndTruncate("hello world", 100)).toBe("hello world");
   });
 
+  test("sanitizes before it clips", () => {
+    expect(sanitizeAndTruncate("a‮b  c", 100)).toBe("a b c");
+  });
+
   test("truncates with ellipsis when input exceeds maxLen", () => {
     const input = "x".repeat(200);
     const out = sanitizeAndTruncate(input, 60);
