@@ -20,7 +20,8 @@
   const STRENGTH: Record<GraphEdge['kind'], number> = { related: 0.2, has: 0.6, clone: 0.3 };
 
   // The px the sidebar takes from the right; the graph fills the rest and resizes when this changes.
-  let { explorer, right = 470 }: { explorer: Explorer; right?: number } = $props();
+  // textScale multiplies every label size; 1 is the size the lens was tuned at.
+  let { explorer, right = 470, textScale = 1 }: { explorer: Explorer; right?: number; textScale?: number } = $props();
   let el: HTMLDivElement;
   // Set once mounted; the effects below read it, so they re-run when it appears.
   let graphCore = $state.raw<Core>();
@@ -126,14 +127,11 @@
     updateLabels();
   }
 
-  onMount(() => {
-    const core = cytoscape({
-      container: el,
-      minZoom: 0.1,
-      maxZoom: 4,
-      style: [
-        { selector: 'node', style: { width: 'data(size)', height: 'data(size)', 'background-color': '#c9ccd2', color: '#f2f3f5', 'font-size': 'mapData(boost, 0, 1, 10, 20)','text-valign': 'center', 'text-halign': 'right', 'text-margin-x': 5, 'min-zoomed-font-size': 9, 'text-wrap': 'ellipsis', 'text-max-width': '320px', 'text-background-color': '#101216', 'text-background-opacity': 0.85, 'text-background-padding': '3px', 'text-background-shape': 'roundrectangle' } },
-        { selector: 'node.trait', style: { label: 'data(label)', 'background-color': 'data(colour)', 'font-size': 'mapData(boost, 0, 1, 13, 22)', 'font-weight': 600 } },
+  // One stylesheet, with every text size scaled by s. The slider is the only thing that changes s.
+  function sheet(s: number): cytoscape.StylesheetJson {
+    return [
+        { selector: 'node', style: { width: 'data(size)', height: 'data(size)', 'background-color': '#c9ccd2', color: '#f2f3f5', 'font-size': `mapData(boost, 0, 1, 10, ${20 * s})`, 'text-valign': 'center', 'text-halign': 'right', 'text-margin-x': 5, 'min-zoomed-font-size': 9, 'text-wrap': 'ellipsis', 'text-max-width': `${320 * s}px`, 'text-background-color': '#101216', 'text-background-opacity': 0.85, 'text-background-padding': '3px', 'text-background-shape': 'roundrectangle' } },
+        { selector: 'node.trait', style: { label: 'data(label)', 'background-color': 'data(colour)', 'font-size': `mapData(boost, 0, 1, 13, ${22 * s})`, 'font-weight': 600 } },
         { selector: 'node.more', style: { label: 'data(label)', 'background-color': '#3a3f49', color: '#8b919c', 'font-style': 'italic' } },
         { selector: 'node.project', style: { label: '', 'background-color': '#6b717c' } },
         { selector: 'node.project.showlabel', style: { label: 'data(label)' } },
@@ -145,8 +143,11 @@
         { selector: 'edge.clone', style: { width: 'mapData(w, 0.2, 1, 1.5, 5)', 'line-color': '#b58be0', 'line-style': 'dashed', 'curve-style': 'straight' } },
         { selector: '.faded', style: { opacity: 0.12 } },
         { selector: 'edge.lit', style: { 'line-color': '#e8a25c', opacity: 1 } },
-      ],
-    });
+    ];
+  }
+
+  onMount(() => {
+    const core = cytoscape({ container: el, minZoom: 0.1, maxZoom: 4, style: sheet(textScale) });
     core.on('tap', 'node', (e) => explorer.open(e.target.id() as NodeId));
     core.on('grab', 'node', (e) => {
       const n = simNodes.get(e.target.id() as NodeId);
@@ -172,12 +173,14 @@
     core.on('zoom', updateLabels);
     // A lens under the cursor: text grows with closeness, and nearby projects show their names.
     // [LAW:dataflow-not-control-flow] the cursor writes one number per node; the style reads it.
-    const LENS = 160;
+    // Full size inside FULL (about the diameter of a large dot), then a short ramp to nothing at LENS.
+    const FULL = 60;
+    const LENS = 120;
     core.on('mousemove', (e) => {
       core.batch(() => {
         core.nodes().forEach((n) => {
           const d = Math.hypot(n.position('x') - e.position.x, n.position('y') - e.position.y);
-          const b = Math.round(Math.max(0, 1 - d / LENS) * 50) / 50;
+          const b = Math.round(Math.min(1, Math.max(0, (LENS - d) / (LENS - FULL))) * 50) / 50;
           if (b !== n.data('boost')) n.data('boost', b);
           if (n.hasClass('project')) n.toggleClass('lens', b > 0.3);
         });
@@ -212,6 +215,11 @@
   $effect(() => {
     right;
     graphCore?.resize();
+  });
+
+  $effect(() => {
+    const s = textScale;
+    graphCore?.style().fromJson(sheet(s)).update();
   });
 
   $effect(() => {

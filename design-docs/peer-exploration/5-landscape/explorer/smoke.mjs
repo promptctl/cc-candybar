@@ -29,6 +29,10 @@ await page.screenshot({ path: '/tmp/ccland/shot-5-lens.png' });
 await page.getByTitle('hide the panel').click();
 await page.waitForTimeout(800);
 await page.screenshot({ path: '/tmp/ccland/shot-6-collapsed.png' });
+await page.locator('input[type=range]').fill('10');
+await page.mouse.move(520, 470, { steps: 5 });
+await page.waitForTimeout(600);
+await page.screenshot({ path: '/tmp/ccland/shot-7-scale10.png' });
 await browser.close();
 if (errors.length) { console.error(errors.join('\n')); process.exit(1); }
 console.log('ok');
