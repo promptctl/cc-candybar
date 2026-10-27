@@ -821,12 +821,13 @@ describe("every render request writes one render event, whatever its outcome", (
       config,
       JSON.stringify({ segments, root: { h: Object.keys(segments) } }),
     );
-    // [LAW:no-ambient-temporal-coupling] The TIMEOUT reply lands only once
-    // the compile's turn ends, so this client waits for the compile, not the
-    // backstop: seconds on CI's two cores, past the helper's budget for an
-    // answered request. The wait is the test's own, so how long the compile
-    // takes decides nothing here; the event's `took` below is what says it
-    // outlived the backstop.
+    // [LAW:no-ambient-temporal-coupling] The backstop's TIMEOUT reply is a
+    // task on the daemon's loop, so it cannot be written until the
+    // synchronous compile yields: this client's wait is bounded by the
+    // compile, seconds on CI's two cores, not by the backstop. The helper's
+    // default budget is for an answered request, so the budget here is the
+    // test's own timeout, and nothing ends the wait before Jest would. The
+    // event's `took` below is what says the render outlived the backstop.
     await expect(
       sendDaemonRequest(
         sockPath,
