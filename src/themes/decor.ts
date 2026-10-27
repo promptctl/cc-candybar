@@ -1181,7 +1181,8 @@ const BANDS = memoPerPalette<Band>();
 const disclosureKey = ({ hue, depth, ground }: Disclosure): string =>
   `${hue}|${depth}|${ground.map((e) => shadeRole(e.hue, e.shade)).join("+")}`;
 
-const deltaE = (a: ColorRgba, b: ColorRgba): number =>
+/** ΔE in OKLab, the measure every floor in this module is stated in. [LAW:one-source-of-truth] The tests and audits import it rather than spell it. */
+export const deltaE = (a: ColorRgba, b: ColorRgba): number =>
   Oklch.fromRgba(a).deltaE(Oklch.fromRgba(b));
 
 // One seam a band row can draw: its two colours, and the words its shortfall

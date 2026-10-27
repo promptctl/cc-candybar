@@ -143,7 +143,6 @@ test("no row longer than ROW_REACH, under any distribution, deals a ground GROUN
 });
 const DEPTH_HUES = [0, 1, 2, 3].map((depth) => hueAtDepth(OPEN_HUE, depth));
 
-const THEMES = REGISTRY;
 const DEPTHS = [0, 1, 2, 3] as const;
 
 /**
@@ -151,10 +150,9 @@ const DEPTHS = [0, 1, 2, 3] as const;
  * trigger opens OPEN_HUE (decorationFor), from a row on any ground, and each
  * band nested in it a depth further.
  */
-const LINEAGES = THEMES.flatMap((palette) =>
+const LINEAGES = REGISTRY.flatMap((palette) =>
   GROUNDS.map(({ name, ground }) => ({ palette, hue: OPEN_HUE as DecorHue, ground, name: `${palette.name}@${name}` })),
 );
-
 
 /** The closed cells a trigger on `ground` stands among. */
 const groundCells = (palette: Palette, ground: Ground): ColorRgba[] =>

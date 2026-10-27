@@ -5,7 +5,7 @@
 // audits/decor-registry.audit.ts measure the same thing by the same words.
 
 import { ColorDepth, drawnColour } from "@promptctl/rich-js";
-import { ColorRgba, getThemePalette, listThemePalettes, Oklch } from "@promptctl/rich-js";
+import { ColorRgba, getThemePalette, listThemePalettes } from "@promptctl/rich-js";
 import { floorOf } from "../../src/config/globals-fields";
 import {
   DISTRIBUTIONS,
@@ -45,6 +45,4 @@ export const FIRST_ROW: Ground = rowGround(
   [row(0, 2), cell(0, 5)],
 );
 
-/** ΔE in OKLab, as rich-js measures it — the same measure the colour model floors against. */
-export const deltaE = (a: ColorRgba, b: ColorRgba): number =>
-  Oklch.fromRgba(a).deltaE(Oklch.fromRgba(b));
+export { deltaE } from "../../src/themes/decor";

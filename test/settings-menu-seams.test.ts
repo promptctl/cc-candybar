@@ -6,7 +6,7 @@
 // real loader, `resolveEffectiveGlobals` and `renderDsl`, under every bundled
 // theme, with every tab and the theme's ⚙ open.
 
-import { TEST_SIGNER } from "../test/helpers/link-signer";
+import { TEST_SIGNER } from "./helpers/link-signer";
 import { listThemePalettes } from "@promptctl/rich-js";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
@@ -22,9 +22,9 @@ import { listResolvablePaletteNames } from "../src/themes/policy";
 import { instantOf } from "../src/utils/instant";
 import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
-import { stripAnsi } from "../test/helpers/ansi";
-import { parseAndValidate } from "../test/helpers/parse-and-validate";
-import { POWERLINE } from "../test/helpers/powerline";
+import { stripAnsi } from "./helpers/ansi";
+import { parseAndValidate } from "./helpers/parse-and-validate";
+import { POWERLINE } from "./helpers/powerline";
 
 const SID = "seams0a1-2c3d-4e5f-8a7b-8c9d0e1f2a3b";
 const TABS = ["session", "look", "layout", "config", "tools"] as const;

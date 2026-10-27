@@ -4,8 +4,9 @@ Every file here walks the whole bundled theme registry: every theme, under
 every style, on every row ground a variation deals, at every colour depth a
 terminal draws. They prove the shipped registry holds the colour model's
 floors (an open trigger stands off its row, a band off its trigger, text off
-its cell, neighbours off each other) on every terminal. That takes minutes
-per file, which is why they are audits and not tests.
+its cell, neighbours off each other) on every terminal. Each takes far longer
+than any test in the suite, minutes for the registry walk, which is why they
+are audits and not tests.
 
 The rule, enforced by `audits/jest.config.js`:
 
