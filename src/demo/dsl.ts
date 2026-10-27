@@ -111,7 +111,7 @@ const sessionState = new SessionState();
 // earns are reported whether or not it goes on to load, as the daemon's strip
 // and `cc-candybar check` report them.
 function loadState(): ReturnType<typeof buildRenderState> {
-  const repos = repoGateAt(cwd, configPath);
+  const repos = repoGateAt(cwd);
   const advisories: Array<string | null> = [...repoGateLines(repos)];
   try {
     return buildRenderState(

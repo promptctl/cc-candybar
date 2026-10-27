@@ -541,7 +541,7 @@ describe("an installed plugin", () => {
   async function segmentsIn(projectDir: string): Promise<string[]> {
     const prepared = await prepareConfig(
       [],
-      repoGateAt(projectDir, undefined).plugins,
+      repoGateAt(projectDir).plugins,
       projectDir,
       [],
       instantOf(new Date()),

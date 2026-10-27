@@ -40,7 +40,7 @@ const target = process.argv[2];
 const at = instantOf(new Date());
 const named =
   target === undefined ? undefined : resolveUserPath(process.cwd(), target);
-const repos = repoGateAt(process.cwd(), named);
+const repos = repoGateAt(process.cwd());
 warnings.push(...repoGateLines(repos));
 const prepared = await prepareConfig(
   named === undefined ? [] : [named],

@@ -10,8 +10,9 @@ import {
   VERB_REPO_CONFIG,
   VERB_SHOW_CONFIG_WARNING,
 } from "../click/wire.js";
-import { resolveDslConfig } from "../config/loader/discovery.js";
+import { repoProject } from "../config/loader/discovery.js";
 import {
+  gateRepos,
   parseRepoConfigBook,
   REPO_ANSWERS,
   type RepoAnswer,
@@ -41,9 +42,10 @@ export const repoConfigs = (
   stateFile(dir, REPO_CONFIGS_FILE, {}, parseRepoConfigBook);
 
 // The gate a one-shot load outside the daemon (the demo, the gallery) runs
-// under: the file it was named, loaded from `cwd`, as a session there would.
-export function repoGateAt(cwd: string, file: string | undefined): RepoGate {
-  return resolveDslConfig(repoConfigs().read(), cwd, cwd, file).repos;
+// under. It loads the one file it was named, or none, never a searched chain,
+// so of a repository's it runs only the plugins the project at `cwd` ships.
+export function repoGateAt(cwd: string): RepoGate {
+  return gateRepos(repoConfigs().read(), [], repoProject(cwd));
 }
 
 // [LAW:single-enforcer] What an answer link signs: the session it was drawn
