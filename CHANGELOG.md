@@ -1,3 +1,9 @@
+## [1.160.4](https://github.com/promptctl/cc-candybar/compare/v1.160.3...v1.160.4) (2026-10-27)
+
+### Bug Fixes
+
+* **test:** every poll names what never held, and one helper keeps real time under a fake clock (brandon-unfiled-3248.bqq) ([#460](https://github.com/promptctl/cc-candybar/issues/460)) ([e95f6d4](https://github.com/promptctl/cc-candybar/commit/e95f6d40b74430e3ed0c815b584dfff41b0c08f8))
+
 ## [1.160.3](https://github.com/promptctl/cc-candybar/compare/v1.160.2...v1.160.3) (2026-10-27)
 
 ### Bug Fixes
