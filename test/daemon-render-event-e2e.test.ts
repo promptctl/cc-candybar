@@ -50,7 +50,8 @@ import {
   type RunningDaemon,
 } from "./helpers/spawn-isolated-daemon";
 
-jest.setTimeout(30_000);
+const TEST_TIMEOUT_MS = 30_000;
+jest.setTimeout(TEST_TIMEOUT_MS);
 
 // `drawn` draws a bar. `broken` gates a row on a `when` that fails when it is
 // evaluated, which costs that row and warns. `held` reads the tmux session name, which the
@@ -820,17 +821,28 @@ describe("every render request writes one render event, whatever its outcome", (
       config,
       JSON.stringify({ segments, root: { h: Object.keys(segments) } }),
     );
+    // [LAW:no-ambient-temporal-coupling] The backstop's TIMEOUT reply is a
+    // task on the daemon's loop, so it cannot be written until the
+    // synchronous compile yields: this client's wait is bounded by the
+    // compile, seconds on CI's two cores, not by the backstop. The helper's
+    // default budget is for an answered request, so the budget here is the
+    // test's own timeout, and nothing ends the wait before Jest would. The
+    // event's `took` below is what says the render outlived the backstop.
     await expect(
-      sendDaemonRequest(sockPath, {
-        v: PROTOCOL_VERSION,
-        kind: "render",
-        ...renderBody("ev-backstop", projectDir, {}, [
-          "cc-candybar",
-          "--config",
-          config,
-        ]),
-        deadline: Date.now() + TOTAL_BUDGET_MS,
-      }),
+      sendDaemonRequest(
+        sockPath,
+        {
+          v: PROTOCOL_VERSION,
+          kind: "render",
+          ...renderBody("ev-backstop", projectDir, {}, [
+            "cc-candybar",
+            "--config",
+            config,
+          ]),
+          deadline: Date.now() + TOTAL_BUDGET_MS,
+        },
+        TEST_TIMEOUT_MS,
+      ),
     ).resolves.toMatchObject({ ok: false, code: "TIMEOUT" });
     const late = only(await eventsOf("ev-backstop"));
     expect(field(late, "outcome")).toBe("ok");
