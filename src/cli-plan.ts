@@ -56,12 +56,18 @@ export async function exitWith(plan: CliPlan): Promise<never> {
   // what each stream took and the code the process ends with. It rides the
   // plan's own stderr write, so it is waited for like the rest — a line
   // written after the wait would be the one line the exit could drop.
+  // Bytes, as `wc -c` counts them, so the record agrees with the reader.
   const record = debugText(
-    `delivered stdout=${plan.stdout.length} stderr=${plan.stderr.length} code=${plan.code}`,
+    `delivered stdout=${Buffer.byteLength(plan.stdout)} stderr=${Buffer.byteLength(plan.stderr)} code=${plan.code}`,
   );
-  await Promise.all([
+  // Both streams settle before anything ends the process: a refusal on one
+  // thrown while the other is still in flight would drop that other's tail,
+  // the loss this file exists to close. The first refusal is then the
+  // command's failure.
+  const outcomes = await Promise.allSettled([
     written(process.stdout, plan.stdout),
     written(process.stderr, plan.stderr + record),
   ]);
+  for (const o of outcomes) if (o.status === "rejected") throw o.reason;
   process.exit(plan.code);
 }

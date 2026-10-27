@@ -126,12 +126,10 @@ const SUBCOMMANDS: Readonly<Record<string, Subcommand>> = {
 };
 
 async function main(): Promise<void> {
+  const subcommand = process.argv[2];
+  const named =
+    subcommand !== undefined && !subcommand.startsWith("-") ? subcommand : null;
   try {
-    const subcommand = process.argv[2];
-    const named =
-      subcommand !== undefined && !subcommand.startsWith("-")
-        ? subcommand
-        : null;
     // [LAW:no-silent-failure] Before the help flag, so `<typo> --help` names
     // the typo rather than printing help that does not mention it.
     if (named !== null && !Object.hasOwn(SUBCOMMANDS, named)) {
@@ -235,11 +233,7 @@ echo '{"session_id":"test-session","workspace":{"project_dir":"/path/to/project"
     // [LAW:no-silent-failure] Named for what was running: a subcommand whose
     // delivery failed (a full disk under `check`) is reported as that
     // subcommand, not as a statusline render.
-    const what =
-      process.argv[2]?.startsWith("-") === false
-        ? process.argv[2]
-        : "statusline";
-    console.error(`cc-candybar ${what}: ${errorMessage}`);
+    console.error(`cc-candybar ${named ?? "statusline"}: ${errorMessage}`);
     process.exit(1);
   }
 }

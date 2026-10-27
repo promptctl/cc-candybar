@@ -59,9 +59,12 @@ test("a reader that hangs up ends the delivery with the plan's code", async () =
       resolve();
     }),
   );
-  const code = await new Promise<number | null>((resolve) =>
-    child.once("exit", resolve),
+  // Code and signal together: a signal death reads as what it is, not as a
+  // code that happens to be null.
+  const end = await new Promise<{ code: number | null; signal: string | null }>(
+    (resolve) =>
+      child.once("exit", (code, signal) => resolve({ code, signal })),
   );
-  expect(code).toBe(0);
+  expect(end).toEqual({ code: 0, signal: null });
   expect(stderr).not.toContain("EPIPE");
 });
