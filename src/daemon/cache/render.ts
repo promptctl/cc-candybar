@@ -1,5 +1,8 @@
 import path from "node:path";
-import { nearestWatchTarget } from "../../utils/watch-target.js";
+import {
+  nearestWatchTarget,
+  watchedPathsOf,
+} from "../../utils/watch-target.js";
 import type { RichText } from "@promptctl/rich-js";
 import { compareShallow, observable, reaction, runInAction } from "mobx";
 import {
@@ -544,14 +547,12 @@ function authoredRoots(
 // [LAW:single-enforcer] Same enumerator the resolver uses, so the watcher
 // covers the exact set of paths the next reload would consult — an explicit
 // `configFile` collapses to one candidate; absent, the precedence chain unfolds
-// in full. Every layer of the chain is ALSO watched by inode, so
-// an in-place write fires as well as an atomic rename. Directories are
-// deduped with their filename filters unioned, and the whole set is sorted
-// so equal sets spell equal signatures.
-function watchTargetsFor(
-  entry: CacheEntry,
-  layers: readonly string[],
-): WatchTargets {
+// in full. A candidate that is a symbolic link (a dotfiles-managed config) is
+// watched in both the places it changes (`watchedPathsOf`): its own directory,
+// by its name, and its target's, by the target's. Directories are deduped with
+// their filename filters unioned, and the whole set is sorted so equal sets
+// spell equal signatures.
+function watchTargetsFor(entry: CacheEntry): WatchTargets {
   // [LAW:types-are-the-program] A directory watched for named children, or
   // for every child (`null`): a plugin root holds folders no load has seen.
   const byDir = new Map<string, Set<string> | null>();
@@ -577,7 +578,7 @@ function watchTargetsFor(
     // recreates the folder and takes a new generation from the storage owner
     // — which never re-arms a watch itself.
     ...new Set([...entry.state.sources.values()].map((k) => k.folder)),
-  ]) {
+  ].flatMap(watchedPathsOf)) {
     const { dir, name } = nearestWatchTarget(candidate);
     const names = byDir.has(dir) ? byDir.get(dir)! : new Set<string>();
     names?.add(name);
@@ -590,7 +591,6 @@ function watchTargetsFor(
     if (leaf && name === "_") byDir.set(dir, null);
   }
   return {
-    files: layers,
     dirs: [...byDir.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([dirPath, names]) =>
@@ -1256,7 +1256,7 @@ export class RenderCache<
     const { dir, name } = nearestWatchTarget(repoConfigsPath());
     this.answersWatch = deps.watchers.acquire(
       `repo-configs:${dir}/${name}`,
-      { files: [], dirs: [{ path: dir, filenames: [name] }] },
+      { dirs: [{ path: dir, filenames: [name] }] },
       () => this.reloadEvery(),
     );
   }
@@ -1900,7 +1900,7 @@ export class RenderCache<
     entry.configHome = loaded.home;
     entry.repos = loaded.repos;
     entry.failedFile = loaded.error === null ? null : loaded.failedFile;
-    const targets = watchTargetsFor(entry, loaded.layers);
+    const targets = watchTargetsFor(entry);
     // [LAW:one-source-of-truth] WatcherRegistry shares slots by key and keeps
     // the FIRST acquire's targets, so the key must name the target set —
     // the signature is the key, and "rebind when the set changed" and "the
@@ -1911,6 +1911,13 @@ export class RenderCache<
     entry.watcherKey = key;
     entry.watcher = this.deps.watchers.acquire(key, targets, () =>
       this.onConfigChanged(entry),
+    );
+    // [LAW:nothing-unseen] A rebind is the fact that the target set moved (a
+    // candidate appeared, a link was re-pointed), and which directories the
+    // entry now hears: a change that fires nothing is read against this line.
+    this.log(
+      "info",
+      `config watch bound projectDir=${entry.projectDir} cwd=${entry.cwd} dirs=${targets.dirs.map((d) => d.path).join(",")} refused=${entry.watcher.refused.length}`,
     );
   }
 

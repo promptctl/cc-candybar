@@ -1,5 +1,27 @@
 import fs from "node:fs";
 import path from "node:path";
+import { resolvedTarget } from "./atomic-write.js";
+
+// [LAW:single-enforcer] The one rule for watching a path that may be a
+// symbolic link: it is watched as spelled AND where a write to it lands
+// (`resolvedTarget`, the one definition of that file, a dangling link
+// included). A linked path changes in two places — the link entry, re-pointed
+// or replaced in its own directory, and the target, edited or rewritten in
+// its — and a directory watch reports only its own children, so a watch on
+// either place alone misses the other. A plain path is one place. Each path
+// returned then takes `nearestWatchTarget`'s one (dir, name) tuple.
+export function watchedPathsOf(candidate: string): readonly string[] {
+  try {
+    const target = resolvedTarget(candidate);
+    return target === candidate ? [candidate] : [candidate, target];
+  } catch {
+    // [LAW:no-silent-failure] exception: a link the kernel refuses to follow
+    // (a loop, an unreadable component) is watched as spelled. The config
+    // loader reports that location as unchecked, so the fault is loud there,
+    // and this runs inside watcher callbacks, which must not throw.
+    return [candidate];
+  }
+}
 
 // [LAW:single-enforcer] The one rule for watching a path that may not exist
 // yet, shared by the config watcher (src/daemon/cache/render.ts) and the

@@ -35,7 +35,11 @@ describe("WatcherRegistry", () => {
     const reg = new WatcherRegistry();
     let fired = 0;
     const headPath = path.join(repo, ".git/HEAD");
-    reg.acquire(repo, { files: [headPath], dirs: [] }, () => fired++);
+    reg.acquire(
+      repo,
+      { dirs: [{ path: path.dirname(headPath), filenames: ["HEAD"] }] },
+      () => fired++,
+    );
     await new Promise((r) => setTimeout(r, 50));
 
     fs.writeFileSync(headPath, "ref: refs/heads/x\n");
@@ -49,8 +53,8 @@ describe("WatcherRegistry", () => {
   test("refcount: release closes watchers when refcount hits zero", async () => {
     const repo = makeRepo();
     const reg = new WatcherRegistry();
-    const h1 = reg.acquire(repo, { files: [], dirs: [] }, () => {});
-    const h2 = reg.acquire(repo, { files: [], dirs: [] }, () => {});
+    const h1 = reg.acquire(repo, { dirs: [] }, () => {});
+    const h2 = reg.acquire(repo, { dirs: [] }, () => {});
     expect(reg.size()).toBe(1);
     h1.release();
     expect(reg.size()).toBe(1); // refcount still > 0
@@ -62,11 +66,16 @@ describe("WatcherRegistry", () => {
   // brandon-unfiled-3248.576q: the registry bounds nothing — its consumers do.
   // An LRU cap here closed watches under holders that still held them.
   test("a slot closes only when its last holder releases it, however many are open", () => {
-    const counters = { watchersOpened: 0, watchersClosed: 0, watchRefusals: 0, watchErrors: 0 };
+    const counters = {
+      watchersOpened: 0,
+      watchersClosed: 0,
+      watchRefusals: 0,
+      watchErrors: 0,
+    };
     const reg = new WatcherRegistry({ counters });
     const fired: string[] = [];
     const handles = Array.from({ length: 300 }, (_, i) =>
-      reg.acquire(`k${i}`, { files: [], dirs: [] }, () => fired.push(`k${i}`)),
+      reg.acquire(`k${i}`, { dirs: [] }, () => fired.push(`k${i}`)),
     );
 
     expect(reg.size()).toBe(300);
@@ -88,9 +97,7 @@ describe("WatcherRegistry", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "watch-names-"));
     const reg = new WatcherRegistry();
     const seen: Invalidation[] = [];
-    reg.acquire(dir, { files: [], dirs: [{ path: dir }] }, (inv) =>
-      seen.push(inv),
-    );
+    reg.acquire(dir, { dirs: [{ path: dir }] }, (inv) => seen.push(inv));
     await new Promise((r) => setTimeout(r, 50));
     fs.writeFileSync(path.join(dir, "a.json"), "1");
     fs.writeFileSync(path.join(dir, "b.json"), "2");
@@ -116,16 +123,12 @@ describe("WatcherRegistry", () => {
     };
     const reg = new WatcherRegistry({ counters, logger: () => {} });
     const missing = path.join(os.tmpdir(), "watch-refused-no-such-folder");
-    const handle = reg.acquire(
-      "k",
-      { files: [], dirs: [{ path: missing }] },
-      () => {},
-    );
+    const handle = reg.acquire("k", { dirs: [{ path: missing }] }, () => {});
     expect(handle.refused).toEqual([
       { path: missing, reason: expect.stringContaining("ENOENT") },
     ]);
     // A second holder of the slot is told the same.
-    expect(reg.acquire("k", { files: [], dirs: [] }, () => {}).refused).toEqual(
+    expect(reg.acquire("k", { dirs: [] }, () => {}).refused).toEqual(
       handle.refused,
     );
     expect(counters).toEqual({
@@ -155,9 +158,7 @@ describe("WatcherRegistry", () => {
       };
       const reg = new WatcherRegistry({ counters, logger: () => {} });
       const seen: Invalidation[] = [];
-      reg.acquire("k", { files: [], dirs: [{ path: "/w" }] }, (inv) =>
-        seen.push(inv),
-      );
+      reg.acquire("k", { dirs: [{ path: "/w" }] }, (inv) => seen.push(inv));
       fake.emit("error", new Error("EMFILE: too many open files"));
       await until(() => seen.length > 0, "the error's invalidation");
       expect(seen).toEqual([
@@ -173,7 +174,7 @@ describe("WatcherRegistry", () => {
   test("closeAll closes every watcher", () => {
     const repo = makeRepo();
     const reg = new WatcherRegistry();
-    reg.acquire(repo, { files: [], dirs: [] }, () => {});
+    reg.acquire(repo, { dirs: [] }, () => {});
     expect(reg.size()).toBe(1);
     reg.closeAll();
     expect(reg.size()).toBe(0);
