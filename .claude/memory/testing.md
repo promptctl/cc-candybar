@@ -2,6 +2,7 @@
 
 - Read rendered bytes through the test helpers' ANSI reader, not a regex of your own. Every link carries an id= derived from its URL, so a regex that spells out ESC]8;; matches nothing.
 - Jest runs ESM through ts-jest. If an ESM dependency ships untranspiled, add it to the transform allow-list under both node_modules/<pkg> and pnpm's .pnpm shadow path.
+- The transform transpiles only, so a type error in a test passes jest and fails the typecheck. Types have one checker, tsc, which the Test job runs before the suite; checking them in the transform costs seconds per file on CI's cold cache.
 - Tests time out at 30 s. Fake time and the filesystem rather than waiting on real ones.
 - Test setup isolates the daemon from the host. Claude Code's config directory points at an empty dir, so no test reads the host's Claude Code settings or transcripts. The registry URL points at a closed port, and managed settings at an empty dir.
 - Test daemons watch the Jest worker's pid and shut down when it dies, so a killed or timed-out Jest can't leave an orphaned daemon.
