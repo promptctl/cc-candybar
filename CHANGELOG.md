@@ -1,3 +1,9 @@
+## [1.160.5](https://github.com/promptctl/cc-candybar/compare/v1.160.4...v1.160.5) (2026-10-27)
+
+### Bug Fixes
+
+* **protocol:** check:protocol reads every anchor from code (brandon-unfiled-3248.x4t) ([#462](https://github.com/promptctl/cc-candybar/issues/462)) ([963899b](https://github.com/promptctl/cc-candybar/commit/963899b090b5471adf79b14c85343af1dc49c8ae))
+
 ## [1.160.4](https://github.com/promptctl/cc-candybar/compare/v1.160.3...v1.160.4) (2026-10-27)
 
 ### Bug Fixes
