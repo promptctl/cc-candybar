@@ -10,3 +10,20 @@ export class BadVerbArgs extends Error {
     this.name = "BadVerbArgs";
   }
 }
+
+// [LAW:single-enforcer] One boundary reclassifies malformed wire encoding.
+// percent-decoding untrusted wire input throws a raw URIError on a bad escape
+// (`%ZZ`, a lone `%`); that is an argument-shape failure, not an operational
+// one, so it must reach the dispatcher as BadVerbArgs (→ BAD_REQUEST) like every
+// other bad-input shape. Every decode of a click's wire value (the verb codecs,
+// the verb of a link a status-line click runs) funnels through here so the
+// reclassification lives once.
+export function decodeWire<T>(decode: () => T): T {
+  try {
+    return decode();
+  } catch (err) {
+    if (err instanceof URIError)
+      throw new BadVerbArgs(`malformed wire encoding: ${err.message}`);
+    throw err;
+  }
+}

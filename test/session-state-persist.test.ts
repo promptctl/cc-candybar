@@ -42,6 +42,89 @@ describe("SessionState disk persistence", () => {
     expect(ss.get("s1", "theme")).toBe("nord"); // now loaded from disk
   });
 
+  // [LAW:nothing-unseen] A flush blocks the daemon's one thread, so each one
+  // says what it wrote and how long it held the thread.
+  it("each flush logs the bytes and sessions it wrote and how long it took", () => {
+    const logged: string[] = [];
+    const ss = new SessionState(
+      new FileSessionStorage(file, 0, (_level, line) => logged.push(line)),
+    );
+    ss.set("s1", "theme", "dracula");
+    ss.flush();
+    const bytes = Buffer.byteLength(readFileSync(file, "utf8"));
+    expect(logged.at(-1)).toMatch(
+      new RegExp(
+        `^session-state saved bytes=${bytes} sessions=1 took=\\d+ms held=\\d+ms$`,
+      ),
+    );
+  });
+
+  const settled = async (done: () => boolean): Promise<void> => {
+    const deadline = Date.now() + 5_000;
+    while (!done()) {
+      if (Date.now() >= deadline) throw new Error("the write never landed");
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+  };
+
+  // The debounced write reaches the disk off the daemon's thread: no flush is
+  // called, and the file still lands whole, owner-only.
+  it("a debounced save lands on disk by itself and says so", async () => {
+    const logged: string[] = [];
+    const ss = new SessionState(
+      new FileSessionStorage(file, 0, (_level, line) => logged.push(line)),
+    );
+    ss.set("s1", "theme", "nord");
+    await settled(() =>
+      logged.some((l) => l.startsWith("session-state saved")),
+    );
+    expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({
+      s1: { theme: "nord" },
+    });
+    expect(statSync(file).mode & 0o777).toBe(0o600);
+    expect(existsSync(`${file}.writing`)).toBe(false);
+  });
+
+  // [LAW:no-ambient-temporal-coupling] Shutdown's synchronous flush writes the
+  // newest state; a debounced write already on its way is older, and must not
+  // land over it.
+  it("a synchronous flush during a debounced write keeps the newer state", async () => {
+    const logged: string[] = [];
+    const ss = new SessionState(
+      new FileSessionStorage(file, 0, (_level, line) => logged.push(line)),
+    );
+    ss.set("s1", "theme", "old");
+    // The debounce fires, and its write is under way.
+    await new Promise((resolve) => setTimeout(resolve, 1));
+    ss.set("s1", "theme", "new");
+    ss.flush();
+    // Whatever the debounced write does next, it lands before this settles.
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({
+      s1: { theme: "new" },
+    });
+    expect(existsSync(`${file}.writing`)).toBe(false);
+  });
+
+  // A disk that refuses a write is retried by the next save or shutdown's
+  // flush, not on a timer: an idle daemon does not spin on it.
+  it("a debounced write the disk refuses is tried once, not on a timer", async () => {
+    const blocked = join(dir, "not-a-folder");
+    writeFileSync(blocked, "");
+    const logged: string[] = [];
+    const ss = new SessionState(
+      new FileSessionStorage(
+        join(blocked, "session-state.json"),
+        0,
+        (_level, line) => logged.push(line),
+      ),
+    );
+    ss.set("s1", "theme", "nord");
+    await settled(() => logged.some((l) => l.includes("save failed")));
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(logged.filter((l) => l.includes("save failed"))).toHaveLength(1);
+  });
+
   it("survives a daemon restart: a fresh instance reads identical values", () => {
     const first = new SessionState(new FileSessionStorage(file, 0));
     first.set("s1", "theme", "dracula");
@@ -79,17 +162,20 @@ describe("SessionState disk persistence", () => {
     expect(reborn.get("s2", "theme")).toBeNull();
   });
 
-  it("debounces: no write before the window elapses, then one atomic file", () => {
+  it("debounces: no write before the window elapses, then one atomic file", async () => {
     jest.useFakeTimers();
     try {
       const ss = new SessionState(new FileSessionStorage(file, 500));
       ss.set("s1", "theme", "nord");
       ss.set("s1", "style", "muted");
+      jest.advanceTimersByTime(499);
       expect(existsSync(file)).toBe(false);
 
-      jest.advanceTimersByTime(500);
-      expect(existsSync(file)).toBe(true);
-      expect(existsSync(`${file}.tmp`)).toBe(false);
+      // The window elapses; the write then reaches the disk off the thread.
+      jest.advanceTimersByTime(1);
+      jest.useRealTimers();
+      await settled(() => existsSync(file));
+      expect(existsSync(`${file}.writing`)).toBe(false);
 
       const reborn = restore();
       expect(reborn.get("s1", "theme")).toBe("nord");

@@ -3,7 +3,7 @@
 // whatever its outcome. A render that draws the bar, one whose config fails
 // partway (a broken gate), and one the daemon refuses each leave an event
 // naming its outcome. The event's own fields, and the threw arm a renderer
-// bug reaches, are held by test/render-event.test.ts.
+// bug reaches, are held by test/request-event.test.ts.
 
 import { execFileSync } from "node:child_process";
 import {
@@ -35,7 +35,11 @@ import {
   renderRequest,
   sendClick,
 } from "./helpers/daemon-e2e";
-import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
+import {
+  effectsUrl,
+  VERB_SET_STATE,
+  VERB_TMUX_STATUS_CLICK,
+} from "../src/click/wire";
 import { CLICK_ERROR_HOLD_S } from "../src/daemon/click-error";
 import { logLines, loggedWhen } from "./helpers/daemon-log";
 import { sendDaemonRequest } from "./helpers/daemon-wire";
@@ -84,10 +88,11 @@ type Event = {
   fields: ReadonlyArray<readonly [string, string]>;
 };
 
-// A log line's level and its `key=value` fields, in order. A value that could
-// be misread as more than one field is a JSON string, read whole and unquoted.
+// A request event's level and its `key=value` fields, in order. A value that
+// could be misread as more than one field is a JSON string, read whole and
+// unquoted.
 function eventOf(line: string): Event {
-  const [, level, rest] = line.match(/ \[(\w+)\] render (.*)$/)!;
+  const [, level, rest] = line.match(/ \[(\w+)\] (?:render|click) (.*)$/)!;
   const fields = [...rest!.matchAll(/(\w+)=("(?:[^"\\]|\\.)*"|\S+)/g)].map(
     ([, key, value]) =>
       [
@@ -125,6 +130,8 @@ describe("every render request writes one render event, whatever its outcome", (
   ];
   const renderEvents = (lines: readonly string[] = logLines(env)): Event[] =>
     lines.filter((l) => / \[\w+\] render /.test(l)).map(eventOf);
+  const clickEvents = (lines: readonly string[]): Event[] =>
+    lines.filter((l) => / \[\w+\] click /.test(l)).map(eventOf);
   const field = (event: Event, key: string): string | undefined =>
     event.fields.find(([k]) => k === key)?.[1];
   // What has landed so far: for what must not have been written.
@@ -171,7 +178,13 @@ describe("every render request writes one render event, whatever its outcome", (
     // A gate that fails costs what it gates, not the bar
     // (brandon-unfiled-3248.ryf): the reply is a bar, its strip saying why.
     const gated = stripAnsi(
-      await render(sockPath, "ev-gate", projectDir, hints, configFlag("broken")),
+      await render(
+        sockPath,
+        "ev-gate",
+        projectDir,
+        hints,
+        configFlag("broken"),
+      ),
     );
     expect(gated).toContain(
       "when over mark: the gate broke — what it gates is hidden",
@@ -273,7 +286,12 @@ describe("every render request writes one render event, whatever its outcome", (
     await sendDaemonRequest(sockPath, {
       v: PROTOCOL_VERSION,
       kind: "render",
-      ...renderBody("ev-pending-warm", projectDir, hints, configFlag("waiting")),
+      ...renderBody(
+        "ev-pending-warm",
+        projectDir,
+        hints,
+        configFlag("waiting"),
+      ),
     });
     await eventsOf("ev-pending-warm");
     const asked = await sendDaemonRequest(sockPath, {
@@ -285,7 +303,9 @@ describe("every render request writes one render event, whatever its outcome", (
     const waiting = stripAnsi((asked as { output: string }).output);
     expect(waiting).toContain("…");
     expect(waiting).not.toContain("⚠");
-    expect(field(await attempts("ev-pending", "ok", "info"), "pending")).toBe("doc");
+    expect(field(await attempts("ev-pending", "ok", "info"), "pending")).toBe(
+      "doc",
+    );
     // How many of its view's parts a render evaluated: all of them cold, and
     // only those whose inputs moved when the session draws the same data
     // again (brandon-unfiled-3248.8ro6).
@@ -301,15 +321,25 @@ describe("every render request writes one render event, whatever its outcome", (
       sockPath,
       "ev-native",
       projectDir,
-      { ...hints, client: { kind: "native", bundle: "/b/dist/index.mjs", source: null } },
+      {
+        ...hints,
+        client: { kind: "native", bundle: "/b/dist/index.mjs", source: null },
+      },
       configFlag("drawn"),
     );
-    expect(field(await attempts("ev-native", "ok", "info"), "client")).toBe("native");
+    expect(field(await attempts("ev-native", "ok", "info"), "client")).toBe(
+      "native",
+    );
 
     // What the hook payload said of the rate-limit windows — the sighting the
     // doctor's segment-data check reads (brandon-doctor-v62x.onf).
     expect(field(drawn, "rateLimits")).toBe("missing");
-    const body = renderBody("ev-windows", projectDir, hints, configFlag("drawn"));
+    const body = renderBody(
+      "ev-windows",
+      projectDir,
+      hints,
+      configFlag("drawn"),
+    );
     await renderRequest(sockPath, {
       ...body,
       hookData: {
@@ -317,9 +347,9 @@ describe("every render request writes one render event, whatever its outcome", (
         rate_limits: { five_hour: { used_percentage: 10, resets_at: 0 } },
       },
     });
-    expect(field(await attempts("ev-windows", "ok", "info"), "rateLimits")).toBe(
-      "carried",
-    );
+    expect(
+      field(await attempts("ev-windows", "ok", "info"), "rateLimits"),
+    ).toBe("carried");
 
     // The broken gate is a render that finished, warning which gate it was;
     // its fields are the drawn bar's, in the same order.
@@ -356,7 +386,8 @@ describe("every render request writes one render event, whatever its outcome", (
     await render(sockPath, "ev-after", projectDir, {});
     const after = await loggedWhen(
       env,
-      (lines) => renderEvents(lines).some((e) => field(e, "sid") === "ev-after"),
+      (lines) =>
+        renderEvents(lines).some((e) => field(e, "sid") === "ev-after"),
       "a later render's event",
     );
     expect(after.join("\n")).not.toContain("handler threw");
@@ -397,7 +428,9 @@ describe("every render request writes one render event, whatever its outcome", (
       ),
     );
     sent = rendered + 1;
-    expect(field((await eventsOf(sid, sent)).at(-1)!, "clickError")).toBe("held");
+    expect(field((await eventsOf(sid, sent)).at(-1)!, "clickError")).toBe(
+      "held",
+    );
     await new Promise((r) => setTimeout(r, (CLICK_ERROR_HOLD_S + 0.2) * 1000));
     const owed = await renderOne();
     expect(field(owed, "clickError")).toBe("owed");
@@ -407,6 +440,167 @@ describe("every render request writes one render event, whatever its outcome", (
     expect(field(over, "err")).toBe("N");
   });
 
+  // [LAW:nothing-unseen] A click is a unit of work like a render: how long it
+  // waited behind the daemon's loop is what a starved click looks like.
+  test("every click request writes one click event: the verb it ran, its session, how long it queued and took, and how it ended", async () => {
+    const sid = "ev-click-event";
+    await render(sockPath, sid, projectDir, {}, configFlag("drawn"));
+    const open = effectsUrl([
+      { verb: VERB_SET_STATE, args: [sid, "candybar.menu", "open"] },
+    ]);
+    expect((await sendClick(sockPath, open)).ok).toBe(true);
+    const unknown = await sendClick(sockPath, "cc-candybar://no-such-verb/x");
+    expect(unknown.ok).toBe(false);
+    // A session id the checkpoint refuses: its verb refuses the click.
+    const badSession = effectsUrl([
+      { verb: VERB_SET_STATE, args: ["../x", "candybar.menu", "open"] },
+    ]);
+    expect((await sendClick(sockPath, badSession)).ok).toBe(false);
+    // A verb that names no session, refused before it launches anything.
+    expect((await sendClick(sockPath, "cc-candybar://copy/%E0")).ok).toBe(
+      false,
+    );
+    const refusedBy = (ls: readonly string[], needle: string): Event[] =>
+      clickEvents(ls).filter((e) => field(e, "problems")?.includes(needle));
+    const lines = await loggedWhen(
+      env,
+      (ls) =>
+        refusedBy(ls, "no-such-verb").length > 0 &&
+        refusedBy(ls, "session id").length > 0 &&
+        clickEvents(ls).some((e) => field(e, "verb") === "copy"),
+      "the refused clicks' events",
+    );
+    const opened = only(
+      clickEvents(lines).filter((e) => field(e, "sid") === sid),
+    );
+    expect(opened.level).toBe("info");
+    expect(opened.fields.map(([key]) => key)).toEqual([
+      "queued",
+      "verb",
+      "sid",
+      "timedOut",
+      "took",
+      "outcome",
+    ]);
+    expect(field(opened, "verb")).toBe("dispatch");
+    expect(field(opened, "queued")).toMatch(/^\d+ms$/);
+    expect(field(opened, "took")).toMatch(/^\d+ms$/);
+    expect(field(opened, "timedOut")).toBe("N");
+    expect(field(opened, "outcome")).toBe("ok");
+    // Refused before its verb was known: no verb, no session. The client's
+    // text is in the problem, never a field.
+    const unknownVerb = only(refusedBy(lines, "no-such-verb"));
+    expect(unknownVerb.level).toBe("warn");
+    expect(unknownVerb.fields.map(([key]) => key)).toEqual([
+      "queued",
+      "timedOut",
+      "took",
+      "outcome",
+      "problems",
+    ]);
+    expect(field(unknownVerb, "outcome")).toBe("bad-request");
+    expect(field(unknownVerb, "problems")).toBe(
+      "unknown click verb: no-such-verb",
+    );
+    // A session id that fails the checkpoint is never recorded as one.
+    const unparsed = only(refusedBy(lines, "session id"));
+    expect(unparsed.fields.map(([key]) => key)).toEqual([
+      "queued",
+      "verb",
+      "timedOut",
+      "took",
+      "outcome",
+      "problems",
+    ]);
+    expect(field(unparsed, "outcome")).toBe("bad-request");
+    // A click naming no session says so: `-`, not absent.
+    const sessionless = only(
+      clickEvents(lines).filter((e) => field(e, "verb") === "copy"),
+    );
+    expect(field(sessionless, "sid")).toBe("-");
+  });
+
+  // A click the daemon cannot read still writes its event, refused as the
+  // client's fault: no throw escapes the click to skip it.
+  test("a click whose fields or encoding are malformed is a bad-request click event", async () => {
+    const notStrings = await sendDaemonRequest(sockPath, {
+      v: PROTOCOL_VERSION,
+      kind: "click",
+      verb: "dispatch",
+      value: 5,
+    });
+    expect(notStrings).toMatchObject({ ok: false, code: "BAD_REQUEST" });
+    const badEscape = await sendDaemonRequest(sockPath, {
+      v: PROTOCOL_VERSION,
+      kind: "click",
+      verb: VERB_TMUX_STATUS_CLICK,
+      value: "%E0/1/r",
+    });
+    expect(badEscape).toMatchObject({ ok: false, code: "BAD_REQUEST" });
+    const refusedBy = (ls: readonly string[], needle: string): Event[] =>
+      clickEvents(ls).filter((e) => field(e, "problems")?.includes(needle));
+    const lines = await loggedWhen(
+      env,
+      (ls) =>
+        refusedBy(ls, "are strings").length > 0 &&
+        refusedBy(ls, "needs <socket>/<pane>/<range>").length > 0,
+      "the malformed clicks' events",
+    );
+    const fields = only(refusedBy(lines, "are strings"));
+    expect(fields.level).toBe("warn");
+    expect(fields.fields.map(([key]) => key)).toEqual([
+      "queued",
+      "timedOut",
+      "took",
+      "outcome",
+      "problems",
+    ]);
+    // The status-line verb is known, so it is recorded before the value its
+    // decode refused.
+    const escape = only(refusedBy(lines, "needs <socket>/<pane>/<range>"));
+    expect(field(escape, "verb")).toBe(VERB_TMUX_STATUS_CLICK);
+    expect(field(escape, "outcome")).toBe("bad-request");
+  });
+
+  // Every request carries a field the schema does not know, so it is said
+  // once per daemon, and the stats list it for as long as the daemon lives.
+  test("an unknown hook field is logged once per daemon and listed in its stats, and a refused request's is neither", async () => {
+    const sid = "ev-unknown-field";
+    const request = {
+      ...renderBody(sid, projectDir, {}, configFlag("drawn")),
+      hookData: { ...hookData(sid, projectDir), novel_field_9b04: 1 },
+    };
+    // Answered before the others are sent, so its field had its chance.
+    const refused = await sendDaemonRequest(sockPath, {
+      ...request,
+      cwd: "relative",
+      hookData: { ...hookData(sid, projectDir), refused_field_9b04: 1 },
+    });
+    expect(refused.ok).toBe(false);
+    await renderRequest(sockPath, request);
+    await renderRequest(sockPath, request);
+    // Each line lands before its request's render event, in the log's order.
+    await eventsOf(sid, 2);
+    expect(
+      logLines(env).filter((l) =>
+        l.includes('schema: unknown field "novel_field_9b04"'),
+      ),
+    ).toHaveLength(1);
+    const resp = await sendDaemonRequest(sockPath, {
+      v: PROTOCOL_VERSION,
+      kind: "stats",
+    });
+    expect(
+      resp.ok && "stats" in resp ? resp.stats.unknownHookFields : resp,
+    ).toContain("novel_field_9b04");
+    expect(
+      resp.ok && "stats" in resp ? resp.stats.unknownHookFields : resp,
+    ).not.toContain("refused_field_9b04");
+    expect(
+      logLines(env).filter((l) => l.includes("refused_field_9b04")),
+    ).toEqual([]);
+  });
+
   // A dump write the filesystem refuses costs the render nothing: the bar is
   // drawn, and its event names the refusal.
   test("a refused dump write is the render event's dumpFailed", async () => {
@@ -414,7 +608,13 @@ describe("every render request writes one render event, whatever its outcome", (
     rmSync(dir, { recursive: true, force: true });
     writeFileSync(dir, ""); // a file where the directory should be
     try {
-      await render(sockPath, "ev-dump-refused", projectDir, {}, configFlag("broken"));
+      await render(
+        sockPath,
+        "ev-dump-refused",
+        projectDir,
+        {},
+        configFlag("broken"),
+      );
     } finally {
       rmSync(dir, { force: true });
     }
@@ -508,7 +708,11 @@ describe("every render request writes one render event, whatever its outcome", (
         {
           // A socket inside the test's own directory: were the stub ever
           // bypassed, a real tmux would find no server there.
-          tmux: { socket: path.join(tmuxDir, "tmux.sock"), pane, truecolor: null },
+          tmux: {
+            socket: path.join(tmuxDir, "tmux.sock"),
+            pane,
+            truecolor: null,
+          },
         },
         configFlag("held"),
       );
@@ -572,9 +776,7 @@ describe("every render request writes one render event, whatever its outcome", (
       await renderRequest(sockPath, tmuxBody("ev-late", "%1")),
     );
     expect(drawn).toContain("held");
-    expect(field((await eventsOf("ev-late", 2))[1]!, "ended")).toBe(
-      "answered",
-    );
+    expect(field((await eventsOf("ev-late", 2))[1]!, "ended")).toBe("answered");
 
     // A client too old to state its deadline is answered by the earliest an
     // old client gives up at — the native client's, whose budget runs from
@@ -608,22 +810,34 @@ describe("every render request writes one render event, whatever its outcome", (
   // so big a compile slows whatever the daemon does next.
   test("a render that outlives its request timeout writes timedOut=Y", async () => {
     const segments = Object.fromEntries(
-      Array.from({ length: 600 }, (_, i) => [`s${i}`, { template: `{{ .session.id }} ${i}` }]),
+      Array.from({ length: 600 }, (_, i) => [
+        `s${i}`,
+        { template: `{{ .session.id }} ${i}` },
+      ]),
     );
     const config = path.join(projectDir, "heavy.json5");
-    writeFileSync(config, JSON.stringify({ segments, root: { h: Object.keys(segments) } }));
+    writeFileSync(
+      config,
+      JSON.stringify({ segments, root: { h: Object.keys(segments) } }),
+    );
     await expect(
       sendDaemonRequest(sockPath, {
         v: PROTOCOL_VERSION,
         kind: "render",
-        ...renderBody("ev-backstop", projectDir, {}, ["cc-candybar", "--config", config]),
+        ...renderBody("ev-backstop", projectDir, {}, [
+          "cc-candybar",
+          "--config",
+          config,
+        ]),
         deadline: Date.now() + TOTAL_BUDGET_MS,
       }),
     ).resolves.toMatchObject({ ok: false, code: "TIMEOUT" });
     const late = only(await eventsOf("ev-backstop"));
     expect(field(late, "outcome")).toBe("ok");
     expect(field(late, "timedOut")).toBe("Y");
-    expect(Number(field(late, "took")?.replace(/ms$/u, ""))).toBeGreaterThan(REQUEST_TIMEOUT_MS);
+    expect(Number(field(late, "took")?.replace(/ms$/u, ""))).toBeGreaterThan(
+      REQUEST_TIMEOUT_MS,
+    );
     await expect(
       sendDaemonRequest(sockPath, { v: PROTOCOL_VERSION, kind: "stats" }),
     ).resolves.toMatchObject({ ok: true, stats: { renderCache: { held: 0 } } });

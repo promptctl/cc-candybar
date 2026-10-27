@@ -164,6 +164,11 @@ export function formatStats(s: StatsSnapshot): string {
   lines.push(`  errored       ${s.requests.errored}`);
   lines.push(`  timedOut      ${s.requests.timedOut}`);
   lines.push(`  inFlight      ${s.requests.inFlight}`);
+  // Each name as a JSON string: a client chose it, and one holding a newline
+  // or an escape would otherwise forge rows or drive the terminal.
+  lines.push(
+    `  unknownFields ${s.unknownHookFields.map((f) => JSON.stringify(f)).join(", ") || "-"}`,
+  );
   lines.push(``);
   lines.push(`gitCache`);
   lines.push(`  size          ${s.gitCache.size}`);
