@@ -30,9 +30,12 @@ export class FileSessionStorage implements SessionStorage {
   private pending: SessionSnapshot | null = null;
   // Whether a debounced write is on its way to the disk.
   private writing = false;
-  // Counts synchronous flushes: a debounced write begun before the latest one
-  // is older than what it wrote.
+  // Counts synchronous flushes that landed: a debounced write begun before
+  // the latest one is older than what it wrote. A flush the disk refused
+  // counts for nothing, so the write it raced still publishes.
   private generation = 0;
+  // The debounced write's temp file: what a flush removes to supersede it.
+  private readonly writingPath: string;
 
   constructor(
     private readonly filePath: string,
@@ -40,7 +43,9 @@ export class FileSessionStorage implements SessionStorage {
     // [LAW:locality-or-seam] Logging is injected, not hard-wired to
     // daemon.log: the daemon passes `dlog`, every other caller stays quiet.
     private readonly logger: DaemonLogger = quietLogger,
-  ) {}
+  ) {
+    this.writingPath = `${filePath}.writing`;
+  }
 
   load(): SessionSnapshot {
     let raw: string;
@@ -101,7 +106,7 @@ export class FileSessionStorage implements SessionStorage {
     const generation = this.generation;
     const started = performance.now();
     const body = JSON.stringify(snapshot);
-    const tmp = `${this.filePath}.writing`;
+    const tmp = this.writingPath;
     this.writing = true;
     // The thread is held until the first await.
     const heldMs = performance.now() - started;
@@ -122,9 +127,7 @@ export class FileSessionStorage implements SessionStorage {
       // nothing: the one outcome in which this older state cannot land over
       // the newer.
       let landed = false;
-      if (generation !== this.generation) {
-        await fs.promises.rm(tmp, { force: true });
-      } else {
+      if (generation === this.generation) {
         try {
           await fs.promises.rename(tmp, this.filePath);
           landed = true;
@@ -140,6 +143,7 @@ export class FileSessionStorage implements SessionStorage {
       // rename, says so: its bytes were written and synced, and the last
       // `saved` line stays the flush's.
       if (generation !== this.generation) {
+        if (!landed) await fs.promises.rm(tmp, { force: true });
         this.logger(
           "info",
           `session-state write superseded by a flush landed=${landed} took=${Math.round(performance.now() - started)}ms held=${Math.round(heldMs)}ms`,
@@ -166,7 +170,6 @@ export class FileSessionStorage implements SessionStorage {
       clearTimeout(this.timer);
       this.timer = null;
     }
-    this.generation++;
     if (this.pending === null) return;
     const snapshot = this.pending;
     const started = performance.now();
@@ -186,8 +189,9 @@ export class FileSessionStorage implements SessionStorage {
       // overwritten below, or its rename finds nothing. Newer state is never
       // put back under older, and a flush this disk refuses, above, discards
       // nothing.
-      fs.rmSync(`${this.filePath}.writing`, { force: true });
+      fs.rmSync(this.writingPath, { force: true });
       fs.renameSync(tmp, this.filePath);
+      this.generation++;
       this.saved(body, snapshot, started, performance.now() - started);
       // [LAW:one-source-of-truth] `pending` is "state not yet durably written".
       // Clear it only once the rename lands, so a transient EIO/ENOSPC leaves

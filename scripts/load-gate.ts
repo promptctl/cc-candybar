@@ -832,6 +832,7 @@ async function run(): Promise<{
   ) {
     await sleep(50);
   }
+  const resumeMs = Date.now() - resumeStarted;
 
   // [LAW:dataflow-not-control-flow] The feed is one session's subscriber,
   // opened only in the `on` world; its frames are counted over the steady
@@ -892,11 +893,13 @@ async function run(): Promise<{
 
   const limit = memoryLimitBytes(env);
   const steady = renders.filter((r) => r.phase === "steady");
-  // [LAW:nothing-unseen] Each failed steady render, by session and offset: a
-  // hold of the daemon's thread is found in its log as a gap at that instant.
+  // [LAW:nothing-unseen] Each failed steady render, by session and offset, in
+  // the order asked: a hold of the daemon's thread is found in its log as a
+  // gap at that instant.
   const steadyFailures = steady
     .filter((r) => r.outcome !== "ok")
-    .map(({ session, atMs, outcome }) => ({ session, atMs, outcome }));
+    .map(({ session, atMs, outcome }) => ({ session, atMs, outcome }))
+    .sort((a, b) => a.atMs - b.atMs);
   const failures = tally(steadyFailures.map((r) => r.outcome));
   const expected = (SESSIONS * STEADY_MS) / SESSION_PERIOD_MS;
   const charges = samples.map((s) => s.charge);
@@ -960,8 +963,9 @@ async function run(): Promise<{
       // The first few failures by name; the facts carry every one.
       detail: `${steady.length} renders (~${Math.round(expected)} asked), failures ${JSON.stringify(failures)}${steadyFailures
         .slice(0, 5)
-        .map((f) => ` s${f.session} at ${f.atMs} ms ${f.outcome}`)
-        .join(",")}`,
+        .map((f) => `s${f.session} at ${f.atMs} ms ${f.outcome}`)
+        .map((f, i) => (i === 0 ? `: ${f}` : `, ${f}`))
+        .join("")}`,
     },
     {
       // The client's own budget is the verdict: a click past it is a timeout.
@@ -1060,6 +1064,9 @@ async function run(): Promise<{
     sessions: SESSIONS,
     steadySeconds: STEADY_MS / 1000,
     warmMs,
+    // Until every session was answered again after the collection, capped
+    // at the warm deadline: at the cap, the backlog never drained.
+    resumeMs,
     warmRenders: tally(
       renders.filter((r) => r.phase === "warm").map((r) => r.outcome),
     ),
