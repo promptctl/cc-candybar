@@ -1,3 +1,9 @@
+## [1.158.0](https://github.com/promptctl/cc-candybar/compare/v1.157.0...v1.158.0) (2026-10-27)
+
+### Features
+
+* **sources:** every source records its refreshes in one ledger (8ro6 §7) ([#446](https://github.com/promptctl/cc-candybar/issues/446)) ([99568f4](https://github.com/promptctl/cc-candybar/commit/99568f4ac50246f6a033cb582a65f0e3c7a5d582))
+
 ## [1.157.0](https://github.com/promptctl/cc-candybar/compare/v1.156.4...v1.157.0) (2026-10-26)
 
 ### ⚠ BREAKING CHANGES
