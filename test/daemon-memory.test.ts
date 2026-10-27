@@ -48,7 +48,6 @@
 jest.setTimeout(180_000);
 
 import { createHook } from "node:async_hooks";
-import { writeHeapSnapshot } from "node:v8";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -202,18 +201,39 @@ describe("heap-analysis scripts", () => {
   let before: string;
   let after: string;
 
-  beforeAll(async () => {
+  beforeAll(() => {
     before = join(root, "before.heapsnapshot");
     after = join(root, "after.heapsnapshot");
-    writeHeapSnapshot(before);
-    // Launch the burst, let the fan-out dispatch for a couple of event-loop
-    // turns, then snapshot WHILE ops are pending (the FSReqPromise are gone
-    // once it drains). Drain afterward so nothing bleeds into other tests.
-    const inFlight = burst(RENDER_CONCURRENCY);
-    await new Promise((r) => setImmediate(r));
-    await new Promise((r) => setImmediate(r));
-    writeHeapSnapshot(after);
-    await inFlight;
+    // The snapshots come from a bare node process, not this Jest worker: a
+    // heap snapshot's cost is the heap's size, and the worker's holds every
+    // transpiled module of the suite, which makes two of them the slowest
+    // thing in this file by far and a minute on a shared CI core. The child
+    // holds only the burst, so the scripts read the same FSReqPromise signal
+    // from a heap a fraction of the size. Snapshot, launch the burst, let the
+    // fan-out dispatch for a couple of event-loop turns, then snapshot WHILE
+    // ops are pending (the FSReqPromise are gone once it drains).
+    execFileSync(
+      "node",
+      [
+        "--input-type=module",
+        "-e",
+        `
+        import { writeHeapSnapshot } from "node:v8";
+        import { readFile } from "node:fs/promises";
+        const [before, after, ...files] = process.argv.slice(1);
+        writeHeapSnapshot(before);
+        const inFlight = Promise.all(files.map((f) => readFile(f)));
+        await new Promise((r) => setImmediate(r));
+        await new Promise((r) => setImmediate(r));
+        writeHeapSnapshot(after);
+        await inFlight;
+        `,
+        before,
+        after,
+        ...allFiles(),
+      ],
+      { stdio: "inherit" },
+    );
   });
 
   test("heap-analyze diff reports FSReqPromise growth between snapshots", () => {

@@ -25,6 +25,11 @@ import {
 import { detectConfigEnv } from "../src/config-hint";
 import { stripAnsi } from "./helpers/daemon-e2e";
 
+// The budget a verdict waits for a source that will not answer in time: long
+// enough that a settling source is not mistaken for a straggler, short enough
+// that reaching it costs the suite nothing beside the wait itself.
+const SHORT_SETTLE_MS = 250;
+
 let dir: string;
 
 beforeAll(() => {
@@ -103,14 +108,14 @@ describe("checkConfig — explicit target", () => {
         root: { h: ["a"] },
       }`,
     );
-    const outcome = await checkConfig(p, dir);
+    const outcome = await checkConfig(p, dir, SHORT_SETTLE_MS);
     if (outcome.kind !== "clean")
       throw new Error(`expected clean, got ${outcome.kind}`);
     expect(outcome.warnings).toContain(
-      "source still running after 5000 ms, rendered with fallback values: slow",
+      `source still running after ${SHORT_SETTLE_MS} ms, rendered with fallback values: slow`,
     );
     expect(checkPlan(outcome).code).toBe(0);
-  }, 15000);
+  });
 
   // brandon-unfiled-3248.8ro6: an input is pending until the view's first
   // payload, and a source keyed on one first runs when it answers — so check
@@ -212,14 +217,14 @@ describe("checkConfig — explicit target", () => {
         root: { h: ["a"] },
       }`,
     );
-    const outcome = await checkConfig(p, dir);
+    const outcome = await checkConfig(p, dir, SHORT_SETTLE_MS);
     if (outcome.kind !== "clean")
       throw new Error(`expected clean, got ${outcome.kind}`);
     expect(outcome.warnings).toContain(
-      "source still running after 5000 ms, rendered with fallback values: slow2",
+      `source still running after ${SHORT_SETTLE_MS} ms, rendered with fallback values: slow2`,
     );
     expect(checkPlan(outcome).code).toBe(0);
-  }, 15000);
+  });
 
   it("reports a structurally invalid config with the loader's message", async () => {
     const p = write("bad.json5", `{ segments: { a: { template: 42 } } }`);
