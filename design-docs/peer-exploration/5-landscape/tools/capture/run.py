@@ -32,6 +32,7 @@ from scrub import scrub  # noqa: E402
 PROFILE = os.path.join(HERE, 'sandbox.sb')
 TIMEOUT = 20
 SLOW_MS = 3000  # average per tick above which the timeline is cut short
+PROJECT_TIMEOUT = 900  # seconds for one project at every width before its child runner is killed
 WIDTHS, MAIN, ROWS = (80, 120, 160), 120, 40
 MAX_TREE = 600_000_000  # node_modules fetched by deps.py count; a bigger tree is only slower to copy
 WORKERS = 8
@@ -140,12 +141,36 @@ def run_timeline(slug, entry, src, width):
     return {'first': first, 'frames': frames, 'ms': ms}
 
 
+def in_own_process(slug, entry):
+    """One project captured by a child runner, so a stall can be ended. A bar's helper that puts the
+    runner into an uninterruptible wait cannot be escaped from inside; the child and its whole
+    session are killed at the limit and the project is recorded as having stalled the runner."""
+    out = os.path.join(RUNS, slug + '.json')
+    child = subprocess.Popen([sys.executable, '-I', os.path.abspath(__file__), ENTRIES, FIXTURE, SRC, RUNS, out, slug],
+                             stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, start_new_session=True)
+    try:
+        _, err = child.communicate(timeout=PROJECT_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        os.killpg(child.pid, signal.SIGKILL)
+        child.communicate()
+        for w in WIDTHS:
+            shutil.rmtree(os.path.join(RUNS, '%s-%d' % (slug, w)), ignore_errors=True)
+        return {'ok': False, 'ms': PROJECT_TIMEOUT * 1000, 'cmd': entry['cmd'], 'frames': {}, 'err': 'stalled the runner', 'exit': 'stalled'}
+    if not os.path.exists(out):
+        return {'ok': False, 'ms': 0, 'cmd': entry['cmd'], 'frames': {}, 'err': err.decode('utf-8', errors='replace')[-2000:], 'exit': 'runner-error'}
+    rec = json.load(open(out))[slug]
+    os.remove(out)
+    return rec
+
+
 entries = {k: v for k, v in json.load(open(ENTRIES)).items() if 'cmd' in v and (not ONLY or k in ONLY)}
 captures = json.load(open(DEST)) if os.path.exists(DEST) and not ONLY else {}
 os.makedirs(RUNS, exist_ok=True)
 done = 0
+# Given slugs, this process captures them itself; given none, it drives a child per project.
+work = capture if ONLY else in_own_process
 with cf.ThreadPoolExecutor(WORKERS) as pool:
-    futures = {pool.submit(capture, slug, e): slug for slug, e in entries.items()}
+    futures = {pool.submit(work, slug, e): slug for slug, e in entries.items()}
     for f in cf.as_completed(futures):
         slug = futures[f]
         captures[slug] = f.result()
