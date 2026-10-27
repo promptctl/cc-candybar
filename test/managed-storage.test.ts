@@ -9,6 +9,7 @@ import {
   STORAGE_FILE_MAX_AGE_MS,
   STORAGE_PROBE_EVERY_MS,
   STORAGE_PROBE_FILE,
+  STORAGE_STALL_AFTER,
   STORAGE_SWEEP_EVERY_MS,
   type FolderIdentity,
   type IdentityRead,
@@ -533,7 +534,7 @@ describe("ManagedStorage stalls", () => {
     new Promise((resolve) => setTimeout(resolve, 3 * DEBOUNCE_MS));
   const stallReason = (folder: string) =>
     new RegExp(
-      `^cannot refresh: ${folder}: its watch has delivered no event since \\S+, not even for a file the daemon wrote there to test it; the OS is not delivering its file events$`,
+      `^cannot refresh: ${folder}: its watch has delivered no event since \\S+, not even for the files the daemon wrote there to test it; the OS is not delivering its file events$`,
     );
   const warnings = (r: Rig) =>
     r.lines.filter((l) => l.startsWith("warn plugin storage stalled"));
@@ -547,7 +548,7 @@ describe("ManagedStorage stalls", () => {
     r.write(A, '"a"');
     const lane = r.storage.declare(new Holds(), key, A);
     expect(await answered(lane)).toEqual(ok("a"));
-    period();
+    for (let i = 0; i < STORAGE_STALL_AFTER; i++) period();
     await until(() => lane.current().kind === "failed", "the stall");
     return { r, key, lane, watch: watches[0]! };
   }
@@ -578,7 +579,57 @@ describe("ManagedStorage stalls", () => {
     expect(warnings(r)).toEqual([]);
   });
 
-  test("a watch that reports nothing for a period stalls its folder: every held lane reads the stall, counted and logged once", async () => {
+  // libuv's macOS watch drops what lands while it rebuilds its one stream.
+  test("one probe unreported is not a stall: a dropped event leaves the folder delivering", async () => {
+    const watches = fakeWatches();
+    fakeClock();
+    const r = rig();
+    const key = r.storage.keyFor(r.folder);
+    r.storage.watch(key);
+    r.write(A, '"a"');
+    const lane = r.storage.declare(new Holds(), key, A);
+    expect(await answered(lane)).toEqual(ok("a"));
+    for (let i = 0; i < 3; i++) {
+      period();
+      await quiet();
+      watches[0]!.listener("change", STORAGE_PROBE_FILE);
+      await quiet();
+    }
+    expect(lane.current()).toEqual(ok("a"));
+    expect(r.storage.stats()).toMatchObject({ stalled: 0, stalls: 0 });
+  });
+
+  test("a probe write that fails is counted and logged, faults nothing, and is not awaited", async () => {
+    fakeWatches();
+    fakeClock();
+    const r = rig();
+    const key = r.storage.keyFor(r.folder);
+    r.storage.watch(key);
+    r.write(A, '"a"');
+    const lane = r.storage.declare(new Holds(), key, A);
+    expect(await answered(lane)).toEqual(ok("a"));
+    await probed(r);
+    fs.chmodSync(path.join(r.folder, STORAGE_PROBE_FILE), 0o444);
+    for (let i = 0; i < 3; i++) {
+      period();
+      await until(
+        () => r.storage.stats().probeFailures === i + 1,
+        "the failed probe",
+      );
+    }
+    expect(lane.current()).toEqual(ok("a"));
+    expect(r.storage.stats()).toMatchObject({
+      probes: 1,
+      probeFailures: 3,
+      stalled: 0,
+      faults: { unusable: 0, refused: 0, error: 0 },
+    });
+    expect(
+      r.lines.filter((l) => l.startsWith("warn plugin storage probe failed")),
+    ).toHaveLength(3);
+  });
+
+  test("probes unreported STORAGE_STALL_AFTER times in a row stall its folder: every held lane reads the stall, counted and logged once", async () => {
     const { r, key, lane } = await stalledRig();
     const other = r.storage.declare(new Holds(), key, B);
     expect(lane.current()).toEqual({
@@ -679,7 +730,7 @@ describe("ManagedStorage stalls", () => {
   test("a stalled folder replaced at the path is lost, and its lanes keep reading the stall", async () => {
     const { r, lane } = await stalledRig();
     await until(
-      () => r.storage.stats().probes === 2,
+      () => r.storage.stats().probes === STORAGE_STALL_AFTER + 1,
       "the stalling period's probe",
     );
     fs.rmSync(r.folder, { recursive: true });
@@ -698,7 +749,7 @@ describe("ManagedStorage stalls", () => {
   test("a stalled folder found lost recovers on its watch's next report, and its lanes read the path again", async () => {
     const { r, lane, watch } = await stalledRig();
     await until(
-      () => r.storage.stats().probes === 2,
+      () => r.storage.stats().probes === STORAGE_STALL_AFTER + 1,
       "the stalling period's probe",
     );
     fs.rmSync(r.folder, { recursive: true });

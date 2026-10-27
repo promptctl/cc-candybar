@@ -207,7 +207,7 @@ export function formatStats(s: StatsSnapshot): string {
     .map(([cause, n]) => `${cause}:${n}`)
     .join(" ");
   lines.push(
-    `  plugin storage folders=${storage.folders} lost=${storage.lost} probes=${storage.probes} stalled=${storage.stalled} stalls=${storage.stalls} faults ${faults}`,
+    `  plugin storage folders=${storage.folders} lost=${storage.lost} probes=${storage.probes} probeFailures=${storage.probeFailures} stalled=${storage.stalled} stalls=${storage.stalls} faults ${faults}`,
   );
   lines.push(``);
   lines.push(`transcriptReads`);

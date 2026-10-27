@@ -48,6 +48,7 @@ const SOURCES: SourceSnapshots = {
     faults: { unusable: 0, refused: 1, error: 0 },
     lost: 1,
     probes: 7,
+    probeFailures: 1,
     stalled: 1,
     stalls: 2,
   },
@@ -345,7 +346,7 @@ describe("formatStats", () => {
       "held          git:1 tmux:1 host:2 today:1 pluginStorage:1",
     );
     expect(out).toContain(
-      "plugin storage folders=1 lost=1 probes=7 stalled=1 stalls=2 faults unusable:0 refused:1 error:0",
+      "plugin storage folders=1 lost=1 probes=7 probeFailures=1 stalled=1 stalls=2 faults unusable:0 refused:1 error:0",
     );
     expect(out).toContain("refused       1");
     expect(out).toContain("errors        3");

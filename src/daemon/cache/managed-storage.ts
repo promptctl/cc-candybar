@@ -22,10 +22,14 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 // is gone.
 export const STORAGE_FILE_MAX_AGE_MS = 30 * DAY_MS;
 export const STORAGE_SWEEP_EVERY_MS = DAY_MS;
-// [LAW:no-ambient-temporal-coupling] How long a probe's write may go
-// unreported before the folder's watch is judged stalled: far above the
-// watch's debounce, and no longer than a bar may lag behind its plugin's file.
+// [LAW:no-ambient-temporal-coupling] How often the owner writes a probe:
+// far above the watch's debounce.
 export const STORAGE_PROBE_EVERY_MS = 30_000;
+// How many probes in a row may go unreported before the folder's watch is
+// judged stalled. More than one, because libuv's macOS watch drops whatever
+// lands while it rebuilds its one FSEvents stream, which any watch opening or
+// closing anywhere in the daemon makes it do.
+export const STORAGE_STALL_AFTER = 2;
 // The file the owner rewrites to test its folder's watch: not `*.json`, so no
 // session's file is ever it and the sweep never removes it.
 export const STORAGE_PROBE_FILE = ".cc-candybar-watch-probe";
@@ -79,9 +83,11 @@ export interface ManagedStorageStats extends KeyedSourceStats {
   readonly faults: Readonly<Record<FaultCause, number>>;
   // Folders found gone or replaced under their watch.
   readonly lost: number;
-  // Probes written: with no stall, how many times a watch proved it is
-  // delivering, so a quiet folder reads as checked rather than unknown.
+  // Probes written, and probe writes that failed. A failed write is not the
+  // folder's fault: the daemon's own write can fail for the daemon's reasons
+  // (a moment's EMFILE) while its program's writes land.
   readonly probes: number;
+  readonly probeFailures: number;
   // Folders whose watch is stalled now, and every move into a stall. Not a
   // fault cause: a fault ends its generation, and a stall recovers.
   readonly stalled: number;
@@ -119,26 +125,23 @@ interface Folder {
 }
 
 // [LAW:types-are-the-program] Whether a generation's open watch is
-// delivering. `delivering`: it reported something since the last probe was
-// written. `stalled`: the probe written at `since` went unreported for a
-// whole period; the next report recovers it.
+// delivering. `delivering`: the times of the probes written since its last
+// report, oldest first. `stalled`: STORAGE_STALL_AFTER probes in a row went
+// unreported, the first written at `since`; the next report recovers it.
 type Delivery =
-  | { readonly kind: "delivering" }
+  | { readonly kind: "delivering"; readonly unreported: readonly number[] }
   | { readonly kind: "stalled"; readonly since: number };
 
-// [LAW:types-are-the-program] One generation's standing, which its sources'
-// reads derive their failure from. `watching`: its folder is the one its
-// watch opened on. `lost`: its folder is gone or replaced. Both still hold
-// the watch open, so both carry its delivery: a lost folder's reload rides
-// the same file events, so while they are stalled its sources read the
-// stall, never a file read once from the path and then left unrefreshed.
-// `faulted`: its folder could not be made or its watch failed. `closed`: its
-// last holder released it. `lost`, `faulted` and `closed` end the
-// generation: nothing moves it on, so each is counted once, and a probe still
-// in flight at the close judges nothing.
+// [LAW:types-are-the-program] What has become of one generation's folder,
+// which its sources' reads derive their failure from first. `watching`: its
+// folder is the one its watch opened on. `lost`: its folder is gone or
+// replaced. `faulted`: its folder could not be made or its watch failed.
+// `closed`: its last holder released it. `lost`, `faulted` and `closed` end
+// the generation: nothing moves it on, so each is counted once, and a probe
+// still in flight at the close judges nothing.
 type Health =
-  | { readonly kind: "watching"; readonly delivery: Delivery }
-  | { readonly kind: "lost"; readonly delivery: Delivery }
+  | { readonly kind: "watching" }
+  | { readonly kind: "lost" }
   | { readonly kind: "faulted"; readonly reason: string }
   | { readonly kind: "closed" };
 
@@ -153,17 +156,15 @@ interface Watched {
   readonly sweep: NodeJS.Timeout;
   readonly probe: NodeJS.Timeout;
   health: Health;
-  // [LAW:one-source-of-truth] When the probe the watch has not reported yet
-  // was written; null before the opening's probe and once the watch reports
-  // anything.
-  pending: number | null;
+  // Its watch's delivery, beside its health rather than in it: a lost
+  // folder's watch is still open, and its reload rides the same file events,
+  // so while they are stalled its sources read the stall, never a file read
+  // once from the path and then left unrefreshed.
+  delivery: Delivery;
 }
 
 const stallReason = (storage: StorageKey, since: number): string =>
-  `cannot refresh: ${storage.folder}: its watch has delivered no event since ${new Date(since).toISOString()}, not even for a file the daemon wrote there to test it; the OS is not delivering its file events`;
-
-const deliveryOf = (health: Health): Delivery | null =>
-  health.kind === "watching" || health.kind === "lost" ? health.delivery : null;
+  `cannot refresh: ${storage.folder}: its watch has delivered no event since ${new Date(since).toISOString()}, not even for the files the daemon wrote there to test it; the OS is not delivering its file events`;
 
 // [LAW:single-enforcer] The one owner of every plugin's managed storage, for
 // the whole daemon (design-docs/PLUGIN-API.md, "Managed storage"). A plugin's
@@ -193,6 +194,7 @@ export class ManagedStorage {
   private lost = 0;
   private stalls = 0;
   private probes = 0;
+  private probeFailures = 0;
   private readonly watchers: WatcherRegistry;
   private readonly logger: DaemonLogger;
   private readonly identityOf: IdentityRead;
@@ -295,10 +297,11 @@ export class ManagedStorage {
       faults: { ...this.faultCounts },
       lost: this.lost,
       stalled: [...this.watched.values()].filter(
-        (w) => deliveryOf(w.health)?.kind === "stalled",
+        (w) => w.health.kind !== "faulted" && w.delivery.kind === "stalled",
       ).length,
       stalls: this.stalls,
       probes: this.probes,
+      probeFailures: this.probeFailures,
     };
   }
 
@@ -345,8 +348,8 @@ export class ManagedStorage {
       ),
       sweep: setInterval(() => void this.sweep(key), STORAGE_SWEEP_EVERY_MS),
       probe: setInterval(() => void this.tick(watched), STORAGE_PROBE_EVERY_MS),
-      health: { kind: "watching", delivery: { kind: "delivering" } },
-      pending: null,
+      health: { kind: "watching" },
+      delivery: { kind: "delivering", unreported: [] },
     };
     watched.sweep.unref();
     watched.probe.unref();
@@ -424,7 +427,7 @@ export class ManagedStorage {
       present();
       return;
     }
-    watched.health = { kind: "lost", delivery: health.delivery };
+    watched.health = { kind: "lost" };
     // An older generation's folder has already moved on: its loss was the
     // current generation's to count.
     if (key.generation !== folder.generation) return;
@@ -457,17 +460,14 @@ export class ManagedStorage {
 
   // [LAW:dataflow-not-control-flow] The same steps at the watch's opening and
   // every period after: judge the folder against the disk, so a folder
-  // replaced at the path is lost and never read as stalled; judge whether the
-  // last probe was reported; write the next one. A probe that cannot be
-  // written to a folder still there is the generation's fault, since its
-  // program cannot write there either.
+  // replaced at the path is lost and never read as stalled; judge the probes
+  // still unreported; write the next one. A stalled watch is probed too, so
+  // its recovery has a write to report even in a folder nobody else writes.
   private async tick(watched: Watched): Promise<void> {
-    this.judged(watched, () => {
-      if (watched.pending !== null) this.stalled(watched, watched.pending);
-    });
+    this.judged(watched, () => this.stalled(watched));
     if (watched.health.kind !== "watching") return;
     const at = Date.now();
-    watched.pending = at;
+    this.awaiting(watched, (times) => [...times, at]);
     try {
       await fs.promises.writeFile(
         path.join(watched.key.folder, STORAGE_PROBE_FILE),
@@ -475,24 +475,43 @@ export class ManagedStorage {
       );
       this.probes++;
     } catch (e) {
-      this.judged(watched, () =>
-        this.faulted(
-          watched,
-          "error",
-          `probe write failed: ${(e as Error).message}`,
-        ),
+      // [LAW:no-silent-failure] Counted and logged, and the probe it never
+      // wrote is not awaited: a write that failed tests no watch.
+      this.awaiting(watched, (times) => times.filter((t) => t !== at));
+      this.probeFailures++;
+      this.logger(
+        "warn",
+        `plugin storage probe failed folder=${valueOf(watched.key.folder)} generation=${watched.key.generation} reason=${JSON.stringify((e as Error).message)}`,
       );
     }
   }
 
+  // The probes a delivering watch has yet to report, edited. A stalled watch
+  // awaits none in particular: any report recovers it.
+  private awaiting(
+    watched: Watched,
+    edit: (times: readonly number[]) => readonly number[],
+  ): void {
+    const { delivery } = watched;
+    if (delivery.kind === "stalled") return;
+    watched.delivery = {
+      kind: "delivering",
+      unreported: edit(delivery.unreported),
+    };
+  }
+
   // [LAW:no-silent-failure] Its sources read the stall, never the value it
   // froze at.
-  private stalled(watched: Watched, since: number): void {
-    const { health } = watched;
-    if (health.kind !== "watching" || health.delivery.kind !== "delivering") {
+  private stalled(watched: Watched): void {
+    const { delivery } = watched;
+    if (
+      delivery.kind === "stalled" ||
+      delivery.unreported.length < STORAGE_STALL_AFTER
+    ) {
       return;
     }
-    watched.health = { kind: "watching", delivery: { kind: "stalled", since } };
+    const since = delivery.unreported[0]!;
+    watched.delivery = { kind: "stalled", since };
     this.stalls++;
     this.logger(
       "warn",
@@ -505,15 +524,12 @@ export class ManagedStorage {
   // a stall re-reads every held file in the folder: a write may have gone
   // unreported meanwhile.
   private delivered(watched: Watched): void {
-    watched.pending = null;
-    const { health } = watched;
-    if (health.kind !== "watching" && health.kind !== "lost") return;
-    if (health.delivery.kind !== "stalled") return;
-    const took = Date.now() - health.delivery.since;
-    watched.health = { kind: health.kind, delivery: { kind: "delivering" } };
+    const { delivery } = watched;
+    watched.delivery = { kind: "delivering", unreported: [] };
+    if (delivery.kind !== "stalled") return;
     this.logger(
       "info",
-      `plugin storage recovered folder=${valueOf(watched.key.folder)} generation=${watched.key.generation} stalled=${took}ms`,
+      `plugin storage recovered folder=${valueOf(watched.key.folder)} generation=${watched.key.generation} stalled=${Date.now() - delivery.since}ms`,
     );
     this.sessions.changed((f) => sameKey(f.storage, watched.key));
   }
@@ -529,8 +545,8 @@ export class ManagedStorage {
         return `cannot refresh: ${storage.folder} ${health.reason}; reload the config or restart the daemon`;
       case "watching":
       case "lost":
-        return health.delivery.kind === "stalled"
-          ? stallReason(storage, health.delivery.since)
+        return watched.delivery.kind === "stalled"
+          ? stallReason(storage, watched.delivery.since)
           : null;
       case "closed":
         return null;
