@@ -461,23 +461,22 @@ describe("doctorPlan over a real config", () => {
   });
 
   // [LAW:single-enforcer] brandon-unfiled-3248.e3r: the argv gate refuses
-  // arity and a stray option only. An empty argument — `doctor "$CFG"` with
-  // CFG unset — passes through as the name it is; what it means is decided
-  // where `check` and the bar decide it, not at the gate. Named per case:
-  // reintroducing `args[0] === ""` fails the first row, not the suite.
+  // arity and an option only. An empty argument — `doctor "$CFG"` with CFG
+  // unset — passes through as the name it is; what it means is decided where
+  // `check` and the bar decide it, not at the gate. One table, so the diff of
+  // a regression names its row: reintroducing `args[0] === ""` shows the
+  // `[""]` row as usage where run is expected.
   test("parseDoctorArgs refuses two files or an option, never an empty name", () => {
-    const USAGE = "doctor: expected at most one config file\nUsage: cc-candybar doctor [config-file]\n";
-    expect(
-      [[], [""], ["a.json5"], ["a.json5", "b.json5"], ["--help"]].map((args) => ({
-        args,
-        parsed: parseDoctorArgs(args),
-      })),
-    ).toEqual([
+    const USAGE = "Usage: cc-candybar doctor [config-file]\n";
+    const ARITY = `doctor: expected at most one config file\n${USAGE}`;
+    const table = [[], [""], ["a.json5"], ["a.json5", "b.json5"], ["--help"], ["a.json5", "--verbose"]];
+    expect(table.map((args) => ({ args, parsed: parseDoctorArgs(args) }))).toEqual([
       { args: [], parsed: { kind: "run", configFile: undefined } },
       { args: [""], parsed: { kind: "run", configFile: "" } },
       { args: ["a.json5"], parsed: { kind: "run", configFile: "a.json5" } },
-      { args: ["a.json5", "b.json5"], parsed: { kind: "usage", message: USAGE } },
-      { args: ["--help"], parsed: { kind: "usage", message: USAGE } },
+      { args: ["a.json5", "b.json5"], parsed: { kind: "usage", message: ARITY } },
+      { args: ["--help"], parsed: { kind: "usage", message: `doctor: unknown option --help\n${USAGE}` } },
+      { args: ["a.json5", "--verbose"], parsed: { kind: "usage", message: `doctor: unknown option --verbose\n${USAGE}` } },
     ]);
   });
 
@@ -496,6 +495,12 @@ describe("doctorPlan over a real config", () => {
     );
     expect(out.code).toBe(1);
     expect(out.stdout).toMatch(/^✗ config — helper "h" is never called\n/);
+
+    // With no variable either, the empty name and no name reach the same
+    // searched chain: undefined-from-empty is undefined-from-absent.
+    const plan = (configFile: string | undefined) =>
+      doctorPlan(REAL, NO_HANDLER, DAEMON, inDir({}), project, () => ({ columns: 120 }), configFile);
+    expect(await plan("")).toEqual(await plan(undefined));
   });
 
   // brandon-effects-2gka.21e, brandon-doctor-v62x.tgp: what the recent bars

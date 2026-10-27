@@ -309,19 +309,31 @@ export type DoctorArgs =
   | { readonly kind: "run"; readonly configFile: string | undefined }
   | { readonly kind: "usage"; readonly message: string };
 
+const USAGE = "Usage: cc-candybar doctor [config-file]\n";
+
 export function parseDoctorArgs(args: readonly string[]): DoctorArgs {
-  // [LAW:single-enforcer] Arity and a stray option only. What the argument
-  // means — including that an empty one, a statusline's `--config "$CFG"`
-  // with CFG unset, is no override — is `cliConfigTarget`'s to say inside
-  // `doctorPlan`, the one reading `check` runs under and the bar renders under.
-  if (args.length > 1 || args[0]?.startsWith("--")) {
+  // [LAW:no-silent-failure] An option is named as one wherever it stands,
+  // as `check` names its unknown options — read as a file, or refused as a
+  // second file, it would be reported as something it is not.
+  const options = args.filter((a) => a.startsWith("--"));
+  const paths = args.filter((a) => !a.startsWith("--"));
+  if (options.length > 0) {
     return {
       kind: "usage",
-      message:
-        "doctor: expected at most one config file\nUsage: cc-candybar doctor [config-file]\n",
+      message: `doctor: unknown option ${options.join(" ")}\n${USAGE}`,
     };
   }
-  return { kind: "run", configFile: args[0] };
+  // [LAW:single-enforcer] Arity only. What the path means — including that
+  // an empty one, a statusline's `--config "$CFG"` with CFG unset, is no
+  // override — is `cliConfigTarget`'s to say inside `doctorPlan`, the one
+  // reading `check` runs under and the bar renders under.
+  if (paths.length > 1) {
+    return {
+      kind: "usage",
+      message: `doctor: expected at most one config file\n${USAGE}`,
+    };
+  }
+  return { kind: "run", configFile: paths[0] };
 }
 
 // `cc-candybar doctor [config-file]` — the argv binding. The one argument is

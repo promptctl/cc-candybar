@@ -1041,6 +1041,11 @@ describe("runCheck — the argv edge", () => {
         verdict: viaEnv.stderr,
       });
     }
+
+    // With no variable either, the empty argument and no argument reach the
+    // same searched chain: undefined-from-empty is undefined-from-absent.
+    delete process.env.CC_CANDYBAR_CONFIG;
+    expect(await run([""])).toEqual(await run([]));
   });
 
   // brandon-check-m2a — the flag an author reaches for to SEE the bar. The
