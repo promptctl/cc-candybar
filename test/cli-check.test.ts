@@ -19,7 +19,7 @@ import path from "node:path";
 import {
   checkConfig,
   checkPlan,
-  runCheck,
+  checkCommandPlan,
   type CheckOutcome,
 } from "../src/check";
 import { detectConfigEnv } from "../src/config-hint";
@@ -461,7 +461,9 @@ describe("checkConfig — explicit target", () => {
         root: { h: ['toolbar'] },
       }`,
     );
-    expect(expectFatal(await checkConfig(p, dir))).toContain('segment "toolbar"');
+    expect(expectFatal(await checkConfig(p, dir))).toContain(
+      'segment "toolbar"',
+    );
   });
 
   // brandon-layout-edit-2gc.5 PR review: `.preset.customized` is a fact
@@ -599,7 +601,7 @@ describe("checkConfig — explicit target", () => {
     );
     const message = expectFatal(await checkConfig(p, dir));
     expect(message).toContain(
-      'palette rule: presets.b.globals.palette rendered',
+      "palette rule: presets.b.globals.palette rendered",
     );
     expect(message).toContain('(under preset "b"');
   });
@@ -639,7 +641,9 @@ describe("checkConfig — explicit target", () => {
     expect(outcome.kind).toBe("clean");
     if (outcome.kind === "clean") {
       expect(outcome.warnings).toEqual([
-        expect.stringMatching(/^theme "textual-dark": no open-trigger colour stands 2\.2:1 off every cell beside it/),
+        expect.stringMatching(
+          /^theme "textual-dark": no open-trigger colour stands 2\.2:1 off every cell beside it/,
+        ),
       ]);
     }
   });
@@ -663,7 +667,9 @@ describe("checkConfig — explicit target", () => {
     expect(outcome.kind).toBe("clean");
     if (outcome.kind === "clean") {
       expect(outcome.warnings).toEqual([
-        expect.stringMatching(/^theme "textual-dark": no open-trigger colour stands 2\.2:1 off every cell beside it.* \(under preset "b"\)$/),
+        expect.stringMatching(
+          /^theme "textual-dark": no open-trigger colour stands 2\.2:1 off every cell beside it.* \(under preset "b"\)$/,
+        ),
       ]);
     }
   });
@@ -826,7 +832,7 @@ describe("checkConfig — default resolution (the daemon's own chain)", () => {
   });
 
   // brandon-config-5g8: $CC_CANDYBAR_CONFIG is a fact of the CLI's own shell,
-  // read at the CLI edge (runCheck → detectConfigEnv) and passed as the
+  // read at the CLI edge (checkCommandPlan → detectConfigEnv) and passed as the
   // explicit target — the way the statusline client sends it as a hint. So
   // an override naming an absent file is `unreadable`, never a clean verdict
   // about a bundled default the user did not ask for.
@@ -974,44 +980,12 @@ describe("checkPlan — the text/exit-code contract", () => {
   });
 });
 
-// `runCheck` is the argv edge: it owns process.exit and the streams, and it is
-// where an explicit argument and the CLI's own $CC_CANDYBAR_CONFIG meet. The
-// spies turn its exit into a thrown code so that composition is observable
-// in-process — everything below the edge is covered through checkConfig.
-describe("runCheck — the argv edge", () => {
-  class Exit {
-    constructor(readonly code: number) {}
-  }
-  async function run(args: string[]): Promise<{
-    code: number;
-    stdout: string;
-    stderr: string;
-  }> {
-    let stdout = "";
-    let stderr = "";
-    const out = jest
-      .spyOn(process.stdout, "write")
-      .mockImplementation((chunk) => ((stdout += String(chunk)), true));
-    const err = jest
-      .spyOn(process.stderr, "write")
-      .mockImplementation((chunk) => ((stderr += String(chunk)), true));
-    const exit = jest.spyOn(process, "exit").mockImplementation(((
-      code?: number,
-    ) => {
-      throw new Exit(code ?? 0);
-    }) as never);
-    try {
-      await runCheck(args);
-    } catch (e) {
-      if (e instanceof Exit) return { code: e.code, stdout, stderr };
-      throw e;
-    } finally {
-      out.mockRestore();
-      err.mockRestore();
-      exit.mockRestore();
-    }
-    throw new Error("runCheck returned instead of exiting");
-  }
+// `checkCommandPlan` is the argv edge, where an explicit argument and the
+// CLI's own $CC_CANDYBAR_CONFIG meet. Its plan is a value (src/cli-plan.ts
+// delivers it), so the composition is observable in-process — everything
+// below the edge is covered through checkConfig.
+describe("checkCommandPlan — the argv edge", () => {
+  const run = (args: string[]) => checkCommandPlan(args);
 
   it("an explicit argument outranks $CC_CANDYBAR_CONFIG; without one the variable is the target", async () => {
     const ok = write(

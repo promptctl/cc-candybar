@@ -27,6 +27,7 @@ import { repoConfigs } from "./daemon/repo-configs.js";
 import { repoGateLines, type ApprovedRepo } from "./config/loader/repo-gate.js";
 import type { ConfigResolution } from "./config/loader/discovery.js";
 import fs from "node:fs";
+import type { CliPlan } from "./cli-plan.js";
 import process from "node:process";
 import {
   loadConfigChain,
@@ -238,8 +239,8 @@ export const CHECK_TODAY: TodayPayload = { cost: 12.5, tokens: 3_400_000 };
 
 // [LAW:dataflow-not-control-flow] The check result is DATA — a pure function of
 // the target file's contents — discriminated into the three outcomes the exit-
-// code contract projects. `checkConfig` carries the decision; `runCheck` only
-// maps it to (streams, exit), so the contract is testable without spawning a
+// code contract projects. `checkConfig` carries the decision; `checkCommandPlan`
+// only maps it to a plan, so the contract is testable without spawning a
 // process or stubbing process.exit.
 //
 // `layers` are the files checked, lowest first; none means the bundled
@@ -285,7 +286,7 @@ function searchedLayers(
 // With no target, the path resolves exactly as the daemon resolves it for a
 // client with no override (resolveDslConfig: project/cwd → XDG), so the file
 // this checks IS the file the daemon would load from this directory. The
-// CLI's own `$CC_CANDYBAR_CONFIG` enters as the target (runCheck), the way
+// CLI's own `$CC_CANDYBAR_CONFIG` enters as the target (checkCommandPlan), the way
 // the statusline client sends it as a hint — a set override always names
 // the file, so an absent one is `unreadable` here, never a clean verdict
 // about the bundled default.
@@ -750,15 +751,10 @@ const EXIT_FATAL = 1;
 const EXIT_USAGE = 2;
 
 // [LAW:dataflow-not-control-flow] The outcome → (streams, exit-code) mapping is
-// DATA: a total fold over CheckOutcome returning one descriptor; runCheck runs
-// the two unconditional writes + exit against it. Verdict on stdout, every
-// diagnostic (warnings included) on stderr — so `check` in a pipeline yields a
-// parseable verdict while a human still sees the advisories.
-export interface CliPlan {
-  readonly stdout: string;
-  readonly stderr: string;
-  readonly code: number;
-}
+// DATA: a total fold over CheckOutcome returning one plan (src/cli-plan.ts),
+// which the entry delivers. Verdict on stdout, every diagnostic (warnings
+// included) on stderr — so `check` in a pipeline yields a parseable verdict
+// while a human still sees the advisories.
 
 function warningLines(warnings: readonly string[]): string {
   return warnings.map((w) => `warning: ${w}\n`).join("");
@@ -770,7 +766,7 @@ function warningLines(warnings: readonly string[]): string {
 // so the bar an author reads and the bar `check` blessed cannot differ; re-rendering here
 // (at a terminal width, say) would be two clocks, and the audience this exists
 // for reads a pipe, which has no width at all. The flag adds a VALUE to one
-// stream rather than selecting a code path: runCheck's two writes are
+// stream rather than selecting a code path: the plan's two streams are
 // unconditional either way, and the arms that never rendered have no bar to
 // print because `rendered` lives on the clean arm alone
 // [LAW:types-are-the-program].
@@ -812,9 +808,8 @@ const USAGE = `Usage: cc-candybar check [${RENDER_FLAG}] [config-file]\n`;
 
 // [LAW:parse-dont-validate] argv crosses one checkpoint and becomes a request
 // the rest of the command reads by field; nothing inland re-reads `args`.
-// `runCheck` used to inspect them inline and write+exit from the middle of
-// itself, which put the usage contract out of reach of everything but a
-// spawned process — the same reason `checkPlan` is a value: a misspelled
+// Inspecting them inline and exiting from the middle of the command would
+// put the usage contract out of reach of everything but a spawned process — the same reason `checkPlan` is a value: a misspelled
 // option is now observable exactly like every other outcome.
 type CheckArgs =
   | {
@@ -839,7 +834,7 @@ function parseCheckArgs(args: readonly string[]): CheckArgs {
   }
   // [LAW:single-enforcer] Arity only. What the path means — including that an
   // empty one, a statusline's `--config "$CFG"` with CFG unset, resolves like
-  // no argument — is `cliConfigTarget`'s to say in `runCheck`, the one
+  // no argument — is `cliConfigTarget`'s to say in `checkCommandPlan`, the one
   // reading `doctor` runs under and the bar renders under.
   if (paths.length > 1) {
     return {
@@ -857,23 +852,21 @@ function parseCheckArgs(args: readonly string[]): CheckArgs {
 // `cc-candybar check [--render] [path]` — the argv binding, and the one place
 // the command touches the process: two unconditional writes and the exit code
 // its plan carries.
-export async function runCheck(args: readonly string[]): Promise<never> {
+export async function checkCommandPlan(
+  args: readonly string[],
+): Promise<CliPlan> {
   const parsed = parseCheckArgs(args);
   const cwd = process.cwd();
-  const plan: CliPlan =
-    parsed.kind === "usage"
-      ? { stdout: "", stderr: parsed.message, code: EXIT_USAGE }
-      : checkPlan(
-          // [LAW:one-source-of-truth] The target the doctor would check under
-          // the same argument, already absolute — `checkConfig`'s own
-          // resolution, the seam for its direct callers, passes it through.
-          await checkConfig(
-            cliConfigTarget(parsed.target, process.env, cwd),
-            cwd,
-          ),
-          parsed.render,
-        );
-  process.stdout.write(plan.stdout);
-  process.stderr.write(plan.stderr);
-  process.exit(plan.code);
+  return parsed.kind === "usage"
+    ? { stdout: "", stderr: parsed.message, code: EXIT_USAGE }
+    : checkPlan(
+        // [LAW:one-source-of-truth] The target the doctor would check under
+        // the same argument, already absolute — `checkConfig`'s own
+        // resolution, the seam for its direct callers, passes it through.
+        await checkConfig(
+          cliConfigTarget(parsed.target, process.env, cwd),
+          cwd,
+        ),
+        parsed.render,
+      );
 }

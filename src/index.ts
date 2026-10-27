@@ -14,11 +14,11 @@ import {
 } from "./install";
 import { runDaemon } from "./daemon/server";
 import { tryRenderViaDaemon } from "./daemon/client";
-import { runDaemonStats } from "./daemon/client-stats";
-import { runDebug } from "./daemon/client-debug";
+import { daemonStatsPlan } from "./daemon/client-stats";
+import { debugCommandPlan } from "./daemon/client-debug";
 import { DEBUG_WHATS } from "./daemon/debug-types";
-import { runSchema } from "./config/cli";
-import { runCheck } from "./check";
+import { schemaPlan } from "./config/cli";
+import { checkCommandPlan } from "./check";
 import { runPlugin } from "./plugin-install";
 import { obtainDaemonKick } from "./daemon/acquire";
 import { planOutcome } from "./render/outcome-plan";
@@ -30,9 +30,10 @@ import { NODE_FLAGS } from "./cli-flags";
 import { PACKAGE_VERSION } from "./version";
 import { detectClientHints } from "./client-hints";
 import { nodeClientHint } from "./client-hint";
-import { runDoctorCli } from "./doctor/cli";
+import { doctorCommandPlan } from "./doctor/cli";
 import { runFrames } from "./frames-cli";
 import { runBarPane } from "./bar-pane";
+import { exitWith } from "./cli-plan";
 
 // [LAW:one-source-of-truth] The bundle this process runs: the file this entry
 // was loaded from, which Node's loader resolved through every link (an npm
@@ -56,7 +57,13 @@ function showHelpText(): void {
 }
 
 // [LAW:dataflow-not-control-flow] Subcommand dispatch is data: argv[2] names
-// a handler, and each handler owns its lifecycle and exit code. The
+// a handler. A one-shot handler (stats, the debug projections, check, doctor,
+// schema, the render relay) folds its outcome into a plan and delivers it
+// through the one exit (src/cli-plan.ts), in one shape:
+// `exitWith(await <command>Plan(args))`. install and plugin print as they go
+// and exit directly, which holds only while their whole output stays under
+// one pipe buffer (64 KiB): past that, an exit drops the queued tail. The
+// daemon, the stream and the pane own their own lifecycles. The
 // stdin-driven render takes flags only (`--config`), so a positional argv[2]
 // naming no handler is a mistake, refused rather than read as a render.
 // `lint` is an alias of `check` — one config verdict, one pipeline, one
@@ -82,30 +89,29 @@ const SUBCOMMANDS: Readonly<Record<string, Subcommand>> = {
     runDaemon();
   },
   "daemon-stats": async (args) => {
-    await runDaemonStats(args);
-    process.exit(0);
+    await exitWith(await daemonStatsPlan(args));
   },
   // The stream owns its own lifecycle.
   frames: async () => {
     await runFrames(process.argv, RUNNING_BUNDLE);
   },
   check: async (args) => {
-    await runCheck(args);
+    await exitWith(await checkCommandPlan(args));
   },
   lint: async (args) => {
-    await runCheck(args);
+    await exitWith(await checkCommandPlan(args));
   },
   plugin: async (args) => {
     process.exit(runPlugin(args));
   },
   schema: async () => {
-    runSchema();
+    await exitWith(schemaPlan());
   },
   // [LAW:single-enforcer] The doctor's CLI projection: the SAME check fold
   // the bar's 🩺 click runs, over this process's own environment (which IS
   // Claude Code's when run from a Claude Code shell).
   doctor: async (args) => {
-    await runDoctorCli(args);
+    await exitWith(await doctorCommandPlan(args));
   },
   // Runs until the pane closes.
   "bar-pane": async (args) => {
@@ -115,20 +121,17 @@ const SUBCOMMANDS: Readonly<Record<string, Subcommand>> = {
     DEBUG_WHATS.map((what): [string, Subcommand] => [
       what,
       async (args) => {
-        await runDebug(what, args);
-        process.exit(0);
+        await exitWith(await debugCommandPlan(what, args));
       },
     ]),
   ),
 };
 
 async function main(): Promise<void> {
+  const subcommand = process.argv[2];
+  const named =
+    subcommand !== undefined && !subcommand.startsWith("-") ? subcommand : null;
   try {
-    const subcommand = process.argv[2];
-    const named =
-      subcommand !== undefined && !subcommand.startsWith("-")
-        ? subcommand
-        : null;
     // [LAW:no-silent-failure] Before the help flag, so `<typo> --help` names
     // the typo rather than printing help that does not mention it.
     if (named !== null && !Object.hasOwn(SUBCOMMANDS, named)) {
@@ -226,12 +229,20 @@ echo '{"session_id":"test-session","workspace":{"project_dir":"/path/to/project"
     if (plan.kick) {
       obtainDaemonKick();
     }
-    process.stdout.write(plan.output);
-    process.exit(0);
+    await exitWith({ stdout: plan.output, stderr: "", code: 0 });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error("Error generating statusline:", errorMessage);
-    process.exit(1);
+    // [LAW:no-silent-failure] Named for what was running: a subcommand whose
+    // delivery failed (a full disk under `check`) is reported as that
+    // subcommand, not as a statusline render. The report goes through the
+    // same delivery, so it is waited for like any plan; a stream that refuses
+    // this too rejects out of main, and Node's unhandled-rejection report is
+    // the loud end.
+    await exitWith({
+      stdout: "",
+      stderr: `cc-candybar ${named ?? "statusline"}: ${errorMessage}\n`,
+      code: 1,
+    });
   }
 }
 

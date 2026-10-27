@@ -4,6 +4,7 @@ import {
   formatStats,
   missingFields,
   shapeSkew,
+  statsPlan,
 } from "../src/daemon/client-stats";
 import { PROTOCOL_VERSION } from "../src/daemon/protocol";
 import { readFileSync } from "node:fs";
@@ -432,5 +433,49 @@ describe("formatStats", () => {
       doctorStores: EMPTY_STORES,
     });
     expect(out).toContain("hit rate      n/a");
+  });
+});
+
+// [LAW:verifiable-goals] The text/exit-code contract of `daemon-stats` is a
+// plan value (src/cli-plan.ts delivers it), so it is pinned here without a
+// process.
+describe("statsPlan — the text/exit-code contract", () => {
+  const snap = RuntimeStats.referenceSnapshot();
+
+  it("JSON mode carries the whole snapshot on stdout and exits 0", () => {
+    const plan = statsPlan({ kind: "ok", value: snap }, true);
+    expect(plan.code).toBe(0);
+    expect(plan.stderr).toBe("");
+    expect(JSON.parse(plan.stdout)).toEqual(JSON.parse(JSON.stringify(snap)));
+  });
+
+  it("text mode carries the formatted report", () => {
+    const plan = statsPlan({ kind: "ok", value: snap }, false);
+    expect(plan).toEqual({ stdout: formatStats(snap), stderr: "", code: 0 });
+  });
+
+  it("a skewed daemon's JSON is still delivered, beside the skew and a failing code", () => {
+    const { clients: _clients, ...older } = snap;
+    const plan = statsPlan(
+      { kind: "ok", value: older as typeof snap },
+      true,
+    );
+    expect(plan.code).toBe(1);
+    expect(plan.stderr).toMatch(/^daemon-stats: .*reports no clients/);
+    expect(JSON.parse(plan.stdout)).not.toHaveProperty("clients");
+  });
+
+  it("an unreachable daemon is a stderr line and exit 1, nothing on stdout", () => {
+    const plan = statsPlan(
+      {
+        kind: "transient",
+        cause: "unreachable",
+        message: "ECONNREFUSED",
+      },
+      false,
+    );
+    expect(plan.stdout).toBe("");
+    expect(plan.stderr).toMatch(/^daemon-stats: daemon unavailable/);
+    expect(plan.code).toBe(1);
   });
 });

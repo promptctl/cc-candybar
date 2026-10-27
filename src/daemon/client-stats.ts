@@ -1,5 +1,5 @@
-import process from "node:process";
 import { describeFailure, requestOutcome } from "./client-transport";
+import type { CliPlan } from "../cli-plan";
 import type { RoundTripBudgets, RoundTripOutcome } from "./client-transport";
 import { RuntimeStats, type StatsSnapshot } from "./stats";
 import { PACKAGE_VERSION } from "../version";
@@ -12,31 +12,35 @@ import { shortDigest } from "../source-digest";
 const BUDGETS: RoundTripBudgets = { connectMs: 200, budgetMs: 500 };
 
 // Query the running daemon for stats. Does NOT spawn a daemon — stats on a
-// dead daemon is meaningless. Exits non-zero on failure with a clear message.
-export async function runDaemonStats(args: readonly string[]): Promise<void> {
-  const wantJson = args.includes("--json");
+// dead daemon is meaningless. A failure is the plan's stderr and a non-zero
+// code.
+export async function daemonStatsPlan(
+  args: readonly string[],
+): Promise<CliPlan> {
+  return statsPlan(await fetchStats(), args.includes("--json"));
+}
 
-  const outcome = await fetchStats();
+// [LAW:dataflow-not-control-flow] The outcome → (streams, exit-code) fold.
+// The raw object needs no shape, so JSON mode carries whatever the daemon
+// said before anything is checked; a skewed daemon's JSON is still delivered,
+// beside the skew on stderr and a failing code.
+export function statsPlan(
+  outcome: RoundTripOutcome<StatsSnapshot>,
+  wantJson: boolean,
+): CliPlan {
   if (outcome.kind !== "ok") {
-    process.stderr.write(`daemon-stats: ${describeFailure(outcome)}\n`);
-    process.exit(1);
+    return {
+      stdout: "",
+      stderr: `daemon-stats: ${describeFailure(outcome)}\n`,
+      code: 1,
+    };
   }
-  // The raw object needs no shape, so JSON mode prints whatever the daemon
-  // said before anything is checked. `exitCode`, never `exit()`, after a
-  // stdout write: a piped stdout flushes asynchronously, and exit() would cut
-  // the JSON mid-object.
-  if (wantJson) {
-    process.stdout.write(JSON.stringify(outcome.value, null, 2) + "\n");
-  }
+  const json = wantJson ? JSON.stringify(outcome.value, null, 2) + "\n" : null;
   const skew = shapeSkew(outcome.value);
   if (skew !== null) {
-    process.stderr.write(`daemon-stats: ${skew}\n`);
-    process.exitCode = 1;
-    return;
+    return { stdout: json ?? "", stderr: `daemon-stats: ${skew}\n`, code: 1 };
   }
-  if (wantJson) return;
-
-  process.stdout.write(formatStats(outcome.value));
+  return { stdout: json ?? formatStats(outcome.value), stderr: "", code: 0 };
 }
 
 export function fetchStats(): Promise<RoundTripOutcome<StatsSnapshot>> {
