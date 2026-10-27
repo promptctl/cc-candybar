@@ -1,3 +1,9 @@
+## [1.160.2](https://github.com/promptctl/cc-candybar/compare/v1.160.1...v1.160.2) (2026-10-27)
+
+### Bug Fixes
+
+* a plugin folder whose watch has stopped delivering reads as stalled, not frozen (candybar-plugin-api-4rls.yaw) ([#458](https://github.com/promptctl/cc-candybar/issues/458)) ([a907bfe](https://github.com/promptctl/cc-candybar/commit/a907bfebbff8f2f4db0c2c8fd1b9b00c3479fa39))
+
 ## [1.160.1](https://github.com/promptctl/cc-candybar/compare/v1.160.0...v1.160.1) (2026-10-27)
 
 ### Bug Fixes
