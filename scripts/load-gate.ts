@@ -597,34 +597,35 @@ interface Click {
 }
 const clicks: Click[] = [];
 
+// One click on a session's 🍫, opening its settings menu or closing it, made
+// as the URL handler makes it — through the handler's own parse and client —
+// and how it ended.
+async function menuClick(s: Session, open: boolean): Promise<string> {
+  const { verb, value } = parseHandlerUrl(
+    effectsUrl([
+      {
+        verb: VERB_SET_STATE,
+        args: [s.id, "candybar.menu", open ? "open" : DISCLOSURE_CLOSED],
+      },
+    ]),
+  );
+  try {
+    const clicked = await tryClickViaDaemon(verb, value);
+    return clicked.kind === "ok" ? "ok" : `${clicked.kind}/${clicked.cause}`;
+  } catch (e) {
+    // [LAW:no-silent-failure] A click path that throws is a failed click.
+    return `threw/${e instanceof Error ? e.message : String(e)}`;
+  }
+}
+
 // One session's settings menu, opened and closed on a beat over the steady
-// phase: the link its 🍫 draws, through the handler's own parse and client.
-// A click that answers late runs the next at once, so a slow daemon is
-// clicked as often, never less.
+// phase. A click that answers late runs the next at once, so a slow daemon is
+// clicked as often, never less. The phase ends on a close, so the menu is left
+// as the clicks found it.
 async function clickMenu(s: Session, started: number): Promise<void> {
-  for (let n = 0; Date.now() - started < STEADY_MS; n++) {
-    const { verb, value } = parseHandlerUrl(
-      effectsUrl([
-        {
-          verb: VERB_SET_STATE,
-          args: [
-            s.id,
-            "candybar.menu",
-            n % 2 === 0 ? "open" : DISCLOSURE_CLOSED,
-          ],
-        },
-      ]),
-    );
+  for (let n = 0; n % 2 === 1 || Date.now() - started < STEADY_MS; n++) {
     const t0 = performance.now();
-    let outcome: string;
-    try {
-      const clicked = await tryClickViaDaemon(verb, value);
-      outcome =
-        clicked.kind === "ok" ? "ok" : `${clicked.kind}/${clicked.cause}`;
-    } catch (e) {
-      // [LAW:no-silent-failure] A click path that throws is a failed click.
-      outcome = `threw/${e instanceof Error ? e.message : String(e)}`;
-    }
+    const outcome = await menuClick(s, n % 2 === 0);
     clicks.push({ ms: performance.now() - t0, outcome });
     // The next beat, or the steady phase's end if that comes first: the
     // phase's daemon events are read up to when the last click answered.
@@ -632,6 +633,25 @@ async function clickMenu(s: Session, started: number): Promise<void> {
       Math.min(started + (n + 1) * CLICK_PERIOD_MS, started + STEADY_MS) -
         Date.now(),
     );
+  }
+}
+
+// The menu drawn once open and once closed before the steady phase: what an
+// open menu builds on its first draw it holds from then on, so the steady
+// phase's first sample already counts it, and the clicks are judged by what
+// they keep beyond it.
+async function warmMenu(s: Session): Promise<void> {
+  for (const open of [true, false]) {
+    const answered = s.answers;
+    const outcome = await menuClick(s, open);
+    if (outcome !== "ok")
+      throw new Error(`the warm-up click on ${s.id}'s menu ended ${outcome}`);
+    const deadline = Date.now() + WARM_DEADLINE_MS;
+    while (s.answers === answered) {
+      if (Date.now() >= deadline)
+        throw new Error(`${s.id} drew no bar after its warm-up click`);
+      await sleep(50);
+    }
   }
 }
 
@@ -763,6 +783,7 @@ async function run(): Promise<{
   // Counted at the deadline: a session that first answers during the
   // collection below answered late.
   const silent = sessions.filter((s) => s.answers === 0).length;
+  await warmMenu(sessions[0]!);
   // Before the steady phase, so no scored render waits on the collection.
   const heapBefore = await liveHeap();
 
@@ -788,13 +809,16 @@ async function run(): Promise<{
 
   phase = "steady";
   const steadyStarted = Date.now();
+  // The first sample precedes the first click: the reading the clicks'
+  // subscriptions are judged to return to.
+  await sample(steadyStarted);
   const clicking = clickMenu(sessions[0]!, steadyStarted);
   // The gate's own event loop: a render it measured late may be its own lag.
   const gateLoop = monitorEventLoopDelay({ resolution: 5 });
   gateLoop.enable();
   while (Date.now() - steadyStarted < STEADY_MS) {
-    await sample(steadyStarted);
     await sleep(SAMPLE_MS);
+    await sample(steadyStarted);
   }
   gateLoop.disable();
   await clicking;
@@ -850,7 +874,6 @@ async function run(): Promise<{
     entries: held((s) => s.renderCache.size),
     compiles: held((s) => s.renderCache.compiles),
     views: held((s) => s.renderCache.views),
-    stateObservers: held((s) => s.sessionState.observers),
     watchers: held((s) => s.watchers.active),
   };
   const pids = [...new Set(samples.map((s) => s.stats.pid))];
@@ -936,6 +959,15 @@ async function run(): Promise<{
         last.watchers.opened === first0.watchers.opened &&
         last.watchers.closed === first0.watchers.closed,
       detail: `${last.watchers.opened - first0.watchers.opened} opened, ${last.watchers.closed - first0.watchers.closed} closed over the steady phase`,
+    },
+    {
+      // [LAW:verifiable-goals] An open menu draws rows that read session
+      // state, so its observers rise and fall with the clicks; what the
+      // clicks must not do is keep any. Once they leave the menu as they
+      // found it, the count is back to its reading before the first.
+      name: "click subscriptions released",
+      pass: last.sessionState.observers === first0.sessionState.observers,
+      detail: `${first0.sessionState.observers} state observers before the first click, ${last.sessionState.observers} after the last`,
     },
     {
       name: "held counts flat",
