@@ -54,7 +54,7 @@ let holds: Holds;
 // real time under this fake clock (a period's read is answered by a real
 // process, so the test has no promise of it to await).
 const fakeClock = (): void => {
-  jest.useFakeTimers({ doNotFake: ["setImmediate", "nextTick", "queueMicrotask"] });
+  jest.useFakeTimers({ doNotFake: ["nextTick", "queueMicrotask"] });
 };
 
 beforeAll(() => {

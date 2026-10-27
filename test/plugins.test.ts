@@ -1059,11 +1059,12 @@ describe("a plugin segment's state variable", () => {
     bar = await startBar({ width: 120, rows: 40, config: p, cwd: dir, ssh: false });
     // The data file is a watched source read after the load, so the first
     // render may still show the empty document.
-    let closed = stripAnsi(await bar.render());
-    for (let i = 0; i < 50 && !closed.includes("n-1"); i++) {
-      await new Promise((r) => setTimeout(r, 100));
-      closed = stripAnsi(await bar.render());
-    }
+    const started = bar;
+    let closed = "";
+    await until(
+      async () => (closed = stripAnsi(await started.render())).includes("n-1"),
+      () => `the bar showing n-1; last:\n${closed}`,
+    );
     expect(closed).toContain("n-1 ▸");
     expect(closed).not.toContain("the long form");
     const opened = await bar.click("▸");

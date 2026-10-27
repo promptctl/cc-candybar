@@ -11,14 +11,17 @@ const TICK_MS = 10;
 const nameOf = (what: What): string =>
   typeof what === "string" ? what : what();
 
+const EXPIRED = Symbol("expired");
+
 // [LAW:no-ambient-temporal-coupling] The budget is one real sleep, never a
 // deadline read off a clock. Jest's fake timers freeze Date, hrtime and
 // performance, and sinon would fake node:timers/promises too were the clock
 // installed on the real global; jest installs it on the sandbox's global, so
 // the module keeps real time there, and a test that fakes the clock for the
-// code it drives still gets a real deadline on what it waits for. The
-// deadline is read after each probe, not raced against it, so a wait ends
-// at most one probe past its budget and never cuts a probe short.
+// code it drives still gets a real deadline on what it waits for. Each probe
+// is raced against the budget, so a probe that never answers (a connect to a
+// bound socket nobody accepts) still ends the wait named at its budget; the
+// probe left in flight is dropped, its late rejection swallowed.
 // [LAW:one-source-of-truth] THE poll loop: both named waits below are one
 // loop with the two outcomes named, so no test file keeps a copy that
 // answers false at its deadline.
@@ -27,15 +30,18 @@ async function holdsWithin(
   budgetMs: number,
 ): Promise<boolean> {
   const stop = new AbortController();
-  let expired = false;
-  void sleep(budgetMs, undefined, { signal: stop.signal }).then(
-    () => { expired = true; },
-    () => {},
-  );
+  const expiry: Promise<typeof EXPIRED> = sleep(budgetMs, EXPIRED, {
+    signal: stop.signal,
+  }).catch(() => EXPIRED);
   try {
     for (;;) {
-      if (await reached()) return true;
-      if (expired) return false;
+      const probe = Promise.resolve().then(reached);
+      const seen = await Promise.race([probe, expiry]);
+      if (seen === true) return true;
+      if (seen === EXPIRED) {
+        probe.catch(() => undefined);
+        return false;
+      }
       await sleep(TICK_MS);
     }
   } finally {
