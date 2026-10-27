@@ -115,8 +115,8 @@ def run_timeline(slug, entry, src, width):
         # nothing waits on the pipes again: they are closed and only the direct child is reaped.
         try:
             os.killpg(p.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
+        except (ProcessLookupError, PermissionError):  # gone already, or holding a member the runner may not signal
+            p.kill()
         if exit_code == 'timeout':
             out, err = b'', b''
             p.stdout.close()

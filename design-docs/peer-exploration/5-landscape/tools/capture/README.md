@@ -87,27 +87,28 @@ Docker was not an option: no daemon on this machine.
 
 ## Where it stands
 
-Safe tier: 1,686 entries, 1,142 captured. Of the 544 failures, 279 printed nothing, 90 lacked
-an npm module, 24 a Python module, 22 were not executable, 15 failed a relative import.
+`/tmp/ccland/captures.json` holds 2,653 records, 2,091 ok: the safe tier (1,686 entries, 1,343
+ok) and the review tier (966 entries, 748 ok). The explorer is built from it.
 
-The top 300 projects by novelty and size had only 61 bars: 77 were in the review tier, 66 risky
-(39 Rust, 18 Go), 45 safe but failed, 39 skipped or unlocated. Three things are in flight to
-raise that:
+The top 300 projects by novelty and size have 125 bars. The 175 without, by tier: 70 risky (the
+compiled ones, mostly), 33 review, 33 safe, 23 skipped as boring, 16 never located. The safe
+and review failures that remain are mostly bars that run and print nothing: an entry that is a
+library module, a wrapper around a binary nobody built, or a bar that needs a subcommand the
+manifest does not name.
 
-1. The review tier is being captured into `captures.json`
-   (`entries-review.json`, log `run-review.log`).
-2. Resolve's guessing was rewritten (stdin-reading, entry-like names, `.d.ts` excluded, the
-   survey's order as tie-break, author's runner kept); 210 safe entries changed command and are
-   being rerun into `captures-rerun.json` (log `run-rerun.log`, slugs in `rerun.json`). Eleven
-   of those had a working capture under the old command; keep whichever capture is ok.
-3. `deps.py` is running over the 544 failing safe entries (`deps-todo.json`, log `deps.log`,
-   output `deps.json`). Both paths are proven on one project each: bun
-   (`Ido-Levi__claude-code-tamagotchi`) and a venv (`oroddlokken__ccreport`). The venv has to
-   be built on the Homebrew python3: uv's own managed interpreter lives under the home
-   directory, which the sandbox denies, so a venv on it fails "Operation not permitted". After
-   it finishes: re-resolve the safe tier so launch picks up the venvs, rerun the slugs whose
-   deps fetched, merge.
+Things learned the hard way, so they are not learned again:
 
-After the sweeps: merge the partial files into `captures.json`, then `pnpm data && pnpm build`
-in the explorer and `node smoke.mjs`. Five bars still show a truncated sandbox path containing
-only their own slug; cosmetic, and the cure is a shorter runs path.
+- A guess at the entry file flips a working one about one time in ten however it is weighted.
+  The merge rule protects the page: a capture that is ok is never replaced by one that is not,
+  so a rerun of changed commands goes to its own file and is merged by that rule.
+- A bar can put the runner into an uninterruptible wait that nothing inside the process can
+  escape, and a daemon that makes its own session outlives the sweep. The runner drives a child
+  per project and kills the child's session at the limit; three such daemons from one project
+  were found an hour after their sweep.
+- Two runners sharing a runs directory collide on a slug and one dies. Pilot in a run of your
+  own slugs, never beside a sweep that may reach the same slug.
+- uv builds a venv on its own managed interpreter under the home directory, which the sandbox
+  denies; the venv has to be built on the Homebrew python3.
+
+Five bars show a truncated sandbox path containing only their own slug; cosmetic, and the cure
+is a shorter runs path. One bar prints the root volume's free space, as a disk segment does.
