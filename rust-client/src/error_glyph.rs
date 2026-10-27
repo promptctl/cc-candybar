@@ -79,7 +79,9 @@ fn describe(cause: &PermanentCause) -> String {
 // mirror its `NEUTRALIZED_RANGES` and `isControlChar`; scripts/check-protocol.mjs
 // holds the tables to one set of code points and both predicates (and their
 // one use) to the bare fold, so a change to either runtime's set alone
-// fails it.
+// fails it. What the whole pass does to a string is behaviour, not a
+// literal, so both suites assert the one case table at
+// test/fixtures/diagnostic-sanitize-cases.json.
 //
 // The collapse predicate adds U+FEFF to `char::is_whitespace()`: the TS
 // side collapses on JS `\s`, which is Unicode White_Space minus U+0085
@@ -97,9 +99,9 @@ fn neutralized(ch: char) -> bool {
     NEUTRALIZED_RANGES.iter().any(|&(lo, hi)| (lo..=hi).contains(&u32::from(ch)))
 }
 
-fn truncate(s: &str) -> String {
-    // Sanitize controls to spaces, collapse whitespace runs to one space,
-    // trim both ends — one pass, mirroring the TS sanitize + collapse + trim.
+// Sanitize controls to spaces, collapse whitespace runs to one space, trim
+// both ends — one pass, mirroring the TS sanitizeText.
+fn sanitize(s: &str) -> String {
     let mut sanitized = String::new();
     let mut gap = false;
     for raw in s.chars() {
@@ -116,10 +118,15 @@ fn truncate(s: &str) -> String {
             sanitized.push(ch);
         }
     }
-    // Clip to MAX_MESSAGE_LEN visible code points, replacing the last one
-    // with an ellipsis when over budget so visible length stays at budget.
+    sanitized
+}
+
+// Sanitize, then clip to MAX_MESSAGE_LEN visible code points, replacing the
+// last one with an ellipsis when over budget so visible length stays at
+// budget.
+fn truncate(s: &str) -> String {
     let mut out = String::new();
-    for (count, ch) in sanitized.chars().enumerate() {
+    for (count, ch) in sanitize(s).chars().enumerate() {
         if count == MAX_MESSAGE_LEN {
             out.pop();
             out.push('…');
@@ -223,55 +230,22 @@ mod tests {
         assert!(body.contains("bypass"), "lost safe content after C1: {g:?}");
     }
 
-    // The bidi format controls that hold state are neutralized like Cc, and
-    // a mark, which holds none, passes — the same set the TS side pins.
-    #[test]
-    fn truncate_neutralizes_stateful_format_controls() {
-        for code in (0x202A..=0x202E).chain(0x2066..=0x206F) {
-            let ch = char::from_u32(code).unwrap();
-            assert_eq!(truncate(&format!("a{ch}b")), "a b", "U+{code:04X}");
-        }
-        assert_eq!(truncate("a\u{200F}b"), "a\u{200F}b");
-    }
+    // [LAW:one-source-of-truth] The sanitizer's behaviour, from the one table
+    // test/diagnostic-sanitize-cases.test.ts asserts against the TS
+    // sanitizeText, so a collapse or neutralize rule changed in one runtime
+    // fails the other's test.
+    const CASES: &str = include_str!("../../test/fixtures/diagnostic-sanitize-cases.json");
 
-    // [LAW:one-type-per-behavior] Newline-sanitization coverage symmetric to
-    // the TS side. The single-line glyph contract requires no embedded
-    // newlines mid-string; both runtimes sanitize \n and \r to spaces at the
-    // truncate boundary and collapse the resulting whitespace runs, so a
-    // "\r\n" break yields exactly one space in both — byte-identical output,
-    // not merely "no newline leaked."
     #[test]
-    fn truncate_sanitizes_embedded_newlines() {
-        let cases: [(&str, &str); 3] = [
-            ("line1\nline2\nline3", "line1 line2 line3"),
-            ("line1\rline2\rline3", "line1 line2 line3"),
-            ("line1\r\nline2\r\nline3", "line1 line2 line3"),
-        ];
-        for (input, expected_substr) in cases {
-            let g = format_permanent_glyph(&PermanentCause::RenderFailed(input.to_string()));
-            // Exactly one trailing newline (the ANSI reset tail).
-            assert_eq!(g.matches('\n').count(), 1, "embedded \\n leaked for: {input:?}");
-            assert_eq!(g.matches('\r').count(), 0, "embedded \\r leaked for: {input:?}");
-            assert!(
-                g.contains(expected_substr),
-                "expected to contain {expected_substr:?} for input {input:?}, got: {g:?}"
-            );
+    fn sanitize_cases() {
+        let all: serde_json::Value = serde_json::from_str(CASES).expect("the fixture is JSON");
+        let cases = all["cases"].as_array().expect("cases is a list");
+        assert!(!cases.is_empty());
+        for case in cases {
+            let input = case["input"].as_str().expect("input is a string");
+            let output = case["output"].as_str().expect("output is a string");
+            assert_eq!(sanitize(input), output, "{case}");
         }
-    }
-
-    // [LAW:one-type-per-behavior] Collapse/trim parity with the TS source —
-    // the exact fixtures test/diagnostic-text.test.ts pins for
-    // sanitizeAndTruncate, so a divergence in either runtime's
-    // collapse-whitespace-runs or trim behavior breaks its own suite
-    // instead of silently falsifying the byte-identical mirror claim.
-    #[test]
-    fn truncate_collapses_whitespace_runs_and_trims() {
-        assert_eq!(truncate("a    b\n\n\nc"), "a b c");
-        assert_eq!(truncate("  hello  "), "hello");
-        assert_eq!(truncate("\n\nhello\n\n"), "hello");
-        // U+FEFF (ZWNBSP) collapses like whitespace — JS `\s` includes it,
-        // so byte parity requires the Rust predicate to as well.
-        assert_eq!(truncate("a\u{FEFF} b"), "a b");
     }
 
     // [LAW:one-type-per-behavior] Astral-character coverage symmetric to the
