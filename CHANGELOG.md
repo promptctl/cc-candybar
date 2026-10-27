@@ -1,3 +1,9 @@
+## [1.158.1](https://github.com/promptctl/cc-candybar/compare/v1.158.0...v1.158.1) (2026-10-27)
+
+### Bug Fixes
+
+* **daemon:** a click says how long it waited, and the load gate clicks beside a shown feed (brandon-unfiled-3248.9b04) ([#447](https://github.com/promptctl/cc-candybar/issues/447)) ([f27c3af](https://github.com/promptctl/cc-candybar/commit/f27c3af161e1ddb2f16b86fc8ff370c450163956))
+
 ## [1.158.0](https://github.com/promptctl/cc-candybar/compare/v1.157.0...v1.158.0) (2026-10-27)
 
 ### Features
