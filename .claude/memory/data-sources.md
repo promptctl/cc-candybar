@@ -22,7 +22,7 @@ Variables that read anything per session live in each session's view: inputs, st
 
 ## Git
 
-Git state is keyed by repo root, not by cwd or session. Two things refresh it. One is a watch on HEAD, the index and the local branch refs. The other is a period over held repos, which also catches working-tree edits no watch sees and events a filesystem drops. A watch that fires mid-read queues exactly one re-read after it, so the last change always lands. A change in a repo nothing uses reads nothing until the repo's next use. A directory resolves to its repo only when a view declares, so drawing a frame never resolves anything.
+Git state is keyed by repo root, not by cwd or session. Two things refresh it. One is a watch on HEAD, the index and the whole refs tree of the common git directory: a linked worktree's own git directory holds no refs, and a branch name's slashes are directories, so a watch one level deep hears neither a worktree's ref move nor one on a slash-named branch. The other is a period over held repos, which also catches working-tree edits no watch sees and events a filesystem drops. A watch that fires mid-read queues exactly one re-read after it, so the last change always lands. A change in a repo nothing uses reads nothing until the repo's next use. A directory resolves to its repo only when a view declares, so drawing a frame never resolves anything.
 
 ## PR lookup
 

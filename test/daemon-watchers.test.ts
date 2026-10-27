@@ -132,6 +132,37 @@ describe("WatcherRegistry", () => {
     rmrf(dir);
   });
 
+  test("a tree target hears a write below its first level, named by its relative path", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "watch-tree-"));
+    const reg = new WatcherRegistry();
+    const seen: Invalidation[] = [];
+    reg.acquire(dir, { dirs: [{ path: dir, recursive: true }] }, (inv) =>
+      seen.push(inv),
+    );
+    const names = () =>
+      seen.flatMap((inv) => (inv.kind === "changed" ? [...inv.names] : []));
+    const leaf = path.join("a", "b", "c");
+    // The directories appear under the live watch, as a branch's `fix/`
+    // directory appears under a repo's watch, and the leaf's write is
+    // re-applied until the watch proves itself live on it.
+    fs.mkdirSync(path.join(dir, "a", "b"), { recursive: true });
+    const rewrite = setInterval(
+      () => fs.writeFileSync(path.join(dir, leaf), "1"),
+      WATCH_RETRY_MS,
+    );
+    try {
+      await until(
+        () => names().includes(leaf),
+        () => `the leaf's relative path among ${JSON.stringify(names())}`,
+        WATCH_LIVENESS_BUDGET_MS,
+      );
+    } finally {
+      clearInterval(rewrite);
+      reg.closeAll();
+      rmrf(dir);
+    }
+  });
+
   test("a refused target comes back on the handle and in the stats, never as opened", () => {
     const counters = {
       watchersOpened: 0,
@@ -219,7 +250,126 @@ class StubInner extends GitService {
   }
 }
 
+// The real reader, counted: what it stores is what git reads off the repo, so
+// a test can ask whether the value is the ref's after a move.
+class CountingInner extends GitService {
+  public calls = 0;
+  override async getGitInfo(
+    ...args: Parameters<GitService["getGitInfo"]>
+  ): Promise<Outcome<GitInfo>> {
+    this.calls++;
+    return super.getGitInfo(...args);
+  }
+}
+
+const sha = (ref: string, cwd: string): string =>
+  execSync(`git rev-parse ${ref}`, { cwd, encoding: "utf8" }).trim();
+
+// A ref-only move — nothing but the branch's ref rewritten, no HEAD, no index
+// — on a slash-named branch checked out in `workingDir`, heard by the repo's
+// watch with no read asking, until the stored head is the ref's.
+//
+// The branch is cut only once the watch has proven itself live, because that
+// is the order a session meets: its repo is declared long before a branch is
+// cut, so `refs/heads/fix/` appears under a watch already open. On Linux the
+// tree watch has to pick a new directory up itself; a watch opened over an
+// existing one proves nothing about that.
+async function hearsRefOnlyMove(
+  workingDir: string,
+  branch: string,
+): Promise<void> {
+  const inner = new CountingInner();
+  const svc = new GitDataProvider({ inner, periodMs: 600_000 });
+  const lane = svc.declare(new Holds(), workingDir, {});
+  await laneOutcome(lane);
+  const storedHead = (): string | undefined => {
+    const info = lane.current();
+    return info.kind === "ok" && info.value.head.kind === "ok"
+      ? info.value.head.value
+      : undefined;
+  };
+  try {
+    // fs.watch has no ready signal: HEAD is rewritten, unchanged, until a
+    // re-read proves the watch live.
+    const headPath = path.join(inner.resolveGitDir(workingDir), "HEAD");
+    const head = fs.readFileSync(headPath, "utf8");
+    const rewrite = setInterval(
+      () => fs.writeFileSync(headPath, head),
+      WATCH_RETRY_MS,
+    );
+    try {
+      await until(
+        () => inner.calls >= 2,
+        "the HEAD rewrite's re-read",
+        WATCH_LIVENESS_BUDGET_MS,
+      );
+    } finally {
+      clearInterval(rewrite);
+    }
+
+    execSync(`git checkout -q -b ${branch}`, { cwd: workingDir });
+    const tip = sha("HEAD", workingDir);
+    const parent = sha("HEAD~1", workingDir);
+    // The move alternates the ref between the two commits so that every
+    // re-application is a write; a same-value update-ref touches nothing.
+    const seen = new Set<string>();
+    let atParent = false;
+    const move = setInterval(() => {
+      atParent = !atParent;
+      execSync(
+        `git update-ref refs/heads/${branch} ${atParent ? parent : tip}`,
+        {
+          cwd: workingDir,
+        },
+      );
+    }, WATCH_RETRY_MS);
+    try {
+      await until(
+        () => {
+          const now = storedHead();
+          if (now !== undefined) seen.add(now);
+          return seen.has(parent);
+        },
+        "a re-read storing the moved ref's head",
+        WATCH_LIVENESS_BUDGET_MS,
+      );
+    } finally {
+      clearInterval(move);
+    }
+    // A change mid-read queues one re-read after it, so the last move lands.
+    await until(
+      () => storedHead() === sha(branch, workingDir),
+      () => `the last move's head; stored ${storedHead()}`,
+    );
+  } finally {
+    svc.close();
+  }
+}
+
 describe("GitDataProvider + watchers integration", () => {
+  test("a ref-only move on a slash-named branch is heard in a main checkout (brandon-unfiled-3248.1x2q)", async () => {
+    const repo = makeRepo();
+    execSync("git commit -q --allow-empty -m second", { cwd: repo });
+    try {
+      await hearsRefOnlyMove(repo, "fix/thing");
+    } finally {
+      rmrf(repo);
+    }
+  });
+
+  test("a ref-only move on a slash-named branch is heard in a linked worktree, whose own git dir holds no refs (brandon-unfiled-3248.1x2q)", async () => {
+    const repo = makeRepo();
+    execSync("git commit -q --allow-empty -m second", { cwd: repo });
+    const worktree = path.join(repo, "..", path.basename(repo) + "-wt");
+    execSync(`git worktree add -q "${worktree}"`, { cwd: repo });
+    try {
+      await hearsRefOnlyMove(worktree, "feat/thing");
+    } finally {
+      rmrf(worktree);
+      rmrf(repo);
+    }
+  });
+
   test("a HEAD change re-reads the repo with no read asking", async () => {
     const repo = makeRepo();
     const inner = new StubInner(repo);

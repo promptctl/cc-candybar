@@ -1243,7 +1243,7 @@ export class GitService {
   // worktree's `git stash list` reports the MAIN repo's stashes, and the reflog
   // backing them exists ONLY under the common dir. Reading the per-worktree
   // gitdir would answer zero stashes for every worktree, silently.
-  private resolveCommonGitDir(workingDir: string): string {
+  resolveCommonGitDir(workingDir: string): string {
     const gitDir = this.resolveGitDir(workingDir);
     try {
       // A linked worktree's gitdir holds `commondir`, one line, a path relative
