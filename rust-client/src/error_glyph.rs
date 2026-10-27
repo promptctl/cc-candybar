@@ -244,7 +244,15 @@ mod tests {
         for case in cases {
             let input = case["input"].as_str().expect("input is a string");
             let output = case["output"].as_str().expect("output is a string");
-            assert_eq!(sanitize(input), output, "{case}");
+            // Escaped, not raw: the inputs carry ESC, 8-bit CSI and bidi
+            // overrides, and a panic message that prints them raw garbles
+            // the rest of the report.
+            assert_eq!(
+                sanitize(input),
+                output,
+                "input \"{}\"",
+                input.escape_default()
+            );
         }
     }
 
@@ -275,15 +283,28 @@ mod tests {
         assert!(g.contains("malformed daemon response: decode response:"));
     }
 
+    // Every cause, and every message-bearing one with a CRLF inside its
+    // message: the fixture proves what `sanitize` does to a string, this
+    // proves each message path goes through it.
     #[test]
     fn glyph_is_single_line() {
-        let g = format_permanent_glyph(&PermanentCause::VersionMismatch {
-            client_v: CLIENT_V,
-            daemon_v: OTHER_V,
-        });
-        // Exactly one trailing newline; no embedded newlines mid-string.
-        assert_eq!(g.matches('\n').count(), 1);
-        assert!(g.ends_with('\n'));
+        let msg = || "line1\r\nline2".to_string();
+        for cause in [
+            PermanentCause::VersionMismatch {
+                client_v: CLIENT_V,
+                daemon_v: OTHER_V,
+            },
+            PermanentCause::BadRequest(msg()),
+            PermanentCause::RenderFailed(msg()),
+            PermanentCause::SwitchedOff(msg()),
+            PermanentCause::MalformedResponse(msg()),
+        ] {
+            let g = format_permanent_glyph(&cause);
+            // Exactly one trailing newline; no embedded newlines mid-string.
+            assert_eq!(g.matches('\n').count(), 1, "{g:?}");
+            assert_eq!(g.matches('\r').count(), 0, "{g:?}");
+            assert!(g.ends_with('\n'));
+        }
     }
 
     #[test]

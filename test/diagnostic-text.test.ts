@@ -1,7 +1,7 @@
 // [LAW:one-source-of-truth] Tests for the shared sanitize-and-truncate
 // primitive used by BOTH src/render/error-glyph.ts (permanent client glyph)
-// AND src/daemon/server.ts composeWithDiagnostics (per-render diagnostic
-// strip). This file pins the predicate's ranges and the clip; what the
+// AND src/render/diagnostic-strip.ts composeWithDiagnostics (per-render
+// diagnostic strip). This file pins the predicate's ranges and the clip; what the
 // sanitizer does to a string is the fixture both runtimes assert
 // (test/diagnostic-sanitize-cases.test.ts).
 

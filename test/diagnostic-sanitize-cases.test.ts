@@ -18,6 +18,8 @@ const CASES = JSON.parse(
   readFileSync(join(__dirname, "fixtures", "diagnostic-sanitize-cases.json"), "utf8"),
 ) as Cases;
 
-test.each(CASES.cases)("sanitizeText($input) is $output", ({ input, output }) => {
+// The title is %j, not $input: the inputs carry ESC, 8-bit CSI and bidi
+// overrides, and a title that prints them raw re-styles the failure report.
+test.each(CASES.cases)("sanitizeText %j", ({ input, output }) => {
   expect(sanitizeText(input)).toBe(output);
 });
