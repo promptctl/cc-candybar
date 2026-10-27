@@ -1,6 +1,7 @@
 // How scripts/check-protocol.mjs reads a runtime's source text: what counts
-// as code, and how a table of code-point ranges reads as one set. Pure
-// text → value functions, so test/protocol-source.test.ts pins them directly.
+// as code, and how each kind of mirrored fact reads as one canonical string.
+// Pure text → value functions, so test/protocol-source.test.ts pins them
+// directly.
 
 // Source with its comment lines removed, so an anchor read through it matches
 // no commented-out copy of what it anchors. A comment line is one whose first
@@ -11,6 +12,64 @@
 export function uncommented(text) {
   return text.replace(/^[ \t]*(?:\/\/[^\n]*|\/\*[\s\S]*?\*\/)/gm, "");
 }
+
+// A reader takes a runtime's source and returns the canonical string for one
+// mirrored fact, or null when its anchor is missing. [LAW:single-enforcer]
+// Every reader is built here, over the source less its comment lines: no
+// reader can take a value from a commented-out copy of its anchor, so a
+// region a reader slices is delimited by code, never by a comment.
+const overCode =
+  (read) =>
+  (source, ...anchors) =>
+    read(uncommented(source), ...anchors);
+
+// Integer constant, allowing a product expression like `16 * 1024 * 1024`.
+export const num = overCode((code, regex) => {
+  const m = code.match(regex);
+  if (!m) return null;
+  // Strip digit-group separators (`3_000`) so both runtimes' idiomatic
+  // spellings compare by value, not by punctuation.
+  const factors = m[1].split("*").map((s) => s.trim().replace(/_/g, ""));
+  if (!factors.every((f) => /^\d+$/.test(f))) return null;
+  return String(factors.reduce((acc, f) => acc * Number(f), 1));
+});
+
+// String-literal constant. Decodes \xNN, \uNNNN (TS) and \u{...} (Rust)
+// escapes so the comparison is on the actual bytes, not the spelling.
+export const lit = overCode((code, regex) => {
+  const m = code.match(regex);
+  if (!m) return null;
+  const decoded = m[1]
+    .replace(/\\x([0-9a-fA-F]{2})/g, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/\\u\{([0-9a-fA-F]+)\}/g, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/\\u([0-9a-fA-F]{4})/g, (_, h) => String.fromCodePoint(parseInt(h, 16)));
+  return JSON.stringify(decoded);
+});
+
+// Set of string members: collect every capture of a global regex within the
+// slice matched by blockRegex, canonicalized as a sorted joined list. A member
+// is its capture groups joined by a fixed separator, so a multi-group regex
+// compares values, never the formatting between them.
+export const memberSet = overCode((code, blockRegex, memberRegex) => {
+  const block = code.match(blockRegex);
+  if (!block) return null;
+  const members = [...block[0].matchAll(memberRegex)].map((m) => m.slice(1).join("="));
+  if (members.length === 0) return null;
+  return [...new Set(members)].sort().join(", ");
+});
+
+// Set of code points in the range table blockRegex's group 1 captures; see
+// rangeSpans for how a table reads.
+export const codeRanges = overCode((code, blockRegex) => {
+  const block = code.match(blockRegex);
+  return block ? rangeSpans(block[1]) : null;
+});
+
+// Structural marker: every pattern must appear in code; the canonical value is
+// the shared description, so both sides agree iff both still use the primitive.
+export const markers = overCode((code, patterns, description) =>
+  patterns.every((p) => p.test(code)) ? description : null,
+);
 
 // The set of code points in the body of a table of inclusive range pairs,
 // `[lo, hi]` (TS) or `(lo, hi)` (Rust), in hex or decimal with optional `_`
