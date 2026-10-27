@@ -1,3 +1,9 @@
+## [1.159.0](https://github.com/promptctl/cc-candybar/compare/v1.158.1...v1.159.0) (2026-10-27)
+
+### Features
+
+* **menu:** every bar says how it is redrawn, in a cell beside the door (brandon-unfiled-3248.9uht) ([#448](https://github.com/promptctl/cc-candybar/issues/448)) ([c72c7c4](https://github.com/promptctl/cc-candybar/commit/c72c7c42a53d716951a4b5f391475c3111dd8f12))
+
 ## [1.158.1](https://github.com/promptctl/cc-candybar/compare/v1.158.0...v1.158.1) (2026-10-27)
 
 ### Bug Fixes
