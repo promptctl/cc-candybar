@@ -15,6 +15,8 @@ import {
 } from "../src/daemon/config-file-store";
 import { resolveDslConfig } from "../src/config/loader/discovery";
 import { instantOf } from "../src/utils/instant";
+import { repoConfigs } from "../src/daemon/repo-configs";
+import { answerRepo } from "./helpers/repo-approval";
 
 let dir: string;
 let project: string;
@@ -27,6 +29,8 @@ beforeEach(() => {
   project = path.join(dir, "repo");
   fs.mkdirSync(path.join(dir, "xdg", "cc-candybar"), { recursive: true });
   fs.mkdirSync(project);
+  // The project's config runs: these cases are about how it layers.
+  answerRepo(project);
   userFile = path.join(dir, "xdg", "cc-candybar", "config.json5");
   projectFile = path.join(project, ".cc-candybar.json5");
   savedXdg = process.env.XDG_CONFIG_HOME;
@@ -50,6 +54,10 @@ function clean(o: CheckOutcome): Extract<CheckOutcome, { kind: "clean" }> {
 
 const noRecord = { record: () => {}, logger: () => {} };
 
+// The home a click in the project writes, under the answers the bar reads.
+const projectHome = () =>
+  durableConfig(repoConfigs().read(), project, project);
+
 test("a project file that places one segment renders over the user's whole config", async () => {
   // `mine` is declared only by the user's file: the project file loads only
   // because it is merged over it.
@@ -61,7 +69,7 @@ test("a project file that places one segment renders over the user's whole confi
   expect(outcome.layers).toEqual([userFile, projectFile]);
   expect(outcome.rendered).toContain("USERSEG");
   expect(outcome.rendered).toContain("PROJSEG");
-  const prepared = await prepareConfig(outcome.layers, project, [], instantOf(new Date()));
+  const prepared = await prepareConfig(outcome.layers, null, project, [], instantOf(new Date()));
   try {
     expect(prepared.config.globals.menuGlyph).toBe("U");
   } finally {
@@ -78,8 +86,8 @@ test("a layer that does not load fails naming its own file", async () => {
 
 test("a durable click writes the user's file, never the project's", () => {
   fs.writeFileSync(projectFile, `{ root: { h: ["mine"] } }`);
-  const home = durableConfig(project, project);
-  expect(home).toEqual({ path: userFile, above: [projectFile], projectDir: project, cwd: project });
+  const home = projectHome();
+  expect(home).toEqual({ path: userFile, above: [projectFile], repo: project, cwd: project });
   writeValues(noRecord, home, [["palette", "nord"]]);
   expect(fs.readFileSync(userFile, "utf8")).toContain("nord");
   expect(fs.readFileSync(projectFile, "utf8")).not.toContain("nord");
@@ -89,7 +97,7 @@ test("a click a project layer would hide is refused, naming the layer", () => {
   fs.writeFileSync(projectFile, `{ globals: { palette: "dracula" } }`);
   const before = fs.readFileSync(userFile, "utf8");
   expect(() =>
-    writeValues(noRecord, durableConfig(project, project), [["palette", "nord"]]),
+    writeValues(noRecord, projectHome(), [["palette", "nord"]]),
   ).toThrow(new RegExp(`${projectFile} sets globals\\.palette`));
   expect(fs.readFileSync(userFile, "utf8")).toBe(before);
 });
@@ -100,14 +108,14 @@ test("a reset the project layer hides still clears the user's file", () => {
     `{ globals: { palette: "nord" }, segments: { mine: { template: "USERSEG" } }, root: { h: ["mine"] } }`,
   );
   fs.writeFileSync(projectFile, `{ globals: { palette: "dracula" } }`);
-  deleteValues(noRecord, durableConfig(project, project), ["palette"]);
+  deleteValues(noRecord, projectHome(), ["palette"]);
   expect(fs.readFileSync(userFile, "utf8")).not.toContain("nord");
 });
 
 test("a click that repairs a broken user file is not refused under a project layer", () => {
   fs.writeFileSync(userFile, `{ globals: { palette: "no-such-theme" } }`);
   fs.writeFileSync(projectFile, `{ globals: { menuGlyph: "P" } }`);
-  writeValues(noRecord, durableConfig(project, project), [["palette", "nord"]]);
+  writeValues(noRecord, projectHome(), [["palette", "nord"]]);
   expect(fs.readFileSync(userFile, "utf8")).toContain("nord");
 });
 
@@ -115,7 +123,7 @@ test("save-as-preset never mints a name a project layer declares", () => {
   fs.writeFileSync(projectFile, `{ presets: { "custom-1": {} } }`);
   const name = writePreset(
     noRecord,
-    durableConfig(project, project),
+    projectHome(),
     "default",
     {},
     [],
@@ -128,7 +136,8 @@ test("the user's file is a layer even when the session's cwd is its directory", 
   const xdgDir = path.dirname(userFile);
   const local = path.join(xdgDir, ".cc-candybar.json5");
   fs.writeFileSync(local, `{}`);
-  const resolved = resolveDslConfig(undefined, xdgDir);
+  answerRepo(xdgDir);
+  const resolved = resolveDslConfig(repoConfigs().read(), undefined, xdgDir);
   expect(resolved.kind === "chain" && resolved.layers).toEqual([
     userFile,
     local,
@@ -141,7 +150,7 @@ test("save-as-preset reads a layer above that the editor would refuse", () => {
     `{ presets: { "custom-1": {} }, globals: { menuGlyph: "a", menuGlyph: "b" } }`,
   );
   expect(
-    writePreset(noRecord, durableConfig(project, project), "default", {}, [], []),
+    writePreset(noRecord, projectHome(), "default", {}, [], []),
   ).toBe("custom-2");
 });
 
@@ -156,7 +165,7 @@ test("a first durable write with no user file succeeds beside an installed plugi
     fs.mkdirSync(path.dirname(def), { recursive: true });
     fs.writeFileSync(def, `{ data: "./d.json", segments: { status: { template: "x" } } }`);
     fs.writeFileSync(projectFile, `{ root: { h: ["plugins.deploy.status"] } }`);
-    writeValues(noRecord, durableConfig(project, project), [["palette", "nord"]]);
+    writeValues(noRecord, projectHome(), [["palette", "nord"]]);
     expect(fs.readFileSync(userFile, "utf8")).toContain("nord");
   } finally {
     if (saved === undefined) delete process.env.XDG_DATA_HOME;

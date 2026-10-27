@@ -21,6 +21,7 @@ import { TMUX_TRUECOLOR_VAR } from "../src/doctor/checks";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import type { DaemonAnswer } from "../src/doctor/daemon-answer";
 import type { FrameSeen } from "../src/daemon/render-sightings";
+import { answerRepo } from "./helpers/repo-approval";
 
 // The daemon a healthy bar answers from: its session runs with the Claude
 // Code directory this test's command reports (CLAUDE_CONFIG_DIR, `inDir`).
@@ -339,6 +340,8 @@ describe("doctorPlan over a real config", () => {
     process.env.XDG_CONFIG_HOME = path.join(dir, "xdg");
     project = path.join(dir, "project");
     fs.mkdirSync(project);
+    // The project's config is the one the doctor reads.
+    answerRepo(project);
   });
   afterEach(() => {
     if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME;

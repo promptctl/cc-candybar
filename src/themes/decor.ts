@@ -1233,7 +1233,7 @@ const STATE_REMEDY = {
  * opened it to be told from it, if it does — the floor whose miss leaves the
  * band's items no colour between the two (`bandItemFor`). Every bundled theme
  * holds it under the `none` style at every depth a bundled menu reaches
- * (test/decor.test.ts), so a style clears it.
+ * (audits/decor-registry.audit.ts), so a style clears it.
  */
 const planeShortfall = (
   palette: Palette,
@@ -1253,7 +1253,7 @@ const planeShortfall = (
  * Two cues move with depth — the lineage's hue steps and the plane recedes. Past the
  * cap the recession stops moving (only 0.05 lies between depths 2 and 3, and
  * a one-hue lineage keeps the hue it had), so from there the plane
- * search's twelfths keep adjacent planes apart; `test/decor.test.ts` pins the
+ * search's twelfths keep adjacent planes apart; `audits/decor-registry.audit.ts` pins the
  * depths the bundled menu reaches (door → tab → ⚙ → list, 0–3).
  */
 export const BAND_RECESSION = {
@@ -1267,7 +1267,7 @@ export const BAND_RECESSION = {
  * ~.02 threshold of a visible difference being the unit: a trigger off the
  * plane it opens, and a plane off the plane it is nested in. They hold over
  * the depths a bar reaches (0–3) in truecolor by the construction below —
- * `test/decor.test.ts` measures every lineage against them — and `bandFor`
+ * `audits/decor-registry.audit.ts` measures every lineage against them — and `bandFor`
  * holds each one again on the colours drawn at 256 and ansi. A nested trigger is held off the
  * plane it sits on by STATE_FLOOR, as every open trigger is held off what it
  * stands among (`standsAmong`).
@@ -1415,7 +1415,8 @@ const decorKey = ({ variation, shade }: Decor): string =>
     shade.quantize,
   ].join("/");
 
-const deltaE = (a: ColorRgba, b: ColorRgba): number =>
+/** ΔE in OKLab, the measure every floor in this module is stated in. [LAW:one-source-of-truth] The tests and audits import it rather than spell it. */
+export const deltaE = (a: ColorRgba, b: ColorRgba): number =>
   Oklch.fromRgba(a).deltaE(Oklch.fromRgba(b));
 
 // One seam a band row can draw: its two colours, and the words its shortfall

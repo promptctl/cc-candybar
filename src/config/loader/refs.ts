@@ -177,6 +177,42 @@ function* callGraphBlocks(
   yield* walk(template, "", null, new Set());
 }
 
+// One answer per template text: a gate's text recurs at every node of every
+// preset that edit chrome wraps alike, and every question asked of a template
+// is asked of the same text again at compile.
+export function perTemplate<T>(
+  answer: (template: string) => T,
+): (t: string) => T {
+  const answers = new Map<string, T>();
+  return (template) => {
+    if (!answers.has(template)) answers.set(template, answer(template));
+    return answers.get(template)!;
+  };
+}
+
+// [LAW:one-source-of-truth] The walk, materialised once per template under one
+// helpers object, and read by every question asked of that template: a
+// template is asked what it reads, which actions it binds, which functions
+// and helpers it calls, at load and again at compile, and each was a walk of
+// its own over the same text. The helpers object is the config's, so the
+// walks live exactly as long as the config does, as a config's value-reads
+// fold does (value-reads.ts).
+const WALKS = new WeakMap<
+  object,
+  (template: string) => readonly GraphBlock[]
+>();
+function callGraph(
+  template: string,
+  helpers: Readonly<Record<string, string>>,
+): readonly GraphBlock[] {
+  let walks = WALKS.get(helpers);
+  if (walks === undefined) {
+    walks = perTemplate((t) => [...callGraphBlocks(t, helpers)]);
+    WALKS.set(helpers, walks);
+  }
+  return walks(template);
+}
+
 // The refs an action's text spells, as paths from the template's root. A `$.a`
 // ref is under `root` whatever the dot; a `.a` ref is under the dot; either
 // reads nothing nameable when its base is null.
@@ -202,7 +238,7 @@ export function templateReads(
   helpers: Readonly<Record<string, string>>,
 ): ReadonlyMap<string, string | null> {
   const reads = new Map<string, string | null>();
-  for (const block of callGraphBlocks(template, helpers)) {
+  for (const block of callGraph(template, helpers)) {
     for (const ref of dotRefs(block)) {
       if (!reads.has(ref)) reads.set(ref, block.via);
     }
@@ -291,7 +327,7 @@ export function templateActionRefs(
   helpers: Readonly<Record<string, string>>,
 ): readonly ActionRef[] {
   const refs = new Map<string, ActionRef>();
-  for (const { code, via } of callGraphBlocks(template, helpers)) {
+  for (const { code, via } of callGraph(template, helpers)) {
     for (const { name, site } of actionBindings(code)) {
       const key = `${name}\0${via ?? "\0"}`;
       if (!refs.has(key)) refs.set(key, { name, site, via });
@@ -312,7 +348,7 @@ export function bindsComputedAction(
   template: string,
   helpers: Readonly<Record<string, string>>,
 ): boolean {
-  for (const { code } of callGraphBlocks(template, helpers)) {
+  for (const { code } of callGraph(template, helpers)) {
     if (COMPUTED_BINDING_RE.test(code.replace(STRING_LITERAL_RE, '""'))) {
       return true;
     }
@@ -332,7 +368,7 @@ export function templateFunctions(
   helpers: Readonly<Record<string, string>>,
 ): ReadonlySet<string> {
   const called = new Set<string>();
-  for (const { code } of callGraphBlocks(template, helpers)) {
+  for (const { code } of callGraph(template, helpers)) {
     for (const [name] of code
       .replace(STRING_LITERAL_RE, "")
       .matchAll(BARE_NAME_RE)) {
@@ -364,7 +400,7 @@ export function templateHelperCalls(
   helpers: Readonly<Record<string, string>>,
 ): ReadonlySet<string> {
   const called = new Set<string>();
-  for (const { code, dot, root } of callGraphBlocks(template, helpers)) {
+  for (const { code, dot, root } of callGraph(template, helpers)) {
     for (const { name } of helperCalls(code, dot, root)) called.add(name);
   }
   return called;

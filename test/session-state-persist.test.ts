@@ -1,4 +1,4 @@
-import {
+import fs, {
   mkdtempSync,
   rmSync,
   writeFileSync,
@@ -104,6 +104,164 @@ describe("SessionState disk persistence", () => {
       s1: { theme: "new" },
     });
     expect(existsSync(`${file}.writing`)).toBe(false);
+  });
+
+  // The rename that publishes a debounced write runs on the thread pool, so a
+  // flush can land while it is on its way. The newer state still wins, the
+  // older write's temp file is gone, and nothing calls the superseded rename
+  // a failure.
+  it("a synchronous flush while the debounced rename is in flight keeps the newer state", async () => {
+    const logged: string[] = [];
+    const ss = new SessionState(
+      new FileSessionStorage(file, 0, (_level, line) => logged.push(line)),
+    );
+    const rename = fs.promises.rename;
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const spy = jest
+      .spyOn(fs.promises, "rename")
+      .mockImplementation(async (from, to) => {
+        await held;
+        return rename(from, to);
+      });
+    try {
+      ss.set("s1", "theme", "old");
+      await settled(() => spy.mock.calls.length === 1);
+      ss.set("s1", "theme", "new");
+      ss.flush();
+      release();
+      // The held rename runs out: it finds no temp file, and the write ends.
+      await settled(() => logged.some((l) => l.includes("superseded")));
+    } finally {
+      spy.mockRestore();
+    }
+    expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({
+      s1: { theme: "new" },
+    });
+    expect(existsSync(`${file}.writing`)).toBe(false);
+    expect(logged.filter((l) => l.includes("save failed"))).toEqual([]);
+    expect(logged.filter((l) => l.includes("superseded"))).toEqual([
+      expect.stringContaining("superseded by a flush landed=false"),
+    ]);
+  });
+
+  // A flush the disk refuses supersedes nothing: the debounced write it raced
+  // still publishes, and the flush's newer state waits for the next save.
+  it("a synchronous flush the disk refuses leaves the in-flight write to land", async () => {
+    const logged: string[] = [];
+    // A real debounce: the newer state the failed flush leaves pending is
+    // rescheduled once the raced write lands, and must not land before the
+    // file is read back.
+    const ss = new SessionState(
+      new FileSessionStorage(file, 500, (_level, line) => logged.push(line)),
+    );
+    const rename = fs.promises.rename;
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const renameSpy = jest
+      .spyOn(fs.promises, "rename")
+      .mockImplementation(async (from, to) => {
+        await held;
+        return rename(from, to);
+      });
+    const writeSpy = jest
+      .spyOn(fs, "writeFileSync")
+      .mockImplementation(() => {
+        throw Object.assign(new Error("ENOSPC: no space"), { code: "ENOSPC" });
+      });
+    try {
+      ss.set("s1", "theme", "old");
+      await settled(() => renameSpy.mock.calls.length === 1);
+      ss.set("s1", "theme", "new");
+      ss.flush();
+      release();
+      await settled(() => logged.some((l) => l.includes("saved")));
+    } finally {
+      writeSpy.mockRestore();
+      renameSpy.mockRestore();
+    }
+    expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({
+      s1: { theme: "old" },
+    });
+    expect(logged.filter((l) => l.includes("save failed"))).toHaveLength(1);
+    expect(logged.filter((l) => l.includes("superseded"))).toEqual([]);
+    expect(logged.filter((l) => l.includes("saved"))).toHaveLength(1);
+    // The newer state is still pending: the next flush lands it.
+    ss.flush();
+    expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({
+      s1: { theme: "new" },
+    });
+    expect(logged.filter((l) => l.includes("saved"))).toHaveLength(2);
+  });
+
+  // A flush that lands before the debounced write reaches its rename: the
+  // write removes its own temp file and says it was superseded.
+  it("a synchronous flush before the debounced rename supersedes it", async () => {
+    const logged: string[] = [];
+    const ss = new SessionState(
+      new FileSessionStorage(file, 0, (_level, line) => logged.push(line)),
+    );
+    const mkdir = fs.promises.mkdir;
+    const spy = jest
+      .spyOn(fs.promises, "mkdir")
+      .mockImplementation(async (dir, opts) => {
+        // The write's first await: the flush lands before it resumes.
+        ss.set("s1", "theme", "new");
+        ss.flush();
+        return mkdir(dir, opts);
+      });
+    try {
+      ss.set("s1", "theme", "old");
+      await settled(() => logged.some((l) => l.includes("superseded")));
+    } finally {
+      spy.mockRestore();
+    }
+    expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({
+      s1: { theme: "new" },
+    });
+    expect(existsSync(`${file}.writing`)).toBe(false);
+    expect(logged.filter((l) => l.includes("save failed"))).toEqual([]);
+    expect(logged.filter((l) => l.includes("superseded"))).toEqual([
+      expect.stringContaining("superseded by a flush landed=false"),
+    ]);
+  });
+
+  // The other ordering: the debounced rename lands, and the flush writes over
+  // it before the write resumes. The write says it was superseded rather than
+  // `saved` after the flush's own line, and the flush's state stands.
+  it("a synchronous flush right after the debounced rename lands supersedes it", async () => {
+    const logged: string[] = [];
+    const ss = new SessionState(
+      new FileSessionStorage(file, 0, (_level, line) => logged.push(line)),
+    );
+    const rename = fs.promises.rename;
+    const spy = jest
+      .spyOn(fs.promises, "rename")
+      .mockImplementation(async (from, to) => {
+        await rename(from, to);
+        // On disk, but the write has not resumed: the flush lands in between.
+        ss.set("s1", "theme", "new");
+        ss.flush();
+      });
+    try {
+      ss.set("s1", "theme", "old");
+      await settled(() => logged.some((l) => l.includes("superseded")));
+    } finally {
+      spy.mockRestore();
+    }
+    expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({
+      s1: { theme: "new" },
+    });
+    expect(logged.filter((l) => l.includes("save failed"))).toEqual([]);
+    expect(logged.filter((l) => l.includes("superseded"))).toEqual([
+      expect.stringContaining("superseded by a flush landed=true"),
+    ]);
+    // The flush's `saved` is the last one.
+    expect(logged.filter((l) => l.includes("saved")).length).toBe(1);
   });
 
   // A disk that refuses a write is retried by the next save or shutdown's

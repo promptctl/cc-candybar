@@ -1027,7 +1027,8 @@ because it sits in a plugin root:
   on macOS Homebrew's `share/` before them (`$HOMEBREW_PREFIX/share`, else
   `/opt/homebrew/share`);
 - `<repo>/.cc-candybar/plugins/<name>/` — a repository's own, there only in
-  sessions working in that repo.
+  sessions working in that repo, once the user has approved the repository
+  in the bar (as its `.cc-candybar.json5` is).
 
 A plugin is a folder: a file sitting directly in a root is a drop naming
 where to move it, and a dot-entry (`.git`, `.DS_Store`) is ignored. A

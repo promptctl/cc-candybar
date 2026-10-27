@@ -23,6 +23,9 @@
 // cold render does not (its next render shows what check showed).
 
 import { linkSignerFromKeyFile } from "./daemon/link-key.js";
+import { repoConfigs } from "./daemon/repo-configs.js";
+import { repoGateLines, type ApprovedRepo } from "./config/loader/repo-gate.js";
+import type { ConfigResolution } from "./config/loader/discovery.js";
 import fs from "node:fs";
 import process from "node:process";
 import {
@@ -268,8 +271,10 @@ export type CheckOutcome =
 // search could not check, and that advisory is the SAME
 // notice RenderCache renders ([LAW:one-source-of-truth]): `check` reports
 // what the bar would, never a re-derivation of it.
-function searchedLayers(cwd: string, warnings: string[]): readonly string[] {
-  const resolution = resolveDslConfig(cwd, cwd);
+function searchedLayers(
+  resolution: ConfigResolution,
+  warnings: string[],
+): readonly string[] {
   const notice = configResolutionNotice(resolution);
   if (notice !== null) warnings.push(notice);
   return resolution.kind === "chain" ? resolution.layers : [];
@@ -294,6 +299,10 @@ function searchedLayers(cwd: string, warnings: string[]): readonly string[] {
 export async function checkConfig(
   target: string | undefined,
   cwd: string = process.cwd(),
+  // [LAW:no-ambient-temporal-coupling] The settle budget is an input of the
+  // verdict, so a caller that means to see the deadline reached names a
+  // budget of its own instead of waiting out the command's.
+  settleMs: number = SOURCE_SETTLE_MS,
 ): Promise<CheckOutcome> {
   // Advisories accumulate from the search onward, independent of load
   // success — mirror of RenderCache.reloadInto.
@@ -307,8 +316,17 @@ export async function checkConfig(
   // (`check .`) fails read() with a path-less EISDIR the catch could not
   // attribute, so the not-a-file usage error is decided here.
   const configPath = explicitConfigPath(cwd, target) ?? null;
+  // [LAW:single-enforcer] The daemon's gate, under the same answers: a
+  // repository the bar would not run, `check` names and runs nothing of.
+  const resolution = resolveDslConfig(
+    repoConfigs().read(),
+    cwd,
+    cwd,
+    configPath ?? undefined,
+  );
+  warnings.push(...repoGateLines(resolution.repos));
   const layers =
-    configPath === null ? searchedLayers(cwd, warnings) : [configPath];
+    configPath === null ? searchedLayers(resolution, warnings) : [configPath];
   if (configPath !== null) {
     // throwIfNoEntry suppresses only ENOENT (left for the content read to
     // classify); EACCES/EPERM on the probe itself is equally "could not read
@@ -339,7 +357,13 @@ export async function checkConfig(
   if (collision !== null) warnings.push(collision);
 
   try {
-    const rendered = await loadRegisterRender(layers, cwd, warnings);
+    const rendered = await loadRegisterRender(
+      layers,
+      resolution.repos.plugins,
+      cwd,
+      warnings,
+      settleMs,
+    );
     return { kind: "clean", layers, warnings, rendered };
   } catch (e) {
     // A filesystem error on the config file itself (ENOENT/EACCES from
@@ -394,11 +418,13 @@ export interface PreparedConfig {
 
 export async function prepareConfig(
   layers: readonly string[],
+  repo: ApprovedRepo | null,
   cwd: string,
   warnings: string[],
   // The instant the view's first payload is stamped at: the one its renders
   // are drawn at.
   at: Instant,
+  settleMs: number = SOURCE_SETTLE_MS,
 ): Promise<PreparedConfig> {
   // Each file's own advisories (an editability notice naming a duplicate key)
   // land before its validation, so a fatal outcome still carries them.
@@ -406,7 +432,7 @@ export async function prepareConfig(
     layers,
     DEFAULT_DSL_CONFIG,
     { entered: () => {}, warned: (w) => warnings.push(...w) },
-    { projectDir: cwd, cwd },
+    { repo, cwd },
   );
   const { config } = loaded;
 
@@ -452,10 +478,10 @@ export async function prepareConfig(
     // no default draws its loading cell until it is scanned). The registry owns
     // the "every run complete" state; a source still out at the deadline is
     // named and the render proceeds on what it holds.
-    const pending = await registry.settled(SOURCE_SETTLE_MS);
+    const pending = await registry.settled(settleMs);
     if (pending.length > 0) {
       warnings.push(
-        `source${pending.length === 1 ? "" : "s"} still running after ${SOURCE_SETTLE_MS} ms, rendered with fallback values: ${pending.join(", ")}`,
+        `source${pending.length === 1 ? "" : "s"} still running after ${settleMs} ms, rendered with fallback values: ${pending.join(", ")}`,
       );
     }
     return {
@@ -565,13 +591,22 @@ export function renderEffective(
 // error a failure. Returns the line a fresh session renders.
 async function loadRegisterRender(
   layers: readonly string[],
+  repo: ApprovedRepo | null,
   cwd: string,
   warnings: string[],
+  settleMs: number,
 ): Promise<string> {
   // [LAW:effects-at-boundaries] One instant for every pass, so the passes
   // differ only in the preset they render.
   const at = instantOf(new Date());
-  const prepared = await prepareConfig(layers, cwd, warnings, at);
+  const prepared = await prepareConfig(
+    layers,
+    repo,
+    cwd,
+    warnings,
+    at,
+    settleMs,
+  );
   const { config } = prepared;
   try {
     // The gates the daemon derives when it loads this config, over the keys

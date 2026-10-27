@@ -1,0 +1,38 @@
+name: Colour audits
+
+# The registry-wide colour audits. The rule they run under — nightly here and
+# nowhere else, gating nothing — is stated once, in audits/README.md; this
+# workflow's single trigger and the runner's guard (audits/jest.config.js)
+# are that rule enforced.
+on:
+  schedule:
+    - cron: '0 9 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Colour audits
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Colour audits
+        run: pnpm run audit:colour

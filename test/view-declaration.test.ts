@@ -28,6 +28,7 @@ import { ABSENT, failed, ok, type Outcome } from "../src/utils/outcome";
 import { settledLane, type Lane } from "../src/utils/reading";
 import { viewFacts } from "./helpers/view-facts";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
+import { answerRepo } from "./helpers/repo-approval";
 
 const REPO = "/repo";
 
@@ -74,6 +75,8 @@ let cleanups: Array<() => void>;
 beforeEach(() => {
   jest.useFakeTimers();
   dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "ccb-declare-")));
+  // The configs these sessions draw are the directory's own.
+  answerRepo(dir);
   cleanups = [() => fs.rmSync(dir, { recursive: true, force: true })];
 });
 afterEach(() => {

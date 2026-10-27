@@ -21,14 +21,13 @@
 // name every accent alike, as Textual draws them — and fact 1 is what holds
 // a bar to its theme.
 
-import { TEST_SIGNER } from "./helpers/link-signer";
+import { TEST_SIGNER } from "../test/helpers/link-signer";
 import {
   ColorDepth,
   ColorRgba,
   drawnColour,
   getThemePalette,
   listThemePalettes,
-  Oklch,
   SEAM_MIN_DELTA_E,
 } from "@promptctl/rich-js";
 
@@ -39,6 +38,7 @@ import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { SessionState } from "../src/daemon/session-state";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import {
+  deltaE,
   SHADES,
   VARIATIONS,
   type ShadeName,
@@ -56,8 +56,6 @@ const ARROW = "\u{e0b0}";
 const DIVIDER = "\u{e0b1}";
 const TOKEN = /\x1b\[([0-9;]*)m|\x1b\]8;[^\x1b]*\x1b\\/g;
 
-const oklch = (c: ColorRgba): Oklch => Oklch.fromRgba(c);
-const dE = (a: ColorRgba, b: ColorRgba): number => oklch(a).deltaE(oklch(b));
 
 // A seam: the backgrounds either side and the glyph between them. The arrow
 // is drawn in the left cell's background over the right cell's, so its
@@ -242,7 +240,7 @@ describe("done-when: every background the closed bar draws is a colour its theme
         for (const bg of backgrounds(bar(theme, calm, variant))) {
           measured++;
           if (exact.has(bg.hex)) continue;
-          const nearest = Math.min(...palette.map((c) => dE(bg, c)));
+          const nearest = Math.min(...palette.map((c) => deltaE(bg, c)));
           if (nearest > PALETTE_FLOOR) wrong.push(`${theme}${calm ? " calm" : ""} ${bg.hex} ${nearest.toFixed(3)}`);
         }
       }
@@ -272,7 +270,7 @@ describe("no two neighbouring cells blur", () => {
     const seams = seamsUnder(variant);
     expect(seams.length).toBeGreaterThan(THEMES.length * 2 * 5);
     const arrows = seams
-      .filter((s) => s.glyph === ARROW && dE(s.left, s.right) < SEAM_MIN_DELTA_E)
+      .filter((s) => s.glyph === ARROW && deltaE(s.left, s.right) < SEAM_MIN_DELTA_E)
       .map((s) => `${s.theme}${s.calm ? " calm" : ""} ${s.left.hex}|${s.right.hex}`);
     expect([...new Set(arrows)]).toEqual([]);
     const dividers = seams

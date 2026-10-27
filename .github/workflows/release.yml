@@ -31,6 +31,10 @@ jobs:
       - name: Lint
         run: pnpm run lint
 
+      # The one type check (jest.config.js's transform transpiles only).
+      - name: Typecheck
+        run: pnpm run typecheck
+
       - name: Build
         run: pnpm run build
 

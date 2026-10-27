@@ -41,7 +41,7 @@ import {
   VERB_TMUX_STATUS_CLICK,
 } from "../src/click/wire";
 import { CLICK_ERROR_HOLD_S } from "../src/daemon/click-error";
-import { logLines, loggedWhen } from "./helpers/daemon-log";
+import { logLines, loggedLines, loggedWhen } from "./helpers/daemon-log";
 import { sendDaemonRequest } from "./helpers/daemon-wire";
 import { until } from "./helpers/until";
 import {
@@ -50,7 +50,8 @@ import {
   type RunningDaemon,
 } from "./helpers/spawn-isolated-daemon";
 
-jest.setTimeout(30_000);
+const TEST_TIMEOUT_MS = 30_000;
+jest.setTimeout(TEST_TIMEOUT_MS);
 
 // `drawn` draws a bar. `broken` gates a row on a `when` that fails when it is
 // evaluated, which costs that row and warns. `held` reads the tmux session name, which the
@@ -134,19 +135,26 @@ describe("every render request writes one render event, whatever its outcome", (
     lines.filter((l) => / \[\w+\] click /.test(l)).map(eventOf);
   const field = (event: Event, key: string): string | undefined =>
     event.fields.find(([k]) => k === key)?.[1];
+  // A session's render event lines, picked so a wait that fails names them.
+  const renderLinesOf = (sid: string, lines: readonly string[]): string[] =>
+    lines.filter(
+      (l) => / \[\w+\] render /.test(l) && field(eventOf(l), "sid") === sid,
+    );
   // What has landed so far: for what must not have been written.
-  const eventsNow = (sid: string, lines?: readonly string[]): Event[] =>
-    renderEvents(lines).filter((e) => field(e, "sid") === sid);
+  const eventsNow = (
+    sid: string,
+    lines: readonly string[] = logLines(env),
+  ): Event[] => renderLinesOf(sid, lines).map(eventOf);
   // A session's events once at least `count` have landed.
   const eventsOf = async (sid: string, count = 1): Promise<Event[]> =>
-    eventsNow(
-      sid,
-      await loggedWhen(
+    (
+      await loggedLines(
         env,
-        (lines) => eventsNow(sid, lines).length >= count,
+        (lines) => renderLinesOf(sid, lines),
+        (found) => found.length >= count,
         `${count} render event(s) for ${sid}`,
-      ),
-    );
+      )
+    ).map(eventOf);
 
   beforeAll(async () => {
     const prepared = prepareIsolatedDaemonEnv("cc-candybar-event-e2e");
@@ -232,15 +240,14 @@ describe("every render request writes one render event, whatever its outcome", (
       outcome: string,
       level: string,
     ): Promise<Event> => {
-      const events = eventsNow(
-        sid,
-        await loggedWhen(
+      const events = (
+        await loggedLines(
           env,
-          (lines) =>
-            eventsNow(sid, lines).some((e) => field(e, "timedOut") === "N"),
+          (lines) => renderLinesOf(sid, lines),
+          (found) => found.some((l) => field(eventOf(l), "timedOut") === "N"),
           `the answered render event for ${sid}`,
-        ),
-      );
+        )
+      ).map(eventOf);
       for (const event of events) {
         expect(event.level).toBe(level);
         expect(field(event, "outcome")).toBe(outcome);
@@ -362,15 +369,20 @@ describe("every render request writes one render event, whatever its outcome", (
 
     // A refused request names its problems. The request was not trusted, so
     // nothing it said is recorded as a fact of the render — not even its sid.
-    const badRequests = (lines?: readonly string[]) =>
-      renderEvents(lines).filter((e) => field(e, "outcome") === "bad-request");
-    const refused = badRequests(
-      await loggedWhen(
+    const badRequests = (lines: readonly string[]): string[] =>
+      lines.filter(
+        (l) =>
+          / \[\w+\] render /.test(l) &&
+          field(eventOf(l), "outcome") === "bad-request",
+      );
+    const refused = (
+      await loggedLines(
         env,
-        (lines) => badRequests(lines).length >= 4,
+        badRequests,
+        (found) => found.length >= 4,
         "the refused requests' events",
-      ),
-    );
+      )
+    ).map(eventOf);
     expect(refused.map((e) => field(e, "problems"))).toEqual([
       `request 'cwd' is not an absolute path: "proj"`,
       `request 'args' is not a list of strings: "x"`,
@@ -820,17 +832,28 @@ describe("every render request writes one render event, whatever its outcome", (
       config,
       JSON.stringify({ segments, root: { h: Object.keys(segments) } }),
     );
+    // [LAW:no-ambient-temporal-coupling] The backstop's TIMEOUT reply is a
+    // task on the daemon's loop, so it cannot be written until the
+    // synchronous compile yields: this client's wait is bounded by the
+    // compile, seconds on CI's two cores, not by the backstop. The helper's
+    // default budget is for an answered request, so the budget here is the
+    // test's own timeout, and nothing ends the wait before Jest would. The
+    // event's `took` below is what says the render outlived the backstop.
     await expect(
-      sendDaemonRequest(sockPath, {
-        v: PROTOCOL_VERSION,
-        kind: "render",
-        ...renderBody("ev-backstop", projectDir, {}, [
-          "cc-candybar",
-          "--config",
-          config,
-        ]),
-        deadline: Date.now() + TOTAL_BUDGET_MS,
-      }),
+      sendDaemonRequest(
+        sockPath,
+        {
+          v: PROTOCOL_VERSION,
+          kind: "render",
+          ...renderBody("ev-backstop", projectDir, {}, [
+            "cc-candybar",
+            "--config",
+            config,
+          ]),
+          deadline: Date.now() + TOTAL_BUDGET_MS,
+        },
+        TEST_TIMEOUT_MS,
+      ),
     ).resolves.toMatchObject({ ok: false, code: "TIMEOUT" });
     const late = only(await eventsOf("ev-backstop"));
     expect(field(late, "outcome")).toBe("ok");
