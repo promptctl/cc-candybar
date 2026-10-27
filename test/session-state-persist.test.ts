@@ -1,4 +1,4 @@
-import {
+import fs, {
   mkdtempSync,
   rmSync,
   writeFileSync,
@@ -104,6 +104,44 @@ describe("SessionState disk persistence", () => {
       s1: { theme: "new" },
     });
     expect(existsSync(`${file}.writing`)).toBe(false);
+  });
+
+  // The rename that publishes a debounced write runs on the thread pool, so a
+  // flush can land while it is on its way. The newer state still wins, the
+  // older write's temp file is gone, and nothing calls the superseded rename
+  // a failure.
+  it("a synchronous flush while the debounced rename is in flight keeps the newer state", async () => {
+    const logged: string[] = [];
+    const ss = new SessionState(
+      new FileSessionStorage(file, 0, (_level, line) => logged.push(line)),
+    );
+    const rename = fs.promises.rename;
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const spy = jest
+      .spyOn(fs.promises, "rename")
+      .mockImplementation(async (from, to) => {
+        await held;
+        return rename(from, to);
+      });
+    try {
+      ss.set("s1", "theme", "old");
+      await settled(() => spy.mock.calls.length === 1);
+      ss.set("s1", "theme", "new");
+      ss.flush();
+      release();
+      // The held rename runs out: it finds no temp file, and the write ends.
+      await (spy.mock.results[0]!.value as Promise<void>).catch(() => {});
+    } finally {
+      spy.mockRestore();
+    }
+    expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({
+      s1: { theme: "new" },
+    });
+    expect(existsSync(`${file}.writing`)).toBe(false);
+    expect(logged.filter((l) => l.includes("save failed"))).toEqual([]);
   });
 
   // A disk that refuses a write is retried by the next save or shutdown's

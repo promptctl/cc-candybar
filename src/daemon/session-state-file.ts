@@ -89,11 +89,12 @@ export class FileSessionStorage implements SessionStorage {
     this.timer.unref();
   }
 
-  // [LAW:effects-at-boundaries] The debounced write takes its disk I/O off the
-  // daemon's one thread: the bytes are written and synced through the thread
-  // pool, so the rename that publishes them is a metadata step with nothing
-  // left to flush. A synchronous write here held every bar and click for as
-  // long as the disk took, hundreds of milliseconds on a busy one.
+  // [LAW:effects-at-boundaries] The debounced write takes all of its disk I/O
+  // off the daemon's one thread: the bytes are written and synced through the
+  // thread pool, and so is the rename that publishes them. A rename is a
+  // journaled metadata op, and on a busy disk it waits on the journal like
+  // any write: run synchronously here it held every bar and click for 180 ms
+  // on a CI runner, past every client's reply budget.
   private async write(): Promise<void> {
     const snapshot = this.pending;
     if (snapshot === null) return;
@@ -102,8 +103,8 @@ export class FileSessionStorage implements SessionStorage {
     const body = JSON.stringify(snapshot);
     const tmp = `${this.filePath}.writing`;
     this.writing = true;
-    // The thread is held until the first await, and again for the rename.
-    const heldBefore = performance.now() - started;
+    // The thread is held until the first await.
+    const heldMs = performance.now() - started;
     try {
       await fs.promises.mkdir(path.dirname(this.filePath), { recursive: true });
       const file = await fs.promises.open(tmp, "w", 0o600);
@@ -121,14 +122,20 @@ export class FileSessionStorage implements SessionStorage {
         await fs.promises.rm(tmp, { force: true });
         return;
       }
-      const renaming = performance.now();
-      fs.renameSync(tmp, this.filePath);
-      this.saved(
-        body,
-        snapshot,
-        started,
-        heldBefore + performance.now() - renaming,
-      );
+      // A flush that lands while this rename is on its way removes the temp
+      // file first (flush, below), so the rename finds nothing: the one
+      // outcome in which this older state cannot land over the newer.
+      try {
+        await fs.promises.rename(tmp, this.filePath);
+      } catch (e) {
+        if (
+          (e as NodeJS.ErrnoException).code === "ENOENT" &&
+          generation !== this.generation
+        )
+          return;
+        throw e;
+      }
+      this.saved(body, snapshot, started, heldMs);
       if (this.pending === snapshot) this.pending = null;
     } catch (e) {
       this.logger("warn", `session-state save failed: ${(e as Error).message}`);
@@ -154,6 +161,12 @@ export class FileSessionStorage implements SessionStorage {
     const started = performance.now();
     try {
       fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
+      // [LAW:no-ambient-temporal-coupling] The debounced write's temp file goes
+      // before this write lands, whatever its rename is doing on the thread
+      // pool: a rename and an unlink of one directory entry cannot interleave,
+      // so either the older state landed already and is overwritten below, or
+      // its rename finds nothing. Newer state is never put back under older.
+      fs.rmSync(`${this.filePath}.writing`, { force: true });
       const tmp = `${this.filePath}.tmp`;
       const body = JSON.stringify(snapshot);
       // [LAW:single-enforcer] Daemon runtime files are owner-only (0o600), like
