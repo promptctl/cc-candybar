@@ -1029,6 +1029,23 @@ describe("runCheck — the argv edge", () => {
     expect(viaEnv.code).toBe(1);
     expect(viaEnv.stderr).toContain(`✗ ${bad}`);
     expect(viaEnv.stderr).toContain('Unknown top-level key "theme"');
+
+    // [LAW:one-source-of-truth] brandon-unfiled-3248.e3r: an empty argument —
+    // `check "$CFG"` with CFG unset — is no argument, as the bar reads the same
+    // `--config "$CFG"`: the variable is the target, with or without the flag.
+    for (const args of [[""], ["--render", ""]]) {
+      const empty = await run(args);
+      expect({ args, code: empty.code, verdict: empty.stderr }).toEqual({
+        args,
+        code: 1,
+        verdict: viaEnv.stderr,
+      });
+    }
+
+    // With no variable either, the empty argument and no argument reach the
+    // same searched chain: undefined-from-empty is undefined-from-absent.
+    delete process.env.CC_CANDYBAR_CONFIG;
+    expect(await run([""])).toEqual(await run([]));
   });
 
   // brandon-check-m2a — the flag an author reaches for to SEE the bar. The
@@ -1068,12 +1085,10 @@ describe("runCheck — the argv edge", () => {
   // also what an unreadable file returns, so a gate that let two paths through
   // and then failed to read the first would pass a code-only assertion — it
   // did, when the arity comparison was mutated by one.
-  it("two paths, or an empty path, stay usage errors with or without the flag", async () => {
-    const ARITY = "check: expected at most one non-empty path";
+  it("two paths stay a usage error with or without the flag", async () => {
+    const ARITY = "check: expected at most one path";
     for (const args of [
       ["a.json5", "b.json5"],
-      [""],
-      ["--render", ""],
       ["--render", "a.json5", "b.json5"],
     ]) {
       const r = await run(args);

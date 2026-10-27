@@ -36,7 +36,7 @@ import {
   ConfigError,
   type DroppedPlugin,
 } from "./config/dsl-loader.js";
-import { detectConfigEnv } from "./config-hint.js";
+import { cliConfigTarget } from "./config-hint.js";
 import { explicitConfigPath } from "./utils/user-path.js";
 import { autoCompactControls } from "./segments/autocompact.js";
 import type { ValidatedConfig } from "./config/dsl-types.js";
@@ -837,14 +837,14 @@ function parseCheckArgs(args: readonly string[]): CheckArgs {
       message: `check: unknown option ${unknown.join(" ")}\n${USAGE}`,
     };
   }
-  // An empty string is not "no argument": `target: undefined` means "resolve
-  // like the daemon", while `""` is a malformed target (the likeliest cause is
-  // an unquoted or mis-expanded shell variable) that would otherwise EISDIR on
-  // the cwd.
-  if (paths.length > 1 || paths[0] === "") {
+  // [LAW:single-enforcer] Arity only. What the path means — including that an
+  // empty one, a statusline's `--config "$CFG"` with CFG unset, resolves like
+  // no argument — is `cliConfigTarget`'s to say in `runCheck`, the one
+  // reading `doctor` runs under and the bar renders under.
+  if (paths.length > 1) {
     return {
       kind: "usage",
-      message: `check: expected at most one non-empty path\n${USAGE}`,
+      message: `check: expected at most one path\n${USAGE}`,
     };
   }
   return {
@@ -859,12 +859,17 @@ function parseCheckArgs(args: readonly string[]): CheckArgs {
 // its plan carries.
 export async function runCheck(args: readonly string[]): Promise<never> {
   const parsed = parseCheckArgs(args);
+  const cwd = process.cwd();
   const plan: CliPlan =
     parsed.kind === "usage"
       ? { stdout: "", stderr: parsed.message, code: EXIT_USAGE }
       : checkPlan(
+          // [LAW:one-source-of-truth] The target the doctor would check under
+          // the same argument, already absolute — `checkConfig`'s own
+          // resolution, the seam for its direct callers, passes it through.
           await checkConfig(
-            parsed.target ?? detectConfigEnv(process.env, process.cwd()),
+            cliConfigTarget(parsed.target, process.env, cwd),
+            cwd,
           ),
           parsed.render,
         );

@@ -33,3 +33,18 @@ export function detectConfigEnv(
 ): string | undefined {
   return explicitConfigPath(cwd, env[CONFIG_ENV]);
 }
+
+// The config a CLI run (`check`, `doctor`) judges, for the bar a session
+// started in this shell renders: the file named on the command line — a
+// statusline command's own `--config` — else the override the client would
+// report. [LAW:single-enforcer] Both CLIs compose it HERE, so they cannot
+// disagree about which file a session's bar reads; and an empty argument is
+// no argument, as `--config "$CFG"` with CFG unset is to the bar, because the
+// argument and the variable cross the one `explicitConfigPath` reading.
+export function cliConfigTarget(
+  arg: string | undefined,
+  env: Readonly<Record<string, string | undefined>>,
+  cwd: string,
+): string | undefined {
+  return explicitConfigPath(cwd, arg) ?? detectConfigEnv(env, cwd);
+}
