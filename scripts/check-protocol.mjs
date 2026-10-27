@@ -105,18 +105,21 @@ function nativeNamesNodeLacks() {
   return reads.without(native, node, debug);
 }
 
+// A code is a member of the union, one `| "CODE"` line.
 const errorCodes = memberSet(
   TS_PROTOCOL,
   /export type ErrorCode =[^;]+;/,
-  /"([A-Z_]+)"/g,
+  /^[ \t]*\| "([A-Z_]+)"/gm,
 );
 // The four decisions, from the first to the close of the last: the two that
 // decide by a code today, and the two beside them, so a code a decision comes
-// to spell is read wherever among them it lands.
+// to spell is read wherever among them it lands. A code is one a match arm
+// names, `"CODE" =>` with or without a guard, never a literal that is not
+// decided by.
 const followerCodes = memberSet(
   RS_FOLLOW,
   /^fn classify\([\s\S]+?^fn next_retry_ms\([\s\S]+?^\}/m,
-  /"([A-Z_]+)"/g,
+  /"([A-Z_]+)"\)?(?: if [^\n]+?)? =>/g,
 );
 
 const clientHintKeys = memberSet(
@@ -125,15 +128,22 @@ const clientHintKeys = memberSet(
   /readonly (\w+)\?:/g,
 );
 
-// The render request's own wire keys: every field of RenderRequest less the
-// hints it carries under the same names.
-function renderRequestOwnKeys() {
-  const all = memberSet(
-    TS_PROTOCOL,
-    /export interface RenderRequest \{[\s\S]+?\n\}/,
-    /^ {2}(\w+)\??:/gm,
+// The wire keys the native client sets on a render request: those in the
+// request literal and after it, then the hints client_hints sets by a call
+// that names no key. Read as one set, so a hint RenderRequest no longer
+// spells, or a key the client stops sending, is drift here either way.
+const RUST_HINT_KEYS = memberSet(
+  RS_MAIN,
+  /^fn client_hints\([\s\S]+?^\}/m,
+  /^[ \t]*request\["(\w+)"\]/gm,
+);
+function renderRequestRustKeys() {
+  const own = memberSet(
+    RS_MAIN,
+    /let mut request = serde_json::json!\(\{[\s\S]+?let body = match serde_json::to_vec\(&request\)/,
+    /^[ \t]*(?:"|request\[")(\w+)"(?::|\])/gm,
   )();
-  return reads.without(all, clientHintKeys());
+  return reads.union(own, RUST_HINT_KEYS());
 }
 
 // The error codes the native follower decides by, less any the daemon's
@@ -254,26 +264,20 @@ const CHECKS = [
   {
     label: "client-hint wire keys",
     ts: clientHintKeys,
-    rust: memberSet(
-      RS_MAIN,
-      /^fn client_hints\([\s\S]+?^\}/m,
-      /^\s*request\["(\w+)"\]/gm,
-    ),
+    rust: RUST_HINT_KEYS,
   },
-  // The render request's own wire keys, the ones beside its hints. A key the
-  // native client stops sending degrades the same silent way: a `deadline`
-  // spelled differently reads as a client too old to state one, and every
-  // answer waits by the guessed budget instead of its client's. The Rust
-  // block runs from the request literal to its encoding; the hints are set
-  // in between by a call, which names no key.
+  // Every wire key of the render request, hints included. A key the native
+  // client stops sending degrades the same silent way: a `deadline` spelled
+  // differently reads as a client too old to state one, and every answer
+  // waits by the guessed budget instead of its client's.
   {
     label: "render request wire keys",
-    ts: renderRequestOwnKeys,
-    rust: memberSet(
-      RS_MAIN,
-      /let mut request = serde_json::json!\(\{[\s\S]+?let body = match serde_json::to_vec\(&request\)/,
-      /^\s*(?:"|request\[")(\w+)"(?::|\])/gm,
+    ts: memberSet(
+      TS_PROTOCOL,
+      /export interface RenderRequest \{[\s\S]+?\n\}/,
+      /^ {2}(\w+)\??:/gm,
     ),
+    rust: renderRequestRustKeys,
   },
   // What the native client says it is: the field names of the `client` hint.
   // A renamed field would make every native render read as "unreported" to

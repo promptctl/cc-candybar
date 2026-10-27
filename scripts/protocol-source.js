@@ -91,6 +91,12 @@ export function without(set, ...others) {
   return keep(set, (m) => !named.has(m));
 }
 
+// Every member any of `sets` names.
+export function union(...sets) {
+  if (sets.some((s) => s === null)) return null;
+  return [...new Set(sets.flatMap((s) => [...members(s)]))].sort().join(", ");
+}
+
 // The members of `set` that `other` also names.
 export function within(set, other) {
   if (set === null || other === null) return null;

@@ -10,6 +10,7 @@ import {
   num,
   rangeSpans,
   uncommented,
+  union,
   within,
   without,
 } from "../scripts/protocol-source";
@@ -81,12 +82,17 @@ describe("readers take no value from a comment line", () => {
 // A row whose value is one side's set less, or within, another's, read on the
 // canonical form the readers produce; a missing anchor on either side stays
 // the null the runner fails on.
-describe("without and within", () => {
+describe("without, union and within", () => {
   it("without keeps the members none of the others name", () => {
     expect(without("a, b, c", "b", "c, d")).toBe("a");
     expect(without("a, b", "z")).toBe("a, b");
     expect(without(null, "a")).toBeNull();
     expect(without("a", "b", null)).toBeNull();
+  });
+
+  it("union names every member once, sorted", () => {
+    expect(union("c, a", "b, a")).toBe("a, b, c");
+    expect(union("a", null)).toBeNull();
   });
 
   it("within keeps the members the other also names", () => {
