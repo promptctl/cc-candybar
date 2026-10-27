@@ -17,7 +17,7 @@ export function answerRepo(
   env: NodeJS.ProcessEnv = process.env,
 ): void {
   const filed = repoConfigs(stateDir(env)).update((book) =>
-    withAnswer(book, fs.realpathSync(dir), answer),
+    withAnswer(book, fs.realpathSync.native(dir), answer),
   );
   if (filed.kind === "failed") throw new Error(filed.reason);
 }

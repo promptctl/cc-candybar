@@ -184,7 +184,9 @@ export function resolveDslConfig(
     // A location is a directory AND a base name: `.cc-candybar` and the XDG
     // `config` may share a directory and are two layers; `.json5`/`.json`
     // at one location are one, the first enumerated winning.
-    const dir = fs.realpathSync(path.dirname(candidate));
+    // [LAW:one-source-of-truth] The on-disk spelling: on a case-insensitive
+    // volume one directory reached as `Code` and `code` is one answer's key.
+    const dir = fs.realpathSync.native(path.dirname(candidate));
     const location = path.join(
       dir,
       path.basename(candidate).replace(/\.(json5|json)$/, ""),
@@ -225,13 +227,15 @@ function isUserFile(candidate: string): boolean {
 }
 
 // The session's project, or null for none, or one that is not there.
-function repoProject(projectDir: string | undefined): RepoProject | null {
+export function repoProject(
+  projectDir: string | undefined,
+): RepoProject | null {
   if (projectDir === undefined || presence(projectDir) !== "present") {
     return null;
   }
   const listed = listFolders(path.join(projectDir, REPO_PLUGIN_DIR));
   return {
-    dir: fs.realpathSync(projectDir),
+    dir: fs.realpathSync.native(projectDir),
     path: projectDir,
     ships: !("error" in listed) && listed.folders.length > 0,
   };
@@ -241,10 +245,8 @@ function repoProject(projectDir: string | undefined): RepoProject | null {
 // first-ever write creates there — CONFIG_EXTENSIONS' head, the documented
 // format, the one that wins a same-location tie.
 function userHome(layers: readonly string[]): string {
-  const base = xdgConfigBase();
   return (
-    layers.find((l) => CONFIG_EXTENSIONS.some((e) => l === `${base}.${e}`)) ??
-    `${base}.${CONFIG_EXTENSIONS[0]}`
+    layers.find(isUserFile) ?? `${xdgConfigBase()}.${CONFIG_EXTENSIONS[0]}`
   );
 }
 
