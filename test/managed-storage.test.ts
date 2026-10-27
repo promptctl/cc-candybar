@@ -92,6 +92,14 @@ const answered = async <T>(lane: { current(): Current<T> }) => {
   return lane.current();
 };
 
+// The watch's opening writes a probe into the folder; a test that removes the
+// folder waits for it, or the probe can land mid-removal and fail it.
+const probed = (r: Rig) =>
+  until(
+    () => fs.existsSync(path.join(r.folder, STORAGE_PROBE_FILE)),
+    "the opening probe",
+  );
+
 const refreshes = (r: Rig, by: string): string[] =>
   r.lines.filter(
     (l) => l.includes("plugin storage refresh") && l.includes(`by=${by}`),
@@ -341,6 +349,7 @@ describe("ManagedStorage watches", () => {
     const r = rig();
     const key = r.storage.keyFor(r.folder);
     r.storage.watch(key);
+    await probed(r);
     await new Promise((resolve) => setTimeout(resolve, 100));
     fs.rmSync(r.folder, { recursive: true });
     const next = r.storage.keyFor(r.folder);
@@ -361,6 +370,7 @@ describe("ManagedStorage watches", () => {
     r.write(A, '"a"');
     const lane = r.storage.declare(new Holds(), key, A);
     expect(await answered(lane)).toEqual(ok("a"));
+    await probed(r);
     fs.rmSync(r.folder, { recursive: true });
     watches[0]!.listener("rename", path.basename(r.folder));
     await until(() => r.storage.stats().lost === 1, "the loss");
@@ -402,7 +412,7 @@ describe("ManagedStorage watches", () => {
   // ext4 reuses a freed inode number: a folder deleted and created again can
   // carry the old device and inode. Only its birth time tells them apart.
   describe("a folder recreated with the same device and inode", () => {
-    function recreated() {
+    async function recreated() {
       const watches = fakeWatches();
       let birth = 1n;
       const identityOf: IdentityRead = (folder) => {
@@ -414,6 +424,7 @@ describe("ManagedStorage watches", () => {
       const r = rig({ identityOf });
       const key = r.storage.keyFor(r.folder);
       r.storage.watch(key);
+      await probed(r);
       const recreate = () => {
         fs.rmSync(r.folder, { recursive: true });
         fs.mkdirSync(r.folder);
@@ -422,8 +433,8 @@ describe("ManagedStorage watches", () => {
       return { r, key, watches, recreate };
     }
 
-    test("its own event first, then the config load: a new generation", () => {
-      const { r, key, watches, recreate } = recreated();
+    test("its own event first, then the config load: a new generation", async () => {
+      const { r, key, watches, recreate } = await recreated();
       recreate();
       watches[0]!.listener("rename", path.basename(r.folder));
       // The fake watch's window closes on the registry's debounce.
@@ -433,7 +444,7 @@ describe("ManagedStorage watches", () => {
     });
 
     test("the config load first, then its own event: a new generation, and the stale event marks nothing", async () => {
-      const { r, key, watches, recreate } = recreated();
+      const { r, key, watches, recreate } = await recreated();
       recreate();
       const next = r.storage.keyFor(r.folder);
       expect(next).toEqual({ ...key, generation: 1 });
@@ -551,10 +562,7 @@ describe("ManagedStorage stalls", () => {
     const lane = r.storage.declare(new Holds(), key, A);
     expect(await answered(lane)).toEqual(ok("a"));
     for (let i = 0; i < 3; i++) {
-      await until(
-        () => fs.existsSync(path.join(r.folder, STORAGE_PROBE_FILE)),
-        "the probe",
-      );
+      await probed(r);
       watches[0]!.listener("change", STORAGE_PROBE_FILE);
       await quiet();
       period();
@@ -636,10 +644,7 @@ describe("ManagedStorage stalls", () => {
     fakeClock();
     const r = rig();
     r.storage.watch(r.storage.keyFor(r.folder));
-    await until(
-      () => fs.existsSync(path.join(r.folder, STORAGE_PROBE_FILE)),
-      "the probe",
-    );
+    await probed(r);
     fs.rmSync(r.folder, { recursive: true });
     for (let i = 0; i < 4; i++) period();
     await quiet();
@@ -660,10 +665,7 @@ describe("ManagedStorage stalls", () => {
     const r = rig();
     const key = r.storage.keyFor(r.folder);
     r.storage.watch(key);
-    await until(
-      () => fs.existsSync(path.join(r.folder, STORAGE_PROBE_FILE)),
-      "the probe",
-    );
+    await probed(r);
     fs.rmSync(r.folder, { recursive: true });
     fs.mkdirSync(r.folder);
     period();
