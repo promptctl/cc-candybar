@@ -4,6 +4,7 @@
     "target": "ES2022", 
     "module": "ESNext",
     "moduleDetection": "force",
+    "isolatedModules": true,
     "allowJs": true,
     "noEmit": true,
 

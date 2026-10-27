@@ -33,6 +33,12 @@ export default {
       "ts-jest",
       {
         useESM: true,
+        // [LAW:single-enforcer] Types are checked once, by `tsc --noEmit`
+        // (the Test job's typecheck step, and publish). The transform only
+        // transpiles: with a type-check it re-reads the module graph in every
+        // worker on a cold cache, which is seconds per test file on CI.
+        // tsconfig's `isolatedModules` is what makes transpiling alone sound.
+        isolatedModules: true,
       },
     ],
   },
