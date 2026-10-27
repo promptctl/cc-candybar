@@ -1,3 +1,9 @@
+## [1.160.9](https://github.com/promptctl/cc-candybar/compare/v1.160.8...v1.160.9) (2026-10-27)
+
+### Bug Fixes
+
+* **daemon:** a repo's watch covers the whole refs tree of its common git dir (brandon-unfiled-3248.1x2q) ([#466](https://github.com/promptctl/cc-candybar/issues/466)) ([bf5cee0](https://github.com/promptctl/cc-candybar/commit/bf5cee06d09c18f6e48cb289d3e03d442c4896b5))
+
 ## [1.160.8](https://github.com/promptctl/cc-candybar/compare/v1.160.7...v1.160.8) (2026-10-27)
 
 ### Bug Fixes
