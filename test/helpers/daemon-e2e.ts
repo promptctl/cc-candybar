@@ -248,7 +248,10 @@ export async function renderUntil(
   let last = "";
   await until(
     async () => accepts((last = await render(sockPath, sessionId, projectDir))),
-    () => `a render of ${what}; last render was:\n${last}`,
+    () =>
+      last
+        ? `a render of ${what}; last render was:\n${last}`
+        : `a render of ${what}; no render answered within the budget`,
     timeoutMs,
   );
   return last;

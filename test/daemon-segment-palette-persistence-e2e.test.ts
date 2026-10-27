@@ -148,7 +148,7 @@ describe("candybar-config-engine-71o.6: real-daemon segment-palette click → pe
 
       // Live re-render, same session, no daemon restart — the persisted
       // palette rides the config file's own watcher, which reloads
-      // asynchronously (see waitForRenderChange). `opened` (captured right
+      // asynchronously (so the shared render-until waits). `opened` (captured right
       // after the menu was opened, same menu-open state as the post-click
       // render, but BEFORE the click) is the right baseline for "did the
       // click visibly change anything" — a `before`-vs-post-click diff would
