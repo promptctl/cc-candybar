@@ -21,7 +21,7 @@ width Claude Code most often advertises; a tick whose exit code is 0 but printed
 ok: a blank bar is a failure to show anything. Ticks that fail after the first are left out of
 the frames.
 """
-import json, os, shutil, subprocess, sys, time
+import json, os, shutil, signal, subprocess, sys, time
 import concurrent.futures as cf
 
 ENTRIES, FIXTURE, SRC, RUNS, DEST = sys.argv[1:6]
@@ -101,11 +101,20 @@ def run_timeline(slug, entry, src, width):
             shutil.copytree(os.path.join(td, TRANSCRIPT_DIR, d), os.path.join(tdir, d.replace('__RUN__', run.replace('/', '-'))))
         hook = open(os.path.join(td, 'hook.json')).read().replace('__RUN__', run)
         t0 = time.time()
+        p = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd, env=env, start_new_session=True)
         try:
-            p = subprocess.run(argv, input=hook.encode(), capture_output=True, cwd=cwd, env=env, timeout=TIMEOUT, start_new_session=True)
-            exit_code, out, err = p.returncode, p.stdout, p.stderr
-        except subprocess.TimeoutExpired as e:
-            exit_code, out, err = 'timeout', e.stdout or b'', e.stderr or b''
+            out, err = p.communicate(hook.encode(), timeout=TIMEOUT)
+            exit_code = p.returncode
+        except subprocess.TimeoutExpired:
+            exit_code = 'timeout'
+        # A bar that leaves a helper running in the background (a cache refresher, a daemon) would hold
+        # the pipes open into the next tick and outlive the sweep; the whole session is ended each tick.
+        try:
+            os.killpg(p.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        if exit_code == 'timeout':
+            out, err = p.communicate()
         ms += int((time.time() - t0) * 1000)
         text = scrub(out.decode('utf-8', errors='replace'), run)[:20000]
         ok = exit_code == 0 and text.strip() != ''
