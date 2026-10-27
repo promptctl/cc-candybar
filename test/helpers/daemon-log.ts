@@ -21,6 +21,26 @@ export async function loggedWhen(
   return lines;
 }
 
+// The lines `pick` draws from the log, once `holds` is true of them. A wait
+// that fails names the picked lines that did land, so a failure on a runner
+// nobody can log into says which events were there. [LAW:no-silent-failure]
+export async function loggedLines(
+  env: NodeJS.ProcessEnv,
+  pick: (lines: readonly string[]) => string[],
+  holds: (picked: readonly string[]) => boolean,
+  what: string,
+): Promise<string[]> {
+  let picked: string[] = [];
+  try {
+    await until(() => holds((picked = pick(logLines(env)))), what);
+  } catch (e) {
+    throw new Error(
+      `${e instanceof Error ? e.message : String(e)}; the lines picked:\n${picked.join("\n")}`,
+    );
+  }
+  return picked;
+}
+
 // [LAW:one-source-of-truth] A render event whose reply its client read: an
 // attempt the client gave up on is logged too, so a count of a session's
 // answers counts these, never every event.
@@ -36,23 +56,10 @@ export async function renderLines(
   sessionId: string,
   count = 1,
 ): Promise<string[]> {
-  const of = (lines: readonly string[]) =>
-    lines.filter((l) => l.includes(`render sid=${sessionId} `));
-  const read = (lines: readonly string[]) =>
-    of(lines).filter(answeredRender);
-  try {
-    return of(
-      await loggedWhen(
-        env,
-        (lines) => read(lines).length >= count,
-        `${count} answered render event(s) for ${sessionId}`,
-      ),
-    );
-  } catch (e) {
-    // [LAW:no-silent-failure] The wait names what it counted, so a failure
-    // on a runner nobody can log into says which events were there.
-    throw new Error(
-      `${e instanceof Error ? e.message : String(e)}; its events:\n${of(logLines(env)).join("\n")}`,
-    );
-  }
+  return loggedLines(
+    env,
+    (lines) => lines.filter((l) => l.includes(`render sid=${sessionId} `)),
+    (events) => events.filter(answeredRender).length >= count,
+    `${count} answered render event(s) for ${sessionId}`,
+  );
 }

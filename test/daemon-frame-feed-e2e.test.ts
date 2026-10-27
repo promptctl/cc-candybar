@@ -49,7 +49,7 @@ import { sendDaemonRequest } from "./helpers/daemon-wire";
 import { links } from "./helpers/ansi";
 import { HANDOFF_BUTTON } from "../src/daemon/lane-handoff";
 import { until } from "./helpers/until";
-import { loggedWhen, logLines, renderLines } from "./helpers/daemon-log";
+import { loggedLines, logLines, renderLines } from "./helpers/daemon-log";
 import { POLLED } from "../src/config/settings-menu";
 import {
   effectsUrl,
@@ -330,12 +330,13 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   // The closing summary of `sessionId`'s feed, once the daemon has logged it.
   const closedSummary = async (sessionId: string): Promise<string> => {
     const mark = `feed sid=${JSON.stringify(sessionId)} closed `;
-    const lines = await loggedWhen(
+    const [line] = await loggedLines(
       env,
-      (l) => l.some((line) => line.includes(mark)),
+      (lines) => lines.filter((l) => l.includes(mark)),
+      (found) => found.length > 0,
       "the feed's closing summary",
     );
-    return lines.find((line) => line.includes(mark))!;
+    return line!;
   };
 
   // brandon-unfiled-3248.8ro6 §4e: a source's value moving between requests
@@ -424,19 +425,22 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     expect(shown.some((text) => text.includes("the picked mark"))).toBe(true);
     // [LAW:no-ambient-temporal-coupling] The log is written off the loop, so
     // the frame a click's view-open draws can reach the test before the line
-    // that records the open lands. The wait is a gate; the assertion below is
-    // the only failure, and on a timeout it reads what did land, so a run that
-    // fails says whether a click opened no view or logged it late.
-    const openedBy = (lines: readonly string[]): Array<string | undefined> =>
-      lines
-        .filter((l) => l.includes(`session view opened sid=${JSON.stringify(sid)} `))
-        .map((l) => / by=(\w+) /.exec(l)?.[1]);
-    const lines = await loggedWhen(
+    // that records the open lands. Wait for the lines; a wait that fails
+    // names the view-open lines that did land.
+    const opened = await loggedLines(
       env,
-      (l) => openedBy(l).length >= 3,
+      (lines) =>
+        lines.filter((l) =>
+          l.includes(`session view opened sid=${JSON.stringify(sid)} `),
+        ),
+      (found) => found.length >= 3,
       "three view-open lines for the session",
-    ).catch(() => logLines(env));
-    expect(openedBy(lines)).toEqual(["request", "click", "click"]);
+    );
+    expect(opened.map((l) => / by=(\w+) /.exec(l)?.[1])).toEqual([
+      "request",
+      "click",
+      "click",
+    ]);
   });
 
   test("a subscriber that arrives before the session's first render receives it", async () => {
@@ -505,7 +509,9 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   const renderEvents = (sid: string): string[] =>
     logLines(env).filter((l) => l.includes(` render sid=${sid} `));
   const laneLines = (sid: string): string[] =>
-    logLines(env).filter((l) => l.includes(" lane: ") && l.includes(`(session=${sid})`));
+    logLines(env).filter(
+      (l) => l.includes(" lane: ") && l.includes(`(session=${sid})`),
+    );
   const setState = (sid: string, key: string, value: string): Promise<void> =>
     click(sockPath, effectsUrl([{ verb: VERB_SET_STATE, args: [sid, key, value] }]));
 
