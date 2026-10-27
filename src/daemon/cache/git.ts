@@ -234,7 +234,7 @@ function watcherTargets(gitDir: string): WatchTargets {
   } catch {
     // ENOENT (worktree case) or other fs error — skip the dir target.
   }
-  return { files: [], dirs };
+  return { dirs };
 }
 
 // [LAW:one-source-of-truth] The branch one pass read, from whichever of its

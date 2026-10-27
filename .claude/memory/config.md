@@ -22,6 +22,8 @@ No variable is declared under another. The draw lands a read on the first declar
 
 There's no daemon-side overrides layer. A click that persists something edits the user's config file in place: it splices one value span and keeps every other byte, comments included. The daemon reloads through the same watcher a hand edit trips. A value written by the menu looks the same as a hand-edited one.
 
+A config file is watched through its directory by name, never by its own inode, because a write-then-rename replaces the inode and leaves an inode watch deaf with nothing to say so. A config file that is a symlink is watched in every directory its chain of file links passes through, by the name each hop has there, because each directory reports only its own children: re-pointing any link in the chain appears in that link's directory, and a write, which lands in the last target, appears in its. A linked directory on the way is not a hop: the watch sits in its canonical directory, so a write there is heard, and re-pointing the directory link itself is not.
+
 A click writes to the session's home file: the explicit path if there is one, else the user's XDG file, which is created on first write. It never writes a project or cwd layer, because that's somebody's repository.
 
 Every write first loads and validates the text it's about to write, and refuses it if it wouldn't load. It also refuses a change that a layer above the home would hide, and names that layer.

@@ -12,6 +12,10 @@ import { GitService, type GitInfo } from "../src/segments/git";
 import { ok, type Outcome } from "../src/utils/outcome";
 import { Holds } from "../src/utils/holds";
 import { until } from "./helpers/until";
+import {
+  WATCH_LIVENESS_BUDGET_MS,
+  WATCH_RETRY_MS,
+} from "./helpers/reload-signal";
 import { laneOutcome } from "../src/utils/reading";
 
 function makeRepo(): string {
@@ -30,27 +34,45 @@ function rmrf(dir: string): void {
 }
 
 describe("WatcherRegistry", () => {
-  test("HEAD modification fires invalidation within debounce window", async () => {
+  // fs.watch has no ready signal (on macOS the FSEvents stream goes live
+  // after the call returns), so the write is re-applied until an event
+  // proves the watch was live — the only proof there is — never written once
+  // after a sleep that bets on it.
+  test("a write to a watched name fires invalidation", async () => {
     const repo = makeRepo();
     const reg = new WatcherRegistry();
     let fired = 0;
     const headPath = path.join(repo, ".git/HEAD");
-    reg.acquire(repo, { files: [headPath], dirs: [] }, () => fired++);
-    await new Promise((r) => setTimeout(r, 50));
-
-    fs.writeFileSync(headPath, "ref: refs/heads/x\n");
-    await new Promise((r) => setTimeout(r, 400));
-
-    expect(fired).toBeGreaterThanOrEqual(1);
-    reg.closeAll();
-    rmrf(repo);
+    reg.acquire(
+      repo,
+      { dirs: [{ path: path.dirname(headPath), filenames: ["HEAD"] }] },
+      () => fired++,
+    );
+    try {
+      const rewrite = setInterval(
+        () => fs.writeFileSync(headPath, "ref: refs/heads/x\n"),
+        WATCH_RETRY_MS,
+      );
+      try {
+        await until(
+          () => fired >= 1,
+          "HEAD write fired the watch",
+          WATCH_LIVENESS_BUDGET_MS,
+        );
+      } finally {
+        clearInterval(rewrite);
+      }
+    } finally {
+      reg.closeAll();
+      rmrf(repo);
+    }
   });
 
   test("refcount: release closes watchers when refcount hits zero", async () => {
     const repo = makeRepo();
     const reg = new WatcherRegistry();
-    const h1 = reg.acquire(repo, { files: [], dirs: [] }, () => {});
-    const h2 = reg.acquire(repo, { files: [], dirs: [] }, () => {});
+    const h1 = reg.acquire(repo, { dirs: [] }, () => {});
+    const h2 = reg.acquire(repo, { dirs: [] }, () => {});
     expect(reg.size()).toBe(1);
     h1.release();
     expect(reg.size()).toBe(1); // refcount still > 0
@@ -62,11 +84,16 @@ describe("WatcherRegistry", () => {
   // brandon-unfiled-3248.576q: the registry bounds nothing — its consumers do.
   // An LRU cap here closed watches under holders that still held them.
   test("a slot closes only when its last holder releases it, however many are open", () => {
-    const counters = { watchersOpened: 0, watchersClosed: 0, watchRefusals: 0, watchErrors: 0 };
+    const counters = {
+      watchersOpened: 0,
+      watchersClosed: 0,
+      watchRefusals: 0,
+      watchErrors: 0,
+    };
     const reg = new WatcherRegistry({ counters });
     const fired: string[] = [];
     const handles = Array.from({ length: 300 }, (_, i) =>
-      reg.acquire(`k${i}`, { files: [], dirs: [] }, () => fired.push(`k${i}`)),
+      reg.acquire(`k${i}`, { dirs: [] }, () => fired.push(`k${i}`)),
     );
 
     expect(reg.size()).toBe(300);
@@ -88,9 +115,7 @@ describe("WatcherRegistry", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "watch-names-"));
     const reg = new WatcherRegistry();
     const seen: Invalidation[] = [];
-    reg.acquire(dir, { files: [], dirs: [{ path: dir }] }, (inv) =>
-      seen.push(inv),
-    );
+    reg.acquire(dir, { dirs: [{ path: dir }] }, (inv) => seen.push(inv));
     await new Promise((r) => setTimeout(r, 50));
     fs.writeFileSync(path.join(dir, "a.json"), "1");
     fs.writeFileSync(path.join(dir, "b.json"), "2");
@@ -116,16 +141,12 @@ describe("WatcherRegistry", () => {
     };
     const reg = new WatcherRegistry({ counters, logger: () => {} });
     const missing = path.join(os.tmpdir(), "watch-refused-no-such-folder");
-    const handle = reg.acquire(
-      "k",
-      { files: [], dirs: [{ path: missing }] },
-      () => {},
-    );
+    const handle = reg.acquire("k", { dirs: [{ path: missing }] }, () => {});
     expect(handle.refused).toEqual([
       { path: missing, reason: expect.stringContaining("ENOENT") },
     ]);
     // A second holder of the slot is told the same.
-    expect(reg.acquire("k", { files: [], dirs: [] }, () => {}).refused).toEqual(
+    expect(reg.acquire("k", { dirs: [] }, () => {}).refused).toEqual(
       handle.refused,
     );
     expect(counters).toEqual({
@@ -155,9 +176,7 @@ describe("WatcherRegistry", () => {
       };
       const reg = new WatcherRegistry({ counters, logger: () => {} });
       const seen: Invalidation[] = [];
-      reg.acquire("k", { files: [], dirs: [{ path: "/w" }] }, (inv) =>
-        seen.push(inv),
-      );
+      reg.acquire("k", { dirs: [{ path: "/w" }] }, (inv) => seen.push(inv));
       fake.emit("error", new Error("EMFILE: too many open files"));
       await until(() => seen.length > 0, "the error's invalidation");
       expect(seen).toEqual([
@@ -173,7 +192,7 @@ describe("WatcherRegistry", () => {
   test("closeAll closes every watcher", () => {
     const repo = makeRepo();
     const reg = new WatcherRegistry();
-    reg.acquire(repo, { files: [], dirs: [] }, () => {});
+    reg.acquire(repo, { dirs: [] }, () => {});
     expect(reg.size()).toBe(1);
     reg.closeAll();
     expect(reg.size()).toBe(0);

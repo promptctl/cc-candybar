@@ -72,6 +72,12 @@ const RETRY_MS = 4 * DEBOUNCE_MS;
 // latency seen, below Jest's 30 s testTimeout so the failure is this error.
 const MAX_ROUNDS = 64;
 
+// [LAW:one-source-of-truth] The one budget a test gives fs.watch to prove
+// itself live, for a test that retries its own mutation rather than a
+// RenderCache reload: the same cadence and the same number of chances.
+export const WATCH_RETRY_MS = RETRY_MS;
+export const WATCH_LIVENESS_BUDGET_MS = MAX_ROUNDS * RETRY_MS;
+
 function arrivesWithin(signal: Promise<void>, ms: number): Promise<boolean> {
   return new Promise((resolve) => {
     const timer = setTimeout(() => resolve(false), ms);

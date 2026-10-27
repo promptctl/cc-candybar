@@ -343,7 +343,7 @@ export class ManagedStorage {
       // slot's one callback is this generation's own.
       handle: this.watchers.acquire(
         `plugin-storage:${keyString(key)}`,
-        { files: [], dirs: [{ path: key.folder }] },
+        { dirs: [{ path: key.folder }] },
         (invalidation) => this.invalidated(watched, invalidation),
       ),
       sweep: setInterval(() => void this.sweep(key), STORAGE_SWEEP_EVERY_MS),

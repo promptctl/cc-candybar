@@ -36,12 +36,18 @@ const defaultLogger: WatcherLogger = (_level, message) => debug(message);
 // drift silently.
 export const DEBOUNCE_MS = 50;
 
-// Absolute filesystem paths the consumer wants invalidation for.
-// `files`: regular files (existence required to watch).
-// `dirs`: directories. Each may optionally restrict which child filenames
-//   should fire — without a filter every change in the dir fires (legacy
-//   git-refs behavior); with a filter only matching basenames fire (config
-//   case: avoids noise from sibling files in ~/.claude/).
+// Absolute directories the consumer wants invalidation for. Each may
+// optionally restrict which child filenames should fire — without a filter
+// every change in the dir fires (legacy git-refs behavior); with a filter only
+// matching basenames fire (config case: avoids noise from sibling files in
+// ~/.claude/).
+//
+// [LAW:types-are-the-program] A file is watched through its directory, by
+// name, never by its own inode: a watch on the file binds the inode it finds,
+// and a write-then-rename (the safe way to rewrite a file, and `writeAtomic`'s
+// way) replaces that inode, leaving the watch deaf with no event to say so. A
+// directory watch reports a child's in-place write and its rename alike, so
+// the contract offers nothing a consumer could go deaf on.
 export interface DirTarget {
   path: string;
   // If set, only fire when fs.watch reports a filename in this list.
@@ -50,7 +56,6 @@ export interface DirTarget {
 }
 
 export interface WatchTargets {
-  files: readonly string[];
   dirs: readonly DirTarget[];
 }
 
@@ -152,9 +157,10 @@ export class WatcherRegistry {
       // so; releasing it is a no-op, so callers don't crash mid-shutdown.
       return {
         release: () => {},
-        refused: [...targets.files, ...targets.dirs.map((d) => d.path)].map(
-          (path) => ({ path, reason: "the watcher registry is closed" }),
-        ),
+        refused: targets.dirs.map((d) => ({
+          path: d.path,
+          reason: "the watcher registry is closed",
+        })),
       };
     }
 
@@ -236,18 +242,6 @@ export class WatcherRegistry {
       this.logger("warn", `watch failed ${target}: ${reason}`);
       refused.push({ path: target, reason });
     };
-
-    for (const target of slot.targets.files) {
-      try {
-        const w = fs.watch(target, { persistent: false }, (_evt, filename) =>
-          fire(namedOf(filename)),
-        );
-        w.on("error", failedAt(target));
-        slot.watchers.push(w);
-      } catch (e) {
-        refuse(target, e);
-      }
-    }
 
     for (const target of slot.targets.dirs) {
       try {
