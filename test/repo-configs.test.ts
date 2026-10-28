@@ -21,7 +21,12 @@ import {
   UNOWNED_STORAGE,
   type ReloadedEntry,
 } from "../src/daemon/cache/render";
-import { repoAnswerFields, repoQuestions } from "../src/daemon/repo-configs";
+import {
+  repoAnswerFields,
+  repoConfigs,
+  repoConfigsPath,
+  repoQuestions,
+} from "../src/daemon/repo-configs";
 import { SessionState } from "../src/daemon/session-state";
 import { VERB_REPO_CONFIG } from "../src/click/wire";
 import { linkSigner } from "../src/click/link-signer";
@@ -251,4 +256,23 @@ test("the question offers each answer as a link signed for its session, director
     const other = answer === "approved" ? "declined" : "approved";
     expect(signer.verify(repoAnswerFields(sid, dir, other), mac)).toBe(false);
   }
+});
+
+// An answer kept where the book used to live, directly in the state
+// directory, still holds once the book has a folder of its own.
+describe("the book in the state directory", () => {
+  test("moves into the book's folder on the first read", () => {
+    const state = path.join(root, "state");
+    fs.mkdirSync(state);
+    fs.writeFileSync(
+      path.join(state, "repo-configs.json"),
+      JSON.stringify({ [project]: "approved" }),
+    );
+    expect(repoConfigs(state).read()).toEqual({
+      kind: "ok",
+      value: { [project]: "approved" },
+    });
+    expect(fs.existsSync(path.join(state, "repo-configs.json"))).toBe(false);
+    expect(fs.existsSync(repoConfigsPath(state))).toBe(true);
+  });
 });

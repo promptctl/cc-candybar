@@ -3,6 +3,7 @@
 // repository awaiting one. The gate itself is pure
 // (src/config/loader/repo-gate.ts); this is where its answers are kept.
 
+import fs from "node:fs";
 import path from "node:path";
 import type { LinkSigner, SignedFields } from "../click/link-signer.js";
 import {
@@ -29,17 +30,42 @@ import {
 import { stateDir } from "./paths.js";
 
 const REPO_CONFIGS_FILE = "repo-configs.json";
+// The book's own folder: the daemon watches it so a hand edit (removing an
+// entry to be asked again) reaches every bar, and the state directory itself
+// holds the log, which writes on every request — a watch there wakes on each
+// line.
+const REPO_CONFIGS_DIR = "repo-configs";
 
 // [LAW:one-source-of-truth] One book per user, under the state directory:
 // an answer given in one session holds in every other, and after a restart.
+export function repoConfigsDir(dir: string = stateDir()): string {
+  return path.join(dir, REPO_CONFIGS_DIR);
+}
+
 export function repoConfigsPath(dir: string = stateDir()): string {
-  return path.join(dir, REPO_CONFIGS_FILE);
+  return path.join(repoConfigsDir(dir), REPO_CONFIGS_FILE);
+}
+
+// A book kept directly in the state directory moves into the book's folder
+// the first time anything reads the answers, so no answer is lost to the move.
+function adoptStateDirBook(dir: string): void {
+  const loose = path.join(dir, REPO_CONFIGS_FILE);
+  if (!fs.existsSync(loose) || fs.existsSync(repoConfigsPath(dir))) return;
+  fs.mkdirSync(repoConfigsDir(dir), { recursive: true });
+  fs.renameSync(loose, repoConfigsPath(dir));
 }
 
 export const repoConfigs = (
   dir: string = stateDir(),
-): StateFile<RepoConfigBook> =>
-  stateFile(dir, REPO_CONFIGS_FILE, {}, parseRepoConfigBook);
+): StateFile<RepoConfigBook> => {
+  adoptStateDirBook(dir);
+  return stateFile(
+    repoConfigsDir(dir),
+    REPO_CONFIGS_FILE,
+    {},
+    parseRepoConfigBook,
+  );
+};
 
 // The gate a one-shot load outside the daemon (the demo, the gallery) runs
 // under. It loads the one file it was named, or none, never a searched chain,

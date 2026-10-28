@@ -55,7 +55,7 @@ import { PRESET_FLOOR, presetRoot } from "../src/config/presets";
 import { viewFacts } from "./helpers/view-facts";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { answerRepo } from "./helpers/repo-approval";
-import { repoConfigsPath } from "../src/daemon/repo-configs";
+import { repoConfigsDir, repoConfigsPath } from "../src/daemon/repo-configs";
 import { stateDir } from "../src/daemon/paths";
 
 // Flatten a layout tree to its segment names, in pre-order — the post-`root`
@@ -891,6 +891,19 @@ describe("RenderCache", () => {
     }
   });
 
+  // The book's folder, never the state directory, whose log writes on every
+  // request.
+  test("the cache watches the answers' folder, not the state directory", () => {
+    const { cleanups, watchers } = makeCache();
+    try {
+      const dirs = watchers.watchedDirs();
+      expect(dirs).toContain(realpathSync.native(repoConfigsDir()));
+      expect(dirs).not.toContain(realpathSync.native(stateDir()));
+    } finally {
+      for (const fn of cleanups) fn();
+    }
+  });
+
   test("a throwing observer cannot push the cache over its entry cap", () => {
     // maxEntries=4. Every lookup throws from the observer AND inserts its
     // entry (pinned above); the cap must still hold across five of them.
@@ -933,37 +946,29 @@ describe("RenderCache", () => {
     }
   });
 
-  // The daemon writes the answers itself and tells the cache, so the state
-  // directory it logs into is never watched.
-  test("the cache watches nothing in the state directory", () => {
-    mkdirSync(stateDir(), { recursive: true });
-    const { cleanups, watchers } = makeCache();
-    try {
-      expect(watchers.watchedDirs()).not.toContain(
-        realpathSync.native(stateDir()),
-      );
-    } finally {
-      for (const fn of cleanups) fn();
-    }
-  });
-
-  // A recorded answer reloads every entry under the new book.
-  test("an entry follows the answers when the cache reloads every entry", () => {
+  // The answers for repositories are one watch for the whole cache, never one
+  // per entry, and a change to them reloads the entries under the new answer.
+  test("an entry follows the answers through the cache's one watch", async () => {
     const { dir, cleanup } = mkConfigDir();
     const lines: string[] = [];
-    const { cache, cleanups } = makeCache(undefined, (_level, msg) =>
-      lines.push(msg),
+    const { cache, cleanups, reloads, watchers } = makeCache(
+      undefined,
+      (_level, msg) => lines.push(msg),
     );
     try {
+      const own = watchers.size();
       const file = join(dir, ".cc-candybar.json5");
       writeFileSync(file, `{ segments: { t: { template: "x" } } }`);
       const entry = cache.getOrCreate(dir, dir, undefined);
       expect(entry.configLayers).toEqual([file]);
-      writeFileSync(
-        repoConfigsPath(),
-        JSON.stringify({ [realpathSync.native(dir)]: "declined" }),
+      expect(watchers.size()).toBe(own + 1);
+      // A rewrite of the book, so every retry the signal makes is an event.
+      const declined = JSON.stringify({
+        [realpathSync.native(dir)]: "declined",
+      });
+      await reloads.after(entry, () =>
+        writeFileSync(repoConfigsPath(), declined),
       );
-      cache.reloadEvery();
       expect(entry.configLayers).toEqual([]);
       expect(entry.repos.declined).toEqual([realpathSync.native(dir)]);
       expect(lines).toContain(

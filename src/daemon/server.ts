@@ -1695,7 +1695,6 @@ const verbCtx = {
       origin.cwd,
       origin.configFile ?? undefined,
     ),
-  reloadEvery: () => renderCache.reloadEvery(),
   // The storage keys of the same entry `configFor` reads the config of.
   sourcesFor: (origin: RenderOrigin) =>
     renderCache.getOrCreate(

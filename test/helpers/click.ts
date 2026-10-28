@@ -146,7 +146,6 @@ export function testVerbContext(
     // cache hands in its own — test/settings-config-menu.test.ts records each
     // reload to pin write → reload → release.
     reloadConfig: () => {},
-    reloadEvery: () => {},
     // A test that drives a run click hands in its own run owner and the
     // storage keys of its config's sources.
     sourcesFor: () => {
