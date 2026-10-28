@@ -102,12 +102,8 @@ export function renderCarousel(
   // again; given, it fires that declared action instead — the settings menu's
   // controls open the list of every option there, so a click on the name
   // opens the choices and only the arrows step. The centre's TEXT is the
-  // carousel's own current option when it fires the option, so the name the
-  // click shows is the one it writes (an unknown current value shows the
-  // first option, the one ▶ steps from). Given, the centre writes nothing, so
-  // it names the value the key holds: a settings control offers part of its
-  // setting's domain when the rest sits in another picker, and a value from
-  // the other part is still the one in force.
+  // carousel's own centre either way: an option when the click writes it, the
+  // value the key holds when it writes nothing (see the ring below).
   centreAction?: string,
 ): RichText {
   // [LAW:no-silent-failure] A carousel is centred on the value its key holds;
@@ -134,11 +130,21 @@ export function renderCarousel(
   // or show, so the ring is empty, as a grid over it has no cells.
   if (count === 0) return assemble([], true);
   const current = readVar(store, apply.stateVar);
-  // The centre is an option, not the value — which is why "current" below is
-  // the picker's own comparison, never "is the centre".
-  const indexAt = ringAround(options, current);
-  const ring = (offset: number): string => options[indexAt(offset)]!;
-  const held = current === "" ? ring(0) : current;
+  // [LAW:dataflow-not-control-flow] The ring the arrows step around, centred
+  // on what the centre shows. A centre that writes is an option, so a value
+  // the domain lacks counts as its first member, by the rule every enumerated
+  // control folds over. A centre that writes nothing names the value the key
+  // holds — a settings control offers part of its setting's domain when the
+  // rest sits in another picker, and a value from the rest is still the one in
+  // force — so that value takes a place of its own just before the first
+  // member: ▶ steps to the first, ◀ to the last. An unset key holds the first
+  // member either way.
+  const named =
+    centreAction === undefined || current === "" || options.includes(current)
+      ? options
+      : [current, ...options];
+  const indexAt = ringAround(named, current);
+  const ring = (offset: number): string => named[indexAt(offset)]!;
   // Each offset's click is realized once: the arrow and the neighbour name
   // beside it write the same option.
   const urls = new Map<number, string>();
@@ -160,7 +166,7 @@ export function renderCarousel(
   };
   const face = (offset: number): RichText =>
     itemPaint(
-      { index: indexAt(offset), count },
+      { index: options.indexOf(ring(offset)), count },
       ring(offset),
       ring(offset),
       ring(offset) === current,
@@ -182,18 +188,12 @@ export function renderCarousel(
           // Drawn as the arrows are, in the segment's own colours: the name
           // is the control's text, not an option laid out for picking
           // (Brandon: "The name loses its styling"), its swatch beside it
-          // when the domain is colour-valued.
-          // [LAW:one-source-of-truth] The value the key holds, not the ring's
-          // centre: the two differ only when the ring lacks it, and then the
-          // centre would name a value the key does not hold. An unset key
-          // holds the first member, by the rule every enumerated control
-          // folds over.
-          valuePaint(renderLook(runtime, "{{ carousel }}"), apply.paletteOf)(
-            { index: indexAt(0), count },
-            held,
-            held,
-            false,
-          ),
+          // when the domain is colour-valued. A value the domain lacks has
+          // no palette to show, so it is its name alone.
+          valuePaint(
+            renderLook(runtime, "{{ carousel }}"),
+            named === options ? apply.paletteOf : undefined,
+          )({ index: indexAt(0), count }, ring(0), ring(0), false),
           effectsUrl(
             realize(
               runtime.compiled.get(centreAction)!,
@@ -213,7 +213,7 @@ export function renderCarousel(
     cellWidth(CAROUSEL_NEXT);
   const levels = neighbourLevels(
     (offset) => option(offset).cellLength,
-    count,
+    named.length,
     base,
     ledRowBudget(runtime),
     neighbours,

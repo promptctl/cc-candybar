@@ -435,14 +435,26 @@ const submenusBeside = (name: SettingName): SubmenuName[] =>
 // A setting's trials are offered by its trials picker, so its own control
 // offers the rest of its domain.
 const offeredHere = (
+  name: SettingName,
   domain: ControlDomain,
   trials: readonly string[],
-): ControlDomain =>
-  typeof domain === "object" &&
-  "from" in domain &&
-  typeof domain.from !== "string"
-    ? { from: domain.from.filter((member) => !trials.includes(member)) }
-    : domain;
+): ControlDomain => {
+  if (
+    typeof domain === "object" &&
+    "from" in domain &&
+    typeof domain.from !== "string"
+  ) {
+    return { from: domain.from.filter((member) => !trials.includes(member)) };
+  }
+  // [LAW:no-silent-failure] Only a list of members can leave its trials out:
+  // trials named on any other domain would sit on the control everyone turns.
+  if (trials.length > 0) {
+    throw new Error(
+      `setting "${name}" names trials, but its control does not range a list of members to leave them out of`,
+    );
+  }
+  return domain;
+};
 const menuControl = (
   name: SettingName,
   id: string,
@@ -475,6 +487,7 @@ const CONTROLS: readonly MenuControl[] = (
     name,
     PLACE[name],
     offeredHere(
+      name,
       settingControlDomain(SETTINGS[name].configKey),
       SETTINGS[name].trials,
     ),

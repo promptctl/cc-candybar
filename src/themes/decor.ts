@@ -177,17 +177,6 @@ const pairWindow = (apart: number): Shade => ({
   quantize: "bin",
 });
 
-/**
- * [LAW:one-type-per-behavior] The shade dial: every position a user can turn
- * it to, lowest first (candybar-theme-colours-6fq5.e5n). The window of three
- * rungs slides up the ladder from the role's deepest shades to its brightest,
- * and `middle` — centred on the role itself — is where it rests. Below the
- * deepest window the dial reaches `muted`: every cell of a row in the role's
- * muted form under the role's own text, one colour per row, its cells parted
- * by the joiner's divider. A new position is one row here: the option domain,
- * the loader's enum, the settings control and every floor derive from this
- * table.
- */
 // Trial jumps (brandon-menus-sjhy.4fi, "a bigger jump in color between
 // sequential segments"): the role's window widened to two and three rungs each
 // side, and the strict two-tone pairs at those widths. Positions of the dial
@@ -203,6 +192,17 @@ export const TRIAL_SHADE_NAMES = Object.keys(TRIAL_SHADES) as ReadonlyArray<
   keyof typeof TRIAL_SHADES
 >;
 
+/**
+ * [LAW:one-type-per-behavior] The shade dial: every position a user can turn
+ * it to, lowest first (candybar-theme-colours-6fq5.e5n). The window of three
+ * rungs slides up the ladder from the role's deepest shades to its brightest,
+ * and `middle` — centred on the role itself — is where it rests. Below the
+ * deepest window the dial reaches `muted`: every cell of a row in the role's
+ * muted form under the role's own text, one colour per row, its cells parted
+ * by the joiner's divider. A new position is one row here: the option domain,
+ * the loader's enum, the settings control and every floor derive from this
+ * table.
+ */
 export const SHADES = {
   muted: { tones: ["muted"], text: roleText, quantize: "point" },
   deepest: ladderWindow(0),
@@ -1007,21 +1007,11 @@ function searchState(
   // shows: a balance sits between two cells, and at 256 colours or ansi it
   // rounds onto one of them where an end of the axis does not.
   //
-  // [LAW:dataflow-not-control-flow] The floors give way in one order, as data:
-  // told from the items and clear of every cell; then clear of every cell,
-  // told from nothing — the items can leave no room to be told from (a theme
-  // whose shades are one colour), and a trigger that cannot be told from them
-  // must still read against its cells; then the furthest.
-  const floors: ReadonlyArray<readonly ColorRgba[]> = [told, []];
-  const firstMet = (
-    meet: (these: readonly ColorRgba[]) => ColorRgba | undefined,
-  ): ColorRgba | undefined => {
-    for (const these of floors) {
-      const met = meet(these);
-      if (met !== undefined) return met;
-    }
-    return undefined;
-  };
+  // The floors give way in one order: told from the items and clear of every
+  // cell; then clear of every cell, told from nothing — the items can leave no
+  // room to be told from (a theme whose shades are one colour), and a trigger
+  // that cannot be told from them must still read against its cells; then the
+  // furthest.
   let fineOffers: readonly ColorRgba[] | undefined;
   const fineOnce = (): readonly ColorRgba[] => (fineOffers ??= fine());
   const meeting = (these: readonly ColorRgba[]): ColorRgba | undefined => {
@@ -1029,7 +1019,8 @@ function searchState(
     return candidates.find(ok) ?? fineOnce().find(ok);
   };
   const chosen =
-    firstMet(meeting) ??
+    meeting(told) ??
+    meeting([]) ??
     [...candidates, ...fineOnce()].reduce((a, b) =>
       standsAsDrawn(b) > standsAsDrawn(a) ? b : a,
     );
@@ -1037,7 +1028,7 @@ function searchState(
   // it draws that meets the first floor it can, where one does, and the
   // shortfall is measured on the pair the terminal shows — never on
   // truecolor's while the label names the depth.
-  const state = firstMet((these) => drawnClear(these)(chosen)) ?? chosen;
+  const state = drawnClear(told)(chosen) ?? drawnClear([])(chosen) ?? chosen;
   const stands = standsAsDrawn(state);
   return {
     anchor: chosen,
@@ -1573,6 +1564,10 @@ function drawnItems(
       others.every(
         (other) => deltaE(candidate, drawn(other)) >= SEAM_MIN_DELTA_E,
       );
+  // [LAW:no-silent-failure] Where the depth draws no colour that stands off
+  // the rest, the item is drawn at its place — as drawn, like every colour
+  // `ensureDrawn` returns — and `seamShortfalls` reports the pair it stands
+  // too near.
   return groundCells(palette, bandEntries(disclosure)).reduce<ColorRgba[]>(
     (placed, item) => [
       ...placed,
@@ -1631,30 +1626,36 @@ function computeUnroundedBand(
   const enclosing = enclosingPlane(palette, disclosure, drawnAt);
   // The items sit on the plane, so it stands a seam off each of them too: a
   // dark theme's background lies the way its darkening rungs do.
-  const items = groundCells(palette, bandEntries(disclosure));
-  const holds = (plane: ColorRgba): boolean =>
-    deltaE(shownTrue(state), shownTrue(plane)) >= BAND_FLOORS.triggerPlane &&
-    enclosing.every(
-      (outer) =>
-        deltaE(shownTrue(outer), shownTrue(plane)) >= BAND_FLOORS.nestedPlane,
-    ) &&
-    toldFrom(shownTrue(plane), items.map(shownTrue));
+  const items = groundCells(palette, bandEntries(disclosure)).map(shownTrue);
+  const holds =
+    (told: readonly ColorRgba[]) =>
+    (plane: ColorRgba): boolean =>
+      deltaE(shownTrue(state), shownTrue(plane)) >= BAND_FLOORS.triggerPlane &&
+      enclosing.every(
+        (outer) =>
+          deltaE(shownTrue(outer), shownTrue(plane)) >= BAND_FLOORS.nestedPlane,
+      ) &&
+      toldFrom(shownTrue(plane), told);
   const intoBackground = into("background", recession);
+  const planes = [
+    intoBackground,
+    into("foreground", recession),
+    into("background", BAND_RECESSION.cap),
+    into("foreground", BAND_RECESSION.cap),
+    ...PLANE_STEPS.toSorted(
+      (a, b) => Math.abs(a - recession) - Math.abs(b - recession),
+    ).flatMap((amount) => [
+      into("background", amount),
+      into("foreground", amount),
+    ]),
+  ];
+  // The item seam gives way first, as a trigger's does: a theme whose shades
+  // crowd every plane still keeps the plane off its trigger and the plane it
+  // hangs in, and the seam it misses is reported.
   return {
     state,
     plane:
-      [
-        intoBackground,
-        into("foreground", recession),
-        into("background", BAND_RECESSION.cap),
-        into("foreground", BAND_RECESSION.cap),
-        ...PLANE_STEPS.toSorted(
-          (a, b) => Math.abs(a - recession) - Math.abs(b - recession),
-        ).flatMap((amount) => [
-          into("background", amount),
-          into("foreground", amount),
-        ]),
-      ].find(holds) ?? intoBackground,
+      planes.find(holds(items)) ?? planes.find(holds([])) ?? intoBackground,
   };
 }
 
@@ -1692,14 +1693,18 @@ function planeFloors(
   const plane = unroundedPlane(depth);
   const keptApart = (floor: number, other: ColorRgba): number =>
     deltaE(shownTrue(plane), shownTrue(other)) >= floor ? floor : 0;
-  // [LAW:one-source-of-truth] Whether the nested trigger clears the plane it
-  // sits on is its own search's word: it was searched against this plane as
-  // the depth rounds it, and `short` says whether what the depth draws for it
-  // clears. The drawn plane keeps that exactly where the nested band reports
-  // it kept — measured on the unrounded pair instead, a plane repaired for
-  // another floor left a nested trigger it had cleared short of it, unreported
-  // (88 bands at ansi under the `none` style alone).
-  const keptUnder = nested.short === null ? STATE_FLOOR : 0;
+  // Whether the nested trigger clears the plane it sits on, as the depth draws
+  // both: it was searched against this plane as the depth rounds it. Measured
+  // in truecolor instead, a plane repaired for another floor left a nested
+  // trigger it had cleared short of it, unreported (88 bands at ansi under the
+  // `none` style alone); read off the nested search's whole shortfall, which
+  // also covers the ✕ it stands beside, a trigger short of the ✕ alone lost
+  // the plane's floor under it.
+  const shown = shownAt(drawnAt);
+  const keptUnder =
+    contrastRatio(shown(nested.state), shown(plane)) >= STATE_FLOOR
+      ? STATE_FLOOR
+      : 0;
   const apart =
     (other: ColorRgba, floor: number): PlaneFloor =>
     (candidate, drawn) =>
