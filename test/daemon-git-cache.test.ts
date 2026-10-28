@@ -1552,6 +1552,53 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
     svc.close();
   });
 
+  // The pass between a worktree's removal and its re-add finds the git
+  // directory gone. It keeps the watch it holds rather than trade it for a
+  // refused slot: on macOS FSEvents keeps a held watch on its path, and on
+  // every platform the period rebinds once a directory is there again.
+  test("a pass over a repo whose git directory is gone keeps the held watch until one is there to bind", async () => {
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), "git-cache-gone-"));
+    const gitDir = path.join(repo, ".git");
+    const create = () => {
+      fs.mkdirSync(path.join(gitDir, "refs", "heads"), { recursive: true });
+      fs.writeFileSync(path.join(gitDir, "HEAD"), "ref: refs/heads/main\n");
+    };
+    create();
+    const { svc, inner, counters, logs } = counted({ periodMs: 60_000 });
+    inner.repoRootByDir[repo] = repo;
+    const watchMoves = () =>
+      passes(logs).map((l) => / watch=(\w+) /.exec(l)![1]);
+    try {
+      await gitOf(svc, new Holds(), repo, {});
+      expect(counters.watchersOpened).toBe(1);
+
+      fs.rmSync(gitDir, { recursive: true, force: true });
+      svc.changed(repo);
+      await until(() => passes(logs).length === 2, "the pass over the gap");
+      expect(watchMoves()).toEqual(["kept", "kept"]);
+      expect(counters).toEqual({
+        watchersOpened: 1,
+        watchersClosed: 0,
+        watchRefusals: 0,
+        watchErrors: 0,
+      });
+
+      create();
+      svc.changed(repo);
+      await until(() => passes(logs).length === 3, "the pass after the re-add");
+      expect(watchMoves()).toEqual(["kept", "kept", "rebound"]);
+      expect(counters).toEqual({
+        watchersOpened: 2,
+        watchersClosed: 1,
+        watchRefusals: 0,
+        watchErrors: 0,
+      });
+    } finally {
+      svc.close();
+      fs.rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
   // A pass's first act derives the watch's key by stat'ing each directory. A
   // directory that cannot be stat'd (a symlink loop here; an unreadable one in
   // the field) must not throw the pass, which would leave every value pending

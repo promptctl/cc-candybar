@@ -254,13 +254,29 @@ function optionsKey(options: GitOptions): string {
 // key. Every pass derives the spec again, so a recreated repo is heard within
 // one period, and a layout change at the same path (a clone replaced by a
 // worktree) is the same case.
-function watchSpec(root: string, gitDir: string, commonDir: string): WatchSpec {
+//
+// `gone`: a directory the spec names is not there, so there is nothing to
+// bind yet.
+interface RepoWatchSpec {
+  readonly spec: WatchSpec;
+  readonly gone: boolean;
+}
+
+function watchSpec(
+  root: string,
+  gitDir: string,
+  commonDir: string,
+): RepoWatchSpec {
   const dirs: DirTarget[] = [
     { path: gitDir, filenames: ["HEAD", "index"] },
     { path: path.join(commonDir, "refs", "heads"), recursive: true },
   ];
-  const bound = dirs.map((d) => `${d.path}@${boundKey(d.path)}`).join("|");
-  return { key: `git:${root}:${bound}`, targets: { dirs } };
+  const keys = dirs.map((d) => boundKey(d.path));
+  const bound = dirs.map((d, i) => `${d.path}@${keys[i]}`).join("|");
+  return {
+    spec: { key: `git:${root}:${bound}`, targets: { dirs } },
+    gone: keys.includes("gone"),
+  };
 }
 
 // [LAW:one-source-of-truth] The branch one pass read, from whichever of its
@@ -538,11 +554,18 @@ export class GitDataProvider {
     held: HeldWatch | null,
   ): { readonly watch: HeldWatch; readonly move: WatchMove } {
     const gitDir = this.inner.resolveGitDir(root);
-    const spec = watchSpec(
+    const { spec, gone } = watchSpec(
       root,
       gitDir,
       this.inner.resolveCommonGitDir(gitDir),
     );
+    // A directory that is gone binds nothing yet. The pass that lands between
+    // a worktree's removal and its re-add (the removal fires the watch) keeps
+    // the watch it holds rather than trade it for a slot the OS refuses:
+    // FSEvents keeps a held watch on its path, and the period rebinds once the
+    // path names a directory again, whose key differs. The build holds
+    // nothing, and takes the refused slot the period refreshes.
+    if (held !== null && gone) return { watch: held, move: "kept" };
     const followed = this.watchers.follow(held, spec, () => this.changed(root));
     // [LAW:nothing-unseen] A rebind is the fact that the directories moved,
     // and which the repo hears now: a change that fires nothing is read
