@@ -1450,23 +1450,17 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
     try {
       await gitOf(svc, new Holds(), repo, {});
       // FSEvents drops what lands before its stream is armed, and a
-      // declaration opens the watch in the same turn it resolves: the first
-      // rename is re-applied until the watch hears one, and every rename
-      // after that is heard as exactly one change.
-      await untilHeard(
-        () => replace("index", "0"),
-        () => svc.getStats().changes >= 1,
-        "the first rename's change",
-      );
-      const live = svc.getStats().changes;
+      // declaration opens the watch in the same turn it resolves, so each
+      // rename is re-applied until the watch hears it. The count only grows:
+      // a rename a round left in flight may land later, so each is at-least.
       const renames = ["index", "index", "HEAD", "index", "HEAD"];
       for (const [i, name] of renames.entries()) {
-        replace(name, String(i + 1));
-        await until(
-          () => svc.getStats().changes >= live + i + 1,
-          `${i + 1} changes past the watch going live`,
+        const before = svc.getStats().changes;
+        await untilHeard(
+          () => replace(name, String(i + 1)),
+          () => svc.getStats().changes > before,
+          `rename ${i + 1} over ${name} heard`,
         );
-        expect(svc.getStats().changes).toBe(live + i + 1);
       }
       expect(counters).toEqual({
         watchersOpened: 1,

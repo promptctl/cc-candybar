@@ -44,20 +44,13 @@ export class ReloadSignal {
   // success or failure alike; the caller asserts on the outcome it wanted.
   // `mutate` must leave the disk in the same final state on every call AND
   // emit an fs event on every call (a plain overwrite does; a bare unlink
-  // does not — pair it with a rewrite). The subscription is taken in the
-  // same synchronous block as the mutation, so fact 1 above holds per round.
+  // does not — pair it with a rewrite). One subscription, taken before the
+  // first mutation, is fact 1 above: every mutation leaves the same state, so
+  // a reload that began after any of them observed it. The condition is the
+  // reload's own promise, so the wait ends on the event, not on a poll tick.
   async after(entry: ReloadedEntry, mutate: () => void): Promise<void> {
-    let observed = false;
-    await untilHeard(
-      () => {
-        void this.next(entry).then(() => {
-          observed = true;
-        });
-        mutate();
-      },
-      () => observed,
-      `a reload of ${entry.projectDir}`,
-    );
+    const reloaded = this.next(entry).then(() => true);
+    await untilHeard(mutate, () => reloaded, `a reload of ${entry.projectDir}`);
   }
 
   private next(entry: ReloadedEntry): Promise<void> {
@@ -73,8 +66,9 @@ export class ReloadSignal {
 // a retry must at least outwait the debounce, or every round re-mutates before
 // the first one could possibly have reloaded.
 const RETRY_MS = 4 * DEBOUNCE_MS;
-// 64 fresh chances (~13 s at the cadence above): far above any delivery
-// latency seen, below Jest's 30 s testTimeout so the failure is this error.
+// 64 fresh chances: far above any delivery latency seen, and ~16 s at the
+// cadence above (a round is the cadence plus at most one poll tick), below
+// Jest's 30 s testTimeout so the failure is this error.
 const MAX_ROUNDS = 64;
 
 // [LAW:single-enforcer] THE retry-until-heard loop for a watch: `mutate` is
@@ -86,7 +80,10 @@ const MAX_ROUNDS = 64;
 // path or a plain overwrite does), and `heard` is read until it holds, so a
 // condition over something a later event can move (a count) must be
 // at-least, never exactly. [LAW:no-silent-failure] A throw from `mutate`
-// lands on the caller's own await, not in a detached timer callback.
+// lands on the caller's own await, not in a detached timer callback, and a
+// probe still in flight when its round expires is not swallowed: the loop
+// goes on, so its late throw stays unhandled and loud rather than hidden
+// under a later round's pass.
 export async function untilHeard(
   mutate: () => void,
   heard: Condition,
@@ -94,11 +91,9 @@ export async function untilHeard(
 ): Promise<void> {
   for (let round = 1; round <= MAX_ROUNDS; round++) {
     mutate();
-    const ending = await holdsWithin(heard, RETRY_MS);
-    if (ending.kind === "held") return;
-    ending.inFlight?.catch(() => undefined);
+    if ((await holdsWithin(heard, RETRY_MS)).kind === "held") return;
   }
   throw new Error(
-    `${nameOf(what)} did not hold after ${MAX_ROUNDS} mutations (${MAX_ROUNDS * RETRY_MS} ms)`,
+    `${nameOf(what)} did not hold after ${MAX_ROUNDS} mutations ${RETRY_MS} ms apart`,
   );
 }
