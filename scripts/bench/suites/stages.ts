@@ -71,7 +71,7 @@ async function prepared(
 // reports these rather than throwing, which is why a sample cannot vouch for
 // itself.
 function drawnClean(
-  drew: ReturnType<typeof renderEffective>,
+  drew: Awaited<ReturnType<typeof renderEffective>>,
   what: string,
 ): number {
   if (drew.failures.size > 0 || drew.rendered.length === 0) {
@@ -106,9 +106,12 @@ async function drawing(
       );
       const start = Date.now();
       let bytes = 0;
-      const ms = await repeat(samples, (i) => {
+      const ms = await repeat(samples, async (i) => {
         const at = instantOf(new Date(start + (i + 4) * 1000));
-        bytes = drawnClean(renderEffective(config, effective, draw.width, at), what);
+        bytes = drawnClean(
+          await renderEffective(config, effective, draw.width, at),
+          what,
+        );
       });
       return { ms, bytes };
     } finally {
@@ -195,7 +198,7 @@ export const STAGES: readonly Benchmark[] = [
               () => false,
             );
             const started = performance.now();
-            const drew = renderEffective(
+            const drew = await renderEffective(
               config,
               effective,
               DRAW_WIDTH,
