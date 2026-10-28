@@ -66,14 +66,17 @@ export class ReloadSignal {
 // a retry must at least outwait the debounce, or every round re-mutates before
 // the first one could possibly have reloaded.
 const RETRY_MS = 4 * DEBOUNCE_MS;
-// 64 fresh chances: far above any delivery latency seen, and ~16 s at the
-// cadence above (a round is the cadence plus at most one poll tick), below
-// Jest's 30 s testTimeout so the failure is this error.
-const MAX_ROUNDS = 64;
+// 48 fresh chances: far above any delivery latency seen, and ~12 s at the
+// cadence above (a round is the cadence plus at most one poll tick), so two
+// waits in sequence still end below Jest's 30 s testTimeout and the failure
+// is this error, with the test's cleanup run.
+const MAX_ROUNDS = 48;
 
 // [LAW:single-enforcer] THE retry-until-heard loop for a watch: `mutate` is
 // applied at once and then once per round until `heard` holds within the
-// round's cadence, or the wait fails by name after MAX_ROUNDS rounds. Only a
+// round's cadence, or the wait fails by name after MAX_ROUNDS rounds.
+// [LAW:one-source-of-truth] The cadence and the chances are the constants
+// above, so every watch a test proves live gets the same budget. Only a
 // delivered event proves a watch live, so `after` is this loop with "heard"
 // being a reload, and a test that drives a watch itself passes the condition
 // it reads. `mutate` must emit an fs event on every call (a rename over the

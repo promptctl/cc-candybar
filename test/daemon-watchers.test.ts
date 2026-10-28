@@ -393,20 +393,20 @@ describe("GitDataProvider + watchers integration", () => {
       await laneOutcome(svc.declare(holds, repo, {}));
       expect(inner.calls).toBe(1);
 
-      // HEAD is rewritten until the watch proves itself live by a re-read: a
-      // write before FSEvents goes live is never reported. Every rewrite the
-      // watch hears is a change, and one mid-read queues a re-read after it,
-      // so the count is at least one more.
+      // HEAD is rewritten until the watch proves itself live by a change and
+      // its re-read: a write before FSEvents goes live is never reported.
+      // Every rewrite the watch hears is a change, and one mid-read queues a
+      // re-read after it, so the count is at least one more. The change is
+      // part of the condition so a period's re-read cannot stand in for it.
       await untilHeard(
         () =>
           fs.writeFileSync(
             path.join(repo, ".git/HEAD"),
             "ref: refs/heads/y\n",
           ),
-        () => inner.calls >= 2,
+        () => svc.getStats().changes >= 1 && inner.calls >= 2,
         "the HEAD change's re-read",
       );
-      expect(svc.getStats().changes).toBeGreaterThanOrEqual(1);
       // The read takes the value the change's re-read stored: a hit, never a
       // miss that waits on a read. The reader's count is not the measure
       // here, because a re-read a late event queued may begin on any turn.
