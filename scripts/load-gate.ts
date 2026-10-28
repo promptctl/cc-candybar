@@ -830,10 +830,11 @@ async function run(): Promise<{
   const failures = tally(steadyFailures.map((r) => r.outcome));
   const expected = (SESSIONS * STEADY_MS) / SESSION_PERIOD_MS;
   const charges = samples.map((s) => s.charge);
-  // The charge read after the final collection, with every session's state
-  // still held: what these sessions cost, without V8's garbage. A run whose
-  // reading went unanswered has none, and fails here as well as on its own
-  // check.
+  // The charge read after the final collection and the drain of the sessions'
+  // last renders, with every session's state still held: what these sessions
+  // cost, without the garbage V8 lets the old generation hold under load. The
+  // drain's own garbage is small beside that headroom. A run whose reading
+  // went unanswered has none, and fails here as well as on its own check.
   const chargeAfterCollection =
     samples.find((s) => s.phase === "after")?.charge ?? null;
   const climb = heapAfter - heapBefore;
@@ -927,7 +928,7 @@ async function run(): Promise<{
       name: "charge once collected within the budget",
       pass:
         chargeAfterCollection !== null && chargeAfterCollection <= BUDGET_BYTES,
-      detail: `${chargeAfterCollection === null ? "no reading after the collection" : `${mb(chargeAfterCollection)} MB`} of ${mb(BUDGET_BYTES)} MB, ${mb(Math.max(...charges))} MB at most under load (limit ${mb(limit)} MB)`,
+      detail: `${chargeAfterCollection === null ? "no reading after the collection" : `${mb(chargeAfterCollection)} MB`} of ${mb(BUDGET_BYTES)} MB, ${underLoad.length === 0 ? "no reading under load" : `${mb(Math.max(...underLoad))} MB at most under load`} (limit ${mb(limit)} MB)`,
     },
     {
       name: "live heap not climbing",
