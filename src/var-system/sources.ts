@@ -1076,14 +1076,18 @@ export class SourceRegistry {
   // is for is out (`awaited`), or when `signal` aborts — and then holds
   // nothing, so a run that never ends keeps no waiter behind it. A run one of
   // them triggers (a `depends_on` reaction fires inside a publish) is marked
-  // before the run that triggered it ends, so it is waited out too.
-  async inFlight(signal: AbortSignal): Promise<void> {
+  // before the run that triggered it ends, so it is waited out too. Resolves
+  // to the names still awaited: empty when all settled, the stragglers when
+  // the signal ended the wait. A signal already aborted ends it at once, so a
+  // caller holding one deadline over many waits pays it once.
+  async inFlight(signal: AbortSignal): Promise<readonly string[]> {
     try {
       await when(() => this.awaited().length === 0, { signal });
     } catch (e) {
       // The signal's abort is the one rejection the wait expects.
       if (!signal.aborted) throw e;
     }
+    return this.awaited();
   }
 
   // The sources a wait on this registry is for: the runs out here and in the
@@ -1095,12 +1099,10 @@ export class SourceRegistry {
   }
 
   // The names still awaited once every run has ended or `withinMs` has
-  // passed: empty when all settled. This is the state a one-shot render
-  // (`cc-candybar check`) awaits so it renders what those sources yielded,
-  // never a guessed delay.
-  async settled(withinMs: number): Promise<readonly string[]> {
-    await this.inFlight(AbortSignal.timeout(withinMs));
-    return this.awaited();
+  // passed: empty when all settled. The state a one-shot render awaits so it
+  // renders what those sources yielded, never a guessed delay.
+  settled(withinMs: number): Promise<readonly string[]> {
+    return this.inFlight(AbortSignal.timeout(withinMs));
   }
 
   // template: a variable whose value is derived by evaluating a go-template

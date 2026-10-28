@@ -1,3 +1,21 @@
+## [1.161.2](https://github.com/promptctl/cc-candybar/compare/v1.161.1...v1.161.2) (2026-10-28)
+
+### Bug Fixes
+
+* **test:** the real-client e2e runs the client again on a blank answer, as the next tick would (brandon-unfiled-3248.s1je) ([#474](https://github.com/promptctl/cc-candybar/issues/474)) ([c425751](https://github.com/promptctl/cc-candybar/commit/c425751301e47461eaace7e400402d0882682ee6))
+
+## [1.161.1](https://github.com/promptctl/cc-candybar/compare/v1.161.0...v1.161.1) (2026-10-28)
+
+### Bug Fixes
+
+* **check:** each preset's pass awaits the runs its payload started (brandon-unfiled-3248.qniv) ([#470](https://github.com/promptctl/cc-candybar/issues/470)) ([1a69a2d](https://github.com/promptctl/cc-candybar/commit/1a69a2d3008355bf63db5bb29fd536ea9d1eab7c))
+
+## [1.161.0](https://github.com/promptctl/cc-candybar/compare/v1.160.11...v1.161.0) (2026-10-28)
+
+### Features
+
+* **bench:** a benchmark of what a statusline tick costs (brandon-unfiled-3248.1vnf) ([#473](https://github.com/promptctl/cc-candybar/issues/473)) ([10aa78b](https://github.com/promptctl/cc-candybar/commit/10aa78b576fe62e635399b0300e17c1ef0b1e65a))
+
 ## [1.160.11](https://github.com/promptctl/cc-candybar/compare/v1.160.10...v1.160.11) (2026-10-28)
 
 ### Bug Fixes

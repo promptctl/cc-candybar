@@ -10,6 +10,7 @@
 // constructed URL — so a test keeps passing when the bar is restyled and fails
 // when the click stops doing what it claimed.
 
+import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import path from "node:path";
 
 import {
@@ -22,7 +23,7 @@ import { parseHandlerUrl } from "../../src/install/index";
 import { effectsOf, type DecodedEffect } from "./click";
 import { sendDaemonRequest, waitForExit } from "./daemon-wire";
 import type { RunningDaemon } from "./spawn-isolated-daemon";
-import { linkUrls } from "./ansi";
+import { linkUrls, stripAnsi } from "./ansi";
 import { detectClaudeConfigDir } from "../../src/claude-settings";
 import { PACKAGE_VERSION } from "../../src/version";
 import { logLines } from "../../src/daemon/log";
@@ -255,6 +256,34 @@ export async function renderUntil(
     timeoutMs,
   );
   return last;
+}
+
+// [LAW:no-ambient-temporal-coupling] The real client answers within its own
+// wall-clock budgets (a 50 ms connect, a 150 ms round trip), and a client
+// starved by a loaded machine spends them before it has run. Its contract for
+// that is a blank line and a respawn kick, with the answer left to Claude
+// Code's next tick; a test has no next tick, so this is it: run the client
+// again until it draws something. A client that never draws fails at the
+// last run's output rather than passing on a blank.
+export function runRealClient(
+  args: readonly string[],
+  options: { cwd: string; env: NodeJS.ProcessEnv; input: string },
+  attempts = 5,
+): SpawnSyncReturns<string> {
+  let run!: SpawnSyncReturns<string>;
+  for (let i = 0; i < attempts; i++) {
+    run = spawnSync(
+      process.execPath,
+      [path.join(process.cwd(), "dist", "index.mjs"), ...args],
+      { ...options, encoding: "utf8", timeout: 10_000 },
+    );
+    if (run.status !== 0 || stripAnsi(run.stdout).trim() !== "") break;
+    // [LAW:no-silent-failure] A retry that absorbs a blank is named, so a
+    // client that needs several runs every time (a real latency regression)
+    // shows in the log instead of passing unseen.
+    console.warn(`runRealClient: blank answer on run ${i + 1}/${attempts}`);
+  }
+  return run;
 }
 
 // [LAW:single-enforcer] THE search over rendered affordances: decode each
