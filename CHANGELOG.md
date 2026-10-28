@@ -1,3 +1,9 @@
+## [1.161.1](https://github.com/promptctl/cc-candybar/compare/v1.161.0...v1.161.1) (2026-10-28)
+
+### Bug Fixes
+
+* **check:** each preset's pass awaits the runs its payload started (brandon-unfiled-3248.qniv) ([#470](https://github.com/promptctl/cc-candybar/issues/470)) ([1a69a2d](https://github.com/promptctl/cc-candybar/commit/1a69a2d3008355bf63db5bb29fd536ea9d1eab7c))
+
 ## [1.161.0](https://github.com/promptctl/cc-candybar/compare/v1.160.11...v1.161.0) (2026-10-28)
 
 ### Features
