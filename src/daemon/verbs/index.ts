@@ -213,6 +213,9 @@ export interface DaemonContext {
   // Reload that config from disk now, so the next render reads what a click
   // just wrote rather than waiting on the file watcher.
   readonly reloadConfig: (origin: RenderOrigin) => void;
+  // Reload every config the daemon holds, under the repository answers a
+  // click just recorded: any session may draw from that repository.
+  readonly reloadEvery: () => void;
   // The storage key of each source that config declares, from the same
   // render state: what a `run` supersedes.
   readonly sourcesFor: (origin: RenderOrigin) => DeclaredSources;
@@ -1576,9 +1579,8 @@ const run: VerbHandler = (value, ctx) => {
 
 // [LAW:parse-dont-validate] An answer is recorded only when its mac verifies:
 // the bar drew it, for this session, for this directory and this answer. The
-// book lives beside the link key, and the render cache watches it, so every
-// bar reloads; the clicking session's reloads before the click answers, as
-// save's does.
+// book lives beside the link key; every bar reloads before the click answers,
+// as save's does.
 const repoConfig: VerbHandler = (value, ctx) => {
   const [sessionId = "", dir = "", answer = "", mac = ""] = decodeWire(() =>
     decodeSegments(value),
@@ -1596,7 +1598,7 @@ const repoConfig: VerbHandler = (value, ctx) => {
     throw new Error(`${dir} was not ${answered}: ${filed.reason}`);
   }
   ctx.dlog("info", `repo-config: ${dir} ${answered} (session=${sid})`);
-  ctx.reloadConfig(sessionOrigin(ctx, sid));
+  ctx.reloadEvery();
 };
 
 // ─── Registry ───────────────────────────────────────────────────────────────

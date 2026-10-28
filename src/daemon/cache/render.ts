@@ -17,7 +17,7 @@ import type { RefreshLedger } from "../../utils/refresh-ledger";
 import type { LinkSigner } from "../../click/link-signer.js";
 import type { SessionId } from "../session-id.js";
 import { fileHeldSettings } from "../setting-drafts.js";
-import { repoConfigs, repoConfigsPath } from "../repo-configs.js";
+import { repoConfigs } from "../repo-configs.js";
 import { REPO_PLUGIN_DIR } from "../../config/loader/plugin-folders.js";
 import {
   repoUnreadNotice,
@@ -65,12 +65,7 @@ import { VariableStore } from "../../var-system/store.js";
 import { SourceRegistry } from "../../var-system/sources.js";
 import type { VarScope } from "../../dsl/variable-scope.js";
 import type { SessionStateReader, SessionStateRW } from "../session-state.js";
-import type {
-  WatcherRegistry,
-  WatcherHandle,
-  HeldWatch,
-  WatchTargets,
-} from "./watchers.js";
+import type { WatcherRegistry, HeldWatch, WatchTargets } from "./watchers.js";
 import { quietLogger, type DaemonLogger } from "../../utils/logger.js";
 import { Holds } from "../../utils/holds.js";
 import { ABSENT, failed, PENDING } from "../../utils/outcome.js";
@@ -1222,7 +1217,6 @@ export class RenderCache<
   // entry: they sit in the state directory beside the daemon's log, and a
   // watch there wakes on every log line. The daemon makes that directory (the
   // link key) before it builds the cache.
-  private readonly answersWatch: WatcherHandle;
   private sweep: ReturnType<typeof setInterval> | null = null;
   private closed = false;
   // Every state the map serves or served, until reclaimed.
@@ -1272,12 +1266,6 @@ export class RenderCache<
     this.budgetBytes = opts.budgetBytes;
     this.maxEntries = opts.maxEntries ?? MAX_ENTRIES;
     this.observers = opts.observers ?? {};
-    const { dir, name } = nearestWatchTarget(repoConfigsPath());
-    this.answersWatch = deps.watchers.acquire(
-      `repo-configs:${dir}/${name}`,
-      { dirs: [{ path: dir, filenames: [name] }] },
-      () => this.reloadEvery(),
-    );
   }
 
   // The compile a served state carries for `key`, else a new one — which the
@@ -1653,7 +1641,6 @@ export class RenderCache<
     this.closed = true;
     if (this.sweep !== null) clearInterval(this.sweep);
     this.sweep = null;
-    this.answersWatch.release();
     const entries = this.entries.size;
     for (const [key, entry] of this.entries) this.drop(key, entry, "close");
     // [LAW:one-source-of-truth] Every state left in `holds` is retired and
@@ -1896,7 +1883,10 @@ export class RenderCache<
   // Every entry, under the answers now on disk: any of them may draw from a
   // repository. The live map is walked, so an entry a reload's `fit` evicts
   // is skipped, never reloaded back to life.
-  private reloadEvery(): void {
+  // [LAW:single-enforcer] The daemon is the book's only writer, so the verb
+  // that records an answer calls this; nothing watches the state directory,
+  // which the daemon's own log shares.
+  reloadEvery(): void {
     // [LAW:nothing-unseen] Why every entry is about to reload, as a config
     // edit's reload says which entry it was for.
     this.log(

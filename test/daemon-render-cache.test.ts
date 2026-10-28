@@ -56,6 +56,7 @@ import { viewFacts } from "./helpers/view-facts";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { answerRepo } from "./helpers/repo-approval";
 import { repoConfigsPath } from "../src/daemon/repo-configs";
+import { stateDir } from "../src/daemon/paths";
 
 // Flatten a layout tree to its segment names, in pre-order — the post-`root`
 // equivalent of the old `config.layout.flatMap(r => r.segments)`.
@@ -932,29 +933,37 @@ describe("RenderCache", () => {
     }
   });
 
-  // The answers for repositories are one watch for the whole cache, never one
-  // per entry, and a change to them reloads the entries under the new answer.
-  test("an entry follows the answers through the cache's one watch", async () => {
+  // The daemon writes the answers itself and tells the cache, so the state
+  // directory it logs into is never watched.
+  test("the cache watches nothing in the state directory", () => {
+    mkdirSync(stateDir(), { recursive: true });
+    const { cleanups, watchers } = makeCache();
+    try {
+      expect(watchers.watchedDirs()).not.toContain(
+        realpathSync.native(stateDir()),
+      );
+    } finally {
+      for (const fn of cleanups) fn();
+    }
+  });
+
+  // A recorded answer reloads every entry under the new book.
+  test("an entry follows the answers when the cache reloads every entry", () => {
     const { dir, cleanup } = mkConfigDir();
     const lines: string[] = [];
-    const { cache, cleanups, reloads, watchers } = makeCache(
-      undefined,
-      (_level, msg) => lines.push(msg),
+    const { cache, cleanups } = makeCache(undefined, (_level, msg) =>
+      lines.push(msg),
     );
     try {
-      const own = watchers.size();
       const file = join(dir, ".cc-candybar.json5");
       writeFileSync(file, `{ segments: { t: { template: "x" } } }`);
       const entry = cache.getOrCreate(dir, dir, undefined);
       expect(entry.configLayers).toEqual([file]);
-      expect(watchers.size()).toBe(own + 1);
-      // A rewrite of the book, so every retry the signal makes is an event.
-      const declined = JSON.stringify({
-        [realpathSync.native(dir)]: "declined",
-      });
-      await reloads.after(entry, () =>
-        writeFileSync(repoConfigsPath(), declined),
+      writeFileSync(
+        repoConfigsPath(),
+        JSON.stringify({ [realpathSync.native(dir)]: "declined" }),
       );
+      cache.reloadEvery();
       expect(entry.configLayers).toEqual([]);
       expect(entry.repos.declined).toEqual([realpathSync.native(dir)]);
       expect(lines).toContain(

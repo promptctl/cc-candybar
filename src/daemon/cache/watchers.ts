@@ -333,6 +333,14 @@ export class WatcherRegistry {
     return this.slots.size;
   }
 
+  // [LAW:nothing-unseen] Every directory a held watch targets, so what the
+  // daemon asks the OS to watch can be read rather than inferred.
+  watchedDirs(): string[] {
+    return [...this.slots.values()].flatMap((slot) =>
+      slot.targets.dirs.map((d) => d.path),
+    );
+  }
+
   closeAll(): void {
     this.closed = true;
     for (const slot of this.slots.values()) {
