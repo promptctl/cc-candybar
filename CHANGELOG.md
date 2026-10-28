@@ -1,3 +1,9 @@
+## [1.161.4](https://github.com/promptctl/cc-candybar/compare/v1.161.3...v1.161.4) (2026-10-28)
+
+### Bug Fixes
+
+* **load-gate:** the budget judges the charge once V8 has collected (brandon-frame-feed-znsy.zpm) ([#475](https://github.com/promptctl/cc-candybar/issues/475)) ([fd4f89e](https://github.com/promptctl/cc-candybar/commit/fd4f89eba779df530659e2fd7e1506eac358f8d1))
+
 ## [1.161.3](https://github.com/promptctl/cc-candybar/compare/v1.161.2...v1.161.3) (2026-10-28)
 
 ### Bug Fixes
