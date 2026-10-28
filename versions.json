@@ -4,15 +4,22 @@
     {
       "version": "pr-472",
       "ref": "refs/pull/472/merge",
-      "sha": "e7dfc81f38832f626ccc5f30e3d5f250cd560900",
-      "timestamp": "2026-10-28T19:36:25.855Z",
+      "sha": "c3ba55ffb8c41298280589cf3ee4fb99a230d47c",
+      "timestamp": "2026-10-28T19:40:37.599Z",
       "commits": [
         {
-          "sha": "e7dfc81f38832f626ccc5f30e3d5f250cd560900",
+          "sha": "c3ba55ffb8c41298280589cf3ee4fb99a230d47c",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-28T13:35:55-06:00",
-          "message": "Merge 74b40941a47e3125c038f247e5bbb5b48b0d6475 into e603faf38f07367cf693aefd978ba9fe95d35254\n"
+          "timestamp": "2026-10-28T19:40:06Z",
+          "message": "Merge 8e49cb1283bae5b5fdea0666527daafcf05b48e2 into e603faf38f07367cf693aefd978ba9fe95d35254\n"
+        },
+        {
+          "sha": "8e49cb1283bae5b5fdea0666527daafcf05b48e2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-28T13:39:55-06:00",
+          "message": "Landscape: bundles resolve against the page, not a deploy's base tag\n\nThe multiplexer injects a base tag at the version root, so the bar and detail bundles, which sit\nbeside the landscape page, resolved to a folder that does not exist and no bar played.\n"
         },
         {
           "sha": "74b40941a47e3125c038f247e5bbb5b48b0d6475",
