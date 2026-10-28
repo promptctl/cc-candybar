@@ -39,16 +39,25 @@ export const identityKey = (identity: FolderIdentity | "gone"): string =>
     ? "gone"
     : `${identity.dev}:${identity.ino}:${identity.birthtimeNs}`;
 
-// What a watch on the path binds, as a key. A watch names a directory, it
-// does not judge it: a directory that cannot be stat'd (unreadable, a symlink
-// loop) binds nothing, so its failure is its key, and the key moves when the
-// directory becomes readable. [LAW:no-silent-failure] The failure is spelled
-// in the key, never swallowed; a storage owner that must judge its folder
-// takes `statIdentity`'s throw instead.
-export const boundKey = (folder: string): string => {
+// What a watch on the path binds: the directory there, or nothing yet, because
+// nothing is at the path (`gone`) or the directory cannot be stat'd
+// (`unreadable`, a permission, a symlink loop, a mount's fault). A watch names
+// a directory, it does not judge it, so [LAW:no-silent-failure] the failure is
+// spelled, never thrown; a storage owner that must judge its folder takes
+// `statIdentity`'s throw instead.
+export type Bound = FolderIdentity | "gone" | { readonly unreadable: string };
+
+export const boundOf = (folder: string): Bound => {
   try {
-    return identityKey(statIdentity(folder));
+    return statIdentity(folder);
   } catch (e) {
-    return `unreadable:${(e as NodeJS.ErrnoException).code ?? String(e)}`;
+    return { unreadable: (e as NodeJS.ErrnoException).code ?? String(e) };
   }
 };
+
+// One spelling of what a watch binds, for a key: it moves exactly when the
+// directory at the path does, or when it comes and goes.
+export const boundKey = (bound: Bound): string =>
+  typeof bound === "string" || "ino" in bound
+    ? identityKey(bound)
+    : `unreadable:${bound.unreadable}`;

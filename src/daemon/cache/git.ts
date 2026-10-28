@@ -21,7 +21,7 @@ import {
   type WatchMove,
   type WatchSpec,
 } from "./watchers";
-import { boundKey } from "../../utils/folder-identity";
+import { boundKey, boundOf } from "../../utils/folder-identity";
 import { TrailingEdge } from "../../utils/trailing-edge";
 import { Period, periodOf, type Every } from "../../utils/period";
 import {
@@ -255,11 +255,11 @@ function optionsKey(options: GitOptions): string {
 // one period, and a layout change at the same path (a clone replaced by a
 // worktree) is the same case.
 //
-// `gone`: a directory the spec names is not there, so there is nothing to
-// bind yet.
+// `unbound`: a directory the spec names is not there, or cannot be stat'd, so
+// there is nothing to bind yet.
 interface RepoWatchSpec {
   readonly spec: WatchSpec;
-  readonly gone: boolean;
+  readonly unbound: boolean;
 }
 
 function watchSpec(
@@ -271,11 +271,11 @@ function watchSpec(
     { path: gitDir, filenames: ["HEAD", "index"] },
     { path: path.join(commonDir, "refs", "heads"), recursive: true },
   ];
-  const keys = dirs.map((d) => boundKey(d.path));
-  const bound = dirs.map((d, i) => `${d.path}@${keys[i]}`).join("|");
+  const bounds = dirs.map((d) => boundOf(d.path));
+  const named = dirs.map((d, i) => `${d.path}@${boundKey(bounds[i]!)}`);
   return {
-    spec: { key: `git:${root}:${bound}`, targets: { dirs } },
-    gone: keys.includes("gone"),
+    spec: { key: `git:${root}:${named.join("|")}`, targets: { dirs } },
+    unbound: bounds.some((b) => typeof b === "string" || "unreadable" in b),
   };
 }
 
@@ -554,18 +554,19 @@ export class GitDataProvider {
     held: HeldWatch | null,
   ): { readonly watch: HeldWatch; readonly move: WatchMove } {
     const gitDir = this.inner.resolveGitDir(root);
-    const { spec, gone } = watchSpec(
+    const { spec, unbound } = watchSpec(
       root,
       gitDir,
       this.inner.resolveCommonGitDir(gitDir),
     );
-    // A directory that is gone binds nothing yet. The pass that lands between
-    // a worktree's removal and its re-add (the removal fires the watch) keeps
+    // A directory that is gone, or cannot be stat'd this pass (a mount's
+    // transient fault), binds nothing yet. The pass that lands between a
+    // worktree's removal and its re-add (the removal fires the watch) keeps
     // the watch it holds rather than trade it for a slot the OS refuses:
     // FSEvents keeps a held watch on its path, and the period rebinds once the
     // path names a directory again, whose key differs. The build holds
     // nothing, and takes the refused slot the period refreshes.
-    if (held !== null && gone) return { watch: held, move: "kept" };
+    if (held !== null && unbound) return { watch: held, move: "kept" };
     const followed = this.watchers.follow(held, spec, () => this.changed(root));
     // [LAW:nothing-unseen] A rebind is the fact that the directories moved,
     // and which the repo hears now: a change that fires nothing is read

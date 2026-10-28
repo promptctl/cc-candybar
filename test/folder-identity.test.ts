@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import {
   boundKey,
+  boundOf,
   identityKey,
   statIdentity,
 } from "../src/utils/folder-identity";
@@ -21,17 +22,18 @@ describe("folder identity as a watch's key", () => {
   });
 
   test("a directory's key is its identity, and nothing at the path is gone", () => {
-    expect(boundKey(dir)).toBe(identityKey(statIdentity(dir)));
-    expect(boundKey(path.join(dir, "missing"))).toBe("gone");
+    expect(boundKey(boundOf(dir))).toBe(identityKey(statIdentity(dir)));
+    expect(boundKey(boundOf(path.join(dir, "missing")))).toBe("gone");
   });
 
   test("a directory that cannot be stat'd is thrown to a judge and spelled to a key", () => {
     const loop = path.join(dir, "loop");
     fs.symlinkSync(loop, loop);
     expect(() => statIdentity(loop)).toThrow(/ELOOP/);
-    expect(boundKey(loop)).toBe("unreadable:ELOOP");
+    expect(boundOf(loop)).toEqual({ unreadable: "ELOOP" });
+    expect(boundKey(boundOf(loop))).toBe("unreadable:ELOOP");
     fs.unlinkSync(loop);
     fs.mkdirSync(loop);
-    expect(boundKey(loop)).toBe(identityKey(statIdentity(loop)));
+    expect(boundKey(boundOf(loop))).toBe(identityKey(statIdentity(loop)));
   });
 });

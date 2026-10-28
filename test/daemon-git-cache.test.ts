@@ -1572,10 +1572,12 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
       await gitOf(svc, new Holds(), repo, {});
       expect(counters.watchersOpened).toBe(1);
 
+      // The removal fires the held watch where the OS delivers it, so the
+      // passes over the gap number one or more; every one keeps the watch.
       fs.rmSync(gitDir, { recursive: true, force: true });
       svc.changed(repo);
-      await until(() => passes(logs).length === 2, "the pass over the gap");
-      expect(watchMoves()).toEqual(["kept", "kept"]);
+      await until(() => passes(logs).length >= 2, "the pass over the gap");
+      expect(new Set(watchMoves())).toEqual(new Set(["kept"]));
       expect(counters).toEqual({
         watchersOpened: 1,
         watchersClosed: 0,
@@ -1585,8 +1587,12 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
 
       create();
       svc.changed(repo);
-      await until(() => passes(logs).length === 3, "the pass after the re-add");
-      expect(watchMoves()).toEqual(["kept", "kept", "rebound"]);
+      await until(
+        () => watchMoves().includes("rebound"),
+        "the pass after the re-add",
+      );
+      expect(watchMoves().filter((m) => m === "rebound")).toHaveLength(1);
+      expect(watchMoves().at(-1)).toBe("rebound");
       expect(counters).toEqual({
         watchersOpened: 2,
         watchersClosed: 1,
