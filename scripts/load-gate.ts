@@ -59,6 +59,9 @@ import type { StatsSnapshot } from "../src/daemon/stats.js";
 import { parseHandlerUrl } from "../src/install/index.js";
 import { sourceDigest } from "../src/source-digest.js";
 import type { ClaudeHookData } from "../src/utils/claude.js";
+import { percentile } from "./lib/percentile.js";
+import { sessionEnv } from "./lib/session-env.js";
+import { transcriptPath, transcriptTurn } from "./lib/transcript.js";
 
 const REPO = path.resolve(import.meta.dirname, "..");
 const BUNDLE = path.join(REPO, "dist", "index.mjs");
@@ -139,6 +142,9 @@ const STAGE_EVERY = 8;
 const BRANCH_EVERY = 64;
 // A long session's transcript: ~5000 lines.
 const TRANSCRIPT_TURNS = 1700;
+// When turn `t` happened: the seeded history runs back from now, 20 s a turn.
+const turnTime = (t: number): Date =>
+  new Date(Date.now() - Math.max(0, TRANSCRIPT_TURNS - t) * 20_000);
 // A cold daemon builds every session's state at once; each session must have
 // answered once by then.
 const WARM_DEADLINE_MS = 30_000;
@@ -267,17 +273,12 @@ const sessions: Session[] = Array.from({ length: SESSIONS }, (_, index) => {
     litStatusline(index),
   );
   // Where Claude Code keeps a session's transcript: under its project's slug.
-  const project = path.join(
-    dirs.claude,
-    "projects",
-    checkout.replace(/[^A-Za-z0-9]/g, "-"),
-  );
-  fs.mkdirSync(project, { recursive: true });
-  const transcript = path.join(project, `${id}.jsonl`);
+  const transcript = transcriptPath(dirs.claude, checkout, id);
+  fs.mkdirSync(path.dirname(transcript), { recursive: true });
   fs.writeFileSync(
     transcript,
     Array.from({ length: TRANSCRIPT_TURNS }, (_, t) =>
-      turn(id, checkout, t),
+      transcriptTurn(id, checkout, t, turnTime(t)),
     ).join(""),
   );
   return { index, id, checkout, transcript, ticks: 0, answers: 0 };
@@ -302,84 +303,6 @@ function litStatusline(index: number): string {
     },
     next: { ticket: ticket(index + 1), recorded_at: "2026-10-25T20:00:00Z" },
   });
-}
-
-// One turn as Claude Code writes it: the prompt, the assistant's tool call
-// with its usage, and the tool's result.
-function turn(sessionId: string, cwd: string, t: number): string {
-  const at = new Date(
-    Date.now() - Math.max(0, TRANSCRIPT_TURNS - t) * 20_000,
-  ).toISOString();
-  const common = {
-    sessionId,
-    cwd,
-    version: "2.1.299",
-    gitBranch: "main",
-    userType: "external",
-  };
-  const lines = [
-    {
-      ...common,
-      type: "user",
-      uuid: `u-${t}`,
-      timestamp: at,
-      message: {
-        role: "user",
-        content: `Step ${t}: run the tests and fix what fails. `.repeat(8),
-      },
-    },
-    {
-      ...common,
-      type: "assistant",
-      uuid: `a-${t}`,
-      timestamp: at,
-      requestId: `req_${t}`,
-      message: {
-        model: "claude-opus-5-5",
-        id: `msg_${t}`,
-        type: "message",
-        role: "assistant",
-        content: [
-          { type: "thinking", thinking: "", signature: "C".repeat(900) },
-          {
-            type: "tool_use",
-            id: `toolu_${t}`,
-            name: "Bash",
-            input: { command: "pnpm test" },
-          },
-        ],
-        stop_reason: "tool_use",
-        usage: {
-          input_tokens: 2,
-          cache_creation_input_tokens: 1200 + t,
-          cache_read_input_tokens: 40_000 + 900 * t,
-          output_tokens: 300 + t,
-          service_tier: "standard",
-          cache_creation: {
-            ephemeral_1h_input_tokens: 1200 + t,
-            ephemeral_5m_input_tokens: 0,
-          },
-        },
-      },
-    },
-    {
-      ...common,
-      type: "user",
-      uuid: `r-${t}`,
-      timestamp: at,
-      message: {
-        role: "user",
-        content: [
-          {
-            type: "tool_result",
-            tool_use_id: `toolu_${t}`,
-            content: "ok ".repeat(200),
-          },
-        ],
-      },
-    },
-  ];
-  return lines.map((l) => JSON.stringify(l) + "\n").join("");
 }
 
 // What Claude Code sends on a statusline refresh, as it moves through a session.
@@ -487,12 +410,7 @@ daemon.on("exit", (code, signal) => {
 });
 
 // The hints a client running in this session's terminal reports.
-const sessionEnv = {
-  CLAUDE_CONFIG_DIR: dirs.claude,
-  TERM: "xterm-ghostty",
-  TERM_PROGRAM: "ghostty",
-  COLORTERM: "truecolor",
-};
+const terminalEnv = sessionEnv(dirs.claude);
 const client = nodeClientHint("node", BUNDLE);
 
 interface Render {
@@ -539,7 +457,12 @@ function tick(s: Session): void {
       "transcript turn",
       fs.promises.appendFile(
         s.transcript,
-        turn(s.id, s.checkout, TRANSCRIPT_TURNS + s.ticks),
+        transcriptTurn(
+          s.id,
+          s.checkout,
+          TRANSCRIPT_TURNS + s.ticks,
+          turnTime(TRANSCRIPT_TURNS + s.ticks),
+        ),
       ),
     );
   }
@@ -577,7 +500,7 @@ function tick(s: Session): void {
         [BUNDLE],
         s.checkout,
         {
-          ...detectClientHints(sessionEnv, s.checkout, {
+          ...detectClientHints(terminalEnv, s.checkout, {
             columns: 160,
             rows: 48,
           }),
@@ -1205,9 +1128,7 @@ function tally(xs: readonly string[]): Record<string, number> {
   return out;
 }
 function pct(sorted: readonly number[], p: number): number {
-  return Math.round(
-    sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))] ?? 0,
-  );
+  return sorted.length === 0 ? 0 : Math.round(percentile(sorted, p));
 }
 
 // [LAW:no-silent-failure] Every way out is a verdict: a crash fails, and a

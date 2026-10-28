@@ -96,7 +96,7 @@ export interface Bar {
 
 // The Status hook Claude Code sends, with every field the bundled bar reads
 // set, so each of its segments draws: context, cost, both rate-limit windows.
-function hookData(cwd: string, transcriptPath: string): ClaudeHookData {
+export function hookData(cwd: string, transcriptPath: string): ClaudeHookData {
   const nowSec = Math.floor(Date.now() / 1000);
   return {
     hook_event_name: "Status",
