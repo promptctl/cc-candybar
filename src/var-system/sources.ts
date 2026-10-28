@@ -1098,6 +1098,13 @@ export class SourceRegistry {
     return [...this.newKeys, ...(this.parent?.awaited() ?? [])];
   }
 
+  // The names still awaited once every run has ended or `withinMs` has
+  // passed: empty when all settled. The state a one-shot render awaits so it
+  // renders what those sources yielded, never a guessed delay.
+  settled(withinMs: number): Promise<readonly string[]> {
+    return this.inFlight(AbortSignal.timeout(withinMs));
+  }
+
   // template: a variable whose value is derived by evaluating a go-template
   // against the current variable store.  MobX auto-tracks every store.read()
   // made during evaluation — no explicit dep declarations needed.
