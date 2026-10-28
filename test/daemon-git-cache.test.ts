@@ -17,6 +17,7 @@ import { ABSENT, failed, ok, type Outcome } from "../src/utils/outcome";
 import { Holds } from "../src/utils/holds";
 import { answered } from "../src/utils/reading";
 import { until } from "./helpers/until";
+import { untilHeard } from "./helpers/reload-signal";
 
 class StubGitService extends GitService {
   public computeCalls: Array<{
@@ -1446,20 +1447,26 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
     replace("index", "0");
     const { svc, inner, counters } = counted();
     inner.repoRootByDir[repo] = repo;
-    const changedTo = async (n: number) => {
-      await until(() => svc.getStats().changes >= n, `${n} changes`);
-      expect(svc.getStats().changes).toBe(n);
-    };
     try {
       await gitOf(svc, new Holds(), repo, {});
       // FSEvents drops what lands before its stream is armed, and a
-      // declaration opens the watch in the same turn it resolves: let it arm,
-      // as the watcher tests do (a dropped event is the period's in the daemon).
-      await new Promise((r) => setTimeout(r, 50));
+      // declaration opens the watch in the same turn it resolves: the first
+      // rename is re-applied until the watch hears one, and every rename
+      // after that is heard as exactly one change.
+      await untilHeard(
+        () => replace("index", "0"),
+        () => svc.getStats().changes >= 1,
+        "the first rename's change",
+      );
+      const live = svc.getStats().changes;
       const renames = ["index", "index", "HEAD", "index", "HEAD"];
       for (const [i, name] of renames.entries()) {
         replace(name, String(i + 1));
-        await changedTo(i + 1);
+        await until(
+          () => svc.getStats().changes >= live + i + 1,
+          `${i + 1} changes past the watch going live`,
+        );
+        expect(svc.getStats().changes).toBe(live + i + 1);
       }
       expect(counters).toEqual({
         watchersOpened: 1,
@@ -1499,7 +1506,6 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
       passes(logs).map((l) => / watch=(\w+) /.exec(l)![1]);
     try {
       await gitOf(svc, new Holds(), repo, {});
-      await new Promise((r) => setTimeout(r, 50));
       expect(counters.watchersOpened).toBe(1);
 
       // The worktree is removed and one of the same name added.
@@ -1515,11 +1521,9 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
         watchRefusals: 0,
         watchErrors: 0,
       });
-      await new Promise((r) => setTimeout(r, 50));
-
       const before = svc.getStats().changes;
-      replace("HEAD", "ref: refs/heads/other\n");
-      await until(
+      await untilHeard(
+        () => replace("HEAD", "ref: refs/heads/other\n"),
         () => svc.getStats().changes > before,
         "a rename in the recreated git directory",
       );

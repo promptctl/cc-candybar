@@ -150,20 +150,24 @@ describe("WatcherRegistry", () => {
     const reg = new WatcherRegistry();
     const seen: Invalidation[] = [];
     reg.acquire(dir, { dirs: [{ path: dir }] }, (inv) => seen.push(inv));
-    await new Promise((r) => setTimeout(r, 50));
-    fs.writeFileSync(path.join(dir, "a.json"), "1");
-    fs.writeFileSync(path.join(dir, "b.json"), "2");
     // FSEvents may also report the folder's own creation late, under its
     // name: the names are what fired, whatever else did.
     const names = () =>
       seen.flatMap((inv) => (inv.kind === "changed" ? [...inv.names] : []));
-    await until(
-      () => names().includes("a.json") && names().includes("b.json"),
-      "both files' names",
-    );
-    expect(seen.every((inv) => inv.kind === "changed")).toBe(true);
-    reg.closeAll();
-    rmrf(dir);
+    try {
+      await untilHeard(
+        () => {
+          fs.writeFileSync(path.join(dir, "a.json"), "1");
+          fs.writeFileSync(path.join(dir, "b.json"), "2");
+        },
+        () => names().includes("a.json") && names().includes("b.json"),
+        "both files' names",
+      );
+      expect(seen.every((inv) => inv.kind === "changed")).toBe(true);
+    } finally {
+      reg.closeAll();
+      rmrf(dir);
+    }
   });
 
   test("a tree target hears a write below its first level, named by its relative path", async () => {
@@ -384,31 +388,35 @@ describe("GitDataProvider + watchers integration", () => {
     const inner = new StubInner(repo);
     const svc = new GitDataProvider({ inner });
     const holds = new Holds();
+    try {
+      await laneOutcome(svc.declare(holds, repo, {}));
+      await laneOutcome(svc.declare(holds, repo, {}));
+      expect(inner.calls).toBe(1);
 
-    await laneOutcome(svc.declare(holds, repo, {}));
-    await laneOutcome(svc.declare(holds, repo, {}));
-    expect(inner.calls).toBe(1);
-
-    // HEAD is rewritten until the watch proves itself live by a re-read: a
-    // write before FSEvents goes live is never reported. Every rewrite the
-    // watch hears is a change, and one mid-read queues a re-read after it, so
-    // the count is at least one more.
-    await untilHeard(
-      () =>
-        fs.writeFileSync(path.join(repo, ".git/HEAD"), "ref: refs/heads/y\n"),
-      () => inner.calls >= 2,
-      "the HEAD change's re-read",
-    );
-    expect(svc.getStats().changes).toBeGreaterThanOrEqual(1);
-    // The read takes the value the change's re-read stored: a hit, never a
-    // miss that waits on a read. The reader's count is not the measure here,
-    // because a re-read a late event queued may begin on any turn.
-    const { hits, misses } = svc.getStats();
-    await laneOutcome(svc.declare(holds, repo, {}));
-    expect(svc.getStats()).toMatchObject({ hits: hits + 1, misses });
-
-    svc.close();
-    rmrf(repo);
+      // HEAD is rewritten until the watch proves itself live by a re-read: a
+      // write before FSEvents goes live is never reported. Every rewrite the
+      // watch hears is a change, and one mid-read queues a re-read after it,
+      // so the count is at least one more.
+      await untilHeard(
+        () =>
+          fs.writeFileSync(
+            path.join(repo, ".git/HEAD"),
+            "ref: refs/heads/y\n",
+          ),
+        () => inner.calls >= 2,
+        "the HEAD change's re-read",
+      );
+      expect(svc.getStats().changes).toBeGreaterThanOrEqual(1);
+      // The read takes the value the change's re-read stored: a hit, never a
+      // miss that waits on a read. The reader's count is not the measure
+      // here, because a re-read a late event queued may begin on any turn.
+      const { hits, misses } = svc.getStats();
+      await laneOutcome(svc.declare(holds, repo, {}));
+      expect(svc.getStats()).toMatchObject({ hits: hits + 1, misses });
+    } finally {
+      svc.close();
+      rmrf(repo);
+    }
   });
 
   test("a held repo is re-read on its period, which a dropped watch event cannot stop", async () => {

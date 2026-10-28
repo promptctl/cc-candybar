@@ -3,7 +3,7 @@ import type {
   RenderCacheObservers,
 } from "../../src/daemon/cache/render";
 import { DEBOUNCE_MS } from "../../src/daemon/cache/watchers";
-import { until, type Condition, type What } from "./until";
+import { holdsWithin, nameOf, type Condition, type What } from "./until";
 
 // [LAW:no-ambient-temporal-coupling] A happens-after gate over RenderCache
 // reloads, in place of polling an entry's fields against a wall-clock
@@ -44,15 +44,19 @@ export class ReloadSignal {
   // success or failure alike; the caller asserts on the outcome it wanted.
   // `mutate` must leave the disk in the same final state on every call AND
   // emit an fs event on every call (a plain overwrite does; a bare unlink
-  // does not — pair it with a rewrite).
+  // does not — pair it with a rewrite). The subscription is taken in the
+  // same synchronous block as the mutation, so fact 1 above holds per round.
   async after(entry: ReloadedEntry, mutate: () => void): Promise<void> {
-    for (let round = 1; round <= MAX_ROUNDS; round++) {
-      const reloaded = this.next(entry);
-      mutate();
-      if (await arrivesWithin(reloaded, RETRY_MS)) return;
-    }
-    throw new Error(
-      `no reload observed for ${entry.projectDir} after ${MAX_ROUNDS} mutations (${MAX_ROUNDS * RETRY_MS} ms)`,
+    let observed = false;
+    await untilHeard(
+      () => {
+        void this.next(entry).then(() => {
+          observed = true;
+        });
+        mutate();
+      },
+      () => observed,
+      `a reload of ${entry.projectDir}`,
     );
   }
 
@@ -73,35 +77,28 @@ const RETRY_MS = 4 * DEBOUNCE_MS;
 // latency seen, below Jest's 30 s testTimeout so the failure is this error.
 const MAX_ROUNDS = 64;
 
-// [LAW:single-enforcer] THE retry-until-heard loop for a watch a test drives
-// itself: `mutate` is re-applied on the cadence above until `heard` holds, or
-// the wait fails by name after the same number of chances `after` gets. The
-// same fact as `after` — only a delivered event proves a watch live — for a
-// test whose proof is a condition it reads rather than a RenderCache reload.
-// `mutate` must emit an fs event on every call (a rename over the path or a
-// plain overwrite does), and `heard` is read until it holds, so a condition
-// over something a later event can move (a count) must be at-least, never
-// exactly. [LAW:no-ambient-temporal-coupling] The interval is cleared on
-// either ending, so no re-application outlives the wait.
+// [LAW:single-enforcer] THE retry-until-heard loop for a watch: `mutate` is
+// applied at once and then once per round until `heard` holds within the
+// round's cadence, or the wait fails by name after MAX_ROUNDS rounds. Only a
+// delivered event proves a watch live, so `after` is this loop with "heard"
+// being a reload, and a test that drives a watch itself passes the condition
+// it reads. `mutate` must emit an fs event on every call (a rename over the
+// path or a plain overwrite does), and `heard` is read until it holds, so a
+// condition over something a later event can move (a count) must be
+// at-least, never exactly. [LAW:no-silent-failure] A throw from `mutate`
+// lands on the caller's own await, not in a detached timer callback.
 export async function untilHeard(
   mutate: () => void,
   heard: Condition,
   what: What,
 ): Promise<void> {
-  const reapply = setInterval(mutate, RETRY_MS);
-  try {
-    await until(heard, what, MAX_ROUNDS * RETRY_MS);
-  } finally {
-    clearInterval(reapply);
+  for (let round = 1; round <= MAX_ROUNDS; round++) {
+    mutate();
+    const ending = await holdsWithin(heard, RETRY_MS);
+    if (ending.kind === "held") return;
+    ending.inFlight?.catch(() => undefined);
   }
-}
-
-function arrivesWithin(signal: Promise<void>, ms: number): Promise<boolean> {
-  return new Promise((resolve) => {
-    const timer = setTimeout(() => resolve(false), ms);
-    void signal.then(() => {
-      clearTimeout(timer);
-      resolve(true);
-    });
-  });
+  throw new Error(
+    `${nameOf(what)} did not hold after ${MAX_ROUNDS} mutations (${MAX_ROUNDS * RETRY_MS} ms)`,
+  );
 }
