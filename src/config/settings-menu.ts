@@ -97,7 +97,11 @@ import {
 } from "./menu-places.js";
 import { BOOLEAN_TRUE } from "../themes/policy.js";
 import { settingControlDomain } from "./loader/globals.js";
-import { settingControl, type Affordance } from "./setting-control.js";
+import {
+  settingControl,
+  type Affordance,
+  type ControlDomain,
+} from "./setting-control.js";
 import { declareHelp, type HelpArtifacts } from "./help.js";
 import {
   drawingVar,
@@ -350,11 +354,19 @@ const HELP: Partial<Record<SettingName, LayoutNode>> = Object.fromEntries(
 );
 
 // One control of the menu: its setting's row of SETTINGS and what the
-// generator made of that setting's declared domain.
+// generator made of that setting's declared domain. A setting has its own
+// control and, when its row names trials, a second one over them in the
+// 🧪 trials submenu; both write the setting's one key.
 interface MenuControl extends SettingProjection {
   readonly name: SettingName;
+  // The name its segments and actions are minted under: the setting's own,
+  // or `<setting>.trials` for its trials picker.
+  readonly id: string;
   readonly control: Affordance;
   readonly beneath: readonly SegmentDecl[];
+  // What the menu lays right after it: its help, and the submenus beside it.
+  readonly help: readonly LayoutNode[];
+  readonly submenus: readonly SubmenuName[];
 }
 
 // [LAW:nothing-unseen] While a lane is on, its toggle says what its frames are
@@ -417,31 +429,85 @@ const TRAIL: Partial<Record<SettingName, string>> = Object.fromEntries(
 // generator configure mode uses for a placement's settings. Every apply
 // action is a session `set`: a draft until the save cell commits it. A field
 // no control shape fits is a `text` row, which is no setting at all.
-const CONTROLS: readonly MenuControl[] = (
-  Object.keys(SETTINGS) as SettingName[]
-).map((name) => {
+// The submenus laid right after a setting's control.
+const submenusBeside = (name: SettingName): SubmenuName[] =>
+  SUBMENU_NAMES.filter((s) => SUBMENUS[s].beside === name);
+// A setting's trials are offered by its trials picker, so its own control
+// offers the rest of its domain.
+const offeredHere = (
+  domain: ControlDomain,
+  trials: readonly string[],
+): ControlDomain =>
+  typeof domain === "object" &&
+  "from" in domain &&
+  typeof domain.from !== "string"
+    ? { from: domain.from.filter((member) => !trials.includes(member)) }
+    : domain;
+const menuControl = (
+  name: SettingName,
+  id: string,
+  place: Place,
+  domain: ControlDomain,
+  laidAfter: Pick<MenuControl, "help" | "submenus">,
+): MenuControl => {
   const row: SettingProjection = SETTINGS[name];
-  const domain = settingControlDomain(row.configKey);
-  const control = settingControl(
-    { label: row.label, domain },
-    row.sessionKey,
-    row.effectiveVar,
-    controlApply(name),
-    accordionOf(PLACE[name]),
-  );
   return {
     ...row,
     name,
-    control,
+    id,
+    place,
+    control: settingControl(
+      { label: row.label, domain },
+      row.sessionKey,
+      row.effectiveVar,
+      controlApply(id),
+      accordionOf(place),
+    ),
     beneath: row.previews.map((preview) => PREVIEWS[preview]),
+    ...laidAfter,
   };
-});
+};
+const CONTROLS: readonly MenuControl[] = (
+  Object.keys(SETTINGS) as SettingName[]
+).map((name) =>
+  menuControl(
+    name,
+    name,
+    PLACE[name],
+    offeredHere(
+      settingControlDomain(SETTINGS[name].configKey),
+      SETTINGS[name].trials,
+    ),
+    {
+      help: [HELP[name]].filter((h) => h !== undefined),
+      submenus: submenusBeside(name),
+    },
+  ),
+);
+// [LAW:one-source-of-truth] The trials pickers, one per setting whose row
+// names trials, derived from the same rows: the trials submenu holds exactly
+// what the rows put there.
+const TRIAL_CONTROLS: readonly MenuControl[] = (
+  Object.keys(SETTINGS) as SettingName[]
+)
+  .filter((name) => SETTINGS[name].trials.length > 0)
+  .map((name) =>
+    menuControl(
+      name,
+      `${name}.trials`,
+      "trials",
+      { from: SETTINGS[name].trials },
+      { help: [], submenus: [] },
+    ),
+  );
+// Every control the menu lays, its own and the trials pickers.
+const MENU_CONTROLS: readonly MenuControl[] = [...CONTROLS, ...TRIAL_CONTROLS];
 
 const controlsIn = (place: Place): readonly MenuControl[] =>
-  CONTROLS.filter((c) => PLACE[c.name] === place);
+  MENU_CONTROLS.filter((c) => c.place === place);
 // What a place holds, the controls inside its submenus included.
 const controlsUnder = (place: Place): readonly MenuControl[] =>
-  CONTROLS.filter((c) => within(PLACE[c.name], place));
+  MENU_CONTROLS.filter((c) => within(c.place, place));
 // [LAW:one-source-of-truth] A trigger that opens a place — a tab, a submenu —
 // is marked `•` while a control inside it would change on reset
 // (brandon-menu-ia-q30.nk8), open or closed, so drift is findable without
@@ -453,16 +519,13 @@ const markedDisplay =
     `(print ${templateLiteral(text)} (ternary ${templateLiteral(DRIFT_MARK)} "" ${anyResettable(
       controlsUnder(place).map((c) => c.name),
     )}))`;
-// The submenus laid right after a setting's control.
-const submenusBeside = (name: SettingName): SubmenuName[] =>
-  SUBMENU_NAMES.filter((s) => SUBMENUS[s].beside === name);
 // The controls in `place`, each followed by the submenus laid beside it, whose
 // bodies are laid the same way.
 const controlsAt = (place: Place): LayoutNode[] =>
   controlsIn(place).flatMap((c) => [
     controlNode(c),
-    ...[HELP[c.name]].filter((h) => h !== undefined),
-    ...submenusBeside(c.name).map((s) =>
+    ...c.help,
+    ...c.submenus.map((s) =>
       disclosureNode(submenuSeg(s), submenuRef(s), placeBody(s), "drop"),
     ),
   ]);
@@ -558,7 +621,7 @@ const TAB_DISARMS = disarms(CONFIRMS.filter((c) => c.place !== "door"));
 // control through the one disclosure lowering, dropped below the row it sits
 // in. Every picker's list joins one accordion (PICKER_KEY).
 function controlNode(c: MenuControl): LayoutNode {
-  const self = controlSeg(c.name);
+  const self = controlSeg(c.id);
   if (c.control.kind === "inline") return seg(self);
   return disclosureNode(
     self,
@@ -567,7 +630,7 @@ function controlNode(c: MenuControl): LayoutNode {
       kind: "container",
       direction: "vertical",
       children: [...c.control.list.rows, ...c.beneath].map((_, row) =>
-        seg(controlRow(c.name, row)),
+        seg(controlRow(c.id, row)),
       ),
     },
     "drop",
@@ -720,6 +783,7 @@ const PLACE_BODY: Readonly<Record<Place, PlaceBody>> = {
     after: [seg(THEME_DEFAULT_SEG)],
   },
   toggles: { direction: "horizontal", content: [], after: [] },
+  trials: { direction: "horizontal", content: [], after: [] },
 };
 function placeBody(place: Place): ContainerNode {
   const { direction, content, after } = PLACE_BODY[place];
@@ -1007,7 +1071,7 @@ function declareDoctorRows(artifacts: MenuArtifacts): void {
 // preset root references this one anchor and both open states are session
 // keys, not tree positions.
 function declareSettingControls(artifacts: MenuArtifacts): void {
-  for (const c of CONTROLS) {
+  for (const c of MENU_CONTROLS) {
     Object.assign(artifacts.actions, c.control.actions);
     const reset = controlReset(c.name);
     artifacts.actions[reset] = { reset: c.configKey };
@@ -1021,7 +1085,7 @@ function declareSettingControls(artifacts: MenuArtifacts): void {
     };
     const resetCell = `{{ if .${controlResettable(c.name)} }} {{ action "${reset}" "↺" }}{{ end }}`;
     Object.assign(artifacts.variables, c.control.variables);
-    artifacts.segments[controlSeg(c.name)] = {
+    artifacts.segments[controlSeg(c.id)] = {
       template: `${c.control.template}${TRAIL[c.name] ?? ""}${resetCell}`,
     };
     if (c.control.kind === "picker") {
@@ -1029,7 +1093,7 @@ function declareSettingControls(artifacts: MenuArtifacts): void {
         ...c.control.list.rows.map((template): SegmentDecl => ({ template })),
         ...c.beneath,
       ].forEach((row, i) => {
-        artifacts.segments[controlRow(c.name, i)] = row;
+        artifacts.segments[controlRow(c.id, i)] = row;
       });
     }
   }

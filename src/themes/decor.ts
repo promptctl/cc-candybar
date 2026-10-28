@@ -188,6 +188,21 @@ const pairWindow = (apart: number): Shade => ({
  * the loader's enum, the settings control and every floor derive from this
  * table.
  */
+// Trial jumps (brandon-menus-sjhy.4fi, "a bigger jump in color between
+// sequential segments"): the role's window widened to two and three rungs each
+// side, and the strict two-tone pairs at those widths. Positions of the dial
+// like any other, offered in the settings menu's 🧪 trials beside the dial
+// rather than on it.
+const TRIAL_SHADES = {
+  wide: centredWindow(2),
+  widest: centredWindow(3),
+  pair: pairWindow(2),
+  "pair-wide": pairWindow(3),
+} as const satisfies Record<string, Shade>;
+export const TRIAL_SHADE_NAMES = Object.keys(TRIAL_SHADES) as ReadonlyArray<
+  keyof typeof TRIAL_SHADES
+>;
+
 export const SHADES = {
   muted: { tones: ["muted"], text: roleText, quantize: "point" },
   deepest: ladderWindow(0),
@@ -195,14 +210,7 @@ export const SHADES = {
   middle: ladderWindow(2),
   brighter: ladderWindow(3),
   brightest: ladderWindow(4),
-  // Candidate jumps for brandon-menus-sjhy.4fi ("a bigger jump in color
-  // between sequential segments"): the role's window widened to two and three
-  // rungs each side, and the strict two-tone pairs at those widths. The
-  // sibling .yup keeps the one Brandon picks.
-  wide: centredWindow(2),
-  widest: centredWindow(3),
-  pair: pairWindow(2),
-  "pair-wide": pairWindow(3),
+  ...TRIAL_SHADES,
 } as const satisfies Record<string, Shade>;
 export type ShadeName = keyof typeof SHADES;
 
@@ -311,6 +319,8 @@ type TuningName =
   `${keyof typeof KEYSTONE_PLACEMENTS}-${keyof typeof OPEN_LINEAGES}`;
 
 // Every keystone placement under every lineage: `door-primary`, `ends-alternate`, …
+// Trial tunings of the accent variation (brandon-menus-sjhy.4fi): offered in
+// the settings menu's 🧪 trials beside the variation's own control.
 function tunings(): Record<TuningName, Variation> {
   const rows = Object.entries(KEYSTONE_PLACEMENTS).flatMap(([at, keystones]) =>
     Object.entries(OPEN_LINEAGES).map(
@@ -323,6 +333,8 @@ function tunings(): Record<TuningName, Variation> {
   );
   return Object.fromEntries(rows) as unknown as Record<TuningName, Variation>;
 }
+
+const TUNINGS = tunings();
 
 /**
  * [LAW:one-type-per-behavior] Every variation a user can choose, named by
@@ -338,14 +350,16 @@ export const VARIATIONS = {
   duo: { hues: ["primary", "secondary"], run: WHOLE_ROW, ...OPENS_TODAY },
   mono: { hues: ["primary"], run: WHOLE_ROW, ...OPENS_TODAY },
   alt: { hues: ["secondary", "accent"], run: 3, ...OPENS_TODAY },
-  // Candidate tunings of the accent variation for brandon-menus-sjhy.4fi: one
-  // row per keystone placement and open-menu lineage Brandon compares. Every
-  // closed cell wears `secondary` but the keystones, which wear the accent,
-  // and no depth of an open menu wears it. The sibling .yup keeps the one he
-  // picks as `accent`.
-  ...tunings(),
+  // Trial tunings of the accent variation (brandon-menus-sjhy.4fi): one row
+  // per keystone placement and open-menu lineage. Every closed cell wears
+  // `secondary` but the keystones, which wear the accent, and no depth of an
+  // open menu wears it.
+  ...TUNINGS,
 } as const satisfies Record<string, Variation>;
 export type VariationName = keyof typeof VARIATIONS;
+export const TRIAL_VARIATION_NAMES = Object.keys(
+  TUNINGS,
+) as readonly TuningName[];
 
 /**
  * How the closed bar wears its theme: the variation chooses each row's role,
