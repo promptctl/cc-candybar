@@ -18,9 +18,10 @@
 // buildState, then the per-request render in server.ts) — resolveDslConfig →
 // detectConfigCollisions → loadConfig → validateConfig → registerDslConfig →
 // deriveActionValidators → renderDsl. "check passes" and "the daemon renders"
-// cannot diverge, because they are one code path — check additionally waits a
-// bounded settle for shell/file sources' first run, which the daemon's first
-// cold render does not (its next render shows what check showed).
+// cannot diverge, because they are one code path — check additionally waits,
+// before each pass, for the shell/file runs that pass's payload started, under
+// one bounded settle window for the whole verdict; the daemon's first cold
+// render does not (its next render shows what check showed).
 
 import { linkSignerFromKeyFile } from "./daemon/link-key.js";
 import { repoConfigs } from "./daemon/repo-configs.js";
@@ -46,13 +47,12 @@ import { VariableStore } from "./var-system/store.js";
 import { SourceRegistry } from "./var-system/sources.js";
 import { SessionState } from "./daemon/session-state.js";
 import {
+  bindPayload,
+  drawDsl,
   registerDslConfig,
-  renderDsl,
   type CompiledConfig,
   type RenderWarning,
 } from "./dsl/render.js";
-import { bindView } from "./dsl/parts.js";
-import { fixedSource } from "./dsl/view-source.js";
 import { stateGate } from "./daemon/verbs/state-validators.js";
 import { configGate } from "./daemon/verbs/config-validators.js";
 import { reserveUpdateKeys } from "./daemon/update-notice.js";
@@ -86,11 +86,38 @@ import {
 // stdout has no columns.
 const CHECK_WIDTH = 200;
 
-// How long the verdict waits for an async source's first run — a shell or file
+// How long the verdict waits for an async source's runs — a shell or file
 // read — before rendering with whatever it holds (and naming the stragglers as
-// a warning). Generous against a slow
-// `uptime`, short against a hung command.
+// a warning). Generous against a slow `uptime`, short against a hung command.
 const SOURCE_SETTLE_MS = 5000;
+
+// [LAW:no-ambient-temporal-coupling] The one deadline a verdict's waits share:
+// the fresh payload's first runs, then the runs each pass's payload starts (a
+// `key` or `depends_on` over `.preset.effective` re-reads when the preset
+// moves). One window rather than one per wait, so a hung command costs the
+// budget once, never once per pass — a wait under a spent window ends at once.
+// `ms` is what the straggler warning names.
+export interface SettleWindow {
+  readonly ms: number;
+  readonly signal: AbortSignal;
+}
+
+export function settleWindow(ms: number = SOURCE_SETTLE_MS): SettleWindow {
+  return { ms, signal: AbortSignal.timeout(ms) };
+}
+
+// The sources still out when a wait under `settle` ended, named as the
+// warning the verdict carries; empty when every run answered.
+function stragglers(
+  settle: SettleWindow,
+  pending: readonly string[],
+): readonly string[] {
+  return pending.length === 0
+    ? []
+    : [
+        `source${pending.length === 1 ? "" : "s"} still running after ${settle.ms} ms, rendered with fallback values: ${pending.join(", ")}`,
+      ];
+}
 
 // One faked Claude Code hook event, shaped like the daemon's augmented payload
 // (see src/daemon/render-payload.ts) — the `input` vars read out of it by their
@@ -400,13 +427,15 @@ export async function checkConfig(
   }
 }
 
-// A config loaded, validated, registered, and settled — the daemon's
-// buildState, in the daemon's order [LAW:single-enforcer]. `check` renders its
-// verdict on it and the gallery renders every theme on it, so neither can
-// drift into a partial copy of the other. The caller owns `registry` and
-// disposes it; the register pass's advisory `loadWarnings` (partial
-// declaration failures) and any source still running at the deadline land in
-// `warnings` — the same channel RenderCache merges them into.
+// A config loaded, validated, registered, and settled under the fresh
+// session's payload — the daemon's buildState, in the daemon's order
+// [LAW:single-enforcer]. `check` renders its verdict on it and the gallery
+// renders every theme on it, so neither can drift into a partial copy of the
+// other. The caller owns `registry` and disposes it; the register pass's
+// advisory `loadWarnings` (partial declaration failures) land in `warnings` —
+// the same channel RenderCache merges them into. A source still running at
+// the deadline is named by the pass that draws without it (renderEffective),
+// never here, so one straggler is one line however many passes reach it.
 export interface PreparedConfig {
   readonly layers: readonly string[];
   // Plugins the config lists that did not load; each fails the verdict.
@@ -425,7 +454,7 @@ export async function prepareConfig(
   // The instant the view's first payload is stamped at: the one its renders
   // are drawn at.
   at: Instant,
-  settleMs: number = SOURCE_SETTLE_MS,
+  settle: SettleWindow = settleWindow(),
 ): Promise<PreparedConfig> {
   // Each file's own advisories (an editability notice naming a duplicate key)
   // land before its validation, so a fatal outcome still carries them.
@@ -461,30 +490,24 @@ export async function prepareConfig(
       () => null,
       () => false,
     );
-    bindView(
+    bindPayload(
       compiled,
       store,
       registry,
-      fixedSource(
-        {
-          ...checkPayload(config, effective, layers.at(-1) ?? null, at),
-          today: CHECK_TODAY,
-        },
-        effective,
-      ),
+      {
+        ...checkPayload(config, effective, layers.at(-1) ?? null, at),
+        today: CHECK_TODAY,
+      },
+      renderOptionsOf(effective, CHECK_WIDTH),
+      effective,
     );
     // [LAW:no-ambient-temporal-coupling] An async source's first run — a shell
-    // or file read — completes after registration; the verdict renders what
-    // the sources YIELDED, not their pre-scan fallbacks (a json document with
-    // no default draws its loading cell until it is scanned). The registry owns
-    // the "every run complete" state; a source still out at the deadline is
-    // named and the render proceeds on what it holds.
-    const pending = await registry.settled(settleMs);
-    if (pending.length > 0) {
-      warnings.push(
-        `source${pending.length === 1 ? "" : "s"} still running after ${settleMs} ms, rendered with fallback values: ${pending.join(", ")}`,
-      );
-    }
+    // or file read — completes after registration; a prepared config's store
+    // holds what the sources YIELDED, not their pre-scan fallbacks (a json
+    // document with no default draws its loading cell until it is scanned).
+    // The registry owns the "every run complete" state; a source still out at
+    // the deadline is left to the pass that draws without it.
+    await registry.inFlight(settle.signal);
     return {
       layers,
       droppedPlugins: [
@@ -511,16 +534,24 @@ export async function prepareConfig(
 // render could not honour (brandon-themes-dzl), and a layout `when` that threw
 // (brandon-unfiled-3248.ryf) — and fails the verdict, so
 // exit 0 never blesses a bar the daemon would render a complaint on.
-export function renderEffective(
+//
+// One pass: the view bound to this pass's payload, the runs that bind started
+// (a source keyed on an input the payload moved) awaited under `settle`, and
+// the draw over what they yielded [LAW:no-ambient-temporal-coupling] — the
+// daemon's request order, where a request awaits the refreshes its arrival
+// triggered before it answers. A source still out at the deadline is this
+// pass's advisory, so the verdict names the preset that drew without it.
+export async function renderEffective(
   { layers, config, compiled, store, registry }: PreparedConfig,
   effective: EffectiveGlobals,
   width: number,
   at: Instant,
-): {
+  settle: SettleWindow = settleWindow(),
+): Promise<{
   rendered: string;
   failures: Map<string, string>;
   advisories: Set<string>;
-} {
+}> {
   // [LAW:types-are-the-program] Keyed by the failing thing's own LABEL, not
   // appended to a list — each can fail at most once per pass, so this is the
   // strongest true shape (dedupe-by-construction within one pass). The key
@@ -567,8 +598,8 @@ export function renderEffective(
         warning satisfies never;
     }
   };
-  const rendered = renderDsl(
-    config,
+  const opts = renderOptionsOf(effective, width);
+  const drawn = bindPayload(
     compiled,
     store,
     registry,
@@ -576,15 +607,26 @@ export function renderEffective(
       ...checkPayload(config, effective, layers.at(-1) ?? null, at),
       today: CHECK_TODAY,
     },
+    opts,
+    effective,
+  );
+  for (const line of stragglers(settle, await registry.inFlight(settle.signal)))
+    advisories.add(line);
+  const rendered = drawDsl(
+    config,
+    compiled,
+    store,
+    registry,
+    drawn,
     at,
-    renderOptionsOf(effective, width),
+    opts,
     {
       onSegmentError: (placementId: string, message: string) =>
         failures.set(`segment "${placementId}"`, message),
       onRenderWarning: warned,
     },
     effective,
-  );
+  ).text;
   return { rendered, failures, advisories };
 }
 
@@ -598,16 +640,10 @@ async function loadRegisterRender(
   settleMs: number,
 ): Promise<string> {
   // [LAW:effects-at-boundaries] One instant for every pass, so the passes
-  // differ only in the preset they render.
+  // differ only in the preset they render; one settle window for every wait.
   const at = instantOf(new Date());
-  const prepared = await prepareConfig(
-    layers,
-    repo,
-    cwd,
-    warnings,
-    at,
-    settleMs,
-  );
+  const settle = settleWindow(settleMs);
+  const prepared = await prepareConfig(layers, repo, cwd, warnings, at, settle);
   const { config } = prepared;
   try {
     // The gates the daemon derives when it loads this config, over the keys
@@ -644,7 +680,7 @@ async function loadRegisterRender(
     // failures the other passes find nor drop the preset that reached it: it
     // is caught here and becomes that pass's one failure. `rendered` is
     // absent exactly then.
-    const render = (preset: string, customized: boolean) => {
+    const render = async (preset: string, customized: boolean) => {
       const effective = resolveEffectiveGlobals(
         config,
         (key) => (key === "preset" ? preset : null),
@@ -656,7 +692,13 @@ async function loadRegisterRender(
         advisories: ReadonlySet<string>;
       };
       try {
-        pass = renderEffective(prepared, effective, CHECK_WIDTH, at);
+        pass = await renderEffective(
+          prepared,
+          effective,
+          CHECK_WIDTH,
+          at,
+          settle,
+        );
       } catch (e) {
         pass = {
           failures: new Map([
@@ -667,14 +709,14 @@ async function loadRegisterRender(
       }
       return { preset, customized, ...pass };
     };
-    const primary = render(freshPreset, false);
-    const outs = [
-      primary,
-      render(freshPreset, true),
-      ...presetNames(config.presets)
-        .filter((p) => p !== freshPreset)
-        .flatMap((p) => [render(p, false), render(p, true)]),
-    ];
+    // [LAW:one-source-of-truth] The passes run one after another: they share
+    // the one view, and each binds it to its own payload before it draws.
+    const primary = await render(freshPreset, false);
+    const outs = [primary, await render(freshPreset, true)];
+    for (const p of presetNames(config.presets)) {
+      if (p === freshPreset) continue;
+      outs.push(await render(p, false), await render(p, true));
+    }
 
     // [LAW:one-source-of-truth] One line per (what, why) — the line's text —
     // however many passes reach it, for failures and advisories alike: an

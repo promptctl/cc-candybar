@@ -21,7 +21,7 @@ import process from "node:process";
 
 import { resolveUserPath } from "../utils/user-path.js";
 import { resolveEffectiveGlobals } from "../config/effective-globals.js";
-import { prepareConfig, renderEffective } from "../check.js";
+import { prepareConfig, renderEffective, settleWindow } from "../check.js";
 import { repoGateAt } from "../daemon/repo-configs.js";
 import { repoGateLines } from "../config/loader/repo-gate.js";
 import { listResolvablePaletteNames } from "../themes/policy.js";
@@ -42,12 +42,16 @@ const named =
   target === undefined ? undefined : resolveUserPath(process.cwd(), target);
 const repos = repoGateAt(process.cwd());
 warnings.push(...repoGateLines(repos));
+// One settle window for the prepare and every row: a theme pick can move a
+// keyed source, and a hung command costs the budget once, not once per theme.
+const settle = settleWindow();
 const prepared = await prepareConfig(
   named === undefined ? [] : [named],
   repos.plugins,
   process.cwd(),
   warnings,
   at,
+  settle,
 );
 try {
   for (const w of warnings) process.stderr.write(`warning: ${w}\n`);
@@ -57,11 +61,12 @@ try {
       (key) => (key === "theme" ? theme : null),
       () => false,
     );
-    const { rendered, failures, advisories } = renderEffective(
+    const { rendered, failures, advisories } = await renderEffective(
       prepared,
       effective,
       WIDTH,
       at,
+      settle,
     );
     for (const [label, message] of failures)
       process.stderr.write(`${theme}: ${label}: ${message}\n`);
