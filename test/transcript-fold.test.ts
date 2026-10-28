@@ -144,12 +144,15 @@ test("a session with no transcript is a real zero, never a failure", async () =>
     );
     expect(await valueOf(warm, "s", path)).toBe(1);
     expect(steps).toBe(1);
+    expect(warm.answer("s").kind).toBe("ok");
     chmodSync(sub, 0o000);
     try {
       for (const fold of [warm, counting()]) {
         const out = await fold.read("s", path);
         expect(out.kind).toBe("failed");
-        if (out.kind === "failed") expect(out.reason).toMatch(/EACCES/);
+        // The open is what classifies, so the reason names it.
+        if (out.kind === "failed")
+          expect(out.reason).toMatch(/EACCES: permission denied, open /);
         // What a draw reads is the failure too, not the prior ok.
         expect(fold.answer("s").kind).toBe("failed");
       }
@@ -159,6 +162,7 @@ test("a session with no transcript is a real zero, never a failure", async () =>
     // Readable again: the warm fold's cursor still stands, nothing re-folded.
     expect(await valueOf(warm, "s", path)).toBe(1);
     expect(steps).toBe(1);
+    expect(warm.answer("s").kind).toBe("ok");
   },
 );
 

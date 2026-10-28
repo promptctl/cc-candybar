@@ -29,7 +29,7 @@ import { debug } from "./logger";
 // IS named is absent (ENOENT) or unreadable (EACCES, EIO) is the read's call,
 // not the stat's: `readAppended`/`readTail` answer `absent` or `failed` with
 // the reason. A stat that classified the same error would be a second
-// enforcer of one rule.
+// enforcer of its read's rule.
 export function statStamp(filePath: string | undefined): string {
   if (!filePath) return "";
   try {
