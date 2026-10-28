@@ -1,3 +1,9 @@
+## [1.161.2](https://github.com/promptctl/cc-candybar/compare/v1.161.1...v1.161.2) (2026-10-28)
+
+### Bug Fixes
+
+* **test:** the real-client e2e runs the client again on a blank answer, as the next tick would (brandon-unfiled-3248.s1je) ([#474](https://github.com/promptctl/cc-candybar/issues/474)) ([c425751](https://github.com/promptctl/cc-candybar/commit/c425751301e47461eaace7e400402d0882682ee6))
+
 ## [1.161.1](https://github.com/promptctl/cc-candybar/compare/v1.161.0...v1.161.1) (2026-10-28)
 
 ### Bug Fixes
