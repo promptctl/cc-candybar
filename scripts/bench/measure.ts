@@ -12,9 +12,13 @@ const WARMUP = 3;
 export async function repeat(
   count: number,
   body: (index: number) => void | Promise<void>,
+  // Run before each repetition, outside its timing: the change the repetition
+  // measures the reaction to.
+  setup?: (index: number) => void | Promise<void>,
 ): Promise<number[]> {
   const ms: number[] = [];
   for (let i = -WARMUP; i < count; i++) {
+    await setup?.(i);
     const started = performance.now();
     await body(i);
     const took = performance.now() - started;

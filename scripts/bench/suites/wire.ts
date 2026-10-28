@@ -74,7 +74,7 @@ function warmVouched(
       moved.push(`renderCache.${key} ${before.renderCache[key]} -> ${after.renderCache[key]}`);
     }
   }
-  for (const key of ["errored"] as const) {
+  for (const key of ["errored", "timedOut"] as const) {
     if (after.requests[key] !== before.requests[key]) {
       moved.push(`requests.${key} ${before.requests[key]} -> ${after.requests[key]}`);
     }
@@ -94,6 +94,33 @@ function answered(ticks: readonly Tick[], what: string): number {
   }
   return unanswered;
 }
+
+// The daemon's record of a run of ticks. With every tick answered, each has
+// exactly one event and the series are the daemon's own view of them. A tick the
+// client gave up on may still be running in the daemon, so its late event can
+// land among the others: pairing by count then could pair a straggler with the
+// wrong tick, and the daemon-side series are left out rather than forged.
+// [LAW:no-silent-failure]
+async function daemonSide(
+  world: World,
+  sessionId: string,
+  from: number,
+  ticks: readonly Tick[],
+): Promise<{ events: RenderEvent[]; exact: boolean }> {
+  const answeredCount = ticks.filter((t) => t.ok).length;
+  return {
+    events: await world.events(sessionId, from, answeredCount),
+    exact: answeredCount === ticks.length,
+  };
+}
+
+const daemonSeries = (side: { events: RenderEvent[]; exact: boolean }) =>
+  side.exact
+    ? [
+        { name: "took", samples: side.events.map((e) => e.tookMs) },
+        { name: "queued", samples: side.events.map((e) => e.queuedMs) },
+      ]
+    : [];
 
 // ── the warm tick ───────────────────────────────────────────────────────────
 
@@ -119,14 +146,13 @@ const warmTick = (columns: number): Benchmark => ({
         ticks.push(await world.tick(session, columns, n++));
       }
       const unanswered = answered(ticks, `wire.tick.w${columns}`);
-      const events = await world.events(session.id, from, plan.samples - unanswered);
+      const side = await daemonSide(world, session.id, from, ticks);
       const after = await world.stats();
-      warmVouched(`wire.tick.w${columns}`, before, after, events);
+      warmVouched(`wire.tick.w${columns}`, before, after, side.events);
       return measured(
         [
           { name: "rtt", samples: ticks.map((t) => t.ms) },
-          { name: "took", samples: events.map((e) => e.tookMs) },
-          { name: "queued", samples: events.map((e) => e.queuedMs) },
+          ...daemonSeries(side),
         ],
         {
           unanswered,
@@ -169,20 +195,19 @@ const concurrentTicks = (sessions: number): Benchmark => ({
       );
       const ticks = perSession.flat();
       const unanswered = answered(ticks, `wire.tick.sessions.${sessions}`);
-      const events = (
-        await Promise.all(
-          all.map((s, i) =>
-            world.events(s.id, marks[i]!, plan.samples - perSession[i]!.filter((t) => !t.ok).length),
-          ),
-        )
-      ).flat();
+      const sides = await Promise.all(
+        all.map((s, i) => daemonSide(world, s.id, marks[i]!, perSession[i]!)),
+      );
+      const side = {
+        events: sides.flatMap((x) => x.events),
+        exact: sides.every((x) => x.exact),
+      };
       const after = await world.stats();
-      warmVouched(`wire.tick.sessions.${sessions}`, before, after, events);
+      warmVouched(`wire.tick.sessions.${sessions}`, before, after, side.events);
       return measured(
         [
           { name: "rtt", samples: ticks.map((t) => t.ms) },
-          { name: "took", samples: events.map((e) => e.tookMs) },
-          { name: "queued", samples: events.map((e) => e.queuedMs) },
+          ...daemonSeries(side),
         ],
         { sessions, periodMs: PERIOD_MS, unanswered },
       );
@@ -332,7 +357,10 @@ const configReload = (entries: number): Benchmark => ({
       for (let i = 0; i < plan.samples; i++) {
         const preset = PRESETS[i % PRESETS.length]!;
         const changed = await untilChanged(world, probe, previous, 10, async () => {
-          fs.writeFileSync(world.configFile, `{ globals: { preset: "${preset}" } }\n`);
+          // Renamed into place, so the watcher never reads a truncated file.
+          const staged = `${world.configFile}.next`;
+          fs.writeFileSync(staged, `{ globals: { preset: "${preset}" } }\n`);
+          fs.renameSync(staged, world.configFile);
         });
         visible.push(changed.visibleMs);
         stall.push(changed.stallMs);

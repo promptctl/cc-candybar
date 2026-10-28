@@ -9,7 +9,7 @@
 import { spawn } from "node:child_process";
 import path from "node:path";
 
-import { BUNDLED_CLIENT_SHIM, REPO, captureEnvironment } from "../environment.js";
+import { BUNDLED_CLIENT_SHIM, REPO, nativeClient } from "../environment.js";
 import { measured, skipped, type Benchmark, type Outcome } from "../types.js";
 import { startWorld } from "../world.js";
 import { repeat } from "../measure.js";
@@ -77,7 +77,7 @@ const client = (
   id: string,
   about: string,
   // Null when the machine has no such client, with the reason.
-  command: () => { bin: string; args: string[]; facts: Record<string, string> } | string,
+  command: () => { bin: string; args: string[]; facts: Record<string, string>; builtFromThisSource?: boolean } | string,
 ): Benchmark => ({
   id,
   group: "client",
@@ -91,6 +91,7 @@ const client = (
       const session = world.session("a", { files: 200, commits: 20, modified: 8, untracked: 4 }, 1_700);
       await world.settle(session, COLUMNS);
       let n = 100;
+      const before = (await world.stats()).requests.total;
       const ms = await repeat(plan.samples, async () => {
         const ran = await run(found.bin, found.args, {
           env: world.clientEnv(COLUMNS),
@@ -102,12 +103,19 @@ const client = (
         if (ran.code !== 0 || !/\S/.test(ran.stdout)) {
           throw new Error(
             `${id}: the client exited ${ran.code} and printed ${JSON.stringify(ran.stdout.slice(0, 200))}` +
-              (Object.values(found.facts).includes("false")
+              (found.builtFromThisSource === false
                 ? " (this binary was not built from this source: just install-rust)"
                 : ""),
           );
         }
       });
+      // [LAW:no-silent-failure] A client that printed a fallback strip without
+      // reaching the daemon exits 0 too: the daemon's own count of requests is
+      // what says every sample was a tick it answered.
+      const answered = (await world.stats()).requests.total - before;
+      if (answered < plan.samples) {
+        throw new Error(`${id}: ${plan.samples} runs reached the daemon as ${answered} requests`);
+      }
       return measured([{ name: "wall", samples: ms }], found.facts);
     } finally {
       await world.stop();
@@ -127,13 +135,14 @@ export const CLIENTS: readonly Benchmark[] = [
     "client.native",
     "the shipped native client, spawned as Claude Code spawns it, drawing a settled session",
     () => {
-      const native = captureEnvironment().native;
+      const native = nativeClient();
       return native === null
         ? "no native client is built (just install-rust stages one)"
         : {
             bin: path.join(REPO, native.path),
             args: [],
             facts: { builtFromThisSource: String(native.builtFromThisSource) },
+            builtFromThisSource: native.builtFromThisSource,
           };
     },
   ),

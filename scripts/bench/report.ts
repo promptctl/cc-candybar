@@ -124,6 +124,9 @@ export function unlike(a: Environment, b: Environment, scales: [number, number])
   const differences: Array<[string, unknown, unknown]> = [
     ["cpu", a.host.cpuModel, b.host.cpuModel],
     ["cores", a.host.cpus, b.host.cpus],
+    ["arch", a.host.arch, b.host.arch],
+    ["memory GiB", a.host.memoryGiB, b.host.memoryGiB],
+    ["native client built from this source", a.native?.builtFromThisSource ?? "no native client", b.native?.builtFromThisSource ?? "no native client"],
     ["os", `${a.host.platform} ${a.host.release}`, `${b.host.platform} ${b.host.release}`],
     ["node", a.node, b.node],
     ["scale", scales[0], scales[1]],
@@ -150,6 +153,15 @@ export function formatReport(report: Report, baseline: Report | null): string {
       : `native client: ${env.native.path} (${env.native.bytes} bytes, ${env.native.builtFromThisSource ? "built from this source" : "NOT built from this source"})`,
     "",
   );
+  if (compared !== null && baseline !== null) {
+    for (const why of unlike(env, baseline.environment, [report.scale, baseline.scale])) {
+      out.push(`baseline differs — ${why}`);
+    }
+    if (compared.gone.length > 0) {
+      out.push(`in the baseline, not in this run: ${compared.gone.join(", ")}`);
+    }
+    out.push("");
+  }
   const header = [
     "benchmark/series",
     "n",
@@ -189,15 +201,6 @@ export function formatReport(report: Report, baseline: Report | null): string {
       "",
     );
   }
-  if (compared !== null && baseline !== null) {
-    for (const why of unlike(env, baseline.environment, [report.scale, baseline.scale])) {
-      out.push(`baseline differs — ${why}`);
-    }
-    if (compared.gone.length > 0) {
-      out.push(`in the baseline, not in this run: ${compared.gone.join(", ")}`);
-    }
-    out.push("");
-  }
   for (const s of report.skipped) out.push(`skipped ${s.id}: ${s.reason}`);
   for (const f of report.failed) out.push(`FAILED  ${f.id}: ${f.error}`);
   return out.join("\n");
@@ -220,9 +223,23 @@ export function parseReport(text: string, source: string): Report {
   if (!Array.isArray(report.rows) || report.environment === undefined) {
     throw new Error(`${source} has no rows or no environment`);
   }
+  const environment = report.environment as Partial<Environment>;
+  if (
+    typeof environment.host !== "object" ||
+    environment.host === null ||
+    typeof environment.node !== "string" ||
+    typeof environment.commit !== "object" ||
+    environment.commit === null
+  ) {
+    throw new Error(`${source} has an environment without a host, node or commit`);
+  }
   for (const row of report.rows) {
+    const d = (row as Partial<typeof row>).distribution;
+    if (typeof row.id !== "string" || typeof d !== "object" || d === null) {
+      throw new Error(`${source} has a row with no id or no distribution: ${JSON.stringify(row).slice(0, 120)}`);
+    }
     // Throws on a row with no usable distribution.
-    distributionOf([row.distribution.p50, row.distribution.p90]);
+    distributionOf([d.p50, d.p90]);
   }
   return report as Report;
 }

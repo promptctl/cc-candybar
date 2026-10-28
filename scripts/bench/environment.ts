@@ -69,7 +69,7 @@ function git(...args: string[]): string {
   return execFileSync("git", args, { cwd: REPO, encoding: "utf8" }).trim();
 }
 
-function nativeClient(): NativeClient | null {
+export function nativeClient(): NativeClient | null {
   const found = NATIVE_CLIENTS.find((p) => fs.existsSync(p));
   if (found === undefined) return null;
   const stat = fs.statSync(found);

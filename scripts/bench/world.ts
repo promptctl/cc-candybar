@@ -36,7 +36,7 @@ import { logPath } from "../../src/daemon/paths.js";
 import type { StatsSnapshot } from "../../src/daemon/stats.js";
 import type { ClaudeHookData } from "../../src/utils/claude.js";
 import { valueOf } from "../../src/utils/logfmt.js";
-import { hookData as barHookData } from "../../test/helpers/drive-bar.js";
+import { hookData as barHookData } from "../lib/hook-data.js";
 import { sessionEnv } from "../lib/session-env.js";
 import { transcriptPath } from "../lib/transcript.js";
 import { BUNDLE, requireCurrentBundle } from "./environment.js";

@@ -10,7 +10,7 @@ import path from "node:path";
 
 import { SessionUsageStore } from "../../../src/daemon/cache/session-usage-store.js";
 import { GitService } from "../../../src/segments/git.js";
-import { hookData } from "../../../test/helpers/drive-bar.js";
+import { hookData } from "../../lib/hook-data.js";
 import {
   appendTurn,
   makeRepo,
@@ -156,10 +156,14 @@ const warmFold = (
       const store = new SessionUsageStore({ sweepIntervalMs: 0 });
       let turns = WARM_TURNS;
       await folded(store, root, transcript, turns);
-      const ms = await repeat(plan.samples, async () => {
-        if (appends) appendTurn(transcript, SESSION, root, turns++);
-        await folded(store, root, transcript, turns);
-      });
+      // The writer's cost stays out of the timed fold.
+      const ms = await repeat(
+        plan.samples,
+        () => folded(store, root, transcript, turns),
+        () => {
+          if (appends) appendTurn(transcript, SESSION, root, turns++);
+        },
+      );
       return measured([{ name: "fold", samples: ms }]);
     } finally {
       removeTree(root);

@@ -96,22 +96,25 @@ async function drawing(
   what: string,
 ): Promise<{ ms: number[]; bytes: number }> {
   const cwd = scratchDir("ccbn-stage");
-  const config = await prepared(draw.layers, cwd);
   try {
-    const effective = resolveEffectiveGlobals(
-      config.config,
-      (key) => (key === "preset" ? draw.preset : null),
-      () => false,
-    );
-    const start = Date.now();
-    let bytes = 0;
-    const ms = await repeat(samples, (i) => {
-      const at = instantOf(new Date(start + (i + 4) * 1000));
-      bytes = drawnClean(renderEffective(config, effective, draw.width, at), what);
-    });
-    return { ms, bytes };
+    const config = await prepared(draw.layers, cwd);
+    try {
+      const effective = resolveEffectiveGlobals(
+        config.config,
+        (key) => (key === "preset" ? draw.preset : null),
+        () => false,
+      );
+      const start = Date.now();
+      let bytes = 0;
+      const ms = await repeat(samples, (i) => {
+        const at = instantOf(new Date(start + (i + 4) * 1000));
+        bytes = drawnClean(renderEffective(config, effective, draw.width, at), what);
+      });
+      return { ms, bytes };
+    } finally {
+      config.registry.dispose();
+    }
   } finally {
-    config.registry.dispose();
     removeTree(cwd);
   }
 }
