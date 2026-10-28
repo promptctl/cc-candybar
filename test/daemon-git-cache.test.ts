@@ -1283,6 +1283,7 @@ describe("GitDataProvider owns its failures and its PR's timing", () => {
     void gitOf(svc, holds, "/repo", {});
     await jest.advanceTimersByTimeAsync(0);
     expect(logs.filter((l) => l.startsWith("git "))).toEqual([
+      "git watch bound root=/repo dirs=/repo/.git,/repo/.git/refs/heads refused=2",
       "git refresh threw (/repo): Error: logger bug",
     ]);
     await jest.advanceTimersByTimeAsync(1_000);
@@ -1569,8 +1570,14 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
       await until(() => passes(logs).length >= 2, "a period pass landed");
       expect(logs.some((l) => l.startsWith("git refresh threw"))).toBe(false);
       expect(passes(logs)[0]).toMatch(/ watch=kept /);
+      // The git directory is refused on every platform. The refs tree under it
+      // is refused on macOS; Linux's recursive watcher (Node's own walk)
+      // swallows the loop and watches nothing, so its count is the
+      // platform's.
       expect(logs).toContainEqual(
-        expect.stringMatching(/^git watch bound root=.* refused=2$/),
+        expect.stringMatching(
+          /^git watch bound root=.* dirs=.*\.git,.*refs\/heads refused=[12]$/,
+        ),
       );
       expect(counters).toEqual({
         watchersOpened: 0,
