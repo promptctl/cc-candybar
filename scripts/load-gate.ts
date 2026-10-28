@@ -623,14 +623,22 @@ const unanswered: string[] = [];
 const charge = (pid: number) => chargeProbe(process.platform, pid);
 
 async function sample(started: number): Promise<void> {
+  // [LAW:no-ambient-temporal-coupling] The phase and offset of the instant the
+  // sample was asked for, not of whatever phase holds once it is answered.
   const at = Date.now() - started;
+  const asked = phase;
   const outcome = await fetchStats();
   if (outcome.kind !== "ok") {
     unanswered.push(`${at} ms: ${outcome.kind}/${outcome.cause}`);
     return;
   }
   const reading = await charge(outcome.value.pid)(outcome.value.rssBytes);
-  samples.push({ phase, at, stats: outcome.value, charge: reading.bytes });
+  samples.push({
+    phase: asked,
+    at,
+    stats: outcome.value,
+    charge: reading.bytes,
+  });
 }
 
 // The daemon's heap once everything unreachable is collected, through its
@@ -1017,6 +1025,9 @@ async function run(): Promise<{
       max: ms.at(-1) ?? 0,
     },
     chargeMb: charges.map(mb),
+    // The charge the budget judges, by name.
+    chargeAfterCollectionMb:
+      chargeAfterCollection === null ? null : mb(chargeAfterCollection),
     limitMb: mb(limit),
     rssMb: samples.map((s) => mb(s.stats.rssBytes)),
     heapUsedMb: samples.map((s) => mb(s.stats.heapUsedBytes)),
