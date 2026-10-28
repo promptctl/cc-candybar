@@ -7,7 +7,7 @@
 // classes); the daemon is spawned with the client's argv, plus an inspector,
 // the one way to collect its heap before reading it (twice, outside the scored
 // renders); memory is the charge the daemon's backstop judges, read through the
-// backstop's own probe.
+// backstop's own probe, less the young generation the daemon's stats report.
 //
 // [LAW:effects-at-boundaries] The world the daemon reads is built here and
 // nowhere real: one temporary root holds its socket, XDG directories, Claude
@@ -17,10 +17,10 @@
 //
 // Pass: every session answers before the warm deadline; every steady render
 // answers ok within the client's budget; the daemon is the same process
-// throughout with no post-mortem; its charge stays within a budget for these
-// sessions and does not climb; the cache's held counts stay flat; every click
-// on one session's settings menu, once a second, answers ok within the click's
-// budget.
+// throughout with no post-mortem; its charge outside V8's young generation
+// stays within a budget for these sessions and does not climb; the cache's
+// held counts stay flat; every click on one session's settings menu, once a
+// second, answers ok within the click's budget.
 //
 // Run: pnpm build && pnpm load-gate [--sessions N] [--seconds S]
 //
@@ -612,6 +612,12 @@ interface Sample {
   readonly at: number;
   readonly stats: StatsSnapshot;
   readonly charge: number;
+  // The charge less V8's young generation. V8 sizes
+  // the young generation by allocation rate, up to a ceiling the Node version
+  // sets, so with it the charge steps between modes on one build, and a budget
+  // between them judges V8's sizing rather than the daemon. Its committed
+  // pages are filled before every scavenge, so the charge counts all of them.
+  readonly outsideYoung: number;
 }
 const samples: Sample[] = [];
 // A daemon too busy to answer stats inside the stats client's budget.
@@ -626,7 +632,13 @@ async function sample(started: number): Promise<void> {
     return;
   }
   const reading = await charge(outcome.value.pid)(outcome.value.rssBytes);
-  samples.push({ phase, at, stats: outcome.value, charge: reading.bytes });
+  samples.push({
+    phase,
+    at,
+    stats: outcome.value,
+    charge: reading.bytes,
+    outsideYoung: reading.bytes - outcome.value.youngGenerationBytes,
+  });
 }
 
 // The daemon's heap once everything unreachable is collected, through its
@@ -825,21 +837,21 @@ async function run(): Promise<{
     .sort((a, b) => a.atMs - b.atMs);
   const failures = tally(steadyFailures.map((r) => r.outcome));
   const expected = (SESSIONS * STEADY_MS) / SESSION_PERIOD_MS;
-  const charges = samples.map((s) => s.charge);
+  const outsideYoung = samples.map((s) => s.outsideYoung);
   const climb = heapAfter - heapBefore;
   const first0 = samples[0]!.stats;
-  // The charge under load, over the steady phase's second half: in the first
-  // the allocator is still filling to the load's working set, and a leak keeps
-  // climbing after it is full. Charge less V8's heap is no measure of native
+  // The charge outside the young generation under load, over the steady
+  // phase's second half: in the first the allocator is still filling to the
+  // load's working set, and a leak keeps climbing after it is full. Charge less V8's heap is no measure of native
   // memory: the heap gives back pages it never touched, which the charge never
   // counted, so the difference grows as the heap shrinks.
   const underLoad = samples
     .filter((s) => s.phase === "steady")
-    .map((s) => s.charge);
+    .map((s) => s.outsideYoung);
   const secondHalf = underLoad.slice(Math.floor(underLoad.length / 2));
   // Two samples at least, or there is no climb to judge: a run whose samples
   // went unanswered fails here as well as on its own check.
-  const chargeClimb =
+  const outsideYoungClimb =
     secondHalf.length < 2 ? null : secondHalf.at(-1)! - secondHalf[0]!;
   const last = samples.at(-1)!.stats;
   const held = (pick: (s: StatsSnapshot) => number) => [
@@ -914,9 +926,9 @@ async function run(): Promise<{
       detail: `pids ${pids.join(",")} ${daemonExit ?? "running"}, post-mortems ${JSON.stringify(postMortems)}`,
     },
     {
-      name: "charge within the budget",
-      pass: charges.every((c) => c <= BUDGET_BYTES),
-      detail: `max ${mb(Math.max(...charges))} MB of ${mb(BUDGET_BYTES)} MB (limit ${mb(limit)} MB)`,
+      name: "charge outside the young generation within the budget",
+      pass: outsideYoung.every((c) => c <= BUDGET_BYTES),
+      detail: `max ${mb(Math.max(...outsideYoung))} MB of ${mb(BUDGET_BYTES)} MB (limit ${mb(limit)} MB)`,
     },
     {
       name: "live heap not climbing",
@@ -924,10 +936,11 @@ async function run(): Promise<{
       detail: `${mb(heapBefore)} MB to ${mb(heapAfter)} MB over the steady phase (limit +${mb(CLIMB_LIMIT_BYTES)} MB)`,
     },
     {
-      name: "charge not climbing under load",
-      pass: chargeClimb !== null && chargeClimb <= CLIMB_LIMIT_BYTES,
+      name: "charge outside the young generation not climbing under load",
+      pass:
+        outsideYoungClimb !== null && outsideYoungClimb <= CLIMB_LIMIT_BYTES,
       detail:
-        chargeClimb === null
+        outsideYoungClimb === null
           ? `${secondHalf.length} sample(s) in the steady phase's second half, too few to judge`
           : `${mb(secondHalf[0]!)} MB to ${mb(secondHalf.at(-1)!)} MB over the steady phase's second half (limit +${mb(CLIMB_LIMIT_BYTES)} MB)`,
     },
@@ -1004,7 +1017,9 @@ async function run(): Promise<{
       p99: pct(ms, 0.99),
       max: ms.at(-1) ?? 0,
     },
-    chargeMb: charges.map(mb),
+    chargeMb: samples.map((s) => mb(s.charge)),
+    youngGenerationMb: samples.map((s) => mb(s.stats.youngGenerationBytes)),
+    outsideYoungMb: outsideYoung.map(mb),
     limitMb: mb(limit),
     rssMb: samples.map((s) => mb(s.stats.rssBytes)),
     heapUsedMb: samples.map((s) => mb(s.stats.heapUsedBytes)),

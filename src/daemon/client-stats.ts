@@ -160,6 +160,7 @@ export function formatStats(s: StatsSnapshot): string {
   lines.push(`  rss           ${fmtBytes(s.rssBytes)}`);
   lines.push(`  heapUsed      ${fmtBytes(s.heapUsedBytes)}`);
   lines.push(`  heapTotal     ${fmtBytes(s.heapTotalBytes)}`);
+  lines.push(`  youngGen      ${fmtBytes(s.youngGenerationBytes)}`);
   lines.push(`  external      ${fmtBytes(s.externalBytes)}`);
   lines.push(`  arrayBuffers  ${fmtBytes(s.arrayBuffersBytes)}`);
   lines.push(``);

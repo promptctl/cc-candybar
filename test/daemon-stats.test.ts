@@ -130,6 +130,9 @@ describe("RuntimeStats.snapshot", () => {
       doctorStores: EMPTY_STORES,
     });
     expect(snap.handlerProbes).toEqual([{ nonce: "n", handler: "1.2.3" }]);
+    // The young generation is a committed part of this process's V8 heap.
+    expect(snap.youngGenerationBytes).toBeGreaterThan(0);
+    expect(snap.youngGenerationBytes).toBeLessThanOrEqual(snap.heapTotalBytes);
     expect(snap.clients).toEqual([
       {
         client: null,
@@ -265,6 +268,7 @@ describe("formatStats", () => {
       rssBytes: 50 * 1024 * 1024,
       heapUsedBytes: 20 * 1024 * 1024,
       heapTotalBytes: 30 * 1024 * 1024,
+      youngGenerationBytes: 4 * 1024 * 1024,
       externalBytes: 1 * 1024 * 1024,
       arrayBuffersBytes: 256 * 1024,
       requests: { total: 100, errored: 2, timedOut: 1, inFlight: 0 },
@@ -358,6 +362,7 @@ describe("formatStats", () => {
     expect(out).toContain("revision      7");
     expect(out).toContain("compiles      2");
     expect(out).toContain("accounted     32.0MB / 128.0MB");
+    expect(out).toContain("youngGen      4.0MB");
   });
 
   test("hit rate is n/a when no observations", () => {
@@ -371,6 +376,7 @@ describe("formatStats", () => {
       rssBytes: 100,
       heapUsedBytes: 50,
       heapTotalBytes: 100,
+      youngGenerationBytes: 10,
       externalBytes: 0,
       arrayBuffersBytes: 0,
       requests: { total: 0, errored: 0, timedOut: 0, inFlight: 0 },
@@ -456,10 +462,7 @@ describe("statsPlan — the text/exit-code contract", () => {
 
   it("a skewed daemon's JSON is still delivered, beside the skew and a failing code", () => {
     const { clients: _clients, ...older } = snap;
-    const plan = statsPlan(
-      { kind: "ok", value: older as typeof snap },
-      true,
-    );
+    const plan = statsPlan({ kind: "ok", value: older as typeof snap }, true);
     expect(plan.code).toBe(1);
     expect(plan.stderr).toMatch(/^daemon-stats: .*reports no clients/);
     expect(JSON.parse(plan.stdout)).not.toHaveProperty("clients");
