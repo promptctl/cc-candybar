@@ -447,7 +447,9 @@ describe("GitDataProvider reads what is held", () => {
     svc.changed("/repo");
     await jest.advanceTimersByTimeAsync(0);
     expect(inner.prCalls).toHaveLength(1);
-    expect(logs.at(-1)).toMatch(/^git refresh \/repo asked=watch .* pr=owed watch=kept by=change /);
+    expect(logs.at(-1)).toMatch(
+      /^git refresh \/repo asked=watch .* pr=owed watch=kept by=change /,
+    );
 
     // Shown again: the new key is looked up, never answered by the old one.
     const shown = gitOf(svc, new Holds(), "/repo", {
@@ -479,7 +481,9 @@ describe("GitDataProvider reads what is held", () => {
     inner.stubInfo = { ...inner.stubInfo, branch: "feature" };
     svc.changed("/repo");
     await jest.advanceTimersByTimeAsync(0);
-    expect(passes(logs).at(-1)).toMatch(/ asked=watch values=1 pr=looked-up watch=kept by=change /);
+    expect(passes(logs).at(-1)).toMatch(
+      / asked=watch values=1 pr=looked-up watch=kept by=change /,
+    );
     expect(inner.prCalls).toHaveLength(2);
     svc.close();
   });
@@ -836,7 +840,10 @@ describe("GitDataProvider refreshes on its own triggers", () => {
   test("a HEAD git could not read is logged, though the payload only reads it for the PR", async () => {
     const { svc, inner, logs, holds } = makeCache();
     inner.repoRootByDir = { "/repo": "/repo" };
-    inner.stubInfo = { ...inner.stubInfo, head: failed("git rev-parse: timeout") };
+    inner.stubInfo = {
+      ...inner.stubInfo,
+      head: failed("git rev-parse: timeout"),
+    };
 
     await gitOf(svc, holds, "/repo", {});
     expect(failuresIn(logs)).toEqual(["git.head: git rev-parse: timeout"]);
@@ -1181,7 +1188,9 @@ describe("GitDataProvider owns its failures and its PR's timing", () => {
     }
     svc.declare(new Holds(), "/slow").current();
     await tick();
-    expect(logs).toEqual(["git resolve failed (/slow): git rev-parse: timeout"]);
+    expect(logs).toEqual([
+      "git resolve failed (/slow): git rev-parse: timeout",
+    ]);
   });
 
   test("a declaration into a closed home throws, for the view's declaration to report", () => {
@@ -1212,15 +1221,17 @@ describe("GitDataProvider owns its failures and its PR's timing", () => {
     inner.prGate = deferred();
     svc.changed("/repo");
     await tick();
-    expect(
-      await gitOf(svc, holds, "/repo", { showPullRequest: true }),
-    ).toEqual(ok({ ...onA, pullRequest: prA }));
+    expect(await gitOf(svc, holds, "/repo", { showPullRequest: true })).toEqual(
+      ok({ ...onA, pullRequest: prA }),
+    );
 
     // Stored, b's values wait for b's PR rather than wear a's.
     inner.remoteGate.resolve();
     await tick();
     // b's PR is a key never answered, which a request waits for.
-    const now = svc.declare(holds, "/repo", { showPullRequest: true }).current();
+    const now = svc
+      .declare(holds, "/repo", { showPullRequest: true })
+      .current();
     expect(now.kind === "ok" && now.value.pullRequest).toMatchObject({
       kind: "pending",
       why: "unread",
@@ -1307,14 +1318,20 @@ describe("GitDataProvider PR keys, drops and refresh events", () => {
     svc.changed("/repo");
     await tick();
 
-    expect(
-      await gitOf(svc, holds, "/repo", { showPullRequest: true }),
-    ).toEqual(ok({ ...onA, pullRequest: first.value.pullRequest }));
+    expect(await gitOf(svc, holds, "/repo", { showPullRequest: true })).toEqual(
+      ok({ ...onA, pullRequest: first.value.pullRequest }),
+    );
     expect(inner.prCalls).toHaveLength(2);
     expect(logs.filter((l) => l.startsWith("git refresh /repo"))).toEqual([
-      expect.stringMatching(/ asked=first,pr,owed values=1 pr=looked-up watch=kept by=first /),
-      expect.stringMatching(/ asked=watch values=1 pr=looked-up watch=kept by=change /),
-      expect.stringMatching(/ asked=watch values=1 pr=recalled watch=kept by=change /),
+      expect.stringMatching(
+        / asked=first,pr,owed values=1 pr=looked-up watch=kept by=first /,
+      ),
+      expect.stringMatching(
+        / asked=watch values=1 pr=looked-up watch=kept by=change /,
+      ),
+      expect.stringMatching(
+        / asked=watch values=1 pr=recalled watch=kept by=change /,
+      ),
     ]);
   });
 
@@ -1357,8 +1374,12 @@ describe("GitDataProvider PR keys, drops and refresh events", () => {
     await jest.advanceTimersByTimeAsync(1_000);
 
     expect(logs.filter((l) => l.startsWith("git refresh /repo"))).toEqual([
-      expect.stringMatching(/ asked=first values=1 pr=- watch=kept by=first outcome=ok took=\d+ms$/),
-      expect.stringMatching(/ asked=- values=1 pr=- watch=kept by=period outcome=ok took=\d+ms$/),
+      expect.stringMatching(
+        / asked=first values=1 pr=- watch=kept by=first outcome=ok took=\d+ms$/,
+      ),
+      expect.stringMatching(
+        / asked=- values=1 pr=- watch=kept by=period outcome=ok took=\d+ms$/,
+      ),
     ]);
     svc.close();
   });
@@ -1528,6 +1549,39 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
     });
     expect(watchers.size()).toBe(1);
     svc.close();
+  });
+
+  // A pass's first act derives the watch's key by stat'ing each directory. A
+  // directory that cannot be stat'd (a symlink loop here; an unreadable one in
+  // the field) must not throw the pass, which would leave every value pending
+  // and drop what the pass was asked: its failure is its key, the OS refuses
+  // the watch, and the pass reads as any other.
+  test("a git directory that cannot be stat'd is read by the pass and refused by the watch, never thrown", async () => {
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), "git-cache-eloop-"));
+    const loop = path.join(repo, ".git");
+    fs.symlinkSync(loop, loop);
+    const { svc, inner, counters, logs } = counted({ periodMs: 100 });
+    inner.repoRootByDir[repo] = repo;
+    inner.gitDirByDir[repo] = loop;
+    try {
+      const outcome = await gitOf(svc, new Holds(), repo, {});
+      expect(outcome.kind).toBe("ok");
+      await until(() => passes(logs).length >= 2, "a period pass landed");
+      expect(logs.some((l) => l.startsWith("git refresh threw"))).toBe(false);
+      expect(passes(logs)[0]).toMatch(/ watch=kept /);
+      expect(logs).toContainEqual(
+        expect.stringMatching(/^git watch bound root=.* refused=2$/),
+      );
+      expect(counters).toEqual({
+        watchersOpened: 0,
+        watchersClosed: 0,
+        watchRefusals: 1,
+        watchErrors: 0,
+      });
+    } finally {
+      svc.close();
+      fs.rmSync(repo, { recursive: true, force: true });
+    }
   });
 
   test("the git cache's own LRU eviction is what releases a watch", async () => {

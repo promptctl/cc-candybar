@@ -81,6 +81,51 @@ describe("WatcherRegistry", () => {
     rmrf(repo);
   });
 
+  // The one rule for a watch whose targets move: the held watch follows the
+  // spec exactly when the key differs, so every consumer rebinds the same way.
+  test("follow keeps a watch under the same key and rebinds it under a new one", () => {
+    const counters = {
+      watchersOpened: 0,
+      watchersClosed: 0,
+      watchRefusals: 0,
+      watchErrors: 0,
+    };
+    const reg = new WatcherRegistry({ counters });
+    const first = reg.follow(
+      null,
+      { key: "a", targets: { dirs: [] } },
+      () => {},
+    );
+    expect(first.move).toBe("rebound");
+    expect(first.watch.key).toBe("a");
+
+    const kept = reg.follow(
+      first.watch,
+      { key: "a", targets: { dirs: [] } },
+      () => {},
+    );
+    expect(kept.move).toBe("kept");
+    expect(kept.watch).toBe(first.watch);
+    expect(reg.size()).toBe(1);
+
+    const rebound = reg.follow(
+      kept.watch,
+      { key: "b", targets: { dirs: [] } },
+      () => {},
+    );
+    expect(rebound.move).toBe("rebound");
+    expect(rebound.watch.key).toBe("b");
+    // The watch under the old key is released; one slot is held, the new one.
+    expect(reg.size()).toBe(1);
+    expect(counters).toEqual({
+      watchersOpened: 2,
+      watchersClosed: 1,
+      watchRefusals: 0,
+      watchErrors: 0,
+    });
+    reg.closeAll();
+  });
+
   // brandon-unfiled-3248.576q: the registry bounds nothing — its consumers do.
   // An LRU cap here closed watches under holders that still held them.
   test("a slot closes only when its last holder releases it, however many are open", () => {

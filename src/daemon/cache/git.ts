@@ -17,10 +17,11 @@ import {
 import {
   WatcherRegistry,
   type DirTarget,
-  type WatcherHandle,
-  type WatchTargets,
+  type HeldWatch,
+  type WatchMove,
+  type WatchSpec,
 } from "./watchers";
-import { identityKey, statIdentity } from "../../utils/folder-identity";
+import { boundKey } from "../../utils/folder-identity";
 import { TrailingEdge } from "../../utils/trailing-edge";
 import { Period, periodOf, type Every } from "../../utils/period";
 import {
@@ -156,19 +157,6 @@ function triggerOf(
   return asked.length === 0 ? "period" : "change";
 }
 
-// The repo's watch as acquired: the registry's handle and the key it was
-// acquired under. [LAW:one-source-of-truth] The key names what the watch
-// bound (`watchOf`), so a watch is rebound exactly when the key a pass derives
-// differs from this one.
-interface RepoWatch {
-  readonly key: string;
-  readonly handle: WatcherHandle;
-}
-
-// What a pass did to the repo's watch, for its refresh event: kept it, or
-// released it and acquired one on the directories its paths name now.
-type WatchMove = "kept" | "rebound";
-
 // [LAW:types-are-the-program] One repo the cache knows. The watch lives as long
 // as the state and the directories it bound do — closing and reopening it per
 // value leaked native memory on macOS (brandon-unfiled-3248.576q;
@@ -186,7 +174,9 @@ interface RepoState {
   // pass, so the last change always lands (brandon-unfiled-3248.xjma); an ask
   // (a period tick) shares the pass in flight, which already answers it.
   readonly refresh: TrailingEdge;
-  watch: RepoWatch;
+  // The watch the registry holds for the repo, under the key `watchSpec`
+  // derived when it was bound.
+  watch: HeldWatch;
   readonly period: Period;
   readonly values: Map<string, GitValue>;
   holders: number;
@@ -250,34 +240,26 @@ function optionsKey(options: GitOptions): string {
 // branches are tens to hundreds; remote refs and tags are the remote's to
 // grow, and a fetch rewriting thousands of them would re-walk the directory
 // per ref. Those still reach the bar on the period.
-// [LAW:dataflow-not-control-flow] One shape for both layouts: nothing stats
-// first. A tree that cannot be opened is a refusal the registry logs and
-// counts, and the period is what refreshes a repo whose watch is refused.
+// [LAW:dataflow-not-control-flow] One shape for both layouts: the stat of
+// each directory names it for the key and decides nothing, and the stat
+// cannot throw. A tree that cannot be opened is a refusal the registry logs
+// and counts, and the period is what refreshes a repo whose watch is refused.
 //
 // A directory watch binds the inode at its path when it opens, not the path:
 // a git directory deleted and recreated at its path (`worktree remove` then
 // `worktree add` of the same name, `rm -rf` then a re-clone) is a new
 // directory the old watch never hears (Linux; FSEvents follows paths). So the
-// slot's key names what the watch bound — each target's path and the identity
-// of the directory there now — and [LAW:one-source-of-truth] "the directories
-// moved" and "the key changed" are one fact: the registry keeps the first
-// acquire's targets under a key, which holds by construction when a different
-// target set is a different key (as the config cache keys its watch). Every
-// pass derives this again and rebinds on a new key, so a recreated repo is
-// heard within one period, and a layout change at the same path (a clone
-// replaced by a worktree) is the same case.
-function watchOf(
-  root: string,
-  gitDir: string,
-  commonDir: string,
-): { readonly key: string; readonly targets: WatchTargets } {
+// spec's key names what the watch binds — each target's path and the identity
+// of the directory there now — and the registry's `follow` rebinds on a new
+// key. Every pass derives the spec again, so a recreated repo is heard within
+// one period, and a layout change at the same path (a clone replaced by a
+// worktree) is the same case.
+function watchSpec(root: string, gitDir: string, commonDir: string): WatchSpec {
   const dirs: DirTarget[] = [
     { path: gitDir, filenames: ["HEAD", "index"] },
     { path: path.join(commonDir, "refs", "heads"), recursive: true },
   ];
-  const bound = dirs
-    .map((d) => `${d.path}@${identityKey(statIdentity(d.path))}`)
-    .join("|");
+  const bound = dirs.map((d) => `${d.path}@${boundKey(d.path)}`).join("|");
   return { key: `git:${root}:${bound}`, targets: { dirs } };
 }
 
@@ -534,7 +516,7 @@ export class GitDataProvider {
     const state: RepoState = {
       root,
       refresh: new TrailingEdge(),
-      watch: this.acquireWatch(root, this.watchOf(root)),
+      watch: this.followWatch(root, null).watch,
       period: new Period(() => {
         void state.refresh.share(PASS, () => this.refreshPass(state));
       }),
@@ -549,34 +531,29 @@ export class GitDataProvider {
 
   // [LAW:one-source-of-truth] The one derivation of a repo's watch, for the
   // state's build and for every pass: the git directories resolved from the
-  // root as they stand now, and the key naming what a watch on them binds.
-  private watchOf(root: string): ReturnType<typeof watchOf> {
-    const gitDir = this.inner.resolveGitDir(root);
-    return watchOf(root, gitDir, this.inner.resolveCommonGitDir(gitDir));
-  }
-
-  private acquireWatch(
+  // root as they stand now, followed by the registry's one rule. A pass calls
+  // it first, before any await, so the watch follows the repo's paths.
+  private followWatch(
     root: string,
-    watch: ReturnType<typeof watchOf>,
-  ): RepoWatch {
-    return {
-      key: watch.key,
-      handle: this.watchers.acquire(watch.key, watch.targets, () =>
-        this.changed(root),
-      ),
-    };
-  }
-
-  // A pass's first act, before any await: the watch follows the repo's paths.
-  // The same key is the same directories, kept; a new key releases the watch
-  // bound to directories the paths no longer name and acquires one on those
-  // they name now.
-  private followWatch(state: RepoState): WatchMove {
-    const watch = this.watchOf(state.root);
-    if (watch.key === state.watch.key) return "kept";
-    state.watch.handle.release();
-    state.watch = this.acquireWatch(state.root, watch);
-    return "rebound";
+    held: HeldWatch | null,
+  ): { readonly watch: HeldWatch; readonly move: WatchMove } {
+    const gitDir = this.inner.resolveGitDir(root);
+    const spec = watchSpec(
+      root,
+      gitDir,
+      this.inner.resolveCommonGitDir(gitDir),
+    );
+    const followed = this.watchers.follow(held, spec, () => this.changed(root));
+    // [LAW:nothing-unseen] A rebind is the fact that the directories moved,
+    // and which the repo hears now: a change that fires nothing is read
+    // against this line, as the config cache's bind line.
+    if (followed.move === "rebound") {
+      this.logger(
+        "info",
+        `git watch bound root=${root} dirs=${spec.targets.dirs.map((d) => d.path).join(",")} refused=${followed.watch.handle.refused.length}`,
+      );
+    }
+    return followed;
   }
 
   private changedPass(state: RepoState, reason: PassReason): void {
@@ -700,7 +677,8 @@ export class GitDataProvider {
     const startedAt = Date.now();
     const asked = [...state.asked];
     state.asked.clear();
-    const watch = this.followWatch(state);
+    const followed = this.followWatch(state.root, state.watch);
+    state.watch = followed.watch;
     const values: GitValue[] = [];
     // A value something reads, or something waits on, is read; the rest are
     // missed, read by the pass their next reader queues.
@@ -749,7 +727,7 @@ export class GitDataProvider {
     // reason it met on the one event; a read of the stored value never logs
     // it again.
     this.gitRefreshes.recorded(
-      `${state.root} asked=${asked.join(",") || "-"} values=${values.length} pr=${prMove} watch=${watch}`,
+      `${state.root} asked=${asked.join(",") || "-"} values=${values.length} pr=${prMove} watch=${followed.move}`,
       triggerOf(asked),
       failures.size === 0 ? ok(null) : failed([...failures].join("; ")),
       Date.now() - startedAt,

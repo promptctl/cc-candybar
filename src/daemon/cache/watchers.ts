@@ -98,6 +98,25 @@ export interface WatcherHandle {
   readonly refused: readonly Refusal[];
 }
 
+// What a consumer asks to watch, under the key naming it. [LAW:one-source-of-truth]
+// The registry keeps the FIRST acquire's targets under a key, so the key must
+// name the target set: a different set is a different key, and "the targets
+// moved" and "the key changed" are one fact.
+export interface WatchSpec {
+  readonly key: string;
+  readonly targets: WatchTargets;
+}
+
+// A watch a consumer holds: the handle and the key it was acquired under.
+export interface HeldWatch {
+  readonly key: string;
+  readonly handle: WatcherHandle;
+}
+
+// What following a spec did to a held watch: kept it, or released it and
+// acquired the spec's.
+export type WatchMove = "kept" | "rebound";
+
 // `watchersOpened` counts slots whose every target opened, `watchRefusals`
 // slots with a target refused, and `watchErrors` errors watches reported after
 // they opened — so a refused or failed watch is never counted as a working
@@ -193,6 +212,30 @@ export class WatcherRegistry {
       else this.counters.watchRefusals++;
     }
     return this.makeHandle(slot);
+  }
+
+  // [LAW:single-enforcer] The one rule for a watch whose targets can move: a
+  // consumer derives its spec from disk again and the held watch follows it
+  // exactly when the key differs. The same key is the same directories, kept;
+  // a new key releases the watch bound to directories the spec no longer
+  // names and acquires one on those it names now. Nothing held yet is a first
+  // acquire, which is a rebind from nothing.
+  follow(
+    held: HeldWatch | null,
+    spec: WatchSpec,
+    onInvalidate: (invalidation: Invalidation) => void,
+  ): { readonly watch: HeldWatch; readonly move: WatchMove } {
+    if (held !== null && held.key === spec.key) {
+      return { watch: held, move: "kept" };
+    }
+    held?.handle.release();
+    return {
+      watch: {
+        key: spec.key,
+        handle: this.acquire(spec.key, spec.targets, onInvalidate),
+      },
+      move: "rebound",
+    };
   }
 
   private makeHandle(slot: WatcherSlot): WatcherHandle {
