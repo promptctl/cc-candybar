@@ -278,6 +278,10 @@ export function runRealClient(
       { ...options, encoding: "utf8", timeout: 10_000 },
     );
     if (run.status !== 0 || stripAnsi(run.stdout).trim() !== "") break;
+    // [LAW:no-silent-failure] A retry that absorbs a blank is named, so a
+    // client that needs several runs every time (a real latency regression)
+    // shows in the log instead of passing unseen.
+    console.warn(`runRealClient: blank answer on run ${i + 1}/${attempts}`);
   }
   return run;
 }
