@@ -1,3 +1,9 @@
+## [1.160.10](https://github.com/promptctl/cc-candybar/compare/v1.160.9...v1.160.10) (2026-10-28)
+
+### Bug Fixes
+
+* **daemon:** a repo's watch is keyed on the directories it bound, and every pass rebinds it (brandon-unfiled-3248.gf07) ([#467](https://github.com/promptctl/cc-candybar/issues/467)) ([88e0cea](https://github.com/promptctl/cc-candybar/commit/88e0ceab9133a88fcba17a013ba1572b50db6441))
+
 ## [1.160.9](https://github.com/promptctl/cc-candybar/compare/v1.160.8...v1.160.9) (2026-10-27)
 
 ### Bug Fixes
