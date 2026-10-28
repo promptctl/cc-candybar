@@ -20,6 +20,7 @@ import {
   type WatcherHandle,
   type WatchTargets,
 } from "./watchers";
+import { identityKey, statIdentity } from "../../utils/folder-identity";
 import { TrailingEdge } from "../../utils/trailing-edge";
 import { Period, periodOf, type Every } from "../../utils/period";
 import {
@@ -155,12 +156,27 @@ function triggerOf(
   return asked.length === 0 ? "period" : "change";
 }
 
+// The repo's watch as acquired: the registry's handle and the key it was
+// acquired under. [LAW:one-source-of-truth] The key names what the watch
+// bound (`watchOf`), so a watch is rebound exactly when the key a pass derives
+// differs from this one.
+interface RepoWatch {
+  readonly key: string;
+  readonly handle: WatcherHandle;
+}
+
+// What a pass did to the repo's watch, for its refresh event: kept it, or
+// released it and acquired one on the directories its paths name now.
+type WatchMove = "kept" | "rebound";
+
 // [LAW:types-are-the-program] One repo the cache knows. The watch lives as long
-// as the state does — closing and reopening it per value leaked native memory
-// on macOS (brandon-unfiled-3248.576q; src/daemon/cache/watchers.ts). Its one
-// use is `holders`, the holds homes' reads take on it, which run the period and
-// keep it from eviction. A change on a repo nothing holds reads nothing; it
-// marks every value missed, so its next read reads at once.
+// as the state and the directories it bound do — closing and reopening it per
+// value leaked native memory on macOS (brandon-unfiled-3248.576q;
+// src/daemon/cache/watchers.ts), and a pass rebinds it only when its paths
+// name other directories. Its one use is `holders`, the holds homes' reads
+// take on it, which run the period and keep it from eviction. A change on a
+// repo nothing holds reads nothing; it marks every value missed, so its next
+// read reads at once.
 interface RepoState {
   readonly root: string;
   // [LAW:single-enforcer] The repo's one serialized refresh loop, owned by its
@@ -170,7 +186,7 @@ interface RepoState {
   // pass, so the last change always lands (brandon-unfiled-3248.xjma); an ask
   // (a period tick) shares the pass in flight, which already answers it.
   readonly refresh: TrailingEdge;
-  readonly watcher: WatcherHandle;
+  watch: RepoWatch;
   readonly period: Period;
   readonly values: Map<string, GitValue>;
   holders: number;
@@ -237,12 +253,32 @@ function optionsKey(options: GitOptions): string {
 // [LAW:dataflow-not-control-flow] One shape for both layouts: nothing stats
 // first. A tree that cannot be opened is a refusal the registry logs and
 // counts, and the period is what refreshes a repo whose watch is refused.
-function watcherTargets(gitDir: string, commonDir: string): WatchTargets {
+//
+// A directory watch binds the inode at its path when it opens, not the path:
+// a git directory deleted and recreated at its path (`worktree remove` then
+// `worktree add` of the same name, `rm -rf` then a re-clone) is a new
+// directory the old watch never hears (Linux; FSEvents follows paths). So the
+// slot's key names what the watch bound — each target's path and the identity
+// of the directory there now — and [LAW:one-source-of-truth] "the directories
+// moved" and "the key changed" are one fact: the registry keeps the first
+// acquire's targets under a key, which holds by construction when a different
+// target set is a different key (as the config cache keys its watch). Every
+// pass derives this again and rebinds on a new key, so a recreated repo is
+// heard within one period, and a layout change at the same path (a clone
+// replaced by a worktree) is the same case.
+function watchOf(
+  root: string,
+  gitDir: string,
+  commonDir: string,
+): { readonly key: string; readonly targets: WatchTargets } {
   const dirs: DirTarget[] = [
     { path: gitDir, filenames: ["HEAD", "index"] },
     { path: path.join(commonDir, "refs", "heads"), recursive: true },
   ];
-  return { dirs };
+  const bound = dirs
+    .map((d) => `${d.path}@${identityKey(statIdentity(d.path))}`)
+    .join("|");
+  return { key: `git:${root}:${bound}`, targets: { dirs } };
 }
 
 // [LAW:one-source-of-truth] The branch one pass read, from whichever of its
@@ -495,16 +531,10 @@ export class GitDataProvider {
       this.touch(existing);
       return existing;
     }
-    const gitDir = this.inner.resolveGitDir(root);
-    const commonDir = this.inner.resolveCommonGitDir(gitDir);
     const state: RepoState = {
       root,
       refresh: new TrailingEdge(),
-      watcher: this.watchers.acquire(
-        `git:${root}`,
-        watcherTargets(gitDir, commonDir),
-        () => this.changed(root),
-      ),
+      watch: this.acquireWatch(root, this.watchOf(root)),
       period: new Period(() => {
         void state.refresh.share(PASS, () => this.refreshPass(state));
       }),
@@ -515,6 +545,38 @@ export class GitDataProvider {
     };
     this.repos.set(root, state);
     return state;
+  }
+
+  // [LAW:one-source-of-truth] The one derivation of a repo's watch, for the
+  // state's build and for every pass: the git directories resolved from the
+  // root as they stand now, and the key naming what a watch on them binds.
+  private watchOf(root: string): ReturnType<typeof watchOf> {
+    const gitDir = this.inner.resolveGitDir(root);
+    return watchOf(root, gitDir, this.inner.resolveCommonGitDir(gitDir));
+  }
+
+  private acquireWatch(
+    root: string,
+    watch: ReturnType<typeof watchOf>,
+  ): RepoWatch {
+    return {
+      key: watch.key,
+      handle: this.watchers.acquire(watch.key, watch.targets, () =>
+        this.changed(root),
+      ),
+    };
+  }
+
+  // A pass's first act, before any await: the watch follows the repo's paths.
+  // The same key is the same directories, kept; a new key releases the watch
+  // bound to directories the paths no longer name and acquires one on those
+  // they name now.
+  private followWatch(state: RepoState): WatchMove {
+    const watch = this.watchOf(state.root);
+    if (watch.key === state.watch.key) return "kept";
+    state.watch.handle.release();
+    state.watch = this.acquireWatch(state.root, watch);
+    return "rebound";
   }
 
   private changedPass(state: RepoState, reason: PassReason): void {
@@ -638,6 +700,7 @@ export class GitDataProvider {
     const startedAt = Date.now();
     const asked = [...state.asked];
     state.asked.clear();
+    const watch = this.followWatch(state);
     const values: GitValue[] = [];
     // A value something reads, or something waits on, is read; the rest are
     // missed, read by the pass their next reader queues.
@@ -686,7 +749,7 @@ export class GitDataProvider {
     // reason it met on the one event; a read of the stored value never logs
     // it again.
     this.gitRefreshes.recorded(
-      `${state.root} asked=${asked.join(",") || "-"} values=${values.length} pr=${prMove}`,
+      `${state.root} asked=${asked.join(",") || "-"} values=${values.length} pr=${prMove} watch=${watch}`,
       triggerOf(asked),
       failures.size === 0 ? ok(null) : failed([...failures].join("; ")),
       Date.now() - startedAt,
@@ -806,7 +869,7 @@ export class GitDataProvider {
     if (state.pr !== null) answerPending(state.pr, gone);
     this.repos.delete(state.root);
     state.refresh.clear();
-    state.watcher.release();
+    state.watch.handle.release();
     state.period.dispose();
     state.pr?.period.dispose();
   }

@@ -447,7 +447,7 @@ describe("GitDataProvider reads what is held", () => {
     svc.changed("/repo");
     await jest.advanceTimersByTimeAsync(0);
     expect(inner.prCalls).toHaveLength(1);
-    expect(logs.at(-1)).toMatch(/^git refresh \/repo asked=watch .* pr=owed by=change /);
+    expect(logs.at(-1)).toMatch(/^git refresh \/repo asked=watch .* pr=owed watch=kept by=change /);
 
     // Shown again: the new key is looked up, never answered by the old one.
     const shown = gitOf(svc, new Holds(), "/repo", {
@@ -479,7 +479,7 @@ describe("GitDataProvider reads what is held", () => {
     inner.stubInfo = { ...inner.stubInfo, branch: "feature" };
     svc.changed("/repo");
     await jest.advanceTimersByTimeAsync(0);
-    expect(passes(logs).at(-1)).toMatch(/ asked=watch values=1 pr=looked-up by=change /);
+    expect(passes(logs).at(-1)).toMatch(/ asked=watch values=1 pr=looked-up watch=kept by=change /);
     expect(inner.prCalls).toHaveLength(2);
     svc.close();
   });
@@ -1312,9 +1312,9 @@ describe("GitDataProvider PR keys, drops and refresh events", () => {
     ).toEqual(ok({ ...onA, pullRequest: first.value.pullRequest }));
     expect(inner.prCalls).toHaveLength(2);
     expect(logs.filter((l) => l.startsWith("git refresh /repo"))).toEqual([
-      expect.stringMatching(/ asked=first,pr,owed values=1 pr=looked-up by=first /),
-      expect.stringMatching(/ asked=watch values=1 pr=looked-up by=change /),
-      expect.stringMatching(/ asked=watch values=1 pr=recalled by=change /),
+      expect.stringMatching(/ asked=first,pr,owed values=1 pr=looked-up watch=kept by=first /),
+      expect.stringMatching(/ asked=watch values=1 pr=looked-up watch=kept by=change /),
+      expect.stringMatching(/ asked=watch values=1 pr=recalled watch=kept by=change /),
     ]);
   });
 
@@ -1357,8 +1357,8 @@ describe("GitDataProvider PR keys, drops and refresh events", () => {
     await jest.advanceTimersByTimeAsync(1_000);
 
     expect(logs.filter((l) => l.startsWith("git refresh /repo"))).toEqual([
-      expect.stringMatching(/ asked=first values=1 pr=- by=first outcome=ok took=\d+ms$/),
-      expect.stringMatching(/ asked=- values=1 pr=- by=period outcome=ok took=\d+ms$/),
+      expect.stringMatching(/ asked=first values=1 pr=- watch=kept by=first outcome=ok took=\d+ms$/),
+      expect.stringMatching(/ asked=- values=1 pr=- watch=kept by=period outcome=ok took=\d+ms$/),
     ]);
     svc.close();
   });
@@ -1369,7 +1369,7 @@ describe("GitDataProvider PR keys, drops and refresh events", () => {
 // outlive the values read from it — a refresh or a change replaces the value,
 // never the watch.
 describe("GitDataProvider holds a repo's watch across its values", () => {
-  function counted(opts: { maxRepos?: number } = {}) {
+  function counted(opts: { maxRepos?: number; periodMs?: number } = {}) {
     const inner = new StubGitService();
     const counters = {
       watchersOpened: 0,
@@ -1449,6 +1449,85 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
       svc.close();
       fs.rmSync(repo, { recursive: true, force: true });
     }
+  });
+
+  // A directory watch binds an inode, not a path: on Linux a git directory
+  // deleted and recreated at its path is a new one the held watch never hears.
+  // The period's pass derives the watch again and rebinds it, so a rename in
+  // the recreated directory is heard. (On a healthy macOS FSEvents follows the
+  // path, so the rebind is a harmless reopen; CI's Linux runner is what
+  // proves the case.)
+  test("a git directory recreated at its path is heard again after the period rebinds the watch (brandon-unfiled-3248.gf07)", async () => {
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), "git-cache-gf07-"));
+    const gitDir = path.join(repo, ".git");
+    const replace = (name: string, text: string) => {
+      const lock = path.join(gitDir, `${name}.lock`);
+      fs.writeFileSync(lock, text);
+      fs.renameSync(lock, path.join(gitDir, name));
+    };
+    const create = () => {
+      fs.mkdirSync(path.join(gitDir, "refs", "heads"), { recursive: true });
+      replace("HEAD", "ref: refs/heads/main\n");
+      replace("index", "0");
+    };
+    create();
+    const { svc, inner, counters, logs } = counted({ periodMs: 100 });
+    inner.repoRootByDir[repo] = repo;
+    const watchMoves = () =>
+      passes(logs).map((l) => / watch=(\w+) /.exec(l)![1]);
+    try {
+      await gitOf(svc, new Holds(), repo, {});
+      await new Promise((r) => setTimeout(r, 50));
+      expect(counters.watchersOpened).toBe(1);
+
+      // The worktree is removed and one of the same name added.
+      fs.rmSync(gitDir, { recursive: true, force: true });
+      create();
+      await until(
+        () => counters.watchersOpened === 2,
+        "the period's pass rebound the watch",
+      );
+      expect(counters).toEqual({
+        watchersOpened: 2,
+        watchersClosed: 1,
+        watchRefusals: 0,
+        watchErrors: 0,
+      });
+      await new Promise((r) => setTimeout(r, 50));
+
+      const before = svc.getStats().changes;
+      replace("HEAD", "ref: refs/heads/other\n");
+      await until(
+        () => svc.getStats().changes > before,
+        "a rename in the recreated git directory",
+      );
+      // One pass rebound it; every other pass kept it.
+      expect(watchMoves().filter((m) => m === "rebound")).toHaveLength(1);
+      expect(watchMoves()[0]).toBe("kept");
+    } finally {
+      svc.close();
+      fs.rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
+  test("a pass over a repo whose directories stand derives the same key and acquires nothing", async () => {
+    jest.useFakeTimers();
+    const { svc, inner, counters, watchers, logs } = counted();
+    inner.repoRootByDir["/repo"] = "/repo";
+    await gitOf(svc, new Holds(), "/repo", {});
+    await jest.advanceTimersByTimeAsync(GIT_PERIOD_MS * 3);
+
+    expect(passes(logs)).toHaveLength(4);
+    expect(passes(logs).every((l) => l.includes(" watch=kept "))).toBe(true);
+    // The stub repo is not on disk: one refused slot, never closed or reopened.
+    expect(counters).toEqual({
+      watchersOpened: 0,
+      watchersClosed: 0,
+      watchRefusals: 1,
+      watchErrors: 0,
+    });
+    expect(watchers.size()).toBe(1);
+    svc.close();
   });
 
   test("the git cache's own LRU eviction is what releases a watch", async () => {

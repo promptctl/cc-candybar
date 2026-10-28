@@ -5,15 +5,17 @@ import { execFileSync } from "node:child_process";
 import { EventEmitter } from "node:events";
 import {
   ManagedStorage,
-  statIdentity,
   STORAGE_FILE_MAX_AGE_MS,
   STORAGE_PROBE_EVERY_MS,
   STORAGE_PROBE_FILE,
   STORAGE_STALL_AFTER,
   STORAGE_SWEEP_EVERY_MS,
+} from "../src/daemon/cache/managed-storage";
+import {
+  statIdentity,
   type FolderIdentity,
   type IdentityRead,
-} from "../src/daemon/cache/managed-storage";
+} from "../src/utils/folder-identity";
 import {
   DEBOUNCE_MS,
   WatcherRegistry,

@@ -2,6 +2,12 @@ import fs from "node:fs";
 import path from "node:path";
 import type { SessionId } from "../session-id";
 import type { WatcherHandle, WatcherRegistry, Invalidation } from "./watchers";
+import {
+  sameIdentity,
+  statIdentity,
+  type FolderIdentity,
+  type IdentityRead,
+} from "../../utils/folder-identity";
 import type { Holds, Release } from "../../utils/holds";
 import {
   KeyedSource,
@@ -45,32 +51,6 @@ export interface StorageKey {
   readonly folder: string;
   readonly generation: number;
 }
-
-// What tells one folder from another across a delete and a create: device and
-// inode name a folder that exists now, and birth time is there because ext4
-// reuses a freed inode number. `gone`: nothing is at the path.
-export interface FolderIdentity {
-  readonly dev: bigint;
-  readonly ino: bigint;
-  readonly birthtimeNs: bigint;
-}
-export type IdentityRead = (folder: string) => FolderIdentity | "gone";
-
-// [LAW:effects-at-boundaries] The disk's answer. A stat that fails for any
-// reason but a missing path throws: the folder cannot be judged.
-export const statIdentity: IdentityRead = (folder) => {
-  try {
-    const st = fs.statSync(folder, { bigint: true });
-    return { dev: st.dev, ino: st.ino, birthtimeNs: st.birthtimeNs };
-  } catch (e) {
-    const code = (e as NodeJS.ErrnoException).code;
-    if (code === "ENOENT" || code === "ENOTDIR") return "gone";
-    throw e;
-  }
-};
-
-const sameIdentity = (a: FolderIdentity, b: FolderIdentity): boolean =>
-  a.dev === b.dev && a.ino === b.ino && a.birthtimeNs === b.birthtimeNs;
 
 // The faults a folder can stand in, by cause: it could not be created or read,
 // the OS refused to open its watch, or the watch reported an error after it
