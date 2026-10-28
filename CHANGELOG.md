@@ -1,3 +1,9 @@
+## [1.161.0](https://github.com/promptctl/cc-candybar/compare/v1.160.11...v1.161.0) (2026-10-28)
+
+### Features
+
+* **bench:** a benchmark of what a statusline tick costs (brandon-unfiled-3248.1vnf) ([#473](https://github.com/promptctl/cc-candybar/issues/473)) ([10aa78b](https://github.com/promptctl/cc-candybar/commit/10aa78b576fe62e635399b0300e17c1ef0b1e65a))
+
 ## [1.160.11](https://github.com/promptctl/cc-candybar/compare/v1.160.10...v1.160.11) (2026-10-28)
 
 ### Bug Fixes
