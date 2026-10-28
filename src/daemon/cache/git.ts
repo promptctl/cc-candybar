@@ -17,9 +17,11 @@ import {
 import {
   WatcherRegistry,
   type DirTarget,
-  type WatcherHandle,
-  type WatchTargets,
+  type HeldWatch,
+  type WatchMove,
+  type WatchSpec,
 } from "./watchers";
+import { boundKey, boundOf } from "../../utils/folder-identity";
 import { TrailingEdge } from "../../utils/trailing-edge";
 import { Period, periodOf, type Every } from "../../utils/period";
 import {
@@ -156,11 +158,13 @@ function triggerOf(
 }
 
 // [LAW:types-are-the-program] One repo the cache knows. The watch lives as long
-// as the state does — closing and reopening it per value leaked native memory
-// on macOS (brandon-unfiled-3248.576q; src/daemon/cache/watchers.ts). Its one
-// use is `holders`, the holds homes' reads take on it, which run the period and
-// keep it from eviction. A change on a repo nothing holds reads nothing; it
-// marks every value missed, so its next read reads at once.
+// as the state and the directories it bound do — closing and reopening it per
+// value leaked native memory on macOS (brandon-unfiled-3248.576q;
+// src/daemon/cache/watchers.ts), and a pass rebinds it only when its paths
+// name other directories. Its one use is `holders`, the holds homes' reads
+// take on it, which run the period and keep it from eviction. A change on a
+// repo nothing holds reads nothing; it marks every value missed, so its next
+// read reads at once.
 interface RepoState {
   readonly root: string;
   // [LAW:single-enforcer] The repo's one serialized refresh loop, owned by its
@@ -170,7 +174,9 @@ interface RepoState {
   // pass, so the last change always lands (brandon-unfiled-3248.xjma); an ask
   // (a period tick) shares the pass in flight, which already answers it.
   readonly refresh: TrailingEdge;
-  readonly watcher: WatcherHandle;
+  // The watch the registry holds for the repo, under the key `watchSpec`
+  // derived when it was bound.
+  watch: HeldWatch;
   readonly period: Period;
   readonly values: Map<string, GitValue>;
   holders: number;
@@ -234,15 +240,43 @@ function optionsKey(options: GitOptions): string {
 // branches are tens to hundreds; remote refs and tags are the remote's to
 // grow, and a fetch rewriting thousands of them would re-walk the directory
 // per ref. Those still reach the bar on the period.
-// [LAW:dataflow-not-control-flow] One shape for both layouts: nothing stats
-// first. A tree that cannot be opened is a refusal the registry logs and
-// counts, and the period is what refreshes a repo whose watch is refused.
-function watcherTargets(gitDir: string, commonDir: string): WatchTargets {
+// [LAW:dataflow-not-control-flow] One shape for both layouts: the stat of
+// each directory names it for the key and decides nothing, and the stat
+// cannot throw. A tree that cannot be opened is a refusal the registry logs
+// and counts, and the period is what refreshes a repo whose watch is refused.
+//
+// A directory watch binds the inode at its path when it opens, not the path:
+// a git directory deleted and recreated at its path (`worktree remove` then
+// `worktree add` of the same name, `rm -rf` then a re-clone) is a new
+// directory the old watch never hears (Linux; FSEvents follows paths). So the
+// spec's key names what the watch binds — each target's path and the identity
+// of the directory there now — and the registry's `follow` rebinds on a new
+// key. Every pass derives the spec again, so a recreated repo is heard within
+// one period, and a layout change at the same path (a clone replaced by a
+// worktree) is the same case.
+//
+// `unbound`: a directory the spec names is not there, or cannot be stat'd, so
+// there is nothing to bind yet.
+interface RepoWatchSpec {
+  readonly spec: WatchSpec;
+  readonly unbound: boolean;
+}
+
+function watchSpec(
+  root: string,
+  gitDir: string,
+  commonDir: string,
+): RepoWatchSpec {
   const dirs: DirTarget[] = [
     { path: gitDir, filenames: ["HEAD", "index"] },
     { path: path.join(commonDir, "refs", "heads"), recursive: true },
   ];
-  return { dirs };
+  const bounds = dirs.map((d) => boundOf(d.path));
+  const named = dirs.map((d, i) => `${d.path}@${boundKey(bounds[i]!)}`);
+  return {
+    spec: { key: `git:${root}:${named.join("|")}`, targets: { dirs } },
+    unbound: bounds.some((b) => typeof b === "string" || "unreadable" in b),
+  };
 }
 
 // [LAW:one-source-of-truth] The branch one pass read, from whichever of its
@@ -495,16 +529,10 @@ export class GitDataProvider {
       this.touch(existing);
       return existing;
     }
-    const gitDir = this.inner.resolveGitDir(root);
-    const commonDir = this.inner.resolveCommonGitDir(gitDir);
     const state: RepoState = {
       root,
       refresh: new TrailingEdge(),
-      watcher: this.watchers.acquire(
-        `git:${root}`,
-        watcherTargets(gitDir, commonDir),
-        () => this.changed(root),
-      ),
+      watch: this.followWatch(root, null).watch,
       period: new Period(() => {
         void state.refresh.share(PASS, () => this.refreshPass(state));
       }),
@@ -515,6 +543,41 @@ export class GitDataProvider {
     };
     this.repos.set(root, state);
     return state;
+  }
+
+  // [LAW:one-source-of-truth] The one derivation of a repo's watch, for the
+  // state's build and for every pass: the git directories resolved from the
+  // root as they stand now, followed by the registry's one rule. A pass calls
+  // it first, before any await, so the watch follows the repo's paths.
+  private followWatch(
+    root: string,
+    held: HeldWatch | null,
+  ): { readonly watch: HeldWatch; readonly move: WatchMove } {
+    const gitDir = this.inner.resolveGitDir(root);
+    const { spec, unbound } = watchSpec(
+      root,
+      gitDir,
+      this.inner.resolveCommonGitDir(gitDir),
+    );
+    // A directory that is gone, or cannot be stat'd this pass (a mount's
+    // transient fault), binds nothing yet. The pass that lands between a
+    // worktree's removal and its re-add (the removal fires the watch) keeps
+    // the watch it holds rather than trade it for a slot the OS refuses:
+    // FSEvents keeps a held watch on its path, and the period rebinds once the
+    // path names a directory again, whose key differs. The build holds
+    // nothing, and takes the refused slot the period refreshes.
+    if (held !== null && unbound) return { watch: held, move: "kept" };
+    const followed = this.watchers.follow(held, spec, () => this.changed(root));
+    // [LAW:nothing-unseen] A rebind is the fact that the directories moved,
+    // and which the repo hears now: a change that fires nothing is read
+    // against this line, as the config cache's bind line.
+    if (followed.move === "rebound") {
+      this.logger(
+        "info",
+        `git watch bound root=${root} dirs=${spec.targets.dirs.map((d) => d.path).join(",")} refused=${followed.watch.handle.refused.length}`,
+      );
+    }
+    return followed;
   }
 
   private changedPass(state: RepoState, reason: PassReason): void {
@@ -638,6 +701,8 @@ export class GitDataProvider {
     const startedAt = Date.now();
     const asked = [...state.asked];
     state.asked.clear();
+    const followed = this.followWatch(state.root, state.watch);
+    state.watch = followed.watch;
     const values: GitValue[] = [];
     // A value something reads, or something waits on, is read; the rest are
     // missed, read by the pass their next reader queues.
@@ -686,7 +751,7 @@ export class GitDataProvider {
     // reason it met on the one event; a read of the stored value never logs
     // it again.
     this.gitRefreshes.recorded(
-      `${state.root} asked=${asked.join(",") || "-"} values=${values.length} pr=${prMove}`,
+      `${state.root} asked=${asked.join(",") || "-"} values=${values.length} pr=${prMove} watch=${followed.move}`,
       triggerOf(asked),
       failures.size === 0 ? ok(null) : failed([...failures].join("; ")),
       Date.now() - startedAt,
@@ -806,7 +871,7 @@ export class GitDataProvider {
     if (state.pr !== null) answerPending(state.pr, gone);
     this.repos.delete(state.root);
     state.refresh.clear();
-    state.watcher.release();
+    state.watch.handle.release();
     state.period.dispose();
     state.pr?.period.dispose();
   }

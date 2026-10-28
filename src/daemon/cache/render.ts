@@ -68,6 +68,7 @@ import type { SessionStateReader, SessionStateRW } from "../session-state.js";
 import type {
   WatcherRegistry,
   WatcherHandle,
+  HeldWatch,
   WatchTargets,
 } from "./watchers.js";
 import { quietLogger, type DaemonLogger } from "../../utils/logger.js";
@@ -428,9 +429,9 @@ export interface CacheEntry {
   lastError: string | null;
   lastWarning: string | null;
   state: DslRenderState;
-  watcher: WatcherHandle | null;
-  // The key `watcher` was acquired under — the identity of its target set.
-  watcherKey: string | null;
+  // The watch the registry holds for the entry, under the key naming its
+  // target set; null until the first bind.
+  watch: HeldWatch | null;
 }
 
 // [LAW:no-ambient-temporal-coupling] A state's lifetime is a fact the cache
@@ -1338,8 +1339,7 @@ export class RenderCache<
       lastWarning: loaded.warning,
       state:
         loaded.state ?? fallbackState(cwd, loaded.repos.plugins, this.deps),
-      watcher: null,
-      watcherKey: null,
+      watch: null,
     };
     this.serve(entry.state);
     // [LAW:single-enforcer] Insert, bound, watch, then notify — in that
@@ -1685,7 +1685,7 @@ export class RenderCache<
     entry: CacheEntry,
     reason: Teardown["reason"],
   ): void {
-    entry.watcher?.release();
+    entry.watch?.handle.release();
     this.entries.delete(key);
     this.retire(entry.state, reason, null);
   }
@@ -1919,23 +1919,22 @@ export class RenderCache<
     entry.repos = loaded.repos;
     entry.failedFile = loaded.error === null ? null : loaded.failedFile;
     const { targets, unresolved } = watchTargetsFor(entry);
-    // [LAW:one-source-of-truth] WatcherRegistry shares slots by key and keeps
-    // the FIRST acquire's targets, so the key must name the target set —
-    // the signature is the key, and "rebind when the set changed" and "the
-    // key changed" are the same fact.
+    // [LAW:one-source-of-truth] The key names the target set, so the
+    // registry's `follow` rebinds exactly when the set changed.
     const key = `config:${entry.projectDir}:${entry.cwd}:${entry.configFile ?? ""}:${JSON.stringify(targets)}`;
-    if (entry.watcher !== null && entry.watcherKey === key) return;
-    entry.watcher?.release();
-    entry.watcherKey = key;
-    entry.watcher = this.deps.watchers.acquire(key, targets, () =>
-      this.onConfigChanged(entry),
+    const { watch, move } = this.deps.watchers.follow(
+      entry.watch,
+      { key, targets },
+      () => this.onConfigChanged(entry),
     );
+    entry.watch = watch;
+    if (move === "kept") return;
     // [LAW:nothing-unseen] A rebind is the fact that the target set moved (a
     // candidate appeared, a link was re-pointed), and which directories the
     // entry now hears: a change that fires nothing is read against this line.
     this.log(
       "info",
-      `config watch bound projectDir=${entry.projectDir} cwd=${entry.cwd} dirs=${targets.dirs.map((d) => d.path).join(",")} refused=${entry.watcher.refused.length}`,
+      `config watch bound projectDir=${entry.projectDir} cwd=${entry.cwd} dirs=${targets.dirs.map((d) => d.path).join(",")} refused=${watch.handle.refused.length}`,
     );
     for (const { path: at, reason } of unresolved)
       this.log(
