@@ -55,7 +55,8 @@ import { PRESET_FLOOR, presetRoot } from "../src/config/presets";
 import { viewFacts } from "./helpers/view-facts";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { answerRepo } from "./helpers/repo-approval";
-import { repoConfigsPath } from "../src/daemon/repo-configs";
+import { repoConfigsDir, repoConfigsPath } from "../src/daemon/repo-configs";
+import { stateDir } from "../src/daemon/paths";
 
 // Flatten a layout tree to its segment names, in pre-order — the post-`root`
 // equivalent of the old `config.layout.flatMap(r => r.segments)`.
@@ -887,6 +888,19 @@ describe("RenderCache", () => {
     } finally {
       for (const fn of cleanups) fn();
       cleanup();
+    }
+  });
+
+  // The book's folder, never the state directory, whose log writes on every
+  // request.
+  test("the cache watches the answers' folder, not the state directory", () => {
+    const { cleanups, watchers } = makeCache();
+    try {
+      const dirs = watchers.watchedDirs();
+      expect(dirs).toContain(realpathSync.native(repoConfigsDir()));
+      expect(dirs).not.toContain(realpathSync.native(stateDir()));
+    } finally {
+      for (const fn of cleanups) fn();
     }
   });
 

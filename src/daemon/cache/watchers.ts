@@ -333,6 +333,13 @@ export class WatcherRegistry {
     return this.slots.size;
   }
 
+  // Every directory a held watch targets.
+  watchedDirs(): string[] {
+    return [...this.slots.values()].flatMap((slot) =>
+      slot.targets.dirs.map((d) => d.path),
+    );
+  }
+
   closeAll(): void {
     this.closed = true;
     for (const slot of this.slots.values()) {

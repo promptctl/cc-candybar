@@ -21,7 +21,12 @@ import {
   UNOWNED_STORAGE,
   type ReloadedEntry,
 } from "../src/daemon/cache/render";
-import { repoAnswerFields, repoQuestions } from "../src/daemon/repo-configs";
+import {
+  repoAnswerFields,
+  repoConfigs,
+  repoConfigsPath,
+  repoQuestions,
+} from "../src/daemon/repo-configs";
 import { SessionState } from "../src/daemon/session-state";
 import { VERB_REPO_CONFIG } from "../src/click/wire";
 import { linkSigner } from "../src/click/link-signer";
@@ -251,4 +256,46 @@ test("the question offers each answer as a link signed for its session, director
     const other = answer === "approved" ? "declined" : "approved";
     expect(signer.verify(repoAnswerFields(sid, dir, other), mac)).toBe(false);
   }
+});
+
+// An answer kept where the book used to live, directly in the state
+// directory, still holds once the book has a folder of its own.
+describe("the book in the state directory", () => {
+  const state = (): string => path.join(root, "state");
+  const loose = (): string => path.join(state(), "repo-configs.json");
+  const other = (): string => path.join(root, "other");
+  const write = (file: string, book: object): void => {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(book));
+  };
+
+  test("is read while the folder holds no book", () => {
+    write(loose(), { [project]: "approved" });
+    expect(repoConfigs(state()).read()).toEqual({
+      kind: "ok",
+      value: { [project]: "approved" },
+    });
+  });
+
+  test("the first answer recorded writes it into the folder, with the answer", () => {
+    write(loose(), { [project]: "approved" });
+    repoConfigs(state()).update((book) => ({ ...book, [other()]: "declined" }));
+    const filed = {
+      kind: "ok",
+      value: { [project]: "approved", [other()]: "declined" },
+    };
+    expect(repoConfigs(state()).read()).toEqual(filed);
+    expect(
+      JSON.parse(fs.readFileSync(repoConfigsPath(state()), "utf8")),
+    ).toEqual(filed.value);
+  });
+
+  test("is not read once the folder holds a book", () => {
+    write(loose(), { [project]: "approved" });
+    write(repoConfigsPath(state()), { [project]: "declined" });
+    expect(repoConfigs(state()).read()).toEqual({
+      kind: "ok",
+      value: { [project]: "declined" },
+    });
+  });
 });

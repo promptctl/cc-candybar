@@ -38,6 +38,8 @@ Each source logs its own failures, once per refresh, and the payload logs none o
 
 The log never writes on the event loop. A synchronous write held every waiting client past its budget whenever the disk was slow, and each client that gave up was one more line. Lines still waiting when the process exits are written synchronously, so the death line lands. Anything reading the log, tests included, waits for the lines it expects rather than reading once.
 
+Nothing watches the state directory itself, because the log writes there on every request and on macOS every write to a watched directory is a file event the OS has to deliver. A file the daemon must see edited (the repository answers, which a user may edit by hand) gets a folder of its own under it.
+
 ## Packaging and install
 
 The npm package ships the bundle and a committed node shim. It has no lifecycle scripts, so it works the moment any package manager unpacks it. Per-platform optional packages carry the native binary. Install decides the fast path: it stages the native binary (or announces the shim where a platform has none) beside the bundle at a stable per-platform path, and writes that path into Claude Code's settings as the statusline command. In a source checkout the native binary stages at its own gitignored path, so the committed shim and the native build never fight over one file.
