@@ -17,10 +17,10 @@
 //
 // Pass: every session answers before the warm deadline; every steady render
 // answers ok within the client's budget; the daemon is the same process
-// throughout with no post-mortem; its charge stays within a budget for these
-// sessions and does not climb; the cache's held counts stay flat; every click
-// on one session's settings menu, once a second, answers ok within the click's
-// budget.
+// throughout with no post-mortem; its charge once V8 has collected stays
+// within a budget for these sessions, and under load does not climb; the
+// cache's held counts stay flat; every click on one session's settings menu,
+// once a second, answers ok within the click's budget.
 //
 // Run: pnpm build && pnpm load-gate [--sessions N] [--seconds S]
 //
@@ -157,13 +157,17 @@ const INSPECTOR_CALL_MS = 30_000;
 // What the charge may grow by across the steady phase, beyond a heap's
 // sawtooth: the live daemon's climb is ~80 MB a minute.
 const CLIMB_LIMIT_BYTES = 32 * 1024 * 1024;
-// What these sessions may be charged: a fifth over the daemon's base and each
-// session's part, as measured at their peaks (~180 MB at 20 sessions, ~275 MB
-// at 50 and ~430 MB at 100) — ~516 MB at 100. The shipped limit is sized for
-// the backstop, and judging by it would pass a daemon nearly twice as heavy.
+// What these sessions may be charged once V8 has collected: a fifth over the
+// daemon's base and each session's part, as measured at their peaks on CI
+// (~174 MB at 20 sessions, ~420 MB at 100) — ~506 MB at 100. Under load the
+// charge adds the garbage V8 lets the old generation hold before collecting,
+// which it sizes from measured GC and mutator speed: one build's peak lands in
+// either of two modes ~15 MB apart by the runner's timing, so a budget on it
+// judges the runner. The shipped limit is sized for the backstop, and judging
+// by it would pass a daemon nearly twice as heavy.
 // [LAW:one-source-of-truth] Derived from the sessions run, so the budget is
 // always these sessions'.
-const BUDGET_BYTES = 1.2 * (120 + 3.1 * SESSIONS) * 1024 * 1024;
+const BUDGET_BYTES = 1.2 * (112 + 3.1 * SESSIONS) * 1024 * 1024;
 const OID = "4f1c2a9e8b7d6c5a4f3e2d1c0b9a8f7e6d5c4b3a";
 
 // ─── The world ──────────────────────────────────────────────────────────────
@@ -619,14 +623,22 @@ const unanswered: string[] = [];
 const charge = (pid: number) => chargeProbe(process.platform, pid);
 
 async function sample(started: number): Promise<void> {
+  // [LAW:no-ambient-temporal-coupling] The phase and offset of the instant the
+  // sample was asked for, not of whatever phase holds once it is answered.
   const at = Date.now() - started;
+  const asked = phase;
   const outcome = await fetchStats();
   if (outcome.kind !== "ok") {
     unanswered.push(`${at} ms: ${outcome.kind}/${outcome.cause}`);
     return;
   }
   const reading = await charge(outcome.value.pid)(outcome.value.rssBytes);
-  samples.push({ phase, at, stats: outcome.value, charge: reading.bytes });
+  samples.push({
+    phase: asked,
+    at,
+    stats: outcome.value,
+    charge: reading.bytes,
+  });
 }
 
 // The daemon's heap once everything unreachable is collected, through its
@@ -826,6 +838,13 @@ async function run(): Promise<{
   const failures = tally(steadyFailures.map((r) => r.outcome));
   const expected = (SESSIONS * STEADY_MS) / SESSION_PERIOD_MS;
   const charges = samples.map((s) => s.charge);
+  // The charge read after the final collection and the drain of the sessions'
+  // last renders, with every session's state still held: what these sessions
+  // cost, without the garbage V8 lets the old generation hold under load. The
+  // drain's own garbage is small beside that headroom. A run whose reading
+  // went unanswered has none, and fails here as well as on its own check.
+  const chargeAfterCollection =
+    samples.find((s) => s.phase === "after")?.charge ?? null;
   const climb = heapAfter - heapBefore;
   const first0 = samples[0]!.stats;
   // The charge under load, over the steady phase's second half: in the first
@@ -914,9 +933,10 @@ async function run(): Promise<{
       detail: `pids ${pids.join(",")} ${daemonExit ?? "running"}, post-mortems ${JSON.stringify(postMortems)}`,
     },
     {
-      name: "charge within the budget",
-      pass: charges.every((c) => c <= BUDGET_BYTES),
-      detail: `max ${mb(Math.max(...charges))} MB of ${mb(BUDGET_BYTES)} MB (limit ${mb(limit)} MB)`,
+      name: "charge once collected within the budget",
+      pass:
+        chargeAfterCollection !== null && chargeAfterCollection <= BUDGET_BYTES,
+      detail: `${chargeAfterCollection === null ? "no reading after the collection" : `${mb(chargeAfterCollection)} MB`} of ${mb(BUDGET_BYTES)} MB, ${underLoad.length === 0 ? "no reading under load" : `${mb(Math.max(...underLoad))} MB at most under load`} (limit ${mb(limit)} MB)`,
     },
     {
       name: "live heap not climbing",
@@ -1005,6 +1025,9 @@ async function run(): Promise<{
       max: ms.at(-1) ?? 0,
     },
     chargeMb: charges.map(mb),
+    // The charge the budget judges, by name.
+    chargeAfterCollectionMb:
+      chargeAfterCollection === null ? null : mb(chargeAfterCollection),
     limitMb: mb(limit),
     rssMb: samples.map((s) => mb(s.stats.rssBytes)),
     heapUsedMb: samples.map((s) => mb(s.stats.heapUsedBytes)),
