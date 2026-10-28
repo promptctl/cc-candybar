@@ -1,3 +1,9 @@
+## [1.160.11](https://github.com/promptctl/cc-candybar/compare/v1.160.10...v1.160.11) (2026-10-28)
+
+### Bug Fixes
+
+* **daemon:** the repository answers get a watched folder of their own; nothing watches the state folder the log writes to (brandon-unfiled-3248.0m61) ([#471](https://github.com/promptctl/cc-candybar/issues/471)) ([df480cf](https://github.com/promptctl/cc-candybar/commit/df480cf2a6da9871f1973a200f9b7fda112be13d))
+
 ## [1.160.10](https://github.com/promptctl/cc-candybar/compare/v1.160.9...v1.160.10) (2026-10-28)
 
 ### Bug Fixes
