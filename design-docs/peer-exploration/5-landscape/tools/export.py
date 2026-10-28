@@ -80,10 +80,12 @@ for run, is_top, ranked in runs:
         kind = re.split(r'[(:;,]', r.get('what', ''))[0].strip()
         # a project that only prints Claude Code's input fields gets no drill-down; one that is not a statusline still does
         boring = not nov and kind != 'not a statusline' and (shape == 'field' or loc < 50)
+        # the link is written only when it is not the repository's GitHub page; the page derives that one
+        url = q['url'] if q['url'] != 'https://github.com/' + q['repo'] else None
         p = {'rank': rank, 'band': '45+' if is_top else next(b for lo, b in BANDS if q['own_commits'] >= lo),
-             'repo': q['repo'], 'url': q['url'], 'commits': q['own_commits'],
+             'repo': q['repo'], 'url': url, 'commits': q['own_commits'],
              'last': (q.get('last') or '')[:10], 'lang': md.get('lang') or '', 'what': r.get('what', ''),
-             'kind': kind, 'shape': shape, 'motive': motive.get(k, ''), 'fams': sorted(fams.get(k, [])), 'loc': loc,
+             'shape': shape, 'motive': motive.get(k, ''), 'fams': sorted(fams.get(k, [])), 'loc': loc,
              'fam': family_of.get(k), 'novel': nov, 'boring': boring,
              'copy': [[o.replace('__', '/', 1), round(100 * a)] for o, n, a, _ in m.get('shares', [])[:3]]}
         p['tier'] = tiers[q['slug']]['tier']
@@ -101,7 +103,7 @@ for run, is_top, ranked in runs:
                                   'sources': r.get('data sources', ''), 'lineage': r.get('lineage', ''),
                                   'why': r.get('why it exists', ''), 'beyond': r.get('beyond baseline', ''),
                                   'summary': r.get('summary', ''), 'fork': q.get('parent') or ''}
-        projects.append(p)
+        projects.append({k: v for k, v in p.items() if v is not None})  # a null link is absent, not written
 
 groups = [name for name, _ in PAT] + ['unsorted']
 # [LAW:one-source-of-truth] A project's bundle is decided here and recorded on the project; the page only follows the number.

@@ -44,6 +44,17 @@ jobs:
       - name: Build site
         run: pnpm run site:build
 
+      # The statusline landscape explorer. Its data and bar bundles are committed (explorer/build.sh
+      # regenerates them from the survey on a machine that has it), so CI only builds the page.
+      - name: Build landscape explorer
+        run: |
+          cd design-docs/peer-exploration/5-landscape/explorer
+          pnpm install --frozen-lockfile
+          pnpm run check
+          pnpm run build
+          cd ../../../..
+          cp -R design-docs/peer-exploration/5-landscape/site site/dist/landscape
+
       - name: Upload site
         if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v5

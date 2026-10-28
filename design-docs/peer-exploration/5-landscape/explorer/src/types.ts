@@ -6,12 +6,12 @@ export interface RawProject {
   rank: number;
   band: string;
   repo: string;
-  url: string;
+  // Absent when the project's link is its GitHub repository; the page derives that link.
+  url?: string;
   commits: number;
   last: string;
   lang: string;
   what: string;
-  kind: string;
   shape: string;
   motive: string;
   fams: string[];
