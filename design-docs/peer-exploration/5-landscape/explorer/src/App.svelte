@@ -29,15 +29,20 @@
     addEventListener('hashchange', fromHash);
     return () => removeEventListener('hashchange', fromHash);
   });
-  // The selected project's captured bar, drawn where a statusline lives: along the bottom. Only its
-  // bundle is fetched, and only once it is selected; until it arrives no bar is drawn.
+  // The bar drawn along the bottom is the selected project's, when it has one captured; otherwise the
+  // top-ranked project with a captured bar, so a visitor sees a bar playing on load. Only that bar's
+  // bundle is fetched.
+  const featured = projects.find((p) => p.live && p.bar != null)!;
+  const shown = $derived.by(() => {
+    const s = explorer.selected === null ? undefined : projectById.get(explorer.selected);
+    return s && s.bar != null ? s : featured;
+  });
   let bars = $state<Bars | null>(null);
   $effect(() => {
-    const p = explorer.selected === null ? undefined : projectById.get(explorer.selected);
+    const p = shown;
     bars = null;
-    if (!p || p.bar === null) return;
     let current = true;
-    bundle<Bars>('bars', p.bar).then((g) => { if (current) bars = g[p.repo] ?? null; });
+    bundle<Bars>('bars', p.bar!).then((g) => { if (current) bars = g[p.repo] ?? null; });
     return () => { current = false; };
   });
   let panelOpen = $state(true);
@@ -66,6 +71,9 @@
   <div class="bar">
     <input placeholder="find a project or characteristic…" bind:value={query} />
     <button onclick={() => explorer.reset()}>reset graph</button>
+    <label class="scale" title="list only projects whose bar was captured">
+      <input type="checkbox" checked={explorer.barsOnly} onchange={(e) => { explorer.barsOnly = e.currentTarget.checked; explorer.reset(); }} /> only with bars
+    </label>
     <label class="scale">text <input type="range" min="1" max="10" step="0.5" bind:value={textScale} /> {textScale}×</label>
     <div class="scale speed" title="how fast the bars play through the mock conversation">play
       {#each SPEEDS as s}<button class:on={clock.speed === s} onclick={() => (clock.speed = s)}>{s}×</button>{/each}
@@ -76,7 +84,7 @@
       </div>
     {/if}
   </div>
-  {#if bars !== null}<div class="strip" style:right="{panelOpen ? PANEL : 0}px">{#key explorer.selected}<Bar {bars} />{/key}</div>{/if}
+  {#if bars !== null}<div class="strip" style:right="{panelOpen ? PANEL : 0}px">{#key shown.id}<Bar {bars} />{/key}<button class="caption" onclick={() => explorer.open(shown.id as NodeId)}>{shown.repo}</button></div>{/if}
   {#if panelOpen}<Panel {explorer} />{/if}
 </main>
 
@@ -86,10 +94,13 @@
   .toggle:hover { color: var(--fg); }
   .scale { display: flex; align-items: center; gap: 6px; color: var(--dim); font-size: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; }
   .scale input { width: 140px; }
+  .scale input[type='checkbox'] { width: auto; }
   .speed button { background: none; border: 0; color: var(--dim); font: inherit; padding: 0 4px; cursor: pointer; }
   .speed button.on { color: var(--live); }
   .bar { position: absolute; left: 14px; top: 12px; display: flex; gap: 8px; z-index: 2; }
   .strip { position: absolute; left: 0; bottom: 0; z-index: 3; padding: 0 14px 12px; pointer-events: none; }
+  .caption { display: block; margin-top: 4px; background: none; border: 0; color: var(--dim); font: inherit; font-size: 12px; cursor: pointer; pointer-events: auto; }
+  .caption:hover { color: var(--fg); }
   input { width: 320px; background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 9px; font: inherit; }
   .bar > button { background: var(--panel); color: var(--dim); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; font: inherit; cursor: pointer; }
   .hits { position: absolute; top: 38px; left: 0; width: 460px; max-height: 60vh; overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; }
