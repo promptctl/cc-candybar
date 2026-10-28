@@ -4,15 +4,22 @@
     {
       "version": "pr-472",
       "ref": "refs/pull/472/merge",
-      "sha": "c3ba55ffb8c41298280589cf3ee4fb99a230d47c",
-      "timestamp": "2026-10-28T19:40:37.599Z",
+      "sha": "693b26c0020bd749ae231c78af3103b20956eed3",
+      "timestamp": "2026-10-28T19:53:57.915Z",
       "commits": [
         {
-          "sha": "c3ba55ffb8c41298280589cf3ee4fb99a230d47c",
+          "sha": "693b26c0020bd749ae231c78af3103b20956eed3",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-28T19:40:06Z",
-          "message": "Merge 8e49cb1283bae5b5fdea0666527daafcf05b48e2 into e603faf38f07367cf693aefd978ba9fe95d35254\n"
+          "timestamp": "2026-10-28T19:53:34Z",
+          "message": "Merge 2334a7b1fe504c9b973998bf9f000fed86f8801f into e603faf38f07367cf693aefd978ba9fe95d35254\n"
+        },
+        {
+          "sha": "2334a7b1fe504c9b973998bf9f000fed86f8801f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-28T13:53:21-06:00",
+          "message": "Landscape: a bar plays on load, a caption names it, and an only-with-bars filter\n\nThe bar strip shows the selected project's bar, or a featured one when nothing with a bar is selected.\nA checkbox limits every characteristic's list to projects whose bar was captured.\n"
         },
         {
           "sha": "8e49cb1283bae5b5fdea0666527daafcf05b48e2",
