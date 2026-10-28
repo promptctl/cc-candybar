@@ -13,6 +13,7 @@ import path from "node:path";
 
 import { hookData, killAndWait, linkUrls, renderRequest, sendClick, stripAnsi } from "./helpers/daemon-e2e";
 import { until } from "./helpers/until";
+import { untilHeard } from "./helpers/reload-signal";
 import {
   prepareIsolatedDaemonEnv,
   spawnDaemonWithEnv,
@@ -157,13 +158,18 @@ describe("a daemon reads a plugin's session source and runs its program", () => 
     // The program's write: the whole file, renamed into place, again until a
     // render shows it (the folder's watch goes live after it opens).
     let bar = "";
-    await until(async () => {
-      const tmp = path.join(storage, `.${SESSION}.tmp`);
-      fs.writeFileSync(tmp, JSON.stringify({ home: "/h/before" }));
-      fs.renameSync(tmp, path.join(storage, `${SESSION}.json`));
-      bar = await render();
-      return bar.includes("home=/h/before");
-    }, () => `the bar showing the program's write; last:\n${bar}`, 10_000);
+    await untilHeard(
+      () => {
+        const tmp = path.join(storage, `.${SESSION}.tmp`);
+        fs.writeFileSync(tmp, JSON.stringify({ home: "/h/before" }));
+        fs.renameSync(tmp, path.join(storage, `${SESSION}.json`));
+      },
+      async () => {
+        bar = await render();
+        return bar.includes("home=/h/before");
+      },
+      () => `the bar showing the program's write; last:\n${bar}`,
+    );
   });
 
   test("a click runs the drawn program; while it runs the source draws its loading cell and no request times out; then its write", async () => {

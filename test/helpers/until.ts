@@ -11,13 +11,13 @@ export type What = string | (() => string);
 // lands one write per delivery window, not five.
 const TICK_MS = 50;
 
-const nameOf = (what: What): string =>
+export const nameOf = (what: What): string =>
   typeof what === "string" ? what : what();
 
 // How a wait ended: the condition held, or the budget expired. At expiry a
 // probe may still be in flight; it is handed back so the caller decides what
 // its late answer means.
-type Ending =
+export type Ending =
   | { kind: "held" }
   | { kind: "expired"; inFlight: Promise<void> | null };
 
@@ -34,10 +34,10 @@ type Ending =
 // what the probe wrote, not off which promise won: an answer that landed is
 // honoured whichever settled first, and only a probe still in flight at
 // expiry is handed back.
-// [LAW:one-source-of-truth] THE poll loop: both named waits below are one
-// loop with the two outcomes named, so no test file keeps a copy that
-// answers false at its deadline.
-async function holdsWithin(
+// [LAW:one-source-of-truth] THE poll loop: both named waits below, and the
+// watch-liveness retry's rounds, are one loop with the two outcomes named, so
+// no test file keeps a copy that answers false at its deadline.
+export async function holdsWithin(
   reached: Condition,
   budgetMs: number,
 ): Promise<Ending> {
