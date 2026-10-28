@@ -11,6 +11,7 @@ import type { LaunchCategory } from "../src/proc/launch";
 import type { LaunchStatsHandle } from "../src/proc/stats-handle";
 import type { TmuxHint } from "../src/tmux-hint";
 import { laneOutcome } from "../src/utils/reading";
+import { until } from "./helpers/until";
 
 // [LAW:behavior-not-structure] A stub `tmux` on PATH answers every invocation
 // with its own arguments, so the session name a lookup returns IS the server
@@ -48,17 +49,12 @@ let starts: LaunchCategory[];
 let svc: TmuxService;
 let holds: Holds;
 
-// Polls a condition a spawn settles: a period's read is answered by a real
-// process, so the test has no promise of it to await.
-const until = async (cond: () => boolean | Promise<boolean>): Promise<void> => {
-  while (!(await cond())) await new Promise((r) => setImmediate(r));
-};
-
 // [LAW:no-ambient-temporal-coupling] The period is a timer, so it is driven by
-// the clock; the stub's answer is real I/O, which is why `setImmediate` (the
-// poll above) keeps running on the real loop.
+// the clock; the stub's answer is real I/O, which the shared `until` polls in
+// real time under this fake clock (a period's read is answered by a real
+// process, so the test has no promise of it to await).
 const fakeClock = (): void => {
-  jest.useFakeTimers({ doNotFake: ["setImmediate", "nextTick", "queueMicrotask"] });
+  jest.useFakeTimers({ doNotFake: ["nextTick", "queueMicrotask"] });
 };
 
 beforeAll(() => {
@@ -133,7 +129,10 @@ describe("TmuxService", () => {
 
     await jest.advanceTimersByTimeAsync(1);
     expect(starts).toEqual(["tmux", "tmux"]);
-    await until(async () => (await laneOutcome(svc.declare(holds, h))) !== old);
+    await until(
+      async () => (await laneOutcome(svc.declare(holds, h))) !== old,
+      "the rename's arrival",
+    );
     expect(await laneOutcome(svc.declare(holds, h))).toEqual({
       kind: "ok",
       value: "renamed",
@@ -141,6 +140,7 @@ describe("TmuxService", () => {
     expect(svc.getStats().refreshes).toEqual({
       first: 1,
       period: 1,
+      change: 0,
       supersede: 0,
     });
   });
@@ -188,6 +188,6 @@ describe("TmuxService", () => {
     ]);
 
     await jest.advanceTimersByTimeAsync(NAME_PERIOD_MS);
-    await until(() => starts.length === 2);
+    await until(() => starts.length === 2, "the second start");
   });
 });

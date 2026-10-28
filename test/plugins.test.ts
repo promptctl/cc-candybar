@@ -3,12 +3,14 @@
 // and the loaded config's live variable store (what the daemon renders from).
 // brandon-plugins-ktag.8fv.
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { checkConfig, prepareConfig, type CheckOutcome } from "../src/check";
 import { addableSegmentDomains } from "../src/config/edit-chrome";
 import { stripAnsi } from "./helpers/daemon-e2e";
+import { until } from "./helpers/until";
 import { renderDsl } from "../src/dsl/render";
 import { instantOf } from "../src/utils/instant";
 import { memoryLimitBytes } from "../src/daemon/limits";
@@ -26,6 +28,9 @@ import { hasCacheField } from "../src/config/dsl-types";
 import { SessionState } from "../src/daemon/session-state";
 import { startBar, type Bar } from "./helpers/drive-bar";
 import { viewFacts } from "./helpers/view-facts";
+import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
+import { answerRepo } from "./helpers/repo-approval";
+import { repoGateAt } from "../src/daemon/repo-configs";
 
 let dir: string;
 beforeEach(() => {
@@ -98,7 +103,7 @@ describe("a listed plugin", () => {
 
   test("its segments join the add-segment library", async () => {
     const warnings: string[] = [];
-    const prepared = await prepareConfig([config()], dir, warnings, instantOf(new Date()));
+    const prepared = await prepareConfig([config()], null, dir, warnings, instantOf(new Date()));
     try {
       const members = [...addableSegmentDomains(prepared.config).values()][0]!.members;
       expect(members).toContain("plugins.deploy.status");
@@ -110,18 +115,16 @@ describe("a listed plugin", () => {
   test("a data rewrite changes what the bar reads, without a reload", async () => {
     const p = config();
     const data = write("deploy/state.json", `{ "env": "prod", "state": "rolling" }`);
-    const prepared = await prepareConfig([p], dir, [], instantOf(new Date()));
+    const prepared = await prepareConfig([p], null, dir, [], instantOf(new Date()));
     try {
       const read = () => prepared.store.readDocument("plugins.deploy.data");
       expect(read()).toEqual({ kind: "ok", value: { env: "prod", state: "rolling" } });
       // fs.watch attaches asynchronously and has no ready signal, so the
       // (idempotent) rewrite repeats until the watcher delivers it.
-      const next = `{ "env": "prod", "state": "live" }`;
-      for (let i = 0; i < 100; i++) {
-        fs.writeFileSync(data, next);
-        await new Promise((r) => setTimeout(r, 50));
-        if ((read() as { value?: { state?: string } }).value?.state === "live") break;
-      }
+      await until(() => {
+        fs.writeFileSync(data, `{ "env": "prod", "state": "live" }`);
+        return (read() as { value?: { state?: string } }).value?.state === "live";
+      }, "the rewrite's arrival in the store");
       expect(read()).toEqual({ kind: "ok", value: { env: "prod", state: "live" } });
     } finally {
       prepared.registry.dispose();
@@ -143,10 +146,22 @@ describe("a plugin that does not load is dropped alone", () => {
     expect(message).toContain(expected);
   }
 
-  test("a definition declaring a source of its own", () =>
+  test("a variable named data, the data file's name", () =>
     dropped(
-      `{ data: "./d.json", segments: {}, variables: { y: { kind: "shell", command: "true", cache: { never: true } } } }`,
-      `a plugin definition may not declare "variables"`,
+      `{ variables: { data: { kind: "literal", value: "x" } } }`,
+      `"data" names the plugin's data file (.plugins.x.data)`,
+    ));
+
+  test("a variable the shared validator refuses", () =>
+    dropped(
+      `{ variables: { y: { kind: "shell", command: "true" } } }`,
+      "variables.y",
+    ));
+
+  test("a variable template that does not parse", () =>
+    dropped(
+      `{ variables: { y: { kind: "template", template: "{{ if .z }}" } } }`,
+      "Template parse error in variables.plugins.x.y.template",
     ));
 
   test("a definition editing root", () =>
@@ -168,10 +183,10 @@ describe("a plugin that does not load is dropped alone", () => {
       `references unknown action "nope"`,
     ));
 
-  test("a segment declaring a var that is a source", () =>
+  test("a segment var template that does not parse", () =>
     dropped(
-      `{ data: "./d.json", segments: { s: { template: "x", vars: { p: { kind: "shell", command: "true", cache: { never: true } } } } } }`,
-      `segments.s.vars.p: a plugin segment's vars may declare only state variables (kind: "state"), never a source such as "shell"`,
+      `{ segments: { s: { template: "x", vars: { p: { kind: "template", template: "{{ end }}" } } } } }`,
+      "Template parse error in segments.plugins.x.s.vars.p.template",
     ));
 
   test("a template that does not parse", () =>
@@ -180,18 +195,35 @@ describe("a plugin that does not load is dropped alone", () => {
       "Template parse error in segments.plugins.x.s.template",
     ));
 
+  test("a variable declared under another of its own, naming both", () =>
+    dropped(
+      `{ variables: { status: { kind: "literal", value: "x" }, "status.home": { kind: "literal", value: "y" } } }`,
+      `variable "plugins.x.status.home" is declared under the variable "plugins.x.status"`,
+    ));
+
+  // A field read of a document lands on the document: each key re-runs the
+  // other's source, so neither has a first value.
+  test("two JSON shells whose cache keys read each other's fields", () =>
+    dropped(
+      `{ variables: {
+        a: { kind: "shell", command: "echo {}", parse: { json: true }, cache: { key: "{{ .plugins.x.b.f }}" } },
+        b: { kind: "shell", command: "echo {}", parse: { json: true }, cache: { key: "{{ .plugins.x.a.f }}" } },
+      } }`,
+      "Dependency cycle: plugins.x.a → plugins.x.b → plugins.x.a",
+    ));
+
   test("a definition that is not there", () =>
     dropped(`{ data: "./d.json", segments: {} }`.replace(/.*/s, "{ "), "JSON5"));
 });
 
 test("the user's config still renders beside a dropped plugin", async () => {
-  write("x/plugin.json5", `{}`);
+  write("x/plugin.json5", `{ root: {} }`);
   const p = write(
     "config.json5",
     `{ plugins: ["./x/plugin.json5"], segments: { mine: { template: "mine-here" } }, root: { h: ["mine"] } }`,
   );
   const warnings: string[] = [];
-  const prepared = await prepareConfig([p], dir, warnings, instantOf(new Date()));
+  const prepared = await prepareConfig([p], null, dir, warnings, instantOf(new Date()));
   try {
     expect(prepared.config.segments.mine).toBeDefined();
     expect(prepared.droppedPlugins).toHaveLength(1);
@@ -215,7 +247,7 @@ describe("a placed segment of a dropped plugin stands in as a cell, not a broken
       `{ plugins: ["./deploy/plugin.json5"], segments: { mine: { template: "mine-here" } }, root: { h: ["mine", "plugins.deploy.status"] } }`,
     );
     const warnings: string[] = [];
-    const prepared = await prepareConfig([p], dir, warnings, instantOf(new Date()));
+    const prepared = await prepareConfig([p], null, dir, warnings, instantOf(new Date()));
     try {
       expect(prepared.droppedPlugins).toHaveLength(1);
       return prepared.config.segments["plugins.deploy.status"]!.template!;
@@ -251,7 +283,7 @@ describe("a placed segment of a dropped plugin stands in as a cell, not a broken
          segments: { "plugins.deploy.status": { palette: "nord" } },
          root: { h: [{ seg: "plugins.deploy.status", settings: { compact: true } }, { seg: "plugins.deploy.status", id: "two", settings: { compact: false } }] } }`,
     );
-    const prepared = await prepareConfig([p], dir, [], instantOf(new Date()));
+    const prepared = await prepareConfig([p], null, dir, [], instantOf(new Date()));
     try {
       expect(prepared.config.segments["plugins.deploy.status"]!.template).toContain("was not loaded");
     } finally {
@@ -266,7 +298,7 @@ describe("a placed segment of a dropped plugin stands in as a cell, not a broken
          segments: { "my.clock": { template: "tick" } },
          root: { h: [{ kind: "group", name: "extra", label: "x", children: ["my.clock"] }] } }`,
     );
-    const prepared = await prepareConfig([p], dir, [], instantOf(new Date()));
+    const prepared = await prepareConfig([p], null, dir, [], instantOf(new Date()));
     try {
       expect(prepared.config.segments["my.clock"]!.template).toBe("tick");
       expect(prepared.config.segments["groups.extra"]!.template).not.toContain("plugin not loaded");
@@ -289,7 +321,7 @@ test("the user's file retunes a plugin segment by field", async () => {
     "config.json5",
     `{ plugins: ["./deploy/plugin.json5"], segments: { "plugins.deploy.status": { bg: "error" } }, root: { h: ["plugins.deploy.status"] } }`,
   );
-  const prepared = await prepareConfig([p], dir, [], instantOf(new Date()));
+  const prepared = await prepareConfig([p], null, dir, [], instantOf(new Date()));
   try {
     expect(prepared.config.segments["plugins.deploy.status"]).toMatchObject({ bg: "error" });
     expect(prepared.config.segments["plugins.deploy.status"]!.template).toContain("⇪");
@@ -300,22 +332,20 @@ test("the user's file retunes a plugin segment by field", async () => {
 
 test("a data file written after load, and replaced by rename, is read", async () => {
   const p = config();
-  const prepared = await prepareConfig([p], dir, [], instantOf(new Date()));
+  const prepared = await prepareConfig([p], null, dir, [], instantOf(new Date()));
   try {
     const read = () => (prepared.store.readDocument("plugins.deploy.data") as { value?: { state?: string } }).value?.state;
     // fs.watch attaches asynchronously with no ready signal: repeat the
     // (idempotent) write until the watcher delivers it.
-    const until = async (state: string, write: () => void) => {
-      for (let i = 0; i < 100 && read() !== state; i++) {
+    const delivered = (state: string, write: () => void) =>
+      until(() => {
         write();
-        await new Promise((r) => setTimeout(r, 50));
-      }
-      expect(read()).toBe(state);
-    };
+        return read() === state;
+      }, `the store reading "${state}"`);
     const data = path.join(dir, "deploy/state.json");
-    await until("first", () => fs.writeFileSync(data, `{ "state": "first" }`));
+    await delivered("first", () => fs.writeFileSync(data, `{ "state": "first" }`));
     for (const state of ["second", "third"]) {
-      await until(state, () => {
+      await delivered(state, () => {
         fs.writeFileSync(`${data}.tmp`, `{ "state": "${state}" }`);
         fs.renameSync(`${data}.tmp`, data);
       });
@@ -329,7 +359,7 @@ test("a plugin whose names another layer already declares is dropped; the first 
   const p = config();
   write("deploy/state.json", `{ "env": "prod", "state": "live" }`);
   fs.writeFileSync(p, `{ plugins: ["./deploy/plugin.json5", "./deploy/plugin.json5"], root: { h: ["plugins.deploy.status"] } }`);
-  const prepared = await prepareConfig([p], dir, [], instantOf(new Date()));
+  const prepared = await prepareConfig([p], null, dir, [], instantOf(new Date()));
   try {
     expect(prepared.droppedPlugins.map((d) => d.reason).join()).toContain(
       `plugin "deploy" is already listed`,
@@ -349,12 +379,12 @@ test("plugins must be a list of paths", async () => {
 // dropped — the record the daemon logs on every load.
 test("the daemon's load records the plugins it merged and dropped", () => {
   const good = config();
-  write("q/plugin.json5", `{}`);
+  write("q/plugin.json5", `{ root: {} }`);
   fs.writeFileSync(
     good,
     `{ plugins: ["./deploy/plugin.json5", "./q/plugin.json5"], root: { h: ["plugins.deploy.status"] } }`,
   );
-  const loaded = loadFromDisk(dir, dir, good, {
+  const loaded = loadFromDisk(dir, dir, good, { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER,
     sessionState: new SessionState(),
   });
   try {
@@ -366,6 +396,118 @@ test("the daemon's load records the plugins it merged and dropped", () => {
   } finally {
     loaded.state?.registry.dispose();
   }
+});
+
+// Every key of a definition is optional, `data` included, and a definition may
+// declare variables in a config's own vocabulary, named under the plugin.
+describe("a plugin's own variables", () => {
+  const HELLO = `{
+    variables: {
+      who: { kind: "literal", value: "world" },
+      greeting: { kind: "template", template: "hello, {{ .plugins.hello.who }}" },
+      open: { kind: "state", key: "open", default: "no" },
+    },
+    segments: {
+      s: {
+        template: "{{ .plugins.hello.greeting }} {{ .plugins.hello.s.n }} {{ .plugins.hello.s.out }} open={{ .plugins.hello.open }}",
+        vars: {
+          n: { kind: "literal", value: 7 },
+          out: { kind: "shell", command: "printf ran", cache: { never: true } },
+        },
+      },
+    },
+  }`;
+  const listing = (definition: string): string => {
+    write("hello/plugin.json5", definition);
+    return write(
+      "config.json5",
+      `{ plugins: ["./hello/plugin.json5"], root: { h: ["plugins.hello.s"] } }`,
+    );
+  };
+
+  test("a definition without data loads, and declares no data variable", async () => {
+    const p = listing(`{ segments: { s: { template: "no data here" } } }`);
+    const { rendered, warnings } = clean(await checkConfig(p, dir));
+    expect(rendered).toContain("no data here");
+    expect(warnings).toEqual([]);
+    const loaded = loadFromDisk(dir, dir, p, { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, sessionState: new SessionState() });
+    try {
+      expect(loaded.state?.plugins.loaded).toEqual([path.join(dir, "hello/plugin.json5")]);
+      expect(Object.keys(loaded.state!.config.variables).filter((v) => v.startsWith("plugins.hello."))).toEqual([]);
+      expect(pluginLoadLine(loaded.layers, loaded.state!, loaded.ms)).toContain(
+        ` +${path.join(dir, "hello/plugin.json5")} data=none`,
+      );
+    } finally {
+      loaded.state?.registry.dispose();
+    }
+  });
+
+  test("an empty definition loads", async () => {
+    write("hello/plugin.json5", `{}`);
+    const p = write("config.json5", `{ plugins: ["./hello/plugin.json5"], root: { h: ["model"] } }`);
+    expect(clean(await checkConfig(p, dir)).warnings).toEqual([]);
+  });
+
+  test("are named under the plugin, and its segment's vars of any kind load and draw", async () => {
+    const p = listing(HELLO);
+    const { rendered, warnings } = clean(await checkConfig(p, dir));
+    expect(warnings).toEqual([]);
+    expect(rendered).toContain("hello, world 7 ran open=no");
+    const loaded = loadFromDisk(dir, dir, p, { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, sessionState: new SessionState() });
+    try {
+      const vars = loaded.state!.config.variables;
+      expect(Object.keys(vars).filter((v) => v.startsWith("plugins.hello."))).toEqual([
+        "plugins.hello.who",
+        "plugins.hello.greeting",
+        "plugins.hello.open",
+      ]);
+      expect(vars.who).toBeUndefined();
+      expect(vars.greeting).toBeUndefined();
+      // A state variable's session key lives under the plugin as its name does.
+      expect(vars["plugins.hello.open"]).toMatchObject({ kind: "state", key: "plugins.hello.open" });
+    } finally {
+      loaded.state?.registry.dispose();
+    }
+  });
+
+  test("a template reading one by its bare name is a drop", async () => {
+    const p = listing(`{
+      variables: { who: { kind: "literal", value: "world" } },
+      segments: { s: { template: "{{ .who }}" } },
+    }`);
+    const message = fatal(await checkConfig(p, dir));
+    expect(message).toContain(`plugin ${path.join(dir, "hello/plugin.json5")} was not loaded`);
+    expect(message).toContain("who");
+  });
+
+  // [LAW:nothing-unseen] The config-load event counts the variables the loaded
+  // plugins declared: the data file is not one, a dropped plugin's are not.
+  test("the daemon's load line counts them", () => {
+    const p = listing(HELLO);
+    write("d/plugin.json5", `{ data: "./d.json", variables: { a: { kind: "literal", value: 1 } } }`);
+    write("q/plugin.json5", `{ root: {}, variables: { b: { kind: "literal", value: 1 } } }`);
+    fs.writeFileSync(
+      p,
+      `{ plugins: ["./hello/plugin.json5", "./d/plugin.json5", "./q/plugin.json5"], root: { h: ["plugins.hello.s"] } }`,
+    );
+    const loaded = loadFromDisk(dir, dir, p, { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, sessionState: new SessionState() });
+    try {
+      expect(pluginLoadLine(loaded.layers, loaded.state!, loaded.ms)).toContain(
+        " plugins loaded=2 sources=0 pluginVariables=4 dropped=1 ",
+      );
+    } finally {
+      loaded.state?.registry.dispose();
+    }
+  });
+
+  test("none declared counts zero", () => {
+    const loaded = loadFromDisk(dir, dir, config(), { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, sessionState: new SessionState() });
+    try {
+      expect(pluginLoadLine(loaded.layers, loaded.state!, loaded.ms)).toContain(" pluginVariables=0 ");
+    } finally {
+      loaded.state?.registry.dispose();
+    }
+  });
 });
 
 // brandon-plugins-ktag.5zv: a plugin an app installs by dropping a folder,
@@ -385,12 +527,22 @@ describe("an installed plugin", () => {
 
   const install = (root: string, name: string, definition: string): string =>
     write(`${root}/cc-candybar/plugins/${name}/plugin.json5`, definition);
-  const repoInstall = (repo: string, name: string, definition: string): string =>
-    write(`${repo}/.cc-candybar/plugins/${name}/plugin.json5`, definition);
+  // A repository's own plugin, in a repository the user approved.
+  const repoInstall = (repo: string, name: string, definition: string): string => {
+    const file = write(`${repo}/.cc-candybar/plugins/${name}/plugin.json5`, definition);
+    answerRepo(path.join(dir, repo));
+    return file;
+  };
   const placing = (seg: string) => write("config.json5", `{ root: { h: ["${seg}"] } }`);
 
   async function segmentsIn(projectDir: string): Promise<string[]> {
-    const prepared = await prepareConfig([], projectDir, [], instantOf(new Date()));
+    const prepared = await prepareConfig(
+      [],
+      repoGateAt(projectDir).plugins,
+      projectDir,
+      [],
+      instantOf(new Date()),
+    );
     try {
       return Object.keys(prepared.config.segments).filter((n) => n.startsWith("plugins."));
     } finally {
@@ -408,7 +560,7 @@ describe("an installed plugin", () => {
 
   test("an unplaced one is in the add-segment library and draws nothing", async () => {
     install("share", "deploy", DEFINITION);
-    const prepared = await prepareConfig([], dir, [], instantOf(new Date()));
+    const prepared = await prepareConfig([], null, dir, [], instantOf(new Date()));
     try {
       const members = [...addableSegmentDomains(prepared.config).values()][0]!.members;
       expect(members).toContain("plugins.deploy.status");
@@ -449,7 +601,7 @@ describe("an installed plugin", () => {
       path.join(dir, "main"),
       path.join(dir, "main/.claude/worktrees/w"),
       placing("plugins.lit.ticket"),
-      { sessionState: new SessionState() },
+      { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, sessionState: new SessionState() },
     );
     try {
       expect(loaded.error).toBeNull();
@@ -457,7 +609,8 @@ describe("an installed plugin", () => {
       expect(loaded.state?.config.variables["plugins.lit.data"]).toMatchObject({ path: data });
       // [LAW:nothing-unseen] The daemon's load line names the file it read,
       // and the checkout it resolved against.
-      const line = pluginLoadLine(loaded.layers, loaded.state!);
+      const line = pluginLoadLine(loaded.layers, loaded.state!, loaded.ms);
+      expect(line).toMatch(/ checkout=git:\S+ ms=\d+ /);
       expect(line).toContain(
         ` +${path.join(dir, "data/cc-candybar/plugins/lit/plugin.json5")} data=${data}`,
       );
@@ -480,11 +633,11 @@ describe("an installed plugin", () => {
     fs.mkdirSync(path.join(dir, "main/src"), { recursive: true });
     const p = placing("plugins.lit.ticket");
     const watchers = new WatcherRegistry({
-      counters: { watchersOpened: 0, watchersClosed: 0 },
+      counters: { watchersOpened: 0, watchersClosed: 0, watchRefusals: 0, watchErrors: 0 },
       logger: () => {},
     });
     const cache = new RenderCache(
-      {
+      { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER,
         sessionState: new SessionState(),
         watchers,
         source: SOURCES_NOTHING,
@@ -505,7 +658,7 @@ describe("an installed plugin", () => {
       const drawn = await Promise.all(
         cwds.map(async (cwd, i) => {
           // Each through a session's view of its entry, as the daemon draws.
-          using held = cache.holdSession(main, cwd, p, `s${i}`, viewFacts(cwd, `s${i}`));
+          using held = cache.holdSession(main, cwd, p, viewFacts(cwd, `s${i}`));
           const s = held.state;
           expect(s).toBe(states[i]);
           expect(await s.registry.settled(5000)).toEqual([]);
@@ -545,11 +698,11 @@ describe("an installed plugin", () => {
     fs.mkdirSync(path.join(dir, "outer/inner"), { recursive: true });
     const p = placing("plugins.lit.ticket");
     const load = (): string => {
-      const loaded = loadFromDisk(dir, path.join(dir, "outer/inner"), p, {
+      const loaded = loadFromDisk(dir, path.join(dir, "outer/inner"), p, { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER,
         sessionState: new SessionState(),
       });
       loaded.state?.registry.dispose();
-      return pluginLoadLine(loaded.layers, loaded.state!);
+      return pluginLoadLine(loaded.layers, loaded.state!, loaded.ms);
     };
     const before = load();
     expect(before).toContain(` checkout=dir:${path.join(dir, "outer/inner")} `);
@@ -586,7 +739,7 @@ describe("an installed plugin", () => {
     write("repo/deploy/plugin.json5", `{ data: "./d.json", segments: { status: { template: "listed" } } }`);
     const project = write("repo/config.json5", `{ plugins: ["./deploy/plugin.json5"], root: { h: ["mine", "plugins.deploy.status"] } }`);
     const warnings: string[] = [];
-    const prepared = await prepareConfig([user, project], dir, warnings, instantOf(new Date()));
+    const prepared = await prepareConfig([user, project], null, dir, warnings, instantOf(new Date()));
     try {
       expect(warnings.join("\n")).toContain(`references unknown action "plugins.deploy.go"`);
     } finally {
@@ -602,7 +755,7 @@ describe("an installed plugin", () => {
     write("repo/deploy/plugin.json5", `{ data: "./d.json", segments: { status: { template: "x" } } }`);
     const project = write("repo/config.json5", `{ plugins: ["./deploy/plugin.json5"] }`);
     const warnings: string[] = [];
-    await expect(prepareConfig([user, project], dir, warnings, instantOf(new Date()))).rejects.toThrow("Dependency cycle");
+    await expect(prepareConfig([user, project], null, dir, warnings, instantOf(new Date()))).rejects.toThrow("Dependency cycle");
     expect(warnings.join("\n")).not.toContain("was not loaded");
   });
 
@@ -628,7 +781,7 @@ describe("an installed plugin", () => {
     for (const line of message.split("\n").filter((l) => /segment "(reads|binds)"/.test(l))) {
       expect(line).toContain(notice);
     }
-    const prepared = await prepareConfig([p], dir, [], instantOf(new Date()));
+    const prepared = await prepareConfig([p], null, dir, [], instantOf(new Date()));
     try {
       expect(prepared.config.segments["plugins.lit.ticket"]!.template).toContain(notice);
     } finally {
@@ -649,7 +802,7 @@ describe("an installed plugin", () => {
   test("a broken one nothing reaches is no warning and passes check", async () => {
     install("share", "foo", `{ data: "./d.json", segments: { s: { template: "{{ if }}" } } }`);
     const warnings: string[] = [];
-    const prepared = await prepareConfig([], dir, warnings, instantOf(new Date()));
+    const prepared = await prepareConfig([], null, dir, warnings, instantOf(new Date()));
     try {
       expect(prepared.droppedPlugins).toEqual([]);
       expect(warnings).toEqual([]);
@@ -676,7 +829,7 @@ describe("an installed plugin", () => {
   test("a dot-folder is never a plugin", async () => {
     fs.mkdirSync(path.join(dir, "repo/.cc-candybar/plugins/.git"), { recursive: true });
     const warnings: string[] = [];
-    const prepared = await prepareConfig([], path.join(dir, "repo"), warnings, instantOf(new Date()));
+    const prepared = await prepareConfig([], null, path.join(dir, "repo"), warnings, instantOf(new Date()));
     try {
       expect(prepared.droppedPlugins).toEqual([]);
       expect(warnings).toEqual([]);
@@ -696,7 +849,7 @@ describe("an installed plugin", () => {
     install("data", "deploy", `{ data: "./d.json", segments: { status: { template: "installed" } } }`);
     write("deploy/plugin.json5", `{ data: "./d.json", segments: { status: { template: "listed" } } }`);
     const p = write("config.json5", `{ plugins: ["./deploy/plugin.json5"], root: { h: ["plugins.deploy.status"] } }`);
-    const loaded = loadFromDisk(dir, dir, p, { sessionState: new SessionState() });
+    const loaded = loadFromDisk(dir, dir, p, { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, sessionState: new SessionState() });
     try {
       expect(loaded.state?.plugins.loaded).toEqual([path.join(dir, "deploy/plugin.json5")]);
     } finally {
@@ -708,11 +861,11 @@ describe("an installed plugin", () => {
   // seed searches the entry's repo, so the plugin that would fix it reloads.
   test("a failed first load still watches the repo's plugin root", () => {
     const watchers = new WatcherRegistry({
-      counters: { watchersOpened: 0, watchersClosed: 0 },
+      counters: { watchersOpened: 0, watchersClosed: 0, watchRefusals: 0, watchErrors: 0 },
       logger: () => {},
     });
     const cache = new RenderCache(
-      {
+      { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER,
         sessionState: new SessionState(),
         watchers,
         source: SOURCES_NOTHING,
@@ -723,6 +876,7 @@ describe("an installed plugin", () => {
     try {
       const repo = path.join(dir, "repo");
       fs.mkdirSync(repo);
+      answerRepo(repo);
       const p = write("config.json5", `{ root: { h: ["plugins.lit.status"] } }`);
       const entry = cache.getOrCreate(repo, repo, p);
       expect(entry.lastError).not.toBeNull();
@@ -738,7 +892,7 @@ describe("an installed plugin", () => {
       "config.json5",
       `{ actions: { mark: { set: "m", to: "1" }, both: { do: ["mark", "plugins.lit.open"] } }, variables: { m: { kind: "state", key: "m", default: "0" } }, segments: { b: { template: '{{ action "both" "go" }}' } }, root: { h: ["b"] } }`,
     );
-    const prepared = await prepareConfig([p], dir, [], instantOf(new Date()));
+    const prepared = await prepareConfig([p], null, dir, [], instantOf(new Date()));
     try {
       expect(prepared.config.actions["plugins.lit.open"]).toBeDefined();
       expect(prepared.droppedPlugins.map((d) => d.plugin)).toEqual(["lit"]);
@@ -751,7 +905,7 @@ describe("an installed plugin", () => {
     install("data", "lit", `{ data: "./d.json", segments: { s: { template: "{{ if }}" } } }`);
     const user = write("user.json5", `{ root: { h: [{ seg: "plugins.lit.s", settings: { a: true } }] } }`);
     const project = write("project.json5", `{ root: { h: [{ seg: "plugins.lit.s", settings: { b: 3 } }] } }`);
-    const prepared = await prepareConfig([user, project], dir, [], instantOf(new Date()));
+    const prepared = await prepareConfig([user, project], null, dir, [], instantOf(new Date()));
     try {
       expect(Object.keys(prepared.config.segments["plugins.lit.s"]!.settings ?? {})).toContain("b");
     } finally {
@@ -763,7 +917,7 @@ describe("an installed plugin", () => {
     install("data", "deploy", `{ data: "./d.json", segments: { status: { template: "installed" } } }`);
     write("deploy/plugin.json5", `{ data: "./d.json", segments: { status: { template: "{{ if }}" } } }`);
     const p = write("config.json5", `{ plugins: ["./deploy/plugin.json5"], root: { h: ["plugins.deploy.status"] } }`);
-    const loaded = loadFromDisk(dir, dir, p, { sessionState: new SessionState() });
+    const loaded = loadFromDisk(dir, dir, p, { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, sessionState: new SessionState() });
     try {
       expect(loaded.state?.plugins.loaded).toEqual([]);
     } finally {
@@ -775,7 +929,7 @@ describe("an installed plugin", () => {
     write("a.b/plugin.json5", `{ data: "./d.json", segments: {} }`);
     const user = write("user.json5", `{ plugins: ["./a.b/plugin.json5"] }`);
     const project = write("project.json5", `{ root: { h: ["plugins.zzz.s"] } }`);
-    const prepared = await prepareConfig([user, project], dir, [], instantOf(new Date()));
+    const prepared = await prepareConfig([user, project], null, dir, [], instantOf(new Date()));
     try {
       expect(prepared.config.segments["plugins.zzz.s"]!.template).toContain(`its folder \\"a.b\\" is not a plugin name`);
     } finally {
@@ -811,7 +965,7 @@ describe("an installed plugin", () => {
   test("a drop is reached by its definition, not by its notice", () => {
     const def = install("data", "lit", `{ data: "./d.json", segments: { s: { template: "{{ if }}" } } }`);
     const p = placing("plugins.lit.s");
-    const loaded = loadFromDisk(dir, dir, p, { sessionState: new SessionState() });
+    const loaded = loadFromDisk(dir, dir, p, { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, sessionState: new SessionState() });
     try {
       expect([...(loaded.state?.plugins.reached ?? [])]).toEqual([def]);
       expect(loaded.state?.plugins.dropped.map((d) => d.path)).toEqual([def]);
@@ -860,7 +1014,7 @@ test("a placement under a refused loose definition's folder stands in naming the
   );
   const message = fatal(await checkConfig(p, dir));
   expect(message).not.toContain("unknown segment");
-  const prepared = await prepareConfig([p], dir, [], instantOf(new Date()));
+  const prepared = await prepareConfig([p], null, dir, [], instantOf(new Date()));
   try {
     expect(prepared.config.segments["plugins.deploy.s"]!.template).toContain("move this file to");
   } finally {
@@ -905,11 +1059,12 @@ describe("a plugin segment's state variable", () => {
     bar = await startBar({ width: 120, rows: 40, config: p, cwd: dir, ssh: false });
     // The data file is a watched source read after the load, so the first
     // render may still show the empty document.
-    let closed = stripAnsi(await bar.render());
-    for (let i = 0; i < 50 && !closed.includes("n-1"); i++) {
-      await new Promise((r) => setTimeout(r, 100));
-      closed = stripAnsi(await bar.render());
-    }
+    const started = bar;
+    let closed = "";
+    await until(
+      async () => (closed = stripAnsi(await started.render())).includes("n-1"),
+      () => `the bar showing n-1; last:\n${closed}`,
+    );
     expect(closed).toContain("n-1 ▸");
     expect(closed).not.toContain("the long form");
     const opened = await bar.click("▸");

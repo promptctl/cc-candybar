@@ -36,7 +36,7 @@ That single command (re-run it any time to update to the latest release):
 2. On macOS, builds `~/Applications/CCCandybarURLHandler.app` and registers the `cc-candybar://` URL scheme with Launch Services.
 3. Writes the staged `bin/cc-candybar` path as the statusline command into `~/.claude/settings.json` (skipped with a notice if you've customized the command; `--force` overwrites).
 
-Restart Claude Code. The statusline appears with the bundled default layout — an identity row (host, directory, gitaculous) over a status row (model, context, ceiling, autocompact, cacheTimer, block, weekly, activity). On macOS, Cmd-clicking clickable cells fires `cc-candybar://` URL verbs that the daemon dispatches (via the URL handler registered in step 2).
+Restart Claude Code. The statusline appears with the bundled default layout — an identity row (host, directory, gitaculous) over a status row (model, context, autocompact, cacheTimer, block, weekly, activity). On macOS, Cmd-clicking clickable cells fires `cc-candybar://` URL verbs that the daemon dispatches (via the URL handler registered in step 2).
 
 ## Customization
 
@@ -48,6 +48,8 @@ Drop a `.cc-candybar.json5` (or `.cc-candybar.json` — both extensions are acce
 4. `$XDG_CONFIG_HOME/cc-candybar/config.json5` (then `.json`; defaults to `~/.config/cc-candybar/config.json5`)
 
 Without `$CC_CANDYBAR_CONFIG`, every file found is a layer: your user file merges over the bundled default, the cwd's over that, and the project's on top. So a project file declares only what that project adds or changes — a segment placed in a row, a plugin listed — and keeps the rest of your own config. `$CC_CANDYBAR_CONFIG` names the one file the session loads, and the others are not read. A change made from the bar (a theme picked and saved, a segment added in edit mode) is written to your user file, never to a project's; when a project file sets the same value, the click is refused and names that file.
+
+A project or cwd file, and a repository's own plugins (`.cc-candybar/plugins/`), come from somebody's repository, and a config can run commands. So the first time a session works in a directory holding one, the bar asks — `<dir> has a cc-candybar config — run it? [approve] [decline]` — and until you answer, it draws your own config and runs nothing from that directory. The answer is kept per directory in `$XDG_STATE_HOME/cc-candybar/repo-configs/repo-configs.json` (default `~/.local/state/cc-candybar/`) and holds across later edits of the files, as Claude Code's answer for a project's MCP servers does. Remove a directory's entry there to be asked again. `cc-candybar check` names a directory still awaiting an answer and runs nothing from it.
 
 JSON is a strict subset of JSON5, so the same parser handles both — `.json5` is the documented format (supports inline comments, trailing commas, unquoted keys), `.json` is the legacy/compat extension. When both exist at the same location, `.json5` wins and the bar shows a persistent warning so you can remove the shadowed duplicate.
 
@@ -118,10 +120,11 @@ These are the segment names `DEFAULT_DSL_CONFIG` declares, each available to a u
 | `tokenSparkline` | `⚡` a sparkline over the last 24 speed samples | once speed samples exist |
 | `cacheTimer` | `◴` minutes until the prompt cache expires, or `cold` | while a cache expiry is known |
 | `context` | `◔` context tokens used and the percentage left | when context tokens are known |
-| `ceiling` | `⌈` the [memento](https://github.com/promptctl/memento) context ceiling this session hands off at; `−`/`+` move it by 100K, `∞` lifts it, `↺` drops the session's own setting (memento's `ceiling set/clear session`). Placed beside `context` | when memento is installed |
-| `autocompact` | `⇲` Claude Code's auto-compact window — `auto`, or the tokens `/autocompact` last set; `−`/`+` move it by 100K up to the model's context window, `↺` returns it to `auto`. Each click types `/autocompact` into the session, so the controls show only inside tmux. Placed beside `ceiling` | always |
+| `autocompact` | `⇲` Claude Code's auto-compact window — `auto`, or the tokens `/autocompact` last set; `−`/`+` move it by 100K up to the model's context window, `↺` returns it to `auto`. Each click types `/autocompact` into the session, so the controls show only inside tmux. Placed beside `context` | always |
 | `metrics` | `Δ` last response time, `⧖` response time, `⧗` session duration, `◆` message count, lines changed | when any of those exist |
 | `activity` | `⌘` the slash command that opened the turn, `☐` the in-progress todo with its position, `⟳` tools in flight and `✓` tools finished this turn | while the session is doing something |
+
+Every bar also carries, right after the settings menu's door, a cell saying how it is redrawn: `30 fps` while an animation lane draws it and it moves where you can see it, ` 1 fps` while that lane's bar is still or off screen, and `polled` when Claude Code reruns the statusline itself. It sits wherever the door does, so no layout has to place it, and none can leave it out.
 
 The lit ticket a checkout is working on is not bundled: it is a plugin, installed with `cc-candybar plugin install promptctl/links-issue-tracker`, whose one segment (`plugins.lit.ticket`, each of its parts a setting) is in edit mode's add-segment library. It reads the `.lit/statusline.json` lit keeps in each checkout, so no lit process runs for the bar.
 

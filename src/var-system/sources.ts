@@ -18,6 +18,7 @@ import path from "path";
 import { nearestWatchTarget } from "../utils/watch-target.js";
 import { setInterval, clearInterval } from "timers";
 import {
+  computed,
   observable,
   reaction,
   runInAction,
@@ -33,7 +34,7 @@ import {
   type VarType,
   type VarValue,
 } from "./types.js";
-import { VariableStore, type Derivation } from "./store.js";
+import { VariableStore, type Derivation, type StoredValue } from "./store.js";
 import { createCcCandybarEngine } from "../template-engine/engine.js";
 import { buildScope } from "../template-engine/scope.js";
 import {
@@ -55,6 +56,12 @@ import {
 import { PendingValueError, readPending, type JsonValue } from "./types.js";
 import type { SessionStateReader } from "../daemon/session-state.js";
 import { TrailingEdge, type Trigger } from "../utils/trailing-edge.js";
+import {
+  RefreshLedger,
+  type Refreshes,
+  type RefreshTrigger,
+} from "../utils/refresh-ledger.js";
+import { valueOf } from "../utils/logfmt.js";
 
 // How long text that is not a document may be a write still in progress
 // before it shows as the failure it is (documentPublisher).
@@ -250,7 +257,40 @@ function parsed<V>(
 
 // The publish half of a source, closed over its store node: takes what the
 // reader yielded, parses it, and writes the node — value or fallback.
-type Publish = (read: Outcome<string>) => void;
+// What the read stored: its outcome, once parsed.
+type Publish = (read: Outcome<string>) => Outcome<unknown>;
+
+// What makes a user source read: its first read, and then what its cache
+// policy names — a period, or a change (a watched file, its key or
+// dependencies moving).
+type UserTrigger = Extract<RefreshTrigger, "first" | "period" | "change">;
+
+// [LAW:one-source-of-truth] A cache policy's refresh, in the ledger's
+// vocabulary.
+function refreshOf(policy: CachePolicy): readonly UserTrigger[] {
+  switch (policy.kind) {
+    case "never":
+      return ["first"];
+    case "ttl":
+      return ["first", "period"];
+    case "watch_file":
+    case "key":
+    case "depends_on":
+      return ["first", "change"];
+  }
+}
+
+// A policy over what a source reads runs it first when that answers, and on
+// every change of the answer after.
+function firstThenChange(
+  update: (cause: RunCause, by: UserTrigger) => void,
+): () => void {
+  let ran = false;
+  return () => {
+    update("new-key", ran ? "change" : "first");
+    ran = true;
+  };
+}
 
 // ─── WatchManager ─────────────────────────────────────────────────────────────
 
@@ -457,6 +497,13 @@ export interface LastError {
   readonly message: string;
 }
 
+// What a registry's sources have published: each one's stored value, and the
+// standing fault of each policy that cannot fire.
+export interface Published {
+  readonly values: readonly StoredValue[];
+  readonly faults: readonly LastError[];
+}
+
 // [LAW:types-are-the-program] What a view's inputs are derived from: the value
 // at each payload path as it stands — PENDING while its source has not
 // answered — and the depth the view's renders draw at, which every contrast
@@ -496,6 +543,32 @@ export function resolvePath(obj: unknown, path: string): unknown {
     cur = (cur as Record<string, unknown>)[part];
   }
   return cur;
+}
+
+// [LAW:parse-dont-validate] What a view's payload holds at a source's name,
+// as the document's reading: the source's own outcome, PENDING while it has
+// not answered, and a failure for anything else.
+function sourceReading(name: string, raw: unknown): Reading<JsonValue> {
+  if (raw === PENDING) return PENDING;
+  if (raw === undefined) {
+    return failed(
+      `variable "${name}": the view's payload has no "${name}": its declaration did not take the source the preset reads`,
+    );
+  }
+  const kind =
+    typeof raw === "object" && raw !== null
+      ? (raw as { kind?: unknown }).kind
+      : undefined;
+  switch (kind) {
+    case "ok":
+    case "absent":
+    case "failed":
+      return raw as Reading<JsonValue>;
+    default:
+      return failed(
+        `variable "${name}": the view's payload holds no source reading at "${name}"`,
+      );
+  }
 }
 
 // Coerces an external primitive to a typed VarValue using the cast helpers
@@ -544,7 +617,10 @@ export class SourceRegistry {
   // source will ever run again, so no read outcome clears it. A watch the OS
   // refused lives until the registry does; a key template that throws lives
   // until the key evaluates again. One map, since a variable has one policy.
-  private readonly policyFaults = new Map<string, LastError>();
+  // Observable, since the bar draws each fault as a refresh warning.
+  private readonly policyFaults = observable.map<string, LastError>(undefined, {
+    deep: false,
+  });
 
   // Triggers for shell/file cache policies and the time source's tick:
   private readonly watchMgr = new WatchManager();
@@ -568,6 +644,8 @@ export class SourceRegistry {
   // parallel read or being dropped. Shared with the git cache's refresh path,
   // which had the same problem first — see src/utils/trailing-edge.ts.
   private readonly reads = new TrailingEdge();
+  // Each source's latest trigger, which the pass that answers it records.
+  private readonly askedBy = new Map<string, UserTrigger>();
   // [LAW:single-enforcer] The registry owns every async handle its sources
   // hold — timers, watchers, reactions, and the child processes and file
   // reads in flight. This is their cancellation: dispose() aborts it, so a
@@ -590,6 +668,26 @@ export class SourceRegistry {
   // [LAW:one-source-of-truth] One engine per registry, not one per variable.
   private readonly engine = createCcCandybarEngine({ drawnAt: this.drawnAt });
 
+  // The names of this registry's own async sources (shell, file), whose
+  // stored values `published` reads.
+  private readonly sourceNames = observable.array<string>([], { deep: false });
+  // [LAW:one-source-of-truth] What this registry's sources have published, as
+  // one value that changes exactly when one of their stored values or
+  // standing faults does: the store writes a value only when its own compare
+  // finds it changed, and a fault is written only when its reason does, so a
+  // re-read that found what was stored moves nothing. A session's view reacts
+  // to it, and so its feed wakes on a publish that changed what the bar can
+  // show (openView).
+  private readonly publishedNow = computed(
+    (): Published => ({
+      values: this.sourceNames.map((name) => this.store.stored(name)),
+      faults: [...this.policyFaults.values()],
+    }),
+  );
+  published(): Published {
+    return this.publishedNow.get();
+  }
+
   // [LAW:locality-or-seam] sessionState is injected (not constructed here)
   // so tests can substitute a fake and the daemon shares its singleton.
   // Absent in non-daemon contexts; declareState() rejects loudly in that case
@@ -608,6 +706,9 @@ export class SourceRegistry {
     sessionState?: SessionStateReader,
     // The directory home a session's view reads through to (`view()`).
     private readonly parent: SourceRegistry | null = null,
+    // [LAW:single-enforcer] The daemon's one ledger, which every source's
+    // refreshes are recorded in; a registry outside the daemon keeps its own.
+    private readonly ledger: RefreshLedger = new RefreshLedger(),
   ) {
     this.sessionState = sessionState;
   }
@@ -626,6 +727,7 @@ export class SourceRegistry {
       this.defaultEmptyValue,
       this.sessionState,
       this,
+      this.ledger,
     );
   }
 
@@ -648,6 +750,26 @@ export class SourceRegistry {
   // A document that is a known failure for as long as it is declared.
   declareFailedDocument(name: string, reason: string): void {
     this.store.defineDocument(name, failed(reason));
+  }
+
+  // A plugin's source: a document derived from the reading its view's payload
+  // carries at the source's own name — ok, absent or failed as the storage
+  // owner read the session's file, or pending while it has not answered.
+  // [LAW:no-silent-failure] A payload with nothing there is a declaration
+  // that did not take the source the preset reads: a bug, read as a failure
+  // naming the variable, never as absent.
+  declareSourceDocument(name: string): void {
+    this.store.defineDerivedDocument(name, () =>
+      sourceReading(name, this.inputs.get().read(name)),
+    );
+  }
+
+  // [LAW:single-enforcer] A handle the registry's owner holds for as long as
+  // the registry lives — a render state's hold on a plugin's storage folder —
+  // released by the registry's one teardown (`dispose`), with everything else
+  // it holds.
+  own(release: () => void): void {
+    this.cleanups.push(release);
   }
 
   // input: a derived value of its path in the bound InputSource, cast to its
@@ -762,8 +884,16 @@ export class SourceRegistry {
     parse: SourceParse,
   ): void {
     const publish = this.publisherFor(name, parse, reader.where);
-    this.registerCachePolicy(name, cache, (cause) =>
-      this.runSource(name, reader, publish, cause),
+    runInAction(() => this.sourceNames.push(name));
+    // [LAW:types-are-the-program] Its scope is derived, never authored: a
+    // view's source reads a session value, a directory home's reads none.
+    const refreshes = this.ledger.declare({
+      name: `var.${name}`,
+      scope: this.parent === null ? "directory" : "view",
+      refresh: refreshOf(cache),
+    });
+    this.registerCachePolicy(name, cache, (cause, by) =>
+      this.runSource(name, reader, publish, cause, by, refreshes),
     );
   }
 
@@ -802,6 +932,7 @@ export class SourceRegistry {
       const outcome = parsed(read, parser, where);
       this.noteOutcome(name, outcome);
       this.store.setBox(name, orElse(outcome, fallback));
+      return outcome;
     };
   }
 
@@ -861,6 +992,9 @@ export class SourceRegistry {
       } else {
         show();
       }
+      // A torn read is still the failure its read met, though the document
+      // stays showing until the settle.
+      return outcome;
     };
   }
 
@@ -869,7 +1003,11 @@ export class SourceRegistry {
     reader: SourceReader,
     publish: Publish,
     cause: RunCause,
+    by: UserTrigger,
+    refreshes: Refreshes<UserTrigger>,
   ): void {
+    // The latest trigger is the one a coalesced pass answers.
+    this.askedBy.set(name, by);
     // [LAW:no-ambient-temporal-coupling] A trigger that arrives while this
     // source is mid-read is not a duplicate to drop: it means the inputs the
     // running read is about to publish are already stale. The trailing edge
@@ -882,11 +1020,22 @@ export class SourceRegistry {
     // [LAW:no-silent-failure] A cancelled read publishes nothing; the
     // registry's own abort is the one rejection a run may end in. Any other
     // rejection is a bug and stays unhandled — loud.
-    const trigger = this.reads.run(name, () =>
-      reader.read().then(publish, (err: unknown) => {
-        if (err !== this.abort.signal.reason) throw err;
-      }),
-    );
+    const trigger = this.reads.run(name, () => {
+      const asked = this.askedBy.get(name) ?? by;
+      const startedAt = Date.now();
+      return reader.read().then(
+        (read) =>
+          refreshes.recorded(
+            `where=${valueOf(reader.where)}`,
+            asked,
+            publish(read),
+            Date.now() - startedAt,
+          ),
+        (err: unknown) => {
+          if (err !== this.abort.signal.reason) throw err;
+        },
+      );
+    });
     this.track(name, trigger, cause);
   }
 
@@ -1191,27 +1340,27 @@ export class SourceRegistry {
   private registerCachePolicy(
     name: string,
     policy: CachePolicy,
-    update: (cause: RunCause) => void,
+    update: (cause: RunCause, by: UserTrigger) => void,
   ): void {
     switch (policy.kind) {
       case "never":
-        update("new-key");
+        update("new-key", "first");
         break;
 
       case "ttl": {
-        update("new-key");
+        update("new-key", "first");
         const unsub = this.ttlMgr.subscribe(policy.durationMs, () =>
-          update("re-read"),
+          update("re-read", "period"),
         );
         this.cleanups.push(unsub);
         break;
       }
 
       case "watch_file": {
-        update("new-key");
+        update("new-key", "first");
         const unsub = this.watchMgr.subscribe(
           policy.path,
-          () => update("re-read"),
+          () => update("re-read", "change"),
           (message) => this.notePolicy(name, failed(message)),
         );
         this.cleanups.push(unsub);
@@ -1247,7 +1396,7 @@ export class SourceRegistry {
                   );
             }
           },
-          () => update("new-key"),
+          firstThenChange(update),
         );
         break;
       }
@@ -1264,7 +1413,7 @@ export class SourceRegistry {
               ? ok(keys.map((key) => key.value).join(","))
               : PENDING;
           },
-          () => update("new-key"),
+          firstThenChange(update),
         );
         break;
       }
@@ -1332,13 +1481,17 @@ export class SourceRegistry {
 
   // The one fold from a policy's own outcome — whether it can fire — to the
   // variable's standing fault.
+  // A fault standing for the same reason keeps its record, so it moves
+  // nothing that draws it.
   private notePolicy(name: string, outcome: Reading<unknown>): void {
-    if (outcome.kind === "failed")
-      this.policyFaults.set(name, {
-        timestamp: Date.now(),
-        message: outcome.reason,
-      });
-    else this.policyFaults.delete(name);
+    runInAction(() => {
+      if (outcome.kind !== "failed") this.policyFaults.delete(name);
+      else if (this.policyFaults.get(name)?.message !== outcome.reason)
+        this.policyFaults.set(name, {
+          timestamp: Date.now(),
+          message: outcome.reason,
+        });
+    });
   }
 
   // [LAW:single-enforcer] The one fold from a source outcome to the

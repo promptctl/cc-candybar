@@ -9,6 +9,7 @@
 //   4. `{{ themePreview "applyAction" }}` is two rows of the selected option's
 //      palette;
 //   5. a link drawn in several colour runs reads as one link.
+import { TEST_SIGNER } from "./helpers/link-signer";
 import { getThemePalette, type RichText } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -54,7 +55,7 @@ function rig(template: string) {
   );
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", new SessionState());
-  const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
+  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   const sink = new Map<string, readonly RichText[]>();
   const rendered = renderDsl(
     config,

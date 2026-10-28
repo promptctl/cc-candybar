@@ -8,13 +8,21 @@ Only ENOENT counts as absent. A location a stat can't see past, such as an unsea
 
 When `.json5` and `.json` sit side by side, `.json5` wins and the shadowed file gets a warning.
 
+A cwd or project layer, and a repository's own plugin folder, load only once the user has approved that directory in the bar. A config can run commands, so a cloned repository asks once, as Claude Code does for a project's MCP servers. The answer is kept by directory, not by content, so editing the files never asks again. The gate sits inside the one resolution every load shares (the render, `check`, the durable writer, the demo), and the plugin listing takes only an approved project as a stamped type, so a new load path can't list a repository's plugins without consulting the answer. The answers live in the state directory, beside the link key that signs the question's clicks.
+
 User files merge over the bundled default by name. Segments and presets merge by name and then by field, so a user declares only what differs. Root rows merge by name, and a whole tree replaces every row.
 
 JSON5 tolerates duplicate keys (the last one wins), but the file editor refuses the whole document. So loading runs the editor's own scanner and warns. With one detector, the warning and the refusal can't disagree.
 
+## Names never nest
+
+No variable is declared under another. The draw lands a read on the first declared name it reaches and the load's walks on the longest, so the two agree only when nothing nests. The check runs over the names after every synthesis pass, because synthesized names are built from authored ones: a user variable `theme` is refused because the settings menu declares `theme.effective`, and a new synthesis that derives names from authored input can make a config that loaded stop loading.
+
 ## The config file is the durable store
 
 There's no daemon-side overrides layer. A click that persists something edits the user's config file in place: it splices one value span and keeps every other byte, comments included. The daemon reloads through the same watcher a hand edit trips. A value written by the menu looks the same as a hand-edited one.
+
+A config file is watched through its directory by name, never by its own inode, because a write-then-rename replaces the inode and leaves an inode watch deaf with nothing to say so. A config file that is a symlink is watched in every directory its chain of file links passes through, by the name each hop has there, because each directory reports only its own children: re-pointing any link in the chain appears in that link's directory, and a write, which lands in the last target, appears in its. A linked directory on the way is not a hop: the watch sits in its canonical directory, so a write there is heard, and re-pointing the directory link itself is not.
 
 A click writes to the session's home file: the explicit path if there is one, else the user's XDG file, which is created on first write. It never writes a project or cwd layer, because that's somebody's repository.
 

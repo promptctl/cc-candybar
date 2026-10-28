@@ -1,5 +1,5 @@
 // [LAW:single-enforcer] What one home holds of the daemon's shared entries (a
-// repo, a pane, a memento reading, a directory set's scans): one hold per
+// repo, a pane, a plugin's session file, a directory set's scans): one hold per
 // entry however often the home reads it (brandon-unfiled-3248.8ro6, step 1).
 // An owner's period visits only held entries (src/utils/period.ts), so an
 // entry the home stopped reading stops costing its refreshes. What the home

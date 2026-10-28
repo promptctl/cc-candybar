@@ -273,6 +273,52 @@ enum BadInput {
     Msg(String),
 }
 
+// The client hints, set on the request (mirrors ClientHints in
+// src/daemon/protocol.ts). [LAW:single-enforcer] Client hints are captured
+// here, in the client's live shell context, then trusted by the daemon. The
+// daemon's own env reflects whichever shell launched it — not the active
+// terminal, and not whether THIS session arrived over SSH.
+// [LAW:one-source-of-truth] scripts/check-protocol.mjs diffs the key set this
+// function sets against that interface — add a hint in both runtimes at once.
+//
+// termCols / termRows are CONDITIONAL: absence is the honest "could not
+// determine". ssh is UNCONDITIONAL: our own env is a total answer, so we
+// always state it, which reserves absence to mean "client too old to
+// report" and keeps that distinguishable from a genuine local session.
+fn client_hints(request: &mut serde_json::Value, cwd: &std::path::Path) {
+    let (term_cols, term_rows) = detect_term_extents();
+    if let Some(cols) = term_cols {
+        request["termCols"] = serde_json::Value::from(cols);
+    }
+    if let Some(rows) = term_rows {
+        request["termRows"] = serde_json::Value::from(rows);
+    }
+    request["ssh"] = serde_json::Value::from(detect_ssh());
+    // tmux is UNCONDITIONAL too: `null` is the affirmative "not in tmux", an
+    // object is the tmux facts — absence stays "client too old to report".
+    request["tmux"] = detect_tmux();
+    // configEnv is CONDITIONAL like termCols: an unset-or-empty variable is
+    // the affirmative "no override", spelled as an absent field.
+    if let Some(path) = detect_config_env(cwd) {
+        request["configEnv"] = serde_json::Value::from(path);
+    }
+    // claudeConfigDir is CONDITIONAL too: unset-or-empty is the default
+    // Claude Code directory, spelled as an absent field.
+    if let Some(dir) = detect_claude_config_dir(cwd) {
+        request["claudeConfigDir"] = serde_json::Value::from(dir);
+    }
+    // terminalEnv is UNCONDITIONAL like tmux: always an object, a variable the
+    // environment does not set left out of it — absence stays "client too old
+    // to report".
+    request["terminalEnv"] = detect_terminal_env();
+    // client is CONDITIONAL only on the binary naming its own path: one that
+    // cannot (current_exe failed) can spawn no daemon either, and its absence
+    // reads as the doctor's "unreported" — never a guessed bundle.
+    if let Some(client) = client_hint(dist_index_path(), RUST_SOURCE) {
+        request["client"] = client;
+    }
+}
+
 fn render(argv: &[String], hook_data: &serde_json::Value) -> RenderOutcome {
     let deadline = Instant::now() + TOTAL_BUDGET;
     // [LAW:one-source-of-truth] The same instant on the wall clock, stated on
@@ -287,18 +333,6 @@ fn render(argv: &[String], hook_data: &serde_json::Value) -> RenderOutcome {
         Ok(p) => p.to_string_lossy().into_owned(),
         Err(e) => return RenderOutcome::Transient(TransientCause::Io(e.to_string())),
     };
-    // [LAW:single-enforcer] Client hints are captured here, in the client's
-    // live shell context, then trusted by the daemon. The daemon's own env
-    // reflects whichever shell launched it — not the active terminal, and not
-    // whether THIS session arrived over SSH.
-    let (term_cols, term_rows) = detect_term_extents();
-    let ssh = detect_ssh();
-    let tmux = detect_tmux();
-    let config_env = detect_config_env(std::path::Path::new(&cwd));
-    let claude_config_dir = detect_claude_config_dir(std::path::Path::new(&cwd));
-    let memento_env = detect_memento_env(std::path::Path::new(&cwd));
-    let terminal_env = detect_terminal_env();
-
     let mut request = serde_json::json!({
         "v": PROTOCOL_VERSION,
         "kind": "render",
@@ -309,47 +343,7 @@ fn render(argv: &[String], hook_data: &serde_json::Value) -> RenderOutcome {
     if let Some(ms) = deadline_epoch_ms {
         request["deadline"] = serde_json::Value::from(ms);
     }
-    // --- client hints (mirrors ClientHints in src/daemon/protocol.ts) ---
-    // [LAW:one-source-of-truth] scripts/check-protocol.mjs diffs the key set in
-    // this block against that interface — add a hint in both runtimes at once.
-    //
-    // termCols / termRows are CONDITIONAL: absence is the honest "could not
-    // determine". ssh is UNCONDITIONAL: our own env is a total answer, so we
-    // always state it, which reserves absence to mean "client too old to
-    // report" and keeps that distinguishable from a genuine local session.
-    if let Some(cols) = term_cols {
-        request["termCols"] = serde_json::Value::from(cols);
-    }
-    if let Some(rows) = term_rows {
-        request["termRows"] = serde_json::Value::from(rows);
-    }
-    request["ssh"] = serde_json::Value::from(ssh);
-    // tmux is UNCONDITIONAL too: `null` is the affirmative "not in tmux", an
-    // object is the tmux facts — absence stays "client too old to report".
-    request["tmux"] = tmux;
-    // configEnv is CONDITIONAL like termCols: an unset-or-empty variable is
-    // the affirmative "no override", spelled as an absent field.
-    if let Some(path) = config_env {
-        request["configEnv"] = serde_json::Value::from(path);
-    }
-    // claudeConfigDir is CONDITIONAL too: unset-or-empty is the default
-    // Claude Code directory, spelled as an absent field.
-    if let Some(dir) = claude_config_dir {
-        request["claudeConfigDir"] = serde_json::Value::from(dir);
-    }
-    // mementoEnv is UNCONDITIONAL like tmux: always an object, a variable the
-    // environment does not set left out of it — absence stays "client too old
-    // to report".
-    request["mementoEnv"] = memento_env;
-    // terminalEnv is UNCONDITIONAL like mementoEnv: always an object.
-    request["terminalEnv"] = terminal_env;
-    // client is CONDITIONAL only on the binary naming its own path: one that
-    // cannot (current_exe failed) can spawn no daemon either, and its absence
-    // reads as the doctor's "unreported" — never a guessed bundle.
-    if let Some(client) = client_hint(dist_index_path(), RUST_SOURCE) {
-        request["client"] = client;
-    }
-    // --- end client hints ---
+    client_hints(&mut request, std::path::Path::new(&cwd));
     let body = match serde_json::to_vec(&request) {
         Ok(b) => b,
         // Encoding our own request failed — this is a programming error
@@ -638,38 +632,6 @@ fn resolve_against(cwd: &std::path::Path, value: &str) -> String {
     resolved.to_string_lossy().into_owned()
 }
 
-// The variables that move where the memento plugin keeps its ceiling layers —
-// mirrors MEMENTO_ENV_VARS in src/memento-hint.ts, diffed by
-// scripts/check-protocol.mjs. The daemon hands them to memento's reader and
-// `ceiling` command in place of its own, which answer for whichever session
-// spawned it. They cross raw, by name: memento owns the rule that folds them
-// into its config home.
-const MEMENTO_ENV_VARS: [&str; 2] = ["MEMENTO_CONFIG_HOME", "XDG_CONFIG_HOME"];
-
-fn detect_memento_env(cwd: &std::path::Path) -> serde_json::Value {
-    memento_env_hint(|name| env::var(name).ok(), cwd)
-}
-
-// [LAW:dataflow-not-control-flow] Total by construction, like tmux_hint: always
-// an object, an unset-or-empty variable left out of it (memento reads both the
-// same way). A relative value is made absolute against this client's cwd —
-// detectMementoEnv's rule. Pure over the lookup so the table in
-// test/memento-hint.test.ts can be run against it.
-fn memento_env_hint(
-    raw: impl Fn(&str) -> Option<String>,
-    cwd: &std::path::Path,
-) -> serde_json::Value {
-    MEMENTO_ENV_VARS
-        .iter()
-        .filter_map(|name| {
-            let value = raw(name).filter(|v| !v.is_empty())?;
-            let absolute = resolve_against(cwd, &value);
-            Some((name.to_string(), serde_json::Value::from(absolute)))
-        })
-        .collect::<serde_json::Map<String, serde_json::Value>>()
-        .into()
-}
-
 // The variables a terminal emulator sets to name itself — mirrors
 // TERMINAL_ENV_VARS in src/terminal-hint.ts, diffed by
 // scripts/check-protocol.mjs. They cross raw, by name: which terminal a value
@@ -686,7 +648,7 @@ fn detect_terminal_env() -> serde_json::Value {
     terminal_env_hint(|name| env::var(name).ok())
 }
 
-// [LAW:dataflow-not-control-flow] Total by construction, like memento_env_hint:
+// [LAW:dataflow-not-control-flow] Total by construction, like tmux_hint:
 // always an object, an unset-or-empty variable left out of it —
 // detectTerminalEnv's rule. Pure over the lookup so test/terminal-hint.test.ts's
 // table can be run against it.
@@ -1249,6 +1211,8 @@ mod tests {
         assert_eq!(hint(Some(" /a , /b")), Some("/a".into()));
         assert_eq!(hint(Some(".claude-work")), Some("/work/proj/.claude-work".into()));
         assert_eq!(hint(Some("../x/./y/")), Some("/work/x/y".into()));
+        assert_eq!(hint(Some("../cfg//x/.")), Some("/work/cfg/x".into()));
+        assert_eq!(hint(Some("/m/../../..")), Some("/".into()));
     }
 
     // The same table as test/config-hint.test.ts.
@@ -1313,40 +1277,6 @@ mod tests {
         assert_eq!(
             hint(Some("tmux"), Some("xterm-kitty")),
             serde_json::json!({ "TERM_PROGRAM": "tmux", "TERM": "xterm-kitty" })
-        );
-    }
-
-    // The same table as test/memento-hint.test.ts.
-    #[test]
-    fn memento_env_hint_reports_exactly_what_the_ts_client_reports() {
-        let cwd = std::path::Path::new("/work/proj");
-        let hint = |home: Option<&str>, xdg: Option<&str>| {
-            memento_env_hint(
-                |name| match name {
-                    "MEMENTO_CONFIG_HOME" => home.map(String::from),
-                    "XDG_CONFIG_HOME" => xdg.map(String::from),
-                    _ => None,
-                },
-                cwd,
-            )
-        };
-        assert_eq!(hint(None, None), serde_json::json!({}));
-        assert_eq!(hint(Some(""), Some("")), serde_json::json!({}));
-        assert_eq!(
-            hint(Some("/m"), None),
-            serde_json::json!({ "MEMENTO_CONFIG_HOME": "/m" })
-        );
-        assert_eq!(
-            hint(Some("/m"), Some("cfg")),
-            serde_json::json!({ "MEMENTO_CONFIG_HOME": "/m", "XDG_CONFIG_HOME": "/work/proj/cfg" })
-        );
-        assert_eq!(
-            hint(Some("./m/"), Some("../cfg//x/.")),
-            serde_json::json!({ "MEMENTO_CONFIG_HOME": "/work/proj/m", "XDG_CONFIG_HOME": "/work/cfg/x" })
-        );
-        assert_eq!(
-            hint(Some("/m/../../.."), None),
-            serde_json::json!({ "MEMENTO_CONFIG_HOME": "/" })
         );
     }
 

@@ -5,6 +5,7 @@
 // from a real 0/"" — so the DSL input fallback chain (default + last_error)
 // fires. [LAW:no-silent-failure][LAW:single-enforcer][LAW:one-type-per-behavior]
 
+import { CacheExpiryProvider } from "../src/segments/cache";
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
 import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
@@ -23,12 +24,12 @@ import type { GitInfo, GitInfoOptions, PrState } from "../src/segments/git";
 import { ABSENT, PENDING, failed, ok, type Outcome } from "../src/utils/outcome";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
 import { instantOf } from "../src/utils/instant";
+import type { Current } from "../src/utils/reading";
 import {
   absentOwners,
   fakeAutoCompact,
   fakeContext,
   fakeGit,
-  fakeMemento,
   fakeMetrics,
   fakeTmux,
   fakeUsage,
@@ -255,7 +256,12 @@ describe("payloadOf — cache outcome lane", () => {
     chmodSync(transcript, 0o000);
 
     const logs: LogEntry[] = [];
-    const deps = depsWith(ABSENT, logs);
+    // The owner logs the refresh that failed, once, as the daemon's does.
+    const deps = depsWith(ABSENT, logs, {
+      cacheExpiry: new CacheExpiryProvider((level, msg) =>
+        logs.push({ level, msg }),
+      ),
+    });
     const payload = await requestPayload(
       hookData(transcript),
       instantOf(new Date()),
@@ -317,7 +323,10 @@ describe("payloadOf — migrated lanes share the outcome contract", () => {
     "tmux.session",
   ]);
 
-  test("failed lanes each log one warn and project as missing fields", async () => {
+  // [LAW:no-silent-failure] A failed lane was logged by the refresh that
+  // failed, its owner's (these stubs stand in for owners); the payload
+  // derived from it logs nothing again.
+  test("failed lanes project as missing fields, and the payload logs none of them", async () => {
     const logs: LogEntry[] = [];
     const deps = depsWith(ABSENT, logs, {
       contextProvider: fakeContext(async () =>
@@ -339,16 +348,7 @@ describe("payloadOf — migrated lanes share the outcome contract", () => {
 
     expect(payload.context).toBeUndefined();
     expect(payload.metrics).toBeUndefined();
-    expect(logs).toEqual(
-      expect.arrayContaining([
-        {
-          level: "warn",
-          msg: "provider fetch failed: context transcript: EACCES",
-        },
-        { level: "warn", msg: "provider fetch failed: metrics (s): boom" },
-      ]),
-    );
-    expect(logs).toHaveLength(2);
+    expect(logs).toEqual([]);
   });
 
   test("ok lanes project values; absent lanes are missing with nothing logged", async () => {
@@ -410,14 +410,10 @@ describe("payloadOf — migrated lanes share the outcome contract", () => {
     expect(payload.context).toBeUndefined();
     // The pane is the client's report and survives the failed name lookup,
     // whose failure its owner logged when the refresh failed: the render
-    // logs only the lane that threw — the throw where it was caught, then
-    // the lane's failure.
+    // logs only the throw, where it was caught.
     expect(payload.tmux).toEqual({ pane: "%7" });
-    expect(logs.map((l) => l.level)).toEqual(["error", "warn"]);
+    expect(logs.map((l) => l.level)).toEqual(["error"]);
     expect(logs[0]!.msg).toContain("context lane threw: Error: stub bug");
-    expect(logs[1]!.msg).toBe(
-      "provider fetch failed: context: Error: stub bug",
-    );
   });
 
   // brandon-tmux-tk7: the tmux family is the session's own client hint. With
@@ -842,18 +838,12 @@ describe("payloadOf — autocompact lane", () => {
   });
 });
 
-// brandon-client-hints-7ua: the memento and today lanes answer for the Claude
-// Code THIS render's client runs under — its config directory and the
-// variables memento resolves its config home from — never the daemon's env.
+// brandon-client-hints-7ua: the today lane answers for the Claude Code THIS
+// render's client runs under — its config directory — never the daemon's env.
 describe("payloadOf — the lanes that read a session's Claude Code", () => {
   const run = async (paths: string[], hints: ClientHints) => {
-    const scopes: unknown[] = [];
     const seeded: unknown[] = [];
     const deps = depsWith(ABSENT, [], {
-      mementoProvider: fakeMemento(async (_holds: unknown, scope: unknown) => {
-        scopes.push(scope);
-        return ABSENT;
-      }),
       usageStore: fakeUsage({
         usage: async () => ABSENT,
         today: (_hook: unknown, claudeConfigDir: unknown) => {
@@ -872,34 +862,8 @@ describe("payloadOf — the lanes that read a session's Claude Code", () => {
       hints,
       NO_CONFIG_FILE,
     );
-    return { scopes, seeded };
+    return { seeded };
   };
-  const ANCHOR = { sessionId: "test-session", projectDir: "/tmp", cwd: "/tmp" };
-
-  test("memento is asked under the client's directory and env", async () => {
-    const { scopes } = await run(["memento.ceiling"], {
-      claudeConfigDir: "/home/u/.claude.zai",
-      mementoEnv: { XDG_CONFIG_HOME: "/home/u/.config-zai" },
-    });
-    expect(scopes).toEqual([
-      {
-        ...ANCHOR,
-        claudeConfigDir: "/home/u/.claude.zai",
-        env: { XDG_CONFIG_HOME: "/home/u/.config-zai" },
-      },
-    ]);
-  });
-
-  test("a client that reports neither: the default directory, and the env left to the daemon's", async () => {
-    const { scopes } = await run(["memento.ceiling"], NO_HINTS);
-    expect(scopes).toEqual([
-      {
-        ...ANCHOR,
-        claudeConfigDir: claudeConfigDir(undefined),
-        env: undefined,
-      },
-    ]);
-  });
 
   test("today seeds the client's directory", async () => {
     const zai = await run(["today.cost"], {
@@ -961,5 +925,43 @@ describe("payloadOf — config file and resume command", () => {
     expect(payload.resumeCommand).toBe(
       "cd /tmp && claude --resume test-session",
     );
+  });
+});
+
+// A request waits only for first answers. A value the daemon itself made
+// stale (a click's move) may take as long as the program the click ran, so a
+// request after it draws the loading cell at once rather than waiting out its
+// deadline.
+describe("settlePayload — what a request waits on", () => {
+  test("a superseded lane is not waited on: the request after a click draws it pending at once", async () => {
+    let current: Current<string> = {
+      kind: "pending",
+      why: "unread",
+      landed: Promise.resolve().then(() => {
+        current = ok("work");
+      }),
+    };
+    const deps = depsWith(ABSENT, [], {
+      tmuxService: { declare: () => ({ current: () => current }) },
+    });
+    const request = () =>
+      requestPayload(
+        hookData("/no/such/transcript.jsonl"),
+        instantOf(new Date()),
+        deps,
+        undefined,
+        new Set(["tmux.session"]),
+        EFFECTIVE_GLOBALS,
+        { tmux: { socket: "/s", pane: "%7", truecolor: null } },
+        NO_CONFIG_FILE,
+      );
+    // The key's first read is waited on.
+    expect((await request()).tmux).toEqual({ pane: "%7", session: "work" });
+    // A click supersedes it with a read that never lands; the request draws at
+    // once. Any lane stands in: the wait asks why a lane is pending, never
+    // which lane it is, and the owners that supersede pin their own state
+    // (keyed-source, managed-storage and run-action tests).
+    current = { kind: "pending", why: "superseded", landed: new Promise(() => {}) };
+    expect((await request()).tmux).toEqual({ pane: "%7", session: PENDING });
   });
 });

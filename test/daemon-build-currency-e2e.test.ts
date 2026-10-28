@@ -36,6 +36,7 @@ import {
 } from "./helpers/spawn-isolated-daemon";
 import { builtBundle } from "./helpers/spawn-test-daemon";
 import { waitForExit } from "./helpers/daemon-wire";
+import { answerRepo } from "./helpers/repo-approval";
 
 const REPO_ROOT = process.cwd();
 const REPO_BUNDLE = path.join(REPO_ROOT, "dist", "index.mjs");
@@ -122,6 +123,8 @@ async function withDaemon<T>(
   body: (sockPath: string, daemon: RunningDaemon) => Promise<T>,
 ): Promise<T> {
   const { env, sockPath, removeTmpDirs } = prepareIsolatedDaemonEnv("ccb-bc");
+  // The project's config (the collision the strip warns of) is approved.
+  answerRepo(scratch.projectDir, "approved", env);
   let daemon: RunningDaemon | undefined;
   try {
     daemon = await spawnDaemonWithEnv(

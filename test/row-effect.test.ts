@@ -3,6 +3,7 @@
 // starts calm when it comes into force, and `none` draws exactly what the bar
 // always drew.
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import { selectionFor } from "./helpers/selection";
 import {
   ColorSpec,
@@ -80,7 +81,7 @@ function renderer(
 } {
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", new SessionState());
-  const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
+  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
   const opts = {
     endcaps: "powerline" as const,
     colorCompatibility,

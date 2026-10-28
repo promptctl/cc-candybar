@@ -35,6 +35,7 @@ import type { ClaudeHookData } from "../src/utils/claude";
 import { Holds } from "../src/utils/holds";
 import { instantOf } from "../src/utils/instant";
 import { todayInfo, todayNow } from "./helpers/today";
+import { until } from "./helpers/until";
 
 let seq = 0;
 // One newline-terminated usage line. Unique tags keep every entry distinct.
@@ -424,6 +425,50 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
       } finally {
         fresh.close();
       }
+    } finally {
+      store.close();
+    }
+  });
+
+  // [LAW:no-ambient-temporal-coupling] An older fold landing first (a
+  // rescan's, say) must not cost the newer one its store: the bar draws the
+  // stored record, so a dropped newer fold would show the older totals until
+  // the session's next request.
+  test("a newer fold that lands after an older one is still the one stored", async () => {
+    const t = join(dir, "N.jsonl");
+    const store = new SessionUsageStore({ sweepIntervalMs: 0 });
+    // Hold each of the first two folds until released, so the older lands first.
+    const internals = store as unknown as {
+      refold: (...args: unknown[]) => Promise<unknown>;
+    };
+    const refold = internals.refold.bind(store);
+    const held: Array<() => void> = [];
+    internals.refold = async (...args) => {
+      const out = await refold(...args);
+      if (held.length < 2) await new Promise<void>((r) => held.push(r));
+      return out;
+    };
+    const heldCount = (n: number) =>
+      until(() => held.length >= n, `${n} held folds`);
+    try {
+      writeFileSync(t, line(new Date(), 0.01, 100, 20));
+      touch(t);
+      const older = store.getUsageInfo("N", hook("N", t));
+      await heldCount(1);
+      appendFileSync(t, line(new Date(), 0.02, 200, 40));
+      touch(t);
+      const newer = store.getUsageInfo("N", hook("N", t));
+      await heldCount(2);
+      held[0]!();
+      await older;
+      held[1]!();
+      await newer;
+
+      const stored = store.usageOf("N", hook("N", t));
+      expect(stored).toMatchObject({
+        kind: "ok",
+        value: { session: { cost: expect.closeTo(0.03, 5), tokens: 360 } },
+      });
     } finally {
       store.close();
     }

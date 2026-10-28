@@ -14,40 +14,49 @@ import { GitDataProvider } from "./cache/git";
 import { SessionUsageStore } from "./cache/session-usage-store";
 import type { WatcherRegistry } from "./cache/watchers";
 import type { DaemonLogger } from "../utils/logger";
+import type { RefreshLedger } from "../utils/refresh-ledger";
 import type { RenderPayloadDeps } from "./render-payload";
 import { ContextProvider } from "../segments/context.js";
 import { MetricsProvider } from "../segments/metrics.js";
 import { ActivityProvider } from "../segments/activity.js";
 import { TmuxService } from "../segments/tmux.js";
-import { MementoProvider } from "../segments/memento.js";
-import { productionMementoEdge } from "../memento/edge.js";
+import { HostService } from "../segments/host.js";
 import { AutoCompactProvider } from "../segments/autocompact-provider.js";
 import { CacheExpiryProvider } from "../segments/cache.js";
 import { RefreshFaults } from "./refresh-faults.js";
+import { ManagedStorage } from "./cache/managed-storage.js";
 
 // The lanes the view's declaration handed it (`lanes`) are the view's to
 // supply; everything else is a provider.
 export type PayloadProviders = Omit<RenderPayloadDeps, "lanes">;
 
+// [LAW:single-enforcer] Every provider records its refreshes in the caller's
+// one ledger, so its stats read every source in one place.
 export function createPayloadProviders(opts: {
   readonly watchers: WatcherRegistry;
   readonly logger: DaemonLogger;
+  readonly ledger: RefreshLedger;
 }): PayloadProviders {
+  const { logger, ledger } = opts;
   return {
+    hostService: new HostService({ logger, ledger }),
     gitProvider: new GitDataProvider({
       watchers: opts.watchers,
-      logger: opts.logger,
+      logger,
+      ledger,
     }),
-    usageStore: new SessionUsageStore({ logger: opts.logger }),
-    contextProvider: new ContextProvider({ logger: opts.logger }),
-    metricsProvider: new MetricsProvider({ logger: opts.logger }),
-    activityProvider: new ActivityProvider({ logger: opts.logger }),
-    tmuxService: new TmuxService({ logger: opts.logger }),
-    mementoProvider: new MementoProvider(productionMementoEdge(), {
-      logger: opts.logger,
+    usageStore: new SessionUsageStore({ logger, ledger }),
+    contextProvider: new ContextProvider({ logger, ledger }),
+    metricsProvider: new MetricsProvider({ logger, ledger }),
+    activityProvider: new ActivityProvider({ logger, ledger }),
+    tmuxService: new TmuxService({ logger, ledger }),
+    autoCompact: new AutoCompactProvider(logger, ledger),
+    cacheExpiry: new CacheExpiryProvider(logger, ledger),
+    managedStorage: new ManagedStorage({
+      watchers: opts.watchers,
+      logger,
+      ledger,
     }),
-    autoCompact: new AutoCompactProvider(opts.logger),
-    cacheExpiry: new CacheExpiryProvider(opts.logger),
     faults: new RefreshFaults(),
     log: opts.logger,
   };

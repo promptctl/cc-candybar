@@ -6,6 +6,7 @@
 // until the dissolve is over, then closes up in one step. A write to the
 // session's state, the width or the palette ends every dissolve in flight.
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import { selectionFor } from "./helpers/selection";
 import { decodeAnsi } from "@promptctl/rich-js";
 
@@ -71,7 +72,7 @@ interface Frame {
 function renderer(cfg: ValidatedConfig, session = new SessionState()) {
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", session);
-  const compiled = registerDslConfig(cfg, registry, { cwd: "/tmp" });
+  const compiled = registerDslConfig(cfg, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
   const opts = {
     endcaps: "powerline" as const,
     colorCompatibility: "truecolor" as const,

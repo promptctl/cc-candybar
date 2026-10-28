@@ -67,6 +67,10 @@ export const LAUNCH_CATEGORIES = [
   "tmux",
   "click.pbcopy",
   "click.open",
+  // A `run` action's program (src/daemon/runs.ts), on a click: one child per
+  // click, async, each with its own timeout. Not rate-limited, so a second
+  // click on a stepper runs a second move rather than being refused.
+  "click.run",
   // The doctor's tmux query — click-driven like the verbs above, and its own
   // category so the cap never reaches the tmux SEGMENT's cache-driven spawns.
   "doctor.tmux",
@@ -89,15 +93,6 @@ export const LAUNCH_CATEGORIES = [
   "doctor.open",
   "doctor.launch-services",
   "doctor.osadecompile",
-  // The memento plugin's context ceiling (src/memento/edge.ts): `read` asks its
-  // own module for the ceiling in force — a scope's first read, then once per
-  // READING_PERIOD_MS (10 s) while a render-cache entry holds the scope, and
-  // once after each move (src/segments/memento.ts); `move` runs its `ceiling`
-  // command on a click. Separate so daemon-stats tells the background reads
-  // from a click. Neither is rate-limited: reads are already bounded by held
-  // scopes × one per period, and clicks on `+` must accumulate.
-  "memento.read",
-  "memento.move",
   // Typing a slash command into a session's Claude Code pane
   // (src/claude-input/edge.ts): `read` captures the pane to decide whether it
   // is safe, `type` sends the keys.

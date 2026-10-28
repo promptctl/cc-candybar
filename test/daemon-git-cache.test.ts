@@ -16,6 +16,8 @@ import {
 import { ABSENT, failed, ok, type Outcome } from "../src/utils/outcome";
 import { Holds } from "../src/utils/holds";
 import { answered } from "../src/utils/reading";
+import { until } from "./helpers/until";
+import { untilHeard } from "./helpers/reload-signal";
 
 class StubGitService extends GitService {
   public computeCalls: Array<{
@@ -159,6 +161,20 @@ function makeCache(
   });
   return { svc, inner, logs, holds: new Holds() };
 }
+
+// The git passes' refresh events, without the PR lookups' between them.
+const passes = (logs: readonly string[]): string[] =>
+  logs.filter((l) => l.startsWith("git refresh "));
+
+// [LAW:no-silent-failure] The reasons each failed refresh of `source` logged,
+// in order: one event per refresh that failed, carrying every reason it met.
+const failuresIn = (logs: readonly string[], source = "git"): string[] =>
+  logs
+    .filter((l) => l.startsWith(`${source} refresh `))
+    .flatMap((l) => {
+      const reason = / outcome=failed reason=("(?:[^"\\]|\\.)*")/.exec(l);
+      return reason === null ? [] : [JSON.parse(reason[1]!) as string];
+    });
 
 // A promise whose settling the test controls — the only way to make a read
 // genuinely in flight, rather than hoping an await boundary lands where needed.
@@ -432,7 +448,9 @@ describe("GitDataProvider reads what is held", () => {
     svc.changed("/repo");
     await jest.advanceTimersByTimeAsync(0);
     expect(inner.prCalls).toHaveLength(1);
-    expect(logs.at(-1)).toMatch(/^git refresh \/repo by=watch .* pr=owed /);
+    expect(logs.at(-1)).toMatch(
+      /^git refresh \/repo asked=watch .* pr=owed watch=kept by=change /,
+    );
 
     // Shown again: the new key is looked up, never answered by the old one.
     const shown = gitOf(svc, new Holds(), "/repo", {
@@ -440,6 +458,8 @@ describe("GitDataProvider reads what is held", () => {
     });
     await jest.advanceTimersByTimeAsync(0);
     expect(inner.prCalls).toHaveLength(2);
+    // Its values were read before: the owed key's lookup is a change.
+    expect(passes(logs).at(-1)).toMatch(/ asked=\S*owed\S* .* by=change /);
     await expect(shown).resolves.toMatchObject({
       kind: "ok",
       value: { branch: "feature" },
@@ -462,7 +482,9 @@ describe("GitDataProvider reads what is held", () => {
     inner.stubInfo = { ...inner.stubInfo, branch: "feature" };
     svc.changed("/repo");
     await jest.advanceTimersByTimeAsync(0);
-    expect(logs.at(-1)).toMatch(/^git refresh \/repo by=watch values=1 .* pr=looked-up /);
+    expect(passes(logs).at(-1)).toMatch(
+      / asked=watch values=1 pr=looked-up watch=kept by=change /,
+    );
     expect(inner.prCalls).toHaveLength(2);
     svc.close();
   });
@@ -489,7 +511,7 @@ describe("GitDataProvider reads what is held", () => {
     // Shown again: one lookup, for `third` — none for the owed `feature`.
     void gitOf(svc, new Holds(), "/repo", { showPullRequest: true });
     await jest.advanceTimersByTimeAsync(0);
-    expect(logs.at(-1)).toMatch(/ pr=looked-up /);
+    expect(passes(logs).at(-1)).toMatch(/ pr=looked-up /);
     expect(inner.prCalls).toHaveLength(2);
     svc.close();
   });
@@ -543,7 +565,7 @@ describe("GitDataProvider reads what is held", () => {
     inner.infoGate.resolve();
     inner.infoGate = null;
     await jest.advanceTimersByTimeAsync(0);
-    expect(logs.at(-1)).toMatch(/ pr=looked-up /);
+    expect(passes(logs).at(-1)).toMatch(/ pr=looked-up /);
     expect(inner.prCalls).toHaveLength(2);
     svc.close();
   });
@@ -638,7 +660,7 @@ describe("GitDataProvider refreshes on its own triggers", () => {
     const out = await gitOf(svc, holds, "/repo", {});
     expect(out).toMatchObject({ kind: "ok", value: { branch: "feature" } });
     expect(inner.computeCalls).toHaveLength(2);
-    expect(svc.getStats()).toMatchObject({ changes: 1, refreshes: 2 });
+    expect(svc.getStats()).toMatchObject({ changes: 1 });
   });
 
   test("a change mid-read queues one re-read after it, so the last change lands (brandon-unfiled-3248.xjma)", async () => {
@@ -796,9 +818,7 @@ describe("GitDataProvider refreshes on its own triggers", () => {
     for (let i = 0; i < 3; i++) {
       expect((await gitOf(svc, holds, "/repo", {})).kind).toBe("failed");
     }
-    expect(logs.filter((l) => l.startsWith("git refresh failed"))).toEqual([
-      "git refresh failed (/repo): git status timed out",
-    ]);
+    expect(failuresIn(logs)).toEqual(["git status timed out"]);
 
     inner.infoFailure = null;
     svc.changed("/repo");
@@ -815,20 +835,19 @@ describe("GitDataProvider refreshes on its own triggers", () => {
     };
 
     for (let i = 0; i < 3; i++) await gitOf(svc, holds, "/repo", {});
-    expect(logs.filter((l) => l.startsWith("git refresh failed"))).toEqual([
-      "git refresh failed (/repo): git.stash: git stash list: timeout",
-    ]);
+    expect(failuresIn(logs)).toEqual(["git.stash: git stash list: timeout"]);
   });
 
   test("a HEAD git could not read is logged, though the payload only reads it for the PR", async () => {
     const { svc, inner, logs, holds } = makeCache();
     inner.repoRootByDir = { "/repo": "/repo" };
-    inner.stubInfo = { ...inner.stubInfo, head: failed("git rev-parse: timeout") };
+    inner.stubInfo = {
+      ...inner.stubInfo,
+      head: failed("git rev-parse: timeout"),
+    };
 
     await gitOf(svc, holds, "/repo", {});
-    expect(logs.filter((l) => l.startsWith("git refresh failed"))).toEqual([
-      "git refresh failed (/repo): git.head: git rev-parse: timeout",
-    ]);
+    expect(failuresIn(logs)).toEqual(["git.head: git rev-parse: timeout"]);
   });
 });
 
@@ -1069,9 +1088,7 @@ describe("GitDataProvider PR source", () => {
         reason: "gh pr view: non-zero, HTTP 401",
       });
     }
-    expect(logs.filter((l) => l.includes("git.pr"))).toEqual([
-      "git refresh failed (/repo): git.pr: gh pr view: non-zero, HTTP 401",
-    ]);
+    expect(failuresIn(logs, "pr")).toEqual(["gh pr view: non-zero, HTTP 401"]);
   });
 
   test("a re-pointed origin is a new key, looked up afresh", async () => {
@@ -1172,7 +1189,9 @@ describe("GitDataProvider owns its failures and its PR's timing", () => {
     }
     svc.declare(new Holds(), "/slow").current();
     await tick();
-    expect(logs).toEqual(["git resolve failed (/slow): git rev-parse: timeout"]);
+    expect(logs).toEqual([
+      "git resolve failed (/slow): git rev-parse: timeout",
+    ]);
   });
 
   test("a declaration into a closed home throws, for the view's declaration to report", () => {
@@ -1203,13 +1222,21 @@ describe("GitDataProvider owns its failures and its PR's timing", () => {
     inner.prGate = deferred();
     svc.changed("/repo");
     await tick();
-    expect(
-      await gitOf(svc, holds, "/repo", { showPullRequest: true }),
-    ).toEqual(ok({ ...onA, pullRequest: prA }));
+    expect(await gitOf(svc, holds, "/repo", { showPullRequest: true })).toEqual(
+      ok({ ...onA, pullRequest: prA }),
+    );
 
     // Stored, b's values wait for b's PR rather than wear a's.
     inner.remoteGate.resolve();
     await tick();
+    // b's PR is a key never answered, which a request waits for.
+    const now = svc
+      .declare(holds, "/repo", { showPullRequest: true })
+      .current();
+    expect(now.kind === "ok" && now.value.pullRequest).toMatchObject({
+      kind: "pending",
+      why: "unread",
+    });
     let read: Outcome<GitInfo> | null = null;
     void gitOf(svc, holds, "/repo", { showPullRequest: true }).then(
       (out) => (read = out),
@@ -1249,7 +1276,7 @@ describe("GitDataProvider owns its failures and its PR's timing", () => {
     jest.useFakeTimers();
     const { svc, inner, logs, holds } = makeCache({
       periodMs: 1_000,
-      throwOn: "git refresh failed",
+      throwOn: "outcome=failed",
     });
     inner.repoRootByDir = { "/repo": "/repo" };
     inner.infoFailure = "git status: boom";
@@ -1257,11 +1284,12 @@ describe("GitDataProvider owns its failures and its PR's timing", () => {
     void gitOf(svc, holds, "/repo", {});
     await jest.advanceTimersByTimeAsync(0);
     expect(logs.filter((l) => l.startsWith("git "))).toEqual([
+      "git watch bound root=/repo dirs=/repo/.git,/repo/.git/refs/heads refused=2",
       "git refresh threw (/repo): Error: logger bug",
     ]);
     await jest.advanceTimersByTimeAsync(1_000);
     expect(inner.computeCalls).toHaveLength(2);
-    expect(logs).toContain("git refresh failed (/repo): git status: boom");
+    expect(failuresIn(logs)).toEqual(["git status: boom"]);
     svc.close();
   });
 });
@@ -1292,14 +1320,20 @@ describe("GitDataProvider PR keys, drops and refresh events", () => {
     svc.changed("/repo");
     await tick();
 
-    expect(
-      await gitOf(svc, holds, "/repo", { showPullRequest: true }),
-    ).toEqual(ok({ ...onA, pullRequest: first.value.pullRequest }));
+    expect(await gitOf(svc, holds, "/repo", { showPullRequest: true })).toEqual(
+      ok({ ...onA, pullRequest: first.value.pullRequest }),
+    );
     expect(inner.prCalls).toHaveLength(2);
     expect(logs.filter((l) => l.startsWith("git refresh /repo"))).toEqual([
-      expect.stringMatching(/ by=first,pr values=1 failed=0 pr=looked-up /),
-      expect.stringMatching(/ by=watch values=1 failed=0 pr=looked-up /),
-      expect.stringMatching(/ by=watch values=1 failed=0 pr=recalled /),
+      expect.stringMatching(
+        / asked=first,pr,owed values=1 pr=looked-up watch=kept by=first /,
+      ),
+      expect.stringMatching(
+        / asked=watch values=1 pr=looked-up watch=kept by=change /,
+      ),
+      expect.stringMatching(
+        / asked=watch values=1 pr=recalled watch=kept by=change /,
+      ),
     ]);
   });
 
@@ -1342,8 +1376,12 @@ describe("GitDataProvider PR keys, drops and refresh events", () => {
     await jest.advanceTimersByTimeAsync(1_000);
 
     expect(logs.filter((l) => l.startsWith("git refresh /repo"))).toEqual([
-      expect.stringMatching(/ by=first values=1 failed=0 pr=- took=\d+ms$/),
-      expect.stringMatching(/ by=period values=1 failed=0 pr=- took=\d+ms$/),
+      expect.stringMatching(
+        / asked=first values=1 pr=- watch=kept by=first outcome=ok took=\d+ms$/,
+      ),
+      expect.stringMatching(
+        / asked=- values=1 pr=- watch=kept by=period outcome=ok took=\d+ms$/,
+      ),
     ]);
     svc.close();
   });
@@ -1354,9 +1392,14 @@ describe("GitDataProvider PR keys, drops and refresh events", () => {
 // outlive the values read from it — a refresh or a change replaces the value,
 // never the watch.
 describe("GitDataProvider holds a repo's watch across its values", () => {
-  function counted(opts: { maxRepos?: number } = {}) {
+  function counted(opts: { maxRepos?: number; periodMs?: number } = {}) {
     const inner = new StubGitService();
-    const counters = { watchersOpened: 0, watchersClosed: 0 };
+    const counters = {
+      watchersOpened: 0,
+      watchersClosed: 0,
+      watchRefusals: 0,
+      watchErrors: 0,
+    };
     const logs: string[] = [];
     const logger = (_level: string, message: string) => logs.push(message);
     const watchers = new WatcherRegistry({ counters, logger });
@@ -1376,7 +1419,13 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
     }
 
     expect(inner.computeCalls).toHaveLength(6);
-    expect(counters).toEqual({ watchersOpened: 1, watchersClosed: 0 });
+    // The stub repo has no folder on disk, so its one slot is a refused one.
+    expect(counters).toEqual({
+      watchersOpened: 0,
+      watchersClosed: 0,
+      watchRefusals: 1,
+      watchErrors: 0,
+    });
     expect(watchers.size()).toBe(1);
     svc.close();
   });
@@ -1386,7 +1435,9 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
   test("the held watch hears every lock-file rename over index and HEAD", async () => {
     const repo = fs.mkdtempSync(path.join(os.tmpdir(), "git-cache-576q-"));
     const gitDir = path.join(repo, ".git");
-    fs.mkdirSync(gitDir);
+    // A git directory always holds `refs/heads`, and the repo's watch covers
+    // that tree; a fixture without it is refused, not opened.
+    fs.mkdirSync(path.join(gitDir, "refs", "heads"), { recursive: true });
     const replace = (name: string, text: string) => {
       const lock = path.join(gitDir, `${name}.lock`);
       fs.writeFileSync(lock, text);
@@ -1396,25 +1447,197 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
     replace("index", "0");
     const { svc, inner, counters } = counted();
     inner.repoRootByDir[repo] = repo;
-    const changedTo = async (n: number) => {
-      const deadline = Date.now() + 5_000;
-      while (svc.getStats().changes < n && Date.now() < deadline) {
-        await new Promise((r) => setTimeout(r, 20));
-      }
-      expect(svc.getStats().changes).toBe(n);
-    };
     try {
       await gitOf(svc, new Holds(), repo, {});
       // FSEvents drops what lands before its stream is armed, and a
-      // declaration opens the watch in the same turn it resolves: let it arm,
-      // as the watcher tests do (a dropped event is the period's in the daemon).
-      await new Promise((r) => setTimeout(r, 50));
+      // declaration opens the watch in the same turn it resolves, so each
+      // rename is re-applied until the watch hears it. The change count is
+      // the only observation, and it only grows: a rename a round left in
+      // flight may land later, so each is at-least, and what the five prove
+      // is that the held watch keeps delivering through every one of them.
       const renames = ["index", "index", "HEAD", "index", "HEAD"];
       for (const [i, name] of renames.entries()) {
-        replace(name, String(i + 1));
-        await changedTo(i + 1);
+        const before = svc.getStats().changes;
+        await untilHeard(
+          () => replace(name, String(i + 1)),
+          () => svc.getStats().changes > before,
+          `rename ${i + 1} over ${name} heard`,
+        );
       }
-      expect(counters).toEqual({ watchersOpened: 1, watchersClosed: 0 });
+      expect(counters).toEqual({
+        watchersOpened: 1,
+        watchersClosed: 0,
+        watchRefusals: 0,
+        watchErrors: 0,
+      });
+    } finally {
+      svc.close();
+      fs.rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
+  // A directory watch binds an inode, not a path: on Linux a git directory
+  // deleted and recreated at its path is a new one the held watch never hears.
+  // The period's pass derives the watch again and rebinds it, so a rename in
+  // the recreated directory is heard. (On a healthy macOS FSEvents follows the
+  // path, so the rebind is a harmless reopen; CI's Linux runner is what
+  // proves the case.)
+  test("a git directory recreated at its path is heard again after the period rebinds the watch (brandon-unfiled-3248.gf07)", async () => {
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), "git-cache-gf07-"));
+    const gitDir = path.join(repo, ".git");
+    const replace = (name: string, text: string) => {
+      const lock = path.join(gitDir, `${name}.lock`);
+      fs.writeFileSync(lock, text);
+      fs.renameSync(lock, path.join(gitDir, name));
+    };
+    const create = () => {
+      fs.mkdirSync(path.join(gitDir, "refs", "heads"), { recursive: true });
+      replace("HEAD", "ref: refs/heads/main\n");
+      replace("index", "0");
+    };
+    create();
+    const { svc, inner, counters, logs } = counted({ periodMs: 100 });
+    inner.repoRootByDir[repo] = repo;
+    const watchMoves = () =>
+      passes(logs).map((l) => / watch=(\w+) /.exec(l)![1]);
+    try {
+      await gitOf(svc, new Holds(), repo, {});
+      expect(counters.watchersOpened).toBe(1);
+
+      // The worktree is removed and one of the same name added.
+      fs.rmSync(gitDir, { recursive: true, force: true });
+      create();
+      await until(
+        () => counters.watchersOpened === 2,
+        "the period's pass rebound the watch",
+      );
+      expect(counters).toEqual({
+        watchersOpened: 2,
+        watchersClosed: 1,
+        watchRefusals: 0,
+        watchErrors: 0,
+      });
+      const before = svc.getStats().changes;
+      await untilHeard(
+        () => replace("HEAD", "ref: refs/heads/other\n"),
+        () => svc.getStats().changes > before,
+        "a rename in the recreated git directory",
+      );
+      // One pass rebound it; every other pass kept it.
+      expect(watchMoves().filter((m) => m === "rebound")).toHaveLength(1);
+      expect(watchMoves()[0]).toBe("kept");
+    } finally {
+      svc.close();
+      fs.rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
+  test("a pass over a repo whose directories stand derives the same key and acquires nothing", async () => {
+    jest.useFakeTimers();
+    const { svc, inner, counters, watchers, logs } = counted();
+    inner.repoRootByDir["/repo"] = "/repo";
+    await gitOf(svc, new Holds(), "/repo", {});
+    await jest.advanceTimersByTimeAsync(GIT_PERIOD_MS * 3);
+
+    expect(passes(logs)).toHaveLength(4);
+    expect(passes(logs).every((l) => l.includes(" watch=kept "))).toBe(true);
+    // The stub repo is not on disk: one refused slot, never closed or reopened.
+    expect(counters).toEqual({
+      watchersOpened: 0,
+      watchersClosed: 0,
+      watchRefusals: 1,
+      watchErrors: 0,
+    });
+    expect(watchers.size()).toBe(1);
+    svc.close();
+  });
+
+  // The pass between a worktree's removal and its re-add finds the git
+  // directory gone. It keeps the watch it holds rather than trade it for a
+  // refused slot: on macOS FSEvents keeps a held watch on its path, and on
+  // every platform the period rebinds once a directory is there again.
+  test("a pass over a repo whose git directory is gone keeps the held watch until one is there to bind", async () => {
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), "git-cache-gone-"));
+    const gitDir = path.join(repo, ".git");
+    const create = () => {
+      fs.mkdirSync(path.join(gitDir, "refs", "heads"), { recursive: true });
+      fs.writeFileSync(path.join(gitDir, "HEAD"), "ref: refs/heads/main\n");
+    };
+    create();
+    const { svc, inner, counters, logs } = counted({ periodMs: 60_000 });
+    inner.repoRootByDir[repo] = repo;
+    const watchMoves = () =>
+      passes(logs).map((l) => / watch=(\w+) /.exec(l)![1]);
+    try {
+      await gitOf(svc, new Holds(), repo, {});
+      expect(counters.watchersOpened).toBe(1);
+
+      // The removal fires the held watch where the OS delivers it, so the
+      // passes over the gap number one or more; every one keeps the watch.
+      fs.rmSync(gitDir, { recursive: true, force: true });
+      svc.changed(repo);
+      await until(() => passes(logs).length >= 2, "the pass over the gap");
+      expect(new Set(watchMoves())).toEqual(new Set(["kept"]));
+      expect(counters).toEqual({
+        watchersOpened: 1,
+        watchersClosed: 0,
+        watchRefusals: 0,
+        watchErrors: 0,
+      });
+
+      create();
+      svc.changed(repo);
+      await until(
+        () => watchMoves().includes("rebound"),
+        "the pass after the re-add",
+      );
+      expect(watchMoves().filter((m) => m === "rebound")).toHaveLength(1);
+      expect(watchMoves().at(-1)).toBe("rebound");
+      expect(counters).toEqual({
+        watchersOpened: 2,
+        watchersClosed: 1,
+        watchRefusals: 0,
+        watchErrors: 0,
+      });
+    } finally {
+      svc.close();
+      fs.rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
+  // A pass's first act derives the watch's key by stat'ing each directory. A
+  // directory that cannot be stat'd (a symlink loop here; an unreadable one in
+  // the field) must not throw the pass, which would leave every value pending
+  // and drop what the pass was asked: its failure is its key, the OS refuses
+  // the watch, and the pass reads as any other.
+  test("a git directory that cannot be stat'd is read by the pass and refused by the watch, never thrown", async () => {
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), "git-cache-eloop-"));
+    const loop = path.join(repo, ".git");
+    fs.symlinkSync(loop, loop);
+    const { svc, inner, counters, logs } = counted({ periodMs: 100 });
+    inner.repoRootByDir[repo] = repo;
+    inner.gitDirByDir[repo] = loop;
+    try {
+      const outcome = await gitOf(svc, new Holds(), repo, {});
+      expect(outcome.kind).toBe("ok");
+      await until(() => passes(logs).length >= 2, "a period pass landed");
+      expect(logs.some((l) => l.startsWith("git refresh threw"))).toBe(false);
+      expect(passes(logs)[0]).toMatch(/ watch=kept /);
+      // The git directory is refused on every platform. The refs tree under it
+      // is refused on macOS; Linux's recursive watcher (Node's own walk)
+      // swallows the loop and watches nothing, so its count is the
+      // platform's.
+      expect(logs).toContainEqual(
+        expect.stringMatching(
+          /^git watch bound root=.* dirs=.*\.git,.*refs\/heads refused=[12]$/,
+        ),
+      );
+      expect(counters).toEqual({
+        watchersOpened: 0,
+        watchersClosed: 0,
+        watchRefusals: 1,
+        watchErrors: 0,
+      });
     } finally {
       svc.close();
       fs.rmSync(repo, { recursive: true, force: true });
@@ -1430,7 +1653,13 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
     holdsA.declare(() => {});
     await gitOf(svc, new Holds(), "/b", {}); // evicts /a, its watch's only holder
 
-    expect(counters).toEqual({ watchersOpened: 2, watchersClosed: 1 });
+    // Neither stub repo is on disk: two refused slots, one closed.
+    expect(counters).toEqual({
+      watchersOpened: 0,
+      watchersClosed: 1,
+      watchRefusals: 2,
+      watchErrors: 0,
+    });
     svc.close();
     expect(counters.watchersClosed).toBe(2);
   });
@@ -1448,7 +1677,12 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
 
     expect(gone.kind).toBe("absent");
     expect(svc.getStats().size).toBe(1);
-    expect(counters).toEqual({ watchersOpened: 1, watchersClosed: 0 });
+    expect(counters).toEqual({
+      watchersOpened: 0,
+      watchersClosed: 0,
+      watchRefusals: 1,
+      watchErrors: 0,
+    });
     svc.close();
   });
 });

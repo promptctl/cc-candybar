@@ -29,28 +29,40 @@ export function writeAtomic(at: string, text: string, mode?: number): void {
   }
 }
 
-// [LAW:single-enforcer] The file a write to `at` lands in: `at` followed
-// through every symbolic link, a dangling one included (its target is the file
-// a first write creates), so whoever removes what a write created removes the
-// same file. A linked directory on the way needs resolving only where a
-// relative link is read against it; the tmp sits beside the file, in
-// whichever directory that is.
+// [LAW:single-enforcer] The file a write to `at` lands in: the last hop of
+// its link chain, a dangling link's target included (it is the file a first
+// write creates), so whoever removes what a write created removes the same
+// file. The tmp sits beside the file, in whichever directory that is.
 export function resolvedTarget(at: string): string {
-  let file = at;
+  return linkChain(at).at(-1)!;
+}
+
+// [LAW:single-enforcer] Every path `at` passes through on the way to the
+// file a write lands in: `at` itself, then each link's target in turn, the
+// last entry a non-link or a path that does not exist. The writer wants the
+// last; a watcher wants them all, because a chain's content changes wherever
+// any one of its links is re-pointed, and a directory watch reports only its
+// own children. A linked directory on the way needs resolving only where a
+// relative link is read against it.
+export function linkChain(at: string): readonly string[] {
+  const chain = [at];
   for (let hops = 0; hops < MAX_LINK_HOPS; hops++) {
+    const file = chain[chain.length - 1]!;
     let stat: fs.Stats;
     try {
       stat = fs.lstatSync(file);
     } catch (e) {
-      if ((e as NodeJS.ErrnoException).code === "ENOENT") return file;
+      // Absent, or under an ancestor that is a regular file: either way the
+      // path does not exist, so there is no link to follow and the chain ends.
+      const { code } = e as NodeJS.ErrnoException;
+      if (code === "ENOENT" || code === "ENOTDIR") return chain;
       throw e;
     }
-    if (!stat.isSymbolicLink()) return file;
+    if (!stat.isSymbolicLink()) return chain;
     // The kernel reads a relative link against the directory the link really
     // sits in, which a linked parent moves.
-    file = path.resolve(
-      fs.realpathSync(path.dirname(file)),
-      fs.readlinkSync(file),
+    chain.push(
+      path.resolve(fs.realpathSync(path.dirname(file)), fs.readlinkSync(file)),
     );
   }
   throw new Error(`${at}: more than ${MAX_LINK_HOPS} symbolic links`);

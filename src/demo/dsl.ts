@@ -22,6 +22,9 @@
 // is not branching — it lets the config's own timed sources (shell, time)
 // populate, exactly as the daemon re-renders on each status-line tick.
 
+import { linkSignerFromKeyFile } from "../daemon/link-key.js";
+import { repoGateAt } from "../daemon/repo-configs.js";
+import { repoGateLines } from "../config/loader/repo-gate.js";
 import { UNFOLLOWED_FEEDS } from "../config/lanes.js";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
@@ -31,10 +34,15 @@ import { setTimeout as sleep } from "node:timers/promises";
 
 import { detectClientHints } from "../client-hints.js";
 import { ConfigError } from "../config/loader/diagnostics.js";
-import { buildRenderState, openView } from "../daemon/cache/render.js";
+import {
+  buildRenderState,
+  openView,
+  UNOWNED_STORAGE,
+} from "../daemon/cache/render.js";
 import { WatcherRegistry } from "../daemon/cache/watchers.js";
 import type { DaemonLogger } from "../utils/logger.js";
 import { createPayloadProviders } from "../daemon/payload-providers.js";
+import { RefreshLedger } from "../utils/refresh-ledger.js";
 import { parseClientHints } from "../daemon/protocol.js";
 import {
   declareLanes,
@@ -43,6 +51,7 @@ import {
   settlePayload,
   todayOf,
 } from "../daemon/render-payload.js";
+import { sessionIdOf } from "../daemon/session-id.js";
 import { sessionSource } from "../daemon/session-source.js";
 import { SessionState } from "../daemon/session-state.js";
 import { EMPTY_HISTORY_DEPTH } from "../daemon/settings-history.js";
@@ -59,7 +68,7 @@ const FRAME_INTERVAL_MS = 450;
 const here = dirname(fileURLToPath(import.meta.url));
 const cwd = process.cwd();
 const configPath = resolve(process.argv[2] ?? join(here, "statusline.json5"));
-const sessionId = "demo0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b";
+const sessionId = sessionIdOf("demo0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b");
 
 // One Claude Code hook event, faked. A session that has never run has no
 // transcript, so the path names no file — a missing transcript is an empty
@@ -88,7 +97,11 @@ const log: DaemonLogger = (level, message) =>
 const warn = (message: string): void => log("warn", message);
 
 const watchers = new WatcherRegistry({ logger: log });
-const providers = createPayloadProviders({ watchers, logger: log });
+const providers = createPayloadProviders({
+  watchers,
+  logger: log,
+  ledger: new RefreshLedger(log),
+});
 // A session that has never clicked: every pick is absent, so each setting
 // resolves to the config's own value, every picker is closed, and there is
 // nothing to undo or go back to.
@@ -98,13 +111,18 @@ const sessionState = new SessionState();
 // earns are reported whether or not it goes on to load, as the daemon's strip
 // and `cc-candybar check` report them.
 function loadState(): ReturnType<typeof buildRenderState> {
-  const advisories: Array<string | null> = [];
+  const repos = repoGateAt(cwd);
+  const advisories: Array<string | null> = [...repoGateLines(repos)];
   try {
     return buildRenderState(
       cwd,
-      { layers: [configPath], home: configPath, projectDir: cwd },
+      { layers: [configPath], home: configPath, repo: repos.plugins },
       advisories,
-      { sessionState },
+      {
+        sessionState,
+        storage: UNOWNED_STORAGE,
+        signer: linkSignerFromKeyFile(),
+      },
     );
   } catch (err) {
     if (err instanceof ConfigError) advisories.push(...err.warnings);
@@ -121,18 +139,19 @@ async function renderFrames(): Promise<void> {
   const view = openView(
     state,
     cwd,
-    sessionId,
-    { hookData, cwd, hints },
+    { sessionId, hookData, cwd, hints },
     {
       sessionState,
-      declare: (holds, facts, closure) =>
-        declareLanes(providers, holds, facts, closure),
+      declare: (holds, facts, closure, sources) =>
+        declareLanes(providers, holds, facts, closure, sources),
       source: sessionSource({
         providers,
         sessionState,
         history: () => EMPTY_HISTORY_DEPTH,
         navigation: () => 0,
       }),
+      // The demo draws one frame per tick of its own: no feed to wake.
+      changed: () => {},
       log,
     },
   );
@@ -161,9 +180,8 @@ async function renderFrames(): Promise<void> {
           hints,
         },
         at,
+        new Map(),
       );
-      for (const f of view.source.failures())
-        warn(`provider fetch failed: ${f}`);
       const { text: line } = drawDsl(
         state.config,
         state.compiled,
@@ -209,6 +227,7 @@ try {
   providers.gitProvider.close();
   providers.usageStore.close();
   providers.tmuxService.close();
-  providers.mementoProvider.close();
+  providers.hostService.close();
+  providers.managedStorage.close();
   watchers.closeAll();
 }

@@ -1,18 +1,31 @@
-import { observable, runInAction, type IObservableValue } from "mobx";
+import {
+  compareStructural,
+  observable,
+  runInAction,
+  type IObservableValue,
+} from "mobx";
 import type { Outcome } from "./outcome";
 
 // [LAW:types-are-the-program] What a source holds for one key: nothing yet,
 // or the latest outcome (brandon-unfiled-3248.8ro6, step 1). `pending` carries
 // the promise its read resolves, so a reader that must wait for a value waits
 // on the read itself, never on a poll. Every owner of a shared source (git's
-// repos, tmux's panes, memento's readings) holds its values in this one shape.
+// repos, tmux's panes, plugins' session files) holds its values in this one shape.
 export type Reading<T> =
   | {
       readonly kind: "pending";
+      readonly why: PendingWhy;
       readonly landed: Promise<void>;
       readonly land: () => void;
     }
   | { readonly kind: "read"; readonly outcome: Outcome<T> };
+
+// [LAW:types-are-the-program] Why a value is not answered yet: `unread`, a key
+// never answered (a first read, a new key); `superseded`, a key whose value the
+// daemon itself made stale (a click that moved it). A request waits only for
+// first answers: a superseded value may take as long as the program the click
+// ran, so it draws its loading cell, and its landing reaches the next frame.
+export type PendingWhy = "unread" | "superseded";
 
 // [LAW:no-ambient-temporal-coupling] A source's stored value, observable, so a
 // derivation over it — a view's payload (brandon-unfiled-3248.8ro6, step 4) —
@@ -24,29 +37,39 @@ export interface Readable<T> {
 
 // A source's stored value before its first read.
 export function unread<T>(): IObservableValue<Reading<T>> {
-  return observable.box<Reading<T>>(pending(), { deep: false });
+  return observable.box<Reading<T>>(pending("unread"), { deep: false });
 }
 
-export function pending<T>(): Reading<T> {
+export function pending<T>(why: PendingWhy): Reading<T> {
   let land!: () => void;
   const landed = new Promise<void>((resolve) => {
     land = resolve;
   });
-  return { kind: "pending", landed, land };
+  return { kind: "pending", why, landed, land };
 }
 
+// [LAW:single-enforcer] A read that found what is stored stores nothing, by
+// structure: nothing derived from the value recomputes, and no feed showing it
+// wakes (brandon-unfiled-3248.8ro6, step 4e). A pending value always lands.
 export function settle<T>(source: Readable<T>, outcome: Outcome<T>): void {
   const prior = source.reading.get();
+  if (prior.kind === "read" && compareStructural(prior.outcome, outcome))
+    return;
   runInAction(() => source.reading.set({ kind: "read", outcome }));
   if (prior.kind === "pending") prior.land();
 }
 
 // The stored value no longer answers what its source reads (a new key, a
-// superseding move): it is pending until a fresh read lands. A value already
-// pending keeps the landing its readers wait on.
-export function renew<T>(source: Readable<T>): void {
-  if (source.reading.get().kind === "read")
-    runInAction(() => source.reading.set(pending()));
+// superseding move): it is pending until a fresh read lands, for `why`. A
+// value already pending keeps the landing its readers wait on, and a key never
+// answered stays `unread` whatever made it pending again.
+export function renew<T>(source: Readable<T>, why: PendingWhy): void {
+  const prior = source.reading.get();
+  if (prior.kind === "read") {
+    runInAction(() => source.reading.set(pending(why)));
+  } else if (prior.why !== why && why === "unread") {
+    runInAction(() => source.reading.set({ ...prior, why }));
+  }
 }
 
 // A source its owner is dropping: a reader waiting on its pending value is
@@ -64,9 +87,10 @@ export function answerPending<T>(
 // draw's); a reader that must have an answer waits it out (`answered`).
 export type Current<T> = Outcome<T> | Waiting;
 
-// Not answered yet, with the landing to wait for.
+// Not answered yet, why, and the landing to wait for.
 export interface Waiting {
   readonly kind: "pending";
+  readonly why: PendingWhy;
   readonly landed: Promise<void>;
 }
 

@@ -29,7 +29,6 @@
 import path from "node:path";
 import { CLAUDE_CONFIG_DIR_ENV } from "../claude-settings.js";
 import { CONFIG_ENV } from "../config-hint.js";
-import { MEMENTO_ENV_VARS } from "../memento-hint.js";
 import {
   LANES,
   LANE_NAMES,
@@ -37,6 +36,7 @@ import {
   type LaneSwitches,
 } from "../config/lanes.js";
 import { holdClickError } from "./click-error.js";
+import type { SessionFacts } from "./session-env.js";
 import type { SessionStateRW } from "./session-state.js";
 import type { Instant } from "../utils/instant.js";
 import type { ClientHints } from "./protocol.js";
@@ -121,11 +121,11 @@ export interface LaneEdge {
     env: Readonly<Record<string, string>>,
   ) => string;
   readonly closePane: (tmux: TmuxHint, pane: string) => void;
-  // Run the `claude` CLI under the session's Claude Code directory; rejects
-  // with its own words when it fails.
+  // Run the `claude` CLI in the session's process environment; rejects with
+  // its own words when it fails.
   readonly claude: (
     args: readonly string[],
-    claudeConfigDir: string | undefined,
+    session: SessionFacts,
   ) => Promise<void>;
   readonly fileExists: (file: string) => boolean;
   readonly presence: (file: string) => Presence;
@@ -335,9 +335,13 @@ async function installBand(
   checkout: string,
   edge: LaneEdge,
 ): Promise<string> {
-  const dir = session.hints.claudeConfigDir;
-  await edge.claude(["plugin", "marketplace", "add", checkout], dir);
-  await edge.claude(["plugin", "install", BAND_PLUGIN], dir);
+  const facts: SessionFacts = {
+    sessionId: session.sessionId,
+    projectDir: session.origin.projectDir,
+    claudeConfigDir: session.hints.claudeConfigDir,
+  };
+  await edge.claude(["plugin", "marketplace", "add", checkout], facts);
+  await edge.claude(["plugin", "install", BAND_PLUGIN], facts);
   const typed = typeSlash(edge.claudeInput, session.hints.tmux, RELOAD_PLUGINS);
   if (typed.kind === "refused") {
     throw new Error(
@@ -357,16 +361,15 @@ interface Attach {
 }
 
 // [LAW:one-source-of-truth] The variables the restart line sets as Claude
-// Code was started with them: the ones the bar reads off a session's client
-// — its Claude Code directory, which `--resume` also looks the session up
-// under, its cc-candybar config, which decides whether lane B is on, and
-// memento's config home. The rest of the environment is the shell's own,
+// Code was started with them: the ones that decide which session and which
+// bar the restart comes back to — its Claude Code directory, which `--resume`
+// also looks the session up under, and its cc-candybar config, which decides
+// whether lane B is on. The rest of the environment is the shell's own,
 // which the shell the line is typed into still exports, and the line lands
 // in the shell's history, where a credential must never be written.
 const CARRIED_ENV: ReadonlySet<string> = new Set([
   CLAUDE_CONFIG_DIR_ENV,
   CONFIG_ENV,
-  ...MEMENTO_ENV_VARS,
 ]);
 
 // [LAW:parse-dont-validate] An environment as a process image carries it,

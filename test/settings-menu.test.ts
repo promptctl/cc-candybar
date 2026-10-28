@@ -19,6 +19,7 @@
 //   5. It is chrome-exempt: edit mode offers no `-` that would delete the door
 //      back into edit mode.
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { POWERLINE } from "./helpers/powerline";
@@ -38,6 +39,7 @@ import {
 import {
   anchorUnderGate,
   countAnchors,
+  POLLED,
   SETTINGS_ANCHOR,
 } from "../src/config/settings-menu";
 import {
@@ -113,7 +115,7 @@ function buildRuntime(
   const sessionState = new SessionState();
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
+  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   // Each segment's cells from the last render, by name.
   const sink = new Map<string, readonly RichText[]>();
   const render = (): string => {
@@ -236,16 +238,18 @@ describe("the global settings menu is reachable from a user config", () => {
     expect(opened.slice(MENU_LINES + 1)).toEqual(closed.slice(1));
   });
 
-  test("a door on a row of its own takes its row with it, every other row byte-identical", () => {
+  test("a door on a row of its own rises out of it, leaving the frame rate, every other row byte-identical", () => {
     const { render, clickWriting } = buildRuntime(
       userConfig(`{ v: ['${SETTINGS_ANCHOR}', ${TWO_SEGMENT_ROW}, { h: ['context'] }] }`),
     );
     const closed = render().split("\n");
     clickWriting(render(), SETTINGS_ANCHOR, "open");
     const opened = render().split("\n");
-    expect(opened).toHaveLength(closed.length - 1 + MENU_LINES);
+    expect(opened).toHaveLength(closed.length + MENU_LINES);
     expect(stripAnsi(opened[0]!)).toContain(DOOR_CLOSE_GLYPH);
-    expect(opened.slice(MENU_LINES)).toEqual(closed.slice(1));
+    expect(stripAnsi(opened[MENU_LINES]!)).toBe(withoutDoor(stripAnsi(closed[0]!)));
+    expect(stripAnsi(opened[MENU_LINES]!)).toContain(POLLED);
+    expect(opened.slice(MENU_LINES + 1)).toEqual(closed.slice(1));
   });
 
   test("an open sibling's body stays open under the open menu", () => {
@@ -273,10 +277,12 @@ describe("the global settings menu is reachable from a user config", () => {
     const opened = stripAnsi(render()).split("\n");
     expect(opened[0]).toContain(DOOR_CLOSE_GLYPH);
     expect(opened[2]).toContain("⎘ id");
-    // The door's column composes as if the door were absent: the line under
-    // it moves up and zips with `model`.
-    expect(opened.slice(MENU_LINES)).toHaveLength(closed.length - 1);
-    expect(opened.slice(MENU_LINES).join("|")).toMatch(/t\/proj.*Opus/u);
+    // The door's column composes as if the door were absent: the frame rate
+    // it leaves keeps the door's line, zipped with `model`, and nothing moves.
+    expect(opened.slice(MENU_LINES)).toHaveLength(closed.length);
+    expect(opened.slice(MENU_LINES).join("|")).toMatch(
+      new RegExp(`${POLLED}.*Opus[^|]*\\|[^|]*t/proj`, "u"),
+    );
   });
 
   test("edit mode is genuinely reachable: the menu's ✎ writes edit.mode and leaves the menu open", () => {
@@ -738,10 +744,12 @@ describe("the default placement never inherits an author's gate", () => {
     expect(closed[2]).toContain("Opus");
     clickWriting(render(), SETTINGS_ANCHOR, "open");
     const opened = stripAnsi(render()).split("\n");
-    // The door's own row rises with it to lead the menu.
-    expect(opened).toHaveLength(closed.length - 1 + MENU_LINES);
+    // The door rises out of its own row to lead the menu; the frame rate
+    // keeps that row.
+    expect(opened).toHaveLength(closed.length + MENU_LINES);
     expect(opened[0]!.startsWith(POWERLINE.lead + DOOR_CLOSE_GLYPH)).toBe(true);
-    expect(opened.slice(MENU_LINES)).toEqual(closed.slice(1));
+    expect(opened[MENU_LINES]).toBe(withoutDoor(closed[0]!));
+    expect(opened.slice(MENU_LINES + 1)).toEqual(closed.slice(1));
   });
 
   test("a bar gated away entirely still renders its door", () => {
@@ -1044,7 +1052,7 @@ describe("the menu is chrome-exempt", () => {
         "",
         new SessionState(),
       ),
-      { cwd: "/tmp/proj" },
+      { signer: TEST_SIGNER, cwd: "/tmp/proj" },
     );
     expect(compiled).toBeDefined();
     // Asserted on the domain's VALUES, never on `insertSegmentFrom` — that

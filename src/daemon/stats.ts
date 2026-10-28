@@ -3,12 +3,14 @@
 // canonical object lives here. Stats are read-only after serialization.
 
 import type { MenuIdleStats } from "./menu-idle.js";
+import type { RunStats } from "./runs.js";
 import type { TmuxStatusStats } from "./tmux-status.js";
 import type { TranscriptReads } from "../utils/transcript-fs";
 import type { FeedStats } from "./frame-feed";
 import type { RenderCacheStats } from "./cache/render";
 import type { GitCacheStats } from "./cache/git";
-import type { KeyedSourceStats, SourceStats } from "../utils/keyed-source";
+import type { SourceRecord, SourceScope } from "../utils/refresh-ledger";
+import type { ManagedStorageStats } from "./cache/managed-storage";
 import type { ProbeArrival } from "../doctor/handler-probe";
 import type { RenderSighting } from "./render-sightings";
 import type { ServingDaemon } from "./limits";
@@ -39,22 +41,35 @@ const ROLLING_BUFFER_CAP = 16384;
 // dashboards (no statistical claim of unbiased sampling).
 const HISTOGRAM_CAP = 16;
 
-export interface SourceSnapshots {
-  tmux: KeyedSourceStats;
-  memento: KeyedSourceStats;
-  autocompact: SourceStats<"request">;
-  cache: SourceStats<"request">;
-  // A Claude Code directory's transcript scan: `first` its seed, `period`
-  // its rescans.
-  today: KeyedSourceStats;
-}
+// The keyed sources whose entries a view holds, so a period visits only
+// those held: a repo's, a pane's, the host's name and user, a directory
+// set's scans, a plugin's session files.
+export type HeldSource = "git" | "tmux" | "host" | "today" | "pluginStorage";
 
-const KEYED_SOURCE_ZERO: KeyedSourceStats = {
-  entries: 0,
-  held: 0,
-  refreshes: { first: 0, period: 0, supersede: 0 },
-  failures: 0,
-};
+// [LAW:nothing-unseen] Every source and every home, from the owners that keep
+// them (design-docs/SOURCES-AND-FRAMES.md, "Seen").
+export interface SourceSnapshots {
+  // Every source declared, from the one ledger: its scope, its refreshes by
+  // the trigger that asked, its failures and its last refresh's length.
+  readonly records: readonly SourceRecord[];
+  // How many homes of each scope are kept now.
+  readonly homes: Readonly<Record<SourceScope, number>>;
+  // How many entries of each keyed source a view holds now.
+  readonly held: Readonly<Record<HeldSource, number>>;
+  // Every plugin's managed storage: the folders watched now, watch faults by
+  // cause, folders found gone or replaced, probes written and failed, and
+  // folders whose watch is stalled now and every move into a stall.
+  readonly pluginStorage: Pick<
+    ManagedStorageStats,
+    | "folders"
+    | "faults"
+    | "lost"
+    | "probes"
+    | "probeFailures"
+    | "stalled"
+    | "stalls"
+  >;
+}
 
 export interface StatsSnapshot {
   pid: number;
@@ -81,6 +96,9 @@ export interface StatsSnapshot {
     timedOut: number;
     inFlight: number;
   };
+  // Hook-data fields this daemon has been sent that its schema does not know:
+  // what Anthropic has added since the schema was written.
+  unknownHookFields: string[];
   gitCache: GitCacheStats;
   usageCache: {
     size: number;
@@ -88,9 +106,6 @@ export interface StatsSnapshot {
     misses: number;
     sweeps: number;
   };
-  // The shared sources each owner refreshes on its own triggers
-  // (brandon-unfiled-3248.8ro6, step 1): the entries each keeps, how many a
-  // home holds, its refreshes by the trigger that asked, and how many failed.
   sources: SourceSnapshots;
   // [LAW:nothing-unseen] Every forward transcript read since start: gated
   // reads, bytes off disk, lines longer than the fold window read whole and
@@ -110,6 +125,10 @@ export interface StatsSnapshot {
   // Sessions whose idle clock is kept, and those with a timer armed to close
   // their menus (src/daemon/menu-idle.ts).
   menuIdle: MenuIdleStats;
+  // `run` clicks (src/daemon/runs.ts): programs started, those that failed
+  // (a non-zero exit or no start), timed out, links refused before anything
+  // ran, and runs in flight now.
+  runs: RunStats;
   // The per-session click store: how many sessions it holds, how many
   // derivations are subscribed to it, and its revision — how many changes it
   // has taken. Observers climbing while renderCache holds steady is a
@@ -126,10 +145,14 @@ export interface StatsSnapshot {
   // The tmux status line lane's writes (src/daemon/tmux-status.ts): sessions
   // it draws, status lines it has laid out, tmux invocations, failed ones.
   tmuxStatus: TmuxStatusStats;
+  // Watch slots: open now, opened with every target watched, closed, opened
+  // with a target the OS refused, and errors watches reported after opening.
   watchers: {
     active: number;
     opened: number;
     closed: number;
+    refused: number;
+    errors: number;
   };
   subprocesses: {
     total: number;
@@ -164,9 +187,20 @@ export class RuntimeStats {
   requestsErrored = 0;
   requestsTimedOut = 0;
   inFlight = 0;
+  private readonly unknownHookFields = new Set<string>();
+
+  // Whether `field` is the first sight of that unknown hook field in this
+  // daemon's life: every request carries it, so it is said once.
+  firstSightOfUnknownHookField(field: string): boolean {
+    const first = !this.unknownHookFields.has(field);
+    this.unknownHookFields.add(field);
+    return first;
+  }
 
   watchersOpened = 0;
   watchersClosed = 0;
+  watchRefusals = 0;
+  watchErrors = 0;
 
   // [LAW:dataflow-not-control-flow] Subprocess metering. Every launch carries
   // its category through one boundary; the per-category state below is a
@@ -284,16 +318,30 @@ export class RuntimeStats {
         hits: 0,
         misses: 0,
         changes: 0,
-        refreshes: 0,
         watchers: 0,
       },
       usageCache: { size: 0, hits: 0, misses: 0, sweeps: 0 },
       sources: {
-        tmux: KEYED_SOURCE_ZERO,
-        memento: KEYED_SOURCE_ZERO,
-        autocompact: { entries: 0, refreshes: { request: 0 }, failures: 0 },
-        cache: { entries: 0, refreshes: { request: 0 }, failures: 0 },
-        today: KEYED_SOURCE_ZERO,
+        records: [],
+        homes: {
+          daemon: 0,
+          configDir: 0,
+          repo: 0,
+          directory: 0,
+          session: 0,
+          view: 0,
+          pane: 0,
+        },
+        held: { git: 0, tmux: 0, host: 0, today: 0, pluginStorage: 0 },
+        pluginStorage: {
+          folders: 0,
+          faults: { unusable: 0, refused: 0, error: 0 },
+          lost: 0,
+          probes: 0,
+          probeFailures: 0,
+          stalled: 0,
+          stalls: 0,
+        },
       },
       transcriptReads: { reads: 0, bytes: 0, longLines: 0, largestLine: 0 },
       renderCache: {
@@ -302,12 +350,14 @@ export class RuntimeStats {
         retired: 0,
         compiles: 0,
         views: 0,
+        pinned: 0,
         retiredViews: 0,
         accountedBytes: 0,
         budgetBytes: 0,
       },
       effectCache: { sessions: 0, effects: 0 },
       menuIdle: { sessions: 0, armed: 0 },
+      runs: { started: 0, failed: 0, timedOut: 0, refused: 0, running: 0 },
       sessionState: { sessions: 0, observers: 0, revision: 0 },
       frameFeeds: {
         feeds: 0,
@@ -345,6 +395,7 @@ export class RuntimeStats {
     renderCache: StatsSnapshot["renderCache"];
     effectCache: StatsSnapshot["effectCache"];
     menuIdle: StatsSnapshot["menuIdle"];
+    runs: RunStats;
     sessionState: StatsSnapshot["sessionState"];
     frameFeeds: FeedStats;
     tmuxStatus: TmuxStatusStats;
@@ -375,6 +426,7 @@ export class RuntimeStats {
         timedOut: this.requestsTimedOut,
         inFlight: this.inFlight,
       },
+      unknownHookFields: [...this.unknownHookFields],
       gitCache: extras.gitCache,
       usageCache: extras.usageCache,
       sources: extras.sources,
@@ -382,6 +434,7 @@ export class RuntimeStats {
       renderCache: extras.renderCache,
       effectCache: extras.effectCache,
       menuIdle: extras.menuIdle,
+      runs: extras.runs,
       sessionState: extras.sessionState,
       frameFeeds: extras.frameFeeds,
       tmuxStatus: extras.tmuxStatus,
@@ -389,6 +442,8 @@ export class RuntimeStats {
         active: extras.watchersActive,
         opened: this.watchersOpened,
         closed: this.watchersClosed,
+        refused: this.watchRefusals,
+        errors: this.watchErrors,
       },
       subprocesses: this.snapshotSubprocesses(),
       nextRestartReason: extras.nextRestartReason ?? null,

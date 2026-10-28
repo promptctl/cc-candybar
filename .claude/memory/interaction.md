@@ -48,6 +48,14 @@ Menus close themselves after a timeout counted from the session's last click. Th
 
 A slash click types into the session's tmux pane. The daemon reads the pane first and refuses unless the pane shows the bare input box: a permission dialog would take the Enter as approval, and a held ctrl+s stash would get popped into the command. The keys go in one tmux call: ctrl+s (Claude Code restores the draft afterwards), then a bracketed paste, then Enter. Only lines the config declares get typed.
 
+## Running a program
+
+A run click runs only what the bar drew. The draw evaluates the program, its arguments and its environment, and the link carries the result, so the click delivers exactly what the glyph promised and evaluates nothing of its own. A click has no view to evaluate in, and values can move between the draw and the click.
+
+The link is signed, because any web page can open a `cc-candybar://` link, and a link that runs a program must prove the daemon drew it. The key lives in the state directory and outlives restarts, so a link still in scrollback keeps working while its action is declared as it was drawn. The signature covers the declaration too, because a link drawn before an edit would otherwise run a program the config no longer declares. What the program is allowed to touch (its directory, the sources it refreshes) comes from the declaration the link names, never from the link.
+
+The click is answered at once and the program runs after it. Its failure therefore can't be the click's error: it reaches the session's bar through the session's state when the program ends.
+
 ## A failed click's error
 
 A failed click's error shows for a few seconds of reruns, and after that until an answer has actually carried it to a client. With no refresh interval, Claude Code asks only on events, so a time limit alone could expire the error before anyone sees it. It counts as delivered only once an answer carrying it has been flushed successfully.

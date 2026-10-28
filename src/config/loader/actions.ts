@@ -24,6 +24,7 @@ import {
   type ActionKey,
   type OptionDomain,
 } from "../action.js";
+import nodePath from "node:path";
 import { findKeyLine } from "./diagnostics.js";
 import {
   CHECKS,
@@ -61,6 +62,7 @@ import {
 export function validateActions(
   ctx: ValidateCtx,
   raw: unknown,
+  home: ActionHome,
 ): Record<string, ActionDecl> {
   if (raw === undefined) return {};
   if (!isPlainObject(raw)) {
@@ -79,7 +81,7 @@ export function validateActions(
     ActionDecl
   >;
   for (const [name, decl] of Object.entries(raw)) {
-    const parsed = validateActionDecl(ctx, `actions.${name}`, decl);
+    const parsed = validateActionDecl(ctx, `actions.${name}`, decl, home);
     if (parsed !== null) out[name] = parsed;
   }
   return out;
@@ -105,6 +107,7 @@ function validateActionDecl(
   ctx: ValidateCtx,
   path: string,
   raw: unknown,
+  home: ActionHome,
 ): ActionDecl | null {
   if (!isPlainObject(raw)) {
     issue(
@@ -135,7 +138,21 @@ function validateActionDecl(
     );
     return null;
   }
-  return ACTION_ARMS[present[0] as ActionKey](ctx, path, raw);
+  return actionArms(home)[present[0] as ActionKey](ctx, path, raw);
+}
+
+// [LAW:types-are-the-program] Where an action table is declared: the directory
+// of the file that declares it, which a `run` declared there runs in, or a
+// text no file holds (the bundled default), named for the error a `run` there
+// is — it has no directory to run in.
+export type ActionHome = { readonly dir: string } | { readonly text: string };
+
+// The home of a table parsed from `filePath`: a file's directory when it is
+// one, else the text's name (a label in angle brackets names no file).
+export function actionHomeOf(filePath: string): ActionHome {
+  return nodePath.isAbsolute(filePath)
+    ? { dir: nodePath.dirname(filePath) }
+    : { text: filePath };
 }
 
 // [LAW:dataflow-not-control-flow] The top-level arm table as DATA: copy/open share
@@ -144,7 +161,9 @@ function validateActionDecl(
 // discriminator key — see valueSourceAction); reset is copy/open's plain-string
 // sibling. The present key indexes this map — the eliminator never branches on
 // the key name.
-const ACTION_ARMS: Record<ActionKey, ArmParse<ActionDecl>> = {
+const actionArms = (
+  home: ActionHome,
+): Record<ActionKey, ArmParse<ActionDecl>> => ({
   set: (ctx, path, raw) => valueSourceAction(ctx, path, raw, "set", SET_ARMS),
   persist: (ctx, path, raw) =>
     valueSourceAction(ctx, path, raw, "persist", PERSIST_ARMS),
@@ -159,10 +178,10 @@ const ACTION_ARMS: Record<ActionKey, ArmParse<ActionDecl>> = {
   preset: presetArm,
   themeDefault: themeDefaultArm,
   doctor: doctorArm,
-  ceiling: ceilingArm,
   slash: slashArm,
+  run: runArm(home),
   do: doArm,
-};
+});
 
 // [LAW:one-source-of-truth] A copy/open action emits the closed single-key
 // object its arm validates — symmetric to `templateArm(key)`'s parse.
@@ -195,8 +214,8 @@ function actionDeclJson(): JsonNode {
       ...presetArmJson(),
       THEME_DEFAULT_ARM_JSON,
       ...doctorArmJson(),
-      ...CEILING_ARM_JSON,
       SLASH_ARM_JSON,
+      RUN_ARM_JSON,
       DO_ARM_JSON,
     ],
   };
@@ -230,7 +249,7 @@ function templateArm(key: "copy" | "open"): ArmParse<ActionDecl> {
 // not a template — no Go-template parsing happens for it, so it reuses the
 // slash-free/non-empty shape `set`/`persist` keys share rather than
 // requireString's bare-presence check. A `function` declaration (not a const
-// arrow) so it is hoisted — ACTION_ARMS above references it directly, not
+// arrow) so it is hoisted — actionArms above references it directly, not
 // through a deferred closure.
 function resetArm(
   ctx: ValidateCtx,
@@ -261,7 +280,7 @@ function resetArm(
 // the literal `true` (mirrors intMarkerSpec — a marker, not data), because
 // there is no key to name: the history they step is one stack per session, and
 // the settings a save writes are the session's own drafts. `function`, not a
-// const arrow, so ACTION_ARMS above (built before this declaration in source
+// const arrow, so actionArms above (built before this declaration in source
 // order) can reference it directly via hoisting.
 type MarkerKey = "undo" | "redo" | "back" | "rewind" | "save";
 const MARKER_SUBJECT: Record<MarkerKey, string> = {
@@ -309,7 +328,7 @@ function markerArmJson(key: MarkerKey): JsonNode {
 // [LAW:types-are-the-program] `preset` (brandon-save-undo-bwi.o6u) is the
 // doctor's shape: `"save"` alone, or `"delete"` with the `name` it removes — a
 // template, so its preset can be the one the bar is in. `function`, not a
-// const arrow, so ACTION_ARMS above can reference it directly via hoisting.
+// const arrow, so actionArms above can reference it directly via hoisting.
 function presetArm(
   ctx: ValidateCtx,
   path: string,
@@ -358,7 +377,7 @@ function presetArmJson(): readonly JsonNode[] {
 // [LAW:types-are-the-program] `themeDefault` (candybar-theme-colours-6fq5.ix8)
 // is `preset: "save"`'s shape with nothing beside it: one verb, `"save"`, and
 // no other key — which theme and which look are the daemon's to read at click
-// time. `function`, not a const arrow, so ACTION_ARMS above can reference it
+// time. `function`, not a const arrow, so actionArms above can reference it
 // directly via hoisting.
 function themeDefaultArm(
   ctx: ValidateCtx,
@@ -398,7 +417,7 @@ const THEME_DEFAULT_ARM_JSON: JsonNode = {
 // (src/doctor/checks.ts), the same list the daemon's doctor verbs gate the
 // wire against, so an authored `[fix]` over a check that does not exist is a
 // load error naming the ones that do, never a click-time BAD_REQUEST.
-// `function`, not a const arrow, so ACTION_ARMS above can reference it
+// `function`, not a const arrow, so actionArms above can reference it
 // directly via hoisting.
 const DOCTOR_KEYS: Readonly<Record<string, readonly string[]>> = {
   run: ["doctor"],
@@ -461,66 +480,9 @@ function doctorArm(
   return { doctor: "mark", check, mark: mark as GlyphMark };
 }
 
-// [LAW:types-are-the-program] `ceiling` is `"set"` with the `to` memento will
-// write, or `"clear"` alone. `to` is only proved to be text: its grammar is
-// memento's, judged by memento when the click runs, never re-spelled here.
-// `function`, not a const arrow, so ACTION_ARMS above can reference it.
-function ceilingArm(
-  ctx: ValidateCtx,
-  path: string,
-  raw: Record<string, unknown>,
-): ActionDecl | null {
-  const verb = raw.ceiling;
-  const allowed = verb === "clear" ? ["ceiling"] : ["ceiling", "to"];
-  for (const k of Object.keys(raw)) {
-    if (!allowed.includes(k))
-      issue(
-        ctx,
-        `${path}.${k}`,
-        `Unknown key "${k}" on a ceiling action. Expected only: ${allowed.join(", ")}`,
-      );
-  }
-  if (verb === "clear") return { ceiling: "clear" };
-  if (verb !== "set") {
-    issue(
-      ctx,
-      `${path}.ceiling`,
-      `ceiling must be "set" or "clear", got ${describeValue(verb)}`,
-    );
-    return null;
-  }
-  const to = raw.to;
-  if (typeof to !== "string" || to.trim() === "") {
-    issue(
-      ctx,
-      `${path}.to`,
-      `ceiling set needs \`to\`: a memento ceiling value such as "+100_000", "400000" or "off", got ${describeValue(to)}`,
-    );
-    return null;
-  }
-  return { ceiling: "set", to };
-}
-
-// [LAW:one-source-of-truth] The schema members for the two arms `ceilingArm`
-// parses.
-const CEILING_ARM_JSON: readonly JsonNode[] = [
-  {
-    type: "object",
-    properties: { ceiling: { const: "set" }, to: { type: "string" } },
-    required: ["ceiling", "to"],
-    additionalProperties: false,
-  },
-  {
-    type: "object",
-    properties: { ceiling: { const: "clear" } },
-    required: ["ceiling"],
-    additionalProperties: false,
-  },
-];
-
 // [LAW:parse-dont-validate] `slash` is the one place a line to type becomes a
 // SlashLine (src/claude-input/slash-line.ts); the verb and the edge take
-// nothing else. `function`, not a const arrow, so ACTION_ARMS can reference it.
+// nothing else. `function`, not a const arrow, so actionArms can reference it.
 function slashArm(
   ctx: ValidateCtx,
   path: string,
@@ -546,6 +508,98 @@ const SLASH_ARM_JSON: JsonNode = {
   type: "object",
   properties: { slash: { type: "string", pattern: SLASH_LINE_PATTERN } },
   required: ["slash"],
+  additionalProperties: false,
+};
+
+// [LAW:types-are-the-program] `run` is a program and its arguments — one
+// template each, with no shell between — the variables laid over the
+// session's process environment, each value a template, and the declared
+// sources the program writes. `env` and `refreshes` may be left out: none is
+// an empty table. Whether each `refreshes` name is a declared source needs the
+// merged config, so it is a cross-ref concern (validateDeclarations). The
+// declaring file's directory is recorded here, as the directory the program
+// runs in.
+const RUN_KEYS = ["run", "env", "refreshes"];
+// An environment variable's name as a shell spells one.
+const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+function runArm(home: ActionHome): ArmParse<ActionDecl> {
+  return (ctx, path, raw) => {
+    for (const k of Object.keys(raw)) {
+      if (!RUN_KEYS.includes(k))
+        issue(
+          ctx,
+          `${path}.${k}`,
+          `Unknown key "${k}" on a run action. Expected only: ${RUN_KEYS.join(", ")}`,
+        );
+    }
+    const before = ctx.issues.length;
+    const run = raw.run;
+    if (
+      !Array.isArray(run) ||
+      run.length === 0 ||
+      run.some((item) => typeof item !== "string") ||
+      run[0] === ""
+    ) {
+      issue(
+        ctx,
+        `${path}.run`,
+        `run must list the program and its arguments, each a template string, the program first and not empty, got ${describeValue(run)}`,
+      );
+    }
+    const env = raw.env ?? {};
+    if (
+      !isPlainObject(env) ||
+      Object.entries(env).some(
+        ([name, value]) => !ENV_NAME.test(name) || typeof value !== "string",
+      )
+    ) {
+      issue(
+        ctx,
+        `${path}.env`,
+        `env must map variable names (letters, digits and _, not starting with a digit) to template strings, got ${describeValue(env)}`,
+      );
+    }
+    const refreshes = raw.refreshes ?? [];
+    if (
+      !Array.isArray(refreshes) ||
+      refreshes.some((name) => typeof name !== "string" || name === "")
+    ) {
+      issue(
+        ctx,
+        `${path}.refreshes`,
+        `refreshes must list the names of the sources the program writes, got ${describeValue(refreshes)}`,
+      );
+    }
+    if (!("dir" in home)) {
+      issue(
+        ctx,
+        `${path}.run`,
+        `a run action runs in the directory of the file that declares it, and ${home.text} is no file`,
+      );
+    }
+    if (ctx.issues.length > before || !("dir" in home)) return null;
+    return {
+      run: run as [string, ...string[]],
+      env: env as Record<string, string>,
+      refreshes: refreshes as string[],
+      cwd: home.dir,
+    };
+  };
+}
+
+const RUN_ARM_JSON: JsonNode = {
+  type: "object",
+  properties: {
+    run: { type: "array", items: { type: "string" }, minItems: 1 },
+    env: {
+      type: "object",
+      propertyNames: { pattern: ENV_NAME.source },
+      additionalProperties: { type: "string" },
+    },
+    refreshes: { type: "array", items: { type: "string", minLength: 1 } },
+  },
+  required: ["run"],
   additionalProperties: false,
 };
 
@@ -587,7 +641,7 @@ function doctorArmJson(): readonly JsonNode[] {
 // gained by the indirection. Whether each name resolves, and whether a
 // follower can ride behind a head at all, needs the merged action table, so
 // both are cross-ref concerns (validateCrossReferences). `function`, not a
-// const arrow, so ACTION_ARMS above can reference it directly via hoisting.
+// const arrow, so actionArms above can reference it directly via hoisting.
 function doArm(
   ctx: ValidateCtx,
   path: string,

@@ -73,8 +73,8 @@ export const ACTION_KEYS = [
   "preset",
   "themeDefault",
   "doctor",
-  "ceiling",
   "slash",
+  "run",
   "do",
 ] as const;
 export type ActionKey = (typeof ACTION_KEYS)[number];
@@ -164,7 +164,7 @@ export type ActionKey = (typeof ACTION_KEYS)[number];
 // the SAME shared registry algebra — see validator-registry.ts). copy/open/
 // reset write nothing SPEC-shaped (reset's target is gated by key membership,
 // not a value domain) — they derive nothing. The vocabulary grows by arms (a
-// future `run`/`open-url`), not by validator plumbing.
+// `run`, a future `open-url`), not by validator plumbing.
 //
 // [LAW:one-type-per-behavior] `persist` mirrors `set`'s four value-source
 // arms verbatim (to/from/min-max-by/cycle) MINUS `int`: an unbounded page
@@ -255,20 +255,19 @@ export type ActionDecl =
       readonly check: string;
       readonly mark: GlyphMark;
     }
-  // [LAW:one-source-of-truth] The memento plugin's context ceiling for the
-  // clicked session: `set` hands `to` — memento's own value grammar, `+100_000`
-  // / `400000` / `off` — to memento's `ceiling set session`, `clear` removes
-  // the session's layer. Nothing here parses `to`: memento is the one judge
-  // of its grammar, and refuses at the click (src/memento/edge.ts). The
-  // declared moves are also the verb's allow-list, so a URL can make only the
-  // moves the session's config offers.
-  | { readonly ceiling: "set"; readonly to: string }
-  | { readonly ceiling: "clear" }
   // [LAW:parse-dont-validate] Type a slash command into the clicked session's
   // Claude Code prompt (src/claude-input/edge.ts). The line is a `SlashLine`,
   // proved at load, and a click is honoured only as a line some declared
   // `slash` action holds, so a URL cannot make up what gets typed.
   | { readonly slash: SlashLine }
+  // [LAW:effects-at-boundaries] Run a program for the clicked session: the
+  // program and its arguments, with no shell, and the variables laid over the
+  // session's process environment, every one a template the draw evaluates.
+  // `refreshes` names the declared sources the program writes, each pending
+  // from the click until it exits. `cwd` is the directory of the file that
+  // declares the action, recorded by the loader: the program runs there, so
+  // a session's worktree removed since its last render can't fail the spawn.
+  | RunAction
   // [LAW:composability] One click, several effects, built from actions that
   // already exist rather than from a new write vocabulary: entering edit mode
   // and closing the menu it was entered from is `edit.toggle` and a close,
@@ -276,25 +275,39 @@ export type ActionDecl =
   // always a head, the member whose display the region shows.
   | { readonly do: readonly [string, ...string[]] };
 
-export type CeilingAction = Extract<ActionDecl, { readonly ceiling: string }>;
-export type SlashAction = Extract<ActionDecl, { readonly slash: string }>;
-
-// [LAW:one-source-of-truth] A ceiling move as the click wire carries it after
-// the session id — the one spelling the renderer emits and the verb compares
-// a click against the config's declared moves with.
-export function ceilingMoveArgs(a: CeilingAction): readonly string[] {
-  return a.ceiling === "set" ? ["set", a.to] : ["clear"];
+export interface RunAction {
+  readonly run: readonly [string, ...string[]];
+  readonly env: Readonly<Record<string, string>>;
+  readonly refreshes: readonly string[];
+  readonly cwd: string;
 }
 
+// [LAW:one-source-of-truth] A run's declaration as its link signs it, spelled
+// once for the draw that signs and the click that verifies: a link verifies
+// only while its action is declared as it was when the bar drew it, so an
+// edited run never runs what was drawn before the edit.
+export function runDeclaration(a: RunAction): string {
+  return JSON.stringify([a.run, Object.entries(a.env), a.cwd, a.refreshes]);
+}
+
+export type SlashAction = Extract<ActionDecl, { readonly slash: string }>;
+
 // [LAW:one-source-of-truth] The templates an action's own text holds, by
-// field: `copy`'s and `open`'s text and a preset delete's `name`, each
-// evaluated where the action is realized.
+// field: `copy`'s and `open`'s text, a preset delete's `name`, and a `run`'s
+// program, arguments and environment values, each evaluated where the action
+// is realized. Every walk of an action's text asks this, so an arm's templates
+// are listed once.
 export function* actionTemplates(
   a: ActionDecl,
 ): IterableIterator<readonly [field: string, source: string]> {
   if ("copy" in a) yield ["copy", a.copy];
   if ("open" in a) yield ["open", a.open];
   if ("preset" in a && a.preset === "delete") yield ["name", a.name];
+  if ("run" in a) {
+    for (const [i, item] of a.run.entries()) yield [`run.${i}`, item];
+    for (const [name, value] of Object.entries(a.env))
+      yield [`env.${name}`, value];
+  }
 }
 
 // [LAW:types-are-the-program] Does this action take the value it writes from

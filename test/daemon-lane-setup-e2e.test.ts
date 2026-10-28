@@ -13,10 +13,17 @@ import {
 import os from "node:os";
 import path from "node:path";
 
-import { effectsUrl, VERB_LOAD_CONFIG, VERB_SET_STATE } from "../src/click/wire";
+import {
+  effectsUrl,
+  VERB_LOAD_CONFIG,
+  VERB_SET_STATE,
+  VERB_TMUX_STATUS_CLICK,
+} from "../src/click/wire";
+import { rangeOf } from "../src/tmux-status/frames";
+import { linkUrls } from "./helpers/ansi";
 import { LANES, type Lane } from "../src/config/lanes";
 import type { ClientHints } from "../src/daemon/protocol";
-import { click, killAndWait, render } from "./helpers/daemon-e2e";
+import { click, killAndWait, render, sendClick } from "./helpers/daemon-e2e";
 import { answeredRender, logLines, renderLines } from "./helpers/daemon-log";
 import {
   prepareIsolatedDaemonEnv,
@@ -98,7 +105,10 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
   // has been logged before it. Counted by answers, since a cold render past
   // the daemon's per-request guard logs a timed-out attempt beside the one
   // its retry got.
-  const renderedAgain = async (sid: string, dir = projectDir): Promise<void> => {
+  const renderedAgain = async (
+    sid: string,
+    dir = projectDir,
+  ): Promise<void> => {
     const before = (await renderLines(env, sid)).filter(answeredRender).length;
     await renderIn(sid, dir);
     await renderLines(env, sid, before + 1);
@@ -116,7 +126,10 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
       ),
     ]);
     // The click itself held the status line: no request came after it.
-    await until(() => statusLines(sid, "holding").length > 0, "the status line's hold");
+    await until(
+      () => statusLines(sid, "holding").length > 0,
+      "the status line's hold",
+    );
     expect(await renderLines(env, sid)).toHaveLength(events);
     // A request after it, and one from another directory, set nothing up
     // again and keep the status line held.
@@ -127,15 +140,56 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
     expect(statusLines(sid, "released")).toEqual([]);
   });
 
+  // [LAW:nothing-unseen] A status-line click's event names its own verb, the
+  // link its range draws, and the verb that link runs, as `linkVerb`.
+  test("a status-line click runs the link its range draws, and its click event names both verbs", async () => {
+    const sid = "lane-status-click";
+    await renderIn(sid);
+    await switchLanes(sid, true, "tmuxStatus");
+    await until(
+      () => statusLines(sid, "holding").length > 0,
+      "the status line's hold",
+    );
+    const link = linkUrls(await renderIn(sid)).find((u) =>
+      u.startsWith("cc-candybar://dispatch/"),
+    );
+    expect(link).toBeDefined();
+    const at = [`/tmp/lane-e2e-${sid}`, "7", rangeOf(link!)]
+      .map(encodeURIComponent)
+      .join("/");
+    const statusClick = `cc-candybar://${VERB_TMUX_STATUS_CLICK}/${at}`;
+    // Refused until the status line has drawn its first frame, which runs
+    // nothing; the first click it answers runs the link.
+    let refusal = "";
+    await until(async () => {
+      const resp = await sendClick(sockPath, statusClick);
+      refusal = resp.ok ? "" : resp.error;
+      return resp.ok;
+    }, () => `the status-line click's acceptance (refused: ${refusal})`);
+    const ran = (): string[] =>
+      logLines(env).filter(
+        (l) =>
+          / \[info\] click /.test(l) &&
+          l.includes(` verb=${VERB_TMUX_STATUS_CLICK} `),
+      );
+    await until(() => ran().length > 0, "the status-line click's event");
+    const [event, ...more] = ran();
+    expect(more).toEqual([]);
+    expect(event).toContain(` link=${JSON.stringify(link)} `);
+    expect(event).toContain(` linkVerb=dispatch sid=${sid} `);
+    expect(event).toContain(" outcome=ok");
+  });
+
   test("one click of two lane toggles sets up both", async () => {
     const sid = "lane-two";
     await renderIn(sid);
     await switchLanes(sid, true, "tmuxStatus", "band");
     await until(() => laneLines(sid).length >= 2, "both toggles' setups");
-    expect(laneLines(sid).map((l) => l.match(/lane: (\w+ \w+)/)![1]).sort()).toEqual([
-      "band on",
-      "tmuxStatus on",
-    ]);
+    expect(
+      laneLines(sid)
+        .map((l) => l.match(/lane: (\w+ \w+)/)![1])
+        .sort(),
+    ).toEqual(["band on", "tmuxStatus on"]);
     for (const line of laneLines(sid)) expect(line).toContain(" by=click ");
   });
 
@@ -143,9 +197,15 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
     const sid = "lane-off";
     await renderIn(sid);
     await switchLanes(sid, true, "tmuxStatus");
-    await until(() => statusLines(sid, "holding").length > 0, "the status line's hold");
+    await until(
+      () => statusLines(sid, "holding").length > 0,
+      "the status line's hold",
+    );
     await switchLanes(sid, false, "tmuxStatus");
-    await until(() => statusLines(sid, "released").length > 0, "the status line's release");
+    await until(
+      () => statusLines(sid, "released").length > 0,
+      "the status line's release",
+    );
     await renderedAgain(sid);
     expect(statusLines(sid, "holding")).toHaveLength(1);
     expect(statusLines(sid, "released")).toHaveLength(1);
@@ -157,9 +217,15 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
     const sid = "lane-taken";
     await renderIn(sid);
     await switchLanes(sid, true, "tmuxStatus");
-    await until(() => statusLines(sid, "holding").length > 0, "the status line's hold");
+    await until(
+      () => statusLines(sid, "holding").length > 0,
+      "the status line's hold",
+    );
     await render(sockPath, "lane-taker", projectDir, inTmux(sid), args());
-    await until(() => statusLines(sid, "released").length > 0, "the taken pane's release");
+    await until(
+      () => statusLines(sid, "released").length > 0,
+      "the taken pane's release",
+    );
     expect(statusLines(sid, "released")).toEqual([
       expect.stringContaining(`pane taken by sid="lane-taker"`),
     ]);
@@ -191,7 +257,10 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
         `lane: tmuxStatus on — the daemon draws %7's bar in its status line by=click (session=${sid})`,
       ),
     ]);
-    await until(() => statusLines(sid, "holding").length > 0, "the status line's hold");
+    await until(
+      () => statusLines(sid, "holding").length > 0,
+      "the status line's hold",
+    );
   });
 
   // The daemon before a restart drew the bar the toggle is clicked on: this

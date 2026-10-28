@@ -42,6 +42,7 @@ import { laneOutcome, type Lane } from "../../utils/reading";
 import { valueOf } from "../../utils/logfmt";
 import type { Holds } from "../../utils/holds";
 import { KeyedSource, type KeyedSourceStats } from "../../utils/keyed-source";
+import { RefreshLedger, type Refreshes } from "../../utils/refresh-ledger";
 import type { Every } from "../../utils/period";
 import { Kept } from "../../var-system/store";
 
@@ -174,6 +175,21 @@ interface SessionSlot {
   // own, so a request's answer moves no day sum.
   readonly failure: IObservableValue<string | null>;
   readonly speed: IObservableValue<Outcome<SpeedObservation> | undefined>;
+}
+
+// A request's one refresh of its session: the stamp it observed, and the
+// record that refresh answered.
+interface SessionRefresh {
+  readonly stamp: string;
+  readonly record: Promise<Outcome<SessionRecord>>;
+}
+
+// What one statusline request reads of its session's record: each lane over
+// the request's one refresh of it.
+export interface SessionRequest {
+  usage(hookData: ClaudeHookData | undefined): Promise<Outcome<UsageInfo>>;
+  speed(nowMs: number): Promise<Outcome<SpeedObservation>>;
+  today(today: Lane<DaySums>): Promise<void>;
 }
 
 // What one caller's ingests did. Renders share the store's running tally — the
@@ -386,9 +402,17 @@ function daySumsOver(
 
 // A directory set's `today` state beside its scan: its roots, and its day
 // sums derived from the records.
-export interface DaySet {
+interface DaySet {
   readonly roots: readonly string[];
   readonly sums: Kept<ReadonlyMap<string, DayUsage>>;
+}
+
+// What `today`'s lane answers: the set's roots and its day sums as they
+// stand. Read through the lane, so whatever tracks the lane moves when a
+// record lands, as it does for every other lane.
+export interface DaySums {
+  readonly roots: readonly string[];
+  readonly sums: ReadonlyMap<string, DayUsage>;
 }
 
 // Bounded-concurrency fan-out for the seed: at most `limit` parses in flight.
@@ -461,9 +485,17 @@ export class SessionUsageStore {
   // exactly once — so they return the same prev+cur and render identical,
   // deterministic throughput instead of the second clobbering the first.
   private readonly speedFlight = new SingleFlight();
+  // [LAW:single-enforcer] A request's refresh of a session is one unit of
+  // work per (session, observed stamp): the lanes of one request that read
+  // the record (session, speed, today) share it, so it records and logs once.
+  private readonly requestFlight = new SingleFlight();
   private readonly staleAgeMs: number;
   private readonly log: DaemonLogger;
   private readonly renderTally: IngestTally = { hits: 0, misses: 0 };
+  private readonly ledger: RefreshLedger;
+  // The session record's refresh, which its statusline request makes; a
+  // rescan's reads are its `today` scan's.
+  private readonly usage: Refreshes<"request">;
   private sweeps = 0;
   private sweepTimer: NodeJS.Timeout | null = null;
 
@@ -476,18 +508,27 @@ export class SessionUsageStore {
       // daemon passes `dlog`; every other consumer keeps the debug-routed
       // default and never writes daemon.log.
       logger?: DaemonLogger;
+      ledger?: RefreshLedger;
     } = {},
   ) {
     this.log = opts.logger ?? quietLogger;
+    this.ledger = opts.ledger ?? new RefreshLedger(this.log);
+    this.usage = this.ledger.declare({
+      name: "usage",
+      scope: "session",
+      refresh: ["request"],
+    });
     this.staleAgeMs = opts.staleAgeMs ?? DEFAULT_STALE_AGE_MS;
     this.scans = new KeyedSource({
       name: "today",
+      scope: "configDir",
       keyOf: (paths) => paths.join("\0"),
       fields: (paths) => `dirs=${valueOf(paths.join(","))}`,
       read: (paths) => this.scan(paths),
       every: opts.rescan ?? DEFAULT_RESCAN,
       maxEntries: MAX_UNHELD_SCANS,
       logger: this.log,
+      ledger: this.ledger,
     });
     const interval = opts.sweepIntervalMs ?? DEFAULT_SWEEP_INTERVAL_MS;
     if (interval > 0) {
@@ -522,18 +563,55 @@ export class SessionUsageStore {
   // SessionInfo whose fields the boundary drops per-field — top-level
   // `absent` is reserved for ingest, since the native officialCost overlay
   // applies even with no record.
-  async getUsageInfo(
+  getUsageInfo(
     sessionId: string,
     hookData?: ClaudeHookData,
   ): Promise<Outcome<UsageInfo>> {
-    const record = await this.refreshed(sessionId, hookData?.transcript_path);
-    if (record.kind === "failed") return record;
-    return ok(
-      usageOver(
-        record.kind === "ok" ? record.value.sessionInfo : EMPTY_SESSION_INFO,
-        hookData,
-      ),
-    );
+    return this.request(sessionId, hookData?.transcript_path).usage(hookData);
+  }
+
+  // [LAW:no-ambient-temporal-coupling] One statusline request's refresh of
+  // its session, as a value: the request's session, speed and today lanes
+  // read the one refresh it starts, whichever asks first and whenever the
+  // others land, so it reads, records and logs once per request.
+  request(
+    sessionId: string,
+    transcriptPath: string | undefined,
+  ): SessionRequest {
+    let refresh: SessionRefresh | null = null;
+    const once = (): SessionRefresh => {
+      if (refresh !== null) return refresh;
+      const stamp = statStamp(transcriptPath);
+      refresh = {
+        stamp,
+        record: this.refreshed(sessionId, transcriptPath, stamp),
+      };
+      return refresh;
+    };
+    return {
+      usage: async (hookData) => {
+        const record = await once().record;
+        if (record.kind === "failed") return record;
+        return ok(
+          usageOver(
+            record.kind === "ok"
+              ? record.value.sessionInfo
+              : EMPTY_SESSION_INFO,
+            hookData,
+          ),
+        );
+      },
+      speed: (nowMs) => this.observed(sessionId, once, nowMs),
+      // [LAW:no-ambient-temporal-coupling] The scan first, then the
+      // session's own refresh: run together, a seed's ingest of this session
+      // and the request's are two cold parses at two stamps, and whichever
+      // lands second is not stored — the request's own, newer fold among
+      // them. A refresh another lane already started is the one awaited.
+      today: async (today) => {
+        await laneOutcome(today);
+        await once().record;
+      },
+    };
   }
 
   // The `session` projection as the session's last refresh left it, for a
@@ -552,24 +630,36 @@ export class SessionUsageStore {
 
   // A request's ingest of its own session, whose outcome the session's slot
   // keeps for the draws until the next one.
-  private async refreshed(
+  private refreshed(
     sessionId: string,
     transcriptPath: string | undefined,
-    knownStamp?: string,
+    stamp: string,
   ): Promise<Outcome<SessionRecord>> {
-    const record = await this.ingest(
-      sessionId,
-      transcriptPath,
-      this.renderTally,
-      knownStamp,
-    );
-    // The session's slot records that its refresh answered — a failure kept
-    // so the draws until the next refresh show it.
-    answer(
-      this.hold(sessionId).failure,
-      record.kind === "failed" ? record.reason : null,
-    );
-    return record;
+    return this.requestFlight.run(`${sessionId}:${stamp}`, async () => {
+      // [LAW:no-ambient-temporal-coupling] This refresh's own tally, so
+      // whether IT read is its own fact, never another session's refresh
+      // landing in the same await.
+      const tally: IngestTally = { hits: 0, misses: 0 };
+      const startedAt = Date.now();
+      const record = await this.ingest(sessionId, transcriptPath, tally, stamp);
+      this.renderTally.hits += tally.hits;
+      this.renderTally.misses += tally.misses;
+      if (tally.misses > 0) {
+        this.usage.recorded(
+          `sid=${valueOf(sessionId)}`,
+          "request",
+          record,
+          Date.now() - startedAt,
+        );
+      }
+      // The session's slot records that its refresh answered — a failure
+      // kept so the draws until the next refresh show it.
+      answer(
+        this.hold(sessionId).failure,
+        record.kind === "failed" ? record.reason : null,
+      );
+      return record;
+    });
   }
 
   // The `today` projection: cross-session sum of every record's today bucket.
@@ -589,16 +679,14 @@ export class SessionUsageStore {
   // `today` keeps up with the cost it was sent with (short only by what a
   // rescan's fold of the same session stores first, `ingest`) — once the
   // directory set's first scan, which `today`'s lane waits on, has landed.
-  async refreshToday(
-    today: Lane<DaySet>,
+  refreshToday(
+    today: Lane<DaySums>,
     hookData: ClaudeHookData | undefined,
   ): Promise<void> {
-    // [LAW:no-ambient-temporal-coupling] The scan first, then the session's
-    // own refresh: run together, a seed's ingest of this session and the
-    // request's are two cold parses at two stamps, and whichever lands second
-    // is not stored — the request's own, newer fold among them.
-    await laneOutcome(today);
-    await this.refreshed(hookData?.session_id ?? "", hookData?.transcript_path);
+    return this.request(
+      hookData?.session_id ?? "",
+      hookData?.transcript_path,
+    ).today(today);
   }
 
   // [LAW:single-enforcer] A view's declaration of `today` (declareLanes in
@@ -609,14 +697,16 @@ export class SessionUsageStore {
   declareToday(
     holds: Holds,
     claudeConfigDir: string | undefined,
-  ): Lane<DaySet> {
+  ): Lane<DaySums> {
     const claudePaths = getClaudePaths(claudeConfigDir);
     const scans = this.scans.declare(holds, claudePaths);
     const set = this.daySet(claudePaths);
     return {
       current: () => {
         const scan = scans.current();
-        return scan.kind === "ok" ? ok(set) : scan;
+        return scan.kind === "ok"
+          ? ok({ roots: set.roots, sums: set.sums.read() })
+          : scan;
       },
     };
   }
@@ -626,7 +716,7 @@ export class SessionUsageStore {
   // day with no refresh. The active session's last ingest failing is the
   // projection's failure.
   todayAt(
-    set: DaySet,
+    set: DaySums,
     hookData: ClaudeHookData | undefined,
     at: Instant,
   ): Outcome<TodayInfo> {
@@ -636,7 +726,7 @@ export class SessionUsageStore {
 
     const today = dayKey(dateOf(at));
     const total: DayUsage = { ...EMPTY_DAY };
-    const inSet = set.sums.read().get(today);
+    const inSet = set.sums.get(today);
     if (inSet !== undefined) addDay(total, inSet);
     // The rendering session counts wherever its transcript lives; under the
     // set's roots it is already in the sums.
@@ -667,9 +757,18 @@ export class SessionUsageStore {
   // session yields a zero-count sample, so a first-ever render establishes a
   // baseline without fabricating a rate. `nowMs` is the caller's single-enforcer
   // clock instant — the store never reads the clock for tok/s timing itself.
-  async observeSpeed(
+  observeSpeed(
     sessionId: string,
     transcriptPath: string | undefined,
+    nowMs: number,
+  ): Promise<Outcome<SpeedObservation>> {
+    return this.request(sessionId, transcriptPath).speed(nowMs);
+  }
+
+  // A request's speed sample, over the request's one refresh of the session.
+  private async observed(
+    sessionId: string,
+    refresh: () => SessionRefresh,
     nowMs: number,
   ): Promise<Outcome<SpeedObservation>> {
     // [LAW:no-ambient-temporal-coupling] Key the observation by the same
@@ -681,9 +780,9 @@ export class SessionUsageStore {
     // No session id is no session: there is no baseline to keep, and a ring
     // keyed "" would be every id-less caller's baseline at once.
     if (!sessionId) return ABSENT;
-    const stamp = statStamp(transcriptPath);
+    const { stamp, record: refreshed } = refresh();
     return this.speedFlight.run(`${sessionId}:${stamp}`, async () => {
-      const record = await this.refreshed(sessionId, transcriptPath, stamp);
+      const record = await refreshed;
       if (record.kind === "failed") {
         answer(this.hold(sessionId).speed, record);
         return record;
@@ -738,10 +837,10 @@ export class SessionUsageStore {
     sessionId: string,
     transcriptPath: string | undefined,
     tally: IngestTally,
-    knownStamp?: string,
+    // The transcript's stamp as the caller observed it.
+    stamp: string,
   ): Promise<Outcome<SessionRecord>> {
     if (!sessionId) return ABSENT;
-    const stamp = knownStamp ?? statStamp(transcriptPath);
     const existing = this.see(sessionId)?.record;
     if (existing && stamp !== "" && existing.transcriptStamp === stamp) {
       tally.hits++;
@@ -756,9 +855,9 @@ export class SessionUsageStore {
     // record when it RUNS (first caller); coalesced callers share that one
     // refold. Two concurrent DIFFERENT-stamp refolds — a render and a rescan,
     // say — each read the same prior, and the commit below is a compare-and-set
-    // on it: the first to land replaces the prior, and the other is not stored,
-    // though its caller still gets the fold its own stamp asked for (so a tok/s
-    // sample is never another stamp's counts). So the stored record only ever
+    // on it: the first to land replaces the prior, and the other folds again
+    // over what landed (below), so neither caller's fold is lost and a request
+    // that lands second still stores its newer stamp. So the stored record only ever
     // advances — `today` never steps back to a shorter fold — and since
     // `refold` writes the byte cursor and the fold as ONE pair
     // covering exactly [0, cursor), the next refold folds each byte once.
@@ -801,12 +900,20 @@ export class SessionUsageStore {
       transcriptStamp: outcome.value.mainStamp,
       transcriptPath,
     };
-    // Something else landed first (another refold, a sweep): store nothing.
-    // Store only over the record this fold started from; a sweep of that record
-    // mid-flight is a change too, so its slot is not brought back.
-    if (this.sessions.get(sessionId)?.record !== prior) return ok(record);
-    this.stored(sessionId, record);
-    return ok(record);
+    // Store only over the record this fold started from. A sweep of that
+    // record mid-flight is a change too, so its slot is not brought back.
+    const landed = this.sessions.get(sessionId)?.record;
+    if (landed === prior) {
+      this.stored(sessionId, record);
+      return ok(record);
+    }
+    if (landed === undefined) return ok(record);
+    // [LAW:no-ambient-temporal-coupling] Another fold landed first — a
+    // rescan's at an older stamp, say. Fold again over it at this stamp, so
+    // the newer fold is never the one dropped: an incremental read of what
+    // lies past it, or a hit when it already covers this stamp. Each retry
+    // starts from what landed, so the stored record only advances.
+    return this.ingest(sessionId, transcriptPath, tally, stamp);
   }
 
   // [LAW:single-enforcer] The one write of a slot's record: the slot is

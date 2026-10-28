@@ -1,15 +1,15 @@
 // [LAW:decomposition] A PLUGIN is another program's contribution to the bar:
-// a DEFINITION file (json5, written once by the app's developer) naming the
-// plugin, its segments, helpers and actions, and the path of a DATA file (plain
-// JSON, rewritten by the running app). This module turns the paths a config
-// lists under `plugins:` into one layer of the merge — bundled < plugins <
-// the user's file — and nothing else.
+// a DEFINITION file (json5, written once by the app's developer) declaring the
+// plugin's variables, segments, helpers and actions, and the path of a DATA
+// file (plain JSON, rewritten by the running app). This module turns the paths
+// a config lists under `plugins:` into one layer of the merge — bundled <
+// plugins < the user's file — and nothing else.
 //
 // [LAW:one-type-per-behavior] A plugin is not a new kind of anything. Its data
 // is the existing `file` source with `parse: { json: true }`, watched, read in
-// templates as `.plugins.<plugin>.data.*`; its segments, helpers and actions are parsed
-// by the same validators a config's are; it joins the config through the same
-// `mergeWithDefault` the user's file does.
+// templates as `.plugins.<plugin>.data.*`; its variables, segments, helpers and
+// actions are parsed by the same validators a config's are; it joins the
+// config through the same `mergeWithDefault` the user's file does.
 //
 // [LAW:no-silent-failure] A definition that does not load drops ONLY that
 // plugin, and the drop is a typed fact on the result (`dropped`), which the
@@ -19,15 +19,19 @@ import fs from "node:fs";
 import path from "node:path";
 import JSON5 from "json5";
 import {
+  variableTemplates,
   type DslConfig,
   type RawDslConfig,
   type RawSegmentDecl,
+  type SourceVarDecl,
+  type VariableDecl,
 } from "../dsl-types.js";
 import { actionTemplates, type ActionDecl } from "../action.js";
 import { listResolvablePaletteNames } from "../../themes/policy.js";
 import { ConfigError, type ConfigIssue } from "./diagnostics.js";
 import { resolveUserPath } from "../../utils/user-path.js";
 import { type Checkout } from "../../utils/git-root.js";
+import type { ApprovedRepo } from "./repo-gate.js";
 import {
   isPlainObject,
   describeType,
@@ -84,9 +88,9 @@ export interface DropCause {
 
 // What a definition's paths resolve against beyond its own directory.
 export interface PluginContext {
-  // The session's project: where its repo-shipped plugins live. Null where no
-  // project is known.
-  readonly projectDir: string | null;
+  // The session's project, once the user approved it: where the plugins it
+  // ships live. Null where none is known or approved.
+  readonly repo: ApprovedRepo | null;
   // The checkout the session works in, for a `data: { checkout }` path; null
   // where no session is known.
   readonly checkout: Checkout | null;
@@ -97,11 +101,17 @@ export function droppedPluginNotice(d: DroppedPlugin): string {
   return `plugin ${d.path} was not loaded: ${d.reason}`;
 }
 
-// [LAW:types-are-the-program] What a definition may say. Everything else is a
-// load error naming the field: a definition declares no sources of its own
-// (no shell), so loading one from a cloned repo runs nothing, and it never
-// edits `root` — placing its segments is the user's choice.
-const DEFINITION_KEYS = new Set(["data", "segments", "helpers", "actions"]);
+// [LAW:types-are-the-program] What a definition may say, every key optional.
+// Everything else is a load error naming the field: a definition never edits
+// `root` — placing its segments is the user's choice.
+const DEFINITION_KEYS = new Set([
+  "data",
+  "sources",
+  "variables",
+  "segments",
+  "helpers",
+  "actions",
+]);
 
 // The file a plugin folder holds its definition in.
 export const DEFINITION_FILE = "plugin.json5";
@@ -129,6 +139,16 @@ export const PLUGIN_NS = "plugins.";
 // `.plugins.<plugin>.data.*`.
 export function pluginDataVar(plugin: string): string {
   return `${PLUGIN_NS}${plugin}.data`;
+}
+
+// The folder a plugin's managed storage lives in: its program writes
+// `<folder>/<session id>.json` there.
+export const STORAGE_FOLDER = "session";
+
+// [LAW:one-source-of-truth] The name of a session's file in a storage folder:
+// the loader names it in its errors, the storage owner reads it.
+export function sessionFileName(sessionId: string): string {
+  return `${sessionId}.json`;
 }
 
 type Attempt<T> =
@@ -242,6 +262,7 @@ export function applyPlugins(
           ),
           under,
         );
+        requireOneSourcePerFile(file, plugin, config);
         validate(config, plugin, under !== layer.config);
         return config;
       });
@@ -260,14 +281,21 @@ export function applyPlugins(
   );
 }
 
-// Whether a declared name is the plugin's: everything under
-// `plugins.<plugin>.`.
+// Whether a declared name is the plugin's: its namespace, `plugins.<plugin>`,
+// where a dropped plugin's tombstone stands, and everything under it.
 export function ownedBy(plugin: string): (name: string) => boolean {
-  const prefix = `${PLUGIN_NS}${plugin}.`;
-  return (name) => name.startsWith(prefix);
+  const ns = tombstoneVar(plugin);
+  return (name) => name === ns || name.startsWith(`${ns}.`);
 }
 
-// The config with nothing left under `plugins.<plugin>.`.
+// [LAW:one-source-of-truth] Where a dropped plugin's tombstone is declared:
+// its namespace itself, so every read under it — its data, its sources, its
+// variables — lands on the drop.
+function tombstoneVar(plugin: string): string {
+  return `${PLUGIN_NS}${plugin}`;
+}
+
+// The config with nothing of the plugin's left.
 // The config itself when it held nothing there, so a caller can tell.
 function withoutPlugin(config: DslConfig, plugin: string): DslConfig {
   const owned = ownedBy(plugin);
@@ -289,9 +317,9 @@ function withoutPlugin(config: DslConfig, plugin: string): DslConfig {
   };
 }
 
-// [LAW:no-silent-failure] A dropped plugin still owns its namespace: its data
-// variable is a document that IS the drop, so a template reading it — the
-// user's own, a stand-in's — renders ⚠ naming why.
+// [LAW:no-silent-failure] A dropped plugin still owns its namespace: the
+// namespace is a document that IS the drop, so a template reading any name
+// under it — the user's own, a stand-in's — renders ⚠ naming why.
 function tombstone(
   config: DslConfig,
   plugin: string,
@@ -301,7 +329,7 @@ function tombstone(
     ...config,
     variables: {
       ...config.variables,
-      [pluginDataVar(plugin)]: {
+      [tombstoneVar(plugin)]: {
         kind: "dropped",
         reason: droppedPluginNotice(dropped),
         definition: dropped.path,
@@ -329,10 +357,14 @@ export function dropsOwning(
   // plugin's) are known only from here.
   beneath: readonly DroppedPlugin[],
 ): (name: string) => readonly DropCause[] {
+  // Every table a plugin may declare in: one declaring no data and no
+  // segments still owns its namespace.
   const owners = new Set(
     [
       ...Object.keys(layer.config.variables),
       ...Object.keys(layer.config.segments),
+      ...Object.keys(layer.config.helpers),
+      ...Object.keys(layer.config.actions),
     ].map(pluginOf),
   );
   const unnamed = [...beneath, ...layer.dropped]
@@ -341,7 +373,7 @@ export function dropsOwning(
   return (name) => {
     const plugin = pluginOf(name);
     if (plugin === undefined) return [];
-    const data = layer.config.variables[pluginDataVar(plugin)];
+    const data = layer.config.variables[tombstoneVar(plugin)];
     if (data?.kind === "dropped")
       return [{ definition: data.definition, notice: data.reason }];
     return owners.has(plugin) ? [] : unnamed;
@@ -387,9 +419,7 @@ export function withDroppedPlacements(
   const tombstoned = (name: string): DropCause | undefined => {
     const plugin = pluginOf(name);
     const data =
-      plugin === undefined
-        ? undefined
-        : config.variables[pluginDataVar(plugin)];
+      plugin === undefined ? undefined : config.variables[tombstoneVar(plugin)];
     return data?.kind === "dropped"
       ? { definition: data.definition, notice: data.reason }
       : undefined;
@@ -429,9 +459,30 @@ export function withDroppedPlacements(
     templates.flatMap((t) => [...templateHelperCalls(t, config.helpers)]),
     config.helpers,
   );
+  // [LAW:dataflow-not-control-flow] A run's `refreshes` naming a dropped
+  // plugin's source loses that name: the plugin brings no source this load,
+  // so the click has nothing of it to make stale, and the run is still the
+  // config's own.
+  const lowered = Object.entries(config.actions).flatMap(([name, a]) => {
+    if (!("run" in a)) return [];
+    const gone = new Map(missing(a.refreshes, config.variables));
+    return gone.size === 0
+      ? []
+      : [
+          {
+            name,
+            action: {
+              ...a,
+              refreshes: a.refreshes.filter((r) => !gone.has(r)),
+            },
+            causes: [...gone.values()],
+          },
+        ];
+  });
   const reached = new Set([
     ...caused.flatMap(({ cause }) => cause.map((c) => c.definition)),
     ...[...actionStandIns, ...helperStandIns].map(([, c]) => c.definition),
+    ...lowered.flatMap(({ causes }) => causes.map((c) => c.definition)),
   ]);
   return {
     config: {
@@ -442,9 +493,12 @@ export function withDroppedPlacements(
       actions: {
         ...config.actions,
         ...Object.fromEntries(
+          lowered.map(({ name, action }) => [name, action]),
+        ),
+        ...Object.fromEntries(
           actionStandIns.map(([name]) => [
             name,
-            { copy: `{{ .${pluginDataVar(pluginOf(name) ?? "")} }}` },
+            { copy: `{{ .${tombstoneVar(pluginOf(name) ?? "")} }}` },
           ]),
         ),
       },
@@ -548,14 +602,15 @@ function fragmentOf(
       });
     }
   }
-  const dataPath = dataPathOf(json.data, file, checkout, issues);
-  if (!isPlainObject(json.segments)) {
-    issues.push({
-      path: "segments",
-      message: `"segments" must be an object naming the plugin's segments`,
-    });
-  }
-  if (issues.length > 0 || dataPath === undefined) return fail();
+  // [LAW:types-are-the-program] `data` is optional: a definition without it
+  // declares no data variable.
+  const dataPath =
+    json.data === undefined
+      ? undefined
+      : dataPathOf(json.data, file, checkout, issues);
+  const sources =
+    json.sources === undefined ? {} : sourcesOf(json.sources, file, issues);
+  if (issues.length > 0) return fail();
 
   const ctx: ValidateCtx = {
     source,
@@ -568,41 +623,74 @@ function fragmentOf(
   // Its `{}` default is what a missing data file reads as: no fields, which a
   // segment gates on (`hasKey`); malformed data is not a missing file and
   // reads as the failure (⚠).
-  const variables = validateVariables(ctx, "data", {
-    [pluginDataVar(ns)]: {
-      kind: "file",
-      path: dataPath,
-      parse: { json: true },
-      cache: { watch_file: dataPath },
-      default: {},
-    },
-  });
-  // [LAW:types-are-the-program] A segment's own `vars` may be sources (a
-  // shell among them), and a definition declares none, so loading one runs
-  // nothing. A `state` variable is not a source: it reads what the session's
-  // own clicks wrote, which is how a plugin segment opens and closes a detail
-  // of its own (lit's ticket description) — so that one kind is admitted and
-  // every other kind is refused by name. A declaration naming no kind at all
-  // is a shape error the variable schema reports itself, once.
-  for (const [name, seg] of Object.entries(json.segments as object)) {
-    if (!isPlainObject(seg) || !isPlainObject(seg.vars)) continue;
-    for (const [varName, decl] of Object.entries(seg.vars)) {
-      const kind = isPlainObject(decl) ? decl.kind : undefined;
-      if (typeof kind !== "string" || kind === "state") continue;
+  const data =
+    dataPath === undefined
+      ? {}
+      : validateVariables(ctx, "data", {
+          [pluginDataVar(ns)]: {
+            kind: "file",
+            path: dataPath,
+            parse: { json: true },
+            cache: { watch_file: dataPath },
+            default: {},
+          },
+        });
+  // [LAW:one-type-per-behavior] A plugin's variables are a user config's
+  // `variables:`, parsed by the same validator, named under its namespace.
+  const variables = validateVariables(ctx, "variables", json.variables);
+  // [LAW:one-source-of-truth] `.plugins.<plugin>.data` is the data file's,
+  // whether or not `data` is declared.
+  for (const [table, names] of [
+    ["variables", Object.keys(variables)],
+    ["sources", Object.keys(sources)],
+  ] as const) {
+    if (names.includes("data")) {
       issues.push({
-        path: `segments.${name}.vars.${varName}`,
-        message: `a plugin segment's vars may declare only state variables (kind: "state"), never a source such as ${JSON.stringify(kind)}: a plugin's only source is its data file`,
+        path: `${table}.data`,
+        message: `"data" names the plugin's data file (.${pluginDataVar(ns)}), declared by the definition's own "data" key: give this ${table === "sources" ? "source" : "variable"} another name`,
+      });
+    }
+  }
+  // [LAW:one-source-of-truth] A source's name is its variable's: one name
+  // under `plugins.<plugin>.` is one declaration.
+  for (const name of Object.keys(sources)) {
+    if (Object.hasOwn(variables, name)) {
+      issues.push({
+        path: `sources.${name}`,
+        message: `source "${name}" and variable "${name}" are one name (.${PLUGIN_NS}${ns}.${name}): give one of them another name`,
       });
     }
   }
   const fragment: RawDslConfig = {
-    variables,
+    variables: {
+      ...data,
+      ...prefixed(ns, sources),
+      ...prefixed(
+        ns,
+        Object.fromEntries(
+          Object.entries(variables).map(([name, decl]) => [
+            name,
+            stateKeyUnder(ns, decl),
+          ]),
+        ),
+      ),
+    },
     segments: prefixed(
       ns,
       stateKeysUnder(ns, validateSegments(ctx, json.segments, new Set())),
     ),
     helpers: prefixed(ns, validateHelpers(ctx, json.helpers)),
-    actions: prefixed(ns, setKeysUnder(ns, validateActions(ctx, json.actions))),
+    // [LAW:one-source-of-truth] A plugin's `run` runs in its folder, the
+    // real path its storage is resolved under.
+    actions: prefixed(
+      ns,
+      setKeysUnder(
+        ns,
+        validateActions(ctx, json.actions, {
+          dir: fs.realpathSync(path.dirname(file)),
+        }),
+      ),
+    ),
   };
   // [LAW:single-enforcer] Template syntax is otherwise first parsed by the
   // compile, after every plugin has merged — too late to drop just this one.
@@ -623,10 +711,20 @@ function fragmentOf(
 function* fragmentTemplates(
   fragment: RawDslConfig,
 ): IterableIterator<readonly [string, string]> {
+  for (const [name, v] of Object.entries(fragment.variables ?? {})) {
+    for (const [field, t] of variableTemplates(v)) {
+      yield [`variables.${name}.${field}`, t];
+    }
+  }
   for (const [name, seg] of Object.entries(fragment.segments ?? {})) {
     for (const field of ["template", "bg", "fg", "when"] as const) {
       const t = seg[field];
       if (t !== undefined) yield [`segments.${name}.${field}`, t];
+    }
+    for (const [varName, v] of Object.entries(seg.vars ?? {})) {
+      for (const [field, t] of variableTemplates(v)) {
+        yield [`segments.${name}.vars.${varName}.${field}`, t];
+      }
     }
   }
   for (const [name, body] of Object.entries(fragment.helpers ?? {})) {
@@ -649,16 +747,22 @@ function prefixed<T>(
 }
 
 // [LAW:one-source-of-truth] A plugin's SESSION keys live under its namespace
-// exactly as its NAMES do: the `key` of every `state` variable its segments
-// hold and the `set` of every action, so a `set` can neither clash with a
-// session key the user's file or another plugin declares (a kind clash there
-// would fail the whole load, not drop the plugin) nor write one the bar owns
-// (`edit.mode`, `candybar.tab`). The author writes the bare key on both sides
-// and the two meet under `plugins.<ns>.`; a `set` outside the namespace is
+// exactly as its NAMES do: the `key` of every `state` variable it or its
+// segments declare and the `set` of every action, so a `set` can neither clash
+// with a session key the user's file or another plugin declares (a kind clash
+// there would fail the whole load, not drop the plugin) nor write one the bar
+// owns (`edit.mode`, `candybar.tab`). The author writes the bare key on both
+// sides and the two meet under `plugins.<ns>.`; a `set` outside the namespace is
 // unrepresentable, not refused. A `persist`'s or `reset`'s target is a path in
 // the user's config file, not a session key, and is left as written.
 function keyUnder(ns: string, key: string): string {
   return `${PLUGIN_NS}${ns}.${key}`;
+}
+
+function stateKeyUnder(ns: string, decl: VariableDecl): VariableDecl {
+  return decl.kind === "state"
+    ? { ...decl, key: keyUnder(ns, decl.key) }
+    : decl;
 }
 
 function stateKeysUnder(
@@ -675,9 +779,7 @@ function stateKeysUnder(
             vars: Object.fromEntries(
               Object.entries(seg.vars).map(([v, decl]) => [
                 v,
-                decl.kind === "state"
-                  ? { ...decl, key: keyUnder(ns, decl.key) }
-                  : decl,
+                stateKeyUnder(ns, decl),
               ]),
             ),
           },
@@ -685,6 +787,9 @@ function stateKeysUnder(
   );
 }
 
+// [LAW:one-source-of-truth] A `run`'s `refreshes` name the plugin's own
+// sources bare, and meet them under the namespace the same way: a plugin's
+// run can refresh only its own sources.
 function setKeysUnder(
   ns: string,
   actions: Readonly<Record<string, ActionDecl>>,
@@ -692,9 +797,127 @@ function setKeysUnder(
   return Object.fromEntries(
     Object.entries(actions).map(([name, a]) => [
       name,
-      "set" in a ? { ...a, set: keyUnder(ns, a.set) } : a,
+      "set" in a
+        ? { ...a, set: keyUnder(ns, a.set) }
+        : "run" in a
+          ? { ...a, refreshes: a.refreshes.map((r) => keyUnder(ns, r)) }
+          : a,
     ]),
   );
+}
+
+// A source's name is one identifier, like a plugin's: `plugins.<plugin>.<source>`
+// is then its full name and its payload path.
+const SOURCE_NAME = PLUGIN_NAME;
+
+// [LAW:types-are-the-program] The one source the API builds: a session's
+// document, re-read when its file changes, read from the plugin's managed
+// storage. Each field is spelled exactly as authored, so anything else — a
+// scope, trigger or reader the design names but this build lacks, a `file`
+// with a path — is refused naming the field and what is built.
+const BUILT_SOURCE = {
+  scope: "session",
+  refresh: { watch: true },
+  read: { file: { json: true } },
+} as const;
+
+// [LAW:parse-dont-validate] A definition's `sources:`, each lowered to the
+// variable that reads it: a session's document in the plugin's managed
+// storage, the folder `<plugin folder real path>/session`. The real path, so a
+// linked plugin folder replaced by an install is another folder.
+function sourcesOf(
+  sources: unknown,
+  file: string,
+  issues: ConfigIssue[],
+): Record<string, SourceVarDecl> {
+  if (!isPlainObject(sources)) {
+    issues.push({
+      path: "sources",
+      message: `"sources" must be an object of named sources, got ${describeType(sources)}`,
+    });
+    return {};
+  }
+  const storage = path.join(
+    fs.realpathSync(path.dirname(file)),
+    STORAGE_FOLDER,
+  );
+  const built = JSON.stringify(BUILT_SOURCE);
+  const lowered: Record<string, SourceVarDecl> = {};
+  for (const [name, source] of Object.entries(sources)) {
+    const at = `sources.${name}`;
+    if (!SOURCE_NAME.test(name)) {
+      issues.push({
+        path: at,
+        message: `source name "${name}" is not one identifier (one matching ${SOURCE_NAME}: it is the last segment of .${PLUGIN_NS}<plugin>.${name})`,
+      });
+      continue;
+    }
+    const wrong = unbuilt(source, BUILT_SOURCE, at);
+    for (const { field, is } of wrong) {
+      issues.push({
+        path: field,
+        message: `${field} ${is}: what is built is a source ${built} — a session's JSON file in the plugin's managed storage, re-read when it changes`,
+      });
+    }
+    if (wrong.length === 0) lowered[name] = { kind: "source", storage };
+  }
+  return lowered;
+}
+
+// [LAW:one-source-of-truth] [LAW:types-are-the-program] A session's file in a
+// storage folder is one document, so it has one name. Sources that would read
+// the same file — two of one plugin's, or another plugin's whose folder is the
+// same real folder — drop the plugin that brings the second name, naming every
+// source and the file. The rule is over the file each source resolves to, not
+// a count per plugin.
+function requireOneSourcePerFile(
+  file: string,
+  plugin: string,
+  config: DslConfig,
+): void {
+  const readers = Object.entries(config.variables).reduce(
+    (byFile, [name, v]) => {
+      if (v.kind !== "source") return byFile;
+      const read = sourceFileOf(v);
+      return byFile.set(read, [...(byFile.get(read) ?? []), name]);
+    },
+    new Map<string, readonly string[]>(),
+  );
+  const owned = ownedBy(plugin);
+  const issues = [...readers]
+    .filter(([, names]) => names.length > 1 && names.some(owned))
+    .map(([read, names]) => ({
+      path: `sources.${names.find(owned)!.slice(`${PLUGIN_NS}${plugin}.`.length)}`,
+      message: `sources ${names.map((n) => `.${n}`).join(" and ")} read the same file, ${read}: a session's file is one document, read by one source`,
+    }));
+  if (issues.length > 0) throw new ConfigError(file, issues);
+}
+
+// The file a source reads, spelled for any session.
+function sourceFileOf(source: SourceVarDecl): string {
+  return path.join(source.storage, sessionFileName("<session id>"));
+}
+
+// Every field where `authored` departs from `built`, at its deepest: a field
+// the build has no such thing as, one it lacks, or another value.
+function unbuilt(
+  authored: unknown,
+  built: unknown,
+  at: string,
+): ReadonlyArray<{ readonly field: string; readonly is: string }> {
+  if (!isPlainObject(built) || !isPlainObject(authored)) {
+    return JSON.stringify(authored) === JSON.stringify(built)
+      ? []
+      : [{ field: at, is: `is ${JSON.stringify(authored)}` }];
+  }
+  return [
+    ...new Set([...Object.keys(built), ...Object.keys(authored)]),
+  ].flatMap((key) => {
+    const field = `${at}.${key}`;
+    if (!Object.hasOwn(built, key)) return [{ field, is: "is not built" }];
+    if (!Object.hasOwn(authored, key)) return [{ field, is: "is missing" }];
+    return unbuilt(authored[key], built[key], field);
+  });
 }
 
 // [LAW:types-are-the-program] Where a plugin's data lives: a path relative to

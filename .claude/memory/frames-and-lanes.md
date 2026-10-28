@@ -6,7 +6,15 @@ A subscription turns a connection into a stream of frames. Data and frames trave
 
 A feed runs at 30 fps while its last frame moved in a pane someone can see, and at 1 fps when the frame is still or the pane is off screen. The daemon polls tmux for pane visibility only between the first feed opening and the last one closing.
 
-The fps a frame shows is the feed's pace (1000 / its period), never a measurement. The number is drawn into the frame, so a measured value would make otherwise unchanged frames differ, and they would all get pushed.
+A feed has one timer, and nothing that wakes it draws: a value its bar draws from moving, the session's state, a config reload, or a pane coming into view only brings that timer forward, to a moving period after the last frame started while its pane is shown and a still period while not. So no cause sets the draw rate, and an unseen feed woken every millisecond still draws once a second. A frame is never drawn in the turn that woke it, so a click's writes and its journal commit land first, and a subscribe draws nothing in its caller's turn.
+
+A view reports that its data moved from one reaction over everything it draws from, and a draw writes none of that. A frame is drawn in one synchronous turn and opens nothing, so a wake while it draws can only be the draw's own, and it is coalesced into that frame, which already reads what moved. Drawing again for it would let a draw set its own next frame.
+
+A frame only finds its session's view; it never builds a cache entry or opens a view, because either is I/O on the frame path. Only an event opens one: a request, a reload's successor, or a click that moved the session's config. So an open feed pins its session in the render cache, and its entry is never evicted nor its view closed idle while the feed is open. A feed whose session has no view waits until the event that opens one wakes it. A view whose opening threw leaves that error in its place, so an open feed draws the failure rather than freezing on the last bar it pushed.
+
+The fps a frame shows is the feed's pace (1000 / its period), never a measurement. The number is drawn into the frame, so a measured value would make otherwise unchanged frames differ, and they would all get pushed. A bar Claude Code polls says `polled` rather than a rate, because request arrivals can't tell Claude Code's timer from its event redraws or from a daemon stall, and a count over a trailing second never reads below one.
+
+The rate cell hangs on the menu's anchor, beside the door, because the anchor is the one position every bar is guaranteed. Placed in a preset's root instead, it would be missing from every preset and authored root that didn't name it.
 
 A throw in a feed's frame step is logged as that feed's fault, never left as an unhandled rejection.
 
@@ -16,7 +24,7 @@ The Node and native followers share their reconnect decisions through one fixtur
 
 ## Lane switches
 
-A lane's switch is read at the moment it's needed, never copied onto a frame. A subscribe to a lane that's off is refused before any feed opens.
+A lane's switch is read at the moment it's needed, never copied onto a frame. A subscribe to a lane that's off is refused before any feed opens, once the session has a view. A session with no view yet has no switch to read, since only an event opens a view, so its feed opens and its first frame decides.
 
 A lane is set up or torn down only by the session's own click that moved its switch, measured around the click (before the handler, after the commit) rather than inferred at a draw. A switch moved by anything else (another session's save, a hand edit, a restart, a cd) sets nothing up, because that would restart every idle Claude Code reading the file. One edge: the before reading is the config as this session's cache last loaded it, and the after reading follows the click's own reload, so another session's save that the watcher hasn't reloaded here yet counts as this click's move. The window is the watcher's debounce, and only the clicking session is set up, to match the bar its click left. A click on a bar from before a daemon restart has no request to set the lane up with yet, so it is owed to the session's next click or request, and settled against the switch as that event finds it: by then another session's save may have moved the switch back, and a setup from the click's reading would restart Claude Code for a lane the bar shows off.
 

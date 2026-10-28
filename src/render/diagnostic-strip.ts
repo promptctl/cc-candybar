@@ -71,6 +71,14 @@ export const UPDATE_SEVERITY: DiagnosticSeverity = {
   colors: DIAGNOSTIC_WARNING_COLORS,
 };
 
+// A repository's config waiting on the user's answer before anything in it
+// runs: advisory, and its glyph is a lock.
+export const APPROVAL_SEVERITY: DiagnosticSeverity = {
+  heading: "APPROVAL",
+  glyph: "🔒",
+  colors: DIAGNOSTIC_WARNING_COLORS,
+};
+
 // The statusline handing the bar off to an animation lane that draws it
 // elsewhere (src/daemon/lane-handoff.ts): advisory, and its glyph is the
 // lanes' own.

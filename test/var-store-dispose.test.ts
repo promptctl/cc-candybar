@@ -7,6 +7,7 @@
 // long as the daemon, so before this, every reload or eviction left the whole
 // disposed store reachable from that atom — 2,500 observers against 12 live
 // entries in the breach snapshot of 2026-10-19 — until the RSS backstop fired.
+import { TEST_SIGNER } from "./helpers/link-signer";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
@@ -60,7 +61,7 @@ function renderedEntry(
   );
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
+  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   if (drawn) {
     renderDsl(
       config,
@@ -142,7 +143,7 @@ describe("VariableStore.dispose releases every computed's subscriptions", () => 
         DEFAULT_DSL_CONFIG,
       ),
       registry,
-      { cwd: "/tmp/proj" },
+      { signer: TEST_SIGNER, cwd: "/tmp/proj" },
     );
     expect(sessionState.observers()).toBe(0);
     registry.dispose();

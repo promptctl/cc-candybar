@@ -21,23 +21,24 @@
 // name every accent alike, as Textual draws them — and fact 1 is what holds
 // a bar to its theme.
 
+import { TEST_SIGNER } from "../test/helpers/link-signer";
 import {
   ColorDepth,
   ColorRgba,
   drawnColour,
   getThemePalette,
   listThemePalettes,
-  Oklch,
   SEAM_MIN_DELTA_E,
 } from "@promptctl/rich-js";
 
-import { checkPayload } from "../src/check";
+import { CHECK_TODAY, checkPayload } from "../src/check";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { unauthored, validateConfig } from "../src/config/dsl-loader";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { SessionState } from "../src/daemon/session-state";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import {
+  deltaE,
   SHADES,
   VARIATIONS,
   type ShadeName,
@@ -55,8 +56,6 @@ const ARROW = "\u{e0b0}";
 const DIVIDER = "\u{e0b1}";
 const TOKEN = /\x1b\[([0-9;]*)m|\x1b\]8;[^\x1b]*\x1b\\/g;
 
-const oklch = (c: ColorRgba): Oklch => Oklch.fromRgba(c);
-const dE = (a: ColorRgba, b: ColorRgba): number => oklch(a).deltaE(oklch(b));
 
 // A seam: the backgrounds either side and the glyph between them. The arrow
 // is drawn in the left cell's background over the right cell's, so its
@@ -146,7 +145,7 @@ const CALM = {
 // render, so the renders differ only in the pick.
 const STORE = new VariableStore();
 const REGISTRY = new SourceRegistry(STORE, "", new SessionState());
-const COMPILED = registerDslConfig(CONFIG, REGISTRY, { cwd: process.cwd() });
+const COMPILED = registerDslConfig(CONFIG, REGISTRY, { signer: TEST_SIGNER, cwd: process.cwd() });
 const AT = instantOf(new Date());
 afterAll(() => REGISTRY.dispose());
 
@@ -165,7 +164,10 @@ function render(theme: string, calm: boolean, { variation, shade, look }: Varian
               : null,
     () => false,
   );
-  const hot = checkPayload(e, null, AT) as Record<string, Record<string, unknown>>;
+  const hot = {
+    ...checkPayload(CONFIG, e, null, AT),
+    today: CHECK_TODAY,
+  } as unknown as Record<string, Record<string, unknown>>;
   const payload = calm
     ? Object.fromEntries(
         Object.entries(hot).map(([k, v]) => [
@@ -238,7 +240,7 @@ describe("done-when: every background the closed bar draws is a colour its theme
         for (const bg of backgrounds(bar(theme, calm, variant))) {
           measured++;
           if (exact.has(bg.hex)) continue;
-          const nearest = Math.min(...palette.map((c) => dE(bg, c)));
+          const nearest = Math.min(...palette.map((c) => deltaE(bg, c)));
           if (nearest > PALETTE_FLOOR) wrong.push(`${theme}${calm ? " calm" : ""} ${bg.hex} ${nearest.toFixed(3)}`);
         }
       }
@@ -258,7 +260,7 @@ describe("no two neighbouring cells blur", () => {
 
   // The joiner draws a divider where an arrow would vanish into the ground
   // it enters: where two neighbours' backgrounds meet. Cells nested in one bar
-  // cell (context beside autocompact, and ceiling) wear that cell's colour
+  // cell (context beside autocompact) wear that cell's colour
   // byte for byte (decorEntryFor), as do the cells of a muted row, and a
   // theme can draw two of its colours alike (textual-ansi's every shade of a
   // role is one colour). Those are the only neighbours that share a
@@ -268,7 +270,7 @@ describe("no two neighbouring cells blur", () => {
     const seams = seamsUnder(variant);
     expect(seams.length).toBeGreaterThan(THEMES.length * 2 * 5);
     const arrows = seams
-      .filter((s) => s.glyph === ARROW && dE(s.left, s.right) < SEAM_MIN_DELTA_E)
+      .filter((s) => s.glyph === ARROW && deltaE(s.left, s.right) < SEAM_MIN_DELTA_E)
       .map((s) => `${s.theme}${s.calm ? " calm" : ""} ${s.left.hex}|${s.right.hex}`);
     expect([...new Set(arrows)]).toEqual([]);
     const dividers = seams

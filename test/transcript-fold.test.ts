@@ -5,7 +5,10 @@
 // /compact rewrites a transcript, and retention only shows itself when the file
 // a fold was built from goes away.
 
+import { RefreshLedger } from "../src/utils/refresh-ledger";
 import {
+  chmodSync,
+  mkdirSync,
   mkdtempSync,
   writeFileSync,
   appendFileSync,
@@ -30,10 +33,22 @@ const line = (text: string): string =>
     message: { role: "user", content: text },
   });
 
+const REFRESHES = new RefreshLedger().declare({
+  name: "count",
+  scope: "session",
+  refresh: ["request"],
+});
+
 // Every fold here counts entries: the smallest projection that makes "how much
 // was folded, and from where" visible without reading any internal state.
 const counting = (max?: number) =>
-  new TranscriptFold<number>(0, (n: number, _e: ParsedEntry) => n + 1, undefined, max);
+  new TranscriptFold<number>(
+    0,
+    (n: number, _e: ParsedEntry) => n + 1,
+    REFRESHES,
+    undefined,
+    max,
+  );
 
 // The fold reads only when the mtime moved, so a test that rewrites a file in the
 // same millisecond must say so explicitly.
@@ -104,6 +119,53 @@ test("a session with no transcript is a real zero, never a failure", async () =>
   expect(await valueOf(counting(), "s", join(dir, "missing.jsonl"))).toBe(0);
 });
 
+// [LAW:no-silent-failure] The other side of that zero: a transcript the daemon
+// cannot stat is not "no transcript". The stamp is empty, so nothing is
+// believed; the read answers with the reason, cold and warm alike, and a
+// warm fold's prior value is not served as current.
+// Root ignores directory permissions, so the condition cannot be built.
+(process.getuid?.() === 0 ? test.skip : test)(
+  "a transcript whose stat fails is a failure with its reason, never an empty fold",
+  async () => {
+    const sub = join(dir, "locked");
+    mkdirSync(sub);
+    const path = join(sub, "d.jsonl");
+    write(path, line("one"));
+    // A re-fold from zero would count 1 again, so the step itself is counted:
+    // that is what "nothing re-folded" means.
+    let steps = 0;
+    const warm = new TranscriptFold<number>(
+      0,
+      (n: number) => {
+        steps++;
+        return n + 1;
+      },
+      REFRESHES,
+    );
+    expect(await valueOf(warm, "s", path)).toBe(1);
+    expect(steps).toBe(1);
+    expect(warm.answer("s").kind).toBe("ok");
+    chmodSync(sub, 0o000);
+    try {
+      for (const fold of [warm, counting()]) {
+        const out = await fold.read("s", path);
+        expect(out.kind).toBe("failed");
+        // The open is what classifies, so the reason names it.
+        if (out.kind === "failed")
+          expect(out.reason).toMatch(/EACCES: permission denied, open /);
+        // What a draw reads is the failure too, not the prior ok.
+        expect(fold.answer("s").kind).toBe("failed");
+      }
+    } finally {
+      chmodSync(sub, 0o755);
+    }
+    // Readable again: the warm fold's cursor still stands, nothing re-folded.
+    expect(await valueOf(warm, "s", path)).toBe(1);
+    expect(steps).toBe(1);
+    expect(warm.answer("s").kind).toBe("ok");
+  },
+);
+
 // Retention is observable: the `absent` arm hands back what the session had, so a
 // fold that is still retained survives its file going away and an evicted one
 // starts from empty. That is what makes the READ-recency re-ordering testable —
@@ -139,6 +201,7 @@ test("a multi-window transcript folds every entry, and a long line is logged", a
   const fold = new TranscriptFold<number>(
     0,
     (n: number, _e: ParsedEntry) => n + 1,
+    REFRESHES,
     (_level, msg) => logged.push(msg),
   );
 

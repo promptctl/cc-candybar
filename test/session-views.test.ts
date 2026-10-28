@@ -1,3 +1,4 @@
+import { TEST_SIGNER } from "./helpers/link-signer";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -17,6 +18,9 @@ import { instantOf } from "../src/utils/instant";
 import { ABSENT } from "../src/utils/outcome";
 import { stripAnsi } from "./helpers/ansi";
 import { viewFacts } from "./helpers/view-facts";
+import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
+import { setLaunchStats } from "../src/proc/launch";
+import { answerRepo } from "./helpers/repo-approval";
 
 // brandon-unfiled-3248.8ro6, step 2: each value lives where its scope says. A
 // directory's store holds the sources no session value reaches; each session
@@ -29,6 +33,8 @@ let dir: string;
 let cleanups: Array<() => void>;
 beforeEach(() => {
   dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "ccb-views-")));
+  // The configs these sessions draw are the directory's own.
+  answerRepo(dir);
   cleanups = [() => fs.rmSync(dir, { recursive: true, force: true })];
 });
 afterEach(() => {
@@ -44,12 +50,12 @@ function makeCache(
 ) {
   const lines: string[] = [];
   const watchers = new WatcherRegistry({
-    counters: { watchersOpened: 0, watchersClosed: 0 },
+    counters: { watchersOpened: 0, watchersClosed: 0, watchRefusals: 0, watchErrors: 0 },
     logger: () => {},
   });
   cleanups.push(() => watchers.closeAll());
   const cache = new RenderCache(
-    {
+    { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER,
       sessionState: new SessionState(),
       watchers,
       source: SOURCES_NOTHING,
@@ -98,11 +104,12 @@ function configure(cwd: string): void {
     root: { h: ["who"] },
   };
   fs.writeFileSync(path.join(cwd, ".cc-candybar.json5"), JSON.stringify(config));
+  answerRepo(cwd);
 }
 
 const drawn = (
   view: SessionView,
-  sid = view.sessionId,
+  sid: string = view.sessionId,
   at = new Date(),
 ): string =>
   stripAnsi(
@@ -126,7 +133,7 @@ async function render(
   at = new Date(),
 ): Promise<{ text: string; view: SessionView }> {
   const { text, view } = (() => {
-    using held = cache.holdSession(cwd, cwd, undefined, sid, viewFacts(cwd, sid));
+    using held = cache.holdSession(cwd, cwd, undefined, viewFacts(cwd, sid));
     return { text: drawn(held.view, sid, at), view: held.view };
   })();
   // Both homes the render read: the view's sources, and the directory's.
@@ -187,7 +194,7 @@ test("a move to another directory declares the new view before the old releases 
   let holders = 0;
   let dropsToZero = 0;
   const { cache } = makeCache({
-    declare: (holds, facts, closure) => {
+    declare: (holds, facts, closure, sources) => {
       holds.take("repo", () => {
         holders++;
         return () => {
@@ -195,11 +202,11 @@ test("a move to another directory declares the new view before the old releases 
           if (holders === 0) dropsToZero++;
         };
       });
-      return DECLARES_NOTHING(holds, facts, closure);
+      return DECLARES_NOTHING(holds, facts, closure, sources);
     },
   });
-  cache.holdSession(dir, dir, undefined, "s-a", viewFacts(dir, "s-a"))[Symbol.dispose]();
-  cache.holdSession(other, other, undefined, "s-a", viewFacts(other, "s-a"))[Symbol.dispose]();
+  cache.holdSession(dir, dir, undefined, viewFacts(dir, "s-a"))[Symbol.dispose]();
+  cache.holdSession(other, other, undefined, viewFacts(other, "s-a"))[Symbol.dispose]();
   expect(cache.stats.views).toBe(1);
   expect(holders).toBe(1);
   expect(dropsToZero).toBe(0);
@@ -263,7 +270,7 @@ test("a view opened inside a MobX batch is declared before it is handed back", (
   configure(dir);
   const { cache } = makeCache();
   const answer = runInAction(() => {
-    using held = cache.holdSession(dir, dir, undefined, "s-a", viewFacts(dir, "s-a"));
+    using held = cache.holdSession(dir, dir, undefined, viewFacts(dir, "s-a"));
     return held.view.lanes().git.current();
   });
   // DECLARES_NOTHING's answer, not the view's want of one.
@@ -274,20 +281,20 @@ test("a kept view is declared with each request holdSession is given, inside a b
   configure(dir);
   const declaredFor: ViewFacts[] = [];
   const { cache } = makeCache({
-    declare: (holds, facts, closure) => {
+    declare: (holds, facts, closure, sources) => {
       declaredFor.push(facts);
-      return DECLARES_NOTHING(holds, facts, closure);
+      return DECLARES_NOTHING(holds, facts, closure, sources);
     },
   });
   const first = viewFacts(dir, "s-a");
-  cache.holdSession(dir, dir, undefined, "s-a", first)[Symbol.dispose]();
+  cache.holdSession(dir, dir, undefined, first)[Symbol.dispose]();
   const next = viewFacts(dir, "s-a");
   runInAction(() => {
-    using held = cache.holdSession(dir, dir, undefined, "s-a", next);
+    using held = cache.holdSession(dir, dir, undefined, next);
     // Declared before the batch ends: this request's lanes, not the last's.
     expect(declaredFor).toEqual([first, next]);
     // A frame's facts, the request already declared, declare nothing again.
-    cache.holdSession(dir, dir, undefined, "s-a", next)[Symbol.dispose]();
+    cache.holdSession(dir, dir, undefined, next)[Symbol.dispose]();
     expect(held.view).toBeDefined();
   });
   expect(declaredFor).toHaveLength(2);
@@ -300,7 +307,7 @@ test("a view whose declaration throws answers that failure on its lanes", () => 
       throw new Error("closure exploded");
     },
   });
-  using held = cache.holdSession(dir, dir, undefined, "s-a", viewFacts(dir, "s-a"));
+  using held = cache.holdSession(dir, dir, undefined, viewFacts(dir, "s-a"));
   expect(held.view.lanes().git.current()).toEqual({
     kind: "failed",
     reason: expect.stringContaining("closure exploded"),
@@ -313,7 +320,7 @@ test("a view whose declaration throws answers that failure on its lanes", () => 
 test("a view held by a render in flight is disposed only when the render returns", () => {
   configure(dir);
   const { cache, lines } = makeCache();
-  const held = cache.holdSession(dir, dir, undefined, "s-a", viewFacts(dir, "s-a"));
+  const held = cache.holdSession(dir, dir, undefined, viewFacts(dir, "s-a"));
   cache.reload(dir, dir, undefined);
   expect(cache.stats).toMatchObject({ views: 1, retiredViews: 1 });
   // Retired, not disposed: the render still draws through it.
@@ -398,9 +405,9 @@ test("a move whose new view fails to open still retires the view it replaces", (
         throw new Error("log boom");
     },
   });
-  cache.holdSession(dir, dir, undefined, "s-a", viewFacts(dir, "s-a"))[Symbol.dispose]();
+  cache.holdSession(dir, dir, undefined, viewFacts(dir, "s-a"))[Symbol.dispose]();
   expect(() =>
-    cache.holdSession(other, other, undefined, "s-a", viewFacts(other, "s-a")),
+    cache.holdSession(other, other, undefined, viewFacts(other, "s-a")),
   ).toThrow("log boom");
   expect(lines).toContainEqual(
     expect.stringMatching(/^session view closed sid="s-a" reason=moved /),
@@ -419,7 +426,7 @@ test("a view that fails to open releases the state hold it was opened under", ()
       }
     },
   });
-  expect(() => cache.holdSession(dir, dir, undefined, "s-a", viewFacts(dir, "s-a"))).toThrow(
+  expect(() => cache.holdSession(dir, dir, undefined, viewFacts(dir, "s-a"))).toThrow(
     "log boom",
   );
   // Retired by the reload and held by nothing, the state is reclaimed now.
@@ -436,3 +443,65 @@ test("views the served entry alone carries past the budget are said, not hidden"
   );
 });
 
+// A config load declares the session values into a view no session draws, to
+// find what cannot declare. Every source a view holds reads a session value,
+// which that view never answers, so the load starts none of them: counted at
+// the spawn, since the probe's teardown aborts a shell it started before the
+// shell can leave a trace of its own.
+test("a config load starts no view's source, and still names a session value that cannot declare", async () => {
+  const shell = (name: string, cache: object) => ({
+    kind: "shell",
+    command: counted(name, name),
+    cache,
+  });
+  fs.writeFileSync(
+    path.join(dir, ".cc-candybar.json5"),
+    JSON.stringify({
+      variables: {
+        sid: { kind: "input", path: "session_id" },
+        mode: { kind: "state", key: "mode", default: "a" },
+        byInput: shell("byInput", { key: "{{ .sid }}" }),
+        byState: shell("byState", { key: "{{ .mode }}" }),
+        afterState: shell("afterState", { depends_on: ["mode"] }),
+        byDepth: shell("byDepth", {
+          key: '{{ readableOn "#777777" "#000000" 4.5 }}',
+        }),
+        perDirectory: shell("perDirectory", { ttl: "1h" }),
+        unclosed: { kind: "template", template: "{{ .sid " },
+      },
+      segments: {
+        s: {
+          template:
+            "{{ .byInput }} {{ .byState }} {{ .afterState }} {{ .byDepth }} {{ .perDirectory }}",
+        },
+      },
+      root: { h: ["s"] },
+    }),
+  );
+  let shells = 0;
+  setLaunchStats({
+    onStart: (c) => {
+      if (c === "user-shell") shells++;
+    },
+    onEnd: () => {},
+  });
+  cleanups.push(() => setLaunchStats(null));
+  const { cache } = makeCache();
+
+  const entry = cache.getOrCreate(dir, dir, undefined);
+  expect(entry.lastError).toBeNull();
+  expect(await entry.state!.registry.settled(5000)).toEqual([]);
+  // The one value that cannot declare, and no view source faulted for want of
+  // a session.
+  expect(entry.lastWarning).toBe('Variable "unclosed": unclosed action');
+  // The directory's one source, and nothing a session did not ask for.
+  expect(shells).toBe(1);
+  expect(runs("perDirectory")).toBe(1);
+
+  // A session asks for each of them, and a render settles what it started.
+  await render(cache, "s-a");
+  for (const name of ["byInput", "byState", "afterState", "byDepth"]) {
+    expect([name, runs(name)]).toEqual([name, 1]);
+  }
+  expect(shells).toBe(5);
+});

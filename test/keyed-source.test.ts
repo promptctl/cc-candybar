@@ -1,13 +1,16 @@
+import { RefreshLedger } from "../src/utils/refresh-ledger";
 import { KeyedSource } from "../src/utils/keyed-source";
 import { Holds } from "../src/utils/holds";
 import { failed, ok, type Outcome } from "../src/utils/outcome";
 import { laneOutcome } from "../src/utils/reading";
 
 // [LAW:behavior-not-structure] The contract of a keyed source, through its
-// read and its supersede alone (brandon-unfiled-3248.8ro6, step 1): a read
-// takes the stored value and waits only on a key never read; a key is read
-// again on its period only while a home holds it; a supersede abandons the
-// read in flight, so no reader is answered with the reading from before it.
+// read, its changes and its supersede alone: a read takes the stored value
+// and waits only on a key never read; a key is read again on its period only
+// while a home holds it, or with no period when a hold returns to it; a change
+// during a read queues one re-read; a supersede abandons the read in flight
+// and holds back every trigger until it resumes, so no reader is answered with
+// the reading from before it.
 
 type Line = { level: string; msg: string };
 
@@ -35,12 +38,14 @@ function sourceOf(
 ) {
   return new KeyedSource<string, string>({
     name: "fake",
+    scope: "pane",
     keyOf: (k) => k,
     fields: (k) => `key=${k}`,
     read,
     every: EVERY,
     maxEntries: opts.maxEntries ?? 64,
     logger: (level, msg) => opts.lines?.push({ level, msg }),
+    ledger: new RefreshLedger((level, msg) => opts.lines?.push({ level, msg })),
   });
 }
 
@@ -140,16 +145,18 @@ describe("KeyedSource", () => {
     expect(source.stats().held).toBe(0);
   });
 
-  test("a supersede abandons the read in flight: its waiter is answered by the fresh read", async () => {
+  test("a supersede abandons the read in flight: its waiter is answered by the read its resume starts", async () => {
     const f = fakeRead();
     source = sourceOf(f.read);
     const holds = new Holds();
     const waiting = laneOutcome(source.declare(holds, "a"));
-    source.supersede("a");
-    expect(f.calls).toHaveLength(2);
+    const resume = source.supersede("a");
+    expect(f.calls).toHaveLength(1);
     // The read from before the supersede lands first and is never stored.
     f.answer(0, ok("before"));
     await settled();
+    resume();
+    expect(f.calls).toHaveLength(2);
     f.answer(1, ok("after"));
     expect(await waiting).toEqual(ok("after"));
     expect(await laneOutcome(source.declare(holds, "a"))).toEqual(ok("after"));
@@ -162,9 +169,10 @@ describe("KeyedSource", () => {
     const f = fakeRead();
     source = sourceOf(f.read, { lines });
     const waiting = laneOutcome(source.declare(new Holds(), "a"));
-    source.supersede("a");
+    const resume = source.supersede("a");
     f.answer(0, failed("layer changed under it"));
     await settled();
+    resume();
     f.answer(1, ok("after"));
     expect(await waiting).toEqual(ok("after"));
     expect(lines.map((l) => `${l.level} ${l.msg}`)).toEqual([
@@ -176,27 +184,81 @@ describe("KeyedSource", () => {
       ),
     ]);
     expect(source.stats()).toMatchObject({
-      refreshes: { first: 1, period: 0, supersede: 1 },
+      refreshes: { first: 1, period: 0, change: 0, supersede: 1 },
       failures: 1,
     });
   });
 
-  test("a supersede of a stored value: the next read waits on the fresh read, never the old value", async () => {
+  test("a supersede of a stored value: pending, superseded, until the read its resume starts", async () => {
     const f = fakeRead();
     source = sourceOf(f.read);
     const holds = new Holds();
     const first = laneOutcome(source.declare(holds, "a"));
     f.answer(0, ok("before"));
     await first;
-    source.supersede("a");
+    const resume = source.supersede("a");
+    expect(source.declare(holds, "a").current()).toMatchObject({
+      kind: "pending",
+      why: "superseded",
+    });
+    resume();
     const next = laneOutcome(source.declare(holds, "a"));
     f.answer(1, ok("after"));
     expect(await next).toEqual(ok("after"));
     expect(source.stats().refreshes).toEqual({
       first: 1,
       period: 0,
+      change: 0,
       supersede: 1,
     });
+  });
+
+  test("a key's first read is pending as unread", () => {
+    const f = fakeRead();
+    source = sourceOf(f.read);
+    expect(source.declare(new Holds(), "a").current()).toMatchObject({
+      kind: "pending",
+      why: "unread",
+    });
+  });
+
+  test("a supersede holds back every trigger of its key until it resumes", async () => {
+    const f = fakeRead();
+    source = sourceOf(f.read);
+    const holds = new Holds();
+    const first = laneOutcome(source.declare(holds, "a"));
+    f.answer(0, ok("A"));
+    await first;
+    const resume = source.supersede("a");
+    // Its period comes due, and the world changes: neither reads.
+    await jest.advanceTimersByTimeAsync(EVERY.okMs * 3);
+    source.changed(() => true);
+    expect(f.calls).toHaveLength(1);
+    resume();
+    expect(f.calls).toHaveLength(2);
+    f.answer(1, ok("B"));
+    await settled();
+    expect(source.declare(holds, "a").current()).toEqual(ok("B"));
+  });
+
+  test("two overlapping supersedes need both resumes, and the last starts one read", async () => {
+    const f = fakeRead();
+    source = sourceOf(f.read);
+    const holds = new Holds();
+    const first = laneOutcome(source.declare(holds, "a"));
+    f.answer(0, ok("A"));
+    await first;
+    const one = source.supersede("a");
+    const two = source.supersede("a");
+    one();
+    one();
+    expect(f.calls).toHaveLength(1);
+    expect(source.declare(holds, "a").current()).toMatchObject({
+      kind: "pending",
+      why: "superseded",
+    });
+    two();
+    expect(f.calls).toHaveLength(2);
   });
 
   test("a period tick while a supersede's read is out shares it", async () => {
@@ -207,16 +269,117 @@ describe("KeyedSource", () => {
     f.answer(0, ok("A"));
     await first;
     await jest.advanceTimersByTimeAsync(EVERY.okMs - 1);
-    source.supersede("a");
+    source.supersede("a")();
     await jest.advanceTimersByTimeAsync(1);
     expect(f.calls).toHaveLength(2);
   });
 
-  test("a key never read has nothing to supersede", () => {
+  test("a key never read: a supersede holds its first read until it resumes", async () => {
     const f = fakeRead();
     source = sourceOf(f.read);
-    source.supersede("a");
+    const resume = source.supersede("a");
+    const waiting = laneOutcome(source.declare(new Holds(), "a"));
     expect(f.calls).toHaveLength(0);
+    resume();
+    expect(f.calls).toHaveLength(1);
+    f.answer(0, ok("A"));
+    expect(await waiting).toEqual(ok("A"));
+  });
+
+  test("a change while a read is out queues exactly one re-read, which lands last", async () => {
+    const f = fakeRead();
+    source = sourceOf(f.read);
+    const holds = new Holds();
+    const first = laneOutcome(source.declare(holds, "a"));
+    source.changed(() => true);
+    source.changed(() => true);
+    source.changed(() => true);
+    expect(f.calls).toHaveLength(1);
+    f.answer(0, ok("old"));
+    expect(await first).toEqual(ok("old"));
+    expect(f.calls).toHaveLength(2);
+    // The value stands while the re-read is out.
+    expect(source.declare(holds, "a").current()).toEqual(ok("old"));
+    f.answer(1, ok("new"));
+    await settled();
+    expect(f.calls).toHaveLength(2);
+    expect(source.declare(holds, "a").current()).toEqual(ok("new"));
+    expect(source.stats().refreshes).toMatchObject({ first: 1, change: 1 });
+  });
+
+  test("a change reads only the held entries it names", async () => {
+    const f = fakeRead();
+    source = sourceOf(f.read);
+    const holds = new Holds();
+    const loose = new Holds();
+    void laneOutcome(source.declare(holds, "a"));
+    void laneOutcome(source.declare(holds, "b"));
+    void laneOutcome(source.declare(loose, "c"));
+    loose.declare(() => {});
+    f.answer(0, ok("A"));
+    f.answer(1, ok("B"));
+    f.answer(2, ok("C"));
+    await settled();
+    source.changed((k) => k !== "b");
+    expect(f.calls.map((c) => c.key)).toEqual(["a", "b", "c", "a"]);
+  });
+
+  describe("with no period", () => {
+    const noPeriod = (read: (key: string) => Promise<Outcome<string>>) =>
+      new KeyedSource<string, string>({
+        name: "fake",
+        scope: "pane",
+        keyOf: (k) => k,
+        fields: (k) => `key=${k}`,
+        read,
+        every: null,
+        maxEntries: 64,
+        logger: () => {},
+        ledger: new RefreshLedger(),
+      });
+
+    test("a held entry is read only on a change, never on a clock", async () => {
+      const f = fakeRead();
+      const s = noPeriod(f.read);
+      source = s;
+      const first = laneOutcome(s.declare(new Holds(), "a"));
+      f.answer(0, ok("A"));
+      await first;
+      await jest.advanceTimersByTimeAsync(EVERY.okMs * 100);
+      expect(f.calls).toHaveLength(1);
+    });
+
+    test("hold, release, change, hold again: the hold's return re-reads, drawing the kept value meanwhile", async () => {
+      const f = fakeRead();
+      const s = noPeriod(f.read);
+      source = s;
+      const holds = new Holds();
+      const first = laneOutcome(s.declare(holds, "a"));
+      f.answer(0, ok("before"));
+      await first;
+      holds.declare(() => {});
+      // Written while nobody held it: the change reads nothing.
+      s.changed(() => true);
+      expect(f.calls).toHaveLength(1);
+      const lane = s.declare(holds, "a");
+      expect(f.calls).toHaveLength(2);
+      expect(lane.current()).toEqual(ok("before"));
+      f.answer(1, ok("written"));
+      await settled();
+      expect(lane.current()).toEqual(ok("written"));
+      expect(s.stats().refreshes).toMatchObject({ first: 1, change: 1 });
+    });
+
+    test("a second holder of a held entry reads nothing", async () => {
+      const f = fakeRead();
+      const s = noPeriod(f.read);
+      source = s;
+      const first = laneOutcome(s.declare(new Holds(), "a"));
+      f.answer(0, ok("A"));
+      await first;
+      s.declare(new Holds(), "a");
+      expect(f.calls).toHaveLength(1);
+    });
   });
 
   test("the LRU evicts only keys nobody holds", async () => {
@@ -237,6 +400,19 @@ describe("KeyedSource", () => {
     const reads = f.calls.length;
     void laneOutcome(source.declare(held, "kept"));
     expect(f.calls).toHaveLength(reads);
+  });
+
+  test("supersedes of keys nobody holds stay within the bound once they resume, and none is dropped mid-move", () => {
+    const f = fakeRead();
+    source = sourceOf(f.read, { maxEntries: 1 });
+    const moving = source.supersede("a");
+    // "a" is mid-move, so it is kept past the bound.
+    const resumes = ["b", "c"].map((k) => source!.supersede(k));
+    expect(source.stats().entries).toBe(3);
+    moving();
+    for (const resume of resumes) resume();
+    source.supersede("d")();
+    expect(source.stats().entries).toBe(1);
   });
 
   test("a waiter on a key the LRU drops is answered, never left waiting", async () => {

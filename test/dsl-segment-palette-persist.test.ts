@@ -32,6 +32,7 @@
 //      file nor the bundled default declares cannot be pinned at all — the
 //      store refuses loudly rather than authoring a hollow declaration.
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import { ownLinks, ownValidators } from "./helpers/ambient-chrome";
 import { existsSync } from "node:fs";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -71,6 +72,7 @@ import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { testVerbContext } from "./helpers/click";
 import { linkUrls, links, stripAnsi } from "./helpers/ansi";
 import { instantOf } from "../src/utils/instant";
+import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -279,7 +281,7 @@ function buildRuntime(src: string, sessionId = "s1", dflt?: DslConfig) {
   durable.seedOrigin(sessionState, sessionId);
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
+  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   const render = (width = Number.POSITIVE_INFINITY): string =>
     renderDsl(
       config,
@@ -466,7 +468,7 @@ describe("config-file-store: segment-palette placement", () => {
     }`;
     durable.write(text);
     expect(() =>
-      writeValues(store(), { path: durable.configPath, above: [], projectDir: null, cwd: null }, [["segments.ghost.palette", "nord"]]),
+      writeValues(store(), { path: durable.configPath, above: [], repo: null, cwd: null }, [["segments.ghost.palette", "nord"]]),
     ).toThrow(
       /cannot edit segments\.ghost\.palette: neither the config file nor the bundled default declares segments\.ghost/,
     );
@@ -483,14 +485,14 @@ function makeCache(): {
 } {
   const cleanups: Array<() => void> = [];
   const watchers = new WatcherRegistry({
-    counters: { watchersOpened: 0, watchersClosed: 0 },
+    counters: { watchersOpened: 0, watchersClosed: 0, watchRefusals: 0, watchErrors: 0 },
     logger: () => {},
   });
   cleanups.push(() => watchers.closeAll());
   const sessionState = new SessionState();
   const reloads = new ReloadSignal();
   const cache = new RenderCache(
-    { sessionState, watchers, source: SOURCES_NOTHING, declare: DECLARES_NOTHING },
+    { storage: NO_PLUGIN_STORAGE, signer: TEST_SIGNER, sessionState, watchers, source: SOURCES_NOTHING, declare: DECLARES_NOTHING },
     { budgetBytes: () => renderCacheBudget(memoryLimitBytes({})), observers: reloads.observers },
   );
   cleanups.unshift(() => cache.close());
@@ -537,7 +539,7 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
       await reloads.after(entry, () =>
         writeValues(
           store(),
-          { path: durable.configPath, above: [], projectDir: null, cwd: null },
+          { path: durable.configPath, above: [], repo: null, cwd: null },
           [["segments.sidebar.palette", "nord"]],
         ),
       );
@@ -569,7 +571,7 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
     }`);
     writeValues(
       store(),
-      { path: durable.configPath, above: [], projectDir: null, cwd: null },
+      { path: durable.configPath, above: [], repo: null, cwd: null },
       [["segments.sidebar.palette", "gruvbox"]],
     );
 
@@ -608,7 +610,7 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
     }`);
     writeValues(
       store(),
-      { path: durable.configPath, above: [], projectDir: null, cwd: null },
+      { path: durable.configPath, above: [], repo: null, cwd: null },
       [["segments.directory.palette", "nord"]],
     );
 

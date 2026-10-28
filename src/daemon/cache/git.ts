@@ -1,4 +1,3 @@
-import fs from "node:fs";
 import path from "node:path";
 import {
   GitService,
@@ -9,12 +8,20 @@ import {
 } from "../../segments/git";
 import { ABSENT, failed, ok, type Outcome } from "../../utils/outcome";
 import { quietLogger } from "../../utils/logger";
+import { valueOf as logfmtValue } from "../../utils/logfmt";
+import {
+  RefreshLedger,
+  type RefreshTrigger,
+  type Refreshes,
+} from "../../utils/refresh-ledger";
 import {
   WatcherRegistry,
   type DirTarget,
-  type WatcherHandle,
-  type WatchTargets,
+  type HeldWatch,
+  type WatchMove,
+  type WatchSpec,
 } from "./watchers";
+import { boundKey, boundOf } from "../../utils/folder-identity";
 import { TrailingEdge } from "../../utils/trailing-edge";
 import { Period, periodOf, type Every } from "../../utils/period";
 import {
@@ -134,16 +141,30 @@ interface PrAnswer {
 type PrMove = "-" | "kept" | "recalled" | "looked-up" | "owed" | "unkeyed";
 
 // What asked for a pass, beside the period: a watch fire, a new option set, a
-// reader of a value a pass went by without, the first PR ask or a PR key owed
-// to whoever shows it next. A pass none of these asked for is the period's.
-type PassReason = "watch" | "first" | "resume" | "pr";
+// reader of a value a pass went by without, the first PR ask, or a hold's
+// return to a PR whose key is owed. A pass none of these asked for is the
+// period's.
+type PassReason = "watch" | "first" | "resume" | "pr" | "owed";
+
+// [LAW:one-source-of-truth] A pass's trigger in the ledger's vocabulary: a
+// first value asked for (a new option set, a PR's first key) makes it a first
+// read, else a watch or a hold's return makes it a change, else its period
+// started it. Which reasons it answered stay on its event (`asked=`).
+function triggerOf(
+  asked: readonly PassReason[],
+): Extract<RefreshTrigger, "first" | "period" | "change"> {
+  if (asked.includes("first") || asked.includes("pr")) return "first";
+  return asked.length === 0 ? "period" : "change";
+}
 
 // [LAW:types-are-the-program] One repo the cache knows. The watch lives as long
-// as the state does — closing and reopening it per value leaked native memory
-// on macOS (brandon-unfiled-3248.576q; src/daemon/cache/watchers.ts). Its one
-// use is `holders`, the holds homes' reads take on it, which run the period and
-// keep it from eviction. A change on a repo nothing holds reads nothing; it
-// marks every value missed, so its next read reads at once.
+// as the state and the directories it bound do — closing and reopening it per
+// value leaked native memory on macOS (brandon-unfiled-3248.576q;
+// src/daemon/cache/watchers.ts), and a pass rebinds it only when its paths
+// name other directories. Its one use is `holders`, the holds homes' reads
+// take on it, which run the period and keep it from eviction. A change on a
+// repo nothing holds reads nothing; it marks every value missed, so its next
+// read reads at once.
 interface RepoState {
   readonly root: string;
   // [LAW:single-enforcer] The repo's one serialized refresh loop, owned by its
@@ -153,7 +174,9 @@ interface RepoState {
   // pass, so the last change always lands (brandon-unfiled-3248.xjma); an ask
   // (a period tick) shares the pass in flight, which already answers it.
   readonly refresh: TrailingEdge;
-  readonly watcher: WatcherHandle;
+  // The watch the registry holds for the repo, under the key `watchSpec`
+  // derived when it was bound.
+  watch: HeldWatch;
   readonly period: Period;
   readonly values: Map<string, GitValue>;
   holders: number;
@@ -176,7 +199,6 @@ export interface GitCacheStats {
   hits: number;
   misses: number;
   changes: number;
-  refreshes: number;
   watchers: number;
 }
 
@@ -204,20 +226,57 @@ function optionsKey(options: GitOptions): string {
 // renaming a `.lock` file over them, and a watch on the file follows the inode
 // git just unlinked — it fires once and never again (measured, macOS).
 //
-// `refs/heads/` only exists in the main repo's gitDir, not under a worktree's
-// metadata dir, so it is watched only where it is real — the `gitDir` watch on
-// HEAD/index still covers branch and index changes in the worktree case.
-function watcherTargets(gitDir: string): WatchTargets {
-  const dirs: DirTarget[] = [{ path: gitDir, filenames: ["HEAD", "index"] }];
-  const refsHeads = path.join(gitDir, "refs/heads");
-  try {
-    if (fs.statSync(refsHeads).isDirectory()) {
-      dirs.push({ path: refsHeads });
-    }
-  } catch {
-    // ENOENT (worktree case) or other fs error — skip the dir target.
-  }
-  return { files: [], dirs };
+// `commonDir` is the git directory the refs live in (`resolveCommonGitDir`):
+// the gitDir itself for a main checkout, the main repo's for a linked
+// worktree, whose own metadata dir holds no refs at all. The branch refs are
+// watched as a tree, because a branch name's slashes are directories
+// (`refs/heads/fix/thing`) and a watch one level deep never hears a ref move
+// below them. A ref-only move — `reset --soft`, `update-ref`, an amend with
+// nothing staged — rewrites nothing but its ref.
+//
+// The tree is `refs/heads`, not `refs`: on Linux a recursive watch is Node's
+// own walk, one inotify watch and one stat per entry and a re-read of a
+// directory on every event in it, so its cost is the tree's size. Local
+// branches are tens to hundreds; remote refs and tags are the remote's to
+// grow, and a fetch rewriting thousands of them would re-walk the directory
+// per ref. Those still reach the bar on the period.
+// [LAW:dataflow-not-control-flow] One shape for both layouts: the stat of
+// each directory names it for the key and decides nothing, and the stat
+// cannot throw. A tree that cannot be opened is a refusal the registry logs
+// and counts, and the period is what refreshes a repo whose watch is refused.
+//
+// A directory watch binds the inode at its path when it opens, not the path:
+// a git directory deleted and recreated at its path (`worktree remove` then
+// `worktree add` of the same name, `rm -rf` then a re-clone) is a new
+// directory the old watch never hears (Linux; FSEvents follows paths). So the
+// spec's key names what the watch binds — each target's path and the identity
+// of the directory there now — and the registry's `follow` rebinds on a new
+// key. Every pass derives the spec again, so a recreated repo is heard within
+// one period, and a layout change at the same path (a clone replaced by a
+// worktree) is the same case.
+//
+// `unbound`: a directory the spec names is not there, or cannot be stat'd, so
+// there is nothing to bind yet.
+interface RepoWatchSpec {
+  readonly spec: WatchSpec;
+  readonly unbound: boolean;
+}
+
+function watchSpec(
+  root: string,
+  gitDir: string,
+  commonDir: string,
+): RepoWatchSpec {
+  const dirs: DirTarget[] = [
+    { path: gitDir, filenames: ["HEAD", "index"] },
+    { path: path.join(commonDir, "refs", "heads"), recursive: true },
+  ];
+  const bounds = dirs.map((d) => boundOf(d.path));
+  const named = dirs.map((d, i) => `${d.path}@${boundKey(bounds[i]!)}`);
+  return {
+    spec: { key: `git:${root}:${named.join("|")}`, targets: { dirs } },
+    unbound: bounds.some((b) => typeof b === "string" || "unreadable" in b),
+  };
 }
 
 // [LAW:one-source-of-truth] The branch one pass read, from whichever of its
@@ -232,7 +291,7 @@ function branchOf(
 // The PR's key is not known to be the branch's now (`PrSource.missed`).
 function owe(pr: PrSource): void {
   pr.missed = true;
-  renew(pr);
+  renew(pr, "unread");
 }
 
 // [LAW:no-silent-failure] A pass that read no branch has none to key an owed
@@ -272,7 +331,8 @@ export class GitDataProvider {
   private hits = 0;
   private misses = 0;
   private changes = 0;
-  private refreshCount = 0;
+  private readonly gitRefreshes: Refreshes<"first" | "period" | "change">;
+  private readonly prRefreshes: Refreshes<"first" | "period">;
   private readonly inner: GitService;
   private readonly periodMs: number;
   private readonly maxRepos: number;
@@ -290,12 +350,24 @@ export class GitDataProvider {
       // non-daemon consumers leave the default (debug-routed, quiet
       // unless CC_CANDYBAR_DEBUG is set).
       logger?: GitProviderLogger;
+      ledger?: RefreshLedger;
     } = {},
   ) {
     this.inner = opts.inner ?? new GitService();
     this.periodMs = opts.periodMs ?? GIT_PERIOD_MS;
     this.maxRepos = opts.maxRepos ?? DEFAULT_MAX_REPOS;
     this.logger = opts.logger ?? quietLogger;
+    const ledger = opts.ledger ?? new RefreshLedger(this.logger);
+    this.gitRefreshes = ledger.declare({
+      name: "git",
+      scope: "repo",
+      refresh: ["first", "period", "change"],
+    });
+    this.prRefreshes = ledger.declare({
+      name: "pr",
+      scope: "repo",
+      refresh: ["first", "period"],
+    });
     if (opts.watchers) {
       this.watchers = opts.watchers;
       this.ownsWatchers = false;
@@ -320,7 +392,6 @@ export class GitDataProvider {
       hits: this.hits,
       misses: this.misses,
       changes: this.changes,
-      refreshes: this.refreshCount,
       watchers: this.watchers.size(),
     };
   }
@@ -458,15 +529,10 @@ export class GitDataProvider {
       this.touch(existing);
       return existing;
     }
-    const gitDir = this.inner.resolveGitDir(root);
     const state: RepoState = {
       root,
       refresh: new TrailingEdge(),
-      watcher: this.watchers.acquire(
-        `git:${root}`,
-        watcherTargets(gitDir),
-        () => this.changed(root),
-      ),
+      watch: this.followWatch(root, null).watch,
       period: new Period(() => {
         void state.refresh.share(PASS, () => this.refreshPass(state));
       }),
@@ -477,6 +543,41 @@ export class GitDataProvider {
     };
     this.repos.set(root, state);
     return state;
+  }
+
+  // [LAW:one-source-of-truth] The one derivation of a repo's watch, for the
+  // state's build and for every pass: the git directories resolved from the
+  // root as they stand now, followed by the registry's one rule. A pass calls
+  // it first, before any await, so the watch follows the repo's paths.
+  private followWatch(
+    root: string,
+    held: HeldWatch | null,
+  ): { readonly watch: HeldWatch; readonly move: WatchMove } {
+    const gitDir = this.inner.resolveGitDir(root);
+    const { spec, unbound } = watchSpec(
+      root,
+      gitDir,
+      this.inner.resolveCommonGitDir(gitDir),
+    );
+    // A directory that is gone, or cannot be stat'd this pass (a mount's
+    // transient fault), binds nothing yet. The pass that lands between a
+    // worktree's removal and its re-add (the removal fires the watch) keeps
+    // the watch it holds rather than trade it for a slot the OS refuses:
+    // FSEvents keeps a held watch on its path, and the period rebinds once the
+    // path names a directory again, whose key differs. The build holds
+    // nothing, and takes the refused slot the period refreshes.
+    if (held !== null && unbound) return { watch: held, move: "kept" };
+    const followed = this.watchers.follow(held, spec, () => this.changed(root));
+    // [LAW:nothing-unseen] A rebind is the fact that the directories moved,
+    // and which the repo hears now: a change that fires nothing is read
+    // against this line, as the config cache's bind line.
+    if (followed.move === "rebound") {
+      this.logger(
+        "info",
+        `git watch bound root=${root} dirs=${spec.targets.dirs.map((d) => d.path).join(",")} refused=${followed.watch.handle.refused.length}`,
+      );
+    }
+    return followed;
   }
 
   private changedPass(state: RepoState, reason: PassReason): void {
@@ -515,7 +616,7 @@ export class GitDataProvider {
     if (pr !== null) {
       pr.holders++;
       if (value.missed) owe(pr);
-      if (pr.missed) state.asked.add("pr");
+      if (pr.missed) state.asked.add("owed");
     }
     // A value a pass went by without is read by the next.
     value.readers++;
@@ -598,8 +699,10 @@ export class GitDataProvider {
   private async pass(state: RepoState): Promise<void> {
     if (this.repos.get(state.root) !== state) return;
     const startedAt = Date.now();
-    const by = state.asked.size === 0 ? "period" : [...state.asked].join(",");
+    const asked = [...state.asked];
     state.asked.clear();
+    const followed = this.followWatch(state.root, state.watch);
+    state.watch = followed.watch;
     const values: GitValue[] = [];
     // A value something reads, or something waits on, is read; the rest are
     // missed, read by the pass their next reader queues.
@@ -621,7 +724,6 @@ export class GitDataProvider {
     ]);
     // Dropped or closed while the read was out: nothing of it is stored.
     if (this.repos.get(state.root) !== state) return;
-    this.refreshCount++;
     const failures = new Set<string>();
     values.forEach((value, i) => {
       const outcome = outcomes[i]!;
@@ -632,11 +734,6 @@ export class GitDataProvider {
         for (const f of gitInfoFailures(outcome.value)) failures.add(f);
       }
     });
-    // [LAW:no-silent-failure] Logged once, by the refresh that failed; a read
-    // of the stored value never logs it again.
-    for (const f of failures) {
-      this.logger("warn", `git refresh failed (${state.root}): ${f}`);
-    }
     // An `absent` repo — a removed worktree, a deleted `.git` — is stored as
     // absent like any outcome. A state has one lifetime rule: kept while in
     // use, and bounded by the LRU once nothing uses it.
@@ -650,9 +747,14 @@ export class GitDataProvider {
           ? unkeyedPr(pr, failures)
           : this.movePr(state, pr, branch, remote ?? pr.remote);
     this.held(state);
-    this.logger(
-      "info",
-      `git refresh ${state.root} by=${by} values=${values.length} failed=${failures.size} pr=${prMove} took=${Date.now() - startedAt}ms`,
+    // [LAW:no-silent-failure] Logged once, by the refresh that failed, every
+    // reason it met on the one event; a read of the stored value never logs
+    // it again.
+    this.gitRefreshes.recorded(
+      `${state.root} asked=${asked.join(",") || "-"} values=${values.length} pr=${prMove} watch=${followed.move}`,
+      triggerOf(asked),
+      failures.size === 0 ? ok(null) : failed([...failures].join("; ")),
+      Date.now() - startedAt,
     );
   }
 
@@ -662,7 +764,7 @@ export class GitDataProvider {
   private prSource(state: RepoState): PrSource {
     const pr: PrSource = {
       period: new Period(() => {
-        void this.readPr(state, pr);
+        void this.readPr(state, pr, "period");
       }),
       seen: new Map(),
       holders: 0,
@@ -712,19 +814,24 @@ export class GitDataProvider {
       owe(pr);
       return "owed";
     }
-    renew(pr);
+    renew(pr, "unread");
     pr.missed = false;
-    void this.readPr(state, pr);
+    void this.readPr(state, pr, "first");
     return "looked-up";
   }
 
   // One lookup for the PR's current key; an ask for a key already being looked
   // up shares that lookup. The forge dispatch delegates to
   // inner.resolvePullRequest — this layer is the source's lifecycle only.
-  private readPr(state: RepoState, pr: PrSource): Promise<void> {
+  private readPr(
+    state: RepoState,
+    pr: PrSource,
+    by: "first" | "period",
+  ): Promise<void> {
     const key = pr.key;
     if (pr.inFlight?.key === key) return pr.inFlight.done;
     const remote = pr.remote;
+    const startedAt = Date.now();
     const lookup: Promise<Outcome<PullRequest>> =
       remote.kind === "ok"
         ? this.inner
@@ -734,12 +841,12 @@ export class GitDataProvider {
     const done = lookup.then((outcome) => {
       if (pr.inFlight?.key === key) pr.inFlight = null;
       if (this.repos.get(state.root) !== state) return;
-      if (outcome.kind === "failed") {
-        this.logger(
-          "warn",
-          `git refresh failed (${state.root}): git.pr: ${outcome.reason}`,
-        );
-      }
+      this.prRefreshes.recorded(
+        `${state.root} key=${logfmtValue(key)}`,
+        by,
+        outcome,
+        Date.now() - startedAt,
+      );
       // Kept under its own key whether or not the PR has moved on since.
       const at = Date.now();
       pr.seen.delete(key);
@@ -764,7 +871,7 @@ export class GitDataProvider {
     if (state.pr !== null) answerPending(state.pr, gone);
     this.repos.delete(state.root);
     state.refresh.clear();
-    state.watcher.release();
+    state.watch.handle.release();
     state.period.dispose();
     state.pr?.period.dispose();
   }

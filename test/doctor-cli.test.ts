@@ -9,7 +9,7 @@ import { withMark } from "../src/doctor/mark-book";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { doctorPlan, loadConfigOnce } from "../src/doctor/cli";
+import { doctorPlan, loadConfigOnce, parseDoctorArgs } from "../src/doctor/cli";
 import { doctorReportKeys, doctorReportPairs } from "../src/doctor/report";
 import { runDoctor } from "../src/doctor/checks";
 import { gatherFacts } from "../src/doctor/edge";
@@ -21,6 +21,7 @@ import { TMUX_TRUECOLOR_VAR } from "../src/doctor/checks";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import type { DaemonAnswer } from "../src/doctor/daemon-answer";
 import type { FrameSeen } from "../src/daemon/render-sightings";
+import { answerRepo } from "./helpers/repo-approval";
 
 // The daemon a healthy bar answers from: its session runs with the Claude
 // Code directory this test's command reports (CLAUDE_CONFIG_DIR, `inDir`).
@@ -339,6 +340,8 @@ describe("doctorPlan over a real config", () => {
     process.env.XDG_CONFIG_HOME = path.join(dir, "xdg");
     project = path.join(dir, "project");
     fs.mkdirSync(project);
+    // The project's config is the one the doctor reads.
+    answerRepo(project);
   });
   afterEach(() => {
     if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME;
@@ -347,6 +350,35 @@ describe("doctorPlan over a real config", () => {
   const projectConfig = (): string => path.join(project, ".cc-candybar.json5");
   const plan = (env: Record<string, string> = {}) =>
     doctorPlan(REAL, NO_HANDLER, DAEMON, inDir(env), project, () => ({ columns: 120 }));
+
+  test("a load of a config whose plugin declares sources makes, watches and sweeps no storage", async () => {
+    const plugin = path.join(project, "p");
+    const storage = path.join(plugin, "session");
+    fs.mkdirSync(storage, { recursive: true });
+    fs.writeFileSync(
+      path.join(plugin, "plugin.json5"),
+      `{ sources: { status: { scope: "session", refresh: { watch: true }, read: { file: { json: true } } } },
+         segments: { s: { template: "{{ .plugins.p.status }}" } } }`,
+    );
+    // A session's file nobody has written for 31 days.
+    const old = path.join(storage, "s.json");
+    fs.writeFileSync(old, "{}");
+    const at = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000);
+    fs.utimesSync(old, at, at);
+    fs.writeFileSync(
+      projectConfig(),
+      `{ plugins: ["./p/plugin.json5"], root: { h: ["plugins.p.s"] } }`,
+    );
+    const load = loadConfigOnce({ projectDir: project, cwd: project, configFile: null });
+    expect(load.error).toBeNull();
+    expect(Object.keys(load.config.variables)).toContain("plugins.p.status");
+    // Long enough for a sweep the load started to have unlinked it.
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(fs.existsSync(old)).toBe(true);
+    fs.rmSync(storage, { recursive: true });
+    loadConfigOnce({ projectDir: project, cwd: project, configFile: null });
+    expect(fs.existsSync(storage)).toBe(false);
+  });
 
   test("no config file anywhere: the bundled default is correct", async () => {
     expect((await plan()).stdout).toBe("✓ config\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width — 120 columns, as this command's terminal measured\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n✓ session data\n");
@@ -426,6 +458,49 @@ describe("doctorPlan over a real config", () => {
       )
         .stdout,
     ).toBe(`✗ config — helper "h" is never called\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width — 120 columns, as this command's terminal measured\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n✓ session data\n`);
+  });
+
+  // [LAW:single-enforcer] brandon-unfiled-3248.e3r: the argv gate refuses
+  // arity and an option only. An empty argument — `doctor "$CFG"` with CFG
+  // unset — passes through as the name it is; what it means is decided where
+  // `check` and the bar decide it, not at the gate. One table, so the diff of
+  // a regression names its row: reintroducing `args[0] === ""` shows the
+  // `[""]` row as usage where run is expected.
+  test("parseDoctorArgs refuses two files or an option, never an empty name", () => {
+    const USAGE = "Usage: cc-candybar doctor [config-file]\n";
+    const ARITY = `doctor: expected at most one config file\n${USAGE}`;
+    const table = [[], [""], ["a.json5"], ["a.json5", "b.json5"], ["--help"], ["a.json5", "--verbose"]];
+    expect(table.map((args) => ({ args, parsed: parseDoctorArgs(args) }))).toEqual([
+      { args: [], parsed: { kind: "run", configFile: undefined } },
+      { args: [""], parsed: { kind: "run", configFile: "" } },
+      { args: ["a.json5"], parsed: { kind: "run", configFile: "a.json5" } },
+      { args: ["a.json5", "b.json5"], parsed: { kind: "usage", message: ARITY } },
+      { args: ["--help"], parsed: { kind: "usage", message: `doctor: unknown option --help\n${USAGE}` } },
+      { args: ["a.json5", "--verbose"], parsed: { kind: "usage", message: `doctor: unknown option --verbose\n${USAGE}` } },
+    ]);
+  });
+
+  // [LAW:one-source-of-truth] brandon-unfiled-3248.e3r: `doctor "$CFG"` with
+  // CFG unset checks the bar `--config "$CFG"` renders — the hinted chain —
+  // never refusing the run. The empty name means what it means to the bar.
+  test("an empty name on the command line is no name: $CC_CANDYBAR_CONFIG is the file checked", async () => {
+    const hinted = path.join(dir, "hinted.json5");
+    fs.writeFileSync(hinted, `{ helpers: { h: "x" } }`);
+    const out = await doctorPlan(
+      REAL,
+      NO_HANDLER, DAEMON,
+      inDir({ CC_CANDYBAR_CONFIG: hinted }),
+      project, () => ({ columns: 120 }),
+      "",
+    );
+    expect(out.code).toBe(1);
+    expect(out.stdout).toMatch(/^✗ config — helper "h" is never called\n/);
+
+    // With no variable either, the empty name and no name reach the same
+    // searched chain: undefined-from-empty is undefined-from-absent.
+    const plan = (configFile: string | undefined) =>
+      doctorPlan(REAL, NO_HANDLER, DAEMON, inDir({}), project, () => ({ columns: 120 }), configFile);
+    expect(await plan("")).toEqual(await plan(undefined));
   });
 
   // brandon-effects-2gka.21e, brandon-doctor-v62x.tgp: what the recent bars

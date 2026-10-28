@@ -444,10 +444,6 @@ export interface TmuxStatusDeps {
   readonly handler: string;
   // This daemon's socket: what it writes into tmux is marked with it.
   readonly owner: string;
-  // [LAW:effects-at-boundaries] Subscribing runs after the request or click
-  // that asked for it has returned: a subscribe still draws its first frame
-  // in its caller's turn.
-  readonly defer: (run: () => void) => void;
   readonly log: (level: "info" | "warn", msg: string) => void;
 }
 
@@ -555,20 +551,22 @@ export class TmuxStatusLines {
       "info",
       `tmux-status: holding sid=${JSON.stringify(sessionId)} pane=${where.pane} socket=${JSON.stringify(where.socket)}`,
     );
-    this.deps.defer(() => {
-      if (this.held.get(sessionId) !== entry) return;
-      entry.unsubscribe = this.deps.subscribe(sessionId, {
-        lane: "tmuxStatus",
-        frame: (resp) => {
-          entry.frame = tmuxStatusResponse(resp);
-          this.reconcile(entry.socket);
-        },
-        refused: (resp) => {
-          if (this.held.get(sessionId) === entry)
-            this.release(entry, `refused: ${resp.error}`);
-        },
-        drawing: () => this.draws(entry),
-      });
+    // [LAW:effects-at-boundaries] Subscribed in the caller's turn: a
+    // subscribe draws nothing there, since its first frame falls due on the
+    // feed's own timer (src/daemon/frame-feed.ts). A feed already open hands
+    // over its frame at once, and the reconcile that starts then runs tmux as
+    // a request's other refreshes do: started in its turn, awaited in none.
+    entry.unsubscribe = this.deps.subscribe(sessionId, {
+      lane: "tmuxStatus",
+      frame: (resp) => {
+        entry.frame = tmuxStatusResponse(resp);
+        this.reconcile(entry.socket);
+      },
+      refused: (resp) => {
+        if (this.held.get(sessionId) === entry)
+          this.release(entry, `refused: ${resp.error}`);
+      },
+      drawing: () => this.draws(entry),
     });
   }
 
@@ -633,8 +631,10 @@ export class TmuxStatusLines {
   // (segments, as the binding's URL carries them): the link the frame the
   // daemon drew there marks it with.
   linkAt(value: string): StatusClick {
-    const [socket, pane, range, ...extra] = decodeSegments(value);
+    const segments = segmentsOf(value);
+    const [socket, pane, range, ...extra] = segments ?? [];
     if (
+      segments === null ||
       socket === undefined ||
       pane === undefined ||
       range === undefined ||
@@ -1076,5 +1076,16 @@ export class TmuxStatusLines {
       socket,
       this.deps.edge.runSync(socket, chain(commands), stdin),
     );
+  }
+}
+
+// A status-line click's segments, or null when one is not percent-encoded:
+// a value it cannot read is refused like any other it cannot use.
+function segmentsOf(value: string): string[] | null {
+  try {
+    return decodeSegments(value);
+  } catch (err) {
+    if (err instanceof URIError) return null;
+    throw err;
   }
 }

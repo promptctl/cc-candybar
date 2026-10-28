@@ -10,22 +10,21 @@
 // override of a bundled variable is used by the bundled segment that reads it).
 //
 // [LAW:single-enforcer] Every reference is found by the folds the loader's own
-// cross-reference check runs (src/config/loader/refs.ts), so "is it used" and
-// "does it resolve" read a template the same way, helpers included.
+// checks run (src/config/loader/refs.ts, value-reads.ts), so "is it used" and
+// "does it resolve" read a template the same way, helpers included, and a read
+// lands on the declarations the draw's does.
 
 import {
-  hasCacheField,
+  variableTemplates,
   walkNodes,
   type DslConfig,
   type RawDslConfig,
   type VariableDecl,
 } from "./dsl-types.js";
 import { isReservedName } from "./loader/reserved-namespace.js";
-import {
-  templateActionRefs,
-  templateHelperRefs,
-  templateReads,
-} from "./loader/refs.js";
+import { templateActionRefs, templateHelperRefs } from "./loader/refs.js";
+import { valueReadsOf } from "./loader/value-reads.js";
+import { actionTemplates } from "./action.js";
 import { presetGlobals, presetNames, presetRoot } from "./presets.js";
 import { EXPRESSION_SLOTS, isExpression } from "../themes/policy.js";
 
@@ -70,43 +69,33 @@ function* templatesOf(config: DslConfig): IterableIterator<string> {
     }
   }
   for (const [, v] of variablesOf(config)) {
-    if (v.kind === "template") yield v.template;
-    if (hasCacheField(v) && "key" in v.cache) yield v.cache.key;
+    for (const [, t] of variableTemplates(v)) yield t;
   }
   for (const a of Object.values(config.actions)) {
-    if ("copy" in a) yield a.copy;
-    if ("open" in a) yield a.open;
-    if ("preset" in a && a.preset === "delete") yield a.name;
+    for (const [, source] of actionTemplates(a)) yield source;
   }
-}
-
-// A read uses a variable when one names the other's dotted prefix: `.git`
-// reads every `git.*`, and `.budget.spent` reads the document `budget`.
-function readsVariable(read: string, name: string): boolean {
-  return (
-    read === name || name.startsWith(`${read}.`) || read.startsWith(`${name}.`)
-  );
 }
 
 export function unusedDeclarations(
   raw: RawDslConfig,
   config: DslConfig,
 ): readonly UnusedDecl[] {
-  const reads = new Set<string>();
+  const fold = valueReadsOf(config);
+  const read = new Set<string>();
   const bound = new Set<string>();
   const calledHelpers = new Set<string>();
   for (const template of templatesOf(config)) {
-    for (const ref of templateReads(template, config.helpers).keys())
-      reads.add(ref);
+    for (const { reaches } of fold.ofTemplate(template))
+      for (const name of reaches) read.add(name);
     for (const { name } of templateActionRefs(template, config.helpers))
       bound.add(name);
     for (const name of templateHelperRefs(template, config.helpers))
       calledHelpers.add(name);
   }
+  // A variable reads through its cache policy too (value-reads.ts).
   for (const [, v] of variablesOf(config)) {
-    if (hasCacheField(v) && "depends_on" in v.cache) {
-      for (const dep of v.cache.depends_on) reads.add(dep);
-    }
+    for (const { reaches } of fold.ofVariable(v))
+      for (const name of reaches) read.add(name);
   }
 
   // A `do` fires its members, so binding it clicks each of them.
@@ -141,8 +130,7 @@ export function unusedDeclarations(
   }
 
   const variableUsed = (name: string, v: VariableDecl): boolean =>
-    [...reads].some((read) => readsVariable(read, name)) ||
-    (v.kind === "state" && writtenKeys.has(v.key));
+    read.has(name) || (v.kind === "state" && writtenKeys.has(v.key));
 
   // [LAW:one-source-of-truth] A name under a reserved namespace was minted by
   // a synthesis pass into the raw sections (group sugar, edit mode), never

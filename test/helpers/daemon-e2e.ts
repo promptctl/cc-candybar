@@ -24,7 +24,6 @@ import { sendDaemonRequest, waitForExit } from "./daemon-wire";
 import type { RunningDaemon } from "./spawn-isolated-daemon";
 import { linkUrls } from "./ansi";
 import { detectClaudeConfigDir } from "../../src/claude-settings";
-import { detectMementoEnv } from "../../src/memento-hint";
 import { PACKAGE_VERSION } from "../../src/version";
 import { logLines } from "../../src/daemon/log";
 import { logPath } from "../../src/daemon/paths";
@@ -127,11 +126,13 @@ export async function renderRequest(
     }
     let event = "";
     await until(
-      () =>
-        (event = answeredEvents(log, sessionId)[before] ?? "") !== "",
+      () => (event = answeredEvents(log, sessionId)[before] ?? "") !== "",
       `the render event of ${sessionId}'s answer`,
     );
     if (/ pending=-(?: |$)/.test(event)) return resp.output;
+    // A source a run superseded is drawn pending by design: no request waits
+    // on it (the run may outlast the deadline), so this answer is the one.
+    if (drewOnlySuperseded(event)) return resp.output;
     // [LAW:no-silent-failure] Only a wait its deadline ended may draw
     // pending: one that answered yet drew a value not answered means the wait
     // left out something the request started (rule 1), and asking again would
@@ -145,6 +146,22 @@ export async function renderRequest(
         `render still drew pending after ${attempt} asks: ${event}`,
       );
   }
+}
+
+// Whether every value a render event drew pending is a plugin source a run
+// superseded, as its `sourcesPending=` names them.
+function drewOnlySuperseded(event: string): boolean {
+  const field = (name: string): string[] =>
+    (new RegExp(` ${name}=(\\S+)`).exec(event)?.[1] ?? "-")
+      .split(",")
+      .filter((v) => v !== "-");
+  const superseded = new Set(
+    field("sourcesPending")
+      .filter((v) => v.endsWith(":superseded"))
+      .map((v) => v.slice(0, -":superseded".length)),
+  );
+  const pending = field("pending");
+  return pending.length > 0 && pending.every((name) => superseded.has(name));
 }
 
 // The body of a status-line render request, as Claude Code's client sends it.
@@ -166,7 +183,6 @@ export function renderBody(
     // points CLAUDE_CONFIG_DIR at an empty dir, so no test daemon reads the
     // host's Claude Code settings. A case's own hints win.
     claudeConfigDir: detectClaudeConfigDir(process.env, cwd),
-    mementoEnv: detectMementoEnv(process.env, cwd),
     ...hints,
   };
 }
@@ -219,7 +235,7 @@ export async function click(sockPath: string, url: string): Promise<void> {
 // there is no happens-after signal to await (brandon-testing-82q tracks
 // publishing one). Asserting on a single post-click render therefore encodes
 // a bet on watcher latency; re-rendering until the expected state appears
-// encodes the actual contract ("the write becomes visible"), and the timeout
+// encodes the actual contract ("the write becomes visible"), and the budget
 // makes a broken write fail with the last render in hand rather than hanging.
 export async function renderUntil(
   sockPath: string,
@@ -229,15 +245,16 @@ export async function renderUntil(
   what: string,
   timeoutMs = 5_000,
 ): Promise<string> {
-  const deadline = Date.now() + timeoutMs;
   let last = "";
-  do {
-    last = await render(sockPath, sessionId, projectDir);
-    if (accepts(last)) return last;
-  } while (Date.now() < deadline);
-  throw new Error(
-    `daemon never rendered ${what} within ${timeoutMs}ms; last render was:\n${last}`,
+  await until(
+    async () => accepts((last = await render(sockPath, sessionId, projectDir))),
+    () =>
+      last
+        ? `a render of ${what}; last render was:\n${last}`
+        : `a render of ${what}; no render answered within the budget`,
+    timeoutMs,
   );
+  return last;
 }
 
 // [LAW:single-enforcer] THE search over rendered affordances: decode each
@@ -275,7 +292,6 @@ export function urlWriting(
   }
   return url;
 }
-
 
 // Stop the daemon and wait for it to be gone.
 //

@@ -22,6 +22,8 @@ import process from "node:process";
 import { resolveUserPath } from "../utils/user-path.js";
 import { resolveEffectiveGlobals } from "../config/effective-globals.js";
 import { prepareConfig, renderEffective } from "../check.js";
+import { repoGateAt } from "../daemon/repo-configs.js";
+import { repoGateLines } from "../config/loader/repo-gate.js";
 import { listResolvablePaletteNames } from "../themes/policy.js";
 import { instantOf } from "../utils/instant.js";
 
@@ -36,8 +38,13 @@ const target = process.argv[2];
 // [LAW:effects-at-boundaries] One instant for every theme, so the rows differ
 // only in the theme they wear.
 const at = instantOf(new Date());
+const named =
+  target === undefined ? undefined : resolveUserPath(process.cwd(), target);
+const repos = repoGateAt(process.cwd());
+warnings.push(...repoGateLines(repos));
 const prepared = await prepareConfig(
-  target === undefined ? [] : [resolveUserPath(process.cwd(), target)],
+  named === undefined ? [] : [named],
+  repos.plugins,
   process.cwd(),
   warnings,
   at,

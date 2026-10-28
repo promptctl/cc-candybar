@@ -3,6 +3,7 @@
 // reads either the provider's record, the payload the daemon would send, or the
 // rendered cell — never the fold's internal state.
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { EMPTY_HISTORY_DEPTH } from "../src/daemon/settings-history";
 import {
@@ -637,6 +638,7 @@ describe("the bundled activity segment renders the payload", () => {
     );
     try {
       const compiled = registerDslConfig(narrowed, registry, {
+        signer: TEST_SIGNER,
         cwd: process.cwd(),
       });
       return plain(

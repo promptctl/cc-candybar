@@ -22,7 +22,12 @@
 // bounded settle for shell/file sources' first run, which the daemon's first
 // cold render does not (its next render shows what check showed).
 
+import { linkSignerFromKeyFile } from "./daemon/link-key.js";
+import { repoConfigs } from "./daemon/repo-configs.js";
+import { repoGateLines, type ApprovedRepo } from "./config/loader/repo-gate.js";
+import type { ConfigResolution } from "./config/loader/discovery.js";
 import fs from "node:fs";
+import type { CliPlan } from "./cli-plan.js";
 import process from "node:process";
 import {
   loadConfigChain,
@@ -32,7 +37,7 @@ import {
   ConfigError,
   type DroppedPlugin,
 } from "./config/dsl-loader.js";
-import { detectConfigEnv } from "./config-hint.js";
+import { cliConfigTarget } from "./config-hint.js";
 import { explicitConfigPath } from "./utils/user-path.js";
 import { autoCompactControls } from "./segments/autocompact.js";
 import type { ValidatedConfig } from "./config/dsl-types.js";
@@ -57,9 +62,13 @@ import { perSetting } from "./config/setting-projections.js";
 import { effectivePresetName, presetNames } from "./config/presets.js";
 import {
   effectiveInputs,
+  projectSources,
   renderOptionsOf,
   type RenderPayload,
+  type TodayPayload,
+  type ViewPayload,
 } from "./daemon/render-payload.js";
+import { ABSENT } from "./utils/outcome.js";
 import {
   resolveEffectiveGlobals,
   type EffectiveGlobals,
@@ -100,13 +109,21 @@ const SOURCE_SETTLE_MS = 5000;
 // test/example-configs.test.ts asserts rendered content against these literal
 // values (780s → "◷ 13m", cost $0.39, version 1.15.0, …); changing one here
 // fails that suite loudly rather than drifting silently.
+//
+// [LAW:types-are-the-program] Typed as the payload a view draws from, less
+// `term`, which the draw writes from its width (drawPayload): a field the
+// daemon's payload requires — every declared source's reading among them — is
+// a compile error here until the fixture carries it.
+export type CheckPayload = Omit<ViewPayload, "term">;
+
 export function checkPayload(
+  config: Pick<ValidatedConfig, "variables">,
   effective: EffectiveGlobals,
   configPath: string | null,
   // The instant the render this payload feeds is drawn at, so its reset times
   // sit where the render's own countdowns measure them from.
   at: Instant,
-): Record<string, unknown> {
+): CheckPayload {
   const home = "/home/tester";
   const nowSec = Math.floor(at);
   const sessionId = "test0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b";
@@ -149,7 +166,6 @@ export function checkPayload(
       committedAt: nowSec - 780,
     },
     session: { cost: 0.39, tokens: 241400 },
-    today: { cost: 12.5, tokens: 3_400_000 },
     context: { totalTokens: 48487, contextLeft: 24 },
     metrics: {
       lastResponseTime: 8.2,
@@ -201,13 +217,30 @@ export function checkPayload(
     // the bundled default has no file, and a stand-in keeps `↗ config` drawn.
     resumeCommand: resumeCommand(workspace, sessionId, undefined),
     configPath: configPath ?? `${home}/.config/cc-candybar/config.json5`,
+    // [LAW:one-source-of-truth] Every source the config declares reads
+    // absent, through the daemon's own projection: `check` runs no plugin
+    // program and has no session, and absent is what a session reads before
+    // its program first writes. So a segment gated on `hasKey` is hidden, and
+    // an unguarded read fails the check with the missing-field error that
+    // session's bar would draw.
+    plugins: projectSources(
+      Object.entries(config.variables).flatMap(([name, decl]) =>
+        decl.kind === "source" ? [name] : [],
+      ),
+      () => ABSENT,
+    ),
   };
 }
 
+// `today` is a fact of the draw's own instant, not of the view's payload
+// (DRAW_PROJECTIONS), so the fixture hands it to the draw beside the payload,
+// as the demo hands its draws theirs.
+export const CHECK_TODAY: TodayPayload = { cost: 12.5, tokens: 3_400_000 };
+
 // [LAW:dataflow-not-control-flow] The check result is DATA — a pure function of
 // the target file's contents — discriminated into the three outcomes the exit-
-// code contract projects. `checkConfig` carries the decision; `runCheck` only
-// maps it to (streams, exit), so the contract is testable without spawning a
+// code contract projects. `checkConfig` carries the decision; `checkCommandPlan`
+// only maps it to a plan, so the contract is testable without spawning a
 // process or stubbing process.exit.
 //
 // `layers` are the files checked, lowest first; none means the bundled
@@ -239,8 +272,10 @@ export type CheckOutcome =
 // search could not check, and that advisory is the SAME
 // notice RenderCache renders ([LAW:one-source-of-truth]): `check` reports
 // what the bar would, never a re-derivation of it.
-function searchedLayers(cwd: string, warnings: string[]): readonly string[] {
-  const resolution = resolveDslConfig(cwd, cwd);
+function searchedLayers(
+  resolution: ConfigResolution,
+  warnings: string[],
+): readonly string[] {
   const notice = configResolutionNotice(resolution);
   if (notice !== null) warnings.push(notice);
   return resolution.kind === "chain" ? resolution.layers : [];
@@ -251,7 +286,7 @@ function searchedLayers(cwd: string, warnings: string[]): readonly string[] {
 // With no target, the path resolves exactly as the daemon resolves it for a
 // client with no override (resolveDslConfig: project/cwd → XDG), so the file
 // this checks IS the file the daemon would load from this directory. The
-// CLI's own `$CC_CANDYBAR_CONFIG` enters as the target (runCheck), the way
+// CLI's own `$CC_CANDYBAR_CONFIG` enters as the target (checkCommandPlan), the way
 // the statusline client sends it as a hint — a set override always names
 // the file, so an absent one is `unreadable` here, never a clean verdict
 // about the bundled default.
@@ -265,6 +300,10 @@ function searchedLayers(cwd: string, warnings: string[]): readonly string[] {
 export async function checkConfig(
   target: string | undefined,
   cwd: string = process.cwd(),
+  // [LAW:no-ambient-temporal-coupling] The settle budget is an input of the
+  // verdict, so a caller that means to see the deadline reached names a
+  // budget of its own instead of waiting out the command's.
+  settleMs: number = SOURCE_SETTLE_MS,
 ): Promise<CheckOutcome> {
   // Advisories accumulate from the search onward, independent of load
   // success — mirror of RenderCache.reloadInto.
@@ -278,8 +317,17 @@ export async function checkConfig(
   // (`check .`) fails read() with a path-less EISDIR the catch could not
   // attribute, so the not-a-file usage error is decided here.
   const configPath = explicitConfigPath(cwd, target) ?? null;
+  // [LAW:single-enforcer] The daemon's gate, under the same answers: a
+  // repository the bar would not run, `check` names and runs nothing of.
+  const resolution = resolveDslConfig(
+    repoConfigs().read(),
+    cwd,
+    cwd,
+    configPath ?? undefined,
+  );
+  warnings.push(...repoGateLines(resolution.repos));
   const layers =
-    configPath === null ? searchedLayers(cwd, warnings) : [configPath];
+    configPath === null ? searchedLayers(resolution, warnings) : [configPath];
   if (configPath !== null) {
     // throwIfNoEntry suppresses only ENOENT (left for the content read to
     // classify); EACCES/EPERM on the probe itself is equally "could not read
@@ -310,7 +358,13 @@ export async function checkConfig(
   if (collision !== null) warnings.push(collision);
 
   try {
-    const rendered = await loadRegisterRender(layers, cwd, warnings);
+    const rendered = await loadRegisterRender(
+      layers,
+      resolution.repos.plugins,
+      cwd,
+      warnings,
+      settleMs,
+    );
     return { kind: "clean", layers, warnings, rendered };
   } catch (e) {
     // A filesystem error on the config file itself (ENOENT/EACCES from
@@ -365,11 +419,13 @@ export interface PreparedConfig {
 
 export async function prepareConfig(
   layers: readonly string[],
+  repo: ApprovedRepo | null,
   cwd: string,
   warnings: string[],
   // The instant the view's first payload is stamped at: the one its renders
   // are drawn at.
   at: Instant,
+  settleMs: number = SOURCE_SETTLE_MS,
 ): Promise<PreparedConfig> {
   // Each file's own advisories (an editability notice naming a duplicate key)
   // land before its validation, so a fatal outcome still carries them.
@@ -377,7 +433,7 @@ export async function prepareConfig(
     layers,
     DEFAULT_DSL_CONFIG,
     { entered: () => {}, warned: (w) => warnings.push(...w) },
-    { projectDir: cwd, cwd },
+    { repo, cwd },
   );
   const { config } = loaded;
 
@@ -388,7 +444,12 @@ export async function prepareConfig(
     new SessionState(),
   );
   try {
-    const compiled = registerDslConfig(config, registry, { cwd });
+    // [LAW:single-enforcer] check draws `run` links as the daemon does,
+    // signed with the one key.
+    const compiled = registerDslConfig(config, registry, {
+      cwd,
+      signer: linkSignerFromKeyFile(),
+    });
     warnings.push(...compiled.loadWarnings);
     // A view's inputs are pending until its source answers, and a source
     // whose `key` or `depends_on` reads one first runs when it answers — so
@@ -405,7 +466,10 @@ export async function prepareConfig(
       store,
       registry,
       fixedSource(
-        checkPayload(effective, layers.at(-1) ?? null, at),
+        {
+          ...checkPayload(config, effective, layers.at(-1) ?? null, at),
+          today: CHECK_TODAY,
+        },
         effective,
       ),
     );
@@ -415,10 +479,10 @@ export async function prepareConfig(
     // no default draws its loading cell until it is scanned). The registry owns
     // the "every run complete" state; a source still out at the deadline is
     // named and the render proceeds on what it holds.
-    const pending = await registry.settled(SOURCE_SETTLE_MS);
+    const pending = await registry.settled(settleMs);
     if (pending.length > 0) {
       warnings.push(
-        `source${pending.length === 1 ? "" : "s"} still running after ${SOURCE_SETTLE_MS} ms, rendered with fallback values: ${pending.join(", ")}`,
+        `source${pending.length === 1 ? "" : "s"} still running after ${settleMs} ms, rendered with fallback values: ${pending.join(", ")}`,
       );
     }
     return {
@@ -508,7 +572,10 @@ export function renderEffective(
     compiled,
     store,
     registry,
-    checkPayload(effective, layers.at(-1) ?? null, at),
+    {
+      ...checkPayload(config, effective, layers.at(-1) ?? null, at),
+      today: CHECK_TODAY,
+    },
     at,
     renderOptionsOf(effective, width),
     {
@@ -525,13 +592,22 @@ export function renderEffective(
 // error a failure. Returns the line a fresh session renders.
 async function loadRegisterRender(
   layers: readonly string[],
+  repo: ApprovedRepo | null,
   cwd: string,
   warnings: string[],
+  settleMs: number,
 ): Promise<string> {
   // [LAW:effects-at-boundaries] One instant for every pass, so the passes
   // differ only in the preset they render.
   const at = instantOf(new Date());
-  const prepared = await prepareConfig(layers, cwd, warnings, at);
+  const prepared = await prepareConfig(
+    layers,
+    repo,
+    cwd,
+    warnings,
+    at,
+    settleMs,
+  );
   const { config } = prepared;
   try {
     // The gates the daemon derives when it loads this config, over the keys
@@ -675,15 +751,10 @@ const EXIT_FATAL = 1;
 const EXIT_USAGE = 2;
 
 // [LAW:dataflow-not-control-flow] The outcome → (streams, exit-code) mapping is
-// DATA: a total fold over CheckOutcome returning one descriptor; runCheck runs
-// the two unconditional writes + exit against it. Verdict on stdout, every
-// diagnostic (warnings included) on stderr — so `check` in a pipeline yields a
-// parseable verdict while a human still sees the advisories.
-export interface CliPlan {
-  readonly stdout: string;
-  readonly stderr: string;
-  readonly code: number;
-}
+// DATA: a total fold over CheckOutcome returning one plan (src/cli-plan.ts),
+// which the entry delivers. Verdict on stdout, every diagnostic (warnings
+// included) on stderr — so `check` in a pipeline yields a parseable verdict
+// while a human still sees the advisories.
 
 function warningLines(warnings: readonly string[]): string {
   return warnings.map((w) => `warning: ${w}\n`).join("");
@@ -695,7 +766,7 @@ function warningLines(warnings: readonly string[]): string {
 // so the bar an author reads and the bar `check` blessed cannot differ; re-rendering here
 // (at a terminal width, say) would be two clocks, and the audience this exists
 // for reads a pipe, which has no width at all. The flag adds a VALUE to one
-// stream rather than selecting a code path: runCheck's two writes are
+// stream rather than selecting a code path: the plan's two streams are
 // unconditional either way, and the arms that never rendered have no bar to
 // print because `rendered` lives on the clean arm alone
 // [LAW:types-are-the-program].
@@ -737,9 +808,8 @@ const USAGE = `Usage: cc-candybar check [${RENDER_FLAG}] [config-file]\n`;
 
 // [LAW:parse-dont-validate] argv crosses one checkpoint and becomes a request
 // the rest of the command reads by field; nothing inland re-reads `args`.
-// `runCheck` used to inspect them inline and write+exit from the middle of
-// itself, which put the usage contract out of reach of everything but a
-// spawned process — the same reason `checkPlan` is a value: a misspelled
+// Inspecting them inline and exiting from the middle of the command would
+// put the usage contract out of reach of everything but a spawned process — the same reason `checkPlan` is a value: a misspelled
 // option is now observable exactly like every other outcome.
 type CheckArgs =
   | {
@@ -762,14 +832,14 @@ function parseCheckArgs(args: readonly string[]): CheckArgs {
       message: `check: unknown option ${unknown.join(" ")}\n${USAGE}`,
     };
   }
-  // An empty string is not "no argument": `target: undefined` means "resolve
-  // like the daemon", while `""` is a malformed target (the likeliest cause is
-  // an unquoted or mis-expanded shell variable) that would otherwise EISDIR on
-  // the cwd.
-  if (paths.length > 1 || paths[0] === "") {
+  // [LAW:single-enforcer] Arity only. What the path means — including that an
+  // empty one, a statusline's `--config "$CFG"` with CFG unset, resolves like
+  // no argument — is `cliConfigTarget`'s to say in `checkCommandPlan`, the one
+  // reading `doctor` runs under and the bar renders under.
+  if (paths.length > 1) {
     return {
       kind: "usage",
-      message: `check: expected at most one non-empty path\n${USAGE}`,
+      message: `check: expected at most one path\n${USAGE}`,
     };
   }
   return {
@@ -782,18 +852,21 @@ function parseCheckArgs(args: readonly string[]): CheckArgs {
 // `cc-candybar check [--render] [path]` — the argv binding, and the one place
 // the command touches the process: two unconditional writes and the exit code
 // its plan carries.
-export async function runCheck(args: readonly string[]): Promise<never> {
+export async function checkCommandPlan(
+  args: readonly string[],
+): Promise<CliPlan> {
   const parsed = parseCheckArgs(args);
-  const plan: CliPlan =
-    parsed.kind === "usage"
-      ? { stdout: "", stderr: parsed.message, code: EXIT_USAGE }
-      : checkPlan(
-          await checkConfig(
-            parsed.target ?? detectConfigEnv(process.env, process.cwd()),
-          ),
-          parsed.render,
-        );
-  process.stdout.write(plan.stdout);
-  process.stderr.write(plan.stderr);
-  process.exit(plan.code);
+  const cwd = process.cwd();
+  return parsed.kind === "usage"
+    ? { stdout: "", stderr: parsed.message, code: EXIT_USAGE }
+    : checkPlan(
+        // [LAW:one-source-of-truth] The target the doctor would check under
+        // the same argument, already absolute — `checkConfig`'s own
+        // resolution, the seam for its direct callers, passes it through.
+        await checkConfig(
+          cliConfigTarget(parsed.target, process.env, cwd),
+          cwd,
+        ),
+        parsed.render,
+      );
 }

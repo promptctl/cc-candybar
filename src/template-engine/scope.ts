@@ -29,8 +29,11 @@ function makeProxy(
     has(_, key: string | symbol): boolean {
       if (typeof key !== "string") return false;
       const fullKey = prefix ? `${prefix}.${key}` : key;
-      // Leaf: exact variable.
-      if (names.has(fullKey)) return true;
+      // Leaf: exact variable — but an absent document is a missing field,
+      // so `hasKey` reads false until its source has something to say, and
+      // an unguarded read is the engine's MissingFieldError. The read is
+      // tracked, so a gate re-runs when the document arrives.
+      if (names.has(fullKey)) return !absentDocument(store, fullKey);
       // Interior: a namespace prefix for at least one stored variable.
       const nsPrefix = `${fullKey}.`;
       for (const n of names) {
@@ -46,9 +49,10 @@ function makeProxy(
       // Leaf: exact variable in the store. A document leaf hands the engine
       // the document itself — its fields are the rest of the chain.
       if (names.has(fullKey)) {
-        return store.getKind(fullKey) === "document"
-          ? unwrapDocument(fullKey, store.readDocument(fullKey))
-          : store.read(fullKey);
+        if (store.getKind(fullKey) !== "document") return store.read(fullKey);
+        const doc = store.readDocument(fullKey);
+        // Absent reads as no such key, as `has` answers.
+        return doc.kind === "absent" ? undefined : unwrapDocument(fullKey, doc);
       }
 
       // Interior: a namespace prefix for at least one stored variable.
@@ -80,13 +84,27 @@ export function placementScope(scope: object, settings: object): object {
   });
 }
 
-// [LAW:no-silent-failure] THE place a document's non-value states become a
-// throw naming the variable: one not scanned yet throws the pending signal, which
-// every place a template is evaluated draws as not answered yet; one with
-// nothing to read (blank text, no default) or whose scan failed throws its
-// reason, which the segment reading it renders as its ⚠ cell (and `cc-candybar
-// check` fails on). A document never reads as an empty value.
-function unwrapDocument(name: string, doc: Reading<JsonValue>): JsonValue {
+// [LAW:one-source-of-truth] Absent is a missing field, for every document:
+// one with nothing to read (no file yet, blank text, no default) is no key at
+// all, so a template gates on it with `hasKey` and an unguarded read is the
+// missing-field error, as for any field the payload lacks.
+function absentDocument(store: VariableStore, name: string): boolean {
+  return (
+    store.getKind(name) === "document" &&
+    store.readDocument(name).kind === "absent"
+  );
+}
+
+// [LAW:no-silent-failure] THE place a document's other non-value states become
+// a throw naming the variable: one not scanned yet throws the pending signal,
+// which every place a template is evaluated draws as not answered yet; one
+// whose scan failed throws its reason, which the segment reading it renders as
+// its ⚠ cell (and `cc-candybar check` fails on). A document never reads as an
+// empty value.
+function unwrapDocument(
+  name: string,
+  doc: Exclude<Reading<JsonValue>, { kind: "absent" }>,
+): JsonValue {
   switch (doc.kind) {
     case "ok":
       return doc.value;
@@ -95,8 +113,6 @@ function unwrapDocument(name: string, doc: Reading<JsonValue>): JsonValue {
         name,
         `variable "${name}" has no value yet: its source has not completed a scan`,
       );
-    case "absent":
-      throw new Error(`variable "${name}": no document, and no default`);
     case "failed":
       throw new Error(`variable "${name}": ${doc.reason}`);
   }

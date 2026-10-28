@@ -3,6 +3,7 @@
 // the pure readers the production edge folds tmux's and ps's answers with
 // (src/daemon/lane-edge.ts).
 
+import { sessionEnv } from "../src/daemon/session-env";
 import fs from "node:fs";
 import { spawnSync } from "node:child_process";
 import os from "node:os";
@@ -27,7 +28,6 @@ import {
 } from "../src/daemon/claude-relaunch";
 import { attachCommandLine } from "../src/attach-launcher";
 import {
-  claudeEnv,
   refusalOf,
   runsAttached,
   taggedBarPanes,
@@ -90,8 +90,8 @@ function fakeEdge(over: Partial<LaneEdge> = {}): { edge: LaneEdge; did: string[]
       return "%9";
     },
     closePane: (_hint, pane) => void did.push(`close ${pane}`),
-    claude: async (args, dir) =>
-      void did.push(`claude ${args.join(" ")} [${dir ?? "-"}]`),
+    claude: async (args, session) =>
+      void did.push(`claude ${args.join(" ")} [${session.claudeConfigDir ?? "-"}]`),
     fileExists: () => true,
     presence: () => "present",
     paneClaude: async () => claude,
@@ -321,7 +321,6 @@ describe("lane B, statusline", () => {
           "CC_CANDYBAR_CONFIG=/u/lab.json5",
           "ANTHROPIC_API_KEY=sk-secret",
           "CLAUDE_CODE_OAUTH_TOKEN=oauth-secret",
-          "MEMENTO_CONFIG_HOME=/u/m",
           "CLAUDECODE=1",
         ],
       }),
@@ -329,7 +328,7 @@ describe("lane B, statusline", () => {
     await finished(LANE_SETUP.statusline.on(session(), HOST, edge));
     expect(did.join("\n")).not.toContain("secret");
     expect(did).toContain(
-      `shell cd /work && CLAUDE_CONFIG_DIR='/u/.claude zai' CC_CANDYBAR_CONFIG=/u/lab.json5 MEMENTO_CONFIG_HOME=/u/m BUN_OPTIONS='--preload /opt/candybar/dist/attach-preload.cjs' claude --worktree feat/tree --dangerously-skip-permissions --resume ${SID}`,
+      `shell cd /work && CLAUDE_CONFIG_DIR='/u/.claude zai' CC_CANDYBAR_CONFIG=/u/lab.json5 BUN_OPTIONS='--preload /opt/candybar/dist/attach-preload.cjs' claude --worktree feat/tree --dangerously-skip-permissions --resume ${SID}`,
     );
   });
 
@@ -787,15 +786,16 @@ describe("the production edge's readers", () => {
   });
 
   test("the claude CLI runs under the session's directory, never the daemon's", () => {
-    const was = process.env.CLAUDE_CONFIG_DIR;
-    process.env.CLAUDE_CONFIG_DIR = "/daemon/spawner/.claude";
-    try {
-      expect(claudeEnv(undefined).CLAUDE_CONFIG_DIR).toBeUndefined();
-      expect(claudeEnv("/u/.claude.zai").CLAUDE_CONFIG_DIR).toBe("/u/.claude.zai");
-    } finally {
-      if (was === undefined) delete process.env.CLAUDE_CONFIG_DIR;
-      else process.env.CLAUDE_CONFIG_DIR = was;
-    }
+    // The session's process environment (src/daemon/session-env.ts) the
+    // edge's `claude` spawns with.
+    const daemon = { CLAUDE_CONFIG_DIR: "/daemon/spawner/.claude", PATH: "/usr/bin" };
+    const facts = { sessionId: "s1", projectDir: "/p" };
+    expect(
+      sessionEnv(daemon, { ...facts, claudeConfigDir: undefined }).CLAUDE_CONFIG_DIR,
+    ).toBeUndefined();
+    expect(
+      sessionEnv(daemon, { ...facts, claudeConfigDir: "/u/.claude.zai" }).CLAUDE_CONFIG_DIR,
+    ).toBe("/u/.claude.zai");
   });
 });
 

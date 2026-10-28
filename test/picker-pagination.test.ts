@@ -10,6 +10,7 @@
 // the nav glyphs visible), never the internal pagination shape — driven through
 // the real spine (registerDslConfig + renderDsl) and the real strip serializer.
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import { getThemePalette, RichText } from "@promptctl/rich-js";
 import { Style } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -23,6 +24,7 @@ import { listResolvablePaletteNames } from "../src/themes/policy";
 import { stripAnsi } from "./helpers/ansi";
 import { swatch } from "../src/render/swatch";
 import { instantOf } from "../src/utils/instant";
+import { menuPageKey } from "../src/config/menu-keys";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const THEMES = listResolvablePaletteNames();
@@ -51,7 +53,7 @@ function pickerConfig(): string {
     globals: {},
     variables: {
       'session.id': { kind: 'input', path: 'session_id', default: '' },
-      theme: { kind: 'state', key: 'theme-pick', default: '${THEMES[0]}' },
+      themePick: { kind: 'state', key: 'theme-pick', default: '${THEMES[0]}' },
       page: { kind: 'state', key: 'theme-page', default: '-1' },
       'term.cols': { kind: 'input', path: 'term.cols', type: 'number', default: 80 },
     },
@@ -82,7 +84,7 @@ function buildRuntime(
   const sessionState = new SessionState();
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
+  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   const basePalette = getThemePalette("textual-dark"!);
   const renderPage = (width: number, page: number, wrap = true): string => {
     sessionState.set("s1", "theme-page", String(page));
@@ -275,8 +277,8 @@ describe("brandon-menus-bn5.3 I2 — {{ menu }} DROP body fits within term.cols"
   const ENDCAPS_OPEN = "menus.endcapsMenu.applyEndcaps";
   // The synthesized page cursors: derived from identity (menuPageKey), one per
   // disclosure state key.
-  const THEME_PAGE = `${THEME_OPEN}.page`;
-  const STYLE_PAGE = `${ENDCAPS_OPEN}.page`;
+  const THEME_PAGE = menuPageKey(THEME_OPEN);
+  const STYLE_PAGE = menuPageKey(ENDCAPS_OPEN);
 
   function buildMenuRuntime(
     style: Endcaps,
@@ -286,7 +288,7 @@ describe("brandon-menus-bn5.3 I2 — {{ menu }} DROP body fits within term.cols"
     const sessionState = new SessionState();
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "", sessionState);
-    const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
+    const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     const basePalette = getThemePalette("textual-dark"!);
     // openStyle: also open the style menu (its own page cursor) so BOTH bodies
     // drop in one render — the multiple-open-menus-in-one-row case.

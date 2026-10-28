@@ -21,7 +21,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { rangeSpans, uncommented } from "./protocol-source.js";
+import * as reads from "./protocol-source.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, "..");
@@ -34,83 +34,24 @@ function read(relPath) {
   return sources.get(relPath);
 }
 
-// The source less its comment lines, for an anchor that must match what the
-// runtime runs, never a commented-out copy. Raw `read` stays for the rows
-// whose region delimiters are comments (`// --- client hints`).
-function code(relPath) {
-  return uncommented(read(relPath));
-}
-
 // --- extractors -----------------------------------------------------------
-// Each extractor returns the canonical string for one side, or null when the
-// anchor is missing. [LAW:no-silent-failure] null is a loud failure below —
-// a vanished anchor means the mirror became unverifiable, which is the same
-// defect as a drift.
-
-// Integer constant, allowing a product expression like `16 * 1024 * 1024`.
-function num(relPath, regex) {
-  return () => {
-    const m = read(relPath).match(regex);
-    if (!m) return null;
-    // Strip digit-group separators (`3_000`) so both runtimes' idiomatic
-    // spellings compare by value, not by punctuation.
-    const factors = m[1].split("*").map((s) => s.trim().replace(/_/g, ""));
-    if (!factors.every((f) => /^\d+$/.test(f))) return null;
-    return String(factors.reduce((acc, f) => acc * Number(f), 1));
-  };
-}
-
-// String-literal constant. Decodes \xNN, \uNNNN (TS) and \u{...} (Rust)
-// escapes so the comparison is on the actual bytes, not the spelling.
-function lit(relPath, regex) {
-  return () => {
-    const m = read(relPath).match(regex);
-    if (!m) return null;
-    const decoded = m[1]
-      .replace(/\\x([0-9a-fA-F]{2})/g, (_, h) =>
-        String.fromCodePoint(parseInt(h, 16)),
-      )
-      .replace(/\\u\{([0-9a-fA-F]+)\}/g, (_, h) =>
-        String.fromCodePoint(parseInt(h, 16)),
-      )
-      .replace(/\\u([0-9a-fA-F]{4})/g, (_, h) =>
-        String.fromCodePoint(parseInt(h, 16)),
-      );
-    return JSON.stringify(decoded);
-  };
-}
-
-// Set of string members: collect every capture of a global regex within the
-// slice matched by blockRegex, canonicalized as a sorted joined list. A member
-// is its capture groups joined by a fixed separator, so a multi-group regex
-// compares values, never the formatting between them.
-function memberSet(relPath, blockRegex, memberRegex) {
-  return () => {
-    const block = read(relPath).match(blockRegex);
-    if (!block) return null;
-    const members = [...block[0].matchAll(memberRegex)].map((m) =>
-      m.slice(1).join("="),
-    );
-    if (members.length === 0) return null;
-    return [...new Set(members)].sort().join(", ");
-  };
-}
-
-// Set of code points in the range table blockRegex's group 1 captures; see
-// rangeSpans for how a table reads.
-function codeRanges(relPath, blockRegex) {
-  return () => {
-    const block = code(relPath).match(blockRegex);
-    return block ? rangeSpans(block[1]) : null;
-  };
-}
-
-// Structural marker: every pattern must appear in code; the canonical value is
-// the shared description, so both sides agree iff both still use the primitive.
-function markers(relPath, patterns, description) {
-  return () =>
-    patterns.every((p) => p.test(code(relPath))) ? description : null;
-}
+// An extractor is a reader from protocol-source.js bound to one file: it
+// returns the canonical string for one side, or null when the anchor is
+// missing. [LAW:no-silent-failure] null is a loud failure below — a vanished
+// anchor means the mirror became unverifiable, which is the same defect as a
+// drift. Every reader sees the source less its comment lines, so a block an
+// extractor slices is delimited by code (a declaration, a function), never by
+// a comment.
+const inFile =
+  (reader) =>
+  (relPath, ...anchors) =>
+  () =>
+    reader(read(relPath), ...anchors);
+const num = inFile(reads.num);
+const lit = inFile(reads.lit);
+const memberSet = inFile(reads.memberSet);
+const codeRanges = inFile(reads.codeRanges);
+const markers = inFile(reads.markers);
 
 // --- the mirrored set -----------------------------------------------------
 
@@ -119,7 +60,6 @@ const TS_CLIENT_HINTS = "src/client-hints.ts";
 const TS_CLI_FLAGS = "src/cli-flags.ts";
 const TS_TMUX_HINT = "src/tmux-hint.ts";
 const TS_CONFIG_HINT = "src/config-hint.ts";
-const TS_MEMENTO_HINT = "src/memento-hint.ts";
 const TS_TERMINAL_HINT = "src/terminal-hint.ts";
 const TS_CLIENT_HINT = "src/client-hint.ts";
 const TS_CLAUDE_SETTINGS = "src/claude-settings.ts";
@@ -162,38 +102,59 @@ function nativeNamesNodeLacks() {
     /export const DEBUG_WHATS = \[[^\]]+\]/,
     /"([a-z]+)"/g,
   )();
-  if (native === null || node === null || debug === null) return null;
-  const nodeNames = new Set([...node.split(", "), ...debug.split(", ")]);
-  return native
-    .split(", ")
-    .filter((n) => !nodeNames.has(n))
-    .join(", ");
+  return reads.without(native, node, debug);
 }
 
+// A code is any upper-case literal in the block, on either side. A narrower
+// form (`| "CODE"` lines, `"CODE" =>` arms) reads nothing from a layout it
+// did not foresee — a one-line union, an or-pattern arm — and a code that
+// vanishes from both sides passes silently. [LAW:no-silent-failure] A literal
+// that is not a code, in a trailing comment or a label, fails this row
+// loudly and by name instead.
 const errorCodes = memberSet(
   TS_PROTOCOL,
   /export type ErrorCode =[^;]+;/,
   /"([A-Z_]+)"/g,
 );
+// The four decisions, from the first to the close of the last: the two that
+// decide by a code today, and the two beside them, so a code a decision comes
+// to spell is read wherever among them it lands.
 const followerCodes = memberSet(
   RS_FOLLOW,
-  /\/\/ --- the four decisions[\s\S]+?\/\/ --- the follower/,
+  /^fn classify\([\s\S]+?^fn next_retry_ms\([\s\S]+?^\}/m,
   /"([A-Z_]+)"/g,
 );
+
+const clientHintKeys = memberSet(
+  TS_PROTOCOL,
+  /export interface ClientHints \{[\s\S]+?\n\}/,
+  /readonly (\w+)\?:/g,
+);
+
+// The wire keys the native client sets on a render request: those in the
+// request literal and after it, then the hints client_hints sets by a call
+// that names no key. Read as one set, so a hint RenderRequest no longer
+// spells, or a key the client stops sending, is drift here either way.
+const rustHintKeys = memberSet(
+  RS_MAIN,
+  /^fn client_hints\([\s\S]+?^\}/m,
+  /request\["(\w+)"\]/g,
+);
+function renderRequestRustKeys() {
+  const own = memberSet(
+    RS_MAIN,
+    /let mut request = serde_json::json!\(\{[\s\S]+?let body = match serde_json::to_vec\(&request\)/,
+    /(?:^ +"|request\[")(\w+)"(?::|\])/gm,
+  )();
+  return reads.union(own, rustHintKeys());
+}
 
 // The error codes the native follower decides by, less any the daemon's
 // ErrorCode does not name. Compared against the follower's own list, so the
 // row agrees exactly when every code it spells is one the daemon sends: a
 // renamed code would otherwise fall through to its `exit` arm.
 function followerCodesTheDaemonSends() {
-  const follower = followerCodes();
-  const daemon = errorCodes();
-  if (follower === null || daemon === null) return null;
-  const sent = new Set(daemon.split(", "));
-  return follower
-    .split(", ")
-    .filter((c) => sent.has(c))
-    .join(", ");
+  return reads.within(followerCodes(), errorCodes());
 }
 
 // [LAW:one-source-of-truth] A row's mirror is the Rust client (`rust`) or
@@ -305,33 +266,21 @@ const CHECKS = [
   // absent-field default on the ONLY client path that actually ships.
   {
     label: "client-hint wire keys",
-    ts: memberSet(
-      TS_PROTOCOL,
-      /export interface ClientHints \{[\s\S]+?\n\}/,
-      /readonly (\w+)\?:/g,
-    ),
-    rust: memberSet(
-      RS_MAIN,
-      /--- client hints[\s\S]+?--- end client hints ---/,
-      /request\["(\w+)"\]/g,
-    ),
+    ts: clientHintKeys,
+    rust: rustHintKeys,
   },
-  // The render request's own wire keys, the ones above its hints. A key the
-  // native client stops sending degrades the same silent way: a `deadline`
-  // spelled differently reads as a client too old to state one, and every
-  // answer waits by the guessed budget instead of its client's.
+  // Every wire key of the render request, hints included. A key the native
+  // client stops sending degrades the same silent way: a `deadline` spelled
+  // differently reads as a client too old to state one, and every answer
+  // waits by the guessed budget instead of its client's.
   {
     label: "render request wire keys",
     ts: memberSet(
       TS_PROTOCOL,
-      /export interface RenderRequest \{[\s\S]+?\/\/ ─── Client hints/,
+      /export interface RenderRequest \{[\s\S]+?\n\}/,
       /^ {2}(\w+)\??:/gm,
     ),
-    rust: memberSet(
-      RS_MAIN,
-      /let mut request = serde_json::json!\(\{[\s\S]+?--- client hints/,
-      /(?:^ +"|request\[")(\w+)"(?::|\])/gm,
-    ),
+    rust: renderRequestRustKeys,
   },
   // What the native client says it is: the field names of the `client` hint.
   // A renamed field would make every native render read as "unreported" to
@@ -413,23 +362,6 @@ const CHECKS = [
     rust: memberSet(
       RS_MAIN,
       /const CLAUDE_CONFIG_DIR_ENV: &str = "[A-Z_]+";/,
-      /"([A-Z_]+)"/g,
-    ),
-  },
-  // Which env vars move memento's config home. Same drift hazard: a variable
-  // one runtime stops reporting would not fail — the daemon would drop it from
-  // memento's spawn, and the session's ceiling would read another directory's
-  // layers under whichever client rendered last.
-  {
-    label: "memento env vocabulary",
-    ts: memberSet(
-      TS_MEMENTO_HINT,
-      /export const MEMENTO_ENV_VARS = \[[\s\S]+?\] as const;/,
-      /"([A-Z_]+)"/g,
-    ),
-    rust: memberSet(
-      RS_MAIN,
-      /const MEMENTO_ENV_VARS: \[&str; \d+\] = \[[\s\S]+?\];/,
       /"([A-Z_]+)"/g,
     ),
   },

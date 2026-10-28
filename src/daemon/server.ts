@@ -1,4 +1,6 @@
 import fs from "node:fs";
+import { linkSignerFromKeyFile } from "./link-key.js";
+import { Runs } from "./runs.js";
 import net from "node:net";
 import v8 from "node:v8";
 import process from "node:process";
@@ -57,6 +59,7 @@ import {
   sanitizeClientVersion,
 } from "./protocol";
 import type {
+  ClickRequest,
   ClientHints,
   RefusedArg,
   RenderRequest,
@@ -64,16 +67,21 @@ import type {
   Response,
   SubscribeRequest,
 } from "./protocol";
+import { parseSessionId, type SessionId } from "./session-id";
 import { createPayloadProviders } from "./payload-providers";
+import { RefreshLedger } from "../utils/refresh-ledger";
+import { repoQuestions } from "./repo-configs";
 import {
+  configLoadedLine,
   RenderCache,
   renderCacheBudget,
   type CacheEntry,
   type DslRenderState,
+  type SessionHold,
   type SessionView,
 } from "./cache/render";
 import { WatcherRegistry } from "./cache/watchers";
-import { RuntimeStats } from "./stats";
+import { RuntimeStats, type SourceSnapshots } from "./stats";
 import {
   makeLimits,
   mb,
@@ -90,6 +98,7 @@ import { NavigationHistory } from "./navigation-history";
 import { stateGate } from "./verbs/state-validators";
 import {
   VERBS,
+  clickLaunch,
   clickSessionOf,
   closeIdleMenus,
   BadVerbArgs,
@@ -114,7 +123,8 @@ import {
   type RateLimitsSeen,
 } from "./render-sightings";
 import { claudeConfigDir } from "../claude-settings";
-import { launchSync, setLaunchStats } from "../proc/launch";
+import { launch, setLaunchStats } from "../proc/launch";
+import { decodeWire } from "./verb-error";
 import { buildDebugSnapshot } from "./debug";
 import { DEBUG_WHATS, isDebugWhat } from "./debug-types";
 import { drawDsl, type RenderWarning } from "../dsl/render.js";
@@ -132,7 +142,10 @@ import {
   renderWidth,
   gitOptionsFromClosure,
   prFactOf,
+  sourcesFactOf,
   settlePayload,
+  refreshedFact,
+  type Refreshed,
   todayOf,
   type PayloadInputs,
 } from "./render-payload.js";
@@ -203,10 +216,10 @@ import {
 import { waitWithin } from "../utils/reading.js";
 import {
   noteFacts,
-  renderEvent,
-  type RenderFacts,
-  type RenderOutcome,
-} from "./render-event.js";
+  requestEvent,
+  type RequestFacts,
+  type RequestOutcome,
+} from "./request-event.js";
 
 // [LAW:one-source-of-truth] one cache instance per daemon process — multiple
 // instances would defeat the share-across-sessions invariant.
@@ -237,20 +250,20 @@ const watcherRegistry = new WatcherRegistry({
 // render in this daemon, built by the one constructor every renderer uses
 // (payload-providers.ts). The render cache owns DSL-state-per-config; these
 // serve the augmented payload that flows through every render.
-// [LAW:single-enforcer] `mementoProvider` is the one owner of memento's
-// ceiling: the payload reads through it and the ceiling verb moves through it,
-// so a click drops the very reading it made stale.
+// [LAW:single-enforcer] The daemon's one record of every source's refreshes:
+// the providers', and each config's user sources (the render cache's).
+const refreshLedger = new RefreshLedger(dlog);
 const payloadProviders = createPayloadProviders({
   watchers: watcherRegistry,
   logger: dlog,
+  ledger: refreshLedger,
 });
 const {
   gitProvider: gitService,
   usageStore,
   tmuxService,
-  mementoProvider,
-  autoCompact,
-  cacheExpiry,
+  hostService,
+  managedStorage,
 } = payloadProviders;
 // [LAW:locality-or-seam] Constructed ephemeral so importing this module (CLI
 // relay, subcommands) does no disk I/O. The daemon binds the file-backed
@@ -273,6 +286,19 @@ const menuIdle = new MenuIdle({
       "error",
       `menu-idle: close failed (session=${sessionId}): ${inspect(error)}`,
     ),
+});
+// [LAW:single-enforcer] The one signer of every `run` link this daemon draws
+// and the one that verifies them on the click, over the state directory's key.
+const linkSigner = linkSignerFromKeyFile();
+// [LAW:no-ambient-temporal-coupling] The one owner of every `run` program in
+// flight (src/daemon/runs.ts), closed with the daemon.
+const runs = new Runs({
+  supersede: (storage, sessionId) =>
+    managedStorage.supersede(storage, sessionId),
+  launch,
+  state: sessionState,
+  log: dlog,
+  now: () => instantOf(new Date()),
 });
 // How this daemon's node runs its bundle: what a bar pane runs, and what a
 // click in a tmux status line runs to hand the click back.
@@ -319,24 +345,23 @@ const tmuxStatusLines: TmuxStatusLines = new TmuxStatusLines({
     "url-handle",
   ].join(" "),
   owner: socketPath(),
-  defer: (run) => void setImmediate(run),
   log: dlog,
 });
 // Each subscribed session's frames, drawn from its latest render request
 // (candybar-animation-wbxz.jmm.usl). A change to the session's own state — a
-// click — draws its next frame at once.
+// click — brings its next frame forward.
 const frameFeeds: FrameFeeds<CheckedRenderRequest> = new FrameFeeds({
-  render: (req, fps) => renderFrame(req, fps),
-  // [LAW:no-ambient-temporal-coupling] The wake runs on the next turn of the
-  // event loop, not inside the session write that changed the revision, so a
-  // click's whole run of writes lands before a frame of it is drawn.
+  render: (sessionId, fps) => renderFrame(sessionId, fps),
+  // [LAW:no-ambient-temporal-coupling] A wake only moves the feed's timer,
+  // which fires in a later turn, so a click's whole run of writes and its
+  // journal commit land before a frame of it is drawn.
   watch: (sessionId, onChange) =>
-    reaction(() => sessionState.revision(sessionId), onChange, {
-      scheduler: (run) => setImmediate(run),
-    }),
-  lanes: (req) => lanesOf(req),
+    reaction(() => sessionState.revision(sessionId), onChange),
+  lanes: (sessionId) => viewLanes(sessionId),
+  pin: (sessionId) => renderCache.pin(sessionId),
   shown: (req) => paneVisibility.shown(req.hints.tmux),
   watching: () => paneVisibility.follow(),
+  refreshes: () => refreshLedger.totals(),
   periods: FEED_PERIODS,
   now: () => performance.now(),
   log: dlog,
@@ -365,7 +390,7 @@ const paneVisibility: PaneVisibility = new PaneVisibility({
   onAnswer: (socket, status) => tmuxStatusLines.answered(socket, status),
   // Only the sessions on a server whose view changed are drawn again.
   onChange: (sockets) =>
-    frameFeeds.wakeWhere((req) =>
+    frameFeeds.wakeWhere("visibility", (req) =>
       tmuxServersOf(req).some((socket) => sockets.has(socket)),
     ),
   intervalMs: 1000,
@@ -381,20 +406,26 @@ function tmuxServersOf({
 // [LAW:locality-or-seam] Same terms as sessionState: naming the directory is
 // free; the daemon wipes it in onListening() (reset), once the bind is
 // won, and is the only writer.
-const diagnosticDump = new DiagnosticDump(diagnosticsDir());
-const renderCache = new RenderCache<SessionSource>(
+// [LAW:single-enforcer] A dump link moving is a data wake like any other: a
+// frame drawn before its request's sync shows the old link until then.
+const diagnosticDump = new DiagnosticDump(diagnosticsDir(), (sessionId) =>
+  frameFeeds.wake(sessionId, "data"),
+);
+const renderCache = new RenderCache<SessionSource, CheckedRenderRequest>(
   {
     sessionState,
     watchers: watcherRegistry,
     log: dlog,
-    declare: (holds, facts, closure) =>
-      declareLanes(payloadProviders, holds, facts, closure),
+    storage: managedStorage,
+    signer: linkSigner,
+    ledger: refreshLedger,
+    declare: (holds, facts, closure, sources) =>
+      declareLanes(payloadProviders, holds, facts, closure, sources),
     // [LAW:single-enforcer] What every session's view draws from: its payload
     // derived over its declaration, its picks and its histories' depths.
     source: sessionSource({
-      // [LAW:single-enforcer] The providers carry `dlog` as `log`: the view's
-      // payload projects the outcome-carrying lanes' failures, which the
-      // request drawing it logs; git logs the refreshes it makes.
+      // [LAW:single-enforcer] Every provider logs the refreshes it makes,
+      // through the one ledger, so a view's payload logs none of them.
       providers: payloadProviders,
       sessionState,
       history: (sessionId) => settingsHistory.depth(sessionId),
@@ -417,11 +448,17 @@ const renderCache = new RenderCache<SessionSource>(
       // — the operator's only record of whether a save was picked up cleanly,
       // kept rendering last-known-good behind an error, or resolved to a
       // different file. Same info level as the detection line.
-      onReload: (entry) =>
-        dlog(
-          "info",
-          `config loaded projectDir=${entry.projectDir} cwd=${entry.cwd} files=${entry.configLayers.join(" < ") || "<bundled default>"} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warning=${entry.lastWarning === null ? "none" : JSON.stringify(entry.lastWarning)}`,
-        ),
+      onReload: (entry, sessions) => {
+        dlog("info", configLoadedLine(entry));
+        // A reload changes the bar of every session drawn from the entry,
+        // even one that failed and kept the old config: its strip says so.
+        for (const sessionId of sessions) frameFeeds.wake(sessionId, "reload");
+      },
+      // [LAW:single-enforcer] What a session's view draws from moved: its
+      // feed's next frame is brought forward, whatever moved it: a request's
+      // facts, a refresh landing after its deadline, a source publishing, a
+      // pick. The dump link, which no view holds, wakes the same way.
+      onViewChanged: (sessionId) => frameFeeds.wake(sessionId, "data"),
     },
   },
 );
@@ -591,6 +628,44 @@ export function runDaemon(): void {
   // duplicate-daemon unrepresentable. The pidfile is diagnostic only — never
   // load-bearing for exclusion.
   bindOrAttachAndExit(server, socketPath(), /* retried */ false);
+}
+
+// [LAW:nothing-unseen] Every source's refreshes from the one ledger, beside
+// how many homes of each scope the owners keep and how many a view holds.
+function sourceSnapshots(): SourceSnapshots {
+  const git = gitService.getStats();
+  const tmux = tmuxService.getStats();
+  const today = usageStore.scanStats();
+  const storage = managedStorage.stats();
+  const cache = renderCache.stats;
+  return {
+    records: refreshLedger.snapshot(),
+    homes: {
+      daemon: 1,
+      configDir: today.entries,
+      repo: git.size,
+      directory: cache.size,
+      session: usageStore.getStats().size,
+      view: cache.views,
+      pane: tmux.entries,
+    },
+    held: {
+      git: git.held,
+      tmux: tmux.held,
+      host: hostService.held(),
+      today: today.held,
+      pluginStorage: storage.held,
+    },
+    pluginStorage: {
+      folders: storage.folders,
+      faults: storage.faults,
+      lost: storage.lost,
+      probes: storage.probes,
+      probeFailures: storage.probeFailures,
+      stalled: storage.stalled,
+      stalls: storage.stalls,
+    },
+  };
 }
 
 // [LAW:dataflow-not-control-flow] One operation ("bring this server up or
@@ -878,7 +953,11 @@ function shutdown(code: number): void {
     ["gitService close", () => gitService.close()],
     ["usageStore close", () => usageStore.close()],
     ["tmuxService close", () => tmuxService.close()],
-    ["mementoProvider close", () => mementoProvider.close()],
+    ["hostService close", () => hostService.close()],
+    // Before the storage it resumes: an aborted run resumes its sources once
+    // its program is gone.
+    ["runs close", () => runs.close()],
+    ["managedStorage close", () => managedStorage.close()],
     ["watcherRegistry close", () => watcherRegistry.closeAll()],
     ["sessionState flush", () => sessionState.flush()],
   ];
@@ -1100,7 +1179,7 @@ const NOTHING_DELIVERED = (): void => {};
 // the connection boundary turns its socket over to the session's feed.
 type HandledRequest =
   | ({ kind: "reply" } & Reply)
-  | { kind: "subscribe"; sessionId: string; lane: Lane };
+  | { kind: "subscribe"; sessionId: SessionId; lane: Lane };
 
 const stay = (resp: Response): Reply => ({
   resp,
@@ -1143,11 +1222,9 @@ const refuse = (
 // [LAW:parse-dont-validate] Trust boundary: the session id and the lane are
 // untrusted JSON; the id keys the feed and the lane is what its toggle gates.
 function subscription(req: SubscribeRequest): HandledRequest {
-  if (typeof req.sessionId !== "string" || req.sessionId === "")
-    return refuse(
-      "BAD_REQUEST",
-      "subscribe needs a non-empty string sessionId",
-    );
+  const sessionId = parseSessionId(req.sessionId);
+  if (!sessionId.ok)
+    return refuse("BAD_REQUEST", `subscribe's sessionId ${sessionId.problem}`);
   // A subscribe that names no lane speaks the contract from before the
   // lane toggles: VERSION_MISMATCH, which every older client reads as "this
   // client is out of date" and stops on, rather than BAD_REQUEST, which it
@@ -1163,7 +1240,7 @@ function subscription(req: SubscribeRequest): HandledRequest {
       "BAD_REQUEST",
       `subscribe needs a lane, one of ${LANE_NAMES.join(", ")}: got ${JSON.stringify(req.lane)}`,
     );
-  return { kind: "subscribe", sessionId: req.sessionId, lane };
+  return { kind: "subscribe", sessionId: sessionId.id, lane };
 }
 
 export async function handleRequest(
@@ -1270,13 +1347,8 @@ export async function replyTo(
       stats: stats.snapshot({
         gitCache: gitService.getStats(),
         usageCache: usageStore.getStats(),
-        sources: {
-          tmux: tmuxService.getStats(),
-          memento: mementoProvider.getStats(),
-          autocompact: autoCompact.getStats(),
-          cache: cacheExpiry.getStats(),
-          today: usageStore.scanStats(),
-        },
+        sources: sourceSnapshots(),
+        runs: runs.stats(),
         transcriptReads: transcriptReads(),
         renderCache: renderCache.stats,
         effectCache: effectSessions.getStats(),
@@ -1313,7 +1385,7 @@ export async function replyTo(
     // render reached, so a failing render is described like any other.
     // A throw is this request's own RENDER_FAILED reply, so the event is the
     // one record of it and the connection's catch never sees a render.
-    const facts: RenderFacts = [];
+    const facts: RequestFacts = [];
     // Where this request came in the order they arrived: renders of one session
     // can finish out of it.
     // [LAW:one-source-of-truth] The count of render requests received is that
@@ -1327,7 +1399,7 @@ export async function replyTo(
     // frame drew — both stamped with the instant and order it arrived in.
     const sighted = (req: CheckedRenderRequest, frame: FrameSeen): void =>
       renderSightings.see(
-        req.hookData.session_id,
+        req.sessionId,
         {
           client: req.hints.client ?? null,
           termCols: req.hints.termCols ?? null,
@@ -1344,10 +1416,10 @@ export async function replyTo(
       sighted(checked.req, "drawing");
       // [LAW:one-source-of-truth] A request past the checkpoint is the
       // session's data from now on; a followed session's next frame is drawn
-      // from it once the request settles (answerRequest). Its answer is its
+      // from it, brought forward as its view takes it up. Its answer is its
       // own client's, drawn for a request, and never a frame
       // (src/daemon/frame-feed.ts).
-      frameFeeds.note(checked.req.hookData.session_id, checked.req, order);
+      frameFeeds.note(checked.req.sessionId, checked.req, order);
     }
     // [LAW:no-ambient-temporal-coupling] When the request's wait ends, fixed
     // at its arrival: early enough before its client hangs up to draw
@@ -1360,7 +1432,7 @@ export async function replyTo(
       return { stated: req.deadline.kind, ms, endsAt: t0 + ms };
     };
     const rendered: {
-      outcome: RenderOutcome;
+      outcome: RequestOutcome;
       resp: Response;
       delivered: () => void;
     } = !checked.ok
@@ -1386,7 +1458,7 @@ export async function replyTo(
                   : () =>
                       answeredClickError(
                         sessionState,
-                        checked.req.hookData.session_id,
+                        checked.req.sessionId,
                         clickShown,
                       ),
             };
@@ -1410,7 +1482,8 @@ export async function replyTo(
       timedOut: timedOut() ? "Y" : "N",
       queued: `${queuedMs}ms`,
     });
-    const { level, line } = renderEvent(
+    const { level, line } = requestEvent(
+      "render",
       facts,
       rendered.outcome,
       Math.round(performance.now() - t0),
@@ -1424,12 +1497,25 @@ export async function replyTo(
   }
 
   if (req.kind === "click") {
-    return stay(
-      handleClick(req.verb, req.value, {
-        via: "link",
-        handler: sanitizeClientVersion(req.clientVersion),
-      }),
+    // [LAW:nothing-unseen] One click event per click request, whatever its
+    // outcome: how long it was queued behind the loop from its accept, how
+    // long it then took, and what it learned on the way (a status-line
+    // click's link, the verb that ran, its session). A field absent means it
+    // stopped before it.
+    const t0 = performance.now();
+    const facts: RequestFacts = [["queued", `${Math.round(t0 - accepted)}ms`]];
+    const outcome = clickOutcome(req, facts);
+    // Whether the client was already told TIMEOUT while the click waited or
+    // ran: its effect still lands, and the client reported a failure.
+    noteFacts(facts, { timedOut: timedOut() ? "Y" : "N" });
+    const { level, line } = requestEvent(
+      "click",
+      facts,
+      outcome,
+      Math.round(performance.now() - t0),
     );
+    dlog(level, line);
+    return stay(clickReply(outcome));
   }
 
   if (req.kind === "debug") {
@@ -1592,7 +1678,6 @@ const verbCtx = {
   clients: renderSightings,
   bundle: DAEMON_BUNDLE,
   serving: () => establishedLimits().serving(),
-  memento: mementoProvider,
   claudeInput: productionClaudeInputEdge(),
   history: settingsHistory,
   navigation: navigationHistory,
@@ -1610,7 +1695,25 @@ const verbCtx = {
       origin.cwd,
       origin.configFile ?? undefined,
     ),
+  // The storage keys of the same entry `configFor` reads the config of.
+  sourcesFor: (origin: RenderOrigin) =>
+    renderCache.getOrCreate(
+      origin.projectDir,
+      origin.cwd,
+      origin.configFile ?? undefined,
+    ).state.sources,
+  links: linkSigner,
+  runs,
   lanes: { of: lanesAt, clicked: laneClicked },
+  views: {
+    follow: (sessionId: string, origin: RenderOrigin) =>
+      renderCache.follow(
+        sessionId,
+        origin.projectDir,
+        origin.cwd,
+        origin.configFile ?? undefined,
+      ),
+  },
 };
 
 /**
@@ -1664,36 +1767,86 @@ function serializeSegmentCells(
   return out;
 }
 
+// [LAW:parse-dont-validate][LAW:no-silent-failure] A click request run to its
+// outcome. Its verb and value are untrusted JSON, refused here unless both are
+// strings, and whatever the click then throws is its outcome too, so every
+// click writes its event: a refusal of its arguments is a bad request, and
+// anything else thrown is the daemon's failure — a program the click ran, or
+// a bug — recorded with the stack that says which.
+function clickOutcome(req: ClickRequest, facts: RequestFacts): RequestOutcome {
+  const { verb, value } = req as { verb: unknown; value: unknown };
+  if (typeof verb !== "string" || typeof value !== "string") {
+    return {
+      kind: "bad-request",
+      problems: [
+        `a click's verb and value are strings, got ${typeof verb} and ${typeof value}`,
+      ],
+    };
+  }
+  try {
+    return handleClick(
+      verb,
+      value,
+      { via: "link", handler: sanitizeClientVersion(req.clientVersion) },
+      facts,
+    );
+  } catch (error) {
+    return error instanceof BadVerbArgs
+      ? { kind: "bad-request", problems: [error.message] }
+      : { kind: "threw", error };
+  }
+}
+
+// [LAW:dataflow-not-control-flow] The field a click records the verb it runs
+// under, by how it arrived: a status-line click has already recorded its own
+// verb, so the one its link runs is `linkVerb`.
+const VERB_FACT: Readonly<Record<ClickArrival["via"], string>> = {
+  link: "verb",
+  "tmux-status": "linkVerb",
+};
+
 function handleClick(
   verb: string,
   value: string,
   arrival: ClickArrival,
-): Response {
-  if (verb === VERB_TMUX_STATUS_CLICK) return statusLineClick(value);
+  facts: RequestFacts,
+): RequestOutcome {
+  if (verb === VERB_TMUX_STATUS_CLICK) {
+    noteFacts(facts, { verb });
+    return statusLineClick(value, facts);
+  }
   const handler = VERBS.get(verb);
   if (!handler) {
-    return {
-      ok: false,
-      error: `unknown click verb: ${verb}`,
-      code: "BAD_REQUEST",
-      daemonV: PROTOCOL_VERSION,
-    };
+    return { kind: "bad-request", problems: [`unknown click verb: ${verb}`] };
   }
-  try {
-    // A click restarts its session's idle clock; one naming no session
-    // restarts none.
-    const clickedIn = clickSessionOf(verb, value);
-    if (clickedIn !== null) menuIdle.clicked(clickedIn, instantOf(new Date()));
-    handler(value, { ...verbCtx, arrival });
-    return { ok: true, output: "" };
-  } catch (e) {
-    const code = e instanceof BadVerbArgs ? "BAD_REQUEST" : "RENDER_FAILED";
-    return {
-      ok: false,
-      error: String(e instanceof Error ? e.message : e),
-      code,
-      daemonV: PROTOCOL_VERSION,
-    };
+  noteFacts(facts, { [VERB_FACT[arrival.via]]: verb });
+  // The click's session, as it crossed the one session-id checkpoint: one
+  // that passed is recorded and restarts its idle clock, one that failed is
+  // never recorded, and a click naming none records `sid=-`.
+  const session = clickSessionOf(verb, value);
+  if (session === null) noteFacts(facts, { sid: "-" });
+  else if (session.ok) {
+    noteFacts(facts, { sid: session.id });
+    menuIdle.clicked(session.id, instantOf(new Date()));
+  }
+  handler(value, { ...verbCtx, arrival });
+  return { kind: "ok" };
+}
+
+// [LAW:single-enforcer] The reply a click's outcome is answered with.
+function clickReply(outcome: RequestOutcome): Response {
+  switch (outcome.kind) {
+    case "ok":
+      return { ok: true, output: "" };
+    case "bad-request":
+      return {
+        ok: false,
+        error: outcome.problems.join("; "),
+        code: "BAD_REQUEST",
+        daemonV: PROTOCOL_VERSION,
+      };
+    case "threw":
+      return renderFailed(outcome.error);
   }
 }
 
@@ -1701,37 +1854,39 @@ function handleClick(
 // with, run as a click on it in the bar would run — a `cc-candybar://` link
 // through its own verb, any other through the platform's opener. Its verb
 // is told the click came through tmux, not the URL handler.
-function statusLineClick(value: string): Response {
-  const refused = (error: string): Response => ({
-    ok: false,
-    error,
-    code: "BAD_REQUEST",
-    daemonV: PROTOCOL_VERSION,
+function statusLineClick(value: string, facts: RequestFacts): RequestOutcome {
+  const refused = (problem: string): RequestOutcome => ({
+    kind: "bad-request",
+    problems: [problem],
   });
   const click = tmuxStatusLines.linkAt(value);
   if (click.kind === "refused") return refused(click.reason);
-  dlog("info", `tmux-status: click ${JSON.stringify(click.url)}`);
+  noteFacts(facts, { link: click.url });
   if (click.url.startsWith("cc-candybar://")) {
-    const parsed = parseHandlerUrl(click.url);
+    // A link a config wrote with a malformed escape is refused, as any
+    // click's malformed wire encoding is.
+    const parsed = decodeWire(() => parseHandlerUrl(click.url));
     // [LAW:no-silent-failure] A link the bar draws never names this verb; one
     // that did would be a click that only ever clicks another.
     if (parsed.verb === VERB_TMUX_STATUS_CLICK)
       return refused("a status-line link names another status-line click");
-    return handleClick(parsed.verb, parsed.value, { via: "tmux-status" });
+    return handleClick(
+      parsed.verb,
+      parsed.value,
+      { via: "tmux-status" },
+      facts,
+    );
   }
-  const opened = launchSync({
-    bin: process.platform === "darwin" ? "/usr/bin/open" : "xdg-open",
-    args: [click.url],
-    category: "click.open",
-  });
-  return opened.ok
-    ? { ok: true, output: "" }
-    : {
-        ok: false,
-        error: `opening ${click.url} failed (${opened.error ?? opened.reason})`,
-        code: "RENDER_FAILED",
-        daemonV: PROTOCOL_VERSION,
-      };
+  clickLaunch(
+    {
+      bin: process.platform === "darwin" ? "/usr/bin/open" : "xdg-open",
+      args: [click.url],
+      category: "click.open",
+    },
+    `opening ${click.url}`,
+    dlog,
+  );
+  return { kind: "ok" };
 }
 
 // --- render ---
@@ -1739,20 +1894,23 @@ function statusLineClick(value: string): Response {
 // One frame of a subscribed session, drawn from its latest request at this
 // instant, by the render a request gets. The response is the one that request
 // would be answered with, and the bar moves when its effects say it does.
-// [LAW:parse-dont-validate] The request crossed the checkpoint when it was
-// noted, so a frame renders it without asking again.
+// [LAW:parse-dont-validate] The request the session's view is declared with
+// crossed the checkpoint when it arrived, so a frame draws by it without
+// asking again. Null while the session has no view: a frame opens none.
 // [LAW:nothing-unseen] A frame that throws carries the render event a throwing
 // request writes, for the feed to log when that failure is first pushed; the
 // feed summarizes the frames that render.
 // [LAW:effects-at-boundaries] Synchronous by type: a frame reads every value
 // as its owner stored it (the view's payload), so it performs no I/O and
-// refreshes no source — the request it is drawn from made those refreshes.
-function renderFrame(req: CheckedRenderRequest, fps: number): FeedFrame {
+// refreshes no source — the request it is drawn from made those refreshes,
+// and an event, never a frame, opened the view it draws.
+function renderFrame(sessionId: string, fps: number): FeedFrame | null {
   const started = new Date();
   const at = instantOf(started);
-  const facts: RenderFacts = [];
+  const facts: RequestFacts = [];
   try {
-    using setup = setUpRender(req, at, facts);
+    using setup = setUpFrame(sessionId, at, facts);
+    if (setup === null) return null;
     const { drawn, motion, evaluated, lanes } = drawRender(setup, {
       by: "feed",
       fps,
@@ -1760,11 +1918,7 @@ function renderFrame(req: CheckedRenderRequest, fps: number): FeedFrame {
     // [LAW:effects-at-boundaries] A frame only draws: the dump is the
     // session's requests' to write, and the frame links it only when it holds
     // this frame's text.
-    const link = diagnosticDump.linkFor(
-      req.hookData.session_id,
-      dumpTextOf(drawn),
-    );
-    const sessionId = req.hookData.session_id;
+    const link = diagnosticDump.linkFor(sessionId, dumpTextOf(drawn));
     const output = composeBar(drawn, link);
     return {
       at,
@@ -1785,7 +1939,8 @@ function renderFrame(req: CheckedRenderRequest, fps: number): FeedFrame {
     };
   } catch (error) {
     const outcome = { kind: "threw", error } as const;
-    const { level, line } = renderEvent(
+    const { level, line } = requestEvent(
+      "render",
       facts,
       outcome,
       Date.now() - started.getTime(),
@@ -1819,15 +1974,12 @@ function sessionGlobals(
   );
 }
 
-// The lanes the settings of the session `req` is from switch on now: its
-// config, as the render cache holds it for the inputs the request named, under
-// its session's picks.
-function lanesOf(req: CheckedRenderRequest): LaneSwitches {
-  const sessionId = req.hookData.session_id;
-  return lanesAt(
-    sessionRenderOrigin(req.requested, sessionState, sessionId),
-    sessionId,
-  );
+// The lanes the session's settings switch on now, as its view draws them, or
+// null while it has no view: a pure read of the view a frame finds, which
+// opens nothing (`holdView`).
+function viewLanes(sessionId: string): LaneSwitches | null {
+  using hold = renderCache.holdView(sessionId);
+  return hold === null ? null : laneSwitches(hold.view.source.effective());
 }
 
 // The lanes `sessionId`'s settings switch on over the config `origin`
@@ -1852,6 +2004,7 @@ function lanesAt(origin: RenderOrigin, sessionId: string): LaneSwitches {
 declare const CHECKED: unique symbol;
 type CheckedRenderRequest = Omit<RenderRequest, "deadline"> & {
   readonly deadline: ClientDeadline;
+  readonly sessionId: SessionId;
   readonly hints: ClientHints;
   readonly rateLimits: RateLimitsSeen;
   readonly requested: RenderOrigin;
@@ -1871,12 +2024,6 @@ function checkRenderRequest(
   // sender is broken or malicious); unknown fields are advisory (Anthropic
   // may have added something).
   const { report } = validateHookData(req.hookData as unknown);
-  for (const field of report.unknownTopLevelFields) {
-    dlog(
-      "info",
-      `schema: unknown field '${field}' — Anthropic may have added it`,
-    );
-  }
   // [LAW:no-silent-failure][LAW:types-are-the-program] Gate hard on
   // schema violations. Continuing with `workspace?.project_dir` would
   // collapse "absent" into an empty-string cache key — silently sharing
@@ -1891,11 +2038,11 @@ function checkRenderRequest(
   for (const { path, expected, got } of report.typeMismatches) {
     wireProblems.push(`field '${path}' expected ${expected}, got ${got}`);
   }
-  // [LAW:parse-dont-validate] A session id names a session: an empty one
-  // names none, refused here as a subscribe refuses it, so no owner keyed by
-  // session ever holds "" as one.
-  if (req.hookData?.session_id === "") {
-    wireProblems.push("field 'session_id' is empty");
+  // [LAW:single-enforcer] The session id crosses the one session-id
+  // checkpoint, as a subscribe's and a click's do.
+  const sessionId = parseSessionId(req.hookData?.session_id);
+  if (!sessionId.ok) {
+    wireProblems.push(`field 'session_id' ${sessionId.problem}`);
   }
   // [LAW:parse-dont-validate] Absolute, not merely non-empty: the
   // request's cwd anchors a relative `--config` (parseRenderArgs), and a
@@ -1924,7 +2071,20 @@ function checkRenderRequest(
   );
   if (deadline.kind === "refused")
     return { ok: false, problems: [...wireProblems, deadline.problem] };
-  if (wireProblems.length > 0) return { ok: false, problems: wireProblems };
+  if (wireProblems.length > 0 || !sessionId.ok)
+    return { ok: false, problems: wireProblems };
+  // [LAW:nothing-unseen] Said once per daemon, at its first sight: every
+  // request carries the field, and a line each rotated the log in minutes.
+  // The stats snapshot lists them all, and only a request the checkpoint
+  // passed adds one: what a refused request says is not recorded as fact.
+  for (const field of report.unknownTopLevelFields) {
+    if (stats.firstSightOfUnknownHookField(field)) {
+      dlog(
+        "info",
+        `schema: unknown field ${JSON.stringify(field)} — Anthropic may have added it`,
+      );
+    }
+  }
   const hints = parseClientHints(req);
   // [LAW:dataflow-not-control-flow] The *request's* cwd, not the daemon's
   // process.cwd(), so config resolution depends only on request data — the
@@ -1935,6 +2095,7 @@ function checkRenderRequest(
     req: {
       ...req,
       deadline,
+      sessionId: sessionId.id,
       hints,
       rateLimits: rateLimitsSeen(req.hookData),
       requested: {
@@ -1967,8 +2128,8 @@ const refusedRender = (problems: string[]) => ({
 interface RenderSetup extends Disposable {
   readonly req: CheckedRenderRequest;
   readonly at: Instant;
-  readonly facts: RenderFacts;
-  readonly sessionId: string;
+  readonly facts: RequestFacts;
+  readonly sessionId: SessionId;
   readonly entry: CacheEntry;
   readonly state: DslRenderState;
   readonly view: SessionView<SessionSource>;
@@ -1977,16 +2138,17 @@ interface RenderSetup extends Disposable {
   readonly payloadInputs: PayloadInputs;
 }
 
-function setUpRender(
+// What a render notes of the request it draws by, and the strip's line for
+// the hints that request refused.
+function requestFacts(
   req: CheckedRenderRequest,
   at: Instant,
-  facts: RenderFacts,
-): RenderSetup {
+  facts: RequestFacts,
+): string | null {
   noteFacts(facts, {
-    sid: req.hookData.session_id,
+    sid: req.sessionId,
     at: at.toFixed(3),
   });
-  const sessionId = req.hookData.session_id;
   // [LAW:parse-dont-validate] The ONE checkpoint for everything the client
   // observed and the daemon cannot. Raw `req.*` hint fields are not read
   // past this line; `hints` is the stamped type the render path consumes.
@@ -2011,6 +2173,16 @@ function setUpRender(
     // doctor's segment-data check reads (RenderSightings).
     rateLimits: req.rateLimits,
   });
+  return hintsError;
+}
+
+function setUpRender(
+  req: CheckedRenderRequest,
+  at: Instant,
+  facts: RequestFacts,
+): RenderSetup {
+  const sessionId = req.sessionId;
+  const hintsError = requestFacts(req, at, facts);
   // [LAW:one-source-of-truth] The explicit config path has three
   // spellings and ONE precedence: a load-config pick (sessionRenderOrigin)
   // over the `--config` flag over the client's `CC_CANDYBAR_CONFIG` hint
@@ -2029,11 +2201,50 @@ function setUpRender(
     origin.projectDir,
     origin.cwd,
     origin.configFile ?? undefined,
-    sessionId,
     req,
   );
+  return setUpDraw(hold, req, hintsError, at, facts);
+}
+
+// [LAW:effects-at-boundaries] A frame's setup: the session's view as it finds
+// it, drawn by the request the view is declared with, or null while the
+// session has no view. It opens nothing (`holdView`).
+function setUpFrame(
+  sessionId: string,
+  at: Instant,
+  facts: RequestFacts,
+): RenderSetup | null {
+  const hold = renderCache.holdView(sessionId);
+  if (hold === null) {
+    // [LAW:no-silent-failure] A view that failed to open draws its error, as
+    // the render that threw it did, never the last bar the feed pushed.
+    const failed = renderCache.openFailure(sessionId);
+    if (failed !== null) throw failed.error;
+    return null;
+  }
+  const req = hold.view.facts();
+  let hintsError: string | null;
+  try {
+    hintsError = requestFacts(req, at, facts);
+  } catch (e) {
+    hold[Symbol.dispose]();
+    throw e;
+  }
+  return setUpDraw(hold, req, hintsError, at, facts);
+}
+
+// The setup over a held view, which owns the hold from here: a throw before
+// it is returned releases it.
+function setUpDraw(
+  hold: SessionHold<SessionSource, CheckedRenderRequest>,
+  req: CheckedRenderRequest,
+  hintsError: string | null,
+  at: Instant,
+  facts: RequestFacts,
+): RenderSetup {
   try {
     const { entry, state, view } = hold;
+    const { sessionId, hints } = req;
     // [LAW:dataflow-not-control-flow] One composition every render: the
     // entry always holds a renderable state (the bundled default until a
     // config loads — src/daemon/cache/render.ts), so body = drawDsl(state)
@@ -2126,6 +2337,7 @@ function drawRender(
     ),
   };
   const metrics = isPending(payload.metrics) ? undefined : payload.metrics;
+  noteFacts(facts, sourcesFactOf(view.lanes().sources));
   noteFacts(facts, {
     prompts: String(metrics?.messageCount ?? "-"),
     nonPrompts: String(metrics?.nonPrompts ?? "-"),
@@ -2226,9 +2438,12 @@ function drawRender(
       : [{ kind: "load" as const, message: entry.lastWarning }]),
     ...renderWarnings,
   ];
+  // [LAW:single-enforcer] Each repository awaiting the user's answer asks,
+  // in every session drawn from the entry, until one of them answers.
+  const questions = repoQuestions(entry.repos, sessionId, linkSigner);
   const diagnostics = collectDiagnostics(
     combinedError,
-    updates,
+    [...updates, ...questions],
     warnings.map((w) => w.message).join("\n"),
   );
   const g = gitService.getStats();
@@ -2289,6 +2504,8 @@ function drawRender(
     err: combinedError ? "Y" : "N",
     clickError: clickHold.kind === "none" ? "-" : clickHold.kind,
     upd: String(updates.length),
+    // How many repositories the strip asked about.
+    ask: String(questions.length),
     warn: warned,
   });
   return {
@@ -2349,7 +2566,7 @@ function dumpTextOf(drawn: DrawnBar): string | null {
 // unconditional per-request write would invalidate every state-driven
 // computed each render.
 function recordRequest(req: CheckedRenderRequest): void {
-  const sessionId = req.hookData.session_id;
+  const sessionId = req.sessionId;
   // [LAW:one-source-of-truth] The STAMPED hints: a click arrives with no
   // hints of its own, so the doctor (verbs/index.ts) reads the facts of this
   // session's last request from here, re-parsed through the same checkpoint.
@@ -2392,21 +2609,10 @@ async function answerRequest(
   order: number,
   at: Instant,
   wait: RequestWait,
-  facts: RenderFacts,
+  facts: RequestFacts,
 ): Promise<RequestAnswer> {
   recordRequest(req);
-  try {
-    return await drawAnswer(req, order, at, wait, facts);
-  } finally {
-    // [LAW:no-ambient-temporal-coupling] A followed session's next frame is
-    // drawn once this request has been answered — its own bar drawn, by its
-    // client's deadline, or its failure thrown — so the frame shows what the
-    // request carried, at an instant after it, and a request that fails
-    // leaves no feed waiting on it. Deferred, so the frame's draw is never a cost of
-    // the request's own answer.
-    const sessionId = req.hookData.session_id;
-    setImmediate(() => frameFeeds.wake(sessionId));
-  }
+  return drawAnswer(req, order, at, wait, facts);
 }
 
 // [LAW:effects-at-boundaries] What a request's arrival starts beyond its
@@ -2477,7 +2683,7 @@ async function drawAnswer(
   order: number,
   at: Instant,
   wait: RequestWait,
-  facts: RenderFacts,
+  facts: RequestFacts,
 ): Promise<RequestAnswer> {
   using setup = setUpRender(req, at, facts);
   arrived(req, laneSwitches(setup.view.source.effective()));
@@ -2489,10 +2695,11 @@ async function drawAnswer(
   // fields moved — until its client's deadline. What has not
   // answered by then draws as pending, and lands for the next frame.
   const waitFrom = performance.now();
+  const refreshed: Refreshed = new Map();
   const ended = await waitWithin(
     (signal) =>
       Promise.all([
-        settlePayload(setup.payloadInputs, at),
+        settlePayload(setup.payloadInputs, at, refreshed),
         setup.view.registry.inFlight(signal),
       ]),
     wait.endsAt - waitFrom,
@@ -2510,15 +2717,11 @@ async function drawAnswer(
   noteFacts(facts, {
     waited: `${Math.round(drawFrom - waitFrom)}ms`,
     ended,
+    refreshed: refreshedFact(refreshed),
   });
-  // [LAW:no-silent-failure] Each lane the view's payload projected as a
-  // missing field, once per request: a frame draws the same payload and
-  // logs nothing of it.
-  for (const f of setup.view.source.failures())
-    dlog("warn", `provider fetch failed: ${f}`);
   const { drawn, motion, clickShown, lanes } = drawRender(setup, ANSWERING);
   const { link, failure } = diagnosticDump.sync(
-    req.hookData.session_id,
+    req.sessionId,
     order,
     dumpTextOf(drawn),
   );
@@ -2528,7 +2731,7 @@ async function drawAnswer(
     dumpFailed: failure === null ? "-" : JSON.stringify(failure),
   });
   const output = composeBar(drawn, link);
-  const sessionId = req.hookData.session_id;
+  const sessionId = req.sessionId;
   const elsewhere = handedOffTo(lanes, frameFeeds.following(sessionId));
   const statusline = statuslineOf(sessionId, drawn, link, output, elsewhere);
   // A `frames` display draws the bar itself; Claude Code's statusline hands

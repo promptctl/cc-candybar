@@ -6,6 +6,7 @@
 // every bundled slash control on the bar: the `commands` tray, `autocompact`,
 // and the settings menu's own tray, its door open.
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -35,7 +36,6 @@ import {
   fakeAutoCompact,
   fakeContext,
   fakeGit,
-  fakeMemento,
   fakeMetrics,
   fakeTmux,
   fakeUsage,
@@ -82,7 +82,6 @@ async function bar(
     contextProvider: fakeContext(async () => ABSENT),
     metricsProvider: fakeMetrics(async () => ABSENT),
     activityProvider: fakeActivity(async () => ABSENT),
-    mementoProvider: fakeMemento(async () => ABSENT),
     tmuxService: fakeTmux(async () => {
       sessionLookups++;
       return ok("work");
@@ -107,7 +106,7 @@ async function bar(
   const sessionState = new SessionState();
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
+  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
   const render = (): string =>
     renderDsl(
       config,

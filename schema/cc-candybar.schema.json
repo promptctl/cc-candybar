@@ -619,9 +619,6 @@
         "context": {
           "$ref": "#/definitions/SegmentDelta"
         },
-        "ceiling": {
-          "$ref": "#/definitions/SegmentDelta"
-        },
         "autocompact": {
           "$ref": "#/definitions/SegmentDelta"
         },
@@ -1132,34 +1129,6 @@
           {
             "type": "object",
             "properties": {
-              "ceiling": {
-                "const": "set"
-              },
-              "to": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "ceiling",
-              "to"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "ceiling": {
-                "const": "clear"
-              }
-            },
-            "required": [
-              "ceiling"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
               "slash": {
                 "type": "string",
                 "pattern": "^/[^\\s\\x00-\\x1f\\x7f-\\x9f/][^\\x00-\\x1f\\x7f-\\x9f]*$"
@@ -1167,6 +1136,38 @@
             },
             "required": [
               "slash"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "run": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 1
+              },
+              "env": {
+                "type": "object",
+                "propertyNames": {
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+                },
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "refreshes": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            "required": [
+              "run"
             ],
             "additionalProperties": false
           },
@@ -2737,7 +2738,7 @@
             "id": {
               "type": "string",
               "minLength": 1,
-              "pattern": "^(?!groups\\.|menus\\.|edit\\.|candybar\\.)[^:/]+$"
+              "pattern": "^(?!groups\\.|menus\\.|menupages\\.|edit\\.|candybar\\.)[^:/]+$"
             },
             "settings": {
               "type": "object",
@@ -2837,7 +2838,7 @@
             "id": {
               "type": "string",
               "minLength": 1,
-              "pattern": "^(?!groups\\.|menus\\.|edit\\.|candybar\\.)[^:/]+$"
+              "pattern": "^(?!groups\\.|menus\\.|menupages\\.|edit\\.|candybar\\.)[^:/]+$"
             },
             "settings": {
               "type": "object",

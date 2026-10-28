@@ -29,7 +29,8 @@ import {
   type Outcome,
   type Reading,
 } from "../utils/outcome.js";
-import { Refreshes, type SourceStats } from "../utils/keyed-source.js";
+import { RefreshLedger, type Refreshes } from "../utils/refresh-ledger.js";
+import type { SourceStats } from "../utils/keyed-source.js";
 import { valueOf } from "../utils/logfmt.js";
 import { quietLogger, type DaemonLogger } from "../utils/logger.js";
 import { readTail, statStamp } from "../utils/transcript-fs.js";
@@ -104,8 +105,15 @@ export class CacheExpiryProvider {
   // warn; an answer believed under its stamp reads nothing, and logs nothing.
   private readonly refreshes: Refreshes<"request">;
 
-  constructor(logger: DaemonLogger = quietLogger) {
-    this.refreshes = new Refreshes("cache", ["request"], logger);
+  constructor(
+    logger: DaemonLogger = quietLogger,
+    ledger: RefreshLedger = new RefreshLedger(logger),
+  ) {
+    this.refreshes = ledger.declare({
+      name: "cache",
+      scope: "session",
+      refresh: ["request"],
+    });
   }
 
   // The session's refresh, which its statusline request makes.
@@ -138,8 +146,9 @@ export class CacheExpiryProvider {
     return this.known.get(sessionId)?.outcome ?? PENDING;
   }
 
-  getStats(): SourceStats<"request"> {
-    return this.refreshes.stats(this.known.size);
+  getStats(): SourceStats {
+    const { refreshes, failures, lastMs } = this.refreshes.record();
+    return { entries: this.known.size, refreshes, failures, lastMs };
   }
 
   private async read(

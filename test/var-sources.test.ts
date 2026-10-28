@@ -1,5 +1,9 @@
+import { RefreshLedger } from "../src/utils/refresh-ledger";
+import { reaction } from "mobx";
 import { ColorDepth, ensureContrast, parseRgbHex } from "@promptctl/rich-js";
 import { feedInputs } from "./helpers/inputs";
+import { shellGate } from "./helpers/shell-gate";
+import { until } from "./helpers/until";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -9,6 +13,7 @@ import {
   SourceRegistry,
   parseDuration,
   MIN_SHELL_TTL_MS,
+  type Published,
   type SourceParse,
 } from "../src/var-system";
 import { SessionState } from "../src/daemon/session-state";
@@ -427,12 +432,15 @@ async function repeatUntil(
   registry: SourceRegistry,
   done: () => boolean,
   change: () => void,
+  what: string,
 ): Promise<void> {
-  for (let i = 0; i < 60 && !done(); i++) {
+  await until(async () => {
+    if (done()) return true;
     change();
     await elapse(50);
     await ran(registry);
-  }
+    return done();
+  }, what, 15_000);
 }
 
 // ─── shell — basic ────────────────────────────────────────────────────────────
@@ -665,6 +673,41 @@ describe("SourceRegistry — shell: ttl cache policy", () => {
     }
   });
 
+  // [LAW:nothing-unseen] A user source is a source like any other: its
+  // refreshes are recorded in the ledger under its derived scope, by the
+  // trigger that asked — its first read, then its period.
+  it("records each run in the ledger: its first read, then its period's", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const f = path.join(dir, "v");
+      fs.writeFileSync(f, "v1");
+      const ledger = new RefreshLedger();
+      const store = new VariableStore();
+      const registry = registryOver(store, "", undefined, null, ledger);
+      registry.declareShell("val", `cat ${f}`, {
+        cwd: process.cwd(),
+        parse: TEXT,
+        cache: { kind: "ttl", durationMs: MIN_SHELL_TTL_MS },
+      });
+      await ran(registry);
+      await elapse(TTL_TICK_WAIT_MS);
+      await ran(registry);
+
+      expect(ledger.snapshot()).toEqual([
+        {
+          name: "var.val",
+          scope: "directory",
+          refreshes: { first: 1, period: expect.any(Number) },
+          failures: 0,
+          lastMs: expect.any(Number),
+        },
+      ]);
+      expect(ledger.snapshot()[0]!.refreshes.period).toBeGreaterThanOrEqual(1);
+    } finally {
+      cleanup();
+    }
+  });
+
   it("TTL bucket sweep: two vars at same interval both update", async () => {
     const { dir, cleanup } = makeTmpDir();
     try {
@@ -752,6 +795,7 @@ describe("SourceRegistry — shell: watch_file cache policy", () => {
         registry,
         () => store.read("val") === "v2",
         () => fs.writeFileSync(watchedFile, "x"),
+        "the store reading v2",
       );
 
       expect(store.read("val")).toBe("v2");
@@ -781,6 +825,7 @@ describe("SourceRegistry — shell: watch_file cache policy", () => {
         registry,
         () => store.read("val") === "v2",
         () => fs.writeFileSync(path.join(watchedDir, "main"), String(write++)),
+        "the store reading v2",
       );
       expect(store.read("val")).toBe("v2");
     } finally {
@@ -809,6 +854,7 @@ describe("SourceRegistry — shell: watch_file cache policy", () => {
         registry,
         () => store.read("val") === "v1",
         () => fs.writeFileSync(f, "v1"),
+        "the store reading v1",
       );
       expect(store.read("val")).toBe("v1");
     } finally {
@@ -831,7 +877,7 @@ describe("SourceRegistry — shell: watch_file cache policy", () => {
       await elapse(100); // the watch attaches with no ready signal, and a removal is not repeatable
       expect(store.read("val")).toBe("v1");
       fs.rmSync(path.dirname(f), { recursive: true });
-      await repeatUntil(registry, () => store.read("val") === "(none)", () => undefined);
+      await repeatUntil(registry, () => store.read("val") === "(none)", () => undefined, "the store reading (none)");
       expect(store.read("val")).toBe("(none)");
     } finally {
       cleanup();
@@ -882,6 +928,7 @@ describe("SourceRegistry — shell: watch_file cache policy", () => {
         registry,
         () => store.read("val") === "v2",
         () => fs.writeFileSync(real, "v2"),
+        "the store reading v2",
       );
       expect(store.read("val")).toBe("v2");
     } finally {
@@ -920,6 +967,7 @@ describe("SourceRegistry — shell: watch_file cache policy", () => {
         registry,
         () => store.read("v1") === "a2" && store.read("v2") === "b2",
         () => fs.writeFileSync(watchedFile, "y"),
+        "both stores reading a2 and b2",
       );
 
       expect(store.read("v1")).toBe("a2");
@@ -1054,6 +1102,12 @@ describe("SourceRegistry — shell: key: cache policy", () => {
       const fault = /^cache key: .*no key/;
       expect(registry.getLastError("val")?.message).toMatch(fault);
       expect([...registry.cachePolicyFaults().keys()]).toEqual(["val"]);
+      // The fault is published, as a stored value is: what a view reacts to.
+      const published: Published[] = [];
+      const stop = reaction(() => registry.published(), (p) => published.push(p));
+      expect(registry.published().faults).toEqual([
+        { timestamp: expect.any(Number), message: expect.stringMatching(fault) },
+      ]);
 
       // A key that throws is no key: the source does not run under it.
       await ran(registry);
@@ -1065,6 +1119,8 @@ describe("SourceRegistry — shell: key: cache policy", () => {
       store.setBox("trigger", "bad again");
       await ran(registry);
       expect(store.read("val")).toBe("");
+      // The same fault standing again publishes nothing.
+      expect(published).toEqual([]);
 
       // The key evaluating again is a key: the source re-runs, the fault clears.
       store.setBox("trigger", "a");
@@ -1072,6 +1128,8 @@ describe("SourceRegistry — shell: key: cache policy", () => {
       expect(store.read("val")).toBe("v2");
       expect(registry.getLastError("val")).toBeUndefined();
       expect(registry.cachePolicyFaults().size).toBe(0);
+      expect(published.at(-1)).toEqual({ values: ["v2"], faults: [] });
+      stop();
     } finally {
       cleanup();
     }
@@ -1297,7 +1355,7 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
       await ran(registry);
       expect(store.read("val")).toBe("v1");
 
-      await repeatUntil(registry, () => store.read("val") === "v2", () => fs.writeFileSync(f, "v2"));
+      await repeatUntil(registry, () => store.read("val") === "v2", () => fs.writeFileSync(f, "v2"), "the store reading v2");
 
       expect(store.read("val")).toBe("v2");
     } finally {
@@ -1329,6 +1387,7 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
         registry,
         () => store.read("v1") === "a2" && store.read("v2") === "b2",
         () => fs.writeFileSync(watchedFile, "v2"),
+        "both stores reading a2 and b2",
       );
 
       expect(store.read("v1")).toBe("a2");
@@ -1695,20 +1754,20 @@ describe("SourceRegistry — depends_on cache policy", () => {
       // the change below provably lands after the read and before the pass
       // ends — a guessed delay could land before `cat` and prove nothing.
       const readMark = path.join(dir, "read");
-      const go = path.join(dir, "go");
-      registry.declareShell("val", `cat ${dataFile}; touch ${readMark}; until [ -e ${go} ]; do sleep 0.01; done`, {
+      const go = shellGate(path.join(dir, "go"));
+      go.close();
+      registry.declareShell("val", `cat ${dataFile}; touch ${readMark}; ${go.hold}`, {
         cwd: process.cwd(),
         parse: TEXT,
         cache: { kind: "depends_on", varNames: ["trigger"] },
       });
 
-      for (let i = 0; i < 500 && !fs.existsSync(readMark); i++) await elapse(10);
-      expect(fs.existsSync(readMark)).toBe(true);
+      await until(() => fs.existsSync(readMark), "the pass reading the file");
       // Change both the dependency and the data: this is the collision, not a
       // sequence.
       fs.writeFileSync(dataFile, "v2");
       store.setBox("trigger", "b");
-      fs.writeFileSync(go, "");
+      go.open();
 
       // The queued re-read is part of the tracked work, so `ran` is what
       // decides when to look — no second sleep guessing at the re-read.
@@ -1977,17 +2036,19 @@ describe("SourceRegistry — parse seam", () => {
         registry,
         () => registry.getLastError("doc") !== undefined,
         () => fs.writeFileSync(f, `{ "sta`),
+        "doc's last error",
       );
       expect(readDoc(store, "doc")).toEqual({ state: "one" });
       await repeatUntil(
         registry,
         () => store.readDocument("doc").kind === "ok" && doc(store, "doc").state === "two",
         () => fs.writeFileSync(f, `{ "state": "two" }`),
+        "the document reading state two",
       );
       expect(readDoc(store, "doc")).toEqual({ state: "two" });
       // Left broken past the settle: the failure shows.
       fs.writeFileSync(f, `{ "sta`);
-      await repeatUntil(registry, () => store.readDocument("doc").kind === "failed", () => undefined);
+      await repeatUntil(registry, () => store.readDocument("doc").kind === "failed", () => undefined, "the document reading failed");
       expect(store.readDocument("doc")).toMatchObject({ kind: "failed" });
     } finally {
       cleanup();
@@ -2036,11 +2097,20 @@ describe("SourceRegistry — parse seam", () => {
   });
 
   it("settled() names the sources still in flight at its deadline", async () => {
-    const { registry } = make();
-    registry.declareShell("slow", `sleep 1; echo x`, { cwd: process.cwd(), parse: TEXT, cache: { kind: "never" } });
-    registry.declareShell("fast", `echo y`, { cwd: process.cwd(), parse: TEXT, cache: { kind: "never" } });
-    expect(await registry.settled(100)).toEqual(["slow"]);
-    expect(await registry.settled(3000)).toEqual([]);
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const gate = shellGate(path.join(dir, "gate"));
+      gate.close();
+      const { store, registry } = make();
+      registry.declareShell("slow", `${gate.hold}; echo x`, { cwd: process.cwd(), parse: TEXT, cache: { kind: "never" } });
+      registry.declareShell("fast", `echo y`, { cwd: process.cwd(), parse: TEXT, cache: { kind: "never" } });
+      await until(() => store.read("fast") === "y", "fast's run publishing");
+      expect(await registry.settled(0)).toEqual(["slow"]);
+      gate.open();
+      expect(await registry.settled(3000)).toEqual([]);
+    } finally {
+      cleanup();
+    }
   });
 
   it("a file source takes the same json parser", async () => {
@@ -2159,43 +2229,52 @@ describe("SourceRegistry — in-flight runs", () => {
     const { dir, cleanup } = makeTmpDir();
     try {
       const spawns = path.join(dir, "spawns");
+      const gate = shellGate(path.join(dir, "gate"));
+      gate.close();
       const { registry: home } = make();
       const view = home.view();
       live.add(view);
       const period = { kind: "ttl", durationMs: MIN_SHELL_TTL_MS } as const;
-      const counted = (out: string) => `echo x >> ${spawns}; sleep 0.3; echo ${out}`;
+      const counted = (out: string) => `echo x >> ${spawns}; ${gate.hold}; echo ${out}`;
       home.declareShell("dir", counted("d"), { cwd: process.cwd(), parse: TEXT, cache: period });
       view.declareShell("own", counted("o"), { cwd: process.cwd(), parse: TEXT, cache: period });
       expect([...(await view.settled(50))].sort()).toEqual(["dir", "own"]);
+      gate.open();
       expect(await view.settled(3000)).toEqual([]);
-      // Both periods' re-runs out: a re-read keeps the answer it has.
+      // Both periods' re-runs held out: a re-read keeps the answer it has. A
+      // re-run can pass the gate while it is open, so only the runs spawned
+      // after it closes are the held ones.
+      gate.close();
       const spawned = (): number => fs.readFileSync(spawns, "utf8").split("\n").length - 1;
-      const rerunBy = Date.now() + 3000;
-      while (spawned() < 4 && Date.now() < rerunBy) {
-        await new Promise((resolve) => setTimeout(resolve, 20));
-      }
-      expect(spawned()).toBeGreaterThanOrEqual(4);
-      const asked = Date.now();
+      const closedAt = spawned();
+      await until(() => spawned() >= closedAt + 2, "both periods' re-runs spawning", 3000);
       expect(await view.settled(3000)).toEqual([]);
-      expect(Date.now() - asked).toBeLessThan(150);
     } finally {
       cleanup();
     }
   });
 
   it("a wait is for a run its key moved", async () => {
-    const store = new VariableStore();
-    const registry = registryOver(store);
-    store.defineBox("trigger", "string", "a");
-    registry.declareShell("val", "sleep 0.3; echo v", {
-      cwd: process.cwd(),
-      parse: TEXT,
-      cache: { kind: "key", template: "{{ .trigger }}" },
-    });
-    expect(await registry.settled(3000)).toEqual([]);
-    store.setBox("trigger", "b");
-    expect(await registry.settled(50)).toEqual(["val"]);
-    expect(await registry.settled(3000)).toEqual([]);
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const gate = shellGate(path.join(dir, "gate"));
+      const store = new VariableStore();
+      const registry = registryOver(store);
+      store.defineBox("trigger", "string", "a");
+      registry.declareShell("val", `${gate.hold}; echo v`, {
+        cwd: process.cwd(),
+        parse: TEXT,
+        cache: { kind: "key", template: "{{ .trigger }}" },
+      });
+      expect(await registry.settled(3000)).toEqual([]);
+      gate.close();
+      store.setBox("trigger", "b");
+      expect(await registry.settled(50)).toEqual(["val"]);
+      gate.open();
+      expect(await registry.settled(3000)).toEqual([]);
+    } finally {
+      cleanup();
+    }
   });
 
   it("inFlight() lets go of a run that never ends when its signal aborts", async () => {

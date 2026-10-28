@@ -34,7 +34,7 @@ pnpm bar --links 🍫                             # …and list what every link 
 | [Settings menu](#the-settings-menu) | The door to every session and config setting | Every bar | Synthesized |
 | [Edit mode](#edit-mode) | Add, remove and configure placements | Every bar, from `✎ arrange` | Synthesized |
 | [Configure mode](#configure-mode) | Change one placement's settings | Edit mode's `🔧` | Synthesized |
-| [Bundled segments with clicks](#bundled-segments-with-clicks) | Git detail, ceiling, autocompact, trays, theme switcher, PR link | Default rows and opt-in | `segments:` in the default config |
+| [Bundled segments with clicks](#bundled-segments-with-clicks) | Git detail, autocompact, trays, theme switcher, PR link | Default rows and opt-in | `segments:` in the default config |
 | [State-showing segments](#state-showing-segments) | Colour or glyph that tracks a value | Default rows and opt-in | `bg:` ramps, `cascade`, `gauge`, `sparkline` |
 | [Diagnostic strip](#diagnostic-strip) | Errors, warnings, update notice, above the bar | Any bar with something to say | Composed by the daemon |
 
@@ -94,7 +94,6 @@ What a click does depends on the action's kind:
 | Open | `{ open: template }` | opens a path in VS Code |
 | Slash | `{ slash: "/compact" }` | types the command into this session's Claude Code pane (refused unless the pane shows a bare prompt) |
 | Doctor | `{ doctor: "run" }` / `{ doctor: "fix", check }` / `{ doctor: "mark", check, mark }` | runs the checks; fixes one; marks the glyphs one shows |
-| Ceiling | `{ ceiling: "set", to }` / `{ ceiling: "clear" }` | moves memento's context ceiling for this session |
 | Do | `{ do: [a, b, …] }` | fires each listed action in one click, one undo step |
 
 ### Toggle
@@ -519,8 +518,7 @@ A passing check reads `✓ <label>`. A failing check that can be fixed carries `
 ```
  ✓ done  |  ☐ live
  🍫  |  ✚  |  ✖ host 🔧  |  ✚  |  ✖ directory 🔧  |  ✚  |  ✖ gitaculous 🔧  |  ✚
- ✚  |  ✖ model 🔧  |  ✚  |  ✚  |  ✖ context 🔧  |  ✚  |  ✖ ceiling 🔧  |  ✚  |  ✖ autocompact 🔧  |  ✚  |  ✖ cacheTimer 🔧  |  ✚  |  ✖ block 🔧  |  ✚  |  ✖ weekly 🔧  |  ✚  |  ✖ activity 🔧  |  ✚
- (?)
+ ✚  |  ✖ model 🔧  |  ✚  |  ✚  |  ✖ context 🔧  |  ✚  |  ✖ autocompact 🔧  |  ✚  |  ✖ cacheTimer 🔧  |  ✚  |  ✖ block 🔧  |  ✚  |  ✖ weekly 🔧  |  ✚  |  ✖ activity 🔧  |  ✚  |  (?)
 ```
 
 At 80 columns the rows wrap:
@@ -529,9 +527,9 @@ At 80 columns the rows wrap:
  ✓ done  |  ☐ live
  🍫  |  ✚  |  ✖ host 🔧  |  ✚  |  ✖ directory 🔧  |  ✚  |  ✖ gitaculous 🔧
  ✚
- ✚  |  ✖ model 🔧  |  ✚  |  ✚  |  ✖ context 🔧  |  ✚  |  ✖ ceiling 🔧  |  ✚
- ✖ autocompact 🔧  |  ✚  |  ✖ cacheTimer 🔧  |  ✚  |  ✖ block 🔧  |  ✚
- ✖ weekly 🔧  |  ✚  |  ✖ activity 🔧  |  ✚  |  (?)
+ ✚  |  ✖ model 🔧  |  ✚  |  ✚  |  ✖ context 🔧  |  ✚  |  ✖ autocompact 🔧
+ ✚  |  ✖ cacheTimer 🔧  |  ✚  |  ✖ block 🔧  |  ✚  |  ✖ weekly 🔧  |  ✚
+ ✖ activity 🔧  |  ✚  |  (?)
 ```
 
 After a change (here, `✖` on host), the edit row grows:
@@ -625,8 +623,6 @@ At 80 columns the expanded form moves to its own row. Which facts each form show
 **`autocompact`**, in the default second row. Each control types `/autocompact <tokens|auto>` into this session's Claude Code pane. With the window on `auto` it reads `⇲ auto −`, as in every drawing above; with a window set it reads `⇲ 400.0K − + ↺` (from the in-process render in `design-docs/settings-menu-map-render.mts`, whose payload sets a window).
 
 `−` and `+` move the window by 100K, within 100K–1M and the model's context window. `↺` returns it to `auto`. A value the daemon cannot read shows `⇲ ⚠ <error>` on the error colour.
-
-**`ceiling`**, beside `context`, shows memento's context ceiling. It is hidden when memento is not installed, which is why it is absent from the live drawings here. Its template draws `⌈ <ceiling> − + ∞`, then `↺` while this session has a value of its own. `−`/`+` move the ceiling by 100K, `∞` lifts it, `↺` drops the session's setting; all four call memento's own `ceiling` command. An unreadable ceiling layer shows `⌈ ⚠ <error> ↺` on the error colour.
 
 **Opt-in segments.** These are in no bundled row; a config places them. Placed in one row, which wraps at 80 columns:
 
@@ -724,7 +720,6 @@ Every verb the daemon accepts, from `src/click/wire.ts`, and what emits it.
 | `undo`, `redo`, `back`, `rewind` | `↶`, `↷`, `◁`, `↩ cancel` |
 | `copy`, `open-vscode` | `⎘ id`, `⎘ resume`, `↗ proj`, `↗ log`, `↗ config` |
 | `slash` | `/compact`, `/model`, `/clear`, autocompact's `−` `+` `↺` |
-| `ceiling` | the ceiling segment's `−` `+` `∞` `↺` |
 | `doctor-run`, `doctor-fix`, `doctor-mark` | `🩺 doctor`, `[fix]`, `[✓ shapes]` `[✗ boxes]` |
 | `show-config-error`, `show-config-warning` | the diagnostic strip's words |
 | `apply-update` | `[rebuild]` / `[upgrade]` |
@@ -738,7 +733,7 @@ Found while drawing the above. Each is for Brandon to decide; none is changed he
 1. **A two-value carousel hides its other value.** Neighbours come in symmetric pairs, so a domain of two shows none: the charset ring is `◀ unicode ▶`, and `ascii` appears nowhere until it is picked (`neighbourLevels` in `src/render/carousel.ts`).
 2. **The doctor's result row does not fit 80 columns.** It is 113 cells, under an empty row; at 200 columns it sits on its own indented row with no empty row.
 3. **Configure mode draws the configured placement twice.** The row shows `✖ gitaculous 🔧` (its name label, which the settings hang from) and then `✖ ⎇ docs/… ▸ 🔧` (its live cell), so one placement has two `✖` and two `🔧`. The same happens for `block`. At 200 columns the theme control also moves under an empty row and loses the body's `|` lead.
-4. **Two `✚` side by side.** Between `model` and `context`, and around `context`/`ceiling` and `autocompact`, edit mode draws adjacent `✚` with nothing between them, because `context` and `ceiling` are nested as one unit and the row has an insertion point on each side of the unit's boundary. With `☑ live` on, a placement that renders nothing (`ceiling`, without memento) leaves its two `✚` adjacent too.
+4. **Two `✚` side by side.** Between `model` and `context`, edit mode draws adjacent `✚` with nothing between them, because `context` and `autocompact` are nested as one unit and the row has an insertion point on each side of the unit's boundary. With `☑ live` on, a placement that renders nothing leaves its two `✚` adjacent too.
 5. **`✖` means two things on one screen.** In edit mode with the menu open, `✖` closes the menu (the door) and `✖` removes a segment, both visible at once. Bodies close with `✕`.
 6. **Four ways to choose one value.** A [menu](#menu)'s grid (`✕ asc desc`), a [carousel](#carousel) (`◀ none ▶`), a ring row that opens a carousel (`◐ none ▸`), and [library pages](#library-pages). The settings menu uses the ring row and carousel; edit mode uses the menu and library; nothing bundled uses a bare menu over a plain list.
 7. **No control names its field.** The settings rings and tabs are labelled by glyph (`🎨`, `◐`, `✦`, `🎼`, `🔣`, `🌈`), while configure mode labels controls with words (`theme`, `warning at %`). This is the proposal's state 1 complaint, and the two conventions differ today.

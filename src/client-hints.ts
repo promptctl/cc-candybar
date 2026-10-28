@@ -8,7 +8,6 @@
 import type { ClientHints } from "./daemon/protocol";
 import { detectClaudeConfigDir } from "./claude-settings";
 import { detectConfigEnv } from "./config-hint";
-import { detectMementoEnv } from "./memento-hint";
 import { detectTermExtent } from "./term-extent";
 import { detectTerminalEnv } from "./terminal-hint";
 import { detectTmuxHint } from "./tmux-hint";
@@ -58,10 +57,8 @@ export function detectClientHints(
     // settings.json from THIS session's Claude Code directory.
     claudeConfigDir: detectClaudeConfigDir(env, cwd),
     // Total like tmux: always an object, so an absent hint means only "client
-    // too old". Memento's spawns run with THIS session's variables.
-    mementoEnv: detectMementoEnv(env, cwd),
-    // Total like mementoEnv. The doctor reads which terminal draws the bar
-    // from these (src/doctor/terminal.ts).
+    // too old". The doctor reads which terminal draws the bar from these
+    // (src/doctor/terminal.ts).
     terminalEnv: detectTerminalEnv(env),
   };
 }

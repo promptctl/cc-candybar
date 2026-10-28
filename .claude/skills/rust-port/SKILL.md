@@ -44,7 +44,7 @@ A phase-1 spike decides between the two on those translation points, and its out
 
 ## Workflow
 
-Git, every time: clean tree; main at 0 ahead / 0 behind, or stop and report the state; branch; commit the finished work; push; open a PR — and invoke `memento:address-pr-reviews` on the PR in the same response as opening it. Run `lit quickstart` first; each phase is an epic, each component a child ticket; a ticket closes when merged, never when green.
+Git, every time: clean tree; main at 0 ahead / 0 behind, or stop and report the state; branch; commit the finished work; push; open a PR — and address the PR's reviews in the same response as opening it. Run `lit quickstart` first; each phase is an epic, each component a child ticket; a ticket closes when merged, never when green.
 
 ## Verification
 

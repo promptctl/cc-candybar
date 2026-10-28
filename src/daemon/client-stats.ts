@@ -1,5 +1,5 @@
-import process from "node:process";
 import { describeFailure, requestOutcome } from "./client-transport";
+import type { CliPlan } from "../cli-plan";
 import type { RoundTripBudgets, RoundTripOutcome } from "./client-transport";
 import { RuntimeStats, type StatsSnapshot } from "./stats";
 import { PACKAGE_VERSION } from "../version";
@@ -12,31 +12,35 @@ import { shortDigest } from "../source-digest";
 const BUDGETS: RoundTripBudgets = { connectMs: 200, budgetMs: 500 };
 
 // Query the running daemon for stats. Does NOT spawn a daemon — stats on a
-// dead daemon is meaningless. Exits non-zero on failure with a clear message.
-export async function runDaemonStats(args: readonly string[]): Promise<void> {
-  const wantJson = args.includes("--json");
+// dead daemon is meaningless. A failure is the plan's stderr and a non-zero
+// code.
+export async function daemonStatsPlan(
+  args: readonly string[],
+): Promise<CliPlan> {
+  return statsPlan(await fetchStats(), args.includes("--json"));
+}
 
-  const outcome = await fetchStats();
+// [LAW:dataflow-not-control-flow] The outcome → (streams, exit-code) fold.
+// The raw object needs no shape, so JSON mode carries whatever the daemon
+// said before anything is checked; a skewed daemon's JSON is still delivered,
+// beside the skew on stderr and a failing code.
+export function statsPlan(
+  outcome: RoundTripOutcome<StatsSnapshot>,
+  wantJson: boolean,
+): CliPlan {
   if (outcome.kind !== "ok") {
-    process.stderr.write(`daemon-stats: ${describeFailure(outcome)}\n`);
-    process.exit(1);
+    return {
+      stdout: "",
+      stderr: `daemon-stats: ${describeFailure(outcome)}\n`,
+      code: 1,
+    };
   }
-  // The raw object needs no shape, so JSON mode prints whatever the daemon
-  // said before anything is checked. `exitCode`, never `exit()`, after a
-  // stdout write: a piped stdout flushes asynchronously, and exit() would cut
-  // the JSON mid-object.
-  if (wantJson) {
-    process.stdout.write(JSON.stringify(outcome.value, null, 2) + "\n");
-  }
+  const json = wantJson ? JSON.stringify(outcome.value, null, 2) + "\n" : null;
   const skew = shapeSkew(outcome.value);
   if (skew !== null) {
-    process.stderr.write(`daemon-stats: ${skew}\n`);
-    process.exitCode = 1;
-    return;
+    return { stdout: json ?? "", stderr: `daemon-stats: ${skew}\n`, code: 1 };
   }
-  if (wantJson) return;
-
-  process.stdout.write(formatStats(outcome.value));
+  return { stdout: json ?? formatStats(outcome.value), stderr: "", code: 0 };
 }
 
 export function fetchStats(): Promise<RoundTripOutcome<StatsSnapshot>> {
@@ -164,6 +168,11 @@ export function formatStats(s: StatsSnapshot): string {
   lines.push(`  errored       ${s.requests.errored}`);
   lines.push(`  timedOut      ${s.requests.timedOut}`);
   lines.push(`  inFlight      ${s.requests.inFlight}`);
+  // Each name as a JSON string: a client chose it, and one holding a newline
+  // or an escape would otherwise forge rows or drive the terminal.
+  lines.push(
+    `  unknownFields ${s.unknownHookFields.map((f) => JSON.stringify(f)).join(", ") || "-"}`,
+  );
   lines.push(``);
   lines.push(`gitCache`);
   lines.push(`  size          ${s.gitCache.size}`);
@@ -172,7 +181,6 @@ export function formatStats(s: StatsSnapshot): string {
     `  hit rate      ${fmtRate(s.gitCache.hits, s.gitCache.misses)} (${s.gitCache.hits} / ${s.gitCache.hits + s.gitCache.misses})`,
   );
   lines.push(`  changes       ${s.gitCache.changes}`);
-  lines.push(`  refreshes     ${s.gitCache.refreshes}`);
   lines.push(``);
   lines.push(`usageCache`);
   lines.push(`  size          ${s.usageCache.size}`);
@@ -182,15 +190,29 @@ export function formatStats(s: StatsSnapshot): string {
   lines.push(`  sweeps        ${s.usageCache.sweeps}`);
   lines.push(``);
   lines.push(`sources`);
-  for (const [name, source] of Object.entries(s.sources)) {
-    const refreshes = Object.entries(source.refreshes)
+  for (const r of s.sources.records) {
+    const refreshes = Object.entries(r.refreshes)
       .map(([by, n]) => `${by}:${n}`)
       .join(" ");
-    const held = "held" in source ? ` held=${source.held}` : "";
     lines.push(
-      `  ${name.padEnd(12)}  entries=${source.entries}${held} failures=${source.failures} refreshes ${refreshes}`,
+      `  ${`${r.scope}/${r.name}`.padEnd(24)}  failures=${r.failures} last=${r.lastMs === null ? "-" : `${r.lastMs}ms`} refreshes ${refreshes}`,
     );
   }
+  const scopes = Object.entries(s.sources.homes)
+    .map(([scope, n]) => `${scope}:${n}`)
+    .join(" ");
+  const held = Object.entries(s.sources.held)
+    .map(([source, n]) => `${source}:${n}`)
+    .join(" ");
+  lines.push(`  homes         ${scopes}`);
+  lines.push(`  held          ${held}`);
+  const storage = s.sources.pluginStorage;
+  const faults = Object.entries(storage.faults)
+    .map(([cause, n]) => `${cause}:${n}`)
+    .join(" ");
+  lines.push(
+    `  plugin storage folders=${storage.folders} lost=${storage.lost} probes=${storage.probes} probeFailures=${storage.probeFailures} stalled=${storage.stalled} stalls=${storage.stalls} faults ${faults}`,
+  );
   lines.push(``);
   lines.push(`transcriptReads`);
   lines.push(`  reads         ${s.transcriptReads.reads}`);
@@ -204,6 +226,7 @@ export function formatStats(s: StatsSnapshot): string {
   lines.push(`  retired       ${s.renderCache.retired}`);
   lines.push(`  compiles      ${s.renderCache.compiles}`);
   lines.push(`  views         ${s.renderCache.views}`);
+  lines.push(`  pinned        ${s.renderCache.pinned}`);
   lines.push(`  retired views ${s.renderCache.retiredViews}`);
   lines.push(
     `  accounted     ${fmtBytes(s.renderCache.accountedBytes)} / ${fmtBytes(s.renderCache.budgetBytes)}`,
@@ -226,6 +249,8 @@ export function formatStats(s: StatsSnapshot): string {
   lines.push(`  active        ${s.watchers.active}`);
   lines.push(`  opened        ${s.watchers.opened}`);
   lines.push(`  closed        ${s.watchers.closed}`);
+  lines.push(`  refused       ${s.watchers.refused}`);
+  lines.push(`  errors        ${s.watchers.errors}`);
   lines.push(``);
   lines.push(`subprocesses`);
   lines.push(`  total         ${s.subprocesses.total}`);

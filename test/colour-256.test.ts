@@ -14,12 +14,9 @@
 // At ansi no ratio exists, and the one floor that does is measured instead:
 // nothing is drawn on its own ground's index.
 
-import {
-  listThemePalettes,
-  Oklch,
-  ColorRgba,
-  SEAM_MIN_DELTA_E,
-} from "@promptctl/rich-js";
+import { TEST_SIGNER } from "./helpers/link-signer";
+import { listThemePalettes, ColorRgba, SEAM_MIN_DELTA_E } from "@promptctl/rich-js";
+import { deltaE as deltaERgba } from "../src/themes/decor";
 import { POWERLINE } from "./helpers/powerline";
 import { prepareConfig, renderEffective } from "../src/check";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
@@ -73,8 +70,7 @@ const ratio = (a: Rgb, b: Rgb): number => {
   const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x) as [number, number];
   return (hi + 0.05) / (lo + 0.05);
 };
-const deltaE = (a: Rgb, b: Rgb): number =>
-  Oklch.fromRgba(new ColorRgba(...a)).deltaE(Oklch.fromRgba(new ColorRgba(...b)));
+const deltaE = (a: Rgb, b: Rgb): number => deltaERgba(new ColorRgba(...a), new ColorRgba(...b));
 
 // The joiners' glyphs. The thin divider is not a joiner here: rich-js draws a divider in
 // the left cell's text colour on the left cell's own ground, so it IS that
@@ -223,7 +219,7 @@ async function closedBars(): Promise<{
   render: (theme: string, colorCompatibility: ColorCompatibility) => Chars;
   dispose: () => void;
 }> {
-  const prepared = await prepareConfig([], process.cwd(), [], instantOf(new Date()));
+  const prepared = await prepareConfig([], null, process.cwd(), [], instantOf(new Date()));
   return {
     render: (theme, colorCompatibility) =>
       drawnChars(
@@ -313,7 +309,7 @@ function forEachStage(
   const registry = new SourceRegistry(store, "", sessionState);
   recordRender(sessionState, "s1");
   try {
-    const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
+    const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
     const ctx = testVerbContext(sessionState, undefined, config);
     const render = (colorCompatibility: ColorCompatibility) =>
       renderDsl(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), { ...OPTS, colorCompatibility });

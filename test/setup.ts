@@ -45,16 +45,12 @@ process.env.CC_CANDYBAR_SOCKET = path.join(
 // local server of its own.
 process.env.CC_CANDYBAR_REGISTRY_URL = "http://127.0.0.1:1";
 
-// [LAW:single-enforcer] No test daemon finds the host's Claude Code plugins:
-// the bar's memento ceiling (src/memento/edge.ts) reads the plugin registry
-// of the Claude Code directory the rendering CLIENT reports, and the test
-// clients report this variable (test/helpers/daemon-e2e.ts, the spawned real
-// client) — a host with memento installed would otherwise put its own ceiling
-// on every test daemon's bar. An empty directory has no registry, so memento
-// is absent, and no transcripts, so `today` seeds nothing of the host's.
+// [LAW:single-enforcer] No test daemon reads the host's Claude Code
+// directory: the bar reads the settings and transcripts of the directory the
+// rendering CLIENT reports, and the test clients report this variable
+// (test/helpers/daemon-e2e.ts, the spawned real client). An empty directory
+// has no settings and no transcripts, so `today` seeds nothing of the host's.
 // Tests that seed transcripts hand the store their own directory.
-// test/memento-integration.test.ts finds the host's memento under the home
-// directory on purpose.
 process.env.CLAUDE_CONFIG_DIR = path.join(
   os.tmpdir(),
   `cc-candybar-jest-claude-${crypto.randomUUID()}`,
@@ -87,4 +83,14 @@ process.env.XDG_DATA_DIRS = noPlugins;
 process.env.XDG_CONFIG_HOME = path.join(
   os.tmpdir(),
   `cc-candybar-jest-config-${crypto.randomUUID()}`,
+);
+
+// [LAW:single-enforcer] No test reads the host's answers for repository
+// configs, or its link key (src/daemon/repo-configs.ts, link-key.ts): both
+// live in the state directory, so a repository the host approved would load
+// in a test that means to see it wait. A test answering for a repository
+// writes into this one (test/helpers/repo-approval.ts).
+process.env.XDG_STATE_HOME = path.join(
+  os.tmpdir(),
+  `cc-candybar-jest-state-${crypto.randomUUID()}`,
 );

@@ -8,6 +8,7 @@
 // at compile time (via the `satisfies` on the constant) AND at runtime here
 // (via parseDslConfig). Two boundaries, one truth.
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import { selectionFor } from "./helpers/selection";
 import { stripAnsi } from "./helpers/ansi";
 import {
@@ -52,7 +53,7 @@ import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { presetNames } from "../src/config/presets";
 import { EDIT_MODE_KEY, EDIT_MODE_ARRANGE } from "../src/config/loader/edit-mode";
 import { narrowToSegment } from "./helpers/narrow-to-segment";
-import { checkPayload } from "../src/check";
+import { CHECK_TODAY, checkPayload } from "../src/check";
 import {
   renderOptionsOf,
 } from "../src/daemon/render-payload";
@@ -61,6 +62,9 @@ import { resolvedStyle } from "../src/render/rich-theme";
 import { TEXT_MIN_CONTRAST } from "../src/themes/decor";
 import { QUIET_MIN_CONTRAST } from "../src/config/quiet-text";
 import { INVISIBLE, linkUrls } from "./helpers/ansi";
+import { POLLED } from "../src/config/settings-menu";
+import { DOOR_GLYPH } from "../src/config/disclosure";
+import { REMOVE_GLYPH } from "../src/config/edit-glyphs";
 import { type Instant, instantOf } from "../src/utils/instant";
 
 // Visible segment text: every zero-width escape, plus the powerline cap glyphs.
@@ -165,11 +169,8 @@ describe("DEFAULT_DSL_CONFIG", () => {
         "gitaculous",
         "model",
         "context",
-        // Nested with `context` as one cell unit, when-gated on memento being
-        // installed (brandon-context-ceiling-xta.asv).
-        "ceiling",
-        // Beside the ceiling, when-gated on the auto-compact window having been
-        // read (brandon-context-ceiling-xta.e3p).
+        // Nested with `context` as one cell unit, when-gated on the
+        // auto-compact window having been read (brandon-context-ceiling-xta.e3p).
         "autocompact",
         "cacheTimer",
         "block",
@@ -208,6 +209,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     );
     try {
       const compiled = registerDslConfig(parsed, registry, {
+        signer: TEST_SIGNER,
         cwd: process.cwd(),
       });
       const basePalette = getThemePalette(
@@ -281,17 +283,17 @@ describe("DEFAULT_DSL_CONFIG", () => {
         new SessionState(),
       );
       const compiled = registerDslConfig(config, registry, {
+        signer: TEST_SIGNER,
         cwd: process.cwd(),
       });
       const row = (
         effort: { level: string } | undefined,
         when: Instant = at,
       ): string => {
-        const { effort: _fixtureEffort, ...payload } = checkPayload(
-          effective,
-          null,
-          when,
-        );
+        const { effort: _fixtureEffort, ...payload } = {
+          ...checkPayload(config, effective, null, when),
+          today: CHECK_TODAY,
+        };
         const errors: string[] = [];
         const rendered = renderDsl(
           config,
@@ -527,7 +529,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     const sessionState = new SessionState();
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "", sessionState);
-    const compiled = registerDslConfig(parsed, registry, { cwd: "/tmp" });
+    const compiled = registerDslConfig(parsed, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
     // A click is gated by the config its session renders: record the render
     // and hand the click that config, so the clicks below pass through the
     // same validator applyTheme/applyStyle would in production.
@@ -656,7 +658,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         new SessionState(),
       );
       try {
-        const compiled = registerDslConfig(parsed, registry, { cwd: "/tmp" });
+        const compiled = registerDslConfig(parsed, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
         const bp = getThemePalette("textual-dark"!)!;
         return renderDsl(parsed, compiled, store, registry, payload, instantOf(new Date()), {
           endcaps: "powerline",
@@ -720,7 +722,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         new SessionState(),
       );
       try {
-        const compiled = registerDslConfig(cfg, registry, { cwd: "/tmp" });
+        const compiled = registerDslConfig(cfg, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
         const bp = getThemePalette(cfg.globals.palette ?? "textual-dark"!)!;
         return renderDsl(cfg, compiled, store, registry, payload, instantOf(new Date()), opts);
       } finally {
@@ -778,7 +780,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         new SessionState(),
       );
       try {
-        const compiled = registerDslConfig(cfg, registry, { cwd: "/tmp" });
+        const compiled = registerDslConfig(cfg, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
         const bp = getThemePalette("textual-dark"!)!;
         return renderDsl(cfg, compiled, store, registry, payload, instantOf(new Date()), opts);
       } finally {
@@ -809,6 +811,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       );
       try {
         const compiled = registerDslConfig(toolbarOnly, registry, {
+          signer: TEST_SIGNER,
           cwd: process.cwd(),
         });
         const basePalette = getThemePalette(
@@ -915,6 +918,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       );
       try {
         const compiled = registerDslConfig(dirOnly, registry, {
+          signer: TEST_SIGNER,
           cwd: process.cwd(),
         });
         const basePalette = getThemePalette(
@@ -1122,7 +1126,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const store = new VariableStore();
       const registry = new SourceRegistry(store, "", sessionState);
       try {
-        const compiled = registerDslConfig(cfg, registry, { cwd: "/tmp" });
+        const compiled = registerDslConfig(cfg, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
         const basePalette = paletteForThemeName(
           theme ?? cfg.globals.palette ?? "textual-dark",
         );
@@ -1449,6 +1453,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       );
       try {
         const compiled = registerDslConfig(metricsOnly, registry, {
+          signer: TEST_SIGNER,
           cwd: process.cwd(),
         });
         const basePalette = getThemePalette(
@@ -1540,6 +1545,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         );
         try {
           const compiled = registerDslConfig(blockOnly, registry, {
+            signer: TEST_SIGNER,
             cwd: process.cwd(),
           });
           const basePalette = getThemePalette(
@@ -1618,6 +1624,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       );
       try {
         const compiled = registerDslConfig(sessionOnly, registry, {
+          signer: TEST_SIGNER,
           cwd: process.cwd(),
         });
         const basePalette = getThemePalette(
@@ -1766,6 +1773,7 @@ describe("bundled preset library renders clean at every width — brandon-preset
     });
     try {
       const compiled = registerDslConfig(VALIDATED, registry, {
+        signer: TEST_SIGNER,
         cwd: "/tmp",
       });
       const segmentErrors: string[] = [];
@@ -1774,7 +1782,10 @@ describe("bundled preset library renders clean at every width — brandon-preset
         compiled,
         store,
         registry,
-        withPayload(checkPayload(effective, null, instantOf(new Date()))),
+        withPayload({
+          ...checkPayload(VALIDATED, effective, null, instantOf(new Date())),
+          today: CHECK_TODAY,
+        }),
         instantOf(new Date()),
         {
           endcaps: effective.endcaps,
@@ -1832,6 +1843,25 @@ describe("bundled preset library renders clean at every width — brandon-preset
         expect(segmentErrors).toEqual([]);
         expect(rendered.length).toBeGreaterThan(0);
       }
+    },
+  );
+
+  // [LAW:verifiable-goals] Every bar says how it is redrawn, right after the
+  // door, whatever the preset arranges — and edit mode offers no way to
+  // remove it, as it offers none for the door. checkPayload's render is a
+  // request's answer, so the readout is the polled one.
+  test.each(presetNames(DEFAULT_DSL_CONFIG.presets))(
+    'preset "%s" carries the frame rate right after the door, in edit mode too',
+    (name) => {
+      const afterDoor = new RegExp(`${DOOR_GLYPH}[^\\p{L}\\p{N}]*${POLLED}`, "u");
+      const plain = renderPreset(name, 120);
+      expect(plain.segmentErrors).toEqual([]);
+      expect(stripAnsi(plain.rendered)).toMatch(afterDoor);
+      const editing = stripAnsi(
+        renderPreset(name, 120, undefined, editingSession).rendered,
+      );
+      expect(editing).toMatch(afterDoor);
+      expect(editing).not.toMatch(new RegExp(`${REMOVE_GLYPH}\\s*${POLLED}`, "u"));
     },
   );
 

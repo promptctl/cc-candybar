@@ -83,6 +83,7 @@ import {
   renderBinding,
   type ActionRuntime,
 } from "../render/action.js";
+import type { LinkSigner } from "../click/link-signer.js";
 import { SESSION_KEY_TO_EFFECTIVE_VAR } from "../config/setting-projections.js";
 import { disclosureCloseFragment } from "../render/disclosure-close.js";
 import { pickerFuncs } from "../render/picker.js";
@@ -115,10 +116,10 @@ import { fixedSource, type Selections } from "./view-source.js";
 import { declaredVariables } from "../config/loader/refs.js";
 import {
   authoredRules,
-  projectionNamesOf,
   projectionsOf,
   templateInstants,
 } from "../config/loader/projections.js";
+import { valueReads } from "../config/loader/value-reads.js";
 import {
   barRoot,
   bandRoot,
@@ -298,6 +299,13 @@ function declareOne(
       registry.declareFailedDocument(name, decl.reason);
       break;
 
+    // [LAW:single-enforcer] A plugin source's reading is read by the managed
+    // storage owner and carried by the view's payload at the source's name
+    // (src/daemon/render-payload.ts); the view derives the document from it.
+    case "source":
+      registry.declareSourceDocument(name);
+      break;
+
     case "input":
       // [LAW:types-are-the-program] The loader validated that `decl.type` is
       // one of "string"|"number"|"boolean" and that `decl.default` (if
@@ -436,13 +444,14 @@ export function registerDslConfig(
   // [LAW:no-silent-failure] `cwd` is required: it is the directory `shell`
   // sources run in, and the daemon's own process.cwd() is
   // whichever shell spawned it — a default here would be that wrong answer.
-  opts: { cwd: string },
+  // `signer` signs the `run` links the compile draws.
+  opts: { cwd: string; signer: LinkSigner },
 ): RegisteredConfig {
   const { compiled, loadWarnings } = registerCompiled(
     config,
     registry,
     opts.cwd,
-    compileAlone,
+    compileAlone(opts.signer),
     EVERY_SCOPE,
   );
   return { ...compiled, loadWarnings };
@@ -455,8 +464,10 @@ export type CompileProvider = (
 ) => CompiledConfig;
 
 /** A compile of its own, for a caller with no other entry to share one with. */
-export const compileAlone: CompileProvider = (_key, input) =>
-  compileDslConfig(input);
+export const compileAlone =
+  (signer: LinkSigner): CompileProvider =>
+  (_key, input) =>
+    compileDslConfig(input, signer);
 
 /** A config composed into a registry: its compile, and its store's declarations. */
 export interface Registration {
@@ -512,11 +523,10 @@ export interface CompileInput {
   readonly config: Omit<ValidatedConfig, "variables">;
   readonly stateReads: ReadonlyArray<readonly [key: string, variable: string]>;
   // [LAW:one-source-of-truth] What the compile tells its own templates' reads
-  // of the instant by (projections.ts): the declared names that decide whether
-  // a read lands on a projection, and the projections, with why — the one
+  // of the instant by (projections.ts): the projections, with why — the one
   // other fact of the variables a compile reads, sorted so it is part of the
-  // compile's identity.
-  readonly projectionNames: readonly string[];
+  // compile's identity. No declared name nests under another, so a read lands
+  // on a projection against these names exactly as against them all.
   readonly projections: ReadonlyArray<readonly [variable: string, why: string]>;
 }
 
@@ -549,7 +559,6 @@ export function compileInputOf(config: ValidatedConfig): CompileInput {
   return {
     config: rest,
     stateReads: [...stateKeyToVar].sort(([a], [b]) => (a < b ? -1 : 1)),
-    projectionNames: projectionNamesOf(config),
     projections: [...projectionsOf(config)].sort(([a], [b]) =>
       a < b ? -1 : 1,
     ),
@@ -608,12 +617,12 @@ export const EVERY_SCOPE: ReadonlySet<VarScope> = new Set([
 // Pre-parse every template the config holds against one engine whose
 // template functions read the store and clocks of the render in progress
 // (ActionRuntime.bound), so the compile holds no store of its own.
-export function compileDslConfig({
-  config,
-  stateReads,
-  projectionNames,
-  projections,
-}: CompileInput): CompiledConfig {
+export function compileDslConfig(
+  { config, stateReads, projections }: CompileInput,
+  // [LAW:locality-or-seam] Not part of the input: the compile's identity is
+  // the config's, and every compile one daemon makes signs with its one key.
+  signer: LinkSigner,
+): CompiledConfig {
   // [LAW:locality-or-seam] One engine per config load, carrying THIS config's
   // action runtime. Engine creation amortizes across all of this config's segment
   // templates (parse-once); per-config (not per-render) is the right granularity
@@ -626,6 +635,7 @@ export function compileDslConfig({
   const actionRuntime: ActionRuntime = {
     bound: undefined,
     compiled: new Map(),
+    signer,
   };
   // [LAW:one-way-deps] Inject action + picker feature funcs as data — the engine
   // stays generic. The picker shares the ACTION runtime (it resolves its
@@ -888,21 +898,24 @@ export function compileDslConfig({
   // the gates are told first, by the engine's clock functions alone — a gate
   // is drawn outside any segment, where no layout can be asked for.
   const basis = {
-    helpers: config.helpers,
-    names: new Set(projectionNames),
+    reads: valueReads({
+      names: new Set(projections.map(([name]) => name)),
+      helpers: config.helpers,
+      actions: config.actions,
+    }),
     projections: new Map(projections),
     clock: engineClockFunctions(renderClocks),
   };
-  const gateReadsInstant = templateInstants(basis, config.actions);
+  const gateReadsInstant = templateInstants(basis);
   const gates = [...roots.values()].flatMap(layoutGates(compiled));
   const layoutReadsInstant = gates.some((gate) =>
     gateReadsInstant(sources.get(gate)!),
   );
   const readsInstant = layoutReadsInstant
-    ? templateInstants(
-        { ...basis, clock: new Set([...basis.clock, LAYOUT_PREVIEW]) },
-        config.actions,
-      )
+    ? templateInstants({
+        ...basis,
+        clock: new Set([...basis.clock, LAYOUT_PREVIEW]),
+      })
     : gateReadsInstant;
   const instant = new Set(
     [...sources].flatMap(([template, source]) =>

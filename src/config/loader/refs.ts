@@ -177,6 +177,42 @@ function* callGraphBlocks(
   yield* walk(template, "", null, new Set());
 }
 
+// One answer per template text: a gate's text recurs at every node of every
+// preset that edit chrome wraps alike, and every question asked of a template
+// is asked of the same text again at compile.
+export function perTemplate<T>(
+  answer: (template: string) => T,
+): (t: string) => T {
+  const answers = new Map<string, T>();
+  return (template) => {
+    if (!answers.has(template)) answers.set(template, answer(template));
+    return answers.get(template)!;
+  };
+}
+
+// [LAW:one-source-of-truth] The walk, materialised once per template under one
+// helpers object, and read by every question asked of that template: a
+// template is asked what it reads, which actions it binds, which functions
+// and helpers it calls, at load and again at compile, and each was a walk of
+// its own over the same text. The helpers object is the config's, so the
+// walks live exactly as long as the config does, as a config's value-reads
+// fold does (value-reads.ts).
+const WALKS = new WeakMap<
+  object,
+  (template: string) => readonly GraphBlock[]
+>();
+function callGraph(
+  template: string,
+  helpers: Readonly<Record<string, string>>,
+): readonly GraphBlock[] {
+  let walks = WALKS.get(helpers);
+  if (walks === undefined) {
+    walks = perTemplate((t) => [...callGraphBlocks(t, helpers)]);
+    WALKS.set(helpers, walks);
+  }
+  return walks(template);
+}
+
 // The refs an action's text spells, as paths from the template's root. A `$.a`
 // ref is under `root` whatever the dot; a `.a` ref is under the dot; either
 // reads nothing nameable when its base is null.
@@ -202,7 +238,7 @@ export function templateReads(
   helpers: Readonly<Record<string, string>>,
 ): ReadonlyMap<string, string | null> {
   const reads = new Map<string, string | null>();
-  for (const block of callGraphBlocks(template, helpers)) {
+  for (const block of callGraph(template, helpers)) {
     for (const ref of dotRefs(block)) {
       if (!reads.has(ref)) reads.set(ref, block.via);
     }
@@ -291,7 +327,7 @@ export function templateActionRefs(
   helpers: Readonly<Record<string, string>>,
 ): readonly ActionRef[] {
   const refs = new Map<string, ActionRef>();
-  for (const { code, via } of callGraphBlocks(template, helpers)) {
+  for (const { code, via } of callGraph(template, helpers)) {
     for (const { name, site } of actionBindings(code)) {
       const key = `${name}\0${via ?? "\0"}`;
       if (!refs.has(key)) refs.set(key, { name, site, via });
@@ -312,7 +348,7 @@ export function bindsComputedAction(
   template: string,
   helpers: Readonly<Record<string, string>>,
 ): boolean {
-  for (const { code } of callGraphBlocks(template, helpers)) {
+  for (const { code } of callGraph(template, helpers)) {
     if (COMPUTED_BINDING_RE.test(code.replace(STRING_LITERAL_RE, '""'))) {
       return true;
     }
@@ -332,7 +368,7 @@ export function templateFunctions(
   helpers: Readonly<Record<string, string>>,
 ): ReadonlySet<string> {
   const called = new Set<string>();
-  for (const { code } of callGraphBlocks(template, helpers)) {
+  for (const { code } of callGraph(template, helpers)) {
     for (const [name] of code
       .replace(STRING_LITERAL_RE, "")
       .matchAll(BARE_NAME_RE)) {
@@ -364,38 +400,65 @@ export function templateHelperCalls(
   helpers: Readonly<Record<string, string>>,
 ): ReadonlySet<string> {
   const called = new Set<string>();
-  for (const { code, dot, root } of callGraphBlocks(template, helpers)) {
+  for (const { code, dot, root } of callGraph(template, helpers)) {
     for (const { name } of helperCalls(code, dot, root)) called.add(name);
   }
   return called;
 }
 
-// Every variable the config declares, under the name the store holds it by:
-// a global by its own name, a segment's local as `segName.varName`.
-export function* declaredVariables(
-  config: Pick<DslConfig, "variables" | "segments">,
-): IterableIterator<readonly [name: string, decl: VariableDecl]> {
-  yield* Object.entries(config.variables);
+// Every variable the config declares, under the name the store holds it by
+// (a global by its own name, a segment's local as `segName.varName`), with the
+// config path that declares it.
+// [LAW:one-source-of-truth] The one spelling of a segment variable's store name.
+export function* declarationsAt(
+  // What it reads: a config's variables and its segments' own vars, so an
+  // authored file's sections answer as a built config's do.
+  config: Pick<DslConfig, "variables"> & {
+    readonly segments: Readonly<
+      Record<string, Pick<DslConfig["segments"][string], "vars">>
+    >;
+  },
+): IterableIterator<
+  readonly [name: string, decl: VariableDecl, at: readonly string[]]
+> {
+  for (const [name, decl] of Object.entries(config.variables)) {
+    yield [name, decl, ["variables", name]];
+  }
   for (const [segName, seg] of Object.entries(config.segments)) {
     for (const [varName, decl] of Object.entries(seg.vars ?? {})) {
-      yield [`${segName}.${varName}`, decl];
+      yield [
+        `${segName}.${varName}`,
+        decl,
+        ["segments", segName, "vars", varName],
+      ];
     }
   }
 }
 
-// The variable a dotted read lands on: the longest declared name the path
-// starts with (`.budget.spent` reads the document `budget`). Null for a read
-// of nothing declared.
+export function* declaredVariables(
+  config: Pick<DslConfig, "variables" | "segments">,
+): IterableIterator<readonly [name: string, decl: VariableDecl]> {
+  for (const [name, decl] of declarationsAt(config)) yield [name, decl];
+}
+
+// [LAW:single-enforcer] THE resolution of a read to the declarations it
+// reaches, for every walk that asks: the declared name the path starts with
+// (`.budget.spent` reads the document `budget`), else — a read that reaches no
+// declared name — every name under it, as a namespace (`.git` reads every
+// `git.*`). Empty for a read of nothing declared. No declared name sits under
+// another (nesting.ts), so at most one declared name starts a path, and the
+// draw's scope proxy, which takes the first it reaches, lands on the same one.
 export function variableRead(
   path: string,
   names: ReadonlySet<string>,
-): string | null {
+): readonly string[] {
   const parts = path.split(".");
   for (let n = parts.length; n > 0; n--) {
     const name = parts.slice(0, n).join(".");
-    if (names.has(name)) return name;
+    if (names.has(name)) return [name];
   }
-  return null;
+  const namespace = `${path}.`;
+  return [...names].filter((name) => name.startsWith(namespace));
 }
 
 // [LAW:types-are-the-program] What a template reference resolves against:
@@ -414,20 +477,14 @@ export interface TemplateScope {
   readonly helpers: Readonly<Record<string, string>>;
 }
 
-// A ref resolves if (a) the full dotted name is a declared variable, (b) it
-// is a strict prefix of some declared variable (namespace navigation like
-// .session in `.session.id` when only `session.id` is declared), or (c) a
-// declared document is a strict prefix of it (a field read).
+// A ref resolves when it reaches a declaration (variableRead): the name
+// itself, a namespace of names under it, or a declared document whose field it
+// reads. Past any other declared name it reads into a value the loader cannot
+// see, so it does not resolve.
 export function refResolves(ref: string, scope: TemplateScope): boolean {
-  if (scope.names.has(ref)) return true;
-  const prefix = `${ref}.`;
-  for (const name of scope.names) {
-    if (name.startsWith(prefix)) return true;
-  }
-  for (const doc of scope.documents) {
-    if (ref.startsWith(`${doc}.`)) return true;
-  }
-  return false;
+  return variableRead(ref, scope.names).some(
+    (name) => !ref.startsWith(`${name}.`) || scope.documents.has(name),
+  );
 }
 
 // [LAW:one-source-of-truth] The one scope every reference surface resolves
@@ -445,9 +502,13 @@ export function templateScopeOf(cfg: DslConfig): TemplateScope {
   return { names, documents, helpers: cfg.helpers };
 }
 
+// [LAW:one-source-of-truth] The one document predicate: what cross-ref lets a
+// field read reach into is what the store declares a document (declareOne,
+// src/dsl/render.ts) — a json shell or file, a plugin's source, a tombstone.
 function isDocumentDecl(v: VariableDecl): boolean {
   return (
     v.kind === "dropped" ||
+    v.kind === "source" ||
     ((v.kind === "shell" || v.kind === "file") && parseArm(v.parse) === "json")
   );
 }

@@ -1,9 +1,10 @@
-import { RuntimeStats } from "../src/daemon/stats";
+import { RuntimeStats, type SourceSnapshots } from "../src/daemon/stats";
 import { EMPTY_STORES } from "./helpers/doctor-facts";
 import {
   formatStats,
   missingFields,
   shapeSkew,
+  statsPlan,
 } from "../src/daemon/client-stats";
 import { PROTOCOL_VERSION } from "../src/daemon/protocol";
 import { readFileSync } from "node:fs";
@@ -15,6 +16,45 @@ const pkg = JSON.parse(
   readFileSync(join(process.cwd(), "package.json"), "utf8"),
 ) as { version: string };
 
+// Every source's record as the ledger keeps it, and the homes by scope.
+const SOURCES: SourceSnapshots = {
+  records: [
+    {
+      name: "tmux",
+      scope: "pane",
+      refreshes: { first: 2, period: 7, change: 0, supersede: 0 },
+      failures: 1,
+      lastMs: 3,
+    },
+    {
+      name: "cache",
+      scope: "session",
+      refreshes: { request: 3 },
+      failures: 1,
+      lastMs: 0,
+    },
+  ],
+  homes: {
+    daemon: 1,
+    configDir: 1,
+    repo: 4,
+    directory: 3,
+    session: 10,
+    view: 2,
+    pane: 2,
+  },
+  held: { git: 1, tmux: 1, host: 2, today: 1, pluginStorage: 1 },
+  pluginStorage: {
+    folders: 1,
+    faults: { unusable: 0, refused: 1, error: 0 },
+    lost: 1,
+    probes: 7,
+    probeFailures: 1,
+    stalled: 1,
+    stalls: 2,
+  },
+};
+
 describe("RuntimeStats.snapshot", () => {
   test("produces a stable shape with extras merged in", () => {
     const stats = new RuntimeStats();
@@ -24,6 +64,8 @@ describe("RuntimeStats.snapshot", () => {
     stats.inFlight = 1;
     stats.watchersOpened = 5;
     stats.watchersClosed = 3;
+    stats.watchRefusals = 1;
+    stats.watchErrors = 2;
 
     const snap = stats.snapshot({
       gitCache: {
@@ -32,32 +74,10 @@ describe("RuntimeStats.snapshot", () => {
         hits: 100,
         misses: 20,
         changes: 3,
-        refreshes: 0,
         watchers: 2,
       },
       usageCache: { size: 10, hits: 50, misses: 5, sweeps: 1 },
-      sources: {
-        today: {
-          entries: 1,
-          held: 1,
-          refreshes: { first: 1, period: 4, supersede: 0 },
-          failures: 0,
-        },
-        tmux: {
-          entries: 2,
-          held: 1,
-          refreshes: { first: 2, period: 7, supersede: 0 },
-          failures: 1,
-        },
-        memento: {
-          entries: 1,
-          held: 1,
-          refreshes: { first: 1, period: 3, supersede: 1 },
-          failures: 0,
-        },
-        autocompact: { entries: 1, refreshes: { request: 2 }, failures: 0 },
-        cache: { entries: 1, refreshes: { request: 3 }, failures: 1 },
-      },
+      sources: SOURCES,
       transcriptReads: { reads: 0, bytes: 0, longLines: 0, largestLine: 0 },
       renderCache: {
         size: 3,
@@ -65,14 +85,24 @@ describe("RuntimeStats.snapshot", () => {
         retired: 0,
         compiles: 1,
         views: 0,
+        pinned: 0,
         retiredViews: 0,
         accountedBytes: 3,
         budgetBytes: 9,
       },
       effectCache: { sessions: 2, effects: 5 },
       menuIdle: { sessions: 2, armed: 1 },
+      runs: { started: 3, failed: 1, timedOut: 1, refused: 2, running: 0 },
       sessionState: { sessions: 2, observers: 11, revision: 7 },
-      frameFeeds: { feeds: 0, subscribers: 0, drawn: 0, pushed: 0, refused: 0, lookups: 0, found: 0 },
+      frameFeeds: {
+        feeds: 0,
+        subscribers: 0,
+        drawn: 0,
+        pushed: 0,
+        refused: 0,
+        lookups: 0,
+        found: 0,
+      },
       tmuxStatus: { sessions: 0, layouts: 0, writes: 0, failedWrites: 0 },
       watchersActive: 2,
       handlerProbes: [{ nonce: "n", handler: "1.2.3" }],
@@ -91,23 +121,28 @@ describe("RuntimeStats.snapshot", () => {
         },
       ],
       bundle: "/opt/cc/dist/index.mjs",
-      daemon: { pid: 1234, memory: { kind: "unmeasured" }, limit: 1, postMortems: { kind: "ok", value: [] } },
+      daemon: {
+        pid: 1234,
+        memory: { kind: "unmeasured" },
+        limit: 1,
+        postMortems: { kind: "ok", value: [] },
+      },
       doctorStores: EMPTY_STORES,
     });
     expect(snap.handlerProbes).toEqual([{ nonce: "n", handler: "1.2.3" }]);
     expect(snap.clients).toEqual([
       {
-          client: null,
-          sessionId: "s1",
-          termCols: 148,
-          rateLimits: "carried",
-          claudeConfigDir: "/c",
-          projectDir: "/p",
-          transcript: { path: "/c/t.jsonl", answered: true },
-          frame: "still",
-          role: "statusline",
-          ago: 4,
-        },
+        client: null,
+        sessionId: "s1",
+        termCols: 148,
+        rateLimits: "carried",
+        claudeConfigDir: "/c",
+        projectDir: "/p",
+        transcript: { path: "/c/t.jsonl", answered: true },
+        frame: "still",
+        role: "statusline",
+        ago: 4,
+      },
     ]);
     expect(snap.bundle).toBe("/opt/cc/dist/index.mjs");
     expect(snap.doctorStores).toEqual(EMPTY_STORES);
@@ -121,24 +156,27 @@ describe("RuntimeStats.snapshot", () => {
     expect(snap.gitCache.hits).toBe(100);
     expect(snap.gitCache.held).toBe(1);
     expect(snap.usageCache.size).toBe(10);
-    expect(snap.sources.tmux.refreshes).toEqual({
-      first: 2,
-      period: 7,
-      supersede: 0,
-    });
-    expect(snap.sources.autocompact.refreshes).toEqual({ request: 2 });
-    expect(snap.sources.cache).toEqual({
-      entries: 1,
-      refreshes: { request: 3 },
-      failures: 1,
-    });
+    expect(snap.sources).toEqual(SOURCES);
     expect(snap.effectCache).toEqual({ sessions: 2, effects: 5 });
     expect(snap.menuIdle).toEqual({ sessions: 2, armed: 1 });
-    expect(snap.sessionState).toEqual({ sessions: 2, observers: 11, revision: 7 });
+    expect(snap.runs).toEqual({
+      started: 3,
+      failed: 1,
+      timedOut: 1,
+      refused: 2,
+      running: 0,
+    });
+    expect(snap.sessionState).toEqual({
+      sessions: 2,
+      observers: 11,
+      revision: 7,
+    });
     expect(snap.watchers).toEqual({
       active: 2,
       opened: 5,
       closed: 3,
+      refused: 1,
+      errors: 2,
     });
     expect(snap.uptimeSec).toBeGreaterThanOrEqual(0);
     expect(snap.pid).toBe(process.pid);
@@ -200,11 +238,17 @@ describe("shapeSkew", () => {
     // `failed` one, so a tagged union is judged present, not below its tag.
     const unlisted = {
       ...snap,
-      daemon: { ...snap.daemon, postMortems: { kind: "failed", reason: "EACCES" } },
+      daemon: {
+        ...snap.daemon,
+        postMortems: { kind: "failed", reason: "EACCES" },
+      },
     };
     expect(missingFields(snap, unlisted)).toEqual([]);
     expect(
-      missingFields(snap, { ...snap, daemon: { ...snap.daemon, postMortems: 3 } }),
+      missingFields(snap, {
+        ...snap,
+        daemon: { ...snap.daemon, postMortems: 3 },
+      }),
     ).toEqual(["daemon.postMortems"]);
   });
 });
@@ -224,38 +268,17 @@ describe("formatStats", () => {
       externalBytes: 1 * 1024 * 1024,
       arrayBuffersBytes: 256 * 1024,
       requests: { total: 100, errored: 2, timedOut: 1, inFlight: 0 },
+      unknownHookFields: ["fast_mode", "x\n  inFlight      9"],
       gitCache: {
         size: 5,
         held: 2,
         hits: 80,
         misses: 20,
         changes: 3,
-        refreshes: 0,
         watchers: 5,
       },
       usageCache: { size: 3, hits: 40, misses: 10, sweeps: 0 },
-      sources: {
-        today: {
-          entries: 1,
-          held: 1,
-          refreshes: { first: 1, period: 4, supersede: 0 },
-          failures: 0,
-        },
-        tmux: {
-          entries: 2,
-          held: 1,
-          refreshes: { first: 2, period: 7, supersede: 0 },
-          failures: 1,
-        },
-        memento: {
-          entries: 0,
-          held: 0,
-          refreshes: { first: 0, period: 0, supersede: 0 },
-          failures: 0,
-        },
-        autocompact: { entries: 1, refreshes: { request: 2 }, failures: 0 },
-        cache: { entries: 1, refreshes: { request: 3 }, failures: 1 },
-      },
+      sources: SOURCES,
       transcriptReads: { reads: 0, bytes: 0, longLines: 0, largestLine: 0 },
       renderCache: {
         size: 4,
@@ -263,16 +286,26 @@ describe("formatStats", () => {
         retired: 1,
         compiles: 2,
         views: 0,
+        pinned: 0,
         retiredViews: 0,
         accountedBytes: 32 * 1024 * 1024,
         budgetBytes: 128 * 1024 * 1024,
       },
       effectCache: { sessions: 2, effects: 3 },
       menuIdle: { sessions: 2, armed: 1 },
+      runs: { started: 3, failed: 1, timedOut: 1, refused: 2, running: 0 },
       sessionState: { sessions: 2, observers: 11, revision: 7 },
-      frameFeeds: { feeds: 0, subscribers: 0, drawn: 0, pushed: 0, refused: 0, lookups: 0, found: 0 },
+      frameFeeds: {
+        feeds: 0,
+        subscribers: 0,
+        drawn: 0,
+        pushed: 0,
+        refused: 0,
+        lookups: 0,
+        found: 0,
+      },
       tmuxStatus: { sessions: 0, layouts: 0, writes: 0, failedWrites: 0 },
-      watchers: { active: 5, opened: 7, closed: 2 },
+      watchers: { active: 5, opened: 7, closed: 2, refused: 1, errors: 3 },
       subprocesses: {
         total: 0,
         inFlight: 0,
@@ -285,20 +318,39 @@ describe("formatStats", () => {
       handlerProbes: [],
       clients: [],
       bundle: "/",
-      daemon: { pid: 1234, memory: { kind: "unmeasured" }, limit: 1, postMortems: { kind: "ok", value: [] } },
+      daemon: {
+        pid: 1234,
+        memory: { kind: "unmeasured" },
+        limit: 1,
+        postMortems: { kind: "ok", value: [] },
+      },
       doctorStores: EMPTY_STORES,
     });
     expect(out).toContain("pid           1234");
+    // A name a client chose cannot forge a row: each is a JSON string.
+    expect(out).toContain('unknownFields "fast_mode", "x\\n  inFlight      9"');
+    expect(out).not.toContain("\n  inFlight      9");
     expect(out).toContain("uptime        2m5s");
     expect(out).toContain("rss           50.0MB");
     expect(out).toContain("held          2");
     expect(out).toContain("hit rate      80.0%");
     expect(out).toContain(
-      "tmux          entries=2 held=1 failures=1 refreshes first:2 period:7 supersede:0",
+      "pane/tmux                 failures=1 last=3ms refreshes first:2 period:7 change:0 supersede:0",
     );
     expect(out).toContain(
-      "autocompact   entries=1 failures=0 refreshes request:2",
+      "session/cache             failures=1 last=0ms refreshes request:3",
     );
+    expect(out).toContain(
+      "homes         daemon:1 configDir:1 repo:4 directory:3 session:10 view:2 pane:2",
+    );
+    expect(out).toContain(
+      "held          git:1 tmux:1 host:2 today:1 pluginStorage:1",
+    );
+    expect(out).toContain(
+      "plugin storage folders=1 lost=1 probes=7 probeFailures=1 stalled=1 stalls=2 faults unusable:0 refused:1 error:0",
+    );
+    expect(out).toContain("refused       1");
+    expect(out).toContain("errors        3");
     expect(out).toContain("active        5");
     expect(out).toContain("effects       3");
     expect(out).toContain("armed         1");
@@ -322,13 +374,13 @@ describe("formatStats", () => {
       externalBytes: 0,
       arrayBuffersBytes: 0,
       requests: { total: 0, errored: 0, timedOut: 0, inFlight: 0 },
+      unknownHookFields: [],
       gitCache: {
         size: 0,
         held: 0,
         hits: 0,
         misses: 0,
         changes: 0,
-        refreshes: 0,
         watchers: 0,
       },
       usageCache: { size: 0, hits: 0, misses: 0, sweeps: 0 },
@@ -340,16 +392,26 @@ describe("formatStats", () => {
         retired: 0,
         compiles: 0,
         views: 0,
+        pinned: 0,
         retiredViews: 0,
         accountedBytes: 0,
         budgetBytes: 0,
       },
       effectCache: { sessions: 0, effects: 0 },
       menuIdle: { sessions: 0, armed: 0 },
+      runs: { started: 0, failed: 0, timedOut: 0, refused: 0, running: 0 },
       sessionState: { sessions: 0, observers: 0, revision: 0 },
-      frameFeeds: { feeds: 0, subscribers: 0, drawn: 0, pushed: 0, refused: 0, lookups: 0, found: 0 },
+      frameFeeds: {
+        feeds: 0,
+        subscribers: 0,
+        drawn: 0,
+        pushed: 0,
+        refused: 0,
+        lookups: 0,
+        found: 0,
+      },
       tmuxStatus: { sessions: 0, layouts: 0, writes: 0, failedWrites: 0 },
-      watchers: { active: 0, opened: 0, closed: 0 },
+      watchers: { active: 0, opened: 0, closed: 0, refused: 0, errors: 0 },
       subprocesses: {
         total: 0,
         inFlight: 0,
@@ -362,9 +424,58 @@ describe("formatStats", () => {
       handlerProbes: [],
       clients: [],
       bundle: "/",
-      daemon: { pid: 1234, memory: { kind: "unmeasured" }, limit: 1, postMortems: { kind: "ok", value: [] } },
+      daemon: {
+        pid: 1234,
+        memory: { kind: "unmeasured" },
+        limit: 1,
+        postMortems: { kind: "ok", value: [] },
+      },
       doctorStores: EMPTY_STORES,
     });
     expect(out).toContain("hit rate      n/a");
+  });
+});
+
+// [LAW:verifiable-goals] The text/exit-code contract of `daemon-stats` is a
+// plan value (src/cli-plan.ts delivers it), so it is pinned here without a
+// process.
+describe("statsPlan — the text/exit-code contract", () => {
+  const snap = RuntimeStats.referenceSnapshot();
+
+  it("JSON mode carries the whole snapshot on stdout and exits 0", () => {
+    const plan = statsPlan({ kind: "ok", value: snap }, true);
+    expect(plan.code).toBe(0);
+    expect(plan.stderr).toBe("");
+    expect(JSON.parse(plan.stdout)).toEqual(JSON.parse(JSON.stringify(snap)));
+  });
+
+  it("text mode carries the formatted report", () => {
+    const plan = statsPlan({ kind: "ok", value: snap }, false);
+    expect(plan).toEqual({ stdout: formatStats(snap), stderr: "", code: 0 });
+  });
+
+  it("a skewed daemon's JSON is still delivered, beside the skew and a failing code", () => {
+    const { clients: _clients, ...older } = snap;
+    const plan = statsPlan(
+      { kind: "ok", value: older as typeof snap },
+      true,
+    );
+    expect(plan.code).toBe(1);
+    expect(plan.stderr).toMatch(/^daemon-stats: .*reports no clients/);
+    expect(JSON.parse(plan.stdout)).not.toHaveProperty("clients");
+  });
+
+  it("an unreachable daemon is a stderr line and exit 1, nothing on stdout", () => {
+    const plan = statsPlan(
+      {
+        kind: "transient",
+        cause: "unreachable",
+        message: "ECONNREFUSED",
+      },
+      false,
+    );
+    expect(plan.stdout).toBe("");
+    expect(plan.stderr).toMatch(/^daemon-stats: daemon unavailable/);
+    expect(plan.code).toBe(1);
   });
 });

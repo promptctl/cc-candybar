@@ -5,6 +5,8 @@
     ```json5 check:pass   — a COMPLETE config file; must exit 0 under `cc-candybar check`.
     ```json5 check:fail   — a COMPLETE config file; must exit 1, and the next
     ```error              — block must quote a substring of check's actual stderr.
+    ```json5 file:<path>  — a file written verbatim at <path>, relative to every
+                            config snippet, before any snippet runs.
   Every ```json5 block in this file MUST carry one of the two annotations.
   Do not edit a snippet or a quoted error without running the test — the quoted
   strings are asserted against the real loader, not transcribed.
@@ -79,7 +81,7 @@ the wire is derived from the same declarations, so a template cannot smuggle an
 un-gated write.
 
 An action declares exactly one of `set` / `persist` / `copy` / `open` /
-`reset` / `undo` / `redo` / `save` / `doctor` / `ceiling` / `slash` / `do`. A `set` or a `persist`
+`reset` / `undo` / `redo` / `save` / `doctor` / `slash` / `run` / `do`. A `set` or a `persist`
 declares exactly one value source:
 
 | declaration | click effect |
@@ -104,9 +106,8 @@ declares exactly one value source:
 | `{ doctor: "run" }` | run every doctor check over the facts the session's last render reported and write the report into SessionState (the settings menu's `🩺 doctor` button) |
 | `{ doctor: "fix", check: "tmuxTruecolor" }` | re-probe that ONE check at click time and perform the fix its fresh verdict carries; refused loudly when there is nothing left to fix. `check` must name a bundled check — any other name is a load error |
 | `{ doctor: "mark", check: "nerdFont", mark: "drawn" }` | record what you saw of the glyphs that check's fresh verdict shows — `"drawn"` (shapes) or `"boxes"` — then re-run; refused loudly when the verdict shows nothing to look at. Only a check that takes a mark (`nerdFont`) may be named. The mark is kept for good — later sessions and `cc-candybar doctor` read it — and holds for that terminal, the font it was read to draw with, and those glyphs only |
-| `{ ceiling: "set", to: "+100_000" }` | move this session's context ceiling in the memento plugin — `to` is memento's own value grammar (`350000`, `+100_000`, `-100_000`, `off`), handed to its `ceiling set session` and judged only by memento; its refusal is the click's error. A click is honoured only as a move the config declares |
-| `{ ceiling: "clear" }` | drop this session's own ceiling layer (memento's `ceiling clear session`), so the project's or user's ceiling applies again |
 | `{ slash: "/compact" }` | type the slash command into THIS session's Claude Code prompt and submit it, through its tmux pane. The line is `/` then a command name, one line, no control characters — anything else is a load error. A draft in the prompt is stashed and comes back after; mid-turn, Claude Code runs the command or queues it. The click is refused in the bar, typing nothing, outside tmux, while a dialog or picker is open, while you hold a ctrl+s stash, or while the pane is in tmux copy mode. A click is honoured only as a line the config declares |
+| `{ run: ["<program>", "<arg>", …], env: { NAME: "template" }, refreshes: ["<source>"] }` | run the program with the arguments and environment the bar drew — no shell — after the click returns; each source in `refreshes` reads as loading until the program exits, then shows what it wrote. A failure, or a link the daemon did not draw, is the click's error in the bar — see below |
 
 A `set` action writing SessionState needs a matching `state` **variable** to
 read the value back into templates: `{ kind: "state", key: "<same key>",
@@ -1000,6 +1001,115 @@ your own project slash command included — is one `slash` action and one
   ungated button still types nothing outside tmux and says why in the bar,
   like every refusal in the table above.
 
+### Running a program: `run`
+
+A button that runs a program — another tool's own command, to move a value it
+keeps — is a `run` action. A plugin that shows a per-session value
+([segment-authoring.md](segment-authoring.md), "A value per session")
+declares the program that moves it beside the source it reads:
+
+```json5 file:limit/plugin.json5
+{
+  sources: {
+    status: { scope: "session", refresh: { watch: true }, read: { file: { json: true } } },
+  },
+  segments: {
+    limit: {
+      when: '{{ hasKey .plugins.limit "status" }}',
+      template: 'limit {{ .plugins.limit.status.value }} {{ action "plugins.limit.raise" "[+]" }}',
+    },
+  },
+  actions: {
+    raise: {
+      run: ["./limit", "raise", "--session", "{{ .session.id }}"],
+      env: { LIMIT_HOME: "{{ .plugins.limit.status.home }}" },
+      refreshes: ["status"],
+    },
+  },
+}
+```
+
+Your own config may declare one too. It names a source by its full name:
+
+```json5 check:pass
+{
+  plugins: ["./limit/plugin.json5"],
+  actions: {
+    resetLimit: { run: ["limit", "reset", "--session", "{{ .session.id }}"], refreshes: ["plugins.limit.status"] },
+  },
+  segments: { limitReset: { template: '{{ action "resetLimit" "⟲ limit" }}' } },
+  root: { rows: { status: { h: ["model", "plugins.limit.limit", "limitReset"] } } },
+}
+```
+
+- **`run` is the program, then its arguments — no shell.** Each item is a
+  template; nothing is split, globbed or expanded. A shell is a program like
+  any other (`["sh", "-c", "…"]`). `env` maps variable names to templates.
+- **`refreshes` names the sources the program rewrites.** A plugin names its
+  own sources bare (`"status"`); your file names one by its full name
+  (`"plugins.limit.status"`). A name that is not a declared source is a load
+  error.
+- **The draw evaluates it, and the click runs what was drawn.** The
+  arguments and `env` are evaluated as the bar draws the button, as a
+  `copy`'s text is, and the link carries the result, signed with a key only
+  the daemon holds. A click runs exactly what the button showed, evaluating
+  nothing of its own. A link the daemon did not draw — edited, forged, or
+  naming a run the session's config does not declare — runs nothing, and the
+  refusal shows in the bar. So does a link drawn before you edited its
+  action: it ran what the old declaration promised.
+- **The program gets the session's environment.** It is the daemon's own
+  environment with every variable that states a session fact replaced:
+  `CLAUDE_CODE_SESSION_ID` is the clicked session's id,
+  `CLAUDE_PROJECT_DIR` its project directory, and `CLAUDE_CONFIG_DIR` its
+  Claude Code directory (unset when that is the default). The daemon was
+  started by some other session's shell, so its own values of these never
+  reach the program. `TMUX` and `TMUX_PANE` are unset. `env` is laid over
+  the result.
+- **It runs in the directory of the file that declares it**: the plugin's
+  folder, or your config file's directory. A relative program (`./limit`)
+  resolves there, and a bare name (`limit`) is looked up on the daemon's
+  `PATH`, which is whatever shell started the daemon had. So a plugin names
+  its program relative to its folder or by absolute path. The session's
+  directories reach the program only through its environment.
+- **It runs after the click returns, for at most 10 seconds.** A non-zero
+  exit, a timeout, or a program that cannot start puts its stderr, trimmed —
+  or the reason, when it printed nothing — in the bar where a refused click's
+  error shows.
+- **A refreshed source reads as loading until the program exits.** From the
+  click until the program ends, each source in `refreshes` is pending: a
+  segment reading it draws its loading cell, never the value from before the
+  click. When the program ends, the source is read again and the bar shows
+  what the program wrote.
+
+The arguments are a list:
+
+```json5 check:fail
+{
+  actions: { deploy: { run: "make deploy" } },
+  segments: { deployButton: { template: '{{ action "deploy" "⇪ deploy" }}' } },
+  root: { rows: { status: { h: ["model", "deployButton"] } } },
+}
+```
+
+```error
+run must list the program and its arguments, each a template string, the program first and not empty, got "make deploy"
+```
+
+and `refreshes` names only sources:
+
+```json5 check:fail
+{
+  variables: { limit: { kind: "literal", value: 3 } },
+  actions: { bump: { run: ["limit", "bump"], refreshes: ["limit"] } },
+  segments: { bumpButton: { template: '{{ action "bump" "+" }}' } },
+  root: { rows: { status: { h: ["model", "bumpButton"] } } },
+}
+```
+
+```error
+actions.bump refreshes "limit", which is a literal variable: a run refreshes only a declared source
+```
+
 ## Edit mode: `+`/`-` chrome for free
 
 Composing the layout by hand-writing `removeSegment`/`insertSegmentFrom`
@@ -1292,7 +1402,9 @@ label plus an arrow: `🍫` closed, `✖` open. By default it is the leading cel
 the bar's first row, and it wears the theme's tint like every other cell.
 `globals.menuGlyph` sets the closed glyph (top-level `globals` only — one menu
 is shared by every preset). Place the reserved `candybar.menu` segment name
-yourself to move it anywhere else.
+yourself to move it anywhere else. The cell beside it, saying how the bar is
+redrawn (`30 fps`, ` 1 fps` or `polled`), goes wherever the door goes, and
+stays on the bar while the menu is open.
 
 ```json5 check:pass
 { globals: { menuGlyph: "🍬" } }
@@ -1313,7 +1425,7 @@ picked in this session and not yet saved, and the theme's `⚙` is open:
   ▾ ⚡ session   🎨 look   📐 layout   ⚙ config   🧰 tools
 ✕ ⎘ id ⎘ resume ↗ proj ↗ log ↗ repo ↗ config
   …
-host   directory   gitaculous             ← the bar, less the door
+polled   host   directory   gitaculous    ← the bar, less the door
 ```
 
 Every row an open disclosure drops leads with a `✕` that closes **that**
@@ -1482,8 +1594,8 @@ names wins.
 
 Everything the menu synthesizes lives under the reserved `candybar.` namespace
 — a variable, action, or segment of your own under that prefix is a load error,
-the same contract `groups.` / `menus.` / `edit.` carry (see "Squatting a
-reserved namespace" below). Edit mode also treats those names as structural: no
+the same contract `groups.` / `menus.` / `menupages.` / `edit.` carry (see
+"Squatting a reserved namespace" below). Edit mode also treats those names as structural: no
 `-` affordance is offered beside the menu, so the way back into edit mode cannot
 be edited away.
 
@@ -1491,11 +1603,11 @@ be edited away.
 
 The apply-action name is the menu's **entire declaration**. The loader
 synthesizes everything else under the reserved `menus.*` namespace: the
-open/closed state, the page cursor (state var + int action), and the click
-gates. The trigger's *text* is the one thing it does not synthesize — you bind
-that, below. The body is a paged picker over the apply
-action's option domain, dropped onto the line below the enclosing row while
-open.
+open/closed state and the click gates, and the page cursor (state var + int
+action) beside them under the reserved `menupages.*`. The trigger's *text* is
+the one thing it does not synthesize — you bind that, below. The body is a
+paged picker over the apply action's option domain, dropped onto the line below
+the enclosing row while open.
 
 An option cell is normally coloured by where it sits in the band the menu
 opens. Over a **colour-valued** domain — `themes`, `placementThemes` and
@@ -1553,7 +1665,7 @@ Rare knobs travel as **one trailing `(dict …)`** — note Go template syntax:
 |---|---|---|---|
 | `closeOnPick` | bool | `false` | picking an option also closes the menu (default: stay open to try options in a row) |
 | `paged` | bool | `true` | paginate the body to the terminal width with ←/→ (a short domain shows one page, no arrows); `false` wraps instead |
-| `key` | string | omitted | accordion grouping: menus sharing a key are mutually exclusive — opening one closes the others. Omitted = independent. A key in a reserved namespace (`groups.`, `menus.`, `edit.`, `candybar.`) is a load error |
+| `key` | string | omitted | accordion grouping: menus sharing a key are mutually exclusive — opening one closes the others. Omitted = independent. A key in a reserved namespace (`groups.`, `menus.`, `menupages.`, `edit.`, `candybar.`) is a load error |
 | `distribution` | string | `"van-der-corput"` | how the dropped band places its options' tints — one of the five names in the `distribution` section below. The same field a `{ h }`/`{ v }` row carries; a menu is a placer too |
 
 Two menus in an accordion (one open at a time), the endcaps pick closing its
@@ -1620,7 +1732,7 @@ writes unsaved, so the two always show the same theme:
 ```
 
 ```render
- 🍫  ✱ Opus 4.8 󰶼 
+ 🍫  polled  ✱ Opus 4.8 󰶼 
  ◀ nord ▀▀▀ ▶ 
 ```
 
@@ -2013,9 +2125,9 @@ The accordion drawer:
 }
 ```
 
-The `groups.` and `menus.` namespaces are **reserved** in all three sections
-(variables, actions, segments) — synthesis owns them unconditionally, whether
-or not any group/menu exists in your config.
+The `groups.`, `menus.` and `menupages.` namespaces are **reserved** in all
+three sections (variables, actions, segments) — synthesis owns them
+unconditionally, whether or not any group/menu exists in your config.
 
 ## `distribution` — how a placer spreads its cells' tints
 
@@ -2234,7 +2346,7 @@ whose options (dict …) is not fully literal — every option value must be a l
 
 ### A `{{ menu }}` accordion key in a reserved namespace
 
-The bundled settings menu's four config pickers share the accordion key `candybar.pickers`; a user menu whose `key` derives that same state key would join that accordion, so opening it would close the settings picker and vice versa. A key is collapsed to an identifier before it becomes a state key, so `candybar.pickers`, `candybar-pickers`, and `candybar_pickers` are all the same key and all refused — the rule covers every reserved namespace (`groups.`, `menus.`, `edit.`, `candybar.`), not only this one:
+The bundled settings menu's four config pickers share the accordion key `candybar.pickers`; a user menu whose `key` derives that same state key would join that accordion, so opening it would close the settings picker and vice versa. A key is collapsed to an identifier before it becomes a state key, so `candybar.pickers`, `candybar-pickers`, and `candybar_pickers` are all the same key and all refused — the rule covers every reserved namespace (`groups.`, `menus.`, `menupages.`, `edit.`, `candybar.`), not only this one:
 
 ```json5 check:fail
 {
@@ -2610,7 +2722,7 @@ can only be paired with "removeSegment", "insertSegment", or "insertSegmentFrom"
 
 1. `cc-candybar check <path>` exits 0.
 2. stderr shows no warnings you have not read and accepted.
-3. You declared **no** `menus.*`/`groups.*` names, no page cursors, no
+3. You declared **no** `menus.*`/`menupages.*`/`groups.*` names, no page cursors, no
    open-state vars — if a menu needed backing state, you let it synthesize.
 4. Anything you could not express with `{{ menu }}`, a group, or a named
    action: read examples/demo-actions.json5 for the raw mechanism before

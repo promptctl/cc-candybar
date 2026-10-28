@@ -7,6 +7,7 @@
 // view last settled on, and a template variable passes it on rather than
 // answering with its default. None of it is a fault: nothing is reported.
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import { SessionState } from "../src/daemon/session-state";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -56,7 +57,7 @@ interface Drawn {
 }
 
 function renderer(cfg: ValidatedConfig) {
-  const compiled = compileDslConfig(compileInputOf(cfg));
+  const compiled = compileDslConfig(compileInputOf(cfg), TEST_SIGNER);
   const store = new VariableStore();
   const session = new SessionState();
   const registry = new SourceRegistry(store, "", session);
@@ -342,7 +343,7 @@ describe("a template variable over a value not answered yet is not answered yet"
 });
 
 describe("a json source with no default", () => {
-  test("draws `…` before its first scan, and ⚠ when its scan had nothing to read", async () => {
+  test("draws `…` before its first scan, and the missing-field ⚠ when its scan had nothing to read", async () => {
     const on = renderer(
       parseAndValidate(
         "<test>",
@@ -359,8 +360,9 @@ describe("a json source with no default", () => {
       expect(cellBetween(on.draw().text, "L", "R")).toBe(`  ${LOADING_GLYPH}  `);
       expect(await on.registry.settled(5000)).toEqual([]);
       const { text, errors, frame } = on.draw();
-      expect(text).toContain('⚠ value: variable "doc": no document, and no default');
-      expect(errors).toEqual(['value: variable "doc": no document, and no default']);
+      // Absent is a missing field (src/template-engine/scope.ts).
+      expect(text).toContain('⚠ value: field "doc.label" not found on receiver');
+      expect(errors).toEqual([expect.stringContaining('value: field "doc.label" not found on receiver')]);
       expect(frame.pending).toEqual([]);
     } finally {
       on.dispose();

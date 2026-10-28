@@ -3,7 +3,7 @@
 // payload reads it with.
 //
 // A fake keeps what its reader answered as a real owner keeps its source's
-// value: a keyed lane (git, tmux, memento) is declared into a lane that is
+// value: a keyed lane (git, tmux) is declared into a lane that is
 // pending from its first read until its reader lands, so a request waits on it
 // as on the real one; a request lane (session, today, speed, context, metrics,
 // activity, cache, autocompact) stores what its refresh's reader answered, and
@@ -13,9 +13,9 @@
 
 import type { Holds } from "../../src/utils/holds";
 import type { ClaudeHookData } from "../../src/utils/claude";
+import { sessionIdOf } from "../../src/daemon/session-id";
 import type { GitInfo, GitInfoOptions } from "../../src/segments/git";
 import type { TmuxHint } from "../../src/tmux-hint";
-import type { CeilingReading, CeilingScope } from "../../src/memento/edge";
 import type { ContextInfo } from "../../src/segments/context";
 import type { MetricsInfo } from "../../src/segments/metrics";
 import type { ActivityInfo } from "../../src/segments/activity";
@@ -34,6 +34,7 @@ import {
   type Reading,
 } from "../../src/utils/outcome";
 import { settledLane, type Current, type Lane } from "../../src/utils/reading";
+import { HostService } from "../../src/segments/host";
 import {
   declareLanes,
   payloadOf,
@@ -75,7 +76,7 @@ function keyed<A extends unknown[], T>(
         values.set(key, outcome);
       },
     );
-    const pending: Current<T> = { kind: "pending", landed };
+    const pending: Current<T> = { kind: "pending", why: "unread", landed };
     values.set(key, pending);
     return pending;
   };
@@ -126,17 +127,6 @@ export function fakeTmux(read: (holds: Holds, hint: TmuxHint) => Loose) {
   };
 }
 
-export function fakeMemento(
-  read: (holds: Holds, scope: CeilingScope) => Loose,
-) {
-  const current = keyed<[CeilingScope], CeilingReading>(read);
-  return {
-    declare: (holds: Holds, scope: CeilingScope): Lane<CeilingReading> => ({
-      current: () => current(holds, scope),
-    }),
-  };
-}
-
 // What the fake's `today` lane answers: the directory set it was declared at,
 // standing in for that set's day sums.
 interface FakeSet {
@@ -165,9 +155,28 @@ export function fakeUsage(
   // reads it as not answered yet.
   const todayRefreshed = new Set<string>();
   const speed = refreshed<SpeedObservation>();
+  const getUsageInfo = (sessionId: string, hookData?: ClaudeHookData) =>
+    usage.store(sessionId, readers.usage?.(sessionId, hookData) ?? ABSENT);
+  const observeSpeed = (
+    sessionId: string,
+    transcriptPath: string | undefined,
+    nowMs: number,
+  ) =>
+    speed.store(
+      sessionId,
+      readers.speed?.(sessionId, transcriptPath, nowMs) ?? ABSENT,
+    );
   return {
-    getUsageInfo: (sessionId: string, hookData?: ClaudeHookData) =>
-      usage.store(sessionId, readers.usage?.(sessionId, hookData) ?? ABSENT),
+    getUsageInfo,
+    // A request's lanes over its session, as the real store's `request`.
+    request: (sessionId: string, transcriptPath: string | undefined) => ({
+      usage: (hookData: ClaudeHookData | undefined) =>
+        getUsageInfo(sessionId, hookData),
+      speed: (nowMs: number) => observeSpeed(sessionId, transcriptPath, nowMs),
+      today: async (_today: Lane<FakeSet>) => {
+        todayRefreshed.add(sessionId);
+      },
+    }),
     usageOf: (sessionId: string): Reading<UsageInfo> => usage.read(sessionId),
     declareToday: (
       _holds: Holds,
@@ -188,15 +197,7 @@ export function fakeUsage(
         ? ((readers.today?.(hookData, set.claudeConfigDir, at) ??
             ABSENT) as Outcome<TodayInfo>)
         : PENDING,
-    observeSpeed: (
-      sessionId: string,
-      transcriptPath: string | undefined,
-      nowMs: number,
-    ) =>
-      speed.store(
-        sessionId,
-        readers.speed?.(sessionId, transcriptPath, nowMs) ?? ABSENT,
-      ),
+    observeSpeed,
     speedOf: (sessionId: string): Reading<SpeedObservation> =>
       speed.read(sessionId),
   };
@@ -273,9 +274,10 @@ export function absentOwners() {
     metricsProvider: fakeMetrics(() => ABSENT),
     activityProvider: fakeActivity(() => ABSENT),
     tmuxService: fakeTmux(() => ABSENT),
-    mementoProvider: fakeMemento(() => ABSENT),
     autoCompact: fakeAutoCompact(() => ABSENT),
     faults: new RefreshFaults(),
+    // The machine's identity, read as the daemon reads it.
+    hostService: new HostService(),
   };
 }
 
@@ -298,8 +300,9 @@ export async function requestPayload(
   const { lanes } = declareLanes(
     deps as unknown as KeyedOwners,
     new HoldsClass(),
-    { hookData, cwd, hints },
+    { sessionId: sessionIdOf(hookData.session_id), hookData, cwd, hints },
     closure,
+    new Map(),
   );
   const inputs: PayloadInputs = {
     hookData,
@@ -308,14 +311,13 @@ export async function requestPayload(
     neededInputPaths: closure,
     deps: { ...deps, lanes: () => lanes } as RenderPayloadDeps,
   };
-  await settlePayload(inputs, at);
-  const { payload, failures } = payloadOf(inputs, {
+  await settlePayload(inputs, at, new Map());
+  const payload = payloadOf(inputs, {
     effective,
     configFacts,
     history: EMPTY_HISTORY_DEPTH,
     back: 0,
   });
-  for (const f of failures) deps.log("warn", `provider fetch failed: ${f}`);
   return {
     ...payload,
     feeds: UNFOLLOWED_FEEDS,
@@ -342,6 +344,7 @@ export function declaredLanes(
     new HoldsClass(),
     facts,
     closure,
+    new Map(),
   );
   return () => lanes;
 }

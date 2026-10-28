@@ -1,7 +1,11 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { resolvedTarget, writeAtomic } from "../src/utils/atomic-write.js";
+import {
+  linkChain,
+  resolvedTarget,
+  writeAtomic,
+} from "../src/utils/atomic-write.js";
 
 let dir: string;
 beforeEach(() => {
@@ -31,7 +35,9 @@ describe("writeAtomic through symbolic links", () => {
     writeAtomic(link, "first");
     expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
     expect(fs.readFileSync(target, "utf8")).toBe("first");
-    expect(resolvedTarget(link)).toBe(path.join(fs.realpathSync(dir), "later.json"));
+    expect(resolvedTarget(link)).toBe(
+      path.join(fs.realpathSync(dir), "later.json"),
+    );
   });
 
   // A dangling link into a directory not created yet (a dotfiles tree not
@@ -74,10 +80,55 @@ describe("writeAtomic through symbolic links", () => {
   });
 });
 
+// The chain is every place a change to the path can appear: a watcher needs
+// each hop, because re-pointing any one link changes what the path reads.
+describe("linkChain", () => {
+  test("a plain path, present or absent, is one place", () => {
+    const plain = path.join(dir, "config.json5");
+    fs.writeFileSync(plain, "");
+    expect(linkChain(plain)).toEqual([plain]);
+    const absent = path.join(dir, "absent.json5");
+    expect(linkChain(absent)).toEqual([absent]);
+    // An ancestor that is a regular file: the path does not exist either.
+    const underFile = path.join(plain, "config.json5");
+    expect(linkChain(underFile)).toEqual([underFile]);
+  });
+
+  test("a link lists itself and its target, a dangling target included", () => {
+    fs.mkdirSync(path.join(dir, "dotfiles"));
+    const target = path.join(fs.realpathSync(dir), "dotfiles", "config.json5");
+    const link = path.join(dir, "config.json5");
+    fs.symlinkSync(target, link);
+    expect(linkChain(link)).toEqual([link, target]);
+    fs.writeFileSync(target, "");
+    expect(linkChain(link)).toEqual([link, target]);
+  });
+
+  test("a chain lists every hop in order, so a middle link re-pointed is heard", () => {
+    const real = fs.realpathSync(dir);
+    const profile = path.join(real, "profiles", "work.json5");
+    const current = path.join(real, "current.json5");
+    const link = path.join(dir, "config.json5");
+    fs.symlinkSync(profile, current);
+    fs.symlinkSync(current, link);
+    expect(linkChain(link)).toEqual([link, current, profile]);
+    expect(resolvedTarget(link)).toBe(profile);
+  });
+
+  test("a loop throws", () => {
+    fs.symlinkSync(path.join(dir, "b"), path.join(dir, "a"));
+    fs.symlinkSync(path.join(dir, "a"), path.join(dir, "b"));
+    expect(() => linkChain(path.join(dir, "a"))).toThrow(
+      /more than 40 symbolic links/,
+    );
+  });
+});
+
 // Undo of a first-ever config write removes what that write created — the
 // target behind a dangling link, never the link.
 test("writeConfigText(null) through a link removes the target, keeps the link", async () => {
-  const { writeConfigText } = await import("../src/daemon/config-file-store.js");
+  const { writeConfigText } =
+    await import("../src/daemon/config-file-store.js");
   const link = path.join(dir, "config.json5");
   fs.symlinkSync("dotfiles-config.json5", link);
   writeConfigText(link, "{}", () => {});

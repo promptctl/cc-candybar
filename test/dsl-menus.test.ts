@@ -24,6 +24,7 @@
 //   5. Old spellings (positional page/bools/key) and malformed option dicts are
 //      LOAD errors naming the new form — never silently reinterpreted.
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import { picked, selectionFor } from "./helpers/selection";
 import { ColorDepth } from "@promptctl/rich-js";
 import { ownLinks } from "./helpers/ambient-chrome";
@@ -70,6 +71,7 @@ import {
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import { linkUrls, stripAnsi } from "./helpers/ansi";
 import { instantOf } from "../src/utils/instant";
+import { menuPageKey } from "../src/config/menu-keys";
 
 /** The address of the segment named `name` in a compiled tree, or throw. */
 function addressOf(root: CompiledNode, name: string): Address {
@@ -176,7 +178,7 @@ function buildRuntime(src: string, sessionId = "s1", look?: string) {
   const sessionState = new SessionState();
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
+  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   const basePalette = getThemePalette("textual-dark"!);
   const sink = new Map<string, readonly RichText[]>();
   const render = (): string =>
@@ -250,7 +252,7 @@ const MENU_SRC = `{
 }`;
 
 const TKEY = "menus.themepicker.applyTheme";
-const PKEY = `${TKEY}.page`;
+const PKEY = menuPageKey(TKEY);
 
 describe("menu synthesis (derived identity, reserved namespace)", () => {
   test("synthesizes state var + cycle action + page cursor keyed by (segment, apply); both gates derive", () => {
@@ -929,8 +931,12 @@ describe("independent default (no shared key)", () => {
     // brings its own synthesized page cursor.
     expect(config.variables["menus.themeMenu.applyTheme"]).toBeDefined();
     expect(config.variables["menus.endcapsMenu.applyEndcaps"]).toBeDefined();
-    expect(config.variables["menus.themeMenu.applyTheme.page"]).toBeDefined();
-    expect(config.variables["menus.endcapsMenu.applyEndcaps.page"]).toBeDefined();
+    expect(
+      config.variables[menuPageKey("menus.themeMenu.applyTheme")],
+    ).toBeDefined();
+    expect(
+      config.variables[menuPageKey("menus.endcapsMenu.applyEndcaps")],
+    ).toBeDefined();
 
     clickToggle(render(), "menus.themeMenu.applyTheme", "applyTheme");
     let out = stripAnsi(render());
@@ -984,9 +990,9 @@ describe("opt-in accordion (shared key, one open at a time)", () => {
     });
     // One page cursor per disclosure key: the accordion holds at most one open
     // body, so its one cursor is exact — and every toggle resets it to 0.
-    expect(config.variables["menus.pickers.page"]).toEqual({
+    expect(config.variables[menuPageKey("menus.pickers")]).toEqual({
       kind: "state",
-      key: "menus.pickers.page",
+      key: menuPageKey("menus.pickers"),
       default: "0",
     });
 
@@ -1053,8 +1059,10 @@ describe('the "theme tester" — N menus in one segment', () => {
     // Restricted to THIS segment's menus: every bar also carries the settings
     // menu's own picker and edit chrome's `+` menus, synthesized under the same
     // namespace but keyed by their own host segments.
-    const menuKeys = Object.keys(config.variables).filter((k) =>
-      k.startsWith("menus.tester."),
+    const menuKeys = Object.keys(config.variables).filter(
+      (k) =>
+        k.startsWith("menus.tester.") ||
+        k.startsWith(menuPageKey("menus.tester.")),
     );
     expect(menuKeys).toHaveLength(6);
   });

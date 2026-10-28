@@ -1,16 +1,12 @@
 // [LAW:types-are-the-program] Dependency-cycle detection over the variable graph.
-// Edges come from three sources (template refs, cache.key refs, cache.depends_on);
-// a single DFS catches mixed cycles spanning edge types. This file changes when
-// what constitutes a runtime dependency edge changes.
+// Its edges are the one fold of what a value reads (value-reads.ts): a single
+// DFS catches mixed cycles spanning edge kinds, and a new edge kind is the
+// fold's to add, never this file's.
 
-import {
-  hasCacheField,
-  type DslConfig,
-  type VariableDecl,
-} from "../dsl-types.js";
+import { type DslConfig, type VariableDecl } from "../dsl-types.js";
 import { findKeyLine } from "./diagnostics.js";
 import { type ValidateCtx } from "./validate-core.js";
-import { templateReads } from "./refs.js";
+import { valueReadsOf } from "./value-reads.js";
 
 // Carries declaration metadata for each graph node so cycle errors report the
 // correct config path (variables.X vs segments.S.vars.X) and correct line.
@@ -73,86 +69,39 @@ export function validateNoCycles(
   }
 }
 
-// [LAW:types-are-the-program] Build the full variable dependency graph: edges
-// are X → Y for any of three edge kinds:
-//   1. template-kind vars: template string references Y (eval dependency)
-//   2. any var with cache.key: key template references Y (cache-key dependency)
-//   3. any var with cache.depends_on: each listed name is Y (invalidation dep)
-// All three kinds can form infinite loops at runtime; a single DFS catches
-// mixed cycles that span multiple edge types.
-//
-// Segment vars use the namespaced form (segName.varName) as their sole graph
-// node — eliminates bare-name collisions when two segments both declare a var
-// named e.g. "local". Global vars keep their bare names.
+// [LAW:types-are-the-program] The variable dependency graph: X → Y for every
+// declaration Y that X reads (value-reads.ts) — through its template, its
+// cache.key or its cache.depends_on, each of which loops forever at runtime
+// when it closes. Nodes are the store's own keys: segment vars under
+// `segName.varName`, globals bare.
 function buildTemplateGraph(cfg: DslConfig): {
   graph: Map<string, Set<string>>;
   nodeInfo: Map<string, NodeInfo>;
 } {
-  const allVarNames = new Set<string>(Object.keys(cfg.variables));
   const nodeInfo = new Map<string, NodeInfo>();
-
-  for (const name of Object.keys(cfg.variables)) {
-    nodeInfo.set(name, {
-      declarationPath: `variables.${name}`,
-      linePathParts: ["variables", name],
-    });
-  }
-  for (const [segName, seg] of Object.entries(cfg.segments)) {
-    if (!seg.vars) continue;
-    for (const vName of Object.keys(seg.vars)) {
-      const canonical = `${segName}.${vName}`;
-      allVarNames.add(canonical);
-      nodeInfo.set(canonical, {
-        declarationPath: `segments.${segName}.vars.${vName}`,
-        linePathParts: ["segments", segName, "vars", vName],
-      });
-    }
-  }
-
   const graph = new Map<string, Set<string>>();
-  for (const name of allVarNames) graph.set(name, new Set());
-
-  // [LAW:one-source-of-truth] Edges resolve refs exactly as the runtime scope
-  // proxy does: a ref is the literal store key (globals bare, segment locals
-  // namespaced as segName.varName) — never re-derived per segment. Bare
-  // own-segment refs are not aliased here because the runtime has no such
-  // aliasing; cross-ref rejects them at load with the namespaced suggestion.
-  const addTemplateEdges = (from: string, template: string): void => {
-    for (const ref of templateReads(template, cfg.helpers).keys()) {
-      if (allVarNames.has(ref)) {
-        graph.get(from)!.add(ref);
-        continue;
-      }
-      // Resolve "first identifier" — `.session.id` may indicate dependence on
-      // `session` if that's the declared var (matches scope.ts proxy walk).
-      const head = ref.split(".")[0]!;
-      if (head !== ref && allVarNames.has(head)) {
-        graph.get(from)!.add(head);
-      }
-    }
+  const reads = valueReadsOf(cfg);
+  const addNode = (
+    name: string,
+    v: VariableDecl,
+    linePathParts: readonly string[],
+  ): void => {
+    nodeInfo.set(name, {
+      declarationPath: linePathParts.join("."),
+      linePathParts,
+    });
+    graph.set(
+      name,
+      new Set(reads.ofVariable(v).flatMap(({ reaches }) => reaches)),
+    );
   };
-
-  const addVarEdges = (name: string, v: VariableDecl): void => {
-    if (v.kind === "template") addTemplateEdges(name, v.template);
-    if (hasCacheField(v)) {
-      if ("key" in v.cache) addTemplateEdges(name, v.cache.key);
-      if ("depends_on" in v.cache) {
-        for (const dep of v.cache.depends_on) {
-          if (allVarNames.has(dep)) graph.get(name)!.add(dep);
-        }
-      }
-    }
-  };
-
   for (const [name, v] of Object.entries(cfg.variables)) {
-    addVarEdges(name, v);
+    addNode(name, v, ["variables", name]);
   }
   for (const [segName, seg] of Object.entries(cfg.segments)) {
-    if (!seg.vars) continue;
-    for (const [vName, vDecl] of Object.entries(seg.vars)) {
-      addVarEdges(`${segName}.${vName}`, vDecl);
+    for (const [vName, v] of Object.entries(seg.vars ?? {})) {
+      addNode(`${segName}.${vName}`, v, ["segments", segName, "vars", vName]);
     }
   }
-
   return { graph, nodeInfo };
 }

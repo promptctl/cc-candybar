@@ -15,6 +15,7 @@
 //      (and under that style): the closed cells' tints, the open state and its
 //      plane, the alerts.
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import { ColorDepth, getThemePalette, transposePalette } from "@promptctl/rich-js";
@@ -93,12 +94,14 @@ function rig(
   const sessionState = new SessionState();
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
+  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
   recordRender(sessionState, SID);
   const ctx = testVerbContext(sessionState, undefined, config);
   const sink = new Map<string, readonly RichText[]>();
   let last = "";
-  const render = (): string => {
+  // The terminal's width is a fact of the render, not of the compile: one
+  // compiled config draws at every width a sweep asks for.
+  const render = (cols = width): string => {
     const effective = resolveEffectiveGlobals(
       config,
       (key) => sessionState.get(SID, key),
@@ -116,7 +119,7 @@ function rig(
         cwd: "/tmp",
         model: { id: "claude-opus-4-7", display_name: "Opus 4.7" },
         workspace: { current_dir: "/tmp", project_dir: "/tmp", added_dirs: [] },
-        term: { cols: width },
+        term: { cols },
         endcaps: { effective: sessionState.get(SID, "endcaps") ?? style },
         preset: { effective: effective.preset },
         autoWrap: { effective: true },
@@ -126,7 +129,7 @@ function rig(
         shade: { effective: effective.shade },
       },
       instantOf(new Date()),
-      opts(width, padding, style, depth),
+      opts(cols, padding, style, depth),
       { perSegmentSink: sink },
       effective,
     );
@@ -471,10 +474,12 @@ describe("the settings menu's look controls are pickers whose name opens a list"
       ),
     ),
   )("every row of the open %s list fits its terminal (%s, padding %i)", (control, style, padding) => {
+    // One compile per case, opened once; the sweep is renders, which cost
+    // nothing beside the compile they would otherwise each repeat.
+    const rt = rig(`{ globals: { palette: 'nord' } }`, 200, padding, style);
+    openPicker(rt, control);
     for (let width = 40; width <= 160; width += 3) {
-      const rt = rig(`{ globals: { palette: 'nord' } }`, width, padding, style);
-      openPicker(rt, control);
-      const lines = stripAnsi(rt.render()).split("\n");
+      const lines = stripAnsi(rt.render(width)).split("\n");
       // The body drops below the row the control sits in, which may itself
       // wrap: it starts at the first line after the control holding the
       // body's first row.
@@ -494,8 +499,8 @@ describe("the settings menu's look controls are pickers whose name opens a list"
       );
       const over = lines.filter((l) => new RichTextValue(l).cellLength > width);
       expect([width, over]).toEqual([width, []]);
-      rt.dispose();
     }
+    rt.dispose();
   });
 
   test("▶ applies the next theme and the whole bar recolours, turning the row to it; ◀ takes it back", () => {
@@ -712,7 +717,7 @@ describe("the preset control's list carries the layout beneath it", () => {
   test("every bundled preset's rows, from its resolved root", () => {
     const config = parseAndValidate("<user>", "{}", ALLOWED, DEFAULT_DSL_CONFIG);
     const registry = new SourceRegistry(new VariableStore(), "");
-    const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
+    const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
     // Every segment but edit mode's chrome, which edit mode alone shows.
     const content = (node: CompiledNode): boolean =>
       node.kind === "container" || !node.name.startsWith(EDIT_NS);
@@ -724,34 +729,34 @@ describe("the preset control's list carries the layout beneath it", () => {
     );
     expect(rows).toEqual({
       default: [
-        ["candybar.menu", "host", "directory", "gitaculous"],
-        ["model", "context", "ceiling", "autocompact", "cacheTimer", "block", "weekly", "activity"],
+        ["candybar.menu", "candybar.fps", "host", "directory", "gitaculous"],
+        ["model", "context", "autocompact", "cacheTimer", "block", "weekly", "activity"],
       ],
-      compact: [["candybar.menu", "directory", "gitaculous", "context"]],
+      compact: [["candybar.menu", "candybar.fps", "directory", "gitaculous", "context"]],
       verbose: [
-        ["candybar.menu", "directory", "gitaculous", "gitPr"],
-        ["model", "context", "ceiling", "autocompact", "cacheTimer", "block", "weekly", "burnrate"],
+        ["candybar.menu", "candybar.fps", "directory", "gitaculous", "gitPr"],
+        ["model", "context", "autocompact", "cacheTimer", "block", "weekly", "burnrate"],
         ["speed", "tokenSparkline"],
       ],
-      zen: [["candybar.menu", "directory", "context"]],
+      zen: [["candybar.menu", "candybar.fps", "directory", "context"]],
       git: [
-        ["candybar.menu", "host", "directory", "gitaculous", "gitPr"],
+        ["candybar.menu", "candybar.fps", "host", "directory", "gitaculous", "gitPr"],
         ["model", "context", "activity"],
       ],
       usage: [
-        ["candybar.menu", "model", "context", "ceiling", "autocompact", "cacheTimer"],
+        ["candybar.menu", "candybar.fps", "model", "context", "autocompact", "cacheTimer"],
         ["block", "weekly", "burnrate"],
         ["session", "today", "speed", "tokenSparkline"],
       ],
       dense: [
         [
           "candybar.menu",
+          "candybar.fps",
           "host",
           "directory",
           "gitaculous",
           "model",
           "context",
-          "ceiling",
           "autocompact",
           "cacheTimer",
           "block",
@@ -827,8 +832,8 @@ describe("the preset control's list carries the layout beneath it", () => {
     // for them whether or not this payload renders them (it renders no host,
     // context, cache timer, or activity).
     const placed = [
-      ["menu", "host", "directory", "gitaculous"],
-      ["model", "context", "ceiling", "autocompact", "cacheTimer", "block", "weekly", "activity"],
+      ["menu", "fps", "host", "directory", "gitaculous"],
+      ["model", "context", "autocompact", "cacheTimer", "block", "weekly", "activity"],
     ];
     expect(previewLabels(rt.render())).toEqual(placed);
     rt.dispose();

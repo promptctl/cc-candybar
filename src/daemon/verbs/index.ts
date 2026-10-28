@@ -18,7 +18,7 @@
 // into the typed args it needs. URL format mirrors:
 //   cc-candybar://<verb>/<value>   where <value> may itself contain `/`.
 
-import { launchSync } from "../../proc/launch";
+import { launchSync, type LaunchOpts } from "../../proc/launch";
 import type { SessionStateReader, SessionStateRW } from "../session-state";
 import { holdClickError } from "../click-error";
 import { instantOf } from "../../utils/instant";
@@ -116,18 +116,20 @@ import {
   VERB_DOCTOR_FIX,
   VERB_DOCTOR_MARK,
   VERB_DOCTOR_PROBE,
-  VERB_CEILING,
   VERB_SLASH,
+  VERB_RUN,
+  VERB_REPO_CONFIG,
+  type EvaluatedRun,
 } from "../../click/wire";
-import {
-  ceilingMoveArgs,
-  type CeilingAction,
-  type SlashAction,
-} from "../../config/action";
-import { ceilingScope, type CeilingMove } from "../../memento/edge";
+import type { LinkSigner } from "../../click/link-signer";
+import { repoAnswerFields, repoConfigs } from "../repo-configs";
+import { withAnswer, type RepoAnswer } from "../../config/loader/repo-gate";
+import type { Runs, RunRequest } from "../runs";
+import type { DeclaredSources } from "../render-payload";
+import { sessionEnv } from "../session-env";
+import { runDeclaration, type SlashAction } from "../../config/action";
 import type { RenderSightings } from "../render-sightings";
 import type { ServingDaemon } from "../limits";
-import type { MementoProvider } from "../../segments/memento";
 import { parseClientHints } from "../protocol";
 import {
   GLYPH_MARKS,
@@ -193,9 +195,6 @@ export interface DaemonContext {
   readonly bundle: string;
   // This daemon as the doctor's daemon row judges it (src/daemon/limits.ts).
   readonly serving: () => ServingDaemon;
-  // [LAW:single-enforcer] The one owner of memento's ceiling reading, so the
-  // move that makes a reading stale is the one that drops it.
-  readonly memento: Pick<MementoProvider, "move">;
   // [LAW:effects-at-boundaries] The tmux pane read and the typing
   // (src/claude-input/edge.ts), handed in so a test drives them with fakes.
   readonly claudeInput: ClaudeInputEdge;
@@ -214,6 +213,15 @@ export interface DaemonContext {
   // Reload that config from disk now, so the next render reads what a click
   // just wrote rather than waiting on the file watcher.
   readonly reloadConfig: (origin: RenderOrigin) => void;
+  // The storage key of each source that config declares, from the same
+  // render state: what a `run` supersedes.
+  readonly sourcesFor: (origin: RenderOrigin) => DeclaredSources;
+  // [LAW:single-enforcer] The signer every `run` link was drawn with: a link
+  // is honoured only if it verifies here.
+  readonly links: LinkSigner;
+  // [LAW:no-ambient-temporal-coupling] The one owner of runs in flight: a
+  // `run` click hands its program over and is answered at once.
+  readonly runs: Pick<Runs, "start" | "refused">;
   // [LAW:effects-at-boundaries] A session's animation-lane switches over the
   // config it renders with (`of`, looked up like `configFor`), and what
   // follows a click of that session (`clicked`): the click path measures
@@ -227,6 +235,13 @@ export interface DaemonContext {
       before: LaneSwitches,
       after: LaneSwitches,
     ) => void;
+  };
+  // [LAW:single-enforcer] Brings the session's view, if it has one, to the
+  // config `origin` resolves to: what a click that moved its load-config pick
+  // does after its commit (`journaled`), so a feed drawing the session shows
+  // the pick on its next frame with no request after it.
+  readonly views: {
+    readonly follow: (sessionId: string, origin: RenderOrigin) => void;
   };
 }
 
@@ -258,21 +273,22 @@ export type ClickContext = Journaled<VerbContext>;
 // throw a BadVerbArgs error which the dispatcher surfaces as BAD_REQUEST.
 export type VerbHandler = (value: string, ctx: ClickContext) => void;
 
-import { BadVerbArgs } from "../verb-error";
+import { BadVerbArgs, decodeWire } from "../verb-error";
+import {
+  parseSessionId,
+  type ParsedSessionId,
+  type SessionId,
+} from "../session-id";
 export { BadVerbArgs };
 
 // ─── Argument decoders ───────────────────────────────────────────────────────
 
-// [LAW:single-enforcer] One place that validates "this string is a usable
-// session id." A session id has come from an untrusted URL; rejecting `/`
-// and `..` keeps it usable as a key in the SessionState map and forbids
-// path-traversal through any downstream code that ever joins it with fs
-// paths (the legacy flag-file path, now removed, was the original reason).
-function requireSessionId(value: string): string {
-  if (!value) throw new BadVerbArgs("session id is required");
-  if (value.includes("/") || value.includes(".."))
-    throw new BadVerbArgs(`invalid session id "${value}"`);
-  return value;
+// [LAW:single-enforcer] A click's session id crosses the one session-id
+// checkpoint (parseSessionId); a refusal is the click's bad arguments.
+function requireSessionId(value: string): SessionId {
+  const parsed = parseSessionId(value);
+  if (!parsed.ok) throw new BadVerbArgs(`session id ${parsed.problem}`);
+  return parsed.id;
 }
 
 // [LAW:types-are-the-program] A single-argument verb (copy/open/toolbar/show-
@@ -287,65 +303,54 @@ function oneArg(value: string): string {
   return decodeWire(() => decodeURIComponent(value));
 }
 
-// [LAW:single-enforcer] One boundary reclassifies malformed wire encoding.
-// percent-decoding untrusted wire input throws a raw URIError on a bad escape
-// (`%ZZ`, a lone `%`); that is an argument-shape failure, not an operational
-// one, so it must reach the dispatcher as BadVerbArgs (→ BAD_REQUEST) like every
-// other bad-input shape. Both verb codecs (single-arg whole-value, multi-seg
-// set-state) funnel their decode through here so the reclassification lives once.
-function decodeWire<T>(decode: () => T): T {
-  try {
-    return decode();
-  } catch (err) {
-    if (err instanceof URIError)
-      throw new BadVerbArgs(`malformed wire encoding: ${err.message}`);
-    throw err;
-  }
-}
-
 // ─── Verb handlers ───────────────────────────────────────────────────────────
 
-// [LAW:single-enforcer] One clipboard primitive, no decode — both the `copy`
-// verb (decodes a wire segment) and the diagnostic verbs (already hold a plain
-// message) funnel here so the launch + rate-limit handling lives in one place.
-function pbcopy(text: string, ctx: VerbContext): void {
-  const result = launchSync({
-    bin: "/usr/bin/pbcopy",
-    stdinInput: text,
-    category: "click.pbcopy",
-  });
-  // [LAW:dataflow-not-control-flow] Rate-limit rejection is one outcome among
-  // many — the click is acknowledged and the rejection is logged. Other
-  // failures are genuine errors that surface as RENDER_FAILED.
-  if (!result.ok) {
-    if (result.reason === "rate-limited") {
-      ctx.dlog("warn", `click.pbcopy rate-limited: ${result.error ?? ""}`);
-      return;
-    }
-    throw new Error(
-      `pbcopy failed (${result.reason}, exit ${result.exitCode ?? "null"})`,
-    );
+// [LAW:single-enforcer] The one launch a click makes of a program — the
+// clipboard, an editor, a status-line link's opener — so its failure handling
+// lives in one place. [LAW:dataflow-not-control-flow] Rate-limit rejection is
+// one outcome among many — the click is acknowledged and the rejection is
+// logged. Other failures are genuine errors that surface as RENDER_FAILED.
+export function clickLaunch(
+  opts: LaunchOpts,
+  what: string,
+  dlog: DaemonContext["dlog"],
+): void {
+  const result = launchSync(opts);
+  if (result.ok) return;
+  if (result.reason === "rate-limited") {
+    dlog("warn", `${opts.category} rate-limited: ${result.error ?? ""}`);
+    return;
   }
+  // What the launch itself said of its failure: the spawn's error, or what
+  // the program wrote to stderr before it exited.
+  const said = result.error ?? result.stderr.trim();
+  throw new Error(
+    `${what} failed (${result.reason}, exit ${result.exitCode ?? "null"})${said === "" ? "" : `: ${said}`}`,
+  );
+}
+
+// One clipboard primitive, no decode — both the `copy` verb (decodes a wire
+// segment) and the diagnostic verbs (already hold a plain message) funnel here.
+function pbcopy(text: string, ctx: VerbContext): void {
+  clickLaunch(
+    { bin: "/usr/bin/pbcopy", stdinInput: text, category: "click.pbcopy" },
+    "pbcopy",
+    ctx.dlog,
+  );
 }
 
 const copy: VerbHandler = (value, ctx) => pbcopy(oneArg(value), ctx);
 
-const openVscode: VerbHandler = (value, ctx) => {
-  const result = launchSync({
-    bin: "/usr/bin/open",
-    args: ["-a", "Visual Studio Code", oneArg(value)],
-    category: "click.open",
-  });
-  if (!result.ok) {
-    if (result.reason === "rate-limited") {
-      ctx.dlog("warn", `click.open rate-limited: ${result.error ?? ""}`);
-      return;
-    }
-    throw new Error(
-      `open -a "Visual Studio Code" failed (${result.reason}, exit ${result.exitCode ?? "null"})`,
-    );
-  }
-};
+const openVscode: VerbHandler = (value, ctx) =>
+  clickLaunch(
+    {
+      bin: "/usr/bin/open",
+      args: ["-a", "Visual Studio Code", oneArg(value)],
+      category: "click.open",
+    },
+    'open -a "Visual Studio Code"',
+    ctx.dlog,
+  );
 
 // Click on the ⚠ in the bar copies the parse error to clipboard.
 const showConfigError: VerbHandler = (value, ctx) => pbcopy(oneArg(value), ctx);
@@ -739,8 +744,11 @@ function nestOf(ctx: DaemonContext, sid: string): DisclosureNest {
   return origin === null ? NO_NEST : disclosureNest(ctx.configFor(origin));
 }
 
+// [LAW:single-enforcer] The home as the render resolves it, under the same
+// answers: a click's chain leaves out what the bar's leaves out.
 function originHome(origin: RenderOrigin): ConfigHome {
   return durableConfig(
+    repoConfigs().read(),
     origin.projectDir,
     origin.cwd,
     origin.configFile ?? undefined,
@@ -1445,48 +1453,6 @@ const doctorMark: VerbHandler = (value, ctx) => {
   });
 };
 
-// ─── Memento ceiling (brandon-context-ceiling-xta.asv) ───────────────────────
-
-// [LAW:parse-dont-validate] A click's move is honoured only as one of the
-// `ceiling` actions the session's config declares: the declaration found is
-// the parsed move, so what reaches memento is what the config author wrote,
-// never text a URL made up. The session's recorded render origin supplies the
-// directories memento anchors its project layer on, and its recorded client
-// hints the Claude Code directory and memento environment — the scope the
-// bar's reading was taken with.
-const ceiling: VerbHandler = (value, ctx) => {
-  const [sessionId = "", ...args] = decodeWire(() => decodeSegments(value));
-  const sid = requireSessionId(sessionId);
-  const origin = sessionOrigin(ctx, sid);
-  const action = Object.values(ctx.configFor(origin).actions)
-    .filter((a): a is CeilingAction => "ceiling" in a)
-    .find((a) => {
-      const declared = ceilingMoveArgs(a);
-      return (
-        declared.length === args.length &&
-        declared.every((d, i) => d === args[i])
-      );
-    });
-  if (action === undefined) {
-    throw new BadVerbArgs(
-      `ceiling: "${args.join(" ")}" is not a move this config declares`,
-    );
-  }
-  const move: CeilingMove =
-    action.ceiling === "set"
-      ? { kind: "set", to: action.to }
-      : { kind: "clear" };
-  const scope = ceilingScope(
-    { sessionId: sid, projectDir: origin.projectDir, cwd: origin.cwd },
-    sessionHints(ctx, sid),
-  );
-  ctx.memento.move(scope, move);
-  ctx.dlog(
-    "info",
-    `ceiling: ${args.join(" ")} (session=${sid} claudeConfigDir=${scope.claudeConfigDir})`,
-  );
-};
-
 // ─── Slash commands (brandon-context-ceiling-xta.7xt) ───────────────────────
 
 // [LAW:parse-dont-validate] A click's line is honoured only as one a `slash`
@@ -1520,6 +1486,117 @@ const slash: VerbHandler = (value, ctx) => {
     throw new BadVerbArgs(`${line} was not typed: ${result.reason}`);
   }
   ctx.dlog("info", `slash: typed ${line} into ${result.pane} (session=${sid})`);
+};
+
+// ─── Run (a `run` action) ───────────────────────────────────────────────────
+
+// [LAW:parse-dont-validate] A run link is honoured only when it names a `run`
+// action the session's config declares and its mac verifies — it was drawn by
+// this daemon's key, for this session, from that declaration as it stands
+// now, with exactly the program, arguments and environment it carries. The
+// directory the program runs in and the sources it refreshes come from that
+// declaration, never from the link. Any web page can open a `cc-candybar://`
+// link, so either check failing refuses the click before anything runs.
+function runOf(
+  [sessionId = "", action = "", evaluated = "", mac = ""]: readonly string[],
+  ctx: VerbContext,
+): RunRequest {
+  const sid = requireSessionId(sessionId);
+  const origin = sessionOrigin(ctx, sid);
+  const actions = ctx.configFor(origin).actions;
+  const decl = Object.hasOwn(actions, action) ? actions[action] : undefined;
+  if (decl === undefined || !("run" in decl)) {
+    throw new BadVerbArgs(
+      `"${action}" is not a run action this session's config declares`,
+    );
+  }
+  const declaration = runDeclaration(decl);
+  if (
+    !ctx.links.verify({ sessionId: sid, action, declaration, evaluated }, mac)
+  ) {
+    throw new BadVerbArgs(
+      "the link's signature does not match what it carries: it was not drawn by this daemon, or its action has been edited since it was drawn",
+    );
+  }
+  // Signed, so it is what a draw wrote: the JSON of an EvaluatedRun.
+  let drawn: EvaluatedRun;
+  try {
+    drawn = JSON.parse(evaluated) as EvaluatedRun;
+  } catch {
+    throw new BadVerbArgs(`run ${action}: what the link carries is not JSON`);
+  }
+  const [program, ...args] = drawn.run;
+  if (program === undefined || program === "") {
+    throw new BadVerbArgs(`run ${action}: the program evaluated to nothing`);
+  }
+  const sources = ctx.sourcesFor(origin);
+  return {
+    sessionId: sid,
+    action,
+    argv: [program, ...args],
+    // [LAW:single-enforcer] The session's process environment, the action's
+    // own variables over it.
+    env: {
+      ...sessionEnv(process.env, {
+        sessionId: sid,
+        projectDir: origin.projectDir,
+        claudeConfigDir: sessionHints(ctx, sid).claudeConfigDir,
+      }),
+      ...drawn.env,
+    },
+    cwd: decl.cwd,
+    // The loader proved every name a declared source of this config, whose
+    // state holds its key.
+    refreshes: decl.refreshes.map((name) => ({
+      name,
+      storage: sources.get(name)!,
+    })),
+  };
+}
+
+const run: VerbHandler = (value, ctx) => {
+  let named = { sessionId: "-", action: "-" };
+  let request: RunRequest;
+  try {
+    const parts = decodeWire(() => decodeSegments(value));
+    named = { sessionId: parts[0] || "-", action: parts[1] || "-" };
+    request = runOf(parts, ctx);
+  } catch (e) {
+    // [LAW:nothing-unseen] Every refused link is the owner's event and count;
+    // the dispatch shows it in the session's bar.
+    if (e instanceof BadVerbArgs) {
+      ctx.runs.refused(named.sessionId, named.action, e.message);
+    }
+    throw e;
+  }
+  ctx.runs.start(request);
+};
+
+// ─── Repository configs (brandon-unfiled-3248.kezw) ─────────────────────────
+
+// [LAW:parse-dont-validate] An answer is recorded only when its mac verifies:
+// the bar drew it, for this session, for this directory and this answer. The
+// book lives beside the link key, and the render cache watches it, so every
+// bar reloads; the clicking session's reloads before the click answers, as
+// save's does.
+const repoConfig: VerbHandler = (value, ctx) => {
+  const [sessionId = "", dir = "", answer = "", mac = ""] = decodeWire(() =>
+    decodeSegments(value),
+  );
+  const sid = requireSessionId(sessionId);
+  // Signed, so it is an answer the bar offered.
+  const answered = answer as RepoAnswer;
+  if (!ctx.links.verify(repoAnswerFields(sid, dir, answered), mac)) {
+    throw new BadVerbArgs(
+      "the answer's signature does not match what it carries: it was not drawn by this daemon",
+    );
+  }
+  const filed = repoConfigs().update((book) => withAnswer(book, dir, answered));
+  if (filed.kind === "failed") {
+    throw new Error(`${dir} was not ${answered}: ${filed.reason}`);
+  }
+  ctx.dlog("info", `repo-config: ${dir} ${answered} (session=${sid})`);
+  ctx.reloadConfig(sessionOrigin(ctx, sid));
 };
 
 // ─── Registry ───────────────────────────────────────────────────────────────
@@ -1600,8 +1677,9 @@ const LEAF_VERBS = new Map<string, VerbHandler>([
   [VERB_DOCTOR_FIX, doctorFix],
   [VERB_DOCTOR_MARK, doctorMark],
   [VERB_DOCTOR_PROBE, doctorProbe],
-  [VERB_CEILING, ceiling],
   [VERB_SLASH, slash],
+  [VERB_RUN, run],
+  [VERB_REPO_CONFIG, repoConfig],
 ]);
 
 // [LAW:one-source-of-truth] The verbs whose handler splits its value into
@@ -1624,8 +1702,9 @@ export const SEGMENTED_VERBS: ReadonlySet<string> = new Set([
   VERB_REDO,
   VERB_DOCTOR_FIX,
   VERB_DOCTOR_MARK,
-  VERB_CEILING,
   VERB_SLASH,
+  VERB_RUN,
+  VERB_REPO_CONFIG,
 ]);
 
 // [LAW:one-source-of-truth] The verbs whose FIRST wire segment is the session
@@ -1652,8 +1731,9 @@ const SESSION_FIRST_VERBS: ReadonlySet<string> = new Set([
   VERB_DOCTOR_RUN,
   VERB_DOCTOR_FIX,
   VERB_DOCTOR_MARK,
-  VERB_CEILING,
   VERB_SLASH,
+  VERB_RUN,
+  VERB_REPO_CONFIG,
   VERB_LOAD_CONFIG,
 ]);
 
@@ -1683,14 +1763,22 @@ const SESSION_FIRST_VERBS: ReadonlySet<string> = new Set([
 // its first session-bearing effect — every SESSION_FIRST_VERBS member carries
 // it there — or none. Dispatch surfaces a failed step in that session's bar,
 // and the daemon counts the click as that session's activity
-// (src/daemon/menu-idle.ts).
-export function clickSessionOf(verb: string, value: string): string | null {
+// (src/daemon/menu-idle.ts). [LAW:single-enforcer] It is read as it crosses
+// the one session-id checkpoint, so every reader of a click's session reads
+// the same checked value; one that fails is no session's, and its verb
+// refuses the click.
+export function clickSessionOf(
+  verb: string,
+  value: string,
+): ParsedSessionId | null {
   return sessionOfEffects(
     verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }],
   );
 }
 
-function sessionOfEffects(effects: readonly ParsedEffect[]): string | null {
+function sessionOfEffects(
+  effects: readonly ParsedEffect[],
+): ParsedSessionId | null {
   const bearing = effects.find((e) => SESSION_FIRST_VERBS.has(e.verb));
   // Only the session's own segment is read: a step's malformed argument is
   // that step's error to hold on the bar, after the click has found its
@@ -1699,7 +1787,7 @@ function sessionOfEffects(effects: readonly ParsedEffect[]): string | null {
     bearing === undefined
       ? ""
       : decodeWire(() => decodeFirstSegment(bearing.value));
-  return sid === "" ? null : sid;
+  return sid === "" ? null : parseSessionId(sid);
 }
 
 const dispatch: VerbHandler = (rawValue, ctx) => {
@@ -1708,7 +1796,7 @@ const dispatch: VerbHandler = (rawValue, ctx) => {
   const effects = parseEffects(rawValue);
   // The click's session, for error display, so a failing step surfaces in the
   // bar like any other.
-  const sessionId = sessionOfEffects(effects);
+  const session = sessionOfEffects(effects);
   for (const { verb, value } of batchAdjacentWrites(effects)) {
     const handler = LEAF_VERBS.get(verb);
     if (!handler) {
@@ -1723,10 +1811,10 @@ const dispatch: VerbHandler = (rawValue, ctx) => {
     }
   }
   if (errors.length > 0) {
-    if (sessionId) {
+    if (session?.ok) {
       holdClickError(
         ctx.sessionState,
-        sessionId,
+        session.id,
         errors.join("\n"),
         instantOf(new Date()),
       );
@@ -1749,7 +1837,8 @@ const dispatch: VerbHandler = (rawValue, ctx) => {
 // it measures that session's lane switches (`sessionOf` names it): before the
 // handler, and after the commit — after any reload the handler made, since a
 // reload is synchronous. What a lane runs follows the difference, which no
-// render, frame or other session's write can make.
+// render, frame or other session's write can make. After the commit it also
+// brings the session's view to the config its origin now resolves to.
 function journaled<C extends DaemonContext>(
   handler: (value: string, ctx: Journaled<C>) => void,
   sessionOf: (value: string) => string | null,
@@ -1791,6 +1880,19 @@ function journaled<C extends DaemonContext>(
         failures.push(e);
       }
     }
+    // [LAW:single-enforcer] Every click passes here, so here is where a
+    // click that moved the session's origin — a load-config pick, or a
+    // history step restoring or clearing one — moves its view: a frame opens
+    // none (src/daemon/cache/render.ts `holdView`).
+    // A session that has never rendered has no origin, and no view.
+    if (sid !== null) {
+      try {
+        const origin = recordedOrigin(ctx, sid);
+        if (origin !== null) ctx.views.follow(sid, origin);
+      } catch (e) {
+        failures.push(e);
+      }
+    }
     if (failures.length === 1) throw failures[0];
     if (failures.length > 1) {
       throw new Error(
@@ -1811,7 +1913,10 @@ export const VERBS: ReadonlyMap<
     ([verb, handler]) =>
       [
         verb,
-        journaled(handler, (value) => clickSessionOf(verb, value)),
+        journaled(handler, (value) => {
+          const session = clickSessionOf(verb, value);
+          return session?.ok ? session.id : null;
+        }),
       ] as const,
   ),
 );

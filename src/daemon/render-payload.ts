@@ -18,11 +18,10 @@
 
 import type { HistoryDepth } from "./settings-history";
 import path from "node:path";
-import os from "node:os";
 import { inspect } from "node:util";
 import type { ClaudeHookData } from "../utils/claude.js";
 import type { ClientHints } from "./protocol.js";
-import type { DslConfig, VariableDecl } from "../config/dsl-types.js";
+import type { DslConfig } from "../config/dsl-types.js";
 import {
   DEFAULT_TERMINAL_WIDTH,
   type BuildLineOptions,
@@ -34,7 +33,8 @@ import type { LaneFeeds } from "../config/lanes.js";
 import { presetGlobals, presetRoot } from "../config/presets.js";
 import { EXPRESSION_SLOTS, isExpression } from "../themes/policy.js";
 import { walkNodes } from "../config/dsl-types.js";
-import { templateReads } from "../config/dsl-loader.js";
+import { declaredVariables } from "../config/loader/refs.js";
+import { payloadPathOf, valueReadsOf } from "../config/loader/value-reads.js";
 import {
   prOfHead,
   trackingOf,
@@ -63,7 +63,7 @@ import {
 import type { DaemonLogger } from "../utils/logger.js";
 import { isBundledPreset } from "./bundled-presets.js";
 import type {
-  DaySet,
+  DaySums,
   SessionUsageStore,
   SpeedObservation,
   TodayInfo,
@@ -77,13 +77,8 @@ import type {
   ToolTally,
 } from "../segments/activity.js";
 import type { TmuxService } from "../segments/tmux.js";
-import type { MementoProvider } from "../segments/memento.js";
+import type { HostService } from "../segments/host.js";
 import type { AutoCompactProvider } from "../segments/autocompact-provider.js";
-import {
-  ceilingScope,
-  type CeilingReading,
-  type CeilingScope,
-} from "../memento/edge.js";
 import {
   autoCompactControls,
   type AutoCompactControls,
@@ -100,6 +95,9 @@ import {
 } from "../config/globals-fields.js";
 import { dateOf, type Instant } from "../utils/instant.js";
 import type { RefreshFaults, RefreshLane } from "./refresh-faults.js";
+import type { SessionId } from "./session-id.js";
+import type { ManagedStorage, StorageKey } from "./cache/managed-storage.js";
+import type { JsonValue } from "../var-system/types.js";
 
 // The resolved globals as the options renderDsl's joiner and cells read (its
 // selection is the resolution itself — RenderSelection is a Pick of it).
@@ -180,11 +178,11 @@ export interface RenderPayloadOf<P> extends ClaudeHookData, ValuedInputs {
   // say; the detached daemon's own environment is never consulted
   // (brandon-tmux-tk7). `session` is that pane's session name.
   readonly tmux?: { readonly pane: string; readonly session?: string | P };
-  // [LAW:types-are-the-program] REQUIRED for the same reason theme/style are:
-  // the daemon assembles it every render from sources that cannot be "not
-  // requested" (two syscalls and one already-parsed wire hint). The fields
-  // INSIDE it carry the real optionality — see HostPayload.
-  readonly host: HostPayload;
+  // [LAW:types-are-the-program] REQUIRED: every payload carries the object,
+  // and the fields INSIDE it carry the real optionality — the name and the
+  // user each a source the closure reads (src/segments/host.ts), `ssh` the
+  // session's hint. See HostPayloadOf.
+  readonly host: HostPayloadOf<P>;
   // `theme.effective`, `style.effective` and `effect.effective` are
   // deliberately NOT fields here. They are the selections whose config rung may
   // hold an EXPRESSION (brandon-looks-pe6, brandon-themes-dzl,
@@ -286,12 +284,20 @@ export interface RenderPayloadOf<P> extends ClaudeHookData, ValuedInputs {
   readonly metrics?: MetricsPayload | P;
   // The one non-quantity family (brandon-activity-ue7): what Claude is DOING.
   readonly activity?: ActivityPayload | P;
-  // The memento plugin's context ceiling for this session; missing when
-  // memento is not installed for the project.
-  readonly memento?: MementoPayload | P;
   // Claude Code's auto-compact window, as its `/autocompact` last wrote it.
   readonly autocompact?: AutoCompactPayload | P;
+  // [LAW:types-are-the-program] Each plugin source the view declared, by
+  // plugin then source — `.plugins.<plugin>.<source>`, the source variable's
+  // own name — as the managed storage owner read the session's file: ok,
+  // absent or failed, or not answered yet. Required: a payload builder that
+  // leaves the sources out does not compile (`projectSources`).
+  readonly plugins: SourcesPayload<P>;
 }
+
+// The readings of a view's sources, nested by plugin and source.
+export type SourcesPayload<P> = Readonly<
+  Record<string, Readonly<Record<string, Outcome<JsonValue> | P>>>
+>;
 
 // What a request is answered from: every source answered.
 export type RenderPayload = RenderPayloadOf<never>;
@@ -301,32 +307,11 @@ export type DrawnPayload = RenderPayloadOf<Pending>;
 // facts of the draw's own instant (DRAW_PROJECTIONS, which each draw hands
 // its binding), so no stored value moves with the clock.
 export type ViewPayload = Omit<DrawnPayload, "feeds" | "today">;
-// A view's payload, and what it projected as missing fields — a failed
-// lane — for the request that draws it to log.
-export interface ViewPayloadOf {
-  readonly payload: ViewPayload;
-  readonly failures: readonly string[];
-}
-
 // The control's facts (src/segments/autocompact.ts) — or the refusal that the
-// settings file could not be read, carried as text like memento's, so the
-// control says why it cannot show the window.
+// settings file could not be read, carried as text, so the control says why
+// it cannot show the window.
 export type AutoCompactPayload =
   | AutoCompactControls
-  | { readonly error: string };
-
-// [LAW:no-silent-failure] Two shapes, never mixed: memento's reading, or its
-// refusal. A refusal is the state in which memento's Stop hook is failing too
-// — its gate off for this session with nothing else to say so — so it
-// travels to the bar as text, never as a missing field.
-export type MementoPayload =
-  | {
-      // Tokens; 0 when a layer turned the ceiling off.
-      readonly ceiling: number;
-      readonly off: boolean;
-      // The session's own layer as written, "" when it has none.
-      readonly session: string;
-    }
   | { readonly error: string };
 
 // Flattened projection of GitInfo: every field shape the parity bindings
@@ -446,16 +431,16 @@ export function prFactOf(
 // declared default AND records a `last_error` that `cc-candybar vars`
 // surfaces — so "we don't know" stays distinguishable from "we know it's
 // local", which a `?? false` here would have destroyed.
-export interface HostPayload {
+export interface HostPayloadOf<P> {
   // The SHORT hostname — `os.hostname()` up to the first dot, the same
   // projection zsh's `%m` makes. A statusbar cell identifies a machine to a
   // human; the FQDN is a network address, a different fact, and a separate
   // field the day something needs it.
-  readonly name?: string;
+  readonly name?: string | P;
   // The EFFECTIVE username from the passwd database, not `$USER`. The env var
   // is a map that drifts (su/sudo leave it stale); the passwd entry for the
   // running uid is the territory. Matches zsh's `%n`.
-  readonly user?: string;
+  readonly user?: string | P;
   readonly ssh?: boolean;
 }
 
@@ -586,17 +571,18 @@ export interface RenderPayloadDeps {
   readonly metricsProvider: MetricsProvider;
   readonly activityProvider: ActivityProvider;
   readonly tmuxService: TmuxService;
-  readonly mementoProvider: MementoProvider;
+  // [LAW:single-enforcer] The one owner of every plugin's session files: a
+  // view's declaration holds each source it reads there, and a render state's
+  // build holds the folders its config declares.
+  readonly managedStorage: ManagedStorage;
   // Claude Code's auto-compact window, read from the user settings file at
   // the path a render names.
   readonly autoCompact: AutoCompactProvider;
   // Each session's prompt-cache expiry, read off its transcript's tail.
   readonly cacheExpiry: CacheExpiryProvider;
-  // [LAW:single-enforcer] The log capability for the provider lanes whose
-  // owner does not log: the request drawing a view's payload is the ONE
-  // place their failures are logged (its `failures`). Git, tmux, memento and autocompact are not among them: each
-  // owner refreshes on its own triggers and logs each refresh that failed,
-  // so a failure stored there is logged once, never once per render.
+  // The machine's identity: its host name and the daemon's user.
+  readonly hostService: HostService;
+  // The log for a session lane whose refresh threw: a bug no owner saw.
   readonly log: DaemonLogger;
   // Each session lane whose refresh threw, until one runs clean.
   readonly faults: RefreshFaults;
@@ -732,83 +718,17 @@ function projectSpeedHistory(obs: SpeedObservation): string | undefined {
   return rates.join(",");
 }
 
-// ─── Host identity ───────────────────────────────────────────────────────────
-
-/**
- * The short hostname: everything before the first dot, or the whole string when
- * there is no dot. `os.hostname()` yields an FQDN on some hosts (macOS's
- * `mymachine.local`, a DNS-configured server's `web1.prod.example.com`) and a
- * bare name on others; this makes the rendered cell identify the machine the
- * same way on both, which is zsh's `%m` and the projection git-taculous shows.
- *
- * [LAW:effects-at-boundaries] Pure and total — the syscall stays in readHost.
- */
-export function shortHostname(hostname: string): string {
-  const dot = hostname.indexOf(".");
-  return dot < 0 ? hostname : hostname.slice(0, dot);
-}
-
-/**
- * Assemble the host identity for one render.
- *
- * [LAW:effects-at-boundaries] Named `read*`, not `project*`, because it is not
- * pure: two syscalls happen here. That is in bounds — this module IS the
- * daemon's data-assembly edge, the same edge that reads `process.env.HOME`
- * below — and the point of the seam is that nothing downstream reads them
- * again.
- *
- * [LAW:no-silent-failure] A throwing syscall (a uid with no passwd entry is the
- * realistic case, in a stripped container) yields an ABSENT field plus a
- * description for the caller to log, exactly like a failed git lane — never a
- * fabricated name, and never an exception: the whole bar must not blank over a
- * cosmetic cell.
- */
-function readHost(hints: ClientHints): {
-  readonly host: HostPayload;
-  readonly failures: readonly string[];
-} {
-  const failures: string[] = [];
-  const attempt = (field: string, read: () => string): string | undefined => {
-    try {
-      const value = read();
-      // "" is not a usable identity; treat it as absence so the DSL default
-      // applies rather than rendering an empty `@host` fragment.
-      return value === "" ? undefined : value;
-    } catch (e) {
-      failures.push(`host.${field}: ${String(e)}`);
-      return undefined;
-    }
-  };
-
-  const name = attempt("name", () => shortHostname(os.hostname()));
-  const user = attempt("user", () => os.userInfo().username);
-  return {
-    host: {
-      ...(name !== undefined && { name }),
-      ...(user !== undefined && { user }),
-      // [LAW:one-source-of-truth] Passed straight through from the parsed
-      // hint. The daemon deliberately does NOT consult its own SSH_* env as a
-      // fallback: that env belongs to whichever shell spawned it, so a
-      // "helpful" fallback would confidently mislabel every session that
-      // daemon serves. Absent hint → absent field → declared default + a
-      // recorded last_error, which is the honest report of "not answered".
-      ...(hints.ssh !== undefined && { ssh: hints.ssh }),
-    },
-    failures,
-  };
-}
-
 // ─── Builder ─────────────────────────────────────────────────────────────────
 
 // ─── Config-driven provider gating ───────────────────────────────────────────
 //
 // [LAW:dataflow-not-control-flow] Whether a provider fires is selected by
 // the active layout. Walk from the preset's resolved root (`presetRoot`, the
-// same tree renderDsl compiles for it) → its nodes → their segments →
-// their template strings → referenced variable names → recursive expansion through
-// `template`-kind vars. The transitive closure tells us which input paths
-// are actually reachable from a rendered segment; providers feeding paths
-// outside that closure do not run.
+// same tree renderDsl compiles for it) → its nodes → their segments → their
+// template strings → the declarations they read (value-reads.ts), and on
+// through what each of those reads. The transitive closure tells us which
+// input paths are actually reachable from a rendered segment; providers
+// feeding paths outside that closure do not run.
 //
 // [LAW:single-enforcer] One reachability walk owns "is this provider
 // needed." A declared-but-unreachable input variable (the default config
@@ -819,43 +739,38 @@ export function buildNeededPrefixes(
   config: DslConfig,
   preset: string,
 ): ReadonlySet<string> {
-  // Seeds: refs from each rendered segment's template/when/bg/fg ONLY —
-  // segment-local vars in `seg.vars` are reached transitively via those refs
-  // (their declared names appear in the templates that need them). Seeding
-  // from `seg.vars` directly would mark unused per-segment template vars as
-  // needed and pull in their providers without justification.
-  const frontier: string[] = [];
-  const reads = (src: string): Iterable<string> =>
-    templateReads(src, config.helpers).keys();
-
-  // A globals rule (a theme or style chosen by data) reads variables too, and it
-  // runs every render — seed its reads so a provider feeding only the rule is
-  // not gated out and the rule never evaluates against unfilled defaults. The
-  // rule in force is the active preset's config-default rung (`presetGlobals`,
-  // the merge `resolveEffectiveGlobals` reads); editGlobals holds names only.
+  // Seeds: each rendered segment's template/when/bg/fg ONLY — segment-local
+  // vars in `seg.vars` are reached transitively through the templates that
+  // read them. Seeding from `seg.vars` directly would mark unused per-segment
+  // template vars as needed and pull in their providers without justification.
+  //
+  // A globals rule (a theme or style chosen by data) reads variables too, and
+  // it runs every render — seed it so a provider feeding only the rule is not
+  // gated out and the rule never evaluates against unfilled defaults. The rule
+  // in force is the active preset's config-default rung (`presetGlobals`, the
+  // merge `resolveEffectiveGlobals` reads); editGlobals holds names only.
   const declared = presetGlobals(config, preset);
-  for (const slot of EXPRESSION_SLOTS) {
+  const rules = EXPRESSION_SLOTS.flatMap((slot) => {
     const authored = declared[slot];
-    if (isExpression(authored))
-      for (const ref of reads(authored)) frontier.push(ref);
-  }
-
+    return isExpression(authored) ? [authored] : [];
+  });
+  const seeds = [...rules];
   for (const node of walkNodes(presetRoot(config, preset).node)) {
-    // A node's `when` references variables too — seed them so a provider feeding
-    // only a predicate (e.g. a state var gating a row/container) isn't gated out.
-    if (node.when) for (const ref of reads(node.when)) frontier.push(ref);
+    // A node's `when` reads variables too — seed it so a provider feeding only
+    // a predicate (e.g. a state var gating a row/container) isn't gated out.
+    if (node.when) seeds.push(node.when);
     if (node.kind !== "segment") continue;
-    frontier.push(...segmentReads(config, node.name));
+    seeds.push(...segmentTemplates(config, node.name));
   }
-  return inputClosure(config, frontier);
+  return inputClosure(config, seeds);
 }
 
-// The refs one segment's own templates read — what it seeds the closure with.
-function segmentReads(config: DslConfig, name: string): string[] {
+// One segment's own templates — what it seeds the closure with.
+function segmentTemplates(config: DslConfig, name: string): string[] {
   const seg = config.segments[name];
   if (!seg) return [];
   return [seg.template, seg.when, seg.bg, seg.fg].flatMap((src) =>
-    src ? [...templateReads(src, config.helpers).keys()] : [],
+    src ? [src] : [],
   );
 }
 
@@ -869,72 +784,35 @@ export function segmentInputPaths(
   name: string,
   whens: readonly string[],
 ): ReadonlySet<string> {
-  return inputClosure(config, [
-    ...segmentReads(config, name),
-    ...whens.flatMap((w) => [...templateReads(w, config.helpers).keys()]),
-  ]);
+  return inputClosure(config, [...segmentTemplates(config, name), ...whens]);
 }
 
-// The `kind: "input"` paths a set of refs reaches, through every
-// `template`-kind variable they read.
+// The payload paths a set of templates reaches — each input's path, each
+// plugin source's name (payloadPathOf) — through every edge of
+// the one fold of what a value reads (value-reads.ts): a template's reads and
+// the texts of the actions it binds, a variable's template, cache key and
+// depends_on. The draw follows each of these, so a path the closure missed
+// would draw unfilled.
 function inputClosure(
   config: DslConfig,
   seeds: readonly string[],
 ): ReadonlySet<string> {
-  // 1. Variable name → declaration index for fast lookup. Global vars first;
-  //    per-segment vars are namespaced `segName.varName` (same as runtime).
-  const allDecls = new Map<string, VariableDecl>();
-  for (const [name, decl] of Object.entries(config.variables)) {
-    allDecls.set(name, decl);
-  }
-  for (const [segName, seg] of Object.entries(config.segments)) {
-    if (!seg.vars) continue;
-    for (const [varName, decl] of Object.entries(seg.vars)) {
-      allDecls.set(`${segName}.${varName}`, decl);
-    }
-  }
-
-  // 2. `visited` tracks vars whose own `template`-kind body we've already
-  //    followed.
-  const frontier = [...seeds];
+  const reads = valueReadsOf(config);
+  const decls = new Map(declaredVariables(config));
+  const frontier = seeds.flatMap((template) =>
+    reads.ofTemplate(template).flatMap(({ reaches }) => reaches),
+  );
   const visited = new Set<string>();
-  const reads = (src: string): Iterable<string> =>
-    templateReads(src, config.helpers).keys();
-
-  // 3. Walk the closure. A ref is the dotted form `a.b.c`. Two cases:
-  //    - LEAF: `ref` exactly matches a declared variable. The scope proxy
-  //      treats this as the variable read.
-  //    - NAMESPACE: `ref` is a strict prefix of declared variable names
-  //      (e.g. `git` when only `git.branch`, `git.sha`, … are declared).
-  //      The scope proxy returns a nested proxy here, which the template
-  //      can iterate / stringify / pass to functions like `toJson`. A
-  //      namespace read implicitly reaches every leaf under it, so every
-  //      `<ref>.*` declaration becomes reachable.
-  //    Both cases collapse to "expand the ref to every matching declared
-  //    name." For template-kind matches, the body refs become new frontier
-  //    items; for input-kind matches, the path is added to the closure.
   const inputPaths = new Set<string>();
   while (frontier.length > 0) {
-    const ref = frontier.pop()!;
-    for (const declName of expandRef(allDecls, ref)) {
-      if (visited.has(declName)) continue;
-      visited.add(declName);
-      const decl = allDecls.get(declName);
-      if (!decl) continue;
-      if (decl.kind === "input") {
-        inputPaths.add(decl.path);
-      } else if (decl.kind === "template") {
-        for (const r of reads(decl.template)) {
-          frontier.push(r);
-        }
-      }
-      // Other kinds (literal/env/file/shell/time/state) declare their
-      // own box without reading a payload path — they need no provider
-      // gating because the daemon's payload builder is the only thing
-      // this gates.
-    }
+    const name = frontier.pop()!;
+    if (visited.has(name)) continue;
+    visited.add(name);
+    const decl = decls.get(name)!;
+    const read = payloadPathOf(name, decl);
+    if (read !== undefined) inputPaths.add(read);
+    for (const { reaches } of reads.ofVariable(decl)) frontier.push(...reaches);
   }
-
   return inputPaths;
 }
 
@@ -949,31 +827,6 @@ export function neededPrefixesByPreset(
     byPreset.set(preset, needed);
     return needed;
   };
-}
-
-// [LAW:single-enforcer] Mirror of the scope proxy's read semantics: a ref
-// resolves either to an exact variable (leaf) or to every variable under a
-// namespace prefix (`.git` matches `git.branch`, `git.sha`, …). Yields the
-// set of declared names the ref reaches.
-function expandRef(
-  decls: ReadonlyMap<string, VariableDecl>,
-  ref: string,
-): readonly string[] {
-  // Leaf — most specific declared name wins, mirroring lookupDecl's loop.
-  let candidate = ref;
-  while (candidate.length > 0) {
-    if (decls.has(candidate)) return [candidate];
-    const dot = candidate.lastIndexOf(".");
-    if (dot < 0) break;
-    candidate = candidate.slice(0, dot);
-  }
-  // Namespace — every name starting with `${ref}.` is reachable.
-  const ns = `${ref}.`;
-  const matches: string[] = [];
-  for (const name of decls.keys()) {
-    if (name.startsWith(ns)) matches.push(name);
-  }
-  return matches;
 }
 
 export function anyPathStartsWith(
@@ -1068,7 +921,7 @@ export interface PayloadInputs {
   readonly cwd: string | undefined;
   // [LAW:single-enforcer] The cache pre-computes the closure once at
   // registration; passing it in (rather than recomputing per render) keeps
-  // the hot path free of the BFS + templateReads cost.
+  // the hot path free of the closure's cost.
   readonly neededInputPaths: ReadonlySet<string>;
   // [LAW:locality-or-seam] The parsed client hints, NOT the raw request — this
   // module is downstream of the wire checkpoint and never re-sanitizes.
@@ -1124,9 +977,11 @@ function wantsOf(neededInputPaths: ReadonlySet<string>) {
     // Only the session NAME costs a spawn; `tmux.pane` is the hint itself, so
     // a config that reads only the pane (every slash gate) runs nothing here.
     tmux: wants("tmux.session"),
+    // `host.ssh` is the hint itself; the name and the user are each a read.
+    hostName: wants("host.name"),
+    hostUser: wants("host.user"),
     cache: wants("cache"),
     speed: wants("speed"),
-    memento: wants("memento"),
     autocompact: wants("autocompact"),
     block: wants("block"),
   };
@@ -1146,6 +1001,21 @@ function settingsPathOf(hints: ClientHints): string {
   return claudeSettingsPath(claudeConfigDir(hints.claudeConfigDir));
 }
 
+// The lanes a request's arrival refreshed: how long each took, or null while
+// it is still out.
+export type Refreshed = Map<RefreshLane, number | null>;
+
+// [LAW:nothing-unseen] The render event's `refreshed=`: each lane the
+// request's arrival refreshed, with how long it took, `…` for one still out
+// when the answer was drawn; `-` for none.
+export function refreshedFact(refreshed: Refreshed): string {
+  return (
+    [...refreshed]
+      .map(([lane, ms]) => `${lane}:${ms === null ? "…" : `${ms}ms`}`)
+      .join(",") || "-"
+  );
+}
+
 // [LAW:single-enforcer] A statusline request's own triggers
 // (brandon-unfiled-3248.8ro6, step 3): it refreshes every session source the
 // closure reads — the transcript's folds, the cache expiry, the speed sample,
@@ -1160,19 +1030,27 @@ function settingsPathOf(hints: ClientHints): string {
 // derived from what is stored, reads it failed rather than not answered.
 //
 // `at` is the request's arrival, the instant its speed sample is taken at.
+// `refreshed` is the request's record of them: each lane it starts, and how
+// long the lane took once it lands.
 export async function refreshPayload(
   inputs: PayloadInputs,
   at: Instant,
+  refreshed: Refreshed,
 ): Promise<void> {
   const { hookData, deps, hints } = inputs;
   const want = wanted(inputs.neededInputPaths);
   const sessionId = hookData.session_id;
+  // The request's one refresh of its session's record, which the session,
+  // today and speed lanes share.
+  const session = deps.usageStore.request(sessionId, hookData.transcript_path);
   const lane = async (
     name: RefreshLane,
     needed: boolean,
     run: () => Promise<unknown>,
   ): Promise<void> => {
     if (!needed) return;
+    const startedAt = performance.now();
+    refreshed.set(name, null);
     let threw: string | null = null;
     try {
       await run();
@@ -1180,15 +1058,12 @@ export async function refreshPayload(
       deps.log("error", `${name} lane threw: ${inspect(e)}`);
       threw = `${name}: ${String(e)}`;
     }
+    refreshed.set(name, Math.round(performance.now() - startedAt));
     deps.faults.refreshed(sessionId, name, threw);
   };
   await Promise.all([
-    lane("session", want.session, () =>
-      deps.usageStore.getUsageInfo(sessionId, hookData),
-    ),
-    lane("today", want.today, () =>
-      deps.usageStore.refreshToday(deps.lanes().today, hookData),
-    ),
+    lane("session", want.session, () => session.usage(hookData)),
+    lane("today", want.today, () => session.today(deps.lanes().today)),
     lane("context", want.context, () =>
       deps.contextProvider.getContextInfo(hookData),
     ),
@@ -1206,21 +1081,15 @@ export async function refreshPayload(
     // [LAW:one-source-of-truth] tok/s folds from the SAME store the session
     // lane reads, one sample per request: a frame takes none, so how often the
     // bar is drawn moves no rate.
-    lane("speed", want.speed, () =>
-      deps.usageStore.observeSpeed(
-        sessionId,
-        hookData.transcript_path,
-        dateOf(at).getTime(),
-      ),
-    ),
+    lane("speed", want.speed, () => session.speed(dateOf(at).getTime())),
     lane("autocompact", want.autocompact, async () =>
       deps.autoCompact.window(settingsPathOf(hints)),
     ),
   ]);
 }
 
-// Each lane's value as its owner holds it now. The keyed lanes' (git, tmux,
-// memento) are `Current`: a value not answered yet carries its landing.
+// Each lane's value as its owner holds it now. The keyed lanes' (git, tmux)
+// are `Current`: a value not answered yet carries its landing.
 // `today` is no lane of the payload: the day it sums is the draw's
 // (`todayOf`).
 interface Lanes {
@@ -1230,20 +1099,29 @@ interface Lanes {
   readonly metrics: Reading<MetricsInfo>;
   readonly activity: Reading<ActivityInfo>;
   readonly tmuxSession: Current<string>;
+  readonly hostName: Current<string>;
+  readonly hostUser: Current<string>;
   readonly cache: Reading<number>;
   readonly speed: Reading<SpeedObservation>;
-  readonly memento: Current<CeilingReading>;
   readonly autoCompact: Reading<AutoCompactWindow>;
+  readonly sources: ReadonlyMap<string, Current<JsonValue>>;
 }
 
 // What a view's declaration reads of the request its renders draw by: the
-// keys every keyed lane is read at.
-export type ViewFacts = Pick<PayloadInputs, "hookData" | "cwd" | "hints">;
+// keys every keyed lane is read at, and the session as the checkpoint parsed
+// it.
+export type ViewFacts = Pick<PayloadInputs, "hookData" | "cwd" | "hints"> & {
+  readonly sessionId: SessionId;
+};
 
 // The owners of the keyed lanes, which a declaration takes its holds in.
 export type KeyedOwners = Pick<
   RenderPayloadDeps,
-  "gitProvider" | "tmuxService" | "mementoProvider" | "usageStore"
+  | "gitProvider"
+  | "tmuxService"
+  | "hostService"
+  | "usageStore"
+  | "managedStorage"
 >;
 
 // [LAW:types-are-the-program] What a view's declaration hands its draws: one
@@ -1252,8 +1130,27 @@ export type KeyedOwners = Pick<
 export interface DeclaredLanes {
   readonly git: Lane<GitInfo>;
   readonly tmux: Lane<string>;
-  readonly memento: Lane<CeilingReading>;
-  readonly today: Lane<DaySet>;
+  readonly hostName: Lane<string>;
+  readonly hostUser: Lane<string>;
+  readonly today: Lane<DaySums>;
+  // [LAW:dataflow-not-control-flow] One lane per plugin source the preset
+  // reads, by the source variable's name: no fixed list — the set is what the
+  // loaded plugins declare and the closure reaches.
+  readonly sources: ReadonlyMap<string, Lane<JsonValue>>;
+}
+
+// The plugin sources a config declares, by variable name, at the storage key
+// its render state's build took for each one's folder.
+export type DeclaredSources = ReadonlyMap<string, StorageKey>;
+
+// [LAW:one-source-of-truth] The sources a view reads: those the config
+// declares that its preset's closure reaches, at their own names
+// (payloadPathOf).
+export function sourcesRead(
+  closure: ReadonlySet<string>,
+  sources: DeclaredSources,
+): readonly string[] {
+  return [...sources.keys()].filter((name) => closure.has(name));
 }
 
 // A declaration's lanes, and what threw while it took them.
@@ -1262,11 +1159,21 @@ export interface Declaration {
   readonly faults: readonly string[];
 }
 
-// Every lane answering one outcome: a view's when its declaration threw
-// whole, or a caller's that declares nothing.
-export function settledLanes(outcome: Outcome<never>): DeclaredLanes {
+// Every lane answering one outcome, `sources` one per name: a view's when its
+// declaration threw whole, or a caller's that declares nothing.
+export function settledLanes(
+  outcome: Outcome<never>,
+  sources: readonly string[],
+): DeclaredLanes {
   const lane = settledLane(outcome);
-  return { git: lane, tmux: lane, memento: lane, today: lane };
+  return {
+    git: lane,
+    tmux: lane,
+    hostName: lane,
+    hostUser: lane,
+    today: lane,
+    sources: new Map(sources.map((name) => [name, lane])),
+  };
 }
 
 // [LAW:one-source-of-truth] The repo a request names, at the option sets and
@@ -1286,19 +1193,6 @@ function gitAt(
   ];
 }
 
-// The same session, anchors and environment memento's Stop hook resolves
-// with — the last two from the client, which runs where that hook does.
-function ceilingScopeOf({ hookData, cwd, hints }: ViewFacts): CeilingScope {
-  return ceilingScope(
-    {
-      sessionId: hookData.session_id,
-      projectDir: hookData.workspace?.project_dir ?? "",
-      cwd: cwd ?? hookData.workspace?.current_dir ?? "",
-    },
-    hints,
-  );
-}
-
 // [LAW:single-enforcer] A view's declaration (brandon-unfiled-3248.8ro6, steps
 // 3 and 4), the one taker of holds: every keyed entry its closure reads, at
 // the keys its request names, taken in `holds` — an entry not read yet is
@@ -1316,6 +1210,7 @@ export function declareLanes(
   holds: Holds,
   facts: ViewFacts,
   closure: ReadonlySet<string>,
+  sources: DeclaredSources,
 ): Declaration {
   const want = wanted(closure);
   const pane = facts.hints.tmux ?? null;
@@ -1342,11 +1237,28 @@ export function declareLanes(
     tmux: declare("tmux", want.tmux && pane !== null, () =>
       owners.tmuxService.declare(holds, pane!),
     ),
-    memento: declare("memento", want.memento, () =>
-      owners.mementoProvider.declare(holds, ceilingScopeOf(facts)),
+    hostName: declare("host.name", want.hostName, () =>
+      owners.hostService.declareName(holds),
+    ),
+    hostUser: declare("host.user", want.hostUser, () =>
+      owners.hostService.declareUser(holds),
     ),
     today: declare("today", want.today, () =>
       owners.usageStore.declareToday(holds, facts.hints.claudeConfigDir),
+    ),
+    // [LAW:one-source-of-truth] Each source's hold at (its folder's storage
+    // key, the session the checkpoint parsed).
+    sources: new Map(
+      sourcesRead(closure, sources).map((name) => [
+        name,
+        declare(name, true, () =>
+          owners.managedStorage.declare(
+            holds,
+            sources.get(name)!,
+            facts.sessionId,
+          ),
+        ),
+      ]),
     ),
   };
   return { lanes, faults };
@@ -1394,33 +1306,41 @@ function readLanes(inputs: PayloadInputs): Lanes {
       deps.activityProvider.activityOf(sessionId),
     ),
     tmuxSession: lanes.tmux.current(),
+    hostName: lanes.hostName.current(),
+    hostUser: lanes.hostUser.current(),
     cache: read("cache", want.cache, () =>
       deps.cacheExpiry.expiryOf(sessionId),
     ),
     speed: read("speed", want.speed, () => deps.usageStore.speedOf(sessionId)),
-    memento: lanes.memento.current(),
     autoCompact: read("autocompact", want.autocompact, () =>
       deps.autoCompact.stored(settingsPathOf(inputs.hints)),
+    ),
+    sources: new Map(
+      [...lanes.sources].map(([name, lane]) => [name, lane.current()]),
     ),
   };
 }
 
-// The landings a request waits on before it draws: every declared lane not
-// answered yet, the branch's PR included.
+// The landings a request waits on before it draws: every declared lane whose
+// key has never answered, the branch's PR included. A lane the daemon itself
+// superseded (a click's move) is not waited on: it draws its loading cell, and
+// its landing reaches the next frame.
 function waitsOf(lanes: DeclaredLanes): Array<Promise<void>> {
-  const waits: Array<Promise<void>> = [];
   const git = lanes.git.current();
-  for (const lane of [
+  const pr = git.kind === "ok" ? git.value.pullRequest : undefined;
+  // [LAW:dataflow-not-control-flow] One test over every lane: why it is
+  // pending decides, never which lane it is.
+  return [
     git,
     lanes.tmux.current(),
-    lanes.memento.current(),
+    lanes.hostName.current(),
+    lanes.hostUser.current(),
     lanes.today.current(),
-  ]) {
-    if (lane.kind === "pending") waits.push(lane.landed);
-  }
-  const pr = git.kind === "ok" ? git.value.pullRequest : undefined;
-  if (pr?.kind === "pending") waits.push(pr.landed);
-  return waits;
+    ...[...lanes.sources.values()].map((lane) => lane.current()),
+    ...(pr === undefined ? [] : [pr]),
+  ].flatMap((lane) =>
+    lane.kind === "pending" && lane.why === "unread" ? [lane.landed] : [],
+  );
 }
 
 // [LAW:effects-at-boundaries] The projections are pure folds returning data
@@ -1431,15 +1351,16 @@ function projectPayload(
   inputs: PayloadInputs,
   draw: DrawInputs,
   lanes: Lanes,
-): ViewPayloadOf {
+): ViewPayload {
   const { hookData, hints } = inputs;
   const { effective, configFacts } = draw;
   const { configPath, ...settingCounts } = configFacts;
   const want = wanted(inputs.neededInputPaths);
   // `over` is the total fold of one lane's reading into its payload field:
-  // ok → its projection, absent → undefined, failed → undefined + a failure to
-  // log, pending → the payload's pending spelling.
-  const failures: string[] = [];
+  // ok → its projection, absent or failed → undefined, pending → the payload's
+  // pending spelling. [LAW:no-silent-failure] A failed lane was logged by the
+  // refresh that failed, its owner's (src/utils/refresh-ledger.ts), so a
+  // payload derived from it logs nothing again.
   const over = <T, U>(
     reading: Reading<T>,
     project: (value: T) => U | undefined,
@@ -1448,8 +1369,6 @@ function projectPayload(
       case "pending":
         return PENDING;
       case "failed":
-        failures.push(reading.reason);
-        return undefined;
       case "absent":
         return undefined;
       case "ok":
@@ -1460,7 +1379,7 @@ function projectPayload(
     reading.kind === "ok" ? reading.value : undefined;
 
   const tmuxPane = hints.tmux ?? null;
-  // Git, tmux, memento and autocompact log their own failures — once per
+  // Git, tmux and autocompact log their own failures — once per
   // refresh that failed (src/daemon/cache/git.ts, src/utils/keyed-source.ts,
   // src/segments/autocompact-provider.ts): their values are stored, so
   // logging one here would repeat a failure on every render. Their failures
@@ -1469,14 +1388,12 @@ function projectPayload(
     lanes.git.kind === "pending"
       ? PENDING
       : projectGitInfo(lanes.git, () => PENDING);
-  // Ungated, like `home` below: two syscalls and a hint already in hand, so a
-  // `wants` gate would add a branch and save nothing.
-  const hostProjection = readHost(hints);
-  failures.push(...hostProjection.failures);
   const tmuxValue =
     lanes.tmuxSession.kind === "pending" ? PENDING : valueOf(lanes.tmuxSession);
-  const mementoValue =
-    lanes.memento.kind === "pending" ? PENDING : projectMemento(lanes.memento);
+  const hostName =
+    lanes.hostName.kind === "pending" ? PENDING : valueOf(lanes.hostName);
+  const hostUser =
+    lanes.hostUser.kind === "pending" ? PENDING : valueOf(lanes.hostUser);
   // The controls are capped to the model's context window, so they are not
   // answered while the window is not.
   const autoCompactValue =
@@ -1573,7 +1490,16 @@ function projectPayload(
         ...(tmuxValue !== undefined && { session: tmuxValue }),
       },
     }),
-    host: hostProjection.host,
+    // [LAW:one-source-of-truth] Passed straight through from the parsed
+    // hint. The daemon deliberately does NOT consult its own SSH_* env as a
+    // fallback: that env belongs to whichever shell spawned it, so a
+    // "helpful" fallback would confidently mislabel every session that
+    // daemon serves.
+    host: {
+      ...(hostName !== undefined && { name: hostName }),
+      ...(hostUser !== undefined && { user: hostUser }),
+      ...(hints.ssh !== undefined && { ssh: hints.ssh }),
+    },
     // [LAW:one-source-of-truth] Always present — the daemon resolves every
     // one of these each render (for BuildLineOptions/basePalette), and these
     // are those exact values. No `wants` gate: each costs nothing (already in
@@ -1611,10 +1537,55 @@ function projectPayload(
     ...(contextPayload !== undefined && { context: contextPayload }),
     ...(metricsPayload !== undefined && { metrics: metricsPayload }),
     ...(activityPayload !== undefined && { activity: activityPayload }),
-    ...(mementoValue !== undefined && { memento: mementoValue }),
     ...(autoCompactValue !== undefined && { autocompact: autoCompactValue }),
+    // The storage owner logs each read that failed: a failure here is a value,
+    // drawn by the template reading it.
+    plugins: projectSources(lanes.sources.keys(), (name) => {
+      const reading = lanes.sources.get(name)!;
+      return reading.kind === "pending" ? PENDING : reading;
+    }),
   };
-  return { payload, failures };
+  return payload;
+}
+
+// [LAW:nothing-unseen] The render event's `sources=` and `sourcesPending=`:
+// how many plugin sources the view declared, and those not answered yet as
+// the draw reads them, each with why (`<name>:unread` or `<name>:superseded`;
+// `-` for none), so a source that never lands is told from one nothing
+// declared, and a run's superseded source from a wait that left one out.
+export function sourcesFactOf(sources: ReadonlyMap<string, Lane<JsonValue>>): {
+  readonly sources: string;
+  readonly sourcesPending: string;
+} {
+  return {
+    sources: String(sources.size),
+    sourcesPending:
+      [...sources]
+        .flatMap(([name, lane]) => {
+          const reading = lane.current();
+          return reading.kind === "pending" ? [`${name}:${reading.why}`] : [];
+        })
+        .join(",") || "-",
+  };
+}
+
+// [LAW:one-source-of-truth] The one projection of a view's sources into its
+// payload: each at `.plugins.<plugin>.<source>`, its variable's own name, as
+// `read` answers it — the daemon reads the storage owner's lanes, `check`
+// reads every source absent (what a session reads before its program first
+// writes). No second spelling of the path exists.
+export function projectSources<P>(
+  names: Iterable<string>,
+  read: (name: string) => Outcome<JsonValue> | P,
+): SourcesPayload<P> {
+  const plugins: Record<string, Record<string, Outcome<JsonValue> | P>> = {};
+  for (const name of names) {
+    // [LAW:types-are-the-program] A source's name is
+    // `plugins.<plugin>.<source>`, each one identifier (the plugin loader).
+    const [, plugin, source] = name.split(".") as [string, string, string];
+    (plugins[plugin] ??= {})[source] = read(name);
+  }
+  return plugins;
 }
 
 function burnOf(
@@ -1638,14 +1609,14 @@ function speedPayloadOf(obs: SpeedObservation): SpeedPayload | undefined {
 
 // [LAW:one-source-of-truth] The one assembly of a view's payload: every
 // source as its owner holds it now, a value not answered yet as PENDING —
-// which the draw takes as its own outcome (the placement's loading cell) —
-// and the failures it projected as missing fields. Performs no I/O, refreshes
+// which the draw takes as its own outcome (the placement's loading cell).
+// Performs no I/O, refreshes
 // nothing and reads no instant, so the session's view keeps it as one computed
 // (src/daemon/session-source.ts), recomputed in the turn a fact it reads moves.
 export function payloadOf(
   inputs: PayloadInputs,
   draw: DrawInputs,
-): ViewPayloadOf {
+): ViewPayload {
   return projectPayload(inputs, draw, readLanes(inputs));
 }
 
@@ -1660,7 +1631,7 @@ export function todayOf(
     faults,
     log,
   }: Pick<RenderPayloadDeps, "usageStore" | "faults" | "log">,
-  lane: Lane<DaySet>,
+  lane: Lane<DaySums>,
   hookData: ClaudeHookData,
   at: Instant,
 ): TodayPayload | Pending | undefined {
@@ -1691,15 +1662,21 @@ export function todayOf(
 export async function settlePayload(
   inputs: PayloadInputs,
   at: Instant,
+  refreshed: Refreshed,
 ): Promise<void> {
-  await refreshPayload(inputs, at);
+  await refreshPayload(inputs, at, refreshed);
   // [LAW:one-source-of-truth] The one wait for an answer: the lanes the view
   // declares now, read again once every landing they waited on has landed —
-  // so a lane a move made pending again is waited out too.
+  // so a lane that turns unread again (a new key) is waited out too, and a
+  // superseded one never is (waitsOf).
   await answered((): true | Waiting => {
     const waits = waitsOf(inputs.deps.lanes());
     return waits.length > 0
-      ? { kind: "pending", landed: Promise.all(waits).then(() => {}) }
+      ? {
+          kind: "pending",
+          why: "unread",
+          landed: Promise.all(waits).then(() => {}),
+        }
       : true;
   });
 }
@@ -1718,33 +1695,6 @@ export function projectAutoCompact(
       return { error: outcome.reason };
     case "ok":
       return autoCompactControls(outcome.value, contextWindow);
-  }
-}
-
-// [LAW:effects-at-boundaries] Pure: memento's outcome in, the payload shape
-// out. Absent (not installed) drops the family, so its segment hides.
-const lastLine = (text: string): string =>
-  text.trim().split("\n").at(-1)!.trim();
-
-export function projectMemento(
-  outcome: Outcome<CeilingReading>,
-): MementoPayload | undefined {
-  switch (outcome.kind) {
-    case "absent":
-      return undefined;
-    case "failed":
-      // A bar cell is one line; a refusal may be a Python traceback. The last
-      // line names the fault (memento's own refusals are one sentence; Python
-      // puts the exception last) — the whole text is in the daemon log.
-      return { error: lastLine(outcome.reason) };
-    case "ok": {
-      const { ceiling, session } = outcome.value;
-      return {
-        ceiling: ceiling === "off" ? 0 : ceiling,
-        off: ceiling === "off",
-        session: session ?? "",
-      };
-    }
   }
 }
 

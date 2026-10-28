@@ -1,15 +1,34 @@
+import fs from "node:fs";
 import path from "node:path";
 import { nearestWatchTarget } from "../../utils/watch-target.js";
+import { linkChain } from "../../utils/atomic-write.js";
 import type { RichText } from "@promptctl/rich-js";
-import { observable, reaction, runInAction } from "mobx";
+import { compareShallow, observable, reaction, runInAction } from "mobx";
 import {
   neededPrefixesByPreset,
   settledLanes,
+  sourcesRead,
   type Declaration,
   type DeclaredLanes,
+  type DeclaredSources,
   type ViewFacts,
 } from "../render-payload.js";
+import type { ManagedStorage, StorageKey } from "./managed-storage.js";
+import type { RefreshLedger } from "../../utils/refresh-ledger";
+import type { LinkSigner } from "../../click/link-signer.js";
+import type { SessionId } from "../session-id.js";
 import { fileHeldSettings } from "../setting-drafts.js";
+import {
+  repoConfigs,
+  repoConfigsDir,
+  repoConfigsPath,
+} from "../repo-configs.js";
+import { REPO_PLUGIN_DIR } from "../../config/loader/plugin-folders.js";
+import {
+  repoUnreadNotice,
+  type ApprovedRepo,
+  type RepoGate,
+} from "../../config/loader/repo-gate.js";
 import {
   loadConfigChain,
   type LoadedChain,
@@ -54,12 +73,17 @@ import type { SessionStateReader, SessionStateRW } from "../session-state.js";
 import type {
   WatcherRegistry,
   WatcherHandle,
+  HeldWatch,
   WatchTargets,
 } from "./watchers.js";
 import { quietLogger, type DaemonLogger } from "../../utils/logger.js";
 import { Holds } from "../../utils/holds.js";
 import { ABSENT, failed, PENDING } from "../../utils/outcome.js";
-import { pluginDataVar, pluginNameOf } from "../../config/loader/plugins.js";
+import {
+  ownedBy,
+  pluginDataVar,
+  pluginNameOf,
+} from "../../config/loader/plugins.js";
 import { projectionsOf } from "../../config/loader/projections.js";
 
 // [LAW:one-source-of-truth] Each cache entry owns the live DSL state for a
@@ -129,6 +153,14 @@ export const MAX_ENTRIES = 256;
 export interface RenderDeps<S extends ViewSource = ViewSource> {
   sessionState: SessionStateRW;
   watchers: WatcherRegistry;
+  // The owner of every plugin's managed storage, whose folders a state's
+  // build holds (StateDeps).
+  storage: PluginStorage;
+  // What signs the `run` links its compiles draw (StateDeps).
+  signer: LinkSigner;
+  // The ledger its states' user sources record their refreshes in
+  // (StateDeps).
+  ledger?: RefreshLedger;
   // What a view declares of the daemon's shared entries
   // (src/daemon/render-payload.ts `declareLanes`); a test reading no built-in
   // source passes DECLARES_NOTHING.
@@ -142,9 +174,31 @@ export interface RenderDeps<S extends ViewSource = ViewSource> {
   log?: DaemonLogger;
 }
 
+// What a render state's build asks of the managed storage owner: the key of
+// each storage folder its config declares (creating the folder), and that
+// folder's watch, held from the build to the state's reclaim.
+export type PluginStorage = Pick<ManagedStorage, "keyFor" | "watch">;
+
+// [LAW:single-enforcer] The storage of a build outside the daemon (the
+// doctor's load, the demo's): it creates, watches and sweeps no folder,
+// because only the daemon's owner knows which files its sessions hold, and a
+// sweep anywhere else removes theirs. A view reading its keys reads the files
+// as they are.
+export const UNOWNED_STORAGE: PluginStorage = {
+  keyFor: (folder) => ({ folder, generation: 0 }),
+  watch: () => () => {},
+};
+
 // What building one config's state needs.
 export interface StateDeps {
   readonly sessionState: SessionStateRW;
+  readonly storage: PluginStorage;
+  // What signs the `run` links a compile draws.
+  readonly signer: LinkSigner;
+  // Where a state's user sources record their refreshes: the daemon's one
+  // ledger. A build outside the daemon (check, the doctor, a test) leaves it
+  // out, and its registries keep their own.
+  readonly ledger?: RefreshLedger;
   // The compile for a config's compile key. A cache shares one between every
   // entry whose config compiles alike (RenderCache's table); a one-shot load
   // has no other entry to share with and compiles its own.
@@ -167,9 +221,18 @@ export interface RenderCacheObservers {
   // after the entry's fields and watcher are settled. The entry is handed
   // over as ReloadedEntry so the observer reads the outcome from the one
   // place it lives and the type, not this comment, keeps it from writing
-  // there. Trusted non-throwing (the same contract as onSegmentError): an
-  // observer that throws is a caller bug surfaced loudly, never absorbed here.
-  readonly onReload?: (entry: ReloadedEntry) => void;
+  // there. `sessions` are those whose views drew from the entry before it
+  // loaded: none for an entry just created. Trusted non-throwing (the same contract as
+  // onSegmentError): an observer that throws is a caller bug surfaced loudly,
+  // never absorbed here.
+  readonly onReload?: (
+    entry: ReloadedEntry,
+    sessions: readonly string[],
+  ) => void;
+  // Fires with a session's id when its view opens and whenever what the view
+  // draws from moves (openView's `changed`): what a feed showing the session
+  // wakes on.
+  readonly onViewChanged?: (sessionId: string) => void;
 }
 
 // [LAW:types-are-the-program] The observer's view of an entry: an ALLOW-LIST
@@ -185,6 +248,7 @@ export type ReloadedEntry = Readonly<
     | "cwd"
     | "configFile"
     | "configLayers"
+    | "repos"
     | "failedFile"
     | "lastError"
     | "lastWarning"
@@ -235,6 +299,12 @@ export interface DslRenderState {
   readonly unused: readonly UnusedDecl[];
   // The plugin definitions this load merged, and those it dropped.
   readonly plugins: LoadedPlugins;
+  // [LAW:no-ambient-temporal-coupling] Each plugin source the config
+  // declares, at the key its build took for the source's folder. The build
+  // holds each folder's watch until the state is reclaimed (its registry's
+  // teardown), so a reload — which builds its successor first — never closes
+  // and reopens one, and no view touches a watch.
+  readonly sources: DeclaredSources;
 }
 
 // The installed roots searched (every one watched), and the definitions —
@@ -247,16 +317,16 @@ type LoadedPlugins = LoadedChain["installed"];
 export interface ConfigChain {
   readonly layers: readonly string[];
   readonly home: string;
-  // The session's project: where its repo-shipped plugins live.
-  readonly projectDir: string | null;
+  // The session's project, once approved: where the plugins it ships live.
+  readonly repo: ApprovedRepo | null;
 }
 
-// [LAW:nothing-unseen] Which plugins a daemon load merged, the data file each
-// merged one reads, the checkout a `{ checkout }` path resolved against —
+// [LAW:nothing-unseen] Which plugins a daemon load merged, how many variables
+// they declare between them, the data file each merged one reads, the checkout a `{ checkout }` path resolved against —
 // `git:<root>`, or `dir:<cwd>` for a directory in no checkout, `-` with no
-// session — and which it dropped: a drop is also on the strip, but the rest is
-// said nowhere else. The daemon's own sink — buildRenderState is shared with
-// the demo.
+// session — which it dropped, and how long the load took: a drop is also on
+// the strip, but the rest is said nowhere else. The daemon's own sink —
+// buildRenderState is shared with the demo.
 export function pluginLoadLine(
   layers: readonly string[],
   {
@@ -264,6 +334,7 @@ export function pluginLoadLine(
     config,
     compiled,
   }: Pick<DslRenderState, "plugins" | "config" | "compiled">,
+  ms: number,
 ): string {
   const { checkout, loaded, dropped, unreached } = plugins;
   const checkoutField =
@@ -276,8 +347,23 @@ export function pluginLoadLine(
       name === undefined ? undefined : config.variables[pluginDataVar(name)];
     return data?.kind === "file" ? data.path : "none";
   };
+  // What the merged plugins declare, by kind: a source is synthesized from
+  // `sources:`, every other name under a namespace but the data file's came
+  // from `variables:`.
+  const declared = loaded
+    .flatMap((definition) => {
+      const name = pluginNameOf(definition);
+      return name === undefined ? [] : [name];
+    })
+    .flatMap((name) =>
+      Object.entries(config.variables).filter(
+        ([v]) => ownedBy(name)(v) && v !== pluginDataVar(name),
+      ),
+    );
+  const sources = declared.filter(([, d]) => d.kind === "source").length;
+  const pluginVariables = declared.length - sources;
   return (
-    `config load ${layers.join(" < ") || "<default>"}: projections=${[...projectionsOf(config).keys()].join(",") || "-"} instantSegments=${instantSegments(compiled).join(",") || "-"} instantTemplates=${compiled.instant.size} plugins loaded=${loaded.length} dropped=${dropped.length} unplaced=${unreached.length} checkout=${checkoutField}` +
+    `config load ${layers.join(" < ") || "<default>"}: projections=${[...projectionsOf(config).keys()].join(",") || "-"} instantSegments=${instantSegments(compiled).join(",") || "-"} instantTemplates=${compiled.instant.size} plugins loaded=${loaded.length} sources=${sources} pluginVariables=${pluginVariables} dropped=${dropped.length} unplaced=${unreached.length} checkout=${checkoutField} ms=${ms}` +
     loaded.map((p) => ` +${p} data=${dataOf(p)}`).join("") +
     dropped.map((d) => ` -${d.path} (${d.reason})`).join("") +
     unreached.map((d) => ` ~${d.path} (${d.reason})`).join("")
@@ -295,6 +381,14 @@ export interface Teardown {
   // Renders holding the state when it was retired: 0 is a teardown at
   // retirement, more is one deferred to the last release.
   readonly held: number;
+}
+
+// [LAW:nothing-unseen] Every (re)load's outcome, success and failure alike:
+// the files it resolved, what failed or warned, and which repositories it
+// left out awaiting the user's answer or declined by it.
+export function configLoadedLine(entry: ReloadedEntry): string {
+  const dirs = (ds: readonly string[]): string => ds.join(",") || "-";
+  return `config loaded projectDir=${entry.projectDir} cwd=${entry.cwd} files=${entry.configLayers.join(" < ") || "<bundled default>"} awaiting=${dirs(entry.repos.awaiting)} declined=${dirs(entry.repos.declined)} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warning=${entry.lastWarning === null ? "none" : JSON.stringify(entry.lastWarning)}`;
 }
 
 export function configDisposeLine(
@@ -333,13 +427,16 @@ export interface CacheEntry {
   configLayers: readonly string[];
   // The file durable clicks write (resolveDslConfig's home).
   configHome: string;
+  // What the session's repositories contribute, as the last load's answers
+  // decided it: the strip asks for each one awaiting.
+  repos: RepoGate;
   failedFile: string | null;
   lastError: string | null;
   lastWarning: string | null;
   state: DslRenderState;
-  watcher: WatcherHandle | null;
-  // The key `watcher` was acquired under — the identity of its target set.
-  watcherKey: string | null;
+  // The watch the registry holds for the entry, under the key naming its
+  // target set; null until the first bind.
+  watch: HeldWatch | null;
 }
 
 // [LAW:no-ambient-temporal-coupling] A state's lifetime is a fact the cache
@@ -365,18 +462,29 @@ export interface Hold extends Disposable {
 
 // A render's hold on the session's view it draws through, and the state the
 // view is of — both released by the one `using`.
-export interface SessionHold<S extends ViewSource = ViewSource> extends Hold {
-  readonly view: SessionView<S>;
+export interface SessionHold<
+  S extends ViewSource = ViewSource,
+  F extends ViewFacts = ViewFacts,
+> extends Hold {
+  readonly view: SessionView<S, F>;
 }
 
+// What opened a view: a request, a reload's successor, or a click that moved
+// the session's origin (`follow`). Never a frame (`holdView`).
+export type ViewOpening = "request" | "reload" | "click";
+
 // Why a view stopped being served: its state did (reload, evict, close), its
-// session's latest render resolved to another entry (`moved`), or no render
-// read it across a whole sweep (`idle`).
+// session's latest render resolved to another entry (`moved`), or no request
+// read it across a whole sweep while no feed pinned its session (`idle`).
 export type ViewClose = Teardown["reason"] | "moved" | "idle";
 
-// A view's lifetime, as a state's (StateHold), and whether a render read it
-// since the last sweep.
+// A view's lifetime, as a state's (StateHold), the entry it opened over, and
+// whether a request read it since the last sweep.
 interface ViewHold {
+  // [LAW:one-source-of-truth] The entry whose state the view is of: an entry
+  // whose state changes or that is dropped retires its views first
+  // (`retire`), so a served view's entry is this one.
+  readonly entry: CacheEntry;
   holders: number;
   retired: { readonly reason: ViewClose; readonly held: number } | null;
   read: boolean;
@@ -394,6 +502,8 @@ export interface RenderCacheStats {
   readonly compiles: number;
   // Sessions' views served now: one per session at most.
   readonly views: number;
+  // Sessions an open feed pins (`pin`).
+  readonly pinned: number;
   // Views retired but not yet disposed because a render still holds one: as
   // `retired` is for states, climbing while `views` holds is a render that
   // never returned.
@@ -441,26 +551,55 @@ function authoredRoots(
 // [LAW:single-enforcer] Same enumerator the resolver uses, so the watcher
 // covers the exact set of paths the next reload would consult — an explicit
 // `configFile` collapses to one candidate; absent, the precedence chain unfolds
-// in full. Every layer of the chain is ALSO watched by inode, so
-// an in-place write fires as well as an atomic rename. Directories are
-// deduped with their filename filters unioned, and the whole set is sorted
-// so equal sets spell equal signatures.
-function watchTargetsFor(
-  entry: CacheEntry,
-  layers: readonly string[],
-): WatchTargets {
+// in full. A candidate that is a symbolic link (a dotfiles-managed config) is
+// watched in every place it changes (`linkChain`): its own directory by its
+// name, and each link's target's directory by the target's name, down to the
+// file a write lands in. Directories are deduped with their filename filters
+// unioned, and the whole set is sorted so equal sets spell equal signatures.
+//
+// [LAW:no-silent-failure] A candidate whose chain the kernel refuses to walk
+// (a loop, an unreadable component) is watched as spelled and reported in
+// `unresolved` with the refusal, so the caller can say which path hears less
+// than it should. Nothing here throws: it runs inside watcher callbacks.
+function watchTargetsFor(entry: CacheEntry): {
+  readonly targets: WatchTargets;
+  readonly unresolved: ReadonlyArray<{ path: string; reason: string }>;
+} {
+  const unresolved: Array<{ path: string; reason: string }> = [];
+  const everywhere = (candidate: string): readonly string[] => {
+    try {
+      return linkChain(candidate);
+    } catch (e) {
+      unresolved.push({ path: candidate, reason: (e as Error).message });
+      return [candidate];
+    }
+  };
   // [LAW:types-are-the-program] A directory watched for named children, or
   // for every child (`null`): a plugin root holds folders no load has seen.
   const byDir = new Map<string, Set<string> | null>();
   // A plugin definition is part of the config it is listed in: installing,
   // fixing or editing one reloads the config as an edit to the file would.
-  const { roots, loaded, dropped, unreached } = entry.state.plugins;
+  const { loaded, dropped, unreached } = entry.state.plugins;
+  // The project's plugin folder is consulted whatever its answer: a plugin
+  // dropped there is a question to ask. The answers are the cache's own watch.
+  const roots = [
+    ...new Set([
+      ...entry.state.plugins.roots,
+      path.join(entry.projectDir, REPO_PLUGIN_DIR),
+    ]),
+  ];
   for (const candidate of [
     ...dslConfigCandidatePaths(entry.projectDir, entry.cwd, entry.configFile),
     ...roots,
     ...loaded,
     ...[...dropped, ...unreached].map((d) => d.path),
-  ]) {
+    // [LAW:single-enforcer] A declared storage folder is watched by name in
+    // its plugin folder, by the follower that already watches the definition:
+    // its removal, recreation or replacement reloads the config, whose build
+    // recreates the folder and takes a new generation from the storage owner
+    // — which never re-arms a watch itself.
+    ...new Set([...entry.state.sources.values()].map((k) => k.folder)),
+  ].flatMap(everywhere)) {
     const { dir, name } = nearestWatchTarget(candidate);
     const names = byDir.has(dir) ? byDir.get(dir)! : new Set<string>();
     names?.add(name);
@@ -473,14 +612,16 @@ function watchTargetsFor(
     if (leaf && name === "_") byDir.set(dir, null);
   }
   return {
-    files: layers,
-    dirs: [...byDir.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([dirPath, names]) =>
-        names === null
-          ? { path: dirPath }
-          : { path: dirPath, filenames: [...names].sort() },
-      ),
+    targets: {
+      dirs: [...byDir.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([dirPath, names]) =>
+          names === null
+            ? { path: dirPath }
+            : { path: dirPath, filenames: [...names].sort() },
+        ),
+    },
+    unresolved,
   };
 }
 
@@ -498,7 +639,11 @@ function joinWarnings(parts: ReadonlyArray<string | null>): string | null {
 export type LoadOutcome = {
   readonly layers: readonly string[];
   readonly home: string;
+  readonly repos: RepoGate;
   readonly warning: string | null;
+  // How long the attempt took, resolution to built state or to its error:
+  // the one number that shows a load getting slower or faster.
+  readonly ms: number;
 } & (
   | { readonly state: DslRenderState; readonly error: null }
   | {
@@ -541,7 +686,7 @@ export function buildRenderState(
     chain.layers,
     DEFAULT_DSL_CONFIG,
     { entered, warned: (w) => warnings.push(...w) },
-    { projectDir: chain.projectDir, cwd },
+    { repo: chain.repo, cwd },
   );
   // Past the chain, a failure is the one file's when there is one, and no
   // file's when several merged into what failed.
@@ -560,9 +705,12 @@ export function buildRenderState(
     store,
     config.globals.default_empty_value ?? "",
     deps.sessionState,
+    null,
+    deps.ledger,
   );
 
   let registration: Registration;
+  let sources: DeclaredSources;
   try {
     // [LAW:one-source-of-truth] The compile holds no store: each render binds
     // its own (drawDsl), so the entry's registry is the store its renders read
@@ -572,7 +720,7 @@ export function buildRenderState(
       config,
       registry,
       cwd,
-      deps.compile ?? compileAlone,
+      deps.compile ?? compileAlone(deps.signer),
       DIRECTORY_SCOPE,
     );
     // [LAW:dataflow-not-control-flow] Partial-load warnings (variable
@@ -597,6 +745,7 @@ export function buildRenderState(
     // click.
     stateGate(config);
     configGate(config);
+    sources = declaredSources(config, deps.storage, registry);
   } catch (err) {
     registry.dispose();
     throw err;
@@ -640,11 +789,38 @@ export function buildRenderState(
       reached: installed.reached,
       rendering: installed.rendering,
     },
+    sources,
   };
 }
 
-// [LAW:effects-at-boundaries] One attempt at the disk: resolve the path,
-// detect collisions, build the state. It touches no entry — the cache folds
+// [LAW:single-enforcer] The build's one ask of the storage owner: for each
+// folder the config's sources name, its key — the owner creates the folder, so
+// its program has somewhere to write before any session reads it — and its
+// watch, held by the registry until the state's teardown. The render path does
+// no I/O for a source: a view's declaration takes the key from here.
+function declaredSources(
+  config: DslConfig,
+  storage: PluginStorage,
+  registry: SourceRegistry,
+): DeclaredSources {
+  const keys = new Map<string, StorageKey>();
+  const sources = new Map<string, StorageKey>();
+  for (const [name, decl] of Object.entries(config.variables)) {
+    if (decl.kind !== "source") continue;
+    let key = keys.get(decl.storage);
+    if (key === undefined) {
+      key = storage.keyFor(decl.storage);
+      keys.set(decl.storage, key);
+      registry.own(storage.watch(key));
+    }
+    sources.set(name, key);
+  }
+  return sources;
+}
+
+// [LAW:effects-at-boundaries] One attempt at the disk: read the user's
+// answers for repositories, resolve the path, detect collisions, build the
+// state. It touches no entry — the cache folds
 // the outcome onto a new entry (getOrCreate) or an existing one (reloadInto),
 // so the state it built is never constructed-then-discarded and the no-file
 // default is built once, not twice; `cc-candybar doctor`, which has no cache,
@@ -655,13 +831,20 @@ export function loadFromDisk(
   configFile: string | undefined,
   deps: StateDeps,
 ): LoadOutcome {
-  const resolution = resolveDslConfig(projectDir, cwd, configFile);
+  const started = performance.now();
+  const resolution = resolveDslConfig(
+    repoConfigs().read(),
+    projectDir,
+    cwd,
+    configFile,
+  );
+  const { repos } = resolution;
   // `chain` loads its layers; `missing`/`unreadable` build the bundled
   // default — what distinguishes them is a notice, below, not a load path.
   const chain: ConfigChain = {
     layers: resolution.kind === "chain" ? resolution.layers : [],
     home: resolution.home,
-    projectDir,
+    repo: repos.plugins,
   };
 
   // [LAW:dataflow-not-control-flow] Advisories run every load, independent
@@ -675,6 +858,7 @@ export function loadFromDisk(
   const advisories = [
     detectConfigCollisions(projectDir, cwd),
     configResolutionNotice(resolution),
+    repoUnreadNotice(repos),
   ];
 
   // [LAW:dataflow-not-control-flow] A failure at any step — parse,
@@ -698,6 +882,8 @@ export function loadFromDisk(
     return {
       layers: chain.layers,
       home: chain.home,
+      ms: Math.round(performance.now() - started),
+      repos,
       failedFile: failing,
       warning: joinWarnings(advisories),
       state: null,
@@ -712,6 +898,8 @@ export function loadFromDisk(
   return {
     layers: chain.layers,
     home: chain.home,
+    ms: Math.round(performance.now() - started),
+    repos,
     warning: joinWarnings(advisories),
     state,
     error: null,
@@ -725,12 +913,12 @@ export function loadFromDisk(
 // load's, and the default earns none by program invariant.
 export function fallbackState(
   cwd: string,
-  projectDir: string,
+  repo: ApprovedRepo | null,
   deps: StateDeps,
 ): DslRenderState {
-  // The entry's own project: the seed watches its repo's plugin root, so a
-  // plugin installed there after the failed load reloads.
-  return buildRenderState(cwd, { layers: [], home: "", projectDir }, [], deps);
+  // The failed load's approved project: the seed draws the plugins it ships,
+  // as the load would have.
+  return buildRenderState(cwd, { layers: [], home: "", repo }, [], deps);
 }
 
 // The scopes a render cache entry and a session's view declare.
@@ -745,7 +933,7 @@ const VIEW_SCOPE: ReadonlySet<VarScope> = new Set(["view"]);
 // and no other session's render re-runs, reads, or reports them.
 //
 // `holds` is what the session's renders read of the daemon's shared entries (a
-// repo, a pane, a memento reading), as the view's declaration takes them
+// repo, a pane, a plugin's session file), as the view's declaration takes them
 // (openView), so their owners' periods visit them while the view's preset and
 // request name them and stop when it is disposed; the directory home reads
 // none itself, so it holds none (brandon-unfiled-3248.8ro6).
@@ -758,18 +946,21 @@ const VIEW_SCOPE: ReadonlySet<VarScope> = new Set(["view"]);
 // lifetime; renderDsl clears + repopulates it in place. A segment hidden by
 // `when` is absent from the map — its presence in the keys is the "this
 // segment rendered" signal.
-export interface SessionView<S extends ViewSource = ViewSource> {
-  readonly sessionId: string;
+export interface SessionView<
+  S extends ViewSource = ViewSource,
+  F extends ViewFacts = ViewFacts,
+> {
+  readonly sessionId: SessionId;
   readonly state: DslRenderState;
   readonly store: VariableStore;
   readonly registry: SourceRegistry;
   readonly holds: Holds;
   // The request the view's renders draw by — the keys its declaration takes
   // its holds at. A render of the same request changes nothing.
-  requested(facts: ViewFacts): void;
+  requested(facts: F): void;
   // The request the view draws by now: the one it opened with, or a later
   // one `requested` named.
-  facts(): ViewFacts;
+  facts(): F;
   // The lanes the view's latest declaration handed it: what its draws read
   // of the daemon's shared entries.
   lanes(): DeclaredLanes;
@@ -777,6 +968,10 @@ export interface SessionView<S extends ViewSource = ViewSource> {
   // store's inputs and slots (`bindView`) when it opened.
   readonly source: S;
   readonly lastRenderCellsBySegment: Map<string, readonly RichText[]>;
+  // The view is no session's bar from now on (a successor took it, or it
+  // closed): it stops saying what it draws from moved, though a render that
+  // holds it still draws from it.
+  retire(): void;
   // [LAW:single-enforcer] The view's one teardown: its holds close and its
   // registry is disposed, so no caller of openView can release one and leak
   // the other. Returns how many computeds the registry's store released.
@@ -784,15 +979,22 @@ export interface SessionView<S extends ViewSource = ViewSource> {
 }
 
 // What a view declares into its holds: every keyed entry `closure` reads, at
-// the keys `facts` name. Returns the lanes it took, and what threw.
+// the keys `facts` name, and each of the config's `sources` it reads. Returns
+// the lanes it took, and what threw.
 export type Declare = (
   holds: Holds,
   facts: ViewFacts,
   closure: ReadonlySet<string>,
+  sources: DeclaredSources,
 ) => Declaration;
 
-export const DECLARES_NOTHING: Declare = () => ({
-  lanes: settledLanes(ABSENT),
+export const DECLARES_NOTHING: Declare = (
+  _holds,
+  _facts,
+  closure,
+  sources,
+) => ({
+  lanes: settledLanes(ABSENT, sourcesRead(closure, sources)),
   faults: [],
 });
 
@@ -801,8 +1003,8 @@ export const DECLARES_NOTHING: Declare = () => ({
 // lanes that declaration handed it — one record, written whole by each
 // declaration, so a reader never joins one declaration's facts to another's
 // lanes.
-export interface ViewDeclared {
-  readonly facts: ViewFacts;
+export interface ViewDeclared<F extends ViewFacts = ViewFacts> {
+  readonly facts: F;
   readonly preset: string;
   readonly lanes: DeclaredLanes;
 }
@@ -832,11 +1034,13 @@ export const SOURCES_NOTHING: SourceOf<ViewSource> = ({ state }) =>
     ),
   );
 
-// What a view reads to keep its declaration current, and what it draws from.
+// What a view reads to keep its declaration current, what it draws from, and
+// whom it tells that what it draws from moved.
 export interface ViewDeclaring<S extends ViewSource = ViewSource> {
   readonly sessionState: SessionStateReader;
   readonly declare: Declare;
   readonly source: SourceOf<S>;
+  readonly changed: (sessionId: string) => void;
   readonly log: DaemonLogger;
 }
 
@@ -854,13 +1058,15 @@ export interface ViewDeclaring<S extends ViewSource = ViewSource> {
 // [LAW:types-are-the-program] A view is never undeclared (step 4): it opens
 // with the request it is drawn for and declares in its opening turn, so its
 // lanes always hold its latest declaration's.
-export function openView<S extends ViewSource>(
+export function openView<S extends ViewSource, F extends ViewFacts>(
   state: DslRenderState,
   cwd: string,
-  sessionId: string,
-  facts: ViewFacts,
-  { sessionState, declare, source: sourceOf, log }: ViewDeclaring<S>,
-): SessionView<S> {
+  facts: F,
+  { sessionState, declare, source: sourceOf, changed, log }: ViewDeclaring<S>,
+): SessionView<S, F> {
+  // [LAW:one-source-of-truth] The session is the one the request's checkpoint
+  // parsed: a later request of the view's names the same one.
+  const { sessionId } = facts;
   const registry = state.registry.view();
   const holds = new Holds();
   // What fails to declare here failed in the load's probe (buildRenderState),
@@ -880,7 +1086,7 @@ export function openView<S extends ViewSource>(
         result: { lanes: taken, faults },
         acquired,
         released,
-      } = holds.declare(() => declare(holds, facts, reads));
+      } = holds.declare(() => declare(holds, facts, reads, state.sources));
       for (const fault of faults) {
         log(
           "error",
@@ -902,7 +1108,9 @@ export function openView<S extends ViewSource>(
         "error",
         `session view declaration threw sid=${JSON.stringify(sessionId)}: ${String(e)}`,
       );
-      return settledLanes(failed(`view declaration threw: ${String(e)}`));
+      return settledLanes(failed(`view declaration threw: ${String(e)}`), [
+        ...state.sources.keys(),
+      ]);
     }
   };
   // [LAW:no-ambient-temporal-coupling] The opening declaration, and each
@@ -914,7 +1122,7 @@ export function openView<S extends ViewSource>(
   // [LAW:one-source-of-truth] The view's one record of what it is declared
   // for, and the lanes that declaration handed it (ViewDeclared): observable,
   // so the view's payload is derived again in the turn a declaration lands.
-  const declaration = (facts: ViewFacts, preset: string): ViewDeclared => ({
+  const declaration = (facts: F, preset: string): ViewDeclared<F> => ({
     facts,
     preset,
     lanes: lanesFor(facts, preset),
@@ -923,7 +1131,7 @@ export function openView<S extends ViewSource>(
     deep: false,
   });
   // [LAW:single-enforcer] A (request, preset) pair is declared once.
-  const redeclare = (facts: ViewFacts, preset: string): void => {
+  const redeclare = (facts: F, preset: string): void => {
     const now = declared.get();
     if (facts === now.facts && preset === now.preset) return;
     const next = declaration(facts, preset);
@@ -945,6 +1153,40 @@ export function openView<S extends ViewSource>(
     declared: () => declared.get(),
   });
   bindView(state.compiled, registry.variableStore, registry, source);
+  // [LAW:single-enforcer] The view's one say that what it draws from moved:
+  // its payload (its request, its picks), every lane it declared, plugin
+  // sources included (`today`'s day sums, which only a draw's projection
+  // reads, among them), its
+  // selections, or what its own or its directory's sources published. Told
+  // as it opens, since a view opening is what its session's bar draws from
+  // changing. The draw writes none of these (step 4e), so no frame wakes the
+  // next one.
+  // [LAW:no-silent-failure] A tracked read that throws is logged: a reaction
+  // that let it go would reach only the console MobX prints to.
+  const stopChanged = reaction(
+    () => {
+      const { sources, ...keyed } = declared.get().lanes;
+      return [
+        source.payload(),
+        source.selections(),
+        registry.published(),
+        state.registry.published(),
+        ...[...Object.values(keyed), ...sources.values()].map((lane) =>
+          lane.current(),
+        ),
+      ];
+    },
+    () => changed(sessionId),
+    {
+      equals: compareShallow,
+      fireImmediately: true,
+      onError: (e) =>
+        log(
+          "error",
+          `session view change threw sid=${JSON.stringify(sessionId)}: ${String(e)}`,
+        ),
+    },
+  );
   return {
     sessionId,
     state,
@@ -956,8 +1198,10 @@ export function openView<S extends ViewSource>(
     facts: () => declared.get().facts,
     lanes: () => declared.get().lanes,
     lastRenderCellsBySegment: new Map<string, readonly RichText[]>(),
+    retire: stopChanged,
     dispose: () => {
       stop();
+      stopChanged();
       holds.close();
       return registry.dispose();
     },
@@ -966,23 +1210,47 @@ export function openView<S extends ViewSource>(
 
 // [LAW:no-ambient-temporal-coupling] The cache's one timer, armed by the first
 // render and stopped with the last entry: every interval it closes each view
-// no render read since the interval before, which releases the view's holds,
-// so an owner's period stops visiting a repo, pane or memento reading 2.5 to 5
-// minutes after the session's last render. A view still drawn holds what its
-// declaration takes (openView), and a period resumed after a gap reads at once.
+// no request read since the interval before and no open feed pins, which
+// releases the view's holds, so an owner's period stops visiting a repo, pane
+// or session file 2.5 to 5 minutes after the session's last request. A view
+// still drawn holds what its declaration takes (openView), and a period
+// resumed after a gap reads at once.
 export const HOLD_SWEEP_MS = 150_000;
 
-export class RenderCache<S extends ViewSource = ViewSource> {
+export class RenderCache<
+  S extends ViewSource = ViewSource,
+  F extends ViewFacts = ViewFacts,
+> {
   private readonly entries = new Map<string, CacheEntry>();
+  // [LAW:one-source-of-truth] The user's answers for repositories are one
+  // fact for the whole daemon, so one watch follows them, never one per
+  // entry. The book has a folder of its own, made here so the watch never
+  // falls back to the state directory, where the daemon's log writes on every
+  // request.
+  private readonly answersWatch: WatcherHandle;
   private sweep: ReturnType<typeof setInterval> | null = null;
   private closed = false;
   // Every state the map serves or served, until reclaimed.
   private readonly holds = new Map<DslRenderState, StateHold>();
   // [LAW:one-source-of-truth] Each session's ONE view: of the entry its latest
   // render resolved to. A render from another entry replaces it.
-  private readonly views = new Map<string, SessionView<S>>();
+  private readonly views = new Map<string, SessionView<S, F>>();
   // Every view the cache serves or served, until reclaimed.
-  private readonly viewHolds = new Map<SessionView<S>, ViewHold>();
+  private readonly viewHolds = new Map<SessionView<S, F>, ViewHold>();
+  // [LAW:no-ambient-temporal-coupling] The sessions an open feed draws, by
+  // how many pins each holds: their views are never closed idle and their
+  // entries never evicted (`fit`), for as long as the feed is open — the fact
+  // itself, not frames happening to read the view within each sweep.
+  private readonly pins = new Map<string, number>();
+  // [LAW:no-silent-failure] Each session whose view last failed to open, by
+  // the error and the request the opening was for, until a view opens for
+  // it: a frame draws that error, never the last bar it pushed, and a click
+  // that moves the origin retries by that request (`follow`). Written only by
+  // `opened`, which sets either this or the session's view, never both.
+  private readonly openFailures = new Map<
+    string,
+    { readonly error: unknown; readonly facts: F }
+  >();
   // [LAW:one-source-of-truth] One compile per compile key, shared by every
   // state carrying that key, and dropped with the last of them (reclaim).
   private readonly compiles = new Map<string, CompiledConfig>();
@@ -1009,13 +1277,20 @@ export class RenderCache<S extends ViewSource = ViewSource> {
     this.budgetBytes = opts.budgetBytes;
     this.maxEntries = opts.maxEntries ?? MAX_ENTRIES;
     this.observers = opts.observers ?? {};
+    fs.mkdirSync(repoConfigsDir(), { recursive: true });
+    const { dir, name } = nearestWatchTarget(repoConfigsPath());
+    this.answersWatch = deps.watchers.acquire(
+      `repo-configs:${dir}/${name}`,
+      { dirs: [{ path: dir, filenames: [name] }] },
+      () => this.reloadEvery(),
+    );
   }
 
   // The compile a served state carries for `key`, else a new one — which the
   // table learns only when a state carrying it is served, so a load that fails
   // after compiling leaves nothing behind.
   private compileOf(key: string, input: CompileInput): CompiledConfig {
-    return this.compiles.get(key) ?? compileDslConfig(input);
+    return this.compiles.get(key) ?? compileDslConfig(input, this.deps.signer);
   }
 
   // [LAW:one-source-of-truth] Read off the map the cache serves: an entry's
@@ -1051,7 +1326,7 @@ export class RenderCache<S extends ViewSource = ViewSource> {
 
     const loaded = this.load(projectDir, cwd, configFile);
     if (loaded.state !== null)
-      this.log("info", pluginLoadLine(loaded.layers, loaded.state));
+      this.log("info", pluginLoadLine(loaded.layers, loaded.state, loaded.ms));
     // [LAW:no-silent-failure] A config that fails its FIRST load still yields
     // a bar: the bundled default, built exactly here and only then — the error
     // rides the diagnostic strip above it, loud, and the settings menu is the
@@ -1064,12 +1339,13 @@ export class RenderCache<S extends ViewSource = ViewSource> {
       configFile,
       configLayers: [],
       configHome: "",
+      repos: loaded.repos,
       failedFile: null,
       lastError: loaded.error,
       lastWarning: loaded.warning,
-      state: loaded.state ?? fallbackState(cwd, projectDir, this.deps),
-      watcher: null,
-      watcherKey: null,
+      state:
+        loaded.state ?? fallbackState(cwd, loaded.repos.plugins, this.deps),
+      watch: null,
     };
     this.serve(entry.state);
     // [LAW:single-enforcer] Insert, bound, watch, then notify — in that
@@ -1086,7 +1362,8 @@ export class RenderCache<S extends ViewSource = ViewSource> {
       `render-cache entry projectDir=${projectDir} cwd=${cwd} compile=${entry.state.compileKey.slice(0, 12)} entries=${this.entries.size} compiles=${this.compiles.size} accounted=${mb(this.accountedBytes())}/${mb(this.budgetBytes())}MB`,
     );
     this.refreshWatcher(entry, loaded);
-    this.observers.onReload?.(entry);
+    // An entry just created was drawn by no session.
+    this.observers.onReload?.(entry, []);
 
     return entry;
   }
@@ -1100,7 +1377,11 @@ export class RenderCache<S extends ViewSource = ViewSource> {
   // every exit, a throw included.
   hold(projectDir: string, cwd: string, configFile: string | undefined): Hold {
     const entry = this.getOrCreate(projectDir, cwd, configFile);
-    const { state } = entry;
+    return this.holdState(entry, entry.state);
+  }
+
+  // The hold on `entry`'s state that `hold` and `holdView` hand out.
+  private holdState(entry: CacheEntry, state: DslRenderState): Hold {
     const hold = this.holdOf(state);
     hold.holders++;
     this.armSweep();
@@ -1131,14 +1412,13 @@ export class RenderCache<S extends ViewSource = ViewSource> {
     projectDir: string,
     cwd: string,
     configFile: string | undefined,
-    sessionId: string,
-    facts: ViewFacts,
-  ): SessionHold<S> {
+    facts: F,
+  ): SessionHold<S, F> {
     const held = this.hold(projectDir, cwd, configFile);
-    let view: SessionView<S>;
+    let view: SessionView<S, F>;
     let lease: ViewHold;
     try {
-      view = this.viewOf(sessionId, held.entry, held.state, facts);
+      view = this.viewOf(held.entry, held.state, facts, "request");
       lease = this.leaseOf(view);
     } catch (err) {
       // [LAW:no-ambient-temporal-coupling] The state hold is this call's
@@ -1147,8 +1427,37 @@ export class RenderCache<S extends ViewSource = ViewSource> {
       held[Symbol.dispose]();
       throw err;
     }
-    lease.holders++;
     lease.read = true;
+    return this.holdViewOf(held, view, lease);
+  }
+
+  // [LAW:single-enforcer] A frame's door: the session's current view, held
+  // for its synchronous draw as `holdSession` holds one, or none. It creates
+  // nothing — no entry, no view, no declaration — so a frame performs no I/O
+  // (brandon-unfiled-3248.8ro6, 5a); only an event opens a view
+  // (ViewOpening). A frame is no request, so it leaves the view's `read`
+  // alone: an open feed keeps its view by its pin.
+  holdView(sessionId: string): SessionHold<S, F> | null {
+    const view = this.views.get(sessionId);
+    if (view === undefined) return null;
+    // Taken before the state hold, so a throw leaves nothing held.
+    const lease = this.leaseOf(view);
+    // [LAW:one-source-of-truth] The state held is the one the view is of.
+    return this.holdViewOf(
+      this.holdState(lease.entry, view.state),
+      view,
+      lease,
+    );
+  }
+
+  // `held` with `lease` on `view` beside it, both released by the one
+  // `using`. Nothing in it throws, so `held` is never stranded.
+  private holdViewOf(
+    held: Hold,
+    view: SessionView<S, F>,
+    lease: ViewHold,
+  ): SessionHold<S, F> {
+    lease.holders++;
     let released = false;
     return {
       entry: held.entry,
@@ -1164,20 +1473,69 @@ export class RenderCache<S extends ViewSource = ViewSource> {
     };
   }
 
+  // Why the session has no view, when its last opening threw: what a frame
+  // draws in place of the view `holdView` found none of.
+  openFailure(sessionId: string): { readonly error: unknown } | null {
+    return this.openFailures.get(sessionId) ?? null;
+  }
+
+  // [LAW:single-enforcer] A click that moved the session's origin — a
+  // load-config pick, or a history step restoring one — moves its view to the
+  // origin's entry, declared with the request the view draws by, as a
+  // request from there would (`journaled`, src/daemon/verbs/index.ts). A
+  // session whose last opening failed opens by the request that opening was
+  // for, so a pick that fixes it shows with no request after it. A session
+  // with neither has nothing to move: no feed draws it, and its next request
+  // opens one. A click that left the origin alone finds the view already on
+  // its entry and changes nothing, its use order included, so the latest
+  // rendered session stays the one that rendered.
+  follow(
+    sessionId: string,
+    projectDir: string,
+    cwd: string,
+    configFile: string | undefined,
+  ): void {
+    const current = this.views.get(sessionId);
+    // Read before the hold: building the origin's entry may evict the one
+    // the current view is of, which retires the view.
+    const facts = current?.facts() ?? this.openFailures.get(sessionId)?.facts;
+    if (facts === undefined) return;
+    const origin = this.entries.get(cacheKey(projectDir, cwd, configFile));
+    if (current !== undefined && origin?.state === current.state) return;
+    using held = this.hold(projectDir, cwd, configFile);
+    this.viewOf(held.entry, held.state, facts, "click");
+  }
+
+  // [LAW:no-ambient-temporal-coupling] An open feed's pin on its session,
+  // from the feed's open to its close (src/daemon/frame-feed.ts). Keyed by
+  // session, so it follows the view wherever a request, a reload or a click
+  // moves it.
+  pin(sessionId: string): () => void {
+    this.pins.set(sessionId, (this.pins.get(sessionId) ?? 0) + 1);
+    let released = false;
+    return () => {
+      if (released) throw new Error("render-cache pin released twice");
+      released = true;
+      const left = (this.pins.get(sessionId) ?? 0) - 1;
+      if (left > 0) this.pins.set(sessionId, left);
+      else this.pins.delete(sessionId);
+    };
+  }
+
   // The session's view of `state`: the one it has, or a new one replacing it.
   private viewOf(
-    sessionId: string,
     entry: CacheEntry,
     state: DslRenderState,
-    facts: ViewFacts,
-  ): SessionView<S> {
+    facts: F,
+    by: ViewOpening,
+  ): SessionView<S, F> {
+    const { sessionId } = facts;
     const current = this.views.get(sessionId);
     if (current?.state === state) {
       // Move to end (most recently used), as getOrCreate does an entry.
       this.views.delete(sessionId);
       this.views.set(sessionId, current);
-      // A request declares again before its refresh; a frame's facts, the
-      // session's latest request, are already declared and change nothing.
+      // A request declares again before its refresh.
       current.requested(facts);
       return current;
     }
@@ -1187,10 +1545,14 @@ export class RenderCache<S extends ViewSource = ViewSource> {
     // end, the most recently used, as a kept view moves there.
     // The old view is retired whether or not the new one opens: the session's
     // render resolved to another entry either way.
+    // The successor is the session's view going on, as a reload's is: a
+    // session no request read since the last sweep is still closed by the
+    // next.
     this.views.delete(sessionId);
-    let view: SessionView<S>;
+    const read = current !== undefined && this.leaseOf(current).read;
+    let view: SessionView<S, F>;
     try {
-      view = this.opened(sessionId, entry, state, facts, false);
+      view = this.opened(entry, state, facts, read, by);
     } finally {
       if (current !== undefined) this.retireView(current, "moved");
     }
@@ -1204,28 +1566,37 @@ export class RenderCache<S extends ViewSource = ViewSource> {
   // read the session's view since the last sweep. Its caller charges it to
   // the budget, once however many it opens.
   private opened(
-    sessionId: string,
     entry: CacheEntry,
     state: DslRenderState,
-    facts: ViewFacts,
+    facts: F,
     read: boolean,
-  ): SessionView<S> {
-    const view = openView(state, entry.cwd, sessionId, facts, {
-      sessionState: this.deps.sessionState,
-      declare: this.deps.declare,
-      source: this.deps.source,
-      log: this.log,
-    });
+    by: ViewOpening,
+  ): SessionView<S, F> {
+    const { sessionId } = facts;
+    let view: SessionView<S, F>;
+    try {
+      view = openView(state, entry.cwd, facts, {
+        sessionState: this.deps.sessionState,
+        declare: this.deps.declare,
+        source: this.deps.source,
+        changed: (sid) => this.observers.onViewChanged?.(sid),
+        log: this.log,
+      });
+    } catch (error) {
+      this.openFailures.set(sessionId, { error, facts });
+      throw error;
+    }
+    this.openFailures.delete(sessionId);
     this.views.set(sessionId, view);
-    this.viewHolds.set(view, { holders: 0, retired: null, read });
+    this.viewHolds.set(view, { entry, holders: 0, retired: null, read });
     this.log(
       "info",
-      `session view opened sid=${JSON.stringify(sessionId)} cwd=${entry.cwd} views=${this.views.size}`,
+      `session view opened sid=${JSON.stringify(sessionId)} by=${by} cwd=${entry.cwd} views=${this.views.size}`,
     );
     return view;
   }
 
-  private leaseOf(view: SessionView<S>): ViewHold {
+  private leaseOf(view: SessionView<S, F>): ViewHold {
     const lease = this.viewHolds.get(view);
     // [LAW:no-silent-failure] As holdOf: every view handed out was entered.
     if (lease === undefined) throw new Error("render-cache view never served");
@@ -1234,16 +1605,17 @@ export class RenderCache<S extends ViewSource = ViewSource> {
 
   // The cache stopped serving `view`; its teardown is due now, or when the
   // last render holding it returns.
-  private retireView(view: SessionView<S>, reason: ViewClose): void {
+  private retireView(view: SessionView<S, F>, reason: ViewClose): void {
     if (this.views.get(view.sessionId) === view)
       this.views.delete(view.sessionId);
+    view.retire();
     const lease = this.leaseOf(view);
     lease.retired = { reason, held: lease.holders };
     this.reclaimView(view, lease);
   }
 
   // [LAW:single-enforcer] The one place a view is disposed: retired and unheld.
-  private reclaimView(view: SessionView<S>, lease: ViewHold): void {
+  private reclaimView(view: SessionView<S, F>, lease: ViewHold): void {
     if (lease.retired === null || lease.holders > 0) return;
     this.viewHolds.delete(view);
     this.log(
@@ -1260,13 +1632,18 @@ export class RenderCache<S extends ViewSource = ViewSource> {
 
   // One sweep. Public so a test can run it at an instant it chose.
   releaseIdle(): void {
-    // A view no render read across the whole interval is closed: its session
-    // ended, or draws from another daemon's bar no more.
+    // A view no request read across the whole interval, whose session no
+    // open feed pins, is closed: its session ended, or draws from another
+    // daemon's bar no more.
     for (const [view, lease] of this.viewHolds) {
-      if (lease.retired !== null) continue;
+      if (lease.retired !== null || this.pins.has(view.sessionId)) continue;
       if (lease.read) lease.read = false;
       else this.retireView(view, "idle");
     }
+    // A failure no open feed shows has no frame to draw it in: the session's
+    // next request reports its own.
+    for (const sessionId of this.openFailures.keys())
+      if (!this.pins.has(sessionId)) this.openFailures.delete(sessionId);
     if (this.entries.size === 0 && this.sweep !== null) {
       clearInterval(this.sweep);
       this.sweep = null;
@@ -1282,6 +1659,7 @@ export class RenderCache<S extends ViewSource = ViewSource> {
     this.closed = true;
     if (this.sweep !== null) clearInterval(this.sweep);
     this.sweep = null;
+    this.answersWatch.release();
     const entries = this.entries.size;
     for (const [key, entry] of this.entries) this.drop(key, entry, "close");
     // [LAW:one-source-of-truth] Every state left in `holds` is retired and
@@ -1313,7 +1691,7 @@ export class RenderCache<S extends ViewSource = ViewSource> {
     entry: CacheEntry,
     reason: Teardown["reason"],
   ): void {
-    entry.watcher?.release();
+    entry.watch?.handle.release();
     this.entries.delete(key);
     this.retire(entry.state, reason, null);
   }
@@ -1335,6 +1713,7 @@ export class RenderCache<S extends ViewSource = ViewSource> {
       retired,
       compiles: this.compiles.size,
       views: this.views.size,
+      pinned: this.pins.size,
       retiredViews,
       accountedBytes: this.accountedBytes(),
       budgetBytes: this.budgetBytes(),
@@ -1350,17 +1729,26 @@ export class RenderCache<S extends ViewSource = ViewSource> {
     const fits = (): boolean =>
       this.entries.size <= this.maxEntries &&
       this.accountedBytes() <= this.budgetBytes();
+    // [LAW:no-ambient-temporal-coupling] An entry a pinned session's view is
+    // of is drawn by an open feed, which a frame never rebuilds (`holdView`).
+    const pinned = new Set(
+      [...this.pins.keys()].flatMap((sessionId) => {
+        const view = this.views.get(sessionId);
+        return view === undefined ? [] : [view.state];
+      }),
+    );
     for (const [key, evicted] of this.entries) {
       if (fits()) return;
-      if (evicted === served) continue;
+      if (evicted === served || pinned.has(evicted.state)) continue;
       this.drop(key, evicted, "evict");
     }
-    // [LAW:no-silent-failure] Nothing left to evict: the entry served and its
-    // sessions' views alone exceed the budget.
+    // [LAW:no-silent-failure] Nothing left to evict: the entry served, the
+    // entries open feeds draw, and their sessions' views alone exceed the
+    // budget.
     if (!fits())
       this.log(
         "warn",
-        `render-cache over budget entries=${this.entries.size} views=${this.views.size} accounted=${mb(this.accountedBytes())}/${mb(this.budgetBytes())}MB`,
+        `render-cache over budget entries=${this.entries.size} views=${this.views.size} pinned=${pinned.size} accounted=${mb(this.accountedBytes())}/${mb(this.budgetBytes())}MB`,
       );
   }
 
@@ -1407,7 +1795,7 @@ export class RenderCache<S extends ViewSource = ViewSource> {
     // retires every view of it first, so each is disposed before or with it.
     // [LAW:no-ambient-temporal-coupling] A reload opens each view's successor
     // over the new state first, declared with the request the old one drew by,
-    // so the session's repo, pane and memento scope stay held across it and
+    // so the session's repo, pane and session files stay held across it and
     // the next frame draws a declared view (brandon-unfiled-3248.8ro6, 4a).
     for (const view of [...this.views.values()]) {
       if (view.state !== state) continue;
@@ -1419,11 +1807,11 @@ export class RenderCache<S extends ViewSource = ViewSource> {
           // The successor is the session's view going on: a session no
           // render read since the last sweep is still closed by the next.
           this.opened(
-            view.sessionId,
             successor.entry,
             successor.state,
             view.facts(),
             this.leaseOf(view).read,
+            "reload",
           );
         } catch (e) {
           this.log(
@@ -1451,6 +1839,14 @@ export class RenderCache<S extends ViewSource = ViewSource> {
     // so a compile no state left there carries has no render to draw it.
     if (![...this.holds.keys()].some((s) => s.compileKey === state.compileKey))
       this.compiles.delete(state.compileKey);
+  }
+
+  // [LAW:one-source-of-truth] The sessions whose views draw from `entry`'s
+  // state.
+  private sessionsOn(entry: CacheEntry): string[] {
+    return [...this.views.values()]
+      .filter((view) => view.state === entry.state)
+      .map((view) => view.sessionId);
   }
 
   // Re-read an entry from disk NOW, for a caller that just wrote its file and
@@ -1481,11 +1877,14 @@ export class RenderCache<S extends ViewSource = ViewSource> {
   // straight-line, so the signal structurally cannot be skipped by whichever
   // arm the load took.
   private reloadInto(entry: CacheEntry): void {
+    // Taken before the reload, so a session whose view fails to reopen over
+    // the new state is still among those it changed.
+    const sessions = this.sessionsOn(entry);
     const loaded = this.load(entry.projectDir, entry.cwd, entry.configFile);
     entry.lastWarning = loaded.warning;
     entry.lastError = loaded.error;
     if (loaded.state !== null) {
-      this.log("info", pluginLoadLine(loaded.layers, loaded.state));
+      this.log("info", pluginLoadLine(loaded.layers, loaded.state, loaded.ms));
       const retired = entry.state;
       entry.state = loaded.state;
       this.serve(loaded.state);
@@ -1497,7 +1896,20 @@ export class RenderCache<S extends ViewSource = ViewSource> {
     // Rebinds to the broken file (and its sibling candidates) too, so an
     // in-place save OR a higher-precedence file appearing recovers.
     this.refreshWatcher(entry, loaded);
-    this.observers.onReload?.(entry);
+    this.observers.onReload?.(entry, sessions);
+  }
+
+  // Every entry, under the answers now on disk: any of them may draw from a
+  // repository. The live map is walked, so an entry a reload's `fit` evicts
+  // is skipped, never reloaded back to life.
+  private reloadEvery(): void {
+    // [LAW:nothing-unseen] Why every entry is about to reload, as a config
+    // edit's reload says which entry it was for.
+    this.log(
+      "info",
+      `repo-config answers changed, reloading entries=${this.entries.size}`,
+    );
+    for (const entry of this.entries.values()) this.reloadInto(entry);
   }
 
   // [LAW:single-enforcer] One watcher-rebind decision per reload: the watch
@@ -1510,19 +1922,31 @@ export class RenderCache<S extends ViewSource = ViewSource> {
   private refreshWatcher(entry: CacheEntry, loaded: LoadOutcome): void {
     entry.configLayers = loaded.layers;
     entry.configHome = loaded.home;
+    entry.repos = loaded.repos;
     entry.failedFile = loaded.error === null ? null : loaded.failedFile;
-    const targets = watchTargetsFor(entry, loaded.layers);
-    // [LAW:one-source-of-truth] WatcherRegistry shares slots by key and keeps
-    // the FIRST acquire's targets, so the key must name the target set —
-    // the signature is the key, and "rebind when the set changed" and "the
-    // key changed" are the same fact.
+    const { targets, unresolved } = watchTargetsFor(entry);
+    // [LAW:one-source-of-truth] The key names the target set, so the
+    // registry's `follow` rebinds exactly when the set changed.
     const key = `config:${entry.projectDir}:${entry.cwd}:${entry.configFile ?? ""}:${JSON.stringify(targets)}`;
-    if (entry.watcher !== null && entry.watcherKey === key) return;
-    entry.watcher?.release();
-    entry.watcherKey = key;
-    entry.watcher = this.deps.watchers.acquire(key, targets, () =>
-      this.onConfigChanged(entry),
+    const { watch, move } = this.deps.watchers.follow(
+      entry.watch,
+      { key, targets },
+      () => this.onConfigChanged(entry),
     );
+    entry.watch = watch;
+    if (move === "kept") return;
+    // [LAW:nothing-unseen] A rebind is the fact that the target set moved (a
+    // candidate appeared, a link was re-pointed), and which directories the
+    // entry now hears: a change that fires nothing is read against this line.
+    this.log(
+      "info",
+      `config watch bound projectDir=${entry.projectDir} cwd=${entry.cwd} dirs=${targets.dirs.map((d) => d.path).join(",")} refused=${watch.handle.refused.length}`,
+    );
+    for (const { path: at, reason } of unresolved)
+      this.log(
+        "warn",
+        `config watch unresolved projectDir=${entry.projectDir} path=${at} reason=${reason}`,
+      );
   }
 
   // [LAW:single-enforcer] One reload dispatcher per cache entry. The
@@ -1552,7 +1976,7 @@ export class RenderCache<S extends ViewSource = ViewSource> {
   // The most recently rendered session's, since `views` is kept in use order.
   // Null while no session's view is open; debug responses are empty in that
   // case by construction.
-  latestView(): SessionView<S> | null {
+  latestView(): SessionView<S, F> | null {
     return [...this.views.values()].at(-1) ?? null;
   }
 }

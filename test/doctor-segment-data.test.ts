@@ -52,17 +52,6 @@ const rateNeed = (
   fact,
 });
 
-const mementoNeed = (
-  located: Extract<
-    SegmentDataFacts["memento"],
-    { kind: "needed" }
-  >["fact"]["located"],
-): SegmentDataFacts["memento"] => ({
-  kind: "needed",
-  segments: ["ceiling"],
-  fact: { located, claudeConfigDir: "/home/u/.claude" },
-});
-
 describe("segment data row", () => {
   test("nothing needed is ok", () => {
     expect(verdict({})).toEqual({ ok: true });
@@ -73,7 +62,6 @@ describe("segment data row", () => {
       verdict({
         pullRequests: login("ready"),
         rateLimits: rateNeed({ kind: "ok", value: ["carried", "unanswered"] }),
-        memento: mementoNeed({ kind: "ok", value: "/plugins/memento" }),
       }),
     ).toEqual({ ok: true });
   });
@@ -161,27 +149,10 @@ describe("segment data row", () => {
     });
   });
 
-  test("memento absent names the Claude Code directory", () => {
-    expect(verdict({ memento: mementoNeed({ kind: "absent" }) })).toMatchObject({
-      ok: false,
-      reason:
-        'ceiling: memento is not installed (or is disabled) for /home/u/.claude — install the memento plugin, or set missingData: "ignore" on ceiling',
-    });
-  });
-
-  test("an unreadable plugin registry fails with why", () => {
-    expect(
-      verdict({ memento: mementoNeed({ kind: "failed", reason: "EACCES" }) }),
-    ).toMatchObject({
-      ok: false,
-      reason: "ceiling: whether memento is installed could not be read: EACCES",
-    });
-  });
-
   test("several problems lead with one and list the rest", () => {
     const v = verdict({
       pullRequests: login("missing"),
-      memento: mementoNeed({ kind: "absent" }),
+      rateLimits: rateNeed({ kind: "failed", reason: "EACCES" }),
     });
     expect(v.ok).toBe(false);
     expect(!v.ok && v.more).toHaveLength(1);
@@ -191,7 +162,7 @@ describe("segment data row", () => {
 describe("the doctor's event field", () => {
   test("names what each source found, `-` where nothing needs it", () => {
     expect(dataFields(HEALTHY_FACTS.data)).toBe(
-      "data=pr:-,rateLimits:-,memento:-",
+      "data=pr:-,rateLimits:-",
     );
     expect(
       dataFields({
@@ -200,16 +171,14 @@ describe("the doctor's event field", () => {
           kind: "ok",
           value: ["carried", "missing", "unanswered", "carried"],
         }),
-        memento: mementoNeed({ kind: "absent" }),
       }),
-    ).toBe("data=pr:logged-out,rateLimits:2/1/1,memento:absent");
+    ).toBe("data=pr:logged-out,rateLimits:2/1/1");
     expect(
       dataFields({
         pullRequests: forgeNeed({ kind: "ok", value: null }),
         rateLimits: rateNeed({ kind: "failed", reason: "r" }),
-        memento: mementoNeed({ kind: "ok", value: "/m" }),
       }),
-    ).toBe("data=pr:no-forge,rateLimits:failed,memento:located");
+    ).toBe("data=pr:no-forge,rateLimits:failed");
   });
 });
 

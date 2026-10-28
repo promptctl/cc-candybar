@@ -18,9 +18,19 @@
 // Pass: every session answers before the warm deadline; every steady render
 // answers ok within the client's budget; the daemon is the same process
 // throughout with no post-mortem; its charge stays within a budget for these
-// sessions and does not climb; the cache's held counts stay flat.
+// sessions and does not climb; the cache's held counts stay flat; every click
+// on one session's settings menu, once a second, answers ok within the click's
+// budget.
 //
 // Run: pnpm build && pnpm load-gate [--sessions N] [--seconds S]
+//
+// The feed measurement (the frame-feed epic's criterion): the same world with
+// a moving bar and its statusline lane on, measured without a feed (`off`,
+// the baseline) and with one session's feed open (`on`), both at 1 Hz:
+//   pnpm load-gate --sessions 20 --period-ms 1000 --feed off > off.json
+//   pnpm load-gate --sessions 20 --period-ms 1000 --feed on --baseline off.json
+// The `on` run adds two checks: the feed holds its pace on its summary line,
+// and the statusline's `took=` p90 is within 2x of the baseline's.
 
 import { spawn } from "node:child_process";
 import fs from "node:fs";
@@ -32,14 +42,21 @@ import { parseArgs } from "node:util";
 import { nodeClientHint } from "../src/client-hint.js";
 import { detectClientHints } from "../src/client-hints.js";
 import { daemonArgs } from "../src/daemon/acquire.js";
-import { tryRenderViaDaemon } from "../src/daemon/client.js";
+import { effectsUrl, VERB_SET_STATE } from "../src/click/wire.js";
+import { DISCLOSURE_CLOSED } from "../src/config/disclosure.js";
+import { tryClickViaDaemon, tryRenderViaDaemon } from "../src/daemon/client.js";
 import { fetchStats } from "../src/daemon/client-stats.js";
 import { mb, memoryLimitBytes } from "../src/daemon/limits.js";
 import { logLines } from "../src/daemon/log.js";
 import { logPath } from "../src/daemon/paths.js";
 import { chargeProbe } from "../src/daemon/memory-report.js";
+import {
+  openFrameStream,
+  type StreamEnd,
+} from "../src/daemon/client-frames.js";
 import { PARENT_PID_ENV } from "../src/daemon/parent-watchdog.js";
 import type { StatsSnapshot } from "../src/daemon/stats.js";
+import { parseHandlerUrl } from "../src/install/index.js";
 import { sourceDigest } from "../src/source-digest.js";
 import type { ClaudeHookData } from "../src/utils/claude.js";
 
@@ -51,19 +68,69 @@ const { values } = parseArgs({
   options: {
     sessions: { type: "string", default: "100" },
     seconds: { type: "string", default: "60" },
+    // Each session's statusline refreshes this often: 100 sessions ask ~60
+    // renders a second, five times what ~20 live sessions ask.
+    "period-ms": { type: "string", default: "1600" },
+    feed: { type: "string" },
+    baseline: { type: "string" },
   },
 });
 const SESSIONS = Number(values.sessions);
 const STEADY_MS = Number(values.seconds) * 1000;
-if (!(Number.isInteger(SESSIONS) && SESSIONS > 0 && STEADY_MS > 0)) {
+const SESSION_PERIOD_MS = Number(values["period-ms"]);
+if (
+  !(
+    Number.isInteger(SESSIONS) &&
+    SESSIONS > 0 &&
+    STEADY_MS > 0 &&
+    SESSION_PERIOD_MS > 0
+  )
+) {
   throw new Error(
-    `--sessions and --seconds must be positive: ${JSON.stringify(values)}`,
+    `--sessions, --seconds and --period-ms must be positive: ${JSON.stringify(values)}`,
   );
 }
-
-// Each session's statusline refreshes this often: 100 sessions ask ~60
-// renders a second, five times what ~20 live sessions ask.
-const SESSION_PERIOD_MS = 1600;
+// [LAW:parse-dont-validate] The feed's world, or none: the gate as CI runs it.
+type FeedWorld = "off" | "on" | null;
+const FEED: FeedWorld =
+  values.feed === undefined
+    ? null
+    : values.feed === "off" || values.feed === "on"
+      ? values.feed
+      : (() => {
+          throw new Error(`--feed is off or on: ${values.feed}`);
+        })();
+// How long the feed runs before the steady phase, so its first frames (the
+// lane's setup) are not scored.
+const FEED_SETTLE_MS = 3000;
+// The share of its pace a feed must draw at to hold it: frames are paced,
+// so a feed drawing on every beat lands a frame or two short of the pace.
+const FEED_PACE_SHARE = 0.95;
+// How far the statusline's p90 may rise with a feed open: the epic's
+// criterion.
+const FEED_P90_RATIO = 2;
+// How often the steady phase clicks: a person opening and closing a menu.
+const CLICK_PERIOD_MS = 1000;
+// [LAW:parse-dont-validate] The feed-off run the `on` run is judged against:
+// its statusline `took=` p90, read once from its own output.
+const BASELINE_P90: number | null =
+  values.baseline === undefined
+    ? null
+    : (() => {
+        if (FEED !== "on") throw new Error("--baseline judges a --feed on run");
+        const base = JSON.parse(fs.readFileSync(values.baseline, "utf8")) as {
+          facts: {
+            feed: { world: string } | null;
+            daemonRenderMs: { took: { p90: number } };
+          };
+        };
+        if (base.facts.feed?.world !== "off") {
+          throw new Error(
+            `--baseline is not a --feed off run: ${values.baseline}`,
+          );
+        }
+        return base.facts.daemonRenderMs.took.p90;
+      })();
 // An active session writes a turn to its transcript every few refreshes, and
 // stages a file (its git index changes) less often.
 const TURN_EVERY = 4;
@@ -75,6 +142,10 @@ const TRANSCRIPT_TURNS = 1700;
 // A cold daemon builds every session's state at once; each session must have
 // answered once by then.
 const WARM_DEADLINE_MS = 30_000;
+// A session is warm once it has answered twice: what its first answer set in
+// motion (its lane's setup) has landed by its second, so the steady phase's
+// first sample holds what the steady phase keeps.
+const WARM_ANSWERS = 2;
 const SAMPLE_MS = 5000;
 const INSPECTOR_CALL_MS = 30_000;
 // What the charge may grow by across the steady phase, beyond a heap's
@@ -110,9 +181,17 @@ fs.mkdirSync(path.dirname(socket), { mode: 0o700 });
 const unknownCalls = path.join(root, "unknown-calls");
 
 fs.mkdirSync(path.join(dirs.config, "cc-candybar"));
-fs.copyFileSync(
-  path.join(FIXTURES, "config.json5"),
+// The feed's world moves: an effect animates the bar, and the statusline lane
+// is on, so a feed has frames to push.
+const config = fs.readFileSync(path.join(FIXTURES, "config.json5"), "utf8");
+fs.writeFileSync(
   path.join(dirs.config, "cc-candybar", "config.json5"),
+  FEED === null
+    ? config
+    : config.replace(
+        "{",
+        '{ globals: { effect: "sparkle", experimentalStatusline: true },',
+      ),
 );
 fs.cpSync(
   path.join(FIXTURES, "plugins"),
@@ -157,7 +236,7 @@ interface Session {
   readonly checkout: string;
   readonly transcript: string;
   ticks: number;
-  answered: boolean;
+  answers: number;
 }
 
 const sessions: Session[] = Array.from({ length: SESSIONS }, (_, index) => {
@@ -201,7 +280,7 @@ const sessions: Session[] = Array.from({ length: SESSIONS }, (_, index) => {
       turn(id, checkout, t),
     ).join(""),
   );
-  return { index, id, checkout, transcript, ticks: 0, answered: false };
+  return { index, id, checkout, transcript, ticks: 0, answers: 0 };
 });
 
 function litStatusline(index: number): string {
@@ -418,6 +497,10 @@ const client = nodeClientHint("node", BUNDLE);
 
 interface Render {
   readonly phase: "warm" | "steady" | "after";
+  // Which session asked, and when it did, in milliseconds since its phase
+  // began: what a failed render is found by in the daemon's log.
+  readonly session: number;
+  readonly atMs: number;
   readonly ms: number;
   // The client's own outcome: ok, or its failure class.
   readonly outcome: string;
@@ -428,6 +511,12 @@ const renders: Render[] = [];
 const timers: NodeJS.Timeout[] = [];
 const stopSessions = (): void => timers.forEach((t) => clearInterval(t));
 let phase: Render["phase"] = "warm";
+// When the phase began: a render's offset is measured from it.
+let phaseStarted = Date.now();
+function enter(next: Render["phase"]): void {
+  phase = next;
+  phaseStarted = Date.now();
+}
 const inFlight = new Set<Promise<void>>();
 
 // [LAW:no-silent-failure] A session's own write that fails is a verdict too:
@@ -478,6 +567,7 @@ function tick(s: Session): void {
     );
   }
   const rendering = phase;
+  const atMs = Date.now() - phaseStarted;
   const t0 = performance.now();
   const done = (async () => {
     let outcome: string;
@@ -496,19 +586,102 @@ function tick(s: Session): void {
       );
       outcome =
         rendered.kind === "ok" ? "ok" : `${rendered.kind}/${rendered.cause}`;
-      if (rendered.kind === "ok") s.answered = true;
+      if (rendered.kind === "ok") s.answers++;
     } catch (e) {
       // [LAW:no-silent-failure] A client path that throws is a failed render,
       // scored like any other, never a gate that ends without a verdict.
       outcome = `threw/${e instanceof Error ? e.message : String(e)}`;
     }
-    renders.push({ phase: rendering, ms: performance.now() - t0, outcome });
+    renders.push({
+      phase: rendering,
+      session: s.index,
+      atMs,
+      ms: performance.now() - t0,
+      outcome,
+    });
   })();
   inFlight.add(done);
   void done.finally(() => inFlight.delete(done));
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// The clicks the steady phase made, as the URL handler makes them: their
+// round trip and how each ended.
+interface Click {
+  readonly ms: number;
+  readonly outcome: string;
+}
+const clicks: Click[] = [];
+
+// One click on a session's 🍫, opening its settings menu or closing it, made
+// as the URL handler makes it — through the handler's own parse and client —
+// and how it ended.
+async function menuClick(s: Session, open: boolean): Promise<string> {
+  const { verb, value } = parseHandlerUrl(
+    effectsUrl([
+      {
+        verb: VERB_SET_STATE,
+        args: [s.id, "candybar.menu", open ? "open" : DISCLOSURE_CLOSED],
+      },
+    ]),
+  );
+  try {
+    const clicked = await tryClickViaDaemon(verb, value);
+    return clicked.kind === "ok" ? "ok" : `${clicked.kind}/${clicked.cause}`;
+  } catch (e) {
+    // [LAW:no-silent-failure] A click path that throws is a failed click.
+    return `threw/${e instanceof Error ? e.message : String(e)}`;
+  }
+}
+
+// One session's settings menu, opened and closed on a beat over the steady
+// phase. A click that answers late runs the next at once, so a slow daemon is
+// clicked as often, never less. The phase ends on a close, so the menu is left
+// as the clicks found it.
+async function clickMenu(s: Session, started: number): Promise<void> {
+  let answered = s.answers;
+  for (let n = 0; n % 2 === 1 || Date.now() - started < STEADY_MS; n++) {
+    const t0 = performance.now();
+    const outcome = await menuClick(s, n % 2 === 0);
+    clicks.push({ ms: performance.now() - t0, outcome });
+    answered = s.answers;
+    // The next beat, or the steady phase's end if that comes first: the
+    // phase's daemon events are read up to when the last click answered.
+    await sleep(
+      Math.min(started + (n + 1) * CLICK_PERIOD_MS, started + STEADY_MS) -
+        Date.now(),
+    );
+  }
+  // The last close's release lands with the bar's next draw, which the
+  // samples after the phase must count.
+  await redrawn(s, answered);
+}
+
+// Until the session draws its bar again after a click answered, when it had
+// `answered`: the draw that builds what an open menu reads, or releases it
+// once closed.
+async function redrawn(s: Session, answered: number): Promise<void> {
+  const deadline = Date.now() + WARM_DEADLINE_MS;
+  while (s.answers === answered) {
+    if (Date.now() >= deadline)
+      throw new Error(`${s.id} drew no bar after its menu was clicked`);
+    await sleep(50);
+  }
+}
+
+// The menu drawn once open and once closed before the steady phase: what an
+// open menu builds on its first draw it holds from then on, so the steady
+// phase's first sample already counts it, and the clicks are judged by what
+// they keep beyond it.
+async function warmMenu(s: Session): Promise<void> {
+  for (const open of [true, false]) {
+    const outcome = await menuClick(s, open);
+    if (outcome !== "ok")
+      throw new Error(`the warm-up click on ${s.id}'s menu ended ${outcome}`);
+    await redrawn(s, s.answers);
+  }
+}
 
 interface Sample {
   // Under the steady load, or the reading once it has stopped.
@@ -616,6 +789,7 @@ async function run(): Promise<{
     );
   }
 
+  enter("warm");
   sessions.forEach((s) =>
     timers.push(
       setTimeout(
@@ -629,7 +803,7 @@ async function run(): Promise<{
   );
   const warmStarted = Date.now();
   while (
-    !sessions.every((s) => s.answered) &&
+    !sessions.every((s) => s.answers >= WARM_ANSWERS) &&
     Date.now() - warmStarted < WARM_DEADLINE_MS
   ) {
     await sleep(50);
@@ -637,30 +811,80 @@ async function run(): Promise<{
   const warmMs = Date.now() - warmStarted;
   // Counted at the deadline: a session that first answers during the
   // collection below answered late.
-  const silent = sessions.filter((s) => !s.answered).length;
+  const silent = sessions.filter((s) => s.answers === 0).length;
+  await warmMenu(sessions[0]!);
   // Before the steady phase, so no scored render waits on the collection.
   const heapBefore = await liveHeap();
+  // [LAW:no-ambient-temporal-coupling] The sessions tick on through the
+  // collection, and the daemon drains what they queued once it ends, so a
+  // render asked right after would wait behind that backlog and run out its
+  // budget. The steady phase begins once every session has been answered
+  // again inside the client's budget: an answer in budget means the queue
+  // ahead of it was shorter than the budget, and the daemon serves faster
+  // than the sessions ask, so from there the queue only shrinks. A session
+  // not answered by the deadline is scored by the steady renders it fails,
+  // as the warm phase scores one, never a run without a verdict.
+  const collected = sessions.map((s) => s.answers);
+  const resumeStarted = Date.now();
+  while (
+    !sessions.every((s, i) => s.answers > collected[i]!) &&
+    Date.now() - resumeStarted < WARM_DEADLINE_MS
+  ) {
+    await sleep(50);
+  }
+  const resumeMs = Date.now() - resumeStarted;
 
-  phase = "steady";
-  const steadyStarted = Date.now();
+  // [LAW:dataflow-not-control-flow] The feed is one session's subscriber,
+  // opened only in the `on` world; its frames are counted over the steady
+  // phase alone.
+  let feedFrames = 0;
+  let feedEnd: StreamEnd | null = null;
+  const stream =
+    FEED === "on"
+      ? openFrameStream(
+          socket,
+          sessions[0]!.id,
+          "statusline",
+          () => feedFrames++,
+          (end) => {
+            feedEnd = end;
+          },
+        )
+      : null;
+  if (stream !== null) await sleep(FEED_SETTLE_MS);
+  const feedFramesBefore = feedFrames;
+
+  enter("steady");
+  const steadyStarted = phaseStarted;
+  // The first sample precedes the first click: the reading the clicks'
+  // subscriptions are judged to return to.
+  await sample(steadyStarted);
+  const clicking = clickMenu(sessions[0]!, steadyStarted);
   // The gate's own event loop: a render it measured late may be its own lag.
   const gateLoop = monitorEventLoopDelay({ resolution: 5 });
   gateLoop.enable();
   while (Date.now() - steadyStarted < STEADY_MS) {
-    await sample(steadyStarted);
     await sleep(SAMPLE_MS);
+    await sample(steadyStarted);
   }
   gateLoop.disable();
+  await clicking;
   const steadyEnded = Date.now();
+  const feedFramesSteady = feedFrames - feedFramesBefore;
   // The second reading under the load the first was taken under: the steady
   // renders settle, and those the collection delays are not scored.
-  phase = "after";
+  enter("after");
   await Promise.all(inFlight);
   const heapAfter = await liveHeap();
   stopSessions();
   await Promise.all(inFlight);
   // The first and last samples each follow a collection.
   await sample(steadyStarted);
+  // After the last sample: a feed closing is a view's observers going, which
+  // the held counts would read as churn.
+  stream?.close();
+  // The feed's closing summary: what it drew over its whole life, at its pace.
+  const feedClosed = stream === null ? null : await feedSummary("closed");
   if (samples.length === 0) {
     throw new Error(
       `the daemon answered no stats sample: ${unanswered.join("; ")}`,
@@ -669,9 +893,14 @@ async function run(): Promise<{
 
   const limit = memoryLimitBytes(env);
   const steady = renders.filter((r) => r.phase === "steady");
-  const failures = tally(
-    steady.filter((r) => r.outcome !== "ok").map((r) => r.outcome),
-  );
+  // [LAW:nothing-unseen] Each failed steady render, by session and offset, in
+  // the order asked: a hold of the daemon's thread is found in its log as a
+  // gap at that instant.
+  const steadyFailures = steady
+    .filter((r) => r.outcome !== "ok")
+    .map(({ session, atMs, outcome }) => ({ session, atMs, outcome }))
+    .sort((a, b) => a.atMs - b.atMs);
+  const failures = tally(steadyFailures.map((r) => r.outcome));
   const expected = (SESSIONS * STEADY_MS) / SESSION_PERIOD_MS;
   const charges = samples.map((s) => s.charge);
   const climb = heapAfter - heapBefore;
@@ -697,7 +926,6 @@ async function run(): Promise<{
     entries: held((s) => s.renderCache.size),
     compiles: held((s) => s.renderCache.compiles),
     views: held((s) => s.renderCache.views),
-    stateObservers: held((s) => s.sessionState.observers),
     watchers: held((s) => s.watchers.active),
   };
   const pids = [...new Set(samples.map((s) => s.stats.pid))];
@@ -706,6 +934,21 @@ async function run(): Promise<{
     ? [...new Set(fs.readFileSync(unknownCalls, "utf8").trim().split("\n"))]
     : [];
   const ms = steady.map((r) => r.ms).sort((a, b) => a - b);
+  const daemon = await daemonEvents(steadyStarted, steadyEnded);
+  const daemonRenderMs = {
+    took: spreadOf(daemon, "render", "took"),
+    queued: spreadOf(daemon, "render", "queued"),
+    waited: spreadOf(daemon, "render", "waited"),
+  };
+  const daemonClickMs = {
+    took: spreadOf(daemon, "click", "took"),
+    queued: spreadOf(daemon, "click", "queued"),
+  };
+  const clickFailures = tally(
+    clicks.filter((c) => c.outcome !== "ok").map((c) => c.outcome),
+  );
+  const expectedClicks = STEADY_MS / CLICK_PERIOD_MS;
+  const clickMs = clicks.map((c) => c.ms).sort((a, b) => a - b);
 
   const checks: Check[] = [
     {
@@ -717,7 +960,20 @@ async function run(): Promise<{
       name: "steady renders",
       pass:
         steady.length >= expected * 0.9 && Object.keys(failures).length === 0,
-      detail: `${steady.length} renders (~${Math.round(expected)} asked), failures ${JSON.stringify(failures)}`,
+      // The first few failures by name; the facts carry every one.
+      detail: `${steady.length} renders (~${Math.round(expected)} asked), failures ${JSON.stringify(failures)}${steadyFailures
+        .slice(0, 5)
+        .map((f) => `s${f.session} at ${f.atMs} ms ${f.outcome}`)
+        .map((f, i) => (i === 0 ? `: ${f}` : `, ${f}`))
+        .join("")}`,
+    },
+    {
+      // The client's own budget is the verdict: a click past it is a timeout.
+      name: "steady clicks",
+      pass:
+        clicks.length >= expectedClicks * 0.9 &&
+        Object.keys(clickFailures).length === 0,
+      detail: `${clicks.length} clicks (~${expectedClicks} made), failures ${JSON.stringify(clickFailures)}`,
     },
     {
       name: "stats answered",
@@ -762,6 +1018,15 @@ async function run(): Promise<{
       detail: `${last.watchers.opened - first0.watchers.opened} opened, ${last.watchers.closed - first0.watchers.closed} closed over the steady phase`,
     },
     {
+      // [LAW:verifiable-goals] An open menu draws rows that read session
+      // state, so its observers rise and fall with the clicks; what the
+      // clicks must not do is keep any. Once they leave the menu as they
+      // found it, the count is back to its reading before the first.
+      name: "click subscriptions released",
+      pass: last.sessionState.observers === first0.sessionState.observers,
+      detail: `${first0.sessionState.observers} state observers before the first click, ${last.sessionState.observers} after the last`,
+    },
+    {
       name: "held counts flat",
       pass:
         Object.values(counters).every((v) => v.length === 1) &&
@@ -782,16 +1047,40 @@ async function run(): Promise<{
           ? "every turn, stage and branch switch"
           : sessionWriteFailures.slice(0, 5).join("; "),
     },
+    // [LAW:dataflow-not-control-flow] The feed's checks, in the world that
+    // opens one; the p90 check where a baseline was given to judge by.
+    ...(feedClosed === null ? [] : [feedPaceCheck(feedClosed)]),
+    ...(BASELINE_P90 === null
+      ? []
+      : [
+          {
+            name: "statusline p90 within 2x of the feed-off baseline",
+            pass: daemonRenderMs.took.p90 <= FEED_P90_RATIO * BASELINE_P90,
+            detail: `took p90 ${daemonRenderMs.took.p90} ms with the feed, ${BASELINE_P90} ms without (limit ${FEED_P90_RATIO}x)`,
+          },
+        ]),
   ];
   const facts = {
     sessions: SESSIONS,
     steadySeconds: STEADY_MS / 1000,
     warmMs,
+    // Until every session was answered again after the collection, capped
+    // at the warm deadline: at the cap, the backlog never drained.
+    resumeMs,
     warmRenders: tally(
       renders.filter((r) => r.phase === "warm").map((r) => r.outcome),
     ),
     steadyRenders: steady.length,
-    steadyMs: { p50: pct(ms, 0.5), p99: pct(ms, 0.99), max: ms.at(-1) ?? 0 },
+    // When the steady phase began, as the daemon's log stamps its lines: a
+    // failure's offset is added to it to find the instant there.
+    steadyStartedAt: new Date(steadyStarted).toISOString(),
+    steadyFailures,
+    steadyMs: {
+      p50: pct(ms, 0.5),
+      p90: pct(ms, 0.9),
+      p99: pct(ms, 0.99),
+      max: ms.at(-1) ?? 0,
+    },
     chargeMb: charges.map(mb),
     limitMb: mb(limit),
     rssMb: samples.map((s) => mb(s.stats.rssBytes)),
@@ -801,24 +1090,69 @@ async function run(): Promise<{
     // how long it then waited for its refreshes and how long it took in all,
     // from its own render events, beside the gate's lag: a slow round trip is
     // one of these.
-    daemonRenderMs: await daemonRenders(steadyStarted, steadyEnded),
+    daemonRenderMs,
+    // The steady clicks' round trips, and what the daemon took over each from
+    // its click events.
+    clickMs: {
+      p50: pct(clickMs, 0.5),
+      p90: pct(clickMs, 0.9),
+      max: clickMs.at(-1) ?? 0,
+    },
+    daemonClickMs,
     gateLoopDelayMs: {
       p99: Math.round(gateLoop.percentile(99) / 1e6),
       max: Math.round(gateLoop.max / 1e6),
     },
     renderCache: last.renderCache,
     requests: last.requests,
+    // The frames the feed's subscriber received over the steady phase, how
+    // its stream ended (null while open), and the feed's own summary lines.
+    feed:
+      FEED === null
+        ? null
+        : {
+            world: FEED,
+            frames: feedFramesSteady,
+            fps: +(feedFramesSteady / (STEADY_MS / 1000)).toFixed(1),
+            end: feedEnd,
+            closed: feedClosed,
+          },
+    loadAverage: os.loadavg().map((x) => +x.toFixed(2)),
   };
   return { checks, facts };
 }
 
-// What the daemon itself took over every render it finished in the window.
-// It writes its log off its event loop, in order, through one writer, so the
-// window's last events have landed once any line after the window has.
-async function daemonRenders(
-  since: number,
-  until: number,
-): Promise<Record<"took" | "queued" | "waited", Record<string, number>>> {
+// The feed's summary line in `state`, once the daemon has written it.
+async function feedSummary(state: "closed"): Promise<string> {
+  for (const giveUp = Date.now() + 10_000; Date.now() < giveUp; ) {
+    const line = logLines(logPath(env)).find(
+      (l) => l.includes("] feed sid=") && l.includes(` ${state} `),
+    );
+    if (line !== undefined) return line;
+    await sleep(200);
+  }
+  throw new Error(`the feed wrote no ${state} summary within 10 s`);
+}
+
+// [LAW:verifiable-goals] A feed holds its pace when the rate it drew at over
+// its life, as its summary states it, is the pace it set.
+function feedPaceCheck(summary: string): Check {
+  const field = (name: string): number =>
+    Number(new RegExp(` ${name}=([\\d.]+)`).exec(summary)?.[1]);
+  const achieved = field("achieved");
+  const pace = field("pace");
+  return {
+    name: "feed holds its pace",
+    pass: Number.isFinite(achieved) && achieved >= FEED_PACE_SHARE * pace,
+    detail: `drew ${field("drawn")} frames in ${field("for")} s at ${achieved} fps of ${pace} (at least ${FEED_PACE_SHARE * 100}%)`,
+  };
+}
+
+// The events the daemon wrote in the window: what it took over every render
+// and click it finished there. It writes its log off its event loop, in
+// order, through one writer, so the window's last events have landed once any
+// line after the window has.
+async function daemonEvents(since: number, until: number): Promise<string[]> {
   const log = logPath(env);
   const stamped = (): Array<{ at: number; line: string }> =>
     logLines(log).map((line) => ({ at: Date.parse(line.slice(0, 24)), line }));
@@ -830,26 +1164,38 @@ async function daemonRenders(
     await sleep(200);
     all = stamped();
   }
-  const lines = all
+  return all
     .filter(
-      ({ at, line }) =>
-        at >= since &&
-        at <= until &&
-        line.includes("] render ") &&
-        line.includes(" took="),
+      ({ at, line }) => at >= since && at <= until && line.includes(" took="),
     )
     .map(({ line }) => line);
-  const spread = (field: string): Record<string, number> => {
-    const ms = lines
-      .map((l) => Number(new RegExp(` ${field}=(\\d+)ms`).exec(l)?.[1]))
-      .filter(Number.isFinite)
-      .sort((a, b) => a - b);
-    return { n: ms.length, p99: pct(ms, 0.99), max: ms.at(-1) ?? 0 };
-  };
+}
+
+// One field's spread over the window's events of one kind, in ms.
+interface Spread {
+  readonly n: number;
+  readonly p50: number;
+  readonly p90: number;
+  readonly p99: number;
+  readonly max: number;
+}
+
+function spreadOf(
+  lines: readonly string[],
+  event: "render" | "click",
+  field: string,
+): Spread {
+  const ms = lines
+    .filter((l) => l.includes(`] ${event} `))
+    .map((l) => Number(new RegExp(` ${field}=(\\d+)ms`).exec(l)?.[1]))
+    .filter(Number.isFinite)
+    .sort((a, b) => a - b);
   return {
-    took: spread("took"),
-    queued: spread("queued"),
-    waited: spread("waited"),
+    n: ms.length,
+    p50: pct(ms, 0.5),
+    p90: pct(ms, 0.9),
+    p99: pct(ms, 0.99),
+    max: ms.at(-1) ?? 0,
   };
 }
 

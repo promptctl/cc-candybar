@@ -29,7 +29,7 @@ import type { DslConfig, VariableDecl } from "../config/dsl-types";
 import { placementId, walkNodes } from "../config/dsl-types";
 import { presetNames, presetRoot } from "../config/presets";
 import { rootNode } from "../config/root";
-import { templateReads } from "../config/dsl-loader";
+import { templateReads, variableRead } from "../config/loader/refs";
 import type { CompiledConfig } from "../dsl/render";
 import type {
   DebugSnapshot,
@@ -289,36 +289,20 @@ function orderedSegmentNames(config: DslConfig): readonly string[] {
 // potentially-referenced name regardless of current state — which is
 // what an operator debugging "what does this segment depend on" needs.
 //
-// This function adds the introspection-specific layers on top of the raw
-// extraction:
-//   1. Intersect with the declared-name set (only report names that exist).
-//   2. Ancestor credit: a candidate `.session.id.extra` resolves to the
-//      declared `session.id` if `extra` is not declared.
-//   3. Sort the result for deterministic snapshots.
+// Each read lands on the declarations it reaches through the loader's one
+// resolver (`variableRead`): `.session.id.extra` credits the declared
+// `session.id`, and a namespace read `.git` credits every `git.*`. Sorted for
+// deterministic snapshots.
 export function extractReferencedVars(
   template: string,
   helpers: Readonly<Record<string, string>>,
   declared: ReadonlySet<string>,
 ): readonly string[] {
-  const found = new Set<string>();
-  for (const candidate of templateReads(template, helpers).keys()) {
-    if (declared.has(candidate)) {
-      found.add(candidate);
-      continue;
-    }
-    // Drop trailing segments until we hit a declared name. Handles
-    // `.session.id.something_extra` where only `session.id` is declared —
-    // still credit it as a reference to `session.id`.
-    const parts = candidate.split(".");
-    while (parts.length > 1) {
-      parts.pop();
-      const prefix = parts.join(".");
-      if (declared.has(prefix)) {
-        found.add(prefix);
-        break;
-      }
-    }
-  }
+  const found = new Set(
+    [...templateReads(template, helpers).keys()].flatMap((path) =>
+      variableRead(path, declared),
+    ),
+  );
   return Array.from(found).sort();
 }
 

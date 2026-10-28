@@ -129,8 +129,7 @@ export const STILL = drew("still");
 export const CARRIED = { kind: "ok", value: ["carried"] } as const;
 
 // The edge's reads of the outside data segments need and of the session's
-// transcript: the checkout's gh logged in, memento installed, the transcript
-// all JSON.
+// transcript: the checkout's gh logged in, the transcript all JSON.
 // The managed settings directory every test edge reads: test/setup.ts's, a
 // directory that holds no policy.
 export const noManagedSettings = (): Pick<DoctorEdge, "managedSettingsDir"> => ({
@@ -139,7 +138,7 @@ export const noManagedSettings = (): Pick<DoctorEdge, "managedSettingsDir"> => (
 
 export const healthyDataEdge = (): Pick<
   DoctorEdge,
-  "forge" | "memento" | "transcript"
+  "forge" | "transcript"
 > => ({
   transcript: () => ({
     kind: "ok",
@@ -149,7 +148,6 @@ export const healthyDataEdge = (): Pick<
     kind: "ok",
     value: { cli: "gh", host: "github.com", status: "ready" },
   }),
-  memento: () => ({ kind: "ok", value: "/plugins/memento" }),
 });
 
 // One session's statusline frame as daemon-stats reports it: session
@@ -229,7 +227,6 @@ export const HEALTHY_FACTS: DoctorFacts = {
   data: {
     pullRequests: { kind: "unneeded" },
     rateLimits: { kind: "unneeded" },
-    memento: { kind: "unneeded" },
   },
   transcripts: {
     kind: "ok",

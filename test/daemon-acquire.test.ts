@@ -3,7 +3,9 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 
+import { isConnectable } from "./helpers/daemon-wire";
 import { spawnTestDaemon } from "./helpers/spawn-test-daemon";
+import { until } from "./helpers/until";
 
 // Each test creates its own isolated state root. CC_CANDYBAR_SOCKET isolates
 // the socket so concurrent tests don't race on the same bind path; XDG_STATE_HOME
@@ -1058,6 +1060,18 @@ describe("daemon startup (bind-based singleton)", () => {
 // level (shutdownObserved). No new production code was needed for that half;
 // this file adds nothing that duplicates it.
 describe("spawn backoff under sustained non-convergence (brandon-daemon-lifecycle-gad.3)", () => {
+  // [LAW:one-source-of-truth] The cooldown's age is Date.now() minus the
+  // record's mtime. Under jest's fake timers Date.now() is the test's clock,
+  // but the filesystem stamps a freshly written record with the real clock,
+  // so every granted record is pinned to the fake clock and the age is
+  // exactly the simulated elapsed time. Backdating the mtime against real
+  // time instead leaves wall-clock as a second clock, and on a loaded
+  // machine it pushes the age across a window boundary a tick early.
+  const pinCooldownRecordToNow = (recordPath: string): void => {
+    const now = new Date();
+    fs.utimesSync(recordPath, now, now);
+  };
+
   test("consecutive kicks that never converge widen the cooldown and cap it — never worse than the fixed 3s floor, decaying toward 1/min", async () => {
     await withTempState(async () => {
       jest.resetModules();
@@ -1074,25 +1088,21 @@ describe("spawn backoff under sustained non-convergence (brandon-daemon-lifecycl
       };
 
       const grantedAtSimulatedMs: number[] = [];
-      let simulatedElapsedMs = 0;
-      // Simulate 10 minutes of continuous statusline-tick pressure, probing
-      // once per simulated second (the natural render cadence).
-      for (let tick = 0; tick < 600; tick++) {
-        obtainDaemonKick({ spawn });
-        if (spawned > grantedAtSimulatedMs.length) {
-          grantedAtSimulatedMs.push(simulatedElapsedMs);
+      jest.useFakeTimers();
+      try {
+        const t0 = Date.now();
+        // Simulate 10 minutes of continuous statusline-tick pressure, probing
+        // once per simulated second (the natural render cadence).
+        for (let tick = 0; tick < 600; tick++) {
+          obtainDaemonKick({ spawn });
+          if (spawned > grantedAtSimulatedMs.length) {
+            grantedAtSimulatedMs.push(Date.now() - t0);
+            pinCooldownRecordToNow(spawnCooldownPath());
+          }
+          jest.advanceTimersByTime(1_000);
         }
-        simulatedElapsedMs += 1_000;
-        // Advance the cooldown file's mtime into the past by the same amount
-        // real wall-clock time would have — the file's age is the only clock
-        // claimSpawnCooldown reads.
-        try {
-          const st = fs.statSync(spawnCooldownPath());
-          const backdated = new Date(st.mtimeMs - 1_000);
-          fs.utimesSync(spawnCooldownPath(), backdated, backdated);
-        } catch {
-          // No cooldown file yet on the very first iteration before any grant.
-        }
+      } finally {
+        jest.useRealTimers();
       }
 
       // Fixed-rate floor: one spawn every 3s for 600s ≈ 200 spawns. The
@@ -1131,27 +1141,34 @@ describe("spawn backoff under sustained non-convergence (brandon-daemon-lifecycl
         return true;
       };
 
-      // Three consecutive non-converging spawns — streak climbs to 3, so the
-      // required window is SPAWN_COOLDOWN_MS * 8.
-      for (let i = 0; i < 3; i++) {
+      jest.useFakeTimers();
+      try {
+        // Three consecutive non-converging spawns — streak climbs to 3, so the
+        // required window is SPAWN_COOLDOWN_MS * 8. Each wait between kicks
+        // is longer than any window the loop reaches (streak ≤ 2, so at most
+        // SPAWN_COOLDOWN_MS * 4), so every kick lands.
+        for (let i = 0; i < 3; i++) {
+          if (i > 0) jest.advanceTimersByTime(SPAWN_COOLDOWN_MS * 8 + 1_000);
+          obtainDaemonKick({ spawn });
+          pinCooldownRecordToNow(spawnCooldownPath());
+        }
+        expect(spawned).toBe(3);
+
+        // Just past the BASE window and well inside the backed-off one: the
+        // kick is refused, which is what makes the grant after the reset
+        // evidence of the reset rather than of the clock.
+        jest.advanceTimersByTime(SPAWN_COOLDOWN_MS + 500);
         obtainDaemonKick({ spawn });
-        const st = fs.statSync(spawnCooldownPath());
-        const backdated = new Date(st.mtimeMs - SPAWN_COOLDOWN_MS * 8 - 1_000);
-        fs.utimesSync(spawnCooldownPath(), backdated, backdated);
+        expect(spawned).toBe(3);
+
+        // The daemon FINALLY binds — server.ts's onListening calls this.
+        resetSpawnBackoff();
+
+        obtainDaemonKick({ spawn });
+        expect(spawned).toBe(4);
+      } finally {
+        jest.useRealTimers();
       }
-      expect(spawned).toBe(3);
-
-      // The daemon FINALLY binds — server.ts's onListening calls this.
-      resetSpawnBackoff();
-
-      // Backdate by just past the BASE window (not the backed-off one) —
-      // if the reset didn't take effect, this kick would still be denied.
-      const st = fs.statSync(spawnCooldownPath());
-      const backdated = new Date(st.mtimeMs - SPAWN_COOLDOWN_MS - 500);
-      fs.utimesSync(spawnCooldownPath(), backdated, backdated);
-
-      obtainDaemonKick({ spawn });
-      expect(spawned).toBe(4);
     });
   });
 });
@@ -1193,16 +1210,18 @@ describe("resetSpawnBackoff wiring into onListening (integration: real daemon)",
 
     const { child: daemon, killTree, release } = await spawnTestDaemon(env);
     try {
-      const connectable = await waitForBackoffWireConnectable(sockPath, 8000);
-      expect(connectable).toBe(true);
+      await until(() => isConnectable(sockPath), "the daemon's socket", 8000);
       // [LAW:no-ambient-temporal-coupling] Kernel connectability begins when
       // listen(2) completes — BEFORE the daemon's 'listening' JS callback
       // (where resetSpawnBackoff runs) has executed. An instant existsSync
       // here races that callback and loses on slow CI runners. The contract
       // is "a serving daemon promptly clears the streak", so await exactly
       // that: the file's disappearance, within a bounded budget.
-      const cleared = await waitForBackoffWireGone(backoffPath, 8000);
-      expect(cleared).toBe(true);
+      await until(
+        () => !fs.existsSync(backoffPath),
+        "the backoff wire's removal",
+        8000,
+      );
     } finally {
       killTree();
       await new Promise<void>((resolve) => {
@@ -1223,35 +1242,3 @@ describe("resetSpawnBackoff wiring into onListening (integration: real daemon)",
     }
   });
 });
-
-async function waitForBackoffWireConnectable(
-  sockPath: string,
-  budgetMs: number,
-): Promise<boolean> {
-  const deadline = Date.now() + budgetMs;
-  while (Date.now() < deadline) {
-    const ok = await new Promise<boolean>((resolve) => {
-      const s = net.connect(sockPath);
-      s.once("connect", () => {
-        s.destroy();
-        resolve(true);
-      });
-      s.once("error", () => resolve(false));
-    });
-    if (ok) return true;
-    await new Promise((r) => setTimeout(r, 25).unref());
-  }
-  return false;
-}
-
-async function waitForBackoffWireGone(
-  filePath: string,
-  budgetMs: number,
-): Promise<boolean> {
-  const deadline = Date.now() + budgetMs;
-  while (Date.now() < deadline) {
-    if (!fs.existsSync(filePath)) return true;
-    await new Promise((r) => setTimeout(r, 25).unref());
-  }
-  return false;
-}

@@ -14,6 +14,7 @@
 // checkConfig for the verdict, and the same effectivePresetName/presetGlobals
 // the daemon calls. No parallel rig.
 
+import { TEST_SIGNER } from "./helpers/link-signer";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import fs from "node:fs";
 import os from "node:os";
@@ -196,7 +197,7 @@ describe("preset compile diagnostics name the authored path", () => {
         "",
         new SessionState(),
       );
-      registerDslConfig(config, registry, { cwd: process.cwd() });
+      registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     } catch (e) {
       return (e as Error).message;
     }
@@ -275,7 +276,7 @@ describe("preset selection — the arrangement the bar renders", () => {
     globals: { palette: '${THEME}', padding: 1 },
     variables: {
       'session.id': { kind: 'input', path: 'session_id', default: '' },
-      preset: { kind: 'state', key: 'preset', default: '${PRESET_FLOOR}' },
+      presetPick: { kind: 'state', key: 'preset', default: '${PRESET_FLOOR}' },
     },
     actions: { applyPreset: { set: 'preset', from: 'presets' } },
     segments: {
@@ -295,7 +296,7 @@ describe("preset selection — the arrangement the bar renders", () => {
     const sessionState = new SessionState();
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "", sessionState);
-    const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
+    const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     // A click is gated by the config its session renders; record the render so
     // the click below resolves this config and passes through its real gate.
     recordRender(sessionState, SID);
