@@ -10,6 +10,7 @@ import {
   PARENT_PID_ENV,
 } from "../src/daemon/parent-watchdog";
 import { spawnTestDaemon } from "./helpers/spawn-test-daemon";
+import { until } from "./helpers/until";
 
 // [LAW:verifiable-goals] The contract under test is the leak's negation: a
 // daemon spawned by a transient process MUST die when that process dies, even
@@ -196,11 +197,7 @@ describe("daemon dies with its spawner (integration)", () => {
 
     // The socket file appears inside bind(), which runs strictly AFTER the
     // watchdog is armed — so its existence guarantees the watchdog is live.
-    const readyDeadline = Date.now() + 5000;
-    while (!fs.existsSync(sockPath) && Date.now() < readyDeadline) {
-      await new Promise((r) => setTimeout(r, 25));
-    }
-    expect(fs.existsSync(sockPath)).toBe(true);
+    await until(() => fs.existsSync(sockPath), "the daemon's socket");
     expect(daemon.exitCode).toBeNull();
 
     const daemonExited = new Promise<void>((resolve) =>

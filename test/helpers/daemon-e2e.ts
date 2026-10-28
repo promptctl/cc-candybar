@@ -235,7 +235,7 @@ export async function click(sockPath: string, url: string): Promise<void> {
 // there is no happens-after signal to await (brandon-testing-82q tracks
 // publishing one). Asserting on a single post-click render therefore encodes
 // a bet on watcher latency; re-rendering until the expected state appears
-// encodes the actual contract ("the write becomes visible"), and the timeout
+// encodes the actual contract ("the write becomes visible"), and the budget
 // makes a broken write fail with the last render in hand rather than hanging.
 export async function renderUntil(
   sockPath: string,
@@ -245,15 +245,16 @@ export async function renderUntil(
   what: string,
   timeoutMs = 5_000,
 ): Promise<string> {
-  const deadline = Date.now() + timeoutMs;
   let last = "";
-  do {
-    last = await render(sockPath, sessionId, projectDir);
-    if (accepts(last)) return last;
-  } while (Date.now() < deadline);
-  throw new Error(
-    `daemon never rendered ${what} within ${timeoutMs}ms; last render was:\n${last}`,
+  await until(
+    async () => accepts((last = await render(sockPath, sessionId, projectDir))),
+    () =>
+      last
+        ? `a render of ${what}; last render was:\n${last}`
+        : `a render of ${what}; no render answered within the budget`,
+    timeoutMs,
   );
+  return last;
 }
 
 // [LAW:single-enforcer] THE search over rendered affordances: decode each

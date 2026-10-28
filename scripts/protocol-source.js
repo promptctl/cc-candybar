@@ -1,6 +1,7 @@
 // How scripts/check-protocol.mjs reads a runtime's source text: what counts
-// as code, and how a table of code-point ranges reads as one set. Pure
-// text → value functions, so test/protocol-source.test.ts pins them directly.
+// as code, and how each kind of mirrored fact reads as one canonical string.
+// Pure text → value functions, so test/protocol-source.test.ts pins them
+// directly.
 
 // Source with its comment lines removed, so an anchor read through it matches
 // no commented-out copy of what it anchors. A comment line is one whose first
@@ -10,6 +11,101 @@
 // code: what goes is only what opens a line as a comment.
 export function uncommented(text) {
   return text.replace(/^[ \t]*(?:\/\/[^\n]*|\/\*[\s\S]*?\*\/)/gm, "");
+}
+
+// A reader takes a runtime's source and returns the canonical string for one
+// mirrored fact, or null when its anchor is missing. [LAW:single-enforcer]
+// Every reader is built here, over the source less its comment lines: no
+// reader can take a value from a line that opens as a comment, so a region a
+// reader slices is delimited by code, never by a comment. A comment trailing
+// code on the same line stays (see uncommented): a member it spells is read,
+// and fails its row loudly as a phantom. Readers stay that broad on purpose —
+// one narrowed to a line shape reads nothing from a layout it did not
+// foresee, and a member missing from both sides passes silently.
+const overCode =
+  (read) =>
+  (source, ...anchors) =>
+    read(uncommented(source), ...anchors);
+
+// Integer constant, allowing a product expression like `16 * 1024 * 1024`.
+export const num = overCode((code, regex) => {
+  const m = code.match(regex);
+  if (!m) return null;
+  // Strip digit-group separators (`3_000`) so both runtimes' idiomatic
+  // spellings compare by value, not by punctuation.
+  const factors = m[1].split("*").map((s) => s.trim().replace(/_/g, ""));
+  if (!factors.every((f) => /^\d+$/.test(f))) return null;
+  return String(factors.reduce((acc, f) => acc * Number(f), 1));
+});
+
+// String-literal constant. Decodes \xNN, \uNNNN (TS) and \u{...} (Rust)
+// escapes so the comparison is on the actual bytes, not the spelling.
+export const lit = overCode((code, regex) => {
+  const m = code.match(regex);
+  if (!m) return null;
+  const decoded = m[1]
+    .replace(/\\x([0-9a-fA-F]{2})/g, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/\\u\{([0-9a-fA-F]+)\}/g, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/\\u([0-9a-fA-F]{4})/g, (_, h) => String.fromCodePoint(parseInt(h, 16)));
+  return JSON.stringify(decoded);
+});
+
+// Set of string members: collect every capture of a global regex within the
+// slice matched by blockRegex, canonicalized as a sorted joined list. A member
+// is its capture groups joined by a fixed separator, so a multi-group regex
+// compares values, never the formatting between them.
+export const memberSet = overCode((code, blockRegex, memberRegex) => {
+  const block = code.match(blockRegex);
+  if (!block) return null;
+  const members = [...block[0].matchAll(memberRegex)].map((m) => m.slice(1).join("="));
+  if (members.length === 0) return null;
+  return [...new Set(members)].sort().join(", ");
+});
+
+// Set of code points in the range table blockRegex's group 1 captures; see
+// rangeSpans for how a table reads.
+export const codeRanges = overCode((code, blockRegex) => {
+  const block = code.match(blockRegex);
+  return block ? rangeSpans(block[1]) : null;
+});
+
+// Structural marker: every pattern must appear in code; the canonical value is
+// the shared description, so both sides agree iff both still use the primitive.
+export const markers = overCode((code, patterns, description) =>
+  patterns.every((p) => p.test(code)) ? description : null,
+);
+
+// Set algebra over canonical member strings, for a row whose value is one
+// side's set less, or within, another's. [LAW:one-source-of-truth] The
+// canonical form (sorted, ", "-joined) is read and split here only. A null
+// operand is a missing anchor, and stays null through the operation.
+// The empty set is the empty string, which split would read as one unnamed
+// member.
+const members = (set) => new Set(set === "" ? [] : set.split(", "));
+const keep = (set, test) =>
+  set
+    .split(", ")
+    .filter((m) => test(m))
+    .join(", ");
+
+// The members of `set` that none of `others` name.
+export function without(set, ...others) {
+  if (set === null || others.some((o) => o === null)) return null;
+  const named = new Set(others.flatMap((o) => [...members(o)]));
+  return keep(set, (m) => !named.has(m));
+}
+
+// Every member any of `sets` names.
+export function union(...sets) {
+  if (sets.some((s) => s === null)) return null;
+  return [...new Set(sets.flatMap((s) => [...members(s)]))].sort().join(", ");
+}
+
+// The members of `set` that `other` also names.
+export function within(set, other) {
+  if (set === null || other === null) return null;
+  const named = members(other);
+  return keep(set, (m) => named.has(m));
 }
 
 // The set of code points in the body of a table of inclusive range pairs,

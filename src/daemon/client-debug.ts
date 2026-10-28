@@ -5,9 +5,9 @@
 // this is its client binding, the mirror of client-stats.ts. Like daemon-stats,
 // it does NOT spawn a daemon: introspecting a dead daemon is meaningless.
 
-import process from "node:process";
 import { describeFailure, requestOutcome } from "./client-transport";
 import type { RoundTripBudgets, RoundTripOutcome } from "./client-transport";
+import type { CliPlan } from "../cli-plan";
 import type {
   DebugSnapshot,
   DebugWhat,
@@ -22,24 +22,33 @@ import type { DslConfig } from "../config/dsl-types";
 const BUDGETS: RoundTripBudgets = { connectMs: 200, budgetMs: 500 };
 
 // `cc-candybar <vars|segments|config> [--json]` — `what` selects the projection.
-export async function runDebug(
+export async function debugCommandPlan(
   what: DebugWhat,
   args: readonly string[],
-): Promise<void> {
-  const wantJson = args.includes("--json");
+): Promise<CliPlan> {
+  return debugPlan(what, await fetchDebug(what), args.includes("--json"));
+}
 
-  const outcome = await fetchDebug(what);
+// [LAW:dataflow-not-control-flow] The outcome → (streams, exit-code) fold.
+export function debugPlan(
+  what: DebugWhat,
+  outcome: RoundTripOutcome<DebugSnapshot>,
+  wantJson: boolean,
+): CliPlan {
   if (outcome.kind !== "ok") {
-    process.stderr.write(`${what}: ${describeFailure(outcome)}\n`);
-    process.exit(1);
+    return {
+      stdout: "",
+      stderr: `${what}: ${describeFailure(outcome)}\n`,
+      code: 1,
+    };
   }
-
-  if (wantJson) {
-    process.stdout.write(JSON.stringify(outcome.value, null, 2) + "\n");
-    return;
-  }
-
-  process.stdout.write(formatDebug(outcome.value));
+  return {
+    stdout: wantJson
+      ? JSON.stringify(outcome.value, null, 2) + "\n"
+      : formatDebug(outcome.value),
+    stderr: "",
+    code: 0,
+  };
 }
 
 function fetchDebug(what: DebugWhat): Promise<RoundTripOutcome<DebugSnapshot>> {

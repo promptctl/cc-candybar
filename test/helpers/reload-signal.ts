@@ -3,6 +3,7 @@ import type {
   RenderCacheObservers,
 } from "../../src/daemon/cache/render";
 import { DEBOUNCE_MS } from "../../src/daemon/cache/watchers";
+import { holdsWithin, nameOf, type Condition, type What } from "./until";
 
 // [LAW:no-ambient-temporal-coupling] A happens-after gate over RenderCache
 // reloads, in place of polling an entry's fields against a wall-clock
@@ -43,16 +44,13 @@ export class ReloadSignal {
   // success or failure alike; the caller asserts on the outcome it wanted.
   // `mutate` must leave the disk in the same final state on every call AND
   // emit an fs event on every call (a plain overwrite does; a bare unlink
-  // does not — pair it with a rewrite).
+  // does not — pair it with a rewrite). One subscription, taken before the
+  // first mutation, is fact 1 above: every mutation leaves the same state, so
+  // a reload that began after any of them observed it. The condition is the
+  // reload's own promise, so the wait ends on the event, not on a poll tick.
   async after(entry: ReloadedEntry, mutate: () => void): Promise<void> {
-    for (let round = 1; round <= MAX_ROUNDS; round++) {
-      const reloaded = this.next(entry);
-      mutate();
-      if (await arrivesWithin(reloaded, RETRY_MS)) return;
-    }
-    throw new Error(
-      `no reload observed for ${entry.projectDir} after ${MAX_ROUNDS} mutations (${MAX_ROUNDS * RETRY_MS} ms)`,
-    );
+    const reloaded = this.next(entry).then(() => true);
+    await untilHeard(mutate, () => reloaded, `a reload of ${entry.projectDir}`);
   }
 
   private next(entry: ReloadedEntry): Promise<void> {
@@ -68,16 +66,37 @@ export class ReloadSignal {
 // a retry must at least outwait the debounce, or every round re-mutates before
 // the first one could possibly have reloaded.
 const RETRY_MS = 4 * DEBOUNCE_MS;
-// 64 fresh chances (~13 s at the cadence above): far above any delivery
-// latency seen, below Jest's 30 s testTimeout so the failure is this error.
-const MAX_ROUNDS = 64;
+// 48 fresh chances: far above any delivery latency seen, and ~12 s at the
+// cadence above (a round is the cadence plus at most one poll tick), so two
+// waits in sequence still end below Jest's 30 s testTimeout and the failure
+// is this error, with the test's cleanup run.
+const MAX_ROUNDS = 48;
 
-function arrivesWithin(signal: Promise<void>, ms: number): Promise<boolean> {
-  return new Promise((resolve) => {
-    const timer = setTimeout(() => resolve(false), ms);
-    void signal.then(() => {
-      clearTimeout(timer);
-      resolve(true);
-    });
-  });
+// [LAW:single-enforcer] THE retry-until-heard loop for a watch: `mutate` is
+// applied at once and then once per round until `heard` holds within the
+// round's cadence, or the wait fails by name after MAX_ROUNDS rounds.
+// [LAW:one-source-of-truth] The cadence and the chances are the constants
+// above, so every watch a test proves live gets the same budget. Only a
+// delivered event proves a watch live, so `after` is this loop with "heard"
+// being a reload, and a test that drives a watch itself passes the condition
+// it reads. `mutate` must emit an fs event on every call (a rename over the
+// path or a plain overwrite does), and `heard` is read until it holds, so a
+// condition over something a later event can move (a count) must be
+// at-least, never exactly. [LAW:no-silent-failure] A throw from `mutate`
+// lands on the caller's own await, not in a detached timer callback, and a
+// probe still in flight when its round expires is not swallowed: the loop
+// goes on, so its late throw stays unhandled and loud rather than hidden
+// under a later round's pass.
+export async function untilHeard(
+  mutate: () => void,
+  heard: Condition,
+  what: What,
+): Promise<void> {
+  for (let round = 1; round <= MAX_ROUNDS; round++) {
+    mutate();
+    if ((await holdsWithin(heard, RETRY_MS)).kind === "held") return;
+  }
+  throw new Error(
+    `${nameOf(what)} did not hold after ${MAX_ROUNDS} mutations ${RETRY_MS} ms apart`,
+  );
 }

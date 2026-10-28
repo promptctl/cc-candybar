@@ -273,6 +273,52 @@ enum BadInput {
     Msg(String),
 }
 
+// The client hints, set on the request (mirrors ClientHints in
+// src/daemon/protocol.ts). [LAW:single-enforcer] Client hints are captured
+// here, in the client's live shell context, then trusted by the daemon. The
+// daemon's own env reflects whichever shell launched it — not the active
+// terminal, and not whether THIS session arrived over SSH.
+// [LAW:one-source-of-truth] scripts/check-protocol.mjs diffs the key set this
+// function sets against that interface — add a hint in both runtimes at once.
+//
+// termCols / termRows are CONDITIONAL: absence is the honest "could not
+// determine". ssh is UNCONDITIONAL: our own env is a total answer, so we
+// always state it, which reserves absence to mean "client too old to
+// report" and keeps that distinguishable from a genuine local session.
+fn client_hints(request: &mut serde_json::Value, cwd: &std::path::Path) {
+    let (term_cols, term_rows) = detect_term_extents();
+    if let Some(cols) = term_cols {
+        request["termCols"] = serde_json::Value::from(cols);
+    }
+    if let Some(rows) = term_rows {
+        request["termRows"] = serde_json::Value::from(rows);
+    }
+    request["ssh"] = serde_json::Value::from(detect_ssh());
+    // tmux is UNCONDITIONAL too: `null` is the affirmative "not in tmux", an
+    // object is the tmux facts — absence stays "client too old to report".
+    request["tmux"] = detect_tmux();
+    // configEnv is CONDITIONAL like termCols: an unset-or-empty variable is
+    // the affirmative "no override", spelled as an absent field.
+    if let Some(path) = detect_config_env(cwd) {
+        request["configEnv"] = serde_json::Value::from(path);
+    }
+    // claudeConfigDir is CONDITIONAL too: unset-or-empty is the default
+    // Claude Code directory, spelled as an absent field.
+    if let Some(dir) = detect_claude_config_dir(cwd) {
+        request["claudeConfigDir"] = serde_json::Value::from(dir);
+    }
+    // terminalEnv is UNCONDITIONAL like tmux: always an object, a variable the
+    // environment does not set left out of it — absence stays "client too old
+    // to report".
+    request["terminalEnv"] = detect_terminal_env();
+    // client is CONDITIONAL only on the binary naming its own path: one that
+    // cannot (current_exe failed) can spawn no daemon either, and its absence
+    // reads as the doctor's "unreported" — never a guessed bundle.
+    if let Some(client) = client_hint(dist_index_path(), RUST_SOURCE) {
+        request["client"] = client;
+    }
+}
+
 fn render(argv: &[String], hook_data: &serde_json::Value) -> RenderOutcome {
     let deadline = Instant::now() + TOTAL_BUDGET;
     // [LAW:one-source-of-truth] The same instant on the wall clock, stated on
@@ -287,17 +333,6 @@ fn render(argv: &[String], hook_data: &serde_json::Value) -> RenderOutcome {
         Ok(p) => p.to_string_lossy().into_owned(),
         Err(e) => return RenderOutcome::Transient(TransientCause::Io(e.to_string())),
     };
-    // [LAW:single-enforcer] Client hints are captured here, in the client's
-    // live shell context, then trusted by the daemon. The daemon's own env
-    // reflects whichever shell launched it — not the active terminal, and not
-    // whether THIS session arrived over SSH.
-    let (term_cols, term_rows) = detect_term_extents();
-    let ssh = detect_ssh();
-    let tmux = detect_tmux();
-    let config_env = detect_config_env(std::path::Path::new(&cwd));
-    let claude_config_dir = detect_claude_config_dir(std::path::Path::new(&cwd));
-    let terminal_env = detect_terminal_env();
-
     let mut request = serde_json::json!({
         "v": PROTOCOL_VERSION,
         "kind": "render",
@@ -308,45 +343,7 @@ fn render(argv: &[String], hook_data: &serde_json::Value) -> RenderOutcome {
     if let Some(ms) = deadline_epoch_ms {
         request["deadline"] = serde_json::Value::from(ms);
     }
-    // --- client hints (mirrors ClientHints in src/daemon/protocol.ts) ---
-    // [LAW:one-source-of-truth] scripts/check-protocol.mjs diffs the key set in
-    // this block against that interface — add a hint in both runtimes at once.
-    //
-    // termCols / termRows are CONDITIONAL: absence is the honest "could not
-    // determine". ssh is UNCONDITIONAL: our own env is a total answer, so we
-    // always state it, which reserves absence to mean "client too old to
-    // report" and keeps that distinguishable from a genuine local session.
-    if let Some(cols) = term_cols {
-        request["termCols"] = serde_json::Value::from(cols);
-    }
-    if let Some(rows) = term_rows {
-        request["termRows"] = serde_json::Value::from(rows);
-    }
-    request["ssh"] = serde_json::Value::from(ssh);
-    // tmux is UNCONDITIONAL too: `null` is the affirmative "not in tmux", an
-    // object is the tmux facts — absence stays "client too old to report".
-    request["tmux"] = tmux;
-    // configEnv is CONDITIONAL like termCols: an unset-or-empty variable is
-    // the affirmative "no override", spelled as an absent field.
-    if let Some(path) = config_env {
-        request["configEnv"] = serde_json::Value::from(path);
-    }
-    // claudeConfigDir is CONDITIONAL too: unset-or-empty is the default
-    // Claude Code directory, spelled as an absent field.
-    if let Some(dir) = claude_config_dir {
-        request["claudeConfigDir"] = serde_json::Value::from(dir);
-    }
-    // terminalEnv is UNCONDITIONAL like tmux: always an object, a variable the
-    // environment does not set left out of it — absence stays "client too old
-    // to report".
-    request["terminalEnv"] = terminal_env;
-    // client is CONDITIONAL only on the binary naming its own path: one that
-    // cannot (current_exe failed) can spawn no daemon either, and its absence
-    // reads as the doctor's "unreported" — never a guessed bundle.
-    if let Some(client) = client_hint(dist_index_path(), RUST_SOURCE) {
-        request["client"] = client;
-    }
-    // --- end client hints ---
+    client_hints(&mut request, std::path::Path::new(&cwd));
     let body = match serde_json::to_vec(&request) {
         Ok(b) => b,
         // Encoding our own request failed — this is a programming error

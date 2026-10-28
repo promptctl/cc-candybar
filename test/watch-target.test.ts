@@ -28,9 +28,11 @@ describe("nearestWatchTarget", () => {
 
   it("walks past a regular file in an ancestor position", () => {
     fs.writeFileSync(path.join(root, "conf"), "");
-    expect(nearestWatchTarget(path.join(root, "conf", "sub", "data"))).toEqual(
-      { dir: root, name: "conf", leaf: false },
-    );
+    expect(nearestWatchTarget(path.join(root, "conf", "sub", "data"))).toEqual({
+      dir: root,
+      name: "conf",
+      leaf: false,
+    });
   });
 
   it("names one directory through a symlink whether or not the leaf exists", () => {

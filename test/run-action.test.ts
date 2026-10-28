@@ -50,6 +50,7 @@ import { clickUrl, effectsOf, testVerbContext } from "./helpers/click";
 import { TEST_LINK_KEY, TEST_SIGNER } from "./helpers/link-signer";
 import { viewFacts } from "./helpers/view-facts";
 import { until } from "./helpers/until";
+import { untilHeard } from "./helpers/reload-signal";
 
 const SOURCE = `{ scope: "session", refresh: { watch: true }, read: { file: { json: true } } }`;
 const STATUS = "plugins.p.status";
@@ -246,17 +247,16 @@ async function writeUntilRead(
     const r = view.lanes().sources.get(name)?.current();
     return r?.kind === "ok" && JSON.stringify(r.value) === JSON.stringify(doc);
   };
-  for (let round = 0; round < 100 && !read(); round++) {
-    fs.mkdirSync(folder, { recursive: true });
-    const tmp = path.join(folder, `.${sid}.${round}.tmp`);
-    fs.writeFileSync(tmp, JSON.stringify(doc));
-    fs.renameSync(tmp, path.join(folder, `${sid}.json`));
-    const deadline = Date.now() + 200;
-    while (Date.now() < deadline && !read()) {
-      await new Promise((r) => setTimeout(r, 10));
-    }
-  }
-  if (!read()) throw new Error(`${name}'s write was never read`);
+  await untilHeard(
+    () => {
+      fs.mkdirSync(folder, { recursive: true });
+      const tmp = path.join(folder, `.${sid}.tmp`);
+      fs.writeFileSync(tmp, JSON.stringify(doc));
+      fs.renameSync(tmp, path.join(folder, `${sid}.json`));
+    },
+    read,
+    `${name}'s write being read`,
+  );
 }
 
 // The run link a draw made: its URL and what it carries.

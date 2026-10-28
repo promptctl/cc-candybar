@@ -17,11 +17,19 @@ import { ABSENT, failed, ok, type Outcome } from "./outcome";
 import { debug } from "./logger";
 
 // [LAW:single-enforcer] The one per-render freshness probe: a SYNC single-file
-// stat's stamp ("" when the file is absent or unreadable). Sync by design — the
-// gate must resolve before deciding whether to read, and a sync stat consumes
-// no gate slot (the async `readAppended`/`readTail` bulk reads are what the
-// limiter bounds). Both the usage store and the metrics provider key their
-// incremental fold off this one helper so the ENOENT→"" policy lives in one place.
+// stat's stamp. Sync by design — the gate must resolve before deciding whether
+// to read, and a sync stat consumes no gate slot (the async
+// `readAppended`/`readTail` bulk reads are what the limiter bounds).
+//
+// A stamp is only ever a reason to SKIP a read: a consumer that holds a fold at
+// this stamp has the file as it stands. "" is no stamp — no path, or a stat
+// that failed for ANY reason — so a consumer never takes "" as a hit. With a
+// path, it reads; with none, what it serves is its own call (the usage store
+// keeps its last record, since nothing has replaced it). Whether a file that
+// IS named is absent (ENOENT) or unreadable (EACCES, EIO) is the read's call,
+// not the stat's: `readAppended`/`readTail` answer `absent` or `failed` with
+// the reason. A stat that classified the same error would be a second
+// enforcer of its read's rule.
 export function statStamp(filePath: string | undefined): string {
   if (!filePath) return "";
   try {

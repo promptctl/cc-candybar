@@ -160,14 +160,12 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
     const statusClick = `cc-candybar://${VERB_TMUX_STATUS_CLICK}/${at}`;
     // Refused until the status line has drawn its first frame, which runs
     // nothing; the first click it answers runs the link.
-    const deadline = Date.now() + 5_000;
-    for (;;) {
+    let refusal = "";
+    await until(async () => {
       const resp = await sendClick(sockPath, statusClick);
-      if (resp.ok) break;
-      if (Date.now() >= deadline)
-        throw new Error(`the status-line click was refused: ${resp.error}`);
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    }
+      refusal = resp.ok ? "" : resp.error;
+      return resp.ok;
+    }, () => `the status-line click's acceptance (refused: ${refusal})`);
     const ran = (): string[] =>
       logLines(env).filter(
         (l) =>

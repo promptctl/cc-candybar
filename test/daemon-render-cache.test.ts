@@ -10,9 +10,11 @@ import {
   chmodSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   realpathSync,
   renameSync,
   rmSync,
+  symlinkSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -40,15 +42,21 @@ import type { Holds } from "../src/utils/holds";
 import { stateGate } from "../src/daemon/verbs/state-validators";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import type { DaemonLogger } from "../src/utils/logger";
+import { writeAtomic } from "../src/utils/atomic-write";
 import { ReloadSignal } from "./helpers/reload-signal";
-import { walkNodes, type LayoutNode } from "../src/config/dsl-types";
+import {
+  walkNodes,
+  type LayoutNode,
+  type LiteralVarDecl,
+} from "../src/config/dsl-types";
 import { rootNode, rootOf } from "../src/config/root";
 import { SETTINGS_NS } from "../src/config/loader/reserved-namespace";
 import { PRESET_FLOOR, presetRoot } from "../src/config/presets";
 import { viewFacts } from "./helpers/view-facts";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { answerRepo } from "./helpers/repo-approval";
-import { repoConfigsPath } from "../src/daemon/repo-configs";
+import { repoConfigsDir, repoConfigsPath } from "../src/daemon/repo-configs";
+import { stateDir } from "../src/daemon/paths";
 
 // Flatten a layout tree to its segment names, in pre-order — the post-`root`
 // equivalent of the old `config.layout.flatMap(r => r.segments)`.
@@ -433,6 +441,184 @@ describe("RenderCache", () => {
     }
   });
 
+  // A dotfiles-managed config: the project's file is a link into a sibling
+  // directory. A write lands in the target (writeAtomic follows the link), so
+  // the target's directory is where the change appears, and a watch on the
+  // file's inode is deaf after the first rename replaces it.
+  describe("a symlinked config", () => {
+    const configWith = (value: string): string =>
+      JSON.stringify({
+        globals: {},
+        variables: { x: { kind: "literal", value } },
+        segments: {
+          only: { template: " {{ .x }} ", bg: "surface", fg: "foreground" },
+        },
+        root: { h: ["only"] },
+      });
+    const literalX = (entry: CacheEntry): LiteralVarDecl["value"] => {
+      const x = entry.state.config.variables.x;
+      if (x?.kind !== "literal") throw new Error(`x is ${JSON.stringify(x)}`);
+      return x.value;
+    };
+
+    // The bind events for `dir`'s entry: one per target set the entry has
+    // heard through, each naming the directories it hears.
+    const bound = (lines: readonly string[], dir: string): string[] =>
+      lines.filter((l) =>
+        l.startsWith(`config watch bound projectDir=${dir} cwd=${dir} dirs=`),
+      );
+    const hears = (line: string, dir: string): boolean =>
+      / dirs=(.*) refused=\d+$/
+        .exec(line)![1]!
+        .split(",")
+        .includes(realpathSync(dir));
+
+    test("a write-then-rename of the link's target reloads, every time", async () => {
+      const { dir, cleanup } = mkConfigDir();
+      const lines: string[] = [];
+      const { cache, cleanups, reloads } = makeCache(undefined, (_l, msg) =>
+        lines.push(msg),
+      );
+      try {
+        mkdirSync(join(dir, "dotfiles"));
+        const target = join(dir, "dotfiles", "candybar.json5");
+        writeFileSync(target, configWith("first"));
+        const link = join(dir, ".cc-candybar.json5");
+        symlinkSync(target, link);
+        const entry = cache.getOrCreate(dir, dir, undefined);
+        expect(entry.configLayers).toEqual([link]);
+        expect(literalX(entry)).toBe("first");
+        // Bound once, hearing the target's directory as well as the link's.
+        expect(bound(lines, dir)).toHaveLength(1);
+        expect(hears(bound(lines, dir)[0]!, join(dir, "dotfiles"))).toBe(true);
+        expect(hears(bound(lines, dir)[0]!, dir)).toBe(true);
+
+        // A menu click: the daemon writes through the link.
+        await reloads.after(entry, () =>
+          writeAtomic(link, configWith("second")),
+        );
+        expect(literalX(entry)).toBe("second");
+        // A hand edit in the dotfiles tree, and the second rename, which an
+        // inode watch never hears.
+        await reloads.after(entry, () =>
+          writeAtomic(target, configWith("third")),
+        );
+        expect(literalX(entry)).toBe("third");
+        // The target set did not move, so nothing rebound.
+        expect(bound(lines, dir)).toHaveLength(1);
+      } finally {
+        for (const fn of cleanups) fn();
+        cleanup();
+      }
+    });
+
+    test("re-pointing the link reloads from the new target", async () => {
+      const { dir, cleanup } = mkConfigDir();
+      const lines: string[] = [];
+      const { cache, cleanups, reloads } = makeCache(undefined, (_l, msg) =>
+        lines.push(msg),
+      );
+      try {
+        mkdirSync(join(dir, "dotfiles"));
+        const first = join(dir, "dotfiles", "first.json5");
+        const second = join(dir, "dotfiles", "second.json5");
+        writeFileSync(first, configWith("first"));
+        writeFileSync(second, configWith("second"));
+        const link = join(dir, ".cc-candybar.json5");
+        symlinkSync(first, link);
+        const entry = cache.getOrCreate(dir, dir, undefined);
+        expect(literalX(entry)).toBe("first");
+
+        // `ln -sfn`: a new link renamed over the old entry.
+        await reloads.after(entry, () => {
+          symlinkSync(second, `${link}.tmp`);
+          renameSync(`${link}.tmp`, link);
+        });
+        expect(literalX(entry)).toBe("second");
+        // The target set moved (first.json5 → second.json5 in dotfiles), so
+        // the entry rebound once, still hearing the dotfiles directory.
+        expect(bound(lines, dir)).toHaveLength(2);
+        expect(hears(bound(lines, dir)[1]!, join(dir, "dotfiles"))).toBe(true);
+        // The rebind follows: a write to the new target reloads too.
+        await reloads.after(entry, () =>
+          writeAtomic(second, configWith("third")),
+        );
+        expect(literalX(entry)).toBe("third");
+      } finally {
+        for (const fn of cleanups) fn();
+        cleanup();
+      }
+    });
+
+    // A profile switch: the config links to a `current` link that picks a
+    // profile. Re-pointing the middle link changes what the config reads, and
+    // it appears only in the middle link's own directory.
+    test("re-pointing a middle link of a chain reloads from the new target", async () => {
+      const { dir, cleanup } = mkConfigDir();
+      const lines: string[] = [];
+      const { cache, cleanups, reloads } = makeCache(undefined, (_l, msg) =>
+        lines.push(msg),
+      );
+      try {
+        mkdirSync(join(dir, "dotfiles", "profiles"), { recursive: true });
+        const work = join(dir, "dotfiles", "profiles", "work.json5");
+        const home = join(dir, "dotfiles", "profiles", "home.json5");
+        writeFileSync(work, configWith("work"));
+        writeFileSync(home, configWith("home"));
+        const current = join(dir, "dotfiles", "current.json5");
+        symlinkSync(work, current);
+        const link = join(dir, ".cc-candybar.json5");
+        symlinkSync(current, link);
+        const entry = cache.getOrCreate(dir, dir, undefined);
+        expect(literalX(entry)).toBe("work");
+        // Every hop's directory is heard.
+        expect(hears(bound(lines, dir)[0]!, dir)).toBe(true);
+        expect(hears(bound(lines, dir)[0]!, join(dir, "dotfiles"))).toBe(true);
+        expect(
+          hears(bound(lines, dir)[0]!, join(dir, "dotfiles", "profiles")),
+        ).toBe(true);
+
+        await reloads.after(entry, () => {
+          symlinkSync(home, `${current}.tmp`);
+          renameSync(`${current}.tmp`, current);
+        });
+        expect(literalX(entry)).toBe("home");
+        await reloads.after(entry, () => writeAtomic(link, configWith("away")));
+        expect(literalX(entry)).toBe("away");
+        expect(readFileSync(home, "utf8")).toBe(configWith("away"));
+      } finally {
+        for (const fn of cleanups) fn();
+        cleanup();
+      }
+    });
+
+    // A candidate the kernel refuses to follow is watched as spelled, and the
+    // bind says so by path: a config that hears less than it should is loud.
+    test("a link loop in a candidate is reported as unresolved", () => {
+      const { dir, cleanup } = mkConfigDir();
+      const lines: string[] = [];
+      const { cache, cleanups } = makeCache(undefined, (level, msg) =>
+        lines.push(`${level} ${msg}`),
+      );
+      try {
+        const link = join(dir, ".cc-candybar.json5");
+        symlinkSync(`${link}.other`, link);
+        symlinkSync(link, `${link}.other`);
+        cache.getOrCreate(dir, dir, undefined);
+        expect(
+          lines.filter((l) =>
+            l.startsWith(
+              `warn config watch unresolved projectDir=${dir} path=${link} reason=`,
+            ),
+          ),
+        ).toHaveLength(1);
+      } finally {
+        for (const fn of cleanups) fn();
+        cleanup();
+      }
+    });
+  });
+
   test("a `{ rows }` fragment merges over the bundled rows and authors the floor preset's root", async () => {
     const { dir, cleanup } = mkConfigDir();
     const { cache, cleanups, reloads } = makeCache();
@@ -702,6 +888,19 @@ describe("RenderCache", () => {
     } finally {
       for (const fn of cleanups) fn();
       cleanup();
+    }
+  });
+
+  // The book's folder, never the state directory, whose log writes on every
+  // request.
+  test("the cache watches the answers' folder, not the state directory", () => {
+    const { cleanups, watchers } = makeCache();
+    try {
+      const dirs = watchers.watchedDirs();
+      expect(dirs).toContain(realpathSync.native(repoConfigsDir()));
+      expect(dirs).not.toContain(realpathSync.native(stateDir()));
+    } finally {
+      for (const fn of cleanups) fn();
     }
   });
 

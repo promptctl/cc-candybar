@@ -1,3 +1,63 @@
+## [1.160.11](https://github.com/promptctl/cc-candybar/compare/v1.160.10...v1.160.11) (2026-10-28)
+
+### Bug Fixes
+
+* **daemon:** the repository answers get a watched folder of their own; nothing watches the state folder the log writes to (brandon-unfiled-3248.0m61) ([#471](https://github.com/promptctl/cc-candybar/issues/471)) ([df480cf](https://github.com/promptctl/cc-candybar/commit/df480cf2a6da9871f1973a200f9b7fda112be13d))
+
+## [1.160.10](https://github.com/promptctl/cc-candybar/compare/v1.160.9...v1.160.10) (2026-10-28)
+
+### Bug Fixes
+
+* **daemon:** a repo's watch is keyed on the directories it bound, and every pass rebinds it (brandon-unfiled-3248.gf07) ([#467](https://github.com/promptctl/cc-candybar/issues/467)) ([88e0cea](https://github.com/promptctl/cc-candybar/commit/88e0ceab9133a88fcba17a013ba1572b50db6441))
+
+## [1.160.9](https://github.com/promptctl/cc-candybar/compare/v1.160.8...v1.160.9) (2026-10-27)
+
+### Bug Fixes
+
+* **daemon:** a repo's watch covers the whole refs tree of its common git dir (brandon-unfiled-3248.1x2q) ([#466](https://github.com/promptctl/cc-candybar/issues/466)) ([bf5cee0](https://github.com/promptctl/cc-candybar/commit/bf5cee06d09c18f6e48cb289d3e03d442c4896b5))
+
+## [1.160.8](https://github.com/promptctl/cc-candybar/compare/v1.160.7...v1.160.8) (2026-10-27)
+
+### Bug Fixes
+
+* **cli:** a one-shot command exits once its streams have taken the plan (brandon-unfiled-3248.6di0) ([#465](https://github.com/promptctl/cc-candybar/issues/465)) ([80c6c54](https://github.com/promptctl/cc-candybar/commit/80c6c54a5f214b6f1eb182b540656eec3770c234))
+
+## [1.160.7](https://github.com/promptctl/cc-candybar/compare/v1.160.6...v1.160.7) (2026-10-27)
+
+### Bug Fixes
+
+* **test:** the backoff test owns the one clock the cooldown reads (brandon-unfiled-3248.9h9) ([#464](https://github.com/promptctl/cc-candybar/issues/464)) ([7c7eb31](https://github.com/promptctl/cc-candybar/commit/7c7eb3123c7a361191f1bc79aa403b1190e3a07c))
+
+## [1.160.6](https://github.com/promptctl/cc-candybar/compare/v1.160.5...v1.160.6) (2026-10-27)
+
+### Bug Fixes
+
+* **doctor:** an empty config argument to doctor and check is no override, as the bar reads it (brandon-unfiled-3248.e3r) ([#463](https://github.com/promptctl/cc-candybar/issues/463)) ([a560eb1](https://github.com/promptctl/cc-candybar/commit/a560eb1cab9d992ac084c05c7a75465835666512))
+
+## [1.160.5](https://github.com/promptctl/cc-candybar/compare/v1.160.4...v1.160.5) (2026-10-27)
+
+### Bug Fixes
+
+* **protocol:** check:protocol reads every anchor from code (brandon-unfiled-3248.x4t) ([#462](https://github.com/promptctl/cc-candybar/issues/462)) ([963899b](https://github.com/promptctl/cc-candybar/commit/963899b090b5471adf79b14c85343af1dc49c8ae))
+
+## [1.160.4](https://github.com/promptctl/cc-candybar/compare/v1.160.3...v1.160.4) (2026-10-27)
+
+### Bug Fixes
+
+* **test:** every poll names what never held, and one helper keeps real time under a fake clock (brandon-unfiled-3248.bqq) ([#460](https://github.com/promptctl/cc-candybar/issues/460)) ([e95f6d4](https://github.com/promptctl/cc-candybar/commit/e95f6d40b74430e3ed0c815b584dfff41b0c08f8))
+
+## [1.160.3](https://github.com/promptctl/cc-candybar/compare/v1.160.2...v1.160.3) (2026-10-27)
+
+### Bug Fixes
+
+* **config:** a symlinked config is watched where a write to it lands, and no file is watched by its inode (brandon-unfiled-3248.wyc) ([#459](https://github.com/promptctl/cc-candybar/issues/459)) ([68a0bd7](https://github.com/promptctl/cc-candybar/commit/68a0bd744efdcc5c3292272895a34a54e880db58))
+
+## [1.160.2](https://github.com/promptctl/cc-candybar/compare/v1.160.1...v1.160.2) (2026-10-27)
+
+### Bug Fixes
+
+* a plugin folder whose watch has stopped delivering reads as stalled, not frozen (candybar-plugin-api-4rls.yaw) ([#458](https://github.com/promptctl/cc-candybar/issues/458)) ([a907bfe](https://github.com/promptctl/cc-candybar/commit/a907bfebbff8f2f4db0c2c8fd1b9b00c3479fa39))
+
 ## [1.160.1](https://github.com/promptctl/cc-candybar/compare/v1.160.0...v1.160.1) (2026-10-27)
 
 ### Bug Fixes

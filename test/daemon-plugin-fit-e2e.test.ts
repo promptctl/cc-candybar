@@ -20,6 +20,8 @@ import {
 } from "./helpers/spawn-isolated-daemon";
 import { loggedWhen } from "./helpers/daemon-log";
 import { effectsOf } from "./helpers/click";
+import { until } from "./helpers/until";
+import { untilHeard } from "./helpers/reload-signal";
 import { VERB_RUN, type EvaluatedRun } from "../src/click/wire";
 
 jest.setTimeout(30_000);
@@ -158,14 +160,13 @@ describe("another program's plugin, as such a program ships it, on a real daemon
     });
 
   const renderUntil = async (shows: (bar: string) => boolean, what: string): Promise<string> => {
-    let bar = "";
-    for (let round = 0; round < 100; round++) {
-      const raw = await renderRaw();
-      bar = stripAnsi(raw);
-      if (shows(bar)) return raw;
-      await new Promise((r) => setTimeout(r, 100));
-    }
-    throw new Error(`the bar never showed ${what}; last:\n${bar}`);
+    let raw = "";
+    await until(
+      async () => shows(stripAnsi((raw = await renderRaw()))),
+      () => `the bar showing ${what}; last:\n${stripAnsi(raw)}`,
+      10_000,
+    );
+    return raw;
   };
 
   const storage = (): string => path.join(fs.realpathSync(folder), "session");
@@ -175,14 +176,18 @@ describe("another program's plugin, as such a program ships it, on a real daemon
   // it opens).
   const programWrites = async (doc: object, shows: string): Promise<void> => {
     let bar = "";
-    for (let round = 0; round < 50 && !bar.includes(shows); round++) {
-      const tmp = path.join(storage(), `.${SESSION}.tmp`);
-      fs.writeFileSync(tmp, JSON.stringify(doc));
-      fs.renameSync(tmp, path.join(storage(), `${SESSION}.json`));
-      await new Promise((r) => setTimeout(r, 100));
-      bar = stripAnsi(await renderRaw());
-    }
-    expect(bar).toContain(shows);
+    await untilHeard(
+      () => {
+        const tmp = path.join(storage(), `.${SESSION}.tmp`);
+        fs.writeFileSync(tmp, JSON.stringify(doc));
+        fs.renameSync(tmp, path.join(storage(), `${SESSION}.json`));
+      },
+      async () => {
+        bar = stripAnsi(await renderRaw());
+        return bar.includes(shows);
+      },
+      () => `the bar showing ${shows}; last:\n${bar}`,
+    );
   };
 
   const calls = (): Call[] =>

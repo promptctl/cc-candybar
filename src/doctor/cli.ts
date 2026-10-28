@@ -17,7 +17,7 @@ import { linkSignerFromKeyFile } from "../daemon/link-key.js";
 import { openSync } from "node:fs";
 import process from "node:process";
 import { WriteStream } from "node:tty";
-import type { CliPlan } from "../check.js";
+import type { CliPlan } from "../cli-plan.js";
 import { DOOR_GLYPH } from "../config/disclosure.js";
 import {
   barsOf,
@@ -60,8 +60,7 @@ import {
   productionHandlerProbeEdge,
   type HandlerProbeEdge,
 } from "./handler-probe.js";
-import { detectConfigEnv } from "../config-hint.js";
-import { explicitConfigPath } from "../utils/user-path.js";
+import { cliConfigTarget } from "../config-hint.js";
 import {
   fallbackState,
   loadFromDisk,
@@ -208,7 +207,7 @@ export function widthOf(
 }
 
 // [LAW:effects-at-boundaries] The whole CLI as data: facts in, (streams,
-// exit code) out. `runDoctorCli` performs it; a test reads it.
+// exit code) out. `doctorCommandPlan` hands it to the one delivery; a test reads it.
 export async function doctorPlan(
   edge: DoctorEdge,
   handler: HandlerProbeEdge,
@@ -246,10 +245,7 @@ export async function doctorPlan(
           cwd,
         ),
         cwd,
-        configFile:
-          explicitConfigPath(cwd, configFile) ??
-          detectConfigEnv(env, cwd) ??
-          null,
+        configFile: cliConfigTarget(configFile, env, cwd) ?? null,
       },
       // No session: the bar a session started here opens on.
       () => null,
@@ -306,28 +302,56 @@ function commandTerminal(): { readonly columns?: number } {
   return { columns };
 }
 
+// [LAW:parse-dont-validate] argv crosses one checkpoint and becomes a request,
+// as `check`'s does, so the usage contract is a value a test reads rather
+// than an exit from the middle of the command.
+export type DoctorArgs =
+  | { readonly kind: "run"; readonly configFile: string | undefined }
+  | { readonly kind: "usage"; readonly message: string };
+
+const USAGE = "Usage: cc-candybar doctor [config-file]\n";
+
+export function parseDoctorArgs(args: readonly string[]): DoctorArgs {
+  // [LAW:no-silent-failure] An option is named as one wherever it stands,
+  // as `check` names its unknown options — read as a file, or refused as a
+  // second file, it would be reported as something it is not.
+  const options = args.filter((a) => a.startsWith("--"));
+  const paths = args.filter((a) => !a.startsWith("--"));
+  if (options.length > 0) {
+    return {
+      kind: "usage",
+      message: `doctor: unknown option ${options.join(" ")}\n${USAGE}`,
+    };
+  }
+  // [LAW:single-enforcer] Arity only. What the path means — including that
+  // an empty one, a statusline's `--config "$CFG"` with CFG unset, is no
+  // override — is `cliConfigTarget`'s to say inside `doctorPlan`, the one
+  // reading `check` runs under and the bar renders under.
+  if (paths.length > 1) {
+    return {
+      kind: "usage",
+      message: `doctor: expected at most one config file\n${USAGE}`,
+    };
+  }
+  return { kind: "run", configFile: paths[0] };
+}
+
 // `cc-candybar doctor [config-file]` — the argv binding. The one argument is
 // the config file a session's statusline command names with `--config`, so
 // the CLI can check the file that session's bar renders.
-export async function runDoctorCli(args: readonly string[]): Promise<never> {
-  // An empty string is a mis-expanded shell variable, never "no argument".
-  if (args.length > 1 || args[0] === "" || args[0]?.startsWith("--")) {
-    process.stderr.write(
-      "doctor: expected at most one config file\nUsage: cc-candybar doctor [config-file]\n",
-    );
-    process.exit(EXIT_USAGE);
-  }
-  const cwd = process.cwd();
-  const plan = await doctorPlan(
-    productionEdge(loadConfigOnce),
-    productionHandlerProbeEdge(),
-    askDaemon,
-    process.env,
-    cwd,
-    commandTerminal,
-    args[0],
-  );
-  process.stdout.write(plan.stdout);
-  process.stderr.write(plan.stderr);
-  process.exit(plan.code);
+export async function doctorCommandPlan(
+  args: readonly string[],
+): Promise<CliPlan> {
+  const parsed = parseDoctorArgs(args);
+  return parsed.kind === "usage"
+    ? { stdout: "", stderr: parsed.message, code: EXIT_USAGE }
+    : await doctorPlan(
+        productionEdge(loadConfigOnce),
+        productionHandlerProbeEdge(),
+        askDaemon,
+        process.env,
+        process.cwd(),
+        commandTerminal,
+        parsed.configFile,
+      );
 }

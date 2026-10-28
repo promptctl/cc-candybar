@@ -1243,8 +1243,7 @@ export class GitService {
   // worktree's `git stash list` reports the MAIN repo's stashes, and the reflog
   // backing them exists ONLY under the common dir. Reading the per-worktree
   // gitdir would answer zero stashes for every worktree, silently.
-  private resolveCommonGitDir(workingDir: string): string {
-    const gitDir = this.resolveGitDir(workingDir);
+  resolveCommonGitDir(gitDir: string): string {
     try {
       // A linked worktree's gitdir holds `commondir`, one line, a path relative
       // to it (`../..` in the ordinary layout).
@@ -1274,7 +1273,7 @@ export class GitService {
   // microtask: its former `Promise.all` partner is the only spawn left.
   private getStashCount(workingDir: string): Outcome<number> {
     const reflog = path.join(
-      this.resolveCommonGitDir(workingDir),
+      this.resolveCommonGitDir(this.resolveGitDir(workingDir)),
       "logs",
       "refs",
       "stash",
@@ -1341,7 +1340,7 @@ export class GitService {
   // than freezing an answer.
   async getRemotesAsync(workingDir: string): Promise<Outcome<GitRemote[]>> {
     const configPath = path.join(
-      this.resolveCommonGitDir(workingDir),
+      this.resolveCommonGitDir(this.resolveGitDir(workingDir)),
       "config",
     );
     const identity = configIdentity(configPath);

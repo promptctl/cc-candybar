@@ -211,19 +211,16 @@ async function answered(
 // fs.watch goes live after it returns, with no ready signal: the program
 // writes again (the same bytes, so the final state is one) until the bar shows
 // what it wrote.
-async function writeUntilShown(
+function writeUntilShown(
   write: () => void,
   shown: () => boolean,
   what: string,
 ): Promise<void> {
-  for (let round = 0; round < 100 && !shown(); round++) {
+  return until(() => {
+    if (shown()) return true;
     write();
-    const deadline = Date.now() + 200;
-    while (Date.now() < deadline && !shown()) {
-      await new Promise((r) => setTimeout(r, 10));
-    }
-  }
-  if (!shown()) throw new Error(`${what} never showed`);
+    return false;
+  }, `${what} showing`);
 }
 
 describe("a source's declaration", () => {
