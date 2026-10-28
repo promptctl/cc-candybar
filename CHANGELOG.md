@@ -1,3 +1,9 @@
+## [1.161.3](https://github.com/promptctl/cc-candybar/compare/v1.161.2...v1.161.3) (2026-10-28)
+
+### Bug Fixes
+
+* **menu:** a menu's items are the theme's shades of its header's colour; the trial looks sit in 🧪 trials (brandon-menus-sjhy.6xa) ([#451](https://github.com/promptctl/cc-candybar/issues/451)) ([f2eecdf](https://github.com/promptctl/cc-candybar/commit/f2eecdf3cb2dbd4e1b9ff2837047e9aeadae7d7f))
+
 ## [1.161.2](https://github.com/promptctl/cc-candybar/compare/v1.161.1...v1.161.2) (2026-10-28)
 
 ### Bug Fixes
