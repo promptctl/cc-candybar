@@ -1,4 +1,5 @@
 node_modules/
 dist/
 src/data.json
-src/bars.json.gz.b64
+public/bars/
+public/detail/

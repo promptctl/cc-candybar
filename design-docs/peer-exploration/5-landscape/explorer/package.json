@@ -3,8 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "data": "python3 -I ../tools/export.py src/data.json",
-    "build": "vite build && cp dist/index.html ../landscape.html",
+    "data": "python3 -I ../tools/export.py src/data.json public",
+    "build": "vite build",
+    "site": "sh build.sh",
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "dev": "vite"
   },

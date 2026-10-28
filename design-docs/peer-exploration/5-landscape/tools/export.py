@@ -1,6 +1,7 @@
 """Export every project read, both runs, as the explorer app's data.json (argv[1] is its path),
-and the captured bars as a gzip file beside it, bars.json.gz.b64, base64 so the page can inline
-it: the bars are most of the page's bytes and compress twentyfold.
+and the captured bars as script bundles in the directory argv[2]: b000.js, b001.js, ... Each holds
+ten projects' bars, gzipped and base64 so the bundle is a single script. The page loads the bundle
+of a project when that project is selected.
 
 Data comes from the same files build.py reads; the novelty patterns are taken from novel.py's PAT
 literal so an item lands in the same group the README counts.
@@ -8,7 +9,8 @@ literal so an item lands in the same group the README counts.
 import ast, base64, gzip, json, glob, os, re, sys
 from collections import defaultdict
 
-DEST = sys.argv[1]
+DEST, PUBLIC = sys.argv[1], sys.argv[2]
+BARS_DIR, DETAIL_DIR = os.path.join(PUBLIC, 'bars'), os.path.join(PUBLIC, 'detail')
 meas = json.load(open('/tmp/ccland/t2/measure.json'))
 meta = json.load(open('/tmp/ccland/meta.json'))
 fnames = json.load(open('/tmp/ccland/famnames.json'))
@@ -65,7 +67,8 @@ runs = [('/tmp/ccland', True, list(enumerate(top, 1))),
         ('/tmp/ccland/t2', False, [(len(top) + i, q) for i, q in enumerate(everyone, 1) if q['slug'] in picked])]
 
 projects = []
-bars = {}  # repo -> frames by width, written beside data.json
+bars = {}  # repo -> frames by width, written as bundles
+details = {}  # repo -> the long fields the project view shows, written as bundles
 for run, is_top, ranked in runs:
     rows, motive, fams, novel = load(run)
     for rank, q in ranked:
@@ -93,16 +96,36 @@ for run, is_top, ranked in runs:
                 if cap['frames'][w] and cap['frames'][w] != last:
                     frames[w] = last = cap['frames'][w]
             bars[q['repo']] = frames
-        if not boring:  # boring rows carry no drill-down, so their long fields are left out of the page
-            p.update({'created': (md.get('created') or '')[:10], 'size': r.get('size', ''),
-                      'sources': r.get('data sources', ''), 'lineage': r.get('lineage', ''),
-                      'why': r.get('why it exists', ''), 'beyond': r.get('beyond baseline', ''),
-                      'summary': r.get('summary', ''), 'fork': q.get('parent') or ''})
+        if not boring:  # boring rows carry no drill-down, so they have no detail bundle
+            details[q['repo']] = {'created': (md.get('created') or '')[:10], 'size': r.get('size', ''),
+                                  'sources': r.get('data sources', ''), 'lineage': r.get('lineage', ''),
+                                  'why': r.get('why it exists', ''), 'beyond': r.get('beyond baseline', ''),
+                                  'summary': r.get('summary', ''), 'fork': q.get('parent') or ''}
         projects.append(p)
 
 groups = [name for name, _ in PAT] + ['unsorted']
-packed = gzip.compress(json.dumps(bars, separators=(',', ':')).encode(), 9)
-open(os.path.join(os.path.dirname(DEST), 'bars.json.gz.b64'), 'w').write(base64.b64encode(packed).decode())
+# [LAW:one-source-of-truth] A project's bundle is decided here and recorded on the project; the page only follows the number.
+# A bundle is a script, so the page loads it from disk with no server. It is loaded when its project is selected.
+def bundle(kind, folder, by_repo, per):
+    """Write by_repo's values into script bundles of `per` projects each; returns repo -> bundle number."""
+    where = {repo: i // per for i, repo in enumerate(by_repo)}
+    groups = defaultdict(dict)
+    for repo, value in by_repo.items():
+        groups[where[repo]][repo] = value
+    for old in glob.glob(os.path.join(folder, 'b*.js')):
+        os.remove(old)
+    os.makedirs(folder, exist_ok=True)
+    for n, group in groups.items():
+        packed = base64.b64encode(gzip.compress(json.dumps(group, separators=(',', ':')).encode(), 9)).decode()
+        open(os.path.join(folder, 'b%03d.js' % n), 'w').write('window.ccBundle("%s",%d,"%s")' % (kind, n, packed))
+    return where
+
+
+bar_at = bundle('bars', BARS_DIR, bars, 10)
+detail_at = bundle('detail', DETAIL_DIR, details, 50)
+for p in projects:
+    p['bar'] = bar_at.get(p['repo'])
+    p['detail'] = detail_at.get(p['repo'])
 data = {'projects': projects, 'families': families, 'fnames': fnames, 'motives': motives, 'groups': groups}
 json.dump(data, open(DEST, 'w'), separators=(',', ':'))
 print(len(projects), 'projects;', sum(p['boring'] for p in projects), 'just print fields;',

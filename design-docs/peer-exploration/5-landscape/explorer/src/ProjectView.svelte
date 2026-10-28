@@ -1,10 +1,24 @@
 <script lang="ts">
   import { cloneLinks, families, motiveName, projectById } from './model';
   import { traitOfGroup } from './traits';
+  import { bundle } from './bundles';
+  import type { RawProject } from './types';
   import Ref from './Ref.svelte';
 
   let { id, go }: { id: string; go: (id: string) => void } = $props();
-  const p = $derived(projectById.get(id)!);
+  const base = $derived(projectById.get(id)!);
+  // The long text arrives with its bundle, once this project is opened; until then the page shows
+  // what the graph already has.
+  let detail = $state<Partial<RawProject>>({});
+  $effect(() => {
+    const b = base;
+    detail = {};
+    if (b.detail === null) return;
+    let current = true;
+    bundle<Partial<RawProject>>('detail', b.detail).then((g) => { if (current) detail = g[b.repo] ?? {}; });
+    return () => { current = false; };
+  });
+  const p = $derived({ ...base, ...detail });
   // The reader wrote "beyond baseline" as `item (file:symbol); item (file:symbol)`; split at the
   // semicolons that sit outside parentheses.
   const beyond = $derived((p.beyond ?? '').split(/;\s+(?![^(]*\))/).filter(Boolean));

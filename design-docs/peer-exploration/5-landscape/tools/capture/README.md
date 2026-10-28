@@ -44,7 +44,7 @@ python3 -I resolve.py /tmp/ccland/tiers.json /tmp/ccland/src /tmp/ccland/entries
 python3 -I deps.py    /tmp/ccland/entries.json /tmp/ccland/src /tmp/ccland/deps.json
 python3 -I resolve.py /tmp/ccland/tiers.json /tmp/ccland/src /tmp/ccland/entries.json safe
 python3 -I run.py     /tmp/ccland/entries.json /private/tmp/ccland/fixture /tmp/ccland/src /private/tmp/ccland/runs /tmp/ccland/captures.json
-cd ../../explorer && pnpm data && pnpm build && node smoke.mjs
+sh ../../explorer/build.sh && (cd ../../explorer && node smoke.mjs)
 ```
 
 `run.py` with slugs after the output path runs only those and writes only those, so a partial

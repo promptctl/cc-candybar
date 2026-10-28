@@ -5,7 +5,7 @@
   import Bar from './Bar.svelte';
   import { liveTraits, projectById, projects } from './model';
   import { clock, SPEEDS } from './clock.svelte';
-  import { bars as barsLoading } from './bars';
+  import { bundle } from './bundles';
   import type { Bars } from './types';
 
   const explorer = new Explorer();
@@ -29,13 +29,16 @@
     addEventListener('hashchange', fromHash);
     return () => removeEventListener('hashchange', fromHash);
   });
-  // The selected project's captured bar, drawn where a statusline lives: along the bottom.
-  // The frames inflate once after the page is up; until then no bar is drawn.
-  let allBars = $state<Record<string, Bars> | null>(null);
-  barsLoading.then((b) => (allBars = b));
-  const bars = $derived.by(() => {
+  // The selected project's captured bar, drawn where a statusline lives: along the bottom. Only its
+  // bundle is fetched, and only once it is selected; until it arrives no bar is drawn.
+  let bars = $state<Bars | null>(null);
+  $effect(() => {
     const p = explorer.selected === null ? undefined : projectById.get(explorer.selected);
-    return p && allBars ? (allBars[p.repo] ?? null) : null;
+    bars = null;
+    if (!p || p.bar === null) return;
+    let current = true;
+    bundle<Bars>('bars', p.bar).then((g) => { if (current) bars = g[p.repo] ?? null; });
+    return () => { current = false; };
   });
   let panelOpen = $state(true);
   let textScale = $state(1);

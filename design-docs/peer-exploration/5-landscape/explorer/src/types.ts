@@ -24,6 +24,9 @@ export interface RawProject {
   // captured: ran in the sandbox and printed something. The frames themselves live in bars.ts.
   tier: 'skip' | 'unlocated' | 'safe' | 'review' | 'risky';
   live: boolean;
+  // The bundles holding this project's frames and its long text, or null when it has neither.
+  bar: number | null;
+  detail: number | null;
   created?: string;
   size?: string;
   sources?: string;

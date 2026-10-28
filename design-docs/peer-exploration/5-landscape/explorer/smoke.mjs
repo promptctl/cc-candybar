@@ -3,7 +3,7 @@
 import { chromium } from 'playwright-core';
 import { fileURLToPath } from 'node:url';
 
-const page_ = fileURLToPath(new URL('../landscape.html', import.meta.url));
+const page_ = fileURLToPath(new URL('../site/index.html', import.meta.url));
 const browser = await chromium.launch({ channel: 'chrome' });
 const page = await browser.newPage({ viewport: { width: 1600, height: 950 } });
 const errors = [];
