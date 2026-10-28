@@ -46,26 +46,33 @@ export function repoConfigsPath(dir: string = stateDir()): string {
   return path.join(repoConfigsDir(dir), REPO_CONFIGS_FILE);
 }
 
-// A book kept directly in the state directory moves into the book's folder
-// the first time anything reads the answers, so no answer is lost to the move.
-function adoptStateDirBook(dir: string): void {
-  const loose = path.join(dir, REPO_CONFIGS_FILE);
-  if (!fs.existsSync(loose) || fs.existsSync(repoConfigsPath(dir))) return;
+// The book's folder, made before the daemon watches it, so the watch never
+// falls back to the state directory. A book kept directly in the state
+// directory moves in, so no answer is lost to the move. The move links
+// before it unlinks, so it never replaces a book already in the folder, and
+// a book another process moved first is no failure. What is left over is
+// returned, to be said.
+export function prepareRepoConfigs(dir: string = stateDir()): string | null {
   fs.mkdirSync(repoConfigsDir(dir), { recursive: true });
-  fs.renameSync(loose, repoConfigsPath(dir));
+  const loose = path.join(dir, REPO_CONFIGS_FILE);
+  try {
+    fs.linkSync(loose, repoConfigsPath(dir));
+  } catch (e) {
+    const code = (e as NodeJS.ErrnoException).code;
+    if (code === "ENOENT") return null;
+    if (code === "EEXIST") {
+      return `${loose} is not read: the answers are kept in ${repoConfigsPath(dir)}`;
+    }
+    throw e;
+  }
+  fs.unlinkSync(loose);
+  return null;
 }
 
 export const repoConfigs = (
   dir: string = stateDir(),
-): StateFile<RepoConfigBook> => {
-  adoptStateDirBook(dir);
-  return stateFile(
-    repoConfigsDir(dir),
-    REPO_CONFIGS_FILE,
-    {},
-    parseRepoConfigBook,
-  );
-};
+): StateFile<RepoConfigBook> =>
+  stateFile(repoConfigsDir(dir), REPO_CONFIGS_FILE, {}, parseRepoConfigBook);
 
 // The gate a one-shot load outside the daemon (the demo, the gallery) runs
 // under. It loads the one file it was named, or none, never a searched chain,

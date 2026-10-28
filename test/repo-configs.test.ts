@@ -23,6 +23,7 @@ import {
 } from "../src/daemon/cache/render";
 import {
   repoAnswerFields,
+  prepareRepoConfigs,
   repoConfigs,
   repoConfigsPath,
   repoQuestions,
@@ -261,18 +262,39 @@ test("the question offers each answer as a link signed for its session, director
 // An answer kept where the book used to live, directly in the state
 // directory, still holds once the book has a folder of its own.
 describe("the book in the state directory", () => {
-  test("moves into the book's folder on the first read", () => {
-    const state = path.join(root, "state");
-    fs.mkdirSync(state);
-    fs.writeFileSync(
-      path.join(state, "repo-configs.json"),
-      JSON.stringify({ [project]: "approved" }),
-    );
-    expect(repoConfigs(state).read()).toEqual({
+  const loose = (): string => path.join(root, "state", "repo-configs.json");
+  const write = (file: string, answer: string): void => {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify({ [project]: answer }));
+  };
+  const state = (): string => path.join(root, "state");
+
+  test("moves into the book's folder when the daemon prepares it", () => {
+    write(loose(), "approved");
+    expect(prepareRepoConfigs(state())).toBeNull();
+    expect(fs.existsSync(loose())).toBe(false);
+    expect(repoConfigs(state()).read()).toEqual({
       kind: "ok",
       value: { [project]: "approved" },
     });
-    expect(fs.existsSync(path.join(state, "repo-configs.json"))).toBe(false);
-    expect(fs.existsSync(repoConfigsPath(state))).toBe(true);
+  });
+
+  test("never replaces a book already in the folder, and says so", () => {
+    write(loose(), "approved");
+    write(repoConfigsPath(state()), "declined");
+    expect(prepareRepoConfigs(state())).toBe(
+      `${loose()} is not read: the answers are kept in ${repoConfigsPath(state())}`,
+    );
+    expect(repoConfigs(state()).read()).toEqual({
+      kind: "ok",
+      value: { [project]: "declined" },
+    });
+  });
+
+  test("with no book anywhere, makes the folder and nothing else", () => {
+    fs.mkdirSync(state());
+    expect(prepareRepoConfigs(state())).toBeNull();
+    expect(fs.readdirSync(state())).toEqual(["repo-configs"]);
+    expect(fs.readdirSync(path.join(state(), "repo-configs"))).toEqual([]);
   });
 });

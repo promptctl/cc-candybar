@@ -70,7 +70,7 @@ import type {
 import { parseSessionId, type SessionId } from "./session-id";
 import { createPayloadProviders } from "./payload-providers";
 import { RefreshLedger } from "../utils/refresh-ledger";
-import { repoQuestions } from "./repo-configs";
+import { prepareRepoConfigs, repoQuestions } from "./repo-configs";
 import {
   configLoadedLine,
   RenderCache,
@@ -411,6 +411,9 @@ function tmuxServersOf({
 const diagnosticDump = new DiagnosticDump(diagnosticsDir(), (sessionId) =>
   frameFeeds.wake(sessionId, "data"),
 );
+const repoConfigsLeftover = prepareRepoConfigs();
+if (repoConfigsLeftover !== null)
+  dlog("warn", `repo-configs: ${repoConfigsLeftover}`);
 const renderCache = new RenderCache<SessionSource, CheckedRenderRequest>(
   {
     sessionState,
