@@ -23,7 +23,7 @@ import { sleep } from "../measure.js";
 import { measured, type Benchmark, type Outcome } from "../types.js";
 import {
   drawn,
-  startWorld,
+  inWorld,
   type RenderEvent,
   type Session,
   type Tick,
@@ -38,18 +38,6 @@ const SMALL_CHECKOUT: RepoShape = { files: 50, commits: 3, modified: 2, untracke
 const TURNS = 1_700;
 const WARMUP_TICKS = 10;
 const DEFAULT_COLUMNS = 120;
-
-async function inWorld<T>(
-  body: (world: World) => Promise<T>,
-  config?: string,
-): Promise<T> {
-  const world = await startWorld(config);
-  try {
-    return await body(world);
-  } finally {
-    await world.stop();
-  }
-}
 
 // [LAW:no-silent-failure] What makes a warm sample a warm sample, said by the
 // daemon: every event drew ok with nothing pending, and between the two

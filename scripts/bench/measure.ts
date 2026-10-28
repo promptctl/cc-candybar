@@ -3,7 +3,7 @@
 // Every repetition is timed separately because the tail is the result. A loop
 // timed as a whole reports its mean and loses the one repetition that stalled.
 
-const WARMUP = 3;
+export const WARMUP = 3;
 
 // Repetitions of `body`, `WARMUP` unrecorded first so the JIT and the module
 // graph are warm. `body` gets the repetition's index (warmups count from

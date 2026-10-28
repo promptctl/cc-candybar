@@ -194,13 +194,18 @@ export async function startWorld(config = "{}\n"): Promise<World> {
   child.once("exit", (code, signal) => {
     exited = `exit code ${code} signal ${signal}`;
   });
+  // A spawn that failed reports here and has no pid; unheard, it would crash
+  // this process, and the boot wait would run out its budget.
+  child.once("error", (e) => {
+    exited = `did not start: ${e.message}`;
+  });
 
   let stopped = false;
   const stop = async (): Promise<void> => {
     if (stopped) return;
     stopped = true;
     try {
-      process.kill(-child.pid!, "SIGKILL");
+      if (child.pid !== undefined) process.kill(-child.pid, "SIGKILL");
     } catch {
       // Already gone: killing a dead daemon is the goal reached.
     }
@@ -372,6 +377,27 @@ function parseRenderEvent(line: string): RenderEvent {
     outcome: fieldOf(line, "outcome"),
     pending: fieldOf(line, "pending"),
   };
+}
+
+// A world for the length of `body`, stopped after. When both fail, the body's
+// error is the cause and stop's is told beside it, not instead of it.
+// [LAW:no-silent-failure]
+export async function inWorld<T>(
+  body: (world: World) => Promise<T>,
+  config?: string,
+): Promise<T> {
+  const world = await startWorld(config);
+  let result: T;
+  try {
+    result = await body(world);
+  } catch (e) {
+    await world.stop().catch((stopped: unknown) => {
+      console.error(`and stopping the world failed too: ${String(stopped)}`);
+    });
+    throw e;
+  }
+  await world.stop();
+  return result;
 }
 
 // [LAW:no-silent-failure] The checkpoint a benchmark of a drawn bar crosses: a

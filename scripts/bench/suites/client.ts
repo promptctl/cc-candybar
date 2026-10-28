@@ -11,8 +11,8 @@ import path from "node:path";
 
 import { BUNDLED_CLIENT_SHIM, REPO, nativeClient } from "../environment.js";
 import { measured, skipped, type Benchmark, type Outcome } from "../types.js";
-import { startWorld } from "../world.js";
-import { repeat } from "../measure.js";
+import { inWorld } from "../world.js";
+import { repeat, WARMUP } from "../measure.js";
 
 const COLUMNS = 120;
 const CALLS = 100;
@@ -77,7 +77,14 @@ const client = (
   id: string,
   about: string,
   // Null when the machine has no such client, with the reason.
-  command: () => { bin: string; args: string[]; facts: Record<string, string>; builtFromThisSource?: boolean } | string,
+  command: () =>
+    | {
+        bin: string;
+        args: string[];
+        facts: Record<string, string>;
+        builtFromThisSource?: boolean;
+      }
+    | string,
 ): Benchmark => ({
   id,
   group: "client",
@@ -86,9 +93,12 @@ const client = (
   async run(plan) {
     const found = command();
     if (typeof found === "string") return skipped(found);
-    const world = await startWorld();
-    try {
-      const session = world.session("a", { files: 200, commits: 20, modified: 8, untracked: 4 }, 1_700);
+    return inWorld(async (world) => {
+      const session = world.session(
+        "a",
+        { files: 200, commits: 20, modified: 8, untracked: 4 },
+        1_700,
+      );
       await world.settle(session, COLUMNS);
       let n = 100;
       const before = (await world.stats()).requests.total;
@@ -113,18 +123,24 @@ const client = (
       // reaching the daemon exits 0 too: the daemon's own count of requests is
       // what says every sample was a tick it answered.
       const answered = (await world.stats()).requests.total - before;
-      if (answered < plan.samples) {
-        throw new Error(`${id}: ${plan.samples} runs reached the daemon as ${answered} requests`);
+      const spawns = plan.samples + WARMUP;
+      if (answered < spawns) {
+        throw new Error(
+          `${id}: ${spawns} runs reached the daemon as ${answered} requests`,
+        );
       }
       return measured([{ name: "wall", samples: ms }], found.facts);
-    } finally {
-      await world.stop();
-    }
+    });
   },
 });
 
 export const CLIENTS: readonly Benchmark[] = [
-  floor("client.floor.exec", "a process that exits at once (`true`): the floor of any spawn", "true", []),
+  floor(
+    "client.floor.exec",
+    "a process that exits at once (`true`): the floor of any spawn",
+    "true",
+    [],
+  ),
   floor(
     "client.floor.node",
     "a node process that exits at once: the floor of a client that is node",
@@ -152,4 +168,3 @@ export const CLIENTS: readonly Benchmark[] = [
     () => ({ bin: process.execPath, args: [BUNDLED_CLIENT_SHIM], facts: {} }),
   ),
 ];
-

@@ -239,7 +239,10 @@ export function parseReport(text: string, source: string): Report {
       throw new Error(`${source} has a row with no id or no distribution: ${JSON.stringify(row).slice(0, 120)}`);
     }
     // Throws on a row with no usable distribution.
-    distributionOf([d.p50, d.p90]);
+    distributionOf([d.n, d.min, d.p50, d.p90, d.p99, d.max]);
+    if (!Number.isInteger(d.n) || d.n < 1) {
+      throw new Error(`${source} has a row (${row.id}) with ${d.n} samples`);
+    }
   }
   return report as Report;
 }
