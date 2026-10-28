@@ -2,8 +2,6 @@
 // watchers each receive a tiny handle they're allowed to bump, but the
 // canonical object lives here. Stats are read-only after serialization.
 
-import v8 from "node:v8";
-
 import type { MenuIdleStats } from "./menu-idle.js";
 import type { RunStats } from "./runs.js";
 import type { TmuxStatusStats } from "./tmux-status.js";
@@ -90,11 +88,6 @@ export interface StatsSnapshot {
   rssBytes: number;
   heapUsedBytes: number;
   heapTotalBytes: number;
-  // The part of heapTotal V8 commits to its young generation: new space and
-  // new large-object space. V8 sizes it by allocation rate, up to a ceiling
-  // its version sets, so it steps up and down with no change in what the
-  // daemon holds.
-  youngGenerationBytes: number;
   externalBytes: number;
   arrayBuffersBytes: number;
   requests: {
@@ -425,7 +418,6 @@ export class RuntimeStats {
       rssBytes: mem.rss,
       heapUsedBytes: mem.heapUsed,
       heapTotalBytes: mem.heapTotal,
-      youngGenerationBytes: youngGenerationBytes(),
       externalBytes: mem.external,
       arrayBuffersBytes: mem.arrayBuffers,
       requests: {
@@ -462,18 +454,4 @@ export class RuntimeStats {
       doctorStores: extras.doctorStores,
     };
   }
-}
-
-// V8's young generation as committed now: the spaces its scavenger allocates
-// into and promotes out of.
-const YOUNG_SPACES: ReadonlySet<string> = new Set([
-  "new_space",
-  "new_large_object_space",
-]);
-
-function youngGenerationBytes(): number {
-  return v8
-    .getHeapSpaceStatistics()
-    .filter((s) => YOUNG_SPACES.has(s.space_name))
-    .reduce((sum, s) => sum + s.space_size, 0);
 }
