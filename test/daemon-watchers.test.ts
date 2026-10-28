@@ -12,10 +12,7 @@ import { GitService, type GitInfo } from "../src/segments/git";
 import { ok, type Outcome } from "../src/utils/outcome";
 import { Holds } from "../src/utils/holds";
 import { until } from "./helpers/until";
-import {
-  WATCH_LIVENESS_BUDGET_MS,
-  WATCH_RETRY_MS,
-} from "./helpers/reload-signal";
+import { untilHeard } from "./helpers/reload-signal";
 import { laneOutcome } from "../src/utils/reading";
 
 function makeRepo(): string {
@@ -49,19 +46,11 @@ describe("WatcherRegistry", () => {
       () => fired++,
     );
     try {
-      const rewrite = setInterval(
+      await untilHeard(
         () => fs.writeFileSync(headPath, "ref: refs/heads/x\n"),
-        WATCH_RETRY_MS,
+        () => fired >= 1,
+        "HEAD write fired the watch",
       );
-      try {
-        await until(
-          () => fired >= 1,
-          "HEAD write fired the watch",
-          WATCH_LIVENESS_BUDGET_MS,
-        );
-      } finally {
-        clearInterval(rewrite);
-      }
     } finally {
       reg.closeAll();
       rmrf(repo);
@@ -191,18 +180,13 @@ describe("WatcherRegistry", () => {
     // directory appears under a repo's watch, and the leaf's write is
     // re-applied until the watch proves itself live on it.
     fs.mkdirSync(path.join(dir, "a", "b"), { recursive: true });
-    const rewrite = setInterval(
-      () => fs.writeFileSync(path.join(dir, leaf), "1"),
-      WATCH_RETRY_MS,
-    );
     try {
-      await until(
+      await untilHeard(
+        () => fs.writeFileSync(path.join(dir, leaf), "1"),
         () => names().includes(leaf),
         () => `the leaf's relative path among ${JSON.stringify(names())}`,
-        WATCH_LIVENESS_BUDGET_MS,
       );
     } finally {
-      clearInterval(rewrite);
       reg.closeAll();
       rmrf(dir);
     }
@@ -330,19 +314,14 @@ async function hearsRefOnlyMove(
     // an empty HEAD.
     const headPath = path.join(inner.resolveGitDir(workingDir), "HEAD");
     const head = fs.readFileSync(headPath, "utf8");
-    const rewrite = setInterval(() => {
-      fs.writeFileSync(`${headPath}.lock`, head);
-      fs.renameSync(`${headPath}.lock`, headPath);
-    }, WATCH_RETRY_MS);
-    try {
-      await until(
-        () => svc.getStats().changes >= 1,
-        "the HEAD rewrite's change",
-        WATCH_LIVENESS_BUDGET_MS,
-      );
-    } finally {
-      clearInterval(rewrite);
-    }
+    await untilHeard(
+      () => {
+        fs.writeFileSync(`${headPath}.lock`, head);
+        fs.renameSync(`${headPath}.lock`, headPath);
+      },
+      () => svc.getStats().changes >= 1,
+      "the HEAD rewrite's change",
+    );
 
     execSync(`git checkout -q -b ${branch}`, { cwd: workingDir });
     const tip = sha("HEAD", workingDir);
@@ -351,28 +330,21 @@ async function hearsRefOnlyMove(
     // re-application is a write; a same-value update-ref touches nothing.
     const seen = new Set<string>();
     let atParent = false;
-    const move = setInterval(() => {
-      atParent = !atParent;
-      execSync(
-        `git update-ref refs/heads/${branch} ${atParent ? parent : tip}`,
-        {
-          cwd: workingDir,
-        },
-      );
-    }, WATCH_RETRY_MS);
-    try {
-      await until(
-        () => {
-          const now = storedHead();
-          if (now !== undefined) seen.add(now);
-          return seen.has(parent);
-        },
-        "a re-read storing the moved ref's head",
-        WATCH_LIVENESS_BUDGET_MS,
-      );
-    } finally {
-      clearInterval(move);
-    }
+    await untilHeard(
+      () => {
+        atParent = !atParent;
+        execSync(
+          `git update-ref refs/heads/${branch} ${atParent ? parent : tip}`,
+          { cwd: workingDir },
+        );
+      },
+      () => {
+        const now = storedHead();
+        if (now !== undefined) seen.add(now);
+        return seen.has(parent);
+      },
+      "a re-read storing the moved ref's head",
+    );
     // A change mid-read queues one re-read after it, so the last move lands.
     await until(
       () => storedHead() === sha(branch, workingDir),
@@ -416,17 +388,24 @@ describe("GitDataProvider + watchers integration", () => {
     await laneOutcome(svc.declare(holds, repo, {}));
     await laneOutcome(svc.declare(holds, repo, {}));
     expect(inner.calls).toBe(1);
-    await new Promise((r) => setTimeout(r, 50));
 
-    fs.writeFileSync(path.join(repo, ".git/HEAD"), "ref: refs/heads/y\n");
-    // FSEvents may deliver the one write as more than one event, and a fire
-    // mid-read queues one re-read after it, so the count is at least one more.
-    await until(() => inner.calls >= 2, "the HEAD change's re-read");
+    // HEAD is rewritten until the watch proves itself live by a re-read: a
+    // write before FSEvents goes live is never reported. Every rewrite the
+    // watch hears is a change, and one mid-read queues a re-read after it, so
+    // the count is at least one more.
+    await untilHeard(
+      () =>
+        fs.writeFileSync(path.join(repo, ".git/HEAD"), "ref: refs/heads/y\n"),
+      () => inner.calls >= 2,
+      "the HEAD change's re-read",
+    );
     expect(svc.getStats().changes).toBeGreaterThanOrEqual(1);
-    // The read takes the value the change's re-read stored.
-    const reads = inner.calls;
+    // The read takes the value the change's re-read stored: a hit, never a
+    // miss that waits on a read. The reader's count is not the measure here,
+    // because a re-read a late event queued may begin on any turn.
+    const { hits, misses } = svc.getStats();
     await laneOutcome(svc.declare(holds, repo, {}));
-    expect(inner.calls).toBe(reads);
+    expect(svc.getStats()).toMatchObject({ hits: hits + 1, misses });
 
     svc.close();
     rmrf(repo);

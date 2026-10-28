@@ -3,6 +3,7 @@ import type {
   RenderCacheObservers,
 } from "../../src/daemon/cache/render";
 import { DEBOUNCE_MS } from "../../src/daemon/cache/watchers";
+import { until, type Condition, type What } from "./until";
 
 // [LAW:no-ambient-temporal-coupling] A happens-after gate over RenderCache
 // reloads, in place of polling an entry's fields against a wall-clock
@@ -72,11 +73,28 @@ const RETRY_MS = 4 * DEBOUNCE_MS;
 // latency seen, below Jest's 30 s testTimeout so the failure is this error.
 const MAX_ROUNDS = 64;
 
-// [LAW:one-source-of-truth] The one budget a test gives fs.watch to prove
-// itself live, for a test that retries its own mutation rather than a
-// RenderCache reload: the same cadence and the same number of chances.
-export const WATCH_RETRY_MS = RETRY_MS;
-export const WATCH_LIVENESS_BUDGET_MS = MAX_ROUNDS * RETRY_MS;
+// [LAW:single-enforcer] THE retry-until-heard loop for a watch a test drives
+// itself: `mutate` is re-applied on the cadence above until `heard` holds, or
+// the wait fails by name after the same number of chances `after` gets. The
+// same fact as `after` — only a delivered event proves a watch live — for a
+// test whose proof is a condition it reads rather than a RenderCache reload.
+// `mutate` must emit an fs event on every call (a rename over the path or a
+// plain overwrite does), and `heard` is read until it holds, so a condition
+// over something a later event can move (a count) must be at-least, never
+// exactly. [LAW:no-ambient-temporal-coupling] The interval is cleared on
+// either ending, so no re-application outlives the wait.
+export async function untilHeard(
+  mutate: () => void,
+  heard: Condition,
+  what: What,
+): Promise<void> {
+  const reapply = setInterval(mutate, RETRY_MS);
+  try {
+    await until(heard, what, MAX_ROUNDS * RETRY_MS);
+  } finally {
+    clearInterval(reapply);
+  }
+}
 
 function arrivesWithin(signal: Promise<void>, ms: number): Promise<boolean> {
   return new Promise((resolve) => {
