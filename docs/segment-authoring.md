@@ -48,7 +48,8 @@ default → validate → register → render against a representative payload). 
 then, before each preset's pass, for the re-reads that preset's payload starts
 (a `key` over `.preset.effective`), all under one 5 s budget; a source still
 running at the deadline is reported as a warning naming the preset that drew
-without it, and that pass renders with the variable's `default`. A user config merges onto the
+without it, and that pass draws the variable as pending (its loading cell),
+never as its `default`: a default stands in for a failure, not a wait. A user config merges onto the
 bundled default by name, so declare only what differs: the variables and
 segments below, plus the row that places the segment. A row you name under
 `root.rows` replaces the bundled row of that name wholesale — the bundled

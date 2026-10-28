@@ -113,7 +113,7 @@ describe("checkConfig — explicit target", () => {
     if (outcome.kind !== "clean")
       throw new Error(`expected clean, got ${outcome.kind}`);
     expect(outcome.warnings).toContain(
-      `source still running after ${SHORT_SETTLE_MS} ms, rendered with fallback values: slow`,
+      `source still running after ${SHORT_SETTLE_MS} ms, drawn as pending: slow`,
     );
     expect(checkPlan(outcome).code).toBe(0);
   });
@@ -256,7 +256,7 @@ describe("checkConfig — explicit target", () => {
     if (outcome.kind !== "clean")
       throw new Error(`expected clean, got ${outcome.kind}`);
     expect(outcome.warnings).toContain(
-      `source still running after ${SHORT_SETTLE_MS} ms, rendered with fallback values: slow2`,
+      `source still running after ${SHORT_SETTLE_MS} ms, drawn as pending: slow2`,
     );
     expect(checkPlan(outcome).code).toBe(0);
   });
