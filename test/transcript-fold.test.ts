@@ -131,20 +131,34 @@ test("a session with no transcript is a real zero, never a failure", async () =>
     mkdirSync(sub);
     const path = join(sub, "d.jsonl");
     write(path, line("one"));
-    const warm = counting();
+    // A re-fold from zero would count 1 again, so the step itself is counted:
+    // that is what "nothing re-folded" means.
+    let steps = 0;
+    const warm = new TranscriptFold<number>(
+      0,
+      (n: number) => {
+        steps++;
+        return n + 1;
+      },
+      REFRESHES,
+    );
     expect(await valueOf(warm, "s", path)).toBe(1);
+    expect(steps).toBe(1);
     chmodSync(sub, 0o000);
     try {
       for (const fold of [warm, counting()]) {
         const out = await fold.read("s", path);
         expect(out.kind).toBe("failed");
         if (out.kind === "failed") expect(out.reason).toMatch(/EACCES/);
+        // What a draw reads is the failure too, not the prior ok.
+        expect(fold.answer("s").kind).toBe("failed");
       }
     } finally {
       chmodSync(sub, 0o755);
     }
     // Readable again: the warm fold's cursor still stands, nothing re-folded.
     expect(await valueOf(warm, "s", path)).toBe(1);
+    expect(steps).toBe(1);
   },
 );
 

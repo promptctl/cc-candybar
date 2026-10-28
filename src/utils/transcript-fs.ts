@@ -23,11 +23,13 @@ import { debug } from "./logger";
 //
 // A stamp is only ever a reason to SKIP a read: a consumer that holds a fold at
 // this stamp has the file as it stands. "" is no stamp — no path, or a stat
-// that failed for ANY reason — so a consumer never takes "" as a hit and reads
-// instead. Whether the file is absent (ENOENT) or unreadable (EACCES, EIO) is
-// the read's call, and only the read's: `readAppended`/`readTail` answer
-// `absent` or `failed` with the reason. A stat that classified the same error
-// would be a second enforcer of one rule.
+// that failed for ANY reason — so a consumer never takes "" as a hit. With a
+// path, it reads; with none, what it serves is its own call (the usage store
+// keeps its last record, since nothing has replaced it). Whether a file that
+// IS named is absent (ENOENT) or unreadable (EACCES, EIO) is the read's call,
+// not the stat's: `readAppended`/`readTail` answer `absent` or `failed` with
+// the reason. A stat that classified the same error would be a second
+// enforcer of one rule.
 export function statStamp(filePath: string | undefined): string {
   if (!filePath) return "";
   try {
