@@ -7,6 +7,8 @@
 
 import { RefreshLedger } from "../src/utils/refresh-ledger";
 import {
+  chmodSync,
+  mkdirSync,
   mkdtempSync,
   writeFileSync,
   appendFileSync,
@@ -116,6 +118,35 @@ test("an append inside the mtime tick of the last read is still read", async () 
 test("a session with no transcript is a real zero, never a failure", async () => {
   expect(await valueOf(counting(), "s", join(dir, "missing.jsonl"))).toBe(0);
 });
+
+// [LAW:no-silent-failure] The other side of that zero: a transcript the daemon
+// cannot stat is not "no transcript". The stamp is empty, so nothing is
+// believed; the read answers with the reason, cold and warm alike, and a
+// warm fold's prior value is not served as current.
+// Root ignores directory permissions, so the condition cannot be built.
+(process.getuid?.() === 0 ? test.skip : test)(
+  "a transcript whose stat fails is a failure with its reason, never an empty fold",
+  async () => {
+    const sub = join(dir, "locked");
+    mkdirSync(sub);
+    const path = join(sub, "d.jsonl");
+    write(path, line("one"));
+    const warm = counting();
+    expect(await valueOf(warm, "s", path)).toBe(1);
+    chmodSync(sub, 0o000);
+    try {
+      for (const fold of [warm, counting()]) {
+        const out = await fold.read("s", path);
+        expect(out.kind).toBe("failed");
+        if (out.kind === "failed") expect(out.reason).toMatch(/EACCES/);
+      }
+    } finally {
+      chmodSync(sub, 0o755);
+    }
+    // Readable again: the warm fold's cursor still stands, nothing re-folded.
+    expect(await valueOf(warm, "s", path)).toBe(1);
+  },
+);
 
 // Retention is observable: the `absent` arm hands back what the session had, so a
 // fold that is still retained survives its file going away and an evicted one
