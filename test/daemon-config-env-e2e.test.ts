@@ -7,7 +7,6 @@
 // variable, and every override arrives the only way a client can send one:
 // as the `configEnv` hint, the `--config` flag, or a load-config click.
 
-import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -24,6 +23,7 @@ import {
   killAndWait,
   render,
   renderRequest,
+  runRealClient,
   stripAnsi,
 } from "./helpers/daemon-e2e";
 import {
@@ -318,23 +318,17 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
   ])("the real client carries %s CC_CANDYBAR_CONFIG to the daemon", async (_, value) => {
     const sid = `cfg-env-real-client-${path.isAbsolute(value()) ? "abs" : "rel"}`;
     // Warm the entry so the client's one bounded request cannot hit a cold
-    // first-load timeout (a real client shows a blank line and retries on
-    // the next tick; a test has no next tick). The cache key is
+    // first-load timeout; runRealClient reruns a blank answer as the next
+    // tick would, but a warm entry keeps that the exception. The cache key is
     // (projectDir, cwd, configFile) and the client reports ITS OWN cwd as
     // `req.cwd`, so it is spawned in projectDir: the entry it hits is the
     // one this warmed.
     await render(sockPath, sid, projectDir, { configEnv: override });
-    const client = spawnSync(
-      process.execPath,
-      [path.join(process.cwd(), "dist", "index.mjs")],
-      {
-        cwd: projectDir,
-        env: { ...env, CC_CANDYBAR_CONFIG: value() },
-        input: JSON.stringify(hookData(sid, projectDir)),
-        encoding: "utf8",
-        timeout: 10_000,
-      },
-    );
+    const client = runRealClient([], {
+      cwd: projectDir,
+      env: { ...env, CC_CANDYBAR_CONFIG: value() },
+      input: JSON.stringify(hookData(sid, projectDir)),
+    });
     expect(client.status).toBe(0);
     const bar = stripAnsi(client.stdout);
     expect(bar).toContain("OVERRIDE-WINS");
@@ -350,17 +344,11 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
   test("the real client relays --config with nothing refused", async () => {
     const sid = "cfg-flag-real-client";
     await render(sockPath, sid, projectDir, {}, configFlag(override));
-    const client = spawnSync(
-      process.execPath,
-      [path.join(process.cwd(), "dist", "index.mjs"), "--config", override],
-      {
-        cwd: projectDir,
-        env,
-        input: JSON.stringify(hookData(sid, projectDir)),
-        encoding: "utf8",
-        timeout: 10_000,
-      },
-    );
+    const client = runRealClient(["--config", override], {
+      cwd: projectDir,
+      env,
+      input: JSON.stringify(hookData(sid, projectDir)),
+    });
     expect(client.status).toBe(0);
     const bar = stripAnsi(client.stdout);
     expect(bar).toContain("OVERRIDE-WINS");
