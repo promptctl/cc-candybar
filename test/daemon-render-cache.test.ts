@@ -55,11 +55,7 @@ import { PRESET_FLOOR, presetRoot } from "../src/config/presets";
 import { viewFacts } from "./helpers/view-facts";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { answerRepo } from "./helpers/repo-approval";
-import {
-  prepareRepoConfigs,
-  repoConfigsDir,
-  repoConfigsPath,
-} from "../src/daemon/repo-configs";
+import { repoConfigsDir, repoConfigsPath } from "../src/daemon/repo-configs";
 import { stateDir } from "../src/daemon/paths";
 
 // Flatten a layout tree to its segment names, in pre-order — the post-`root`
@@ -86,8 +82,6 @@ function makeCache(
   watchers: WatcherRegistry;
 } {
   const cleanups: Array<() => void> = [];
-  // As the daemon does before it builds the cache.
-  prepareRepoConfigs();
   const watchers = new WatcherRegistry({
     counters: {
       watchersOpened: 0,

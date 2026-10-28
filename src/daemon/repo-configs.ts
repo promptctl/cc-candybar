@@ -46,33 +46,33 @@ export function repoConfigsPath(dir: string = stateDir()): string {
   return path.join(repoConfigsDir(dir), REPO_CONFIGS_FILE);
 }
 
-// The book's folder, made before the daemon watches it, so the watch never
-// falls back to the state directory. A book kept directly in the state
-// directory moves in, so no answer is lost to the move. The move links
-// before it unlinks, so it never replaces a book already in the folder, and
-// a book another process moved first is no failure. What is left over is
-// returned, to be said.
-export function prepareRepoConfigs(dir: string = stateDir()): string | null {
-  fs.mkdirSync(repoConfigsDir(dir), { recursive: true });
-  const loose = path.join(dir, REPO_CONFIGS_FILE);
-  try {
-    fs.linkSync(loose, repoConfigsPath(dir));
-  } catch (e) {
-    const code = (e as NodeJS.ErrnoException).code;
-    if (code === "ENOENT") return null;
-    if (code === "EEXIST") {
-      return `${loose} is not read: the answers are kept in ${repoConfigsPath(dir)}`;
-    }
-    throw e;
-  }
-  fs.unlinkSync(loose);
-  return null;
-}
-
+// [LAW:one-source-of-truth] The book in its folder is the answers. One kept
+// directly in the state directory, where the book used to live, is read
+// only while the folder holds none, and the first answer recorded writes it
+// into the folder with that answer: nothing is moved, so no answer is lost
+// to a move, and every reader — the daemon, `check`, the demo — reads the
+// same answers.
 export const repoConfigs = (
   dir: string = stateDir(),
-): StateFile<RepoConfigBook> =>
-  stateFile(repoConfigsDir(dir), REPO_CONFIGS_FILE, {}, parseRepoConfigBook);
+): StateFile<RepoConfigBook> => {
+  const book = stateFile(
+    repoConfigsDir(dir),
+    REPO_CONFIGS_FILE,
+    {},
+    parseRepoConfigBook,
+  );
+  const loose = stateFile(dir, REPO_CONFIGS_FILE, {}, parseRepoConfigBook);
+  const filed = (): boolean => fs.existsSync(repoConfigsPath(dir));
+  return {
+    read: () => (filed() ? book : loose).read(),
+    update: (next) => {
+      if (filed()) return book.update(next);
+      const kept = loose.read();
+      if (kept.kind === "failed") return kept;
+      return book.update(() => next(kept.value));
+    },
+  };
+};
 
 // The gate a one-shot load outside the daemon (the demo, the gallery) runs
 // under. It loads the one file it was named, or none, never a searched chain,

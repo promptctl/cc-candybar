@@ -23,7 +23,6 @@ import {
 } from "../src/daemon/cache/render";
 import {
   repoAnswerFields,
-  prepareRepoConfigs,
   repoConfigs,
   repoConfigsPath,
   repoQuestions,
@@ -262,39 +261,41 @@ test("the question offers each answer as a link signed for its session, director
 // An answer kept where the book used to live, directly in the state
 // directory, still holds once the book has a folder of its own.
 describe("the book in the state directory", () => {
-  const loose = (): string => path.join(root, "state", "repo-configs.json");
-  const write = (file: string, answer: string): void => {
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, JSON.stringify({ [project]: answer }));
-  };
   const state = (): string => path.join(root, "state");
+  const loose = (): string => path.join(state(), "repo-configs.json");
+  const other = (): string => path.join(root, "other");
+  const write = (file: string, book: object): void => {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(book));
+  };
 
-  test("moves into the book's folder when the daemon prepares it", () => {
-    write(loose(), "approved");
-    expect(prepareRepoConfigs(state())).toBeNull();
-    expect(fs.existsSync(loose())).toBe(false);
+  test("is read while the folder holds no book", () => {
+    write(loose(), { [project]: "approved" });
     expect(repoConfigs(state()).read()).toEqual({
       kind: "ok",
       value: { [project]: "approved" },
     });
   });
 
-  test("never replaces a book already in the folder, and says so", () => {
-    write(loose(), "approved");
-    write(repoConfigsPath(state()), "declined");
-    expect(prepareRepoConfigs(state())).toBe(
-      `${loose()} is not read: the answers are kept in ${repoConfigsPath(state())}`,
-    );
+  test("the first answer recorded writes it into the folder, with the answer", () => {
+    write(loose(), { [project]: "approved" });
+    repoConfigs(state()).update((book) => ({ ...book, [other()]: "declined" }));
+    const filed = {
+      kind: "ok",
+      value: { [project]: "approved", [other()]: "declined" },
+    };
+    expect(repoConfigs(state()).read()).toEqual(filed);
+    expect(
+      JSON.parse(fs.readFileSync(repoConfigsPath(state()), "utf8")),
+    ).toEqual(filed.value);
+  });
+
+  test("is not read once the folder holds a book", () => {
+    write(loose(), { [project]: "approved" });
+    write(repoConfigsPath(state()), { [project]: "declined" });
     expect(repoConfigs(state()).read()).toEqual({
       kind: "ok",
       value: { [project]: "declined" },
     });
-  });
-
-  test("with no book anywhere, makes the folder and nothing else", () => {
-    fs.mkdirSync(state());
-    expect(prepareRepoConfigs(state())).toBeNull();
-    expect(fs.readdirSync(state())).toEqual(["repo-configs"]);
-    expect(fs.readdirSync(path.join(state(), "repo-configs"))).toEqual([]);
   });
 });

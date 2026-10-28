@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 import { nearestWatchTarget } from "../../utils/watch-target.js";
 import { linkChain } from "../../utils/atomic-write.js";
@@ -17,7 +18,11 @@ import type { RefreshLedger } from "../../utils/refresh-ledger";
 import type { LinkSigner } from "../../click/link-signer.js";
 import type { SessionId } from "../session-id.js";
 import { fileHeldSettings } from "../setting-drafts.js";
-import { repoConfigs, repoConfigsPath } from "../repo-configs.js";
+import {
+  repoConfigs,
+  repoConfigsDir,
+  repoConfigsPath,
+} from "../repo-configs.js";
 import { REPO_PLUGIN_DIR } from "../../config/loader/plugin-folders.js";
 import {
   repoUnreadNotice,
@@ -1219,9 +1224,9 @@ export class RenderCache<
   private readonly entries = new Map<string, CacheEntry>();
   // [LAW:one-source-of-truth] The user's answers for repositories are one
   // fact for the whole daemon, so one watch follows them, never one per
-  // entry. The book has a folder of its own, which the daemon makes before it
-  // builds the cache, so the watch never falls back to the state directory,
-  // where the daemon's log writes on every request.
+  // entry. The book has a folder of its own, made here so the watch never
+  // falls back to the state directory, where the daemon's log writes on every
+  // request.
   private readonly answersWatch: WatcherHandle;
   private sweep: ReturnType<typeof setInterval> | null = null;
   private closed = false;
@@ -1272,6 +1277,7 @@ export class RenderCache<
     this.budgetBytes = opts.budgetBytes;
     this.maxEntries = opts.maxEntries ?? MAX_ENTRIES;
     this.observers = opts.observers ?? {};
+    fs.mkdirSync(repoConfigsDir(), { recursive: true });
     const { dir, name } = nearestWatchTarget(repoConfigsPath());
     this.answersWatch = deps.watchers.acquire(
       `repo-configs:${dir}/${name}`,
