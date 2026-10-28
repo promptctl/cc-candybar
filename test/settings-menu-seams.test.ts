@@ -5,6 +5,11 @@
 // control and its neighbours and between the closed tabs. Driven through the
 // real loader, `resolveEffectiveGlobals` and `renderDsl`, under every bundled
 // theme, with every tab and the theme's ⚙ open.
+//
+// brandon-menus-sjhy.4fi: a menu's items are its hue's own shades, the ones
+// the dial's window names, so where a theme spells two neighbouring rungs
+// under a seam — textual-ansi's flat ladder, catppuccin-latte's accent at
+// `middle` — the divider is the theme's own, and the band reports it.
 
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { listThemePalettes } from "@promptctl/rich-js";
@@ -17,7 +22,7 @@ import { perSetting } from "../src/config/setting-projections";
 import { CHECK_TODAY, checkPayload } from "../src/check";
 import { renderOptionsOf } from "../src/daemon/render-payload";
 import { SessionState } from "../src/daemon/session-state";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { registerDslConfig, renderDsl, type RenderWarning } from "../src/dsl/render";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { instantOf } from "../src/utils/instant";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -30,9 +35,14 @@ const SID = "seams0a1-2c3d-4e5f-8a7b-8c9d0e1f2a3b";
 const TABS = ["session", "look", "layout", "config", "tools"] as const;
 const COLS = 200;
 
+// A band whose two items the theme spells under a seam: the one divider the
+// menu may draw, reported by the render as it draws it.
+const ITEM_SEAM = /an open band's item \d and item \d stand/;
+
 // The open menu's rows under every bundled theme, each tab and the theme's ⚙
 // open, at `colorCompatibility` and under the session look `look`: the rows
-// that carry the joiner's divider, and how many filled arrows were read.
+// that carry the joiner's divider on a theme whose bands reported no item
+// seam, and how many filled arrows were read.
 function menuSeams(
   colorCompatibility: string,
   look: Readonly<Record<string, string>>,
@@ -48,7 +58,7 @@ function menuSeams(
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", session);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/home/tester/code/project" });
-  const render = (): string[] => {
+  const render = (): { lines: string[]; warnings: RenderWarning[] } => {
     const effective = resolveEffectiveGlobals(config, (key) => session.get(SID, key) ?? null, () => false);
     const at = instantOf(new Date());
     const payload = {
@@ -60,11 +70,14 @@ function menuSeams(
       session_id: SID,
       term: { cols: COLS },
     };
-    return renderDsl(config, compiled, store, registry, payload, at, renderOptionsOf(effective, COLS), {
+    const warnings: RenderWarning[] = [];
+    const lines = renderDsl(config, compiled, store, registry, payload, at, renderOptionsOf(effective, COLS), {
       onSegmentError: (name, message) => {
         throw new Error(`${name}: ${message}`);
       },
+      onRenderWarning: (warning) => warnings.push(warning),
     }, effective).split("\n");
+    return { lines, warnings };
   };
 
   const divided: string[] = [];
@@ -73,18 +86,19 @@ function menuSeams(
   for (const theme of listThemePalettes()) {
     session.set(SID, "theme", theme);
     session.set(SID, SETTINGS_ANCHOR, "closed");
-    const barRows = render().length;
+    const barRows = render().lines.length;
     session.set(SID, SETTINGS_ANCHOR, SETTINGS_OPEN);
     session.set(SID, sharedMenuStateKey("candybar.pickers"), "gear");
     for (const tab of tabs) {
       session.set(SID, `${SETTINGS_NS}tab`, tab);
-      const lines = render();
+      const { lines, warnings } = render();
+      const themesOwn = warnings.some((w) => w.kind === "band-floor" && ITEM_SEAM.test(w.message));
       // The menu opens ABOVE the bar: its rows are the ones over the bar's.
       const menu = lines.slice(0, lines.length - barRows).map(stripAnsi);
       expect(menu.length).toBeGreaterThan(2);
       for (const row of menu) {
         arrows += row.split(POWERLINE.glyph).length - 1;
-        if (row.includes(POWERLINE.divider)) divided.push(`${theme} / ${tab}: ${row.trim()}`);
+        if (row.includes(POWERLINE.divider) && !themesOwn) divided.push(`${theme} / ${tab}: ${row.trim()}`);
       }
     }
   }
@@ -92,7 +106,7 @@ function menuSeams(
   return { divided, arrows };
 }
 
-test("every seam in the open settings menu is a filled arrow, under every bundled theme and tab", () => {
+test("every seam in the open settings menu is a filled arrow, under every bundled theme and tab, but where the theme spells two rungs alike — which the band reports", () => {
   const { divided, arrows } = menuSeams("truecolor", {}, TABS);
   expect(divided).toEqual([]);
   // Non-vacuous: the menu's rows were read, seams and all.

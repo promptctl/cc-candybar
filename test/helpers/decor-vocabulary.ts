@@ -13,6 +13,7 @@ import {
   SHADES,
   VARIATIONS,
   type AddressStep,
+  type Decor,
   type Ground,
   type ShadeName,
   type VariationName,
@@ -38,9 +39,9 @@ export const cell = (index: number, count: number): AddressStep => ({ index, cou
 // floor is measured on.
 export const drawnGround = (c: ColorRgba): ColorRgba => c.compositeOver(new ColorRgba(0, 0, 0));
 
+// The default bar's decor: the dial's floor variation at its floor shade.
+export const TODAY: Decor = { variation: VARIATIONS[floorOf("variation")], shade: SHADES[floorOf("shade")] };
+
 // The ground the band facts are stated on where one suffices: a trigger in
 // the default bar's first row, at the default shade.
-export const FIRST_ROW: Ground = rowGround(
-  { variation: VARIATIONS[floorOf("variation")], shade: SHADES[floorOf("shade")] },
-  [row(0, 2), cell(0, 5)],
-);
+export const FIRST_ROW: Ground = rowGround(TODAY, [row(0, 2), cell(0, 5)]);

@@ -35,6 +35,7 @@ import {
 import type { ActiveSegmentRef } from "../src/render/active-segment";
 import { segmentColorFuncs } from "../src/render/segment-color";
 import type { Disclosure } from "../src/themes/decor";
+import { DEFAULT_DECOR } from "./helpers/decor";
 import {
   transposedPalette,
   paletteForThemeName,
@@ -104,7 +105,7 @@ function resolve(
 
 // This file is about bg/fg resolution; the disclosure only rides the record.
 const DISCLOSURE: Disclosure = {
-  hue: "primary",
+  decor: DEFAULT_DECOR,
   depth: 0,
   ground: [{ hue: "primary", shade: "base" }],
 };
