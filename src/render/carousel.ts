@@ -102,9 +102,12 @@ export function renderCarousel(
   // again; given, it fires that declared action instead — the settings menu's
   // controls open the list of every option there, so a click on the name
   // opens the choices and only the arrows step. The centre's TEXT is the
-  // carousel's own current option either way, so the name the arrows step
-  // from and the name the click shows cannot disagree (an unknown current
-  // value shows the first option, the one ▶ steps from).
+  // carousel's own current option when it fires the option, so the name the
+  // click shows is the one it writes (an unknown current value shows the
+  // first option, the one ▶ steps from). Given, the centre writes nothing, so
+  // it names the value the key holds: a settings control offers part of its
+  // setting's domain when the rest sits in another picker, and a value from
+  // the other part is still the one in force.
   centreAction?: string,
 ): RichText {
   // [LAW:no-silent-failure] A carousel is centred on the value its key holds;
@@ -135,6 +138,7 @@ export function renderCarousel(
   // the picker's own comparison, never "is the centre".
   const indexAt = ringAround(options, current);
   const ring = (offset: number): string => options[indexAt(offset)]!;
+  const held = current === "" ? ring(0) : current;
   // Each offset's click is realized once: the arrow and the neighbour name
   // beside it write the same option.
   const urls = new Map<number, string>();
@@ -179,10 +183,15 @@ export function renderCarousel(
           // is the control's text, not an option laid out for picking
           // (Brandon: "The name loses its styling"), its swatch beside it
           // when the domain is colour-valued.
+          // [LAW:one-source-of-truth] The value the key holds, not the ring's
+          // centre: the two differ only when the ring lacks it, and then the
+          // centre would name a value the key does not hold. An unset key
+          // holds the first member, by the rule every enumerated control
+          // folds over.
           valuePaint(renderLook(runtime, "{{ carousel }}"), apply.paletteOf)(
             { index: indexAt(0), count },
-            ring(0),
-            ring(0),
+            held,
+            held,
             false,
           ),
           effectsUrl(

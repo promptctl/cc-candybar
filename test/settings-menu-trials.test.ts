@@ -92,3 +92,23 @@ test("🧪 trials offers each setting's trial looks, and one applied shows as th
   expect(applied).toContain("pair");
   expect(applied).toContain("start-primary");
 });
+
+test("each picker of a setting reads the value in force, whichever picker offers it", () => {
+  const { open, set } = menu();
+  // The ⚙'s row holds 🧪 trials; the open trials submenu is the row after it.
+  const rows = (): { gear: string; trials: string } => {
+    const lines = open("trials").split("\n");
+    const at = lines.findIndex((line) => line.includes("🧪 trials"));
+    return { gear: lines[at]!, trials: lines[at + 1]! };
+  };
+  set("variation", "start-primary");
+  set("shade", "pair");
+  const trial = rows();
+  expect(trial.gear).toContain("🎼 ◀ start-primary ▶");
+  expect(trial.gear).toContain("🔆 ◀ pair ▶");
+  set("variation", "duo");
+  set("shade", "deepest");
+  const shipped = rows();
+  expect(shipped.trials).toContain("🎼 ◀ duo ▶");
+  expect(shipped.trials).toContain("🔆 ◀ deepest ▶");
+});

@@ -903,25 +903,36 @@ function searchState(
   const standsTrue = standsAt(ColorDepth.TRUECOLOR);
   const standsAsDrawn = standsAt(drawnAt);
   // What the depth draws for `c` that stands STATE_FLOOR off every cell as
-  // drawn: `c`, or the nearest colour the depth draws that does — none where
-  // it draws no such colour, whichever `c` it starts from (rich-js
-  // `ensureDrawn`).
-  const drawnClear = (c: ColorRgba): ColorRgba | undefined =>
-    ensureDrawn(
-      c,
-      drawnAt,
-      (candidate, draw) =>
-        cells.every(
-          (cell) => contrastRatio(candidate, draw(cell)) >= STATE_FLOOR,
-        ) && toldFrom(candidate, told.map(draw)),
-    );
+  // drawn and is told from each of `these` as drawn: `c`, or the nearest
+  // colour the depth draws that does — none where it draws no such colour,
+  // whichever `c` it starts from (rich-js `ensureDrawn`, whose rounding is
+  // `shownAt`'s, so what it is measured against is rounded once).
+  const shown = shownAt(drawnAt);
+  const cellsDrawn = cells.map(shown);
+  const drawnClear = (
+    these: readonly ColorRgba[],
+  ): ((c: ColorRgba) => ColorRgba | undefined) => {
+    const theseDrawn = these.map(shown);
+    return (c) =>
+      ensureDrawn(
+        c,
+        drawnAt,
+        (candidate) =>
+          cellsDrawn.every(
+            (cell) => contrastRatio(candidate, cell) >= STATE_FLOOR,
+          ) && toldFrom(candidate, theseDrawn),
+      );
+  };
   // A step clears in truecolor and as the depth draws it: where the depth
   // draws no colour that clears, it shows a step as the step's own rounding,
   // which can land on a cell.
-  const clears = (c: ColorRgba): boolean =>
-    standsTrue(c) >= STATE_FLOOR &&
-    toldFrom(shownTrue(c), told) &&
-    drawnClear(c) !== undefined;
+  const clears = (these: readonly ColorRgba[]): ((c: ColorRgba) => boolean) => {
+    const drawn = drawnClear(these);
+    return (c) =>
+      standsTrue(c) >= STATE_FLOOR &&
+      toldFrom(shownTrue(c), these) &&
+      drawn(c) !== undefined;
+  };
   // The fine end of the search, offered once no twelfth clears: every colour
   // the terminal can draw along either ray, nearest the hue first. A colour
   // that clears can sit between twelfths — rows an authored distribution
@@ -995,17 +1006,38 @@ function searchState(
   // terminal draws it, since where nothing clears it is what the terminal
   // shows: a balance sits between two cells, and at 256 colours or ansi it
   // rounds onto one of them where an end of the axis does not.
-  const furthestOf = (offered: readonly ColorRgba[]): ColorRgba =>
-    offered.find(clears) ??
-    [...candidates, ...offered].reduce((a, b) =>
+  //
+  // [LAW:dataflow-not-control-flow] The floors give way in one order, as data:
+  // told from the items and clear of every cell; then clear of every cell,
+  // told from nothing — the items can leave no room to be told from (a theme
+  // whose shades are one colour), and a trigger that cannot be told from them
+  // must still read against its cells; then the furthest.
+  const floors: ReadonlyArray<readonly ColorRgba[]> = [told, []];
+  const firstMet = (
+    meet: (these: readonly ColorRgba[]) => ColorRgba | undefined,
+  ): ColorRgba | undefined => {
+    for (const these of floors) {
+      const met = meet(these);
+      if (met !== undefined) return met;
+    }
+    return undefined;
+  };
+  let fineOffers: readonly ColorRgba[] | undefined;
+  const fineOnce = (): readonly ColorRgba[] => (fineOffers ??= fine());
+  const meeting = (these: readonly ColorRgba[]): ColorRgba | undefined => {
+    const ok = clears(these);
+    return candidates.find(ok) ?? fineOnce().find(ok);
+  };
+  const chosen =
+    firstMet(meeting) ??
+    [...candidates, ...fineOnce()].reduce((a, b) =>
       standsAsDrawn(b) > standsAsDrawn(a) ? b : a,
     );
-  const chosen = candidates.find(clears) ?? furthestOf(fine());
-  // [LAW:dataflow-not-control-flow] One path whichever was chosen: the depth
-  // replaces it by the nearest colour it draws that clears every cell as
-  // drawn, where one does, and the shortfall is measured on the pair the
-  // terminal shows — never on truecolor's while the label names the depth.
-  const state = drawnClear(chosen) ?? chosen;
+  // One path whichever was chosen: the depth replaces it by the nearest colour
+  // it draws that meets the first floor it can, where one does, and the
+  // shortfall is measured on the pair the terminal shows — never on
+  // truecolor's while the label names the depth.
+  const state = firstMet((these) => drawnClear(these)(chosen)) ?? chosen;
   const stands = standsAsDrawn(state);
   return {
     anchor: chosen,
@@ -1519,8 +1551,8 @@ const seamShortfalls = (
  * each tone of the dial's window, as the palette names it (`bandEntries`) —
  * which truecolor draws byte for byte. At 256 colours and ansi, an item whose
  * rounding stands under `SEAM_MIN_DELTA_E` off another colour of its row —
- * the ✕ (the state), a trigger open in the band, an item placed before it —
- * or is the plane, is replaced by the nearest entry the depth draws that
+ * the plane, the ✕ (the state), a trigger open in the band, an item placed
+ * before it — is replaced by the nearest entry the depth draws that
  * stands off them all (rich-js `ensureDrawn`), as the state is. Where the
  * depth draws no such entry the item is drawn at its place, and
  * `seamShortfalls` names the pair.
@@ -1533,10 +1565,11 @@ function drawnItems(
   drawnAt: ColorDepth,
 ): readonly ColorRgba[] {
   const asDrawn = shownAt(drawnAt);
+  // [LAW:single-enforcer] The floor `seamShortfalls` reports is the one the
+  // repair keeps: a seam off every colour beside the item, the plane included.
   const seen =
     (others: readonly ColorRgba[]) =>
     (candidate: ColorRgba, drawn: (c: ColorRgba) => ColorRgba): boolean =>
-      candidate.hex !== drawn(drawnBand.plane).hex &&
       others.every(
         (other) => deltaE(candidate, drawn(other)) >= SEAM_MIN_DELTA_E,
       );
@@ -1546,7 +1579,7 @@ function drawnItems(
       ensureDrawn(
         item,
         drawnAt,
-        seen([drawnBand.state, nested.state, ...placed]),
+        seen([drawnBand.plane, drawnBand.state, nested.state, ...placed]),
       ) ?? asDrawn(item),
     ],
     [],
@@ -1716,6 +1749,30 @@ export function bandItemFor(
   );
 }
 
+/**
+ * A band item as it is drawn: its colour (`bandItemFor`) and the text the
+ * dial pairs with that shade. [LAW:one-source-of-truth] What a segment placed
+ * in the band and an option a picker lays in it both wear, so neighbouring
+ * items of one menu read alike.
+ */
+export function bandItem(
+  palette: Palette,
+  disclosure: Disclosure,
+  place: PlacedStep | undefined,
+  drawnAt: ColorDepth,
+): Pick<Decoration, "tint" | "text"> {
+  const tint = bandItemFor(palette, disclosure, place, drawnAt);
+  return {
+    tint,
+    text: disclosure.decor.shade.text(
+      palette,
+      hueOf(disclosure),
+      tint,
+      drawnAt,
+    ),
+  };
+}
+
 // --- Regions -------------------------------------------------------------------
 
 /**
@@ -1856,15 +1913,8 @@ export function decorationFor(
       // chrome's unit around each content cell of a user's body — wears that
       // cell's item, and a row picks nothing, so a one-cell row and edit
       // chrome's wrapping of it are both a first cell.
-      const tint = bandItemFor(
-        palette,
-        band,
-        rowAndCell(address).cell,
-        drawnAt,
-      );
       return {
-        tint,
-        text: band.decor.shade.text(palette, hueOf(band), tint, drawnAt),
+        ...bandItem(palette, band, rowAndCell(address).cell, drawnAt),
         disclosure: nestedIn(band),
       };
     }

@@ -10,12 +10,15 @@
 import { ColorDepth, drawnColour } from "@promptctl/rich-js";
 import {
   ColorRgba,
+  Oklch,
   contrastRatio,
   getThemePalette,
   listThemePalettes,
   Palette,
 } from "@promptctl/rich-js";
 import { floorOf } from "../src/config/globals-fields";
+import type { ActiveSegment } from "../src/render/active-segment";
+import { bandItemStyle } from "../src/render/band-style";
 import {
   BAND_FLOORS,
   deltaE,
@@ -38,6 +41,7 @@ import {
   paletteRole,
   rowGround,
   shadeRole,
+  stateFor,
   vocabularyOf,
   vocabularySelect,
   inBin,
@@ -630,6 +634,27 @@ describe("a band item is placed by its step", () => {
       }
     }
   });
+  test("a picker's option wears what a segment at its step wears, text and all, so one menu's items read alike", () => {
+    for (const shade of ["middle", "muted"] as const) {
+      const decor: Decor = { variation: VARIATIONS["ends-primary"], shade: SHADES[shade] };
+      const disclosure: Disclosure = { decor, depth: 0, ground: FIRST_ROW };
+      for (const palette of REGISTRY) {
+        // The option's style reads the active segment's palette and the band it opens, nothing else.
+        const active = { palette, disclosure } as ActiveSegment;
+        for (const index of [0, 1, 2]) {
+          const option = bandItemStyle(active, { index, count: 3, distribution: VDC }, ColorDepth.TRUECOLOR);
+          const segment = decorationFor(palette, { kind: "band", band: disclosure, address: [cell(index, 3)] }, ColorDepth.TRUECOLOR);
+          expect([palette.name, shade, index, option.bgcolor?.value?.hex, option.color?.value?.hex]).toEqual([
+            palette.name,
+            shade,
+            index,
+            segment.tint.hex,
+            segment.text.hex,
+          ]);
+        }
+      }
+    }
+  });
 });
 
 describe("a band item is drawn, never thrown — the settings controls are band items", () => {
@@ -679,6 +704,27 @@ describe("no floor is measured where nothing is drawn in colour", () => {
     const disclosure: Disclosure = { decor, depth: 0, ground };
     expect(bandFor(textualDark, disclosure, ColorDepth.TRUECOLOR).shortfalls).not.toEqual([]);
     expect(bandFor(textualDark, disclosure, ColorDepth.DEFAULT).shortfalls).toEqual([]);
+  });
+});
+
+describe("an open trigger's floors give way in order", () => {
+  test("items that leave no colour of the hue to be told from leave the trigger its cells give it alone", () => {
+    for (const palette of REGISTRY) {
+      const hue: DecorHue = "primary";
+      const cells = [paletteRole(palette, "background")];
+      // Every colour along the hue's rays to white and to black, closer than
+      // a seam apart: nothing the hue can be drawn as is told from them all.
+      const lch = Oklch.fromRgba(paletteRole(palette, hue));
+      const ends = [new ColorRgba(255, 255, 255), new ColorRgba(0, 0, 0)].map((c) => Oklch.fromRgba(c));
+      const crowd = ends.flatMap((end) =>
+        Array.from({ length: 401 }, (_, k) => lch.mixAxes(end, { l: k / 400, c: 0, h: 0, alpha: 0 }).toRgba()),
+      );
+      // In truecolor, where the crowd is every colour the hue is drawn as;
+      // a depth's table can hold an entry that stands off all of them.
+      const alone = stateFor(palette, hue, cells, [], ColorDepth.TRUECOLOR);
+      const crowded = stateFor(palette, hue, cells, crowd, ColorDepth.TRUECOLOR);
+      expect([palette.name, crowded.state.hex, crowded.short]).toEqual([palette.name, alone.state.hex, alone.short]);
+    }
   });
 });
 

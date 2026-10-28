@@ -13,7 +13,7 @@ import {
 import type { ColorRgba, Palette } from "@promptctl/rich-js";
 import { DISCLOSURE_CLOSE_ROLE } from "../config/disclosure.js";
 import {
-  bandItemFor,
+  bandItem,
   paletteRole,
   TEXT_MIN_CONTRAST,
   textOn,
@@ -107,9 +107,7 @@ export function bandItemStyle(
   step: PlacedStep,
   drawnAt: ColorDepth,
 ): Style {
-  return stateCell(
-    active.palette,
-    bandItemFor(active.palette, active.disclosure, step, drawnAt),
-    drawnAt,
+  return decoratedCell(
+    bandItem(active.palette, active.disclosure, step, drawnAt),
   );
 }
