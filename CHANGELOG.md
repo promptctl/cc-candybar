@@ -1,3 +1,9 @@
+## [1.162.1](https://github.com/promptctl/cc-candybar/compare/v1.162.0...v1.162.1) (2026-10-29)
+
+### Bug Fixes
+
+* **test:** a watched-file rewrite is a rename over the file, re-applied until the feed hears it (brandon-unfiled-3248.v9ix) ([#478](https://github.com/promptctl/cc-candybar/issues/478)) ([2377fc2](https://github.com/promptctl/cc-candybar/commit/2377fc2986a52b1c81e1717e5c90e7b17373a205))
+
 ## [1.162.0](https://github.com/promptctl/cc-candybar/compare/v1.161.4...v1.162.0) (2026-10-29)
 
 ### Features
