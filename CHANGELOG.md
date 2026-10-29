@@ -1,3 +1,9 @@
+## [1.162.3](https://github.com/promptctl/cc-candybar/compare/v1.162.2...v1.162.3) (2026-10-29)
+
+### Bug Fixes
+
+* **test:** the tmux stub waits on a gate the test holds (brandon-unfiled-3248.009i) ([#480](https://github.com/promptctl/cc-candybar/issues/480)) ([fd6ec8d](https://github.com/promptctl/cc-candybar/commit/fd6ec8d4733e93e217d07463582ca5edf2c228bb))
+
 ## [1.162.2](https://github.com/promptctl/cc-candybar/compare/v1.162.1...v1.162.2) (2026-10-29)
 
 ### Bug Fixes
