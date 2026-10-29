@@ -6,6 +6,7 @@
 // bug reaches, are held by test/request-event.test.ts.
 
 import { spawn } from "node:child_process";
+import { once } from "node:events";
 import {
   existsSync,
   mkdirSync,
@@ -80,20 +81,22 @@ const CONFIGS = {
 // kernel does when the worker dies, ends the stub's read, and it exits 1; a
 // stub started once the gate is closed finds nothing listening and exits at
 // once. So a run that ends before its gate opens, however it ends, leaves no
-// stub behind.
+// stub behind. The stub runs on the worker's own node, so it needs nothing
+// from the daemon's PATH, and it says back through the gate that it heard.
 const STUB_TMUX = [
+  `#!${process.execPath}`,
   `const gate = require("node:net").connect(require("node:path").join(__dirname, "gate"));`,
-  `gate.once("data", () => { process.stdout.write("held\\n"); gate.destroy(); });`,
-  `gate.on("end", () => { process.stderr.write("the gate closed before it opened\\n"); process.exitCode = 1; });`,
-  `gate.on("error", (err) => { process.stderr.write(err.message + "\\n"); process.exitCode = 1; });`,
+  `process.exitCode = 1;`,
+  `gate.once("data", () => { process.exitCode = 0; process.stdout.write("held\\n"); gate.end("held\\n"); });`,
+  `gate.on("close", () => process.exitCode && process.stderr.write("the gate closed before it opened\\n"));`,
+  `gate.on("error", (err) => process.stderr.write(err.message + "\\n"));`,
 ].join("\n");
-
-const shellQuoted = (s: string): string => `'${s.replaceAll("'", `'\\''`)}'`;
 
 interface TmuxStub {
   // Resolves once the nth stub to run has connected, counting from 1.
   asked(n: number): Promise<void>;
-  // Lets the nth stub answer. Rejects, naming it, when it hung up first.
+  // Lets the nth stub answer, resolving once it says it heard. Rejects,
+  // naming it, when it hung up first.
   open(n: number): Promise<void>;
   // Ends every stub still waiting.
   close(): Promise<void>;
@@ -105,16 +108,9 @@ interface Ask {
   hungUp: string | null;
 }
 
-// A `tmux` in `dir` and the gate it waits on. The stub runs on the worker's
-// own node, so it needs nothing from the daemon's PATH, and `exec` keeps the
-// pid its spawner holds.
+// A `tmux` in `dir` and the gate it waits on.
 async function tmuxStub(dir: string): Promise<TmuxStub> {
-  writeFileSync(path.join(dir, "tmux.cjs"), STUB_TMUX);
-  writeFileSync(
-    path.join(dir, "tmux"),
-    `#!/bin/sh\nexec ${shellQuoted(process.execPath)} "$(dirname "$0")/tmux.cjs"\n`,
-    { mode: 0o755 },
-  );
+  writeFileSync(path.join(dir, "tmux"), STUB_TMUX, { mode: 0o755 });
   // [LAW:no-silent-failure] A stub that hangs up before its gate opens says
   // how, for the open that finds it gone.
   const asks: Ask[] = [];
@@ -134,11 +130,15 @@ async function tmuxStub(dir: string): Promise<TmuxStub> {
         const ask = asks[n - 1];
         if (ask === undefined)
           return reject(new Error(`tmux stub #${n} never asked`));
-        if (ask.hungUp !== null)
-          return reject(
+        const gone = () =>
+          reject(
             new Error(`tmux stub #${n} ${ask.hungUp} before its gate opened`),
           );
-        ask.socket.write("open\n", (err) => (err ? reject(err) : resolve()));
+        if (ask.hungUp !== null) return gone();
+        // A write lands in the kernel whether or not the stub is alive to
+        // read it; only the stub's answer back says it heard.
+        ask.socket.once("data", () => resolve()).once("close", gone);
+        ask.socket.write("open\n");
       }),
     close: () =>
       new Promise((resolve, reject) => {
@@ -930,15 +930,18 @@ describe("the tmux stub's wait is its gate's", () => {
       stdio: "ignore",
     });
     try {
-      await stub.asked(1);
-      await stub.close();
+      // A spawn that fails rejects here, by name.
+      await once(child, "spawn");
+      await stub.asked(1).finally(() => stub.close());
+      // Bounded, so a stub that ignores its gate fails this test by name and
+      // the cleanup below still runs.
       await until(
-        () => child.exitCode !== null,
+        () => child.exitCode !== null || child.signalCode !== null,
         "the stub exiting once its gate closed",
       );
-      expect(child.exitCode).toBe(1);
+      expect([child.exitCode, child.signalCode]).toEqual([1, null]);
     } finally {
-      // A failed run leaves no stub either. The stub `exec`s node, so the
+      // A failed run leaves no stub either. The stub is node itself, so the
       // child is the whole of it.
       child.kill("SIGKILL");
       rmSync(dir, { recursive: true, force: true });
