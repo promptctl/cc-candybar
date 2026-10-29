@@ -384,11 +384,12 @@ export interface Teardown {
 }
 
 // [LAW:nothing-unseen] Every (re)load's outcome, success and failure alike:
-// the files it resolved, what failed or warned, and which repositories it
-// left out awaiting the user's answer or declined by it.
+// the files it resolved, what failed or warned, which repositories it left
+// out awaiting the user's answer or declined by it, and which directories
+// claimed a worktree their repository does not vouch for, and why.
 export function configLoadedLine(entry: ReloadedEntry): string {
   const dirs = (ds: readonly string[]): string => ds.join(",") || "-";
-  return `config loaded projectDir=${entry.projectDir} cwd=${entry.cwd} files=${entry.configLayers.join(" < ") || "<bundled default>"} awaiting=${dirs(entry.repos.awaiting)} declined=${dirs(entry.repos.declined)} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warning=${entry.lastWarning === null ? "none" : JSON.stringify(entry.lastWarning)}`;
+  return `config loaded projectDir=${entry.projectDir} cwd=${entry.cwd} files=${entry.configLayers.join(" < ") || "<bundled default>"} awaiting=${dirs(entry.repos.awaiting)} declined=${dirs(entry.repos.declined)} unproven=${entry.repos.unproven.length === 0 ? "-" : JSON.stringify(entry.repos.unproven)} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warning=${entry.lastWarning === null ? "none" : JSON.stringify(entry.lastWarning)}`;
 }
 
 export function configDisposeLine(

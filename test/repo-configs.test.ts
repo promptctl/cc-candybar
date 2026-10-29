@@ -1,9 +1,10 @@
 // [LAW:behavior-not-structure] A repository's cc-candybar configs — its cwd
 // and project layers and its `.cc-candybar/plugins/` — load only once the user
-// approved the directory, and every resolution (the render, `check`, the
-// durable writer) answers the same way. The answer is per directory and holds
-// across edits: nothing here hashes a file.
+// approved the repository, and every resolution (the render, `check`, the
+// durable writer) answers the same way. The answer is per repository, holds
+// across edits (nothing here hashes a file) and covers every linked worktree.
 
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -22,6 +23,7 @@ import {
   type ReloadedEntry,
 } from "../src/daemon/cache/render";
 import {
+  recordAnswer,
   repoAnswerFields,
   repoConfigs,
   repoConfigsPath,
@@ -77,8 +79,10 @@ describe("the gate over a project's config file", () => {
     expect(layersOf(book({}))).toEqual([]);
     expect(resolved.repos).toEqual({
       plugins: null,
+      approved: [],
       awaiting: [project],
       declined: [],
+      unproven: [],
       unread: null,
     });
     expect(layersOf(book({ [project]: "approved" }))).toEqual([file]);
@@ -203,9 +207,20 @@ describe("check", () => {
     expect(outcome).toMatchObject({ kind: "clean", layers: [file] });
     expect(fs.existsSync(marker)).toBe(true);
   });
+
+  test("a directory whose worktree claim fails its proof is reported with the reason it answers for itself", async () => {
+    write(".cc-candybar.json5", "{}");
+    write(".git", "gitdir: /nonexistent/x\n");
+    const outcome = await checkConfig(undefined, project);
+    expect(outcome.kind).toBe("clean");
+    if (outcome.kind !== "clean") return;
+    expect(outcome.warnings).toContain(
+      `not proven a worktree: ${project} — it answers for itself, because /nonexistent/x is not there`,
+    );
+  });
 });
 
-test("the config loaded event names the repositories left waiting and declined", () => {
+test("the config loaded event names the repositories left waiting and declined, and the unproven worktrees", () => {
   const entry: ReloadedEntry = {
     projectDir: project,
     cwd: project,
@@ -213,8 +228,10 @@ test("the config loaded event names the repositories left waiting and declined",
     configLayers: [],
     repos: {
       plugins: null,
+      approved: [],
       awaiting: ["/a", "/b"],
       declined: [],
+      unproven: [{ dir: "/c", reason: "/x is not there" }],
       unread: null,
     },
     failedFile: null,
@@ -223,19 +240,28 @@ test("the config loaded event names the repositories left waiting and declined",
     state: undefined as never,
   };
   const line = configLoadedLine(entry);
-  expect(line).toContain(" awaiting=/a,/b declined=- ");
+  expect(line).toContain(
+    ` awaiting=/a,/b declined=- unproven=[{"dir":"/c","reason":"/x is not there"}] `,
+  );
 });
 
 test("the question offers each answer as a link signed for its session, directory and answer", () => {
   const signer = linkSigner(Buffer.alloc(32, 7));
   const [channel, ...rest] = repoQuestions(
-    { plugins: null, awaiting: [project], declined: [], unread: null },
+    {
+      plugins: null,
+      approved: [],
+      awaiting: [project],
+      declined: [],
+      unproven: [],
+      unread: null,
+    },
     "sid-1",
     signer,
   );
   expect(rest).toEqual([]);
   expect(channel!.message).toBe(
-    `${project} has a cc-candybar config — run it?`,
+    `a cc-candybar config for ${project} — run it?`,
   );
   const answers = channel!.lines[0]
     .flatMap((span) => effectsOf(span.link))
@@ -296,6 +322,154 @@ describe("the book in the state directory", () => {
     expect(repoConfigs(state()).read()).toEqual({
       kind: "ok",
       value: { [project]: "declined" },
+    });
+  });
+});
+
+describe("a repository's worktrees answer as the repository", () => {
+  let wt: string;
+  const git = (...args: string[]): void => {
+    execFileSync("git", args, { stdio: "ignore" });
+  };
+  const resolveAt = (answers: RepoAnswers, dir: string) =>
+    resolveDslConfig(answers, dir, dir);
+  const layersAt = (answers: RepoAnswers, dir: string) => {
+    const r = resolveAt(answers, dir);
+    return r.kind === "chain" ? r.layers : null;
+  };
+
+  beforeEach(() => {
+    git("init", "-q", project);
+    git(
+      "-C",
+      project,
+      "-c",
+      "user.name=t",
+      "-c",
+      "user.email=t@t",
+      "commit",
+      "-q",
+      "--allow-empty",
+      "-m",
+      "c",
+    );
+    wt = path.join(root, "wt");
+    git("-C", project, "worktree", "add", "-q", "--detach", wt);
+    fs.writeFileSync(path.join(wt, ".cc-candybar.json5"), "{}");
+    fs.mkdirSync(path.join(wt, ".cc-candybar/plugins/deploy"), {
+      recursive: true,
+    });
+    fs.writeFileSync(
+      path.join(wt, ".cc-candybar/plugins/deploy/plugin.json5"),
+      "{}",
+    );
+  });
+
+  test("a new worktree of an approved repository loads its config and plugins, and never asks", () => {
+    const resolved = resolveAt(book({ [project]: "approved" }), wt);
+    expect(resolved).toMatchObject({
+      layers: [path.join(wt, ".cc-candybar.json5")],
+      repos: { plugins: wt, approved: [wt], awaiting: [], declined: [] },
+    });
+  });
+
+  test("a worktree's own answer stands while its repository has none", () => {
+    expect(resolveAt(book({ [wt]: "approved" }), wt)).toMatchObject({
+      layers: [path.join(wt, ".cc-candybar.json5")],
+      repos: { plugins: wt, approved: [wt], awaiting: [] },
+    });
+    expect(resolveAt(book({ [wt]: "declined" }), wt)).toMatchObject({
+      layers: [],
+      repos: { plugins: null, awaiting: [], declined: [wt] },
+    });
+  });
+
+  test("a declined repository's worktrees are declined", () => {
+    const resolved = resolveAt(book({ [project]: "declined" }), wt);
+    expect(resolved).toMatchObject({
+      layers: [],
+      repos: { plugins: null, awaiting: [], declined: [project] },
+    });
+  });
+
+  test("an unanswered repository's worktree asks for the repository, and its answer covers both", () => {
+    expect(resolveAt(book({}), wt).repos.awaiting).toEqual([project]);
+    const state = repoConfigs(path.join(root, "state"));
+    expect(recordAnswer(state, project, "approved").kind).toBe("ok");
+    const answers = state.read() as RepoAnswers;
+    expect(layersAt(answers, wt)).toEqual([
+      path.join(wt, ".cc-candybar.json5"),
+    ]);
+    fs.writeFileSync(path.join(project, ".cc-candybar.json5"), "{}");
+    expect(resolveAt(answers, project).repos.awaiting).toEqual([]);
+  });
+
+  test("a worktree's own answer that disagrees with its repository's asks, loads nothing, and the answer supersedes it", () => {
+    const legacy = { [project]: "approved", [wt]: "declined" } as const;
+    expect(resolveAt(book(legacy), wt)).toMatchObject({
+      layers: [],
+      repos: { plugins: null, approved: [], awaiting: [project] },
+    });
+    // One that agrees changes nothing.
+    expect(
+      resolveAt(book({ [project]: "approved", [wt]: "approved" }), wt).repos
+        .approved,
+    ).toEqual([wt]);
+
+    const state = repoConfigs(path.join(root, "state"));
+    state.update(() => legacy);
+    expect(recordAnswer(state, project, "approved")).toEqual({
+      kind: "ok",
+      value: { superseded: [wt], absent: [], unchecked: [] },
+    });
+    expect(state.read()).toEqual({
+      kind: "ok",
+      value: { [project]: "approved" },
+    });
+  });
+
+  test("an entry whose directory is gone is kept and named, and the answer is recorded", () => {
+    const gone = path.join(root, "removed-worktree");
+    const state = repoConfigs(path.join(root, "state"));
+    state.update(() => ({ [gone]: "approved" }));
+    expect(recordAnswer(state, project, "declined")).toEqual({
+      kind: "ok",
+      value: { superseded: [], absent: [gone], unchecked: [] },
+    });
+    expect(state.read()).toEqual({
+      kind: "ok",
+      value: { [gone]: "approved", [project]: "declined" },
+    });
+  });
+
+  test("a directory that only claims to be a worktree answers for itself, says why, and loads without a throw", () => {
+    const evil = path.join(root, "evil");
+    fs.mkdirSync(evil);
+    fs.symlinkSync(path.join(wt, ".git"), path.join(evil, ".git"));
+    fs.writeFileSync(path.join(evil, ".cc-candybar.json5"), "{}");
+    const resolved = resolveAt(book({ [project]: "approved" }), evil);
+    expect(resolved).toMatchObject({
+      layers: [],
+      repos: {
+        awaiting: [evil],
+        unproven: [
+          { dir: evil, reason: `${path.join(evil, ".git")} is not a file` },
+        ],
+      },
+    });
+
+    // A moved worktree, and an entry for it in the book, throw nowhere.
+    const moved = path.join(root, "moved");
+    fs.renameSync(wt, moved);
+    const state = repoConfigs(path.join(root, "state"));
+    state.update(() => ({ [moved]: "approved" }));
+    expect(resolveAt(state.read() as RepoAnswers, moved).repos).toMatchObject({
+      approved: [moved],
+      unproven: [{ dir: moved }],
+    });
+    expect(recordAnswer(state, project, "approved")).toEqual({
+      kind: "ok",
+      value: { superseded: [], absent: [], unchecked: [] },
     });
   });
 });

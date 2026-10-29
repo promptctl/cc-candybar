@@ -5,6 +5,7 @@
 // exploited: a REAL daemon over a REAL socket, a project config whose
 // `shell` variable leaves a marker on disk when it runs.
 
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -26,7 +27,7 @@ import {
 } from "./helpers/spawn-isolated-daemon";
 import { VERB_REPO_CONFIG } from "../src/click/wire";
 import { logPath } from "../src/daemon/paths";
-import { repoConfigsPath } from "../src/daemon/repo-configs";
+import { repoConfigs, repoConfigsPath } from "../src/daemon/repo-configs";
 import { stateDir } from "../src/daemon/paths";
 import { until } from "./helpers/until";
 
@@ -118,7 +119,7 @@ describe("a repository's config waits for the user's one answer", () => {
     const text = stripAnsi(rendered).replace(/\s+/g, " ");
     expect(text).toContain("USERSEG");
     expect(text).not.toContain("REPOSEG");
-    expect(text).toContain(`${project} has a cc-candybar config`);
+    expect(text).toContain(`a cc-candybar config for ${project}`);
     expect(fs.existsSync(marker)).toBe(false);
     // [LAW:nothing-unseen] The load says which repository it left waiting.
     const loadedLine = ` awaiting=${project} declined=- `;
@@ -157,7 +158,7 @@ describe("a repository's config waits for the user's one answer", () => {
       (r) => stripAnsi(r).includes("REPOSEGran"),
       "the approved repository's config",
     );
-    expect(stripAnsi(approved)).not.toContain("has a cc-candybar config");
+    expect(stripAnsi(approved)).not.toContain("a cc-candybar config for");
     expect(fs.existsSync(marker)).toBe(true);
 
     // A restart reads the answer back from the state directory.
@@ -165,7 +166,7 @@ describe("a repository's config waits for the user's one answer", () => {
     await start();
     const restarted = stripAnsi(await draw("repo-yes-2"));
     expect(restarted).toContain("REPOSEG");
-    expect(restarted).not.toContain("has a cc-candybar config");
+    expect(restarted).not.toContain("a cc-candybar config for");
 
     // An edit reloads into the edited config, and never asks again.
     fs.writeFileSync(projectFile, repoConfig(marker, "EDITED"));
@@ -176,7 +177,7 @@ describe("a repository's config waits for the user's one answer", () => {
       (r) => stripAnsi(r).includes("EDITED"),
       "the edited config",
     );
-    expect(stripAnsi(edited)).not.toContain("has a cc-candybar config");
+    expect(stripAnsi(edited)).not.toContain("a cc-candybar config for");
   });
 
   test("decline: the user's config draws, nothing runs, and nothing asks again", async () => {
@@ -192,7 +193,7 @@ describe("a repository's config waits for the user's one answer", () => {
       isolated.sockPath,
       "repo-no",
       project,
-      (r) => !stripAnsi(r).includes("has a cc-candybar config"),
+      (r) => !stripAnsi(r).includes("a cc-candybar config for"),
       "the bar without the question",
     );
     expect(stripAnsi(declined)).toContain("USERSEG");
@@ -202,7 +203,80 @@ describe("a repository's config waits for the user's one answer", () => {
     await start();
     const restarted = stripAnsi(await draw("repo-no-2"));
     expect(restarted).toContain("USERSEG");
-    expect(restarted).not.toContain("has a cc-candybar config");
+    expect(restarted).not.toContain("a cc-candybar config for");
     expect(fs.existsSync(marker)).toBe(false);
+  });
+
+  test("a worktree asks for its repository, and one answer there covers the repository and supersedes the worktree's own", async () => {
+    const git = (...args: string[]): void => {
+      execFileSync("git", args, { stdio: "ignore" });
+    };
+    git("init", "-q", project);
+    git(
+      "-C",
+      project,
+      "-c",
+      "user.name=t",
+      "-c",
+      "user.email=t@t",
+      "commit",
+      "-q",
+      "--allow-empty",
+      "-m",
+      "c",
+    );
+    const wt = `${project}-wt`;
+    git("-C", project, "worktree", "add", "-q", "--detach", wt);
+    const wtMarker = path.join(wt, "ran.marker");
+    fs.writeFileSync(
+      path.join(wt, ".cc-candybar.json5"),
+      repoConfig(wtMarker, "WTSEG"),
+    );
+    // An answer kept under the worktree's own path, before answers were kept
+    // by repository: it disagrees with the repository's, so it asks.
+    repoConfigs(stateDir(isolated.env)).update(() => ({
+      [project]: "declined",
+      [wt]: "approved",
+    }));
+    try {
+      await start();
+      const asked = await render(isolated.sockPath, "repo-wt", wt);
+      expect(stripAnsi(asked).replace(/\s+/g, " ")).toContain(
+        `a cc-candybar config for ${project}`,
+      );
+      const resp = await sendClick(
+        isolated.sockPath,
+        answerUrl(asked, "approved"),
+        ANSWER_REPLY_MS,
+      );
+      expect(resp.ok).toBe(true);
+      await renderUntil(
+        isolated.sockPath,
+        "repo-wt",
+        wt,
+        (r) => stripAnsi(r).includes("WTSEGran"),
+        "the worktree's config, approved through its repository",
+      );
+      // [LAW:nothing-unseen] The answer says which entries it superseded.
+      await until(
+        () =>
+          fs
+            .readFileSync(logPath(isolated.env), "utf8")
+            .includes(
+              `repo-config: ${project} approved superseded=${wt} absent=- unchecked=- `,
+            ),
+        "the repo-config event naming the superseded worktree entry",
+      );
+      expect(repoConfigs(stateDir(isolated.env)).read()).toEqual({
+        kind: "ok",
+        value: { [project]: "approved" },
+      });
+      // The main worktree is approved by the same answer.
+      const main = stripAnsi(await draw("repo-main"));
+      expect(main).toContain("REPOSEG");
+      expect(main).not.toContain("a cc-candybar config for");
+    } finally {
+      fs.rmSync(wt, { recursive: true, force: true });
+    }
   });
 });
