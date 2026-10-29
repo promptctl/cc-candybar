@@ -173,6 +173,30 @@ describe("entries share a compile exactly when their configs compile alike", () 
     for (const s of states) expect(render(s)).toContain("alpha");
   });
 
+  // An edit to a config many directories render from reloads every one of
+  // their entries. The first reload builds the edited config's compile; the
+  // rest take it from the table, so the edit costs one compile, not one per
+  // entry.
+  test("a changed config reloaded across its entries builds one compile", () => {
+    const { cache, lines } = makeCache(64 * COMPILE_BYTES);
+    const cfg = file("config.json5", carouselConfig("mode", "alpha"));
+    const dirs = ["a", "b", "c"].map((d) => path.join(dir, d));
+    for (const d of dirs) {
+      fs.mkdirSync(d);
+      cache.getOrCreate(d, d, cfg);
+    }
+    const built = () =>
+      lines.filter((l) => l.startsWith("render-cache compile built ")).length;
+    expect(built()).toBe(1);
+    fs.writeFileSync(cfg, carouselConfig("other", "beta"));
+    for (const d of dirs) cache.reload(d, d, cfg);
+    expect(built()).toBe(2);
+    const states = dirs.map((d) => cache.getOrCreate(d, d, cfg).state);
+    expect(new Set(states.map((s) => s.compiled)).size).toBe(1);
+    expect(cache.stats).toMatchObject({ size: 3, compiles: 1 });
+    for (const s of states) expect(render(s)).toContain("beta");
+  });
+
   // [LAW:types-are-the-program] The one per-entry fact a compile reads is
   // which variable reads a session key back. Two configs differing only there
   // must not share: the second's carousel would read a variable its store

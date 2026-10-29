@@ -7,6 +7,7 @@ import {
   chmodSync,
   mkdirSync,
   mkdtempSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -30,6 +31,7 @@ import {
   spawnDaemonWithEnv,
   type RunningDaemon,
 } from "./helpers/spawn-isolated-daemon";
+import { untilHeard } from "./helpers/reload-signal";
 import { until } from "./helpers/until";
 
 jest.setTimeout(30_000);
@@ -161,11 +163,14 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
     // Refused until the status line has drawn its first frame, which runs
     // nothing; the first click it answers runs the link.
     let refusal = "";
-    await until(async () => {
-      const resp = await sendClick(sockPath, statusClick);
-      refusal = resp.ok ? "" : resp.error;
-      return resp.ok;
-    }, () => `the status-line click's acceptance (refused: ${refusal})`);
+    await until(
+      async () => {
+        const resp = await sendClick(sockPath, statusClick);
+        refusal = resp.ok ? "" : resp.error;
+        return resp.ok;
+      },
+      () => `the status-line click's acceptance (refused: ${refusal})`,
+    );
     const ran = (): string[] =>
       logLines(env).filter(
         (l) =>
@@ -280,5 +285,66 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
       expect.stringContaining(" by=owed "),
     ]);
     expect(statusLines(sid, "holding")).toHaveLength(1);
+  });
+
+  // A click that writes no config file reloads no entry, however many
+  // directories render that config. Judged by what each load says caused it,
+  // on the event every load path emits: from the click on, the only loads of
+  // these entries are the watch hearing the config rewritten after it. A load
+  // the click caused, by any path, would say `explicit` or name another file.
+  test("a lane switch's click reloads no entry; the config's own rewrite reloads each one", async () => {
+    const sid = "lane-no-reload";
+    const root = realpathSync(
+      mkdtempSync(path.join(os.tmpdir(), "cc-candybar-lane-reload-")),
+    );
+    try {
+      const cfg = path.join(root, "reload.json5");
+      writeFileSync(cfg, CONFIG);
+      const dirs = ["a", "b", "c"].map((d) => path.join(root, d));
+      for (const [i, d] of dirs.entries()) {
+        mkdirSync(d);
+        await render(sockPath, `${sid}-${i}`, d, inTmux(`${sid}-${i}`), [
+          "cc-candybar",
+          "--config",
+          cfg,
+        ]);
+      }
+      await switchLanes(`${sid}-0`, true, "pane");
+      await until(() => laneLines(`${sid}-0`).length > 0, "the pane's setup");
+      const clicked = `set-state: ${LANES.pane.setting}=true (session=${sid}-0)`;
+      const sinceClick = (): string[] => {
+        const lines = logLines(env);
+        const at = lines.findIndex((l) => l.includes(clicked));
+        if (at < 0) throw new Error(`the click logged no \`${clicked}\``);
+        return lines.slice(at);
+      };
+      // The click's one file write, landed: a save after the click wrote a
+      // snapshot taken after its pick.
+      await until(
+        () => sinceClick().some((l) => l.includes(" session-state saved ")),
+        "the session-state save after the click",
+      );
+      const loadsAfterClick = (): string[] =>
+        sinceClick().filter((l) =>
+          dirs.some((d) =>
+            l.includes(` config loaded projectDir=${d} cwd=${d} `),
+          ),
+        );
+      // The positive control: the watches are live, and an event the click
+      // caused would have been delivered before the rewrite's.
+      await untilHeard(
+        () =>
+          writeFileSync(cfg, CONFIG.replace("a lane mark", "a reloaded mark")),
+        () =>
+          dirs.every((d) =>
+            loadsAfterClick().some((l) => l.includes(` projectDir=${d} `)),
+          ),
+        "each entry's load of the rewritten config",
+      );
+      for (const line of loadsAfterClick())
+        expect(line).toContain(" cause=watch:reload.json5 files=");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

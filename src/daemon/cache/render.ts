@@ -74,6 +74,7 @@ import type {
   WatcherRegistry,
   WatcherHandle,
   HeldWatch,
+  Invalidation,
   WatchTargets,
 } from "./watchers.js";
 import { quietLogger, type DaemonLogger } from "../../utils/logger.js";
@@ -222,12 +223,13 @@ export interface RenderCacheObservers {
   // over as ReloadedEntry so the observer reads the outcome from the one
   // place it lives and the type, not this comment, keeps it from writing
   // there. `sessions` are those whose views drew from the entry before it
-  // loaded: none for an entry just created. Trusted non-throwing (the same contract as
-  // onSegmentError): an observer that throws is a caller bug surfaced loudly,
-  // never absorbed here.
+  // loaded: none for an entry just created. `cause` is why it loaded. Trusted
+  // non-throwing (the same contract as onSegmentError): an observer that
+  // throws is a caller bug surfaced loudly, never absorbed here.
   readonly onReload?: (
     entry: ReloadedEntry,
     sessions: readonly string[],
+    cause: LoadCause,
   ) => void;
   // Fires with a session's id when its view opens and whenever what the view
   // draws from moves (openView's `changed`): what a feed showing the session
@@ -383,13 +385,38 @@ export interface Teardown {
   readonly held: number;
 }
 
+// [LAW:types-are-the-program] Why an entry loaded: its first load, a caller's
+// explicit re-read (after a durable write, or before a doctor verdict), or a
+// watch that heard something, carrying what the watch heard.
+export type LoadCause =
+  | { readonly kind: "open" }
+  | { readonly kind: "explicit" }
+  | { readonly kind: "watch"; readonly heard: Invalidation };
+
+const causeField = (cause: LoadCause): string => {
+  if (cause.kind !== "watch") return cause.kind;
+  const { heard } = cause;
+  switch (heard.kind) {
+    case "changed":
+      return `watch:${[...heard.names].join(",")}`;
+    case "unknown":
+      return "watch:unknown";
+    case "failed":
+      return `watch:failed:${JSON.stringify(heard.reason)}`;
+  }
+};
+
 // [LAW:nothing-unseen] Every (re)load's outcome, success and failure alike:
-// the files it resolved, what failed or warned, which repositories it left
-// out awaiting the user's answer or declined by it, and which directories
-// claimed a worktree their repository does not vouch for, and why.
-export function configLoadedLine(entry: ReloadedEntry): string {
+// why it ran, the files it resolved, what failed or warned, which
+// repositories it left out awaiting the user's answer or declined by it, and
+// which directories claimed a worktree their repository does not vouch for,
+// and why.
+export function configLoadedLine(
+  entry: ReloadedEntry,
+  cause: LoadCause,
+): string {
   const dirs = (ds: readonly string[]): string => ds.join(",") || "-";
-  return `config loaded projectDir=${entry.projectDir} cwd=${entry.cwd} files=${entry.configLayers.join(" < ") || "<bundled default>"} awaiting=${dirs(entry.repos.awaiting)} declined=${dirs(entry.repos.declined)} unproven=${entry.repos.unproven.length === 0 ? "-" : JSON.stringify(entry.repos.unproven)} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warning=${entry.lastWarning === null ? "none" : JSON.stringify(entry.lastWarning)}`;
+  return `config loaded projectDir=${entry.projectDir} cwd=${entry.cwd} cause=${causeField(cause)} files=${entry.configLayers.join(" < ") || "<bundled default>"} awaiting=${dirs(entry.repos.awaiting)} declined=${dirs(entry.repos.declined)} unproven=${entry.repos.unproven.length === 0 ? "-" : JSON.stringify(entry.repos.unproven)} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warning=${entry.lastWarning === null ? "none" : JSON.stringify(entry.lastWarning)}`;
 }
 
 export function configDisposeLine(
@@ -1283,7 +1310,7 @@ export class RenderCache<
     this.answersWatch = deps.watchers.acquire(
       `repo-configs:${dir}/${name}`,
       { dirs: [{ path: dir, filenames: [name] }] },
-      () => this.reloadEvery(),
+      (heard) => this.reloadEvery({ kind: "watch", heard }),
     );
   }
 
@@ -1364,7 +1391,7 @@ export class RenderCache<
     );
     this.refreshWatcher(entry, loaded);
     // An entry just created was drawn by no session.
-    this.observers.onReload?.(entry, []);
+    this.observers.onReload?.(entry, [], { kind: "open" });
 
     return entry;
   }
@@ -1850,19 +1877,21 @@ export class RenderCache<
       .map((view) => view.sessionId);
   }
 
-  // Re-read an entry from disk NOW, for a caller that just wrote its file and
-  // must not act on the old config until the reload has landed (a save
-  // releasing the picks the file now holds). The watcher still fires later;
-  // a second reload of unchanged bytes is idempotent.
+  // Re-read an entry from disk NOW, for a caller that must not act on the old
+  // config until the reload has landed (a save releasing the picks the file
+  // now holds, a doctor verdict on the files as they are). The watcher still
+  // fires after a write; a second reload of unchanged bytes is idempotent.
   reload(
     projectDir: string,
     cwd: string,
     configFile: string | undefined,
   ): void {
-    this.reloadInto(this.getOrCreate(projectDir, cwd, configFile));
+    this.reloadInto(this.getOrCreate(projectDir, cwd, configFile), {
+      kind: "explicit",
+    });
   }
 
-  // Re-populate `entry` from the current state of disk (watcher-driven).
+  // Re-populate `entry` from the current state of disk, for `cause`.
   //
   // - Load success: swap the fresh state in, retire the prior one.
   // - Load failure: keep the prior state (the bundled default before any
@@ -1877,7 +1906,7 @@ export class RenderCache<
   // [LAW:single-enforcer] One publish point for "this reload completed":
   // straight-line, so the signal structurally cannot be skipped by whichever
   // arm the load took.
-  private reloadInto(entry: CacheEntry): void {
+  private reloadInto(entry: CacheEntry, cause: LoadCause): void {
     // Taken before the reload, so a session whose view fails to reopen over
     // the new state is still among those it changed.
     const sessions = this.sessionsOn(entry);
@@ -1897,20 +1926,20 @@ export class RenderCache<
     // Rebinds to the broken file (and its sibling candidates) too, so an
     // in-place save OR a higher-precedence file appearing recovers.
     this.refreshWatcher(entry, loaded);
-    this.observers.onReload?.(entry, sessions);
+    this.observers.onReload?.(entry, sessions, cause);
   }
 
   // Every entry, under the answers now on disk: any of them may draw from a
   // repository. The live map is walked, so an entry a reload's `fit` evicts
   // is skipped, never reloaded back to life.
-  private reloadEvery(): void {
-    // [LAW:nothing-unseen] Why every entry is about to reload, as a config
-    // edit's reload says which entry it was for.
+  private reloadEvery(cause: LoadCause): void {
+    // [LAW:nothing-unseen] Why every entry is about to reload: one line for
+    // the batch, before each entry's own load names the cause.
     this.log(
       "info",
       `repo-config answers changed, reloading entries=${this.entries.size}`,
     );
-    for (const entry of this.entries.values()) this.reloadInto(entry);
+    for (const entry of this.entries.values()) this.reloadInto(entry, cause);
   }
 
   // [LAW:single-enforcer] One watcher-rebind decision per reload: the watch
@@ -1929,10 +1958,16 @@ export class RenderCache<
     // [LAW:one-source-of-truth] The key names the target set, so the
     // registry's `follow` rebinds exactly when the set changed.
     const key = `config:${entry.projectDir}:${entry.cwd}:${entry.configFile ?? ""}:${JSON.stringify(targets)}`;
+    // [LAW:single-enforcer] One reload dispatcher per cache entry: any
+    // change the entry's watch hears re-resolves its whole chain (so a
+    // higher-precedence file appearing supersedes a lower one) and reloads.
+    // It does not filter by which path changed, because the (projectDir,
+    // cwd) tuple already scopes the entry's watch set; what was heard rides
+    // on the reload's cause.
     const { watch, move } = this.deps.watchers.follow(
       entry.watch,
       { key, targets },
-      () => this.onConfigChanged(entry),
+      (heard) => this.reloadInto(entry, { kind: "watch", heard }),
     );
     entry.watch = watch;
     if (move === "kept") return;
@@ -1948,21 +1983,6 @@ export class RenderCache<
         "warn",
         `config watch unresolved projectDir=${entry.projectDir} path=${at} reason=${reason}`,
       );
-  }
-
-  // [LAW:single-enforcer] One reload dispatcher per cache entry. The
-  // watcher fires on any change in any candidate dir matching the
-  // CONFIG_FILENAME; the entry re-resolves its own resolution chain (so a
-  // higher-precedence file appearing supersedes a lower one) and reloads.
-  // We don't filter by which specific path changed because the
-  // (projectDir, cwd) tuple already scopes the entry's watcher set —
-  // sibling entries with different scopes don't share this watcher.
-  private onConfigChanged(entry: CacheEntry): void {
-    this.log(
-      "info",
-      `config change detected for entry projectDir=${entry.projectDir} cwd=${entry.cwd}`,
-    );
-    this.reloadInto(entry);
   }
 
   get size(): number {
