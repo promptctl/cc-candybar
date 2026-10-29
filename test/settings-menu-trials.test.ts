@@ -5,61 +5,27 @@
 // the 🎼 and 🔆 carousels everyone turns offer none of them. Driven through the
 // real loader, `resolveEffectiveGlobals` and `renderDsl`.
 
-import { TEST_SIGNER } from "./helpers/link-signer";
-import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { sharedMenuStateKey } from "../src/config/menu-keys";
 import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/settings-menu";
 import { SETTINGS_NS } from "../src/config/loader/reserved-namespace";
-import { perSetting } from "../src/config/setting-projections";
-import { CHECK_TODAY, checkPayload } from "../src/check";
-import { renderOptionsOf } from "../src/daemon/render-payload";
-import { SessionState } from "../src/daemon/session-state";
-import { registerDslConfig, renderDsl } from "../src/dsl/render";
-import { listResolvablePaletteNames, TRIAL_SHADE_NAMES, TRIAL_VARIATION_NAMES } from "../src/themes/policy";
+import { TRIAL_SHADE_NAMES, TRIAL_VARIATION_NAMES } from "../src/themes/policy";
 import { instantOf } from "../src/utils/instant";
-import { SourceRegistry } from "../src/var-system/sources";
-import { VariableStore } from "../src/var-system/store";
 import { stripAnsi } from "./helpers/ansi";
-import { parseAndValidate } from "./helpers/parse-and-validate";
+import { sessionBar } from "./helpers/session-bar";
 
-const SID = "trials0a-2c3d-4e5f-8a7b-8c9d0e1f2a3b";
 const COLS = 400;
 
 function menu() {
-  const config = parseAndValidate("<user>", `{}`, new Set(listResolvablePaletteNames()), DEFAULT_DSL_CONFIG);
-  const session = new SessionState();
-  const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", session);
-  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/home/tester/code/project" });
-  const render = (): string => {
-    const effective = resolveEffectiveGlobals(config, (key) => session.get(SID, key) ?? null, () => false);
-    const at = instantOf(new Date());
-    const payload = {
-      ...checkPayload(config, effective, null, at),
-      today: CHECK_TODAY,
-      resettable: perSetting(() => false),
-      unsaved: 0,
-      history: { undo: 0, redo: 0 },
-      session_id: SID,
-      term: { cols: COLS },
-    };
-    return stripAnsi(
-      renderDsl(config, compiled, store, registry, payload, at, renderOptionsOf(effective, COLS), {
-        onSegmentError: (name, message) => {
-          throw new Error(`${name}: ${message}`);
-        },
-      }, effective),
-    );
-  };
+  const bar = sessionBar(`{}`, COLS);
+  const render = (): string => stripAnsi(bar.render(instantOf(new Date())).text);
   const open = (gearPick: string, trialsPick?: string): string => {
-    session.set(SID, SETTINGS_ANCHOR, SETTINGS_OPEN);
-    session.set(SID, sharedMenuStateKey(`${SETTINGS_NS}pickers`), "gear");
-    session.set(SID, sharedMenuStateKey(`${SETTINGS_NS}gearPickers`), gearPick);
-    if (trialsPick !== undefined) session.set(SID, sharedMenuStateKey(`${SETTINGS_NS}trialsPickers`), trialsPick);
+    bar.pick(SETTINGS_ANCHOR, SETTINGS_OPEN);
+    bar.pick(sharedMenuStateKey(`${SETTINGS_NS}pickers`), "gear");
+    bar.pick(sharedMenuStateKey(`${SETTINGS_NS}gearPickers`), gearPick);
+    if (trialsPick !== undefined) bar.pick(sharedMenuStateKey(`${SETTINGS_NS}trialsPickers`), trialsPick);
     return render();
   };
-  return { open, set: (key: string, value: string) => session.set(SID, key, value) };
+  return { open, set: (key: string, value: string) => bar.pick(key, value) };
 }
 
 const anyOf = (text: string, names: readonly string[]): string[] => names.filter((name) => text.includes(name));
