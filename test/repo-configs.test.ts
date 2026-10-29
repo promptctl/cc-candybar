@@ -242,18 +242,25 @@ const loadedEntry: ReloadedEntry = {
 
 test.each<[LoadCause, string]>([
   [{ kind: "open" }, "open"],
-  [{ kind: "explicit" }, "explicit"],
+  [{ kind: "write" }, "write"],
+  [{ kind: "doctor" }, "doctor"],
   [
     {
-      kind: "watch",
-      heard: { kind: "changed", names: new Set(["config.json5", "a.json"]) },
+      kind: "config-watch",
+      heard: {
+        kind: "changed",
+        paths: new Set(["/p/config.json5", "/u/a.json"]),
+      },
     },
-    "watch:config.json5,a.json",
+    "config-watch:/p/config.json5,/u/a.json",
   ],
-  [{ kind: "watch", heard: { kind: "unknown" } }, "watch:unknown"],
   [
-    { kind: "watch", heard: { kind: "failed", reason: "/d: EPERM" } },
-    'watch:failed:"/d: EPERM"',
+    { kind: "answers-watch", heard: { kind: "unknown" } },
+    "answers-watch:unknown",
+  ],
+  [
+    { kind: "config-watch", heard: { kind: "failed", reason: "/d: EPERM" } },
+    'config-watch:failed:"/d: EPERM"',
   ],
 ])("the config loaded event says why the load ran: %j", (cause, field) => {
   expect(configLoadedLine(loadedEntry, cause)).toContain(

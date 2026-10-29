@@ -385,26 +385,35 @@ export interface Teardown {
   readonly held: number;
 }
 
-// [LAW:types-are-the-program] Why an entry loaded: its first load, a caller's
-// explicit re-read (after a durable write, or before a doctor verdict), or a
-// watch that heard something, carrying what the watch heard.
+// [LAW:types-are-the-program] Why an entry loaded: its first load; a re-read
+// a caller asked for, after a click's durable write or before a doctor
+// verdict; or a watch that heard something, the entry's own config watch or
+// the repo-config answers watch every entry shares, carrying what it heard.
 export type LoadCause =
   | { readonly kind: "open" }
-  | { readonly kind: "explicit" }
-  | { readonly kind: "watch"; readonly heard: Invalidation };
+  | ExplicitLoad
+  | {
+      readonly kind: "config-watch" | "answers-watch";
+      readonly heard: Invalidation;
+    };
 
-const causeField = (cause: LoadCause): string => {
-  if (cause.kind !== "watch") return cause.kind;
-  const { heard } = cause;
+export interface ExplicitLoad {
+  readonly kind: "write" | "doctor";
+}
+
+const heardField = (heard: Invalidation): string => {
   switch (heard.kind) {
     case "changed":
-      return `watch:${[...heard.names].join(",")}`;
+      return [...heard.paths].join(",");
     case "unknown":
-      return "watch:unknown";
+      return "unknown";
     case "failed":
-      return `watch:failed:${JSON.stringify(heard.reason)}`;
+      return `failed:${JSON.stringify(heard.reason)}`;
   }
 };
+
+const causeField = (cause: LoadCause): string =>
+  "heard" in cause ? `${cause.kind}:${heardField(cause.heard)}` : cause.kind;
 
 // [LAW:nothing-unseen] Every (re)load's outcome, success and failure alike:
 // why it ran, the files it resolved, what failed or warned, which
@@ -1310,7 +1319,7 @@ export class RenderCache<
     this.answersWatch = deps.watchers.acquire(
       `repo-configs:${dir}/${name}`,
       { dirs: [{ path: dir, filenames: [name] }] },
-      (heard) => this.reloadEvery({ kind: "watch", heard }),
+      (heard) => this.reloadEvery({ kind: "answers-watch", heard }),
     );
   }
 
@@ -1885,10 +1894,9 @@ export class RenderCache<
     projectDir: string,
     cwd: string,
     configFile: string | undefined,
+    cause: ExplicitLoad,
   ): void {
-    this.reloadInto(this.getOrCreate(projectDir, cwd, configFile), {
-      kind: "explicit",
-    });
+    this.reloadInto(this.getOrCreate(projectDir, cwd, configFile), cause);
   }
 
   // Re-populate `entry` from the current state of disk, for `cause`.
@@ -1967,7 +1975,7 @@ export class RenderCache<
     const { watch, move } = this.deps.watchers.follow(
       entry.watch,
       { key, targets },
-      (heard) => this.reloadInto(entry, { kind: "watch", heard }),
+      (heard) => this.reloadInto(entry, { kind: "config-watch", heard }),
     );
     entry.watch = watch;
     if (move === "kept") return;

@@ -266,7 +266,7 @@ test("a reload under a view no request reaches opens its successor declared: git
 
   // A config edit while a feed draws the session and Claude Code sends
   // nothing: no request will declare the new view.
-  cache.reload(dir, dir, undefined);
+  cache.reload(dir, dir, undefined, { kind: "write" });
   const successor = cache.latestView()!;
   expect(successor).not.toBe(view);
   expect(successor.lanes().git.current()).toMatchObject({

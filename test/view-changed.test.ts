@@ -91,7 +91,8 @@ function setUp() {
   cleanups.push(() => cache.close());
   const open = (sid: string) =>
     cache.holdSession(dir, dir, configFile, viewFacts(dir, sid));
-  const reload = (): void => cache.reload(dir, dir, configFile);
+  const reload = (): void =>
+    cache.reload(dir, dir, configFile, { kind: "write" });
   return { status, changed, reloads, writeConfig, reload, open };
 }
 
@@ -143,14 +144,20 @@ test("a reload names the sessions that drew from its entry, whether or not it lo
 test("a view a reload retired says nothing more while a render still holds it", async () => {
   const { status, changed, reload, open } = setUp();
   using old = open("s");
-  await until(() => old.view.store.read("status") === "green", "the first read");
+  await until(
+    () => old.view.store.read("status") === "green",
+    "the first read",
+  );
   // [LAW:no-ambient-temporal-coupling] A reload of the file as it stands: a
   // write would also wake the config's watch, whose reload of its own can
   // land inside the window counted below and open the session's view again.
   reload();
   using now = open("s");
   expect(now.view).not.toBe(old.view);
-  await until(() => now.view.store.read("status") === "green", "the successor's first read");
+  await until(
+    () => now.view.store.read("status") === "green",
+    "the successor's first read",
+  );
   await sleep(200);
   const settled = changed.length;
   writeAtomic(status, "red");

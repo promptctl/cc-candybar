@@ -1028,7 +1028,7 @@ describe("RenderCache", () => {
         ],
       );
 
-      cache.reload("/p4", "/p4", undefined);
+      cache.reload("/p4", "/p4", undefined, { kind: "write" });
       const reload = lines.filter((l) =>
         l.startsWith("config disposed reason=reload"),
       );
@@ -1117,7 +1117,7 @@ describe("RenderCache", () => {
       lines.filter((l) => l.startsWith("config disposed reason=reload"));
     try {
       const hold = cache.hold("/p0", "/p0", undefined);
-      cache.reload("/p0", "/p0", undefined);
+      cache.reload("/p0", "/p0", undefined, { kind: "write" });
       // The entry serves the fresh state; the render keeps the one it
       // started on, undisposed, until it returns.
       expect(hold.entry.state).not.toBe(hold.state);
@@ -1132,7 +1132,7 @@ describe("RenderCache", () => {
       ]);
       expect(cache.stats).toMatchObject({ size: 1, held: 0, retired: 0 });
       // The fresh state is served and torn down like any other.
-      cache.reload("/p0", "/p0", undefined);
+      cache.reload("/p0", "/p0", undefined, { kind: "write" });
       expect(disposals()).toHaveLength(2);
       expect(disposals()[1]).toMatch(/ held=0$/);
     } finally {
@@ -1152,7 +1152,7 @@ describe("RenderCache", () => {
       ];
       expect(holds[1]!.state).toBe(holds[0]!.state);
       expect(cache.stats).toMatchObject({ size: 1, held: 1, retired: 0 });
-      cache.reload("/p0", "/p0", undefined);
+      cache.reload("/p0", "/p0", undefined, { kind: "write" });
       holds[0]![Symbol.dispose]();
       expect(lines.filter((l) => l.startsWith("config disposed "))).toEqual([]);
       holds[1]![Symbol.dispose]();
@@ -1294,9 +1294,9 @@ describe("RenderCache idle sweep", () => {
       expect(() => cache.getOrCreate(dir, dir, undefined)).toThrow(
         "render cache used after close",
       );
-      expect(() => cache.reload(dir, dir, undefined)).toThrow(
-        "render cache used after close",
-      );
+      expect(() =>
+        cache.reload(dir, dir, undefined, { kind: "write" }),
+      ).toThrow("render cache used after close");
     } finally {
       cache.close();
       jest.useRealTimers();
@@ -1638,7 +1638,7 @@ describe("RenderCache frames and pins", () => {
         );
       }
       const unpin = cache.pin("s1");
-      cache.reload(dir, dir, undefined);
+      cache.reload(dir, dir, undefined, { kind: "write" });
       expect(logs).toContainEqual(
         expect.stringMatching(
           /^session view reopen failed sid="s1": Error: the successor broke/,
@@ -1754,7 +1754,7 @@ describe("RenderCache frames and pins", () => {
     const { cache, dirs, close, request, opened } = pinCache();
     try {
       request("s1", dirs[0]!);
-      cache.reload(dirs[0]!, dirs[0]!, undefined);
+      cache.reload(dirs[0]!, dirs[0]!, undefined, { kind: "write" });
       expect(opened().map((l) => l.match(/ by=(\w+) /)?.[1])).toEqual([
         "request",
         "reload",

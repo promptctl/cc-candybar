@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import path from "node:path";
 import { debug } from "../../utils/logger";
 
 // Logger callable used for watcher lifecycle / failure events. Daemon
@@ -66,11 +67,13 @@ export interface WatchTargets {
 }
 
 // [LAW:types-are-the-program] What one debounce window of a slot's watches
-// says: the basenames that fired (`changed`), or that the OS named none of
-// them (`unknown`), or that a watch reported an error after it opened
-// (`failed`). One window folds into one value, the strongest of what it saw.
+// says: the paths that fired, each the watched directory joined with the name
+// the OS reported (`changed`), or that the OS named none of them (`unknown`),
+// or that a watch reported an error after it opened (`failed`). Paths, not
+// names: a slot watches many directories, and two of them can hold a child of
+// the same name. One window folds into one value, the strongest of what it saw.
 export type Invalidation =
-  | { readonly kind: "changed"; readonly names: ReadonlySet<string> }
+  | { readonly kind: "changed"; readonly paths: ReadonlySet<string> }
   | { readonly kind: "unknown" }
   | { readonly kind: "failed"; readonly reason: string };
 
@@ -130,18 +133,18 @@ export interface WatcherCounters {
 }
 
 // The window's fold: a failure outranks everything, an unnamed event outranks
-// names, and names gather.
+// paths, and paths gather.
 function folded(window: Invalidation, next: Invalidation): Invalidation {
   if (next.kind === "failed") return next;
   if (window.kind !== "changed") return window;
   if (next.kind === "unknown") return next;
-  return { kind: "changed", names: new Set([...window.names, ...next.names]) };
+  return { kind: "changed", paths: new Set([...window.paths, ...next.paths]) };
 }
 
-const namedOf = (filename: string | null): Invalidation =>
+const namedOf = (dir: string, filename: string | null): Invalidation =>
   filename === null
     ? { kind: "unknown" }
-    : { kind: "changed", names: new Set([filename]) };
+    : { kind: "changed", paths: new Set([path.join(dir, filename)]) };
 
 export class WatcherRegistry {
   private readonly slots = new Map<string, WatcherSlot>();
@@ -270,7 +273,7 @@ export class WatcherRegistry {
           } catch (e) {
             this.logger(
               "warn",
-              `watcher invalidate threw: ${(e as Error).message}`,
+              `watcher invalidate threw key=${slot.key}: ${(e as Error).message}`,
             );
           }
         }, DEBOUNCE_MS),
@@ -299,7 +302,7 @@ export class WatcherRegistry {
           // [LAW:dataflow-not-control-flow] Filter is a value (Set) — same
           // code path every event; the Set's .has() decides whether to fire.
           if (filterSet && (!filename || !filterSet.has(filename))) return;
-          fire(namedOf(filename));
+          fire(namedOf(target.path, filename));
         };
         const w = fs.watch(
           target.path,

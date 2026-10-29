@@ -189,7 +189,7 @@ describe("entries share a compile exactly when their configs compile alike", () 
       lines.filter((l) => l.startsWith("render-cache compile built ")).length;
     expect(built()).toBe(1);
     fs.writeFileSync(cfg, carouselConfig("other", "beta"));
-    for (const d of dirs) cache.reload(d, d, cfg);
+    for (const d of dirs) cache.reload(d, d, cfg, { kind: "write" });
     expect(built()).toBe(2);
     const states = dirs.map((d) => cache.getOrCreate(d, d, cfg).state);
     expect(new Set(states.map((s) => s.compiled)).size).toBe(1);
@@ -284,7 +284,7 @@ describe("the cache is bounded by bytes", () => {
     cache.getOrCreate(b, b, cfgB);
     expect(cache.stats).toMatchObject({ size: 2, compiles: 1 });
     fs.writeFileSync(cfgB, carouselConfig("other", "beta"));
-    cache.reload(b, b, cfgB);
+    cache.reload(b, b, cfgB, { kind: "write" });
     // `b` moved onto a compile of its own; `a`, least recently used, left.
     expect(cache.stats).toMatchObject({ size: 1, compiles: 1 });
     expect(cache.stats.accountedBytes).toBeLessThanOrEqual(cache.stats.budgetBytes);

@@ -9,6 +9,7 @@ import {
   mkdtempSync,
   realpathSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import os from "node:os";
@@ -289,9 +290,11 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
 
   // A click that writes no config file reloads no entry, however many
   // directories render that config. Judged by what each load says caused it,
-  // on the event every load path emits: from the click on, the only loads of
-  // these entries are the watch hearing the config rewritten after it. A load
-  // the click caused, by any path, would say `explicit` or name another file.
+  // on the event every load path emits. The directories are this test's own,
+  // so every load of their entries is here: each opens once, and after that
+  // only its config watch, hearing the config rewritten after the click,
+  // loads it again. A load the click caused would say another cause; a write
+  // of its own to the config would leave the file changed before the rewrite.
   test("a lane switch's click reloads no entry; the config's own rewrite reloads each one", async () => {
     const sid = "lane-no-reload";
     const root = realpathSync(
@@ -309,40 +312,40 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
           cfg,
         ]);
       }
+      const written = (): bigint => statSync(cfg, { bigint: true }).mtimeNs;
+      const unwritten = written();
       await switchLanes(`${sid}-0`, true, "pane");
       await until(() => laneLines(`${sid}-0`).length > 0, "the pane's setup");
       const clicked = `set-state: ${LANES.pane.setting}=true (session=${sid}-0)`;
-      const sinceClick = (): string[] => {
-        const lines = logLines(env);
-        const at = lines.findIndex((l) => l.includes(clicked));
-        if (at < 0) throw new Error(`the click logged no \`${clicked}\``);
-        return lines.slice(at);
-      };
       // The click's one file write, landed: a save after the click wrote a
       // snapshot taken after its pick.
-      await until(
-        () => sinceClick().some((l) => l.includes(" session-state saved ")),
-        "the session-state save after the click",
-      );
-      const loadsAfterClick = (): string[] =>
-        sinceClick().filter((l) =>
-          dirs.some((d) =>
-            l.includes(` config loaded projectDir=${d} cwd=${d} `),
-          ),
+      await until(() => {
+        const lines = logLines(env);
+        const at = lines.findIndex((l) => l.includes(clicked));
+        return (
+          at >= 0 &&
+          lines.slice(at).some((l) => l.includes(" session-state saved "))
         );
+      }, "the session-state save after the click");
+      expect(written()).toBe(unwritten);
+      const causes = (d: string): string[] =>
+        logLines(env)
+          .filter((l) => l.includes(` config loaded projectDir=${d} cwd=${d} `))
+          .map((l) => / cause=(\S+) /.exec(l)![1]!);
+      const rewrite = `config-watch:${cfg}`;
       // The positive control: the watches are live, and an event the click
       // caused would have been delivered before the rewrite's.
       await untilHeard(
         () =>
           writeFileSync(cfg, CONFIG.replace("a lane mark", "a reloaded mark")),
-        () =>
-          dirs.every((d) =>
-            loadsAfterClick().some((l) => l.includes(` projectDir=${d} `)),
-          ),
+        () => dirs.every((d) => causes(d).includes(rewrite)),
         "each entry's load of the rewritten config",
       );
-      for (const line of loadsAfterClick())
-        expect(line).toContain(" cause=watch:reload.json5 files=");
+      for (const d of dirs) {
+        const [opened, ...reloads] = causes(d);
+        expect(opened).toBe("open");
+        expect(new Set(reloads)).toEqual(new Set([rewrite]));
+      }
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

@@ -1662,7 +1662,7 @@ const verbCtx = {
       origin.cwd,
       origin.configFile ?? undefined,
     ] as const;
-    renderCache.reload(...at);
+    renderCache.reload(...at, { kind: "doctor" });
     const entry = renderCache.getOrCreate(...at);
     return {
       layers: entry.configLayers,
@@ -1693,6 +1693,7 @@ const verbCtx = {
       origin.projectDir,
       origin.cwd,
       origin.configFile ?? undefined,
+      { kind: "write" },
     ),
   // The storage keys of the same entry `configFor` reads the config of.
   sourcesFor: (origin: RenderOrigin) =>
