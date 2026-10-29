@@ -1,3 +1,9 @@
+## [1.162.2](https://github.com/promptctl/cc-candybar/compare/v1.162.1...v1.162.2) (2026-10-29)
+
+### Bug Fixes
+
+* **test:** a removed folder's wait lays the folder down again each round, until the watch hears it (brandon-unfiled-3248.rfpg) ([#479](https://github.com/promptctl/cc-candybar/issues/479)) ([571b5c5](https://github.com/promptctl/cc-candybar/commit/571b5c50dc27af202258dd28207a56c2deaa5169))
+
 ## [1.162.1](https://github.com/promptctl/cc-candybar/compare/v1.162.0...v1.162.1) (2026-10-29)
 
 ### Bug Fixes
