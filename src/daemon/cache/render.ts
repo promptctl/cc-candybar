@@ -78,6 +78,7 @@ import type {
   WatchTargets,
 } from "./watchers.js";
 import { quietLogger, type DaemonLogger } from "../../utils/logger.js";
+import { valueOf } from "../../utils/logfmt.js";
 import { Holds } from "../../utils/holds.js";
 import { ABSENT, failed, PENDING } from "../../utils/outcome.js";
 import {
@@ -408,7 +409,7 @@ const heardField = (heard: Invalidation): string => {
     case "unknown":
       return "unknown";
     case "failed":
-      return `failed:${JSON.stringify(heard.reason)}`;
+      return `failed:${heard.reason}`;
   }
 };
 
@@ -425,7 +426,7 @@ export function configLoadedLine(
   cause: LoadCause,
 ): string {
   const dirs = (ds: readonly string[]): string => ds.join(",") || "-";
-  return `config loaded projectDir=${entry.projectDir} cwd=${entry.cwd} cause=${causeField(cause)} files=${entry.configLayers.join(" < ") || "<bundled default>"} awaiting=${dirs(entry.repos.awaiting)} declined=${dirs(entry.repos.declined)} unproven=${entry.repos.unproven.length === 0 ? "-" : JSON.stringify(entry.repos.unproven)} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warning=${entry.lastWarning === null ? "none" : JSON.stringify(entry.lastWarning)}`;
+  return `config loaded projectDir=${entry.projectDir} cwd=${entry.cwd} cause=${valueOf(causeField(cause))} files=${entry.configLayers.join(" < ") || "<bundled default>"} awaiting=${dirs(entry.repos.awaiting)} declined=${dirs(entry.repos.declined)} unproven=${entry.repos.unproven.length === 0 ? "-" : JSON.stringify(entry.repos.unproven)} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warning=${entry.lastWarning === null ? "none" : JSON.stringify(entry.lastWarning)}`;
 }
 
 export function configDisposeLine(

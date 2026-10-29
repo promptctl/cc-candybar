@@ -33,6 +33,8 @@ import {
   type RunningDaemon,
 } from "./helpers/spawn-isolated-daemon";
 import { untilHeard } from "./helpers/reload-signal";
+import { writeAtomic } from "../src/utils/atomic-write";
+import { valueOf } from "../src/utils/logfmt";
 import { until } from "./helpers/until";
 
 jest.setTimeout(30_000);
@@ -332,14 +334,26 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
         logLines(env)
           .filter((l) => l.includes(` config loaded projectDir=${d} cwd=${d} `))
           .map((l) => / cause=(\S+) /.exec(l)![1]!);
-      const rewrite = `config-watch:${cfg}`;
-      // The positive control: the watches are live, and an event the click
-      // caused would have been delivered before the rewrite's.
+      const rewrite = valueOf(`config-watch:${cfg}`);
+      // The positive control: each entry draws the rewritten config, so its
+      // watch delivered the rewrite, and an event the click caused would
+      // have been delivered before it.
+      const reloaded = CONFIG.replace("a lane mark", "a reloaded mark");
       await untilHeard(
-        () =>
-          writeFileSync(cfg, CONFIG.replace("a lane mark", "a reloaded mark")),
-        () => dirs.every((d) => causes(d).includes(rewrite)),
-        "each entry's load of the rewritten config",
+        () => writeAtomic(cfg, reloaded),
+        async () =>
+          (
+            await Promise.all(
+              dirs.map((d, i) =>
+                render(sockPath, `${sid}-${i}`, d, inTmux(`${sid}-${i}`), [
+                  "cc-candybar",
+                  "--config",
+                  cfg,
+                ]),
+              ),
+            )
+          ).every((drawn) => drawn.includes("a reloaded mark")),
+        "each entry's draw of the rewritten config",
       );
       for (const d of dirs) {
         const [opened, ...reloads] = causes(d);

@@ -260,7 +260,7 @@ test.each<[LoadCause, string]>([
   ],
   [
     { kind: "config-watch", heard: { kind: "failed", reason: "/d: EPERM" } },
-    'config-watch:failed:"/d: EPERM"',
+    '"config-watch:failed:/d: EPERM"',
   ],
 ])("the config loaded event says why the load ran: %j", (cause, field) => {
   expect(configLoadedLine(loadedEntry, cause)).toContain(
