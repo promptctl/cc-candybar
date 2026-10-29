@@ -48,7 +48,9 @@ import {
 import { sendDaemonRequest } from "./helpers/daemon-wire";
 import { links } from "./helpers/ansi";
 import { HANDOFF_BUTTON } from "../src/daemon/lane-handoff";
-import { until } from "./helpers/until";
+import { untilHeard } from "./helpers/reload-signal";
+import { replaceFile } from "./helpers/replace-file";
+import { until, type Condition } from "./helpers/until";
 import {
   loggedLines,
   logLines,
@@ -116,7 +118,8 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   // arrived. `during` is handed the frames
   // received so far, so it can wait for ones the daemon has sent before the
   // stream closes (closing drops whatever is still in flight); `elapsed`, the
-  // clock those arrivals are read on; and `waitFor`, the wait for them.
+  // clock those arrivals are read on; `waitFor`, the wait for them; and
+  // `untilHeard`, the wait that re-applies a watched write until they come.
   // [LAW:no-silent-failure] A daemon too busy to take the subscribe inside its
   // request budget answers TIMEOUT, and the subscriber opens another, as
   // afterStreamEnd decides for every real consumer; any other end fails the
@@ -129,6 +132,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       received: ReadonlyArray<Frame>;
       elapsed: () => number;
       waitFor: typeof until;
+      untilHeard: typeof untilHeard;
     }) => Promise<void>,
   ): Promise<Frame[]> {
     const frames: Frame[] = [];
@@ -150,18 +154,24 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
             );
         },
       );
+    const live =
+      (reached: Condition): Condition =>
+      () => {
+        if (ended !== null) throw ended;
+        return reached();
+      };
     const waitFor: typeof until = (reached, what, budgetMs) =>
-      until(
-        () => {
-          if (ended !== null) throw ended;
-          return reached();
-        },
-        what,
-        budgetMs,
-      );
+      until(live(reached), what, budgetMs);
+    const untilHeardLive: typeof untilHeard = (mutate, heard, what) =>
+      untilHeard(mutate, live(heard), what);
     let stream = open();
     try {
-      await during({ received: frames, elapsed, waitFor });
+      await during({
+        received: frames,
+        elapsed,
+        waitFor,
+        untilHeard: untilHeardLive,
+      });
     } finally {
       stream.close();
     }
@@ -359,11 +369,20 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     );
     await render(sockPath, sid, projectDir, {}, ["cc-candybar", "--config", config]);
     let wrote = 0;
-    const frames = await framesOf(sid, async ({ received, elapsed, waitFor }) => {
+    const frames = await framesOf(sid, async ({ received, elapsed, waitFor, untilHeard }) => {
       await waitFor(() => received.length > 0, "the bar before the write");
-      wrote = elapsed();
-      writeFileSync(statusFile, "red");
-      await waitFor(() => received.length > 1, "the rewritten value");
+      // The watch has no ready signal, so the (idempotent) replacement repeats
+      // until a frame shows it heard. `wrote` is the last replacement's time,
+      // so a frame from an earlier one that arrived late measures shorter,
+      // never longer.
+      await untilHeard(
+        () => {
+          wrote = elapsed();
+          replaceFile(statusFile, "red");
+        },
+        () => received.length > 1,
+        "the rewritten value",
+      );
     });
     expect(outputs(frames).map(stripAnsi)).toEqual([
       expect.stringContaining("status green"),
