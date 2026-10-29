@@ -204,8 +204,6 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       return resp.output;
     });
 
-  // A wait is for the frame that shows what it waits on, never for a count: a
-  // subscription reopened after a TIMEOUT pushes its opening frame again.
   const shows = (frames: ReadonlyArray<Frame>, text: string): boolean =>
     outputs(frames).some((o) => stripAnsi(o).includes(text));
 
