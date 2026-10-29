@@ -24,7 +24,7 @@ import {
 } from "../config/loader/repo-gate.js";
 import { worktreeLink } from "../utils/git-root.js";
 import { ok } from "../utils/outcome.js";
-import { presence } from "../utils/presence.js";
+import { presence, type Unchecked } from "../utils/presence.js";
 import type { Asked } from "../doctor/checks.js";
 import { stateFile, type StateFile } from "../doctor/state-file.js";
 import {
@@ -81,12 +81,13 @@ export const repoConfigs = (
 };
 
 // What recording an answer did to the book's other entries: the worktrees'
-// own answers it superseded, and the entries whose directory is not there
-// (a removed worktree, an unmounted volume), which no key can be proven for
-// and which stay as they are.
+// own answers it superseded, and the entries no key can be proven for, which
+// stay as they are: those whose directory is not there (a removed worktree,
+// an unmounted volume), and those a stat could not see past.
 export interface Recorded {
   readonly superseded: readonly string[];
-  readonly missing: readonly string[];
+  readonly absent: readonly string[];
+  readonly unchecked: readonly Unchecked[];
 }
 
 // [LAW:single-enforcer] The one way an answer reaches the book — the bar's
@@ -99,15 +100,25 @@ export function recordAnswer(
   dir: string,
   answer: RepoAnswer,
 ): Asked<Recorded> {
-  let recorded: Recorded = { superseded: [], missing: [] };
+  let recorded: Recorded = { superseded: [], absent: [], unchecked: [] };
   const filed = store.update((book) => {
-    const others = Object.keys(book).filter((d) => d !== dir);
-    const present = others.filter((d) => presence(d) === "present");
+    const others = Object.keys(book)
+      .filter((d) => d !== dir)
+      .map((d) => ({ d, found: presence(d) }));
     recorded = {
-      superseded: present.filter(
-        (d) => answerDir({ dir: d, link: worktreeLink(d) }) === dir,
+      superseded: others
+        .filter(
+          ({ d, found }) =>
+            found === "present" &&
+            answerDir({ dir: d, link: worktreeLink(d) }) === dir,
+        )
+        .map(({ d }) => d),
+      absent: others
+        .filter(({ found }) => found === "absent")
+        .map(({ d }) => d),
+      unchecked: others.flatMap(({ found }) =>
+        typeof found === "object" ? [found] : [],
       ),
-      missing: others.filter((d) => !present.includes(d)),
     };
     return withAnswer(book, dir, answer, recorded.superseded);
   });
@@ -149,7 +160,7 @@ export function repoQuestions(
   signer: LinkSigner,
 ): DiagnosticChannel[] {
   return gate.awaiting.map((dir) => {
-    const message = `${dir} has a cc-candybar config — run it?`;
+    const message = `the repository at ${dir} has a cc-candybar config — run it?`;
     const answers = REPO_ANSWERS.map((answer) =>
       diagnosticSpan(
         `[${answer === "approved" ? "approve" : "decline"}]`,

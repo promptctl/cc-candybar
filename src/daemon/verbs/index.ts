@@ -1595,10 +1595,10 @@ const repoConfig: VerbHandler = (value, ctx) => {
   if (filed.kind === "failed") {
     throw new Error(`${dir} was not ${answered}: ${filed.reason}`);
   }
-  const { superseded, missing } = filed.value;
+  const { superseded, absent, unchecked } = filed.value;
   ctx.dlog(
     "info",
-    `repo-config: ${dir} ${answered} superseded=${superseded.join(",") || "-"} missing=${missing.join(",") || "-"} (session=${sid})`,
+    `repo-config: ${dir} ${answered} superseded=${superseded.join(",") || "-"} absent=${absent.join(",") || "-"} unchecked=${unchecked.length === 0 ? "-" : JSON.stringify(unchecked)} (session=${sid})`,
   );
   ctx.reloadConfig(sessionOrigin(ctx, sid));
 };

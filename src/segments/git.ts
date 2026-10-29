@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { launch, type LaunchResult } from "../proc/launch";
-import { ABSENT, failed, ok, type Outcome } from "../utils/outcome";
+import { ABSENT, failed, ok, orElse, type Outcome } from "../utils/outcome";
 import type { Current } from "../utils/reading";
 import { debug } from "../utils/logger";
 import {
@@ -1070,12 +1070,13 @@ export class GitService {
   // `<workingDir>/.git`. For a worktree, `<workingDir>/.git` is a *file*
   // naming the worktree-metadata dir, where HEAD and index live — watching
   // `<workingDir>/.git/HEAD` would fail (no such path) and the cache would
-  // never invalidate. A `.git` that names nothing readable (a directory, an
-  // unreadable or malformed file) is the dotGit path, so callers always get a
-  // string to watch.
+  // never invalidate.
+  //
+  // [LAW:no-silent-failure] exception: this is a watch target, not an answer.
+  // A `.git` that names nothing readable (a directory, an unreadable or
+  // malformed file) watches the dotGit path, so callers always get a string.
   resolveGitDir(workingDir: string): string {
-    const named = gitDirNamed(workingDir);
-    return named.kind === "ok" ? named.value : path.join(workingDir, ".git");
+    return orElse(gitDirNamed(workingDir), path.join(workingDir, ".git"));
   }
 
   private getOngoingOperation(workingDir: string): Outcome<string> {
@@ -1235,8 +1236,9 @@ export class GitService {
   // gitdir would answer zero stashes for every worktree, silently.
   resolveCommonGitDir(gitDir: string): string {
     // No `commondir` file is the ordinary case: this already IS the common dir.
-    const common = commonDirOf(gitDir);
-    return common.kind === "ok" ? common.value : gitDir;
+    // [LAW:no-silent-failure] exception: as resolveGitDir's, a read target —
+    // an unreadable `commondir` reads the git dir itself.
+    return orElse(commonDirOf(gitDir), gitDir);
   }
 
   // [LAW:one-source-of-truth] `git stash list` counts REFLOG ENTRIES for

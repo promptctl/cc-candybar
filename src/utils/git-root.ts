@@ -58,6 +58,13 @@ function probe<T>(read: () => T): Outcome<T> {
 const realDir = (p: string): Outcome<string> =>
   probe(() => fs.realpathSync.native(p));
 
+// [LAW:no-silent-failure] Why a probe of `what` gave no value: the error a
+// failed read carries (it names its path), or that nothing is there.
+const why = (
+  what: string,
+  o: Exclude<Outcome<unknown>, { kind: "ok" }>,
+): string => (o.kind === "absent" ? `${what} is not there` : o.reason);
+
 // [LAW:one-source-of-truth] The git directory a checkout root's `.git` file
 // names (`gitdir: <path>`, relative to the root): a linked worktree's
 // metadata dir, a submodule's, or a `--separate-git-dir` checkout's.
@@ -111,28 +118,32 @@ export function worktreeLink(dir: string): WorktreeLink {
   const root = gitRootOf(dir);
   if (root === undefined) return UNLINKED;
   const dotGit = path.join(root, ".git");
+  // A `.git` that is, or links to, a git directory claims no worktree: a
+  // main checkout, or one whose `.git` a tool keeps elsewhere (Android's
+  // `repo`). Only a regular file claims one, so a symlink to another
+  // checkout's `.git` file borrows nothing.
+  const followed = probe(() => fs.statSync(dotGit));
+  if (followed.kind === "ok" && followed.value.isDirectory()) return UNLINKED;
   const entry = probe(() => fs.lstatSync(dotGit));
-  if (entry.kind !== "ok") return unproven(`${dotGit} cannot be read`);
-  if (entry.value.isDirectory()) return UNLINKED;
+  if (entry.kind !== "ok") return unproven(why(dotGit, entry));
   if (!entry.value.isFile()) return unproven(`${dotGit} is not a file`);
   const named = gitDirNamed(root);
-  if (named.kind !== "ok") return unproven(`${dotGit} names no git dir`);
+  if (named.kind !== "ok") return unproven(why(dotGit, named));
   const gitDir = realDir(named.value);
-  if (gitDir.kind !== "ok") return unproven(`${named.value} is not there`);
+  if (gitDir.kind !== "ok") return unproven(why(named.value, gitDir));
   const common = commonDirOf(gitDir.value);
   // A git dir with no `commondir` is its own repository's: a submodule or a
   // `--separate-git-dir` checkout, which no linked worktree's answer reaches.
   if (common.kind === "absent") return UNLINKED;
   if (common.kind === "failed") return unproven(common.reason);
   const realCommon = realDir(common.value);
-  if (realCommon.kind !== "ok") return unproven(`${common.value} is not there`);
+  if (realCommon.kind !== "ok") return unproven(why(common.value, realCommon));
   if (path.dirname(gitDir.value) !== path.join(realCommon.value, "worktrees")) {
     return unproven(`${gitDir.value} is not a worktree of ${realCommon.value}`);
   }
-  const back = probe(() =>
-    fs.readFileSync(path.join(gitDir.value, "gitdir"), "utf-8"),
-  );
-  if (back.kind !== "ok") return unproven(`${gitDir.value} has no gitdir`);
+  const backFile = path.join(gitDir.value, "gitdir");
+  const back = probe(() => fs.readFileSync(backFile, "utf-8"));
+  if (back.kind !== "ok") return unproven(why(backFile, back));
   const pointer = path.resolve(gitDir.value, back.value.trim());
   const pointerDir = realDir(path.dirname(pointer));
   if (

@@ -207,6 +207,17 @@ describe("check", () => {
     expect(outcome).toMatchObject({ kind: "clean", layers: [file] });
     expect(fs.existsSync(marker)).toBe(true);
   });
+
+  test("a directory whose worktree claim fails its proof is reported with the reason it answers for itself", async () => {
+    write(".cc-candybar.json5", "{}");
+    write(".git", "gitdir: /nonexistent/x\n");
+    const outcome = await checkConfig(undefined, project);
+    expect(outcome.kind).toBe("clean");
+    if (outcome.kind !== "clean") return;
+    expect(outcome.warnings).toContain(
+      `not proven a worktree: ${project} — it answers for itself, because /nonexistent/x is not there`,
+    );
+  });
 });
 
 test("the config loaded event names the repositories left waiting and declined, and the unproven worktrees", () => {
@@ -250,7 +261,7 @@ test("the question offers each answer as a link signed for its session, director
   );
   expect(rest).toEqual([]);
   expect(channel!.message).toBe(
-    `${project} has a cc-candybar config — run it?`,
+    `the repository at ${project} has a cc-candybar config — run it?`,
   );
   const answers = channel!.lines[0]
     .flatMap((span) => effectsOf(span.link))
@@ -362,6 +373,17 @@ describe("a repository's worktrees answer as the repository", () => {
     });
   });
 
+  test("a worktree's own answer stands while its repository has none", () => {
+    expect(resolveAt(book({ [wt]: "approved" }), wt)).toMatchObject({
+      layers: [path.join(wt, ".cc-candybar.json5")],
+      repos: { plugins: wt, approved: [wt], awaiting: [] },
+    });
+    expect(resolveAt(book({ [wt]: "declined" }), wt)).toMatchObject({
+      layers: [],
+      repos: { plugins: null, awaiting: [], declined: [wt] },
+    });
+  });
+
   test("a declined repository's worktrees are declined", () => {
     const resolved = resolveAt(book({ [project]: "declined" }), wt);
     expect(resolved).toMatchObject({
@@ -398,7 +420,7 @@ describe("a repository's worktrees answer as the repository", () => {
     state.update(() => legacy);
     expect(recordAnswer(state, project, "approved")).toEqual({
       kind: "ok",
-      value: { superseded: [wt], missing: [] },
+      value: { superseded: [wt], absent: [], unchecked: [] },
     });
     expect(state.read()).toEqual({
       kind: "ok",
@@ -412,7 +434,7 @@ describe("a repository's worktrees answer as the repository", () => {
     state.update(() => ({ [gone]: "approved" }));
     expect(recordAnswer(state, project, "declined")).toEqual({
       kind: "ok",
-      value: { superseded: [], missing: [gone] },
+      value: { superseded: [], absent: [gone], unchecked: [] },
     });
     expect(state.read()).toEqual({
       kind: "ok",
@@ -447,7 +469,7 @@ describe("a repository's worktrees answer as the repository", () => {
     });
     expect(recordAnswer(state, project, "approved")).toEqual({
       kind: "ok",
-      value: { superseded: [], missing: [] },
+      value: { superseded: [], absent: [], unchecked: [] },
     });
   });
 });

@@ -233,13 +233,16 @@ describe("a repository's config waits for the user's one answer", () => {
       repoConfig(wtMarker, "WTSEG"),
     );
     // An answer kept under the worktree's own path, before answers were kept
-    // by repository: it disagrees with the repository's (none), so it asks.
-    repoConfigs(stateDir(isolated.env)).update(() => ({ [wt]: "declined" }));
+    // by repository: it disagrees with the repository's, so it asks.
+    repoConfigs(stateDir(isolated.env)).update(() => ({
+      [project]: "declined",
+      [wt]: "approved",
+    }));
     try {
       await start();
       const asked = await render(isolated.sockPath, "repo-wt", wt);
       expect(stripAnsi(asked).replace(/\s+/g, " ")).toContain(
-        `${project} has a cc-candybar config`,
+        `the repository at ${project} has a cc-candybar config`,
       );
       const resp = await sendClick(
         isolated.sockPath,
@@ -260,7 +263,7 @@ describe("a repository's config waits for the user's one answer", () => {
           fs
             .readFileSync(logPath(isolated.env), "utf8")
             .includes(
-              `repo-config: ${project} approved superseded=${wt} missing=- `,
+              `repo-config: ${project} approved superseded=${wt} absent=- unchecked=- `,
             ),
         "the repo-config event naming the superseded worktree entry",
       );

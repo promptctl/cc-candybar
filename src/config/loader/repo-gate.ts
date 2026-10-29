@@ -56,17 +56,33 @@ export function answerDir(d: RepoDir): string {
 const answerOf = (book: RepoConfigBook, dir: string): RepoAnswer | null =>
   Object.hasOwn(book, dir) ? book[dir]! : null;
 
-// A directory's standing: its repository's answer, awaiting one, or unknown
-// because the book could not be read. Only `approved` loads. An answer the
-// book still holds under a worktree's own path that disagrees with its
-// repository's leaves it awaiting, so neither answer wins unseen; answering
+// A directory's standing, and the book entry it stands under. Only `approved`
+// loads. The answer is its repository's; an answer the book still holds under
+// a worktree's own path, kept from before answers were kept by repository,
+// stands while the repository has none, and one that disagrees with the
+// repository's leaves it awaiting, so neither answer wins unseen. Answering
 // supersedes it (`withAnswer`).
-function standing(answers: RepoAnswers, d: RepoDir): RepoStanding {
-  if (answers.kind === "failed") return "unread";
-  const repo = answerOf(answers.value, answerDir(d)) ?? "awaiting";
-  const own = answerOf(answers.value, d.dir) ?? repo;
-  return own === repo ? repo : "awaiting";
+interface Ruling {
+  readonly standing: RepoStanding;
+  readonly under: string;
 }
+function ruling(answers: RepoAnswers, d: RepoDir): Ruling {
+  const key = answerDir(d);
+  if (answers.kind === "failed") return { standing: "unread", under: key };
+  const repo = answerOf(answers.value, key);
+  const own = answerOf(answers.value, d.dir);
+  if (repo === null) {
+    return own === null
+      ? { standing: "awaiting", under: key }
+      : { standing: own, under: d.dir };
+  }
+  return {
+    standing: own === null || own === repo ? repo : "awaiting",
+    under: key,
+  };
+}
+const standing = (answers: RepoAnswers, d: RepoDir): RepoStanding =>
+  ruling(answers, d).standing;
 
 // A directory claiming to be a linked worktree that the repository does not
 // vouch for, and why: it answers under its own path.
@@ -116,7 +132,10 @@ export function gateRepos(
   ];
   const repos = (s: RepoStanding): string[] => [
     ...new Set(
-      reached.filter((d) => standing(answers, d) === s).map(answerDir),
+      reached
+        .map((d) => ruling(answers, d))
+        .filter((r) => r.standing === s)
+        .map((r) => r.under),
     ),
   ];
   return {
@@ -187,6 +206,10 @@ export function repoGateLines(gate: RepoGate): readonly string[] {
     ),
     ...gate.declined.map(
       (d) => `declined: ${d} — its cc-candybar config does not run`,
+    ),
+    ...gate.unproven.map(
+      (u) =>
+        `not proven a worktree: ${u.dir} — it answers for itself, because ${u.reason}`,
     ),
   ];
 }

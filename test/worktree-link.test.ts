@@ -76,6 +76,13 @@ test("a --separate-git-dir checkout, whose git dir has no commondir, is not link
   expect(worktreeLink(sep)).toEqual({ kind: "unlinked" });
 });
 
+test("a .git symlinked to a git directory claims no worktree", () => {
+  const linkedDir = path.join(root, "linked-git");
+  fs.mkdirSync(linkedDir);
+  fs.symlinkSync(path.join(main, ".git"), path.join(linkedDir, ".git"));
+  expect(worktreeLink(linkedDir)).toEqual({ kind: "unlinked" });
+});
+
 describe("what a directory writes about itself proves nothing", () => {
   test("a .git naming a real worktree's metadata fails git's back-pointer", () => {
     const evil = path.join(root, "evil");
@@ -115,6 +122,19 @@ describe("a link that cannot be proven is said, never thrown", () => {
   test("a worktree whose metadata was pruned", () => {
     fs.rmSync(path.join(main, ".git", "worktrees", "wt"), { recursive: true });
     expect(worktreeLink(wt)).toMatchObject({ kind: "unproven" });
+  });
+
+  test("a .git that cannot be read says why", () => {
+    const dotGit = path.join(wt, ".git");
+    fs.chmodSync(dotGit, 0o000);
+    try {
+      expect(worktreeLink(wt)).toEqual({
+        kind: "unproven",
+        reason: expect.stringContaining("EACCES"),
+      });
+    } finally {
+      fs.chmodSync(dotGit, 0o644);
+    }
   });
 
   test("a .git naming a git dir that is not there", () => {
