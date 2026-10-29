@@ -1,6 +1,6 @@
-// node proto-looks/build.mjs — proto-looks/out/{new,today}.json → proto-looks/accent-looks.html (self-contained).
+// node proto-looks/build.mjs — proto-looks/out/renders.json → proto-looks/accent-looks.html (self-contained).
 import fs from "node:fs";
-import { JUMPS, KEYSTONES, OPENS, STATES, THEMES, TODAY, variationOf } from "./axes.mjs";
+import { JUMPS, KEYSTONES, OPENS, STATES, THEMES, variationOf } from "./axes.mjs";
 const OUT = "proto-looks/out";
 const colours = [], colourIdx = new Map();
 const idx = (rgb) => {
@@ -37,22 +37,27 @@ function runsOf(row) {
   return runs;
 }
 const picture = ({ text, warnings }) => ({ rows: text.split("\n").map(runsOf), warnings });
-const fresh = JSON.parse(fs.readFileSync(`${OUT}/new.json`, "utf8"));
-const today = JSON.parse(fs.readFileSync(`${OUT}/today.json`, "utf8"));
+const drawn = JSON.parse(fs.readFileSync(`${OUT}/renders.json`, "utf8"));
+const taken = new Set();
 const take = (from, key) => {
-  const r = from.renders[key];
+  const r = from[key];
   if (r === undefined) throw new Error(`no render ${key}`);
+  taken.add(key);
   return { closed: picture(r.closed), open: picture(r.open) };
 };
 const renders = {}, reference = {}, poles = {};
 for (const t of THEMES) {
-  poles[t] = { bg: fresh.poles[t].background, fg: fresh.poles[t].foreground };
+  poles[t] = { bg: drawn.poles[t].background, fg: drawn.poles[t].foreground };
   for (const s of STATES) {
-    reference[`${s.id}.${t}`] = take(today, `${TODAY.variation}|${TODAY.shade}|${s.id}|${t}`);
+    reference[`${s.id}.${t}`] = take(drawn.today, `${s.id}|${t}`);
     for (const j of JUMPS) for (const k of KEYSTONES) for (const o of OPENS)
-      renders[`${j.id}.${k.id}.${o.id}.${s.id}.${t}`] = take(fresh, `${variationOf(k.id, o.id)}|${j.id}|${s.id}|${t}`);
+      renders[`${j.id}.${k.id}.${o.id}.${s.id}.${t}`] = take(drawn.renders, `${variationOf(k.id, o.id)}|${j.id}|${s.id}|${t}`);
   }
 }
+// [LAW:one-source-of-truth] The axes label the colour model's trial rows; a row
+// render.ts drew that no axis names is a candidate the page would never show.
+const unplaced = Object.keys(drawn.renders).filter((key) => !taken.has(key));
+if (unplaced.length > 0) throw new Error(`rendered but on no axis: ${unplaced.slice(0, 5).join(", ")} (${unplaced.length})`);
 const data = { jumps: JUMPS, keystones: KEYSTONES, opens: OPENS, states: STATES, themes: THEMES, colours, poles, renders, reference };
 const fonts = JSON.parse(fs.readFileSync("proto-looks/fonts.json", "utf8"));
 const page = fs.readFileSync("proto-looks/template.html", "utf8")

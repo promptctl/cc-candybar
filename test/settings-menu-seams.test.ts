@@ -11,27 +11,15 @@
 // under a seam — textual-ansi's flat ladder, catppuccin-latte's accent at
 // `middle` — the divider is the theme's own, and the band reports it.
 
-import { TEST_SIGNER } from "./helpers/link-signer";
 import { listThemePalettes } from "@promptctl/rich-js";
-import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { sharedMenuStateKey } from "../src/config/menu-keys";
 import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/settings-menu";
 import { SETTINGS_NS } from "../src/config/loader/reserved-namespace";
-import { perSetting } from "../src/config/setting-projections";
-import { CHECK_TODAY, checkPayload } from "../src/check";
-import { renderOptionsOf } from "../src/daemon/render-payload";
-import { SessionState } from "../src/daemon/session-state";
-import { registerDslConfig, renderDsl, type RenderWarning } from "../src/dsl/render";
-import { listResolvablePaletteNames } from "../src/themes/policy";
 import { instantOf } from "../src/utils/instant";
-import { SourceRegistry } from "../src/var-system/sources";
-import { VariableStore } from "../src/var-system/store";
 import { stripAnsi } from "./helpers/ansi";
-import { parseAndValidate } from "./helpers/parse-and-validate";
 import { POWERLINE } from "./helpers/powerline";
+import { sessionBar } from "./helpers/session-bar";
 
-const SID = "seams0a1-2c3d-4e5f-8a7b-8c9d0e1f2a3b";
 const TABS = ["session", "look", "layout", "config", "tools"] as const;
 const COLS = 200;
 
@@ -48,49 +36,23 @@ function menuSeams(
   look: Readonly<Record<string, string>>,
   tabs: readonly (typeof TABS)[number][],
 ): { divided: string[]; arrows: number } {
-  const config = parseAndValidate(
-    "<user>",
-    `{ globals: { colorCompatibility: '${colorCompatibility}' } }`,
-    new Set(listResolvablePaletteNames()),
-    DEFAULT_DSL_CONFIG,
-  );
-  const session = new SessionState();
-  const store = new VariableStore();
-  const registry = new SourceRegistry(store, "", session);
-  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/home/tester/code/project" });
-  const render = (): { lines: string[]; warnings: RenderWarning[] } => {
-    const effective = resolveEffectiveGlobals(config, (key) => session.get(SID, key) ?? null, () => false);
-    const at = instantOf(new Date());
-    const payload = {
-      ...checkPayload(config, effective, null, at),
-      today: CHECK_TODAY,
-      resettable: perSetting(() => false),
-      unsaved: 0,
-      history: { undo: 0, redo: 0 },
-      session_id: SID,
-      term: { cols: COLS },
-    };
-    const warnings: RenderWarning[] = [];
-    const lines = renderDsl(config, compiled, store, registry, payload, at, renderOptionsOf(effective, COLS), {
-      onSegmentError: (name, message) => {
-        throw new Error(`${name}: ${message}`);
-      },
-      onRenderWarning: (warning) => warnings.push(warning),
-    }, effective).split("\n");
-    return { lines, warnings };
+  const bar = sessionBar(`{ globals: { colorCompatibility: '${colorCompatibility}' } }`, COLS);
+  const render = () => {
+    const { text, warnings } = bar.render(instantOf(new Date()));
+    return { lines: text.split("\n"), warnings };
   };
 
   const divided: string[] = [];
   let arrows = 0;
-  for (const [key, value] of Object.entries(look)) session.set(SID, key, value);
+  for (const [key, value] of Object.entries(look)) bar.pick(key, value);
   for (const theme of listThemePalettes()) {
-    session.set(SID, "theme", theme);
-    session.set(SID, SETTINGS_ANCHOR, "closed");
+    bar.pick("theme", theme);
+    bar.pick(SETTINGS_ANCHOR, "closed");
     const barRows = render().lines.length;
-    session.set(SID, SETTINGS_ANCHOR, SETTINGS_OPEN);
-    session.set(SID, sharedMenuStateKey("candybar.pickers"), "gear");
+    bar.pick(SETTINGS_ANCHOR, SETTINGS_OPEN);
+    bar.pick(sharedMenuStateKey("candybar.pickers"), "gear");
     for (const tab of tabs) {
-      session.set(SID, `${SETTINGS_NS}tab`, tab);
+      bar.pick(`${SETTINGS_NS}tab`, tab);
       const { lines, warnings } = render();
       const themesOwn = warnings.some((w) => w.kind === "band-floor" && ITEM_SEAM.test(w.message));
       // The menu opens ABOVE the bar: its rows are the ones over the bar's.
@@ -102,7 +64,7 @@ function menuSeams(
       }
     }
   }
-  registry.dispose();
+  bar.dispose();
   return { divided, arrows };
 }
 

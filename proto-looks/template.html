@@ -83,7 +83,8 @@ function controls() {
 function copyPick() {
   const lab = (a) => AXES[a].find((o) => o.id === S[a]).label;
   const text = `jump: ${S.jump} — ${lab("jump")}\nkeystone: ${S.keystone} — ${lab("keystone")}\nopen: ${S.open} — ${lab("open")}`;
-  navigator.clipboard.writeText(text).then(() => { document.getElementById("copy").textContent = "Copied"; });
+  const button = document.getElementById("copy");
+  navigator.clipboard.writeText(text).then(() => { button.textContent = "Copied"; }, (e) => { button.textContent = `Not copied: ${e.message}`; });
 }
 function picture(box, r, pole) {
   box.append(bar(r.rows, pole));

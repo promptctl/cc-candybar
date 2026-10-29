@@ -32,5 +32,3 @@ export const THEMES = [
 ];
 /** The VARIATIONS row a keystone placement and an open lineage name. */
 export const variationOf = (keystone, open) => `${keystone}-${open}`;
-/** The row the bar wore before this ticket: the shipped `accent` variation at the dial's `middle`. */
-export const TODAY = { variation: "accent", shade: "middle" };
