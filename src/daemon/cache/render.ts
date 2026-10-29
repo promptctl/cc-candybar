@@ -413,8 +413,17 @@ const heardField = (heard: Invalidation): string => {
   }
 };
 
-const causeField = (cause: LoadCause): string =>
-  "heard" in cause ? `${cause.kind}:${heardField(cause.heard)}` : cause.kind;
+const causeField = (cause: LoadCause): string => {
+  switch (cause.kind) {
+    case "open":
+    case "write":
+    case "doctor":
+      return cause.kind;
+    case "config-watch":
+    case "answers-watch":
+      return `${cause.kind}:${heardField(cause.heard)}`;
+  }
+};
 
 // [LAW:nothing-unseen] Every (re)load's outcome, success and failure alike:
 // why it ran, the files it resolved, what failed or warned, which
@@ -425,8 +434,8 @@ export function configLoadedLine(
   entry: ReloadedEntry,
   cause: LoadCause,
 ): string {
-  const dirs = (ds: readonly string[]): string => ds.join(",") || "-";
-  return `config loaded projectDir=${entry.projectDir} cwd=${entry.cwd} cause=${valueOf(causeField(cause))} files=${entry.configLayers.join(" < ") || "<bundled default>"} awaiting=${dirs(entry.repos.awaiting)} declined=${dirs(entry.repos.declined)} unproven=${entry.repos.unproven.length === 0 ? "-" : JSON.stringify(entry.repos.unproven)} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warning=${entry.lastWarning === null ? "none" : JSON.stringify(entry.lastWarning)}`;
+  const dirs = (ds: readonly string[]): string => valueOf(ds.join(",") || "-");
+  return `config loaded projectDir=${valueOf(entry.projectDir)} cwd=${valueOf(entry.cwd)} cause=${valueOf(causeField(cause))} files=${valueOf(entry.configLayers.join(" < ") || "<bundled default>")} awaiting=${dirs(entry.repos.awaiting)} declined=${dirs(entry.repos.declined)} unproven=${entry.repos.unproven.length === 0 ? "-" : JSON.stringify(entry.repos.unproven)} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warning=${entry.lastWarning === null ? "none" : JSON.stringify(entry.lastWarning)}`;
 }
 
 export function configDisposeLine(
@@ -1320,7 +1329,7 @@ export class RenderCache<
     this.answersWatch = deps.watchers.acquire(
       `repo-configs:${dir}/${name}`,
       { dirs: [{ path: dir, filenames: [name] }] },
-      (heard) => this.reloadEvery({ kind: "answers-watch", heard }),
+      (heard) => this.reloadEvery(heard),
     );
   }
 
@@ -1941,14 +1950,11 @@ export class RenderCache<
   // Every entry, under the answers now on disk: any of them may draw from a
   // repository. The live map is walked, so an entry a reload's `fit` evicts
   // is skipped, never reloaded back to life.
-  private reloadEvery(cause: LoadCause): void {
-    // [LAW:nothing-unseen] Why every entry is about to reload: one line for
-    // the batch, before each entry's own load names the cause.
-    this.log(
-      "info",
-      `repo-config answers changed, reloading entries=${this.entries.size}`,
-    );
-    for (const entry of this.entries.values()) this.reloadInto(entry, cause);
+  // [LAW:one-source-of-truth] Each entry's load names the answers watch and
+  // what it heard; the batch has no record of its own.
+  private reloadEvery(heard: Invalidation): void {
+    for (const entry of this.entries.values())
+      this.reloadInto(entry, { kind: "answers-watch", heard });
   }
 
   // [LAW:single-enforcer] One watcher-rebind decision per reload: the watch

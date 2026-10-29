@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { debug } from "../../utils/logger";
+import { valueOf } from "../../utils/logfmt";
 
 // Logger callable used for watcher lifecycle / failure events. Daemon
 // injects `dlog` (writes to daemon.log at the requested level); other
@@ -83,12 +84,18 @@ export interface Refusal {
   readonly reason: string;
 }
 
+// A debounce window's invalidation while it gathers: its paths are the
+// registry's own until the window closes and hands them to the consumer.
+type Gathering =
+  | Exclude<Invalidation, { kind: "changed" }>
+  | { readonly kind: "changed"; readonly paths: Set<string> };
+
 interface WatcherSlot {
   key: string;
   watchers: fs.FSWatcher[];
   refcount: number;
   // The debounce window open now, and what it has seen so far.
-  debounce: { readonly timer: NodeJS.Timeout; window: Invalidation } | null;
+  debounce: { readonly timer: NodeJS.Timeout; window: Gathering } | null;
   onInvalidate: (invalidation: Invalidation) => void;
   targets: WatchTargets;
   refused: readonly Refusal[];
@@ -133,15 +140,17 @@ export interface WatcherCounters {
 }
 
 // The window's fold: a failure outranks everything, an unnamed event outranks
-// paths, and paths gather.
-function folded(window: Invalidation, next: Invalidation): Invalidation {
+// paths, and paths gather into the window's own set, so a burst of events
+// costs one insert each.
+function folded(window: Gathering, next: Gathering): Gathering {
   if (next.kind === "failed") return next;
   if (window.kind !== "changed") return window;
   if (next.kind === "unknown") return next;
-  return { kind: "changed", paths: new Set([...window.paths, ...next.paths]) };
+  for (const p of next.paths) window.paths.add(p);
+  return window;
 }
 
-const namedOf = (dir: string, filename: string | null): Invalidation =>
+const namedOf = (dir: string, filename: string | null): Gathering =>
   filename === null
     ? { kind: "unknown" }
     : { kind: "changed", paths: new Set([path.join(dir, filename)]) };
@@ -259,7 +268,7 @@ export class WatcherRegistry {
   }
 
   private openWatchers(slot: WatcherSlot): void {
-    const fire = (invalidation: Invalidation) => {
+    const fire = (invalidation: Gathering) => {
       if (slot.debounce !== null) {
         slot.debounce.window = folded(slot.debounce.window, invalidation);
         return;
@@ -273,7 +282,7 @@ export class WatcherRegistry {
           } catch (e) {
             this.logger(
               "warn",
-              `watcher invalidate threw key=${slot.key}: ${(e as Error).message}`,
+              `watcher invalidate threw key=${valueOf(slot.key)}: ${(e as Error).message}`,
             );
           }
         }, DEBOUNCE_MS),

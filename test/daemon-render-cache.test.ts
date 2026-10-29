@@ -23,6 +23,7 @@ import { join } from "node:path";
 import {
   RenderCache,
   type CacheEntry,
+  type LoadCause,
   type Hold,
   type RenderCacheObservers,
   type SessionView,
@@ -946,11 +947,13 @@ describe("RenderCache", () => {
   // per entry, and a change to them reloads the entries under the new answer.
   test("an entry follows the answers through the cache's one watch", async () => {
     const { dir, cleanup } = mkConfigDir();
-    const lines: string[] = [];
-    const { cache, cleanups, reloads, watchers } = makeCache(
-      undefined,
-      (_level, msg) => lines.push(msg),
-    );
+    const causes: LoadCause["kind"][] = [];
+    const { cache, cleanups, reloads, watchers } = makeCache({
+      onReload: (entry, sessions, cause) => {
+        causes.push(cause.kind);
+        reloads.observers.onReload!(entry, sessions, cause);
+      },
+    });
     try {
       const own = watchers.size();
       const file = join(dir, ".cc-candybar.json5");
@@ -967,9 +970,7 @@ describe("RenderCache", () => {
       );
       expect(entry.configLayers).toEqual([]);
       expect(entry.repos.declined).toEqual([realpathSync.native(dir)]);
-      expect(lines).toContain(
-        "repo-config answers changed, reloading entries=1",
-      );
+      expect(causes).toContain("answers-watch");
     } finally {
       for (const fn of cleanups) fn();
       cleanup();

@@ -332,8 +332,13 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
       expect(written()).toBe(unwritten);
       const causes = (d: string): string[] =>
         logLines(env)
-          .filter((l) => l.includes(` config loaded projectDir=${d} cwd=${d} `))
-          .map((l) => / cause=(\S+) /.exec(l)![1]!);
+          .filter((l) =>
+            l.includes(
+              ` config loaded projectDir=${valueOf(d)} cwd=${valueOf(d)} `,
+            ),
+          )
+          // A logfmt value: bare, or a JSON string.
+          .map((l) => / cause=("(?:[^"\\]|\\.)*"|\S+) /.exec(l)![1]!);
       const rewrite = valueOf(`config-watch:${cfg}`);
       // The positive control: each entry draws the rewritten config, so its
       // watch delivered the rewrite, and an event the click caused would
