@@ -2,9 +2,9 @@
 // `resolveEffectiveGlobals` and `renderDsl`, on check's payload, exactly as a
 // click on the bar would leave it.
 //
-// [LAW:one-source-of-truth] The settings-menu seams test and the accent-looks
-// harness (proto-looks/) both draw through this one rig, so a field the render
-// path comes to need reaches both, and neither draws a bar the other does not.
+// [LAW:one-source-of-truth] The settings-menu tests that drive the bar by its
+// session picks and the accent-looks harness (proto-looks/) draw through this
+// one rig, so a field the render path comes to need reaches them all.
 
 import { DEFAULT_DSL_CONFIG } from "../../src/config/default-dsl-config";
 import { resolveEffectiveGlobals } from "../../src/config/effective-globals";

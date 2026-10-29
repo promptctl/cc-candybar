@@ -100,7 +100,7 @@ function update() {
     const card = el("section", { className: "theme" }, el("h2", { textContent: theme }));
     const today = el("div", { className: "variant today" });
     today.style.background = pole.bg; today.style.color = pole.fg;
-    today.append(el("div", { className: "label", textContent: "today — as the bar ships (accent variation at middle; menus open in accent, then primary, then secondary)" }));
+    today.append(el("div", { className: "label", textContent: "today — as the bar ships" }));
     picture(today, pictureOf(D.reference[`${S.state}.${theme}`]), pole);
     card.append(today);
     for (const val of values) {

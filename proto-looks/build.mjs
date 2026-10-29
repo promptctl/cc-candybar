@@ -27,7 +27,7 @@ function runsOf(row) {
       else if (n === 4) flags |= 8; else if (n === 7) flags |= 16;
       else if (n === 22) flags &= ~3; else if (n === 23) flags &= ~4; else if (n === 24) flags &= ~8; else if (n === 27) flags &= ~16;
       else if (n === 39) fg = null; else if (n === 49) bg = null;
-      else if ((n === 38 || n === 48) && c[i + 1] === 2) { const v = hex(c[i + 2], c[i + 3], c[i + 4]); if (n === 38) fg = v; else bg = v; i += 4; }
+      else if ((n === 38 || n === 48) && c[i + 1] === 2 && c.length >= i + 5) { const v = hex(c[i + 2], c[i + 3], c[i + 4]); if (n === 38) fg = v; else bg = v; i += 4; }
       // [LAW:no-silent-failure] an SGR code this page cannot draw would show a wrong colour as the look.
       else throw new Error(`unhandled SGR ${n} in ${JSON.stringify(m[0])}`);
     }
