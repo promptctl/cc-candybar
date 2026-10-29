@@ -261,7 +261,7 @@ test("the question offers each answer as a link signed for its session, director
   );
   expect(rest).toEqual([]);
   expect(channel!.message).toBe(
-    `the repository at ${project} has a cc-candybar config — run it?`,
+    `a cc-candybar config for ${project} — run it?`,
   );
   const answers = channel!.lines[0]
     .flatMap((span) => effectsOf(span.link))

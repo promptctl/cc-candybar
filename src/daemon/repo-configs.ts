@@ -160,7 +160,7 @@ export function repoQuestions(
   signer: LinkSigner,
 ): DiagnosticChannel[] {
   return gate.awaiting.map((dir) => {
-    const message = `the repository at ${dir} has a cc-candybar config — run it?`;
+    const message = `a cc-candybar config for ${dir} — run it?`;
     const answers = REPO_ANSWERS.map((answer) =>
       diagnosticSpan(
         `[${answer === "approved" ? "approve" : "decline"}]`,
