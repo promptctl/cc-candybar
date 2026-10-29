@@ -613,13 +613,21 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     const sid = "feed-file-lane";
     const file = path.join(projectDir, "fileLane.json5");
     await render(sockPath, sid, projectDir, { termCols: 80 }, args("fileLane"));
-    writeFileSync(file, CONFIGS.fileLane.replace("{ segments", "{ globals: { experimentalBand: true }, segments"));
-    // Renders, each with hints its last did not report, until the daemon has
-    // reloaded the file and one draws by its switch.
-    for (let cols = 81; !renderEvents(sid).some((l) => l.includes(" lanes=band ")); cols++) {
-      if (cols > 400) throw new Error("no render drew by the file's switch");
-      await render(sockPath, sid, projectDir, { termCols: cols }, args("fileLane"));
-    }
+    // The file's watch has no ready signal, so the save is re-applied until a
+    // render, each with hints its last did not report, draws by its switch.
+    let cols = 80;
+    await untilHeard(
+      () =>
+        writeAtomic(
+          file,
+          CONFIGS.fileLane.replace("{ segments", "{ globals: { experimentalBand: true }, segments"),
+        ),
+      async () => {
+        await render(sockPath, sid, projectDir, { termCols: ++cols }, args("fileLane"));
+        return renderEvents(sid).some((l) => l.includes(" lanes=band "));
+      },
+      "a render drawn by the file's switch",
+    );
     await render(sockPath, sid, projectDir, { termCols: 20 }, args("fileLane"));
     // The session moves the switch itself: its click sets it up, with no
     // request after it, and it is the only setup this session's log holds.
