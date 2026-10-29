@@ -81,9 +81,6 @@ function ruling(answers: RepoAnswers, d: RepoDir): Ruling {
     under: key,
   };
 }
-const standing = (answers: RepoAnswers, d: RepoDir): RepoStanding =>
-  ruling(answers, d).standing;
-
 // A directory claiming to be a linked worktree that the repository does not
 // vouch for, and why: it answers under its own path.
 export interface UnprovenRepo {
@@ -130,22 +127,19 @@ export function gateRepos(
       [...dirs, ...(project?.ships ? [project] : [])].map((d) => [d.dir, d]),
     ).values(),
   ];
+  // [LAW:one-source-of-truth] Each reached directory is ruled once, and
+  // every list below is a view of those rulings.
+  const ruled = reached.map((d) => ({ dir: d.dir, ...ruling(answers, d) }));
+  const standing = (s: RepoStanding) => ruled.filter((r) => r.standing === s);
   const repos = (s: RepoStanding): string[] => [
-    ...new Set(
-      reached
-        .map((d) => ruling(answers, d))
-        .filter((r) => r.standing === s)
-        .map((r) => r.under),
-    ),
+    ...new Set(standing(s).map((r) => r.under)),
   ];
   return {
     plugins:
-      project !== null && standing(answers, project) === "approved"
+      project !== null && ruling(answers, project).standing === "approved"
         ? (project.path as ApprovedRepo)
         : null,
-    approved: reached
-      .filter((d) => standing(answers, d) === "approved")
-      .map((d) => d.dir),
+    approved: standing("approved").map((r) => r.dir),
     awaiting: repos("awaiting"),
     declined: repos("declined"),
     unproven: reached.flatMap((d) =>
