@@ -444,12 +444,11 @@ const renderCache = new RenderCache<SessionSource, CheckedRenderRequest>(
     },
     observers: {
       // [LAW:no-silent-failure] Every config (re)load's outcome lands in
-      // daemon.log beside the "config change detected" line that preceded it
-      // — the operator's only record of whether a save was picked up cleanly,
-      // kept rendering last-known-good behind an error, or resolved to a
-      // different file. Same info level as the detection line.
-      onReload: (entry, sessions) => {
-        dlog("info", configLoadedLine(entry));
+      // daemon.log with its cause — the operator's only record of why a load
+      // ran, and whether a save was picked up cleanly, kept rendering
+      // last-known-good behind an error, or resolved to a different file.
+      onReload: (entry, sessions, cause) => {
+        dlog("info", configLoadedLine(entry, cause));
         // A reload changes the bar of every session drawn from the entry,
         // even one that failed and kept the old config: its strip says so.
         for (const sessionId of sessions) frameFeeds.wake(sessionId, "reload");
@@ -1663,7 +1662,7 @@ const verbCtx = {
       origin.cwd,
       origin.configFile ?? undefined,
     ] as const;
-    renderCache.reload(...at);
+    renderCache.reload(...at, { kind: "doctor" });
     const entry = renderCache.getOrCreate(...at);
     return {
       layers: entry.configLayers,
@@ -1694,6 +1693,7 @@ const verbCtx = {
       origin.projectDir,
       origin.cwd,
       origin.configFile ?? undefined,
+      { kind: "write" },
     ),
   // The storage keys of the same entry `configFor` reads the config of.
   sourcesFor: (origin: RenderOrigin) =>

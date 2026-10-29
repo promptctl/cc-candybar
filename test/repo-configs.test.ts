@@ -20,6 +20,7 @@ import {
   configLoadedLine,
   loadFromDisk,
   UNOWNED_STORAGE,
+  type LoadCause,
   type ReloadedEntry,
 } from "../src/daemon/cache/render";
 import {
@@ -220,6 +221,53 @@ describe("check", () => {
   });
 });
 
+const loadedEntry: ReloadedEntry = {
+  projectDir: "/p",
+  cwd: "/p",
+  configFile: undefined,
+  configLayers: [],
+  repos: {
+    plugins: null,
+    approved: [],
+    awaiting: [],
+    declined: [],
+    unproven: [],
+    unread: null,
+  },
+  failedFile: null,
+  lastError: null,
+  lastWarning: null,
+  state: undefined as never,
+};
+
+test.each<[LoadCause, string]>([
+  [{ kind: "open" }, "open"],
+  [{ kind: "write" }, "write"],
+  [{ kind: "doctor" }, "doctor"],
+  [
+    {
+      kind: "config-watch",
+      heard: {
+        kind: "changed",
+        paths: new Set(["/p/config.json5", "/u/a.json"]),
+      },
+    },
+    "config-watch:/p/config.json5,/u/a.json",
+  ],
+  [
+    { kind: "answers-watch", heard: { kind: "unknown" } },
+    "answers-watch:unknown",
+  ],
+  [
+    { kind: "config-watch", heard: { kind: "failed", reason: "/d: EPERM" } },
+    '"config-watch:failed:/d: EPERM"',
+  ],
+])("the config loaded event says why the load ran: %j", (cause, field) => {
+  expect(configLoadedLine(loadedEntry, cause)).toContain(
+    ` cwd=/p cause=${field} files=`,
+  );
+});
+
 test("the config loaded event names the repositories left waiting and declined, and the unproven worktrees", () => {
   const entry: ReloadedEntry = {
     projectDir: project,
@@ -239,7 +287,7 @@ test("the config loaded event names the repositories left waiting and declined, 
     lastWarning: null,
     state: undefined as never,
   };
-  const line = configLoadedLine(entry);
+  const line = configLoadedLine(entry, { kind: "open" });
   expect(line).toContain(
     ` awaiting=/a,/b declined=- unproven=[{"dir":"/c","reason":"/x is not there"}] `,
   );

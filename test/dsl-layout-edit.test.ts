@@ -1035,7 +1035,7 @@ function originCtx(
       cache.getOrCreate(origin.projectDir, origin.cwd, origin.configFile ?? undefined)
         .state.config,
     reloadConfig: (origin) =>
-      cache.reload(origin.projectDir, origin.cwd, origin.configFile ?? undefined),
+      cache.reload(origin.projectDir, origin.cwd, origin.configFile ?? undefined, { kind: "write" }),
   };
 }
 

@@ -145,23 +145,24 @@ describe("WatcherRegistry", () => {
     reg.closeAll();
   });
 
-  test("hands its consumer the basenames that fired in the window", async () => {
+  test("hands its consumer the paths that fired in the window", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "watch-names-"));
     const reg = new WatcherRegistry();
     const seen: Invalidation[] = [];
     reg.acquire(dir, { dirs: [{ path: dir }] }, (inv) => seen.push(inv));
     // FSEvents may also report the folder's own creation late, under its
-    // name: the names are what fired, whatever else did.
-    const names = () =>
-      seen.flatMap((inv) => (inv.kind === "changed" ? [...inv.names] : []));
+    // name: the paths are what fired, whatever else did.
+    const paths = () =>
+      seen.flatMap((inv) => (inv.kind === "changed" ? [...inv.paths] : []));
+    const [a, b] = ["a.json", "b.json"].map((f) => path.join(dir, f));
     try {
       await untilHeard(
         () => {
-          fs.writeFileSync(path.join(dir, "a.json"), "1");
-          fs.writeFileSync(path.join(dir, "b.json"), "2");
+          fs.writeFileSync(a!, "1");
+          fs.writeFileSync(b!, "2");
         },
-        () => names().includes("a.json") && names().includes("b.json"),
-        "both files' names",
+        () => paths().includes(a!) && paths().includes(b!),
+        "both files' paths",
       );
       expect(seen.every((inv) => inv.kind === "changed")).toBe(true);
     } finally {
@@ -170,25 +171,25 @@ describe("WatcherRegistry", () => {
     }
   });
 
-  test("a tree target hears a write below its first level, named by its relative path", async () => {
+  test("a tree target hears a write below its first level, named by its path", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "watch-tree-"));
     const reg = new WatcherRegistry();
     const seen: Invalidation[] = [];
     reg.acquire(dir, { dirs: [{ path: dir, recursive: true }] }, (inv) =>
       seen.push(inv),
     );
-    const names = () =>
-      seen.flatMap((inv) => (inv.kind === "changed" ? [...inv.names] : []));
-    const leaf = path.join("a", "b", "c");
+    const paths = () =>
+      seen.flatMap((inv) => (inv.kind === "changed" ? [...inv.paths] : []));
+    const leaf = path.join(dir, "a", "b", "c");
     // The directories appear under the live watch, as a branch's `fix/`
     // directory appears under a repo's watch, and the leaf's write is
     // re-applied until the watch proves itself live on it.
-    fs.mkdirSync(path.join(dir, "a", "b"), { recursive: true });
+    fs.mkdirSync(path.dirname(leaf), { recursive: true });
     try {
       await untilHeard(
-        () => fs.writeFileSync(path.join(dir, leaf), "1"),
-        () => names().includes(leaf),
-        () => `the leaf's relative path among ${JSON.stringify(names())}`,
+        () => fs.writeFileSync(leaf, "1"),
+        () => paths().includes(leaf),
+        () => `the leaf's path among ${JSON.stringify(paths())}`,
       );
     } finally {
       reg.closeAll();
@@ -400,10 +401,7 @@ describe("GitDataProvider + watchers integration", () => {
       // part of the condition so a period's re-read cannot stand in for it.
       await untilHeard(
         () =>
-          fs.writeFileSync(
-            path.join(repo, ".git/HEAD"),
-            "ref: refs/heads/y\n",
-          ),
+          fs.writeFileSync(path.join(repo, ".git/HEAD"), "ref: refs/heads/y\n"),
         () => svc.getStats().changes >= 1 && inner.calls >= 2,
         "the HEAD change's re-read",
       );
