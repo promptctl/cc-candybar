@@ -930,9 +930,11 @@ describe("the tmux stub's wait is its gate's", () => {
       stdio: "ignore",
     });
     try {
-      // A spawn that fails rejects here, by name.
-      await once(child, "spawn");
-      await stub.asked(1).finally(() => stub.close());
+      // A spawn that fails rejects here, by name, and the gate closes
+      // whichever way this ends.
+      await Promise.all([once(child, "spawn"), stub.asked(1)]).finally(() =>
+        stub.close(),
+      );
       // Bounded, so a stub that ignores its gate fails this test by name and
       // the cleanup below still runs.
       await until(
