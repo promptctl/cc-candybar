@@ -732,14 +732,7 @@ describe("a storage folder's watch", () => {
     const entry = r.cache.getOrCreate(dir, dir, file);
     const storage = storageOf();
     const before = entry.state.sources.get(STATUS)!;
-    // [LAW:no-ambient-temporal-coupling] A removal that lands before the watch
-    // is live is never heard, and removing a folder already gone emits nothing,
-    // so each round lays the folder down again before removing it. The storage
-    // owner's probe can land in the folder mid-removal, so the removal retries.
-    await r.reloads.after(entry, () => {
-      fs.mkdirSync(storage, { recursive: true });
-      fs.rmSync(storage, { recursive: true, maxRetries: 3 });
-    });
+    await r.reloads.afterRemoving(entry, storage, () => fs.mkdirSync(storage));
     expect(fs.statSync(storage).isDirectory()).toBe(true);
     expect(entry.state.sources.get(STATUS)!.generation).toBeGreaterThan(
       before.generation,
@@ -830,15 +823,7 @@ describe("an installed plugin's storage", () => {
     expect(r.providers.managedStorage.stats().folders).toBe(1);
     const entry = r.cache.getOrCreate(dir, dir, file);
     const folder = path.join(root(), "p");
-    // [LAW:no-ambient-temporal-coupling] A removal that lands before the watch
-    // is live is never heard, and removing a folder already gone emits nothing,
-    // so each round installs the plugin again before removing it. The storage
-    // owner's opening probe can land in the folder mid-removal, so the removal
-    // retries.
-    await r.reloads.after(entry, () => {
-      plugin("", folder);
-      fs.rmSync(folder, { recursive: true, maxRetries: 3 });
-    });
+    await r.reloads.afterRemoving(entry, folder, () => plugin("", folder));
     expect(
       Object.keys(entry.state.config.variables).filter((n) =>
         n.startsWith("plugins.p."),

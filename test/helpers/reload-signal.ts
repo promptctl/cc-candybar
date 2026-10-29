@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import type {
   ReloadedEntry,
   RenderCacheObservers,
@@ -51,6 +52,23 @@ export class ReloadSignal {
   async after(entry: ReloadedEntry, mutate: () => void): Promise<void> {
     const reloaded = this.next(entry).then(() => true);
     await untilHeard(mutate, () => reloaded, `a reload of ${entry.projectDir}`);
+  }
+
+  // [LAW:no-ambient-temporal-coupling] `after`, for removing `folder`.
+  // Removing a folder already gone emits nothing, so a round that finds it
+  // missing lays it down with `layDown` first; the first round finds it
+  // present and is a bare removal, the gesture under test. A writer landing
+  // in the folder mid-removal (the storage owner's probe) is retried rather
+  // than failing ENOTEMPTY.
+  async afterRemoving(
+    entry: ReloadedEntry,
+    folder: string,
+    layDown: () => void,
+  ): Promise<void> {
+    await this.after(entry, () => {
+      if (!fs.existsSync(folder)) layDown();
+      fs.rmSync(folder, { recursive: true, maxRetries: 3 });
+    });
   }
 
   private next(entry: ReloadedEntry): Promise<void> {
