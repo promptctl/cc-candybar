@@ -5,7 +5,8 @@
 // naming its outcome. The event's own fields, and the threw arm a renderer
 // bug reaches, are held by test/request-event.test.ts.
 
-import { execFileSync } from "node:child_process";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
 import {
   existsSync,
   mkdirSync,
@@ -14,7 +15,6 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { constants, open } from "node:fs/promises";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
@@ -67,22 +67,86 @@ const CONFIGS = {
   ruled: `{ globals: { style: '{{ if eq .session.id "x" }}vivid{{ else }}none{{ end }}', effect: '{{ if eq (mod (unixEpoch now) 2) 0 }}none{{ else }}none{{ end }}' }, segments: { mark: { template: 'mark' } }, root: { h: ['mark'] } }`,
 };
 
-// [LAW:no-ambient-temporal-coupling] The `tmux` on the daemon's PATH: it holds
-// the gate beside it open for reading — a FIFO, opened read-write so the open
-// itself does not wait for a writer — then says it was asked, and answers only
-// once the test writes a line into the gate. `asked` therefore means "reading":
-// the test opens the gate after the client has been answered TIMEOUT, so the
-// render provably outlives the request timeout, an ordering the test owns, not
-// a bet on how slow a render is. Only a render whose client reports a tmux pane
-// runs it, and src/proc/tmux.ts kills it at 2 s, so a test that never opens the
-// gate leaves no stub behind.
-const STUB_TMUX = `#!/bin/sh
-here=$(dirname "$0")
-exec 3<> "$here/gate"
-: > "$here/asked"
-read _ <&3
-echo held
-`;
+// [LAW:no-ambient-temporal-coupling] The `tmux` on the daemon's PATH: it
+// connects to the gate beside it, a unix socket the test listens on, and
+// answers only once the test writes a line into it. Its connection is its
+// asking, so `asked` means "reading": the test opens the gate after the
+// client has been answered, so the render provably outlives its deadline, an
+// ordering the test owns, not a bet on how slow a render is. Only a render
+// whose client reports a tmux pane runs it.
+//
+// The stub's life is the connection's. A `launch` child leads its own process
+// group, so killing the daemon never reaches it, and src/proc/tmux.ts's 2 s
+// kill dies with the daemon. Closing the gate, which afterAll does and the
+// kernel does when the worker dies, ends the stub's read, and it exits 1; a
+// stub started once the gate is closed finds nothing listening and exits at
+// once. So a run that ends before its gate opens, however it ends, leaves no
+// stub behind. The stub runs on the worker's own node, so it needs nothing
+// from the daemon's PATH, and it says back through the gate that it heard.
+const STUB_TMUX = [
+  `#!${process.execPath}`,
+  `const gate = require("node:net").connect(require("node:path").join(__dirname, "gate"));`,
+  `process.exitCode = 1;`,
+  `gate.once("data", () => { process.exitCode = 0; process.stdout.write("held\\n"); gate.end("held\\n"); });`,
+  `gate.on("close", () => process.exitCode && process.stderr.write("the gate closed before it opened\\n"));`,
+  `gate.on("error", (err) => process.stderr.write(err.message + "\\n"));`,
+].join("\n");
+
+interface TmuxStub {
+  // Resolves once the nth stub to run has connected, counting from 1.
+  asked(n: number): Promise<void>;
+  // Lets the nth stub answer, resolving once it says it heard. Rejects,
+  // naming it, when it hung up first.
+  open(n: number): Promise<void>;
+  // Ends every stub still waiting.
+  close(): Promise<void>;
+}
+
+// One stub's connection, and how it ended if it hung up.
+interface Ask {
+  socket: net.Socket;
+  hungUp: string | null;
+}
+
+// A `tmux` in `dir` and the gate it waits on.
+async function tmuxStub(dir: string): Promise<TmuxStub> {
+  writeFileSync(path.join(dir, "tmux"), STUB_TMUX, { mode: 0o755 });
+  // [LAW:no-silent-failure] A stub that hangs up before its gate opens says
+  // how, for the open that finds it gone.
+  const asks: Ask[] = [];
+  const server = net.createServer((socket) => {
+    const ask: Ask = { socket, hungUp: null };
+    socket.on("error", (err) => (ask.hungUp = err.message));
+    socket.on("close", () => (ask.hungUp ??= "hung up"));
+    asks.push(ask);
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject).listen(path.join(dir, "gate"), resolve);
+  });
+  return {
+    asked: (n) => until(() => asks.length >= n, `tmux stub #${n} asking`),
+    open: (n) =>
+      new Promise((resolve, reject) => {
+        const ask = asks[n - 1];
+        if (ask === undefined)
+          return reject(new Error(`tmux stub #${n} never asked`));
+        const gone = () =>
+          reject(
+            new Error(`tmux stub #${n} ${ask.hungUp} before its gate opened`),
+          );
+        if (ask.hungUp !== null) return gone();
+        // A write lands in the kernel whether or not the stub is alive to
+        // read it; only the stub's answer back says it heard.
+        ask.socket.once("data", () => resolve()).once("close", gone);
+        ask.socket.write("open\n");
+      }),
+    close: () =>
+      new Promise((resolve, reject) => {
+        for (const { socket } of asks) socket.destroy();
+        server.close((err) => (err ? reject(err) : resolve()));
+      }),
+  };
+}
 
 type Event = {
   level: string;
@@ -122,6 +186,7 @@ describe("every render request writes one render event, whatever its outcome", (
   let removeTmpDirs: () => void;
   let projectDir: string;
   let tmuxDir: string;
+  let stub: TmuxStub | undefined;
   let daemon: RunningDaemon | undefined;
 
   const configFlag = (name: keyof typeof CONFIGS): string[] => [
@@ -166,8 +231,7 @@ describe("every render request writes one render event, whatever its outcome", (
       writeFileSync(path.join(projectDir, `${name}.json5`), text);
     tmuxDir = path.join(projectDir, "bin");
     mkdirSync(tmuxDir);
-    execFileSync("mkfifo", [path.join(tmuxDir, "gate")]);
-    writeFileSync(path.join(tmuxDir, "tmux"), STUB_TMUX, { mode: 0o755 });
+    stub = await tmuxStub(tmuxDir);
     daemon = await spawnDaemonWithEnv({
       ...prepared.env,
       PATH: `${tmuxDir}${path.delimiter}${prepared.env.PATH ?? ""}`,
@@ -176,6 +240,7 @@ describe("every render request writes one render event, whatever its outcome", (
 
   afterAll(async () => {
     if (daemon) await killAndWait(daemon);
+    await stub?.close();
     rmSync(projectDir, { recursive: true, force: true });
     removeTmpDirs();
   });
@@ -728,16 +793,6 @@ describe("every render request writes one render event, whatever its outcome", (
         },
         configFlag("held"),
       );
-    const openGate = async (): Promise<void> => {
-      // A non-blocking open fails (ENXIO) once the stub has stopped reading,
-      // rather than waiting for a reader that will never come.
-      const gate = await open(
-        path.join(tmuxDir, "gate"),
-        constants.O_WRONLY | constants.O_NONBLOCK,
-      );
-      await gate.write("open\n");
-      await gate.close();
-    };
     const stats = () =>
       sendDaemonRequest(sockPath, { v: PROTOCOL_VERSION, kind: "stats" });
 
@@ -759,10 +814,7 @@ describe("every render request writes one render event, whatever its outcome", (
     expect(Date.now()).toBeLessThanOrEqual(deadline);
     expect(stated).toMatchObject({ ok: true });
     expect(stripAnsi((stated as { output: string }).output)).toContain("…");
-    await until(
-      () => existsSync(path.join(tmuxDir, "asked")),
-      "the render asked tmux",
-    );
+    await stub!.asked(1);
     const late = only(await eventsOf("ev-late"));
     expect(field(late, "outcome")).toBe("ok");
     expect(field(late, "timedOut")).toBe("N");
@@ -778,7 +830,7 @@ describe("every render request writes one render event, whatever its outcome", (
 
     // The read lands, and the session's next render draws it, waiting on
     // nothing.
-    await openGate();
+    await stub!.open(1);
     await loggedWhen(
       env,
       (lines) => lines.some((l) => / tmux refresh .* outcome=ok /u.test(l)),
@@ -793,7 +845,6 @@ describe("every render request writes one render event, whatever its outcome", (
     // A client too old to state its deadline is answered by the earliest an
     // old client gives up at — the native client's, whose budget runs from
     // before its connect — so within its whole budget, the connect included.
-    rmSync(path.join(tmuxDir, "asked"));
     const sent = Date.now();
     await expect(
       sendDaemonRequest(sockPath, {
@@ -807,11 +858,8 @@ describe("every render request writes one render event, whatever its outcome", (
     expect(field(unstated, "deadline")).toMatch(/^unstated:\d+ms$/u);
     expect(field(unstated, "ended")).toBe("deadline");
     // Its stub is still reading: let it answer rather than be killed.
-    await until(
-      () => existsSync(path.join(tmuxDir, "asked")),
-      "the second render asked tmux",
-    );
-    await openGate();
+    await stub!.asked(2);
+    await stub!.open(2);
   });
 
   // The connection's backstop answers TIMEOUT whatever the render is still
@@ -864,5 +912,41 @@ describe("every render request writes one render event, whatever its outcome", (
     await expect(
       sendDaemonRequest(sockPath, { v: PROTOCOL_VERSION, kind: "stats" }),
     ).resolves.toMatchObject({ ok: true, stats: { renderCache: { held: 0 } } });
+  });
+});
+
+describe("the tmux stub's wait is its gate's", () => {
+  // [LAW:no-ambient-temporal-coupling] Started as `launch` starts it, leading
+  // its own process group, the stub is out of reach of anything that kills
+  // its spawner: the daemon above, or this test. Only its gate ends it, so a
+  // run that ends before the gate opens leaves nothing behind.
+  test("a stub whose gate closes before it opens exits", async () => {
+    const dir = mkdtempSync(
+      path.join(os.tmpdir(), "cc-candybar-render-event-e2e-"),
+    );
+    const stub = await tmuxStub(dir);
+    const child = spawn(path.join(dir, "tmux"), [], {
+      detached: true,
+      stdio: "ignore",
+    });
+    try {
+      // A spawn that fails rejects here, by name, and the gate closes
+      // whichever way this ends.
+      await Promise.all([once(child, "spawn"), stub.asked(1)]).finally(() =>
+        stub.close(),
+      );
+      // Bounded, so a stub that ignores its gate fails this test by name and
+      // the cleanup below still runs.
+      await until(
+        () => child.exitCode !== null || child.signalCode !== null,
+        "the stub exiting once its gate closed",
+      );
+      expect([child.exitCode, child.signalCode]).toEqual([1, null]);
+    } finally {
+      // A failed run leaves no stub either. The stub is node itself, so the
+      // child is the whole of it.
+      child.kill("SIGKILL");
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

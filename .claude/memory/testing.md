@@ -11,6 +11,7 @@
 - Test setup isolates the daemon from the host. Claude Code's config directory points at an empty dir, so no test reads the host's Claude Code settings or transcripts. The registry URL points at a closed port, and managed settings at an empty dir.
 - Test setup also isolates the state directory, so a test never sees the host's answers for repository configs. A test that loads a project or cwd config, or a repository's plugins, approves the directory first through the approval helper. Unapproved, the layer is silently absent from the chain, and the failure looks like the config never loaded.
 - Test daemons watch the Jest worker's pid and shut down when it dies, so a killed or timed-out Jest can't leave an orphaned daemon.
+- A process the daemon spawns leads its own process group, so killing a test daemon never reaches it, and the daemon's own timeout on the spawn dies with the daemon. A stub that blocks waits on a connection the test holds, never on a pipe it holds itself, so the test's teardown, or the worker's death, ends it.
 - Close any render cache a test builds. Otherwise its idle sweep keeps it, and every compile it serves, alive for the life of the worker.
 - The authoring docs under docs/ are tested against the live loader, so editing a doc can fail tests.
 - In a worktree whose node_modules is a symlink to the main checkout's, pnpm can refuse to run scripts. If it does, run the binaries in node_modules/.bin directly.
