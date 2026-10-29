@@ -17,7 +17,7 @@ import { SessionState } from "../src/daemon/session-state";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { viewFacts } from "./helpers/view-facts";
-import { replaceFile } from "./helpers/replace-file";
+import { writeAtomic } from "../src/utils/atomic-write";
 import { until } from "./helpers/until";
 
 const sleep = (ms: number): Promise<void> =>
@@ -117,7 +117,7 @@ test("a source re-read that finds what it stored wakes nothing; a new value wake
   // Twenty periods of re-reads of the same text.
   await sleep(1000);
   expect(changed).toHaveLength(settled);
-  replaceFile(status, "red");
+  writeAtomic(status, "red");
   await until(() => held.view.store.read("status") === "red", "the new value");
   expect(changed).toHaveLength(settled + 1);
   await sleep(300);
@@ -151,7 +151,7 @@ test("a view a reload retired says nothing more while a render still holds it", 
   await until(() => now.view.store.read("status") === "green", "the successor's first read");
   await sleep(200);
   const settled = changed.length;
-  replaceFile(status, "red");
+  writeAtomic(status, "red");
   await until(
     () =>
       old.view.store.read("status") === "red" &&

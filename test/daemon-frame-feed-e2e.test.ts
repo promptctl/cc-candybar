@@ -49,7 +49,7 @@ import { sendDaemonRequest } from "./helpers/daemon-wire";
 import { links } from "./helpers/ansi";
 import { HANDOFF_BUTTON } from "../src/daemon/lane-handoff";
 import { untilHeard } from "./helpers/reload-signal";
-import { replaceFile } from "./helpers/replace-file";
+import { writeAtomic } from "../src/utils/atomic-write";
 import { until, type Condition } from "./helpers/until";
 import {
   loggedLines,
@@ -203,6 +203,11 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
         throw new Error(`not a frame: ${JSON.stringify(resp)}`);
       return resp.output;
     });
+
+  // A wait is for the frame that shows what it waits on, never for a count: a
+  // subscription reopened after a TIMEOUT pushes its opening frame again.
+  const shows = (frames: ReadonlyArray<Frame>, text: string): boolean =>
+    outputs(frames).some((o) => stripAnsi(o).includes(text));
 
   beforeAll(async () => {
     const prepared = prepareIsolatedDaemonEnv("cc-candybar-feed-e2e");
@@ -371,27 +376,28 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     let wrote = 0;
     const frames = await framesOf(sid, async ({ received, elapsed, waitFor, untilHeard }) => {
       await waitFor(() => received.length > 0, "the bar before the write");
-      // The watch has no ready signal, so the (idempotent) replacement repeats
-      // until a frame shows it heard. `wrote` is the last replacement's time,
-      // so a frame from an earlier one that arrived late measures shorter,
-      // never longer.
+      // [LAW:no-ambient-temporal-coupling] The watch has no ready signal, so
+      // one value is re-applied until a frame shows it heard, and only then is
+      // the measured write made, once: a retried write's frame may answer an
+      // earlier round, and timed from the last it measures short.
       await untilHeard(
-        () => {
-          wrote = elapsed();
-          replaceFile(statusFile, "red");
-        },
-        () => received.length > 1,
-        "the rewritten value",
+        () => writeAtomic(statusFile, "amber"),
+        () => shows(received, "status amber"),
+        "the value that proves the watch live",
       );
+      wrote = elapsed();
+      writeAtomic(statusFile, "red");
+      await waitFor(() => shows(received, "status red"), "the rewritten value");
     });
     expect(outputs(frames).map(stripAnsi)).toEqual([
       expect.stringContaining("status green"),
+      expect.stringContaining("status amber"),
       expect.stringContaining("status red"),
     ]);
     // Measured from the write, as the click's is: the still bar's next frame
-    // falls due a still period after its first started, just before the
+    // falls due a still period after the last one started, just before the
     // write, so a frame in by half of one is the wake's.
-    expect(frames[1]!.at - wrote).toBeLessThan(FEED_PERIODS.still / 2);
+    expect(frames[2]!.at - wrote).toBeLessThan(FEED_PERIODS.still / 2);
     expect(await closedSummary(sid)).toMatch(/ woke=data:[1-9]\d*,/u);
   });
 
@@ -402,10 +408,15 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       `{ globals: { experimentalStatusline: true }, segments: { mark: { template: '${mark}' } }, root: { h: ['mark'] } }`;
     writeFileSync(config, configOf("before the save"));
     await render(sockPath, sid, projectDir, {}, ["cc-candybar", "--config", config]);
-    const frames = await framesOf(sid, async ({ received, waitFor }) => {
+    const frames = await framesOf(sid, async ({ received, waitFor, untilHeard }) => {
       await waitFor(() => received.length > 0, "the bar before the save");
-      writeFileSync(config, configOf("after the save"));
-      await waitFor(() => received.length > 1, "the saved bar");
+      // The config's watch has no ready signal either, and a repeated save
+      // draws the same bytes, which are never pushed twice.
+      await untilHeard(
+        () => writeAtomic(config, configOf("after the save")),
+        () => shows(received, "after the save"),
+        "the saved bar",
+      );
     });
     expect(outputs(frames).map(stripAnsi)).toEqual([
       expect.stringContaining("before the save"),
@@ -435,7 +446,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       await waitFor(() => received.length > 0, "the bar before the pick");
       await pick(picked);
       await waitFor(
-        () => outputs(received).some((o) => stripAnsi(o).includes("the picked mark")),
+        () => shows(received, "the picked mark"),
         "the picked bar",
       );
       await pick("");
