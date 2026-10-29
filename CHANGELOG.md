@@ -1,3 +1,9 @@
+## [1.162.0](https://github.com/promptctl/cc-candybar/compare/v1.161.4...v1.162.0) (2026-10-29)
+
+### Features
+
+* **approval:** approving a repository covers all of its worktrees (candybar-plugins-vf6g.svv) ([#477](https://github.com/promptctl/cc-candybar/issues/477)) ([c0cbfc6](https://github.com/promptctl/cc-candybar/commit/c0cbfc62bf5d8cc64dcaf60c67df971379b28fcc))
+
 ## [1.161.4](https://github.com/promptctl/cc-candybar/compare/v1.161.3...v1.161.4) (2026-10-28)
 
 ### Bug Fixes
