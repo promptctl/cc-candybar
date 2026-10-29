@@ -44,30 +44,31 @@ export class ReloadSignal {
   // Apply `mutate` and resolve once a reload of `entry` has observed it —
   // success or failure alike; the caller asserts on the outcome it wanted.
   // `mutate` must leave the disk in the same final state on every call AND
-  // emit an fs event on every call (a plain overwrite does; a bare unlink
-  // does not — pair it with a rewrite). One subscription, taken before the
-  // first mutation, is fact 1 above: every mutation leaves the same state, so
-  // a reload that began after any of them observed it. The condition is the
-  // reload's own promise, so the wait ends on the event, not on a poll tick.
+  // emit an fs event on every call (a plain overwrite does; removing what is
+  // already gone does not — `afterRemoving` is the removal). One
+  // subscription, taken before the first mutation, is fact 1 above: every
+  // mutation leaves the same state, so a reload that began after any of them
+  // observed it. The condition is the reload's own promise, so the wait ends
+  // on the event, not on a poll tick.
   async after(entry: ReloadedEntry, mutate: () => void): Promise<void> {
     const reloaded = this.next(entry).then(() => true);
     await untilHeard(mutate, () => reloaded, `a reload of ${entry.projectDir}`);
   }
 
-  // [LAW:no-ambient-temporal-coupling] `after`, for removing `folder`.
-  // Removing a folder already gone emits nothing, so a round that finds it
-  // missing lays it down with `layDown` first; the first round finds it
-  // present and is a bare removal, the gesture under test. A writer landing
-  // in the folder mid-removal (the storage owner's probe) is retried rather
-  // than failing ENOTEMPTY.
+  // [LAW:no-ambient-temporal-coupling] `after`, for removing `target`, a file
+  // or a folder. Removing what is already gone emits nothing, so a round that
+  // finds it missing lays it down with `layDown` first; the first round finds
+  // it present and is a bare removal, the gesture under test. A writer
+  // landing in a folder mid-removal (the storage owner's probe) is retried
+  // rather than failing ENOTEMPTY.
   async afterRemoving(
     entry: ReloadedEntry,
-    folder: string,
+    target: string,
     layDown: () => void,
   ): Promise<void> {
     await this.after(entry, () => {
-      if (!fs.existsSync(folder)) layDown();
-      fs.rmSync(folder, { recursive: true, maxRetries: 3 });
+      if (!fs.existsSync(target)) layDown();
+      fs.rmSync(target, { recursive: true, maxRetries: 3 });
     });
   }
 
