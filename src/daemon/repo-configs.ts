@@ -13,13 +13,19 @@ import {
 } from "../click/wire.js";
 import { repoProject } from "../config/loader/discovery.js";
 import {
+  answerDir,
   gateRepos,
   parseRepoConfigBook,
   REPO_ANSWERS,
+  withAnswer,
   type RepoAnswer,
   type RepoConfigBook,
   type RepoGate,
 } from "../config/loader/repo-gate.js";
+import { worktreeLink } from "../utils/git-root.js";
+import { ok } from "../utils/outcome.js";
+import { presence } from "../utils/presence.js";
+import type { Asked } from "../doctor/checks.js";
 import { stateFile, type StateFile } from "../doctor/state-file.js";
 import {
   APPROVAL_SEVERITY,
@@ -73,6 +79,40 @@ export const repoConfigs = (
     },
   };
 };
+
+// What recording an answer did to the book's other entries: the worktrees'
+// own answers it superseded, and the entries whose directory is not there
+// (a removed worktree, an unmounted volume), which no key can be proven for
+// and which stay as they are.
+export interface Recorded {
+  readonly superseded: readonly string[];
+  readonly missing: readonly string[];
+}
+
+// [LAW:single-enforcer] The one way an answer reaches the book — the bar's
+// click and the tests' approvals alike: the repository at `dir` takes the
+// answer, and every other entry whose directory is present and answers under
+// `dir` (a linked worktree's own, kept from before answers were kept by
+// repository) goes with it, so a repository holds one answer.
+export function recordAnswer(
+  store: StateFile<RepoConfigBook>,
+  dir: string,
+  answer: RepoAnswer,
+): Asked<Recorded> {
+  let recorded: Recorded = { superseded: [], missing: [] };
+  const filed = store.update((book) => {
+    const others = Object.keys(book).filter((d) => d !== dir);
+    const present = others.filter((d) => presence(d) === "present");
+    recorded = {
+      superseded: present.filter(
+        (d) => answerDir({ dir: d, link: worktreeLink(d) }) === dir,
+      ),
+      missing: others.filter((d) => !present.includes(d)),
+    };
+    return withAnswer(book, dir, answer, recorded.superseded);
+  });
+  return filed.kind === "failed" ? filed : ok(recorded);
+}
 
 // The gate a one-shot load outside the daemon (the demo, the gallery) runs
 // under. It loads the one file it was named, or none, never a searched chain,

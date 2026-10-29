@@ -5,6 +5,7 @@
 // exploited: a REAL daemon over a REAL socket, a project config whose
 // `shell` variable leaves a marker on disk when it runs.
 
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -26,7 +27,7 @@ import {
 } from "./helpers/spawn-isolated-daemon";
 import { VERB_REPO_CONFIG } from "../src/click/wire";
 import { logPath } from "../src/daemon/paths";
-import { repoConfigsPath } from "../src/daemon/repo-configs";
+import { repoConfigs, repoConfigsPath } from "../src/daemon/repo-configs";
 import { stateDir } from "../src/daemon/paths";
 import { until } from "./helpers/until";
 
@@ -204,5 +205,75 @@ describe("a repository's config waits for the user's one answer", () => {
     expect(restarted).toContain("USERSEG");
     expect(restarted).not.toContain("has a cc-candybar config");
     expect(fs.existsSync(marker)).toBe(false);
+  });
+
+  test("a worktree asks for its repository, and one answer there covers the repository and supersedes the worktree's own", async () => {
+    const git = (...args: string[]): void => {
+      execFileSync("git", args, { stdio: "ignore" });
+    };
+    git("init", "-q", project);
+    git(
+      "-C",
+      project,
+      "-c",
+      "user.name=t",
+      "-c",
+      "user.email=t@t",
+      "commit",
+      "-q",
+      "--allow-empty",
+      "-m",
+      "c",
+    );
+    const wt = `${project}-wt`;
+    git("-C", project, "worktree", "add", "-q", "--detach", wt);
+    const wtMarker = path.join(wt, "ran.marker");
+    fs.writeFileSync(
+      path.join(wt, ".cc-candybar.json5"),
+      repoConfig(wtMarker, "WTSEG"),
+    );
+    // An answer kept under the worktree's own path, before answers were kept
+    // by repository: it disagrees with the repository's (none), so it asks.
+    repoConfigs(stateDir(isolated.env)).update(() => ({ [wt]: "declined" }));
+    try {
+      await start();
+      const asked = await render(isolated.sockPath, "repo-wt", wt);
+      expect(stripAnsi(asked).replace(/\s+/g, " ")).toContain(
+        `${project} has a cc-candybar config`,
+      );
+      const resp = await sendClick(
+        isolated.sockPath,
+        answerUrl(asked, "approved"),
+        ANSWER_REPLY_MS,
+      );
+      expect(resp.ok).toBe(true);
+      await renderUntil(
+        isolated.sockPath,
+        "repo-wt",
+        wt,
+        (r) => stripAnsi(r).includes("WTSEGran"),
+        "the worktree's config, approved through its repository",
+      );
+      // [LAW:nothing-unseen] The answer says which entries it superseded.
+      await until(
+        () =>
+          fs
+            .readFileSync(logPath(isolated.env), "utf8")
+            .includes(
+              `repo-config: ${project} approved superseded=${wt} missing=- `,
+            ),
+        "the repo-config event naming the superseded worktree entry",
+      );
+      expect(repoConfigs(stateDir(isolated.env)).read()).toEqual({
+        kind: "ok",
+        value: { [project]: "approved" },
+      });
+      // The main worktree is approved by the same answer.
+      const main = stripAnsi(await draw("repo-main"));
+      expect(main).toContain("REPOSEG");
+      expect(main).not.toContain("has a cc-candybar config");
+    } finally {
+      fs.rmSync(wt, { recursive: true, force: true });
+    }
   });
 });
