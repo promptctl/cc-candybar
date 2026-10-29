@@ -44,7 +44,7 @@ import { installFromRepo } from "../src/plugin-install";
 import { REPO_PLUGIN_DIR } from "../src/config/loader/plugin-folders";
 import { stripAnsi } from "./helpers/daemon-e2e";
 import { viewFacts } from "./helpers/view-facts";
-import { ReloadSignal } from "./helpers/reload-signal";
+import { ReloadSignal, untilHeard } from "./helpers/reload-signal";
 import { until } from "./helpers/until";
 
 const SOURCE = `{ scope: "session", refresh: { watch: true }, read: { file: { json: true } } }`;
@@ -732,18 +732,18 @@ describe("a storage folder's watch", () => {
     const entry = r.cache.getOrCreate(dir, dir, file);
     const storage = storageOf();
     const before = entry.state.sources.get(STATUS)!;
-    await until(
+    // [LAW:no-ambient-temporal-coupling] A removal that lands before the watch
+    // is live is never heard, and removing a folder already gone emits nothing,
+    // so each round lays the folder down again before removing it.
+    await untilHeard(
       () => {
-        if (
-          fs.existsSync(storage) &&
-          entry.state.sources.get(STATUS) !== before
-        )
-          return true;
-        fs.rmSync(storage, { recursive: true, force: true });
-        return false;
+        fs.mkdirSync(storage, { recursive: true });
+        fs.rmSync(storage, { recursive: true });
       },
+      () =>
+        fs.existsSync(storage) &&
+        entry.state.sources.get(STATUS)!.generation > before.generation,
       "a reload that recreated the removed folder",
-      10_000,
     );
     expect(fs.statSync(storage).isDirectory()).toBe(true);
     expect(entry.state.sources.get(STATUS)!.generation).toBeGreaterThan(
@@ -835,15 +835,18 @@ describe("an installed plugin's storage", () => {
     expect(r.providers.managedStorage.stats().folders).toBe(1);
     const entry = r.cache.getOrCreate(dir, dir, file);
     const folder = path.join(root(), "p");
-    await until(
+    // [LAW:no-ambient-temporal-coupling] As above: each round installs the
+    // plugin again before removing it, so every round is an event to hear.
+    await untilHeard(
       () => {
-        fs.rmSync(folder, { recursive: true, force: true });
-        return Object.keys(entry.state.config.variables).every(
-          (n) => !n.startsWith("plugins.p."),
-        );
+        plugin("", folder);
+        fs.rmSync(folder, { recursive: true });
       },
+      () =>
+        Object.keys(entry.state.config.variables).every(
+          (n) => !n.startsWith("plugins.p."),
+        ),
       "the reload that drops the uninstalled plugin",
-      10_000,
     );
     expect(r.providers.managedStorage.stats().folders).toBe(0);
     expect(fs.existsSync(folder)).toBe(false);
