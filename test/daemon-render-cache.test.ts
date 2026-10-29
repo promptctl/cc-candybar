@@ -15,7 +15,6 @@ import {
   renameSync,
   rmSync,
   symlinkSync,
-  unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -720,13 +719,10 @@ describe("RenderCache", () => {
       expect(entry.lastWarning).toContain(cfgJson);
 
       // Removing the duplicate clears the warning on next reload. The
-      // watcher fires on file deletion in the same dir. Rewrite-then-unlink
-      // so every application of the mutation emits an event (a bare unlink
-      // of an already-absent file emits none) and ends with the file absent.
-      await reloads.after(entry, () => {
-        writeFileSync(cfgJson, validCfg);
-        unlinkSync(cfgJson);
-      });
+      // watcher fires on file deletion in the same dir.
+      await reloads.afterRemoving(entry, cfgJson, () =>
+        writeFileSync(cfgJson, validCfg),
+      );
       expect(entry.lastWarning).toBeNull();
       // The .json5 is still the resolved file; render state intact.
       expect(entry.configLayers).toEqual([cfgJson5]);
