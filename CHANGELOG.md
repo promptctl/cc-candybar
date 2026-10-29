@@ -1,3 +1,9 @@
+## [1.162.4](https://github.com/promptctl/cc-candybar/compare/v1.162.3...v1.162.4) (2026-10-29)
+
+### Bug Fixes
+
+* **daemon:** every config load says why it ran, and a click reloads no entry (brandon-unfiled-3248.7nq0) ([#481](https://github.com/promptctl/cc-candybar/issues/481)) ([34f2f8f](https://github.com/promptctl/cc-candybar/commit/34f2f8f995929cdfb25ae15d119ac336290790d4))
+
 ## [1.162.3](https://github.com/promptctl/cc-candybar/compare/v1.162.2...v1.162.3) (2026-10-29)
 
 ### Bug Fixes
