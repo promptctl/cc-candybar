@@ -1,3 +1,9 @@
+## [1.166.0](https://github.com/promptctl/cc-candybar/compare/v1.165.1...v1.166.0) (2026-10-30)
+
+### Features
+
+* **plugins:** a missing segment is an error only when its plugin is present (candybar-plugins-vf6g.odm) ([#497](https://github.com/promptctl/cc-candybar/issues/497)) ([5577ddd](https://github.com/promptctl/cc-candybar/commit/5577ddd8731d529e5500113fe2febc34aff9f5b2))
+
 ## [1.165.1](https://github.com/promptctl/cc-candybar/compare/v1.165.0...v1.165.1) (2026-10-30)
 
 ### Bug Fixes
