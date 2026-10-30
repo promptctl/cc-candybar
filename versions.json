@@ -4,15 +4,50 @@
     {
       "version": "pr-472",
       "ref": "refs/pull/472/merge",
-      "sha": "06386e072718bc4e3359f4c4ad771c25a314fc33",
-      "timestamp": "2026-10-30T07:20:24.816Z",
+      "sha": "6fe05d133305b9ebbbc46b25a22d60b358265a09",
+      "timestamp": "2026-10-30T07:29:25.432Z",
       "commits": [
         {
-          "sha": "06386e072718bc4e3359f4c4ad771c25a314fc33",
+          "sha": "6fe05d133305b9ebbbc46b25a22d60b358265a09",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T07:19:52Z",
-          "message": "Merge ba12cb85484a8306447086aaf1a2dad9180be07c into c30715de3dda55e6120daf037cbec4c1bd4b14eb\n"
+          "timestamp": "2026-10-30T07:28:43Z",
+          "message": "Merge 7c496f6069ad08b38d834fe6859aee9537ef13ce into c30715de3dda55e6120daf037cbec4c1bd4b14eb\n"
+        },
+        {
+          "sha": "7c496f6069ad08b38d834fe6859aee9537ef13ce",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T01:28:29-06:00",
+          "message": "ci(pages): build with a read-only token and no stored credentials; only the deploy job can write\n"
+        },
+        {
+          "sha": "91b52ca78f2a5254528cab975b7a20da15721ce0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T01:27:56-06:00",
+          "message": "fix(landscape): a bundle missing its project is a visible error, a link's case is corrected in place, and pools are filtered once per filter change\n"
+        },
+        {
+          "sha": "700f61954c981c1058039d3cf56ebf4e40187195",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T01:26:47-06:00",
+          "message": "fix(capture): nothing runs that triage did not read; unscanned targets are recorded and named\n"
+        },
+        {
+          "sha": "d16277012b92cf95642a355d9b79be672869181b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T01:26:46-06:00",
+          "message": "fix(landscape): export stores each project's kind, and triage and the explorer read it\n"
+        },
+        {
+          "sha": "58fba64308295ca2fb65e779598d11083dbe0bae",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T01:26:44-06:00",
+          "message": "fix(capture): credential check reads escape payloads too, and no committed bytecode\n"
         },
         {
           "sha": "ba12cb85484a8306447086aaf1a2dad9180be07c",
