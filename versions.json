@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-508",
+      "ref": "refs/pull/508/merge",
+      "sha": "cea46d3755ac42021551b2d8946b56a6c7307d03",
+      "timestamp": "2026-10-30T20:20:35.192Z",
+      "commits": [
+        {
+          "sha": "cea46d3755ac42021551b2d8946b56a6c7307d03",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T14:19:43-06:00",
+          "message": "Merge 548d9d64670adc464b5df4ea5154464cbc95d191 into 7e5b89a141178df3755ef8ff6b31eec91352e91d\n"
+        },
+        {
+          "sha": "548d9d64670adc464b5df4ea5154464cbc95d191",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T14:11:13-06:00",
+          "message": "test(colour): the closing sweep holds under every shipped variation, and nightly under every trial tuning (candybar-joiners-e5r4.5x1)\n\nThe sweep moves into a helper so the suite sweeps the four variations\non the dial and the nightly audits sweep the twelve trial tunings\nthrough the same reader. The three rigs are shared across variations,\nand the press exemption is computed under the variation swept.\n"
+        },
+        {
+          "sha": "74da9915a771f2197ce8aab2c3c4c322e57074f2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T14:11:13-06:00",
+          "message": "fix(colour): the cells either side of a hue turn draw as two colours at every depth (candybar-joiners-e5r4.5x1)\n\nA dial window keeps one hue's tones apart and the distribution keeps\nneighbours of one hue on different tones, but where a row turns hue\n(alt every three cells, either side of a keystone) each cell takes a\ntone from its own hue's window, and at 256 colours and ansi two hues'\nrungs often round onto one colour.\n\nA line of cells is now read as a whole: where the cells either side of\na turn are drawn alike, by identity after rounding, the cell after the\nturn takes the first tone of its window drawn as neither neighbour,\nelse the nearest rung of its ladder through the one widening; where it\nhas none, the cell before the turn does; where neither has one, the\njoiner's lift draws the seam. Each line is memoised by its address, so\na cell's entry is a lookup, and the theme preview's role groups meet\nby the same rule.\n\nThe unit property holds it over every variation, dial position,\nbundled theme and depth, rows to 16. Policy item 4 in the joiners\nproposal.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "b100e4391f45deea8b68df49f4ebdd4a6ee988cb",
