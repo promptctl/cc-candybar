@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-488",
+      "ref": "refs/pull/488/merge",
+      "sha": "163703a16376864c3fd37a9256909b23a7192ca1",
+      "timestamp": "2026-10-30T10:21:42.889Z",
+      "commits": [
+        {
+          "sha": "163703a16376864c3fd37a9256909b23a7192ca1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T04:20:57-06:00",
+          "message": "Merge f67bf232eabeca89d06d3db58a641b84ea9b84c9 into e31c958417e5127d95819930643df17eb59fe2bf\n"
+        },
+        {
+          "sha": "f67bf232eabeca89d06d3db58a641b84ea9b84c9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T04:20:37-06:00",
+          "message": "fix(proc): a launch child dies with the process that launched it, SIGKILL included (brandon-unfiled-3248.86ga)\n\nA launch child leads its own process group, and everything that ended it\n(its timeout, its caller's abort, its own exit) ran inside the launcher.\nA daemon that exited left every in-flight group running, reparented to\ninit for good, and a SIGKILL runs no cleanup to prevent that.\n\nEach launching process now starts one lifeline: an awk program in its\nown group, reading a pipe only the launcher holds. Every waited child is\nregistered on it and deregistered when it settles. When the launcher\nends, however it ends, the kernel closes the pipe, and the lifeline sends\nthe remaining groups the timeout's own escalation: SIGTERM, then SIGKILL\nafter the grace. The in-process set of live groups is the truth. A lost\nlifeline is logged, and the next launch replaces it and hands it the\nwhole set.\n\nThe binary watch now holds a restart while the update notice's act is\nrunning. That act is a launch child rewriting the bundle the watch\nsamples, and a restart in the middle would now kill it half-written.\n\nThe Pages site's child_process shim gains resident programs, since the\nlifeline lives as long as the page's daemon.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-486",
       "ref": "refs/pull/486/merge",
       "sha": "9da905307ecff66703b3b8503230f130db15db05",
