@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-488",
+      "ref": "refs/pull/488/merge",
+      "sha": "f2ca086508182a7f30b9912cf06400e55a3074af",
+      "timestamp": "2026-10-30T10:36:58.503Z",
+      "commits": [
+        {
+          "sha": "f2ca086508182a7f30b9912cf06400e55a3074af",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T10:36:08Z",
+          "message": "Merge 49442a5fcb8bb428e305b50877b17c3c9b65124d into e31c958417e5127d95819930643df17eb59fe2bf\n"
+        },
+        {
+          "sha": "49442a5fcb8bb428e305b50877b17c3c9b65124d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T04:35:58-06:00",
+          "message": "fix(proc): the update act outlives the daemon, and a downed lifeline stands as a warning (brandon-unfiled-3248.86ga)\n\nHigh review of the lifeline:\n\n- The update act rewrites the bundle, so any daemon exit now killed it\n  half-written. A waited launch can say it outlives its launcher, and the\n  act does; the binary watch still holds the restart while it runs.\n- Why the lifeline is down is one state: the log says each change, and the\n  daemon shows it beside the file-events warning, so a broken lifeline\n  reaches the bar instead of only daemon.log.\n- awk is found on the launcher's PATH, as every launched program is, so a\n  machine without /usr/bin/awk (NixOS) is guarded.\n- The binary watch says its wait once, through the shared change logger.\n- The demo shim's resident programs are programs that answer RESIDENT, one\n  registry instead of two.\n"
+        },
+        {
+          "sha": "f67bf232eabeca89d06d3db58a641b84ea9b84c9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T04:20:37-06:00",
+          "message": "fix(proc): a launch child dies with the process that launched it, SIGKILL included (brandon-unfiled-3248.86ga)\n\nA launch child leads its own process group, and everything that ended it\n(its timeout, its caller's abort, its own exit) ran inside the launcher.\nA daemon that exited left every in-flight group running, reparented to\ninit for good, and a SIGKILL runs no cleanup to prevent that.\n\nEach launching process now starts one lifeline: an awk program in its\nown group, reading a pipe only the launcher holds. Every waited child is\nregistered on it and deregistered when it settles. When the launcher\nends, however it ends, the kernel closes the pipe, and the lifeline sends\nthe remaining groups the timeout's own escalation: SIGTERM, then SIGKILL\nafter the grace. The in-process set of live groups is the truth. A lost\nlifeline is logged, and the next launch replaces it and hands it the\nwhole set.\n\nThe binary watch now holds a restart while the update notice's act is\nrunning. That act is a launch child rewriting the bundle the watch\nsamples, and a restart in the middle would now kill it half-written.\n\nThe Pages site's child_process shim gains resident programs, since the\nlifeline lives as long as the page's daemon.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-486",
       "ref": "refs/pull/486/merge",
       "sha": "3ccf3f4524ce8a867e320d5a8b74715ea2d8de69",
@@ -55,28 +84,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T03:11:46-06:00",
           "message": "feat(config): a repo config can add a cell beside a placement the user already has (candybar-plugins-vf6g.99v)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-488",
-      "ref": "refs/pull/488/merge",
-      "sha": "163703a16376864c3fd37a9256909b23a7192ca1",
-      "timestamp": "2026-10-30T10:21:42.889Z",
-      "commits": [
-        {
-          "sha": "163703a16376864c3fd37a9256909b23a7192ca1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T04:20:57-06:00",
-          "message": "Merge f67bf232eabeca89d06d3db58a641b84ea9b84c9 into e31c958417e5127d95819930643df17eb59fe2bf\n"
-        },
-        {
-          "sha": "f67bf232eabeca89d06d3db58a641b84ea9b84c9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T04:20:37-06:00",
-          "message": "fix(proc): a launch child dies with the process that launched it, SIGKILL included (brandon-unfiled-3248.86ga)\n\nA launch child leads its own process group, and everything that ended it\n(its timeout, its caller's abort, its own exit) ran inside the launcher.\nA daemon that exited left every in-flight group running, reparented to\ninit for good, and a SIGKILL runs no cleanup to prevent that.\n\nEach launching process now starts one lifeline: an awk program in its\nown group, reading a pipe only the launcher holds. Every waited child is\nregistered on it and deregistered when it settles. When the launcher\nends, however it ends, the kernel closes the pipe, and the lifeline sends\nthe remaining groups the timeout's own escalation: SIGTERM, then SIGKILL\nafter the grace. The in-process set of live groups is the truth. A lost\nlifeline is logged, and the next launch replaces it and hands it the\nwhole set.\n\nThe binary watch now holds a restart while the update notice's act is\nrunning. That act is a launch child rewriting the bundle the watch\nsamples, and a restart in the middle would now kill it half-written.\n\nThe Pages site's child_process shim gains resident programs, since the\nlifeline lives as long as the page's daemon.\n"
         }
       ]
     },

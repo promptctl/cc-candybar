@@ -34119,8 +34119,8 @@ init_globals();
 init_globals();
 var import_buffer3 = __toESM(require_buffer(), 1);
 var import_events2 = __toESM(require_events(), 1);
+var RESIDENT = "resident";
 var programs = /* @__PURE__ */ new Map();
-var residents = /* @__PURE__ */ new Set();
 var enoent = (cmd) => Object.assign(new Error(`spawn ${cmd} ENOENT`), { code: "ENOENT", errno: -2, syscall: `spawn ${cmd}`, path: cmd });
 var Stream = class extends import_events2.EventEmitter {
   encoding = null;
@@ -34150,12 +34150,10 @@ var Stream = class extends import_events2.EventEmitter {
 };
 var nextPid = 5e3;
 function spawn(cmd, args = [], opts = {}) {
-  const name = cmd.split("/").pop();
-  const program = programs.get(name);
-  const resident = residents.has(name);
+  const program = programs.get(cmd.split("/").pop());
   const child = Object.assign(new import_events2.EventEmitter(), {
     // As in Node, a program that cannot start has no pid (src/proc/launch.ts reads that).
-    pid: program === void 0 && !resident ? void 0 : nextPid++,
+    pid: program === void 0 ? void 0 : nextPid++,
     stdout: new Stream(),
     stderr: new Stream(),
     stdin: new Stream(),
@@ -34169,12 +34167,12 @@ function spawn(cmd, args = [], opts = {}) {
     }
   });
   setTimeout(() => {
-    if (resident) return;
     if (program === void 0) {
       child.emit("error", enoent(cmd));
       return;
     }
     const run3 = program(args, opts.cwd);
+    if (run3 === RESIDENT) return;
     if (run3.stdout) child.stdout.chunk(run3.stdout);
     if (run3.stderr) child.stderr.chunk(run3.stderr);
     child.exitCode = run3.code;
@@ -34189,6 +34187,7 @@ function spawnSync(cmd, args = [], opts = {}) {
   const program = programs.get(cmd.split("/").pop());
   if (program === void 0) return { pid: 0, status: null, signal: null, stdout: "", stderr: "", output: [], error: enoent(cmd) };
   const run3 = program(args, opts.cwd);
+  if (run3 === RESIDENT) throw new Error(`${cmd} runs as long as the page does; a sync run of it would never return`);
   return { pid: nextPid++, status: run3.code, signal: null, stdout: run3.stdout, stderr: run3.stderr ?? "", output: [null, run3.stdout, run3.stderr ?? ""] };
 }
 
@@ -34268,37 +34267,48 @@ function setLaunchLog(log) {
 var LIFELINE_PROGRAM = `$1 == "+" { live[$2] = 1; next } $1 == "-" { delete live[$2]; next } END { for (g in live) groups = groups " -" g; if (groups != "") system("kill -TERM" groups " 2>/dev/null; sleep ${TIMEOUT_KILL_GRACE_MS / 1e3}; kill -KILL" groups " 2>/dev/null") }`;
 var liveGroups = /* @__PURE__ */ new Set();
 var lifeline = null;
+var fault = null;
+function setFault(next2) {
+  if (next2 === fault) return;
+  fault = next2;
+  launchLog(
+    next2 === null ? "info" : "warn",
+    next2 === null ? "launch lifeline running again" : `launch lifeline ${next2}; the next launch starts another`
+  );
+}
 function lose(line, reason) {
   if (lifeline?.process !== line) return;
   lifeline = null;
-  launchLog(
-    "warn",
-    `launch lifeline lost (${reason}); the next launch starts another`
-  );
+  setFault(reason);
+}
+function lifelineWarnings() {
+  return fault === null ? [] : [
+    {
+      kind: "lifeline",
+      message: `programs the daemon runs would outlive it if it died: its launch lifeline ${fault}, and the next launch starts another`
+    }
+  ];
 }
 function spawnLifeline() {
   statsHandle?.onStart("lifeline");
   const t0 = Date.now();
   let line;
   try {
-    line = spawn("/usr/bin/awk", [LIFELINE_PROGRAM], {
-      env: { PATH: "/usr/bin:/bin" },
+    line = spawn("awk", [LIFELINE_PROGRAM], {
       stdio: ["pipe", "ignore", "ignore"],
       detached: true
     });
   } catch (err) {
     statsHandle?.onEnd("lifeline", Date.now() - t0);
-    launchLog(
-      "warn",
-      `launch lifeline not started (${spawnErrorText(err, void 0)})`
-    );
+    setFault(`did not start: ${spawnErrorText(err, void 0)}`);
     return null;
   }
   statsHandle?.onEnd("lifeline", Date.now() - t0);
   const pipe = line.stdin;
-  line.once("error", (err) => lose(line, err.message));
+  line.once("spawn", () => setFault(null));
+  line.once("error", (err) => lose(line, `failed: ${err.message}`));
   line.once("exit", (code, sig) => lose(line, `exited ${sig ?? code}`));
-  pipe.on("error", (err) => lose(line, `pipe: ${err.message}`));
+  pipe.on("error", (err) => lose(line, `pipe failed: ${err.message}`));
   line.unref();
   pipe.unref();
   for (const group of liveGroups) pipe.write(`+ ${group}
@@ -34367,7 +34377,7 @@ async function launch(opts) {
       });
       return;
     }
-    const group = child.pid;
+    const group = opts.outlivesLauncher ? void 0 : child.pid;
     if (group !== void 0) guard(group);
     let stdout2 = "";
     let stderr2 = "";
@@ -35954,6 +35964,14 @@ function debug(message, ...args) {
   if (debugOn()) {
     console.error(`[DEBUG] ${message}`, ...args);
   }
+}
+function changeLogger(log) {
+  let last2 = null;
+  return ([level, msg]) => {
+    if (msg === last2) return;
+    last2 = msg;
+    log(level, msg);
+  };
 }
 var quietLogger = (_level, message) => debug(message);
 
@@ -48850,11 +48868,11 @@ var SourceRegistry = class _SourceRegistry {
   getLastError(name) {
     if (!this.declaredHere(name)) return this.parent?.getLastError(name);
     const read2 = this.lastErrors.get(name);
-    const fault = this.policyFaults.get(name);
-    if (fault === void 0) return read2;
-    return read2 === void 0 ? fault : {
+    const fault2 = this.policyFaults.get(name);
+    if (fault2 === void 0) return read2;
+    return read2 === void 0 ? fault2 : {
       timestamp: read2.timestamp,
-      message: `${fault.message}; ${read2.message}`
+      message: `${fault2.message}; ${read2.message}`
     };
   }
   // Every variable whose cache policy cannot fire, with why: each render
@@ -62714,20 +62732,20 @@ function sessionEnv(daemonEnv, facts) {
 init_globals();
 var isRecord = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
 function parseMarkBook(doc) {
-  const fault = (reason) => ({
+  const fault2 = (reason) => ({
     kind: "failed",
     reason
   });
-  if (!isRecord(doc)) return fault("is not an object");
+  if (!isRecord(doc)) return fault2("is not an object");
   for (const [check, sightings] of Object.entries(doc)) {
     if (!isRecord(sightings)) {
-      return fault(
+      return fault2(
         `holds ${JSON.stringify(check)} as something other than its sightings`
       );
     }
     for (const [id2, mark] of Object.entries(sightings)) {
       if (!GLYPH_MARKS.includes(mark)) {
-        return fault(
+        return fault2(
           `marks ${JSON.stringify(id2)} ${JSON.stringify(mark)}, not ${GLYPH_MARKS.join(" or ")}`
         );
       }
@@ -64110,8 +64128,8 @@ function readLanes(inputs) {
   const lanes = deps.lanes();
   const read2 = (lane, needed, value) => {
     if (!needed) return ABSENT2;
-    const fault = deps.faults.of(sessionId2, lane);
-    if (fault !== void 0) return fault;
+    const fault2 = deps.faults.of(sessionId2, lane);
+    if (fault2 !== void 0) return fault2;
     try {
       return value();
     } catch (e) {
@@ -68622,14 +68640,6 @@ function describeRelease(c) {
       return ["warn", `release: unchecked: ${c.reason}`];
   }
 }
-function changeLogger(log) {
-  let last2 = null;
-  return ([level, msg]) => {
-    if (msg === last2) return;
-    last2 = msg;
-    log(level, msg);
-  };
-}
 var lastLine = (text3) => text3.split(/\r?\n/).map((s) => s.trim()).filter((s) => s !== "").at(-1);
 function failureReason(r) {
   const exit2 = r.exitCode === null ? "" : ` (exit ${r.exitCode})`;
@@ -68715,7 +68725,8 @@ function makeUpdateWatch(opts) {
       void launch({
         ...facts.command,
         category: "update.apply",
-        timeoutMs: ACT_TIMEOUT_MS
+        timeoutMs: ACT_TIMEOUT_MS,
+        outlivesLauncher: true
       }).then((result) => {
         if (result.ok) {
           act = IDLE;
@@ -68747,6 +68758,7 @@ function sameStamp(a, b) {
 }
 function makeBinaryWatch(opts) {
   const { targets, intervalMs, stat: stat3, held, exit: exit2, log } = opts;
+  const logHeld = changeLogger(log);
   const boot = targets.map((path40) => ({ path: path40, stamp: mtimeOf(path40, stat3) }));
   const watched = boot.filter(({ stamp }) => stamp.kind !== "failed");
   let timer = null;
@@ -68760,7 +68772,10 @@ function makeBinaryWatch(opts) {
       if (!sameStamp(stamp, now2)) {
         const what = `binary ${now2.kind === "absent" ? "gone" : "changed"} (${path40})`;
         if (held()) {
-          log("info", `${what}; the restart waits for the running update`);
+          logHeld([
+            "info",
+            `${what}; the restart waits for the running update`
+          ]);
           return;
         }
         log("info", `${what}; shutting down`);
@@ -72183,8 +72198,8 @@ var ManagedStorage = class {
     }
   }
   async read(f) {
-    const fault = this.standing(f.storage);
-    if (fault !== null) return failed(fault);
+    const fault2 = this.standing(f.storage);
+    if (fault2 !== null) return failed(fault2);
     const file = fileOf(f);
     let text3;
     try {
@@ -75918,12 +75933,12 @@ function drawDsl(config2, compiled, store, registry, projected, at, opts, observ
     );
     const frameMotion = rendered.some((row2) => row2.moves) ? "moves" : armed() ? "can-move" : "still";
     for (const message of shortfalls) warn({ kind: "band-floor", message });
-    for (const [variable, fault] of registry.cachePolicyFaults())
+    for (const [variable, fault2] of registry.cachePolicyFaults())
       warn({
         kind: "refresh",
         variable,
-        error: fault.message,
-        message: `variable "${variable}" cannot refresh: ${fault.message}`
+        error: fault2.message,
+        message: `variable "${variable}" cannot refresh: ${fault2.message}`
       });
     return {
       text: rendered.map((row2) => row2.text).join("\n"),
@@ -76476,10 +76491,10 @@ function openView(state, cwd2, facts, { sessionState: sessionState2, declare, so
         acquired,
         released
       } = holds2.declare(() => declare(holds2, facts2, reads, state.sources));
-      for (const fault of faults) {
+      for (const fault2 of faults) {
         log(
           "error",
-          `session view declaration threw sid=${JSON.stringify(sessionId2)} ${fault}`
+          `session view declaration threw sid=${JSON.stringify(sessionId2)} ${fault2}`
         );
       }
       if (acquired + released > 0) {
@@ -80091,8 +80106,9 @@ var binaryWatch = makeBinaryWatch({
   ],
   intervalMs: BIN_CHECK_INTERVAL_MS,
   stat: fs_default.statSync,
-  // The update notice's act rewrites the bundle from a launch child, which
-  // dies with the daemon: a restart waits for it, and its end samples again.
+  // The update notice's act rewrites the bundle: a restart while it runs
+  // would boot a half-written bundle and drop the act's verdict, so it waits.
+  // A success samples again at once; after a failure the next tick does.
   held: () => updateWatch.running(),
   exit: () => shutdown(0),
   log: dlog
@@ -80857,6 +80873,7 @@ function drawRender(setup, drawing2) {
   ].flatMap(({ about, text: text3 }) => about && text3 ? [{ about, text: text3 }] : []);
   const standing = [
     ...fileEventsWarnings(fileEvents.delivery()),
+    ...lifelineWarnings(),
     ...entry.lastWarning === null ? [] : [{ kind: "load", message: entry.lastWarning }]
   ];
   const scope = { config: state.config };
@@ -80960,6 +80977,7 @@ function drawRender(setup, drawing2) {
       case "file-events":
         return `${w.kind}:${w.state}`;
       case "load":
+      case "lifeline":
       case "band-floor":
       case "when":
         return w.kind;
@@ -81380,7 +81398,7 @@ function updateRepo(next2) {
 `);
 }
 var ok2 = (stdout2) => ({ code: 0, stdout: stdout2 });
-residents.add("awk");
+programs.set("awk", () => RESIDENT);
 programs.set("ps", () => ok2(""));
 programs.set("git", (args) => {
   const line = args.join(" ");
