@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "1925439a3e6f32b37877fb421b084c970ac4ae7f",
+      "timestamp": "2026-10-30T15:40:26.522Z",
+      "commits": [
+        {
+          "sha": "1925439a3e6f32b37877fb421b084c970ac4ae7f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T09:39:33-06:00",
+          "message": "refactor(watchers): watch_file sources hold their watches through the registry, which shares one handle per directory (brandon-unfiled-3248.pijr) (#498)\n\n* refactor(watchers): watch_file sources hold their watches through the registry, which shares one handle per directory (brandon-unfiled-3248.pijr)\n\nThe var-system's own watch manager opened, filtered, failed and closed its\nfs.watch handles beside the watcher registry, so its handles never reached\nthe daemon's counters or log. It is gone: a watch_file path follows its\nspec through the registry's `follow`, as the config and git watches do.\n\nThe registry gains what that needed, as rules for every consumer:\n- one OS handle per directory, refcounted by the slots on it, and `follow`\n  acquires before it releases, so a key move (a link re-pointed to a new\n  name) keeps every directory both keys name open;\n- a directory made again at its path is reopened in place when a slot\n  acquires it; a deaf one is reopened only through `listening`, which only\n  watch_file calls, at a real event on a kept watch, never on a failed one;\n- every holder of a key hears each window; a directory going deaf is told\n  to every slot on it; the handle's `deaf` list is live;\n- a directory's own name under a name filter is judged by the folder at the\n  path, not the event type; an unnamed event under a filter is `unknown`;\n- daemon-stats counts directory handles opened, closed and open beside the\n  slots, and the registry logs every open, close and reopen with its cause.\n\n* fix(watchers): a directory watch follows the folder at its path, and every slot on it hears it recover (brandon-unfiled-3248.pijr)\n\nReview of #498:\n- An event naming a directory whose folder was made again moves the handle\n  onto the new folder, so later own-name events (macOS: a child came or went)\n  no longer pass every name filter.\n- A reopen that listens tells every slot an unknown window, so a shared\n  directory's other holders re-read what went unheard and clear their fault.\n- Joining a slot refreshes its directories as opening one does, so a rebind\n  onto a key another holder owns retries its deaf directory.\n- Managed storage judges an unknown window against the disk: it may hold the\n  folder's own event.\n- watch_file's follow-then-retry is one step, the window's cause its input.\n\n* fix(watchers): a directory's state is its current handle's to change (brandon-unfiled-3248.pijr)\n\nReview of #498 (medium):\n- An error or event from a handle a reopen replaced no longer marks the\n  directory deaf or fires its slots; the bound folder is read from the\n  current state, not a closure copy.\n- One predicate says whether a path binds a folder, for the watch key and\n  the refresh.\n- The follow comment says where a deaf directory is retried; the memory\n  lines say the handle follows a folder made again, and why storage still\n  recovers through a reload.\n\n* fix(watchers): a retry reopens deaf directories and judges no folder's identity (brandon-unfiled-3248.pijr)\n\nReview of #498 (second high):\n- listening retries deaf directories only. Judging identity there gave the\n  reopen's unknown window a path back to another reopen wherever a folder's\n  identity is unstable; a moved folder is the next derive's new key, which\n  acquires and refreshes.\n- The config and git bind log lines say deaf=, which counts directories\n  that failed after opening as well as those refused.\n\n* test(git-cache): a looped git directory's open count is the platform's, as its deaf count is (brandon-unfiled-3248.pijr)\n\nLinux's recursive watcher swallows the symlink loop under refs/heads and\nopens it; macOS refuses it. The directory watches opened are the targets\nless the deaf ones, read from the bind line."
+        }
+      ]
+    },
+    {
       "version": "pr-492",
       "ref": "refs/pull/492/merge",
       "sha": "7d5e55ba3b727b5fd9ca37e7ab754ec412f8fa59",
@@ -91,28 +106,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T08:43:47-06:00",
           "message": "feat(tmux): the tmux status line is a renderer the config menu offers inside tmux, and a handed-off statusline is one small row (candybar-plugins-vf6g.qzx)\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "16ba284b459a5bc135c21f529414a4020a2b2b46",
-      "timestamp": "2026-10-30T15:09:25.861Z",
-      "commits": [
-        {
-          "sha": "16ba284b459a5bc135c21f529414a4020a2b2b46",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T09:08:27-06:00",
-          "message": "fix(render): bump rich-js to 0.25 so every join is an arrow, and the tests say so (candybar-joiners-e5r4.0hr) (#496)\n\n* test: any divider between two neighbouring cells fails (brandon-menus-sjhy.57p)\n\nBrandon: \"Take any tests that assert this state and reverse them, so any\noccurance of this state makes the tests fail.\" The equal-bg test, the menu\nseams' theme's-own allowance, the 256/ansi divider floor and the theme\nidentity audit's divider rule each accepted the divider; each now fails on it.\n\n* fix(render): bump rich-js to 0.25 so every join is an arrow, and the tests say so (candybar-joiners-e5r4.0hr)\n\nrich-js 0.25's joiner has no divider: it always draws its seam and lifts\nan arrow's ink off a ground it would vanish into. The seam adapters\nfollow the new SeamForm (plainWith has no divider; the glyph probe draws\ntwo cells), the glyph lists and doctor fixtures lose U+E0B1, and the\ndocs' render fences and the two byte snapshots show U+E0B0 where U+E0B1\nwas, each a lifted arrow between the door and its rate cell.\n\nThe reversed tests' arrow checks read the lift: in colour-256 an arrow's\nink is its cell's ground wherever that stands off the next ground as\ndrawn, and otherwise the colour rich-js's own joiner draws for the two\ntruecolor grounds, at truecolor, 256 and ansi. The theme-identity audit\nreads an arrow's left side from the column before it, since the ink no\nlonger says it.\n\nThe 33 other rich-js commits in 0.25.0 change four APIs the render\nuses: Effected takes its time from RenderOptions.frame, an effect frame\ncarries CellLook attributes, Transition is a class with a schedule, and\nanimationFuncs takes a TemplateFrame (only frames and stepped are\nregistered, as before).\n\n* fix(render): a passage keeps only the effect it draws, and each depth of a bar is compared at one instant (candybar-joiners-e5r4.0hr)\n\nHigh review pass on #496:\n- Passage keeps the transition's done and its grounded effect, never the transition as made, whose own effect veils toward the terminal's ground.\n- colour-256 draws every render of a comparison at one instant, so the depths compared are the same bar glyph for glyph.\n- The audit, segment-render-unit and engine comments say what rich-js 0.25 does: one ground gets a lifted arrow; tween, loop and glyphs are refused as unknown functions.\n\n* fix(deps): require rich-js ^0.25.1, since 0.25.0's color module reads `pattern` before its import and no suite loads under ts-jest (candybar-joiners-e5r4.0hr)\n\n* docs(render): the unregistered animation functions and the seams test say what is drawn (candybar-joiners-e5r4.0hr)\n\nMedium review pass on #496: engine.ts gives the reason tween, loop and glyphs are not registered, and what registering each takes; settings-menu-seams' header says two rungs spelled alike share a ground under a lifted arrow."
-        },
-        {
-          "sha": "b1b30c3e8dc47d1989a6d2abe48e0e0eca3f232c",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-10-30T14:38:34Z",
-          "message": "chore(release): set `package.json` to 1.166.0 [skip ci]\n\n## [1.166.0](https://github.com/promptctl/cc-candybar/compare/v1.165.1...v1.166.0) (2026-10-30)\n\n### Features\n\n* **plugins:** a missing segment is an error only when its plugin is present (candybar-plugins-vf6g.odm) ([#497](https://github.com/promptctl/cc-candybar/issues/497)) ([5577ddd](https://github.com/promptctl/cc-candybar/commit/5577ddd8731d529e5500113fe2febc34aff9f5b2))\n"
         }
       ]
     }
