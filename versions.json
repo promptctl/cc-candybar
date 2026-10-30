@@ -4,15 +4,43 @@
     {
       "version": "pr-472",
       "ref": "refs/pull/472/merge",
-      "sha": "693b26c0020bd749ae231c78af3103b20956eed3",
-      "timestamp": "2026-10-28T19:53:57.915Z",
+      "sha": "8186cb43b1b454e20570478450cfd9155aaa87f1",
+      "timestamp": "2026-10-30T07:12:03.119Z",
       "commits": [
         {
-          "sha": "693b26c0020bd749ae231c78af3103b20956eed3",
+          "sha": "8186cb43b1b454e20570478450cfd9155aaa87f1",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-28T19:53:34Z",
-          "message": "Merge 2334a7b1fe504c9b973998bf9f000fed86f8801f into e603faf38f07367cf693aefd978ba9fe95d35254\n"
+          "timestamp": "2026-10-30T07:11:36Z",
+          "message": "Merge b2e706abca8b2c758fe5089445f82b62419a32fe into 0861c4b866aa16f3f014fa1afeef7a2a853e3701\n"
+        },
+        {
+          "sha": "b2e706abca8b2c758fe5089445f82b62419a32fe",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T01:11:19-06:00",
+          "message": "docs(landscape): one artifact, the published explorer; drop the stale landscape.html\n"
+        },
+        {
+          "sha": "6db003031e1c2a175876c885ad7838c3ef20b49d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T01:11:18-06:00",
+          "message": "fix(landscape): counts follow the bars filter, history restores without paging, bundle failures show and retry, bars fit their terminal layout, and speed or selection no longer rebuilds the view\n"
+        },
+        {
+          "sha": "8680329d8f5ce2b9d72ce5a0af947769be1b421f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T01:08:37-06:00",
+          "message": "fix(capture): no tty writes or app launches from the sandbox, and say what it cannot contain\n"
+        },
+        {
+          "sha": "4420d35a61e3a50254869dac1ccf83915e004246",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T01:06:45-06:00",
+          "message": "fix(pages): link the live bar at main/, and fork PRs build without deploying\n"
         },
         {
           "sha": "2334a7b1fe504c9b973998bf9f000fed86f8801f",
