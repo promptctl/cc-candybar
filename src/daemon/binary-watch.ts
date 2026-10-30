@@ -8,7 +8,7 @@
 // for the moment the daemon itself changed the bundle (the update notice's
 // rebuild) and need not wait a minute to notice.
 
-import type { DaemonLogger } from "../utils/logger";
+import { changeLogger, type DaemonLogger } from "../utils/logger";
 import { ABSENT, failed, ok, type Outcome } from "../utils/outcome";
 
 /** `fs.statSync`'s shape: the edge the watch reads the disk through. */
@@ -53,6 +53,7 @@ export interface BinaryWatch {
 
 export function makeBinaryWatch(opts: BinaryWatchOptions): BinaryWatch {
   const { targets, intervalMs, stat, held, exit, log } = opts;
+  const logHeld = changeLogger(log);
   // The stamps the daemon booted with, taken the same way every sample is.
   const boot = targets.map((path) => ({ path, stamp: mtimeOf(path, stat) }));
   // [LAW:types-are-the-program] A stat that failed at boot leaves nothing to
@@ -71,7 +72,10 @@ export function makeBinaryWatch(opts: BinaryWatchOptions): BinaryWatch {
       if (!sameStamp(stamp, now)) {
         const what = `binary ${now.kind === "absent" ? "gone" : "changed"} (${path})`;
         if (held()) {
-          log("info", `${what}; the restart waits for the running update`);
+          logHeld([
+            "info",
+            `${what}; the restart waits for the running update`,
+          ]);
           return;
         }
         log("info", `${what}; shutting down`);

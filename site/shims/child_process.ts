@@ -9,10 +9,10 @@ export interface ProgramRun {
   readonly stdout: string;
   readonly stderr?: string;
 }
-export type Program = (args: readonly string[], cwd: string | undefined) => ProgramRun;
+// A program that answers RESIDENT runs as long as the page does: no answer, no exit.
+export const RESIDENT = "resident";
+export type Program = (args: readonly string[], cwd: string | undefined) => ProgramRun | typeof RESIDENT;
 export const programs = new Map<string, Program>();
-// Programs that, once started, run as long as the page does: no answer, no exit.
-export const residents = new Set<string>();
 
 const enoent = (cmd: string) => Object.assign(new Error(`spawn ${cmd} ENOENT`), { code: "ENOENT", errno: -2, syscall: `spawn ${cmd}`, path: cmd });
 
@@ -31,12 +31,10 @@ class Stream extends EventEmitter {
 
 let nextPid = 5000;
 export function spawn(cmd: string, args: readonly string[] = [], opts: { cwd?: string } = {}) {
-  const name = cmd.split("/").pop()!;
-  const program = programs.get(name);
-  const resident = residents.has(name);
+  const program = programs.get(cmd.split("/").pop()!);
   const child = Object.assign(new EventEmitter(), {
     // As in Node, a program that cannot start has no pid (src/proc/launch.ts reads that).
-    pid: program === undefined && !resident ? undefined : nextPid++,
+    pid: program === undefined ? undefined : nextPid++,
     stdout: new Stream(),
     stderr: new Stream(),
     stdin: new Stream(),
@@ -48,12 +46,12 @@ export function spawn(cmd: string, args: readonly string[] = [], opts: { cwd?: s
     ref: () => {},
   });
   setTimeout(() => {
-    if (resident) return;
     if (program === undefined) {
       child.emit("error", enoent(cmd));
       return;
     }
     const run = program(args, opts.cwd);
+    if (run === RESIDENT) return;
     if (run.stdout) child.stdout.chunk(run.stdout);
     if (run.stderr) child.stderr.chunk(run.stderr);
     child.exitCode = run.code;
@@ -69,6 +67,7 @@ export function spawnSync(cmd: string, args: readonly string[] = [], opts: { cwd
   const program = programs.get(cmd.split("/").pop()!);
   if (program === undefined) return { pid: 0, status: null, signal: null, stdout: "", stderr: "", output: [], error: enoent(cmd) };
   const run = program(args, opts.cwd);
+  if (run === RESIDENT) throw new Error(`${cmd} runs as long as the page does; a sync run of it would never return`);
   return { pid: nextPid++, status: run.code, signal: null, stdout: run.stdout, stderr: run.stderr ?? "", output: [null, run.stdout, run.stderr ?? ""] };
 }
 

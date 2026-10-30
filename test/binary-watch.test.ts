@@ -133,13 +133,15 @@ test("one moved target among several ends the daemon once", () => {
   expect(exits).toBe(1);
 });
 
-// The update's act is a launch child that dies with the daemon, so a restart
-// mid-act would leave the bundle half-written.
+// The update's act rewrites the bundle, so a restart mid-act would boot the
+// next daemon from a half-written one. The wait is said once, however many
+// samples it spans.
 test("a bundle rebuilt while an update runs restarts the daemon once the update ends", () => {
   const w = watch();
   updating = true;
   const later = new Date(fs.statSync(bundle).mtimeMs + 5_000);
   fs.utimesSync(bundle, later, later);
+  w.checkNow();
   w.checkNow();
   expect(exits).toBe(0);
   updating = false;

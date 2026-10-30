@@ -49,7 +49,7 @@ import {
   type BuildCurrency,
   type SourceStamp,
 } from "./build-currency";
-import type { LogLevel } from "../utils/logger";
+import { changeLogger, type LogLevel } from "../utils/logger";
 import { BadVerbArgs } from "./verb-error";
 import { registerConfigValidator } from "./verbs/config-validators";
 import { registerStateValidator } from "./verbs/state-validators";
@@ -322,19 +322,6 @@ function describeRelease(c: Currency): [LogLevel, string] {
   }
 }
 
-// [LAW:one-type-per-behavior] A log line that repeats only on change, one
-// per channel — the steady state of a one-minute clock is silence.
-function changeLogger(
-  log: UpdateWatchOptions["log"],
-): (entry: [LogLevel, string]) => void {
-  let last: string | null = null;
-  return ([level, msg]) => {
-    if (msg === last) return;
-    last = msg;
-    log(level, msg);
-  };
-}
-
 // The last non-empty line of a stream — where a build tool puts its verdict.
 const lastLine = (text: string): string | undefined =>
   text
@@ -460,11 +447,14 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
         `apply-update: ${facts.act} — ${facts.command.bin} ${facts.command.args?.join(" ") ?? ""}`,
       );
       // The child inherits the daemon's environment (PATH included): no env
-      // is passed, so nothing about the command is composed from data.
+      // is passed, so nothing about the command is composed from data. It
+      // rewrites the bundle the daemon runs from, so the daemon's death leaves
+      // it to finish rather than tearing the bundle half-written.
       void launch({
         ...facts.command,
         category: "update.apply",
         timeoutMs: ACT_TIMEOUT_MS,
+        outlivesLauncher: true,
       }).then((result) => {
         if (result.ok) {
           act = IDLE;

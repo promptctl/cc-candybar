@@ -7,6 +7,7 @@ import {
   launch,
   launchDetachedSync,
   launchSync,
+  lifelineWarnings,
   setLaunchLog,
   setLaunchStats,
   __lifelineForTest,
@@ -483,10 +484,10 @@ describe("the lifeline", () => {
   const running = (seconds: string) =>
     spawnSync("pgrep", ["-f", `^sleep ${seconds}$`]).status === 0;
 
-  let lost: string[];
+  let said: string[];
   beforeEach(() => {
-    lost = [];
-    setLaunchLog((_level, msg) => lost.push(msg));
+    said = [];
+    setLaunchLog((level, msg) => said.push(`${level}: ${msg}`));
   });
 
   it("ends every group in flight when the launcher's pipe closes", async () => {
@@ -498,13 +499,23 @@ describe("the lifeline", () => {
     await until(() => !running("30.861"), "the grandchild sleep ending");
   });
 
-  it("a lost lifeline is said, and the next launch replaces it holding every group in flight", async () => {
+  it("a lost lifeline stands as a warning, and the next launch replaces it holding every group in flight", async () => {
     const first = launch(grandchild("30.862"));
     const { pid: lostPid } = __lifelineForTest();
     process.kill(lostPid!, "SIGKILL");
-    await until(() => lost.length > 0, "the lost lifeline's warning");
-    expect(lost).toEqual([
-      "launch lifeline lost (exited SIGKILL); the next launch starts another",
+    await until(
+      () =>
+        said.includes(
+          "warn: launch lifeline exited SIGKILL; the next launch starts another",
+        ),
+      "the lost lifeline's warning",
+    );
+    expect(lifelineWarnings()).toEqual([
+      {
+        kind: "lifeline",
+        message:
+          "programs the daemon runs would outlive it if it died: its launch lifeline exited SIGKILL, and the next launch starts another",
+      },
     ]);
     const second = launch(grandchild("30.863"));
     const replacement = __lifelineForTest();
@@ -513,6 +524,11 @@ describe("the lifeline", () => {
       () => running("30.862") && running("30.863"),
       "both launched sleeps",
     );
+    await until(
+      () => lifelineWarnings().length === 0,
+      "the replacement running",
+    );
+    expect(said.at(-1)).toBe("info: launch lifeline running again");
     replacement.cut();
     expect(await first).toMatchObject({ ok: false, reason: "signal" });
     expect(await second).toMatchObject({ ok: false, reason: "signal" });
@@ -520,5 +536,24 @@ describe("the lifeline", () => {
       () => !running("30.862") && !running("30.863"),
       "both grandchild sleeps ending",
     );
+  });
+
+  it("leaves a child that outlives its launcher to finish", async () => {
+    const stop = new AbortController();
+    const outliving = launch({
+      ...grandchild("30.864"),
+      signal: stop.signal,
+      outlivesLauncher: true,
+    });
+    const guarded = launch(grandchild("30.865"));
+    await until(
+      () => running("30.864") && running("30.865"),
+      "both launched sleeps",
+    );
+    __lifelineForTest().cut();
+    expect(await guarded).toMatchObject({ ok: false, reason: "signal" });
+    expect(running("30.864")).toBe(true);
+    stop.abort();
+    expect(await outliving).toMatchObject({ ok: false, reason: "aborted" });
   });
 });

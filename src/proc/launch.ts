@@ -20,7 +20,9 @@
 // daemon-acquisition path. There is no `detached: boolean` flag on `LaunchOpts`
 // ([LAW:no-mode-explosion]); the two lifetimes are two functions with two
 // return contracts, so an unwaited helper that survives a render frame is
-// unrepresentable here rather than forbidden by convention.
+// unrepresentable here rather than forbidden by convention. Whether a waited
+// child also dies with its launcher's death is not a return contract, so it is
+// a value on the request (`outlivesLauncher`), not a third function.
 //
 // A `launch` child leads its own process group, so terminating it (the timeout,
 // or the caller's `signal`) reaches everything it spawned: `sh -c "sleep 5;
@@ -29,7 +31,7 @@
 // no longer reaches a foreground CLI's children through the tty, and nothing
 // aimed at the launcher's own group reaches them either: a child ends by its
 // timeout, its caller's `signal`, its own exit, or the lifeline (below) when
-// the process that launched it ends.
+// the process that launched it ends, unless it outlives its launcher.
 
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -244,6 +246,12 @@ export interface AsyncLaunchOpts extends LaunchOpts {
   // The caller's cancellation: aborting it terminates the child (and its
   // group); the result is `reason: "aborted"` once the child is reaped.
   signal?: AbortSignal;
+  // [LAW:no-mode-explosion] A child whose work is a write that killing it
+  // would tear (the update act rewriting the bundle the daemon runs from) is
+  // never given to the lifeline, so its launcher's death leaves it to finish.
+  // Cap: that kind of child alone. Every child whose answer a launcher waits
+  // on dies with it.
+  outlivesLauncher?: true;
 }
 
 export type LaunchResult =
@@ -307,8 +315,8 @@ export function setLaunchStats(handle: LaunchStatsHandle | null): void {
 // backstop so the promise cannot resolve while the child is still alive.
 const TIMEOUT_KILL_GRACE_MS = 250;
 
-// Where a lost lifeline is reported. The daemon installs its log; any other
-// process (the CLI, bar-pane, a test) says it on stderr.
+// Where the lifeline's changes are said. The daemon installs its log; any
+// other process (the CLI, bar-pane, a test) says them on stderr.
 let launchLog: DaemonLogger = (_level, msg) => process.emitWarning(msg);
 
 export function setLaunchLog(log: DaemonLogger): void {
@@ -350,43 +358,70 @@ interface Lifeline {
 }
 let lifeline: Lifeline | null = null;
 
-function lose(line: ChildProcess, reason: string): void {
-  if (lifeline?.process !== line) return;
-  lifeline = null;
+// [LAW:one-source-of-truth] Why the groups this process has in flight are not
+// guarded now: what ended its last lifeline, or kept one from starting. Null
+// while a lifeline runs, or before one is needed. The log says each change,
+// and the daemon shows it as a standing warning.
+let fault: string | null = null;
+
+function setFault(next: string | null): void {
+  if (next === fault) return;
+  fault = next;
   launchLog(
-    "warn",
-    `launch lifeline lost (${reason}); the next launch starts another`,
+    next === null ? "info" : "warn",
+    next === null
+      ? "launch lifeline running again"
+      : `launch lifeline ${next}; the next launch starts another`,
   );
 }
 
+function lose(line: ChildProcess, reason: string): void {
+  if (lifeline?.process !== line) return;
+  lifeline = null;
+  setFault(reason);
+}
+
+export interface LifelineWarning {
+  readonly kind: "lifeline";
+  readonly message: string;
+}
+
+export function lifelineWarnings(): LifelineWarning[] {
+  return fault === null
+    ? []
+    : [
+        {
+          kind: "lifeline",
+          message: `programs the daemon runs would outlive it if it died: its launch lifeline ${fault}, and the next launch starts another`,
+        },
+      ];
+}
+
 // Leads its own group, so nothing aimed at the launcher's group reaches it, and
-// is unref'd with its pipe, so it never holds a process open. Its PATH is fixed
-// rather than the launcher's: the daemon's environment belongs to whichever
-// shell spawned it.
+// is unref'd with its pipe, so it never holds a process open. `awk` is found
+// on the launcher's PATH, as every launched program is: where a machine keeps
+// it is the machine's fact (NixOS has no /usr/bin/awk).
 function spawnLifeline(): Lifeline | null {
   statsHandle?.onStart("lifeline");
   const t0 = Date.now();
   let line: ChildProcess;
   try {
-    line = spawn("/usr/bin/awk", [LIFELINE_PROGRAM], {
-      env: { PATH: "/usr/bin:/bin" },
+    line = spawn("awk", [LIFELINE_PROGRAM], {
       stdio: ["pipe", "ignore", "ignore"],
       detached: true,
     });
   } catch (err) {
     statsHandle?.onEnd("lifeline", Date.now() - t0);
-    launchLog(
-      "warn",
-      `launch lifeline not started (${spawnErrorText(err, undefined)})`,
-    );
+    setFault(`did not start: ${spawnErrorText(err, undefined)}`);
     return null;
   }
   statsHandle?.onEnd("lifeline", Date.now() - t0);
   // stdio[0] is "pipe", so Node hands back a socket.
   const pipe = line.stdin as Socket;
-  line.once("error", (err) => lose(line, err.message));
+  line.once("spawn", () => setFault(null));
+  line.once("error", (err) => lose(line, `failed: ${err.message}`));
   line.once("exit", (code, sig) => lose(line, `exited ${sig ?? code}`));
-  pipe.on("error", (err) => lose(line, `pipe: ${err.message}`));
+  pipe.on("error", (err) => lose(line, `pipe failed: ${err.message}`));
   line.unref();
   pipe.unref();
   for (const group of liveGroups) pipe.write(`+ ${group}\n`);
@@ -407,10 +442,17 @@ function unguard(group: number): void {
 }
 
 // Exposed for tests only: ends the lifeline's pipe — the EOF the launcher's
-// death gives it — and names its pid.
+// death gives it — and names its pid. A cut lifeline is lost at once, so the
+// test's next launch starts another rather than writing to a closed pipe.
 export function __lifelineForTest(): { pid: number | undefined; cut(): void } {
   const line = lifeline;
-  return { pid: line?.process.pid, cut: () => line?.pipe.end() };
+  return {
+    pid: line?.process.pid,
+    cut: () => {
+      line?.pipe.end();
+      if (line) lose(line.process, "cut by a test");
+    },
+  };
 }
 
 // A termination the launcher itself initiated — carried as data because the
@@ -474,8 +516,9 @@ export async function launch(opts: AsyncLaunchOpts): Promise<LaunchResult> {
       return;
     }
     // A child whose spawn failed asynchronously (ENOENT) has no pid, and no
-    // group to guard: its `error` event settles it.
-    const group = child.pid;
+    // group to guard: its `error` event settles it. Nor does a child that
+    // outlives its launcher.
+    const group = opts.outlivesLauncher ? undefined : child.pid;
     if (group !== undefined) guard(group);
 
     let stdout = "";
