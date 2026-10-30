@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-503",
+      "ref": "refs/pull/503/merge",
+      "sha": "e3c97bf4945cf12fdc321805115e86264b6b5912",
+      "timestamp": "2026-10-30T16:53:53.442Z",
+      "commits": [
+        {
+          "sha": "e3c97bf4945cf12fdc321805115e86264b6b5912",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T10:52:55-06:00",
+          "message": "Merge e0907723f3fb39cbf126238b951b9fad4ff86b2a into ac7fa0066116393d2e51df899b6ec19d31ba5071\n"
+        },
+        {
+          "sha": "e0907723f3fb39cbf126238b951b9fad4ff86b2a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T10:49:49-06:00",
+          "message": "fix(colour): the door's open ✖ wears the theme's text-red, so it reads on its activated ground (candybar-joiners-e5r4.i30)\n\nThe open door's ✖ now selects among the reds the theme names for its error\nrole instead of wearing the base red: `text-error` where it clears\nTEXT_MIN_CONTRAST on the pressed state as truecolor draws it, otherwise the\nfirst rung of the error ladder out toward the pole the ground stands farther\nfrom that clears, and where none clears, the named red standing farthest off.\nIt never slides lightness and is never a synthesised colour; `keptOn` still\nholds its contrast through rounding at 256 and ansi.\n\nA new rig test opens the door under every bundled theme and dial position at\ntruecolor, 256 and ansi and measures the ✖ as drawn; it lists the themes where\nno named red clears, with the red worn and the ratio reached. The palette\nidentity test now holds the ✖ to the theme's error reds.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "ac7fa0066116393d2e51df899b6ec19d31ba5071",
