@@ -127,8 +127,9 @@ def bundle(kind, folder, by_repo, per):
     return where
 
 
-# [LAW:no-silent-failure] a credential-shaped frame stops the export before anything is written.
+# [LAW:no-silent-failure] a credential shape in any published bundle stops the export before anything is written.
 credentials.check(bars)
+credentials.check(details)
 bar_at = bundle('bars', BARS_DIR, bars, 10)
 detail_at = bundle('detail', DETAIL_DIR, details, 50)
 # A project with no bundle of a kind has no key for it, as every absent link is written.

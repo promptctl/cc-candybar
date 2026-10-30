@@ -51,7 +51,7 @@ jobs:
         run: |
           cd design-docs/peer-exploration/5-landscape/explorer
           # the committed bars are checked again for credential shapes before anything is published
-          python3 -I ../tools/credentials.py public/bars/*.js
+          python3 -I ../tools/credentials.py public/bars/*.js public/detail/*.js
           pnpm install --frozen-lockfile
           pnpm run check
           pnpm run build

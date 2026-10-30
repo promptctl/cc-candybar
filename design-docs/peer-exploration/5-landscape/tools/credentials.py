@@ -50,16 +50,28 @@ def shapes(text):
     return hits
 
 
+def strings(value):
+    """Every string inside a bundle's value, whatever its shape: frames and detail alike."""
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, dict):
+        for v in value.values():
+            yield from strings(v)
+    elif isinstance(value, list):
+        for v in value:
+            yield from strings(v)
+
+
 def check(by_repo):
-    """Fails loudly, naming every project whose frames hold a credential shape."""
+    """Fails loudly, naming every project whose bundle holds a credential shape."""
     bad = {}
-    for repo, widths in by_repo.items():
-        hits = {h for frames in widths.values() for _, f in frames for h in find(f)}
+    for repo, contents in by_repo.items():
+        hits = {h for s in strings(contents) for h in find(s)}
         if hits:
             bad[repo] = sorted(hits)
     if bad:
         lines = ['%s: %s %s' % (repo, kind, s[:12] + '…') for repo, hs in bad.items() for kind, s in hs]
-        raise SystemExit('credential-shaped text in captured bars; nothing published:\n  ' + '\n  '.join(lines))
+        raise SystemExit('credential-shaped text in a published bundle; nothing published:\n  ' + '\n  '.join(lines))
 
 
 if __name__ == '__main__':
