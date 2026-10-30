@@ -552,7 +552,7 @@ const updateWatch = makeUpdateWatch({
   entryUrl: import.meta.url,
   // [LAW:one-source-of-truth] Keyed by the bundle the act rewrites, the one
   // this daemon runs from.
-  actsDir: actsDir(stateDir(), fileURLToPath(import.meta.url)),
+  actsDir: actsDir(stateDir(), DAEMON_BUNDLE),
   intervalMs: BIN_CHECK_INTERVAL_MS,
   releaseIntervalMs: RELEASE_CHECK_INTERVAL_MS,
   registryUrl: process.env.CC_CANDYBAR_REGISTRY_URL ?? REGISTRY_URL,

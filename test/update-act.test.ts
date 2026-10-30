@@ -19,7 +19,6 @@ import {
   isRecordedJob,
   judgeAct,
   makeActReader,
-  writing,
   type ActFacts,
   type ActRecord,
 } from "../src/daemon/update-act";
@@ -93,20 +92,21 @@ describe("judgeAct: the act as every daemon sees it", () => {
     [
       "a timeout, still dying",
       facts({ end: { kind: "timeout" } }),
+      { kind: "running", act: 3 },
+    ],
+    [
+      "exit 0 with a child still in its group",
+      facts({ end: { kind: "exit", code: 0 } }),
+      { kind: "running", act: 3 },
+    ],
+    [
+      "a timeout, its group gone",
+      facts({ alive: false, end: { kind: "timeout" } }),
       { kind: "failed", act: 3, identity: "id-1", reason: "timeout" },
     ],
   ])("%s", (_name, input, expected) => {
     expect(judgeAct(input)).toEqual(expected);
   });
-});
-
-test("an act whose group is alive may be writing the bundle, whatever its verdict", () => {
-  expect(writing(null)).toBe(false);
-  expect(writing(facts({}))).toBe(true);
-  expect(writing(facts({ end: { kind: "timeout" } }))).toBe(true);
-  expect(writing(facts({ alive: false, end: { kind: "exit", code: 0 } }))).toBe(
-    false,
-  );
 });
 
 const jobFiles = (): JobFiles => ({
@@ -364,13 +364,13 @@ describe("claimAct: one act per bundle", () => {
     );
   });
 
-  test("a claim whose job has no fingerprint throws, its program never runs, and it leaves nothing", async () => {
+  test("a job `ps` can't fingerprint runs, recorded with no start time", async () => {
     const dir = dirOf();
     const unreadable = (): StartTimeRead => ({
       kind: "unavailable",
       detail: "ps timeout",
     });
-    expect(() =>
+    expect(
       claimAct(
         dir,
         null,
@@ -380,10 +380,14 @@ describe("claimAct: one act per bundle", () => {
         Date.now(),
         unreadable,
       ),
-    ).toThrow(/no fingerprint: ps timeout/);
-    await new Promise((r) => setTimeout(r, 200));
-    expect(fs.existsSync(marker())).toBe(false);
-    expect(fs.readdirSync(dir)).toEqual([]);
+    ).toEqual({ ok: true, act: 1 });
+    const reader = makeActReader(dir, unreadable);
+    expect(reader.read()!.record.startTime).toBeNull();
+    await until(
+      () => judgeAct(reader.read()).kind === "succeeded",
+      "the act to succeed",
+    );
+    expect(fs.existsSync(marker())).toBe(true);
   });
 
   test("a job started before this boot is not the recorded one, whatever holds its pid", () => {
@@ -449,7 +453,7 @@ describe("claimAct: one act per bundle", () => {
     expect(judgeAct(again)).toEqual({ kind: "running", act: 1 });
   });
 
-  test("act files that can't be read are an error the watch shows, and hold a restart", () => {
+  test("act files that can't be read are an error the watch shows, and hold no restart", () => {
     const dir = dirOf();
     fs.mkdirSync(path.join(dir, "1"), { recursive: true });
     fs.writeFileSync(path.join(dir, "1", "record.json"), "{ torn");
@@ -464,7 +468,7 @@ describe("claimAct: one act per bundle", () => {
       onApplied: () => {},
       log: (_level, msg) => logged.push(msg),
     });
-    expect(watch.running()).toBe(true);
+    expect(watch.running()).toBe(false);
     expect(watch.error()).toMatch(/update act files .*JSON/);
     expect(logged).toEqual([watch.error()]);
     fs.writeFileSync(

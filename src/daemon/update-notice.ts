@@ -55,7 +55,6 @@ import {
   IDLE,
   judgeAct,
   makeActReader,
-  writing,
   type ActFacts,
   type ActState,
 } from "./update-act";
@@ -276,7 +275,8 @@ export interface UpdateWatch {
   // to apply or an act is already running on this bundle.
   act(): void;
   // Whether an act may be rewriting this bundle now, whichever daemon started
-  // it. True while its files can't be read: no one can say it isn't.
+  // it. False while its files can't be read: the error says so, and holding
+  // every restart on a file nothing repairs would hold them for good.
   running(): boolean;
   // Why this bundle's act files can't be read, as of the last look; null when
   // they can.
@@ -407,19 +407,20 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
     syncGate();
   }
 
-  // [LAW:no-silent-failure] Act files that can't be read are an error the
-  // indicator shows, never a throw out of a timer: that would end this daemon,
-  // and each one after it on this bundle at its first look.
-  type ActsRead =
-    | { readonly ok: true; readonly facts: ActFacts | null }
+  // [LAW:single-enforcer] The one edge every touch of the act files passes
+  // through. [LAW:no-silent-failure] Files that can't be read or written are
+  // an error the indicator shows, never a throw out of a timer: that would end
+  // this daemon, and each one after it on this bundle at its first look.
+  type ActsTouch<T> =
+    | { readonly ok: true; readonly value: T }
     | { readonly ok: false; readonly error: string };
   let unreadable: string | null = null;
   const logUnreadable = changeLogger(log);
-  function readActs(): ActsRead {
+  function touchActs<T>(touch: () => T): ActsTouch<T> {
     try {
-      const facts = acts.read();
+      const value = touch();
       unreadable = null;
-      return { ok: true, facts };
+      return { ok: true, value };
     } catch (err) {
       unreadable = `update act files (${actsDir}): ${(err as Error).message}`;
       logUnreadable(["error", unreadable]);
@@ -427,20 +428,27 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
     }
   }
 
+  // Ends the act if its group is alive past its deadline, with a timeout
+  // verdict unless the job's own landed first.
+  function endIfOverdue(facts: ActFacts | null): void {
+    if (!facts?.alive || Date.now() <= facts.record.deadline) return;
+    const why = endOverdue(actsDir, facts)
+      ? "timed out"
+      : "outlived its verdict";
+    log("error", `apply-update: act ${facts.act} ${why}; ending it`);
+  }
+
   // Notices an act ending, whichever daemon started it: a success means the
   // bundle on disk changed, so the build is sampled and the binary watch asked
-  // now. An act whose group is alive past its deadline is ended.
+  // now.
   function watchAct(): void {
-    const read = readActs();
+    const read = touchActs(() => {
+      const facts = acts.read();
+      endIfOverdue(facts);
+      return facts;
+    });
     if (!read.ok) return;
-    const { facts } = read;
-    const next = judgeAct(facts);
-    if (facts?.alive && Date.now() > facts.record.deadline) {
-      const why = endOverdue(actsDir, facts)
-        ? "timed out"
-        : "outlived its verdict";
-      log("error", `apply-update: act ${facts.act} ${why}; ending it`);
-    }
+    const next = judgeAct(read.value);
     if (seen === null && next.kind === "running") {
       log("info", `apply-update: act ${next.act} is running; watching it`);
     }
@@ -475,8 +483,8 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
     },
     notice: (ctx) => updateNotice(current(), seen ?? IDLE, ctx),
     running() {
-      const read = readActs();
-      return !read.ok || writing(read.facts);
+      const read = touchActs(() => acts.read());
+      return read.ok && judgeAct(read.value).kind === "running";
     },
     error: () => unreadable,
     act() {
@@ -485,10 +493,10 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
         throw new BadVerbArgs("apply-update: nothing newer is known to apply");
       }
       const facts = factsOf(update);
-      const read = readActs();
+      const read = touchActs(() => acts.read());
       if (!read.ok) throw new BadVerbArgs(`apply-update: ${read.error}`);
-      const newest = read.facts;
-      if (writing(newest)) {
+      const newest = read.value;
+      if (judgeAct(newest).kind === "running") {
         throw new BadVerbArgs(`apply-update: already ${facts.busy}`);
       }
       // The child inherits the daemon's environment (PATH included): no env

@@ -28,6 +28,7 @@ import {
   type JobFiles,
   type LaunchOpts,
 } from "../proc/launch";
+import { readTailSync } from "../utils/transcript-fs";
 import { readStartTime, type StartTimeRead } from "./process-fingerprint";
 
 export function actsDir(stateDir: string, entryPath: string): string {
@@ -36,14 +37,13 @@ export function actsDir(stateDir: string, entryPath: string): string {
 }
 
 // What `act()` started: the identity of the newer thing it applies (the
-// notice names a failure against it), the job's process identity, when it
-// started, and when it is overdue.
-// [LAW:types-are-the-program] The start time is required: a job no fingerprint
-// can tell from a stranger holding its pid is never started.
+// notice names a failure against it), the job's process identity (its start
+// time null where `ps` could not answer, as process-fingerprint.ts allows),
+// when it started, and when it is overdue.
 export interface ActRecord {
   readonly identity: string;
   readonly pid: number;
-  readonly startTime: string;
+  readonly startTime: string | null;
   readonly started: number;
   readonly deadline: number;
 }
@@ -66,8 +66,7 @@ export const IDLE: ActState = { kind: "idle" };
 
 // One act as read from disk. `alive` is read before `end`: a job writes its
 // verdict before its group ends, so "gone, then no verdict" is a job that
-// never wrote one, and an act that ends between the two reads reads as
-// running for one more look.
+// never wrote one.
 export interface ActFacts {
   readonly act: number;
   readonly record: ActRecord;
@@ -77,19 +76,22 @@ export interface ActFacts {
   readonly lastLine: string | null;
 }
 
-// [LAW:dataflow-not-control-flow] Facts to state, nothing read here.
+// [LAW:dataflow-not-control-flow] Facts to state, nothing read here. An act
+// runs while anything of its group is alive, whatever its verdict: a
+// timed-out group is still dying, and a program can leave a child running past
+// its own exit, and either may still be writing the bundle. Its verdict
+// stands once the group is gone.
 export function judgeAct(facts: ActFacts | null): ActState {
   if (facts === null) return IDLE;
   const { act, record, alive, end, lastLine } = facts;
+  if (alive) return { kind: "running", act };
   if (end === null) {
-    return alive
-      ? { kind: "running", act }
-      : {
-          kind: "failed",
-          act,
-          identity: record.identity,
-          reason: "lost: the act ended without a verdict",
-        };
+    return {
+      kind: "failed",
+      act,
+      identity: record.identity,
+      reason: "lost: the act ended without a verdict",
+    };
   }
   if (end.kind === "exit" && end.code === 0) return { kind: "succeeded", act };
   const reason =
@@ -107,7 +109,7 @@ const filesOf = (actDir: string): JobFiles => ({
 const recordOf = (actDir: string): string => path.join(actDir, "record.json");
 
 // The numbered acts, ascending. A claim in progress stages under a dotted
-// name, which is no act.
+// name, and an act being removed leaves under one, which is no act.
 function actNumbers(dir: string): number[] {
   let names: string[];
   try {
@@ -126,28 +128,37 @@ function actNumbers(dir: string): number[] {
 // verdict. Only the tail is read: a build's log can be long.
 const TAIL_BYTES = 4096;
 function lastLineOf(file: string): string | null {
-  let fd: number;
+  const tail = readTailSync(file, TAIL_BYTES);
+  switch (tail.kind) {
+    case "absent":
+      return null;
+    case "failed":
+      throw new Error(`${file}: ${tail.reason}`);
+    case "ok":
+      return (
+        tail.value.buf
+          .toString("utf8")
+          .split(/\r?\n/)
+          .map((s) => s.trim())
+          .filter((s) => s !== "")
+          .at(-1) ?? null
+      );
+  }
+}
+
+// Removes an act in one step, by renaming it to a dotted name first: removed
+// in place, its files would go one by one, and a reader between them could
+// find the record without the verdict and read an end it never had.
+// Another claim that won after this one may have removed it already.
+function removeAct(dir: string, act: number): void {
+  const leaving = path.join(dir, `.removed-${act}-${process.pid}`);
   try {
-    fd = fs.openSync(file, "r");
+    fs.renameSync(path.join(dir, String(act)), leaving);
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return;
     throw err;
   }
-  try {
-    const size = fs.fstatSync(fd).size;
-    const buf = Buffer.alloc(Math.min(size, TAIL_BYTES));
-    fs.readSync(fd, buf, 0, buf.length, size - buf.length);
-    return (
-      buf
-        .toString("utf8")
-        .split(/\r?\n/)
-        .map((s) => s.trim())
-        .filter((s) => s !== "")
-        .at(-1) ?? null
-    );
-  } finally {
-    fs.closeSync(fd);
-  }
+  fs.rmSync(leaving, { recursive: true, force: true });
 }
 
 // When this boot began, by the wall clock the record's start is written in.
@@ -155,9 +166,10 @@ const bootedAt = (): number => Date.now() - os.uptime() * 1000;
 
 // Whether the job's group is the one the record names. A job started before
 // this boot is gone, whatever holds its pid now. A live leader whose start
-// time differs is someone else's. A live group whose leader has gone has no
-// start time to tell by, and is taken as the job's: the sh leads it, so the
-// program outliving it is the likelier story.
+// time differs is someone else's. A live group whose leader has gone, or whose
+// job `ps` could not fingerprint, has no start time to tell by and is taken as
+// the job's: the sh leads it, so the program outliving it is the likelier
+// story.
 export function isRecordedJob(
   record: ActRecord,
   read: (pid: number) => StartTimeRead = readStartTime,
@@ -165,7 +177,11 @@ export function isRecordedJob(
 ): boolean {
   if (record.started <= boot || !jobGroupAlive(record.pid)) return false;
   const leader = read(record.pid);
-  return leader.kind === "unavailable" || leader.token === record.startTime;
+  return (
+    record.startTime === null ||
+    leader.kind === "unavailable" ||
+    leader.token === record.startTime
+  );
 }
 
 // The record of an act, or null when the act is gone.
@@ -182,12 +198,6 @@ export interface ActReader {
   // The newest act on the bundle, read now.
   read(): ActFacts | null;
 }
-
-// Whether anything of the act may still be writing the bundle: its group,
-// whatever its verdict. A timed-out group is still dying, and a program can
-// leave a child running past its own exit.
-export const writing = (facts: ActFacts | null): boolean =>
-  facts !== null && facts.alive;
 
 // The newest act as one reader knows it, keyed by its job, since an act's
 // number is claimed again once its directory is gone. `ours` turns false for
@@ -229,9 +239,9 @@ export function makeActReader(
       end === null
         ? null
         : (lastLineOf(files.stderr) ?? lastLineOf(files.stdout));
-    // An act pruned after its record was read reads as an end it never had,
-    // so what was read stands only while the record still does.
-    if (!fs.existsSync(recordOf(actDir))) return null;
+    // An act removed after its record was read reads as an end it never had,
+    // so what was read stands only while the act still does.
+    if (!fs.existsSync(actDir)) return null;
     const facts = { act, record, alive: known.ours, end, lastLine };
     if (!facts.alive) known.final = facts;
     return facts;
@@ -295,15 +305,10 @@ export function claimAct(
   let stood = false;
   try {
     const start = read(job.pid);
-    if (start.kind !== "start") {
-      throw new Error(
-        `apply-update: the act's job has no fingerprint: ${start.detail}`,
-      );
-    }
     const record: ActRecord = {
       identity,
       pid: job.pid,
-      startTime: start.token,
+      startTime: start.kind === "start" ? start.token : null,
       started: now,
       deadline: now + timeoutMs,
     };
@@ -316,7 +321,7 @@ export function claimAct(
       throw err;
     }
     if (actNumbers(dir).some((n) => n > act)) {
-      fs.rmSync(actDir, { recursive: true, force: true });
+      removeAct(dir, act);
       return CLAIMED_FIRST;
     }
     stood = true;
@@ -326,7 +331,7 @@ export function claimAct(
     fs.rmSync(staging, { recursive: true, force: true });
   }
   for (const n of actNumbers(dir).filter((n) => n < act)) {
-    fs.rmSync(path.join(dir, String(n)), { recursive: true, force: true });
+    removeAct(dir, n);
   }
   return { ok: true, act };
 }
