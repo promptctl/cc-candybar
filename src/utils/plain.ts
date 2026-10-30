@@ -2,10 +2,10 @@ import { createHash } from "node:crypto";
 
 // [LAW:types-are-the-program] A value JSON writes as itself: primitives,
 // arrays, and objects whose fields are plain, optional fields included. A Set,
-// a Map, a Date or a function anywhere inside is `never`, because
-// `JSON.stringify` writes the first three as `{}` and drops the last, so a
-// digest of one would miss whatever it held. So is a field typed `unknown` or
-// `any`: it admits any of them.
+// a Map, a Date, a function or a symbol anywhere inside is `never`, because
+// `JSON.stringify` writes the first three as `{}` and drops the last two, so a
+// digest of one would miss whatever it held; a bigint it refuses to write. So
+// is a field typed `unknown` or `any`: it admits any of them.
 export type Plain<T> = unknown extends T
   ? never
   : T extends string | number | boolean | null | undefined
@@ -15,6 +15,8 @@ export type Plain<T> = unknown extends T
           | ReadonlyMap<unknown, unknown>
           | Date
           | ((...args: never[]) => unknown)
+          | symbol
+          | bigint
       ? never
       : T extends ReadonlyArray<infer E>
         ? ReadonlyArray<Plain<E>>

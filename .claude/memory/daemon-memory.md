@@ -24,7 +24,7 @@ A render in flight holds the state it draws with. Eviction and reload swap the m
 
 In the stats, a retired count that climbs while the cache size holds steady means a render never returned.
 
-A reload whose resolved inputs are the ones the served state was built from keeps that state, because a rebuilt state reopens every session view and restarts its sources, and a save is always followed by its watch's reload of the same bytes. The key is typed over every input a build reads, a plugin folder's generation included, so a folder's recovery still rebuilds, and an input added later fails to compile until it is keyed. A test that reloads to drive a build has to change what the config loads first.
+A reload whose resolved inputs are the ones the served state was built from keeps that state, because a rebuilt state reopens every session view and restarts its sources, and a save is always followed by its watch's reload of the same bytes. The key is typed over every input a build resolves from the config's files and folders, a plugin folder's generation included, so a folder's recovery still rebuilds, and an input added later fails to compile until it is keyed. What else a build reads belongs to the daemon and is the same for every load, so it is not keyed: anything there that starts to vary per load has to join the key, or a reload keeps a state built from its old value. A test that reloads to drive a build has to change what the config loads first.
 
 ## Dispose releases every MobX subscription
 
