@@ -4,18 +4,21 @@ import { createHash } from "node:crypto";
 // arrays, and objects whose fields are plain, optional fields included. A Set,
 // a Map, a Date or a function anywhere inside is `never`, because
 // `JSON.stringify` writes the first three as `{}` and drops the last, so a
-// digest of one would miss whatever it held.
-export type Plain<T> = T extends string | number | boolean | null | undefined
-  ? T
-  : T extends
-        | ReadonlySet<unknown>
-        | ReadonlyMap<unknown, unknown>
-        | Date
-        | ((...args: never[]) => unknown)
-    ? never
-    : T extends ReadonlyArray<infer E>
-      ? ReadonlyArray<Plain<E>>
-      : { readonly [K in keyof T]: Plain<T[K]> };
+// digest of one would miss whatever it held. So is a field typed `unknown` or
+// `any`: it admits any of them.
+export type Plain<T> = unknown extends T
+  ? never
+  : T extends string | number | boolean | null | undefined
+    ? T
+    : T extends
+          | ReadonlySet<unknown>
+          | ReadonlyMap<unknown, unknown>
+          | Date
+          | ((...args: never[]) => unknown)
+      ? never
+      : T extends ReadonlyArray<infer E>
+        ? ReadonlyArray<Plain<E>>
+        : { readonly [K in keyof T]: Plain<T[K]> };
 
 // [LAW:types-are-the-program] An object written as the projection of a `T`:
 // every key of `T`, optional ones included, and no other. Used with

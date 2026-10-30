@@ -715,6 +715,10 @@ export type LoadOutcome = {
       readonly kind: "failed";
       readonly state: null;
       readonly error: string;
+      // What was thrown, its type and stack intact: a defect in the load is
+      // told apart from a config the load refused by this, never by its
+      // message.
+      readonly cause: unknown;
       // The layer whose load threw — the file the strip links to. Null when
       // the throw was not a file's (the bundled default by program
       // invariant never is).
@@ -729,7 +733,7 @@ export type Settled = LoadOutcome["kind"];
 // out beside the error, never instead of it.
 interface Failed {
   readonly kind: "failed";
-  readonly error: string;
+  readonly cause: unknown;
   readonly failedFile: string | null;
   readonly warnings: readonly string[];
 }
@@ -755,18 +759,22 @@ export interface ResolvedLoad extends LoadInputs {
   readonly warnings: readonly string[];
 }
 
-// An attempt at a state from a resolved load. A state already built from the
-// same inputs is `kept` (the render cache's reload), anything else is built.
+// An attempt at a state from a resolved load: the served state `kept` when it
+// was built from the same inputs, otherwise one built.
 export type Attempt =
   | {
       readonly kind: "built" | "kept";
       readonly state: DslRenderState;
     }
   | Failed;
-export type AttemptState = (load: ResolvedLoad) => Attempt;
 
 const thrown = (err: unknown): string =>
   err instanceof Error ? err.message : String(err);
+
+// Past the chain, a failure is the one file's when there is one, and no
+// file's when several merged into what failed.
+const blamed = (layers: LoadedChain["layers"]): string | null =>
+  layers.length === 1 ? layers[0]!.path : null;
 
 // [LAW:types-are-the-program] The key covers the whole of a load's inputs:
 // each projection names every field of what it projects (`Projection`), and
@@ -864,6 +872,7 @@ export function resolveLoad(
       },
       { repo: chain.repo, cwd },
     );
+    failing = blamed(loaded.layers);
     const inputs = {
       cwd,
       chain,
@@ -873,12 +882,7 @@ export function resolveLoad(
     return { kind: "resolved", ...inputs, key: loadKey(inputs), warnings };
   } catch (err) {
     if (err instanceof ConfigError) warnings.push(...err.warnings);
-    return {
-      kind: "failed",
-      error: thrown(err),
-      failedFile: failing,
-      warnings,
-    };
+    return { kind: "failed", cause: err, failedFile: failing, warnings };
   }
 }
 
@@ -961,10 +965,8 @@ export function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
     if (err instanceof ConfigError) warnings.push(...err.warnings);
     return {
       kind: "failed",
-      error: thrown(err),
-      // Past the chain, a failure is the one file's when there is one, and
-      // no file's when several merged into what failed.
-      failedFile: layers.length === 1 ? layers[0]!.path : null,
+      cause: err,
+      failedFile: blamed(layers),
       warnings,
     };
   }
@@ -1061,26 +1063,34 @@ export function settle(
         kind: "failed",
         warning: warning(attempt.warnings),
         state: null,
-        error: attempt.error,
+        error: thrown(attempt.cause),
+        cause: attempt.cause,
         failedFile: attempt.failedFile,
       };
   }
 }
 
 // [LAW:single-enforcer] Resolve a chain, attempt a state from it, settle: the
-// one load every reader shares. `attempt` builds, unless the caller serves a
-// state it may keep (the render cache's reload).
+// one load every reader shares. `served` is the state the caller serves, if
+// any (the render cache's reload): inputs that resolve to the key it was built
+// from keep it, since rebuilding it would reopen every session view and
+// restart its sources for nothing.
 export function loadChain(
   frame: LoadFrame,
   cwd: string,
   chain: ConfigChain,
   deps: StateDeps,
-  attempt: AttemptState = (load) => buildRenderState(load, deps),
+  served: DslRenderState | null = null,
 ): LoadOutcome {
   const resolved = resolveLoad(cwd, chain, deps.storage);
-  return resolved.kind === "failed"
-    ? settle(frame, [], resolved)
-    : settle(frame, resolved.warnings, attempt(resolved));
+  if (resolved.kind === "failed") return settle(frame, [], resolved);
+  // [LAW:one-source-of-truth] A memo on load identity, as the compile table
+  // is on compile identity.
+  const attempt: Attempt =
+    served?.loadKey === resolved.key
+      ? { kind: "kept", state: served }
+      : buildRenderState(resolved, deps);
+  return settle(frame, resolved.warnings, attempt);
 }
 
 // [LAW:effects-at-boundaries] One attempt at the disk: read the user's
@@ -1095,7 +1105,7 @@ export function loadFromDisk(
   cwd: string,
   configFile: string | undefined,
   deps: StateDeps,
-  attempt?: AttemptState,
+  served: DslRenderState | null = null,
 ): LoadOutcome {
   const started = performance.now();
   const resolution = resolveDslConfig(
@@ -1136,7 +1146,7 @@ export function loadFromDisk(
     cwd,
     chain,
     deps,
-    attempt,
+    served,
   );
 }
 
@@ -1162,7 +1172,9 @@ export function fallbackState(
   // [LAW:no-silent-failure] The default validates by program invariant
   // (test/default-dsl-config.test.ts); a throw is a daemon bug.
   if (built.kind === "failed")
-    throw new Error(`bundled default failed to load: ${built.error}`);
+    throw new Error(`bundled default failed to load: ${thrown(built.cause)}`, {
+      cause: built.cause,
+    });
   return built.state;
 }
 
@@ -1569,7 +1581,7 @@ export class RenderCache<
       return existing;
     }
 
-    const loaded = this.load(projectDir, cwd, configFile);
+    const loaded = this.load(projectDir, cwd, configFile, null);
     if (loaded.state !== null)
       this.log("info", pluginLoadLine(loaded.layers, loaded.state, loaded.ms));
     // [LAW:no-silent-failure] A config that fails its FIRST load still yields
@@ -1924,10 +1936,10 @@ export class RenderCache<
     projectDir: string,
     cwd: string,
     configFile: string | undefined,
-    attempt?: AttemptState,
+    served: DslRenderState | null,
   ): LoadOutcome {
     if (this.closed) throw new Error("render cache used after close");
-    return loadFromDisk(projectDir, cwd, configFile, this.deps, attempt);
+    return loadFromDisk(projectDir, cwd, configFile, this.deps, served);
   }
 
   // [LAW:single-enforcer] The one way an entry leaves the map: its watcher
@@ -2127,19 +2139,14 @@ export class RenderCache<
     // Taken before the reload, so a session whose view fails to reopen over
     // the new state is still among those it changed.
     const sessions = this.sessionsOn(entry);
-    // [LAW:one-source-of-truth] The cache's memo on load identity, as the
-    // compile table is on compile identity: inputs that resolve to the key of
-    // the state the entry serves keep it, so a save's watch reload of the
-    // bytes the save just loaded reopens no view and restarts no source.
+    // A save's watch reload of the bytes the save just loaded keeps the
+    // state the entry serves, so it reopens no view and restarts no source.
     const served = entry.state;
     const loaded = this.load(
       entry.projectDir,
       entry.cwd,
       entry.configFile,
-      (load) =>
-        load.key === served.loadKey
-          ? { kind: "kept", state: served }
-          : buildRenderState(load, this.deps),
+      served,
     );
     entry.lastWarning = loaded.warning;
     entry.lastError = loaded.error;

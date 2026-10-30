@@ -27,6 +27,9 @@ test("a value JSON would write as {} or drop is not a digest's input", () => {
   digestOf({ read: () => 1 });
   // @ts-expect-error a Date is written as a string it no longer is
   digestOf({ at: new Date() });
+  const opaque: unknown = new Map([[1, 2]]);
+  // @ts-expect-error a field typed `unknown` admits a Map
+  digestOf({ held: opaque });
 });
 
 test("a projection names every field of what it projects, and no other", () => {

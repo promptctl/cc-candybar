@@ -33,6 +33,7 @@ import process from "node:process";
 import { setTimeout as sleep } from "node:timers/promises";
 
 import { detectClientHints } from "../client-hints.js";
+import { ConfigError } from "../config/loader/diagnostics.js";
 import {
   loadChain,
   openView,
@@ -110,9 +111,6 @@ const sessionState = new SessionState();
 // The demo renders the file it was given or nothing. The advisories a file
 // earns are reported whether or not it goes on to load, as the daemon's strip
 // and `cc-candybar check` report them.
-// A config the load refused: the loader's message is the whole report.
-class Refused extends Error {}
-
 function loadState(): DslRenderState {
   const repos = repoGateAt(cwd);
   const chain = { layers: [configPath], home: configPath, repo: repos.plugins };
@@ -134,8 +132,8 @@ function loadState(): DslRenderState {
       signer: linkSignerFromKeyFile(),
     },
   );
-  loaded.warning?.split("\n").forEach(warn);
-  if (loaded.state === null) throw new Refused(loaded.error);
+  if (loaded.warning !== null) warn(loaded.warning);
+  if (loaded.state === null) throw loaded.cause;
   return loaded.state;
 }
 
@@ -225,7 +223,7 @@ try {
 } catch (err) {
   // A refused config is the demo's one expected failure: the loader's message
   // is the whole report. Anything else is a defect and keeps its stack.
-  if (!(err instanceof Refused)) throw err;
+  if (!(err instanceof ConfigError)) throw err;
   process.stderr.write(`error: ${err.message}\n`);
   process.exitCode = 1;
 } finally {
