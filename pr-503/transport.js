@@ -54837,13 +54837,13 @@ function settingsArtifacts(doorGlyph) {
       // disclosure binds: the shape did not change, only the values. Open,
       // the ✖ wears a red the theme names for `DOOR_CLOSE_ROLE`, as the theme
       // gives it (`roleTextOn`): the theme's text-red where that reads on the
-      // pressed state, otherwise the nearest rung of the role's ladder, toward
-      // the pole the pressed state stands farther from, that does, and where
-      // none does, the named red standing farthest off. It never slides
-      // lightness: a slid red stops reading as red, and the ✖ must be red on
-      // every theme. `keptOn` only stops the terminal's rounding from costing
-      // it the contrast it has. Closed, the author's glyph keeps the cell's
-      // own text.
+      // pressed state, otherwise the role's own red or the nearest rung of its
+      // ladder out toward the pole the pressed state stands farther from that
+      // does, and where none does, the named red standing farthest off. It
+      // never slides lightness: a slid red stops reading as red, and the ✖
+      // must be red on every theme. `keptOn` only stops the terminal's
+      // rounding from costing it the contrast it has. Closed, the author's
+      // glyph keeps the cell's own text.
       [SETTINGS_ANCHOR]: {
         template: `{{ $door := ${disclosureTriggerCall(SETTINGS_ANCHOR, templateLiteral(doorGlyph), templateLiteral(DOOR_CLOSE_GLYPH))} }}{{ if ${disclosureTerm(SETTINGS_REF)} }}{{ fg (keptOn (roleTextOn "${DOOR_CLOSE_ROLE}" (bgOf)) (bgOf)) $door }}{{ else }}{{ $door }}{{ end }}` + DIAGNOSTICS_INDICATOR
       },
@@ -76136,7 +76136,7 @@ function segmentColorFuncs(ref) {
   const roleTextOn = {
     fn: ((role, bgRef) => {
       const { palette: palette2 } = requireActiveSegment(ref, "{{ roleTextOn }}");
-      return roleText2(palette2, role, resolveColorRef(palette2, bgRef)).hex;
+      return namedRoleText(palette2, role, resolveColorRef(palette2, bgRef)).hex;
     }),
     argTypes: ["string", "string"],
     arity: { kind: "exact" },
@@ -76198,7 +76198,7 @@ var RUNGS_OUT = {
   "#ffffff": ["lighten-1", "lighten-2", "lighten-3"]
 };
 var RUNGS = Object.values(RUNGS_OUT).flat();
-function roleText2(palette, role, ground) {
+function namedRoleText(palette, role, ground) {
   const shown = drawnColour(ground, ColorDepth.TRUECOLOR);
   const named3 = (name) => {
     const colour = resolveColorRef(palette, name);
@@ -76216,12 +76216,14 @@ function roleText2(palette, role, ground) {
   }
   const text4 = `text-${role}`;
   const rung = (step4) => `${role}-${step4}`;
-  const reds = new Map(
+  const colours = new Map(
     [text4, role, ...RUNGS.map(rung)].map((name) => [name, named3(name)])
   );
-  const preferred = [text4, ...out.map(rung)].map((name) => reds.get(name));
-  return (preferred.find(({ ratio }) => ratio >= TEXT_MIN_CONTRAST) ?? [...reds.values()].reduce(
-    (farthest, red) => red.ratio > farthest.ratio ? red : farthest
+  const preferred = [text4, role, ...out.map(rung)].map(
+    (name) => colours.get(name)
+  );
+  return (preferred.find(({ ratio }) => ratio >= TEXT_MIN_CONTRAST) ?? [...colours.values()].reduce(
+    (farthest, colour) => colour.ratio > farthest.ratio ? colour : farthest
   )).colour;
 }
 function flattenStops(stops) {
