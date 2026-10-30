@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-506",
+      "ref": "refs/pull/506/merge",
+      "sha": "3404ddddd851a63270ec93f41428a2a4b2f51b5b",
+      "timestamp": "2026-10-30T18:15:26.690Z",
+      "commits": [
+        {
+          "sha": "3404ddddd851a63270ec93f41428a2a4b2f51b5b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T12:13:52-06:00",
+          "message": "Merge bd5a78fe9e70bf09f13fd57910caf910f7472afb into e03723ccfd5e2ed7bcd921e08ab6228dc1949671\n"
+        },
+        {
+          "sha": "bd5a78fe9e70bf09f13fd57910caf910f7472afb",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T12:13:05-06:00",
+          "message": "test(colour): the door's ✖ at a lower depth is held on the rung the depth presses it into (candybar-joiners-e5r4.686)\n\nAt 256 colours and ansi the door's ground is the pressed shade at that\ndepth, which moves along the ladder where the depth draws the dial's rung\nlike what stands beside the door. Where the ground is the truecolor one\nrounded, rounding never costs the ✖ the contrast it has at truecolor, as\nbefore. On another rung the ✖ stands as far off as the door's rule puts a\nred there at truecolor: the text floor where a named red clears it, else\nthe farthest of them. The looks at a lower depth are the first to reach\neach ground the depth gives the door, and each ground is held to its name.\n\nThe listing of grounds no named red clears, regenerated from the rendered\nbar at truecolor, is unchanged: no truecolor ground moves.\n"
+        },
+        {
+          "sha": "fe74e6ff45bb99779b3771bb0a7390677bd2fbd0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T11:21:13-06:00",
+          "message": "fix(colour): a dial window holds only the rungs the depth draws distinct, and no seam on the bundled bar joins one colour (candybar-joiners-e5r4.686)\n\nA cell's shade is selected from its hue's window at the depth drawn: the\ndial position's tones the depth draws as distinct colours, by identity\nafter rounding (rich-js drawnColour), widened along the ladder to the\nnearest rung drawn apart where the depth draws them all as one. A pressed\nshade (the activated trigger, its band's leads and ✕) is the dial's\nactivated rung widened by the same function until it draws apart from its\nband's items, its trigger's neighbours and the press a depth up. Both are\nmemoised per palette and read by entryOf as before.\n\nThe closing sweep renders every bundled theme at truecolor, 256 and ansi,\nclosed and on each settings tab, through the session rig, and holds every\nseam to two grounds drawn as two colours. One seam reader in test/helpers\nserves the sweep, colour-256 and the theme-identity audit.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-505",
       "ref": "refs/pull/505/merge",
       "sha": "04bd2f84d4d6f86c427453140d97c3691b050a48",
