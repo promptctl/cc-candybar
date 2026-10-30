@@ -16,7 +16,11 @@ import { SessionEffects, type RowItem } from "../src/render/effect";
 import { FrameMemory } from "../src/render/frame-memory";
 import { framed } from "./helpers/frames";
 import type { RenderedLine } from "../src/dsl/node-registry";
-import { ANIMATION_SPEEDS, type AnimationSpeedName } from "../src/themes";
+import {
+  ANIMATION_SPEED_NAMES,
+  ANIMATION_SPEEDS,
+  type AnimationSpeedName,
+} from "../src/themes";
 import type { Instant } from "../src/utils/instant";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { stripAnsi } from "./helpers/ansi";
@@ -49,13 +53,21 @@ const loopT = (
   return fx.lastFrame().t;
 };
 
+// [LAW:types-are-the-program] A table keyed by every speed: a speed added to
+// the domain does not compile here until its expected behaviour is written.
+const everySpeed = <Row extends readonly unknown[]>(
+  rows: Record<AnimationSpeedName, Row>,
+) => ANIMATION_SPEED_NAMES.map((speed) => [speed, ...rows[speed]] as const);
+
 describe("the bar's loop runs at the session's animation speed", () => {
-  test.each([
-    ["1x", 10],
-    ["5x", 50],
-    ["10x", 100],
-    ["20x", 200],
-  ] as const)("ten seconds at %s are %d seconds of the loop", (speed, t) => {
+  test.each(
+    everySpeed({
+      "1x": [10],
+      "5x": [50],
+      "10x": [100],
+      "20x": [200],
+    }),
+  )("ten seconds at %s are %d seconds of the loop", (speed, t) => {
     const fx = new SessionEffects<string>("s");
     loopT(fx, at(0), speed);
     expect(loopT(fx, at(10), speed)).toBeCloseTo(t, 9);
@@ -131,25 +143,26 @@ describe("a fade runs at the session's animation speed", () => {
 
   // A speed is picked by a write to the session's state, which ends every fade
   // in flight (its revision moves), so a fade runs at one speed throughout.
-  test.each([
-    ["1x", 1.5, [{ placement: "left", t: 1.5 }]],
-    ["10x", 3, []],
-    ["20x", 1.5, []],
-  ] as const)(
-    "at %s, a twenty-second fade %s s in is %j",
-    (speed, later, fading) => {
-      const fx = new SessionEffects<string>("s");
-      const memory = new FrameMemory<string>();
-      frame(fx, memory, at(0), speed, false);
-      expect(frame(fx, memory, at(1), speed, true)).toEqual([
-        { placement: "left", t: 0 },
-      ]);
-      expect(
-        frame(fx, memory, at(1 + later / 2), speed, true)[0]!.t,
-      ).toBeCloseTo((later / 2) * ANIMATION_SPEEDS[speed], 9);
-      expect(frame(fx, memory, at(1 + later), speed, true)).toEqual(fading);
-    },
-  );
+  test.each(
+    everySpeed({
+      "1x": [1.5, [{ placement: "left", t: 1.5 }]],
+      "5x": [1.5, [{ placement: "left", t: 7.5 }]],
+      "10x": [3, []],
+      "20x": [1.5, []],
+    }),
+  )("at %s, a twenty-second fade %s s in is %j", (speed, later, fading) => {
+    const fx = new SessionEffects<string>("s");
+    const memory = new FrameMemory<string>();
+    frame(fx, memory, at(0), speed, false);
+    expect(frame(fx, memory, at(1), speed, true)).toEqual([
+      { placement: "left", t: 0 },
+    ]);
+    expect(frame(fx, memory, at(1 + later / 2), speed, true)[0]!.t).toBeCloseTo(
+      (later / 2) * ANIMATION_SPEEDS[speed],
+      9,
+    );
+    expect(frame(fx, memory, at(1 + later), speed, true)).toEqual(fading);
+  });
 });
 
 describe("a template's frames run at the session's animation speed; realtimeFrames does not", () => {
@@ -212,17 +225,16 @@ describe("a template's frames run at the session's animation speed; realtimeFram
 
   // Ten glyphs a second apart: `frames` reads its animation seconds, and
   // `realtimeFrames` its wall seconds, since the session's first frame.
-  test.each([
-    ["1x", 1, "anim=b", "real=b"],
-    ["5x", 1, "anim=f", "real=b"],
-    ["10x", 0.5, "anim=f", "real=a"],
-    ["20x", 0.4, "anim=i", "real=a"],
-  ] as const)(
-    "at %s, %d s later draws %s and %s",
-    (speed, later, anim, real) => {
-      const bar = drawn(speed, [0, later]);
-      expect(bar).toContain(anim);
-      expect(bar).toContain(real);
-    },
-  );
+  test.each(
+    everySpeed({
+      "1x": [1, "anim=b", "real=b"],
+      "5x": [1, "anim=f", "real=b"],
+      "10x": [0.5, "anim=f", "real=a"],
+      "20x": [0.4, "anim=i", "real=a"],
+    }),
+  )("at %s, %d s later draws %s and %s", (speed, later, anim, real) => {
+    const bar = drawn(speed, [0, later]);
+    expect(bar).toContain(anim);
+    expect(bar).toContain(real);
+  });
 });

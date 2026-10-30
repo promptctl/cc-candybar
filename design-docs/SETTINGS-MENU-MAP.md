@@ -25,7 +25,7 @@ A body drops below its trigger or rises above the whole bar (`placement: "drop" 
 | Tab | Holds |
 |---|---|
 | `⚡ session` | `⎘ id`, `⎘ resume`, `↗ proj`, `↗ log`, `↗ repo`, `↗ config` (shown only when a config file exists); a second row of `/compact /clear /model` (xta.qhj) and the autocompact control (xta.e3p) |
-| `🎨 look` | Effect, endcaps, fade in/out and animation speed (1x / 5x / 10x / 20x, nt2) |
+| `🎨 look` | Effect, endcaps, fade in/out and animation speed (nt2) |
 | `📐 layout` | `+ preset` (bwi.o6u) |
 | `⚙ config` | "all config options": the controls generated from the config schema (brandon-settings-coverage-g4p.zoj) that no other place holds: `☑ wrap`, `◀ padding ▶` ("Move padding and wrap from the layout menu to config", ek7), `☑ update notice`, `renderer ◀ claude ▶` (offered inside tmux only; open, one aligned row per renderer), then `🧪 toggles`, a submenu holding the animation lanes' toggles (`🧪 band (A)`, `🧪 statusline (B)`, `🧪 tmux pane (C)`). Each setting's row in `src/config/globals-fields.ts` names its place — the first line, a tab, or a submenu — so a control lands in exactly one place |
 | `🧰 tools` | `🩺 doctor` and its check rows (below) |
