@@ -55,6 +55,8 @@ import {
   IDLE,
   judgeAct,
   makeActReader,
+  writing,
+  type ActFacts,
   type ActState,
 } from "./update-act";
 import { changeLogger, type LogLevel } from "../utils/logger";
@@ -273,8 +275,12 @@ export interface UpdateWatch {
   // The apply-update verb's effect. Throws BadVerbArgs when there is nothing
   // to apply or an act is already running on this bundle.
   act(): void;
-  // Whether an act is rewriting this bundle now, whichever daemon started it.
+  // Whether an act may be rewriting this bundle now, whichever daemon started
+  // it. True while its files can't be read: no one can say it isn't.
   running(): boolean;
+  // Why this bundle's act files can't be read, as of the last look; null when
+  // they can.
+  error(): string | null;
 }
 
 // A build or an install is a long child; ten minutes is generous for either
@@ -401,19 +407,39 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
     syncGate();
   }
 
+  // [LAW:no-silent-failure] Act files that can't be read are an error the
+  // indicator shows, never a throw out of a timer: that would end this daemon,
+  // and each one after it on this bundle at its first look.
+  type ActsRead =
+    | { readonly ok: true; readonly facts: ActFacts | null }
+    | { readonly ok: false; readonly error: string };
+  let unreadable: string | null = null;
+  const logUnreadable = changeLogger(log);
+  function readActs(): ActsRead {
+    try {
+      const facts = acts.read();
+      unreadable = null;
+      return { ok: true, facts };
+    } catch (err) {
+      unreadable = `update act files (${actsDir}): ${(err as Error).message}`;
+      logUnreadable(["error", unreadable]);
+      return { ok: false, error: unreadable };
+    }
+  }
+
   // Notices an act ending, whichever daemon started it: a success means the
   // bundle on disk changed, so the build is sampled and the binary watch asked
-  // now. An overdue act is ended with a timeout verdict.
+  // now. An act whose group is alive past its deadline is ended.
   function watchAct(): void {
-    const facts = acts.read();
+    const read = readActs();
+    if (!read.ok) return;
+    const { facts } = read;
     const next = judgeAct(facts);
-    if (
-      facts !== null &&
-      next.kind === "running" &&
-      Date.now() > facts.record.deadline &&
-      endOverdue(actsDir, facts)
-    ) {
-      log("error", `apply-update: act ${facts.act} timed out; ending it`);
+    if (facts?.alive && Date.now() > facts.record.deadline) {
+      const why = endOverdue(actsDir, facts)
+        ? "timed out"
+        : "outlived its verdict";
+      log("error", `apply-update: act ${facts.act} ${why}; ending it`);
     }
     if (seen === null && next.kind === "running") {
       log("info", `apply-update: act ${next.act} is running; watching it`);
@@ -448,15 +474,21 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
       }
     },
     notice: (ctx) => updateNotice(current(), seen ?? IDLE, ctx),
-    running: () => judgeAct(acts.read()).kind === "running",
+    running() {
+      const read = readActs();
+      return !read.ok || writing(read.facts);
+    },
+    error: () => unreadable,
     act() {
       const update = current();
       if (update === null) {
         throw new BadVerbArgs("apply-update: nothing newer is known to apply");
       }
       const facts = factsOf(update);
-      const newest = acts.read();
-      if (judgeAct(newest).kind === "running") {
+      const read = readActs();
+      if (!read.ok) throw new BadVerbArgs(`apply-update: ${read.error}`);
+      const newest = read.facts;
+      if (writing(newest)) {
         throw new BadVerbArgs(`apply-update: already ${facts.busy}`);
       }
       // The child inherits the daemon's environment (PATH included): no env

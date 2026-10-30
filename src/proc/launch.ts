@@ -958,22 +958,30 @@ export function jobGroupAlive(pid: number): boolean {
   }
 }
 
-// Ends a job with a verdict of the launcher's: claims the status first, and
-// signals the group only when the claim won, with the timeout's own
-// escalation. False when the job's own verdict landed first, and the job is
-// left alone.
+// Ends a job's group with the timeout's own escalation, and gives it a verdict
+// of the launcher's unless its own landed first: the first verdict stands, and
+// a group that outlives its verdict (a child the program left) is ended all the
+// same. True when the launcher's verdict is the one that stands. A status
+// whose directory is gone belongs to a job whose files were removed once it
+// had ended, so there is nothing left to end.
 export function endJob(pid: number, status: string, end: JobEnd): boolean {
   const staged = `${status}.${process.pid}`;
-  writeFileSync(staged, `${formatJobEnd(end)}\n`);
+  try {
+    writeFileSync(staged, `${formatJobEnd(end)}\n`);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw err;
+  }
+  let stands = true;
   try {
     linkSync(staged, status);
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "EEXIST") return false;
-    throw err;
+    if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+    stands = false;
   } finally {
     rmSync(staged, { force: true });
   }
   signalGroup(pid, "SIGTERM");
   setTimeout(() => signalGroup(pid, "SIGKILL"), TIMEOUT_KILL_GRACE_MS).unref();
-  return true;
+  return stands;
 }

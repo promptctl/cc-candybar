@@ -19,10 +19,12 @@ import {
   isRecordedJob,
   judgeAct,
   makeActReader,
+  writing,
   type ActFacts,
   type ActRecord,
 } from "../src/daemon/update-act";
 import type { StartTimeRead } from "../src/daemon/process-fingerprint";
+import { makeUpdateWatch } from "../src/daemon/update-notice";
 import { until } from "./helpers/until";
 
 let scratch: string;
@@ -96,6 +98,15 @@ describe("judgeAct: the act as every daemon sees it", () => {
   ])("%s", (_name, input, expected) => {
     expect(judgeAct(input)).toEqual(expected);
   });
+});
+
+test("an act whose group is alive may be writing the bundle, whatever its verdict", () => {
+  expect(writing(null)).toBe(false);
+  expect(writing(facts({}))).toBe(true);
+  expect(writing(facts({ end: { kind: "timeout" } }))).toBe(true);
+  expect(writing(facts({ alive: false, end: { kind: "exit", code: 0 } }))).toBe(
+    false,
+  );
 });
 
 const jobFiles = (): JobFiles => ({
@@ -180,6 +191,30 @@ describe("launchJobSync: a job whose output and verdict are files", () => {
     expect(endJob(slow.pid, ended.status, { kind: "timeout" })).toBe(true);
     await until(() => !groupAlive(slow.pid), "the ended job's group to go");
     expect(readJobEnd(ended.status)).toEqual({ kind: "timeout" });
+  });
+
+  test("ending a job whose program exited still ends what it left running, and keeps the exit", async () => {
+    const files = jobFiles();
+    const job = launchJobSync(
+      {
+        bin: "sh",
+        args: ["-c", "sleep 30 & exit 0"],
+        category: "update.apply",
+      },
+      files,
+    );
+    if (!job.ok) throw new Error(job.error);
+    job.release();
+    await until(() => readJobEnd(files.status) !== null, "the job's verdict");
+    expect(groupAlive(job.pid)).toBe(true);
+    expect(endJob(job.pid, files.status, { kind: "timeout" })).toBe(false);
+    await until(() => !groupAlive(job.pid), "the left-behind child to end");
+    expect(readJobEnd(files.status)).toEqual({ kind: "exit", code: 0 });
+  });
+
+  test("ending a job whose files are gone is a no-op, not an error", () => {
+    const status = path.join(scratch, "gone", "status");
+    expect(endJob(process.pid, status, { kind: "timeout" })).toBe(false);
   });
 
   test("a status this module did not write is an error, not an end", () => {
@@ -388,6 +423,56 @@ describe("claimAct: one act per bundle", () => {
     const facts = makeActReader(dir, sameLeader).read()!;
     expect(facts.act).toBe(2);
     expect(facts.record.identity).toBe("id-2");
+  });
+
+  test("an act number claimed again names the new act, not the one this reader knew", async () => {
+    const dir = dirOf();
+    claimAct(
+      dir,
+      null,
+      "id-1",
+      TOUCH(marker()),
+      60_000,
+      Date.now(),
+      sameLeader,
+    );
+    const reader = makeActReader(dir, sameLeader);
+    await until(
+      () => judgeAct(reader.read()).kind === "succeeded",
+      "the first act to succeed",
+    );
+    fs.rmSync(dir, { recursive: true });
+    claimAct(dir, null, "id-2", SLEEP, 60_000, Date.now(), sameLeader);
+    const again = reader.read()!;
+    ended.push(again.record.pid);
+    expect(again.record.identity).toBe("id-2");
+    expect(judgeAct(again)).toEqual({ kind: "running", act: 1 });
+  });
+
+  test("act files that can't be read are an error the watch shows, and hold a restart", () => {
+    const dir = dirOf();
+    fs.mkdirSync(path.join(dir, "1"), { recursive: true });
+    fs.writeFileSync(path.join(dir, "1", "record.json"), "{ torn");
+    const logged: string[] = [];
+    const watch = makeUpdateWatch({
+      entryUrl: "file:///some/bundle/index.mjs",
+      actsDir: dir,
+      intervalMs: 60_000,
+      releaseIntervalMs: 60_000,
+      registryUrl: "http://127.0.0.1:1",
+      fetchImpl: fetch,
+      onApplied: () => {},
+      log: (_level, msg) => logged.push(msg),
+    });
+    expect(watch.running()).toBe(true);
+    expect(watch.error()).toMatch(/update act files .*JSON/);
+    expect(logged).toEqual([watch.error()]);
+    fs.writeFileSync(
+      path.join(dir, "1", "record.json"),
+      JSON.stringify({ ...RECORD, started: Date.now() }),
+    );
+    expect(watch.running()).toBe(false);
+    expect(watch.error()).toBeNull();
   });
 
   test("acts are kept per bundle", () => {

@@ -344,8 +344,9 @@ describe("brandon-build-notice-5d6: the daemon renders what is newer than it, wi
   describe("a daemon SIGKILLed mid-act", () => {
     // A build tool stand-in, first on PATH: it waits for the test's gate and
     // then does what a build does to a running daemon, rewriting the bundle it
-    // watches. It ends itself once the scratch checkout is gone, so a failed
-    // test leaves nothing behind: an act outlives every daemon by design.
+    // watches. It ends itself once the scratch checkout is gone or two minutes
+    // have passed, so a failed test, or a worker killed before its cleanup,
+    // leaves nothing behind: an act outlives every daemon by design.
     function standIn(
       s: Scratch,
       then: string,
@@ -357,8 +358,8 @@ describe("brandon-build-notice-5d6: the daemon renders what is newer than it, wi
         path.join(binDir, "pnpm"),
         [
           "#!/bin/sh",
-          `while [ ! -e ${JSON.stringify(gate)} ]; do [ -d ${JSON.stringify(s.root)} ] || exit 1; sleep 0.1; done`,
-          `echo $$ > ${JSON.stringify(ran)}`,
+          `n=0; while [ ! -e ${JSON.stringify(gate)} ]; do [ -d ${JSON.stringify(s.root)} ] && [ $n -lt 1200 ] || exit 1; n=$((n+1)); sleep 0.1; done`,
+          `echo $$ >> ${JSON.stringify(ran)}`,
           then,
           "",
         ].join("\n"),
@@ -439,7 +440,7 @@ describe("brandon-build-notice-5d6: the daemon renders what is newer than it, wi
         },
       );
       // One program ran, once: the refused click started none.
-      expect(ran.trim()).toMatch(/^\d+$/);
+      expect(ran.trim().split("\n")).toEqual([expect.stringMatching(/^\d+$/)]);
     });
 
     test("a failed act's verdict reaches the daemon that did not start it", async () => {

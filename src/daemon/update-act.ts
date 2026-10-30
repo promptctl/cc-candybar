@@ -183,21 +183,30 @@ export interface ActReader {
   read(): ActFacts | null;
 }
 
-// The newest act as one reader knows it. `ours` turns false for good once the
-// group reads gone: a gone group never comes back as the job's, though its pid
-// may come back as someone else's. `final` holds the facts once nothing about
-// the act can change: a verdict is never rewritten, and a gone job writes none.
+// Whether anything of the act may still be writing the bundle: its group,
+// whatever its verdict. A timed-out group is still dying, and a program can
+// leave a child running past its own exit.
+export const writing = (facts: ActFacts | null): boolean =>
+  facts !== null && facts.alive;
+
+// The newest act as one reader knows it, keyed by its job, since an act's
+// number is claimed again once its directory is gone. `ours` turns false for
+// good once the group reads gone: a gone group never comes back as the job's,
+// though its pid may come back as someone else's. `final` holds the facts from
+// then on, since a job writes its verdict before its group ends.
 interface Known {
-  readonly act: number;
   readonly record: ActRecord;
   ours: boolean;
   final: ActFacts | null;
 }
 
+const sameJob = (a: ActRecord, b: ActRecord): boolean =>
+  a.pid === b.pid && a.startTime === b.startTime;
+
 // [LAW:effects-at-boundaries] The edge that reads acts. Who the recorded job
-// is gets settled by a fingerprint once per act (a `ps`); after that each read
-// asks only whether its group is alive and whether it left a verdict, and an
-// act that ended is not read again.
+// is gets settled by a fingerprint once per job (a `ps`); after that each read
+// asks only whether its group is alive and whether it left a verdict, until
+// the group is gone.
 export function makeActReader(
   dir: string,
   read: (pid: number) => StartTimeRead = readStartTime,
@@ -207,13 +216,13 @@ export function makeActReader(
   // The act's facts, or null when the act vanished under the read.
   function factsOf(act: number): ActFacts | null {
     const actDir = path.join(dir, String(act));
-    if (known?.act !== act) {
-      const record = readRecord(actDir);
-      if (record === null) return null;
-      known = { act, record, ours: isRecordedJob(record, read), final: null };
+    const record = readRecord(actDir);
+    if (record === null) return null;
+    if (known === null || !sameJob(known.record, record)) {
+      known = { record, ours: isRecordedJob(record, read), final: null };
     }
     if (known.final !== null) return known.final;
-    known.ours = known.ours && jobGroupAlive(known.record.pid);
+    known.ours = known.ours && jobGroupAlive(record.pid);
     const files = filesOf(actDir);
     const end = readJobEnd(files.status);
     const lastLine =
@@ -223,14 +232,8 @@ export function makeActReader(
     // An act pruned after its record was read reads as an end it never had,
     // so what was read stands only while the record still does.
     if (!fs.existsSync(recordOf(actDir))) return null;
-    const facts = {
-      act,
-      record: known.record,
-      alive: known.ours,
-      end,
-      lastLine,
-    };
-    if (!facts.alive || end !== null) known.final = facts;
+    const facts = { act, record, alive: known.ours, end, lastLine };
+    if (!facts.alive) known.final = facts;
     return facts;
   }
 
@@ -333,9 +336,9 @@ const CLAIMED_FIRST: Claim = {
   reason: "another act claimed this bundle first",
 };
 
-// Ends an act its reader saw running past its deadline with a `timeout`
-// verdict: a running read already proved the group the recorded job. False
-// when the job's own verdict landed first.
+// Ends an act whose group its reader saw alive past its deadline, with a
+// `timeout` verdict unless the job's own landed first: a live read already
+// proved the group the recorded job. True when the timeout is the verdict.
 export function endOverdue(dir: string, facts: ActFacts): boolean {
   const status = filesOf(path.join(dir, String(facts.act))).status;
   return endJob(facts.record.pid, status, { kind: "timeout" });

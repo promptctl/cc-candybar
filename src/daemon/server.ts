@@ -2393,6 +2393,7 @@ function drawRender(
     said(refusedArgsError(req.refusedArgs)),
     said(hintsError),
     { about: "load", text: entry.lastError },
+    { about: "update-act", text: updateWatch.error() },
     ...state.dropped.map((e) => ({
       about: `dropped\0${e.file}`,
       text: e.message,
