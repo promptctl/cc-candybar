@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-504",
+      "ref": "refs/pull/504/merge",
+      "sha": "f049b44d93280f7e7a72699b9047f7c6c06d34d8",
+      "timestamp": "2026-10-30T17:45:41.899Z",
+      "commits": [
+        {
+          "sha": "f049b44d93280f7e7a72699b9047f7c6c06d34d8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T11:42:23-06:00",
+          "message": "Merge 94e21e4d2d015aae6d2551d878d274f2d0cc3b62 into 46745100f446a07971644e712c1ae93efc7f4a04\n"
+        },
+        {
+          "sha": "94e21e4d2d015aae6d2551d878d274f2d0cc3b62",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T11:41:49-06:00",
+          "message": "refactor(config): a config layer carries its own scope, not a parallel repoLayers list (candybar-plugins-vf6g.chl)\n\nEach chain layer is {path, scope}, the scope decided once where discovery\nfinds the file. repoLayers is gone from the resolution, the durable home,\nthe session, the render cache's chain and its load key, and the loader\nreads layer.scope instead of testing path membership. Hand-built chains\n(check's explicit file, demo, gallery, bench, the durable writer's home)\nstate the user's scope through one helper, homeLayer.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "pr-502",
       "ref": "refs/pull/502/merge",
       "sha": "829558625c4940ab2721bf4e47fe786bb2e7a511",
