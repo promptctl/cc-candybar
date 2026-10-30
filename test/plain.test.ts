@@ -30,7 +30,7 @@ test("a value JSON would write as {} or drop is not a digest's input", () => {
   // @ts-expect-error a symbol is dropped
   digestOf({ tag: Symbol("x") });
   // @ts-expect-error a bigint is refused at runtime
-  digestOf({ size: 1n });
+  expect(() => digestOf({ size: 1n })).toThrow(TypeError);
   const opaque: unknown = new Map([[1, 2]]);
   // @ts-expect-error a field typed `unknown` admits a Map
   digestOf({ held: opaque });
