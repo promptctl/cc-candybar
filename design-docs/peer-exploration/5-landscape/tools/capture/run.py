@@ -88,6 +88,8 @@ def run_timeline(slug, entry, src, width):
     os.makedirs(os.path.join(run, 'tmp'))
     home = os.path.join(run, 'home')
     cwd = os.path.join(run, 'work', 'candybar-demo')
+    # [LAW:one-source-of-truth] one project-directory name fills the transcript's folder name and the path the hook names.
+    project_dir = cwd.replace('/', '-')
     cmd = entry['cmd'].replace('__PROJ__', proj)
     env = {'HOME': home, 'USER': 'dev', 'LOGNAME': 'dev', 'SHELL': '/bin/bash', 'TMPDIR': os.path.join(run, 'tmp'),
            'PATH': os.path.join(run, 'bin') + ':' + os.path.join(proj, 'node_modules/.bin') + ':/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:' + os.path.join(BUN, 'bin'),
@@ -104,8 +106,8 @@ def run_timeline(slug, entry, src, width):
         tdir = os.path.join(run, TRANSCRIPT_DIR)
         shutil.rmtree(tdir, ignore_errors=True)
         for d in os.listdir(os.path.join(td, TRANSCRIPT_DIR)):
-            shutil.copytree(os.path.join(td, TRANSCRIPT_DIR, d), os.path.join(tdir, d.replace('__RUN__', run.replace('/', '-'))))
-        hook = open(os.path.join(td, 'hook.json')).read().replace('__RUN__', run)
+            shutil.copytree(os.path.join(td, TRANSCRIPT_DIR, d), os.path.join(tdir, d.replace('__SLUG__', project_dir)))
+        hook = open(os.path.join(td, 'hook.json')).read().replace('__SLUG__', project_dir).replace('__RUN__', run)
         t0 = time.time()
         p = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd, env=env, start_new_session=True)
         try:
