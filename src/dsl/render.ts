@@ -56,7 +56,6 @@ import {
   type MenuFlash,
   type RowKind,
 } from "../render/effect.js";
-import { flashAt } from "../config/menu-timeout.js";
 import {
   decideEffectName,
   decideStyleName,
@@ -1138,8 +1137,8 @@ export interface RenderObservers {
 }
 
 // [LAW:types-are-the-program] A drawn frame: its bytes, and its motion
-// (brandon-doctor-v62x.tgp). `moves` is what its cells say (`DrawnRow.moves`),
-// never what the config asked for: a template's `frames` moves the bar as
+// (brandon-doctor-v62x.tgp). `moves` is a finite `nextChange`, what its cells
+// and the holds told to its draw say, never what the config asked for: a template's `frames` moves the bar as
 // surely as an effect does. `can-move` is a still frame whose config, under
 // the settings in force, can draw motion at a later render — a
 // `globals.effect` rule, placements that fade as they come and go, or a
@@ -1147,6 +1146,9 @@ export interface RenderObservers {
 // `when`, or in a closed body) — which no still cell can say.
 export interface DrawnFrame {
   readonly text: string;
+  // The moment, in wall seconds, the frame next changes without new data, or
+  // Infinity: what a feed drawing it waits for (src/daemon/frame-feed.ts).
+  readonly nextChange: number;
   readonly motion: DrawnMotion;
   // The rows an open menu added — a disclosure body, a dropped `{{ menu }}` —
   // which flash and close once the session goes idle.
@@ -1326,15 +1328,15 @@ export function drawDsl(
   const { perSegmentSink, onSegmentError, onRenderWarning } = observers ?? {};
   const warn = (warning: RenderWarning): void => onRenderWarning?.(warning);
   // [LAW:one-source-of-truth] The session's animation clock, read once at the
-  // render's instant: its templates' `frames` animate by this reading, and the
-  // effects below by the same value (brandon-menus-sjhy.nt2).
+  // render's instant: its templates' `frames` run through this timeline, and
+  // the effects below through the same one (brandon-menus-sjhy.nt2).
   const effects = selection.effects ?? new SessionEffects<RenderedLine>("");
   const clock = effects.clockAt(at, ANIMATION_SPEEDS[selection.animationSpeed]);
   // [LAW:one-source-of-truth] The instant this render draws at, bound to the
   // engines' one clock for the walk and unbound on every exit: every time read
-  // below — a template's `now`, a `time` variable — reads the one instant.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- held for its disposal
-  using _clock = bindClock(at, clock.anim);
+  // below — a template's `now`, a `time` variable — reads the one instant,
+  // and every hold an animation function tells the frame is heard here.
+  using drawClock = bindClock(at, clock.timeline);
   const parts = partsOf(compiled, store);
   // [LAW:one-source-of-truth] The depth the bytes are written at is the
   // view's — the one every contrast floor below is measured on.
@@ -1450,18 +1452,16 @@ export function drawDsl(
   // from this config, preset and session state — did not draw fades in, and
   // one it drew that this frame does not dissolves out as it was drawn there.
   // [LAW:one-source-of-truth] The flash counts down to the instant the
-  // daemon's timer closes the menus (`flashAt`), lit in the theme's `warning`
-  // — something is about to happen — under the text chosen for it.
-  const flashT =
-    selection.idleSince === undefined
-      ? null
-      : flashAt(selection.idleSince, selection.menuTimeout, at);
+  // daemon's timer closes the menus (src/config/menu-timeout.ts), across the
+  // whole idle period, lit in the theme's `warning` — something is about to
+  // happen — under the text chosen for it.
   const flashFill = paletteRole(palette, "warning");
   const flash: MenuFlash =
-    flashT === null
+    selection.idleSince === undefined
       ? null
       : {
-          t: flashT,
+          idleSince: selection.idleSince,
+          timeoutS: selection.menuTimeout,
           fill: flashFill,
           text: textOn(palette, flashFill, registry.drawnAt()),
         };
@@ -1605,10 +1605,11 @@ export function drawDsl(
   motion.drawn();
   record.commit();
   const menuRows = rendered.filter((row) => row.kind === "menu").length;
-  // What the frame arms under the settings in force, drawn or not: an open
-  // menu, which flashes before it closes on its own, an effect rule, fades, or a placement of this preset — hidden by its `when` or a
-  // closed body right now — wearing an effect of its own. Asked only of a
-  // frame no row of which moves.
+  // What the frame arms under the settings in force, drawn or not: a menu this
+  // frame is the first to draw, whose idle period — and the flash before it
+  // closes on its own — begins with it, an effect rule, fades, or a placement
+  // of this preset — hidden by its `when` or a closed body right now — wearing
+  // an effect of its own. Asked only of a frame nothing on which will change.
   const armed = (): boolean =>
     menuRows > 0 ||
     parts.selections().effect.kind === "expression" ||
@@ -1617,7 +1618,15 @@ export function drawDsl(
       ({ settings }) =>
         settings.effect !== FOLLOW_BAR && settings.effect !== EFFECT_FLOOR,
     );
-  const frameMotion: DrawnMotion = rendered.some((row) => row.moves)
+  // [LAW:one-source-of-truth] A frame next changes when the soonest of its
+  // rows does, or of the holds its templates told the draw without a cell to
+  // stamp (`bindClock`): rich-js's hold of a frame is both. Its motion is that
+  // one value read as a word, so the two cannot disagree.
+  const nextChange = Math.min(
+    drawClock.heard(),
+    ...rendered.map((row) => row.nextChange),
+  );
+  const frameMotion: DrawnMotion = Number.isFinite(nextChange)
     ? "moves"
     : armed()
       ? "can-move"
@@ -1632,6 +1641,7 @@ export function drawDsl(
     });
   return {
     text: rendered.map((row) => row.text).join("\n"),
+    nextChange,
     motion: frameMotion,
     menuRows,
     evaluated: parts.evaluated - evaluatedBefore,

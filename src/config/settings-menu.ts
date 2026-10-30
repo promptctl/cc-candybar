@@ -402,14 +402,16 @@ const laneReadout = (lane: Lane): string => {
   );
 };
 // [LAW:nothing-unseen] Every bar says how it is redrawn, in the cell beside the
-// door. On a frame the feed drew: how fast the feed draws it, the moving rate
-// while it moves where someone can see it, one a second while it is still or
-// unseen. On a request's answer: that Claude Code polls it. A polled bar has no
-// rate to show, since its redraws are Claude Code's, and the requests that
-// carry them cannot tell its timer from its event redraws or a daemon stall.
+// door. On a frame the feed drew: the most frames a second the feed draws it
+// at — the moving rate while its pane is on a screen, one a second while it
+// is not — written `≤`, since the feed draws a bar only as often as it
+// changes, and a still bar on a screen is drawn once a second. On a request's
+// answer: that Claude Code polls it. A polled bar has no rate to show, since
+// its redraws are Claude Code's, and the requests that carry them cannot tell
+// its timer from its event redraws or a daemon stall.
 // [LAW:dataflow-not-control-flow] The one branch is Drawing's own
 // discriminator. Both forms are padded to the wider of `polled` and the
-// fastest pace, MOVING_FPS, so a bar starting, stopping or losing its lane
+// fastest ceiling, MOVING_FPS, so a bar starting, stopping or losing its lane
 // moves no cell after it.
 // [LAW:single-enforcer] Every error and warning a draw owes its reader is one
 // indicator, a second click region in the door's own cell, so it sits beside
@@ -424,14 +426,15 @@ const DIAGNOSTICS_INDICATOR =
 
 const FPS_SEG = `${SETTINGS_NS}fps`;
 export const POLLED = "polled";
+const AT_MOST = "≤";
 const FPS_UNIT = " fps";
 const RATE_WIDTH = Math.max(
   POLLED.length,
-  String(MOVING_FPS).length + FPS_UNIT.length,
+  AT_MOST.length + String(MOVING_FPS).length + FPS_UNIT.length,
 );
 const FRAME_RATE =
   `{{ if eq .${drawingVar("by")} "${"feed" satisfies Drawing["by"]}" }}` +
-  `{{ printf "%${RATE_WIDTH - FPS_UNIT.length}d" (int .${drawingVar("fps")}) }}${FPS_UNIT}` +
+  `{{ printf "%${RATE_WIDTH - FPS_UNIT.length}s" (printf "${AT_MOST}%d" (int .${drawingVar("fps")})) }}${FPS_UNIT}` +
   `{{ else }}${POLLED.padStart(RATE_WIDTH)}{{ end }}`;
 
 // What a control shows after itself: a lane's toggle its readout.

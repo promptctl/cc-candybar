@@ -41,16 +41,14 @@ export const MENU_TIMEOUT_DEFAULT = 30;
 export const closesAt = (since: Instant, timeoutS: number): Instant =>
   (since + timeoutS) as Instant;
 
-// How far into its flash a menu drawn at `at` is, or null while it is not
-// flashing.
-export function flashAt(
-  since: Instant,
-  timeoutS: number,
-  at: Instant,
-): number | null {
-  const t = at - (closesAt(since, timeoutS) - CLOSING_FLASH_SECONDS);
-  return t >= 0 && t < CLOSING_FLASH_SECONDS ? t : null;
-}
+// How far into a session's idle period its flash begins: the flash ends at
+// exactly the close. [LAW:one-source-of-truth] The render's flash is one
+// animation over the whole idle period, dark until this moment, so every frame
+// of an idle menu says when the flash starts. It is positive because the
+// setting's range starts above the flash's length (MENU_TIMEOUT_RANGE), which a
+// flash starting before the idle period could not draw.
+export const flashBegins = (timeoutS: number): number =>
+  timeoutS - CLOSING_FLASH_SECONDS;
 
 // Whether the flash is lit `t` seconds in.
 export function litAt(t: number): boolean {

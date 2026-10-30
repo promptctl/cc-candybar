@@ -35,7 +35,7 @@ import { EDIT_LIVE_KEY } from "../src/config/edit-chrome";
 import {
   CLOSING_FLASH_SECONDS,
   MENU_TIMEOUT_RANGE,
-  flashAt,
+  flashBegins,
   litAt,
 } from "../src/config/menu-timeout";
 import { MenuIdle } from "../src/daemon/menu-idle";
@@ -47,11 +47,9 @@ describe("the flash", () => {
   test("three slow flashes, then three fast ones, ending where the menu closes", () => {
     expect(CLOSING_FLASH_SECONDS).toBe(7.5);
     expect(MENU_TIMEOUT_RANGE.min).toBeGreaterThan(CLOSING_FLASH_SECONDS);
-    // Idle since 1000 with a 30 s timeout: closes at 1030, flashes from 1022.5.
-    expect(flashAt(at(1000), 30, at(1022.4))).toBeNull();
-    expect(flashAt(at(1000), 30, at(1022.5))).toBe(0);
-    expect(flashAt(at(1000), 30, at(1029.9))).toBeCloseTo(7.4);
-    expect(flashAt(at(1000), 30, at(1030))).toBeNull();
+    // A 30 s timeout closes 30 s into the idle period, flashing from 22.5 s.
+    expect(flashBegins(30)).toBe(22.5);
+    expect(flashBegins(30) + CLOSING_FLASH_SECONDS).toBe(30);
     const lit = [
       0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.1, 6.4, 6.6, 6.9, 7.1, 7.4,
     ].map(litAt);
@@ -400,8 +398,20 @@ describe("the flash on the bar", () => {
     expect(rt.draw(DARK, SINCE).text).toBe(rt.draw(DARK).text);
     const waiting = rt.draw(BEFORE, SINCE);
     expect(waiting.text).toBe(rt.draw(BEFORE).text);
-    // Still now, but it will flash and close.
-    expect(waiting.motion).toBe("can-move");
+    // Drawn as it was, yet it says when it changes: the flash's first lit hold
+    // (candybar-animation-wbxz.014), so a feed drawing it is drawn then.
+    expect(waiting.motion).toBe("moves");
+    expect(waiting.nextChange).toBe(1022.5);
+    // The same frame between two holds says when the next one turns.
+    expect(rt.draw(DARK, SINCE).nextChange).toBe(1024.5);
+  });
+
+  test("a menu the frame first draws, its idle period not begun, can move but says no change", () => {
+    const rt = buildRuntime(BUNDLED);
+    rt.clickWriting(SETTINGS_ANCHOR, SETTINGS_OPEN);
+    const opened = rt.draw(BEFORE);
+    expect(opened.nextChange).toBe(Infinity);
+    expect(opened.motion).toBe("can-move");
   });
 
   test("a bar with no menu open draws no menu rows, and never flashes", () => {

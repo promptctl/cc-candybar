@@ -87,10 +87,10 @@ export const TOGGLED_LANES = LANE_NAMES.filter(
 // Which lanes a session's settings switch on.
 export type LaneSwitches = Readonly<Record<Lane, boolean>>;
 
-// [LAW:one-source-of-truth] The rate a lane's frames are drawn at while the bar
-// moves where someone can see it: the daemon's feed is scheduled by it, and
-// each lane's toggle turns its spinner at it, so the spinner is smooth exactly
-// when frames arrive as fast as the feed draws them.
+// [LAW:one-source-of-truth] The most frames a second a lane is drawn at, while
+// its pane is on a screen: the closest the daemon's feed spaces two frames,
+// and the rate each lane's toggle turns its spinner at, so the spinner is
+// smooth exactly when frames arrive as fast as the feed draws them.
 export const MOVING_FPS = 30;
 
 // [LAW:nothing-unseen] What one lane of a session's frames is doing, as the
@@ -108,8 +108,8 @@ export type LaneFeeds = Readonly<Record<Lane, LaneFeed>>;
 
 // [LAW:types-are-the-program] Who a render is drawn for: a client's render
 // request, answered to that client alone, or the frame feed, whose frames are
-// pushed to every lane's subscribers — with that feed's pace, the frames a
-// second it draws at, which only a fed bar has. Set beside the payload as
+// pushed to every lane's subscribers — with that feed's ceiling, the most
+// frames a second it draws the bar at, which only a fed bar has. Set beside the payload as
 // `drawing`, read through `drawing.by` and `drawing.fps`.
 export type Drawing =
   | { readonly by: "request" }

@@ -454,7 +454,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     rt.openTools();
     rt.clickVerb(VERB_DOCTOR_RUN);
     expect(rt.render()).toContain(
-      `✗ effect refresh — the bar moves (an effect, a fade, or an animated segment), but its statusLine sets no refreshInterval, so Claude Code redraws it only on events (statusLine from ${rt.settingsPath}) [fix]`,
+      `✗ effect refresh — the bar moves (an effect, a fade, an animated segment, or an open menu counting down to its close), but its statusLine sets no refreshInterval, so Claude Code redraws it only on events (statusLine from ${rt.settingsPath}) [fix]`,
     );
 
     // The event names the scope the statusLine was read from.

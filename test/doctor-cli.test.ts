@@ -537,7 +537,7 @@ describe("doctorPlan over a real config", () => {
     expect(await planOver(drawing("moves", dir))).toEqual({
       stdout:
         "✓ config\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width — 120 columns, as this command's terminal measured\n" +
-        "✗ effect refresh — the bar moves (an effect, a fade, or an animated segment), but its statusLine sets no refreshInterval, so Claude Code redraws it only on events" +
+        "✗ effect refresh — the bar moves (an effect, a fade, an animated segment, or an open menu counting down to its close), but its statusLine sets no refreshInterval, so Claude Code redraws it only on events" +
         ` (statusLine from ${settingsPath()})` +
         ` (fix: click the settings menu (${DOOR_GLYPH} by default) › 🧰 tools › 🩺 doctor, then [fix] on the bar)\n` +
         "✓ Nerd Font\n✓ segment data\n✓ session data\n",
@@ -585,7 +585,7 @@ describe("doctorPlan over a real config", () => {
 
     test("with bars in both, the one whose own chain fails is the finding, with its fix", async () => {
       expect((await planOver(sessions(s1(), s2()))).stdout).toContain(
-        `✗ effect refresh — the bar moves (an effect, a fade, or an animated segment), but its statusLine sets no refreshInterval, so Claude Code redraws it only on events (statusLine from ${settingsPath()})`,
+        `✗ effect refresh — the bar moves (an effect, a fade, an animated segment, or an open menu counting down to its close), but its statusLine sets no refreshInterval, so Claude Code redraws it only on events (statusLine from ${settingsPath()})`,
       );
     });
 

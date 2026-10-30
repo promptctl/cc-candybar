@@ -6,12 +6,7 @@
 // unread behind it, and a declaration the project config never uses.
 
 import { builtBundle } from "./helpers/spawn-test-daemon";
-import {
-  mkdtempSync,
-  mkdirSync,
-  realpathSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdtempSync, mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -464,7 +459,7 @@ test("a bar whose only motion is a template's fails effect refresh", async () =>
     expect(run).toBeDefined();
     await click(sockPath, run!);
     expect(flat(await draw())).toContain(
-      "✗ effect refresh — the bar moves (an effect, a fade, or an animated segment), but its statusLine sets no refreshInterval",
+      "✗ effect refresh — the bar moves (an effect, a fade, an animated segment, or an open menu counting down to its close), but its statusLine sets no refreshInterval",
     );
 
     writeFileSync(projectConfig, barOf("still"));
@@ -472,9 +467,10 @@ test("a bar whose only motion is a template's fails effect refresh", async () =>
     await draw();
     await click(sockPath, run!);
     // Still, but drawn under the open menu the doctor is clicked from, which
-    // flashes and closes on its own.
+    // counts down to the flash before it closes on its own: the frame says
+    // when that starts (candybar-animation-wbxz.014), so the bar moves.
     expect(flat(await draw())).toContain(
-      "✗ effect refresh — the bar can start moving (an open menu,",
+      "✗ effect refresh — the bar moves (an effect, a fade, an animated segment, or an open menu counting down to its close)",
     );
 
     // The same bar with its menu closed is still, and passes.
@@ -504,12 +500,21 @@ test("a bar whose only motion is a template's fails effect refresh", async () =>
     expect(menuIdle).toContainEqual(expect.stringMatching(/^\d+\.\ds\/30s$/));
     expect(motion).toContain("still");
     const doctorLines = (lines: readonly string[]) =>
-      lines.filter((l) => l.includes("doctor:") && l.includes(`session=${SID}`));
+      lines.filter(
+        (l) => l.includes("doctor:") && l.includes(`session=${SID}`),
+      );
     expect(
       (
-        await loggedLines(env, doctorLines, (found) => found.length >= 4, "the doctor's four runs")
+        await loggedLines(
+          env,
+          doctorLines,
+          (found) => found.length >= 4,
+          "the doctor's four runs",
+        )
       ).map((l) => l.match(/ frames=(\S+) /)?.[1]),
-    ).toEqual(["1/0/0/0/0", "1/0/0/0/0", "0/1/0/0/0", "0/0/1/0/0"]);
+      // The third run's still bar sits under a menu counting down to its
+      // close, which moves it; the fourth's menu is closed.
+    ).toEqual(["1/0/0/0/0", "1/0/0/0/0", "1/0/0/0/0", "0/0/1/0/0"]);
   } finally {
     if (daemon) await killAndWait(daemon);
     removeTmpDirs();
