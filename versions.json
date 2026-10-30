@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-500",
+      "ref": "refs/pull/500/merge",
+      "sha": "db0c119da3a883819c3e1c4fddbd72988523f83d",
+      "timestamp": "2026-10-30T16:25:49.216Z",
+      "commits": [
+        {
+          "sha": "db0c119da3a883819c3e1c4fddbd72988523f83d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T16:24:52Z",
+          "message": "Merge e9e8b01ae45fcf0da86d2834dfe58ad807c9718a into 4f90c928ea159b91f00da76cd04a08140a27cb0e\n"
+        },
+        {
+          "sha": "e9e8b01ae45fcf0da86d2834dfe58ad807c9718a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T10:17:10-06:00",
+          "message": "fix(test): the viewer read refuses a bar already showing the viewer, and the killed-daemon wait reads the daemon's own env and snapshot type (brandon-unfiled-3248.vfhf)\n"
+        },
+        {
+          "sha": "294c4e8b6bed446717d843333417a85503c33be9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T10:14:54-06:00",
+          "message": "fix(test): a test that SIGKILLs a daemon waits for the viewer's close to be saved, and the shared viewer read stays strict (brandon-unfiled-3248.vfhf)\n"
+        },
+        {
+          "sha": "2819c827b670ead3e693e8350187e9ddf86de799",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T09:55:19-06:00",
+          "message": "fix(test): a viewer read closes a viewer the restored session state left open (brandon-unfiled-3248.vfhf)\n\nOn Linux CI the SIGKILLed starter's last session-state write (closing the\nviewer) fell inside the 500ms debounce, so the successor restored the\nviewer open on page 2. The bar then carries no indicator to click, and\nreadDiagnostics read that as no messages. The act was read as running\nall along (daemon.log: 'apply-update: act 1 is running; watching it').\n"
+        }
+      ]
+    },
+    {
       "version": "pr-502",
       "ref": "refs/pull/502/merge",
       "sha": "d1b8a5845e954195999a08db29cd9f14469ab06e",
@@ -91,42 +127,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T06:37:15-06:00",
           "message": "fix(colour): adjacent row positions never select one tone, and the muted dial gets two (candybar-joiners-e5r4.tx7)\n\nA three-tone window is read by halves instead of by nearest point: the\nupper half of the circle is the window's last entry (its middle rung) and\nthe lower half is split the same way between its ends. Van der Corput's\nfirst bit is the index's parity, so every odd place wears the middle rung\nand the even places alternate low and high. Of two neighbours exactly one\nis odd, so no two neighbours share a tone at any index, and every step is\none rung. Nearest point centred a tone on 0, where places 2^k - 1 and 2^k\nland either side ever closer, so 7 and 8, 15 and 16, ... shared it.\n\nThe muted position deals the role's muted form and the role itself, read\nby bin, so its neighbours alternate too.\n\nOne property test states it for every dial position over rows of 2 to 16\ncells; it replaces the adjacency checks that were spread over three tests.\nThe 🧪 toggles row's eighth item moves from the low rung to the middle one.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-500",
-      "ref": "refs/pull/500/merge",
-      "sha": "aa712462a9256f0e448eee2ecb38dad96224bee3",
-      "timestamp": "2026-10-30T16:18:13.381Z",
-      "commits": [
-        {
-          "sha": "aa712462a9256f0e448eee2ecb38dad96224bee3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T16:17:21Z",
-          "message": "Merge cf3cc85f18a21c632d51ebc35c9f6da82fff46d9 into 73801c6e3b63cf23ed6af12476e50b45a0c45333\n"
-        },
-        {
-          "sha": "cf3cc85f18a21c632d51ebc35c9f6da82fff46d9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T10:17:10-06:00",
-          "message": "fix(test): the viewer read refuses a bar already showing the viewer, and the killed-daemon wait reads the daemon's own env and snapshot type (brandon-unfiled-3248.vfhf)\n"
-        },
-        {
-          "sha": "925c432c5470ece599e1ccb72db9e47912d1a05f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T10:14:54-06:00",
-          "message": "fix(test): a test that SIGKILLs a daemon waits for the viewer's close to be saved, and the shared viewer read stays strict (brandon-unfiled-3248.vfhf)\n"
-        },
-        {
-          "sha": "0b7353d57b7b3968df196e5f8995bf792c837184",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T09:55:19-06:00",
-          "message": "fix(test): a viewer read closes a viewer the restored session state left open (brandon-unfiled-3248.vfhf)\n\nOn Linux CI the SIGKILLed starter's last session-state write (closing the\nviewer) fell inside the 500ms debounce, so the successor restored the\nviewer open on page 2. The bar then carries no indicator to click, and\nreadDiagnostics read that as no messages. The act was read as running\nall along (daemon.log: 'apply-update: act 1 is running; watching it').\n"
         }
       ]
     },
