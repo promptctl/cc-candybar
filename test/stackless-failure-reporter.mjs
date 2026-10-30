@@ -36,16 +36,22 @@ export default class StacklessFailureReporter {
   onTestResult(_test, result) {
     const blocks = blocksOf(result.failureMessage ?? "");
     const file = path.relative(this.rootDir, result.testFilePath);
-    for (const test of result.testResults) {
-      const title = [...test.ancestorTitles, test.title].join(" › ");
-      const own = blocks.filter((block) => block.title === title);
-      test.failureMessages.forEach((message, i) => {
-        if (own[i]?.empty !== true) return;
-        process.stderr.write(
-          `  ● ${title}\n\n` +
-            `    thrown with an empty stack while ${file} was running: ${message}\n\n`,
-        );
-      });
-    }
+    // jest's report holds one block per failure message, in the order of the
+    // file's results and of each result's messages, so the n-th failure is
+    // the n-th block, whichever test shares its title.
+    const failures = result.testResults.flatMap((test) =>
+      test.failureMessages.map((message) => ({
+        title: [...test.ancestorTitles, test.title].join(" › "),
+        message,
+      })),
+    );
+    failures.forEach(({ title, message }, n) => {
+      const block = blocks[n];
+      if (block?.title !== title || !block.empty) return;
+      process.stderr.write(
+        `  ● ${title}\n\n` +
+          `    thrown with an empty stack while ${file} was running: ${message}\n\n`,
+      );
+    });
   }
 }

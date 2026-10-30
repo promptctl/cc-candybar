@@ -1,8 +1,10 @@
 // Jest reports through its "agent" reporter when an agent runs it and its
 // "default" one otherwise, but only while no reporter list is configured.
-// [LAW:one-source-of-truth] exception: @jest/core does not export the check
-// (its detectAgent), so the same variables are read here to keep that choice
-// beside the reporter this config adds.
+// [LAW:one-source-of-truth] exception: the list below copies the one
+// @jest/core's detectAgent reads (jest 30.3). jest does not export that check,
+// and a reporter list has no entry for "jest's choice", so keeping the choice
+// beside the reporter this config adds means reading the same variables here.
+// On a jest upgrade, compare this list with detectAgent's.
 const AGENT_ENV_VARS = [
   "AI_AGENT",
   "AUGMENT_AGENT",

@@ -4,8 +4,6 @@
 
 import fs from "node:fs";
 import net from "node:net";
-import os from "node:os";
-import path from "node:path";
 
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { logPath } from "../src/daemon/paths";
@@ -14,11 +12,13 @@ import {
   makeFrameReader,
   PROTOCOL_VERSION,
 } from "../src/daemon/protocol";
+import { REQUEST_TIMEOUT_MS } from "../src/daemon/request-deadline";
 import {
   requestEvent,
   type RequestOutcome,
 } from "../src/daemon/request-event";
 import { click } from "./helpers/daemon-e2e";
+import { prepareIsolatedDaemonEnv } from "./helpers/spawn-isolated-daemon";
 
 interface StandIn {
   readonly sockPath: string;
@@ -26,14 +26,14 @@ interface StandIn {
   close(): Promise<void>;
 }
 
-// A daemon stand-in on an isolated state directory's socket: it answers every
-// click TIMEOUT, as the 200 ms guard does, and logs the click's event a beat
-// later, as the daemon does once a click queued behind its loop has run.
+// A daemon stand-in on an isolated daemon's socket: it answers every click
+// TIMEOUT, as the request guard does, and logs the click's event a beat later,
+// as the daemon does once a click queued behind its loop has run.
 async function timingOut(outcome: RequestOutcome): Promise<StandIn> {
-  const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-clk-"));
-  const env = { XDG_STATE_HOME: stateRoot };
-  const sockPath = path.join(stateRoot, "cc-candybar", "socket");
-  fs.mkdirSync(path.dirname(sockPath), { recursive: true, mode: 0o700 });
+  const { env, sockPath, removeTmpDirs } = prepareIsolatedDaemonEnv("ccb-clk");
+  // A write still pending when the stand-in closes is dropped with it, so no
+  // timer of this file outlives its test.
+  const pending = new Set<NodeJS.Timeout>();
   let clicks = 0;
   const server = net.createServer((sock) => {
     sock.on(
@@ -44,7 +44,7 @@ async function timingOut(outcome: RequestOutcome): Promise<StandIn> {
           sock.end(
             encodeFrame({
               ok: false,
-              error: "request exceeded 200ms",
+              error: `request exceeded ${REQUEST_TIMEOUT_MS}ms`,
               code: "TIMEOUT",
               daemonV: PROTOCOL_VERSION,
             }),
@@ -59,14 +59,14 @@ async function timingOut(outcome: RequestOutcome): Promise<StandIn> {
             outcome,
             1,
           );
-          setTimeout(
-            () =>
-              fs.appendFileSync(
-                logPath(env),
-                `${new Date().toISOString()} [${level}] ${line}\n`,
-              ),
-            100,
-          );
+          const write = setTimeout(() => {
+            pending.delete(write);
+            fs.appendFileSync(
+              logPath(env),
+              `${new Date().toISOString()} [${level}] ${line}\n`,
+            );
+          }, 100);
+          pending.add(write);
         },
         () => {},
       ),
@@ -76,13 +76,15 @@ async function timingOut(outcome: RequestOutcome): Promise<StandIn> {
   return {
     sockPath,
     clicks: () => clicks,
-    close: () =>
-      new Promise<void>((resolve) =>
+    close: () => {
+      for (const write of pending) clearTimeout(write);
+      return new Promise<void>((resolve) =>
         server.close(() => {
-          fs.rmSync(stateRoot, { recursive: true, force: true });
+          removeTmpDirs();
           resolve();
         }),
-      ),
+      );
+    },
   };
 }
 
