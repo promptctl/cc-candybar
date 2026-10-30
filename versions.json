@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-502",
+      "ref": "refs/pull/502/merge",
+      "sha": "477bc7e60f595725434c73a497ed6d59fef95107",
+      "timestamp": "2026-10-30T17:11:42.573Z",
+      "commits": [
+        {
+          "sha": "477bc7e60f595725434c73a497ed6d59fef95107",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T17:10:55Z",
+          "message": "Merge 66c0269c8e92bb6e491a55968f4bef8aac3d8302 into 1bef42323069803286132c18409da954fece2264\n"
+        },
+        {
+          "sha": "66c0269c8e92bb6e491a55968f4bef8aac3d8302",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T10:34:40-06:00",
+          "message": "fix(test): a failure jest would print blank names its message and the file it landed in (brandon-unfiled-3248.cuvv)\n"
+        },
+        {
+          "sha": "1668e9f23508dadff6531cdb4f78ccd5b2c9e0c1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T10:22:49-06:00",
+          "message": "fix(test): a click answered TIMEOUT takes its outcome from the daemon's click event, and is never sent twice (brandon-unfiled-3248.cuvv)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-503",
       "ref": "refs/pull/503/merge",
       "sha": "f852b29ca8cbbfb0a940b83602897aef4f8755bb",
@@ -106,35 +135,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-10-30T16:41:43Z",
           "message": "chore(release): set `package.json` to 1.166.2 [skip ci]\n\n## [1.166.2](https://github.com/promptctl/cc-candybar/compare/v1.166.1...v1.166.2) (2026-10-30)\n\n### Bug Fixes\n\n* **colour:** adjacent row positions never select one tone, and the muted dial gets two (candybar-joiners-e5r4.tx7) ([#494](https://github.com/promptctl/cc-candybar/issues/494)) ([db7ae9e](https://github.com/promptctl/cc-candybar/commit/db7ae9ee8f9ab8e5bcaf98a2977284b727ef5d2f))\n* **test:** a test that SIGKILLs a daemon waits for its session state to be saved (brandon-unfiled-3248.vfhf) ([#500](https://github.com/promptctl/cc-candybar/issues/500)) ([79eac59](https://github.com/promptctl/cc-candybar/commit/79eac595257ef87be616ea19c3ea787386d26db6))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-502",
-      "ref": "refs/pull/502/merge",
-      "sha": "2aa0a47758874969a8f46a2ecad3c6b1981334b1",
-      "timestamp": "2026-10-30T16:38:14.218Z",
-      "commits": [
-        {
-          "sha": "2aa0a47758874969a8f46a2ecad3c6b1981334b1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T10:36:03-06:00",
-          "message": "Merge 88c9c9a5843bc6afceff78a97e8b14cfb4ca7591 into db7ae9ee8f9ab8e5bcaf98a2977284b727ef5d2f\n"
-        },
-        {
-          "sha": "88c9c9a5843bc6afceff78a97e8b14cfb4ca7591",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T10:34:40-06:00",
-          "message": "fix(test): a failure jest would print blank names its message and the file it landed in (brandon-unfiled-3248.cuvv)\n"
-        },
-        {
-          "sha": "16665f584aaaf3747d9f10d3c2ee6eada86f69e6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T10:22:49-06:00",
-          "message": "fix(test): a click answered TIMEOUT takes its outcome from the daemon's click event, and is never sent twice (brandon-unfiled-3248.cuvv)\n"
         }
       ]
     }
