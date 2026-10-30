@@ -62,15 +62,6 @@ export class DroppedFileError extends ConfigError {
   }
 }
 
-// [LAW:single-enforcer] The one maker of a dropped-placement error, so every
-// one carries its prompt.
-export function droppedFileError(
-  file: string,
-  issues: readonly ConfigIssue[],
-): DroppedFileError {
-  return new DroppedFileError(file, issues);
-}
-
 // [LAW:types-are-the-program] What `check` and the demo refuse that the bar
 // draws past: every placement it dropped, as each writing file's own error.
 // An author's refusal like ConfigError, but over several files.

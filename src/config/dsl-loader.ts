@@ -40,9 +40,8 @@ import {
   findKeyLine,
   keyLocator,
   DroppedPlacements,
-  droppedFileError,
+  DroppedFileError,
   type ConfigIssue,
-  type DroppedFileError,
 } from "./loader/diagnostics.js";
 import {
   describeType,
@@ -104,17 +103,17 @@ import {
   withDroppedPlacements,
   dropsOwning,
   type DroppedPlugin,
-  type NamedDefinition,
   type PluginDefinition,
   type PluginLayer,
 } from "./loader/plugins.js";
 import {
   ownedBy,
+  type NamedDefinition,
   type PluginScope,
   type SegmentPresence,
 } from "./loader/plugin-scope.js";
 import { installedPlugins } from "./loader/plugin-folders.js";
-import { presenceOf, withoutUnplaced } from "./loader/unplaced.js";
+import { presenceOf, reportable, withoutUnplaced } from "./loader/unplaced.js";
 import type { ApprovedRepo } from "./loader/repo-gate.js";
 import { type Checkout, checkoutOf } from "../utils/git-root.js";
 
@@ -265,6 +264,7 @@ export function loadConfigSource(
   const standing = withDroppedPlacements(
     mergeWithDefault(parsed.raw, plugins.config),
     owning,
+    (parsed.raw.insert ?? []).map((cell) => cell.seg),
   );
   return {
     source,
@@ -619,7 +619,6 @@ function checkPlugin(
     groups: [],
     unplaced: [],
     inherited: [],
-    presence: () => ({ kind: "missing" }),
   };
   validateDeclarations(ctx, config, templateScopeOf(config), owned);
   validateNoCycles(ctx, config, owned);
@@ -790,7 +789,6 @@ function judgeRenderable(
     groups: [],
     unplaced: [],
     inherited: [],
-    presence,
   };
   // [LAW:single-enforcer] The one refusal every stage throws through, so the
   // drops ride with whichever issue refuses the config.
@@ -803,10 +801,17 @@ function judgeRenderable(
       );
     }
   };
-  validateCrossReferences(ctx, merged, raw);
+  validateCrossReferences(ctx, merged, raw, presence);
   validateNoCycles(ctx, merged);
   refuseIfIssues();
-  const dropped = droppedByFile(filePath, merged.segments, ctx, beneath, filed);
+  const dropped = droppedByFile(
+    filePath,
+    merged.segments,
+    ctx,
+    presence,
+    beneath,
+    filed,
+  );
   // [LAW:dataflow-not-control-flow] Every undeclared placement leaves the
   // tree, reported or not: a cell whose plugin is absent here is no error, so
   // nothing was dropped, yet it must not reach the renderer. A config with
@@ -875,15 +880,20 @@ function layerInserts(
   readonly dropped: readonly FiledIssue[];
 } {
   const layers = [...beneath].reverse().concat(top);
+  // [LAW:dataflow-not-control-flow] A cell anchored on a placement whose
+  // plugin is absent is absent with it: its anchor draws nothing here, so
+  // neither does it, and neither is an error (unplaced.ts reportable).
+  const anchored = (cell: InsertCell): boolean =>
+    presence(cell.anchor).kind !== "absent";
+  // [LAW:single-enforcer] A cell naming the bar's chrome (the settings menu's
+  // anchor among it) never gets here: the parse refuses it (loader/layout.ts).
   const declared = (cell: InsertCell): boolean =>
     presence(cell.seg).kind === "declared";
-  // [LAW:no-silent-failure] exception: an absent plugin is data, like a false when — a home config may place a repo's cells for every repo it is used in; a plugin that failed to load is already reported by its own drop notice
-  const broken = (cell: InsertCell): boolean => {
-    const kind = presence(cell.seg).kind;
-    return kind === "plugin" || kind === "missing";
-  };
+  const broken = (cell: InsertCell): boolean => reportable(presence(cell.seg));
+  const own = (layer: AuthoredLayer): readonly InsertCell[] =>
+    (layer.raw.insert ?? []).filter(anchored);
   return {
-    cells: layers.flatMap((layer) => (layer.raw.insert ?? []).filter(declared)),
+    cells: layers.flatMap((layer) => own(layer).filter(declared)),
     authored: {
       root: layers.some((layer) => layer.raw.root !== undefined),
       presets: new Set(
@@ -893,19 +903,21 @@ function layerInserts(
     // One locator per layer, so its source is parsed at most once.
     dropped: layers.flatMap((layer) => {
       const lineOf = keyLocator(layer.source);
-      return (layer.raw.insert ?? []).filter(broken).map((cell) => ({
-        file: layer.path,
-        issue: {
-          path: cell.by.entry,
-          message: unplacedMessage(
-            cell.by.entry,
-            cell.seg,
-            top.config.segments,
-            presence(cell.seg),
-          ),
-          line: lineOf(cell.by.entry.split(".")),
-        },
-      }));
+      return own(layer)
+        .filter(broken)
+        .map((cell) => ({
+          file: layer.path,
+          issue: {
+            path: cell.by.entry,
+            message: unplacedMessage(
+              cell.by.entry,
+              cell.seg,
+              top.config.segments,
+              presence(cell.seg),
+            ),
+            line: lineOf(cell.by.entry.split(".")),
+          },
+        }));
     }),
   };
 }
@@ -926,6 +938,7 @@ function droppedByFile(
   // The segments the merged config declares.
   segments: DslConfig["segments"],
   ctx: ValidateCtx,
+  presence: (name: string) => SegmentPresence,
   beneath: readonly AuthoredLayer[],
   // Insert cells already filed against the file that wrote them.
   filed: readonly FiledIssue[],
@@ -949,12 +962,14 @@ function droppedByFile(
           author.layoutKey,
           name,
           segments,
-          ctx.presence(name),
+          presence(name),
         ),
         line: findKeyLine(author.layer.source, author.path.split(".")),
       });
   }
-  return [...byFile].map(([file, issues]) => droppedFileError(file, issues));
+  return [...byFile].map(
+    ([file, issues]) => new DroppedFileError(file, issues),
+  );
 }
 
 /**
@@ -1021,7 +1036,6 @@ function parseDslFile<L>(
     groups: [],
     unplaced: [],
     inherited: [],
-    presence: () => ({ kind: "missing" }),
   };
 
   // ── Stage 2: top-level shape + per-record shape. Absence survives as

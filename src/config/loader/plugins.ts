@@ -141,7 +141,6 @@ const PLUGIN_NAME = /^[a-z][a-z0-9_]*$/;
 
 // A definition, named (plugin-scope.ts) or not: its name is undefined when its
 // folder's name cannot be a plugin's.
-export type { NamedDefinition };
 export type PluginDefinition =
   | NamedDefinition
   | {
@@ -417,12 +416,18 @@ export function dropsOwning(
 export function withDroppedPlacements(
   config: DslConfig,
   owning: (name: string) => readonly DropCause[],
+  // [LAW:one-type-per-behavior] The segments the layer's own `insert` cells
+  // place: a placement like any in a tree, so a dropped plugin's cell stands
+  // in and reaches its drop the same way. A lower layer's cells reach theirs
+  // on that layer, and its stand-ins carry up through `segments`.
+  inserted: readonly string[],
 ): { readonly config: DslConfig; readonly reached: ReadonlySet<string> } {
   const placements = presetNames(config.presets)
     .flatMap((preset) => [...walkNodes(presetRoot(config, preset).node)])
     .flatMap((node) => (node.kind === "segment" ? [node] : []));
   const names = new Set([
     ...placements.map((n) => n.name),
+    ...inserted,
     ...Object.keys(config.segments),
   ]);
   // A name a drop owns has no declaration but a stand-in (the drop removed
@@ -637,7 +642,6 @@ function fragmentOf(
     groups: [],
     unplaced: [],
     inherited: [],
-    presence: () => ({ kind: "missing" }),
   };
   // [LAW:one-source-of-truth] The data variable is parsed by the validator
   // every `file` source goes through, from the declaration a user would write.

@@ -221,16 +221,26 @@ describe("a config that cannot be drawn as written", () => {
     await click(sockPath, viewerLink(shown, "‹")!.url);
     shown = await render(sockPath, sid, projectDir, hints, a);
     expect(pageOf(shown).position).toBe("1/2");
-    const copies = linkUrls(shown)
-      .flatMap((u) => effectsOf(u))
-      .filter((e) => e.verb === "copy");
-    // ⧉ and the message's first line both copy the prompt that fixes it.
-    expect(copies.length).toBeGreaterThan(0);
-    for (const c of copies) expect(c.args).toEqual(copies[0]!.args);
-    expect(copies[0]!.args[0]).toMatch(
-      /^Fix my cc-candybar statusline config\.[\s\S]*Config file to edit: .*many\.json5\n\nInvalid config in .*many\.json5[\s\S]*first-missing-segment[\s\S]*second-missing[\s\S]*Edit only the config file/,
+    const copyUrls = linkUrls(shown).filter((u) =>
+      effectsOf(u).some((e) => e.verb.startsWith("copy")),
     );
-    expect(copies[0]!.args[0]).not.toContain("duplicate key");
+    const copies = copyUrls.flatMap((u) => effectsOf(u));
+    // ⧉ and the message's first line both name the message by its key; the
+    // daemon reads the prompt that fixes it when the click runs, so no link
+    // carries it and the frame's bytes do not grow with it.
+    expect(copies.length).toBeGreaterThan(1);
+    for (const c of copies)
+      expect(c).toEqual({
+        verb: "copy-diagnostic",
+        args: [sid, expect.any(String)],
+      });
+    for (const c of copies) expect(c.args).toEqual(copies[0]!.args);
+    for (const u of copyUrls) expect(u.length).toBeLessThan(200);
+    expect(shown).not.toContain("Fix my cc-candybar");
+    // A key no draw lists (the message fixed since) is refused loudly.
+    await expect(
+      click(sockPath, copyUrls[0]!.replace(String(copies[0]!.args[1]), "1")),
+    ).rejects.toThrow(/no longer listed/);
     await click(sockPath, viewerLink(shown, "✕")!.url);
   });
 });

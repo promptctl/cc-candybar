@@ -33,16 +33,29 @@ export function presenceOf(
   segments: Readonly<Record<string, unknown>>,
   rendering: ReadonlyMap<string, NamedDefinition>,
 ): (name: string) => SegmentPresence {
+  const owners = [...rendering].map(
+    ([ns, definition]) => [ownedBy(ns), definition] as const,
+  );
   return (name) => {
     if (isSettingsAnchor(name) || Object.hasOwn(segments, name))
       return { kind: "declared" };
-    const owner = [...rendering].find(([ns]) => ownedBy(ns)(name));
+    const owner = owners.find(([owns]) => owns(name));
     if (owner !== undefined) return { kind: "plugin", definition: owner[1] };
     const scope = scopeOf(name);
     return scope !== undefined && scope !== name
       ? { kind: "absent" }
       : { kind: "missing" };
   };
+}
+
+// Whether a placement of a name that does not render is an error: one a
+// present plugin does not declare, or one nothing explains.
+// [LAW:no-silent-failure] exception: a name under a plugin absent from the
+// session is data, like a false `when`, because a home config may place a
+// repo's cells for every repo it is used in. A plugin that failed to load is
+// not absent: a stand-in declares each of its placed names and draws the drop.
+export function reportable(presence: SegmentPresence): boolean {
+  return presence.kind === "plugin" || presence.kind === "missing";
 }
 
 // `config` with every placement of an undeclared segment removed from its

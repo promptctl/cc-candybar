@@ -15,7 +15,11 @@
 import { createHash } from "node:crypto";
 
 import { RichText, Style, asCellCol, chopCells } from "@promptctl/rich-js";
-import { effectsUrl, VERB_COPY, VERB_SET_STATE } from "../click/wire.js";
+import {
+  effectsUrl,
+  VERB_COPY_DIAGNOSTIC,
+  VERB_SET_STATE,
+} from "../click/wire.js";
 import { DIAGNOSTICS_VIEWING } from "../config/door.js";
 import { sanitizeText } from "./diagnostic-text.js";
 import {
@@ -76,8 +80,10 @@ export const HANDOFF_SEVERITY: DiagnosticSeverity = {
 };
 
 // [LAW:parse-dont-validate] A run of words sharing one click, or none: a plain
-// message.s first line copies what ⧉ copies, its other lines carry no click
-// (one link per message bounds a frame.s bytes), while an update notice.s and a repository question's answers each carry their own. The text
+// message's first line copies what ⧉ copies and its other lines carry no
+// click, while an update notice's and a repository question's answers each
+// carry their own. A copy click names its message by key, never by the text
+// it copies, so a frame's bytes do not grow with that text. The text
 // is sanitized at construction — `diagnosticSpan` is the only constructor — so
 // every span the viewer meets is already safe to emit, whatever produced it.
 export interface DiagnosticSpan {
@@ -123,41 +129,69 @@ export interface SourcedText {
 // nothing visible in it — empty, whitespace, control characters — is no
 // message, decided here.
 export function collectDiagnostics(
+  sessionId: string,
   errors: readonly SourcedText[],
   notices: readonly DiagnosticMessage[],
   warnings: readonly SourcedText[],
 ): DiagnosticList {
-  return [
-    ...errors.flatMap((e) => plainMessage(e, ERROR_SEVERITY)),
+  const plain = new Set<DiagnosticMessage>();
+  const plainOf = (
+    text: SourcedText,
+    severity: DiagnosticSeverity,
+  ): DiagnosticMessage[] => {
+    const made = plainMessage(text, severity);
+    for (const m of made) plain.add(m);
+    return made;
+  };
+  const list = [
+    ...errors.flatMap((e) => plainOf(e, ERROR_SEVERITY)),
     ...notices,
-    ...warnings.flatMap((w) => plainMessage(w, WARNING_SEVERITY)),
+    ...warnings.flatMap((w) => plainOf(w, WARNING_SEVERITY)),
   ];
+  // A message's key depends on the whole list (which occurrence it is), so
+  // its first line's click is minted once the list stands.
+  const keys = copyKeys(list);
+  return list.map((m, i) =>
+    plain.has(m)
+      ? {
+          ...m,
+          lines: [
+            [diagnosticSpan(m.lines[0][0].text, copyLink(sessionId, keys[i]!))],
+            ...m.lines.slice(1),
+          ],
+        }
+      : m,
+  );
 }
 
-// A plain message: every visible line one span, the first a click that copies
-// what ⧉ copies and the rest none. Blank lines are dropped; a message with no
-// visible line is none.
-export function plainMessage(
+// A plain message: every visible line one span with no click (its first
+// gains the copy click once the list stands). Blank lines are dropped; a
+// message with no visible line is none.
+function plainMessage(
   { about, text: message, copy }: SourcedText,
   severity: DiagnosticSeverity,
 ): DiagnosticMessage[] {
   const [first, ...rest] = message
     .split(/\r\n|\r|\n/)
-    .filter((line) => diagnosticSpan(line, null).text !== "");
-  if (first === undefined) return [];
-  const copyLink = effectsUrl([{ verb: VERB_COPY, args: [copy] }]);
-  return [
-    {
-      severity,
-      about,
-      message,
-      copy,
-      lines: [
-        [diagnosticSpan(first, copyLink)],
-        ...rest.map((line): DiagnosticLine => [diagnosticSpan(line, null)]),
-      ],
-    },
-  ];
+    .map((line) => diagnosticSpan(line, null))
+    .filter((span) => span.text !== "")
+    .map((span): DiagnosticLine => [span]);
+  return first === undefined
+    ? []
+    : [{ severity, about, message, copy, lines: [first, ...rest] }];
+}
+
+// [LAW:one-source-of-truth] The key a copy click names each message by: the
+// key the viewer opens it at, so one identity names a message for both.
+export function copyKeys(list: DiagnosticList): readonly string[] {
+  return stopsOf(list).map((stop) => String(stop * PAGES + 1));
+}
+
+// [LAW:single-enforcer] The one click that copies a message, for ⧉ and its
+// first line alike: the daemon reads what it copies from the session's last
+// draw when the click runs.
+function copyLink(sessionId: string, key: string): string {
+  return effectsUrl([{ verb: VERB_COPY_DIAGNOSTIC, args: [sessionId, key] }]);
 }
 
 // The level the list counts as: the worst of its members, none when empty.
@@ -343,7 +377,7 @@ export function viewerRows(
         ...(steps ? [step("‹", back)] : []),
         button(position, null),
         ...(steps ? [step("›", on)] : []),
-        button("⧉ copy", effectsUrl([{ verb: VERB_COPY, args: [shown.copy] }])),
+        button("⧉ copy", copyLink(sessionId, viewerKey(list, index - 1, 0))),
       ],
       opts,
     );

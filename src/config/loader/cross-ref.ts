@@ -93,6 +93,7 @@ import {
   retiredVariableMessage,
 } from "./retired-variables.js";
 import { SYNTAX_ENGINE } from "./syntax-engine.js";
+import { reportable } from "./unplaced.js";
 import { type ValidateCtx } from "./validate-core.js";
 import { authoredRules, instantReadOf, projectionsOf } from "./projections.js";
 import {
@@ -234,6 +235,9 @@ export function validateCrossReferences(
   ctx: ValidateCtx,
   cfg: DslConfig,
   authored: RawDslConfig,
+  // [LAW:single-enforcer] What a placed name is in the session the config
+  // renders for (unplaced.ts presenceOf).
+  presence: (name: string) => SegmentPresence,
 ): void {
   // [LAW:locality-or-seam] globals.style names a member of the MERGED styles
   // block (a user's default may be a bundled style — same reason every cross-ref
@@ -400,7 +404,8 @@ export function validateCrossReferences(
     // no id: one bad name costs its own cell and is reported as a drop.
     const byId = new Map<string, SegmentNode[]>();
     for (const node of walkNodes(tree)) {
-      if (node.kind !== "segment" || !declared(node.name)) continue;
+      if (node.kind !== "segment" || presence(node.name).kind !== "declared")
+        continue;
       const id = placementId(node);
       byId.set(id, [...(byId.get(id) ?? []), node]);
     }
@@ -475,9 +480,6 @@ export function validateCrossReferences(
   // wrote that names no declared segment. The undeclared names reported, so
   // each is told once.
   const reported = new Set<string>();
-  const declared = (name: string): boolean =>
-    isSettingsAnchor(name) ||
-    Object.prototype.hasOwnProperty.call(cfg.segments, name);
   const checkLayoutTree = (root: RootFragment, layoutKey: string): void => {
     const top = fragmentNode(root);
     const rows = isRowsFragment(root)
@@ -520,18 +522,12 @@ export function validateCrossReferences(
         }
         continue;
       }
-      const presence = ctx.presence(node.name);
-      // [LAW:no-silent-failure] exception: an absent plugin is data, like a false when — a home config may place a repo's cells for every repo it is used in; a plugin that failed to load is already reported by its own drop notice
-      if (presence.kind === "plugin" || presence.kind === "missing") {
+      const placed = presence(node.name);
+      if (reportable(placed)) {
         reported.add(node.name);
         ctx.unplaced.push({
           path,
-          message: unplacedMessage(
-            layoutKey,
-            node.name,
-            cfg.segments,
-            presence,
-          ),
+          message: unplacedMessage(layoutKey, node.name, cfg.segments, placed),
           line,
         });
       }
@@ -565,9 +561,8 @@ export function validateCrossReferences(
   for (const [key, tree] of rendered) {
     for (const [node] of walkNodePaths(tree, key)) {
       if (node.kind !== "segment" || reported.has(node.name)) continue;
-      const presence = ctx.presence(node.name);
-      // [LAW:no-silent-failure] exception: an absent plugin is data, like a false when — a home config may place a repo's cells for every repo it is used in; a plugin that failed to load is already reported by its own drop notice
-      if (presence.kind === "declared" || presence.kind === "absent") continue;
+      const placed = presence(node.name);
+      if (!reportable(placed)) continue;
       reported.add(node.name);
       ctx.inherited.push({
         name: node.name,
@@ -576,7 +571,7 @@ export function validateCrossReferences(
           `${key} inherits from a config layer below whose`,
           node.name,
           cfg.segments,
-          presence,
+          placed,
         ),
         line: findKeyLine(ctx.source, key.split(".")),
       });

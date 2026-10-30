@@ -10,6 +10,7 @@ import { RichText } from "@promptctl/rich-js";
 import {
   APPROVAL_SEVERITY,
   collectDiagnostics as collectSourced,
+  copyKeys,
   diagnosticSpan,
   diagnosticsProjection,
   ERROR_SEVERITY,
@@ -39,7 +40,7 @@ const collectDiagnostics = (
   errors: readonly string[],
   notices: readonly DiagnosticMessage[],
   warnings: readonly string[],
-) => collectSourced(errors.map(sourced), notices, warnings.map(sourced));
+) => collectSourced(SID, errors.map(sourced), notices, warnings.map(sourced));
 const at = (index: number) => ({ index, page: 0 });
 const geometry = (width: number): DiagnosticGeometry => ({
   width,
@@ -173,6 +174,7 @@ describe("the viewer", () => {
     ) =>
       viewerKey(
         collectSourced(
+          SID,
           errors.map((e) => ({ ...e, copy: e.text })),
           [],
           warnings.map((w) => ({ ...w, copy: w.text })),
@@ -264,7 +266,9 @@ describe("the viewer", () => {
     expect(header(2)).toBe("✕ ‹ [2/3] › ⧉ copy ");
     expect(header(3)).toBe("✕ ‹ [3/3]   ⧉ copy ");
     const writes = links(viewerRows(list, at(2), SID, geometry(80)))
-      .filter((l) => effectsOf(l.url).every((e) => e.verb !== "copy"))
+      .filter((l) =>
+        effectsOf(l.url).every((e) => e.verb !== "copy-diagnostic"),
+      )
       .map((l) => [stripAnsi(l.text).trim(), effectsOf(l.url)]);
     const [a, , c] = list.map((_, i) => viewerKey(list, i, 0));
     expect(writes).toEqual([
@@ -293,45 +297,49 @@ describe("the viewer", () => {
     }
   });
 
-  test("⧉ and the message's first line copy the viewed message verbatim, and nothing else in it clicks", () => {
+  test("⧉ and the message's first line copy the viewed message by its key, and nothing else in it clicks", () => {
     const list = collectDiagnostics([ERROR, "second"], [], []);
+    const own = {
+      verb: "copy-diagnostic",
+      args: [SID, copyKeys(list)[0]],
+    };
     const out = viewerRows(list, at(1), SID, geometry(60));
     const copies = linkUrls(out)
       .flatMap((u) => effectsOf(u))
-      .filter((e) => e.verb === "copy");
+      .filter((e) => e.verb.startsWith("copy"));
     expect(copies.length).toBeGreaterThan(1);
-    for (const c of copies) expect(c).toEqual({ verb: "copy", args: [ERROR] });
+    for (const c of copies) expect(c).toEqual(own);
     // Only the first line's words click; the issue lines below carry none.
     const bodyLinks = links(out.split("\n").slice(1).join("\n"));
     const firstLine = ERROR.split("\n")[0]!;
     for (const l of bodyLinks) {
       expect(firstLine).toContain(stripAnsi(l.text).trim().split(" ")[0]);
-      expect(effectsOf(l.url)).toEqual([{ verb: "copy", args: [ERROR] }]);
+      expect(effectsOf(l.url)).toEqual([own]);
     }
+    // The key is the one the viewer opens the message at.
+    expect(copyKeys(list)[0]).toBe(viewerKey(list, 0, 0));
   });
 
-  test("a message whose copy is a prompt copies the prompt, from ⧉ and its first line alike", () => {
+  test("a copy link names its message, never the text it copies, so a long prompt costs a frame nothing", () => {
+    const prompt = "FIX PROMPT ".repeat(1000);
     const list = collectSourced(
+      SID,
       [
         {
           about: "dropped",
           text: 'root entry "x" is broken\nmore',
-          copy: "FIX PROMPT",
+          copy: prompt,
         },
       ],
       [],
       [],
     );
+    expect(list[0]!.copy).toBe(prompt);
     expect(list[0]!.lines[0]![0].link).not.toBeNull();
-    expect(effectsOf(list[0]!.lines[0]![0].link!)).toEqual([
-      { verb: "copy", args: ["FIX PROMPT"] },
-    ]);
+    expect(list[0]!.lines[0]![0].link!.length).toBeLessThan(200);
     expect(list[0]!.lines[1]![0].link).toBeNull();
-    const copies = linkUrls(viewerRows(list, at(1), SID, geometry(80)))
-      .flatMap((u) => effectsOf(u))
-      .filter((e) => e.verb === "copy");
-    expect(copies.length).toBeGreaterThan(0);
-    for (const c of copies) expect(c.args).toEqual(["FIX PROMPT"]);
+    for (const url of linkUrls(viewerRows(list, at(1), SID, geometry(80))))
+      expect(url).not.toContain("FIX");
   });
 
   test("a message's control characters are neutralized before they reach the terminal", () => {

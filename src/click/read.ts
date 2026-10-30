@@ -14,6 +14,7 @@ import {
   VERB_APPLY_UPDATE,
   VERB_RUN,
   VERB_COPY,
+  VERB_COPY_DIAGNOSTIC,
   VERB_DISPATCH,
   VERB_LOAD_CONFIG,
   VERB_OPEN_VSCODE,
@@ -163,6 +164,7 @@ export function describeLink(link: DrawnLink, sessionId: string): string {
  */
 export const HOST_VERBS: ReadonlyMap<string, string> = new Map([
   [VERB_COPY, "copies to the clipboard"],
+  [VERB_COPY_DIAGNOSTIC, "copies a diagnostic to the clipboard"],
   [VERB_OPEN_VSCODE, "opens a file in VS Code"],
   [VERB_APPLY_UPDATE, "rebuilds cc-candybar"],
   [VERB_RUN, "runs a program the config declares"],

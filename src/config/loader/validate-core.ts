@@ -13,7 +13,6 @@ import {
   type SourceKind,
 } from "../dsl-types.js";
 import { findKeyLine, type ConfigIssue } from "./diagnostics.js";
-import { type SegmentPresence } from "./plugin-scope.js";
 import { retiredThemeNote } from "../../themes/policy.js";
 
 export interface ValidateCtx {
@@ -34,10 +33,6 @@ export interface ValidateCtx {
   // each with its issue under that tree: the loader reports each against the
   // file that wrote it.
   readonly inherited: Array<ConfigIssue & { readonly name: string }>;
-  // [LAW:single-enforcer] What a placed name is in the session the config
-  // renders for (plugin-scope.ts): the layout walk reports a placement only
-  // when it is broken, never when its plugin is simply not here.
-  readonly presence: (name: string) => SegmentPresence;
 }
 
 export type Mutable<T> = { -readonly [K in keyof T]: T[K] };

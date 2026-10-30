@@ -209,6 +209,7 @@ import { productionLaneEdge } from "./lane-edge.js";
 import { handedOffTo, laneHandoff } from "./lane-handoff.js";
 import {
   collectDiagnostics,
+  copyKeys,
   type SourcedText,
   diagnosticsProjection,
   handoffRows,
@@ -1758,6 +1759,8 @@ const verbCtx = {
         origin.configFile ?? undefined,
       ),
   },
+  diagnosticCopy: (sessionId: string, key: string) =>
+    renderCache.drawnCopy(sessionId, key),
 };
 
 /**
@@ -2390,30 +2393,26 @@ function drawRender(
   // viewer (an issue fixed) without becoming another message; a request's
   // refusal, its hints' and a click's are about exactly what their text says.
   // Each copies its own text, but a drop copies the prompt that fixes it.
-  const said = (text: string | null | undefined) => ({ about: text, text });
-  const shown = (
-    ...all: ReadonlyArray<{
-      about: string | null | undefined;
-      text: string | null | undefined;
-    }>
-  ): SourcedText[] =>
-    all.flatMap(({ about, text }) =>
-      about && text ? [{ about, text, copy: text }] : [],
-    );
-  const errors = [
-    ...shown(
-      said(refusedArgsError(req.refusedArgs)),
-      said(hintsError),
-      { about: "load", text: entry.lastError },
-      { about: "update-act", text: updateWatch.error() },
-    ),
+  const sourced = (about: string, text: string | null | undefined) => ({
+    about,
+    text,
+    copy: text,
+  });
+  const said = (text: string | null | undefined) => sourced(text ?? "", text);
+  const errors: SourcedText[] = [
+    said(refusedArgsError(req.refusedArgs)),
+    said(hintsError),
+    sourced("load", entry.lastError),
+    sourced("update-act", updateWatch.error()),
     ...state.dropped.map((e) => ({
       about: `dropped\0${e.file}`,
       text: e.message,
       copy: e.prompt,
     })),
-    ...shown(said(clickShown?.text)),
-  ];
+    said(clickShown?.text),
+  ].flatMap(({ about, text, copy }) =>
+    about && text && copy ? [{ about, text, copy }] : [],
+  );
   // What stands before the draw: whether the daemon can vouch that a config
   // edit reloads and that what it launches dies with it, and the warning this
   // config's load carried.
@@ -2434,6 +2433,7 @@ function drawRender(
   // session (src/daemon/render-warnings.ts).
   const scope = { config: state.config };
   const diagnostics = collectDiagnostics(
+    sessionId,
     errors,
     [...updates, ...questions],
     [
@@ -2445,6 +2445,12 @@ function drawRender(
       copy: w.message,
     })),
   );
+  // [LAW:one-source-of-truth] What each copy click this draw mints copies,
+  // read back when the click runs (the copy-diagnostic verb): the list the
+  // session was last shown, never text carried in the link.
+  const keys = copyKeys(diagnostics);
+  view.drawnCopies.clear();
+  diagnostics.forEach((m, i) => view.drawnCopies.set(keys[i]!, m.copy));
   const projected = {
     diagnostics: diagnosticsProjection(diagnostics),
     drawing,

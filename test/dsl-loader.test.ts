@@ -959,7 +959,7 @@ describe("loadDslConfig — the parse step of shell/file sources", () => {
     // an exotic object with no own enumerable fields is not a document.
     const issues: ConfigIssue[] = [];
     validateVariables(
-      { source: "", issues, allowedPalettes: new Set(), groups: [], unplaced: [], inherited: [], presence: () => ({ kind: "missing" }) },
+      { source: "", issues, allowedPalettes: new Set(), groups: [], unplaced: [], inherited: [] },
       "variables",
       {
         x: {

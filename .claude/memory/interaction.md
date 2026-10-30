@@ -59,3 +59,7 @@ The click is answered at once and the program runs after it. Its failure therefo
 ## A failed click's error
 
 A failed click's error shows for a few seconds of reruns, and after that until an answer has actually carried it to a client. With no refresh interval, Claude Code asks only on events, so a time limit alone could expire the error before anyone sees it. It counts as delivered only once an answer carrying it has been flushed successfully.
+
+## Copying a diagnostic
+
+A diagnostic's copy click carries the message's key, never its text, and the daemon reads the text from the session's last draw when the click runs. Every word cell of a line repeats its link, and terminals drop OSC 8 links past a couple of kilobytes, so a fix prompt carried in the link would multiply a frame's bytes and then silently stop clicking.

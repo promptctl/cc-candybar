@@ -33,6 +33,7 @@ import { answerRepo } from "./helpers/repo-approval";
 import { repoGateAt } from "../src/daemon/repo-configs";
 import { installFromRepo } from "../src/plugin-install";
 import { bindSelf } from "../src/config/loader/refs";
+import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 
 let dir: string;
 beforeEach(() => {
@@ -880,6 +881,45 @@ describe("an installed plugin", () => {
     const message = fatal(await checkConfig(placing("plugins.empty.s"), dir));
     expect(message).toContain("1 plugin did not load");
     expect(message).toContain(notice);
+  });
+
+  test("an insert cell placing a broken one's segment reaches the drop as a tree placement does: ⚠ naming it", async () => {
+    install("data", "lit", `{ data: "./d.json", segments: { ticket: { template: "{{ if }}" } } }`);
+    const p = write(
+      "config.json5",
+      `{ segments: { mine: { template: "mine-here" } }, root: { h: ["mine"] }, insert: [{ seg: "plugins.lit.ticket", after: "mine" }] }`,
+    );
+    const notice = `plugin ${path.join(dir, "data/cc-candybar/plugins/lit/plugin.json5")} was not loaded`;
+    const message = fatal(await checkConfig(p, dir));
+    expect(message).toContain("1 plugin did not load");
+    expect(message).toContain(notice);
+    const prepared = await prepareConfig([p], NO_REPO, dir, [], instantOf(new Date()));
+    try {
+      expect(prepared.droppedPlugins).toHaveLength(1);
+      expect(prepared.config.segments["plugins.lit.ticket"]!.template).toContain(notice);
+    } finally {
+      prepared.registry.dispose();
+    }
+  });
+
+  test("an insert cell anchored on an absent plugin's cell is absent with it: not drawn, no ⚠", async () => {
+    const p = write(
+      "config.json5",
+      `{ segments: { mine: { template: "MINE" }, two: { template: "TWO" } }, root: { h: ["mine", "repo.lit.ticket"] }, insert: [{ seg: "two", after: "repo.lit.ticket" }] }`,
+    );
+    const { rendered, warnings } = clean(await checkConfig(p, dir));
+    expect(rendered).toContain("MINE");
+    expect(rendered).not.toContain("TWO");
+    expect(rendered).not.toContain("⚠");
+    expect(warnings).toEqual([]);
+  });
+
+  test("the settings menu's anchor is refused as an insert cell", async () => {
+    const p = write(
+      "config.json5",
+      `{ segments: { mine: { template: "MINE" } }, root: { h: ["mine"] }, insert: [{ seg: "${SETTINGS_ANCHOR}", after: "mine" }] }`,
+    );
+    expect(fatal(await checkConfig(p, dir))).toContain(`an insert cell places a segment, and "${SETTINGS_ANCHOR}" is the bar's own chrome`);
   });
 
   // Nobody asked for a plugin nothing places: a broken one a package manager

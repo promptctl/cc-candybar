@@ -6,7 +6,11 @@
 import { HEALTHY_BUNDLE } from "./doctor-facts";
 import { TEST_SIGNER } from "./link-signer";
 import { NavigationHistory } from "../../src/daemon/navigation-history";
-import { HEALTHY_INSTALL_EDGE, HEALTHY_SERVING, noManagedSettings } from "./doctor-facts";
+import {
+  HEALTHY_INSTALL_EDGE,
+  HEALTHY_SERVING,
+  noManagedSettings,
+} from "./doctor-facts";
 import { parseHandlerUrl } from "../../src/install/index";
 import {
   VERBS,
@@ -32,11 +36,18 @@ const NO_LANES = Object.fromEntries(
 
 // The record a session's render leaves behind, which a click resolves its
 // config from: a session only clicks links its own render drew.
-export function recordRender(sessionState: SessionStateRW, sessionId: string): void {
+export function recordRender(
+  sessionState: SessionStateRW,
+  sessionId: string,
+): void {
   sessionState.set(
     sessionId,
     SESSION_RENDER_ORIGIN_KEY,
-    encodeRenderOrigin({ projectDir: "/tmp/proj", cwd: "/tmp/proj", configFile: null }),
+    encodeRenderOrigin({
+      projectDir: "/tmp/proj",
+      cwd: "/tmp/proj",
+      configFile: null,
+    }),
   );
 }
 
@@ -179,6 +190,8 @@ export function testVerbContext(
     },
     // No render cache here, so no session has a view to move.
     views: { follow: () => {} },
+    // No draw here lists a diagnostic, so a copy-diagnostic click is refused.
+    diagnosticCopy: () => undefined,
   };
 }
 
