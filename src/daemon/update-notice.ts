@@ -49,7 +49,7 @@ import {
   type BuildCurrency,
   type SourceStamp,
 } from "./build-currency";
-import type { LogLevel } from "../utils/logger";
+import { changeLogger, type LogLevel } from "../utils/logger";
 import { BadVerbArgs } from "./verb-error";
 import { registerConfigValidator } from "./verbs/config-validators";
 import { registerStateValidator } from "./verbs/state-validators";
@@ -279,6 +279,8 @@ export interface UpdateWatch {
   // The apply-update verb's effect. Throws BadVerbArgs when there is nothing
   // to apply or an act is already running.
   act(): void;
+  // Whether an act's child is running now.
+  running(): boolean;
 }
 
 // A build or an install is a long child; ten minutes is generous for either
@@ -318,19 +320,6 @@ function describeRelease(c: Currency): [LogLevel, string] {
     case "unchecked":
       return ["warn", `release: unchecked: ${c.reason}`];
   }
-}
-
-// [LAW:one-type-per-behavior] A log line that repeats only on change, one
-// per channel — the steady state of a one-minute clock is silence.
-function changeLogger(
-  log: UpdateWatchOptions["log"],
-): (entry: [LogLevel, string]) => void {
-  let last: string | null = null;
-  return ([level, msg]) => {
-    if (msg === last) return;
-    last = msg;
-    log(level, msg);
-  };
 }
 
 // The last non-empty line of a stream — where a build tool puts its verdict.
@@ -442,6 +431,7 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
       }
     },
     notice: (ctx) => updateNotice(current(), act, ctx),
+    running: () => act.kind === "running",
     act() {
       const update = current();
       if (update === null) {

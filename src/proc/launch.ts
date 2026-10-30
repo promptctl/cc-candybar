@@ -26,11 +26,14 @@
 // or the caller's `signal`) reaches everything it spawned: `sh -c "sleep 5;
 // echo x"` keeps `sh` as the parent and `sleep` as a grandchild, and signalling
 // `sh` alone would orphan the `sleep`. The price is that a terminal's SIGINT
-// no longer reaches a foreground CLI's children through the tty: a child ends
-// by its timeout, its caller's `signal`, or its own exit.
+// no longer reaches a foreground CLI's children through the tty, and nothing
+// aimed at the launcher's own group reaches them either: a child ends by its
+// timeout, its caller's `signal`, its own exit, or the lifeline (below) when
+// the process that launched it ends.
 
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
+import type { Socket } from "node:net";
 import { types } from "node:util";
 import type { ChildProcess, StdioOptions } from "node:child_process";
 
@@ -138,6 +141,10 @@ export const LAUNCH_CATEGORIES = [
   "lane.tmux",
   "lane.claude",
   "lane.process",
+  // The launcher's lifeline (below): one per process that launches, and one
+  // more each time a lost one is replaced. Metered for its spawn alone, so
+  // every replacement counts in daemon-stats.
+  "lifeline",
   // The tmux status line lane (src/daemon/tmux-status.ts): the daemon's own
   // writes of a shown bar into its tmux status line, one per frame pushed
   // while the pane is the one a status line shows, and the reads and writes
@@ -299,6 +306,148 @@ export function setLaunchStats(handle: LaunchStatsHandle | null): void {
 // backstop so the promise cannot resolve while the child is still alive.
 const TIMEOUT_KILL_GRACE_MS = 250;
 
+// Who hears each change in why the lifeline is down (`fault`, below). The
+// daemon logs it and redraws its feeds, so its warning comes and goes on
+// pushed frames too; any other process (the CLI, bar-pane, a test) says the
+// warning on stderr.
+let lifelineObserver: (fault: string | null) => void = () =>
+  lifelineWarnings().forEach((w) => process.emitWarning(w.message));
+
+export function setLifelineObserver(
+  observe: (fault: string | null) => void,
+): void {
+  lifelineObserver = observe;
+}
+
+// --- the lifeline ---
+//
+// [LAW:types-are-the-program] "A waited child cannot outlive its frame" holds
+// when the frame is the whole process. Everything else that ends a child runs
+// inside the launcher, and a SIGKILL'd launcher runs nothing, so the end lives
+// in a second process that learns of the death from the kernel: when a process
+// ends, however it ends, the kernel closes its fds, and the lifeline reads EOF
+// on the pipe the launcher held. It then signals every group still registered
+// with the timeout's own escalation, SIGTERM and after the grace SIGKILL.
+//
+// `kill -TERM -<pgid>` is the one spelling every /bin/sh takes: dash rejects
+// `kill -TERM -- -<pgid>`, and `kill -s TERM -<pgid>` fails in every one.
+// [LAW:no-silent-failure] exception: kill's stderr goes nowhere, because a
+// group that ended on its own (ESRCH) is the state this exists to reach, and
+// the launcher it would report to is gone.
+const LIFELINE_PROGRAM =
+  `$1 == "+" { live[$2] = 1; next } ` +
+  `$1 == "-" { delete live[$2]; next } ` +
+  `END { for (g in live) groups = groups " -" g; ` +
+  `if (groups != "") system("kill -TERM" groups " 2>/dev/null; ` +
+  `sleep ${TIMEOUT_KILL_GRACE_MS / 1000}; kill -KILL" groups " 2>/dev/null") }`;
+
+// [LAW:one-source-of-truth] The groups this process has in flight. The
+// lifeline mirrors the set, and a new lifeline is given the whole set, so a
+// lost one costs only the moments until the next launch replaces it.
+const liveGroups = new Set<number>();
+
+// The lifeline's process and the write end of its pipe, which only this
+// process holds.
+interface Lifeline {
+  readonly process: ChildProcess;
+  readonly pipe: Socket;
+}
+let lifeline: Lifeline | null = null;
+
+// [LAW:one-source-of-truth] Why the groups this process has in flight are not
+// guarded now: what ended its last lifeline, or kept one from starting. Null
+// while a lifeline runs, or before one is needed. Its observer hears each
+// change, and the daemon shows it as a standing warning.
+let fault: string | null = null;
+
+function setFault(next: string | null): void {
+  if (next === fault) return;
+  fault = next;
+  lifelineObserver(next);
+}
+
+function lose(line: ChildProcess, reason: string): void {
+  if (lifeline?.process !== line) return;
+  lifeline = null;
+  setFault(reason);
+}
+
+export interface LifelineWarning {
+  readonly kind: "lifeline";
+  readonly message: string;
+}
+
+export function lifelineWarnings(): LifelineWarning[] {
+  return fault === null
+    ? []
+    : [
+        {
+          kind: "lifeline",
+          message: `programs launched now would outlive their launcher if it died: its launch lifeline ${fault}, and the next launch starts another`,
+        },
+      ];
+}
+
+// Leads its own group, so nothing aimed at the launcher's group reaches it, and
+// is unref'd with its pipe, so it never holds a process open. `awk` is found
+// on the launcher's PATH, as every launched program is: where a machine keeps
+// it is the machine's fact (NixOS has no /usr/bin/awk).
+function spawnLifeline(): Lifeline | null {
+  statsHandle?.onStart("lifeline");
+  const t0 = Date.now();
+  let line: ChildProcess;
+  try {
+    line = spawn("awk", [LIFELINE_PROGRAM], {
+      stdio: ["pipe", "ignore", "ignore"],
+      detached: true,
+    });
+  } catch (err) {
+    statsHandle?.onEnd("lifeline", Date.now() - t0);
+    setFault(`did not start: ${spawnErrorText(err, undefined)}`);
+    return null;
+  }
+  statsHandle?.onEnd("lifeline", Date.now() - t0);
+  // stdio[0] is "pipe", so Node hands back a socket.
+  const pipe = line.stdin as Socket;
+  line.once("spawn", () => {
+    if (lifeline?.process === line) setFault(null);
+  });
+  line.once("error", (err) => lose(line, `failed: ${err.message}`));
+  line.once("exit", (code, sig) => lose(line, `exited ${sig ?? code}`));
+  pipe.on("error", (err) => lose(line, `pipe failed: ${err.message}`));
+  line.unref();
+  pipe.unref();
+  for (const group of liveGroups) pipe.write(`+ ${group}\n`);
+  return { process: line, pipe };
+}
+
+// A new lifeline is handed the whole set, this group included; the line after
+// it is then a repeat the lifeline's set absorbs.
+function guard(group: number): void {
+  liveGroups.add(group);
+  lifeline ??= spawnLifeline();
+  lifeline?.pipe.write(`+ ${group}\n`);
+}
+
+function unguard(group: number): void {
+  liveGroups.delete(group);
+  lifeline?.pipe.write(`- ${group}\n`);
+}
+
+// Exposed for tests only: ends the lifeline's pipe — the EOF the launcher's
+// death gives it — and names its pid. A cut lifeline is lost at once, so the
+// test's next launch starts another rather than writing to a closed pipe.
+export function __lifelineForTest(): { pid: number | undefined; cut(): void } {
+  const line = lifeline;
+  return {
+    pid: line?.process.pid,
+    cut: () => {
+      line?.pipe.end();
+      if (line) lose(line.process, "cut by a test");
+    },
+  };
+}
+
 // A termination the launcher itself initiated — carried as data because the
 // OS reports only the signal, never why it was sent.
 type Terminated = "timeout" | "aborted";
@@ -359,6 +508,10 @@ export async function launch(opts: AsyncLaunchOpts): Promise<LaunchResult> {
       });
       return;
     }
+    // A child whose spawn failed asynchronously (ENOENT) has no pid, and no
+    // group to guard: its `error` event settles it.
+    const group = child.pid;
+    if (group !== undefined) guard(group);
 
     let stdout = "";
     let stderr = "";
@@ -380,6 +533,7 @@ export async function launch(opts: AsyncLaunchOpts): Promise<LaunchResult> {
       if (timer) clearTimeout(timer);
       if (killTimer) clearTimeout(killTimer);
       opts.signal?.removeEventListener("abort", onAbort);
+      if (group !== undefined) unguard(group);
       statsHandle?.onEnd(opts.category, Date.now() - t0);
       deliver();
     };
