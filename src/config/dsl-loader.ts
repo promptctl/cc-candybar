@@ -80,6 +80,7 @@ import {
 } from "./loader/actions.js";
 import { validateStyles } from "./loader/styles.js";
 import { validatePresets } from "./loader/presets.js";
+import { unplacedNotices } from "./presets.js";
 import { validateHelpers } from "./loader/helpers.js";
 import {
   authoredPlacement,
@@ -178,11 +179,7 @@ export function loadConfig(
   allowedPalettes?: ReadonlySet<string>,
 ): LoadedFile & { config: DslConfig } {
   return path === null
-    ? // No file authors no `insert`, so nothing is ever unplaced.
-      {
-        ...NO_FILE,
-        config: mergeWithDefault(NO_FILE.raw, dflt, "<default>").config,
-      }
+    ? { ...NO_FILE, config: mergeWithDefault(NO_FILE.raw, dflt) }
     : loadConfigSource(
         path,
         fs.readFileSync(path, "utf-8"),
@@ -247,20 +244,14 @@ export function loadConfigSource(
     };
   });
   const { plugins, owning } = parsed.layer;
-  const merged = mergeWithDefault(parsed.raw, plugins.config, path);
-  const standing = withDroppedPlacements(merged.config, owning);
+  const standing = withDroppedPlacements(
+    mergeWithDefault(parsed.raw, plugins.config),
+    owning,
+  );
   return {
     source,
     raw: parsed.raw,
-    // [LAW:no-silent-failure] A cell this file's `insert` could not place is
-    // a warning on this file: the bar still draws, and says what it left out.
-    warnings: [
-      ...parsed.warnings,
-      ...plugins.dropped.map(droppedPluginNotice),
-      ...merged.unplaced.map(
-        (u) => `${path}: ${u.entry} places "${u.seg}" ${u.reason}`,
-      ),
-    ],
+    warnings: [...parsed.warnings, ...plugins.dropped.map(droppedPluginNotice)],
     plugins: {
       loaded: plugins.loaded,
       dropped: plugins.dropped,
@@ -435,6 +426,10 @@ export function loadConfigChain(
     rendering: layers.at(-1)?.plugins.rendering ?? plugins.rendering,
   };
   const top = layers.at(-1);
+  // [LAW:no-silent-failure] Every layer's `insert` cells are placed by each
+  // tree that renders, so whether one landed is a fact about the whole
+  // chain: asked once, over the config that renders, before it validates.
+  trace.warned(unplacedNotices(top?.config ?? base));
   if (top === undefined) {
     return {
       layers,
@@ -821,7 +816,13 @@ function parseDslFile<L>(
       : (validatePluginRefs({ ...ctx, issues: [] }, json.plugins) ?? []),
     isPlainObject(json.segments) ? Object.keys(json.segments) : [],
   );
-  const raw = validateTopLevel(ctx, json, inherited, actionHomeOf(filePath));
+  const raw = validateTopLevel(
+    ctx,
+    json,
+    inherited,
+    actionHomeOf(filePath),
+    filePath,
+  );
 
   if (issues.length > 0) {
     throw new ConfigError(filePath, issues, warnings);
@@ -865,6 +866,8 @@ function validateTopLevel(
   inheritedSegments: ReadonlySet<string>,
   // Where the file's actions are declared: a `run` runs in its directory.
   home: ActionHome,
+  // The file being parsed: stamped on each `insert` cell it writes.
+  file: string,
 ): RawDslConfig {
   for (const key of Object.keys(raw)) {
     if (!TOP_LEVEL_KEYS.has(key)) {
@@ -898,7 +901,8 @@ function validateTopLevel(
   }
   if (raw.root !== undefined)
     out.root = validateRootFragment(ctx, "root", raw.root);
-  if (raw.insert !== undefined) out.insert = validateInsert(ctx, raw.insert);
+  if (raw.insert !== undefined)
+    out.insert = validateInsert(ctx, raw.insert, file);
   if (raw.actions !== undefined)
     out.actions = validateActions(ctx, raw.actions, home);
   // [LAW:no-silent-failure] `looks:` was renamed `styles:` (brandon-menu-ia-

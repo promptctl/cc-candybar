@@ -102,8 +102,7 @@ describe("styles block — loader validation", () => {
     const merged = mergeWithDefault(
       parseDslConfig("<looks>", `{ globals: { style: "vapor" } }`, ALLOWED),
       DEFAULT_DSL_CONFIG,
-      "<test>",
-    ).config;
+    );
     expect(() =>
       validateConfig(unauthored(merged), "<looks>", ALLOWED),
     ).toThrow(
@@ -115,8 +114,7 @@ describe("styles block — loader validation", () => {
     const merged = mergeWithDefault(
       parseDslConfig("<looks>", `{ globals: { style: "vivid" } }`, ALLOWED),
       DEFAULT_DSL_CONFIG,
-      "<test>",
-    ).config;
+    );
     expect(() =>
       validateConfig(unauthored(merged), "<looks>", ALLOWED),
     ).not.toThrow();
@@ -134,8 +132,7 @@ describe("the renamed keys refuse their old spellings", () => {
       const merged = mergeWithDefault(
         parseDslConfig("<renames>", src, ALLOWED),
         DEFAULT_DSL_CONFIG,
-        "<test>",
-      ).config;
+      );
       validateConfig(unauthored(merged), "<renames>", ALLOWED);
     } catch (e) {
       expect(e).toBeInstanceOf(ConfigError);
@@ -187,8 +184,7 @@ describe("the renamed keys refuse their old spellings", () => {
     const merged = mergeWithDefault(
       parseDslConfig("<renames>", `{ styles: { flame: {} } }`, ALLOWED),
       DEFAULT_DSL_CONFIG,
-      "<test>",
-    ).config;
+    );
     validateConfig(unauthored(merged), "<renames>", ALLOWED);
     expect(merged.styles).toHaveProperty("flame");
   });
@@ -242,7 +238,7 @@ describe("styles block — normalization and merge", () => {
       `{ styles: { vivid: { chromaScale: 2 }, mine: { hueShift: 10 } } }`,
       ALLOWED,
     );
-    const merged = mergeWithDefault(raw, DEFAULT_DSL_CONFIG, "<test>").config;
+    const merged = mergeWithDefault(raw, DEFAULT_DSL_CONFIG);
     // The identity floor is always present — effectiveStyleName's collapse
     // target cannot be merged away.
     expect(merged.styles.none).toEqual({
@@ -703,8 +699,7 @@ describe("globals.style as an expression — a style chosen by data", () => {
         ALLOWED,
       ),
       DEFAULT_DSL_CONFIG,
-      "<test>",
-    ).config;
+    );
     expect(() =>
       validateConfig(unauthored(withExpr), "<looks-expr>", ALLOWED),
     ).not.toThrow();
@@ -715,8 +710,7 @@ describe("globals.style as an expression — a style chosen by data", () => {
         ALLOWED,
       ),
       DEFAULT_DSL_CONFIG,
-      "<test>",
-    ).config;
+    );
     expect(() =>
       validateConfig(unauthored(withName), "<looks-expr>", ALLOWED),
     ).toThrow(/globals\.style "vapor" does not match any declared style/);

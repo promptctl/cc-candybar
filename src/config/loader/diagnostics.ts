@@ -4,7 +4,12 @@
 // what the config-file editor would refuse. Changes here are display/source-
 // mapping changes; the schema validators never touch this file.
 
-import { Json5EditError, parseDocument } from "../json5-edit.js";
+import {
+  entryOf,
+  Json5EditError,
+  parseDocument,
+  type Node,
+} from "../json5-edit.js";
 
 // ─── Public types ────────────────────────────────────────────────────────────
 
@@ -61,6 +66,13 @@ export function findKeyLine(
   source: string,
   pathParts: readonly string[],
 ): number | undefined {
+  // [LAW:single-enforcer] A path through an array (`insert.1.seg`) is placed
+  // by the config editor's own document model, which knows where element 1
+  // starts; the key scanner below cannot count elements.
+  const indexed = pathParts.some((p) => /^\d+$/.test(p))
+    ? elementPathLine(source, pathParts)
+    : undefined;
+  if (indexed !== undefined) return indexed;
   let cursor = 0;
   let foundCursor: number | undefined;
   for (const part of pathParts) {
@@ -77,6 +89,35 @@ export function findKeyLine(
   return foundCursor !== undefined
     ? lineFromOffset(source, foundCursor)
     : undefined;
+}
+
+// The line of the deepest node the path reaches through the parsed document,
+// or undefined when the document does not parse or its first step is absent.
+function elementPathLine(
+  source: string,
+  pathParts: readonly string[],
+): number | undefined {
+  let node: Node;
+  try {
+    node = parseDocument(source);
+  } catch (e) {
+    if (e instanceof Json5EditError) return undefined;
+    throw e;
+  }
+  let reached: Node | undefined;
+  for (const part of pathParts) {
+    const next: Node | undefined = /^\d+$/.test(part)
+      ? node.kind === "array"
+        ? node.elements[Number(part)]
+        : undefined
+      : entryOf(node, part)?.value;
+    if (next === undefined) break;
+    node = next;
+    reached = next;
+  }
+  return reached === undefined
+    ? undefined
+    : lineFromOffset(source, reached.span.start);
 }
 
 function findKeyOccurrence(source: string, from: number, key: string): number {

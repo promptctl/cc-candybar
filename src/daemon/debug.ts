@@ -28,7 +28,8 @@ import type { SourceRegistry } from "../var-system/sources";
 import type { DslConfig, VariableDecl } from "../config/dsl-types";
 import { placementId, walkNodes } from "../config/dsl-types";
 import { presetNames, presetRoot } from "../config/presets";
-import { rootNode } from "../config/root";
+import { EMPTY_ROWS } from "../config/root";
+import { renderedRoot } from "../config/presets";
 import { templateReads, variableRead } from "../config/loader/refs";
 import type { CompiledConfig } from "../dsl/render";
 import type {
@@ -258,7 +259,7 @@ function placementsBySegment(config: DslConfig): Map<string, string[]> {
 function orderedSegmentNames(config: DslConfig): readonly string[] {
   const out: string[] = [];
   const seen = new Set<string>();
-  for (const node of walkNodes(rootNode(config.root))) {
+  for (const node of walkNodes(renderedRoot(config, EMPTY_ROWS).node)) {
     if (node.kind !== "segment") continue;
     if (config.segments[node.name] && !seen.has(node.name)) {
       out.push(node.name);

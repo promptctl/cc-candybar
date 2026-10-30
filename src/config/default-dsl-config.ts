@@ -1199,6 +1199,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
   // (src/config/bundled-theme-defaults.ts), since it is chosen theme by theme
   // in the bar rather than authored with the rest of this literal.
   themeDefaults: BUNDLED_THEME_DEFAULTS,
+  insert: [],
 
   presets: {
     // [LAW:dataflow-not-control-flow] "default" is just the identity fragment
@@ -1707,6 +1708,4 @@ export const DEFAULT_DSL_CONFIG: DslConfig = mergeWithDefault(
     AUTHORED_PALETTE_NAMES,
   ),
   RAW_DEFAULT_DSL_CONFIG,
-  // The bundled default authors no `insert`, so nothing is ever unplaced.
-  "<default>",
-).config;
+);

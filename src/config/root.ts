@@ -12,6 +12,7 @@
 // the floor preset all run the same expression [LAW:dataflow-not-control-flow].
 
 import {
+  mapOpens,
   placementId,
   walkNodePaths,
   walkNodes,
@@ -128,30 +129,26 @@ export function mergeRoot(fragment: RootFragment, base: Root): Root {
     : rootOf(fragment);
 }
 
-// A cell a layer's `insert` list could not place, and why — the layer's
-// loader turns each into a warning naming its file.
+// A cell one rendered tree could not place, and why.
 export interface Unplaced {
-  readonly entry: string;
-  readonly seg: string;
+  readonly cell: InsertCell;
   readonly reason: string;
 }
 
-// [LAW:one-source-of-truth] THE placement of a layer's `insert` cells, folded
-// over the root that layer's own `root` merged into, in list order (a later
-// cell may anchor on an earlier one). A cell lands beside the placement its
-// anchor names, wherever in the tree that is, so a whole-tree root and a rows
-// map are addressed alike. A cell whose id the tree already holds under the
-// same segment is satisfied as it stands; under another segment it would make
-// the id ambiguous, so it is refused like a missing anchor.
+// [LAW:one-source-of-truth] THE placement of `insert` cells in one tree that
+// renders, in chain order (a later cell may anchor on an earlier one). A cell
+// lands beside the placement its anchor names, wherever in the tree that is,
+// so a whole-tree root and a rows map are addressed alike. A cell whose id
+// the tree already holds under the same segment is satisfied as it stands;
+// under another segment it would make the id ambiguous, so it is refused like
+// a missing anchor — never placed, so the tree's ids stay unique.
 // [LAW:no-silent-failure] Every cell that does not land comes back unplaced.
 export function insertCells(
   root: Root,
   cells: readonly InsertCell[],
-  file: string,
 ): { readonly root: Root; readonly unplaced: readonly Unplaced[] } {
   return cells.reduce<{ root: Root; unplaced: readonly Unplaced[] }>(
-    (acc, cell, i) => {
-      const entry = `insert[${i}]`;
+    (acc, cell) => {
       const id = cell.id ?? cell.seg;
       const held = segmentWithId(rootNode(acc.root), id);
       if (held !== undefined) {
@@ -159,7 +156,6 @@ export function insertCells(
           ? acc
           : refuse(
               acc,
-              entry,
               cell,
               `as "${id}", but placement "${id}" is already segment "${held.name}" — give the cell its own id`,
             );
@@ -168,26 +164,28 @@ export function insertCells(
         kind: "segment",
         name: cell.seg,
         ...(cell.id !== undefined && { id: cell.id }),
-        insertedBy: { file, entry },
+        insertedBy: cell.by,
       };
-      const rows = Object.entries(acc.root.rows);
-      const placed = rows.map(
+      const rows = Object.entries(acc.root.rows).map(
         ([name, row]) =>
-          [name, besideRow(row, cell.anchor, node, cell.relation)] as const,
+          [
+            name,
+            row,
+            besideRow(row, cell.anchor, node, cell.relation),
+          ] as const,
       );
-      return placed.some(([, row]) => row !== null)
+      return rows.some(([, , placed]) => placed !== null)
         ? {
             ...acc,
             root: {
               ...acc.root,
               rows: Object.fromEntries(
-                placed.map(([name, row], r) => [name, row ?? rows[r]![1]]),
+                rows.map(([name, row, placed]) => [name, placed ?? row]),
               ),
             },
           }
         : refuse(
             acc,
-            entry,
             cell,
             `${cell.relation} "${cell.anchor}", but the bar has no placement "${cell.anchor}"`,
           );
@@ -198,14 +196,10 @@ export function insertCells(
 
 function refuse(
   acc: { root: Root; unplaced: readonly Unplaced[] },
-  entry: string,
   cell: InsertCell,
   reason: string,
 ): { root: Root; unplaced: readonly Unplaced[] } {
-  return {
-    ...acc,
-    unplaced: [...acc.unplaced, { entry, seg: cell.seg, reason }],
-  };
+  return { ...acc, unplaced: [...acc.unplaced, { cell, reason }] };
 }
 
 function segmentWithId(tree: LayoutNode, id: string): SegmentNode | undefined {
@@ -232,25 +226,20 @@ function besideRow(
       ...(when !== undefined && { when }),
     };
   }
-  return beside(row, anchor, cell, relation);
+  return row.kind === "container"
+    ? beside(row, anchor, cell, relation)
+    : besideInBody(row, anchor, cell, relation);
 }
 
-// The node with `cell` spliced beside the anchor among its siblings, or null
-// when no sibling list under `node` holds the anchor. Disclosure bodies are
-// searched like containers.
+// The container with `cell` spliced beside the anchor among its siblings,
+// or null when nothing under it holds the anchor. Disclosure bodies are
+// searched like containers, through mapOpens.
 function beside(
-  node: LayoutNode,
+  node: ContainerNode,
   anchor: string,
   cell: SegmentNode,
   relation: "before" | "after",
-): LayoutNode | null {
-  if (node.kind === "segment") {
-    if (node.opens === undefined) return null;
-    const body = beside(node.opens.body, anchor, cell, relation);
-    return body === null
-      ? null
-      : { ...node, opens: { ...node.opens, body: body as ContainerNode } };
-  }
+): ContainerNode | null {
   const at = node.children.findIndex(
     (child) => child.kind === "segment" && placementId(child) === anchor,
   );
@@ -266,7 +255,10 @@ function beside(
     };
   }
   for (const [i, child] of node.children.entries()) {
-    const next = beside(child, anchor, cell, relation);
+    const next =
+      child.kind === "container"
+        ? beside(child, anchor, cell, relation)
+        : besideInBody(child, anchor, cell, relation);
     if (next !== null) {
       return {
         ...node,
@@ -275,6 +267,23 @@ function beside(
     }
   }
   return null;
+}
+
+// The segment with `cell` placed inside the body it opens, or null when it
+// opens nothing that holds the anchor.
+function besideInBody(
+  node: SegmentNode,
+  anchor: string,
+  cell: SegmentNode,
+  relation: "before" | "after",
+): SegmentNode | null {
+  let found = false;
+  const next = mapOpens(node, (body) => {
+    const placed = beside(body, anchor, cell, relation);
+    found = placed !== null;
+    return placed ?? body;
+  });
+  return found ? next : null;
 }
 
 // Whether a fragment restages anything at all — false exactly for the merge's

@@ -194,8 +194,70 @@ describe("a project layer inserting into the user's row", () => {
     );
   const order = (rendered: string, ...marks: string[]) =>
     marks.map((m) => rendered.indexOf(m));
+  // The warnings about the config's own root: the bundled whole-tree presets
+  // (compact, verbose, …) hold none of these tests' placements, so each
+  // cell also warns once per such preset, naming it.
   const warnedFor = (warnings: readonly string[], entry: string) =>
-    warnings.filter((w) => w.includes(entry));
+    warnings.filter((w) => w.includes(entry) && !w.includes(" in preset "));
+  const presetWarnings = (warnings: readonly string[], preset: string) =>
+    warnings.filter((w) => w.endsWith(` in preset "${preset}"`));
+  const presetTree = async (preset: string) => {
+    const outcome = clean(await checkConfig(undefined, project));
+    const prepared = await prepareConfig(
+      outcome.layers,
+      null,
+      project,
+      [],
+      instantOf(new Date()),
+    );
+    try {
+      return [...walkNodes(fragmentNode(prepared.config.presets[preset]!.root!))]
+        .flatMap((n) => (n.kind === "segment" ? [n.name] : []));
+    } finally {
+      prepared.registry.dispose();
+    }
+  };
+
+  test("a preset that already places the cell loads and draws it once", async () => {
+    userRow(
+      `{ rows: { status: { h: ["mine", "other"] } } }`,
+      `, theirs: { template: "THEIRSEG" } }, presets: { mine2: { root: { h: ["mine", "theirs"] } }`,
+    );
+    writeProject(`[{ seg: "theirs", after: "mine" }]`);
+    const outcome = clean(await checkConfig(undefined, project));
+    expect(presetWarnings(outcome.warnings, "mine2")).toEqual([]);
+    expect(
+      (await presetTree("mine2")).filter((n) => n === "theirs"),
+    ).toHaveLength(1);
+  });
+
+  test("an anchor only a preset holds is placed in that preset, with no warning for it", async () => {
+    userRow(`{ rows: { status: { h: ["mine", "other"] } } }`);
+    writeProject(`[{ seg: "theirs", after: "burnrate" }]`);
+    const outcome = clean(await checkConfig(undefined, project));
+    expect(presetWarnings(outcome.warnings, "verbose")).toEqual([]);
+    const verbose = await presetTree("verbose");
+    expect(verbose.indexOf("theirs")).toBeGreaterThan(verbose.indexOf("burnrate"));
+    expect(verbose.indexOf("burnrate")).toBeGreaterThanOrEqual(0);
+  });
+
+  test("a whole-tree preset draws the cell when it holds the anchor, and warns naming itself when it does not", async () => {
+    userRow(`{ rows: { status: { h: ["mine", "other"] } } }`);
+    writeProject(`[{ seg: "theirs", before: "directory" }]`);
+    const outcome = clean(await checkConfig(undefined, project));
+    expect(presetWarnings(outcome.warnings, "compact")).toEqual([]);
+    const compact = await presetTree("compact");
+    expect(compact.indexOf("theirs")).toBeGreaterThanOrEqual(0);
+    expect(compact.indexOf("theirs")).toBeLessThan(compact.indexOf("directory"));
+    writeProject(`[{ seg: "theirs", after: "mine" }]`);
+    const missed = presetWarnings(
+      clean(await checkConfig(undefined, project)).warnings,
+      "compact",
+    );
+    expect(missed).toHaveLength(1);
+    expect(missed[0]).toContain(projectFile);
+    expect(missed[0]).toContain('"mine"');
+  });
 
   test("an approved repo's cell lands beside its anchor and the user's file is untouched", async () => {
     userRow(`{ rows: { status: { h: ["mine", "other"] } } }`);
@@ -206,7 +268,7 @@ describe("a project layer inserting into the user's row", () => {
     expect(u).toBeGreaterThanOrEqual(0);
     expect(u).toBeLessThan(t!);
     expect(t).toBeLessThan(o!);
-    expect(warnedFor(outcome.warnings, "insert[")).toEqual([]);
+    expect(warnedFor(outcome.warnings, "insert.")).toEqual([]);
     expect(fs.readFileSync(userFile, "utf8")).toBe(before);
   });
 
@@ -226,7 +288,7 @@ describe("a project layer inserting into the user's row", () => {
     const outcome = clean(await checkConfig(undefined, project));
     expect(outcome.rendered).toContain("USERSEG");
     expect(outcome.rendered).not.toContain("THEIRSEG");
-    const warned = warnedFor(outcome.warnings, "insert[0]");
+    const warned = warnedFor(outcome.warnings, "insert.0");
     expect(warned).toHaveLength(1);
     expect(warned[0]).toContain(projectFile);
     expect(warned[0]).toContain('"theirs"');
@@ -241,7 +303,7 @@ describe("a project layer inserting into the user's row", () => {
     writeProject(`[{ seg: "theirs", after: "mine" }]`);
     const outcome = clean(await checkConfig(undefined, project));
     expect(outcome.rendered.split("THEIRSEG")).toHaveLength(2);
-    expect(warnedFor(outcome.warnings, "insert[0]")).toEqual([]);
+    expect(warnedFor(outcome.warnings, "insert.0")).toEqual([]);
   });
 
   test("a cell whose id another segment holds is not drawn, and the warning names both", async () => {
@@ -252,7 +314,7 @@ describe("a project layer inserting into the user's row", () => {
     const outcome = clean(await checkConfig(undefined, project));
     expect(outcome.rendered).toContain("OTHERSEG");
     expect(outcome.rendered).not.toContain("THEIRSEG");
-    const warned = warnedFor(outcome.warnings, "insert[0]");
+    const warned = warnedFor(outcome.warnings, "insert.0");
     expect(warned).toHaveLength(1);
     expect(warned[0]).toContain(projectFile);
     expect(warned[0]).toContain('"theirs"');
@@ -317,7 +379,7 @@ describe("a project layer inserting into the user's row", () => {
       const label = nodes.find((n) => n.name === "edit.label:theirs:theirs")!;
       expect(label.opens).toBeUndefined();
       expect(config.segments[label.name]!.template).toBe(
-        `{{ "theirs · ${outcome.layers[1]} insert[0]" }}`,
+        `{{ "theirs · ${outcome.layers[1]} insert.0" }}`,
       );
       // A layout op aimed at the inserted id writes nothing.
       const before = fs.readFileSync(userFile, "utf8");

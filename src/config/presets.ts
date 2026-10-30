@@ -48,8 +48,16 @@ import type {
   DslConfig,
   Globals,
   PresetDecl,
+  RootFragment,
 } from "./dsl-types.js";
-import { EMPTY_ROWS, mergeRoot, restages, rootNode } from "./root.js";
+import {
+  EMPTY_ROWS,
+  insertCells,
+  mergeRoot,
+  restages,
+  rootNode,
+  type Unplaced,
+} from "./root.js";
 import { effectiveMemberName } from "../themes/policy.js";
 
 // [LAW:one-source-of-truth] The floor preset's name, spelled once. `styles` has
@@ -157,17 +165,62 @@ export function presetByName(
 // tree together with where it came from makes that drift unrepresentable rather
 // than merely fixed [FRAMING:representation].
 export function presetRoot(
-  config: Pick<DslConfig, "presets" | "root">,
+  config: Pick<DslConfig, "presets" | "root" | "insert">,
   name: string,
-): { readonly node: ContainerNode; readonly path: string } {
+): {
+  readonly node: ContainerNode;
+  readonly path: string;
+  readonly unplaced: readonly Unplaced[];
+} {
   // [LAW:dataflow-not-control-flow] One merge for every preset — the floor's
   // empty fragment is the identity, not an arm — and the path is a projection
   // of the same fact the merge folds over (does the fragment restage anything?).
   const fragment = presetByName(config.presets, name).root ?? EMPTY_ROWS;
+  const { node, unplaced } = renderedRoot(config, fragment);
   return {
-    node: rootNode(mergeRoot(fragment, config.root)),
+    node,
     path: restages(fragment) ? `presets.${name}.root` : "root",
+    unplaced,
   };
+}
+
+// [LAW:no-silent-failure] Every `insert` cell some rendered tree could not
+// place, as the warning the bar shows: the file and entry that wrote it, why,
+// and the preset whose tree it missed when that is not the config's own root.
+// Each tree is asked once — every preset that restages nothing renders the
+// config's own root and shares its answer.
+export function unplacedNotices(config: DslConfig): readonly string[] {
+  const trees = [
+    { path: "root", where: "", ...renderedRoot(config, EMPTY_ROWS) },
+    ...presetNames(config.presets).map((name) => ({
+      ...presetRoot(config, name),
+      where: ` in preset "${name}"`,
+    })),
+  ];
+  return trees
+    .filter((tree, i) => trees.findIndex((t) => t.path === tree.path) === i)
+    .flatMap(({ where, unplaced }) =>
+      unplaced.map(
+        ({ cell, reason }) =>
+          `${cell.by.file}: ${cell.by.entry} places "${cell.seg}" ${reason}${where}`,
+      ),
+    );
+}
+
+// [LAW:one-source-of-truth] THE tree that renders for a fragment over the
+// config's root: the fragment merged, then every layer's `insert` cells
+// placed in it. Each rendered tree places the cells itself, so a preset's
+// whole tree decides its own anchors, and a cell its tree already holds is
+// never placed twice.
+export function renderedRoot(
+  config: Pick<DslConfig, "root" | "insert">,
+  fragment: RootFragment,
+): { readonly node: ContainerNode; readonly unplaced: readonly Unplaced[] } {
+  const { root, unplaced } = insertCells(
+    mergeRoot(fragment, config.root),
+    config.insert,
+  );
+  return { node: rootNode(root), unplaced };
 }
 
 // [LAW:dataflow-not-control-flow] A preset's display globals, as a total

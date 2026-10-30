@@ -163,7 +163,7 @@ describe("the input closure follows every edge the draw does", () => {
   // control needs a bar without it.
   const closureOf = (src: string): ReadonlySet<string> =>
     buildNeededPrefixes(
-      mergeWithDefault(parseDslConfig("<user>", src, ALLOWED), EMPTY_DEFAULT, "<test>").config,
+      mergeWithDefault(parseDslConfig("<user>", src, ALLOWED), EMPTY_DEFAULT),
       PRESET_FLOOR,
     );
 

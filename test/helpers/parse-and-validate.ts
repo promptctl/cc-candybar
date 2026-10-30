@@ -27,6 +27,7 @@ export const EMPTY_DEFAULT: DslConfig = {
   helpers: {},
   editGlobals: {},
   themeDefaults: {},
+  insert: [],
 };
 
 // The judgment `check` makes: the bar's own validation, refusing every
@@ -60,7 +61,7 @@ export function parseAndValidate(
     inheritableSegmentNames(dflt),
   );
   return validateConfig(
-    { config: mergeWithDefault(raw, dflt, "<test>").config, raw, source },
+    { config: mergeWithDefault(raw, dflt), raw, source },
     filePath,
     allowedPalettes,
   );

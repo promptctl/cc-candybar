@@ -180,6 +180,7 @@ const CONFIG_WITHOUT_METRICS: DslConfig = {
   helpers: {},
   editGlobals: {},
   themeDefaults: {},
+  insert: [],
 };
 
 const CONFIG_WITH_METRICS: DslConfig = {
@@ -193,6 +194,7 @@ const CONFIG_WITH_METRICS: DslConfig = {
   helpers: {},
   editGlobals: {},
   themeDefaults: {},
+  insert: [],
 };
 
 describe("payloadOf — layout-driven provider gating", () => {
@@ -266,6 +268,7 @@ describe("payloadOf — layout-driven provider gating", () => {
       helpers: {},
       editGlobals: {},
       themeDefaults: {},
+      insert: [],
     };
     const needed = buildNeededPrefixes(config, PRESET_FLOOR);
     // The only declared `git.*` input is `git.branch`; it must be in
@@ -293,6 +296,7 @@ describe("payloadOf — layout-driven provider gating", () => {
       helpers: {},
       editGlobals: {},
       themeDefaults: {},
+      insert: [],
     };
     const needed = buildNeededPrefixes(config, PRESET_FLOOR);
     expect(needed.has("metrics.sessionDuration")).toBe(true);
@@ -327,6 +331,7 @@ describe("payloadOf — layout-driven provider gating", () => {
       helpers: {},
       editGlobals: {},
       themeDefaults: {},
+      insert: [],
     };
     const floor = buildNeededPrefixes(config, PRESET_FLOOR);
     expect(floor.has("metrics.sessionDuration")).toBe(true);
@@ -397,6 +402,7 @@ describe("payloadOf — layout-driven provider gating", () => {
       helpers: { echo: "{{ .git.branch }}" },
       editGlobals: {},
       themeDefaults: {},
+      insert: [],
     };
     const needed = buildNeededPrefixes(config, PRESET_FLOOR);
     expect(needed.has("workspace.current_dir")).toBe(true);

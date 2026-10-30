@@ -2582,6 +2582,22 @@ describe("loadDslConfig — insert", () => {
     });
   });
 
+  test("a cell naming the settings door or other chrome is an issue", () => {
+    expectIssue(`{ insert: [{ seg: "candybar.menu", after: "model" }] }`, {
+      path: "insert.0.seg",
+      message: "the bar's own chrome",
+    });
+  });
+
+  test("an issue in the second cell points at the second cell's line", () => {
+    const err = expectError(
+      `{\n  insert: [\n    { seg: "model", after: "context" },\n    { seg: "nosuchsegment", after: "model" },\n  ],\n}`,
+    );
+    const issue = err.issues.find((i) => i.path === "insert.1")!;
+    expect(issue.message).toMatch(/does not match any declared segment/);
+    expect(issue.line).toBe(4);
+  });
+
   test("insert must be a list", () => {
     expectIssue(`{ insert: { seg: "model", after: "a" } }`, {
       path: "insert",

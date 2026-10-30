@@ -58,16 +58,17 @@ const DFLT: DslConfig = {
   helpers: {},
   editGlobals: {},
   themeDefaults: {},
+  insert: [],
 };
 
 describe("mergeWithDefault", () => {
   test("empty raw equals the default", () => {
-    expect(mergeWithDefault({}, DFLT, "<test>").config).toEqual(DFLT);
+    expect(mergeWithDefault({}, DFLT)).toEqual(DFLT);
   });
 
   test("globals: shallow merge — user wins per field, others retained", () => {
     const raw: RawDslConfig = { globals: { default_empty_value: "cyan" } };
-    const out = mergeWithDefault(raw, DFLT, "<test>").config;
+    const out = mergeWithDefault(raw, DFLT);
     expect(out.globals).toEqual({
       default_separator: " ", // from default
       default_empty_value: "cyan", // from user
@@ -82,7 +83,7 @@ describe("mergeWithDefault", () => {
         baz: { kind: "literal", value: "user-baz" },
       },
     };
-    const out = mergeWithDefault(raw, DFLT, "<test>").config;
+    const out = mergeWithDefault(raw, DFLT);
     expect(out.variables.foo).toEqual({ kind: "literal", value: "user-foo" });
     expect(out.variables.bar).toEqual({ kind: "literal", value: "default-bar" });
     expect(out.variables.baz).toEqual({ kind: "literal", value: "user-baz" });
@@ -95,7 +96,7 @@ describe("mergeWithDefault", () => {
         c: { template: " C " } as SegmentDecl,
       },
     };
-    const out = mergeWithDefault(raw, DFLT, "<test>").config;
+    const out = mergeWithDefault(raw, DFLT);
     expect(out.segments.a!.template).toBe(" A-user ");
     expect(out.segments.b!.template).toBe(" B ");
     expect(out.segments.c!.template).toBe(" C ");
@@ -105,14 +106,14 @@ describe("mergeWithDefault", () => {
   // fields it names replace the base's, every other field inherits.
   test("segments: a delta over a bundled name merges by field", () => {
     const raw: RawDslConfig = { segments: { a: { palette: "nord" } } };
-    const out = mergeWithDefault(raw, DFLT, "<test>").config;
+    const out = mergeWithDefault(raw, DFLT);
     expect(out.segments.a).toEqual({ template: " A ", palette: "nord" });
     expect(out.segments.b).toEqual(DFLT.segments.b);
   });
 
   test("presets: a delta over a bundled name merges by field", () => {
     const raw: RawDslConfig = { presets: { compact: { root: hrow("b") } } };
-    const out = mergeWithDefault(raw, DFLT, "<test>").config;
+    const out = mergeWithDefault(raw, DFLT);
     expect(out.presets.compact).toEqual({
       root: hrow("b"),
       globals: { padding: 0 },
@@ -122,21 +123,21 @@ describe("mergeWithDefault", () => {
 
   test("root: a whole tree replaces the default's rows outright", () => {
     const raw: RawDslConfig = { root: vert(["b", "a"]) };
-    expect(mergeWithDefault(raw, DFLT, "<test>").config.root).toEqual(rootOf(vert(["b", "a"])));
+    expect(mergeWithDefault(raw, DFLT).root).toEqual(rootOf(vert(["b", "a"])));
   });
 
   test("root absent → default root", () => {
-    expect(mergeWithDefault({}, DFLT, "<test>").config.root).toEqual(DFLT.root);
+    expect(mergeWithDefault({}, DFLT).root).toEqual(DFLT.root);
   });
 
   test("root: an empty tree suppresses every default row", () => {
     // Distinct from root absent (inherit the default): the bar renders nothing.
-    expect(mergeWithDefault({ root: vert() }, DFLT, "<test>").config.root).toEqual({ rows: {} });
+    expect(mergeWithDefault({ root: vert() }, DFLT).root).toEqual({ rows: {} });
   });
 
   test("root: a tree's `when` lifts to the bar", () => {
     const raw: RawDslConfig = { root: { ...vert(["a"]), when: "{{ .x }}" } };
-    expect(mergeWithDefault(raw, DFLT, "<test>").config.root).toEqual({
+    expect(mergeWithDefault(raw, DFLT).root).toEqual({
       rows: { "#1": hrow("a") },
       when: "{{ .x }}",
     });
@@ -146,7 +147,7 @@ describe("mergeWithDefault", () => {
     const raw: RawDslConfig = {
       root: { ...vert(["a"]), distribution: "monotonic" },
     };
-    expect(mergeWithDefault(raw, DFLT, "<test>").config.root).toEqual({
+    expect(mergeWithDefault(raw, DFLT).root).toEqual({
       rows: { "#1": hrow("a") },
       distribution: "monotonic",
     });
@@ -157,7 +158,7 @@ describe("mergeWithDefault", () => {
       ...(hrow("a", "b") as ContainerNode),
       distribution: "monotonic",
     };
-    expect(mergeWithDefault({ root: row }, DFLT, "<test>").config.root).toEqual({
+    expect(mergeWithDefault({ root: row }, DFLT).root).toEqual({
       rows: { "#1": row },
     });
   });
@@ -175,14 +176,14 @@ describe("mergeWithDefault", () => {
 
   test("rows: replace one row by name, in place — the other inherited", () => {
     const raw: RawDslConfig = { root: { rows: { main: hrow("b", "a") } } };
-    expect(mergeWithDefault(raw, DFLT, "<test>").config.root).toEqual({
+    expect(mergeWithDefault(raw, DFLT).root).toEqual({
       rows: { main: hrow("b", "a"), status: hrow("b") },
     });
   });
 
   test("rows: a new row appends after the inherited ones", () => {
     const raw: RawDslConfig = { root: { rows: { extra: hrow("a") } } };
-    expect(Object.keys(mergeWithDefault(raw, DFLT, "<test>").config.root.rows)).toEqual([
+    expect(Object.keys(mergeWithDefault(raw, DFLT).root.rows)).toEqual([
       "main",
       "status",
       "extra",
@@ -191,14 +192,14 @@ describe("mergeWithDefault", () => {
 
   test("rows: an empty container removes a default row without restating the rest", () => {
     const raw: RawDslConfig = { root: { rows: { status: hrow() } } };
-    expect(mergeWithDefault(raw, DFLT, "<test>").config.root).toEqual({
+    expect(mergeWithDefault(raw, DFLT).root).toEqual({
       rows: { main: hrow("a"), status: hrow() },
     });
   });
 
   test("rows: `when` is carried like a globals field", () => {
     const raw: RawDslConfig = { root: { rows: {}, when: "{{ .x }}" } };
-    expect(mergeWithDefault(raw, DFLT, "<test>").config.root).toEqual({
+    expect(mergeWithDefault(raw, DFLT).root).toEqual({
       ...DFLT.root,
       when: "{{ .x }}",
     });
@@ -206,7 +207,7 @@ describe("mergeWithDefault", () => {
 
   test("rows: `distribution` is carried like a globals field", () => {
     const raw: RawDslConfig = { root: { rows: {}, distribution: "monotonic" } };
-    expect(mergeWithDefault(raw, DFLT, "<test>").config.root).toEqual({
+    expect(mergeWithDefault(raw, DFLT).root).toEqual({
       ...DFLT.root,
       distribution: "monotonic",
     });
@@ -218,14 +219,14 @@ describe("mergeWithDefault", () => {
       root: { ...DFLT.root, when: "{{ .gate }}" },
     };
     const raw: RawDslConfig = { root: { rows: { extra: hrow("a") } } };
-    expect(mergeWithDefault(raw, gated, "<test>").config.root).toEqual({
+    expect(mergeWithDefault(raw, gated).root).toEqual({
       rows: { ...DFLT.root.rows, extra: hrow("a") },
       when: "{{ .gate }}",
     });
   });
 
   test("rows: `{ rows: {} }` is the merge's identity", () => {
-    expect(mergeWithDefault({ root: { rows: {} } }, DFLT, "<test>").config.root).toEqual(DFLT.root);
+    expect(mergeWithDefault({ root: { rows: {} } }, DFLT).root).toEqual(DFLT.root);
   });
 });
 
@@ -234,7 +235,7 @@ describe("validateConfig", () => {
     // ValidatedConfig is structurally DslConfig + a phantom brand. The
     // synthesis passes add the chrome every bar carries; what was merged
     // passes through untouched.
-    const merged = mergeWithDefault({}, DFLT, "<test>").config;
+    const merged = mergeWithDefault({}, DFLT);
     const validated = validateConfig(unauthored(merged), "<test>");
     expect(validated.root).toBe(merged.root);
     expect(validated.globals).toBe(merged.globals);

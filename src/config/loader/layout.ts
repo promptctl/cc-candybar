@@ -50,7 +50,11 @@ import {
   disclosureTrigger,
 } from "../disclosure.js";
 import { findKeyLine } from "./diagnostics.js";
-import { GROUP_NS, reservedNamespaceCollisions } from "./reserved-namespace.js";
+import {
+  GROUP_NS,
+  isReservedName,
+  reservedNamespaceCollisions,
+} from "./reserved-namespace.js";
 import {
   describeType,
   describeValue,
@@ -535,6 +539,8 @@ const INSERT_SCHEMA: RecordSchema<InsertArm> = {
 export function validateInsert(
   ctx: ValidateCtx,
   raw: unknown,
+  // The file being parsed, stamped on every cell with the cell's own path.
+  file: string,
 ): readonly InsertCell[] {
   if (!Array.isArray(raw)) {
     ctx.issues.push({
@@ -551,11 +557,23 @@ export function validateInsert(
     const sides = (["before", "after"] as const).filter(
       (side) => arm[side] !== undefined,
     );
+    const line = findKeyLine(ctx.source, path.split("."));
     if (sides.length !== 1) {
       ctx.issues.push({
         path,
         message: `an insert cell names exactly one of "before" or "after" (the placement id it sits beside), got ${sides.length === 0 ? "neither" : "both"}`,
-        line: findKeyLine(ctx.source, ["insert"]),
+        line,
+      });
+      return [];
+    }
+    // [LAW:no-silent-failure] A reserved name is chrome — the settings door,
+    // a group's toggle, edit mode's own cells — placed by the bar itself; a
+    // cell naming one would place nothing a layer can mean.
+    if (isReservedName(arm.seg)) {
+      ctx.issues.push({
+        path: `${path}.seg`,
+        message: `an insert cell places a segment, and "${arm.seg}" is the bar's own chrome — name a segment instead`,
+        line: findKeyLine(ctx.source, [...path.split("."), "seg"]),
       });
       return [];
     }
@@ -566,6 +584,7 @@ export function validateInsert(
         ...(arm.id !== undefined && { id: arm.id }),
         anchor: arm[relation]!,
         relation,
+        by: { file, entry: path },
       },
     ];
   });

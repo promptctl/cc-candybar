@@ -204,7 +204,7 @@ function renderBurnrate(
     ALLOWED,
   );
   const cfg = validateConfig(
-    { config: mergeWithDefault(raw, DEFAULT_DSL_CONFIG, "<test>").config, raw, source: "{}" },
+    { config: mergeWithDefault(raw, DEFAULT_DSL_CONFIG), raw, source: "{}" },
     "<test>",
     ALLOWED,
   );

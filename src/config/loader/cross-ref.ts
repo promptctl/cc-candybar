@@ -66,12 +66,12 @@ import {
 import { SLOT_PATHS, slotAt } from "../payload-inputs.js";
 import { endcapsNameMessage } from "./styles.js";
 import { parsePersistTarget } from "./persist-target.js";
-import { presetNames, presetRoot } from "../presets.js";
+import { presetNames, presetRoot, renderedRoot } from "../presets.js";
 import {
   fragmentNode,
   fragmentNodePaths,
   isRowsFragment,
-  rootNode,
+  EMPTY_ROWS,
 } from "../root.js";
 import {
   anchorUnderGate,
@@ -514,7 +514,9 @@ export function validateCrossReferences(
   // RENDERS, keyed by the path presetRoot reports it authored at — so a
   // fragment that is the merge identity collapses onto `root` by data and is
   // neither re-walked nor reported under a path nothing edits.
-  const rendered = new Map<string, LayoutNode>([["root", rootNode(cfg.root)]]);
+  const rendered = new Map<string, LayoutNode>([
+    ["root", renderedRoot(cfg, EMPTY_ROWS).node],
+  ]);
   for (const name of presetNames(cfg.presets)) {
     const { node, path } = presetRoot(cfg, name);
     rendered.set(path, node);
