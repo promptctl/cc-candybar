@@ -651,7 +651,10 @@ describe("the colour is its role at a shade, as the palette names it", () => {
 // position, bundled theme and depth, for every row up to sixteen long, on the
 // colours the depth draws: two cells side by side are two colours wherever
 // either of them has a rung of its own ladder drawn as neither of the cells
-// beside it.
+// beside it. candybar-joiners-e5r4.34r: and a cell the rule moves is drawn
+// apart from what an open trigger on the bar wears, wherever its ladder has a
+// rung drawn as neither of its neighbours nor that, because a trigger can
+// stand beside it and the press keeps apart only from what the windows deal.
 describe("where a row turns hue", () => {
   // The hue a place is dealt, in the test's own words: the row starts on its
   // own step (row 0 of 2 on the first, row 1 on the second) and steps every
@@ -663,11 +666,11 @@ describe("where a row turns hue", () => {
   const ROWS = Array.from({ length: 15 }, (_, i) => i + 2);
 
   test.each(VARIATION_NAMES)(
-    "under %s, two cells side by side are drawn alike only where neither has a rung of its own ladder drawn as neither of its neighbours; a cell keeps its hue, leaves the tone its place deals only where a cell across a turn was drawn like it, and leaves its window only where no tone of it stands apart from both neighbours",
+    "under %s, two cells side by side are drawn alike only where neither has a rung of its own ladder drawn as neither of its neighbours; a cell keeps its hue, leaves the tone its place deals only where a cell across a turn was drawn like it, is drawn apart from an open trigger's pressed shade wherever its ladder has a rung apart from both neighbours and the press, and leaves its window only where no tone of it stands apart from all it keeps off",
     (name) => {
       const variation = VARIATIONS[name];
       const wrong: string[] = [];
-      const seen = { turns: 0, dealtAlike: 0, moved: 0, widened: 0, noneToGive: 0 };
+      const seen = { turns: 0, dealtAlike: 0, moved: 0, widened: 0, noneToGive: 0, offPress: 0 };
       for (const drawnAt of DRAWN) {
         const shown = shownAt(drawnAt);
         for (const palette of REGISTRY) {
@@ -686,6 +689,9 @@ describe("where a row turns hue", () => {
           for (const shade of SHADE_NAMES) {
             const decor: Decor = { variation, shade: SHADES[shade] };
             const windowOf = (hue: DecorHue) => windowAt(palette, hue, SHADES[shade], drawnAt);
+            // What every open trigger on the bar wears: each opens the
+            // lineage at depth 0, wherever it stands.
+            const pressed = shown(bandFor(palette, { decor, depth: 0 }, drawnAt).state).hex;
             for (const r of [0, 1]) {
               for (const count of ROWS) {
                 const where = `${palette.name} ${shade} at ${ColorDepth[drawnAt]}, row ${r}, ${count} cells`;
@@ -697,6 +703,10 @@ describe("where a row turns hue", () => {
                 });
                 const besideOf = (i: number): string[] => [line[i - 1], line[i + 1]].flatMap((entry) => (entry === undefined ? [] : [drawn(entry)]));
                 const hasRungToGive = (i: number): boolean => ladder(line[i]!.hue).some((c) => !besideOf(i).includes(c));
+                // What a moved cell keeps off: its neighbours, and the press
+                // as well wherever its ladder has a rung apart from all three.
+                const keptOff = (i: number): string[] =>
+                  ladder(line[i]!.hue).some((c) => ![...besideOf(i), pressed].includes(c)) ? [...besideOf(i), pressed] : besideOf(i);
                 line.forEach((entry, i) => {
                   if (entry.hue !== dealt[i]!.hue) wrong.push(`${where}: ${i} wears ${entry.hue}, dealt ${dealt[i]!.hue}`);
                   if (entry.shade === dealt[i]!.shade) return;
@@ -707,9 +717,13 @@ describe("where a row turns hue", () => {
                     (j) => dealt[j] !== undefined && dealt[j]!.hue !== entry.hue && [drawn(dealt[j]!), drawn(line[j]!)].includes(drawn(dealt[i]!)),
                   );
                   if (!metAcross) wrong.push(`${where}: ${i} left its tone, though no cell across a turn was drawn like it`);
+                  if (keptOff(i).includes(pressed)) {
+                    seen.offPress++;
+                    if (drawn(entry) === pressed) wrong.push(`${where}: ${i} wears ${entry.shade}, drawn as the press ${pressed}`);
+                  }
                   if (windowOf(entry.hue).includes(entry.shade)) return;
                   seen.widened++;
-                  const apart = windowOf(entry.hue).filter((tone) => !besideOf(i).includes(drawn({ hue: entry.hue, shade: tone })));
+                  const apart = windowOf(entry.hue).filter((tone) => !keptOff(i).includes(drawn({ hue: entry.hue, shade: tone })));
                   if (apart.length > 0) wrong.push(`${where}: ${i} wears ${entry.shade}, past its window's ${apart.join()}`);
                 });
                 for (let i = 0; i + 1 < count; i++) {
@@ -738,7 +752,7 @@ describe("where a row turns hue", () => {
       // that turns meets two hues on one colour at some depth, and holds each
       // such turn by moving a cell.
       const turns = variation.run !== WHOLE_ROW || variation.keystones.length > 0;
-      expect([name, seen.turns > 0, seen.dealtAlike > 0, seen.moved > 0]).toEqual([name, turns, turns, turns]);
+      expect([name, seen.turns > 0, seen.dealtAlike > 0, seen.moved > 0, seen.offPress > 0]).toEqual([name, turns, turns, turns, turns]);
     },
   );
 
@@ -773,6 +787,43 @@ describe("where a row turns hue", () => {
     // secondary after the turn has teal alone, and the accent before it has
     // blue beside it on its other side: neither has a rung to give.
     expect(line("textual-ansi", "muted", 5).drawn).toEqual(["#008080", "#0000ff", "#008080", "#008080", "#008080"]);
+  });
+
+  test("a cell moved at a turn keeps off the shade an open trigger on the bar wears: past a tone of its window drawn like it, and where the cell after the turn has nothing apart from both neighbours and the press, the cell before the turn moves", () => {
+    const ansi = ColorDepth.STANDARD;
+    const shown = shownAt(ansi);
+    const moon = getThemePalette("rose-pine-moon");
+    const drawnLine = (variation: VariationName, shade: ShadeName, count: number) => {
+      const decor: Decor = { variation: VARIATIONS[variation], shade: SHADES[shade] };
+      const entries = Array.from({ length: count }, (_, i) => decorEntryFor(moon, decor, [row(1, 2), cell(i, count)], ansi));
+      return {
+        entries,
+        drawn: entries.map((entry) => shown(decorEntryColour(moon, entry)).hex),
+        pressed: shown(bandFor(moon, { decor, depth: 0 }, ansi).state).hex,
+      };
+    };
+    // On the muted dial under end-secondary, the line-end keystone is dealt
+    // its accent's muted grey beside the secondary's grey. Its window's other
+    // tone, the accent itself, draws silver, which is what an open trigger
+    // wears there (the dial's pressed rung, the secondary's second
+    // lightening), so it passes that tone over for its ladder's white.
+    const end = drawnLine("end-secondary", "muted", 3);
+    expect(windowAt(moon, "accent", SHADES.muted, ansi)).toEqual(["muted", "base"]);
+    expect(end.pressed).toBe("#c0c0c0");
+    expect(end.entries[2]).toEqual({ hue: "accent", shade: "lighten-3" });
+    expect(end.drawn).toEqual(["#008080", "#808080", "#ffffff"]);
+    // Under alt, the accent after the second row's turn is dealt grey beside
+    // the secondary's grey, and its ladder draws grey, silver and white: its
+    // neighbours wear the first two and an open trigger the third. So the
+    // secondary before the turn moves, to its silver, past its window and
+    // apart from the teal and grey beside it and from the press.
+    const alt = drawnLine("alt", "middle", 8);
+    expect(alt.pressed).toBe("#ffffff");
+    expect(alt.entries.slice(5, 7)).toEqual([
+      { hue: "secondary", shade: "lighten-2" },
+      { hue: "accent", shade: "darken-1" },
+    ]);
+    expect(alt.drawn.slice(4, 8)).toEqual(["#008080", "#c0c0c0", "#808080", "#c0c0c0"]);
   });
 });
 

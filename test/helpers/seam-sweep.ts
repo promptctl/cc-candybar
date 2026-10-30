@@ -56,7 +56,7 @@ import {
 } from "../../src/themes/decor";
 import { instantOf } from "../../src/utils/instant";
 import { LADDER, TODAY, besidePress } from "./decor-vocabulary";
-import { drawnChars, seams, shown, type Char } from "./seams";
+import { cellAfter, cellBefore, drawnChars, seams, shown } from "./seams";
 import { sessionBar, type SessionBar } from "./session-bar";
 
 const THEMES = listThemePalettes();
@@ -111,8 +111,9 @@ function flatShades(palette: Palette, drawnAt: ColorDepth): ReadonlySet<string> 
 
 // Every pressed shade under `decor`, as the palette names it, whose role's
 // ladder `drawnAt` draws only in colours the design stands beside the press
-// (`besidePress`).
-function pressesWithNoneToGive(palette: Palette, decor: Decor, drawnAt: ColorDepth): ReadonlySet<string> {
+// (`besidePress`). The sweep's press exemption, read by every frame that
+// holds a seam beside an open trigger.
+export function pressesWithNoneToGive(palette: Palette, decor: Decor, drawnAt: ColorDepth): ReadonlySet<string> {
   return new Set(
     [0, 1, 2, 3].flatMap((depth) => {
       const disclosure: Disclosure = { decor, depth };
@@ -128,19 +129,6 @@ function pressesWithNoneToGive(palette: Palette, decor: Decor, drawnAt: ColorDep
 // A cell's background as the render dealt it, before the writer rounds it.
 const dealt = (cell: RichText): ColorRgba | undefined => resolvedStyle(cell.style).bgcolor?.value;
 const visible = (text: string): string => text.replace(/\s/g, "");
-
-// The visible text of the cell a seam leaves and the one it enters: the
-// characters back to the joiner before it, and on to the joiner after it.
-const cellBefore = (chars: readonly Char[], at: number): string => {
-  let from = at;
-  while (from > 0 && !chars[from - 1]!.joiner) from--;
-  return chars.slice(from, at).map((c) => c.ch).join("");
-};
-const cellAfter = (chars: readonly Char[], at: number): string => {
-  let to = at + 1;
-  while (to < chars.length && !chars[to]!.joiner) to++;
-  return chars.slice(at + 1, to).map((c) => c.ch).join("");
-};
 
 /**
  * The bundled bar drawn at each depth, one rig per depth: parse and compile

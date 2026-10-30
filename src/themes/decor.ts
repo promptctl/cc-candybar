@@ -9,8 +9,9 @@
 // generates for the role in every theme — from the window of them the SHADE
 // dial is turned to, with the row and the shade chosen by the node's position
 // in the tree; where a row turns from one hue to the next, the cells either
-// side of the turn wear shades the depth draws as two colours wherever their
-// ladders have them. An open menu selects the same way: the segment that opened it
+// side of the turn wear shades the depth draws as two colours, and as neither
+// colour an open trigger beside them would wear, wherever their ladders have
+// them. An open menu selects the same way: the segment that opened it
 // wears its hue at its pressed shade — the dial's activated shade, moved along
 // the ladder where the depth draws it like what stands beside it — and its
 // rows sit on the theme's `surface`. Every background the bar draws is one its
@@ -430,7 +431,7 @@ export const vocabularyOf = (
 ): readonly DecorEntry[] =>
   turnsHeld(
     palette,
-    decor.shade,
+    decor,
     decor.variation.hues.flatMap((hue) => {
       const window = windowAt(palette, hue, decor.shade, drawnAt);
       // [LAW:no-defensive-null-guards] A window is never empty (`Tones`), so
@@ -939,6 +940,8 @@ function dealtAt(
  *
  * [LAW:dataflow-not-control-flow] Built once per (palette, variation, dial
  * position, row, line, depth) and memoised, so a cell's entry is a lookup.
+ * The variation's lineage and the dial's pressed shade are in the key because
+ * the turn rule keeps a moved cell off the pressed shade they name.
  */
 function lineAt(
   palette: Palette,
@@ -947,12 +950,14 @@ function lineAt(
   cell: AddressStep,
   drawnAt: ColorDepth,
 ): readonly DecorEntry[] {
-  const { hues, run, keystones } = decor.variation;
+  const { hues, run, keystones, open } = decor.variation;
   const key = [
     hues.join(","),
     run,
     keystones.join(","),
+    open.join(","),
     decor.shade.tones.join(","),
+    decor.shade.activated,
     row === undefined ? "" : stepKey(row),
     // One answer for every place along the line, so the cell is keyed at
     // the line's first.
@@ -962,7 +967,7 @@ function lineAt(
   return LINES(palette, key, () =>
     turnsHeld(
       palette,
-      decor.shade,
+      decor,
       Array.from({ length: cell.lineEnd - cell.lineStart + 1 }, (_, at) =>
         dealtAt(
           palette,
@@ -1035,17 +1040,26 @@ const DISTRIBUTION_NAME = new Map<Distribution, DistributionName>(
  * window drawn as neither of its neighbours, else the nearest rung of its
  * ladder that is (`widen`). Both neighbours, because its other neighbour is
  * of its own hue, kept apart from it by the distribution: a tone drawn like
- * that one would move the collision one seam over. Where its ladder has no
- * such rung, the cell before the turn takes one by the same rule; where
- * neither has one, both keep what they were dealt and the joiner's lift
- * draws the seam. The line is read from its first place to its last, so a
- * cell with a turn on each side (one cell between two keystones) is decided
- * against the cell before it as that one finally stands, and every seam
- * behind the place being read stays held. That reading is why the cell after
- * the turn moves first: it is the one not yet read, so no cell already read
- * changes unless the cell after has nothing to give. A keystone ending a
- * line is therefore the cell that moves, and one starting a line keeps its
- * shade.
+ * that one would move the collision one seam over. And drawn as neither of
+ * them nor the shade an open trigger on the bar wears (`pressedOnBar`): a
+ * trigger can stand beside the cell that moves, and the press keeps apart
+ * only from the tones the windows deal, because a band's colours never
+ * depend on where its trigger stands, so a rung past a window is one the
+ * press cannot see. A cell's neighbours are a fact of its address, so the
+ * cell is the one that keeps off the press. Where its ladder has no such
+ * rung, the cell before the turn takes one by the same rule. Where neither
+ * has one, the two take a rung apart from their neighbours alone, in the
+ * same order, and a trigger beside the one that moves shares its colour;
+ * where neither has even that, both keep what they were dealt and the
+ * joiner's lift draws the seam. The line is read from its first place to its
+ * last, so a cell with a turn on each side (one cell between two keystones)
+ * is decided against the cell before it as that one finally stands, and
+ * every seam behind the place being read stays held. That reading is why the
+ * cell after the turn moves first: it is the one not yet read, so no cell
+ * already read changes unless the cell after has nothing to give. A keystone
+ * ending a line is therefore the cell that moves wherever it has a rung to
+ * give, and one starting a line keeps its shade wherever the cell after it
+ * has one.
  *
  * Alike means drawn as one colour, by identity after rounding, as the window
  * decides it; nothing measures a distance between two colours. A cell keeps
@@ -1059,7 +1073,7 @@ const DISTRIBUTION_NAME = new Map<Distribution, DistributionName>(
  */
 function turnsHeld(
   palette: Palette,
-  shade: Shade,
+  decor: Decor,
   dealt: readonly DecorEntry[],
   drawnAt: ColorDepth,
 ): readonly DecorEntry[] {
@@ -1068,31 +1082,41 @@ function turnsHeld(
     const entry = line[at];
     return entry && drawnIn(palette, entry.hue, drawnAt)(entry.shade);
   };
-  // The entry `at` takes to stand apart from the cells either side of it:
-  // its own hue, at the first tone of its window, else the nearest rung of
-  // its ladder, drawn as neither neighbour.
-  const apart = (at: number): DecorEntry | undefined => {
+  const pressed = pressedOnBar(palette, decor, drawnAt);
+  // The entry `at` takes to stand apart from the cells either side of it and
+  // from every colour `off` names: its own hue, at the first tone of its
+  // window, else the nearest rung of its ladder, drawn as none of them.
+  const apart = (
+    at: number,
+    off: readonly string[],
+  ): DecorEntry | undefined => {
     // [LAW:no-defensive-null-guards] `at` is a place on the line.
     const { hue } = line[at]!;
-    const taken = [drawn(at - 1), drawn(at + 1)].filter(
+    const taken = [drawn(at - 1), drawn(at + 1), ...off].filter(
       (colour): colour is string => colour !== undefined,
     );
-    const window = windowAt(palette, hue, shade, drawnAt);
+    const window = windowAt(palette, hue, decor.shade, drawnAt);
     const tone =
       window.find((t) => !taken.includes(drawnIn(palette, hue, drawnAt)(t))) ??
       widen(palette, hue, window, taken, drawnAt);
     return tone === undefined ? undefined : { hue, shade: tone };
   };
+  // [LAW:dataflow-not-control-flow] Who moves, in the order the rule names,
+  // as data: the cell after the turn, then the one before it, each kept off
+  // the press as well, then each kept off its neighbours alone.
+  const moves = (at: number) =>
+    [[pressed], []].flatMap((off) =>
+      [at, at - 1].map((place) => ({ place, off })),
+    );
   for (let at = 1; at < line.length; at++) {
     if (line[at - 1]!.hue === line[at]!.hue || drawn(at - 1) !== drawn(at))
       continue;
-    const after = apart(at);
-    if (after !== undefined) {
-      line[at] = after;
-      continue;
+    for (const { place, off } of moves(at)) {
+      const entry = apart(place, off);
+      if (entry === undefined) continue;
+      line[place] = entry;
+      break;
     }
-    const before = apart(at - 1);
-    if (before !== undefined) line[at - 1] = before;
   }
   return line;
 }
@@ -1293,7 +1317,11 @@ export const bandEntries = (
  * keeps apart from every tone of the band's own window, from every tone the
  * trigger's neighbours are dealt, and from the pressed shade one depth up.
  * Where the role's whole ladder draws as those colours it keeps the dial's
- * shade: there is no other to give, and the joiner shows the seam.
+ * shade: there is no other to give, and the joiner shows the seam. A bar
+ * cell a hue turn moves past its window is not among them, because which
+ * rung it takes depends on where it stands, and a band's colours never
+ * depend on where its trigger stands; that cell keeps off this shade
+ * instead (`turnsHeld`).
  *
  * [LAW:one-source-of-truth] Read by `bandFor`, so the trigger, its band's
  * leads and its ✕ wear one shade. [LAW:dataflow-not-control-flow] Built once
@@ -1344,6 +1372,30 @@ export function pressedAt(
 // Every pressed cell of every frame asks for its shade, and the answer is a
 // pure function of what the key names.
 const PRESSED = memoPerPalette<RoleShade>();
+
+/**
+ * What an open trigger on the bar under `decor` wears, as `drawnAt` draws it:
+ * every trigger on the bar opens its lineage at depth 0, whatever its row or
+ * place (`decorationFor`), so this is one colour for the whole bar, known
+ * without any position — which is what lets the turn rule (`turnsHeld`) keep
+ * a cell off it by its address alone.
+ * [LAW:one-source-of-truth] The band's own pressed shade, read through
+ * `pressedAt` as `bandFor` reads it, so the colour a cell keeps off is the
+ * one the trigger is drawn in. [LAW:dataflow-not-control-flow] A lookup of
+ * that memoised entry.
+ */
+const pressedOnBar = (
+  palette: Palette,
+  decor: Decor,
+  drawnAt: ColorDepth,
+): string => {
+  const opened: Disclosure = { decor, depth: 0 };
+  return drawnIn(
+    palette,
+    hueOf(opened),
+    drawnAt,
+  )(pressedAt(palette, opened, drawnAt));
+};
 
 /** The band a trigger standing in `disclosure`'s band opens: one depth further. */
 const nestedIn = (disclosure: Disclosure): Disclosure => ({

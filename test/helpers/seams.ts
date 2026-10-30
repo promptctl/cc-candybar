@@ -139,3 +139,19 @@ export function seams(chars: readonly Char[]): Seam[] {
     ARROWS.has(ch) && !reverse && before !== undefined ? [{ glyph: ch, left: before, right: bg, ink: fg, at }] : [],
   );
 }
+
+/**
+ * The visible text of the cell the seam at `at` leaves and of the one it
+ * enters: the characters back to the joiner before it, and on to the joiner
+ * after it.
+ */
+export const cellBefore = (chars: readonly Char[], at: number): string => {
+  let from = at;
+  while (from > 0 && !chars[from - 1]!.joiner) from--;
+  return chars.slice(from, at).map((c) => c.ch).join("");
+};
+export const cellAfter = (chars: readonly Char[], at: number): string => {
+  let to = at + 1;
+  while (to < chars.length && !chars[to]!.joiner) to++;
+  return chars.slice(at + 1, to).map((c) => c.ch).join("");
+};
