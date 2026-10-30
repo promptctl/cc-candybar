@@ -55,7 +55,7 @@ import { linkUrls, links } from "./helpers/ansi";
 import { instantOf, type Instant } from "../src/utils/instant";
 import {
   LANES,
-  LANE_NAMES,
+  TOGGLED_LANES,
   MOVING_FPS,
   UNFOLLOWED_FEEDS,
   type Drawing,
@@ -63,6 +63,7 @@ import {
   type LaneFeeds,
 } from "../src/config/lanes";
 import { LANE_HELP } from "../src/help-text";
+import { settingMenuPath } from "../src/config/menu-places";
 import { DOOR_GLYPH } from "../src/config/disclosure";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
@@ -102,6 +103,9 @@ function rig(
   render: (feeds?: LaneFeeds, at?: Instant, drawing?: Drawing) => string;
   click: (url: string) => void;
   dispose: () => void;
+  // The tmux pane the session's client reports it runs in, "" outside tmux —
+  // the `tmux.pane` input every render's payload carries.
+  tmuxPane: string;
 } {
   const sessionState = new SessionState();
   durable?.write(source);
@@ -128,6 +132,7 @@ function rig(
     return { config, store, registry, compiled, fileHeld };
   };
   let entry = load(source);
+  let tmuxPane = "";
   const logs: string[] = [];
   const reloads: { text: string; picks: Record<string, string | null> }[] = [];
   const ctx: VerbContext = {
@@ -149,6 +154,12 @@ function rig(
   return {
     get config() {
       return entry.config;
+    },
+    get tmuxPane() {
+      return tmuxPane;
+    },
+    set tmuxPane(pane: string) {
+      tmuxPane = pane;
     },
     sessionState,
     logs,
@@ -195,6 +206,7 @@ function rig(
             redo: durable?.history(SID).future.length ?? 0,
           },
           feeds,
+          tmux: { pane: tmuxPane },
           // What the daemon sets beside the payload (server.ts).
           drawing,
         },
@@ -1528,15 +1540,15 @@ describe("the animation lanes' toggles", () => {
   // What the lane runs follows the switch the session renders by, whatever
   // moved it (test/lane-setup.test.ts, "LaneSetups"), so the toggle is its
   // setting's write and nothing else.
-  test.each(LANE_NAMES)(
+  test.each(TOGGLED_LANES)(
     "%s: the toggle's click is its switch's write alone",
     (lane) => {
       const { r } = openToggles();
       try {
-        const [url, ...others] = writesTo(r.render(), LANES[lane].setting);
+        const [url, ...others] = writesTo(r.render(), LANES[lane].switch.setting);
         expect(others).toEqual([]);
         expect(effectsOf(url!).map((e) => [e.verb, ...e.args])).toEqual([
-          ["set-state", SID, LANES[lane].setting, "true"],
+          ["set-state", SID, LANES[lane].switch.setting, "true"],
         ]);
         r.click(url!);
         expect(plain(r.render())).toContain(`☑ ${LANES[lane].label}`);
@@ -1546,14 +1558,14 @@ describe("the animation lanes' toggles", () => {
     },
   );
 
-  test.each(LANE_NAMES)(
+  test.each(TOGGLED_LANES)(
     "%s: the (?) beside the toggle says what the lane does",
     (lane) => {
       const { r } = openToggles();
       try {
         for (const line of LANE_HELP[lane])
           expect(plain(r.render())).not.toContain(line);
-        const key = `candybar.help.${LANES[lane].setting}`;
+        const key = `candybar.help.${LANES[lane].switch.setting}`;
         const url = urlsOf(r.render()).find((u) => {
           const effects = effectsOf(u);
           return effects.length === 1 && effects[0]!.args[1] === key;
@@ -1571,6 +1583,147 @@ describe("the animation lanes' toggles", () => {
 
 // [LAW:verifiable-goals] candybar-animation-wbxz.a4h: a lane toggle says what
 // its frames are doing, so whether a lane works can be seen from the bar.
+
+// candybar-plugins-vf6g.qzx — the tmux status line is a renderer: a menu in ⚙
+// config with `claude` and `tmux`, offered to a session inside tmux.
+describe("the renderer menu", () => {
+  const RENDERER_APPLY = "candybar.apply.renderer";
+  // The settings menu open on ⚙ config, the session in tmux pane %7 or in no
+  // pane at all.
+  const openConfig = (pane: string, source = TWO_SEGMENT_ROOT, durable?: DurableConfig) => {
+    const r = rig(source, durable);
+    r.tmuxPane = pane;
+    r.click(writesTo(r.render(), "candybar.menu")[0]!);
+    showTab(r, "config");
+    return r;
+  };
+  const rendererLine = (rendered: string): string | undefined =>
+    plain(rendered)
+      .split("\n")
+      .find((l) => l.includes("renderer ◀"));
+  const openList = (r: ReturnType<typeof rig>): void => {
+    const url = urlsOf(r.render()).find((u) =>
+      effectsOf(u).some((e) => e.args[2] === RENDERER_APPLY),
+    );
+    if (url === undefined) throw new Error("no link opens the renderer list");
+    r.click(url);
+  };
+
+  test("inside tmux, ⚙ config holds `renderer ◀ claude ▶`, and its closed list takes no row", () => {
+    const r = openConfig("%7");
+    try {
+      expect(rendererLine(r.render())).toContain("renderer ◀ claude ▶");
+      expect(plain(r.render())).not.toContain("Claude Code's status line");
+    } finally {
+      r.dispose();
+    }
+  });
+
+  test("opened, it lays one aligned row per renderer, as the add-segment menu lays its library", () => {
+    const r = openConfig("%7");
+    try {
+      openList(r);
+      const lines = plain(r.render()).split("\n");
+      expect(lines.some((l) => l.includes("draw the bar in"))).toBe(true);
+      const claude = lines.find((l) => l.includes("Claude Code's status line"))!;
+      const tmux = lines.find((l) => l.includes("the tmux status line, while"))!;
+      expect(claude).toMatch(/claude\s+Claude Code's status line/u);
+      expect(tmux).toMatch(/tmux\s+the tmux status line/u);
+      expect(claude.indexOf("Claude Code's")).toBe(tmux.indexOf("the tmux"));
+    } finally {
+      r.dispose();
+    }
+  });
+
+  test("its arrow switches the value, as a draft the save cell counts", () => {
+    const r = openConfig("%7");
+    try {
+      const arrow = links(r.render()).find(
+        (l) =>
+          stripAnsi(l.text) === "▶" &&
+          effectsOf(l.url).some(
+            (e) => e.args[1] === "renderer" && e.args[2] === "tmux",
+          ),
+      );
+      expect(arrow).toBeDefined();
+      r.click(arrow!.url);
+      expect(r.sessionState.get(SID, "renderer")).toBe("tmux");
+      expect(rendererLine(r.render())).toContain("renderer ◀ tmux ▶");
+      expect(plain(r.render())).toContain("💾 save 1");
+    } finally {
+      r.dispose();
+    }
+  });
+
+  test("outside tmux there is no renderer menu, and a file's tmux marks nothing", () => {
+    const source = `{
+  globals: { renderer: "tmux" },
+  segments: { a: { template: 'a' } },
+  root: { h: ['a'] },
+}`;
+    const inside = openConfig("%7", source);
+    const outside = openConfig("", source);
+    try {
+      expect(rendererLine(inside.render())).toContain("renderer ◀ tmux ▶");
+      expect(rendererLine(outside.render())).toBeUndefined();
+      expect(plain(outside.render())).not.toContain("the tmux status line");
+      // The tab's drift mark counts the renderer only where it is drawn.
+      expect(plain(inside.render())).toContain("config •");
+      expect(plain(outside.render())).not.toContain("config •");
+      expect(plain(outside.render())).not.toContain("⟲");
+    } finally {
+      inside.dispose();
+      outside.dispose();
+    }
+  });
+
+  test("the tmux status line is no longer one of the 🧪 toggles", () => {
+    const r = openConfig("%7");
+    try {
+      const url = urlsOf(r.render()).find((u) =>
+        effectsOf(u).some(
+          (e) => e.args[1] === PICKERS_KEY && e.args[2] === "toggles",
+        ),
+      );
+      r.click(url!);
+      const rendered = plain(r.render());
+      for (const lane of TOGGLED_LANES)
+        expect(rendered).toContain(`☐ ${LANES[lane].label}`);
+      expect(rendered).not.toMatch(/☐ .*tmux status line/u);
+      expect(settingMenuPath("renderer")).toBe(settingMenuPath("padding"));
+    } finally {
+      r.dispose();
+    }
+  });
+
+  // [LAW:no-silent-failure] The setting is shared by every session the config
+  // renders: a reset-all clicked where the renderer is not drawn leaves it.
+  test("a reset-all outside tmux leaves the shared renderer as the file holds it", () => {
+    const durable = durableConfig("cc-candybar-renderer-reset-");
+    const r = openConfig(
+      "",
+      `{
+  globals: { renderer: "tmux", padding: 3 },
+  segments: { a: { template: 'a' } },
+  root: { h: ['a'] },
+}`,
+      durable,
+    );
+    try {
+      const labelled = (text: string): string =>
+        links(r.render()).find((l) => stripAnsi(l.text) === text)!.url;
+      r.click(labelled("⟲"));
+      r.click(labelled("⟲ reset all?"));
+      const globals = durable.parsed().globals as Record<string, unknown>;
+      expect(globals).not.toHaveProperty("padding");
+      expect(globals.renderer).toBe("tmux");
+    } finally {
+      r.dispose();
+      durable.dispose();
+    }
+  });
+});
+
 describe("a lane toggle's readout", () => {
   const SPINNER = /[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/u;
   // The 🧪 toggles submenu open in the ⚙ config tab, statusline (B) on.

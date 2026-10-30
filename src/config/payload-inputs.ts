@@ -252,10 +252,3 @@ export const SLOT_PATHS: Readonly<Record<ExpressionSlot, string>> =
 export function slotAt(path: string): ExpressionSlot | undefined {
   return EXPRESSION_SLOTS.find((slot) => SLOT_PATHS[slot] === path);
 }
-
-// [LAW:one-source-of-truth] The one spelling of "a `slash` click has a pane to
-// type into", as a template expression: every bundled slash control gates on
-// it, so none shows a button whose every click the verb would refuse
-// (brandon-tmux-tk7). A user's own slash button gates the same way:
-// `when: '{{ ne .tmux.pane "" }}'`.
-export const IN_TMUX = 'ne .tmux.pane ""';

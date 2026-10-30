@@ -319,12 +319,15 @@ const controlResettable = (name: string): string =>
   `${SETTINGS_NS}resettable.${name}`;
 // What a marked trigger carries after its label.
 const DRIFT_MARK = " •";
-// A boolean `or` over the named controls' resettable flags — `false` over none,
-// so a tab holding no control is never marked.
-const anyResettable = (names: readonly string[]): string =>
-  names.length === 0
+// A boolean `or` over the controls' resettable flags, each only while its
+// control is offered to the session — `false` over none, so a tab holding no
+// control is never marked, and a mark never points at a control not drawn.
+const anyResettable = (
+  controls: ReadonlyArray<Pick<MenuControl, "name" | "shown">>,
+): string =>
+  controls.length === 0
     ? "false"
-    : `(or ${names.map((n) => `.${controlResettable(n)}`).join(" ")})`;
+    : `(or ${controls.map((c) => `(and (${c.shown}) .${controlResettable(c.name)})`).join(" ")})`;
 
 // ─── The animation lanes' toggles (brandon-menus-sjhy.amf) ────────────────
 //
@@ -337,7 +340,7 @@ const anyResettable = (names: readonly string[]): string =>
 // `(?)` says what the lane is and what turning it on does, from the help
 // corpus `--help` prints.
 const laneSettings = LANE_NAMES.map(
-  (lane) => [LANES[lane].setting, lane] as const,
+  (lane) => [LANES[lane].switch.setting, lane] as const,
 );
 
 // The `(?)` laid after a control, and the artifacts it declares.
@@ -347,15 +350,16 @@ const HELP_ARTIFACTS: HelpArtifacts = {
   segments: {},
 };
 const HELP: Partial<Record<SettingName, LayoutNode>> = Object.fromEntries(
-  laneSettings.map(([setting, lane]) => [
-    setting,
-    declareHelp(
-      `${SETTINGS_NS}help.${setting}`,
-      LANE_HELP[lane],
-      [],
-      HELP_ARTIFACTS,
-    ),
-  ]),
+  laneSettings.map(([setting, lane]) => {
+    const name = `${SETTINGS_NS}help.${setting}`;
+    const node = declareHelp(name, LANE_HELP[lane], [], HELP_ARTIFACTS);
+    // A `(?)` is offered where its control is.
+    HELP_ARTIFACTS.segments[name] = {
+      ...HELP_ARTIFACTS.segments[name]!,
+      when: `{{ ${SETTINGS[setting].shown} }}`,
+    };
+    return [setting, node];
+  }),
 );
 
 // One control of the menu: its setting's row of SETTINGS and what the
@@ -394,7 +398,10 @@ const laneReadout = (lane: Lane): string => {
     " ",
   );
   return (
-    `{{ if .${SETTINGS[LANES[lane].setting].effectiveVar} }} ` +
+    // [LAW:dataflow-not-control-flow] One test for every switch, a flag's or
+    // the renderer's: the setting's value against the one that turns the lane
+    // on, each spelled as a template literal of its own type.
+    `{{ if eq .${SETTINGS[LANES[lane].switch.setting].effectiveVar} ${JSON.stringify(LANES[lane].switch.on)} }} ` +
     `{{ if ${feed("subscribers")} }}{{ realtimeFrames ${spinner} }} {{ ${feed("fps")} }} fps` +
     `{{ if not ${feed("shown")} }} · off screen{{ end }}` +
     `{{ else }}no subscriber{{ end }}{{ end }}`
@@ -546,7 +553,7 @@ const markedDisplay =
   (place: Place) =>
   (text: string): string =>
     `(print ${templateLiteral(text)} (ternary ${templateLiteral(DRIFT_MARK)} "" ${anyResettable(
-      controlsUnder(place).map((c) => c.name),
+      controlsUnder(place),
     )}))`;
 // The controls in `place`, each followed by the submenus laid beside it, whose
 // bodies are laid the same way.
@@ -572,10 +579,15 @@ export const SETTINGS_WRITTEN_KEYS: ReadonlySet<string> = new Set(
   CONTROLS.flatMap((c) => [c.sessionKey, c.configKey]),
 );
 
+// [LAW:single-enforcer] `⟲` resets the controls every session is offered. A
+// control offered only to some sessions (the renderer, inside tmux) resets by
+// its own ↺, so a reset-all clicked where it is not drawn never changes a
+// setting the sessions share and that session cannot see.
+const RESET_ALL_CONTROLS = CONTROLS.filter((c) => c.shown === "true");
 const RESET_ALL = confirmStep(
   RESET_ALL_SEG,
   { arm: "⟲", confirm: "⟲ reset all?" },
-  CONTROLS.map((c) => controlReset(c.name)),
+  RESET_ALL_CONTROLS.map((c) => controlReset(c.name)),
 );
 
 // ─── The save cell ──────────────────────────────────────────────────────────
@@ -610,7 +622,7 @@ const SAVE_PARTS: readonly SavePart[] = [
   counted("history.redo", `{{ action "${REDO_ACTION}" "↷" }}`),
   {
     body: RESET_ALL.template,
-    shown: `(or ${anyResettable(CONTROLS.map((c) => c.name))} ${RESET_ALL.armed})`,
+    shown: `(or ${anyResettable(RESET_ALL_CONTROLS)} ${RESET_ALL.armed})`,
   },
 ];
 // The parts present, one space between each: `$sep` is empty until the first
@@ -1138,8 +1150,11 @@ function declareSettingControls(artifacts: MenuArtifacts): void {
     };
     const resetCell = `{{ if .${controlResettable(c.name)} }} {{ action "${reset}" "↺" }}{{ end }}`;
     Object.assign(artifacts.variables, c.control.variables);
+    // [LAW:dataflow-not-control-flow] Every control is gated by whom it is
+    // offered to; its list hangs on it, so hiding it hides the list.
     artifacts.segments[controlSeg(c.id)] = {
       template: `${c.control.template}${TRAIL[c.name] ?? ""}${resetCell}`,
+      when: `{{ ${c.shown} }}`,
     };
     if (c.control.kind === "picker") {
       [

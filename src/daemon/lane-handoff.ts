@@ -1,9 +1,9 @@
-// While an animation lane draws a session's bar somewhere other than its
-// statusline — the band above the prompt (A), a tmux pane (C) — the statusline
-// shows one line instead of a second copy of the bar: where the bar is, and a
-// button that resets those lanes' settings, in case the place they draw it
-// has broken (Brandon: "we should NOT show the original bar except a single
-// line that contains a button to reset those settings").
+// While a lane draws a session's bar somewhere other than its statusline —
+// the band above the prompt (A), a tmux pane or the tmux status line (C) — the
+// statusline shows one small row instead of a second copy of the bar: a button
+// that draws the bar back in Claude Code's statusline, in case the place the
+// lane draws it has broken, and the error indicator beside it, so an error is
+// seen even where the lane's bar is not.
 //
 // [LAW:one-source-of-truth] Only the bytes Claude Code's statusline receives
 // change: the lanes draw from the session's full render, which the feed is
@@ -15,7 +15,7 @@ import {
   type Lane,
   type LaneSwitches,
 } from "../config/lanes.js";
-import { effectsUrl, VERB_COPY, VERB_RESET_CONFIG } from "../click/wire.js";
+import { effectsUrl, VERB_RESET_CONFIG } from "../click/wire.js";
 import {
   diagnosticSpan,
   HANDOFF_SEVERITY,
@@ -35,35 +35,26 @@ export function handedOffTo(
   );
 }
 
-export const HANDOFF_BUTTON = "[⟲ draw it here]";
+export const HANDOFF_BUTTON = "[⟲ claude]";
 
-// The handoff line for `lanes` (non-empty): the sentence, which copies itself
-// (it is in no diagnostic list, so no key names it, and it is one short
-// sentence), then the button. The button resets each lane's
-// setting at every layer (the settings menu's ↺ for it); what the lane runs
-// follows the switch (src/daemon/lane-setup.ts), so a pane it opened closes.
+// The handoff row for `lanes` (non-empty): the button alone; the error
+// indicator is laid after it where the row is drawn (src/render/diagnostics.ts).
+// The button resets each lane's switch at every layer (the settings menu's ↺
+// for it), which puts the renderer back to `claude` and turns a 🧪 lane off;
+// what the lane runs follows the switch (src/daemon/lane-setup.ts), so a pane
+// it opened closes.
 export function laneHandoff(
   sessionId: string,
   lanes: readonly [Lane, ...Lane[]],
 ): ChannelMessage {
-  const where = lanes.map((lane) => LANES[lane].elsewhere).join(" and ");
-  const message = `the bar is drawn in ${where}`;
   const reset = effectsUrl([
     {
       verb: VERB_RESET_CONFIG,
-      args: [sessionId, ...lanes.map((lane) => LANES[lane].setting)],
+      args: [sessionId, ...lanes.map((lane) => LANES[lane].switch.setting)],
     },
   ]);
   return {
     severity: HANDOFF_SEVERITY,
-    lines: [
-      [
-        diagnosticSpan(
-          message,
-          effectsUrl([{ verb: VERB_COPY, args: [message] }]),
-        ),
-        diagnosticSpan(HANDOFF_BUTTON, reset),
-      ],
-    ],
+    lines: [[diagnosticSpan(HANDOFF_BUTTON, reset)]],
   };
 }

@@ -150,7 +150,7 @@ const PIN_AND_PICK: Record<PinnedSetting, { pin: string; pick: string }> = {
   experimentalBand: { pin: "true", pick: "false" },
   experimentalStatusline: { pin: "false", pick: "true" },
   experimentalPane: { pin: "true", pick: "false" },
-  experimentalTmuxStatus: { pin: "true", pick: "false" },
+  renderer: { pin: "'tmux'", pick: "claude" },
 };
 
 describe("a save under a preset that pins the field lands where it renders", () => {

@@ -116,4 +116,4 @@ export const settingsByPlace = (): readonly PlaceSettings[] =>
 
 // Why a subscriber of `lane` is refused, naming the switch that admits it.
 export const laneOffReason = (lane: Lane): string =>
-  `${LANES[lane].label} is off — turn it on in the settings menu's ${settingMenuPath(LANES[lane].setting)}, or set globals.${LANES[lane].setting}: true`;
+  `${LANES[lane].label} is off — turn it on in the settings menu's ${settingMenuPath(LANES[lane].switch.setting)}, or set globals.${LANES[lane].switch.setting}: ${JSON.stringify(LANES[lane].switch.on)}`;

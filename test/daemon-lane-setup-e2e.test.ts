@@ -7,6 +7,7 @@ import {
   chmodSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   realpathSync,
   rmSync,
   statSync,
@@ -24,8 +25,15 @@ import {
 import { rangeOf } from "../src/tmux-status/frames";
 import { linkUrls } from "./helpers/ansi";
 import { LANES, type Lane } from "../src/config/lanes";
+import { GLOBAL_FIELDS } from "../src/config/globals-fields";
 import type { ClientHints } from "../src/daemon/protocol";
-import { click, killAndWait, render, sendClick } from "./helpers/daemon-e2e";
+import {
+  click,
+  killAndWait,
+  render,
+  sendClick,
+  stripAnsi,
+} from "./helpers/daemon-e2e";
 import { answeredRender, logLines, renderLines } from "./helpers/daemon-log";
 import {
   prepareIsolatedDaemonEnv,
@@ -88,14 +96,23 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
   });
   const renderIn = (sid: string, dir = projectDir): Promise<string> =>
     render(sockPath, sid, dir, inTmux(sid), args());
+  // A lane's switch, moved: on is the value that turns it on, off the
+  // setting's floor (`false` for a 🧪 toggle, `claude` for the renderer).
   const switchLanes = (sid: string, on: boolean, ...lanes: Lane[]) =>
     click(
       sockPath,
       effectsUrl(
-        lanes.map((lane) => ({
-          verb: VERB_SET_STATE,
-          args: [sid, LANES[lane].setting, String(on)],
-        })),
+        lanes.map((lane) => {
+          const { setting, on: value } = LANES[lane].switch;
+          return {
+            verb: VERB_SET_STATE,
+            args: [
+              sid,
+              setting,
+              on ? String(value) : String(GLOBAL_FIELDS[setting].floor),
+            ],
+          };
+        }),
       ),
     );
   const laneLines = (sid: string): string[] =>
@@ -247,13 +264,32 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
     expect(statusLines(sid, "holding")).toHaveLength(1);
   });
 
+  // candybar-plugins-vf6g.qzx: the renderer is shared by every session the
+  // config renders, and a session outside tmux has no status line to take.
+  test("a session outside tmux under renderer tmux draws the whole bar in its statusline and leaves the setting as it is", async () => {
+    const sid = "lane-no-tmux";
+    const file = path.join(projectDir, "renderer-tmux.json5");
+    const source = `{ globals: { renderer: "tmux" }, segments: { mark: { template: 'a lane mark' } }, root: { h: ['mark'] } }`;
+    writeFileSync(file, source);
+    const drawn = await render(sockPath, sid, projectDir, {}, [
+      "cc-candybar",
+      "--config",
+      file,
+    ]);
+    expect(stripAnsi(drawn)).toContain("a lane mark");
+    expect(stripAnsi(drawn)).not.toContain("⟲ claude");
+    await renderLines(env, sid, 1);
+    expect(statusLines(sid, "holding")).toEqual([]);
+    expect(readFileSync(file, "utf8")).toBe(source);
+  });
+
   test("a load-config pick of a config that switches a lane on sets it up, as the session's click", async () => {
     const sid = "lane-load";
     await renderIn(sid);
     const picked = path.join(projectDir, "tmux-on.json5");
     writeFileSync(
       picked,
-      `{ globals: { experimentalTmuxStatus: true }, segments: { mark: { template: 'a lane mark' } }, root: { h: ['mark'] } }`,
+      `{ globals: { renderer: "tmux" }, segments: { mark: { template: 'a lane mark' } }, root: { h: ['mark'] } }`,
     );
     await click(
       sockPath,
@@ -318,7 +354,7 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
       const unwritten = written();
       await switchLanes(`${sid}-0`, true, "pane");
       await until(() => laneLines(`${sid}-0`).length > 0, "the pane's setup");
-      const clicked = `set-state: ${LANES.pane.setting}=true (session=${sid}-0)`;
+      const clicked = `set-state: ${LANES.pane.switch.setting}=true (session=${sid}-0)`;
       // The click's one file write, landed: a save after the click wrote a
       // snapshot taken after its pick.
       await until(() => {

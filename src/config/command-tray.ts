@@ -8,7 +8,7 @@
 import type { ActionDecl } from "./action.js";
 import type { VariableDecl } from "./dsl-types.js";
 import { confirmStep } from "./confirm-step.js";
-import { IN_TMUX } from "./payload-inputs.js";
+import { IN_TMUX } from "./lanes.js";
 import { slashLine } from "../claude-input/slash-line.js";
 
 const COMMANDS = ["/compact", "/model"] as const;

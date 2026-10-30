@@ -83,9 +83,12 @@ export type EffectiveGlobals = ValuedGlobals & {
 };
 
 // Which lanes a session's settings switch on — each lane's toggle as the
-// resolution resolved it.
+// resolution resolved it, on while its switch's setting holds the value that
+// turns it on.
 export const laneSwitches = (effective: EffectiveGlobals): LaneSwitches =>
-  perLane((lane) => effective[LANES[lane].setting]);
+  perLane(
+    (lane) => effective[LANES[lane].switch.setting] === LANES[lane].switch.on,
+  );
 
 // [LAW:one-type-per-behavior] THE fold for one valued field: the staged
 // fragment over the session's pick over the config default over the row's

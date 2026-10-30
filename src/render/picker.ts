@@ -589,23 +589,18 @@ export function pickerFuncs(
             `{{ picker "${applyName}" … }} sets both closeOnPick and inBody; a picker in a body is closed by the body's ✕, so it has no close to fold into a pick`,
           );
         }
-        // [LAW:no-silent-failure] `{{ picker }}` is one expression and emits
-        // one value, so it cannot carry a library's several rows; a menu body
-        // is where a catalogue domain lays out. Refused by what the domain
-        // declares, before anything renders.
         const apply = requireOptionKind(runtime, applyName, "picker");
-        if (apply.library !== undefined) {
-          throw new Error(
-            `{{ picker "${applyName}" … }} ranges a catalogue domain, which lays out as one row per member; a catalogue renders in a {{ menu }} body`,
-          );
-        }
         const active = requireActiveSegment(activeSegment, "{{ picker }}");
         if (active.bg === undefined) {
           throw new Error(
             `{{ picker }} is not available while segments.${active.segName}'s own "bg:" is being evaluated — a picker is drawn on that background`,
           );
         }
-        const [line] = renderPicker(
+        // [LAW:types-are-the-program] `{{ picker }}` emits one value, so a
+        // catalogue's rows past its first drop below the segment on its
+        // declared drop list, the channel a `{{ menu }}` body rides — one
+        // library layout, wherever it is drawn.
+        const [line, ...rows] = renderPicker(
           applyName,
           apply,
           { key: page.key, stateVar: page.stateVar },
@@ -631,6 +626,7 @@ export function pickerFuncs(
           ),
           closeOn(active.palette, active.bg, activeSegment.drawnAt()),
         );
+        active.drops.push(...rows);
         return line!;
       },
       argTypes: ["string", "string", "bool"],

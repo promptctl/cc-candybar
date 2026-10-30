@@ -8,6 +8,7 @@ import {
   GLOBAL_FIELDS,
   THEME_DEFAULT_FIELDS,
   type ControlledField,
+  type FieldRow,
   type GlobalField,
 } from "../globals-fields.js";
 import { isExpression, retiredThemeNote } from "../../themes/policy.js";
@@ -41,13 +42,24 @@ export function globalsControlDomain(
   field: GlobalField,
 ): ControlDomain | "text" {
   const row = GLOBAL_FIELDS[field];
-  return row.kind === "text" ? "text" : row.domain;
+  return row.kind === "text" ? "text" : rangedDomain(row);
 }
 
 // The domain of a setting the bar controls. Every controlled row declares
 // one, so this cannot be asked of a field no control shape fits.
 export function settingControlDomain(field: ControlledField): ControlDomain {
-  return GLOBAL_FIELDS[field].domain;
+  return rangedDomain(GLOBAL_FIELDS[field]);
+}
+
+// [LAW:one-source-of-truth] A row whose named domain is a catalogue is ranged
+// by that name, so the picker and the click gate resolve the one registration
+// that carries its descriptions; every other row by the members it declares.
+function rangedDomain(
+  row: Exclude<FieldRow, { readonly kind: "text" }>,
+): ControlDomain {
+  return "optionDomain" in row && row.optionDomain?.library !== undefined
+    ? { from: row.optionDomain.name }
+    : row.domain;
 }
 
 // [LAW:one-source-of-truth] A globals FRAGMENT — a delta layered over the
@@ -161,6 +173,10 @@ const REMOVED_GLOBALS: Readonly<Record<string, string>> = {
   look: 'it was renamed "style" — write the same name as style: "<name>"',
   progression:
     'it was renamed "variation", and its values with it: accent (was secondary-accent), duo (was primary-secondary), mono (was primary)',
+  // The tmux status line became a renderer the bar fully supports, so its
+  // experimental toggle is a value of the renderer setting.
+  experimentalTmuxStatus:
+    'it became the renderer setting — write renderer: "tmux" (or pick tmux in ⚙ config › renderer, from a session inside tmux)',
   // Brandon cut ascii mode: the bar draws Nerd Font glyphs, and the doctor's
   // nerdFont check names the font that lacks them.
   charset:
