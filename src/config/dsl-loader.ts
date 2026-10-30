@@ -120,6 +120,7 @@ import {
   withoutUnplaced,
 } from "./loader/unplaced.js";
 import type { ApprovedRepo } from "./loader/repo-gate.js";
+import type { ConfigLayer } from "./loader/discovery.js";
 import { type Checkout, checkoutOf } from "../utils/git-root.js";
 
 // ─── Public barrel ───────────────────────────────────────────────────────────
@@ -139,8 +140,13 @@ export {
   configResolutionNotice,
   durableConfig,
   detectConfigCollisions,
+  homeLayer,
 } from "./loader/discovery.js";
-export type { ConfigHome, ConfigResolution } from "./loader/discovery.js";
+export type {
+  ConfigHome,
+  ConfigLayer,
+  ConfigResolution,
+} from "./loader/discovery.js";
 export type { Unchecked } from "../utils/presence.js";
 export { mergeWithDefault } from "./loader/merge.js";
 export { inheritableSegmentNames } from "./loader/segments.js";
@@ -379,7 +385,7 @@ function statKey(file: string): string {
  * takes.
  */
 export function loadConfigChain(
-  paths: readonly string[],
+  chain: readonly ConfigLayer[],
   dflt: DslConfig,
   trace: ChainTrace,
   session: SessionDirs,
@@ -409,7 +415,7 @@ export function loadConfigChain(
   );
   const base = plugins.config;
   const layers: Array<LoadedFile & { path: string; config: DslConfig }> = [];
-  for (const path of paths) {
+  for (const { path, scope } of chain) {
     const below = layers.at(-1)?.plugins;
     const loaded = loadConfigSource(
       path,
@@ -419,7 +425,7 @@ export function loadConfigChain(
         ...ctx,
         // [LAW:one-source-of-truth] A layer's scope is where discovery found
         // it, carried here as data — never read off the file's name.
-        scope: session.repoLayers.includes(path) ? "repo" : "plugins",
+        scope,
         beneath: {
           dropped: [
             ...plugins.dropped,
@@ -520,9 +526,6 @@ export function loadConfigChain(
 export interface SessionDirs {
   readonly repo: ApprovedRepo | null;
   readonly cwd: string | null;
-  // The chain's layers a repository supplies, as discovery found them: the
-  // plugins each lists are `repo` plugins.
-  readonly repoLayers: readonly string[];
 }
 
 export interface ChainTrace {

@@ -40,6 +40,8 @@ import {
   refuseDrops,
   type DroppedPlugin,
   type SessionDirs,
+  type ConfigLayer,
+  homeLayer,
 } from "./config/dsl-loader.js";
 import { cliConfigTarget } from "./config-hint.js";
 import { explicitConfigPath } from "./utils/user-path.js";
@@ -318,13 +320,13 @@ export const CHECK_TODAY: TodayPayload = { cost: 12.5, tokens: 3_400_000 };
 export type CheckOutcome =
   | {
       readonly kind: "clean";
-      readonly layers: readonly string[];
+      readonly layers: readonly ConfigLayer[];
       readonly warnings: readonly string[];
       readonly rendered: string;
     }
   | {
       readonly kind: "fatal";
-      readonly layers: readonly string[];
+      readonly layers: readonly ConfigLayer[];
       readonly message: string;
       readonly warnings: readonly string[];
     }
@@ -344,7 +346,7 @@ export type CheckOutcome =
 function searchedLayers(
   resolution: ConfigResolution,
   warnings: string[],
-): readonly string[] {
+): readonly ConfigLayer[] {
   const notice = configResolutionNotice(resolution);
   if (notice !== null) warnings.push(notice);
   return resolution.kind === "chain" ? resolution.layers : [];
@@ -395,8 +397,12 @@ export async function checkConfig(
     configPath ?? undefined,
   );
   warnings.push(...repoGateLines(resolution.repos));
+  // An explicit file that is absent or unreadable is still the chain: its
+  // read is what names the failure.
   const layers =
-    configPath === null ? searchedLayers(resolution, warnings) : [configPath];
+    configPath === null
+      ? searchedLayers(resolution, warnings)
+      : [homeLayer(configPath)];
   if (configPath !== null) {
     // throwIfNoEntry suppresses only ENOENT (left for the content read to
     // classify); EACCES/EPERM on the probe itself is equally "could not read
@@ -429,10 +435,7 @@ export async function checkConfig(
   try {
     const rendered = await loadRegisterRender(
       layers,
-      {
-        repo: resolution.repos.plugins,
-        repoLayers: resolution.kind === "chain" ? resolution.repoLayers : [],
-      },
+      { repo: resolution.repos.plugins },
       cwd,
       warnings,
       settleMs,
@@ -452,7 +455,7 @@ export async function checkConfig(
       errno !== null &&
       typeof errno.code === "string" &&
       typeof errno.path === "string" &&
-      layers.includes(errno.path) &&
+      layers.some((l) => l.path === errno.path) &&
       typeof errno.message === "string"
     ) {
       return { kind: "unreadable", path: errno.path, message: errno.message };
@@ -495,15 +498,14 @@ export interface PreparedConfig {
   readonly registry: SourceRegistry;
 }
 
-// The repository a chain loads with: its approved project, and the layers it
-// supplies.
+// The repository a chain loads with: its approved project.
 export type RepoSession = Omit<SessionDirs, "cwd">;
 
-// A chain no repository supplies a layer of, and no approved project.
-export const NO_REPO: RepoSession = { repo: null, repoLayers: [] };
+// No approved project.
+export const NO_REPO: RepoSession = { repo: null };
 
 export async function prepareConfig(
-  layers: readonly string[],
+  chain: readonly ConfigLayer[],
   repo: RepoSession,
   cwd: string,
   warnings: string[],
@@ -514,8 +516,9 @@ export async function prepareConfig(
 ): Promise<PreparedConfig> {
   // Each file's own advisories (an editability notice naming a duplicate key)
   // land before its validation, so a fatal outcome still carries them.
+  const layers = chain.map((l) => l.path);
   const loaded = loadConfigChain(
-    layers,
+    chain,
     DEFAULT_DSL_CONFIG,
     { warned: (w) => warnings.push(...w) },
     { ...repo, cwd },
@@ -674,7 +677,7 @@ export async function renderEffective(
 // The verdict: the prepared config rendered under every preset, every render
 // error a failure. Returns the line a fresh session renders.
 async function loadRegisterRender(
-  layers: readonly string[],
+  chain: readonly ConfigLayer[],
   repo: RepoSession,
   cwd: string,
   warnings: string[],
@@ -684,7 +687,7 @@ async function loadRegisterRender(
   // differ only in the preset they render; one settle window for every wait.
   const at = instantOf(new Date());
   const prepared = await prepareConfig(
-    layers,
+    chain,
     repo,
     cwd,
     warnings,
@@ -857,7 +860,8 @@ export function checkPlan(o: CheckOutcome, render = false): CliPlan {
   switch (o.kind) {
     case "clean": {
       const where =
-        o.layers.join(" < ") || "bundled default (no config file found)";
+        o.layers.map((l) => l.path).join(" < ") ||
+        "bundled default (no config file found)";
       const count =
         o.warnings.length > 0
           ? ` (${o.warnings.length} warning${o.warnings.length === 1 ? "" : "s"})`
@@ -874,7 +878,7 @@ export function checkPlan(o: CheckOutcome, render = false): CliPlan {
         stdout: "",
         stderr:
           warningLines(o.warnings) +
-          `✗ ${o.layers.join(" < ") || "<default>"}\n${o.message}\n`,
+          `✗ ${o.layers.map((l) => l.path).join(" < ") || "<default>"}\n${o.message}\n`,
         code: EXIT_FATAL,
       };
     case "unreadable":

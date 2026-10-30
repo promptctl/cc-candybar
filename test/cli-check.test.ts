@@ -79,7 +79,7 @@ describe("checkConfig — explicit target", () => {
     const outcome = await checkConfig(p, dir);
     expect(outcome.kind).toBe("clean");
     if (outcome.kind === "clean") {
-      expect(outcome.layers).toEqual([p]);
+      expect(outcome.layers).toEqual([{ path: p, scope: "plugins" }]);
       expect(outcome.rendered.length).toBeGreaterThan(0);
     }
   });
@@ -797,7 +797,7 @@ describe("checkConfig — default resolution (the daemon's own chain)", () => {
     answerRepo(cwd);
     const outcome = await checkConfig(undefined, cwd);
     expect(outcome.kind).toBe("clean");
-    if (outcome.kind === "clean") expect(outcome.layers).toEqual([p]);
+    if (outcome.kind === "clean") expect(outcome.layers).toEqual([{ path: p, scope: "repo" }]);
   });
 
   // brandon-config-5g8: $CC_CANDYBAR_CONFIG is a fact of the CLI's own shell,
@@ -819,7 +819,7 @@ describe("checkConfig — default resolution (the daemon's own chain)", () => {
     // ...the CLI edge lifts it into the target.
     const viaEnv = await checkConfig(detectConfigEnv(process.env, cwd), cwd);
     expect(viaEnv.kind).toBe("clean");
-    if (viaEnv.kind === "clean") expect(viaEnv.layers).toEqual([p]);
+    if (viaEnv.kind === "clean") expect(viaEnv.layers).toEqual([{ path: p, scope: "plugins" }]);
     process.env.CC_CANDYBAR_CONFIG = path.join(dir, "absent.json5");
     const absent = await checkConfig(detectConfigEnv(process.env, cwd), cwd);
     expect(absent.kind).toBe("unreadable");
@@ -834,7 +834,7 @@ describe("checkConfig — default resolution (the daemon's own chain)", () => {
     );
     const outcome = await checkConfig("target.json5", path.join(dir, "rel"));
     expect(outcome.kind).toBe("clean");
-    if (outcome.kind === "clean") expect(outcome.layers).toEqual([p]);
+    if (outcome.kind === "clean") expect(outcome.layers).toEqual([{ path: p, scope: "plugins" }]);
   });
 
   it("surfaces the .json5/.json collision as a warning on a CLEAN exit", async () => {
@@ -861,7 +861,7 @@ describe("checkPlan — the text/exit-code contract", () => {
   it("maps clean → exit 0 with the verdict on stdout", async () => {
     const plan = checkPlan({
       kind: "clean",
-      layers: ["/tmp/x.json5"],
+      layers: [{ path: "/tmp/x.json5", scope: "plugins" }],
       warnings: [],
       rendered: "line",
     });
@@ -885,7 +885,7 @@ describe("checkPlan — the text/exit-code contract", () => {
   it("maps fatal → exit 1 with the diagnostic on stderr", async () => {
     const plan = checkPlan({
       kind: "fatal",
-      layers: ["/tmp/x.json5"],
+      layers: [{ path: "/tmp/x.json5", scope: "plugins" }],
       message: "broken here",
       warnings: [],
     });
@@ -911,7 +911,7 @@ describe("checkPlan — the text/exit-code contract", () => {
   it("the verdict alone carries no bar; --render appends the rendered one beneath it", () => {
     const clean: CheckOutcome = {
       kind: "clean",
-      layers: ["/tmp/x.json5"],
+      layers: [{ path: "/tmp/x.json5", scope: "plugins" }],
       warnings: [],
       rendered: " ~/c/x \n Opus 4.8 ",
     };
@@ -933,7 +933,7 @@ describe("checkPlan — the text/exit-code contract", () => {
       checkPlan(
         {
           kind: "fatal",
-          layers: ["/tmp/x.json5"],
+          layers: [{ path: "/tmp/x.json5", scope: "plugins" }],
           message: "broken",
           warnings: [],
         },

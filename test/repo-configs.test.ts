@@ -68,9 +68,9 @@ function write(rel: string, text: string): string {
   return file;
 }
 
-const layersOf = (answers: RepoAnswers): readonly string[] | null => {
+const layersOf = (answers: RepoAnswers) => {
   const r = resolveDslConfig(answers, project, project);
-  return r.kind === "chain" ? r.layers : null;
+  return r.kind === "chain" ? r.layers.map((l) => l.path) : null;
 };
 
 describe("the gate over a project's config file", () => {
@@ -109,7 +109,10 @@ describe("the gate over a project's config file", () => {
     const named = write("named.json5", "{}");
     write(".cc-candybar.json5", "{}");
     const explicit = resolveDslConfig(book({}), project, project, named);
-    expect(explicit.kind === "chain" && explicit.layers).toEqual([named]);
+    // An explicit file is the user's, whatever repository it sits in.
+    expect(explicit.kind === "chain" && explicit.layers).toEqual([
+      { path: named, scope: "plugins" },
+    ]);
     expect(explicit.repos.awaiting).toEqual([]);
   });
 
@@ -208,7 +211,10 @@ describe("check", () => {
     const file = write(".cc-candybar.json5", shellConfig(marker));
     answerRepo(project);
     const outcome = await checkConfig(undefined, project);
-    expect(outcome).toMatchObject({ kind: "clean", layers: [file] });
+    expect(outcome).toMatchObject({
+      kind: "clean",
+      layers: [{ path: file, scope: "repo" }],
+    });
     expect(fs.existsSync(marker)).toBe(true);
   });
 
@@ -391,7 +397,7 @@ describe("a repository's worktrees answer as the repository", () => {
     resolveDslConfig(answers, dir, dir);
   const layersAt = (answers: RepoAnswers, dir: string) => {
     const r = resolveAt(answers, dir);
-    return r.kind === "chain" ? r.layers : null;
+    return r.kind === "chain" ? r.layers.map((l) => l.path) : null;
   };
 
   beforeEach(() => {
@@ -424,14 +430,14 @@ describe("a repository's worktrees answer as the repository", () => {
   test("a new worktree of an approved repository loads its config and plugins, and never asks", () => {
     const resolved = resolveAt(book({ [project]: "approved" }), wt);
     expect(resolved).toMatchObject({
-      layers: [path.join(wt, ".cc-candybar.json5")],
+      layers: [{ path: path.join(wt, ".cc-candybar.json5"), scope: "repo" }],
       repos: { plugins: wt, approved: [wt], awaiting: [], declined: [] },
     });
   });
 
   test("a worktree's own answer stands while its repository has none", () => {
     expect(resolveAt(book({ [wt]: "approved" }), wt)).toMatchObject({
-      layers: [path.join(wt, ".cc-candybar.json5")],
+      layers: [{ path: path.join(wt, ".cc-candybar.json5"), scope: "repo" }],
       repos: { plugins: wt, approved: [wt], awaiting: [] },
     });
     expect(resolveAt(book({ [wt]: "declined" }), wt)).toMatchObject({

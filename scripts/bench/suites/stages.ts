@@ -17,7 +17,7 @@ import {
   type PreparedConfig,
 } from "../../../src/check.js";
 import { DEFAULT_DSL_CONFIG } from "../../../src/config/default-dsl-config.js";
-import { loadConfigChain } from "../../../src/config/dsl-loader.js";
+import { homeLayer, loadConfigChain } from "../../../src/config/dsl-loader.js";
 import { resolveEffectiveGlobals } from "../../../src/config/effective-globals.js";
 import { presetNames } from "../../../src/config/presets.js";
 import { instantOf } from "../../../src/utils/instant.js";
@@ -48,8 +48,9 @@ async function prepared(
   cwd: string,
 ): Promise<PreparedConfig> {
   const warnings: string[] = [];
+  // An example file is explicit: no repository supplies it.
   const config = await prepareConfig(
-    layers,
+    layers.map(homeLayer),
     NO_REPO,
     cwd,
     warnings,
@@ -153,7 +154,7 @@ export const STAGES: readonly Benchmark[] = [
             [],
             DEFAULT_DSL_CONFIG,
             { warned: () => {} },
-            { repo: null, cwd, repoLayers: [] },
+            { repo: null, cwd },
           );
         });
         return measured([{ name: "load", samples: ms }]);

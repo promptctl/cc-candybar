@@ -19,7 +19,7 @@ let dir: string;
 const homeWith = (text: string): ConfigHome => {
   const file = path.join(dir, "config.json5");
   fs.writeFileSync(file, text);
-  return { path: file, above: [], repoLayers: [], repo: null, cwd: null };
+  return { path: file, above: [], repo: null, cwd: null };
 };
 
 beforeEach(() => {

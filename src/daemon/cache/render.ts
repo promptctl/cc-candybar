@@ -39,6 +39,7 @@ import {
   detectConfigCollisions,
   ConfigError,
   type DroppedFileError,
+  type ConfigLayer,
 } from "../../config/dsl-loader.js";
 import type {
   DslConfig,
@@ -342,9 +343,7 @@ type LoadedPlugins = LoadedChain["installed"];
 // clicks write — `resolveDslConfig`'s chain, or the bundled default's empty
 // one.
 export interface ConfigChain {
-  readonly layers: readonly string[];
-  // The layers a repository supplies (`ConfigResolution`).
-  readonly repoLayers: readonly string[];
+  readonly layers: readonly ConfigLayer[];
   readonly home: string;
   // The session's project, once approved: where the plugins it ships live.
   readonly repo: ApprovedRepo | null;
@@ -770,7 +769,6 @@ function loadKey(inputs: LoadInputs): string {
     cwd: inputs.cwd,
     chain: {
       layers: chain.layers,
-      repoLayers: chain.repoLayers,
       home: chain.home,
       repo: chain.repo,
     } satisfies Projection<ConfigChain>,
@@ -847,7 +845,7 @@ export function resolveLoad(
       chain.layers,
       DEFAULT_DSL_CONFIG,
       { warned: (w) => warnings.push(...w) },
-      { repo: chain.repo, cwd, repoLayers: chain.repoLayers },
+      { repo: chain.repo, cwd },
     );
     const inputs = {
       cwd,
@@ -967,7 +965,9 @@ export function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
       // What a reset clears is the home's: resets write nowhere else.
       authoredRoots: authoredRoots(merged, homeRaw),
       fileHeldSettings: fileHeldSettings(homeRaw),
-      configPath: chain.layers.includes(chain.home) ? chain.home : null,
+      configPath: chain.layers.some((l) => l.path === chain.home)
+        ? chain.home
+        : null,
       // One entry per declaration, however many layers declare it, judged
       // over the trees as placed and every layer's insert entries, so a
       // segment only an insert entry places is used, here or not.
@@ -997,11 +997,9 @@ export function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
   };
 }
 
-// What every load of one chain shares, whatever its attempt: the files it
-// resolved, the advisories its resolution earned, and when it started.
+// What every load of one chain shares, whatever its attempt: the advisories
+// its resolution earned, and when it started.
 export interface LoadFrame {
-  readonly layers: readonly string[];
-  readonly home: string;
   readonly repos: RepoGate;
   readonly advisories: ReadonlyArray<string | null>;
   readonly started: number;
@@ -1015,12 +1013,14 @@ export interface LoadFrame {
 // kept state never drops a line its build earned.
 export function settle(
   frame: LoadFrame,
+  chain: ConfigChain,
   resolveWarnings: readonly string[],
   attempt: Attempt,
 ): LoadOutcome {
   const common = {
-    layers: frame.layers,
-    home: frame.home,
+    // [LAW:one-source-of-truth] The files reported are the chain loaded.
+    layers: chain.layers.map((l) => l.path),
+    home: chain.home,
     repos: frame.repos,
     ms: Math.round(performance.now() - frame.started),
   };
@@ -1061,14 +1061,14 @@ export function loadChain(
   served: DslRenderState | null = null,
 ): LoadOutcome {
   const resolved = resolveLoad(cwd, chain, deps.storage);
-  if (resolved.kind === "failed") return settle(frame, [], resolved);
+  if (resolved.kind === "failed") return settle(frame, chain, [], resolved);
   // [LAW:one-source-of-truth] A memo on load identity, as the compile table
   // is on compile identity.
   const attempt: Attempt =
     served?.loadKey === resolved.key
       ? { kind: "kept", state: served }
       : buildRenderState(resolved, deps);
-  return settle(frame, resolved.warnings, attempt);
+  return settle(frame, chain, resolved.warnings, attempt);
 }
 
 // [LAW:effects-at-boundaries] One attempt at the disk: read the user's
@@ -1097,7 +1097,6 @@ export function loadFromDisk(
   // default — what distinguishes them is a notice, below, not a load path.
   const chain: ConfigChain = {
     layers: resolution.kind === "chain" ? resolution.layers : [],
-    repoLayers: resolution.kind === "chain" ? resolution.repoLayers : [],
     home: resolution.home,
     repo: repos.plugins,
   };
@@ -1119,13 +1118,7 @@ export function loadFromDisk(
   // prior state stays untouched, so the daemon keeps rendering the
   // last-known-good config — the bundled default until one has loaded —
   // and its diagnostics count `lastError` and `lastWarning`.
-  return loadChain(
-    { layers: chain.layers, home: chain.home, repos, advisories, started },
-    cwd,
-    chain,
-    deps,
-    served,
-  );
+  return loadChain({ repos, advisories, started }, cwd, chain, deps, served);
 }
 
 // [LAW:single-enforcer] What a config that fails its FIRST load renders: the
@@ -1142,7 +1135,7 @@ export function fallbackState(
   // as the load would have.
   const resolved = resolveLoad(
     cwd,
-    { layers: [], repoLayers: [], home: "", repo },
+    { layers: [], home: "", repo },
     deps.storage,
   );
   const built =

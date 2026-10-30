@@ -36,6 +36,7 @@ import {
   loadConfigChain,
   type ConfigHome,
   type LoadedChain,
+  homeLayer,
 } from "../config/dsl-loader.js";
 import { ConfigError } from "../config/loader/diagnostics.js";
 import type {
@@ -479,7 +480,7 @@ function refuseHidden(home: ConfigHome, was: Was, will: LoadedChain): void {
   const hidden = hiddenBy(home, was(), will);
   if (hidden.length > 0) {
     throw new BadVerbArgs(
-      `refused: ${home.above.join(", ")} sets ${hidden.join(", ")} over ${home.path}, so this click would change nothing on the bar — edit it there`,
+      `refused: ${home.above.map((l) => l.path).join(", ")} sets ${hidden.join(", ")} over ${home.path}, so this click would change nothing on the bar — edit it there`,
     );
   }
 }
@@ -495,7 +496,7 @@ function homeOnly<T>(home: ConfigHome, read: () => T): T {
   } catch (e) {
     if (!(e instanceof BadVerbArgs) || home.above.length === 0) throw e;
     throw new BadVerbArgs(
-      `${e.message} — or it is declared by ${home.above.join(", ")}, which the bar does not edit`,
+      `${e.message} — or it is declared by ${home.above.map((l) => l.path).join(", ")}, which the bar does not edit`,
     );
   }
 }
@@ -533,10 +534,10 @@ function loadedOrNull(
 // layer whatever it holds.
 function chainOver(home: ConfigHome, text: string | null): LoadedChain {
   return loadConfigChain(
-    text !== null ? [home.path, ...home.above] : home.above,
+    text !== null ? [homeLayer(home.path), ...home.above] : home.above,
     DEFAULT_DSL_CONFIG,
     { warned: () => {} },
-    { repo: home.repo, cwd: home.cwd, repoLayers: home.repoLayers },
+    { repo: home.repo, cwd: home.cwd },
     (p) =>
       p === home.path && text !== null ? text : fs.readFileSync(p, "utf8"),
   );
@@ -786,9 +787,9 @@ function freePresetName(doc: Node | null, home: ConfigHome): string {
       ...presetKeys(doc),
       // Each layer above as the loader reads it (JSON5, duplicate keys and
       // all) — the editor refuses files the loader renders.
-      ...home.above.flatMap((p) =>
+      ...home.above.flatMap((l) =>
         Object.keys(
-          (JSON5.parse(fs.readFileSync(p, "utf8")) as { presets?: object })
+          (JSON5.parse(fs.readFileSync(l.path, "utf8")) as { presets?: object })
             .presets ?? {},
         ),
       ),

@@ -7,7 +7,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { checkConfig, NO_REPO, prepareConfig, type CheckOutcome } from "../src/check";
-import { durableConfig, loadConfigChain } from "../src/config/dsl-loader";
+import { durableConfig, homeLayer, loadConfigChain } from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import {
   deleteValues,
@@ -71,7 +71,10 @@ test("a project file that places one segment renders over the user's whole confi
     `{ segments: { proj: { template: "PROJSEG" } }, root: { h: ["mine", "proj"] } }`,
   );
   const outcome = clean(await checkConfig(undefined, project));
-  expect(outcome.layers).toEqual([userFile, projectFile]);
+  expect(outcome.layers).toEqual([
+    { path: userFile, scope: "plugins" },
+    { path: projectFile, scope: "repo" },
+  ]);
   expect(outcome.rendered).toContain("USERSEG");
   expect(outcome.rendered).toContain("PROJSEG");
   const prepared = await prepareConfig(outcome.layers, NO_REPO, project, [], instantOf(new Date()));
@@ -92,7 +95,7 @@ test("a layer that does not load fails naming its own file", async () => {
 test("a durable click writes the user's file, never the project's", () => {
   fs.writeFileSync(projectFile, `{ root: { h: ["mine"] } }`);
   const home = projectHome();
-  expect(home).toEqual({ path: userFile, above: [projectFile], repoLayers: [projectFile], repo: project, cwd: project });
+  expect(home).toEqual({ path: userFile, above: [{ path: projectFile, scope: "repo" }], repo: project, cwd: project });
   writeValues(noRecord, home, [["palette", "nord"]]);
   expect(fs.readFileSync(userFile, "utf8")).toContain("nord");
   expect(fs.readFileSync(projectFile, "utf8")).not.toContain("nord");
@@ -144,8 +147,8 @@ test("the user's file is a layer even when the session's cwd is its directory", 
   answerRepo(xdgDir);
   const resolved = resolveDslConfig(repoConfigs().read(), undefined, xdgDir);
   expect(resolved.kind === "chain" && resolved.layers).toEqual([
-    userFile,
-    local,
+    { path: userFile, scope: "plugins" },
+    { path: local, scope: "repo" },
   ]);
 });
 
@@ -415,10 +418,10 @@ describe("a project layer inserting into the user's row", () => {
   const barLoad = () => {
     const warnings: string[] = [];
     const loaded = loadConfigChain(
-      [userFile, projectFile],
+      [homeLayer(userFile), { path: projectFile, scope: "repo" }],
       DEFAULT_DSL_CONFIG,
       { warned: (w) => warnings.push(...w) },
-      { repo: null, cwd: project, repoLayers: [projectFile] },
+      { repo: null, cwd: project },
     );
     const drawn = (preset: string) =>
       [...walkNodes(fragmentNode(loaded.config.presets[preset]!.root!))]
