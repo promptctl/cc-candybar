@@ -4,13 +4,13 @@
 // branches. [LAW:behavior-not-structure] Every assertion is about bytes out
 // for addresses in; a different implementation of the same contract passes.
 // candybar-theme-colours-6fq5.e5n: a closed cell wears its role at a shade the
-// palette names, through the shade dial, and an open trigger stands off the
-// row it stands in.
+// palette names, through the shade dial. candybar-joiners-e5r4.dg6: so does
+// everything an open menu draws — the segment that opened it, its ✕ and leads,
+// the plane its rows sit on and their items.
 
-import { ColorDepth, drawnColour } from "@promptctl/rich-js";
+import { ColorDepth, Style } from "@promptctl/rich-js";
 import {
   ColorRgba,
-  Oklch,
   contrastRatio,
   getThemePalette,
   listThemePalettes,
@@ -18,17 +18,16 @@ import {
 } from "@promptctl/rich-js";
 import { floorOf } from "../src/config/globals-fields";
 import type { ActiveSegment } from "../src/render/active-segment";
-import { bandItemStyle } from "../src/render/band-style";
+import { bandItemStyle, closeCell, closeOn, stateCell } from "../src/render/band-style";
 import {
-  BAND_FLOORS,
-  deltaE,
   VARIATIONS,
   SHADES,
   DECOR_HUES,
   KEYSTONE_HUE,
   QUANTIZE,
   DISTRIBUTIONS,
-  STATE_FLOOR,
+  PLANE_ROLE,
+  TEXT_MIN_CONTRAST,
   bandFor,
   bandItemFor,
   decorEntryColour,
@@ -39,9 +38,7 @@ import {
   hueOf,
   lineageHue,
   paletteRole,
-  rowGround,
   shadeRole,
-  stateFor,
   vocabularyOf,
   vocabularySelect,
   inBin,
@@ -72,7 +69,7 @@ import {
   withSiblingAdded,
   type Shape,
 } from "./helpers/seeded-trees";
-import { DRAWN, FIRST_ROW, REGISTRY, SHADE_NAMES, TODAY, VARIATION_NAMES, VDC, cell, row } from "./helpers/decor-vocabulary";
+import { DRAWN, REGISTRY, SHADE_NAMES, TODAY, VARIATION_NAMES, VDC, cell, row, shownAt } from "./helpers/decor-vocabulary";
 
 const DRACULA = getThemePalette("dracula");
 // The decor the address properties are stated under: a two-step variation, so
@@ -196,8 +193,6 @@ describe("the shade dial", () => {
     expect(decorEntryFor(under("start-primary"), [row(1, 2)]).hue).toBe("accent");
     // What is nested inside a keystone cell wears it.
     expect(decorEntryFor(under("ends-primary"), [row(0, 2), cell(3, 4), cell(1, 3)]).hue).toBe("accent");
-    // The ground of a keystone row carries the accent entry its keystone wears.
-    expect(rowGround(under("ends-primary"), [row(0, 2), cell(0, 4)])).toContainEqual({ hue: "accent", shade: decorEntryFor(under("ends-primary"), [row(0, 2), cell(3, 4)]).shade });
   });
 
   test("every shipped theme carries every role the vocabulary names", () => {
@@ -208,9 +203,12 @@ describe("the shade dial", () => {
         "background",
         "warning",
         "error",
+        PLANE_ROLE,
         ...DECOR_HUES.flatMap((hue) => [
           `text-${hue}` as const,
-          ...SHADE_NAMES.flatMap((shade) => SHADES[shade].tones.map((tone) => shadeRole(hue, tone))),
+          ...SHADE_NAMES.flatMap((shade) =>
+            [...SHADES[shade].tones, SHADES[shade].activated].map((tone) => shadeRole(hue, tone)),
+          ),
         ]),
       ] as const;
       for (const role of roles) expect(() => paletteRole(palette, role)).not.toThrow();
@@ -367,51 +365,14 @@ describe("the colour is its role at a shade, as the palette names it", () => {
     }
   });
 
-  test("a row's ground is the entries its cells wear, each once — every cell as decorEntryFor reads it", () => {
-    const at = (name: VariationName): Decor => ({ variation: VARIATIONS[name], shade: SHADES.middle });
-    const worn = (name: VariationName, r: number, count: number) => rowGround(at(name), [row(r, 2), cell(0, count)]);
-    const entry = (hue: DecorHue, shade: RoleShade): DecorEntry => ({ hue, shade });
-    // A row of one wears what a first cell does, and nothing else; two cells
-    // take two of the window's three shades.
-    expect(worn("accent", 0, 1)).toEqual([entry("secondary", "darken-1")]);
-    expect(worn("accent", 0, 2)).toEqual([entry("secondary", "darken-1"), entry("secondary", "base")]);
-    expect(worn("accent", 1, 8)).toEqual([entry("accent", "darken-1"), entry("accent", "base"), entry("accent", "lighten-1")]);
-    // A row of one run never turns; a longer one turns to the other role for
-    // the cells it has past the run, at the shades those cells take.
-    expect(worn("alt", 1, 3)).toEqual([entry("accent", "darken-1"), entry("accent", "base"), entry("accent", "lighten-1")]);
-    expect(worn("alt", 0, 4)).toEqual([
-      entry("secondary", "darken-1"),
-      entry("secondary", "base"),
-      entry("secondary", "lighten-1"),
-      entry("accent", "base"),
-    ]);
-    // Anything nested in a cell stands in that cell's row.
-    expect(rowGround(at("alt"), [row(0, 2), cell(0, 8), cell(1, 3)])).toEqual(worn("alt", 0, 8));
-    // Under every shipped decor, at either start and every length: each
-    // cell's own entry, and nothing else.
-    const key = (e: DecorEntry): string => shadeRole(e.hue, e.shade);
-    for (const variation of VARIATION_NAMES) {
-      for (const shade of SHADE_NAMES) {
-        const decor: Decor = { variation: VARIATIONS[variation], shade: SHADES[shade] };
-        for (const r of [0, 1]) {
-          for (let count = 1; count <= 12; count++) {
-            const cells = Array.from({ length: count }, (_, i) => key(decorEntryFor(decor, [row(r, 2), cell(i, count)])));
-            const ground = rowGround(decor, [row(r, 2), cell(0, count)]).map(key);
-            expect([variation, shade, r, count, [...ground].sort()]).toEqual([variation, shade, r, count, [...new Set(cells)].sort()]);
-          }
-        }
-      }
-    }
-  });
-
-  test("an open bar trigger opens its decor's lineage at depth 0, whatever its row, over the ground of its row", () => {
+  test("an open bar trigger opens its decor's lineage at depth 0, whatever its row", () => {
     for (const name of VARIATION_NAMES) {
       for (const shade of SHADE_NAMES) {
         const decor: Decor = { variation: VARIATIONS[name], shade: SHADES[shade] };
         for (const address of [[row(0, 2), cell(2, 4)], [row(1, 2), cell(0, 4)]]) {
           const region = { kind: "bar", decor, address } as const;
           const { disclosure } = decorationFor(DRACULA, region, ColorDepth.TRUECOLOR);
-          expect([name, shade, disclosure]).toEqual([name, shade, { decor, depth: 0, ground: rowGround(decor, address) }]);
+          expect([name, shade, disclosure]).toEqual([name, shade, { decor, depth: 0 }]);
           expect(hueOf(disclosure)).toBe(VARIATIONS[name].open[0]);
         }
       }
@@ -584,14 +545,14 @@ describe("a band item is placed by its step", () => {
     const at = (index: number, count: number): PlacedStep => ({ index, count, distribution: VDC });
     for (const shade of SHADE_NAMES) {
       const decor: Decor = { variation: VARIATIONS["ends-primary"], shade: SHADES[shade] };
-      const disclosure: Disclosure = { decor, depth: 0, ground: FIRST_ROW };
+      const disclosure: Disclosure = { decor, depth: 0 };
       const { tones, quantize } = SHADES[shade];
       for (const palette of REGISTRY) {
-        const { items } = bandFor(palette, disclosure, ColorDepth.TRUECOLOR);
+        const { items } = bandFor(palette, disclosure);
         // The items are the lineage's hue at each tone, as the palette names it.
         expect(items.map((c) => c.hex)).toEqual(tones.map((tone) => paletteRole(palette, shadeRole("primary", tone)).hex));
         const item = (place: PlacedStep | undefined) =>
-          bandItemFor(palette, disclosure, place, ColorDepth.TRUECOLOR).hex;
+          bandItemFor(palette, disclosure, place).hex;
         const inBand = (address: Address) =>
           decorationFor(palette, { kind: "band", band: disclosure, address }, ColorDepth.TRUECOLOR).tint.hex;
         // A cell picks its item as a bar cell picks its shade: the window's
@@ -627,7 +588,7 @@ describe("a band item is placed by its step", () => {
   test("a band item's text is what the dial pairs with its shade, as a bar cell's is", () => {
     for (const shade of ["middle", "muted"] as const) {
       const decor: Decor = { variation: VARIATIONS["ends-primary"], shade: SHADES[shade] };
-      const disclosure: Disclosure = { decor, depth: 0, ground: FIRST_ROW };
+      const disclosure: Disclosure = { decor, depth: 0 };
       for (const palette of REGISTRY) {
         const { tint, text } = decorationFor(palette, { kind: "band", band: disclosure, address: [] }, ColorDepth.TRUECOLOR);
         expect([palette.name, shade, text.hex]).toEqual([palette.name, shade, SHADES[shade].text(palette, "primary", tint, ColorDepth.TRUECOLOR).hex]);
@@ -637,7 +598,7 @@ describe("a band item is placed by its step", () => {
   test("a picker's option wears what a segment at its step wears, text and all, so one menu's items read alike", () => {
     for (const shade of ["middle", "muted"] as const) {
       const decor: Decor = { variation: VARIATIONS["ends-primary"], shade: SHADES[shade] };
-      const disclosure: Disclosure = { decor, depth: 0, ground: FIRST_ROW };
+      const disclosure: Disclosure = { decor, depth: 0 };
       for (const palette of REGISTRY) {
         // The option's style reads the active segment's palette and the band it opens, nothing else.
         const active = { palette, disclosure } as ActiveSegment;
@@ -657,101 +618,82 @@ describe("a band item is placed by its step", () => {
   });
 });
 
-describe("a band item is drawn, never thrown — the settings controls are band items", () => {
-  test("a band whose plane stands on its trigger reports it, and its items are drawn at every depth", () => {
-    // A palette a style washed out: the accent, the background and the
-    // foreground all but meet, the accent stands off its dark row as it is,
-    // and no plane recedes from it.
-    const washed = new Palette(
-      "washed",
-      true,
-      new Map<string, ColorRgba>([
-        ...getThemePalette("nord")!.vars,
-        ["accent", new ColorRgba(0xff, 0xff, 0xff)],
-        ["background", new ColorRgba(0xff, 0xff, 0xff)],
-        ["foreground", new ColorRgba(0xf4, 0xf4, 0xf4)],
-        ["secondary-darken-1", new ColorRgba(0x20, 0x20, 0x20)],
-      ]),
-    );
-    const disclosure: Disclosure = { decor: TODAY, depth: 0, ground: [{ hue: "secondary", shade: "darken-1" }] };
-    for (const drawnAt of DRAWN) {
-      // Every floor the band stands short of, each in the module's words (which
-      // pairs a band must report is held by the seam test above).
-      const { shortfalls } = bandFor(washed, disclosure, drawnAt);
-      expect(shortfalls.length).toBeGreaterThan(0);
-      const at = `as drawn at depth ${ColorDepth[drawnAt]}`;
-      for (const line of shortfalls) {
-        expect(line).toMatch(
-          new RegExp(
-            `^theme "washed": (no open-trigger colour stands 2\\.2:1 off every cell beside it — the nearest stands \\d\\.\\d{2}:1 ${at}; another shade or variation clears it|an open band's plane stands ΔE 0\\.\\d{3} off the trigger that opened it ${at}, under the 0\\.1 that tells them apart; another style clears it|an open band's (trigger|plane|item \\d) and item \\d stand ΔE 0\\.\\d{3} apart ${at}, under the 0\\.04 below which two cells in those colours are joined by a divider and read as one)$`,
-          ),
-        );
-      }
-      for (let index = 0; index < 6; index++) {
-        expect(() => bandItemFor(washed, disclosure, { index, count: 6, distribution: VDC }, drawnAt)).not.toThrow();
-      }
-    }
-  });
-});
-
-describe("no floor is measured where nothing is drawn in colour", () => {
-  test("a band that stands short in truecolor reports nothing at colour depth none (DEFAULT)", () => {
-    // textual-dark's first row under `alt`, turning from its navy to its
-    // orange: no colour stands 2.2:1 off both.
-    const textualDark = getThemePalette("textual-dark")!;
-    const decor: Decor = { variation: VARIATIONS.alt, shade: SHADES[floorOf("shade")] };
-    const ground = rowGround(decor, [row(0, 2), cell(0, 5)]);
-    const disclosure: Disclosure = { decor, depth: 0, ground };
-    expect(bandFor(textualDark, disclosure, ColorDepth.TRUECOLOR).shortfalls).not.toEqual([]);
-    expect(bandFor(textualDark, disclosure, ColorDepth.DEFAULT).shortfalls).toEqual([]);
-  });
-});
-
-describe("an open trigger's floors give way in order", () => {
-  test("items that leave no colour of the hue to be told from leave the trigger its cells give it alone", () => {
-    for (const palette of REGISTRY) {
-      const hue: DecorHue = "primary";
-      const cells = [paletteRole(palette, "background")];
-      // Every colour along the hue's rays to white and to black, closer than
-      // a seam apart: nothing the hue can be drawn as is told from them all.
-      const lch = Oklch.fromRgba(paletteRole(palette, hue));
-      const ends = [new ColorRgba(255, 255, 255), new ColorRgba(0, 0, 0)].map((c) => Oklch.fromRgba(c));
-      const crowd = ends.flatMap((end) =>
-        Array.from({ length: 401 }, (_, k) => lch.mixAxes(end, { l: k / 400, c: 0, h: 0, alpha: 0 }).toRgba()),
-      );
-      // In truecolor, where the crowd is every colour the hue is drawn as;
-      // a depth's table can hold an entry that stands off all of them.
-      const alone = stateFor(palette, hue, cells, [], ColorDepth.TRUECOLOR);
-      const crowded = stateFor(palette, hue, cells, crowd, ColorDepth.TRUECOLOR);
-      expect([palette.name, crowded.state.hex, crowded.short]).toEqual([palette.name, alone.state.hex, alone.short]);
-    }
-  });
-});
-
-describe("a band's drawn plane always has a colour that keeps its floors", () => {
-  // bandFor throws if nothing a depth draws keeps its plane's floors. The
-  // tables rule that out whatever the palette: the floors are measured on
-  // drawn colours, each an entry of the depth's table, and wherever the
-  // trigger, the nested trigger and the enclosing plane are drawn, the entries
-  // standing STATE_FLOOR off the nested trigger outnumber those either ΔE
-  // floor can rule out.
-  const LEVELS = [0, 95, 135, 175, 215, 255];
-  const XTERM = [
-    ...LEVELS.flatMap((r) => LEVELS.flatMap((g) => LEVELS.map((b) => new ColorRgba(r, g, b)))),
-    ...Array.from({ length: 24 }, (_, i) => new ColorRgba(8 + 10 * i, 8 + 10 * i, 8 + 10 * i)),
+describe("an open menu wears shades its theme names, selected and never searched", () => {
+  // A palette entry in the test's own words: the role, suffixed by its shade.
+  const named = (hue: DecorHue, shade: RoleShade): string => (shade === "base" ? hue : `${hue}-${shade}`);
+  // Every lineage a shipped variation opens, once.
+  const LINEAGES: readonly Lineage[] = [
+    ...new Map(VARIATION_NAMES.map((name) => [VARIATIONS[name].open.join(","), VARIATIONS[name].open] as const)).values(),
   ];
-  test.each([
-    ["ansi", ColorDepth.STANDARD, 16],
-    ["256 colours", ColorDepth.EIGHT_BIT, 240],
-  ] as const)("at %s, over its %i entries", (_name, drawnAt, entries) => {
-    // Every colour the depth draws, through its own rounding.
-    const table = [...new Map(XTERM.map((c) => drawnColour(c, drawnAt)).map((c) => [c.hex, c])).values()];
-    expect(table.length).toBe(entries);
-    const mostNear = (floor: number): number =>
-      Math.max(...table.map((at) => table.filter((v) => deltaE(v, at) < floor).length));
-    const fewestOffNested = Math.min(
-      ...table.map((nested) => table.filter((v) => contrastRatio(v, nested) >= STATE_FLOOR).length),
-    );
-    expect(fewestOffNested).toBeGreaterThan(mostNear(BAND_FLOORS.triggerPlane) + mostNear(BAND_FLOORS.nestedPlane));
+
+  test("the dial names the shade a pressed button wears: the role's muted form on every window of the ladder, its second lightening where the row is already muted", () => {
+    expect(SHADES.muted.activated).toBe("lighten-2");
+    for (const name of SHADE_NAMES.filter((shade) => shade !== "muted")) {
+      expect([name, SHADES[name].activated]).toEqual([name, "muted"]);
+    }
+  });
+
+  test("the activated segment wears its menu's hue at that shade, the plane is the theme's surface at every depth, and the items are the hue at the window's tones, byte for byte as the palette names each", () => {
+    for (const palette of REGISTRY) {
+      for (const shade of SHADE_NAMES) {
+        for (const open of LINEAGES) {
+          const decor: Decor = { variation: { ...TODAY.variation, open }, shade: SHADES[shade] };
+          for (const depth of [0, 1, 2, 3, 4]) {
+            const hue = lineageHue(open, depth);
+            const { state, plane, items } = bandFor(palette, { decor, depth });
+            const where = [palette.name, shade, open.join(","), depth];
+            expect([...where, state.hex, plane.hex, items.map((c) => c.hex)]).toEqual([
+              ...where,
+              palette.get(named(hue, SHADES[shade].activated))!.hex,
+              palette.get("surface")!.hex,
+              SHADES[shade].tones.map((tone) => palette.get(named(hue, tone))!.hex),
+            ]);
+          }
+        }
+      }
+    }
+  });
+
+  test("text on every cell an open menu draws clears TEXT_MIN_CONTRAST as drawn, at truecolor, 256 colours and ansi", () => {
+    const wrong: string[] = [];
+    let measured = 0;
+    for (const drawnAt of DRAWN) {
+      const shown = shownAt(drawnAt);
+      for (const palette of REGISTRY) {
+        for (const shade of SHADE_NAMES) {
+          for (const hue of DECOR_HUES) {
+            const disclosure: Disclosure = {
+              decor: { variation: { ...TODAY.variation, open: [hue] }, shade: SHADES[shade] },
+              depth: 0,
+            };
+            const { state, plane } = bandFor(palette, disclosure);
+            const active = { palette, disclosure } as ActiveSegment;
+            // The activated segment and the blank leads wear `state` under the
+            // text chosen for it; the ✕ leading a row wears it under the close
+            // glyph's; the plane carries a picker's ✕ and the text of a list
+            // drawn on it; the items are dealt along a row.
+            const cells: ReadonlyArray<readonly [string, Style]> = [
+              ["activated", stateCell(palette, state, drawnAt)],
+              ["✕", closeCell(palette, state, drawnAt)],
+              ["plane", stateCell(palette, plane, drawnAt)],
+              ["✕ on the plane", Style.combine([stateCell(palette, plane, drawnAt), closeOn(palette, plane, drawnAt)])],
+              ...Array.from(
+                { length: 8 },
+                (_, index) => [`item ${index}`, bandItemStyle(active, { index, count: 8, distribution: VDC }, drawnAt)] as const,
+              ),
+            ];
+            for (const [cell, style] of cells) {
+              measured++;
+              const ratio = contrastRatio(shown(style.color!.value!), shown(style.bgcolor!.value!));
+              if (ratio < TEXT_MIN_CONTRAST) {
+                wrong.push(`${palette.name} ${shade} ${hue} ${cell} at ${ColorDepth[drawnAt]}: ${ratio.toFixed(2)}`);
+              }
+            }
+          }
+        }
+      }
+    }
+    expect(wrong).toEqual([]);
+    expect(measured).toBe(DRAWN.length * REGISTRY.length * SHADE_NAMES.length * DECOR_HUES.length * 12);
   });
 });

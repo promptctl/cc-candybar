@@ -15,12 +15,12 @@
 //     one transposed palette every unpinned segment colours from.
 
 import { TEST_SIGNER } from "./helpers/link-signer";
-import { ColorDepth, ColorRgba, getThemePalette, Palette, transposePalette } from "@promptctl/rich-js";
+import { getThemePalette, transposePalette } from "@promptctl/rich-js";
 import type { RichText, ThemeKey } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { registerDslConfig, renderDsl, type RenderWarning } from "../src/dsl/render";
+import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { childStep, type CompiledNode } from "../src/dsl/node-registry";
 import type { DslConfig } from "../src/config/dsl-types";
 import { SessionState } from "../src/daemon/session-state";
@@ -32,8 +32,6 @@ import { EDIT_NS } from "../src/config/loader/reserved-namespace";
 import {
   decorFor,
   DISTRIBUTIONS,
-  bandFor,
-  rowGround,
   SHADES,
   VARIATIONS,
   type Address,
@@ -598,132 +596,5 @@ describe("candybar-render-ai7.8 — `distribution` is authored per placer", () =
     );
     plain.dispose();
     rt.dispose();
-  });
-});
-
-describe("an open trigger on a row no colour stands off", () => {
-  // nord, with its secondary row's shades pulled to black, mid grey and white:
-  // every colour sits within 2.2:1 of one of them, so no open state clears the
-  // first row's ground under the default shade.
-  const straddling = new Palette(
-    "straddling",
-    true,
-    new Map<string, ColorRgba>([
-      ...getThemePalette("nord")!.vars,
-      ["secondary-darken-1", new ColorRgba(0, 0, 0)],
-      ["secondary", new ColorRgba(0x77, 0x77, 0x77)],
-      ["secondary-lighten-1", new ColorRgba(0xff, 0xff, 0xff)],
-    ]),
-  );
-
-  test("still opens: the bar and the body render, and the shortfall is reported once", () => {
-    const config = parseAndValidate(
-      "<test>",
-      `{
-        variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
-        segments: { inner: { template: 'INNER-BODY' } },
-        root: { v: [ { kind: 'group', name: 'details', label: 'details', open: true, children: ['inner'] } ] },
-      }`,
-      ALLOWED,
-    );
-    const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", new SessionState());
-    const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
-    const errors: string[] = [];
-    const warnings: RenderWarning[] = [];
-    const out = renderDsl(
-      config,
-      compiled,
-      store,
-      registry,
-      { session_id: "s1" },
-      instantOf(new Date()),
-      OPTS,
-      {
-        onSegmentError: (name, message) => errors.push(`${name}: ${message}`),
-        onRenderWarning: (warning) => warnings.push(warning),
-      },
-      selectionFor(config, { theme: { kind: "decided", name: "straddling", value: straddling } }),
-    );
-    expect(errors).toEqual([]);
-    expect(out).toContain("INNER-BODY");
-    expect(warnings).toEqual([
-      {
-        kind: "band-floor",
-        message: expect.stringMatching(/^theme "straddling": no open-trigger colour stands 2\.2:1 off every cell beside it — the nearest stands \d\.\d\d:1 as drawn at depth TRUECOLOR; another shade or variation clears it$/),
-      },
-    ]);
-    registry.dispose();
-  });
-});
-
-describe("an open band whose plane stands on its trigger", () => {
-  // nord washed out the way a style can wash a palette: the accent, the
-  // background and the foreground all but meet, over a first row dark enough
-  // that the accent stands off it as it is — so the open state is near that
-  // white, and no plane recedes from it into a background that is the same
-  // white.
-  const washed = new Palette(
-    "washed",
-    true,
-    new Map<string, ColorRgba>([
-      ...getThemePalette("nord")!.vars,
-      ["accent", new ColorRgba(0xff, 0xff, 0xff)],
-      ["background", new ColorRgba(0xff, 0xff, 0xff)],
-      ["foreground", new ColorRgba(0xf4, 0xf4, 0xf4)],
-      ["secondary-darken-1", new ColorRgba(0x20, 0x20, 0x20)],
-      ["secondary", new ColorRgba(0x30, 0x30, 0x30)],
-      ["secondary-lighten-1", new ColorRgba(0x40, 0x40, 0x40)],
-    ]),
-  );
-
-  test("still renders its body, and reports each floor it stands short of, once", () => {
-    const config = parseAndValidate(
-      "<test>",
-      `{
-        variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
-        segments: { inner: { template: 'INNER-BODY' } },
-        root: { v: [ { kind: 'group', name: 'details', label: 'details', open: true, children: ['inner'] } ] },
-      }`,
-      ALLOWED,
-    );
-    const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", new SessionState());
-    const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
-    const errors: string[] = [];
-    const warnings: RenderWarning[] = [];
-    const out = renderDsl(
-      config,
-      compiled,
-      store,
-      registry,
-      { session_id: "s1" },
-      instantOf(new Date()),
-      OPTS,
-      {
-        onSegmentError: (name, message) => errors.push(`${name}: ${message}`),
-        onRenderWarning: (warning) => warnings.push(warning),
-      },
-      selectionFor(config, { theme: { kind: "decided", name: "washed", value: washed } }),
-    );
-    expect(errors).toEqual([]);
-    expect(out).toContain("INNER-BODY");
-    // The band the toggle opens: the bar's default decor at depth 0, over the
-    // ground of the row the toggle is alone on.
-    const opened = bandFor(
-      washed,
-      {
-        decor: DEFAULT_DECOR,
-        depth: 0,
-        ground: rowGround(DEFAULT_DECOR, [{ index: 0, count: 1, distribution: DISTRIBUTIONS["van-der-corput"], axis: "row" }]),
-      },
-      ColorDepth.TRUECOLOR,
-    );
-    expect(opened.shortfalls[0]).toMatch(
-      /^theme "washed": an open band's plane stands ΔE 0\.\d{3} off the trigger that opened it as drawn at depth TRUECOLOR, under the 0\.1 that tells them apart; another style clears it$/,
-    );
-    // Each floor the band stands short of, as the band names it, once.
-    expect(warnings).toEqual(opened.shortfalls.map((message) => ({ kind: "band-floor", message })));
-    registry.dispose();
   });
 });

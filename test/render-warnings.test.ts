@@ -7,7 +7,9 @@ import { RenderWarningRecords } from "../src/daemon/render-warnings";
 import type { RenderWarning } from "../src/dsl/render";
 
 const warning = (message: string): RenderWarning => ({
-  kind: "band-floor",
+  kind: "refresh",
+  variable: message,
+  error: message,
   message,
 });
 

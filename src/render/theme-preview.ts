@@ -68,7 +68,7 @@ function previewRows(
   opens: Disclosure,
   drawnAt: ColorDepth,
 ): ReadonlyArray<ReadonlyArray<readonly Swatch[]>> {
-  const band = bandFor(palette, opens, drawnAt);
+  const band = bandFor(palette, opens);
   // A cell chosen its text the way the walk chooses it off its decoration.
   const chosen = (text: string, colour: ColorRgba): Swatch => ({
     text,

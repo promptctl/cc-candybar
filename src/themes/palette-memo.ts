@@ -1,5 +1,5 @@
 // [LAW:one-type-per-behavior] The one memo the themes module caches a
-// per-palette answer through — a colour search in decor.ts, a transposition in
+// per-palette answer through — the text chosen in decor.ts, a transposition in
 // palette-resolvers.ts: `compute` runs once per (palette, key).
 //
 // [LAW:one-source-of-truth] Keyed on the palette OBJECT, so an answer belongs to

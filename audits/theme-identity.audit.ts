@@ -27,6 +27,7 @@ import {
   drawnColour,
   getThemePalette,
   listThemePalettes,
+  Oklch,
   SEAM_MIN_DELTA_E,
 } from "@promptctl/rich-js";
 
@@ -38,7 +39,6 @@ import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { SessionState } from "../src/daemon/session-state";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import {
-  deltaE,
   SHADES,
   VARIATIONS,
   type ShadeName,
@@ -51,6 +51,9 @@ import { instantOf } from "../src/utils/instant";
 // About one just-noticeable step: how near a drawn background must sit to a
 // colour its palette names (the ticket's own bound).
 const PALETTE_FLOOR = 0.02;
+
+/** ΔE in OKLab, through rich-js's own arithmetic. */
+const deltaE = (a: ColorRgba, b: ColorRgba): number => Oklch.fromRgba(a).deltaE(Oklch.fromRgba(b));
 
 const ARROW = "\u{e0b0}";
 const DIVIDER = "\u{e0b1}";

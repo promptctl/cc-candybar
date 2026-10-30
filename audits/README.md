@@ -1,10 +1,10 @@
 # Colour audits
 
 Every file here walks the whole bundled theme registry: every theme, under
-every style, on every row ground a variation deals, at every colour depth a
-terminal draws. They prove the shipped registry holds the colour model's
-floors (an open trigger stands off its row, a band off its trigger, text off
-its cell, neighbours off each other) on every terminal. Each takes far longer
+the variations, dial positions and styles a user can pick, at every colour
+depth a terminal draws. They prove the shipped registry holds what the colour model
+promises (every background a colour its theme names, text off its cell,
+closed neighbours off each other) on every terminal. Each takes far longer
 than any test in the suite, minutes for the registry walk, which is why they
 are audits and not tests.
 
@@ -15,5 +15,5 @@ The rule, enforced by `audits/jest.config.js`:
 - Never on a pull request, never on a push to main, never by hand: the workflow has no `push`, `pull_request` or `workflow_dispatch` trigger.
 - Nothing is gated on them. A red nightly run is a report to read the next morning, not a check a merge waits on.
 
-A failing audit names the theme, style, ground and depth it found short, so
-the fix starts from the line it prints.
+A failing audit names the theme, look and depth it found short, so the fix
+starts from the line it prints.

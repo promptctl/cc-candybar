@@ -166,11 +166,7 @@ function renderMenu(
   // trigger from.
   const body = (): readonly RichText[] => {
     const drawnAt = runtime.activeSegment.drawnAt();
-    const plane = bandFor(
-      placement.palette,
-      placement.disclosure,
-      drawnAt,
-    ).plane;
+    const plane = bandFor(placement.palette, placement.disclosure).plane;
     const apply = requireOptionKind(action, applyName, "menu");
     return renderPicker(
       applyName,
