@@ -425,6 +425,16 @@ class WatchManager {
     }
   }
 
+  // [LAW:no-silent-failure] Events the watches may have missed: each watch
+  // re-derives its target, since a directory may have appeared unheard, and
+  // every subscriber re-reads as if its own watch had reported.
+  caughtUp(): void {
+    for (const [filePath, entry] of this.watchers) {
+      this.rearm(filePath, entry);
+      for (const cb of entry.subscribers.keys()) cb();
+    }
+  }
+
   private unsubscribe(filePath: string, callback: () => void): void {
     const entry = this.watchers.get(filePath);
     if (!entry) return;
@@ -600,6 +610,12 @@ function zeroValue(type: VarType): VarValue {
 
 // ─── SourceRegistry ───────────────────────────────────────────────────────────
 
+// Subscribes to the end of each span in which the OS may have dropped file
+// events, returning the unsubscribe. Only the daemon measures delivery; a
+// registry outside it hears none.
+export type CatchUps = (caughtUp: () => void) => () => void;
+const NO_CATCH_UPS: CatchUps = () => () => {};
+
 // [LAW:single-enforcer] One SourceRegistry per daemon, sharing one
 // VariableStore. Multiple registries on the same store would produce
 // duplicate box definitions for input-kind variables.
@@ -709,8 +725,12 @@ export class SourceRegistry {
     // [LAW:single-enforcer] The daemon's one ledger, which every source's
     // refreshes are recorded in; a registry outside the daemon keeps its own.
     private readonly ledger: RefreshLedger = new RefreshLedger(),
+    // The daemon's file-event catch-ups, which its `watch_file` sources
+    // re-read on, since their watches ride the same OS stream.
+    private readonly catchUps: CatchUps = NO_CATCH_UPS,
   ) {
     this.sessionState = sessionState;
+    this.cleanups.push(catchUps(() => this.watchMgr.caughtUp()));
   }
 
   // [LAW:one-source-of-truth] A session's view of this directory home
@@ -728,6 +748,7 @@ export class SourceRegistry {
       this.sessionState,
       this,
       this.ledger,
+      this.catchUps,
     );
   }
 

@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { inspect, parseArgs } from "node:util";
 import {
   daemonDir,
+  watchProbeDir,
   ensureSocketParentSafe,
   leasePath,
   leasePathFor,
@@ -68,6 +69,11 @@ import type {
 } from "./protocol";
 import { parseSessionId, type SessionId } from "./session-id";
 import { createPayloadProviders } from "./payload-providers";
+import {
+  FileEventDelivery,
+  fileEventsWarnings,
+  type FileEventsWarning,
+} from "./cache/file-events";
 import { RefreshLedger } from "../utils/refresh-ledger";
 import { repoQuestions } from "./repo-configs";
 import {
@@ -254,8 +260,15 @@ const watcherRegistry = new WatcherRegistry({
 // [LAW:single-enforcer] The daemon's one record of every source's refreshes:
 // the providers', and each config's user sources (the render cache's).
 const refreshLedger = new RefreshLedger(dlog);
+// [LAW:one-source-of-truth] Whether the OS is delivering this daemon's file
+// events: one owner, started once the bind is won (onListening).
+const fileEvents = new FileEventDelivery({
+  watchers: watcherRegistry,
+  logger: dlog,
+});
 const payloadProviders = createPayloadProviders({
   watchers: watcherRegistry,
+  fileEvents,
   logger: dlog,
   ledger: refreshLedger,
 });
@@ -415,6 +428,12 @@ const renderCache = new RenderCache<SessionSource, CheckedRenderRequest>(
     storage: managedStorage,
     signer: linkSigner,
     ledger: refreshLedger,
+    // [LAW:single-enforcer] The delivery owner's catch-ups, which a
+    // `watch_file` source's watch, riding the same OS stream, may have missed.
+    catchUps: (caughtUp) =>
+      fileEvents.subscribe((notice) => {
+        if (notice.kind === "caught-up") caughtUp();
+      }),
     declare: (holds, facts, closure, sources) =>
       declareLanes(payloadProviders, holds, facts, closure, sources),
     // [LAW:single-enforcer] What every session's view draws from: its payload
@@ -457,6 +476,22 @@ const renderCache = new RenderCache<SessionSource, CheckedRenderRequest>(
     },
   },
 );
+// [LAW:no-silent-failure] An edit made while file events went unheard is
+// re-read when they resume, in every entry, and every feed redraws when
+// delivery moves, so its row comes and goes on frames too.
+fileEvents.subscribe((notice) => {
+  switch (notice.kind) {
+    case "period":
+      return;
+    case "caught-up":
+      renderCache.reloadEvery({ kind: "events-resumed", since: notice.since });
+      frameFeeds.wakeWhere("data", () => true);
+      return;
+    case "moved":
+      frameFeeds.wakeWhere("data", () => true);
+      return;
+  }
+});
 
 // One cadence for "how often does the daemon look at its build on disk" —
 // the binary watch (exit on a changed bundle) and the update watch (does the
@@ -655,10 +690,6 @@ function sourceSnapshots(): SourceSnapshots {
       folders: storage.folders,
       faults: storage.faults,
       lost: storage.lost,
-      probes: storage.probes,
-      probeFailures: storage.probeFailures,
-      stalled: storage.stalled,
-      stalls: storage.stalls,
     },
   };
 }
@@ -811,6 +842,7 @@ function onListening(sockPath: string): void {
   // acquire.ts. Any consecutive-spawn backoff accumulated getting here no
   // longer applies once a daemon is actually serving.
   resetSpawnBackoff();
+  fileEvents.start(watchProbeDir());
   binaryWatch.arm();
   updateWatch.arm();
   establishedLimits().arm();
@@ -946,6 +978,7 @@ function shutdown(code: number): void {
     // its program is gone.
     ["runs close", () => runs.close()],
     ["managedStorage close", () => managedStorage.close()],
+    ["fileEvents close", () => fileEvents.close()],
     ["watcherRegistry close", () => watcherRegistry.closeAll()],
     ["sessionState flush", () => sessionState.flush()],
   ];
@@ -1336,6 +1369,7 @@ export async function replyTo(
         gitCache: gitService.getStats(),
         usageCache: usageStore.getStats(),
         sources: sourceSnapshots(),
+        fileEvents: fileEvents.stats(),
         runs: runs.stats(),
         transcriptReads: transcriptReads(),
         renderCache: renderCache.stats,
@@ -2339,10 +2373,14 @@ function drawRender(
     })),
     said(clickShown?.text),
   ].flatMap(({ about, text }) => (about && text ? [{ about, text }] : []));
-  const loadWarnings: readonly LoadWarning[] =
-    entry.lastWarning === null
+  // What stands before the draw: whether the daemon can vouch that a config
+  // edit reloads, and the warning this config's load carried.
+  const standing: ReadonlyArray<FileEventsWarning | LoadWarning> = [
+    ...fileEventsWarnings(fileEvents.delivery()),
+    ...(entry.lastWarning === null
       ? []
-      : [{ kind: "load", message: entry.lastWarning }];
+      : [{ kind: "load" as const, message: entry.lastWarning }]),
+  ];
   // [LAW:one-source-of-truth] ONE list per draw, built before it: the door's
   // indicator reads it as the `diagnostics` projection and the viewer pages
   // the same object, so the two cannot disagree within a frame. The render
@@ -2354,7 +2392,7 @@ function drawRender(
     errors,
     [...updates, ...questions],
     [
-      ...loadWarnings,
+      ...standing,
       ...renderWarnings.ofSession(sessionId, drawing.by, scope),
     ].map((w) => ({ about: `${w.kind}\0${w.message}`, text: w.message })),
   );
@@ -2470,26 +2508,29 @@ function drawRender(
   // `-` for none.
   const passages = (frames: readonly PassageFrame[]): string =>
     frames.map((f) => `${f.placement}@${f.t.toFixed(3)}`).join(",") || "-";
-  // [LAW:nothing-unseen] Each warning this frame met, the load's and its own
-  // walk's, in order; `-` for none. A rule's tag names
+  // [LAW:nothing-unseen] Each warning this frame met, those standing before
+  // it and its own walk's, in order; `-` for none. A rule's tag names
   // the slot that fell to its floor (`rule:style`), and a refresh's the
   // variable that stopped (`refresh:stamp`), so the event says which.
   // [LAW:types-are-the-program] Exhaustive over the kinds: a new kind is a
   // compile error here until the event says how to name it.
-  const tagOf = (w: LoadWarning | RenderWarning): string => {
+  const tagOf = (
+    w: FileEventsWarning | LoadWarning | RenderWarning,
+  ): string => {
     switch (w.kind) {
       case "rule":
         return `rule:${w.slot}`;
       case "refresh":
         return `refresh:${w.variable}`;
+      case "file-events":
+        return `${w.kind}:${w.state}`;
       case "load":
       case "band-floor":
       case "when":
         return w.kind;
     }
   };
-  const warned =
-    [...loadWarnings, ...drawnWarnings].map(tagOf).join(",") || "-";
+  const warned = [...standing, ...drawnWarnings].map(tagOf).join(",") || "-";
   noteFacts(facts, {
     git: `${g.size}/${g.hits}h/${g.misses}m`,
     usage: `${u.size}/${u.hits}h/${u.misses}m`,

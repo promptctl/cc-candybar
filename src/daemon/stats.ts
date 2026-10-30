@@ -11,6 +11,7 @@ import type { RenderCacheStats } from "./cache/render";
 import type { GitCacheStats } from "./cache/git";
 import type { SourceRecord, SourceScope } from "../utils/refresh-ledger";
 import type { ManagedStorageStats } from "./cache/managed-storage";
+import type { FileEventsStats } from "./cache/file-events";
 import type { ProbeArrival } from "../doctor/handler-probe";
 import type { RenderSighting } from "./render-sightings";
 import type { ServingDaemon } from "./limits";
@@ -57,17 +58,10 @@ export interface SourceSnapshots {
   // How many entries of each keyed source a view holds now.
   readonly held: Readonly<Record<HeldSource, number>>;
   // Every plugin's managed storage: the folders watched now, watch faults by
-  // cause, folders found gone or replaced, probes written and failed, and
-  // folders whose watch is stalled now and every move into a stall.
+  // cause, and folders found gone or replaced.
   readonly pluginStorage: Pick<
     ManagedStorageStats,
-    | "folders"
-    | "faults"
-    | "lost"
-    | "probes"
-    | "probeFailures"
-    | "stalled"
-    | "stalls"
+    "folders" | "faults" | "lost"
   >;
 }
 
@@ -107,6 +101,9 @@ export interface StatsSnapshot {
     sweeps: number;
   };
   sources: SourceSnapshots;
+  // [LAW:nothing-unseen] Whether the OS is delivering file events, and since
+  // when the daemon cannot vouch that it heard every one.
+  fileEvents: FileEventsStats;
   // [LAW:nothing-unseen] Every forward transcript read since start: gated
   // reads, bytes off disk, lines longer than the fold window read whole and
   // the longest of them — what bounds a fold's memory beyond its window
@@ -337,11 +334,14 @@ export class RuntimeStats {
           folders: 0,
           faults: { unusable: 0, refused: 0, error: 0 },
           lost: 0,
-          probes: 0,
-          probeFailures: 0,
-          stalled: 0,
-          stalls: 0,
         },
+      },
+      fileEvents: {
+        delivery: { kind: "delivering", unreported: [], missedSince: null },
+        stalls: 0,
+        catchUps: 0,
+        probes: 0,
+        probeFailures: 0,
       },
       transcriptReads: { reads: 0, bytes: 0, longLines: 0, largestLine: 0 },
       renderCache: {
@@ -391,6 +391,7 @@ export class RuntimeStats {
     gitCache: StatsSnapshot["gitCache"];
     usageCache: StatsSnapshot["usageCache"];
     sources: SourceSnapshots;
+    fileEvents: FileEventsStats;
     transcriptReads: TranscriptReads;
     renderCache: StatsSnapshot["renderCache"];
     effectCache: StatsSnapshot["effectCache"];
@@ -430,6 +431,7 @@ export class RuntimeStats {
       gitCache: extras.gitCache,
       usageCache: extras.usageCache,
       sources: extras.sources,
+      fileEvents: extras.fileEvents,
       transcriptReads: extras.transcriptReads,
       renderCache: extras.renderCache,
       effectCache: extras.effectCache,

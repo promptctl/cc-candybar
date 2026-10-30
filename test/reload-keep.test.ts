@@ -5,6 +5,7 @@ import {
   DECLARES_NOTHING,
   RenderCache,
   SOURCES_NOTHING,
+  type LoadCause,
   type Settled,
 } from "../src/daemon/cache/render";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
@@ -12,6 +13,7 @@ import { SessionState } from "../src/daemon/session-state";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { viewFacts } from "./helpers/view-facts";
+import { fakeWatches } from "./helpers/fake-watches";
 
 // [LAW:behavior-not-structure] A reload keeps the state it serves exactly when
 // what it read from disk is what that state was built from, read through
@@ -37,6 +39,7 @@ beforeEach(() => {
 
 afterEach(() => {
   for (const fn of cleanups.splice(0).reverse()) fn();
+  jest.restoreAllMocks();
   process.env.XDG_DATA_HOME = saved.home;
   process.env.XDG_DATA_DIRS = saved.dirs;
   process.env.XDG_CONFIG_HOME = saved.config;
@@ -45,6 +48,7 @@ afterEach(() => {
 
 function rig() {
   const loads: Settled[] = [];
+  const causes: LoadCause[] = [];
   const lines: string[] = [];
   const watchers = new WatcherRegistry({ logger: () => {} });
   cleanups.push(() => watchers.closeAll());
@@ -60,7 +64,12 @@ function rig() {
     },
     {
       budgetBytes: () => Number.MAX_SAFE_INTEGER,
-      observers: { onReload: (_e, _s, _c, settled) => loads.push(settled) },
+      observers: {
+        onReload: (_e, _s, cause, settled) => {
+          loads.push(settled);
+          causes.push(cause);
+        },
+      },
     },
   );
   cleanups.push(() => cache.close());
@@ -74,7 +83,7 @@ function rig() {
   const reopened = () => lines.filter((l) => / by=reload /.test(l)).length;
   const open = (sid: string) =>
     cache.holdSession(dir, dir, file, viewFacts(dir, sid))[Symbol.dispose]();
-  return { cache, lines, write, entry, reload, reopened, open };
+  return { cache, lines, loads, causes, write, entry, reload, reopened, open };
 }
 
 const CONFIG = `{
@@ -137,7 +146,9 @@ test("a change only to a warning keeps the state and updates the warning", () =>
   expect(r.entry().lastWarning).toBeNull();
   // A duplicate key resolving to the value already there: JSON5 keeps the
   // last, so what loads is unchanged and only the advisory is new.
-  r.write(CONFIG.replace(`template: "one"`, `template: "one", template: "one"`));
+  r.write(
+    CONFIG.replace(`template: "one"`, `template: "one", template: "one"`),
+  );
   expect(r.reload()).toBe("kept");
   expect(r.entry().state).toBe(state);
   expect(r.entry().lastWarning).toContain("template");
@@ -161,9 +172,9 @@ test("an installed plugin nothing places, added with the config unchanged, build
   expect(r.entry().state.plugins.unreached.map((d) => d.path)).toContain(
     definition,
   );
-  expect(
-    r.lines.filter((l) => l.startsWith("config load ")).at(-1),
-  ).toContain(` ~${definition} (`);
+  expect(r.lines.filter((l) => l.startsWith("config load ")).at(-1)).toContain(
+    ` ~${definition} (`,
+  );
   expect(
     r.lines.some(
       (l) =>
@@ -171,4 +182,35 @@ test("an installed plugin nothing places, added with the config unchanged, build
         l.includes(path.dirname(definition)),
     ),
   ).toBe(true);
+});
+
+// File events resuming after a span re-read every entry: an edit made while
+// the OS delivered nothing was never heard by the entry's own watch.
+test("a catch-up reloads every entry under events-resumed: the one edited while its watch heard nothing builds the new config, the other keeps its view", () => {
+  fakeWatches();
+  const r = rig();
+  const other = path.join(dir, "other");
+  fs.mkdirSync(other);
+  const otherFile = path.join(other, "config.json5");
+  fs.writeFileSync(otherFile, CONFIG);
+  r.write(CONFIG);
+  r.open("s1");
+  r.cache
+    .holdSession(other, other, otherFile, viewFacts(other, "s2"))
+    [Symbol.dispose]();
+  const edited = r.entry().state;
+  const kept = r.cache.getOrCreate(other, other, otherFile).state;
+  r.write(CONFIG.replace(`"one"`, `"two"`));
+  const since = Date.parse("2026-10-27T04:00:00.000Z");
+  const before = r.loads.length;
+  r.cache.reloadEvery({ kind: "events-resumed", since });
+  expect(r.causes.slice(before)).toEqual([
+    { kind: "events-resumed", since },
+    { kind: "events-resumed", since },
+  ]);
+  expect(r.loads.slice(before).sort()).toEqual(["built", "kept"]);
+  expect(r.entry().state).not.toBe(edited);
+  expect(JSON.stringify(r.entry().state.config)).toContain(`"two"`);
+  expect(r.cache.getOrCreate(other, other, otherFile).state).toBe(kept);
+  expect(r.reopened()).toBe(1);
 });

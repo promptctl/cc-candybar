@@ -215,6 +215,12 @@ export function spawnBackoffPath(): string {
   return path.join(stateDir(), SPAWN_BACKOFF_FILE);
 }
 
+// The daemon's own folder for testing its file watch: never the state
+// directory itself, where the log writes on every request.
+export function watchProbeDir(): string {
+  return path.join(stateDir(), "watch-probe");
+}
+
 export function logPath(env: NodeJS.ProcessEnv = process.env): string {
   return path.join(stateDir(env), "daemon.log");
 }

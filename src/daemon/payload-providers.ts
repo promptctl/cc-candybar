@@ -13,6 +13,7 @@
 import { GitDataProvider } from "./cache/git";
 import { SessionUsageStore } from "./cache/session-usage-store";
 import type { WatcherRegistry } from "./cache/watchers";
+import type { FileEvents } from "./cache/file-events";
 import type { DaemonLogger } from "../utils/logger";
 import type { RefreshLedger } from "../utils/refresh-ledger";
 import type { RenderPayloadDeps } from "./render-payload";
@@ -34,6 +35,9 @@ export type PayloadProviders = Omit<RenderPayloadDeps, "lanes">;
 // one ledger, so its stats read every source in one place.
 export function createPayloadProviders(opts: {
   readonly watchers: WatcherRegistry;
+  // Whether the OS is delivering file events: the caller's one owner, which
+  // only the daemon starts.
+  readonly fileEvents: FileEvents;
   readonly logger: DaemonLogger;
   readonly ledger: RefreshLedger;
 }): PayloadProviders {
@@ -54,6 +58,7 @@ export function createPayloadProviders(opts: {
     cacheExpiry: new CacheExpiryProvider(logger, ledger),
     managedStorage: new ManagedStorage({
       watchers: opts.watchers,
+      fileEvents: opts.fileEvents,
       logger,
       ledger,
     }),
