@@ -4,15 +4,22 @@
     {
       "version": "pr-486",
       "ref": "refs/pull/486/merge",
-      "sha": "2e774a95a3d66a799a6376a936cc5ccd96583fe8",
-      "timestamp": "2026-10-30T09:31:06.415Z",
+      "sha": "68a0406b6c8044d8cc2e38d4b58c6b7d9583fcde",
+      "timestamp": "2026-10-30T09:32:32.434Z",
       "commits": [
         {
-          "sha": "2e774a95a3d66a799a6376a936cc5ccd96583fe8",
+          "sha": "68a0406b6c8044d8cc2e38d4b58c6b7d9583fcde",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T09:30:16Z",
-          "message": "Merge 349c86dd39ad8093c6ddacd3d149c3af2e2a76bc into 4363d2a7982c76c6f6ada1028f154dd9a498309c\n"
+          "timestamp": "2026-10-30T09:31:44Z",
+          "message": "Merge a014c7f7ac444c9c702acac467bdfc906d4774ab into 4363d2a7982c76c6f6ada1028f154dd9a498309c\n"
+        },
+        {
+          "sha": "a014c7f7ac444c9c702acac467bdfc906d4774ab",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T03:31:32-06:00",
+          "message": "fix(config): an insert cell warns only where a config file wrote the tree it missed (candybar-plugins-vf6g.99v)\n"
         },
         {
           "sha": "349c86dd39ad8093c6ddacd3d149c3af2e2a76bc",

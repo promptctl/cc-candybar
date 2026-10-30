@@ -50245,10 +50245,10 @@ function presetRoot(config2, name) {
     unplaced
   };
 }
-function unplacedNotices(config2) {
+function unplacedNotices(config2, authored) {
   const trees = [
     { path: "root", where: "", ...renderedRoot(config2, EMPTY_ROWS) },
-    ...presetNames(config2.presets).map((name) => ({
+    ...presetNames(config2.presets).filter((name) => authored.has(name)).map((name) => ({
       ...presetRoot(config2, name),
       where: ` in preset "${name}"`
     }))
@@ -58810,7 +58810,12 @@ function loadConfigChain(paths, dflt, trace, session, read2 = (p2) => fs_default
     rendering: layers.at(-1)?.plugins.rendering ?? plugins2.rendering
   };
   const top = layers.at(-1);
-  trace.warned(unplacedNotices(top?.config ?? base));
+  trace.warned(
+    unplacedNotices(
+      top?.config ?? base,
+      new Set(layers.flatMap((l) => Object.keys(l.raw.presets ?? {})))
+    )
+  );
   if (top === void 0) {
     return {
       layers,
