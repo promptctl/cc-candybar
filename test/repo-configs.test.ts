@@ -261,6 +261,13 @@ test.each<[LoadCause, string]>([
     { kind: "config-watch", heard: { kind: "failed", reason: "/d: EPERM" } },
     '"config-watch:failed:/d: EPERM"',
   ],
+  [
+    {
+      kind: "events-resumed",
+      since: Date.parse("2026-10-27T04:00:00.000Z"),
+    },
+    "events-resumed:2026-10-27T04:00:00.000Z",
+  ],
 ])("the config loaded event says why the load ran: %j", (cause, field) => {
   expect(configLoadedLine(loadedEntry, cause, "built")).toContain(
     ` cwd=/p cause=${field} state=built files=`,

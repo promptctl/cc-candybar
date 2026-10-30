@@ -401,15 +401,18 @@ export interface Teardown {
 
 // [LAW:types-are-the-program] Why an entry loaded: its first load; a re-read
 // a caller asked for, after a click's durable write or before a doctor
-// verdict; or a watch that heard something, the entry's own config watch or
-// the repo-config answers watch every entry shares, carrying what it heard.
+// verdict; a watch that heard something, the entry's own config watch or
+// the repo-config answers watch every entry shares, carrying what it heard;
+// or file events resuming after a span, starting `since`, in which an edit
+// may have gone unheard.
 export type LoadCause =
   | { readonly kind: "open" }
   | ExplicitLoad
   | {
       readonly kind: "config-watch" | "answers-watch";
       readonly heard: Invalidation;
-    };
+    }
+  | { readonly kind: "events-resumed"; readonly since: number };
 
 export interface ExplicitLoad {
   readonly kind: "write" | "doctor";
@@ -435,6 +438,8 @@ const causeField = (cause: LoadCause): string => {
     case "config-watch":
     case "answers-watch":
       return `${cause.kind}:${heardField(cause.heard)}`;
+    case "events-resumed":
+      return `${cause.kind}:${new Date(cause.since).toISOString()}`;
   }
 };
 
@@ -1521,7 +1526,7 @@ export class RenderCache<
     this.answersWatch = deps.watchers.acquire(
       `repo-configs:${dir}/${name}`,
       { dirs: [{ path: dir, filenames: [name] }] },
-      (heard) => this.reloadEvery(heard),
+      (heard) => this.reloadEvery({ kind: "answers-watch", heard }),
     );
   }
 
@@ -2147,14 +2152,14 @@ export class RenderCache<
     this.observers.onReload?.(entry, sessions, cause, loaded.kind);
   }
 
-  // Every entry, under the answers now on disk: any of them may draw from a
-  // repository. The live map is walked, so an entry a reload's `fit` evicts
-  // is skipped, never reloaded back to life.
-  // [LAW:one-source-of-truth] Each entry's load names the answers watch and
-  // what it heard; the batch has no record of its own.
-  private reloadEvery(heard: Invalidation): void {
-    for (const entry of this.entries.values())
-      this.reloadInto(entry, { kind: "answers-watch", heard });
+  // Every entry, re-read for `cause`: the answers on disk moved, and any
+  // entry may draw from a repository; or file events resumed, and an edit to
+  // any entry's files may have gone unheard. The live map is walked, so an
+  // entry a reload's `fit` evicts is skipped, never reloaded back to life.
+  // [LAW:one-source-of-truth] Each entry's load names the cause; the batch
+  // has no record of its own.
+  reloadEvery(cause: LoadCause): void {
+    for (const entry of this.entries.values()) this.reloadInto(entry, cause);
   }
 
   // [LAW:single-enforcer] One watcher-rebind decision per reload: the watch

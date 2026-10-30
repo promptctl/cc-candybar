@@ -11,6 +11,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createPayloadProviders } from "../src/daemon/payload-providers";
+import { FileEventDelivery } from "../src/daemon/cache/file-events";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import {
   loadFromDisk,
@@ -158,6 +159,7 @@ function rig(timeoutMs?: number): Rig {
   const watchers = new WatcherRegistry({ logger: log });
   const providers = createPayloadProviders({
     watchers,
+    fileEvents: new FileEventDelivery({ watchers, logger: log }),
     logger: log,
     ledger: new RefreshLedger(log),
   });

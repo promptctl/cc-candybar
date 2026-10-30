@@ -2,6 +2,7 @@ import { describeFailure, requestOutcome } from "./client-transport";
 import type { CliPlan } from "../cli-plan";
 import type { RoundTripBudgets, RoundTripOutcome } from "./client-transport";
 import { RuntimeStats, type StatsSnapshot } from "./stats";
+import { fileEventsLine } from "./cache/file-events";
 import { PACKAGE_VERSION } from "../version";
 import { bakedDigest } from "./build-currency";
 import { shortDigest } from "../source-digest";
@@ -211,8 +212,9 @@ export function formatStats(s: StatsSnapshot): string {
     .map(([cause, n]) => `${cause}:${n}`)
     .join(" ");
   lines.push(
-    `  plugin storage folders=${storage.folders} lost=${storage.lost} probes=${storage.probes} probeFailures=${storage.probeFailures} stalled=${storage.stalled} stalls=${storage.stalls} faults ${faults}`,
+    `  plugin storage folders=${storage.folders} lost=${storage.lost} faults ${faults}`,
   );
+  lines.push(`  fileEvents    ${fileEventsLine(s.fileEvents)}`);
   lines.push(``);
   lines.push(`transcriptReads`);
   lines.push(`  reads         ${s.transcriptReads.reads}`);
