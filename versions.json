@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-503",
+      "ref": "refs/pull/503/merge",
+      "sha": "3fb72b12c95cf7b0a9d2fd157c24e7b551aa2ff2",
+      "timestamp": "2026-10-30T17:53:39.823Z",
+      "commits": [
+        {
+          "sha": "3fb72b12c95cf7b0a9d2fd157c24e7b551aa2ff2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T17:51:56Z",
+          "message": "Merge 3932906e07d943e1c83dcfdcdc5a8cec196223f6 into 60d9da3ab14bbf0a4f835357c392667f7dc1a884\n"
+        },
+        {
+          "sha": "3932906e07d943e1c83dcfdcdc5a8cec196223f6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T11:29:59-06:00",
+          "message": "test(colour): the ✖ is held to a named red on every ground the sweep draws (candybar-joiners-e5r4.i30)\n\nThe palette-identity sweep draws the bundled variation only, and the contrast sweep checked the ink only on listed grounds, so a synthesised red that cleared the floor under another variation went unseen. The contrast sweep now holds every door's ink to the theme's named reds. The selector's doc says the fallback is taken whenever the walk finds none, and clears wherever any named colour does.\n"
+        },
+        {
+          "sha": "00b3d4dad59dd009323ce156012cb69574e1786d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T11:17:53-06:00",
+          "message": "fix(colour): roleTextOn walks out from the role's own colour, so the theme's red wins where it reads (candybar-joiners-e5r4.i30)\n\nThe walk after text-<role> skipped the role itself while the farthest-off fallback counted it, so on a ground where the base red clears and the text colour does not, a rung was taken over the theme's own red. No bundled door ground changes; roleTextOn is a template function, and its answer elsewhere now follows the rule it states. The private selector is renamed apart from decor's sliding roleText, and the seam's doc names every function it binds.\n"
+        },
+        {
+          "sha": "9669023749d755332c0ec7d3b3e4ddd50f858fa1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T11:04:01-06:00",
+          "message": "test(colour): the door's ✖ is held on every ground a variation opens it on, and the design doc states its rule (candybar-joiners-e5r4.i30)\n\nThe sweep ran the default variation only, but the door's ground is its variation's menu hue at the dial's pressed rung, so a variation with another lineage gives the ✖ another ground. It now draws every dial position under the bundled variation and every variation at each pressed rung, split by theme so each test stays inside the suite's time limit, and lists the farthest-off red by the ground's palette name. 22 of 23 themes now list a ground; only textual-ansi clears everywhere.\n"
+        },
+        {
+          "sha": "e31c41bca08d7c2b2e02afe647b62dbda52bcf50",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T10:49:49-06:00",
+          "message": "fix(colour): the door's open ✖ wears the theme's text-red, so it reads on its activated ground (candybar-joiners-e5r4.i30)\n\nThe open door's ✖ now selects among the reds the theme names for its error\nrole instead of wearing the base red: `text-error` where it clears\nTEXT_MIN_CONTRAST on the pressed state as truecolor draws it, otherwise the\nfirst rung of the error ladder out toward the pole the ground stands farther\nfrom that clears, and where none clears, the named red standing farthest off.\nIt never slides lightness and is never a synthesised colour; `keptOn` still\nholds its contrast through rounding at 256 and ansi.\n\nA new rig test opens the door under every bundled theme and dial position at\ntruecolor, 256 and ansi and measures the ✖ as drawn; it lists the themes where\nno named red clears, with the red worn and the ratio reached. The palette\nidentity test now holds the ✖ to the theme's error reds.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-504",
       "ref": "refs/pull/504/merge",
       "sha": "f049b44d93280f7e7a72699b9047f7c6c06d34d8",
@@ -85,49 +128,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-10-30T17:01:29Z",
           "message": "chore(release): set `package.json` to 1.166.3 [skip ci]\n\n## [1.166.3](https://github.com/promptctl/cc-candybar/compare/v1.166.2...v1.166.3) (2026-10-30)\n\n### Bug Fixes\n\n* **watchers:** the registry refuses a directory it cannot open, on every platform (brandon-unfiled-3248.0mvx) ([#501](https://github.com/promptctl/cc-candybar/issues/501)) ([ac7fa00](https://github.com/promptctl/cc-candybar/commit/ac7fa0066116393d2e51df899b6ec19d31ba5071))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-503",
-      "ref": "refs/pull/503/merge",
-      "sha": "cd9e7cc5b8dad0c48c1ee591b8b6043d0b346888",
-      "timestamp": "2026-10-30T17:30:55.016Z",
-      "commits": [
-        {
-          "sha": "cd9e7cc5b8dad0c48c1ee591b8b6043d0b346888",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T17:30:09Z",
-          "message": "Merge 57e789f198856c818686252bfe3fc2226540fe21 into 1bef42323069803286132c18409da954fece2264\n"
-        },
-        {
-          "sha": "57e789f198856c818686252bfe3fc2226540fe21",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T11:29:59-06:00",
-          "message": "test(colour): the ✖ is held to a named red on every ground the sweep draws (candybar-joiners-e5r4.i30)\n\nThe palette-identity sweep draws the bundled variation only, and the contrast sweep checked the ink only on listed grounds, so a synthesised red that cleared the floor under another variation went unseen. The contrast sweep now holds every door's ink to the theme's named reds. The selector's doc says the fallback is taken whenever the walk finds none, and clears wherever any named colour does.\n"
-        },
-        {
-          "sha": "1946332f7d9af318fe2a0d3e790a34e04c5d9d6e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T11:17:53-06:00",
-          "message": "fix(colour): roleTextOn walks out from the role's own colour, so the theme's red wins where it reads (candybar-joiners-e5r4.i30)\n\nThe walk after text-<role> skipped the role itself while the farthest-off fallback counted it, so on a ground where the base red clears and the text colour does not, a rung was taken over the theme's own red. No bundled door ground changes; roleTextOn is a template function, and its answer elsewhere now follows the rule it states. The private selector is renamed apart from decor's sliding roleText, and the seam's doc names every function it binds.\n"
-        },
-        {
-          "sha": "4361938564ec0f22ab332ef8d21820cb174d9811",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T11:04:01-06:00",
-          "message": "test(colour): the door's ✖ is held on every ground a variation opens it on, and the design doc states its rule (candybar-joiners-e5r4.i30)\n\nThe sweep ran the default variation only, but the door's ground is its variation's menu hue at the dial's pressed rung, so a variation with another lineage gives the ✖ another ground. It now draws every dial position under the bundled variation and every variation at each pressed rung, split by theme so each test stays inside the suite's time limit, and lists the farthest-off red by the ground's palette name. 22 of 23 themes now list a ground; only textual-ansi clears everywhere.\n"
-        },
-        {
-          "sha": "e0907723f3fb39cbf126238b951b9fad4ff86b2a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T10:49:49-06:00",
-          "message": "fix(colour): the door's open ✖ wears the theme's text-red, so it reads on its activated ground (candybar-joiners-e5r4.i30)\n\nThe open door's ✖ now selects among the reds the theme names for its error\nrole instead of wearing the base red: `text-error` where it clears\nTEXT_MIN_CONTRAST on the pressed state as truecolor draws it, otherwise the\nfirst rung of the error ladder out toward the pole the ground stands farther\nfrom that clears, and where none clears, the named red standing farthest off.\nIt never slides lightness and is never a synthesised colour; `keptOn` still\nholds its contrast through rounding at 256 and ansi.\n\nA new rig test opens the door under every bundled theme and dial position at\ntruecolor, 256 and ansi and measures the ✖ as drawn; it lists the themes where\nno named red clears, with the red worn and the ratio reached. The palette\nidentity test now holds the ✖ to the theme's error reds.\n"
         }
       ]
     }
