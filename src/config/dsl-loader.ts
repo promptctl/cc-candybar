@@ -113,7 +113,12 @@ import {
   type SegmentPresence,
 } from "./loader/plugin-scope.js";
 import { installedPlugins } from "./loader/plugin-folders.js";
-import { presenceOf, reportable, withoutUnplaced } from "./loader/unplaced.js";
+import {
+  presenceOf,
+  reportable,
+  segmentsPlacedAs,
+  withoutUnplaced,
+} from "./loader/unplaced.js";
 import type { ApprovedRepo } from "./loader/repo-gate.js";
 import { type Checkout, checkoutOf } from "../utils/git-root.js";
 
@@ -880,11 +885,19 @@ function layerInserts(
   readonly dropped: readonly FiledIssue[];
 } {
   const layers = [...beneath].reverse().concat(top);
+  const placedAs = segmentsPlacedAs(
+    top.config,
+    layers.flatMap((layer) => layer.raw.insert ?? []),
+  );
   // [LAW:dataflow-not-control-flow] A cell anchored on a placement whose
   // plugin is absent is absent with it: its anchor draws nothing here, so
-  // neither does it, and neither is an error (unplaced.ts reportable).
-  const anchored = (cell: InsertCell): boolean =>
-    presence(cell.anchor).kind !== "absent";
+  // neither does it, and neither is an error (unplaced.ts reportable). The
+  // anchor is a placement id, so it is the segments placed under it that are
+  // judged; an anchor naming no placement stays, and is reported missing.
+  const anchored = (cell: InsertCell): boolean => {
+    const on = placedAs(cell.anchor);
+    return on.length === 0 || on.some((seg) => presence(seg).kind !== "absent");
+  };
   // [LAW:single-enforcer] A cell naming the bar's chrome (the settings menu's
   // anchor among it) never gets here: the parse refuses it (loader/layout.ts).
   const declared = (cell: InsertCell): boolean =>

@@ -914,6 +914,18 @@ describe("an installed plugin", () => {
     expect(warnings).toEqual([]);
   });
 
+  test("an insert cell anchored on an absent plugin's placement by its id is absent with it", async () => {
+    const p = write(
+      "config.json5",
+      `{ segments: { mine: { template: "MINE" }, two: { template: "TWO" } }, root: { h: ["mine", { seg: "repo.lit.ticket", id: "ticket" }] }, insert: [{ seg: "two", after: "ticket" }] }`,
+    );
+    const { rendered, warnings } = clean(await checkConfig(p, dir));
+    expect(rendered).toContain("MINE");
+    expect(rendered).not.toContain("TWO");
+    expect(rendered).not.toContain("⚠");
+    expect(warnings).toEqual([]);
+  });
+
   test("the settings menu's anchor is refused as an insert cell", async () => {
     const p = write(
       "config.json5",
@@ -1319,6 +1331,19 @@ describe("a repo's plugin beside an installed one of its name", () => {
     process.env.XDG_DATA_DIRS = saved.dirs;
     if (saved.config === undefined) delete process.env.XDG_CONFIG_HOME;
     else process.env.XDG_CONFIG_HOME = saved.config;
+  });
+
+  test("a user config's insert cell naming the repo's broken plugin shows its drop", async () => {
+    write(
+      "xdg/cc-candybar/config.json5",
+      `{ root: { rows: { status: { h: ["model", "plugins.lit.phase"] } } }, insert: [{ seg: "repo.lit.ticket", after: "plugins.lit.phase" }] }`,
+    );
+    write("repo/.cc-candybar/plugins/lit/plugin.json5", `{ segments: { ticket: { template: "{{ if }}" } } }`);
+    write("repo/.cc-candybar.json5", `{}`);
+    answerRepo(repo);
+    const message = fatal(await checkConfig(undefined, repo));
+    expect(message).toContain("1 plugin did not load");
+    expect(message).toContain(`plugin ${path.join(repo, ".cc-candybar/plugins/lit/plugin.json5")} was not loaded`);
   });
 
   test("approved, both load and all three cells draw with no warning", async () => {

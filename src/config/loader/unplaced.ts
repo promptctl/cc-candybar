@@ -18,7 +18,12 @@ import type {
   Root,
   RootFragment,
 } from "../dsl-types.js";
-import { mapOpens } from "../dsl-types.js";
+import {
+  mapOpens,
+  placementId,
+  walkNodes,
+  type InsertCell,
+} from "../dsl-types.js";
 import {
   ownedBy,
   scopeOf,
@@ -56,6 +61,33 @@ export function presenceOf(
 // not absent: a stand-in declares each of its placed names and draws the drop.
 export function reportable(presence: SegmentPresence): boolean {
   return presence.kind === "plugin" || presence.kind === "missing";
+}
+
+// The segment each placement id names, across the config's root, every
+// preset's root and the insert cells: an anchor names a placement, not a
+// segment, so what it stands on is the segment of the placement it names.
+// One id placed under several segments (two presets alike) names them all.
+export function segmentsPlacedAs(
+  config: DslConfig,
+  cells: readonly InsertCell[],
+): (id: string) => readonly string[] {
+  const placed = new Map<string, Set<string>>();
+  const add = (id: string, segment: string): void => {
+    placed.set(id, (placed.get(id) ?? new Set()).add(segment));
+  };
+  const trees = (f: RootFragment): readonly LayoutNode[] =>
+    isRowsFragment(f) ? Object.values(f.rows) : [f];
+  const fragments = [
+    config.root,
+    ...Object.values(config.presets).flatMap((p) =>
+      p.root === undefined ? [] : [p.root],
+    ),
+  ];
+  for (const tree of fragments.flatMap(trees))
+    for (const node of walkNodes(tree))
+      if (node.kind === "segment") add(placementId(node), node.name);
+  for (const cell of cells) add(cell.id ?? cell.seg, cell.seg);
+  return (id) => [...(placed.get(id) ?? [])];
 }
 
 // `config` with every placement of an undeclared segment removed from its

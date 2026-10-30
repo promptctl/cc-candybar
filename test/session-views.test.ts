@@ -513,3 +513,14 @@ test("a config load starts no view's source, and still names a session value tha
   }
   expect(shells).toBe(5);
 });
+
+test("a diagnostic a request last delivered stays copyable after a feed frame lists others", async () => {
+  configure(dir);
+  const { cache } = makeCache();
+  const { view } = await render(cache, "s-copy");
+  view.drawnCopies.set("request", new Map([["7", "the request's message"]]));
+  view.drawnCopies.set("feed", new Map([["9", "the feed's message"]]));
+  expect(cache.drawnCopy("s-copy", "7")).toBe("the request's message");
+  expect(cache.drawnCopy("s-copy", "9")).toBe("the feed's message");
+  expect(cache.drawnCopy("s-copy", "8")).toBeUndefined();
+});

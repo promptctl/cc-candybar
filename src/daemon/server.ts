@@ -2445,12 +2445,6 @@ function drawRender(
       copy: w.message,
     })),
   );
-  // [LAW:one-source-of-truth] What each copy click this draw mints copies,
-  // read back when the click runs (the copy-diagnostic verb): the list the
-  // session was last shown, never text carried in the link.
-  const keys = copyKeys(diagnostics);
-  view.drawnCopies.clear();
-  diagnostics.forEach((m, i) => view.drawnCopies.set(keys[i]!, m.copy));
   const projected = {
     diagnostics: diagnosticsProjection(diagnostics),
     drawing,
@@ -2510,6 +2504,15 @@ function drawRender(
     // view's slots settle those names (src/dsl/parts.ts), the same ones its
     // payload's `.effective` fields read.
     { ...effective, effects, idleSince },
+  );
+  // [LAW:one-source-of-truth] What each copy click this frame mints copies,
+  // read back when the click runs (the copy-diagnostic verb): the list this
+  // renderer last delivered, never text carried in the link. Recorded once
+  // the frame exists, so a draw that throws leaves the shown frame's copies.
+  const keys = copyKeys(diagnostics);
+  view.drawnCopies.set(
+    drawing.by,
+    new Map(diagnostics.map((m, i) => [keys[i]!, m.copy])),
   );
   // What this frame drew is what the session's close timer follows.
   menuIdle.observe(sessionId, at, frame.menuRows > 0, effective.menuTimeout);

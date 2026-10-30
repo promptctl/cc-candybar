@@ -23,6 +23,7 @@ import {
   repoConfigsPath,
 } from "../repo-configs.js";
 import { REPO_PLUGIN_DIR } from "../../config/loader/plugin-folders.js";
+import type { Drawing } from "../../config/lanes.js";
 import {
   repoUnreadNotice,
   type ApprovedRepo,
@@ -1194,10 +1195,11 @@ export interface SessionView<
   // store's inputs and slots (`bindView`) when it opened.
   readonly source: S;
   readonly lastRenderCellsBySegment: Map<string, readonly RichText[]>;
-  // What each diagnostic the view's last draw listed copies, by the key its
-  // copy click names (src/render/diagnostics.ts): the draw refills it in
-  // place, and a click reads it, so no link carries the text it copies.
-  readonly drawnCopies: Map<string, string>;
+  // What each diagnostic the view's renderers last delivered copies, by the
+  // key its copy click names (src/render/diagnostics.ts), one map per
+  // renderer: a request and a feed frame list different messages, and a
+  // click may come from either surface. No link carries the text it copies.
+  readonly drawnCopies: Map<Drawing["by"], ReadonlyMap<string, string>>;
   // The view is no session's bar from now on (a successor took it, or it
   // closed): it stops saying what it draws from moved, though a render that
   // holds it still draws from it.
@@ -1428,7 +1430,7 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
     facts: () => declared.get().facts,
     lanes: () => declared.get().lanes,
     lastRenderCellsBySegment: new Map<string, readonly RichText[]>(),
-    drawnCopies: new Map<string, string>(),
+    drawnCopies: new Map<Drawing["by"], ReadonlyMap<string, string>>(),
     retire: stopChanged,
     dispose: () => {
       stop();
@@ -2208,10 +2210,18 @@ export class RenderCache<
     return [...this.views.values()].at(-1) ?? null;
   }
 
-  // What the diagnostic the session's view last drew under `key` copies;
-  // undefined while it has no view or that draw listed none under it. Reads,
+  // What the diagnostic the session's view last delivered under `key`
+  // copies, from whichever renderer drew it; undefined while it has no view
+  // or no renderer's last frame listed it. Reads,
   // never opens, like latestView.
   drawnCopy(sessionId: string, key: string): string | undefined {
-    return this.views.get(sessionId)?.drawnCopies.get(key);
+    const drawn = this.views.get(sessionId)?.drawnCopies.values() ?? [];
+    // A key names a message's identity, so every renderer that lists it
+    // copies the same message.
+    for (const copies of drawn) {
+      const copy = copies.get(key);
+      if (copy !== undefined) return copy;
+    }
+    return undefined;
   }
 }
