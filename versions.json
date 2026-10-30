@@ -2,39 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-507",
-      "ref": "refs/pull/507/merge",
-      "sha": "1705b1022ae6d9220aabfea36962946701186f63",
-      "timestamp": "2026-10-30T18:32:47.255Z",
-      "commits": [
-        {
-          "sha": "1705b1022ae6d9220aabfea36962946701186f63",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T12:32:03-06:00",
-          "message": "Merge a3e26357cc22cc5ea47f53631f026368a80d6762 into 7cc276c0c16ac5e07c5f963f30318fa6c43d9370\n"
-        },
-        {
-          "sha": "a3e26357cc22cc5ea47f53631f026368a80d6762",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T12:31:45-06:00",
-          "message": "fix(diagnostics): what the config watch cannot hear shows in the ⚠ indicator (candybar-plugins-vf6g.8uk)\n\nThe config watcher's unresolved link chains and deaf directories reached\nonly daemon.log, and only on a rebind, so an edit could go unheard while the\nbar showed nothing. A `watch_file` source already showed the same two facts.\n\nOne fault builder beside the watch rule now serves both: `watch_file` and the\nconfig watch call it, each with its own label. The cache entry holds its\nderived watch and the held watch as one value, re-derived on every load, and\nthe draw shows its fault as a standing `config-watch` warning that clears once\nthe chain can be walked and the OS listens again.\n"
-        }
-      ]
-    },
-    {
       "version": "pr-505",
       "ref": "refs/pull/505/merge",
-      "sha": "e917a09e716e182e12dbb20f0b68099e1f7d8c55",
-      "timestamp": "2026-10-30T18:25:07.632Z",
+      "sha": "76dc18aa6c74a7ae000e2f5e5fbce1614d3a2d3f",
+      "timestamp": "2026-10-30T18:37:19.837Z",
       "commits": [
         {
-          "sha": "e917a09e716e182e12dbb20f0b68099e1f7d8c55",
+          "sha": "76dc18aa6c74a7ae000e2f5e5fbce1614d3a2d3f",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T18:24:23Z",
-          "message": "Merge a0173d2d14d610d5fb1289b970e18f66cd6c74e3 into 7cc276c0c16ac5e07c5f963f30318fa6c43d9370\n"
+          "timestamp": "2026-10-30T18:33:03Z",
+          "message": "Merge 154dc8ed0773f229988ae12db7eb44a489b9eb50 into 7cc276c0c16ac5e07c5f963f30318fa6c43d9370\n"
+        },
+        {
+          "sha": "154dc8ed0773f229988ae12db7eb44a489b9eb50",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T12:32:52-06:00",
+          "message": "docs(feed): the rate cell reads as a ceiling in the README, the authoring guide and the feed's comments (candybar-animation-wbxz.014)\n"
         },
         {
           "sha": "a0173d2d14d610d5fb1289b970e18f66cd6c74e3",
@@ -56,6 +41,28 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T11:53:27-06:00",
           "message": "feat(feed): a frame is drawn when the bar next changes, not at a fixed 30 fps (candybar-animation-wbxz.014)\n\nA feed chose between two fixed periods by whether its last frame moved, so\na 1 s template `frames` was drawn 30 times a second with 29 frames dropped\nas repeated bytes. Every animation a frame draws now says when it next\nchanges on one host clock, and the feed draws the next frame then: no\ncloser than its spacing, no further apart than the still period.\n\n- The session's animation clock is a rich-js Timeline. Templates' `frames`\n  and `stepped` run through it and stamp their holds on wall time; the\n  draw hears the holds of functions that stamp no cell (onHold).\n- Each effect part carries the timeline it counts on: loops and passages\n  the session's, the closing flash the host clock at rate 1. The flash is\n  one animation over the idle period, so a frame announces its start.\n- A row's and a frame's `nextChange` replace the `moves` boolean; motion\n  is read off that one value.\n- The feed owns the instant each frame is drawn for, kept within the\n  timer's resolution of the wall clock, so a frame set for a change shows\n  it however its timer fires.\n- The rate cell shows the feed's ceiling, `≤30 fps` / `≤1 fps`.\n"
+        }
+      ]
+    },
+    {
+      "version": "pr-507",
+      "ref": "refs/pull/507/merge",
+      "sha": "1705b1022ae6d9220aabfea36962946701186f63",
+      "timestamp": "2026-10-30T18:32:47.255Z",
+      "commits": [
+        {
+          "sha": "1705b1022ae6d9220aabfea36962946701186f63",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T12:32:03-06:00",
+          "message": "Merge a3e26357cc22cc5ea47f53631f026368a80d6762 into 7cc276c0c16ac5e07c5f963f30318fa6c43d9370\n"
+        },
+        {
+          "sha": "a3e26357cc22cc5ea47f53631f026368a80d6762",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T12:31:45-06:00",
+          "message": "fix(diagnostics): what the config watch cannot hear shows in the ⚠ indicator (candybar-plugins-vf6g.8uk)\n\nThe config watcher's unresolved link chains and deaf directories reached\nonly daemon.log, and only on a rebind, so an edit could go unheard while the\nbar showed nothing. A `watch_file` source already showed the same two facts.\n\nOne fault builder beside the watch rule now serves both: `watch_file` and the\nconfig watch call it, each with its own label. The cache entry holds its\nderived watch and the held watch as one value, re-derived on every load, and\nthe draw shows its fault as a standing `config-watch` warning that clears once\nthe chain can be walked and the OS listens again.\n"
         }
       ]
     },
