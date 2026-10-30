@@ -27,3 +27,6 @@ npm/*/bin/
 # the committed entry is the node shim at bin/cc-candybar.
 bin/cc-candybar-native
 .claude/*.lock
+
+# The page build (explorer/build.sh): generated, rebuilt from the survey directory.
+design-docs/peer-exploration/5-landscape/site/

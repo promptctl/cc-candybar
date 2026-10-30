@@ -1,9 +1,8 @@
 name: Pages
 
-# The live bar on GitHub Pages: site/ built into a static page whose
-# transport runs the daemon in the browser (site/transport.ts). Published from
-# main; a pull request builds it, so a change that breaks the build is caught
-# before it merges.
+# One site, published by gh-pages-multiplexer to a version folder per ref: main/ for the main branch,
+# pr-<n>/ for each pull request, with a sticky comment on the PR linking its preview. Each version
+# holds the main site at its root and the statusline landscape explorer under landscape/.
 on:
   push:
     branches: [main]
@@ -11,21 +10,25 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# The build runs every package's install scripts, so it holds a read-only token and keeps no
+# credentials in the checkout; only the deploy job, which runs no package code, can write.
 permissions:
   contents: read
 
-# A newer push supersedes a pull request's build; a deploy from main always finishes.
+# A deploy from one ref must not cancel another's; the multiplexer retries lost pushes itself.
 concurrency:
   group: pages-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: false
 
 jobs:
   build:
-    name: Build site
+    name: Build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -41,27 +44,56 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build site
+      - name: Build main site
         run: pnpm run site:build
 
-      - name: Upload site
-        if: github.event_name != 'pull_request'
-        uses: actions/upload-pages-artifact@v5
+      - name: Build landscape explorer
+        run: |
+          cd design-docs/peer-exploration/5-landscape/explorer
+          # the committed bars are checked again for credential shapes before anything is published
+          python3 -I ../tools/credentials.py public/bars/*.js public/detail/*.js
+          pnpm install --frozen-lockfile
+          pnpm run check
+          pnpm run build
+
+      - name: Assemble the version
+        run: |
+          rm -rf published
+          cp -R site/dist published
+          mkdir -p published/landscape
+          cp -R design-docs/peer-exploration/5-landscape/site/. published/landscape/
+
+      - name: Hand the version to the deploy
+        uses: actions/upload-artifact@v4
         with:
-          path: site/dist
+          name: published
+          path: published
+          retention-days: 1
 
   deploy:
     name: Deploy
-    if: github.event_name != 'pull_request'
     needs: build
+    # A fork's pull request gets a read-only token whatever `permissions:` says, so it can neither
+    # push gh-pages nor comment: it builds, which is the check, and publishes nothing.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      contents: write        # the multiplexer pushes gh-pages
+      pull-requests: write   # the sticky preview comment
     steps:
-      - name: Deploy
-        id: deployment
-        uses: actions/deploy-pages@v5
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the multiplexer reads git history for each version's manifest
+
+      - name: Take the built version
+        uses: actions/download-artifact@v4
+        with:
+          name: published
+          path: published
+
+      - name: Deploy with gh-pages-multiplexer
+        uses: brandon-fryslie/gh-pages-multiplexer@v1
+        with:
+          source-dir: published
+          ref-patterns: main,pr-*

@@ -1,5 +1,5 @@
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
-import { cloneLinks, liveTraits, members, projectById, traitLinks } from './model';
+import { cloneLinks, liveTraits, members, projectById, traitLinks, type Project } from './model';
 
 // The graph on screen is a set of shown node ids. Every edge is derived from that set, so an
 // edge can never outlive or miss one of its ends. [LAW:one-source-of-truth]
@@ -15,6 +15,20 @@ export class Explorer {
   parent = new Map<NodeId, NodeId>();
   pages = new SvelteMap<string, number>();
   selected = $state<NodeId | null>(null);
+  // When on, a characteristic lists only the projects whose bar was captured. [LAW:one-source-of-truth] every list of members goes through pool().
+  barsOnly = $state(false);
+
+  keep<P extends { live: boolean }>(ps: P[]): P[] {
+    return this.barsOnly ? ps.filter((p) => p.live) : ps;
+  }
+
+  // Every characteristic's pool, filtered once when the filter changes, not on each read: the graph,
+  // the panel and every edge pass ask for pools many times a frame.
+  private pools = $derived(new Map([...members].map(([t, ps]) => [t, this.keep(ps)])));
+
+  pool(t: string): Project[] {
+    return this.pools.get(t)!;
+  }
 
   constructor() {
     this.reset();
@@ -41,7 +55,7 @@ export class Explorer {
     this.selected = id;
     if (id.startsWith('t:')) {
       const t = id.slice(2);
-      const ps = members.get(t)!;
+      const ps = this.pool(t);
       const page = Math.min(ps.length, (this.pages.get(t) ?? 0) + PAGE);
       this.pages.set(t, page);
       ps.slice(0, page).forEach((p) => this.show(p.id as NodeId, id));
@@ -52,10 +66,17 @@ export class Explorer {
     }
   }
 
+  // Shows a node and selects it without pulling anything more in, when it is already on screen:
+  // walking history back to a characteristic must restore the graph, not page it again.
+  reveal(id: NodeId): void {
+    if (this.shown.has(id)) this.selected = id;
+    else this.open(id);
+  }
+
   nodes = $derived.by((): GraphNode[] => {
     const out: GraphNode[] = [...this.shown].map((id) => ({ id, parent: this.parent.get(id) }));
     this.pages.forEach((page, t) => {
-      if (page < members.get(t)!.length) out.push({ id: `more:${t}`, parent: traitNode(t) });
+      if (page < this.pool(t).length) out.push({ id: `more:${t}`, parent: traitNode(t) });
     });
     return out;
   });
@@ -76,7 +97,7 @@ export class Explorer {
       }
     }
     for (const [t, page] of this.pages) {
-      if (page < members.get(t)!.length) out.push({ id: `m:${t}`, source: traitNode(t), target: `more:${t}`, kind: 'has', w: 1 });
+      if (page < this.pool(t).length) out.push({ id: `m:${t}`, source: traitNode(t), target: `more:${t}`, kind: 'has', w: 1 });
     }
     return out;
   });

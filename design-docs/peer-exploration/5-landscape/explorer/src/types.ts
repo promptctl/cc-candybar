@@ -6,11 +6,13 @@ export interface RawProject {
   rank: number;
   band: string;
   repo: string;
-  url: string;
+  // Absent when the project's link is its GitHub repository; the page derives that link.
+  url?: string;
   commits: number;
   last: string;
   lang: string;
   what: string;
+  // what the project is: the description up to its first punctuation, stored by export
   kind: string;
   shape: string;
   motive: string;
@@ -20,6 +22,14 @@ export interface RawProject {
   novel: Novel[];
   boring: boolean;
   copy: [repo: string, percent: number][];
+  // The risk tier the capture triage stamped (tools/capture/triage.py), and whether its bar was
+  // captured: ran in the sandbox and printed something. The frames themselves arrive in a bars bundle.
+  tier: 'skip' | 'unlocated' | 'safe' | 'review' | 'risky';
+  live: boolean;
+  // The bundles holding this project's frames and its long text, or null when it has neither.
+  // the bundles holding its bar and its long text; absent when it has none
+  bar?: number;
+  detail?: number;
   created?: string;
   size?: string;
   sources?: string;
@@ -29,6 +39,11 @@ export interface RawProject {
   summary?: string;
   fork?: string;
 }
+
+// What a statusline printed in the sandbox through the fixture's 120-second conversation, keyed
+// by terminal width: a frame for each tick at which the output changed. A width whose frames
+// matched the next narrower one is left out.
+export type Bars = Record<string, [tick: number, out: string][]>;
 
 export interface RawData {
   projects: RawProject[];

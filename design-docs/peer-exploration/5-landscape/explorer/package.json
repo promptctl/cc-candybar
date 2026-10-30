@@ -3,22 +3,27 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "data": "python3 -I ../tools/export.py src/data.json",
-    "build": "vite build && cp dist/index.html ../landscape.html",
+    "data": "python3 -I ../tools/export.py src/data.json public",
+    "build": "vite build",
+    "site": "sh build.sh",
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "dev": "vite"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
     "@tsconfig/svelte": "^5.0.8",
-    "@types/cytoscape-fcose": "^2.2.5",
+    "@types/d3-force": "^3.0.10",
     "cytoscape": "^3.34.4",
-    "cytoscape-fcose": "^2.2.0",
     "playwright-core": "^1.64.1",
     "svelte": "^5.57.2",
     "svelte-check": "^4.7.7",
     "typescript": "^6.0.3",
     "vite": "^8.3.5",
     "vite-plugin-singlefile": "^2.3.4"
+  },
+  "dependencies": {
+    "@xterm/addon-unicode11": "^0.9.0",
+    "@xterm/xterm": "^6.0.0",
+    "d3-force": "^3.0.0"
   }
 }
