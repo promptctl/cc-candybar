@@ -1053,16 +1053,18 @@ id the user's bar holds (a bare placement's id is its segment's name):
 {
   segments: { lit: { template: "lit" } },
   root: { rows: { status: { h: ["model", "context"] } } },
-  insert: [{ seg: "lit", before: "context" }],
+  insert: [{ seg: "lit", after: "model" }],
 }
 ```
 
 Here the file stands alone, so the row it inserts into is its own. In a
 repository, leave `root` out and the cell lands in the user's row. Each
 cell takes exactly one of `before` or `after`, and an optional `id`. Every
-arrangement places the cell in its own tree, presets included. One whose
-tree lacks the anchor doesn't draw it, and the bar warns naming your file,
-the cell, the anchor and the preset. A cell the user already places is not
+arrangement places the cell in its own tree, presets included, and one
+whose tree lacks the anchor doesn't draw it. When that is the user's own
+root, or a preset some config file writes, the bar warns naming your file,
+the cell, the anchor and the preset. A preset only cc-candybar ships has
+no such placement to sit beside, so it simply draws without the cell. A cell the user already places is not
 drawn twice. Like the rest of the file, `insert` takes effect only once the
 user has approved the repository. In edit mode the cell shows which file
 placed it, and offers no remove or move, because it lives in your file, not

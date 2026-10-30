@@ -189,13 +189,23 @@ export function presetRoot(
 // and the preset whose tree it missed when that is not the config's own root.
 // Each tree is asked once — every preset that restages nothing renders the
 // config's own root and shares its answer.
-export function unplacedNotices(config: DslConfig): readonly string[] {
+// [LAW:no-silent-failure] exception: a preset only the bundled default
+// declares is not asked. Its tree is ours, not the user's, so a cell whose
+// anchor it lacks has no "beside" there — like a `when` that is false, not a
+// broken state — and warning would put a standing ⚠ on every bar a repo
+// adds to. `authored` names the presets some config file declares.
+export function unplacedNotices(
+  config: DslConfig,
+  authored: ReadonlySet<string>,
+): readonly string[] {
   const trees = [
     { path: "root", where: "", ...renderedRoot(config, EMPTY_ROWS) },
-    ...presetNames(config.presets).map((name) => ({
-      ...presetRoot(config, name),
-      where: ` in preset "${name}"`,
-    })),
+    ...presetNames(config.presets)
+      .filter((name) => authored.has(name))
+      .map((name) => ({
+        ...presetRoot(config, name),
+        where: ` in preset "${name}"`,
+      })),
   ];
   return trees
     .filter((tree, i) => trees.findIndex((t) => t.path === tree.path) === i)

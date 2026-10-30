@@ -429,7 +429,12 @@ export function loadConfigChain(
   // [LAW:no-silent-failure] Every layer's `insert` cells are placed by each
   // tree that renders, so whether one landed is a fact about the whole
   // chain: asked once, over the config that renders, before it validates.
-  trace.warned(unplacedNotices(top?.config ?? base));
+  trace.warned(
+    unplacedNotices(
+      top?.config ?? base,
+      new Set(layers.flatMap((l) => Object.keys(l.raw.presets ?? {}))),
+    ),
+  );
   if (top === undefined) {
     return {
       layers,

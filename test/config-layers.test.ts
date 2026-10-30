@@ -194,9 +194,7 @@ describe("a project layer inserting into the user's row", () => {
     );
   const order = (rendered: string, ...marks: string[]) =>
     marks.map((m) => rendered.indexOf(m));
-  // The warnings about the config's own root: the bundled whole-tree presets
-  // (compact, verbose, …) hold none of these tests' placements, so each
-  // cell also warns once per such preset, naming it.
+  // The warnings about the config's own root, apart from any naming a preset.
   const warnedFor = (warnings: readonly string[], entry: string) =>
     warnings.filter((w) => w.includes(entry) && !w.includes(" in preset "));
   const presetWarnings = (warnings: readonly string[], preset: string) =>
@@ -249,7 +247,18 @@ describe("a project layer inserting into the user's row", () => {
     const compact = await presetTree("compact");
     expect(compact.indexOf("theirs")).toBeGreaterThanOrEqual(0);
     expect(compact.indexOf("theirs")).toBeLessThan(compact.indexOf("directory"));
+  });
+
+  test("a bundled-only preset that lacks the anchor does not warn; one the user authors does", async () => {
+    userRow(`{ rows: { status: { h: ["mine", "other"] } } }`);
     writeProject(`[{ seg: "theirs", after: "mine" }]`);
+    const bundled = clean(await checkConfig(undefined, project)).warnings;
+    expect(bundled.filter((w) => w.includes(" in preset "))).toEqual([]);
+    expect(warnedFor(bundled, "insert.0")).toEqual([]);
+    userRow(
+      `{ rows: { status: { h: ["mine", "other"] } } }`,
+      ` }, presets: { compact: { root: { h: ["other"] } }`,
+    );
     const missed = presetWarnings(
       clean(await checkConfig(undefined, project)).warnings,
       "compact",
