@@ -58389,10 +58389,10 @@ function boundToSelf(ns, fragment) {
       }
     })),
     helpers: each(fragment.helpers, bind),
-    actions: each(fragment.actions, (a) => {
-      const bound = mapActionTemplates(a, bind);
-      return "do" in bound ? { ...bound, do: bound.do.map(named3) } : bound;
-    })
+    actions: each(
+      fragment.actions,
+      (a) => mapActionNames(mapActionTemplates(a, bind), named3)
+    )
   };
 }
 function selfDepends(v, named3) {
@@ -58400,6 +58400,17 @@ function selfDepends(v, named3) {
     ...v,
     cache: { depends_on: v.cache.depends_on.map(named3) }
   } : v;
+}
+function mapActionNames(a, f) {
+  const seg2 = "segments.";
+  const out = { ...a };
+  if ("do" in a) out.do = a.do.map((m) => f(m, "do"));
+  for (const field of ["removeSegment", "insertSegment", "anchor"])
+    if (field in a)
+      out[field] = f(a[field], field);
+  if ("persist" in a && a.persist.startsWith(seg2))
+    out.persist = seg2 + f(a.persist.slice(seg2.length), "persist");
+  return out;
 }
 var SEGMENT_TEMPLATE_FIELDS = ["template", "bg", "fg", "when"];
 function wrongScopeRefs(fragment, id2) {
@@ -58430,16 +58441,29 @@ function wrongScopeRefs(fragment, id2) {
       if (via === null) check(where, ref, true);
     for (const { name, via } of templateActionRefs(template, helpers))
       if (via === null) check(where, name, false);
-    for (const name of templateHelperCalls(template, helpers))
+    for (const name of templateHelperCalls(template, {}))
       check(where, name, false);
   }
   for (const [name, a] of Object.entries(fragment.actions ?? {})) {
-    if ("do" in a) for (const m of a.do) check(`actions.${name}.do`, m, false);
+    mapActionNames(a, (ref, field) => {
+      check(`actions.${name}.${field}`, ref, false);
+      return ref;
+    });
   }
-  for (const [name, v] of Object.entries(fragment.variables ?? {})) {
+  const variables = [
+    ...Object.entries(fragment.variables ?? {}).map(
+      ([name, v]) => [`variables.${name}`, v]
+    ),
+    ...Object.entries(fragment.segments ?? {}).flatMap(
+      ([seg2, decl]) => Object.entries(decl.vars ?? {}).map(
+        ([name, v]) => [`segments.${seg2}.vars.${name}`, v]
+      )
+    )
+  ];
+  for (const [where, v] of variables) {
     if (hasCacheField(v) && "depends_on" in v.cache)
       for (const d of v.cache.depends_on)
-        check(`variables.${name}.cache.depends_on`, d, false);
+        check(`${where}.cache.depends_on`, d, false);
   }
   return [...issues.values()];
 }
