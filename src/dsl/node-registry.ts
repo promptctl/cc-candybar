@@ -564,15 +564,7 @@ function spanOf(node: LayoutNode): Span {
     return { width: 1, reach: 1 };
   }
   const laid = laidOut(node);
-  return {
-    // The places of the children drawn on its first line: none, for a
-    // container that draws no line.
-    width: laid.reduce(
-      (sum, { span, ownLine }) => sum + (ownLine ? 0 : span.width),
-      0,
-    ),
-    reach: reachOf(laid),
-  };
+  return { width: widthOf(laid), reach: reachOf(laid) };
 }
 
 // A container's children, each with where it starts: side by side in a
@@ -594,6 +586,11 @@ function laidOut(node: ContainerNode): Laid[] {
     return { start: at, span, ownLine: ownLine(i) };
   });
 }
+
+// The places on a container's first line: those of the children drawn on
+// it, so none for a container that draws no line.
+const widthOf = (laid: readonly Laid[]): number =>
+  laid.reduce((sum, { span, ownLine }) => sum + (ownLine ? 0 : span.width), 0);
 
 const reachOf = (laid: readonly Laid[]): number =>
   laid.reduce((most, { start, span }) => Math.max(most, start + span.reach), 0);
@@ -633,7 +630,7 @@ function placeChildren(
   const [places, count, lineEnd] =
     axis === "row"
       ? [laid.map((_, index) => index), laid.length, laid.length - 1]
-      : [laid.map(({ start }) => start), reachOf(laid), spanOf(node).width - 1];
+      : [laid.map(({ start }) => start), reachOf(laid), widthOf(laid) - 1];
   return places.map((index) => ({
     index,
     count,

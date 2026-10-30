@@ -726,16 +726,18 @@ function prependAnchor(node: LayoutNode): LayoutNode {
   if (node.when === undefined) {
     return { ...node, children: [anchorRef, ...node.children] };
   }
-  // [LAW:one-source-of-truth] A gated row is led from outside its gate on a
-  // row of its own making, and a row nested in a row places nothing: its
-  // distribution moves to the row its cells are now laid on, as an ungated
-  // row's places the door beside its cells.
-  const { distribution, ...gated } = node;
+  // [LAW:one-source-of-truth] A gated row is led from outside its gate: it
+  // stays the row, now led by the door, and only its gate moves in, onto a
+  // container around its cells. A row nested in a row places nothing, so
+  // whatever makes it a row (its distribution) stays on the row its cells are
+  // laid on, as an ungated row's places the door beside its cells.
+  const { when, children, ...row } = node;
   return {
-    kind: "container",
-    direction: "horizontal",
-    ...(distribution !== undefined && { distribution }),
-    children: [anchorRef, gated],
+    ...row,
+    children: [
+      anchorRef,
+      { kind: "container", direction: row.direction, when, children },
+    ],
   };
 }
 
