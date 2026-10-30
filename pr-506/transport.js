@@ -38686,6 +38686,18 @@ function watchTargetsOf(paths) {
     unresolved
   };
 }
+function watchFault(label2, watch2) {
+  const reasons = [
+    ...watch2.derived.unresolved.map(
+      // Every reason names the path it stopped at, the kernel's and the loop's.
+      (u) => `cannot follow a link chain \u2014 ${u.reason}`
+    ),
+    ...watch2.held.handle.deaf.map(
+      (d) => d.kind === "refused" ? `cannot watch ${d.path} \u2014 ${d.reason}` : `watching ${d.path} failed \u2014 ${d.reason}`
+    )
+  ];
+  return reasons.length === 0 ? null : `${label2}: ${reasons.join("; ")}`;
+}
 function folded(window2, next2) {
   if (next2.kind === "failed") return next2;
   if (window2.kind !== "changed") return window2;
@@ -38749,13 +38761,14 @@ var WatcherRegistry = class {
   // FSEvents keeps on its path for a slot the OS refuses. The next derive
   // that finds the directory there rebinds, since its key differs.
   //
-  // A deaf watch under an unchanged key is kept deaf: config and git follow
-  // on a `failed` window, and a follow that retried would retry an error that
-  // recurs on every reopen within one debounce window. A deaf directory is
-  // retried when a holder names it instead: an acquire that joins it, or a
-  // consumer's `listening`.
-  follow(held, spec, onInvalidate) {
+  // A kept watch reopens, in place, every directory the OS is not listening
+  // to, unless the follow answers a `failed` window (`after`): the OS
+  // refuses an immediate retry the way it refused the first, and a retry
+  // that fails again would tell another failed window. So every consumer
+  // that follows a moving spec retries its deaf directories by the same rule.
+  follow(held, spec, onInvalidate, after) {
     if (held !== null && (held.key === spec.key || spec.unbound)) {
+      if (after?.kind !== "failed") this.listening(held);
       return { watch: held, move: "kept" };
     }
     const watch2 = {
@@ -38817,7 +38830,7 @@ var WatcherRegistry = class {
       id: id2,
       ...where,
       listeners: /* @__PURE__ */ new Set(),
-      state: this.open(where, () => dir, "acquire")
+      state: this.open(where, () => dir, "acquire", null)
     };
     this.dirs.set(id2, dir);
     return dir;
@@ -38848,14 +38861,14 @@ var WatcherRegistry = class {
   reopen(dir, cause) {
     const was = dir.state;
     if (was.kind === "listening") this.closeHandle(dir.path, was.handle, cause);
-    dir.state = this.open(dir, () => dir, cause);
+    dir.state = this.open(dir, () => dir, cause, was);
     if (dir.state.kind === "listening") this.tell(dir, { kind: "unknown" });
     else if (was.kind === "listening")
       this.tell(dir, failedOf(dir.state.deafness));
   }
   // `dirOf` names the watch the handle belongs to; its callbacks run only
   // after the open returns, once the watch holds the state returned here.
-  open(where, dirOf, cause) {
+  open(where, dirOf, cause, was) {
     const at = where.path;
     const bound = boundKey(boundOf(at));
     try {
@@ -38887,7 +38900,8 @@ var WatcherRegistry = class {
       return { kind: "listening", handle, bound };
     } catch (e) {
       const reason = e.message;
-      this.logger("warn", `watch failed ${at}: ${reason}`);
+      const same = was?.kind === "deaf" && was.deafness.kind === "refused" && was.deafness.reason === reason;
+      if (!same) this.logger("warn", `watch failed ${at}: ${reason}`);
       return {
         kind: "deaf",
         deafness: { kind: "refused", path: at, reason }
@@ -49458,39 +49472,40 @@ var PathWatches = class {
   arm(filePath2) {
     const watch2 = derived(filePath2);
     const entry = {
-      watch: watch2,
-      subscribers: /* @__PURE__ */ new Map(),
-      held: this.watchers.follow(
-        null,
-        watch2,
-        (heard) => this.heard(filePath2, entry, heard)
-      ).watch
+      bound: {
+        derived: watch2,
+        held: this.watchers.follow(
+          null,
+          watch2,
+          (heard) => this.heard(filePath2, entry, heard),
+          null
+        ).watch
+      },
+      subscribers: /* @__PURE__ */ new Map()
     };
     this.entries.set(filePath2, entry);
     return entry;
   }
   // Derive where the path can change, follow it, and say the watch's fault.
   // A new key acquires its watch, keeping every directory both keys name and
-  // retrying any the OS is not listening to. A kept watch's deaf directories
-  // are retried on any cause but a `failed` window: the OS refuses an
-  // immediate retry the way it refused the first.
+  // retrying any the OS is not listening to.
   rederive(filePath2, entry, cause) {
-    entry.watch = derived(filePath2);
-    const { watch: watch2, move } = this.watchers.follow(
-      entry.held,
-      entry.watch,
-      (heard) => this.heard(filePath2, entry, heard)
+    const paths = derived(filePath2);
+    const { watch: watch2 } = this.watchers.follow(
+      entry.bound.held,
+      paths,
+      (heard) => this.heard(filePath2, entry, heard),
+      cause
     );
-    entry.held = watch2;
-    if (cause.kind !== "failed" && move === "kept")
-      this.watchers.listening(entry.held);
+    entry.bound = { derived: paths, held: watch2 };
     this.report(filePath2, entry);
   }
   // A window re-derives and re-reads.
   heard(filePath2, entry, heard) {
-    const wasLeaf = entry.watch.reached;
+    const wasLeaf = entry.bound.derived.reached;
     this.rederive(filePath2, entry, heard);
-    if (heard.kind !== "failed" && !wasLeaf && !entry.watch.reached) return;
+    if (heard.kind !== "failed" && !wasLeaf && !entry.bound.derived.reached)
+      return;
     for (const cb of entry.subscribers.keys()) cb();
   }
   report(filePath2, entry) {
@@ -49512,12 +49527,13 @@ var PathWatches = class {
     if (!entry) return;
     entry.subscribers.delete(callback);
     if (entry.subscribers.size === 0) {
-      entry.held.handle.release();
+      entry.bound.held.handle.release();
       this.entries.delete(filePath2);
     }
   }
   dispose() {
-    for (const entry of this.entries.values()) entry.held.handle.release();
+    for (const entry of this.entries.values())
+      entry.bound.held.handle.release();
     this.entries.clear();
   }
   size() {
@@ -49525,17 +49541,7 @@ var PathWatches = class {
   }
 };
 var derived = (filePath2) => watchTargetsOf({ named: [filePath2], whole: [filePath2] });
-function faultOf(filePath2, entry) {
-  const reasons = [
-    ...entry.watch.unresolved.map(
-      (u) => `cannot follow its links \u2014 ${u.reason}`
-    ),
-    ...entry.held.handle.deaf.map(
-      (d) => d.kind === "refused" ? `cannot watch ${d.path} \u2014 ${d.reason}` : `watching ${d.path} failed \u2014 ${d.reason}`
-    )
-  ];
-  return reasons.length === 0 ? null : `watch_file ${filePath2}: ${reasons.join("; ")}`;
-}
+var faultOf = (filePath2, entry) => watchFault(`watch_file ${filePath2}`, entry.bound);
 var TtlBucketManager = class {
   buckets = /* @__PURE__ */ new Map();
   subscribe(durationMs, callback) {
@@ -71572,6 +71578,12 @@ var GitDataProvider = class {
       )
     };
   }
+  // A watch's window: a failed one is kept for the next pass's follow.
+  heard(root, heard) {
+    const state = this.repos.get(root);
+    if (state && heard.kind === "failed") state.failed = heard;
+    this.changed(root);
+  }
   // A watch fire: the repo changed since any read in flight began.
   changed(root) {
     const state = this.repos.get(root);
@@ -71599,13 +71611,14 @@ var GitDataProvider = class {
     const state = {
       root,
       refresh: new TrailingEdge(),
-      watch: this.followWatch(root, null).watch,
+      watch: this.followWatch(root, null, null).watch,
       period: new Period(() => {
         void state.refresh.share(PASS, () => this.refreshPass(state));
       }),
       values: /* @__PURE__ */ new Map(),
       holders: 0,
       asked: /* @__PURE__ */ new Set(),
+      failed: null,
       pr: null
     };
     this.repos.set(root, state);
@@ -71615,14 +71628,19 @@ var GitDataProvider = class {
   // state's build and for every pass: the git directories resolved from the
   // root as they stand now, followed by the registry's one rule. A pass calls
   // it first, before any await, so the watch follows the repo's paths.
-  followWatch(root, held) {
+  followWatch(root, held, after) {
     const gitDir = this.inner.resolveGitDir(root);
     const spec = watchSpec(
       root,
       gitDir,
       this.inner.resolveCommonGitDir(gitDir)
     );
-    const followed = this.watchers.follow(held, spec, () => this.changed(root));
+    const followed = this.watchers.follow(
+      held,
+      spec,
+      (heard) => this.heard(root, heard),
+      after
+    );
     if (followed.move === "rebound") {
       this.logger(
         "info",
@@ -71732,7 +71750,8 @@ var GitDataProvider = class {
     const startedAt = Date.now();
     const asked2 = [...state.asked];
     state.asked.clear();
-    const followed = this.followWatch(state.root, state.watch);
+    const followed = this.followWatch(state.root, state.watch, state.failed);
+    state.failed = null;
     state.watch = followed.watch;
     const values2 = [];
     for (const value of state.values.values()) {
@@ -78372,6 +78391,7 @@ var heardField = (heard) => {
       return `failed:${heard.reason}`;
   }
 };
+var heardOf = (cause) => cause.kind === "config-watch" ? cause.heard : null;
 var causeField = (cause) => {
   switch (cause.kind) {
     case "open":
@@ -78887,7 +78907,7 @@ var RenderCache = class {
       "info",
       `render-cache entry projectDir=${projectDir} cwd=${cwd2} compile=${entry.state.compileKey.slice(0, 12)} entries=${this.entries.size} compiles=${this.compiles.size} accounted=${mb(this.accountedBytes())}/${mb(this.budgetBytes())}MB`
     );
-    this.refreshWatcher(entry, loaded);
+    this.refreshWatcher(entry, loaded, { kind: "open" });
     this.observers.onReload?.(entry, [], { kind: "open" }, loaded.kind);
     return entry;
   }
@@ -79143,7 +79163,7 @@ var RenderCache = class {
   // [LAW:single-enforcer] The one way an entry leaves the map: its watcher
   // goes, the map stops serving it, and its state is retired.
   drop(key, entry, reason) {
-    entry.watch?.handle.release();
+    entry.watch?.held.handle.release();
     this.entries.delete(key);
     this.retire(entry.state, reason, null);
   }
@@ -79300,7 +79320,7 @@ var RenderCache = class {
       this.retire(served, "reload", { entry, state: loaded.state });
     }
     this.fit(entry);
-    this.refreshWatcher(entry, loaded);
+    this.refreshWatcher(entry, loaded, cause);
     this.observers.onReload?.(entry, sessions, cause, loaded.kind);
   }
   // Every entry, re-read for `cause`: the answers on disk moved, and any
@@ -79319,7 +79339,11 @@ var RenderCache = class {
   // (including null↔non-null) is one way the set changes; a candidate's
   // parent directory appearing is another — the same rule covers both, so
   // there is no separate "did the path change" test to drift from it.
-  refreshWatcher(entry, loaded) {
+  //
+  // A kept watch's deaf directories are retried on any cause but a `failed`
+  // window, which the OS refuses again at once: a directory refused once is
+  // otherwise deaf until the target set moves, and the bar says so for good.
+  refreshWatcher(entry, loaded, cause) {
     entry.configLayers = loaded.layers;
     entry.configHome = loaded.home;
     entry.repos = loaded.repos;
@@ -79327,11 +79351,12 @@ var RenderCache = class {
     const { targets, unresolved } = paths;
     const key = `config:${entry.projectDir}:${entry.cwd}:${entry.configFile ?? ""}:${paths.key}`;
     const { watch: watch2, move } = this.deps.watchers.follow(
-      entry.watch,
+      entry.watch?.held ?? null,
       { ...paths, key },
-      (heard) => this.reloadInto(entry, { kind: "config-watch", heard })
+      (heard) => this.reloadInto(entry, { kind: "config-watch", heard }),
+      heardOf(cause)
     );
-    entry.watch = watch2;
+    entry.watch = { derived: { ...paths, key }, held: watch2 };
     if (move === "kept") return;
     this.log(
       "info",
@@ -83144,9 +83169,11 @@ function drawRender(setup, drawing2) {
   ].flatMap(
     ({ about, text: text4, copy: copy3 }) => about && text4 && copy3 ? [{ about, text: text4, copy: copy3 }] : []
   );
+  const configWatch = entry.watch === null ? null : watchFault("config watch", entry.watch);
   const standing = [
     ...fileEventsWarnings(fileEvents.delivery()),
     ...lifelineWarnings(),
+    ...configWatch === null ? [] : [{ kind: "config-watch", message: configWatch }],
     ...entry.lastWarning === null ? [] : [{ kind: "load", message: entry.lastWarning }]
   ];
   const scope = { config: state.config };
@@ -83270,6 +83297,7 @@ function drawRender(setup, drawing2) {
       case "file-events":
         return `${w.kind}:${w.state}`;
       case "load":
+      case "config-watch":
       case "lifeline":
       case "when":
         return w.kind;
