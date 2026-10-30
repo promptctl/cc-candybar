@@ -154,8 +154,14 @@ const drainedWaiters: Array<() => void> = [];
 let exiting = false;
 let exitArmed = false;
 
+// [LAW:one-source-of-truth] One line of the log as it lands in the file: when,
+// at what level, and the message. Whatever writes a log line spells it here.
+export function logLine(level: LogLevel, msg: string): string {
+  return `${new Date().toISOString()} [${level}] ${msg}\n`;
+}
+
 export function dlog(level: LogLevel, msg: string): void {
-  const line = `${new Date().toISOString()} [${level}] ${msg}\n`;
+  const line = logLine(level, msg);
   if (!exitArmed) {
     exitArmed = true;
     process.on("exit", () => {
@@ -230,7 +236,10 @@ function take(): string {
   const lost =
     dropped === 0
       ? ""
-      : `${new Date().toISOString()} [warn] log: ${dropped} earlier line(s) dropped (${droppedBytes} bytes): more than ${MAX_WAITING_BYTES} bytes were waiting for the disk\n`;
+      : logLine(
+          "warn",
+          `log: ${dropped} earlier line(s) dropped (${droppedBytes} bytes): more than ${MAX_WAITING_BYTES} bytes were waiting for the disk`,
+        );
   const lines = lost + waiting.join("");
   waiting = [];
   waitingBytes = 0;

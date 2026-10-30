@@ -6,6 +6,7 @@ import fs from "node:fs";
 import net from "node:net";
 
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
+import { logLine } from "../src/daemon/log";
 import { logPath } from "../src/daemon/paths";
 import {
   encodeFrame,
@@ -61,10 +62,7 @@ async function timingOut(outcome: RequestOutcome): Promise<StandIn> {
           );
           const write = setTimeout(() => {
             pending.delete(write);
-            fs.appendFileSync(
-              logPath(env),
-              `${new Date().toISOString()} [${level}] ${line}\n`,
-            );
+            fs.appendFileSync(logPath(env), logLine(level, line));
           }, 100);
           pending.add(write);
         },

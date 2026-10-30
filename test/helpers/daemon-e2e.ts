@@ -246,9 +246,12 @@ export async function click(sockPath: string, url: string): Promise<void> {
     throw new Error(`click failed: ${resp.error} (${resp.code})`);
   }
   let event = "";
+  // The event is the click's answer by another road, so it has the budget
+  // the click's reply had.
   await until(
     () => (event = timedOutClicks(log)[before] ?? "") !== "",
     `the click event of a click answered TIMEOUT (${url})`,
+    REPLY_BUDGET_MS,
   );
   if (!/ outcome=ok(?: |$)/.test(event)) {
     throw new Error(`click failed once it ran past its TIMEOUT: ${event}`);
