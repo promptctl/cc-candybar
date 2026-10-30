@@ -4,15 +4,22 @@
     {
       "version": "pr-508",
       "ref": "refs/pull/508/merge",
-      "sha": "cea46d3755ac42021551b2d8946b56a6c7307d03",
-      "timestamp": "2026-10-30T20:20:35.192Z",
+      "sha": "1105fce05f02af321b55e17cfd0a4d929966be6c",
+      "timestamp": "2026-10-30T20:39:29.612Z",
       "commits": [
         {
-          "sha": "cea46d3755ac42021551b2d8946b56a6c7307d03",
+          "sha": "1105fce05f02af321b55e17cfd0a4d929966be6c",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T14:19:43-06:00",
-          "message": "Merge 548d9d64670adc464b5df4ea5154464cbc95d191 into 7e5b89a141178df3755ef8ff6b31eec91352e91d\n"
+          "timestamp": "2026-10-30T20:38:37Z",
+          "message": "Merge 77fe4c0c6dee2a0f453de91e04160f7282280056 into 7e5b89a141178df3755ef8ff6b31eec91352e91d\n"
+        },
+        {
+          "sha": "77fe4c0c6dee2a0f453de91e04160f7282280056",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T14:38:24-06:00",
+          "message": "docs(colour): the preview's meeting swatch can stand in for a window tone, and why the cell after a turn moves first (candybar-joiners-e5r4.5x1)\n\nvocabularyOf and the preview header said every tone of each role's window is sampled; where the swatch at the meeting moves and its role has no other swatch in the tone it was dealt, the sample does not show that tone. The hue-turn rule now states why the cell after the turn moves first and what that means for a keystone at either end of a line. The turn property rounds each entry once per palette and depth.\n"
         },
         {
           "sha": "548d9d64670adc464b5df4ea5154464cbc95d191",
