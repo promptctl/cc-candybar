@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-487",
+      "ref": "refs/pull/487/merge",
+      "sha": "da6eac0ab291d009e0a477a9bf8a9db6896c239a",
+      "timestamp": "2026-10-30T09:55:24.192Z",
+      "commits": [
+        {
+          "sha": "da6eac0ab291d009e0a477a9bf8a9db6896c239a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T09:54:28Z",
+          "message": "Merge c6e418f4f5535800353ecea103f26651c54691cb into 059a45e0880e4967c0f0fee60def00a4f4153ac0\n"
+        },
+        {
+          "sha": "c6e418f4f5535800353ecea103f26651c54691cb",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T03:52:09-06:00",
+          "message": "fix(ci): the schema guard names gen:schema as the truth and lets a read error speak for itself (brandon-unfiled-3248.oq80)\n\nThe stale message named only the loader schemas, but the artifact also\ncarries the bundled default's segment names. A bare catch relabelled every\nread error as \"missing\"; readFileSync's own error is the accurate one.\ncli.ts no longer calls the artifact build-generated.\n"
+        },
+        {
+          "sha": "4429c4744e1e5419a6ebe4a19987a155f01a699f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T03:48:13-06:00",
+          "message": "fix(ci): the committed schema has one writer, and the Test job fails a PR that leaves it stale (brandon-unfiled-3248.oq80)\n\nThe build ran gen-schema before tsdown, so every CI and release run\nrewrote schema/cc-candybar.schema.json before anything compared it. The\nprepublishOnly check compared the file with a copy the build had just\nwritten, test/config-schema.test.ts read that same copy, and the\ncommitted file on main (the one editors fetch through $id) drifted with\nnothing to catch it.\n\nThe build no longer regenerates the schema; `pnpm gen:schema` is the\nonly writer. The required Test job runs check:schema before Build. The\nschema is regenerated to match the loader, which adds the look names.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-486",
       "ref": "refs/pull/486/merge",
       "sha": "912f6cdd3d3e32fe3d6ba4e56ef0919d39e28481",
@@ -41,35 +70,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T03:11:46-06:00",
           "message": "feat(config): a repo config can add a cell beside a placement the user already has (candybar-plugins-vf6g.99v)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-487",
-      "ref": "refs/pull/487/merge",
-      "sha": "c899f1909def30d3c5affb54f1f52e24964246c9",
-      "timestamp": "2026-10-30T09:53:04.639Z",
-      "commits": [
-        {
-          "sha": "c899f1909def30d3c5affb54f1f52e24964246c9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T09:52:21Z",
-          "message": "Merge deeca69765683b1c264547e87ea7267a80e1182f into 059a45e0880e4967c0f0fee60def00a4f4153ac0\n"
-        },
-        {
-          "sha": "deeca69765683b1c264547e87ea7267a80e1182f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T03:52:09-06:00",
-          "message": "fix(ci): the schema guard names gen:schema as the truth and lets a read error speak for itself (brandon-unfiled-3248.oq80)\n\nThe stale message named only the loader schemas, but the artifact also\ncarries the bundled default's segment names. A bare catch relabelled every\nread error as \"missing\"; readFileSync's own error is the accurate one.\ncli.ts no longer calls the artifact build-generated.\n"
-        },
-        {
-          "sha": "eba7509a79734201f7353c814098c7778fa49b95",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T03:48:13-06:00",
-          "message": "fix(ci): the committed schema has one writer, and the Test job fails a PR that leaves it stale (brandon-unfiled-3248.oq80)\n\nThe build ran gen-schema before tsdown, so every CI and release run\nrewrote schema/cc-candybar.schema.json before anything compared it. The\nprepublishOnly check compared the file with a copy the build had just\nwritten, test/config-schema.test.ts read that same copy, and the\ncommitted file on main (the one editors fetch through $id) drifted with\nnothing to catch it.\n\nThe build no longer regenerates the schema; `pnpm gen:schema` is the\nonly writer. The required Test job runs check:schema before Build. The\nschema is regenerated to match the loader, which adds the look names.\n"
         }
       ]
     },
