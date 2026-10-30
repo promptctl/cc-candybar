@@ -74,6 +74,13 @@ function answeredEvents(log: string, sessionId: string): string[] {
   );
 }
 
+// The click events whose client had already been told TIMEOUT, in log order.
+function timedOutClicks(log: string): string[] {
+  return logLines(log).filter(
+    (l) => l.includes("] click ") && l.includes(" timedOut=Y "),
+  );
+}
+
 // The Status hook payload Claude Code sends, as `render` below relays it and
 // as the real client reads it from stdin.
 export function hookData(sessionId: string, cwd: string): ClaudeHookData {
@@ -222,10 +229,32 @@ export function sendClick(
 }
 
 // `sendClick`, for a test whose click must land.
+//
+// [LAW:no-ambient-temporal-coupling] A TIMEOUT is not the click's outcome. The
+// daemon's 200 ms guard abandons a request's reply, never its work, so a click
+// answered TIMEOUT still runs and its effect still lands (server.ts records it
+// as `timedOut=Y`). A render may be asked again on TIMEOUT because it is a
+// read; a click is a write, so sending it again applies it twice, and a second
+// apply-update is refused as already running. On TIMEOUT the click's outcome
+// is read from the daemon's own click event instead.
 export async function click(sockPath: string, url: string): Promise<void> {
+  const log = logOf(sockPath);
+  const before = timedOutClicks(log).length;
   const resp = await sendClick(sockPath, url);
-  if (!resp.ok) {
+  if (resp.ok) return;
+  if (resp.code !== "TIMEOUT") {
     throw new Error(`click failed: ${resp.error} (${resp.code})`);
+  }
+  let event = "";
+  // The event is the click's answer by another road, so it has the budget
+  // the click's reply had.
+  await until(
+    () => (event = timedOutClicks(log)[before] ?? "") !== "",
+    `the click event of a click answered TIMEOUT (${url})`,
+    REPLY_BUDGET_MS,
+  );
+  if (!/ outcome=ok(?: |$)/.test(event)) {
+    throw new Error(`click failed once it ran past its TIMEOUT: ${event}`);
   }
 }
 

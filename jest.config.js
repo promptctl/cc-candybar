@@ -1,3 +1,27 @@
+// Jest reports through its "agent" reporter when an agent runs it and its
+// "default" one otherwise, but only while no reporter list is configured.
+// [LAW:one-source-of-truth] exception: the list below copies the one
+// @jest/core's detectAgent reads (jest 30.3). jest does not export that check,
+// and a reporter list has no entry for "jest's choice", so keeping the choice
+// beside the reporter this config adds means reading the same variables here.
+// On a jest upgrade, compare this list with detectAgent's.
+const AGENT_ENV_VARS = [
+  "AI_AGENT",
+  "AUGMENT_AGENT",
+  "CLAUDE_CODE",
+  "CLAUDECODE",
+  "CODEX_SANDBOX",
+  "CODEX_THREAD_ID",
+  "CURSOR_AGENT",
+  "GEMINI_CLI",
+  "GOOSE_PROVIDER",
+  "OPENCODE",
+  "REPL_ID",
+];
+const jestReporter = AGENT_ENV_VARS.some((key) => (process.env[key] ?? "") !== "")
+  ? "agent"
+  : "default";
+
 export default {
   setupFiles: ["<rootDir>/test/setup.ts"],
   // [LAW:no-mode-explosion] A small fixed cap, not "cores-1" (the default),
@@ -8,6 +32,7 @@ export default {
   // per-invocation resource pressure (brandon-daemon-lifecycle-gad.1).
   maxWorkers: 4,
   globalTeardown: "<rootDir>/test/global-teardown.ts",
+  reporters: [jestReporter, "<rootDir>/test/stackless-failure-reporter.mjs"],
   preset: "ts-jest/presets/default-esm",
   extensionsToTreatAsEsm: [".ts"],
   testEnvironment: "node",
