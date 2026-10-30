@@ -157,10 +157,11 @@ export const VERB_RUN = "run";
 export const VERB_REPO_CONFIG = "repo-config";
 
 // Copy what a diagnostic message copies (src/render/diagnostics.ts): its text,
-// or the prompt that fixes what it reports. Args: `[sessionId, key]` — the key
-// the viewer opens the message by, so a frame's bytes never grow with what it
-// copies; the text is read at click time from the session's last draw, and a
-// message no longer listed is refused loudly.
+// or the prompt that fixes what it reports. Args: `[sessionId, by, key]` — the
+// renderer that drew the link and the key the viewer opens the message by, so a
+// frame's bytes never grow with what it copies; the text is read at click time
+// from that renderer's last delivered frame, and a message no longer listed is
+// refused loudly.
 export const VERB_COPY_DIAGNOSTIC = "copy-diagnostic";
 
 // [LAW:types-are-the-program] What a `run` link carries of the draw's
