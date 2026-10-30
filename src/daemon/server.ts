@@ -2344,9 +2344,10 @@ function drawRender(
   const diagnostics = collectDiagnostics(
     errors,
     [...updates, ...questions],
-    [...loadWarnings, ...renderWarnings.ofSession(sessionId, drawing.by, scope)].map(
-      (w) => w.message,
-    ),
+    [
+      ...loadWarnings,
+      ...renderWarnings.ofSession(sessionId, drawing.by, scope),
+    ].map((w) => w.message),
   );
   const projected = {
     diagnostics: diagnosticsProjection(diagnostics),

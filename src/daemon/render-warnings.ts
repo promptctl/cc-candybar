@@ -38,7 +38,7 @@ interface WarningRecord {
 }
 
 // Every renderer, in the order the session's list takes them.
-const RENDERERS: readonly Drawing["by"][] = ["request", "feed"];
+const RENDERERS: ReadonlyArray<Drawing["by"]> = ["request", "feed"];
 
 const generations = new WeakMap<object, number>();
 let nextGeneration = 0;

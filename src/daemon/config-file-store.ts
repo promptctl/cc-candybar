@@ -455,7 +455,11 @@ function commit(
   home: ConfigHome,
   before: string | null,
   after: string,
-  refuse: (home: ConfigHome, was: LoadedChain | null, will: LoadedChain) => void,
+  refuse: (
+    home: ConfigHome,
+    was: LoadedChain | null,
+    will: LoadedChain,
+  ) => void,
 ): void {
   const will = loadOrRefuse(home, after);
   // [LAW:one-source-of-truth] The file before the click is loaded once, and
