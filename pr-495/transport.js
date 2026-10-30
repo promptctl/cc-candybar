@@ -34043,7 +34043,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.164.1";
+var PACKAGE_VERSION = "1.165.0";
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
@@ -37463,14 +37463,32 @@ function runDeclaration(a) {
   return JSON.stringify([a.run, Object.entries(a.env), a.cwd, a.refreshes]);
 }
 function* actionTemplates(a) {
-  if ("copy" in a) yield ["copy", a.copy];
-  if ("open" in a) yield ["open", a.open];
-  if ("preset" in a && a.preset === "delete") yield ["name", a.name];
+  const found = [];
+  mapActionTemplates(a, (source, field) => {
+    found.push([field, source]);
+    return source;
+  });
+  yield* found;
+}
+function mapActionTemplates(a, f) {
+  if ("copy" in a) return { ...a, copy: f(a.copy, "copy") };
+  if ("open" in a) return { ...a, open: f(a.open, "open") };
+  if ("preset" in a && a.preset === "delete")
+    return { ...a, name: f(a.name, "name") };
   if ("run" in a) {
-    for (const [i, item] of a.run.entries()) yield [`run.${i}`, item];
-    for (const [name, value] of Object.entries(a.env))
-      yield [`env.${name}`, value];
+    const run3 = a.run.map((item, i) => f(item, `run.${i}`));
+    return {
+      ...a,
+      run: run3,
+      env: Object.fromEntries(
+        Object.entries(a.env).map(([name, value]) => [
+          name,
+          f(value, `env.${name}`)
+        ])
+      )
+    };
   }
+  return a;
 }
 function actionBindsTemplateValue(a) {
   return "from" in a || "int" in a || "insertSegmentFrom" in a;
@@ -37533,11 +37551,20 @@ var CACHE_KEYS = [
 function hasCacheField(v) {
   return v.kind === "file" || v.kind === "shell";
 }
+function mapVariableTemplates(v, f) {
+  const body = v.kind === "template" ? { ...v, template: f(v.template, "template") } : v;
+  return hasCacheField(body) && "key" in body.cache ? {
+    ...body,
+    cache: { ...body.cache, key: f(body.cache.key, "cache.key") }
+  } : body;
+}
 function variableTemplates(v) {
-  return [
-    ...v.kind === "template" ? [["template", v.template]] : [],
-    ...hasCacheField(v) && "key" in v.cache ? [["cache.key", v.cache.key]] : []
-  ];
+  const found = [];
+  mapVariableTemplates(v, (template, field) => {
+    found.push([field, template]);
+    return template;
+  });
+  return found;
 }
 var MISSING_DATA = ["fail", "ignore"];
 function missingDataOf(seg2) {
@@ -37643,16 +37670,40 @@ var TRUNCATE_MODES = [
 
 // src/config/loader/refs.ts
 init_globals();
+
+// src/config/loader/plugin-scope.ts
+init_globals();
+var PLUGIN_SCOPES = ["plugins", "repo"];
+function pluginNs({ scope, name }) {
+  return `${scope}.${name}`;
+}
+function ownedBy(ns) {
+  return (name) => name === ns || name.startsWith(`${ns}.`);
+}
+var SELF = "self";
+function scopeOf(name) {
+  return PLUGIN_SCOPES.find((s) => name === s || name.startsWith(`${s}.`));
+}
+function otherScopeHint(name, declared) {
+  const scope = scopeOf(name);
+  if (scope === void 0 || scope === name) return "";
+  const other = PLUGIN_SCOPES.filter((s) => s !== scope).map((s) => `${s}${name.slice(scope.length)}`).find(declared);
+  return other === void 0 ? "" : ` ("${other}" is declared: a repository's own plugins are named under repo., installed ones under plugins., and a name in one is never looked up in the other)`;
+}
+
+// src/config/loader/refs.ts
 var STRING_LITERAL_RE = /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`[^`]*`/g;
 function* templateBlocks(template) {
   let open2 = template.indexOf("{{");
   while (open2 !== -1) {
     let block = "";
     let i = open2 + 2;
+    const spans = [[0, i]];
     while (i < template.length && !template.startsWith("}}", i)) {
       if (template.startsWith("/*", i)) {
         const close3 = template.indexOf("*/", i + 2);
         i = close3 === -1 ? template.length : close3 + 2;
+        spans.push([block.length, i]);
         continue;
       }
       const start = i;
@@ -37667,7 +37718,14 @@ function* templateBlocks(template) {
       block += template.slice(start, i);
     }
     if (i >= template.length) return;
-    yield block;
+    yield {
+      text: block,
+      at: (index) => {
+        let [from, to] = spans[0];
+        for (const [b, t2] of spans) if (b <= index) [from, to] = [b, t2];
+        return to + index - from;
+      }
+    };
     open2 = template.indexOf("{{", i + 2);
   }
 }
@@ -37685,8 +37743,8 @@ function operandAt(text3, dot, root) {
 var KEYWORD_RE = /^(\w+)\b\s*([\s\S]*)$/;
 function* scopedBlocks(template, root) {
   const stack = [root];
-  for (const raw of templateBlocks(template)) {
-    const code = raw.replace(/^-(?=\s)/, "").trim();
+  for (const block of templateBlocks(template)) {
+    const code = block.text.replace(/^-(?=\s)/, "").trim();
     const [, keyword = "", rest2 = ""] = KEYWORD_RE.exec(code) ?? [];
     const top = stack[stack.length - 1];
     const outer = stack.length > 1 ? stack[stack.length - 2] : top;
@@ -37695,12 +37753,12 @@ function* scopedBlocks(template, root) {
       continue;
     }
     if (keyword === "else") {
-      yield { code, dot: outer };
+      yield { code, dot: outer, block };
       const chained = /^with\b([\s\S]*)$/.exec(rest2);
       stack[stack.length - 1] = chained === null ? outer : operandAt(chained[1], outer, root);
       continue;
     }
-    yield { code, dot: top };
+    yield { code, dot: top, block };
     if (keyword === "if") stack.push(top);
     if (keyword === "with") stack.push(operandAt(rest2, top, root));
     if (keyword === "range" || keyword === "define" || keyword === "block")
@@ -37715,7 +37773,8 @@ function* helperCalls(code, dot, root) {
     if (TEMPLATE_KEYWORD_RE.test(code.slice(cursor, s.index))) {
       yield {
         name: s[0].slice(1, -1),
-        at: operandAt(code.slice(end), dot, root)
+        at: operandAt(code.slice(end), dot, root),
+        index: s.index
       };
     }
     cursor = end;
@@ -37801,7 +37860,7 @@ function* actionBindings(code) {
       }
     }
     if (pending2 > 0 && depth === 0) {
-      yield { name: s[0].slice(1, -1), site };
+      yield { name: s[0].slice(1, -1), site, index: s.index };
       pending2--;
     }
     cursor = s.index + s[0].length;
@@ -37849,6 +37908,32 @@ function templateHelperCalls(template, helpers) {
     for (const { name } of helperCalls(code, dot, root)) called.add(name);
   }
   return called;
+}
+var SELF_REF_RE = (self2) => new RegExp(`(?<![A-Za-z0-9_)$])(\\$?)\\.${self2}(?![A-Za-z0-9_])`, "g");
+function bindSelf(template, self2, ns) {
+  const refRe = SELF_REF_RE(self2);
+  const named3 = ownedBy(self2);
+  const starts = [];
+  for (const { dot, block } of scopedBlocks(template, "")) {
+    const code = block.text.replace(
+      STRING_LITERAL_RE,
+      (s) => " ".repeat(s.length)
+    );
+    for (const r of code.matchAll(refRe)) {
+      const base = r[1] === "$" ? "" : dot;
+      if (base === "") starts.push(block.at(r.index + r[1].length + 1));
+    }
+    for (const { name, index } of [
+      ...helperCalls(block.text, dot, ""),
+      ...actionBindings(block.text)
+    ]) {
+      if (named3(name)) starts.push(block.at(index + 1));
+    }
+  }
+  return [...new Set(starts)].sort((a, b) => b - a).reduce(
+    (t2, start) => t2.slice(0, start) + ns + t2.slice(start + self2.length),
+    template
+  );
 }
 function* declarationsAt(config2) {
   for (const [name, decl] of Object.entries(config2.variables)) {
@@ -37911,6 +37996,29 @@ init_globals();
 var BARE = /^[^\s"=\\]+$/;
 var valueOf = (value) => BARE.test(value) ? value : JSON.stringify(value);
 
+// src/utils/folder-identity.ts
+init_globals();
+var statIdentity = (folder) => {
+  try {
+    const st = fs_default.statSync(folder, { bigint: true });
+    return { dev: st.dev, ino: st.ino, birthtimeNs: st.birthtimeNs };
+  } catch (e) {
+    const code = e.code;
+    if (code === "ENOENT" || code === "ENOTDIR") return "gone";
+    throw e;
+  }
+};
+var sameIdentity = (a, b) => a.dev === b.dev && a.ino === b.ino && a.birthtimeNs === b.birthtimeNs;
+var identityKey = (identity3) => identity3 === "gone" ? "gone" : `${identity3.dev}:${identity3.ino}:${identity3.birthtimeNs}`;
+var boundOf = (folder) => {
+  try {
+    return statIdentity(folder);
+  } catch (e) {
+    return { unreadable: e.code ?? String(e) };
+  }
+};
+var boundKey = (bound) => typeof bound === "string" || "ino" in bound ? identityKey(bound) : `unreadable:${bound.unreadable}`;
+
 // src/utils/watch-target.ts
 init_globals();
 var import_node_path12 = __toESM(require_path_browserify(), 1);
@@ -37936,6 +38044,9 @@ function canonicalDirectory(p2) {
 // src/daemon/cache/watchers.ts
 var defaultLogger = (_level, message) => debug(message);
 var DEBOUNCE_MS = 50;
+function aboutItself(dir, event, changed) {
+  return event === "rename" && changed === import_node_path13.default.basename(dir);
+}
 function watchTargetsOf(paths) {
   const unresolved = [];
   let reached = true;
@@ -37954,12 +38065,23 @@ function watchTargetsOf(paths) {
   }
   for (const dir of paths.whole.map(canonicalDirectory))
     if (dir !== null) byDir.set(dir, null);
+  const targets = {
+    dirs: [...byDir.entries()].sort(([a], [b]) => a.localeCompare(b)).map(
+      ([dirPath, names]) => names === null ? { path: dirPath } : { path: dirPath, filenames: [...names].sort() }
+    )
+  };
+  const bound = new Map(
+    targets.dirs.map((d) => {
+      const at = boundOf(d.path);
+      const bindable = typeof at !== "string" && "ino" in at;
+      return [d.path, bindable ? boundKey(at) : null];
+    })
+  );
   return {
-    targets: {
-      dirs: [...byDir.entries()].sort(([a], [b]) => a.localeCompare(b)).map(
-        ([dirPath, names]) => names === null ? { path: dirPath } : { path: dirPath, filenames: [...names].sort() }
-      )
-    },
+    key: JSON.stringify([targets, [...bound]]),
+    targets,
+    unbound: [...bound.values()].includes(null),
+    bound,
     reached,
     unresolved
   };
@@ -38030,8 +38152,14 @@ var WatcherRegistry = class {
   // a new key releases the watch bound to directories the spec no longer
   // names and acquires one on those it names now. Nothing held yet is a first
   // acquire, which is a rebind from nothing.
+  //
+  // A spec with a directory that binds nothing yet (gone, or a mount's
+  // transient fault) keeps the watch held: a derive that lands between a
+  // directory's removal and its making again would otherwise trade a watch
+  // FSEvents keeps on its path for a slot the OS refuses. The next derive
+  // that finds the directory there rebinds, since its key differs.
   follow(held, spec, onInvalidate) {
-    if (held !== null && held.key === spec.key) {
+    if (held !== null && (held.key === spec.key || spec.unbound)) {
       return { watch: held, move: "kept" };
     }
     held?.handle.release();
@@ -38096,8 +38224,9 @@ var WatcherRegistry = class {
     for (const target of slot.targets.dirs) {
       try {
         const filterSet = target.filenames ? new Set(target.filenames) : null;
-        const onDirEvent = (_evt, filename) => {
-          if (filterSet && (!filename || !filterSet.has(filename))) return;
+        const onDirEvent = (evt, filename) => {
+          if (filterSet && (!filename || !filterSet.has(filename) && !aboutItself(target.path, evt, filename)))
+            return;
           fire(namedOf(target.path, filename));
         };
         const w = fs_default.watch(
@@ -38144,29 +38273,6 @@ var WatcherRegistry = class {
     this.slots.clear();
   }
 };
-
-// src/utils/folder-identity.ts
-init_globals();
-var statIdentity = (folder) => {
-  try {
-    const st = fs_default.statSync(folder, { bigint: true });
-    return { dev: st.dev, ino: st.ino, birthtimeNs: st.birthtimeNs };
-  } catch (e) {
-    const code = e.code;
-    if (code === "ENOENT" || code === "ENOTDIR") return "gone";
-    throw e;
-  }
-};
-var sameIdentity = (a, b) => a.dev === b.dev && a.ino === b.ino && a.birthtimeNs === b.birthtimeNs;
-var identityKey = (identity3) => identity3 === "gone" ? "gone" : `${identity3.dev}:${identity3.ino}:${identity3.birthtimeNs}`;
-var boundOf = (folder) => {
-  try {
-    return statIdentity(folder);
-  } catch (e) {
-    return { unreadable: e.code ?? String(e) };
-  }
-};
-var boundKey = (bound) => typeof bound === "string" || "ino" in bound ? identityKey(bound) : `unreadable:${bound.unreadable}`;
 
 // src/var-system/sources.ts
 init_timers();
@@ -48546,32 +48652,36 @@ var WatchManager = class {
   }
   arm(filePath2) {
     const entry = {
-      watch: { targets: { dirs: [] }, reached: false, unresolved: [] },
+      watch: derived(filePath2),
       dirs: /* @__PURE__ */ new Map(),
       subscribers: /* @__PURE__ */ new Map()
     };
     this.entries.set(filePath2, entry);
-    this.rederive(filePath2, entry);
+    this.settle(filePath2, entry);
     return entry;
   }
-  // Derive where the path can change from disk ONCE, and bring the
-  // directories to it: one in the set and not listening to the directory at
-  // its path now (new, failed, or bound to one since removed) is opened; one
-  // no longer in the set is closed; one listening to it keeps its handle,
-  // since opening and closing a directory watch is not free on macOS (see the
-  // watcher registry). New handles open before old ones close, so a refusal
-  // leaves the rest listening, and a failed directory is tried again only
-  // here — at an event on another of the entry's directories, or the
-  // daemon's catch-up — never in a loop.
   rederive(filePath2, entry) {
-    entry.watch = watchTargetsOf({ named: [filePath2], whole: [filePath2] });
-    const wanted2 = new Set(entry.watch.targets.dirs.map((d) => d.path));
-    for (const dir of wanted2) {
+    entry.watch = derived(filePath2);
+    this.settle(filePath2, entry);
+  }
+  // Bring the directories to where the path can change, as last derived: one
+  // in the set and not listening to the folder at its path now (new, failed,
+  // or bound to one since removed and made again) is opened; one no longer in
+  // the set is closed; one listening to it keeps its handle, since opening and
+  // closing a directory watch is not free on macOS (see the watcher registry),
+  // and so does one whose folder binds nothing right now, as the registry's
+  // `follow` keeps a held watch. A refusal is the watch's standing fault, and
+  // a failed directory is tried again only at a re-derive — an event on
+  // another of the entry's directories, or the daemon's catch-up — never in a
+  // loop: the OS refuses an immediate retry the same way.
+  settle(filePath2, entry) {
+    const wanted2 = entry.watch.bound;
+    for (const [dir, bound] of wanted2) {
       const held = entry.dirs.get(dir);
-      if (held?.kind === "open" && held.bound === boundKey(boundOf(dir)))
+      if (held?.kind === "open" && (bound === null || held.bound === bound))
         continue;
       if (held?.kind === "open") held.handle.close();
-      entry.dirs.set(dir, this.open(filePath2, entry, dir));
+      entry.dirs.set(dir, this.open(filePath2, entry, dir, bound));
     }
     for (const [dir, state] of entry.dirs) {
       if (wanted2.has(dir)) continue;
@@ -48580,9 +48690,10 @@ var WatchManager = class {
     }
     this.report(filePath2, entry);
   }
-  open(filePath2, entry, dir) {
+  // `bound` was read before the open, so a folder replaced while it opens
+  // reads as moved at the next re-derive, never as the one the handle bound.
+  open(filePath2, entry, dir, bound) {
     const self2 = import_path2.default.basename(dir);
-    const bound = boundKey(boundOf(dir));
     try {
       const handle = fs_default.watch(dir, (_event, changed) => {
         if (changed !== null && changed !== self2 && !hears(entry, dir, changed))
@@ -48639,6 +48750,7 @@ var WatchManager = class {
     return this.entries.size;
   }
 };
+var derived = (filePath2) => watchTargetsOf({ named: [filePath2], whole: [filePath2] });
 function hears(entry, dir, changed) {
   const target = entry.watch.targets.dirs.find((d) => d.path === dir);
   return target !== void 0 && (target.filenames?.includes(changed) ?? true);
@@ -50962,6 +51074,38 @@ function reservedNamespaceCollisions(ctx, out, ns, synthesizedBy) {
           line: findKeyLine(ctx.source, ["root"])
         });
       }
+    }
+  }
+}
+function pluginScopeCollisions(ctx, out, inherited) {
+  for (const section of [
+    "variables",
+    "actions",
+    "helpers",
+    "segments"
+  ]) {
+    for (const name of Object.keys(out[section] ?? {})) {
+      const scope = scopeOf(name);
+      if (scope === void 0) continue;
+      if (section !== "variables" && name === scope) continue;
+      if (section === "segments" && inherited.has(name)) continue;
+      ctx.issues.push({
+        path: `${section}.${name}`,
+        message: `"${name}" is in "${scope}", the namespace plugins own (each declares its names there from its own definition) \u2014 rename it`,
+        line: findKeyLine(ctx.source, [section, name])
+      });
+    }
+  }
+  for (const [segment, decl] of Object.entries(out.segments ?? {})) {
+    for (const v of Object.keys(decl.vars ?? {})) {
+      const name = `${segment}.${v}`;
+      const scope = scopeOf(name);
+      if (scope === void 0 || inherited.has(segment)) continue;
+      ctx.issues.push({
+        path: `segments.${segment}.vars.${v}`,
+        message: `segment "${segment}"'s var "${v}" is named "${name}", in "${scope}", the namespace plugins own \u2014 rename the var or the segment`,
+        line: findKeyLine(ctx.source, ["segments", segment, "vars", v])
+      });
     }
   }
 }
@@ -57347,7 +57491,10 @@ function authoredPlacement(raw, name) {
   }
   return void 0;
 }
-var unplacedMessage = (layoutKey, name) => `${layoutKey} entry "${name}" does not match any declared segment${renamedHint(name)}`;
+var unplacedMessage = (layoutKey, name, segments) => `${layoutKey} entry "${name}" does not match any declared segment${missingSegmentHint(name, segments)}`;
+function missingSegmentHint(name, segments) {
+  return renamedHint(name) + otherScopeHint(name, (other) => Object.hasOwn(segments, other));
+}
 function validateCrossReferences(ctx, cfg, authored) {
   const styleFragments = [
     [["globals"], cfg.globals.style, "globals.endcaps"],
@@ -57487,7 +57634,7 @@ function validateCrossReferences(ctx, cfg, authored) {
         reported.add(node.name);
         ctx.unplaced.push({
           path: path42,
-          message: unplacedMessage(layoutKey, node.name),
+          message: unplacedMessage(layoutKey, node.name, cfg.segments),
           line
         });
       }
@@ -57517,7 +57664,7 @@ function validateCrossReferences(ctx, cfg, authored) {
       ctx.inherited.push({
         name: node.name,
         path: key,
-        message: `${key} inherits from a config layer below an entry "${node.name}" that does not match any declared segment${renamedHint(node.name)}`,
+        message: `${key} inherits from a config layer below an entry "${node.name}" that does not match any declared segment${missingSegmentHint(node.name, cfg.segments)}`,
         line: findKeyLine(ctx.source, key.split("."))
       });
     }
@@ -57971,7 +58118,7 @@ function validateDeclarations(ctx, cfg, templateScope, subject) {
       if (decl?.kind === "source") continue;
       ctx.issues.push({
         path: `actions.${name}.refreshes`,
-        message: `actions.${name} refreshes "${ref}", which ${decl === void 0 ? "is not declared" : `is a ${decl.kind} variable`}: a run refreshes only a declared source (by its full name, plugins.<plugin>.<source>; a plugin names its own sources bare)`,
+        message: `actions.${name} refreshes "${ref}", which ${decl === void 0 ? "is not declared" : `is a ${decl.kind} variable`}: a run refreshes only a declared source (by its full name, <scope>.<plugin>.<source> where the scope is plugins or repo; a plugin names its own sources bare)`,
         line: findKeyLine(ctx.source, ["actions", name, "refreshes"])
       });
     }
@@ -58231,13 +58378,12 @@ var DEFINITION_KEYS = /* @__PURE__ */ new Set([
 ]);
 var DEFINITION_FILE = "plugin.json5";
 var PLUGIN_NAME = /^[a-z][a-z0-9_]*$/;
-function pluginNameOf(definition) {
+function pluginDefinition(definition, scope) {
   const name = import_node_path18.default.basename(import_node_path18.default.dirname(definition));
-  return PLUGIN_NAME.test(name) ? name : void 0;
+  return PLUGIN_NAME.test(name) ? { path: definition, scope, name } : { path: definition, scope, name: void 0 };
 }
-var PLUGIN_NS = "plugins.";
-function pluginDataVar(plugin) {
-  return `${PLUGIN_NS}${plugin}.data`;
+function pluginDataVar(ns) {
+  return `${ns}.data`;
 }
 var STORAGE_FOLDER = "session";
 function sessionFileName(sessionId2) {
@@ -58258,86 +58404,80 @@ function reasonOf(err) {
   }
   return err instanceof Error ? err.message : String(err);
 }
-function listedPlugins(refs, from) {
-  return refs.map((ref) => resolveUserPath(import_node_path18.default.dirname(from), ref));
+function listedPlugins(refs, from, scope) {
+  return refs.map(
+    (ref) => pluginDefinition(resolveUserPath(import_node_path18.default.dirname(from), ref), scope)
+  );
 }
 function applyPlugins(definitions, ctx, base, validate) {
   const taken = /* @__PURE__ */ new Map();
   return definitions.reduce(
-    (layer, file) => {
-      const plugin = pluginNameOf(file);
+    (layer, definition) => {
+      const file = definition.path;
+      const ns = definition.name === void 0 ? void 0 : pluginNs(definition);
       const drop2 = (reason, config2) => {
         const rendering = new Map(layer.rendering);
-        if (plugin !== void 0 && config2 !== layer.config)
-          rendering.delete(plugin);
+        if (ns !== void 0 && config2 !== layer.config) rendering.delete(ns);
         return {
           ...layer,
           config: config2,
           rendering,
-          dropped: [...layer.dropped, { path: file, plugin, reason }]
+          dropped: [...layer.dropped, { ...definition, reason }]
         };
       };
       if (import_node_path18.default.basename(file) !== DEFINITION_FILE) {
         const reason = `a plugin is a folder holding its ${DEFINITION_FILE}, and the folder's name is the plugin's: move this file to <dir>/<name>/${DEFINITION_FILE} and list that`;
         return drop2(
           reason,
-          plugin === void 0 ? layer.config : tombstone(withoutPlugin(layer.config, plugin), plugin, {
-            path: file,
-            plugin,
+          ns === void 0 ? layer.config : tombstone(withoutPlugin(layer.config, ns), ns, {
+            ...definition,
             reason
           })
         );
       }
-      if (plugin === void 0) {
+      if (definition.name === void 0 || ns === void 0) {
         return drop2(
           `its folder "${import_node_path18.default.basename(import_node_path18.default.dirname(file))}" is not a plugin name (one matching ${PLUGIN_NAME}: it prefixes every name the plugin declares)`,
           layer.config
         );
       }
-      const first2 = taken.get(plugin);
+      const first2 = taken.get(ns);
       if (first2 !== void 0) {
         return drop2(
-          `plugin "${plugin}" is already listed, from ${first2}`,
+          `plugin "${definition.name}" is already listed, from ${first2}`,
           layer.config
         );
       }
-      taken.set(plugin, file);
-      const under2 = withoutPlugin(layer.config, plugin);
+      taken.set(ns, file);
+      const under2 = withoutPlugin(layer.config, ns);
       const merged = attempt2(() => {
         const source = fs_default.readFileSync(file, "utf-8");
         const config2 = mergeWithDefault(
           fragmentOf(
             file,
-            plugin,
+            definition,
             { source, json: import_json52.default.parse(source) },
             ctx
           ),
           under2
         );
-        requireOneSourcePerFile(file, plugin, config2);
-        validate(config2, plugin, under2 !== layer.config);
+        requireOneSourcePerFile(file, ns, config2);
+        validate(config2, ns, under2 !== layer.config);
         return config2;
       });
       if (merged.ok) {
         return {
           ...layer,
           config: merged.value,
-          loaded: [...layer.loaded, file],
-          rendering: new Map([...layer.rendering, [plugin, file]])
+          loaded: [...layer.loaded, definition],
+          rendering: new Map([...layer.rendering, [ns, definition]])
         };
       }
-      const dropped2 = { path: file, plugin, reason: merged.reason };
-      return drop2(merged.reason, tombstone(under2, plugin, dropped2));
+      const dropped2 = { ...definition, reason: merged.reason };
+      return drop2(merged.reason, tombstone(under2, ns, dropped2));
     },
     { config: base.config, rendering: base.rendering, loaded: [], dropped: [] }
   );
-}
-function ownedBy(plugin) {
-  const ns = tombstoneVar(plugin);
-  return (name) => name === ns || name.startsWith(`${ns}.`);
-}
-function tombstoneVar(plugin) {
-  return `${PLUGIN_NS}${plugin}`;
 }
 function withoutPlugin(config2, plugin) {
   const owned = ownedBy(plugin);
@@ -58357,12 +58497,12 @@ function withoutPlugin(config2, plugin) {
     actions: keep2(config2.actions)
   };
 }
-function tombstone(config2, plugin, dropped2) {
+function tombstone(config2, ns, dropped2) {
   return {
     ...config2,
     variables: {
       ...config2.variables,
-      [tombstoneVar(plugin)]: {
+      [ns]: {
         kind: "dropped",
         reason: droppedPluginNotice(dropped2),
         definition: dropped2.path
@@ -58370,26 +58510,26 @@ function tombstone(config2, plugin, dropped2) {
     }
   };
 }
-function pluginOf(name) {
-  return name.startsWith(PLUGIN_NS) ? name.slice(PLUGIN_NS.length).split(".")[0] : void 0;
+function tombstonesOf(config2) {
+  const tombstones = Object.entries(config2.variables).flatMap(
+    ([ns, v]) => v.kind === "dropped" ? [{ ns, definition: v.definition, notice: v.reason }] : []
+  );
+  return (name) => tombstones.find(({ ns }) => ownedBy(ns)(name));
 }
 function dropsOwning(layer, beneath) {
-  const owners = new Set(
-    [
-      ...Object.keys(layer.config.variables),
-      ...Object.keys(layer.config.segments),
-      ...Object.keys(layer.config.helpers),
-      ...Object.keys(layer.config.actions)
-    ].map(pluginOf)
+  const tombstoned = tombstonesOf(layer.config);
+  const rendering = [...layer.rendering.keys()].map(ownedBy);
+  const unnamed = [...beneath, ...layer.dropped].filter(
+    (d) => d.name === void 0
   );
-  const unnamed = [...beneath, ...layer.dropped].filter((d) => d.plugin === void 0).map((d) => ({ definition: d.path, notice: droppedPluginNotice(d) }));
   return (name) => {
-    const plugin = pluginOf(name);
-    if (plugin === void 0) return [];
-    const data = layer.config.variables[tombstoneVar(plugin)];
-    if (data?.kind === "dropped")
-      return [{ definition: data.definition, notice: data.reason }];
-    return owners.has(plugin) ? [] : unnamed;
+    const scope = scopeOf(name);
+    if (scope === void 0) return [];
+    const cause = tombstoned(name);
+    if (cause !== void 0)
+      return [{ definition: cause.definition, notice: cause.notice }];
+    if (rendering.some((owns) => owns(name))) return [];
+    return unnamed.filter((d) => d.scope === scope).map((d) => ({ definition: d.path, notice: droppedPluginNotice(d) }));
   };
 }
 function withDroppedPlacements(config2, owning) {
@@ -58409,16 +58549,12 @@ function withDroppedPlacements(config2, owning) {
       )
     ])
   );
-  const tombstoned = (name) => {
-    const plugin = pluginOf(name);
-    const data = plugin === void 0 ? void 0 : config2.variables[tombstoneVar(plugin)];
-    return data?.kind === "dropped" ? { definition: data.definition, notice: data.reason } : void 0;
-  };
+  const tombstoned = tombstonesOf(config2);
   const anyTombstone = Object.values(config2.variables).some(
     (v) => v.kind === "dropped"
   );
   const templates = anyTombstone ? Object.values(config2.segments).flatMap(
-    (seg2) => ["template", "bg", "fg", "when"].flatMap(
+    (seg2) => SEGMENT_TEMPLATE_FIELDS.flatMap(
       (f) => seg2[f] === void 0 ? [] : [seg2[f]]
     )
   ) : [];
@@ -58471,9 +58607,9 @@ function withDroppedPlacements(config2, owning) {
           lowered.map(({ name, action: action2 }) => [name, action2])
         ),
         ...Object.fromEntries(
-          actionStandIns.map(([name]) => [
+          actionStandIns.map(([name, { ns }]) => [
             name,
-            { copy: `{{ .${tombstoneVar(pluginOf(name) ?? "")} }}` }
+            { copy: `{{ .${ns} }}` }
           ])
         )
       },
@@ -58528,7 +58664,8 @@ function settingFor(label2, values2) {
     default: first2
   };
 }
-function fragmentOf(file, ns, { source, json: json2 }, { checkout }) {
+function fragmentOf(file, id2, { source, json: json2 }, { checkout }) {
+  const ns = pluginNs(id2);
   const issues = [];
   const fail2 = () => {
     throw new ConfigError(file, issues);
@@ -58544,7 +58681,7 @@ function fragmentOf(file, ns, { source, json: json2 }, { checkout }) {
     if (!DEFINITION_KEYS.has(key)) {
       issues.push({
         path: key,
-        message: key === "plugin" ? `a plugin definition does not name itself: its name is its folder's ("${ns}") \u2014 remove "plugin"` : `a plugin definition may not declare "${key}". Expected only: ${[...DEFINITION_KEYS].join(", ")}`
+        message: key === "plugin" ? `a plugin definition does not name itself: its name is its folder's ("${import_node_path18.default.basename(import_node_path18.default.dirname(file))}") \u2014 remove "plugin"` : `a plugin definition may not declare "${key}". Expected only: ${[...DEFINITION_KEYS].join(", ")}`
       });
     }
   }
@@ -58584,11 +58721,11 @@ function fragmentOf(file, ns, { source, json: json2 }, { checkout }) {
     if (Object.hasOwn(variables, name)) {
       issues.push({
         path: `sources.${name}`,
-        message: `source "${name}" and variable "${name}" are one name (.${PLUGIN_NS}${ns}.${name}): give one of them another name`
+        message: `source "${name}" and variable "${name}" are one name (.${ns}.${name}): give one of them another name`
       });
     }
   }
-  const fragment = {
+  const authored = {
     variables: {
       ...data,
       ...prefixed(ns, sources),
@@ -58619,6 +58756,8 @@ function fragmentOf(file, ns, { source, json: json2 }, { checkout }) {
       )
     )
   };
+  issues.push(...wrongScopeRefs(authored, id2));
+  const fragment = boundToSelf(ns, authored);
   for (const [where, template] of fragmentTemplates(fragment)) {
     try {
       SYNTAX_ENGINE.parse(template);
@@ -58632,6 +58771,111 @@ function fragmentOf(file, ns, { source, json: json2 }, { checkout }) {
   if (issues.length > 0) fail2();
   return fragment;
 }
+function boundToSelf(ns, fragment) {
+  const bind = (template) => bindSelf(template, SELF, ns);
+  const named3 = (name) => ownedBy(SELF)(name) ? `${ns}${name.slice(SELF.length)}` : name;
+  const each = (table, f) => Object.fromEntries(
+    Object.entries(table ?? {}).map(([name, value]) => [name, f(value)])
+  );
+  return {
+    ...fragment,
+    variables: each(
+      fragment.variables,
+      (v) => selfDepends(mapVariableTemplates(v, bind), named3)
+    ),
+    segments: each(fragment.segments, (seg2) => ({
+      ...seg2,
+      ...Object.fromEntries(
+        SEGMENT_TEMPLATE_FIELDS.flatMap(
+          (f) => seg2[f] === void 0 ? [] : [[f, bind(seg2[f])]]
+        )
+      ),
+      ...seg2.vars !== void 0 && {
+        vars: each(
+          seg2.vars,
+          (v) => selfDepends(mapVariableTemplates(v, bind), named3)
+        )
+      }
+    })),
+    helpers: each(fragment.helpers, bind),
+    actions: each(
+      fragment.actions,
+      (a) => mapActionNames(mapActionTemplates(a, bind), named3)
+    )
+  };
+}
+function selfDepends(v, named3) {
+  return hasCacheField(v) && "depends_on" in v.cache ? {
+    ...v,
+    cache: { depends_on: v.cache.depends_on.map(named3) }
+  } : v;
+}
+function mapActionNames(a, f) {
+  const seg2 = "segments.";
+  const out = { ...a };
+  if ("do" in a) out.do = a.do.map((m) => f(m, "do"));
+  for (const field of ["removeSegment", "insertSegment", "anchor"])
+    if (field in a)
+      out[field] = f(a[field], field);
+  if ("persist" in a && a.persist.startsWith(seg2))
+    out.persist = seg2 + f(a.persist.slice(seg2.length), "persist");
+  return out;
+}
+var SEGMENT_TEMPLATE_FIELDS = ["template", "bg", "fg", "when"];
+function wrongScopeRefs(fragment, id2) {
+  const helpers = fragment.helpers ?? {};
+  const elsewhere = PLUGIN_SCOPES.filter((s) => s !== id2.scope).map(
+    (scope) => ({ scope, ns: pluginNs({ scope, name: id2.name }) })
+  );
+  const issues = /* @__PURE__ */ new Map();
+  const check = (where, ref, read2) => {
+    const other = elsewhere.find(({ ns }) => ownedBy(ns)(ref));
+    if (other === void 0) return;
+    const dot = read2 ? "." : "";
+    issues.set(`${where}\0${ref}`, {
+      path: where,
+      message: `${where} names ${dot}${ref}, this plugin under "${other.scope}", but it loads as ${pluginNs(id2)}: a plugin names itself without its scope \u2014 write ${dot}${SELF}${ref.slice(other.ns.length)}`
+    });
+  };
+  const templates = [
+    ...[...fragmentTemplates(fragment)].filter(
+      ([where]) => !where.startsWith("helpers.")
+    ),
+    ...Object.entries(helpers).map(
+      ([name, body]) => [`helpers.${name}`, body]
+    )
+  ];
+  for (const [where, template] of templates) {
+    for (const [ref, via] of templateReads(template, helpers))
+      if (via === null) check(where, ref, true);
+    for (const { name, via } of templateActionRefs(template, helpers))
+      if (via === null) check(where, name, false);
+    for (const name of templateHelperCalls(template, {}))
+      check(where, name, false);
+  }
+  for (const [name, a] of Object.entries(fragment.actions ?? {})) {
+    mapActionNames(a, (ref, field) => {
+      check(`actions.${name}.${field}`, ref, false);
+      return ref;
+    });
+  }
+  const variables = [
+    ...Object.entries(fragment.variables ?? {}).map(
+      ([name, v]) => [`variables.${name}`, v]
+    ),
+    ...Object.entries(fragment.segments ?? {}).flatMap(
+      ([seg2, decl]) => Object.entries(decl.vars ?? {}).map(
+        ([name, v]) => [`segments.${seg2}.vars.${name}`, v]
+      )
+    )
+  ];
+  for (const [where, v] of variables) {
+    if (hasCacheField(v) && "depends_on" in v.cache)
+      for (const d of v.cache.depends_on)
+        check(`${where}.cache.depends_on`, d, false);
+  }
+  return [...issues.values()];
+}
 function* fragmentTemplates(fragment) {
   for (const [name, v] of Object.entries(fragment.variables ?? {})) {
     for (const [field, t2] of variableTemplates(v)) {
@@ -58639,7 +58883,7 @@ function* fragmentTemplates(fragment) {
     }
   }
   for (const [name, seg2] of Object.entries(fragment.segments ?? {})) {
-    for (const field of ["template", "bg", "fg", "when"]) {
+    for (const field of SEGMENT_TEMPLATE_FIELDS) {
       const t2 = seg2[field];
       if (t2 !== void 0) yield [`segments.${name}.${field}`, t2];
     }
@@ -58660,11 +58904,11 @@ function* fragmentTemplates(fragment) {
 }
 function prefixed(ns, decls) {
   return Object.fromEntries(
-    Object.entries(decls).map(([name, d]) => [`${PLUGIN_NS}${ns}.${name}`, d])
+    Object.entries(decls).map(([name, d]) => [`${ns}.${name}`, d])
   );
 }
 function keyUnder(ns, key) {
-  return `${PLUGIN_NS}${ns}.${key}`;
+  return `${ns}.${key}`;
 }
 function stateKeyUnder(ns, decl) {
   return decl.kind === "state" ? { ...decl, key: keyUnder(ns, decl.key) } : decl;
@@ -58718,7 +58962,7 @@ function sourcesOf(sources, file, issues) {
     if (!SOURCE_NAME.test(name)) {
       issues.push({
         path: at,
-        message: `source name "${name}" is not one identifier (one matching ${SOURCE_NAME}: it is the last segment of .${PLUGIN_NS}<plugin>.${name})`
+        message: `source name "${name}" is not one identifier (one matching ${SOURCE_NAME}: it is the last segment of .<scope>.<plugin>.${name})`
       });
       continue;
     }
@@ -58744,7 +58988,7 @@ function requireOneSourcePerFile(file, plugin, config2) {
   );
   const owned = ownedBy(plugin);
   const issues = [...readers].filter(([, names]) => names.length > 1 && names.some(owned)).map(([read2, names]) => ({
-    path: `sources.${names.find(owned).slice(`${PLUGIN_NS}${plugin}.`.length)}`,
+    path: `sources.${names.find(owned).slice(`${plugin}.`.length)}`,
     message: `sources ${names.map((n) => `.${n}`).join(" and ")} read the same file, ${read2}: a session's file is one document, read by one source`
   }));
   if (issues.length > 0) throw new ConfigError(file, issues);
@@ -58807,12 +59051,14 @@ init_os();
 var import_node_path19 = __toESM(require_path_browserify(), 1);
 function pluginRoots(repo2) {
   const dataDirs = (process_default.env.XDG_DATA_DIRS || defaultDataDirs()).split(":").filter((d) => d !== "");
-  const roots = [
+  const installed = [
     ...[...dataDirs].reverse().map((d) => import_node_path19.default.join(d, "cc-candybar", "plugins")),
-    userPluginRoot(),
-    ...repo2 === null ? [] : [import_node_path19.default.join(repo2, REPO_PLUGIN_DIR)]
+    userPluginRoot()
   ];
-  return roots.filter((r, i) => roots.lastIndexOf(r) === i);
+  return [
+    ...installed.filter((r, i) => installed.lastIndexOf(r) === i).map((dir) => ({ dir, scope: "plugins" })),
+    ...repo2 === null ? [] : [{ dir: import_node_path19.default.join(repo2, REPO_PLUGIN_DIR), scope: "repo" }]
+  ];
 }
 function userPluginRoot() {
   const dataHome = process_default.env.XDG_DATA_HOME || import_node_path19.default.join(os_default.homedir(), ".local", "share");
@@ -58825,28 +59071,39 @@ function defaultDataDirs() {
 }
 function installedPlugins(repo2) {
   const roots = pluginRoots(repo2);
-  const byName = /* @__PURE__ */ new Map();
+  const byNs = /* @__PURE__ */ new Map();
   const unchecked = [];
   const strays = [];
-  for (const root of roots) {
+  for (const { dir: root, scope } of roots) {
     const listed = listFolders(root);
     if ("error" in listed) {
       unchecked.push(listed);
       continue;
     }
     for (const name of listed.folders) {
-      byName.delete(name);
-      byName.set(name, import_node_path19.default.join(root, name, DEFINITION_FILE));
+      const definition = pluginDefinition(
+        import_node_path19.default.join(root, name, DEFINITION_FILE),
+        scope
+      );
+      const key = `${scope}\0${name}`;
+      byNs.delete(key);
+      byNs.set(key, definition);
     }
     for (const file of listed.files) {
       strays.push({
         path: import_node_path19.default.join(root, file),
-        plugin: void 0,
+        scope,
+        name: void 0,
         reason: `a plugin is a folder holding its ${DEFINITION_FILE}: move this file to ${import_node_path19.default.join(root, "<name>", DEFINITION_FILE)}`
       });
     }
   }
-  return { roots, definitions: [...byName.values()], unchecked, strays };
+  return {
+    roots: roots.map((r) => r.dir),
+    definitions: [...byNs.values()],
+    unchecked,
+    strays
+  };
 }
 function listFolders(root) {
   try {
@@ -59071,15 +59328,16 @@ function dslConfigCandidatePaths(projectDir, cwd2, configFile) {
   return [
     .../* @__PURE__ */ new Set([
       ...projectDir ? CONFIG_EXTENSIONS.map(
-        (ext) => import_node_path21.default.join(projectDir, `.cc-candybar.${ext}`)
+        (ext) => import_node_path21.default.join(projectDir, `${REPO_CONFIG_BASE}.${ext}`)
       ) : [],
       ...CONFIG_EXTENSIONS.map(
-        (ext) => import_node_path21.default.join(effectiveCwd, `.cc-candybar.${ext}`)
+        (ext) => import_node_path21.default.join(effectiveCwd, `${REPO_CONFIG_BASE}.${ext}`)
       ),
       ...CONFIG_EXTENSIONS.map((ext) => `${xdgConfigBase()}.${ext}`)
     ])
   ];
 }
+var REPO_CONFIG_BASE = ".cc-candybar";
 function xdgConfigBase() {
   const xdgConfigHome = process_default.env.XDG_CONFIG_HOME ?? import_node_path21.default.join(os_default.homedir(), ".config");
   return import_node_path21.default.join(xdgConfigHome, "cc-candybar", "config");
@@ -59116,14 +59374,23 @@ function resolveDslConfig(answers, projectDir, cwd2, configFile) {
     found.flatMap((f) => f.repo === null ? [] : [f.repo]),
     repoProject(projectDir)
   );
-  const layers = found.filter((f) => f.repo === null || repos.approved.includes(f.repo.dir)).map((f) => f.file).reverse();
+  const kept = found.filter((f) => f.repo === null || repos.approved.includes(f.repo.dir)).reverse();
+  const layers = kept.map((f) => f.file);
+  const repoLayers = kept.flatMap((f) => f.repo === null ? [] : [f.file]);
   if (configFile === void 0) {
-    return { kind: "chain", layers, home: userHome(layers), unchecked, repos };
+    return {
+      kind: "chain",
+      layers,
+      repoLayers,
+      home: userHome(layers),
+      unchecked,
+      repos
+    };
   }
   const [own2] = unchecked;
   const home = configFile;
   if (layers.length > 0) {
-    return { kind: "chain", layers, home, unchecked, repos };
+    return { kind: "chain", layers, repoLayers, home, unchecked, repos };
   }
   return own2 === void 0 ? { kind: "missing", path: configFile, home, repos } : { kind: "unreadable", ...own2, home, repos };
 }
@@ -59152,6 +59419,7 @@ function durableConfig(answers, projectDir, cwd2, configFile) {
   return {
     path: resolved.home,
     above: layers.filter((l) => l !== resolved.home),
+    repoLayers: resolved.kind === "chain" ? resolved.repoLayers : [],
     repo: resolved.repos.plugins,
     cwd: cwd2 ?? null
   };
@@ -59207,6 +59475,7 @@ function loadConfig(path42, dflt, ctx, allowedPalettes) {
   );
 }
 var NO_PROJECT = {
+  scope: "plugins",
   repo: null,
   checkout: null,
   beneath: { dropped: [], rendering: /* @__PURE__ */ new Map() }
@@ -59214,7 +59483,9 @@ var NO_PROJECT = {
 function loadConfigSource(path42, source, dflt, ctx, allowedPalettes) {
   const parsed2 = parseDslFile(path42, source, allowedPalettes, (refs, names) => {
     const layer = applyPlugins(
-      listedPlugins(refs, path42),
+      // [LAW:one-source-of-truth] The layer's scope, decided where the
+      // layer was discovered, rides on every definition it lists.
+      listedPlugins(refs, path42, ctx.scope),
       ctx,
       { config: dflt, rendering: ctx.beneath.rendering },
       (c, plugin, replaces) => checkPlugin(c, plugin, replaces, path42, allowedPalettes)
@@ -59250,7 +59521,7 @@ var installedMemo = /* @__PURE__ */ new WeakMap();
 function installedLayer(definitions, ctx, dflt, allowedPalettes) {
   const key = JSON.stringify([
     [...allowedPalettes ?? []].sort(),
-    definitions.map((d) => [d, statKey(d)])
+    definitions.map((d) => [d.path, d.scope, statKey(d.path)])
   ]);
   const byProject = installedMemo.get(dflt) ?? /* @__PURE__ */ new Map();
   installedMemo.set(dflt, byProject);
@@ -59300,6 +59571,9 @@ function loadConfigChain(paths, dflt, trace, session, read2 = (p2) => fs_default
       layers.at(-1)?.config ?? base,
       {
         ...ctx,
+        // [LAW:one-source-of-truth] A layer's scope is where discovery found
+        // it, carried here as data — never read off the file's name.
+        scope: session.repoLayers.includes(path42) ? "repo" : "plugins",
         beneath: {
           dropped: [
             ...plugins2.dropped,
@@ -59374,12 +59648,12 @@ function loadConfigChain(paths, dflt, trace, session, read2 = (p2) => fs_default
     throw e;
   }
 }
-function checkPlugin(config2, plugin, replaces, filePath2, allowedPalettes) {
+function checkPlugin(config2, ns, replaces, filePath2, allowedPalettes) {
   if (replaces) {
     validateRenderable(unauthored(config2), filePath2, allowedPalettes);
     return;
   }
-  const owned = ownedBy(plugin);
+  const owned = ownedBy(ns);
   const issues = [];
   const ctx = {
     source: "",
@@ -59485,7 +59759,7 @@ function judgeRenderable({ raw, source }, filePath2, allowedPalettes, beneath, m
   validateCrossReferences(ctx, merged, raw);
   validateNoCycles(ctx, merged);
   refuseIfIssues();
-  const dropped2 = droppedByFile(filePath2, ctx, beneath, filed);
+  const dropped2 = droppedByFile(filePath2, merged.segments, ctx, beneath, filed);
   const config2 = dropped2.length === 0 ? merged : withoutUnplaced(merged);
   const withMenus = synthesizePlacementMenus(config2, issues);
   refuseIfIssues();
@@ -59528,14 +59802,18 @@ function layerInserts(top, beneath) {
         file: layer.path,
         issue: {
           path: cell3.by.entry,
-          message: unplacedMessage(cell3.by.entry, cell3.seg),
+          message: unplacedMessage(
+            cell3.by.entry,
+            cell3.seg,
+            top.config.segments
+          ),
           line: lineOf(cell3.by.entry.split("."))
         }
       }));
     })
   };
 }
-function droppedByFile(filePath2, ctx, beneath, filed) {
+function droppedByFile(filePath2, segments, ctx, beneath, filed) {
   const byFile = /* @__PURE__ */ new Map();
   const add2 = (file, issue3) => {
     byFile.set(file, [...byFile.get(file) ?? [], issue3]);
@@ -59551,7 +59829,7 @@ function droppedByFile(filePath2, ctx, beneath, filed) {
     else
       add2(author.layer.path, {
         path: author.path,
-        message: unplacedMessage(author.layoutKey, name),
+        message: unplacedMessage(author.layoutKey, name, segments),
         line: findKeyLine(author.layer.source, author.path.split("."))
       });
   }
@@ -59680,6 +59958,7 @@ function validateTopLevel(ctx, raw, inheritedSegments, home, file) {
     SETTINGS_NS,
     "the global settings menu"
   );
+  pluginScopeCollisions(ctx, out, inheritedSegments);
   return out;
 }
 var TOP_LEVEL_KEYS = /* @__PURE__ */ new Set([
@@ -61505,11 +61784,11 @@ function mergeContributions(contributions, noun = "state") {
     spec: mergeKeySpecs(key, specs, noun)
   }));
 }
-function createGate(baseline, daemonWide, derived2, noun) {
+function createGate(baseline, daemonWide, derived3, noun) {
   const validators = new Map(Object.entries(baseline));
   const ranges = /* @__PURE__ */ new Map();
   const daemonKeys = new Set(daemonWide.map((d) => d.key));
-  for (const { key, spec } of derived2) {
+  for (const { key, spec } of derived3) {
     if (daemonKeys.has(key) && spec.kind !== "allow-list") {
       throw new Error(
         `${noun} gate: key "${key}" is written by the daemon's own links as one of a list of values, and cannot be declared as ${spec.kind === "int" ? "a paged cursor (int)" : "a bounded value (range)"}. Use a distinct key.`
@@ -61521,7 +61800,7 @@ function createGate(baseline, daemonWide, derived2, noun) {
       key,
       spec: { kind: "allow-list", allowed }
     })),
-    ...derived2
+    ...derived3
   ];
   for (const { key, spec } of mergeContributions(contributions, noun)) {
     if (!key) throw new Error(`${noun} gate: key is required`);
@@ -62257,7 +62536,7 @@ function chainOver(home, text3) {
     DEFAULT_DSL_CONFIG,
     { warned: () => {
     } },
-    { repo: home.repo, cwd: home.cwd },
+    { repo: home.repo, cwd: home.cwd, repoLayers: home.repoLayers },
     (p2) => p2 === home.path && text3 !== null ? text3 : fs_default.readFileSync(p2, "utf8")
   );
 }
@@ -63672,7 +63951,7 @@ function launchFailure(label2, result) {
 function firstLine2(s) {
   return s.trim().split("\n", 1)[0] ?? "";
 }
-function derived(from, project) {
+function derived2(from, project) {
   if (from.kind !== "ok") return from;
   const value = project(from.value);
   return value === null ? ABSENT2 : ok(value);
@@ -64022,7 +64301,7 @@ var GitService = class {
     };
     if (options.showWorkingTree) result.workingTree = core.value.workingTree;
     if (options.showSha) {
-      result.sha = derived(core.value.oid, (o) => o.slice(0, 7));
+      result.sha = derived2(core.value.oid, (o) => o.slice(0, 7));
     }
     if (options.showUpstream) result.upstream = core.value.upstream;
     if (options.showTag) {
@@ -64034,11 +64313,11 @@ var GitService = class {
     if (options.showStashCount) result.stashCount = this.getStashCount(gitDir);
     const remotes = options.showRepoName || options.showRepoUrl ? await this.getRemotesAsync(gitDir) : void 0;
     if (remotes !== void 0 && options.showRepoName) {
-      result.repoName = derived(remotes, (r) => this.repoNameFrom(r, gitDir));
+      result.repoName = derived2(remotes, (r) => this.repoNameFrom(r, gitDir));
       result.isWorktree = isWorktreeDir;
     }
     if (remotes !== void 0 && options.showRepoUrl) {
-      result.repoUrl = derived(remotes, repoWebUrl);
+      result.repoUrl = derived2(remotes, repoWebUrl);
     }
     if (options.showOperation) {
       result.operation = this.getOngoingOperation(gitDir);
@@ -65083,7 +65362,7 @@ function projectPayload(inputs, draw2, lanes) {
     ...autoCompactValue !== void 0 && { autocompact: autoCompactValue },
     // The storage owner logs each read that failed: a failure here is a value,
     // drawn by the template reading it.
-    plugins: projectSources(lanes.sources.keys(), (name) => {
+    ...projectSources(lanes.sources.keys(), (name) => {
       const reading = lanes.sources.get(name);
       return reading.kind === "pending" ? PENDING : reading;
     })
@@ -65100,12 +65379,19 @@ function sourcesFactOf(sources) {
   };
 }
 function projectSources(names, read2) {
-  const plugins2 = {};
+  const payload = Object.fromEntries(
+    PLUGIN_SCOPES.map((scope) => [scope, {}])
+  );
   for (const name of names) {
-    const [, plugin, source] = name.split(".");
-    (plugins2[plugin] ??= {})[source] = read2(name);
+    const keys2 = name.split(".");
+    const leaf = keys2.pop();
+    const parent = keys2.reduce(
+      (at, key) => at[key] ??= {},
+      payload
+    );
+    parent[leaf] = read2(name);
   }
-  return plugins2;
+  return payload;
 }
 function burnOf(cost, duration2) {
   const costPerHour = cost != null && duration2 != null ? projectCostPerHour(cost, duration2) : void 0;
@@ -70050,7 +70336,8 @@ function watchSpec(root, gitDir, commonDir) {
   const bounds = dirs.map((d) => boundOf(d.path));
   const named3 = dirs.map((d, i) => `${d.path}@${boundKey(bounds[i])}`);
   return {
-    spec: { key: `git:${root}:${named3.join("|")}`, targets: { dirs } },
+    key: `git:${root}:${named3.join("|")}`,
+    targets: { dirs },
     unbound: bounds.some((b) => typeof b === "string" || "unreadable" in b)
   };
 }
@@ -70254,12 +70541,11 @@ var GitDataProvider = class {
   // it first, before any await, so the watch follows the repo's paths.
   followWatch(root, held) {
     const gitDir = this.inner.resolveGitDir(root);
-    const { spec, unbound } = watchSpec(
+    const spec = watchSpec(
       root,
       gitDir,
       this.inner.resolveCommonGitDir(gitDir)
     );
-    if (held !== null && unbound) return { watch: held, move: "kept" };
     const followed = this.watchers.follow(held, spec, () => this.changed(root));
     if (followed.move === "rebound") {
       this.logger(
@@ -76238,11 +76524,11 @@ function compileKey(input) {
   return createHash("sha256").update(JSON.stringify(input)).digest("hex");
 }
 function declareDslVariables(config2, registry, cwd2, scopes) {
-  const scopeOf = variableScopes(config2);
+  const scopeOf2 = variableScopes(config2);
   const projections = projectionsOf(config2);
   const loadWarnings = [];
   for (const [name, decl] of declaredVariables(config2)) {
-    if (!scopes.has(scopeOf.get(name))) continue;
+    if (!scopes.has(scopeOf2.get(name))) continue;
     try {
       declareOne(
         registry,
@@ -76914,21 +77200,17 @@ function pluginLoadLine(layers, {
   const { checkout, loaded, dropped: dropped2, unreached } = plugins2;
   const checkoutField = checkout === null ? "-" : `${checkout.git ? "git" : "dir"}:${checkout.root}`;
   const dataOf = (definition) => {
-    const name = pluginNameOf(definition);
-    const data = name === void 0 ? void 0 : config2.variables[pluginDataVar(name)];
+    const data = definition.name === void 0 ? void 0 : config2.variables[pluginDataVar(pluginNs(definition))];
     return data?.kind === "file" ? data.path : "none";
   };
-  const declared = loaded.flatMap((definition) => {
-    const name = pluginNameOf(definition);
-    return name === void 0 ? [] : [name];
-  }).flatMap(
-    (name) => Object.entries(config2.variables).filter(
-      ([v]) => ownedBy(name)(v) && v !== pluginDataVar(name)
+  const declared = loaded.flatMap((d) => d.name === void 0 ? [] : [pluginNs(d)]).flatMap(
+    (ns) => Object.entries(config2.variables).filter(
+      ([v]) => ownedBy(ns)(v) && v !== pluginDataVar(ns)
     )
   );
   const sources = declared.filter(([, d]) => d.kind === "source").length;
   const pluginVariables = declared.length - sources;
-  return `config load ${layers.join(" < ") || "<default>"}: projections=${[...projectionsOf(config2).keys()].join(",") || "-"} instantSegments=${instantSegments(compiled).join(",") || "-"} instantTemplates=${compiled.instant.size} plugins loaded=${loaded.length} sources=${sources} pluginVariables=${pluginVariables} dropped=${dropped2.length} unplaced=${unreached.length} checkout=${checkoutField} ms=${ms}` + loaded.map((p2) => ` +${p2} data=${dataOf(p2)}`).join("") + dropped2.map((d) => ` -${d.path} (${d.reason})`).join("") + unreached.map((d) => ` ~${d.path} (${d.reason})`).join("");
+  return `config load ${layers.join(" < ") || "<default>"}: projections=${[...projectionsOf(config2).keys()].join(",") || "-"} instantSegments=${instantSegments(compiled).join(",") || "-"} instantTemplates=${compiled.instant.size} plugins loaded=${loaded.length} sources=${sources} pluginVariables=${pluginVariables} dropped=${dropped2.length} unplaced=${unreached.length} checkout=${checkoutField} ms=${ms}` + loaded.map((p2) => ` +${p2.path} data=${dataOf(p2)}`).join("") + dropped2.map((d) => ` -${d.path} (${d.reason})`).join("") + unreached.map((d) => ` ~${d.path} (${d.reason})`).join("");
 }
 var heardField = (heard) => {
   switch (heard.kind) {
@@ -76982,7 +77264,7 @@ function watchTargetsFor(entry) {
     named: [
       ...dslConfigCandidatePaths(entry.projectDir, entry.cwd, entry.configFile),
       ...roots,
-      ...loaded,
+      ...loaded.map((d) => d.path),
       ...[...dropped2, ...unreached].map((d) => d.path),
       // [LAW:single-enforcer] A declared storage folder is watched by name in
       // its plugin folder, by the follower that already watches the
@@ -77014,6 +77296,7 @@ function loadKey(inputs) {
     cwd: inputs.cwd,
     chain: {
       layers: chain2.layers,
+      repoLayers: chain2.repoLayers,
       home: chain2.home,
       repo: chain2.repo
     },
@@ -77069,7 +77352,7 @@ function resolveLoad(cwd2, chain2, storage) {
       chain2.layers,
       DEFAULT_DSL_CONFIG,
       { warned: (w) => warnings.push(...w) },
-      { repo: chain2.repo, cwd: cwd2 }
+      { repo: chain2.repo, cwd: cwd2, repoLayers: chain2.repoLayers }
     );
     const inputs = {
       cwd: cwd2,
@@ -77148,7 +77431,7 @@ function buildRenderState(load, deps) {
         checkout: installed.checkout,
         roots: installed.roots,
         // What renders, as the loader decided it: a nearer layer's load or
-        // drop replaces a farther one's of the same name.
+        // drop replaces a farther one's of the same namespace.
         loaded: [...installed.rendering.values()],
         dropped: [
           ...installed.dropped,
@@ -77208,6 +77491,7 @@ function loadFromDisk(projectDir, cwd2, configFile, deps, served = null) {
   const { repos } = resolution;
   const chain2 = {
     layers: resolution.kind === "chain" ? resolution.layers : [],
+    repoLayers: resolution.kind === "chain" ? resolution.repoLayers : [],
     home: resolution.home,
     repo: repos.plugins
   };
@@ -77227,7 +77511,7 @@ function loadFromDisk(projectDir, cwd2, configFile, deps, served = null) {
 function fallbackState(cwd2, repo2, deps) {
   const resolved = resolveLoad(
     cwd2,
-    { layers: [], home: "", repo: repo2 },
+    { layers: [], repoLayers: [], home: "", repo: repo2 },
     deps.storage
   );
   const built = resolved.kind === "failed" ? resolved : buildRenderState(resolved, deps);
@@ -77883,11 +78167,12 @@ var RenderCache = class {
     entry.configLayers = loaded.layers;
     entry.configHome = loaded.home;
     entry.repos = loaded.repos;
-    const { targets, unresolved } = watchTargetsFor(entry);
-    const key = `config:${entry.projectDir}:${entry.cwd}:${entry.configFile ?? ""}:${JSON.stringify(targets)}`;
+    const paths = watchTargetsFor(entry);
+    const { targets, unresolved } = paths;
+    const key = `config:${entry.projectDir}:${entry.cwd}:${entry.configFile ?? ""}:${paths.key}`;
     const { watch: watch2, move } = this.deps.watchers.follow(
       entry.watch,
-      { key, targets },
+      { ...paths, key },
       (heard) => this.reloadInto(entry, { kind: "config-watch", heard })
     );
     entry.watch = watch2;
