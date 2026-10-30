@@ -4,29 +4,22 @@
     {
       "version": "pr-500",
       "ref": "refs/pull/500/merge",
-      "sha": "b7dcb1f9905b51aaa79cca99bc708a020febccee",
-      "timestamp": "2026-10-30T15:56:17.071Z",
+      "sha": "276fc9529dc3d42ae671a8b38a8a1292a93fd5fe",
+      "timestamp": "2026-10-30T15:57:06.288Z",
       "commits": [
         {
-          "sha": "b7dcb1f9905b51aaa79cca99bc708a020febccee",
+          "sha": "276fc9529dc3d42ae671a8b38a8a1292a93fd5fe",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T09:55:28-06:00",
-          "message": "Merge 90c6752277c0301d560582296c1c237b1038f100 into fe783f48728a83116d74cf3674e4695aff77fd76\n"
+          "timestamp": "2026-10-30T15:55:43Z",
+          "message": "Merge 0b7353d57b7b3968df196e5f8995bf792c837184 into fe783f48728a83116d74cf3674e4695aff77fd76\n"
         },
         {
-          "sha": "90c6752277c0301d560582296c1c237b1038f100",
+          "sha": "0b7353d57b7b3968df196e5f8995bf792c837184",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-10-30T09:55:19-06:00",
           "message": "fix(test): a viewer read closes a viewer the restored session state left open (brandon-unfiled-3248.vfhf)\n\nOn Linux CI the SIGKILLed starter's last session-state write (closing the\nviewer) fell inside the 500ms debounce, so the successor restored the\nviewer open on page 2. The bar then carries no indicator to click, and\nreadDiagnostics read that as no messages. The act was read as running\nall along (daemon.log: 'apply-update: act 1 is running; watching it').\n"
-        },
-        {
-          "sha": "c9290fab3ed8400f0db1ff6813068d3344ef0a17",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T09:52:10-06:00",
-          "message": "WIP: temporary CI diagnostics for vfhf (to be removed)\n"
         }
       ]
     },
