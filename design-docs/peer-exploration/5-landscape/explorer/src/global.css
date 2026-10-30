@@ -1,4 +1,8 @@
-:root { --bg: #101216; --panel: #181b21; --line: #2a2e36; --fg: #e4e6ea; --dim: #8b919c; --idea: #e8a25c; }
+/* The Powerline glyph subset the repo's web demo ships (FONT-LICENSE), so arrows and caps draw without a patched font. */
+@font-face { font-family: 'Rich Powerline'; src: url('./rich-powerline.woff2') format('woff2'); unicode-range: U+E0A0-E0D7; font-display: block; }
+:root { --bg: #101216; --panel: #181b21; --line: #2a2e36; --fg: #e4e6ea; --dim: #8b919c; --idea: #e8a25c; --live: #5fc0a8; }
+/* the mark on a project whose bar was captured and plays along the bottom of the graph */
+.live::after { content: ' ▰'; color: var(--live); font-size: 11px; }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--fg); font: 14px/1.45 -apple-system, system-ui, sans-serif; }
 a { color: #7cc4a8; }

@@ -3,7 +3,7 @@
 import { chromium } from 'playwright-core';
 import { fileURLToPath } from 'node:url';
 
-const page_ = fileURLToPath(new URL('../landscape.html', import.meta.url));
+const page_ = fileURLToPath(new URL('../site/index.html', import.meta.url));
 const browser = await chromium.launch({ channel: 'chrome' });
 const page = await browser.newPage({ viewport: { width: 1600, height: 950 } });
 const errors = [];
@@ -21,6 +21,25 @@ await page.screenshot({ path: '/tmp/ccland/shot-3-project.png' });
 await page.fill('input', 'pet');
 await page.waitForTimeout(300);
 await page.screenshot({ path: '/tmp/ccland/shot-4-search.png' });
+await page.fill('input', '');
+// a project with a captured bar: the terminal must draw it
+await page.fill('input', 'pyccsl');
+await page.waitForTimeout(300);
+await page.locator('.hits button').first().click();
+await page.waitForTimeout(1500);
+if ((await page.locator('.strip .xterm-rows').count()) === 0) errors.push('no terminal drawn for a captured bar');
+await page.screenshot({ path: '/tmp/ccland/shot-4b-bar.png' });
+await page.mouse.move(500, 480);
+await page.mouse.move(520, 470, { steps: 5 });
+await page.waitForTimeout(400);
+await page.screenshot({ path: '/tmp/ccland/shot-5-lens.png' });
+await page.getByTitle('hide the panel').click();
+await page.waitForTimeout(800);
+await page.screenshot({ path: '/tmp/ccland/shot-6-collapsed.png' });
+await page.locator('input[type=range]').fill('10');
+await page.mouse.move(520, 470, { steps: 5 });
+await page.waitForTimeout(600);
+await page.screenshot({ path: '/tmp/ccland/shot-7-scale10.png' });
 await browser.close();
 if (errors.length) { console.error(errors.join('\n')); process.exit(1); }
 console.log('ok');

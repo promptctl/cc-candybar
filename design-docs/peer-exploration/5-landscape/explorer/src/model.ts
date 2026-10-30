@@ -6,6 +6,7 @@ import type { RawData, RawProject } from './types';
 export interface Project extends RawProject {
   id: string;
   traits: string[];
+  url: string;
 }
 
 // JSON infers novel items as string[]; export.py writes them as fixed triples, which RawData states.
@@ -14,7 +15,8 @@ export const BANDS = ['45+', '20-44', '10-19', '5-9', '2-4', '0-1'] as const;
 export const motives = data.motives;
 export const families = data.families;
 
-export const projects: Project[] = data.projects.map((p) => ({ ...p, id: 'p:' + p.repo.toLowerCase(), traits: traitsOf(p) }));
+// A project's link is stored only when it is not the GitHub repository of its name [LAW:one-source-of-truth].
+export const projects: Project[] = data.projects.map((p) => ({ ...p, id: 'p:' + p.repo.toLowerCase(), traits: traitsOf(p), url: p.url ?? 'https://github.com/' + p.repo }));
 export const projectById = new Map(projects.map((p) => [p.id, p]));
 export const traitById = new Map(TRAITS.map((t) => [t.id, t]));
 export const bandSize = Object.fromEntries(BANDS.map((b) => [b, projects.filter((p) => p.band === b).length]));

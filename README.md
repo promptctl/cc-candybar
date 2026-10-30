@@ -12,7 +12,7 @@
 
 </div>
 
-**[Try the live bar in your browser →](https://promptctl.github.io/cc-candybar/)** The real daemon, compiled for the page, replays a few turns of a Claude Code session; every click in the bar is real.
+**[Try the live bar in your browser →](https://promptctl.github.io/cc-candybar/main/)** The real daemon, compiled for the page, replays a few turns of a Claude Code session; every click in the bar is real.
 
 ## What it is
 

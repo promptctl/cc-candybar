@@ -262,8 +262,8 @@ test.each<[LoadCause, string]>([
     '"config-watch:failed:/d: EPERM"',
   ],
 ])("the config loaded event says why the load ran: %j", (cause, field) => {
-  expect(configLoadedLine(loadedEntry, cause)).toContain(
-    ` cwd=/p cause=${field} files=`,
+  expect(configLoadedLine(loadedEntry, cause, "built")).toContain(
+    ` cwd=/p cause=${field} state=built files=`,
   );
 });
 
@@ -285,7 +285,7 @@ test("the config loaded event names the repositories left waiting and declined, 
     lastWarning: null,
     state: undefined as never,
   };
-  const line = configLoadedLine(entry, { kind: "open" });
+  const line = configLoadedLine(entry, { kind: "open" }, "built");
   expect(line).toContain(
     ` awaiting=/a,/b declined=- unproven=[{"dir":"/c","reason":"/x is not there"}] `,
   );

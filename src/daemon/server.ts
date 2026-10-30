@@ -443,8 +443,8 @@ const renderCache = new RenderCache<SessionSource, CheckedRenderRequest>(
       // daemon.log with its cause — the operator's only record of why a load
       // ran, and whether a save was picked up cleanly, kept rendering
       // last-known-good behind an error, or resolved to a different file.
-      onReload: (entry, sessions, cause) => {
-        dlog("info", configLoadedLine(entry, cause));
+      onReload: (entry, sessions, cause, settled) => {
+        dlog("info", configLoadedLine(entry, cause, settled));
         // A reload changes the bar of every session drawn from the entry,
         // even one that failed and kept the old config: its indicator says so.
         for (const sessionId of sessions) frameFeeds.wake(sessionId, "reload");

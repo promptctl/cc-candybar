@@ -142,15 +142,16 @@ test("a reload names the sessions that drew from its entry, whether or not it lo
 // A view a reload replaced is no session's bar, though the render that holds
 // it still draws from it: what its retired sources publish wakes no feed.
 test("a view a reload retired says nothing more while a render still holds it", async () => {
-  const { status, changed, reload, open } = setUp();
+  const { status, changed, writeConfig, reload, open } = setUp();
   using old = open("s");
   await until(
     () => old.view.store.read("status") === "green",
     "the first read",
   );
-  // [LAW:no-ambient-temporal-coupling] A reload of the file as it stands: a
-  // write would also wake the config's watch, whose reload of its own can
-  // land inside the window counted below and open the session's view again.
+  // An edit, and the save's reload of it. The config's watch hears the write
+  // too, and its reload of the same bytes, which can land inside the window
+  // counted below, keeps the state and opens no view.
+  writeConfig("{{ .status }}!");
   reload();
   using now = open("s");
   expect(now.view).not.toBe(old.view);

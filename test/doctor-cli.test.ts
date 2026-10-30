@@ -380,6 +380,18 @@ describe("doctorPlan over a real config", () => {
     expect(fs.existsSync(storage)).toBe(false);
   });
 
+  // The doctor reads the one load the daemon settles, so a warning only the
+  // build earns (a variable that failed to declare) reaches its verdict too.
+  test("a load's warning carries what its build earned", () => {
+    fs.writeFileSync(
+      projectConfig(),
+      `{ variables: { v: { kind: "template", template: "{{ if }}" } } }`,
+    );
+    const load = loadConfigOnce({ projectDir: project, cwd: project, configFile: null });
+    expect(load.error).toBeNull();
+    expect(load.warning).toContain(`Variable "v"`);
+  });
+
   test("no config file anywhere: the bundled default is correct", async () => {
     expect((await plan()).stdout).toBe("✓ config\n✓ install\n✓ daemon\n✓ URL handler\n✓ links\n✓ tmux truecolor\n✓ UTF-8\n✓ terminal width — 120 columns, as this command's terminal measured\n✓ effect refresh\n✓ Nerd Font\n✓ segment data\n✓ session data\n");
   });

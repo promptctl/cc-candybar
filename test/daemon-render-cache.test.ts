@@ -43,6 +43,7 @@ import { stateGate } from "../src/daemon/verbs/state-validators";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import type { DaemonLogger } from "../src/utils/logger";
 import { writeAtomic } from "../src/utils/atomic-write";
+import { editedConfig, editProjectConfig } from "./helpers/edited-config";
 import { ReloadSignal } from "./helpers/reload-signal";
 import {
   walkNodes,
@@ -966,9 +967,9 @@ describe("RenderCache", () => {
     const { dir, cleanup } = mkConfigDir();
     const causes: LoadCause["kind"][] = [];
     const { cache, cleanups, reloads, watchers } = makeCache({
-      onReload: (entry, sessions, cause) => {
+      onReload: (entry, sessions, cause, settled) => {
         causes.push(cause.kind);
-        reloads.observers.onReload!(entry, sessions, cause);
+        reloads.observers.onReload!(entry, sessions, cause, settled);
       },
     });
     try {
@@ -1027,12 +1028,16 @@ describe("RenderCache", () => {
     const { cache, cleanups } = makeCache(undefined, (_level, msg) =>
       lines.push(msg),
     );
+    // The entry the test reloads loads a file it edits, so the reload builds.
+    const cfg = editedConfig();
+    cleanups.push(cfg.cleanup);
+    const fileOf = (i: number) => (i === 4 ? cfg.file : undefined);
     try {
       cache
         .holdSession("/p0", "/p0", undefined, viewFacts("/p0", "s0"))
         [Symbol.dispose]();
       for (let i = 0; i < 5; i++)
-        cache.getOrCreate(`/p${i}`, `/p${i}`, undefined);
+        cache.getOrCreate(`/p${i}`, `/p${i}`, fileOf(i));
       const evict = lines.filter((l) => l.startsWith("config disposed "));
       expect(evict).toHaveLength(1);
       expect(evict[0]).toMatch(
@@ -1046,7 +1051,8 @@ describe("RenderCache", () => {
         ],
       );
 
-      cache.reload("/p4", "/p4", undefined, { kind: "write" });
+      cfg.edit();
+      cache.reload("/p4", "/p4", cfg.file, { kind: "write" });
       const reload = lines.filter((l) =>
         l.startsWith("config disposed reason=reload"),
       );
@@ -1057,7 +1063,7 @@ describe("RenderCache", () => {
 
       // A close tears every entry down at once, but a state a render still
       // holds waits for it, as an eviction's does.
-      const hold = cache.hold("/p4", "/p4", undefined);
+      const hold = cache.hold("/p4", "/p4", cfg.file);
       const closes = () =>
         lines.filter((l) => l.startsWith("config disposed reason=close"));
       cache.close();
@@ -1133,13 +1139,16 @@ describe("RenderCache", () => {
     );
     const disposals = () =>
       lines.filter((l) => l.startsWith("config disposed reason=reload"));
+    const cfg = editedConfig();
+    cleanups.push(cfg.cleanup);
     try {
-      const hold = cache.hold("/p0", "/p0", undefined);
-      cache.reload("/p0", "/p0", undefined, { kind: "write" });
+      const hold = cache.hold("/p0", "/p0", cfg.file);
+      cfg.edit();
+      cache.reload("/p0", "/p0", cfg.file, { kind: "write" });
       // The entry serves the fresh state; the render keeps the one it
       // started on, undisposed, until it returns.
       expect(hold.entry.state).not.toBe(hold.state);
-      expect(cache.getOrCreate("/p0", "/p0", undefined)).toBe(hold.entry);
+      expect(cache.getOrCreate("/p0", "/p0", cfg.file)).toBe(hold.entry);
       expect(disposals()).toEqual([]);
       expect(cache.stats).toMatchObject({ size: 1, held: 1, retired: 1 });
       hold[Symbol.dispose]();
@@ -1150,7 +1159,8 @@ describe("RenderCache", () => {
       ]);
       expect(cache.stats).toMatchObject({ size: 1, held: 0, retired: 0 });
       // The fresh state is served and torn down like any other.
-      cache.reload("/p0", "/p0", undefined, { kind: "write" });
+      cfg.edit();
+      cache.reload("/p0", "/p0", cfg.file, { kind: "write" });
       expect(disposals()).toHaveLength(2);
       expect(disposals()[1]).toMatch(/ held=0$/);
     } finally {
@@ -1163,14 +1173,17 @@ describe("RenderCache", () => {
     const { cache, cleanups } = makeCache(undefined, (_level, msg) =>
       lines.push(msg),
     );
+    const cfg = editedConfig();
+    cleanups.push(cfg.cleanup);
     try {
       const holds: Hold[] = [
-        cache.hold("/p0", "/p0", undefined),
-        cache.hold("/p0", "/p0", undefined),
+        cache.hold("/p0", "/p0", cfg.file),
+        cache.hold("/p0", "/p0", cfg.file),
       ];
       expect(holds[1]!.state).toBe(holds[0]!.state);
       expect(cache.stats).toMatchObject({ size: 1, held: 1, retired: 0 });
-      cache.reload("/p0", "/p0", undefined, { kind: "write" });
+      cfg.edit();
+      cache.reload("/p0", "/p0", cfg.file, { kind: "write" });
       holds[0]![Symbol.dispose]();
       expect(lines.filter((l) => l.startsWith("config disposed "))).toEqual([]);
       holds[1]![Symbol.dispose]();
@@ -1656,6 +1669,7 @@ describe("RenderCache frames and pins", () => {
         );
       }
       const unpin = cache.pin("s1");
+      editProjectConfig(dir);
       cache.reload(dir, dir, undefined, { kind: "write" });
       expect(logs).toContainEqual(
         expect.stringMatching(
@@ -1772,6 +1786,7 @@ describe("RenderCache frames and pins", () => {
     const { cache, dirs, close, request, opened } = pinCache();
     try {
       request("s1", dirs[0]!);
+      editProjectConfig(dirs[0]!);
       cache.reload(dirs[0]!, dirs[0]!, undefined, { kind: "write" });
       expect(opened().map((l) => l.match(/ by=(\w+) /)?.[1])).toEqual([
         "request",

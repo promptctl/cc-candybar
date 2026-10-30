@@ -81,9 +81,13 @@ const runs = (name: string): number => {
 const counted = (name: string, out: string): string =>
   `echo run >> ${JSON.stringify(path.join(dir, `${name}.runs`))}; echo ${out}`;
 
-function configure(cwd: string): void {
+// `edition` moves a literal no template reads, so configuring again with a
+// new one is an edit a reload builds a state for: a reload of unchanged
+// inputs keeps the state it serves.
+function configure(cwd: string, edition = 0): void {
   const config = {
     variables: {
+      edition: { kind: "literal", value: String(edition) },
       sid: { kind: "input", path: "session_id" },
       // Re-runs when the session it is keyed on changes.
       perSession: {
@@ -216,6 +220,7 @@ test("a reload opens each of the entry's views anew on the new state, and retire
   configure(dir);
   const { cache, lines } = makeCache();
   const before = await render(cache, "s-a");
+  configure(dir, 1);
   cache.reload(dir, dir, undefined, { kind: "write" });
   // The successor is open — declared, so the next frame draws a view that
   // holds what it reads — before any render (brandon-unfiled-3248.8ro6, 4a).
@@ -255,6 +260,7 @@ test("a reload keeps whether the session's view was read: a view idle before it 
   // A sweep with no render since: the view is unread, and kept once more.
   cache.releaseIdle();
   expect(cache.stats.views).toBe(1);
+  configure(dir, 1);
   cache.reload(dir, dir, undefined, { kind: "write" });
   cache.releaseIdle();
   expect(cache.stats.views).toBe(0);
@@ -321,6 +327,7 @@ test("a view held by a render in flight is disposed only when the render returns
   configure(dir);
   const { cache, lines } = makeCache();
   const held = cache.holdSession(dir, dir, undefined, viewFacts(dir, "s-a"));
+  configure(dir, 1);
   cache.reload(dir, dir, undefined, { kind: "write" });
   expect(cache.stats).toMatchObject({ views: 1, retiredViews: 1 });
   // Retired, not disposed: the render still draws through it.
@@ -430,6 +437,7 @@ test("a view that fails to open releases the state hold it was opened under", ()
     "log boom",
   );
   // Retired by the reload and held by nothing, the state is reclaimed now.
+  configure(dir, 1);
   cache.reload(dir, dir, undefined, { kind: "write" });
   expect(cache.stats.retired).toBe(0);
 });

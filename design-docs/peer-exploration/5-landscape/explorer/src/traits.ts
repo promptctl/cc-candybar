@@ -102,6 +102,7 @@ export function traitOfGroup(group: string): Trait {
   return TRAITS.find((t) => t.test({ f: new Set(), m: '', g: new Set([group]), kind: '' }))!;
 }
 
+// [LAW:one-source-of-truth] the kind is what export stored, by the same rule triage reads.
 export function traitsOf(p: RawProject): string[] {
   const l: Labels = { f: new Set(p.fams), m: p.motive, g: new Set(p.novel.map((n) => n[2])), kind: p.kind };
   return TRAITS.filter((t) => t.test(l)).map((t) => t.id);
