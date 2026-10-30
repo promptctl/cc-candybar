@@ -37641,8 +37641,8 @@ function windowAt(palette, hue, shade, drawnAt) {
       if (kept.length < size && kept.every((held) => drawn(held) !== drawn(tone)))
         kept.push(tone);
     }
-    return Array.from({ length: size - kept.length }).reduce(
-      (window2) => {
+    return inWalkOrder(
+      Array.from({ length: size - kept.length }).reduce((window2) => {
         const wider = widen(
           palette,
           hue,
@@ -37651,11 +37651,18 @@ function windowAt(palette, hue, shade, drawnAt) {
           drawnAt
         );
         return wider === void 0 ? window2 : [...window2, wider];
-      },
-      kept
+      }, kept)
     );
   });
 }
+var inWalkOrder = (window2) => {
+  if (window2.length < 3) return window2;
+  const ladder = LADDER;
+  const [low, between, high] = [...window2].sort(
+    (a, b) => ladder.indexOf(a) - ladder.indexOf(b)
+  );
+  return [low, high, between];
+};
 var windowSize = (count, colours) => Math.max(2, Math.min(count, colours - 1));
 var WINDOWS = memoPerPalette();
 var drawnIn = (palette, hue, drawnAt) => (tone) => drawnColour(paletteRole(palette, shadeRole(hue, tone)), drawnAt).hex;

@@ -4,15 +4,22 @@
     {
       "version": "pr-510",
       "ref": "refs/pull/510/merge",
-      "sha": "56a42136b004710131d6de2d16733d9c1d2989a8",
-      "timestamp": "2026-10-30T21:49:13.975Z",
+      "sha": "aa30000a9bdc3971f865946f469f2116b0d4a547",
+      "timestamp": "2026-10-30T22:06:18.712Z",
       "commits": [
         {
-          "sha": "56a42136b004710131d6de2d16733d9c1d2989a8",
+          "sha": "aa30000a9bdc3971f865946f469f2116b0d4a547",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T21:48:22Z",
-          "message": "Merge 5c0fc8093b446235274a1a7c152a42c9cb368ac0 into 8c3367611eff3468d4e6dcbbdb2130db7083f5df\n"
+          "timestamp": "2026-10-30T22:05:35Z",
+          "message": "Merge 92abec87d19bbbbd7f95f8f1cce32d924a3e470f into 8c3367611eff3468d4e6dcbbdb2130db7083f5df\n"
+        },
+        {
+          "sha": "92abec87d19bbbbd7f95f8f1cce32d924a3e470f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-10-30T16:05:26-06:00",
+          "message": "fix(colour): a window of three is listed lowest, highest, then between, so a rung widened past the dial's tones stands at an end of the walk (candybar-joiners-e5r4.cfm)\n\nReview of PR #510: a widened rung was appended into the slot van der Corput deals at every other cell, so a deepest row at 256 wore a lightening on half its cells. The window test now states the order, that a ladder of more than two keeps a colour no window tone wears, and each edge of the size rule.\n"
         },
         {
           "sha": "5c0fc8093b446235274a1a7c152a42c9cb368ac0",
