@@ -6,6 +6,7 @@
 // fold over the one call-graph walk (`callGraphBlocks`); a new question is a new
 // fold over it, never a second walker, or it is blind to helpers again.
 
+import { ownedBy } from "./plugin-scope.js";
 import { parseArm, type DslConfig, type VariableDecl } from "../dsl-types.js";
 
 const STRING_LITERAL_RE = /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`[^`]*`/g;
@@ -435,8 +436,7 @@ const SELF_REF_RE = (self: string): RegExp =>
   new RegExp(`(?<![A-Za-z0-9_)$])(\\$?)\\.${self}(?![A-Za-z0-9_])`, "g");
 export function bindSelf(template: string, self: string, ns: string): string {
   const refRe = SELF_REF_RE(self);
-  const named = (name: string): boolean =>
-    name === self || name.startsWith(`${self}.`);
+  const named = ownedBy(self);
   const starts: number[] = [];
   for (const { dot, block } of scopedBlocks(template, "")) {
     const code = block.text.replace(STRING_LITERAL_RE, (s) =>

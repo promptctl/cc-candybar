@@ -1592,6 +1592,9 @@ export function projectSources<P>(
     PLUGIN_SCOPES.map((scope) => [scope, {}]),
   );
   for (const name of names) {
+    // [LAW:types-are-the-program] A source's name is
+    // `<scope>.<plugin>.<source>`, each one identifier (the plugin loader),
+    // which is what makes the nesting below the return type's shape.
     const keys = name.split(".");
     const leaf = keys.pop()!;
     const parent = keys.reduce<Record<string, unknown>>(

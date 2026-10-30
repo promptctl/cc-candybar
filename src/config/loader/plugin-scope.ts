@@ -22,6 +22,12 @@ export function pluginNs({ scope, name }: PluginId): string {
   return `${scope}.${name}`;
 }
 
+// Whether a declared name is the plugin's: its namespace, `<scope>.<plugin>`,
+// where a dropped plugin's tombstone stands, and everything under it.
+export function ownedBy(ns: string): (name: string) => boolean {
+  return (name) => name === ns || name.startsWith(`${ns}.`);
+}
+
 // The scope-free name a plugin's own definition calls itself by: the loader
 // binds it to the namespace the plugin loads under, so one definition loads
 // alike from a repository and from an install.

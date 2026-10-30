@@ -96,7 +96,6 @@ import { validateNoCycles } from "./loader/cycles.js";
 import { validateNoNesting } from "./loader/nesting.js";
 import {
   applyPlugins,
-  ownedBy,
   listedPlugins,
   droppedPluginNotice,
   type PluginContext,
@@ -107,7 +106,7 @@ import {
   type PluginDefinition,
   type PluginLayer,
 } from "./loader/plugins.js";
-import type { PluginScope } from "./loader/plugin-scope.js";
+import { ownedBy, type PluginScope } from "./loader/plugin-scope.js";
 import { installedPlugins } from "./loader/plugin-folders.js";
 import { withoutUnplaced } from "./loader/unplaced.js";
 import type { ApprovedRepo } from "./loader/repo-gate.js";

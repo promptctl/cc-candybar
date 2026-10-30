@@ -20,6 +20,7 @@ import fs from "node:fs";
 import path from "node:path";
 import JSON5 from "json5";
 import {
+  hasCacheField,
   mapVariableTemplates,
   variableTemplates,
   type DslConfig,
@@ -63,6 +64,7 @@ import {
   templateReads,
 } from "./refs.js";
 import {
+  ownedBy,
   PLUGIN_SCOPES,
   pluginNs,
   scopeOf,
@@ -308,12 +310,6 @@ export function applyPlugins(
     },
     { config: base.config, rendering: base.rendering, loaded: [], dropped: [] },
   );
-}
-
-// Whether a declared name is the plugin's: its namespace, `<scope>.<plugin>`,
-// where a dropped plugin's tombstone stands, and everything under it.
-export function ownedBy(ns: string): (name: string) => boolean {
-  return (name) => name === ns || name.startsWith(`${ns}.`);
 }
 
 // The config with nothing of the plugin's left.
@@ -685,7 +681,8 @@ function fragmentOf(
       });
     }
   }
-  const fragment: RawDslConfig = boundToSelf(ns, {
+  // The definition as written: its own names spelled `self`.
+  const authored: RawDslConfig = {
     variables: {
       ...data,
       ...prefixed(ns, sources),
@@ -715,7 +712,9 @@ function fragmentOf(
         }),
       ),
     ),
-  });
+  };
+  issues.push(...wrongScopeRefs(authored, id));
+  const fragment = boundToSelf(ns, authored);
   // [LAW:single-enforcer] Template syntax is otherwise first parsed by the
   // compile, after every plugin has merged — too late to drop just this one.
   for (const [where, template] of fragmentTemplates(fragment)) {
@@ -728,7 +727,6 @@ function fragmentOf(
       });
     }
   }
-  issues.push(...wrongScopeRefs(fragment, id));
   if (issues.length > 0) fail();
   return fragment;
 }
@@ -744,9 +742,7 @@ function fragmentOf(
 function boundToSelf(ns: string, fragment: RawDslConfig): RawDslConfig {
   const bind = (template: string): string => bindSelf(template, SELF, ns);
   const named = (name: string): string =>
-    name === SELF || name.startsWith(`${SELF}.`)
-      ? `${ns}${name.slice(SELF.length)}`
-      : name;
+    ownedBy(SELF)(name) ? `${ns}${name.slice(SELF.length)}` : name;
   const each = <T>(
     table: Readonly<Record<string, T>> | undefined,
     f: (value: T) => T,
@@ -756,7 +752,9 @@ function boundToSelf(ns: string, fragment: RawDslConfig): RawDslConfig {
     );
   return {
     ...fragment,
-    variables: each(fragment.variables, (v) => mapVariableTemplates(v, bind)),
+    variables: each(fragment.variables, (v) =>
+      selfDepends(mapVariableTemplates(v, bind), named),
+    ),
     segments: each(fragment.segments, (seg) => ({
       ...seg,
       ...Object.fromEntries(
@@ -765,7 +763,9 @@ function boundToSelf(ns: string, fragment: RawDslConfig): RawDslConfig {
         ),
       ),
       ...(seg.vars !== undefined && {
-        vars: each(seg.vars, (v) => mapVariableTemplates(v, bind)),
+        vars: each(seg.vars, (v) =>
+          selfDepends(mapVariableTemplates(v, bind), named),
+        ),
       }),
     })),
     helpers: each(fragment.helpers, bind),
@@ -776,6 +776,20 @@ function boundToSelf(ns: string, fragment: RawDslConfig): RawDslConfig {
         : bound;
     }),
   };
+}
+
+// A variable's `cache.depends_on` names variables, so `self` binds there as
+// it does in a `do` list.
+function selfDepends(
+  v: VariableDecl,
+  named: (name: string) => string,
+): VariableDecl {
+  return hasCacheField(v) && "depends_on" in v.cache
+    ? ({
+        ...v,
+        cache: { depends_on: v.cache.depends_on.map(named) },
+      } as VariableDecl)
+    : v;
 }
 
 // The template fields a segment declaration carries.
@@ -822,6 +836,11 @@ function wrongScopeRefs(
   }
   for (const [name, a] of Object.entries(fragment.actions ?? {})) {
     if ("do" in a) for (const m of a.do) check(`actions.${name}.do`, m, false);
+  }
+  for (const [name, v] of Object.entries(fragment.variables ?? {})) {
+    if (hasCacheField(v) && "depends_on" in v.cache)
+      for (const d of v.cache.depends_on)
+        check(`variables.${name}.cache.depends_on`, d, false);
   }
   return [...issues.values()];
 }

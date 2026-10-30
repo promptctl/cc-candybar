@@ -84,11 +84,10 @@ import { digestOf, type Projection } from "../../utils/plain.js";
 import { Holds } from "../../utils/holds.js";
 import { ABSENT, failed, PENDING } from "../../utils/outcome.js";
 import {
-  ownedBy,
   pluginDataVar,
   type PluginDefinition,
 } from "../../config/loader/plugins.js";
-import { pluginNs } from "../../config/loader/plugin-scope.js";
+import { ownedBy, pluginNs } from "../../config/loader/plugin-scope.js";
 import { projectionsOf } from "../../config/loader/projections.js";
 
 // [LAW:one-source-of-truth] Each cache entry owns the live DSL state for a

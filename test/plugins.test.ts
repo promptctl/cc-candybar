@@ -1373,6 +1373,14 @@ describe("a plugin names itself without its scope", () => {
     expect(message).toContain(`write self.h`);
   });
 
+  test("a cache's depends_on names a variable through self", async () => {
+    write(
+      path.join(userRoot, "plugin.json5"),
+      `{ variables: { a: { kind: "literal", value: "x" }, b: { kind: "shell", command: "echo y", cache: { depends_on: ["self.a"] } } }, segments: { s: { template: "⇪{{ .self.b }}[go]" } } }`,
+    );
+    expect(cells(await checkConfig(write("config.json5", `{ root: { h: ["plugins.deploy.s"] } }`), dir))).toBe("⇪y[go]");
+  });
+
   test("an explicit config named like a repository's lists installed plugins", async () => {
     write("elsewhere/deploy/plugin.json5", SELF_DEFINITION);
     write("elsewhere/deploy/state.json", STATE);
