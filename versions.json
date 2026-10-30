@@ -2,45 +2,31 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-488",
-      "ref": "refs/pull/488/merge",
-      "sha": "631e1bbd8be89745c9bc12ecc080cdaa023a6f7b",
-      "timestamp": "2026-10-30T10:57:42.281Z",
+      "version": "pr-490",
+      "ref": "refs/pull/490/merge",
+      "sha": "f90cc31287c6b910d25ad892ffc18bd8a881aa9a",
+      "timestamp": "2026-10-30T11:04:32.590Z",
       "commits": [
         {
-          "sha": "631e1bbd8be89745c9bc12ecc080cdaa023a6f7b",
+          "sha": "f90cc31287c6b910d25ad892ffc18bd8a881aa9a",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T10:56:47Z",
-          "message": "Merge b43976d562143771f71d20f348608a33d1133945 into abe2b7909fcf52f5b03f459d550ad4f260f545ac\n"
+          "timestamp": "2026-10-30T05:03:40-06:00",
+          "message": "Merge 7f39650bf5c406f389b84654f2f0610a76033923 into abe2b7909fcf52f5b03f459d550ad4f260f545ac\n"
         },
         {
-          "sha": "b43976d562143771f71d20f348608a33d1133945",
+          "sha": "7f39650bf5c406f389b84654f2f0610a76033923",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T04:55:56-06:00",
-          "message": "fix(proc): a lifeline's start clears its fault only while it is the current one, and the warning names no daemon (brandon-unfiled-3248.86ga)\n\nSecond high review of the lifeline:\n\n- A spawn event from a lifeline already lost no longer clears the fault while\n  nothing guards.\n- The warning says \"their launcher\", since bar-pane and the CLI print it too.\n- The architecture memory says which children the lifeline holds (those not\n  blocking the daemon) and the one window it leaves: a daemon death while the\n  update writes the bundle tears it. The durable update act that closes it is\n  brandon-unfiled-3248.z676.\n"
+          "timestamp": "2026-10-30T05:00:36-06:00",
+          "message": "docs(joiners): the plan — filled arrows always, named shades everywhere, floors deleted\n"
         },
         {
-          "sha": "841b92bb768219ea73d539efd8ee26209fc314a2",
+          "sha": "70758536031569d8f24edcae8983e15cb75881ec",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T04:42:26-06:00",
-          "message": "fix(proc): the update act dies with the daemon like every child, and a lifeline change redraws every feed (brandon-unfiled-3248.86ga)\n\nMedium review of the lifeline:\n\n- Exempting the update act from the lifeline did not let it outlive the\n  daemon: its output pipes lead to the dead daemon, so a shell in it dies of\n  SIGPIPE at its next write, and the next daemon has no record of it and\n  would start a second. The act is a launch child like any other again; the\n  binary watch still holds the restart while it runs.\n- The lifeline's seam is an observer of its fault rather than a log. The\n  daemon's observer logs each change and wakes every feed, as file events'\n  delivery does, so the warning comes and goes on pushed frames too.\n"
-        },
-        {
-          "sha": "eef9156525e04b06f71286ccde4cd1c18a4e8f09",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T04:35:58-06:00",
-          "message": "fix(proc): the update act outlives the daemon, and a downed lifeline stands as a warning (brandon-unfiled-3248.86ga)\n\nHigh review of the lifeline:\n\n- The update act rewrites the bundle, so any daemon exit now killed it\n  half-written. A waited launch can say it outlives its launcher, and the\n  act does; the binary watch still holds the restart while it runs.\n- Why the lifeline is down is one state: the log says each change, and the\n  daemon shows it beside the file-events warning, so a broken lifeline\n  reaches the bar instead of only daemon.log.\n- awk is found on the launcher's PATH, as every launched program is, so a\n  machine without /usr/bin/awk (NixOS) is guarded.\n- The binary watch says its wait once, through the shared change logger.\n- The demo shim's resident programs are programs that answer RESIDENT, one\n  registry instead of two.\n"
-        },
-        {
-          "sha": "f0e04c202a4c9f4561e84b49e25901d771a696c2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-10-30T04:20:37-06:00",
-          "message": "fix(proc): a launch child dies with the process that launched it, SIGKILL included (brandon-unfiled-3248.86ga)\n\nA launch child leads its own process group, and everything that ended it\n(its timeout, its caller's abort, its own exit) ran inside the launcher.\nA daemon that exited left every in-flight group running, reparented to\ninit for good, and a SIGKILL runs no cleanup to prevent that.\n\nEach launching process now starts one lifeline: an awk program in its\nown group, reading a pipe only the launcher holds. Every waited child is\nregistered on it and deregistered when it settles. When the launcher\nends, however it ends, the kernel closes the pipe, and the lifeline sends\nthe remaining groups the timeout's own escalation: SIGTERM, then SIGKILL\nafter the grace. The in-process set of live groups is the truth. A lost\nlifeline is logged, and the next launch replaces it and hands it the\nwhole set.\n\nThe binary watch now holds a restart while the update notice's act is\nrunning. That act is a launch child rewriting the bundle the watch\nsamples, and a restart in the middle would now kill it half-written.\n\nThe Pages site's child_process shim gains resident programs, since the\nlifeline lives as long as the page's daemon.\n"
+          "timestamp": "2026-10-30T03:03:05-06:00",
+          "message": "docs(joiners): proposal — the joiner holds seam ink apart from its ground, and nothing predicts it\n"
         }
       ]
     },

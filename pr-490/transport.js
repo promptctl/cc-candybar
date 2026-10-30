@@ -4616,7 +4616,7 @@ var require_lib = __commonJS({
       return out;
     };
     var extglobSource = (type3, alts, extglob, nodot, tail, segStart) => {
-      const guard2 = nodot && segStart ? NODOT : "";
+      const guard = nodot && segStart ? NODOT : "";
       const body = altsSource(alts, extglob, nodot, tail, segStart);
       switch (type3) {
         case 63:
@@ -4625,10 +4625,10 @@ var require_lib = __commonJS({
           return "(?:" + body + ")";
         case 33:
           if (alts.length === 1 && !alts[0])
-            return guard2 + "[^/]+";
-          return "(?!(?:" + body + ")" + tail + "$)" + guard2 + STAR;
+            return guard + "[^/]+";
+          return "(?!(?:" + body + ")" + tail + "$)" + guard + STAR;
       }
-      const more = guard2 ? altsSource(alts, extglob, nodot, tail, false) : body;
+      const more = guard ? altsSource(alts, extglob, nodot, tail, false) : body;
       if (more === body)
         return "(?:" + body + ")" + (type3 === 42 ? "*" : "+");
       const once2 = "(?:" + body + ")(?:" + more + ")*";
@@ -4650,7 +4650,7 @@ var require_lib = __commonJS({
           }
         }
         const atStart = start;
-        const guard2 = nodot && atStart ? NODOT : "";
+        const guard = nodot && atStart ? NODOT : "";
         start = false;
         switch (code) {
           case 42: {
@@ -4659,7 +4659,7 @@ var require_lib = __commonJS({
               j++;
             if (j === i + 1) {
               const whole = atStart && (j === length || pattern.charCodeAt(j) === 47);
-              out += guard2 + (whole ? "[^/]+" : STAR);
+              out += guard + (whole ? "[^/]+" : STAR);
               i = j;
               break;
             }
@@ -4680,16 +4680,16 @@ var require_lib = __commonJS({
                 break;
             }
             if (slash2) {
-              out += nodot ? "(?:" + guard2 + GLOBSTAR_NODOT + "/)?" : "(?:.*/)?";
+              out += nodot ? "(?:" + guard + GLOBSTAR_NODOT + "/)?" : "(?:.*/)?";
               j++;
               start = true;
             } else
-              out += nodot ? guard2 + GLOBSTAR_NODOT : ".*";
+              out += nodot ? guard + GLOBSTAR_NODOT : ".*";
             i = j;
             break;
           }
           case 63:
-            out += guard2 + "[^/]";
+            out += guard + "[^/]";
             i++;
             break;
           case 91: {
@@ -4700,7 +4700,7 @@ var require_lib = __commonJS({
               break;
             }
             const cls = classSource(pattern, i, end);
-            out += (cls.charCodeAt(0) === 91 ? guard2 : "") + cls;
+            out += (cls.charCodeAt(0) === 91 ? guard : "") + cls;
             i = end;
             break;
           }
@@ -34119,7 +34119,6 @@ init_globals();
 init_globals();
 var import_buffer3 = __toESM(require_buffer(), 1);
 var import_events2 = __toESM(require_events(), 1);
-var RESIDENT = "resident";
 var programs = /* @__PURE__ */ new Map();
 var enoent = (cmd) => Object.assign(new Error(`spawn ${cmd} ENOENT`), { code: "ENOENT", errno: -2, syscall: `spawn ${cmd}`, path: cmd });
 var Stream = class extends import_events2.EventEmitter {
@@ -34142,9 +34141,6 @@ var Stream = class extends import_events2.EventEmitter {
     return true;
   }
   resume() {
-    return this;
-  }
-  unref() {
     return this;
   }
 };
@@ -34172,7 +34168,6 @@ function spawn(cmd, args = [], opts = {}) {
       return;
     }
     const run3 = program(args, opts.cwd);
-    if (run3 === RESIDENT) return;
     if (run3.stdout) child.stdout.chunk(run3.stdout);
     if (run3.stderr) child.stderr.chunk(run3.stderr);
     child.exitCode = run3.code;
@@ -34187,7 +34182,6 @@ function spawnSync(cmd, args = [], opts = {}) {
   const program = programs.get(cmd.split("/").pop());
   if (program === void 0) return { pid: 0, status: null, signal: null, stdout: "", stderr: "", output: [], error: enoent(cmd) };
   const run3 = program(args, opts.cwd);
-  if (run3 === RESIDENT) throw new Error(`${cmd} runs as long as the page does; a sync run of it would never return`);
   return { pid: nextPid++, status: run3.code, signal: null, stdout: run3.stdout, stderr: run3.stderr ?? "", output: [null, run3.stdout, run3.stderr ?? ""] };
 }
 
@@ -34260,71 +34254,6 @@ function setLaunchStats(handle) {
   statsHandle = handle;
 }
 var TIMEOUT_KILL_GRACE_MS = 250;
-var lifelineObserver = () => lifelineWarnings().forEach((w) => process_default.emitWarning(w.message));
-function setLifelineObserver(observe) {
-  lifelineObserver = observe;
-}
-var LIFELINE_PROGRAM = `$1 == "+" { live[$2] = 1; next } $1 == "-" { delete live[$2]; next } END { for (g in live) groups = groups " -" g; if (groups != "") system("kill -TERM" groups " 2>/dev/null; sleep ${TIMEOUT_KILL_GRACE_MS / 1e3}; kill -KILL" groups " 2>/dev/null") }`;
-var liveGroups = /* @__PURE__ */ new Set();
-var lifeline = null;
-var fault = null;
-function setFault(next2) {
-  if (next2 === fault) return;
-  fault = next2;
-  lifelineObserver(next2);
-}
-function lose(line, reason) {
-  if (lifeline?.process !== line) return;
-  lifeline = null;
-  setFault(reason);
-}
-function lifelineWarnings() {
-  return fault === null ? [] : [
-    {
-      kind: "lifeline",
-      message: `programs launched now would outlive their launcher if it died: its launch lifeline ${fault}, and the next launch starts another`
-    }
-  ];
-}
-function spawnLifeline() {
-  statsHandle?.onStart("lifeline");
-  const t0 = Date.now();
-  let line;
-  try {
-    line = spawn("awk", [LIFELINE_PROGRAM], {
-      stdio: ["pipe", "ignore", "ignore"],
-      detached: true
-    });
-  } catch (err) {
-    statsHandle?.onEnd("lifeline", Date.now() - t0);
-    setFault(`did not start: ${spawnErrorText(err, void 0)}`);
-    return null;
-  }
-  statsHandle?.onEnd("lifeline", Date.now() - t0);
-  const pipe = line.stdin;
-  line.once("spawn", () => {
-    if (lifeline?.process === line) setFault(null);
-  });
-  line.once("error", (err) => lose(line, `failed: ${err.message}`));
-  line.once("exit", (code, sig) => lose(line, `exited ${sig ?? code}`));
-  pipe.on("error", (err) => lose(line, `pipe failed: ${err.message}`));
-  line.unref();
-  pipe.unref();
-  for (const group of liveGroups) pipe.write(`+ ${group}
-`);
-  return { process: line, pipe };
-}
-function guard(group) {
-  liveGroups.add(group);
-  lifeline ??= spawnLifeline();
-  lifeline?.pipe.write(`+ ${group}
-`);
-}
-function unguard(group) {
-  liveGroups.delete(group);
-  lifeline?.pipe.write(`- ${group}
-`);
-}
 function signalGroup(pid2, sig) {
   try {
     process_default.kill(-pid2, sig);
@@ -34376,8 +34305,6 @@ async function launch(opts) {
       });
       return;
     }
-    const group = child.pid;
-    if (group !== void 0) guard(group);
     let stdout2 = "";
     let stderr2 = "";
     let settled3 = false;
@@ -34391,7 +34318,6 @@ async function launch(opts) {
       if (timer) clearTimeout(timer);
       if (killTimer) clearTimeout(killTimer);
       opts.signal?.removeEventListener("abort", onAbort);
-      if (group !== void 0) unguard(group);
       statsHandle?.onEnd(opts.category, Date.now() - t0);
       deliver();
     };
@@ -35963,14 +35889,6 @@ function debug(message, ...args) {
   if (debugOn()) {
     console.error(`[DEBUG] ${message}`, ...args);
   }
-}
-function changeLogger(log) {
-  let last2 = null;
-  return ([level, msg]) => {
-    if (msg === last2) return;
-    last2 = msg;
-    log(level, msg);
-  };
 }
 var quietLogger = (_level, message) => debug(message);
 
@@ -48868,11 +48786,11 @@ var SourceRegistry = class _SourceRegistry {
   getLastError(name) {
     if (!this.declaredHere(name)) return this.parent?.getLastError(name);
     const read2 = this.lastErrors.get(name);
-    const fault2 = this.policyFaults.get(name);
-    if (fault2 === void 0) return read2;
-    return read2 === void 0 ? fault2 : {
+    const fault = this.policyFaults.get(name);
+    if (fault === void 0) return read2;
+    return read2 === void 0 ? fault : {
       timestamp: read2.timestamp,
-      message: `${fault2.message}; ${read2.message}`
+      message: `${fault.message}; ${read2.message}`
     };
   }
   // Every variable whose cache policy cannot fire, with why: each render
@@ -63113,20 +63031,20 @@ function sessionEnv(daemonEnv, facts) {
 init_globals();
 var isRecord = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
 function parseMarkBook(doc) {
-  const fault2 = (reason) => ({
+  const fault = (reason) => ({
     kind: "failed",
     reason
   });
-  if (!isRecord(doc)) return fault2("is not an object");
+  if (!isRecord(doc)) return fault("is not an object");
   for (const [check, sightings] of Object.entries(doc)) {
     if (!isRecord(sightings)) {
-      return fault2(
+      return fault(
         `holds ${JSON.stringify(check)} as something other than its sightings`
       );
     }
     for (const [id2, mark] of Object.entries(sightings)) {
       if (!GLYPH_MARKS.includes(mark)) {
-        return fault2(
+        return fault(
           `marks ${JSON.stringify(id2)} ${JSON.stringify(mark)}, not ${GLYPH_MARKS.join(" or ")}`
         );
       }
@@ -64509,8 +64427,8 @@ function readLanes(inputs) {
   const lanes = deps.lanes();
   const read2 = (lane, needed, value) => {
     if (!needed) return ABSENT2;
-    const fault2 = deps.faults.of(sessionId2, lane);
-    if (fault2 !== void 0) return fault2;
+    const fault = deps.faults.of(sessionId2, lane);
+    if (fault !== void 0) return fault;
     try {
       return value();
     } catch (e) {
@@ -69021,6 +68939,14 @@ function describeRelease(c) {
       return ["warn", `release: unchecked: ${c.reason}`];
   }
 }
+function changeLogger(log) {
+  let last2 = null;
+  return ([level, msg]) => {
+    if (msg === last2) return;
+    last2 = msg;
+    log(level, msg);
+  };
+}
 var lastLine = (text3) => text3.split(/\r?\n/).map((s) => s.trim()).filter((s) => s !== "").at(-1);
 function failureReason(r) {
   const exit2 = r.exitCode === null ? "" : ` (exit ${r.exitCode})`;
@@ -69088,7 +69014,6 @@ function makeUpdateWatch(opts) {
       }
     },
     notice: (ctx) => updateNotice(current(), act, ctx),
-    running: () => act.kind === "running",
     act() {
       const update = current();
       if (update === null) {
@@ -69137,8 +69062,7 @@ function sameStamp(a, b) {
   return a.kind === "ok" && b.kind === "ok" ? a.value === b.value : a.kind === b.kind;
 }
 function makeBinaryWatch(opts) {
-  const { targets, intervalMs, stat: stat3, held, exit: exit2, log } = opts;
-  const logHeld = changeLogger(log);
+  const { targets, intervalMs, stat: stat3, exit: exit2, log } = opts;
   const boot = targets.map((path41) => ({ path: path41, stamp: mtimeOf(path41, stat3) }));
   const watched = boot.filter(({ stamp }) => stamp.kind !== "failed");
   let timer = null;
@@ -69150,15 +69074,10 @@ function makeBinaryWatch(opts) {
         continue;
       }
       if (!sameStamp(stamp, now2)) {
-        const what = `binary ${now2.kind === "absent" ? "gone" : "changed"} (${path41})`;
-        if (held()) {
-          logHeld([
-            "info",
-            `${what}; the restart waits for the running update`
-          ]);
-          return;
-        }
-        log("info", `${what}; shutting down`);
+        log(
+          "info",
+          `binary ${now2.kind === "absent" ? "gone" : "changed"} (${path41}); shutting down`
+        );
         if (timer) clearInterval(timer);
         exit2();
         return;
@@ -72578,8 +72497,8 @@ var ManagedStorage = class {
     }
   }
   async read(f) {
-    const fault2 = this.standing(f.storage);
-    if (fault2 !== null) return failed(fault2);
+    const fault = this.standing(f.storage);
+    if (fault !== null) return failed(fault);
     const file = fileOf(f);
     let text3;
     try {
@@ -76313,12 +76232,12 @@ function drawDsl(config2, compiled, store, registry, projected, at, opts, observ
     );
     const frameMotion = rendered.some((row2) => row2.moves) ? "moves" : armed() ? "can-move" : "still";
     for (const message of shortfalls) warn({ kind: "band-floor", message });
-    for (const [variable, fault2] of registry.cachePolicyFaults())
+    for (const [variable, fault] of registry.cachePolicyFaults())
       warn({
         kind: "refresh",
         variable,
-        error: fault2.message,
-        message: `variable "${variable}" cannot refresh: ${fault2.message}`
+        error: fault.message,
+        message: `variable "${variable}" cannot refresh: ${fault.message}`
       });
     return {
       text: rendered.map((row2) => row2.text).join("\n"),
@@ -76876,10 +76795,10 @@ function openView(state, cwd2, facts, { sessionState: sessionState2, declare, so
         acquired,
         released
       } = holds2.declare(() => declare(holds2, facts2, reads, state.sources));
-      for (const fault2 of faults) {
+      for (const fault of faults) {
         log(
           "error",
-          `session view declaration threw sid=${JSON.stringify(sessionId2)} ${fault2}`
+          `session view declaration threw sid=${JSON.stringify(sessionId2)} ${fault}`
         );
       }
       if (acquired + released > 0) {
@@ -80478,13 +80397,6 @@ fileEvents.subscribe((notice) => {
       return;
   }
 });
-setLifelineObserver((fault2) => {
-  dlog(
-    fault2 === null ? "info" : "warn",
-    fault2 === null ? "launch lifeline running again" : `launch lifeline ${fault2}; the next launch starts another`
-  );
-  frameFeeds.wakeWhere("data", () => true);
-});
 var BIN_CHECK_INTERVAL_MS = 60 * 1e3;
 var RELEASE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1e3;
 var binaryWatch = makeBinaryWatch({
@@ -80497,10 +80409,6 @@ var binaryWatch = makeBinaryWatch({
   ],
   intervalMs: BIN_CHECK_INTERVAL_MS,
   stat: fs_default.statSync,
-  // The update notice's act rewrites the bundle from a launch child, which
-  // dies with the daemon: a restart waits for it. A success samples again at
-  // once; after a failure the next tick does.
-  held: () => updateWatch.running(),
   exit: () => shutdown(0),
   log: dlog
 });
@@ -81264,7 +81172,6 @@ function drawRender(setup, drawing2) {
   ].flatMap(({ about, text: text3 }) => about && text3 ? [{ about, text: text3 }] : []);
   const standing = [
     ...fileEventsWarnings(fileEvents.delivery()),
-    ...lifelineWarnings(),
     ...entry.lastWarning === null ? [] : [{ kind: "load", message: entry.lastWarning }]
   ];
   const scope = { config: state.config };
@@ -81368,7 +81275,6 @@ function drawRender(setup, drawing2) {
       case "file-events":
         return `${w.kind}:${w.state}`;
       case "load":
-      case "lifeline":
       case "band-floor":
       case "when":
         return w.kind;
@@ -81789,7 +81695,6 @@ function updateRepo(next2) {
 `);
 }
 var ok2 = (stdout2) => ({ code: 0, stdout: stdout2 });
-programs.set("awk", () => RESIDENT);
 programs.set("ps", () => ok2(""));
 programs.set("git", (args) => {
   const line = args.join(" ");
