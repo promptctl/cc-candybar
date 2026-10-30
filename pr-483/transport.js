@@ -58620,17 +58620,18 @@ function validateRenderable({ config: merged, raw, source }, filePath2 = "<confi
     groups: [],
     unplaced: []
   };
+  const refuseIfIssues = () => {
+    if (issues.length > 0) {
+      throw new ConfigError(filePath2, [...issues, ...ctx.unplaced]);
+    }
+  };
   validateCrossReferences(ctx, merged, raw);
   validateNoCycles(ctx, merged);
-  if (issues.length > 0) {
-    throw new ConfigError(filePath2, [...issues, ...ctx.unplaced]);
-  }
+  refuseIfIssues();
   const dropped2 = ctx.unplaced.length === 0 ? null : new ConfigError(filePath2, ctx.unplaced);
   const config2 = dropped2 === null ? merged : withoutUnplaced(merged);
   const withMenus = synthesizePlacementMenus(config2, issues);
-  if (issues.length > 0) {
-    throw new ConfigError(filePath2, issues);
-  }
+  refuseIfIssues();
   const withChrome = synthesizeEditChrome(synthesizeSettingsMenu(withMenus));
   const authored = new Set(
     [
@@ -58644,9 +58645,7 @@ function validateRenderable({ config: merged, raw, source }, filePath2 = "<confi
     checked: () => true,
     authored: (name) => authored.has(name)
   });
-  if (issues.length > 0) {
-    throw new ConfigError(filePath2, issues);
-  }
+  refuseIfIssues();
   return { config: withChrome, dropped: dropped2 };
 }
 function parseDslConfig(filePath2, source, allowedPalettes = new Set(listResolvablePaletteNames()), inheritedSegments = NO_INHERITED_SEGMENTS) {
@@ -61291,13 +61290,14 @@ function requireValueTarget(key) {
 }
 function commit(store, home, before, after, refuse2) {
   const will = loadOrRefuse(home, after);
-  refuseNewDrops(home, before, will);
-  refuse2(home, before, will);
+  const was = loadedOrNull(home, before);
+  refuseNewDrops(home, was, will);
+  refuse2(home, was, will);
   writeConfigText(home.path, after, store.logger);
   store.record(home.path, before, after);
 }
-function refuseHidden(home, before, will) {
-  const hidden = hiddenBy(home, before, will);
+function refuseHidden(home, was, will) {
+  const hidden = hiddenBy(home, was, will);
   if (hidden.length > 0) {
     throw new BadVerbArgs(
       `refused: ${home.above.join(", ")} sets ${hidden.join(", ")} over ${home.path}, so this click would change nothing on the bar \u2014 edit it there`
@@ -61316,8 +61316,7 @@ function homeOnly(home, read2) {
     );
   }
 }
-function hiddenBy(home, before, will) {
-  const was = loadedOrNull(home, before);
+function hiddenBy(home, was, will) {
   if (was === null) return [];
   const drawn = new Set(changedPaths(topConfig(was), topConfig(will)));
   return changedPaths(homeConfig(home, was), homeConfig(home, will)).filter(
@@ -61370,8 +61369,9 @@ function loadOrRefuse(home, text3) {
     );
   }
 }
-function refuseNewDrops(home, before, will) {
-  const held = new Set(dropsOf(home, before).map((i) => i.message));
+function refuseNewDrops(home, was, will) {
+  if (was === null) return;
+  const held = new Set((was.dropped?.issues ?? []).map((i) => i.message));
   const added = (will.dropped?.issues ?? []).filter(
     (i) => !held.has(i.message)
   );
@@ -61379,14 +61379,6 @@ function refuseNewDrops(home, before, will) {
     throw new BadVerbArgs(
       `refused: this click would leave a placement of a segment nothing declares \u2014 ${new ConfigError(home.path, added).message}`
     );
-  }
-}
-function dropsOf(home, text3) {
-  try {
-    return chainOver(home, text3).dropped?.issues ?? [];
-  } catch (e) {
-    if (!(e instanceof ConfigError)) throw e;
-    return [];
   }
 }
 function readValue(file, key) {
@@ -62321,9 +62313,9 @@ function plainMessage(message, severity) {
 function worstLevel(list2) {
   return list2.length === 0 ? null : list2.some((m) => m.severity.level === "error") ? "error" : "warning";
 }
-var IDENTITY_BITS = 38;
+var IDENTITY_BITS = 32;
 var OCCURRENCES = 256;
-var PAGES = 64;
+var PAGES = 4096;
 function identityOf(message) {
   const headline = message.message.split(/\r\n|\r|\n/, 1)[0];
   const digest2 = createHash("sha256").update(`${message.severity.level}\0${message.severity.glyph}\0${headline}`).digest("hex");
@@ -62339,7 +62331,7 @@ function stopsOf(list2) {
   });
 }
 function viewerKey(list2, at, page2) {
-  return String(stopsOf(list2)[at] * PAGES + Math.min(page2, PAGES - 1) + 1);
+  return String(stopsOf(list2)[at] * PAGES + page2 + 1);
 }
 var INDICATOR_CAP = 9;
 var LEVEL_COLORS = {
@@ -62371,10 +62363,7 @@ function viewerRows(list2, at, sessionId2, geometry) {
   const { index } = at;
   const shown = list2[index - 1];
   const opts = viewerOptions(geometry);
-  const perPage = Math.max(1, geometry.rows - 1);
   const body = channelRows(shown, opts, []);
-  const pages = Math.ceil(body.length / perPage);
-  const page2 = Math.min(at.page, pages - 1);
   const style = new Style({
     bgcolor: shown.severity.colors.bg,
     color: shown.severity.colors.fg
@@ -62382,21 +62371,47 @@ function viewerRows(list2, at, sessionId2, geometry) {
   const go = (key) => viewerLink(sessionId2, key);
   const button = (text3, link) => cell(text3, link === null ? style : style.withLink(link));
   const step4 = (glyph, to) => to === null ? button(" ", null) : button(glyph, go(viewerKey(list2, to.index - 1, to.page)));
-  const back2 = page2 > 0 ? { index, page: page2 - 1 } : index > 1 ? { index: index - 1, page: 0 } : null;
-  const on2 = page2 < pages - 1 ? { index, page: page2 + 1 } : index < list2.length ? { index: index + 1, page: 0 } : null;
-  const steps2 = list2.length > 1 || pages > 1;
-  const position = pages > 1 ? `[${index}/${list2.length} ${page2 + 1}/${pages}]` : `[${index}/${list2.length}]`;
-  const header = [
-    button("\u2715", go(VIEWER_CLOSED)),
-    ...steps2 ? [step4("\u2039", back2)] : [],
-    button(position, null),
-    ...steps2 ? [step4("\u203A", on2)] : [],
-    button("\u29C9 copy", effectsUrl([{ verb: VERB_COPY, args: [shown.message] }]))
-  ];
-  return [
-    renderStripCells(header, opts),
-    ...body.slice(page2 * perPage, (page2 + 1) * perPage)
-  ].join("\n");
+  const headerOf = (pages, page2) => {
+    const back2 = page2 > 0 ? { index, page: page2 - 1 } : index > 1 ? { index: index - 1, page: 0 } : null;
+    const on2 = page2 < pages - 1 ? { index, page: page2 + 1 } : index < list2.length ? { index: index + 1, page: 0 } : null;
+    const steps2 = list2.length > 1 || pages > 1;
+    const position = pages > 1 ? `[${index}/${list2.length} ${page2 + 1}/${pages}]` : `[${index}/${list2.length}]`;
+    return renderStripCells(
+      [
+        button("\u2715", go(VIEWER_CLOSED)),
+        ...steps2 ? [step4("\u2039", back2)] : [],
+        button(position, null),
+        ...steps2 ? [step4("\u203A", on2)] : [],
+        button(
+          "\u29C9 copy",
+          effectsUrl([{ verb: VERB_COPY, args: [shown.message] }])
+        )
+      ],
+      opts
+    );
+  };
+  let headerRows = 1;
+  for (; ; ) {
+    const perPage = Math.max(1, geometry.rows - headerRows);
+    const pages = Math.min(PAGES, Math.ceil(body.length / perPage));
+    const page2 = Math.min(at.page, pages - 1);
+    const header = headerOf(pages, page2);
+    const measured3 = header.split("\n").length;
+    if (measured3 > headerRows) {
+      headerRows = measured3;
+      continue;
+    }
+    const rows = body.slice(page2 * perPage, (page2 + 1) * perPage);
+    const left = body.length - (page2 + 1) * perPage;
+    const shownRows = page2 === pages - 1 && left > 0 ? [
+      ...rows.slice(0, -1),
+      renderStripCells(
+        [button(`\u2026 ${left + 1} more rows: \u29C9 copy has them all`, null)],
+        { ...opts, wrap: false }
+      )
+    ] : rows;
+    return [header, ...shownRows].join("\n");
+  }
 }
 function handoffRows(handoff, list2, sessionId2, geometry) {
   const { label, fg, bg, open: open2 } = diagnosticsProjection(list2);
@@ -79157,6 +79172,16 @@ function laneHandoff(sessionId2, lanes) {
 // src/daemon/render-warnings.ts
 init_globals();
 var MAX_RECORDS = 512;
+var RENDERERS = ["request", "feed"];
+var generations = /* @__PURE__ */ new WeakMap();
+var nextGeneration = 0;
+var generationOf = (config2) => {
+  const held = generations.get(config2);
+  if (held !== void 0) return held;
+  const minted = nextGeneration++;
+  generations.set(config2, minted);
+  return minted;
+};
 var RenderWarningRecords = class {
   constructor(maxRecords = MAX_RECORDS) {
     this.maxRecords = maxRecords;
@@ -79167,7 +79192,25 @@ var RenderWarningRecords = class {
   // its first, or once its last frame was drawn from another scope.
   of(sessionId2, by, scope) {
     const held = this.records.get(keyOf(sessionId2, by));
-    return held !== void 0 && held.scope.config === scope.config && held.scope.width === scope.width ? held.warnings : [];
+    return held !== void 0 && held.generation === generationOf(scope.config) && held.width === scope.width ? held.warnings : [];
+  }
+  // The session's warnings as `by` draws them in `scope`: its own record, and
+  // every other renderer's drawn from the same config, each warning once
+  // across renderers (a warning two renderers met is one fact).
+  ofSession(sessionId2, by, scope) {
+    const generation = generationOf(scope.config);
+    const listed = [];
+    for (const renderer of RENDERERS) {
+      const held = this.records.get(keyOf(sessionId2, renderer));
+      const own2 = renderer === by ? this.of(sessionId2, by, scope) : held?.generation === generation ? held.warnings : [];
+      const earlier = listed.map((w) => JSON.stringify(w));
+      for (const w of own2) {
+        const at = earlier.indexOf(JSON.stringify(w));
+        if (at === -1) listed.push(w);
+        else earlier.splice(at, 1);
+      }
+    }
+    return listed;
   }
   // Records what a frame warned. Says whether that changed what the
   // renderer's next frame in `scope` shows.
@@ -79175,7 +79218,11 @@ var RenderWarningRecords = class {
     const held = this.of(sessionId2, by, scope);
     const key = keyOf(sessionId2, by);
     this.records.delete(key);
-    this.records.set(key, { scope, warnings });
+    this.records.set(key, {
+      generation: generationOf(scope.config),
+      width: scope.width,
+      warnings
+    });
     for (const oldest of this.records.keys()) {
       if (this.records.size <= this.maxRecords) break;
       this.records.delete(oldest);
@@ -80283,9 +80330,10 @@ function drawRender(setup, drawing2) {
   const diagnostics = collectDiagnostics(
     errors2,
     [...updates, ...questions],
-    [...loadWarnings, ...renderWarnings.of(sessionId2, drawing2.by, scope)].map(
-      (w) => w.message
-    )
+    [
+      ...loadWarnings,
+      ...renderWarnings.ofSession(sessionId2, drawing2.by, scope)
+    ].map((w) => w.message)
   );
   const projected = {
     diagnostics: diagnosticsProjection(diagnostics),
